@@ -165,7 +165,7 @@ func topRepaint(base int) string {
 // the client emulator, exactly what restoreTerminalContent plus the subscribe
 // handler (WriteOutputAsync) do. It returns the locked client and the
 // subscription channel; the caller owns closing the client and unsubscribing.
-func reattachFrom(p *PTY, clientID string) (*lockedClient, <-chan ptyChunk) {
+func reattachFrom(p *PTY, clientID string) (*lockedClient, *ptyQueue) {
 	state := p.GetTerminalState(0, 0)
 	if state == nil {
 		return nil, nil
@@ -184,7 +184,7 @@ func reattachFrom(p *PTY, clientID string) (*lockedClient, <-chan ptyChunk) {
 	// applied to the client, as the client's output handler does. All writes
 	// go through the lock the test reads under.
 	go func() {
-		for chunk := range ch {
+		for chunk, ok := ch.next(); ok; chunk, ok = ch.next() {
 			if len(chunk.data) > 0 {
 				client.Write(chunk.data)
 			}

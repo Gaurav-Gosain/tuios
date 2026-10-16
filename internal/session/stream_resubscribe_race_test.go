@@ -48,7 +48,7 @@ func TestStaleStreamLeavesTheNewSubscriptionAlone(t *testing.T) {
 	// reads the pipe yet.
 	pty.appendAndBroadcast([]byte("before the hide"))
 	deadline := time.Now().Add(5 * time.Second)
-	for len(old.ch) > 0 || old.queued.Load() > 0 {
+	for old.out.len() > 0 || old.queued.Load() > 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("the old stream never took its output")
 		}

@@ -42,13 +42,13 @@ func TestSkippedFrameNeverLeaksSharedMemory(t *testing.T) {
 				payload := base64.StdEncoding.EncodeToString([]byte(name))
 				p.feedRing(fmt.Appendf(nil, "\x1b[H\x1b_Ga=T,f=32,t=%s,s=1,v=1,i=1,q=2,C=1;%s\x1b\\", medium, payload))
 				if n%10 == 9 {
-					for len(ch) > 0 {
-						got = takeChunk(got, <-ch, sub)
+					for ch.len() > 0 {
+						got = takeChunk(got, ch.take(), sub)
 					}
 				}
 			}
-			for len(ch) > 0 {
-				got = takeChunk(got, <-ch, sub)
+			for ch.len() > 0 {
+				got = takeChunk(got, ch.take(), sub)
 			}
 			skipped := p.framesSkipped.Load()
 			if medium == "d" {
@@ -149,8 +149,8 @@ func TestCatchUpNeverStartsInsideAFrame(t *testing.T) {
 		p.feedReads(b.Bytes())
 		ch := p.Subscribe("late", 0)
 		var out []byte
-		for len(ch) > 0 {
-			out = takeChunk(out, <-ch, p.subscriberFor("late"))
+		for ch.len() > 0 {
+			out = takeChunk(out, ch.take(), p.subscriberFor("late"))
 		}
 		if b64.MatchString(screenOf(out)) {
 			bad++
@@ -185,8 +185,8 @@ func TestCatchUpSkipsTheRestOfACommand(t *testing.T) {
 				ch := p.SubscribeFromSnapshot("late", int64(cut))
 				p.feedReads(stream[cut : cut+(80<<10)])
 				var out []byte
-				for len(ch) > 0 {
-					out = takeChunk(out, <-ch, p.subscriberFor("late"))
+				for ch.len() > 0 {
+					out = takeChunk(out, ch.take(), p.subscriberFor("late"))
 				}
 				if b64.MatchString(screenOf(out)) {
 					bad++
@@ -254,12 +254,12 @@ func TestSkippedFrameKeepsTheOtherScreensImage(t *testing.T) {
 			var fastOut, slowOut []byte
 			for i := 0; i < len(stream); i += 8 {
 				p.feedRing(stream[i:min(i+8, len(stream))])
-				for len(fastCh) > 0 {
-					fastOut = takeChunk(fastOut, <-fastCh, fast)
+				for fastCh.len() > 0 {
+					fastOut = takeChunk(fastOut, fastCh.take(), fast)
 				}
 			}
-			for len(slowCh) > 0 {
-				slowOut = takeChunk(slowOut, <-slowCh, slow)
+			for slowCh.len() > 0 {
+				slowOut = takeChunk(slowOut, slowCh.take(), slow)
 			}
 			skipped := p.framesSkipped.Load()
 			if enter == "" {

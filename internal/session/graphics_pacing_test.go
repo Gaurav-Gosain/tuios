@@ -93,14 +93,14 @@ func TestPacingHoldEndsWhenTheClientLeaves(t *testing.T) {
 				case "close":
 					p.cancel()
 				case "catch up":
-					for len(ch) > 0 {
-						takeChunk(nil, <-ch, sub)
+					for ch.len() > 0 {
+						takeChunk(nil, ch.take(), sub)
 						p.wakePacer()
 					}
 				case "gap resume":
 					sub.gapped.Store(true)
-					for len(ch) > 0 {
-						takeChunk(nil, <-ch, sub)
+					for ch.len() > 0 {
+						takeChunk(nil, ch.take(), sub)
 					}
 					p.resumeAfterGap("stuck", sub)
 				}
@@ -135,8 +135,8 @@ func TestPacingHoldIsCappedOncePerEpisode(t *testing.T) {
 	}
 	// Once the client catches up, the next time it falls behind is a new
 	// episode with a new cap.
-	for len(ch) > 0 {
-		takeChunk(nil, <-ch, sub)
+	for ch.len() > 0 {
+		takeChunk(nil, ch.take(), sub)
 	}
 	p.holdForSlowSubscribers()
 	p.feedReads(pacingFrame(1, 8<<10))
@@ -157,8 +157,8 @@ func TestPacingNeedsEveryPacingClientBehind(t *testing.T) {
 	p.Subscribe("viewer", 0)
 	p.SetPacing("viewer", false)
 	p.feedReads(pacingFrame(0, 8<<10))
-	for len(fastCh) > 0 {
-		takeChunk(nil, <-fastCh, fast)
+	for fastCh.len() > 0 {
+		takeChunk(nil, fastCh.take(), fast)
 	}
 	if took := holdReturns(t, p, time.Second, nil); took > 10*time.Millisecond {
 		t.Fatalf("a client that keeps up did not set the pace: held %s", took)
@@ -218,8 +218,8 @@ func TestStuckClientQueueStaysBounded(t *testing.T) {
 		t.Fatalf("the stuck client skipped %d frames, want 299", got)
 	}
 	var out []byte
-	for len(ch) > 0 {
-		out = takeChunk(out, <-ch, sub)
+	for ch.len() > 0 {
+		out = takeChunk(out, ch.take(), sub)
 	}
 	last := pacingFrame(299, size)
 	if !bytes.HasSuffix(out, last) {
@@ -244,7 +244,7 @@ func TestFrameDropRacesTheTake(t *testing.T) {
 	got := make(chan []byte)
 	go func() {
 		var out []byte
-		for c := range ch {
+		for c, ok := ch.next(); ok; c, ok = ch.next() {
 			out = takeChunk(out, c, sub)
 		}
 		got <- out

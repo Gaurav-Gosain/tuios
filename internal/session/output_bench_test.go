@@ -15,16 +15,14 @@ import (
 // subscriber. The PTY read and the VT parse are deliberately outside: the read
 // is a syscall the benchmark cannot honestly reproduce, and the parse is
 // already covered by the emulator benchmarks in vt.
-func benchPTY(subs int, chanCap int) *PTY {
+func benchPTY(subs int) *PTY {
 	p := &PTY{
 		ID:           "bench-pty-0000000000000000000000000",
 		outputBuffer: make([]byte, 64*1024),
 		subscribers:  make(map[string]*ptySubscriber, subs),
 	}
 	for i := range subs {
-		p.subscribers[fmt.Sprintf("client-%d", i)] = &ptySubscriber{
-			ch: make(chan ptyChunk, chanCap),
-		}
+		p.subscribers[fmt.Sprintf("client-%d", i)] = newSubscriber()
 	}
 	return p
 }
@@ -33,13 +31,13 @@ func benchPTY(subs int, chanCap int) *PTY {
 // output: ring append plus broadcast to n subscribers. Chunk size is the 16 KiB
 // the read loop uses, which is what a flooding pane actually delivers.
 //
-// The subscriber channels are drained by the benchmark itself rather than by a
+// The subscriber queues are drained by the benchmark itself rather than by a
 // reader goroutine, so the number measures the producer side alone and does not
 // vary with how a consumer happens to be scheduled.
 func BenchmarkPTYOutputChunk(b *testing.B) {
 	for _, subs := range []int{0, 1, 4} {
 		b.Run(fmt.Sprintf("subscribers-%d", subs), func(b *testing.B) {
-			p := benchPTY(subs, 16384)
+			p := benchPTY(subs)
 			data := make([]byte, 16*1024)
 			for i := range data {
 				data[i] = byte('a' + i%26)
@@ -53,13 +51,12 @@ func BenchmarkPTYOutputChunk(b *testing.B) {
 				p.outputMu.Unlock()
 				p.broadcast(ptyChunk{data: data}, seq)
 
-				// Keep the channels from filling, which would turn every later
+				// Keep the queues from filling, which would turn every later
 				// broadcast into the cheap dropped-chunk branch and stop the
 				// benchmark measuring the delivery path at all.
 				if subs > 0 && i%1024 == 1023 {
 					for _, sub := range p.subscribers {
-						for len(sub.ch) > 0 {
-							<-sub.ch
+						for _, ok, _ := sub.out.pop(); ok; _, ok, _ = sub.out.pop() {
 						}
 					}
 				}
@@ -74,7 +71,7 @@ func BenchmarkPTYOutputChunk(b *testing.B) {
 func BenchmarkPTYBroadcast(b *testing.B) {
 	for _, subs := range []int{1, 4, 16} {
 		b.Run(fmt.Sprintf("subscribers-%d", subs), func(b *testing.B) {
-			p := benchPTY(subs, 16384)
+			p := benchPTY(subs)
 			data := make([]byte, 16*1024)
 
 			b.ReportAllocs()
@@ -83,8 +80,7 @@ func BenchmarkPTYBroadcast(b *testing.B) {
 				p.broadcast(ptyChunk{data: data}, int64(i+1))
 				if i%1024 == 1023 {
 					for _, sub := range p.subscribers {
-						for len(sub.ch) > 0 {
-							<-sub.ch
+						for _, ok, _ := sub.out.pop(); ok; _, ok, _ = sub.out.pop() {
 						}
 					}
 				}
@@ -98,7 +94,7 @@ func BenchmarkPTYBroadcast(b *testing.B) {
 // ends. The arm is on the output path, so its cost is paid per chunk whether or
 // not the scan it schedules ever runs.
 func BenchmarkScreenSettleArm(b *testing.B) {
-	p := benchPTY(0, 1)
+	p := benchPTY(0)
 	p.setScreenLook(func() {})
 	b.Cleanup(p.stopScreenSettle)
 

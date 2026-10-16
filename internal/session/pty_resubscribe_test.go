@@ -41,19 +41,15 @@ func (p *PTY) appendAndBroadcast(data []byte) {
 	p.broadcast(ptyChunk{data: data}, seq)
 }
 
-// drain collects everything queued on a subscriber channel without blocking.
-func drain(ch <-chan ptyChunk) []byte {
+// drain collects everything queued on a subscriber queue without blocking.
+func drain(ch *ptyQueue) []byte {
 	var out []byte
 	for {
-		select {
-		case chunk, ok := <-ch:
-			if !ok {
-				return out
-			}
-			out = append(out, chunk.data...)
-		default:
+		chunk, ok, _ := ch.pop()
+		if !ok {
 			return out
 		}
+		out = append(out, chunk.data...)
 	}
 }
 

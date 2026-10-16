@@ -27,7 +27,7 @@ var (
 )
 
 // streamPTYOutput streams raw PTY bytes to a subscriber with batching.
-// Multiple channel reads are coalesced into a single connection write to
+// Multiple queued chunks are coalesced into a single connection write to
 // reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
 // write per batch instead of one per read).
 //
@@ -38,7 +38,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	// On any exit, stop receiving from the PTY and drop the subscription entry so
 	// the connState is left coherent: a later re-subscribe must not be blocked by
 	// a stale "already subscribed" guard (daemon_handlers.go), and no PTY keeps
-	// broadcasting into an unread channel.
+	// broadcasting into an unread queue.
 	//
 	// Both act only while they still refer to this goroutine's subscriber. A
 	// pane hidden and shown quickly unsubscribes and subscribes again while
@@ -59,7 +59,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	// 256 KiB for every client and pane pair, including panes that never
 	// print.
 	var batch []byte
-	var outputCh <-chan ptyChunk = sub.ch
+	queue := &sub.out
 	// take accounts for a chunk taken off the stream, so broadcast can tell
 	// how much this client still holds, and adds its bytes to the batch. A
 	// frame broadcast dropped for a newer one adds nothing.
@@ -73,114 +73,139 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	var windowStart time.Time
 	windowBytes := 0
 	var hold *time.Timer
+	// trim fires once a queue the backlog grew has stayed empty for
+	// queueTrimAfter. Made the first time a grown queue drains.
+	var trim *time.Timer
 	// resize is a value, not a pointer: taking the address of the receive
 	// variables made them escape, one allocation per chunk.
 	var resize ptyChunk
 
 	for {
+		// A client that went away stops the stream even while chunks are
+		// still queued.
 		select {
 		case <-cs.done:
 			return
 		case <-d.ctx.Done():
 			return
-		case chunk, ok := <-outputCh:
-			if !ok {
+		default:
+		}
+		chunk, ok, closed := queue.pop()
+		if closed {
+			return
+		}
+		if !ok {
+			// Wait only after a pop found the queue empty: the next push
+			// leaves a token on wake (subscriber_queue.go).
+			var trimC <-chan time.Time
+			if queue.oversized() {
+				if trim == nil {
+					trim = time.NewTimer(queueTrimAfter)
+				} else {
+					trim.Reset(queueTrimAfter)
+				}
+				trimC = trim.C
+			}
+			select {
+			case <-cs.done:
+				return
+			case <-d.ctx.Done():
+				return
+			case <-queue.wake:
+			case <-trimC:
+				queue.trim()
+			}
+			continue
+		}
+		batch = batch[:0]
+		resize = ptyChunk{}
+		// A dropped frame costs nothing to skip.
+		if chunk.frame != nil && chunk.frame.state.Load() == frameDropped {
+			goto send
+		}
+		// A resize is never held: it carries no bytes and it ends a batch
+		// anyway. Bytes after a full window wait for the window to end, and
+		// whatever queued meanwhile goes out with them below.
+		if !chunk.isResize() && windowBytes >= streamFloodBytes {
+			if wait := streamFrameInterval - time.Since(windowStart); wait > 0 {
+				if hold == nil {
+					hold = time.NewTimer(wait)
+				} else {
+					hold.Reset(wait)
+				}
+				select {
+				case <-hold.C:
+				case <-cs.done:
+					return
+				case <-d.ctx.Done():
+					return
+				}
+			}
+		}
+		// A resize marks the byte the daemon's emulator changed width at,
+		// so it ends the batch in front of it and is sent on its own.
+		// Coalescing it into the bytes either side would put the client's
+		// emulator at the wrong width for one of them.
+		if chunk.isResize() {
+			resize = chunk
+		} else {
+			take(chunk)
+			for len(batch) < maxBatch {
+				more, ok, _ := queue.pop()
+				if !ok {
+					goto send
+				}
+				if more.isResize() {
+					resize = more
+					goto send
+				}
+				take(more)
+			}
+		}
+	send:
+		// A frame can make the batch larger than maxBatch, so it goes out
+		// in pieces of at most maxBatch, each with its own deadline.
+		for out := batch; len(out) > 0; {
+			piece := out[:min(len(out), maxBatch)]
+			out = out[len(piece):]
+			cs.sendMu.Lock()
+			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			err := WritePTYOutput(cs.conn, pty.ID, piece)
+			cs.sendMu.Unlock()
+			if now := time.Now(); now.Sub(windowStart) >= streamFrameInterval {
+				windowStart, windowBytes = now, len(piece)
+			} else {
+				windowBytes += len(piece)
+			}
+			if err != nil {
+				// The write failed mid-frame (a slow/stuck client hitting the 5s
+				// deadline): the wire now carries a partial frame and every later
+				// send would append onto a desynced stream. Tear the whole client
+				// down rather than leaving it half-subscribed and desynced.
+				cs.drop()
 				return
 			}
-			batch = batch[:0]
-			resize = ptyChunk{}
-			// A dropped frame costs nothing to skip.
-			if chunk.frame != nil && chunk.frame.state.Load() == frameDropped {
-				goto send
+		}
+		if resize.isResize() {
+			if err := d.sendMessage(cs, MsgPTYResized, &PTYResizedPayload{
+				PTYID:  pty.ID,
+				Width:  resize.width,
+				Height: resize.height,
+			}); err != nil {
+				return
 			}
-			// A resize is never held: it carries no bytes and it ends a batch
-			// anyway. Bytes after a full window wait for the window to end, and
-			// whatever queued meanwhile goes out with them below.
-			if !chunk.isResize() && windowBytes >= streamFloodBytes {
-				if wait := streamFrameInterval - time.Since(windowStart); wait > 0 {
-					if hold == nil {
-						hold = time.NewTimer(wait)
-					} else {
-						hold.Reset(wait)
-					}
-					select {
-					case <-hold.C:
-					case <-cs.done:
-						return
-					case <-d.ctx.Done():
-						return
-					}
-				}
+		}
+		// A stream that was gapped while this client was slow has drained
+		// by the time the queue is empty. Rebuild it from where it got
+		// to, so the client is handed what it missed instead of the rest
+		// of the stream painted over a hole.
+		if q, next := pty.resumeAfterGap(cs.clientID, sub); q != nil {
+			cs.mu.Lock()
+			if cs.ptySubscriptions[pty.ID] == sub {
+				cs.ptySubscriptions[pty.ID] = next
 			}
-			// A resize marks the byte the daemon's emulator changed width at,
-			// so it ends the batch in front of it and is sent on its own.
-			// Coalescing it into the bytes either side would put the client's
-			// emulator at the wrong width for one of them.
-			if chunk.isResize() {
-				resize = chunk
-			} else {
-				take(chunk)
-				for len(batch) < maxBatch {
-					select {
-					case more, ok := <-outputCh:
-						if !ok {
-							goto send
-						}
-						if more.isResize() {
-							resize = more
-							goto send
-						}
-						take(more)
-					default:
-						goto send
-					}
-				}
-			}
-		send:
-			// A frame can make the batch larger than maxBatch, so it goes out
-			// in pieces of at most maxBatch, each with its own deadline.
-			for out := batch; len(out) > 0; {
-				piece := out[:min(len(out), maxBatch)]
-				out = out[len(piece):]
-				cs.sendMu.Lock()
-				_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-				err := WritePTYOutput(cs.conn, pty.ID, piece)
-				cs.sendMu.Unlock()
-				if now := time.Now(); now.Sub(windowStart) >= streamFrameInterval {
-					windowStart, windowBytes = now, len(piece)
-				} else {
-					windowBytes += len(piece)
-				}
-				if err != nil {
-					// The write failed mid-frame (a slow/stuck client hitting the 5s
-					// deadline): the wire now carries a partial frame and every later
-					// send would append onto a desynced stream. Tear the whole client
-					// down rather than leaving it half-subscribed and desynced.
-					cs.drop()
-					return
-				}
-			}
-			if resize.isResize() {
-				if err := d.sendMessage(cs, MsgPTYResized, &PTYResizedPayload{
-					PTYID:  pty.ID,
-					Width:  resize.width,
-					Height: resize.height,
-				}); err != nil {
-					return
-				}
-			}
-			// A stream that was gapped while this client was slow has drained
-			// by the time the channel is empty. Rebuild it from where it got
-			// to, so the client is handed what it missed instead of the rest
-			// of the stream painted over a hole.
-			if ch, next := pty.resumeAfterGap(cs.clientID, sub); ch != nil {
-				cs.mu.Lock()
-				if cs.ptySubscriptions[pty.ID] == sub {
-					cs.ptySubscriptions[pty.ID] = next
-				}
-				cs.mu.Unlock()
-				outputCh, sub = ch, next
-			}
+			cs.mu.Unlock()
+			queue, sub = q, next
 		}
 	}
 }

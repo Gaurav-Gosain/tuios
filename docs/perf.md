@@ -3292,3 +3292,78 @@ removed the loops never settle and the test fails.
 the first look over four intervals of an idle session, then a structural
 change still reaches disk. With the 2 s poll back the saver wakes 4 times
 and the test fails.
+
+## 2026-10 the daemon's subscriber queue
+
+The daemon made each stream's output queue whole on subscribe: a channel of
+4096 chunks, 56 bytes a slot, about 229 KB for each pane and each attached
+client before the pane printed anything. At 50 idle panes and one client
+that was 12 MB of the daemon's heap. The earlier ledger entry on
+`outputChan` kept it because a smaller channel dropped output. Since then a
+full queue gaps the stream and rebuilds it from the ring, so the slot count is
+a limit and not a reservation.
+
+### What changed
+
+- `ptyQueue` (`internal/session/subscriber_queue.go`) replaces the channel. It
+  is a ring behind a mutex that starts empty, doubles from 16 slots with the
+  backlog, and stops at the same 4096. A stream that would take one more is
+  gapped and rebuilt from the ring, as before. The order, the byte bound
+  (`maxSubscriberQueue`), the catch-up, `route` and `enqueue` are the same.
+- The stream writer takes chunks until the queue is empty and only then waits
+  on a one-slot wake channel. A push that makes the queue non-empty leaves a
+  token there.
+- A queue that grew past 16 slots gives its array back after it has stayed
+  empty for one second (`queueTrimAfter`). The attach stream trims on a timer
+  it arms only for such a queue. `stream-pane` trims on its one-second tick.
+
+### Numbers
+
+Throwaway daemon with `--pprof`, 50 idle bash panes, one client in a detached
+tmux at 120x36, 12 s to settle. Three runs each, main and branch interleaved.
+Live heap is the `inuse_space` total of the heap profile.
+
+| | main | branch |
+|---|---|---|
+| daemon HeapInuse | 43.1, 47.4, 50.0 MiB | 28.5, 29.4, 29.8 MiB |
+| daemon RSS | 97.4, 97.8, 101.6 MiB | 79.2, 79.5, 83.4 MiB |
+| live heap (profile) | 29.0, 29.9, 33.2 MiB | 15.0, 15.0, 15.2 MiB |
+| `subscribeLocked` in the live heap | 4.9 to 13.0 MiB | below the sampling floor |
+| saved per pane, from the medians | | HeapInuse 0.36 MiB, RSS 0.37 MiB |
+
+HeapInuse and RSS fall by more than the 229 KB the channel held, because the
+GC lets the heap grow to twice the live heap before it collects.
+
+`go test -bench 'BenchmarkPTY(OutputChunk|Broadcast)$' -benchmem`, six runs of
+each test binary interleaved, GOMAXPROCS=4, nice 19 on cores 0-7 of a machine
+in use, benchstat:
+
+| | main | branch | |
+|---|---|---|---|
+| OutputChunk, 0 subscribers | 860 ns | 864 ns | ~ (p=0.24) |
+| OutputChunk, 1 subscriber | 908 ns | 908 ns | ~ (p=1.0) |
+| OutputChunk, 4 subscribers | 947 ns | 940 ns | ~ (p=1.0) |
+| Broadcast, 1 subscriber | 402 ns | 383 ns | -4.8% (p=0.002) |
+| Broadcast, 4 subscribers | 594 ns | 537 ns | ~ (p=0.065) |
+| Broadcast, 16 subscribers | 1.42 µs | 1.20 µs | -15.3% (p=0.002) |
+
+Allocations stay at one per op. Broadcast to 16 subscribers shows 81.5 B/op
+against 80: the first fill grows each queue to 1024 slots once. The
+benchmarks drain each queue with `pop` until it is empty. A drain that asked
+`len` before each `pop` took the lock twice a chunk and measured the harness,
+not the producer.
+
+`TestIdleSubscriptionMemoryBudget` holds an idle subscription to a sixteenth
+of the old channel. It measures 1804 bytes here and 230109 bytes on main,
+where it fails. `TestFloodedQueueGivesBackItsPeak` fills a queue to the limit
+through wrapped doublings and checks the order, the refused chunk, and the
+trim.
+
+### Measured and deliberately not changed
+
+- **Letting the array go at every drain.** That was the first version. A
+  stream that drained between bursts grew its queue from 16 slots again at
+  every burst. Broadcast was 4.7% to 27% slower and took 1984 B/op with 16
+  subscribers. Those runs also used the two-lock drain, so part of the cost
+  was the harness. The one-second trim keeps the steady flood at the
+  old cost.

@@ -99,13 +99,13 @@ func frameSkipping(ops []byte, slowEvery, readSize, joinAt uint8) error {
 	slowCh := p.Subscribe("slow", 0)
 	fast, slow := p.subscriberFor("fast"), p.subscriberFor("slow")
 	var fastOut, slowOut, lateOut []byte
-	var lateCh <-chan ptyChunk
+	var lateCh *ptyQueue
 	var late *ptySubscriber
 	var lateFrom int64
 
-	drain := func(ch <-chan ptyChunk, sub *ptySubscriber, out []byte) []byte {
-		for len(ch) > 0 {
-			out = takeChunk(out, <-ch, sub)
+	drain := func(ch *ptyQueue, sub *ptySubscriber, out []byte) []byte {
+		for ch.len() > 0 {
+			out = takeChunk(out, ch.take(), sub)
 		}
 		return out
 	}

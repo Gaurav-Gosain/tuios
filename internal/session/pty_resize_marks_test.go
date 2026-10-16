@@ -24,19 +24,15 @@ func newResizablePTY(t *testing.T) *PTY {
 	}
 }
 
-// chunks collects everything queued on a subscriber channel without blocking.
-func chunks(ch <-chan ptyChunk) []ptyChunk {
+// chunks collects everything queued on a subscriber queue without blocking.
+func chunks(ch *ptyQueue) []ptyChunk {
 	var out []ptyChunk
 	for {
-		select {
-		case c, ok := <-ch:
-			if !ok {
-				return out
-			}
-			out = append(out, c)
-		default:
+		c, ok, _ := ch.pop()
+		if !ok {
 			return out
 		}
+		out = append(out, c)
 	}
 }
 

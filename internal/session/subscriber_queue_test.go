@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"testing"
+	"time"
 )
 
 // queuePTY is a PTY with no process behind it: enough for the ring, the
@@ -50,8 +51,8 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 		t.Fatal("a stream past the bound was not marked gapped")
 	}
 	held := 0
-	for len(ch) > 0 {
-		c := <-ch
+	for ch.len() > 0 {
+		c := ch.take()
 		held += len(c.data)
 		sub.queued.Add(-int64(len(c.data)))
 	}
@@ -64,7 +65,7 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 
 	// Gapped and drained: nothing more is queued until the stream is rebuilt.
 	p.feedRing(chunk)
-	if len(ch) != 0 {
+	if ch.len() != 0 {
 		t.Fatal("a gapped stream was handed another chunk, which would paint past the hole")
 	}
 
@@ -75,13 +76,13 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 	if nsub.gapped.Load() {
 		t.Fatal("the rebuilt stream is still gapped")
 	}
-	first, ok := <-nch
+	first, ok := nch.next()
 	if !ok || !bytes.HasPrefix(first.data, resyncPrefix) {
 		t.Fatalf("the rebuilt stream did not start with a clear, the ring rolled past where it stopped: %q", head(first.data))
 	}
 	nsub.queued.Add(-int64(len(first.data)))
-	if len(nch) != 0 {
-		t.Fatalf("the ring replay came as %d chunks, want one", 1+len(nch))
+	if nch.len() != 0 {
+		t.Fatalf("the ring replay came as %d chunks, want one", 1+nch.len())
 	}
 	if q := nsub.queued.Load(); q != 0 {
 		t.Fatalf("after taking the replay the stream still accounts %d bytes", q)
@@ -90,13 +91,10 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 	// Live output flows again.
 	next := bytes.Repeat([]byte("n"), 100)
 	p.feedRing(next)
-	select {
-	case c := <-nch:
-		if !bytes.Equal(c.data, next) {
-			t.Fatalf("after the resume the stream got %q, want the live chunk", head(c.data))
-		}
-	default:
+	if c, ok, _ := nch.pop(); !ok {
 		t.Fatal("after the resume the stream got nothing")
+	} else if !bytes.Equal(c.data, next) {
+		t.Fatalf("after the resume the stream got %q, want the live chunk", head(c.data))
 	}
 }
 
@@ -150,4 +148,44 @@ func head(b []byte) []byte {
 		return b[:24]
 	}
 	return b
+}
+
+// take pops the oldest chunk, or the zero chunk when none is queued.
+func (q *ptyQueue) take() ptyChunk {
+	c, _, _ := q.pop()
+	return c
+}
+
+// next waits for the oldest chunk. It reports false once the queue is closed
+// and drained, as a receive from a closed channel does.
+func (q *ptyQueue) next() (ptyChunk, bool) {
+	for {
+		c, ok, closed := q.pop()
+		if ok {
+			return c, true
+		}
+		if closed {
+			return ptyChunk{}, false
+		}
+		<-q.wake
+	}
+}
+
+// recv is next with a time limit. It reports false on timeout too.
+func (q *ptyQueue) recv(limit time.Duration) (ptyChunk, bool) {
+	timeout := time.After(limit)
+	for {
+		c, ok, closed := q.pop()
+		if ok {
+			return c, true
+		}
+		if closed {
+			return ptyChunk{}, false
+		}
+		select {
+		case <-q.wake:
+		case <-timeout:
+			return ptyChunk{}, false
+		}
+	}
 }

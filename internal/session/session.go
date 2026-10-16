@@ -3738,13 +3738,13 @@ var maxSubscriberQueue int64 = 8 << 20
 // the last chunk this subscriber was handed, which is where the client is
 // resumed if it comes back.
 type ptySubscriber struct {
-	ch   chan ptyChunk
+	out  ptyQueue
 	sent atomic.Int64
-	// queued is how many bytes sit on ch that the stream goroutine has not
+	// queued is how many bytes sit on out that the stream goroutine has not
 	// taken yet.
 	queued atomic.Int64
 	// gapped is set when a chunk could not be queued, because the queue held
-	// maxSubscriberQueue bytes or every slot was taken. Nothing more is queued
+	// maxSubscriberQueue bytes or subscriberSlots chunks. Nothing more is queued
 	// for a gapped stream: what it holds drains, and then the stream is
 	// rebuilt from sent through the ring. A chunk dropped in the middle of a
 	// stream used to be a silent hole the client painted the rest of the
@@ -3755,7 +3755,7 @@ type ptySubscriber struct {
 	// subscribeLocked.
 	missed bool
 
-	// framesWaiting counts the frames on ch that the stream goroutine has not
+	// framesWaiting counts the frames on out that the stream goroutine has not
 	// taken. skipped counts the frames dropped for newer ones. See
 	// kitty_frames.go.
 	framesWaiting atomic.Int32
@@ -3837,7 +3837,7 @@ var cancelPrefix = []byte{0x18}
 // the pane's screen; replaying the buffer from the top painted the pane's whole
 // history a second time below the paint already there, which is the stacked
 // prompts a workspace switch used to leave behind.
-func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
+func (p *PTY) Subscribe(clientID string, fromSeq int64) *ptyQueue {
 	return p.subscribe(clientID, fromSeq, false)
 }
 
@@ -3848,12 +3848,12 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 // throws away the snapshot's rows, which are exactly what a full-screen program
 // drew and cannot be recovered from the ring (issue #123). A snapshot is the
 // whole of the stream up to fromSeq, so the tail replays on top of it.
-func (p *PTY) SubscribeFromSnapshot(clientID string, fromSeq int64) <-chan ptyChunk {
+func (p *PTY) SubscribeFromSnapshot(clientID string, fromSeq int64) *ptyQueue {
 	return p.subscribe(clientID, fromSeq, true)
 }
 
-func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) <-chan ptyChunk {
-	return p.subscribeSub(clientID, fromSeq, fromSnapshot).ch
+func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) *ptyQueue {
+	return &p.subscribeSub(clientID, fromSeq, fromSnapshot).out
 }
 
 // subscribeSub is Subscribe returning the subscriber itself. A stream
@@ -3880,37 +3880,38 @@ func (p *PTY) subscriberFor(clientID string) *ptySubscriber {
 // it. It returns nil when cur is not gapped, still holds chunks, or is no
 // longer the client's stream: a client that unsubscribed and subscribed again
 // while cur's goroutine was still draining has a new stream, and rebuilding
-// over it would close the channel its new goroutine reads.
-func (p *PTY) resumeAfterGap(clientID string, cur *ptySubscriber) (<-chan ptyChunk, *ptySubscriber) {
+// over it would close the queue its new goroutine reads.
+func (p *PTY) resumeAfterGap(clientID string, cur *ptySubscriber) (*ptyQueue, *ptySubscriber) {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 	sub, ok := p.subscribers[clientID]
-	if !ok || sub != cur || !sub.gapped.Load() || len(sub.ch) > 0 {
+	if !ok || sub != cur || !sub.gapped.Load() || sub.out.len() > 0 {
 		return nil, nil
 	}
-	close(sub.ch)
+	sub.out.close()
 	delete(p.subscribers, clientID)
 	debugLog("[DEBUG] PTY %s: client %s fell behind at %d, resuming from the ring", p.ID[:8], clientID, sub.sent.Load())
-	ch := p.subscribeLocked(clientID, sub.sent.Load(), false)
+	q := p.subscribeLocked(clientID, sub.sent.Load(), false)
 	next := p.subscribers[clientID]
 	next.noPace.Store(sub.noPace.Load())
 	p.wakePacer()
-	return ch, next
+	return q, next
 }
 
 // subscribeLocked is subscribe with subscribersMu held.
-func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool) <-chan ptyChunk {
-	// Return existing channel if already subscribed
+func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool) *ptyQueue {
+	// Return the existing queue if already subscribed
 	if existing, ok := p.subscribers[clientID]; ok {
 		debugLog("[DEBUG] PTY %s: client %s already subscribed", p.ID[:8], clientID)
-		return existing.ch
+		return &existing.out
 	}
 
-	// Slots bound the count of chunks, maxSubscriberQueue bounds their bytes.
-	// Each chunk is one PTY read of up to 16 KiB, and the catch-up below is
-	// at most the ring, so the byte bound is the one a stalled client meets.
-	// The channel itself is 160 KiB per (client, pane); at 16384 it was 640.
-	sub := &ptySubscriber{ch: make(chan ptyChunk, 4096)}
+	// subscriberSlots bounds the count of chunks, maxSubscriberQueue bounds
+	// their bytes. Each chunk is one PTY read of up to 16 KiB, and the
+	// catch-up below is at most the ring, so the byte bound is the one a
+	// stalled client meets. The queue grows with the backlog: an idle pane
+	// holds a few slots per client, not all of them (subscriber_queue.go).
+	sub := newSubscriber()
 	p.subscribers[clientID] = sub
 	p.subscriberCount.Store(int32(len(p.subscribers)))
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
@@ -3951,11 +3952,10 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	if n := ringEnd - start; n > 0 {
 		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
 		send := func(c ptyChunk) {
-			select {
-			case sub.ch <- c:
+			if sub.out.push(c) {
 				sub.queued.Add(int64(len(c.data)))
-			default:
-				debugLog("[DEBUG] PTY %s: failed to send catch-up chunk (channel full)", p.ID[:8])
+			} else {
+				debugLog("[DEBUG] PTY %s: failed to send catch-up chunk (queue full)", p.ID[:8])
 			}
 		}
 		// The replay is cut at every resize mark inside it and the resize sent
@@ -4036,14 +4036,11 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	p.terminalMu.RLock()
 	if p.terminal != nil {
 		w, h := p.terminal.Width(), p.terminal.Height()
-		select {
-		case sub.ch <- ptyChunk{width: w, height: h}:
-		default:
-		}
+		sub.out.push(ptyChunk{width: w, height: h})
 	}
 	p.terminalMu.RUnlock()
 
-	return sub.ch
+	return &sub.out
 }
 
 // Unsubscribe removes a subscriber and returns the stream position it reached,
@@ -4074,7 +4071,7 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 	}
 	// Closing lets the streaming goroutine drain what is still queued, so every
 	// chunk broadcast up to here does reach the client.
-	close(sub.ch)
+	sub.out.close()
 	delete(p.subscribers, clientID)
 	p.subscriberCount.Store(int32(len(p.subscribers)))
 	p.wakePacer()
@@ -4563,10 +4560,10 @@ func (p *PTY) Close() error {
 	// pane whose emulator is about to be closed.
 	p.stopScreenSettle()
 
-	// Close all subscriber channels
+	// Close all subscriber queues
 	p.subscribersMu.Lock()
 	for id, sub := range p.subscribers {
-		close(sub.ch)
+		sub.out.close()
 		delete(p.subscribers, id)
 	}
 	p.subscriberCount.Store(0)
@@ -4877,9 +4874,7 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 			if sub.open != nil {
 				p.flushOpen(clientID, sub)
 			}
-			select {
-			case sub.ch <- chunk:
-			default:
+			if !sub.out.push(chunk) {
 				sub.gapped.Store(true)
 				sub.forgetFrames()
 			}

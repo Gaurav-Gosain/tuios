@@ -87,12 +87,11 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 	defer func() { _ = pty.Unsubscribe("reattach-client") }()
 
 	var replay []byte
-	select {
-	case chunk := <-ch:
-		replay = chunk.data
-	case <-time.After(5 * time.Second):
+	chunk, ok := ch.recv(5 * time.Second)
+	if !ok {
 		t.Fatal("no buffered replay for the new subscriber")
 	}
+	replay = chunk.data
 	if bytes.Contains(replay, enable) {
 		t.Fatal("replay still contains the enable sequence; the scrolled-out condition was not reproduced")
 	}

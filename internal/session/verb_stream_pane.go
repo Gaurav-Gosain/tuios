@@ -467,46 +467,40 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 			}
 			// A lease the client stopped renewing ends. See paneLeaseTTL.
 			ps.expireLease()
+			// A queue the backlog grew and that is empty now lets its
+			// array go (subscriber_queue.go).
+			ps.sub.out.trim()
 			// A pane whose program exited stays open until a client closes
 			// its window. With nothing more coming from it, the stream ends.
-			if ps.pty.IsExited() && len(ps.sub.ch) == 0 {
+			if ps.pty.IsExited() && ps.sub.out.len() == 0 {
 				if quiet++; quiet >= 2 {
 					return ps.exitReason()
 				}
 			}
-		case c, ok := <-ps.sub.ch:
-			if !ok {
-				if err := flush(); err != nil {
-					return err
-				}
-				return ps.exitReason()
-			}
-			quiet = 0
-			if err := take(c); err != nil {
-				return err
-			}
-		drain:
+		case <-ps.sub.out.wake:
+			// The token says a chunk may be waiting. Take every chunk queued,
+			// so the next push leaves a new token (subscriber_queue.go).
 			for {
-				select {
-				case more, ok := <-ps.sub.ch:
-					if !ok {
-						if err := flush(); err != nil {
-							return err
-						}
-						return ps.exitReason()
-					}
-					if err := take(more); err != nil {
+				c, ok, closed := ps.sub.out.pop()
+				if closed {
+					if err := flush(); err != nil {
 						return err
 					}
-				default:
-					break drain
+					return ps.exitReason()
+				}
+				if !ok {
+					break
+				}
+				quiet = 0
+				if err := take(c); err != nil {
+					return err
 				}
 			}
 			if err := flush(); err != nil {
 				return err
 			}
 		}
-		if ps.sub.gapped.Load() && len(ps.sub.ch) == 0 {
+		if ps.sub.gapped.Load() && ps.sub.out.len() == 0 {
 			if err := ps.recoverGap(); err != nil {
 				return err
 			}
@@ -814,7 +808,7 @@ func (p *PTY) subscribeAt(clientID string, fromSeq int64, fromSnapshot bool) (*p
 	p.subscribeLocked(clientID, fromSeq, fromSnapshot)
 	sub := p.subscribers[clientID]
 	if sub.missed {
-		close(sub.ch)
+		sub.out.close()
 		delete(p.subscribers, clientID)
 		p.subscriberCount.Store(int32(len(p.subscribers)))
 		return nil, false

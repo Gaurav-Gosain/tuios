@@ -714,22 +714,20 @@ func (p *PTY) enqueue(clientID string, sub *ptySubscriber, c ptyChunk, end int64
 	// than was counted.
 	sub.queued.Add(n)
 	c.end = end
-	select {
-	case sub.ch <- c:
+	if sub.out.push(c) {
 		// Only an item that was queued counts as reached: a client dropped
 		// here resumes from the gap rather than past it.
 		sub.sent.Store(end)
 		return true
-	default:
-		sub.queued.Add(-n)
-		sub.gapped.Store(true)
-		p.streamsCut.Add(1)
-		sub.forgetFrames()
-		if p.debug {
-			debugLog("[DEBUG] PTY %s: channel full for %s, gapped", p.ID[:8], clientID)
-		}
-		return false
 	}
+	sub.queued.Add(-n)
+	sub.gapped.Store(true)
+	p.streamsCut.Add(1)
+	sub.forgetFrames()
+	if p.debug {
+		debugLog("[DEBUG] PTY %s: queue full for %s, gapped", p.ID[:8], clientID)
+	}
+	return false
 }
 
 // forgetFrames drops what a client was gathering and every frame it could

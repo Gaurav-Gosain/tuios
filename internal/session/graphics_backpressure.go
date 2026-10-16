@@ -52,7 +52,7 @@ func (sub *ptySubscriber) behind() bool {
 	return sub.gapped.Load() ||
 		sub.framesWaiting.Load() > 0 ||
 		sub.queued.Load() > maxSubscriberQueue/2 ||
-		len(sub.ch) > cap(sub.ch)/2
+		sub.out.len() > subscriberSlots/2
 }
 
 // everyClientBehind reports whether at least one client paces the pane and
