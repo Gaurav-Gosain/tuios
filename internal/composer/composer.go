@@ -18,6 +18,7 @@ package composer
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -264,7 +265,9 @@ func (m *Model) Paste(text string, remote bool) {
 		return
 	}
 	if m.size+len(text) > m.opt.MaxBytes {
-		m.notice = "The paste is larger than " + sizeWords(m.opt.MaxBytes-m.size) + ". Save it to a file and type the path."
+		// The room left can be a few bytes, so the line names no size: a
+		// paste of one character must not read as larger than a kilobyte.
+		m.notice = "The paste is too large for the message. Save it to a file and type the path."
 		return
 	}
 	lines, chars := measure(text)
@@ -281,7 +284,7 @@ func (m *Model) Paste(text string, remote bool) {
 // own, and its characters.
 func measure(text string) (lines, chars int) {
 	body := strings.TrimRight(text, "\n")
-	return strings.Count(body, "\n") + 1, len([]rune(text))
+	return strings.Count(body, "\n") + 1, utf8.RuneCountInString(text)
 }
 
 // nextBlock is the number a new block takes: the highest in the draft plus
@@ -336,15 +339,6 @@ func thousands(n int) string {
 		b.WriteString(s[i : i+3])
 	}
 	return b.String()
-}
-
-// sizeWords says a byte count the way a person reads it: in MB from one
-// megabyte, in KB below.
-func sizeWords(n int) string {
-	if n >= 1<<20 {
-		return strconv.Itoa(n>>20) + " MB"
-	}
-	return strconv.Itoa(max(n>>10, 1)) + " KB"
 }
 
 // edited clears what an edit makes stale: the notice and the column up and
