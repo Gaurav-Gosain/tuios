@@ -232,7 +232,7 @@ func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal 
 	b.WriteString(base.Foreground(pal.FgMute).Render(padRight(source, themeEditorSourceW)))
 	b.WriteString(base.Foreground(pal.FgDim).Render(padRight(hex, themeEditorHexW)))
 	if floor, on := m.themeEditorFloor(row); floor > 0 && on != nil && c != nil && !overlay.IsNoColor(c) {
-		ratio := overlay.ContrastRatio(c, on)
+		ratio := themeEditorRatio(c, on)
 		badge := fmt.Sprintf("%.1f:1", ratio)
 		if ratio < floor {
 			b.WriteString(base.Foreground(pal.Warn).Bold(true).Render("! " + badge))

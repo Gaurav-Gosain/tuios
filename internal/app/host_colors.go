@@ -121,11 +121,13 @@ func (m *OS) schemeTheme() string {
 // followSchemeTheme puts the theme of the pair that fits the terminal in
 // force, when the config sets theme_light. It runs when the local terminal
 // reports its background, and after a light and dark switch (mode 2031). The
-// picker's preview is left alone while it is open. A --theme flag is an
+// picker's and the theme editor's previews are left alone while they are
+// open. The editor calls this again when it closes. A --theme flag is an
 // explicit choice, so with one the pair is not followed.
 func (m *OS) followSchemeTheme() {
 	if m.UserConfig == nil || m.UserConfig.Appearance.ThemeLight == "" ||
-		m.Client != ClientLocal || m.LearnMode || m.ShowThemePicker || config.FlagTheme() != "" {
+		m.Client != ClientLocal || m.LearnMode || m.ShowThemePicker || m.themeEditor.open ||
+		config.FlagTheme() != "" {
 		return
 	}
 	name := m.schemeTheme()

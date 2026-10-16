@@ -155,3 +155,78 @@ func TestThemeFileWritersHonourConfigReadOnly(t *testing.T) {
 		}
 	}
 }
+
+// themeFileWriteSites are the functions in internal/app that call a theme
+// file writer, each with the gate in themeFileWriters that stands in front of
+// it. ThemePickerConfirmDelete deletes only what ThemePickerAskDelete asked
+// about, so the ask is its gate.
+var themeFileWriteSites = map[string]string{
+	"ThemeEditorSave":          "ThemeEditorSave",
+	"ThemePickerConfirmDelete": "ThemePickerAskDelete",
+}
+
+// TestEveryThemeFileWriteIsGated finds every reach for a theme file writer in
+// internal/app: theme.DeleteThemeFile, and a draft's Save or SaveOver. Each
+// must sit in a function named in themeFileWriteSites, so a writer added
+// later cannot skip the ConfigReadOnly check by not being on the list.
+//
+// Negative control: a call to st.draft.Save() in any other function fails
+// this test with that function's name.
+func TestEveryThemeFileWriteIsGated(t *testing.T) {
+	names, err := filepath.Glob(filepath.Join("..", "app", "*.go"))
+	if err != nil {
+		t.Fatalf("listing internal/app: %v", err)
+	}
+	fset := token.NewFileSet()
+	seen := map[string]bool{}
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", name, err)
+		}
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				sel, ok := n.(*ast.SelectorExpr)
+				if !ok || !writesThemeFile(sel) {
+					return true
+				}
+				gate, listed := themeFileWriteSites[fn.Name.Name]
+				switch {
+				case !listed:
+					t.Errorf("%s in %s writes a theme file and is not in themeFileWriteSites; name it there with the gate that reads ConfigReadOnly",
+						fn.Name.Name, fset.Position(sel.Pos()))
+				case !slices.Contains(themeFileWriters, gate):
+					t.Errorf("%s is gated by %s, which is not in themeFileWriters", fn.Name.Name, gate)
+				}
+				seen[fn.Name.Name] = true
+				return true
+			})
+		}
+	}
+	for site := range themeFileWriteSites {
+		if !seen[site] {
+			t.Errorf("%s is named as a theme file write site but writes nothing; this guard is looking at nothing", site)
+		}
+	}
+}
+
+// writesThemeFile reports whether sel reaches for a theme file writer:
+// theme.DeleteThemeFile, or Save or SaveOver on a draft.
+func writesThemeFile(sel *ast.SelectorExpr) bool {
+	switch sel.Sel.Name {
+	case "DeleteThemeFile":
+		x, ok := sel.X.(*ast.Ident)
+		return ok && x.Name == "theme"
+	case "Save", "SaveOver":
+		x, ok := sel.X.(*ast.SelectorExpr)
+		return ok && x.Sel.Name == "draft"
+	}
+	return false
+}

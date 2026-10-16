@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"image/color"
 	"slices"
 	"strings"
@@ -120,6 +121,9 @@ type themeEditorState struct {
 	typingOn bool
 	// leaving is set by an esc over unsaved changes. A second esc drops them.
 	leaving bool
+	// overwrite is set when a save found the file changed on disk. The next
+	// ctrl+s replaces it.
+	overwrite bool
 }
 
 // ThemeEditorOpen reports whether the theme editor is open.
@@ -174,6 +178,8 @@ func (m *OS) CloseThemeEditor() {
 	if live {
 		m.applyTheme(original)
 		theme.DropScratch(id)
+		// A light and dark switch while the editor was open was held back.
+		m.followSchemeTheme()
 	}
 }
 
@@ -368,20 +374,36 @@ func themeColourList(t *tint.Tint) []*tint.Color {
 // measured on, or 0 for a row with no floor.
 func (m *OS) themeEditorFloor(row themeEditorRow) (float64, color.Color) {
 	st := &m.themeEditor
-	if st.resolved == nil {
+	// At 16 colours the frame writer steps each colour down to a slot whose
+	// RGB only the terminal knows, so there is no ratio to show or to fix.
+	if st.resolved == nil || theme.Depth() == overlay.Depth16 {
 		return 0, nil
 	}
 	if row.pane >= 0 {
 		bg := theme.AsColor(st.resolved.Bg)
-		switch {
-		case row.pane == 0:
+		switch row.pane {
+		case 0:
 			return theme.ContrastFloor, bg
-		case row.pane == 1 || row.pane == 2:
+		case 1, 2:
+			return 0, nil
+		case 4, 11:
+			// Black and white: one of the two is meant to sit near the
+			// ground, so a floor would only ask for a broken palette.
 			return 0, nil
 		}
 		return theme.MarkFloor, bg
 	}
-	return theme.FloorOf(row.role, st.resolved, st.pal)
+	floor, ground := theme.FloorOf(row.role, st.resolved, st.pal)
+	if ground == nil || overlay.IsNoColor(ground) {
+		return 0, nil
+	}
+	return floor, ground
+}
+
+// themeEditorRatio is the contrast of c on ground as the terminal shows
+// them: at 256 colours, the palette entries the frame writer picks.
+func themeEditorRatio(c, ground color.Color) float64 {
+	return overlay.ContrastRatio(overlay.Shown(c), overlay.Shown(ground))
 }
 
 // themeEditorSource says where row's colour comes from: a key in the config
@@ -543,6 +565,15 @@ func (m *OS) ThemeEditorCommitTyping() {
 			m.ShowNotification("A theme cannot name "+value+". tuios measures the text inks", "warning", m.Settings.NotificationWarningDuration)
 			return
 		}
+		// A role that names itself, or two that name each other, parses
+		// and does not resolve. Refuse it here, while the value is still
+		// in the field to correct.
+		trial := st.draft.Clone()
+		trial.Chrome[row.role] = value
+		if _, _, err := trial.Resolve(); err != nil {
+			m.ShowNotification(err.Error(), "warning", m.Settings.NotificationWarningDuration)
+			return
+		}
 	}
 	st.typingOn, st.typing = false, ""
 	m.themeEditorSet(row, value)
@@ -559,7 +590,19 @@ func (m *OS) ThemeEditorSave() tea.Cmd {
 		m.ShowNotification("This client cannot change the theme files", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	path, err := st.draft.Save()
+	save := st.draft.Save
+	if st.overwrite {
+		save = st.draft.SaveOver
+	}
+	path, err := save()
+	if errors.Is(err, theme.ErrChangedOnDisk) {
+		// Someone else wrote the file since the editor read it. Their
+		// change is lost on a write, so the second ctrl+s decides.
+		st.overwrite = true
+		m.ShowNotification("The theme file changed on disk. Press ctrl+s again to replace it", "warning", m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	st.overwrite = false
 	if err != nil {
 		m.ShowNotification("Theme not saved: "+err.Error(), "error", m.Settings.NotificationWarningDuration)
 		return nil

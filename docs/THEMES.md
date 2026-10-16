@@ -103,7 +103,9 @@ for a colour with text or a mark on it, its contrast. Where the colour comes
 from is one of `custom` (a hex in this theme), `slot` or `role` (a name in
 this theme), `from base`, or `set in config.toml` (a key in the config wins).
 A contrast under its floor shows `!`: 4.5:1 for text, 3:1 for a mark, a pill
-or a border.
+or a border. At 256 colours the contrast is for the colours the terminal
+shows. At 16 colours the sheet shows no contrast, because the terminal
+decides those colours.
 
 | Key | What it does |
 |---|---|
@@ -120,9 +122,12 @@ or a border.
 - Each change shows on the whole screen at once. In a client of `tuios ssh`
   or `tuios-web` the theme is the server's, so only the sheet shows the
   change.
-- `ctrl+s` writes `<id>.json` in the themes directory with only what differs
-  from the base. A built-in theme saves as an edited copy under its own id.
-  Every client on the machine reads the file again.
+- `ctrl+s` writes the theme's file with only what differs from the base. A
+  new theme saves as `<id>.json` in the themes directory. A built-in theme
+  saves as an edited copy under its own id. Every client on the machine reads
+  the file again.
+- If the file changed on disk after the editor read it, `ctrl+s` tells you
+  and writes nothing. Press `ctrl+s` again to replace the file.
 - A client of `tuios ssh` or `tuios-web` cannot save.
 - When the editor closes, the theme that was in use comes back. If you saved
   the theme in use, it comes back with your changes.

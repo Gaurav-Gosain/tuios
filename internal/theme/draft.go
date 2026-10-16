@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image/color"
@@ -40,7 +41,21 @@ type Draft struct {
 	// Chrome holds the file's own chrome fields by role, as the file writes
 	// them: hex, a slot or another role. Empty takes the base's.
 	Chrome [roleLastSettable + 1]string
+	// src is the file the draft was read from and the bytes it held. Clones
+	// share it, so a save seen by one draft is seen by the undo stack too.
+	src *draftSource
 }
+
+// draftSource is where a draft saves and what that file held when it was
+// last read or written. A new theme has no path yet.
+type draftSource struct {
+	path string
+	disk []byte
+}
+
+// ErrChangedOnDisk is Save's error when the file changed after the draft read
+// it: by hand, by another client or by a tool. SaveOver writes anyway.
+var ErrChangedOnDisk = errors.New("the theme file changed on disk after the editor read it")
 
 // ColourKeys are the names of a theme's pane colours, in Draft.Colours order.
 func ColourKeys() []string { return colourKeys[:] }
@@ -73,7 +88,7 @@ func DraftOf(id string) (*Draft, error) {
 		if _, ok := tint.GetTint(id); !ok {
 			return nil, fmt.Errorf("%q is not a theme", id)
 		}
-		return &Draft{ID: id, Base: id}, nil
+		return &Draft{ID: id, Base: id, src: &draftSource{}}, nil
 	}
 	// #nosec G304 -- the path is the themes directory's own file for id
 	data, err := os.ReadFile(r.path)
@@ -84,7 +99,7 @@ func DraftOf(id string) (*Draft, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Draft{ID: id, Base: f.Base, Dark: f.Dark}
+	d := &Draft{ID: id, Base: f.Base, Dark: f.Dark, src: &draftSource{path: r.path, disk: data}}
 	if f.DisplayName != f.ID {
 		d.Name = f.DisplayName
 	}
@@ -111,7 +126,7 @@ func NewDraft(base string) (*Draft, error) {
 		}
 		id = fmt.Sprintf("%s-custom-%d", stem, n)
 	}
-	return &Draft{ID: id, Base: base}, nil
+	return &Draft{ID: id, Base: base, src: &draftSource{}}, nil
 }
 
 // Clone copies the draft.
@@ -205,33 +220,61 @@ func DropScratch(id string) {
 	tint.UnregisterIDs(scratch)
 }
 
-// Save writes the draft into the themes directory as a sparse file and reads
-// the directory again, so the theme is selectable at once. It returns the file.
-func (d *Draft) Save() (string, error) {
+// Save writes the draft as a sparse file and reads the themes directory
+// again, so the theme is selectable at once. It returns the file. A theme read
+// from a file is written back to that file, whatever its name. A new one is
+// written as its id in the themes directory.
+//
+// A file that changed after the draft read it is not replaced: Save returns
+// ErrChangedOnDisk, and SaveOver replaces it.
+func (d *Draft) Save() (string, error) { return d.save(false) }
+
+// SaveOver is Save that replaces the file even when it changed on disk.
+func (d *Draft) SaveOver() (string, error) { return d.save(true) }
+
+func (d *Draft) save(force bool) (string, error) {
 	if !ValidThemeID(d.ID) {
 		return "", fmt.Errorf("%q cannot name a theme file. Use lower-case letters, digits, dots, dashes and underscores", d.ID)
 	}
 	if _, _, err := d.Resolve(); err != nil {
 		return "", err
 	}
-	dir, err := GetThemesDir()
-	if err != nil {
-		return "", err
+	if d.src == nil {
+		d.src = &draftSource{}
+	}
+	path := d.src.path
+	if path == "" {
+		dir, err := GetThemesDir()
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(dir, d.ID+".json")
+	}
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New(filepath.Base(path) + " is a link. tuios does not write through it")
+	}
+	if !force {
+		// #nosec G304 -- the path is the draft's own file in the themes directory
+		now, err := os.ReadFile(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		if !bytes.Equal(now, d.src.disk) {
+			return "", ErrChangedOnDisk
+		}
 	}
 	doc := themeDoc{ID: d.ID, DisplayName: d.Name, Base: d.Base, Dark: d.Dark, Colours: d.Colours}
 	copy(doc.Chrome[:], d.Chrome[:])
-	path := filepath.Join(dir, d.ID+".json")
-	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return "", errors.New(d.ID + ".json is a link. tuios does not write through it")
-	}
+	body := doc.encode(true)
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, doc.encode(true), 0o600); err != nil {
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
+	d.src.path, d.src.disk = path, body
 	ReloadCustomThemes()
 	return path, nil
 }
