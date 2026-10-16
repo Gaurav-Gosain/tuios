@@ -139,7 +139,7 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 		l := lines[i]
 		switch {
 		case l.heading != "":
-			body = append(body, overlay.Style(pal.Surface).Foreground(pal.FgDim).Bold(true).Render(l.heading))
+			body = append(body, themeEditorInk(pal.Surface, pal.FgDim, l.heading, true))
 		case l.row < 0:
 			body = append(body, "")
 		default:
@@ -172,7 +172,7 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	// The panel is as tall as its rows. The rest of the sheet's height is
 	// surface, so the sheet reaches the dock whatever the list's length.
 	if extra := h - geo.Height; extra > 0 {
-		blank := overlay.Style(pal.Surface).Render(strings.Repeat(" ", geo.Width))
+		blank := themeEditorInk(pal.Surface, nil, strings.Repeat(" ", geo.Width), false)
 		content += strings.Repeat("\n"+blank, extra)
 		geo.Height = h
 	}
@@ -186,7 +186,7 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 	st := &m.themeEditor
 	var out []string
 	note := func(s string, ink color.Color) {
-		out = append(out, overlay.Style(pal.Surface).Foreground(ink).Render(overlay.Truncate(s, width)))
+		out = append(out, themeEditorInk(pal.Surface, ink, overlay.Truncate(s, width), false))
 	}
 	if st.err != nil {
 		note("! "+st.err.Error(), pal.Warn)
@@ -198,8 +198,8 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 		note("This client shows the colours here only.", pal.FgMute)
 	}
 	if st.typingOn {
-		field := overlay.Style(pal.Card).Foreground(pal.Fg).Render(" " + st.typing + "█ ")
-		out = append(out, overlay.Style(pal.Surface).Foreground(pal.FgDim).Render("Value: ")+field)
+		field := themeEditorInk(pal.Card, pal.Fg, " "+st.typing+"█ ", false)
+		out = append(out, themeEditorInk(pal.Surface, pal.FgDim, "Value: ", false)+field)
 	}
 	return out
 }
@@ -209,44 +209,49 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal overlay.Palette) string {
 	st := overlay.RowState{Cursor: cursor, Focused: true}
 	ground := pal.Ground(st, pal.Surface)
-	base := overlay.Style(ground)
 	marker := "  "
 	labelInk := pal.FgDim
 	if cursor {
 		marker, labelInk = "› ", pal.Fg
 	}
 	c := m.themeEditorColour(row)
-	swatch := base.Render("  ")
-	hex := "none"
+	swatchBg, hex := ground, "none"
 	if c != nil && !overlay.IsNoColor(c) {
-		swatch = lipgloss.NewStyle().Background(c).Render("  ")
-		hex = overlay.Hex(toRGBA(c))
+		swatchBg, hex = c, overlay.Hex(toRGBA(c))
 	}
 	label := overlay.Truncate(row.label, themeEditorLabelW-1)
 	source := overlay.Truncate(m.themeEditorSource(row), themeEditorSourceW-1)
 
 	var b strings.Builder
-	b.WriteString(base.Foreground(labelInk).Render(marker + padRight(label, themeEditorLabelW)))
-	b.WriteString(swatch)
-	b.WriteString(base.Render(" "))
-	b.WriteString(base.Foreground(pal.FgMute).Render(padRight(source, themeEditorSourceW)))
-	b.WriteString(base.Foreground(pal.FgDim).Render(padRight(hex, themeEditorHexW)))
+	b.WriteString(themeEditorInk(ground, labelInk, marker+fitLine(label, themeEditorLabelW), false))
+	b.WriteString(themeEditorInk(swatchBg, nil, "  ", false))
+	b.WriteString(themeEditorInk(ground, nil, " ", false))
+	b.WriteString(themeEditorInk(ground, pal.FgMute, fitLine(source, themeEditorSourceW), false))
+	b.WriteString(themeEditorInk(ground, pal.FgDim, fitLine(hex, themeEditorHexW), false))
 	if floor, on := m.themeEditorFloor(row); floor > 0 && on != nil && c != nil && !overlay.IsNoColor(c) {
 		ratio := themeEditorRatio(c, on)
 		badge := fmt.Sprintf("%.1f:1", ratio)
 		if ratio < floor {
-			b.WriteString(base.Foreground(pal.Warn).Bold(true).Render("! " + badge))
+			b.WriteString(themeEditorInk(ground, pal.Warn, "! "+badge, true))
 		} else {
-			b.WriteString(base.Foreground(pal.FgMute).Render("  " + badge))
+			b.WriteString(themeEditorInk(ground, pal.FgMute, "  "+badge, false))
 		}
 	}
 	return pal.Row(b.String(), width, st, pal.Surface)
 }
 
-// padRight pads s with spaces to w cells.
-func padRight(s string, w int) string {
-	if n := lipgloss.Width(s); n < w {
-		return s + strings.Repeat(" ", w-n)
+// themeEditorInk renders s in ink on ground, either of which may be nil.
+// One call in place of a lipgloss chain per cell keeps the Style copies out
+// of the row function.
+//
+//go:noinline
+func themeEditorInk(ground, ink color.Color, s string, bold bool) string {
+	st := overlay.Style(ground)
+	if ink != nil {
+		st = st.Foreground(ink)
 	}
-	return s
+	if bold {
+		st = st.Bold(true)
+	}
+	return st.Render(s)
 }

@@ -7,7 +7,6 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"charm.land/tone"
@@ -60,6 +59,9 @@ var ErrChangedOnDisk = errors.New("the theme file changed on disk after the edit
 // ColourKeys are the names of a theme's pane colours, in Draft.Colours order.
 func ColourKeys() []string { return colourKeys[:] }
 
+// ColourOf is t's pane colour i, in ColourKeys order.
+func ColourOf(t *tint.Tint, i int) *tint.Color { return *themeColours(t)[i] }
+
 // SettableRoles are the chrome roles a theme file may set, in file order.
 func SettableRoles() []Role {
 	out := make([]Role, 0, roleLastSettable)
@@ -69,12 +71,23 @@ func SettableRoles() []Role {
 	return out
 }
 
-// themeIDPattern is what an id the editor writes may be: it names a file.
-var themeIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
-
-// ValidThemeID reports whether id can name a theme file.
+// ValidThemeID reports whether id can name a theme file: 1 to 64 of a-z,
+// 0-9, '_', '.' and '-', starting with a letter or a digit. A loop, not a
+// regexp: a package-level pattern compiles at init in every tuios process.
 func ValidThemeID(id string) bool {
-	return themeIDPattern.MatchString(id) && !strings.Contains(id, "~")
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case i > 0 && (c == '_' || c == '.' || c == '-'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // DraftOf starts a draft of the theme id. A theme file of yours is read as it
@@ -354,16 +367,6 @@ func FloorOf(r Role, t *tint.Tint, pal overlay.Palette) (floor float64, ground c
 		return MarkFloor, bg
 	}
 	return 0, nil
-}
-
-// ParseRole is the settable role named name, or false.
-func ParseRole(name string) (Role, bool) {
-	for r := RoleAccent; r <= roleLastSettable; r++ {
-		if r.String() == name {
-			return r, true
-		}
-	}
-	return RoleNone, false
 }
 
 // ColourNames lists the names a colour value can take, for completion: the

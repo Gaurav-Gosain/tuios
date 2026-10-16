@@ -354,20 +354,9 @@ func (m *OS) themeEditorColour(row themeEditorRow) color.Color {
 		return nil
 	}
 	if row.pane >= 0 {
-		cols := themeColourList(st.resolved)
-		return theme.AsColor(cols[row.pane])
+		return theme.AsColor(theme.ColourOf(st.resolved, row.pane))
 	}
 	return theme.RoleColour(row.role, st.resolved, st.chrome, st.pal)
-}
-
-// themeColourList is a tint's colours in theme.ColourKeys order.
-func themeColourList(t *tint.Tint) []*tint.Color {
-	return []*tint.Color{
-		t.Fg, t.Bg, t.SelectionBg, t.Cursor,
-		t.Black, t.Red, t.Green, t.Yellow, t.Blue, t.Purple, t.Cyan, t.White,
-		t.BrightBlack, t.BrightRed, t.BrightGreen, t.BrightYellow,
-		t.BrightBlue, t.BrightPurple, t.BrightCyan, t.BrightWhite,
-	}
 }
 
 // themeEditorFloor is the contrast row has to clear and the ground it is
