@@ -1,6 +1,6 @@
 # Live handoff: upgrading the daemon without killing pane processes
 
-Status: draft spec, not implemented. Local issue draft for discussion with the maintainer. Every architectural claim cites `path:line` at commit `b676cc47`. Every number marked measured comes from a probe in `docs/design/live-handoff-probes/` (Appendix A).
+Status: implemented as PR 2 to PR 5 on the branch `feat/live-handoff-impl`; section 7 lists where the implementation departs from this spec. Local issue draft for discussion with the maintainer. Every architectural claim cites `path:line` at commit `b676cc47`. Every number marked measured comes from a probe in `docs/design/live-handoff-probes/` (Appendix A).
 
 ## TL;DR
 
@@ -17,7 +17,8 @@ Status: draft spec, not implemented. Local issue draft for discussion with the m
   - liveness alone comes from kqueue or a pidfd (Linux process file descriptor), plus master EOF (end of file)/EIO (I/O error).
 - **Peak memory (measured, section 3).** A busy 60-pane daemon (full 198x48 screens, 1000 history rows each) holds about 100 MB live heap, an idle one about 17 MB. The manifest for 60 panes is 1.3–2.2 MB with screens only, 25–34 MB with 1000 rows. Exec in place frees the old heap at exec, and the new image peaks at about 2× its rebuilt heap while it applies history: +60–88 MB screens only, +195–342 MB with 1000 rows. So adoption bounds its workers and tunes the GC (garbage collector). A second process adds the old heap on top: about 300–450 MB transient for the busy case.
 - **Pause and blackout (measured parts).**
-  - 60 panes, screens only: capture 0.02–0.04 s, exec plus Go init 11–31 ms, apply about 0.02 s, so roughly 0.05–0.1 s serially. With 1000 rows: about 0.7–1.0 s serially, or about 0.13–0.17 s plus exec with capture and apply on 18 workers. ⚠️ A real end-to-end pause needs the implementation (PR 4 artifact).
+  - 60 panes, screens only: capture 0.02–0.04 s, exec plus Go init 11–31 ms, apply about 0.02 s, so roughly 0.05–0.1 s serially. With 1000 rows: about 0.7–1.0 s serially, or about 0.13–0.17 s plus exec with capture and apply on 18 workers.
+  - Measured end to end on the implementation (PR 4 artifact, section 4.1): 60 busy panes with 1000 rows each pause for 0.29–0.31 s from the first pane stopping to every pane reading again, and `daemon upgrade` takes 0.78–0.79 s, of which 0.44–0.46 s is the preflight's first exec of the new file.
   - A chatty pane blocks in `write()` once the kernel buffer fills: about 1 KB on macOS, 12–20 KB on Linux. The pane loses nothing.
   - Clients see a disconnect. PR 5 asks them to reattach. The clients-follow step reattaches them automatically, with a full repaint from the snapshot.
 - **Recommended first phase.** Follow the maintainer's PR numbering. The first shippable slice is **PR 2**: a quiesce primitive, a gated two-step exit wait and an adopted-pane constructor. It changes no user-visible behaviour, and an E2E (end-to-end) test drives it through a test-only re-exec. The user-visible feature is PR 2 to PR 5 together:
@@ -421,7 +422,8 @@ Snapshot capture and apply per 200x50 pane, through the real path `PTY.GetTermin
 | 1000 rows, palette | +92–93 MB | +197 MB | +195 MB | +254 MB |
 | 1000 rows, truecolor | +106–108 MB | +223 MB | +245 MB | +342 MB |
 
-  - With history the new image peaks at about 2× its rebuilt live heap, and a single worker does not avoid that. So adoption lowers the GC target for its duration (`debug.SetGCPercent` or a `GOMEMLIMIT` through `debug.SetMemoryLimit`), bounds its workers, restores both, and then calls `memtrim.Request()`. It only trims when the heap holds at least 32 MB beyond live data (`internal/memtrim/memtrim.go:23-84`). ⚠️ The peak with that tuning is unmeasured; the PR 4 artifact records it.
+  - With history the new image peaks at about 2× its rebuilt live heap, and a single worker does not avoid that. So adoption lowers the GC target for its duration (`debug.SetGCPercent` or a `GOMEMLIMIT` through `debug.SetMemoryLimit`), bounds its workers, restores both, and then calls `memtrim.Request()`. It only trims when the heap holds at least 32 MB beyond live data (`internal/memtrim/memtrim.go:23-84`).
+  - Measured on the implementation (PR 4 artifact): 60 busy panes at 200x50 with 1000 rows, applied on 4 workers. At `GOGC=25` for the apply, HeapInuse goes from 44–45 MB (the manifest read) to a peak of 124–126 MB and ends at 116–124 MB. At the default `GOGC=100` the same apply peaks at 182–187 MB. The tuning costs 70–85 ms of apply time (165–181 ms against 95–96 ms), and saves about 60 MB at the peak. The implementation keeps `GOGC=25`.
 - **The manifest** sits in the page cache (macOS, an unlinked file) or in a memfd (Linux). **A memfd is RAM** (random-access memory) until the new image closes it, so on Linux the true peak adds the whole manifest. Close or truncate it as soon as adoption has read it. Sizes for 60 panes, from the table above: 1.3–2.2 MB screens only, 25–34 MB with 1000 rows, 237–291 MB with 10,000 rows. Hence section 3.3.
 - **Second process.** The old live heap (about 100 MB for the busy case) stays resident while the new image hits the same apply peak: about 300–450 MB transient, against about 200–340 MB for exec in place. Plus the manifest in flight on the socket.
 - **After the handoff.** The new image has no alternate-screen or reflow scratch until it is used again, which is better than steady state. #735 and #736 release those every 30 s (`vt/reflow.go:66`, `vt/emulator.go:874`, `internal/session/daemon.go:2079-2120`). #762 (client side) is still open.
@@ -464,7 +466,7 @@ Snapshot capture and apply per 200x50 pane, through the real path `PTY.GetTermin
   - For comparison, fork plus exec of tuios to its first byte: p50 11.7 ms, p95 15.8 ms.
   - The first exec of a newly written binary on macOS costs 0.3–0.5 s more. The preflight on the same inode keeps it out of the pause (section 2.1).
   - At 10,000 rows: capture 3.7–5.7 s serially or 0.31–0.58 s on 18 workers, apply 2.6–3.1 s or 0.6–0.77 s.
-  - ⚠️ Not measured: the quiesce drain, the manifest write and fsync, config load, and a real end-to-end handoff. The PR 4 E2E artifact records the end-to-end figure.
+  - Measured on the implementation, the same 60 busy panes (PR 4 artifact): the quiesce of all 60 takes 0.2–0.4 ms; capturing, encoding and writing the 25.9 MB manifest on 8 workers 66–91 ms; the apply 165–181 ms (above); and the pause from the first pane stopping to every pane reading again 298–306 ms, which includes the exec, Go init, config load, reading the manifest and adopting the sessions. The preflight, before anything pauses, is 0.43–0.48 s for a newly written binary. A kept-open `yes` pane held 1024 bytes in the kernel when the panes stopped, read through kqueue, as measured outside tuios.
 
 ### 4.2 Client-visible blackout and redraw
 
@@ -567,7 +569,7 @@ E2E tests:
 Risks:
 - **Post-exec hard crash.** A new image that dies before its fallback ends every pane, as a crash does today. Causes: a runtime fatal error, out of memory, or `SIGKILL`. Mitigations: the preflight runs init and flag parsing, the watchdog, the fallback re-exec, and the cross-version E2E. Is this residual risk acceptable for an opt-in feature?
 - **Fork during the exposed-fd window.** Mitigated by stopping forkers plus `syscall.ForkLock`. One missed fork site can leak a PTY master, so the pane never hangs up, or leak the start lock, so the daemon can never start again. PR 2's fork control guards it.
-- **Apply memory peak.** The new image peaks at about 2× its rebuilt heap while it applies history, up to +342 MB for 60 busy truecolor panes on 18 workers (section 3.2). The GC tuning that bounds it is unmeasured until PR 4.
+- **Apply memory peak.** The new image peaks at about 2× its rebuilt heap while it applies history, up to +342 MB for 60 busy truecolor panes on 18 workers (section 3.2). With the apply on 4 workers at `GOGC=25` the implementation peaks at 124–126 MB of HeapInuse for 60 busy palette panes, against 182–187 MB at the default (section 3.2).
 - **Pipe read ends.** verify-fan and `capture_stdout` popups hold pipe read ends that close at exec, and the child's next write dies of SIGPIPE (section 2.3). The preflight refuses while either runs. A new feature that keeps a pipe read end is the same hazard, so the refusal check lists them in one place.
 - **First exec of a new binary.** 0.3–0.5 s on macOS, cause not confirmed. Paid by the preflight on the same inode and by the hardlinked `tuios.prev`. An installer that swaps the file between preflight and exec forces a second preflight.
 - **Silent semantic drift.** A changed meaning in a carried field passes gob decoding. The layout-hash test forces a version bump on struct change, but not on a change of meaning. Review discipline is the remaining guard.
@@ -585,6 +587,21 @@ Open questions:
 5. **Leases and in-flight verbs** (`wait-for`, `popup` waits): fail them with a retryable error, or carry them?
 6. **Hooks:** add an `after-daemon-upgrade` hook, or only an event?
 7. **install.sh default:** when does "upgrade live" become the default answer?
+
+## 7. Implementation notes
+
+Where the implementation departs from the spec above, or settles what it left open, and why.
+
+- **The reply forwarder.** The spec drains the terminal-response pipe at the quiesce. A blocking `Read` on that pipe cannot be drained: a reply the forwarder has taken but not yet written is in its hands, and no lock can be held around the blocking read. The forwarder now takes replies with the emulator's non-blocking `TakeResponses`, under a per-pane `respMu`, woken by `vtWriter` after each write. The emulator queues a reply only inside a write, so the wake covers every reply, and the quiesce flushes under the same lock (`internal/session/pty_quiesce.go`).
+- **The read gate.** The reader takes `streamMu` before it lets `readMu` go, and holds it until its chunk is queued for `vtWriter`. So the quiesce needs no ack from the reader that it has parked: once it has seen `readMu` with the flag set, `streamMu` is next free behind the last chunk, and the marker it queues lands after it. A wake pipe beside the master gets the reader out of `poll` on `Close`, which closing the master does not do.
+- **Freezing pane starts and closes.** The spec does not say what stops a pane starting or closing between the manifest write and the exec. A pane started then would be killed by the exec; one closed then would leave its descriptor number free for another file, which the new image would adopt. A manager-wide `paneLife` lock is taken for reading by `createPTY`, `ClosePTY` and `Session.Stop`, and for writing by the handoff from the manifest write to the exec. The reap gates shut first, because a reap runs the pane's exit, which may close the pane.
+- **What is carried.** A pane is carried when a window in its session's state names it. A PTY no window names (one whose window was being added as the handoff started) is not, and its program sees its terminal hang up at the exec, as the `new-window` that made it sees its connection drop. The slave copies are not closed by hand: they are close-on-exec, so the exec closes them. A pane's `close_on_exit` and plugin exit actions are closures and are not carried: after the handoff such a window stays open when its program exits with no client attached, as a plain window does. Popups and kept-open panes are carried with their behaviour.
+- **Panes on other machines refuse.** A window whose process runs on another host (`WindowState.Host`) has a stream over a federation link, not a descriptor here, so a handoff is refused while one exists, as for hosted panes.
+- **The commit point.** The verb that starts a handoff answers once the fallible steps are done, and the commit (closing the clients and the exec) runs after the reply is written, through the connection's takeover. A prepared handoff that is not committed within 5 s is put back.
+- **The manifest.** The daemon record is JSON, because the event ring and the mailbox are JSON types; the pane records are gob. The new image reads the whole manifest before it applies anything, about 26 MB for 60 busy panes. The layout test hashes the handoff's own record types and only names the types they carry from elsewhere (`SessionState`, `TerminalState`, the events, the mail), whose fields are only ever added to.
+- **The open cluster.** It is carried through an optional interface of the snapshot package that the pure Go emulator implements; libghostty-vt keeps its own and carries none. The change is in `tuios.dev/vt`, so its pin moves to a pseudo-version of that commit until vt is tagged.
+- **The fallback loop.** An image started as a fallback carries `TUIOS_HANDOFF_FALLBACK=1`, and does not fall back again: if it cannot adopt the panes either, it ends, and the panes hang up as in a crash. The variable is removed from the environment once the adoption has gone through, so no pane inherits it.
+- **Keeping the previous binary.** `tuios.prev` is kept under the daemon's state folder (`<state>/handoff/`, per server). A daemon running inside another program keeps none and refuses to hand off. A copy, made where a hard link would cross file systems, is checked by its SHA-256 at upgrade time; a link by its inode.
 
 ## Appendix A: measurements made for this spec
 
@@ -616,7 +633,9 @@ The probes are short scratch programs, kept with their raw outputs under `docs/d
 | `zz_handoff_measure_test.go.txt` | Fills 200x50 emulators with the `wirePTY` (256-colour) and `wirePTYTruecolor` fillers at 0, 1000 and 10,000 history rows; captures through `PTY.GetTerminalStatePacked` and applies as a daemon would, per pane, serially and on 18 workers; samples HeapInuse every 2 ms while 60 panes apply on 1, 4 and 18 workers. Rerun: copy it to `internal/session/zz_handoff_measure_test.go`, then `HANDOFF_MEASURE=1 go test -count=1 -v -run TestHandoffMeasure ./internal/session/`, then delete it | `capture_apply.txt`, `apply_peak.txt`: the tables of sections 3.1, 3.2 and 4.1 |
 | `daemon_heap.sh`, `hmprobe_main.go.txt` | Starts a throwaway daemon in scratch XDG directories with `--pprof`, makes 60 sessions at a chosen size (the helper exists because the CLI creates 80x24), optionally prints 1000 coloured 190-character lines in each, and reads `/debug/pprof/heap?gc=1` and RSS at t+3 s and t+35 s. Rerun: build tuios and the helper (its header says how) next to the script, then `W=200 H=50 ./daemon_heap.sh print1000 <port>` | `daemon_heap.txt`: the daemon rows of section 3.1 |
 
-⚠️ Still unmeasured: a real end-to-end handoff pause, the apply peak under GC tuning, ghostty capture and apply at depth, a binary-to-binary pure to ghostty handoff, the listener backlog under load, and pending output holding an exit on Linux.
+**The implementation** (macOS, 18 cores, Go 1.26.9, pure Go emulator). `TestDaemonUpgradeMeasuresABusyDaemon` in `e2e/tui/live_upgrade_test.go` makes 60 panes at 200x50, each printing 1000 coloured 191-character lines, and upgrades the daemon to a second copy of its binary. The new image reports what it measured through a test-only verb. Run four times, two at `GOGC=25` and two at the default, for the figures in sections 3.2 and 4.1. Rerun: `TUIOS_E2E=1 TUIOS_E2E_BIN=<tuios> TUIOS_E2E_HANDOFF_MEASURE=1 go test -count=1 -run '^TestDaemonUpgradeMeasuresABusyDaemon$' .` in `e2e/tui`.
+
+⚠️ Still unmeasured: ghostty capture and apply at depth, a binary-to-binary pure to ghostty handoff, the listener backlog under load, and pending output holding an exit on Linux.
 
 ## Glossary
 
