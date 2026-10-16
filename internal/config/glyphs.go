@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/lrstanley/go-nf/glyphs/fa"
 )
 
 // BorderStyleGlyphs is the appearance.border_style value meaning "take the
@@ -147,6 +148,45 @@ func (s *Settings) GetRailRowStyle() string {
 		return RailRowBar
 	}
 	return s.RailRowStyle
+}
+
+// GetRailHeaderStyle is how a rail section header is drawn. A nil or unset
+// settings reads as auto, the rail's drawing before the option.
+func (s *Settings) GetRailHeaderStyle() string {
+	if s == nil || s.RailHeaderStyle == "" {
+		return RailHeaderAuto
+	}
+	return s.RailHeaderStyle
+}
+
+// GetRailSectionIcon is the icon in front of a rail section's header under
+// the icon header style: the glyph set's, else a Nerd Font icon. Empty, so the
+// header is plain, for a section with no icon and where Nerd Fonts are off
+// and the set names none.
+func (s *Settings) GetRailSectionIcon(section string) string {
+	var role func(*theme.GlyphSet) string
+	var nerd string
+	switch section {
+	case "sessions":
+		role, nerd = func(g *theme.GlyphSet) string { return g.SectionSessions }, fa.LayerGroup.String()
+	case "terminals":
+		role, nerd = func(g *theme.GlyphSet) string { return g.SectionTerminals }, fa.Terminal.String()
+	case "agents":
+		role, nerd = func(g *theme.GlyphSet) string { return g.SectionAgents }, fa.Robot.String()
+	case "files":
+		role, nerd = func(g *theme.GlyphSet) string { return g.SectionFiles }, fa.Folder.String()
+	case "git":
+		role, nerd = func(g *theme.GlyphSet) string { return g.SectionGit }, fa.CodeBranch.String()
+	default:
+		return ""
+	}
+	if g := role(theme.Glyphs()); g != "" && (!s.UseASCIIOnly || overlay.IsASCII(g)) {
+		return g
+	}
+	if s.NerdFontsOff() {
+		return ""
+	}
+	return nerd
 }
 
 // GetRailMarker is the gutter glyph of the marker row style.

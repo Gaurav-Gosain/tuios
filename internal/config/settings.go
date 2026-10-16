@@ -216,6 +216,9 @@ type Settings struct {
 	// RailRowStyle is how the rail marks the row you are on. Set via
 	// appearance.sidebar.row_style; read it through GetRailRowStyle.
 	RailRowStyle string
+	// RailHeaderStyle is how a rail section header is drawn. Set via
+	// appearance.sidebar.header_style; read it through GetRailHeaderStyle.
+	RailHeaderStyle string
 	// SidebarEditor is the terminal editor command; empty uses the environment.
 	SidebarEditor string
 

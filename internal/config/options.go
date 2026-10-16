@@ -919,6 +919,11 @@ var optionSpecs = []Option{
 		Accepted:    RailRowStyles, Default: RailRowBar,
 	},
 	{
+		Path: "appearance.sidebar.header_style", Type: OptionString, Section: "sidebar",
+		Description: "How a rail section header is drawn: auto, plain, rule, pill, or icon with the section's icon",
+		Accepted:    RailHeaderStyles, Default: RailHeaderAuto,
+	},
+	{
 		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
 		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi.",
 		Default:     "",

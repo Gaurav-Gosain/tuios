@@ -89,13 +89,21 @@ type GlyphSet struct {
 	ArrowRight string `json:"arrow_right,omitempty"`
 
 	// The rail's marks, one cell each.
-	Focus     string `json:"focus,omitempty"`     // "you are here"
-	Marker    string `json:"marker,omitempty"`    // "you are here", the marker row style
-	Attention string `json:"attention,omitempty"` // "this one wants a human"
-	Bullet    string `json:"bullet,omitempty"`    // a resting row
-	Add       string `json:"add,omitempty"`       // the new-thing control
-	Collapse  string `json:"collapse,omitempty"`
-	Expand    string `json:"expand,omitempty"`
+	Focus  string `json:"focus,omitempty"`  // "you are here"
+	Marker string `json:"marker,omitempty"` // "you are here", the marker row style
+
+	// The icons in front of the rail's section headers, under the icon
+	// header style, one cell each.
+	SectionSessions  string `json:"section_sessions,omitempty"`
+	SectionTerminals string `json:"section_terminals,omitempty"`
+	SectionAgents    string `json:"section_agents,omitempty"`
+	SectionFiles     string `json:"section_files,omitempty"`
+	SectionGit       string `json:"section_git,omitempty"`
+	Attention        string `json:"attention,omitempty"` // "this one wants a human"
+	Bullet           string `json:"bullet,omitempty"`    // a resting row
+	Add              string `json:"add,omitempty"`       // the new-thing control
+	Collapse         string `json:"collapse,omitempty"`
+	Expand           string `json:"expand,omitempty"`
 
 	// The rail's two tree marks, three cells each. They run in front of a row
 	// that belongs to a group above it: TreeBranch while siblings follow,
@@ -154,6 +162,8 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		PillLeft: "▏", PillRight: "▕",
 		Rule: "─", ArrowLeft: "‹", ArrowRight: "›",
 		Focus: "▎", Attention: "▎", Bullet: "·", Marker: "›",
+		SectionSessions: "◆", SectionTerminals: "▸", SectionAgents: "●",
+		SectionFiles: "▤", SectionGit: "±",
 		Add: "+", Collapse: "«", Expand: "»",
 		TreeBranch: "├─ ", TreeLast: "└─ ",
 		FoldOpen: "▾", FoldShut: "▸",
@@ -335,6 +345,11 @@ var glyphRoles = []glyphRole{
 	{"arrow_right", func(g *GlyphSet) *string { return &g.ArrowRight }, 1},
 	{"focus", func(g *GlyphSet) *string { return &g.Focus }, 1},
 	{"marker", func(g *GlyphSet) *string { return &g.Marker }, 1},
+	{"section_sessions", func(g *GlyphSet) *string { return &g.SectionSessions }, 1},
+	{"section_terminals", func(g *GlyphSet) *string { return &g.SectionTerminals }, 1},
+	{"section_agents", func(g *GlyphSet) *string { return &g.SectionAgents }, 1},
+	{"section_files", func(g *GlyphSet) *string { return &g.SectionFiles }, 1},
+	{"section_git", func(g *GlyphSet) *string { return &g.SectionGit }, 1},
 	{"attention", func(g *GlyphSet) *string { return &g.Attention }, 1},
 	{"bullet", func(g *GlyphSet) *string { return &g.Bullet }, 1},
 	{"add", func(g *GlyphSet) *string { return &g.Add }, 1},

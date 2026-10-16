@@ -834,15 +834,43 @@ func sidebarHeaderRightRoom(cw, labelW int) int {
 // s carries appearance.sidebar.header_case: with headings on, the label is bold
 // and uppercase and a rule runs to right. Passing nil settings keeps the blank
 // gap, which is what the callers that put their own controls in that gap want.
+//
+// appearance.sidebar.header_style draws the label on a quiet fill (pill), or
+// with the section's icon in front of it (icon), and decides the rule: auto
+// draws it with headings on, plain never, rule always. See
+// sidebarHeaderDecorW for the cells the fill or the icon adds.
 func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *config.Settings) string {
 	headings := s.GetRailHeaderCase() == config.RailHeaderUppercase
+	style := s.GetRailHeaderStyle()
+	section := label
 	labelStyle := sidebarStyle(nil, pal.FgMute)
 	if headings {
 		labelStyle = sidebarStyle(nil, pal.FgDim).Bold(true)
 		label = strings.ToUpper(label)
 	}
-	row := sidebarStyle(nil, nil).Render(" ") +
-		labelStyle.Render(overlay.Truncate(label, max(cw-2, 1)))
+	ruled := headings
+	switch style {
+	case config.RailHeaderPlain, config.RailHeaderPill, config.RailHeaderIcon:
+		ruled = false
+	case config.RailHeaderRule:
+		ruled = true
+	}
+	decorW := sidebarHeaderDecorW(section, s)
+	text := overlay.Truncate(label, max(cw-2-decorW, 1))
+	shown := labelStyle.Render(text)
+	switch style {
+	case config.RailHeaderPill:
+		ground := pal.FgMute
+		caps := sidebarStyle(nil, ground)
+		fill := lipgloss.NewStyle().Background(ground).Foreground(overlay.ContrastText(ground)).Bold(headings)
+		shown = caps.Render(s.GetWindowPillLeft()) + fill.Render(text) + caps.Render(s.GetWindowPillRight())
+	case config.RailHeaderIcon:
+		if icon := s.GetRailSectionIcon(section); icon != "" {
+			shown = sidebarStyle(nil, pal.AccentBright).Render(icon) + sidebarStyle(nil, nil).Render(" ") + shown
+		}
+	}
+	headings = ruled
+	row := sidebarStyle(nil, nil).Render(" ") + shown
 	lw := lipgloss.Width(row)
 	rw := lipgloss.Width(right)
 	if rw > 0 {
@@ -890,7 +918,23 @@ func sidebarHeaderCutFront(right string, rw, room int) string {
 
 // sidebarHeaderLabelW is the columns a section's label occupies, its leading
 // inset included. A header's controls refuse to draw over it.
-func sidebarHeaderLabelW(label string) int { return 1 + lipgloss.Width(label) }
+func sidebarHeaderLabelW(label string, s *config.Settings) int {
+	return 1 + lipgloss.Width(label) + sidebarHeaderDecorW(label, s)
+}
+
+// sidebarHeaderDecorW is the cells header_style adds to a section's label:
+// the pill's two caps, or the icon and the space after it.
+func sidebarHeaderDecorW(section string, s *config.Settings) int {
+	switch s.GetRailHeaderStyle() {
+	case config.RailHeaderPill:
+		return lipgloss.Width(s.GetWindowPillLeft()) + lipgloss.Width(s.GetWindowPillRight())
+	case config.RailHeaderIcon:
+		if icon := s.GetRailSectionIcon(section); icon != "" {
+			return lipgloss.Width(icon) + 1
+		}
+	}
+	return 0
+}
 
 // sidebarTokenSpan is one clickable token inside a header row, in
 // content-relative columns. Several share a line, so the header hit-tests per
@@ -1942,7 +1986,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// its own control and the section header none: two "+" for one
 		// machine would be one more than the rail can explain.
 		if canCreate && len(m.SidebarHostIDs) == 0 {
-			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW(label),
+			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW(label, &m.Settings),
 				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings, nil); ok {
 				add = tok
 				recordToken(span, "")
@@ -2005,7 +2049,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// coexist with a pointer on this header, so the two never compete for the
 		// same cells in practice; the arithmetic holds either way.
 		termAdd, termSpan, hasTermAdd := sidebarHeaderAdd(sidebarRowNewWindow, cw,
-			sidebarHeaderLabelW("terminals"), pal, headerHoverX[sidebarSectionTerminals],
+			sidebarHeaderLabelW("terminals", &m.Settings), pal, headerHoverX[sidebarSectionTerminals],
 			isCursor(sidebarRowNewWindow, shown, ""), &m.Settings, nil)
 		right := termAdd
 		if peeking {
@@ -2026,7 +2070,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// label, the gap after it, the inset, and the control with the
 			// blank in front of it. Half the rail, which this used to take,
 			// ignored the label and on a narrow rail ran the name into it.
-			room := sidebarHeaderRightRoom(cw, sidebarHeaderLabelW("terminals"))
+			room := sidebarHeaderRightRoom(cw, sidebarHeaderLabelW("terminals", &m.Settings))
 			if hasTermAdd {
 				room -= lipgloss.Width(sidebarAddGlyph(&m.Settings)) + 1
 			}
@@ -2154,7 +2198,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// The count is the Inbox's while it is connected, narrowed to this
 		// session when the filter is, and over the rows the section lists
 		// otherwise. See sidebarHeaderCounts.
-		controls, tokens := m.sidebarAgentsControls(cw, sidebarHeaderLabelW("agents"), pal,
+		controls, tokens := m.sidebarAgentsControls(cw, sidebarHeaderLabelW("agents", &m.Settings), pal,
 			headerHoverX[sidebarSectionAgents], m.sidebarHeaderCounts(parents))
 		for _, tk := range tokens {
 			recordToken(tk, "")

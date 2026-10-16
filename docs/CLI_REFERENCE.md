@@ -1731,6 +1731,7 @@ name alone. Some of them:
 | `window_title_style` | `pill`, `tab`, `plain` | Shape of a pane's title (default `pill`) |
 | `window_title_align` | `auto`, `left`, `center`, `right` | Place of a pane's title on its row (default `auto`) |
 | `sidebar.row_style` | `bar`, `marker`, `underline`, `pill` | How the rail marks the row you are on (default `bar`) |
+| `sidebar.header_style` | `auto`, `plain`, `rule`, `pill`, `icon` | How a rail section header is drawn (default `auto`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `theme_transition` | `none`, `circle`, `fade` | How a theme change shows: `circle` grows the new theme from the middle of the screen, `fade` changes all cells at the same time (default `none`) |

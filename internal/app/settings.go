@@ -475,6 +475,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
 			opt("appearance.sidebar.header_case"),
 			opt("appearance.sidebar.row_style"),
+			opt("appearance.sidebar.header_style"),
 			opt("appearance.sidebar.show_glyphs"),
 			opt("appearance.sidebar.show_counts"),
 			opt("appearance.sidebar.show_numbers"),

@@ -1472,6 +1472,30 @@ A row that waits for a person keeps its attention mark in the gutter. The
 marker glyph is the `marker` role of the glyph set (see [GLYPHS.md](GLYPHS.md)).
 The option is on the settings page, in the Sidebar section.
 
+## The rail's section headers
+
+`appearance.sidebar.header_style` sets how a section header is drawn:
+
+| Value | What it draws |
+|---|---|
+| `auto` | The label, with a rule after it when `header_case` is `uppercase`. This is the default |
+| `plain` | The label with no rule |
+| `rule` | The label and a rule to the rail's edge |
+| `pill` | The label on a quiet fill, with the pill caps of the glyph set |
+| `icon` | The section's icon, then the label |
+
+```toml
+[appearance.sidebar]
+header_style = "icon"
+```
+
+The icons are glyph roles: `section_sessions`, `section_terminals`,
+`section_agents`, `section_files` and `section_git` (see
+[GLYPHS.md](GLYPHS.md)). With Nerd Fonts on, the default icons are Nerd Font
+icons. The `unicode` glyph set has its own. With no icon, the header is plain.
+`header_case` still sets the case of the label. On a narrow rail, a pill or
+an icon can leave no room for a header's `+`.
+
 ## A rail section that overflows
 
 A section with more rows than the lines it is given shows as many as fit. It ends in `… +N` for the rest. The wheel over a section scrolls it. The keyboard cursor scrolls it to keep itself in view.

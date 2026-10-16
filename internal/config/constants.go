@@ -558,6 +558,21 @@ const (
 // RailRowStyles lists the valid values for appearance.sidebar.row_style.
 var RailRowStyles = []string{RailRowBar, RailRowMarker, RailRowUnderline, RailRowPill}
 
+// The rail's header styles, appearance.sidebar.header_style. auto draws a
+// rule after an uppercase header and none after a lowercase one, as the rail
+// always has. plain never draws the rule and rule always does. pill puts the
+// label on a quiet fill, and icon puts the section's icon in front of it.
+const (
+	RailHeaderAuto  = "auto"
+	RailHeaderPlain = "plain"
+	RailHeaderRule  = "rule"
+	RailHeaderPill  = "pill"
+	RailHeaderIcon  = "icon"
+)
+
+// RailHeaderStyles lists the valid values for appearance.sidebar.header_style.
+var RailHeaderStyles = []string{RailHeaderAuto, RailHeaderPlain, RailHeaderRule, RailHeaderPill, RailHeaderIcon}
+
 // Where a delete from the files section sends the file.
 //
 // Trash is the default. The rail is an incidental place for a keystroke to land

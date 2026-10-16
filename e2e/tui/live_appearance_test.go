@@ -41,6 +41,9 @@ var liveAppearanceCases = []liveAppearanceCase{
 	// The attached session's name on the rail, in the pill caps.
 	{path: "appearance.sidebar.row_style", value: "pill", restore: "bar", changesFrame: true, shows: "\ue0b6home\ue0b4"},
 	{path: "appearance.sidebar.row_style", value: "marker", restore: "bar", changesFrame: true, shows: "›· home"},
+	// The sessions header in the pill caps, and behind its icon.
+	{path: "appearance.sidebar.header_style", value: "pill", restore: "auto", changesFrame: true, shows: "\ue0b6sessions\ue0b4"},
+	{path: "appearance.sidebar.header_style", value: "icon", restore: "auto", changesFrame: true, shows: "\ueea8 sessions"},
 	{path: "appearance.shared_borders", value: "true", restore: "false", changesFrame: true},
 	{path: "appearance.motion", value: "none", restore: "full"},
 	{path: "appearance.glyphs", value: "unicode", restore: "default", changesFrame: true},

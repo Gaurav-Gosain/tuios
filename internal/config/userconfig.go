@@ -817,6 +817,9 @@ type SidebarConfig struct {
 	// RowStyle is how the row you are on is marked: bar, marker, underline or
 	// pill (default: bar). See RailRowStyles.
 	RowStyle string `toml:"row_style"`
+	// HeaderStyle is how a section header is drawn: auto, plain, rule, pill
+	// or icon (default: auto). See RailHeaderStyles.
+	HeaderStyle string `toml:"header_style"`
 	// Editor is the terminal editor command for files (default: $EDITOR,
 	// $VISUAL or vi).
 	Editor string `toml:"editor"`
@@ -1065,6 +1068,7 @@ func DefaultConfig() *UserConfig {
 				FolderClick:   SidebarFolderClickNavigate,
 				HeaderCase:    RailHeaderLowercase,
 				RowStyle:      RailRowBar,
+				HeaderStyle:   RailHeaderAuto,
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 				SubagentRows:  SidebarSubagentRowsRows,
@@ -2485,6 +2489,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.RailRowStyle = RailRowBar
 	if slices.Contains(RailRowStyles, sb.RowStyle) {
 		s.RailRowStyle = sb.RowStyle
+	}
+	s.RailHeaderStyle = RailHeaderAuto
+	if slices.Contains(RailHeaderStyles, sb.HeaderStyle) {
+		s.RailHeaderStyle = sb.HeaderStyle
 	}
 	s.SidebarEditor = sb.Editor
 	if sb.FileActions != nil {

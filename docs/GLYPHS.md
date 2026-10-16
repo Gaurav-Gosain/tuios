@@ -130,6 +130,9 @@ reports it under `problems` with the reason.
   `tree_branch` and `tree_last` (in front of a worktree session under its
   repository), `fold_open` and `fold_shut` (on a machine's group header in the
   sessions section, saying whether its rows are on screen under it)
+- **Rail section icons:** `section_sessions`, `section_terminals`,
+  `section_agents`, `section_files`, `section_git`, in front of the section
+  headers with `appearance.sidebar.header_style = "icon"`
 - **Files section:** `folder`, `parent` (the `..` row), `file`. These are what
   the rail's listing draws when `appearance.sidebar.file_icons` is off or the
   terminal is in ASCII mode; with icons on, a nerd font codepoint per file type

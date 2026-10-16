@@ -747,7 +747,7 @@ func (m *OS) drawHostRow(
 		st.Cursor = st.Cursor || isCursor(sidebarRowHost, GlobalSessionName, "")
 		add := ""
 		if !collapsed {
-			labelW := sidebarHeaderLabelW(m.Settings.GetRailFoldOpenGlyph() + " " + node.Title)
+			labelW := sidebarHeaderLabelW(m.Settings.GetRailFoldOpenGlyph()+" "+node.Title, nil)
 			if tok, span, ok := sidebarHeaderAdd(sidebarRowGlobalNew, cw, labelW, pal,
 				headerHoverX, isCursor(sidebarRowGlobalNew, GlobalSessionName, ""), &m.Settings,
 				sidebarRowBg(st, pal)); ok {
@@ -771,7 +771,7 @@ func (m *OS) drawHostRow(
 			if node.Host == m.attachedMachine() {
 				kind, id = sidebarRowNewSession, ""
 			}
-			labelW := sidebarHeaderLabelW(m.Settings.GetRailFoldOpenGlyph() + " " + node.Title)
+			labelW := sidebarHeaderLabelW(m.Settings.GetRailFoldOpenGlyph()+" "+node.Title, nil)
 			if kind != sidebarRowNewSession || canCreate {
 				if tok, span, ok := sidebarHeaderAdd(kind, cw, labelW, pal,
 					headerHoverX, isCursor(kind, id, ""), &m.Settings,

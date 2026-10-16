@@ -6748,3 +6748,15 @@ Run on 2026-10-17.
 |---|---|---|---|---|
 | pill did not mark the name | yes | `nameMarked` forced false in `sidebarSessionRow` | `.../sidebar.row_style=pill` ("the frame does not show \"\ue0b6home\ue0b4\"") | **caught** |
 | marker did not draw its glyph | yes | the marker case in `sidebarGutterTinted` never matches | `.../sidebar.row_style=marker` ("the frame does not show \"›· home\"") | **caught** |
+
+## The rail's header style
+
+`TestLiveAppearanceKeepsTheScreen` gains `sidebar.header_style=pill` and
+`sidebar.header_style=icon`. Each must show the sessions header in the pill
+caps or behind its icon, and restore on set back.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The header ignored its style | yes | the style switch in `sidebarHeaderRowRuled` never matches | `.../sidebar.header_style=pill` and `=icon` ("the frame does not show ...") | **caught** |
