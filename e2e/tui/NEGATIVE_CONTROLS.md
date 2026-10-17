@@ -1301,6 +1301,7 @@ cutting one call site from the tree the tests were written against.
 | No leader menu while a tape sleeps | `stepScript` in `internal/app/update.go` followed by `return m, nil` while the tape holds, as before the fix | `TestTapeExecKeepsTimeAndDrawsTheLeaderMenu` ("the which-key menu never opened"), 1 of 1 run | **caught** |
 | A final Sleep not waited for | the Sleep check in `stepScript` made to skip a finished player | `TestTapeExecKeepsTimeAndDrawsTheLeaderMenu` ("tape exec returned after 3.09s"), 1 of 1 run | **caught** |
 | Both, the tree before the fix | origin/main at 841190970 | `TestTapeExecKeepsTimeAndDrawsTheLeaderMenu` (both messages, exec returned after 3.08s), 2 of 2 runs | **caught** |
+| A last WaitFor not waited for | `stepScript` with the finished check before the holds, as at a9d67d153 | `TestTapeExecStopsAtTheFailedLine` ("tape exec succeeded on a tape that ends in a WaitFor that cannot hold"), 1 of 1 run | **caught** |
 
 `TestExampleTapeRuns` plays `examples/actions_and_waits.tape` and has no
 control of its own: it fails on any of the first two cuts, since the example

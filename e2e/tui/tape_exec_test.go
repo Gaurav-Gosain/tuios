@@ -28,7 +28,9 @@ import (
 //   - TestTapeExecStopsAtTheFailedLine: the failScript call cut from
 //     checkScriptWait's timeout: the wait is dropped, the line after it runs,
 //     and exec exits 0. The Locate call cut from runTapeExec: the message
-//     names line 3 of the sent text, not lib.tape line 2.
+//     names line 3 of the sent text, not lib.tape line 2. The finished
+//     check in stepScript placed before the holds: a tape that ends in the
+//     WaitFor exits 0 at once.
 //   - TestTapeExecKeepsTimeAndDrawsTheLeaderMenu: the tree before the fix:
 //     the tick returned early while a Sleep held playback, so no frame was
 //     drawn and the menu never opened; and a final Sleep did not hold the
@@ -135,6 +137,16 @@ Run "echo AFTER-$((1+1))"
 	time.Sleep(2 * time.Second)
 	if strings.Contains(term.Screen().Text(), "AFTER-2") {
 		t.Errorf("the tape went on past the failed WaitFor\n%s", term.Snapshot())
+	}
+	// A WaitFor on the tape's last line holds the end of the tape, and its
+	// timeout fails the tape like any other.
+	last := writeTape(t, base, "last.tape", `WaitFor text "never-printed-xyz" 1s
+`)
+	out, errOut, err = splitCLI(t, base, "tape", "exec", "-s", "tapefail", last)
+	if err == nil {
+		t.Errorf("tape exec succeeded on a tape that ends in a WaitFor that cannot hold\nstdout: %s\n%s", out, term.Snapshot())
+	} else if !strings.Contains(errOut, "timed out after 1s") {
+		t.Errorf("tape exec stderr = %q, want the last WaitFor's timeout", errOut)
 	}
 }
 

@@ -339,34 +339,20 @@ func (m *OS) stepScript() tea.Cmd {
 	if !m.ScriptMode || m.ScriptPaused || m.ScriptPlayer == nil {
 		return nil
 	}
-	// A Sleep holds the tape, the last one too: a tape that ends on a Sleep
-	// ends when it is over, so tuios tape exec returns only then.
+	// The tape has ended, or failed. failScript stamps the time too.
+	if !m.ScriptFinishedTime.IsZero() {
+		return nil
+	}
+	// Every hold below also holds the end of the tape. A tape that ends on a
+	// Sleep, a WaitFor, a new pane or a command Update has not run yet ends
+	// only when that is over, so tuios tape exec returns only then, and a last
+	// WaitFor that times out or a last command that fails fails the tape.
 	if !m.ScriptSleepUntil.IsZero() {
 		if time.Now().Before(m.ScriptSleepUntil) {
 			return nil
 		}
 		m.ScriptSleepUntil = time.Time{}
 	}
-	player := m.ScriptPlayer
-	if player.IsFinished() {
-		if !m.ScriptFinishedTime.IsZero() {
-			return nil
-		}
-		m.ScriptFinishedTime = time.Now()
-		m.reportScriptResult(true, "")
-		// A tape that builds a layout creates panes whose early output (a
-		// split pane's shell prompt, an echo) can land before the client
-		// subscribed, leaving an unfocused pane blank on screen while the
-		// daemon holds the real content. Refresh every pane from the daemon a
-		// beat after playback, once output has settled.
-		if m.DaemonClient != nil {
-			return tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
-				return tapeLayoutRefreshMsg{}
-			})
-		}
-		return nil
-	}
-
 	// Wait for animations to complete before the next command, so playback
 	// stays visually consistent.
 	if m.HasActiveAnimations() {
@@ -392,6 +378,27 @@ func (m *OS) stepScript() tea.Cmd {
 	}
 	// Hold for a WaitUntilRegex from a command dispatched before.
 	if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
+		return nil
+	}
+	// A wait that timed out above failed the tape.
+	if !m.ScriptFinishedTime.IsZero() {
+		return nil
+	}
+
+	player := m.ScriptPlayer
+	if player.IsFinished() {
+		m.ScriptFinishedTime = time.Now()
+		m.reportScriptResult(true, "")
+		// A tape that builds a layout creates panes whose early output (a
+		// split pane's shell prompt, an echo) can land before the client
+		// subscribed, leaving an unfocused pane blank on screen while the
+		// daemon holds the real content. Refresh every pane from the daemon a
+		// beat after playback, once output has settled.
+		if m.DaemonClient != nil {
+			return tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
+				return tapeLayoutRefreshMsg{}
+			})
+		}
 		return nil
 	}
 
