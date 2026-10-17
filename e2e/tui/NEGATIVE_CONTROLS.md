@@ -9953,6 +9953,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 ### What a window holds outside the session state (handoff version 4)
 
 `e2e/tui/handoff_settings_test.go` covers what section 7.2 of the spec carries from version 4 on. Each test hands the panes to a new image with `test-handoff` and checks the window is still there before it checks the setting.
+`e2e/tui/handoff_settings_test.go` covers what section 7.3 of the spec carries from version 3 on. Each test hands the panes to a new image with `test-handoff` and checks the window is still there before it checks the setting.
 
 - `TestSelfExecClosesCloseOnExitWindows`: three windows made with `new-window`. "during" (`close_on_exit`) exits 2 s after it starts, inside a 3.5 s hold between the manifest and the exec, and must close once the new image is up; "after" (`close_on_exit`) exits when a line is typed after the handoff and must close; "plain" exits the same way and must stay, reading 4. The handoff must carry four panes, so "during" was not closed by the old image first.
 - `TestSelfExecKeepsWorkspaceReturn`: two sessions with a `close_on_exit` job pane alone on workspace 5, which they show. "ret" came there with `select-workspace` `return_to` 3 from workspace 1, as `xpanes` does; "trail" came from 3, which it came to from 1. When the job exits after the handoff both must show 3.
