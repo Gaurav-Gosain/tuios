@@ -114,24 +114,33 @@ _backup:
     done
 
 # Uses `tuios hosts sync`. With no names it syncs every host in the [hosts]
-# table. A restart ends the programs in the panes of that daemon.
-# Install here and on hosts, restart old daemons (ends pane programs)
+# table. Each old daemon is upgraded live, which keeps the programs in its
+# panes, or else restarted, which ends them; the report says which and why.
+# Install here and on hosts, upgrade old daemons live (else restart)
 [group('deploy')]
 deploy *hosts: build
     {{ quote(bin / "tuios") }} hosts sync --dev --src {{ quote(root) }} --local --restart --yes "$@"
 
-# Install on hosts only, restart old daemons (ends pane programs)
+# Install on hosts only, upgrade old daemons live (else restart)
 [group('deploy')]
 deploy-hosts *hosts: build
     {{ quote(bin / "tuios") }} hosts sync --dev --src {{ quote(root) }} --restart --yes "$@"
 
-# Layouts come back with new shells.
-# Restart the live daemon (ends the programs in every pane)
+# Upgrades the daemon live to the tuios on PATH, keeping every pane's program.
+# Where it cannot (an old daemon, a refusal), it says why and restarts it,
+# which ends them; layouts come back with new shells. A tuios without live
+# upgrades only restarts.
+# Move the live daemon onto the installed tuios (live, else restart)
 [group('deploy')]
 restart:
-    tuios kill-server || true
-    tuios start-server
-    tuios --version | head -1
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin=$(command -v tuios)
+    case "$("$bin" daemon upgrade --help 2>&1 || true)" in
+        *or-restart*) "$bin" daemon upgrade --binary "$bin" --or-restart ;;
+        *) "$bin" kill-server || true; "$bin" start-server ;;
+    esac
+    "$bin" --version | head -1
 
 # Show the installed version and live sessions (read only)
 [group('daemon')]

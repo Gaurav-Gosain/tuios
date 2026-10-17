@@ -15,10 +15,14 @@
 #   ghostty   link the libghostty-vt emulator. Needs zig; the pinned
 #             static library is built on first use and cached in .ghostty-vt/.
 #
-#   --prefix DIR    install into DIR (default: $TUIOS_PREFIX, else ~/.local/bin)
-#   --kill-server   stop a running daemon after installing, without asking
-#   --keep-server   leave a running daemon alone, without asking
-#   -h, --help      show this text
+#   --prefix DIR       install into DIR (default: $TUIOS_PREFIX, else ~/.local/bin)
+#   --upgrade-server   upgrade a running daemon live to the new build, without
+#                      asking. Every program in its panes keeps running. When it
+#                      cannot be upgraded live, it is left running and the
+#                      reason is printed (experimental)
+#   --kill-server      stop a running daemon after installing, without asking
+#   --keep-server      leave a running daemon alone, without asking
+#   -h, --help         show this text
 #
 # Both backends install under the same name, so switching is one run of this
 # script with the other name. `tuios --version` reports which one is installed.
@@ -59,6 +63,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --prefix=*) prefix=${1#--prefix=} ;;
+        --upgrade-server) daemon_action=upgrade ;;
         --kill-server) daemon_action=stop ;;
         --keep-server) daemon_action=keep ;;
         -h | --help)
@@ -215,15 +220,18 @@ Delete that one, or install over it with:
 esac
 
 # A running daemon keeps serving the binary it started from, so until it is
-# restarted the new build is only what new clients run.
+# moved the new build is only what new clients run. The daemon looked at is the
+# default server's, so every command below is run with TUIOS_SERVER empty: a
+# TUIOS_SERVER in this shell would aim it at another daemon.
 if pid=$(daemon_pid); then
     case $daemon_action in
         keep) daemon_action=no ;;
         ask)
             if [ -t 0 ] && [ -r /dev/tty ]; then
-                printf '\nA daemon (pid %s) is still running the previous build.\nStopping it ends the programs running in your panes; layouts and working\ndirectories come back with new shells. Stop it now? [y/N] ' "$pid" >&2
+                printf '\nA daemon (pid %s) is still running the previous build.\n  u  upgrade it live: every program in your panes keeps running (experimental)\n  y  stop it: programs end, and layouts and working directories come back\n     with new shells\n  N  leave it running the previous build\nChoice? [u/y/N] ' "$pid" >&2
                 read -r answer </dev/tty || answer=n
                 case $answer in
+                    [uU] | [uU][pP][gG][rR][aA][dD][eE]) daemon_action=upgrade ;;
                     [yY] | [yY][eE][sS]) daemon_action=stop ;;
                     *) daemon_action=no ;;
                 esac
@@ -233,15 +241,35 @@ if pid=$(daemon_pid); then
             ;;
     esac
 
-    if [ "$daemon_action" = stop ]; then
-        say "==> stopping the daemon"
-        "$dest" kill-server
-    else
-        note "A daemon (pid $pid) is still running the previous build, and every
+    case $daemon_action in
+        stop)
+            say "==> stopping the daemon"
+            TUIOS_SERVER='' "$dest" kill-server
+            ;;
+        upgrade)
+            say "==> upgrading the daemon live"
+            # Never a restart here: nobody asked for one. A daemon that cannot
+            # be upgraded live keeps running the previous build, and the
+            # command has said why.
+            if ! TUIOS_SERVER='' "$dest" daemon upgrade --binary "$dest"; then
+                note "The daemon (pid $pid) was not upgraded live, and still runs the previous
+build with every program in its panes. The lines above say why. To move it
+anyway, run:
+    tuios daemon upgrade --or-restart
+That restarts it when it cannot be upgraded live, which ends the programs
+running in your panes."
+            fi
+            ;;
+        *)
+            note "A daemon (pid $pid) is still running the previous build, and every
 attached session goes through it. Run this when you are ready to switch:
+    tuios daemon upgrade
+That keeps every program in your panes running (experimental). Where it cannot,
+it says why, and this restarts the daemon instead:
     tuios kill-server
 That ends the programs running in your panes. Each session's layout and
 working directories are saved on the way out and come back with new shells
 when the daemon starts again."
-    fi
+            ;;
+    esac
 fi
