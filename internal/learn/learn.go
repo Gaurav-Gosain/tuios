@@ -161,6 +161,12 @@ type CommandMsg struct {
 	Args []string
 }
 
+// commandDoneMsg follows a command through the app's Update. The command
+// changed the model outside Update, and Update is where a change gets its
+// frame: it drops the cached view, arms any animation, and asks the renderer
+// to write the frame now. The app ignores the message itself.
+type commandDoneMsg struct{}
+
 // Init starts the app and tells the page the tour is ready.
 func (m *Model) Init() tea.Cmd {
 	cmd := m.OS.Init()
@@ -182,6 +188,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case CommandMsg:
 		cmd = m.RunCommand(msg.Name, msg.Args...)
+		_, after := m.OS.Update(commandDoneMsg{})
+		cmd = tea.Batch(cmd, after)
 	case playTapeMsg:
 		m.tapeName = msg.name
 		_, cmd = m.OS.Update(app.PlayTapeMsg{Name: msg.name, Script: msg.script})
