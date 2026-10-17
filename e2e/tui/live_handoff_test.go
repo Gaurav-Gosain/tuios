@@ -204,14 +204,22 @@ func waitHandoffPane(t *testing.T, base, session, window string, re *regexp.Rege
 // windowExitCode waits for a window's process to exit and returns its status.
 func windowExitCode(t *testing.T, base, session, window string, timeout time.Duration) int {
 	t.Helper()
+	code, known := windowExit(t, base, session, window, timeout)
+	if !known {
+		t.Fatalf("wait-for window-exit carried no exit_code for window %s", window)
+	}
+	return code
+}
+
+// windowExit waits for a window's process to exit and returns its status, and
+// whether the daemon knows it: wait-for omits exit_code when it does not.
+func windowExit(t *testing.T, base, session, window string, timeout time.Duration) (int, bool) {
+	t.Helper()
 	res := mustCall(t, base, "wait-for", map[string]any{
 		"session": session, "window": window, "condition": "window-exit", "timeout": int(timeout / time.Millisecond),
 	})
 	code, ok := res["exit_code"].(float64)
-	if !ok {
-		t.Fatalf("wait-for window-exit carried no exit_code: %v", res)
-	}
-	return int(code)
+	return int(code), ok
 }
 
 // writeHandoffArtifact saves what a test measured.
