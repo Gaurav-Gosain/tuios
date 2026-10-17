@@ -2802,6 +2802,18 @@ pull request, linux/amd64 then darwin/arm64:
 #860 changes only the browser build. No dependency was added. The new
 budgets leave 30,086 and 30,774 bytes of room.
 
+The budgets went to 37,956,000 (linux/amd64) and 35,686,000 (darwin/arm64)
+when screenshots learned to draw a pane's kitty and sixel images (#678). Main
+measured 37,834,914 and 35,586,226 bytes (Go 1.26.9), 30,086 and 30,774 bytes
+under the budgets. The feature brings it to 37,925,026 and 35,655,298, 90,112
+and 69,072 bytes more: the image layer in tuios.dev/shot with its scaler and
+its SVG and HTML output, the payloads the kitty passthrough keeps, and the
+code that finds a pane's images and decodes them under a pixel bound. It
+uses no package tuios did not link already. The SVG and HTML output copies
+the part of an image it shows instead of asking for SubImage through an
+interface, which would link that method of every image type. The new budgets
+leave 30,974 and 30,702 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
