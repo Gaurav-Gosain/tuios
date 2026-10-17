@@ -241,6 +241,17 @@ func main() {
 		}
 		return js.ValueOf(out)
 	}))
+	// stop ends the program, so a page that is done with this tuios gets its
+	// memory back. Learn mode turns every quit into a note, so nothing else
+	// ends it. os.Exit rather than Program.Kill: Kill waits for every running
+	// command and for the input reader, which never returns here.
+	api.Set("stop", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		if js.Global().Get("tuios").Equal(api) {
+			js.Global().Delete("tuios")
+		}
+		go os.Exit(0)
+		return nil
+	}))
 	js.Global().Set("tuios", api)
 	if ready := js.Global().Get("onTuiosReady"); ready.Type() == js.TypeFunction {
 		ready.Invoke(api)

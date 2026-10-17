@@ -50,6 +50,7 @@ frame.
 | `tuios.actions()` | every keybinding action name mapped to its description |
 | `tuios.unavailable()` | the actions Learn mode turns off, mapped to the note each shows |
 | `tuios.commands()` | the command names `tuios.command` accepts |
+| `tuios.stop()` | end the program. The promise `go.run` returned resolves, and no event is sent. Drop every reference to the API and to the `Go` object after it, so the browser can free the memory. A call to the API after it throws an error |
 
 ## Events
 
@@ -90,7 +91,7 @@ Events come in a fixed order for one key press: `key` first, then any
 | `shell.start` | `{command, line, cwd}` | the fake shell started a command. `command` is the first word |
 | `shell.command` | `{command, line, cwd, exitCode}` | the command finished. `exitCode` is a number: 0 for success, 127 for a command the shell does not know |
 | `shell.cwd` | `{cwd}` | the shell changed directory |
-| `exit` | `{error?}` | the program ended. Learn mode never quits, so this only follows a crash |
+| `exit` | `{error?}` | the program ended. Learn mode never quits, so this only follows a crash. `tuios.stop()` sends no `exit` event |
 
 Overlay names: `help`, `whichkey`, `commandPalette`, `launcher`, `settings`,
 `themePicker`, `keybinds`, `copyMode`, `search` (copy mode or scrollback
