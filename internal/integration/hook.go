@@ -416,6 +416,7 @@ const maxHintSession = 64
 // type: a harness that changes a field's type costs that field, not the hook.
 type fields map[string]any
 
+// str is the string at key, or "" when it is missing or not a string.
 //
 //go:noinline
 func (f fields) str(key string) string {
