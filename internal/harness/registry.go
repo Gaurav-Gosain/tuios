@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -31,6 +32,10 @@ type bundledFile struct {
 	data []byte
 }
 
+// maxBundledBytes bounds what bundledFiles unpacks, in all and per entry. The
+// manifests are about 100 KB.
+const maxBundledBytes = 4 << 20
+
 // bundledFiles unpacks the archive in name order. It unpacks on each call and
 // keeps nothing, because Load runs once per daemon start and a kept copy would
 // sit in memory for the life of the process.
@@ -39,7 +44,10 @@ func bundledFiles() ([]bundledFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bundled manifests: %w", err)
 	}
-	tr := tar.NewReader(zr)
+	// The archive is built into the binary, so these limits guard against a
+	// bad gen.go or a corrupt commit, not an attacker: the whole stream stops
+	// at maxBundledBytes, and a header cannot ask for more than that.
+	tr := tar.NewReader(io.LimitReader(zr, maxBundledBytes))
 	var out []bundledFile
 	for {
 		h, err := tr.Next()
@@ -48,6 +56,10 @@ func bundledFiles() ([]bundledFile, error) {
 		}
 		if err != nil {
 			return out, fmt.Errorf("bundled manifests: %w", err)
+		}
+		if h.Typeflag != tar.TypeReg || h.Size < 0 || h.Size > maxBundledBytes ||
+			h.Name != path.Base(h.Name) || strings.ContainsAny(h.Name, `/\`) || !strings.HasSuffix(h.Name, ".toml") {
+			return out, fmt.Errorf("bundled manifests: unexpected entry %q", h.Name)
 		}
 		data := make([]byte, h.Size)
 		if _, err := io.ReadFull(tr, data); err != nil {
