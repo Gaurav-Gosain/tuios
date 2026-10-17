@@ -241,14 +241,14 @@ const FontFallbackNotice = "Icons need your terminal font. Set screenshot.font_f
 // capture is the point; the font is how it looks.
 func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 	if s.FontFile != "" {
-		data, err := os.ReadFile(s.FontFile) // #nosec G304 - the path is the operator's own config
+		data, err := readFontFile(s.FontFile)
 		if err == nil {
 			return shot.Font{Data: data}, shot.Font{}, nil
 		}
 		warnings = append(warnings, "The font file could not be read. Another font was used.")
 	}
 	if face, ok := FontByPostScriptName(s.HostFontFamily); ok {
-		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - a font file the resolver found
+		if data, err := readFontFile(face.File); err == nil {
 			boldFace, boldOK := FontByPostScriptName(s.HostBoldFamily)
 			// Two faces of one collection share a path, so the file being the
 			// same no longer means the font is. The index is what tells the
@@ -260,7 +260,7 @@ func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 		}
 	}
 	if face, ok := FontByFamily(s.FontFamily); ok {
-		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - a font file the resolver found
+		if data, err := readFontFile(face.File); err == nil {
 			if boldFace, boldOK := BoldFontByFamily(s.FontFamily, face); boldOK {
 				bold = readFontBytes(boldFace)
 			}
@@ -272,7 +272,7 @@ func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 
 // readFontBytes loads a resolved face, or nothing when the file will not read.
 func readFontBytes(face FontFace) shot.Font {
-	data, err := os.ReadFile(face.File) // #nosec G304 - a font file the resolver found
+	data, err := readFontFile(face.File)
 	if err != nil {
 		return shot.Font{}
 	}

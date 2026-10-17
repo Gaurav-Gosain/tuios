@@ -2,10 +2,12 @@ package capture
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
@@ -195,7 +197,15 @@ func fcMatch(pattern, format string, verify func(string) bool) (FontFace, bool) 
 
 // runFcMatch is the fontconfig call, isolated so a host without fontconfig
 // costs one PATH lookup and no process.
+//
+// One call that runs out of time turns fontconfig off for the life of the
+// process. A capture asks about up to maxFallbackLookups glyphs, and the font
+// lock is held across each call, so a hung fc-match would otherwise stall every
+// capture with a new glyph by the timeout once per glyph.
 func runFcMatch(pattern, format string) (string, error) {
+	if fcMatchStalled.Load() {
+		return "", errFcMatchStalled
+	}
 	if _, err := exec.LookPath("fc-match"); err != nil {
 		return "", err
 	}
@@ -203,10 +213,19 @@ func runFcMatch(pattern, format string) (string, error) {
 	defer cancel()
 	out, err := childproc.CommandContext(ctx, "fc-match", pattern, "-f", format).Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			fcMatchStalled.Store(true)
+		}
 		return "", err
 	}
 	return string(out), nil
 }
+
+var (
+	// fcMatchStalled is set once fc-match has run out of time.
+	fcMatchStalled    atomic.Bool
+	errFcMatchStalled = errors.New("fc-match timed out before")
+)
 
 // equalFontName compares two font names the way a person reads them: case and
 // the spaces between words are not what tells two fonts apart, and fontconfig
@@ -225,5 +244,6 @@ func resetFontCache() {
 	fontCacheMu.Lock()
 	defer fontCacheMu.Unlock()
 	fontCache = map[string]FontFace{}
+	fcMatchStalled.Store(false)
 	resetFontIndex()
 }

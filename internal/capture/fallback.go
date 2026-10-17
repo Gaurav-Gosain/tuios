@@ -4,6 +4,8 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"sync"
+	"time"
 
 	"tuios.dev/shot"
 )
@@ -83,7 +85,7 @@ func fillFallbacks(g *shot.Grid, f *shot.Frame) {
 		if !ok || slices.Contains(added, face) {
 			continue
 		}
-		data, err := os.ReadFile(face.File) // #nosec G304 - a font file fontconfig named
+		data, err := readFontFile(face.File)
 		if err != nil {
 			continue
 		}
@@ -91,4 +93,56 @@ func fillFallbacks(g *shot.Grid, f *shot.Frame) {
 		added = append(added, face)
 		last = r
 	}
+}
+
+// fontFileKeep is how long the font files stay in memory after the last
+// capture that read them. A run of captures, such as an agent that takes one
+// after each step, reads each file once. An idle tuios keeps none: one CJK
+// fallback is about 19 MB.
+const fontFileKeep = time.Minute
+
+// fontFileBudget bounds the bytes the cache keeps. A file past it is read for
+// its capture and not kept.
+const fontFileBudget = 64 << 20
+
+var fontFiles struct {
+	mu    sync.Mutex
+	data  map[string][]byte
+	size  int
+	timer *time.Timer
+}
+
+// readFontFile reads a font file through the cache. The renderer only reads
+// font data, so captures share one copy.
+func readFontFile(path string) ([]byte, error) {
+	fontFiles.mu.Lock()
+	defer fontFiles.mu.Unlock()
+	if fontFiles.timer == nil {
+		fontFiles.timer = time.AfterFunc(fontFileKeep, dropFontFiles)
+	} else {
+		fontFiles.timer.Reset(fontFileKeep)
+	}
+	if data, ok := fontFiles.data[path]; ok {
+		return data, nil
+	}
+	data, err := os.ReadFile(path) // #nosec G304 - the operator's config, or a font file the resolver found
+	if err != nil {
+		return nil, err
+	}
+	if fontFiles.size+len(data) <= fontFileBudget {
+		if fontFiles.data == nil {
+			fontFiles.data = map[string][]byte{}
+		}
+		fontFiles.data[path] = data
+		fontFiles.size += len(data)
+	}
+	return data, nil
+}
+
+// dropFontFiles empties the cache. The timer runs it once, fontFileKeep after
+// the last read, so an idle process has no timer.
+func dropFontFiles() {
+	fontFiles.mu.Lock()
+	defer fontFiles.mu.Unlock()
+	fontFiles.data, fontFiles.size = nil, 0
 }
