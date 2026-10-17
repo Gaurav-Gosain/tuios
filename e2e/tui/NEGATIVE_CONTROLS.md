@@ -6822,3 +6822,13 @@ Run on 2026-10-17.
 |---|---|---|---|---|
 | `prefix z` never cleared the notice | yes | `actions.go` and `prefix_actions.go` as on main | `TestZoomToggle` ("the ZOOM notice stayed after unzooming, round 0") | **caught** |
 | Bare `z` cleared with an empty message, which removes nothing | yes | `handleToggleZoom` back to `ShowNotification("", ...)` | `TestZoomToggle` ("the ZOOM notice stayed after unzooming, round 3") | **caught** |
+## A screenshot shows the pane's kitty image
+
+`TestKittyImageSurvivesCaptureMode` shows a 37x23 gradient PNG with kitty
+graphics in 10 by 5 cells, then takes the window from capture mode. The PNG
+must hold at least 5000 pixels of the image, and their red must rise from left
+to right. It passes on the branch, in the standalone TUI and against a daemon.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A screenshot showed the blank cells under a kitty image (issue 678) | the decode in `decodeShotPieces` | it returns nil (`if true`) | `TestKittyImageSurvivesCaptureMode/standalone` and `/daemon` ("has 454 pixels of the image, want at least 5000") | **caught** |

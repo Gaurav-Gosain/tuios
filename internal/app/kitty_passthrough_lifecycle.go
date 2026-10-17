@@ -69,6 +69,8 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		kp.releaseHostID(windowID, hostID)
 	}
 	delete(kp.imageIDMap, windowID)
+	kp.forgetKept(windowID, 0)
+	delete(kp.rawChunks, windowID)
 	kp.forgetImagePixels(windowID, 0)
 	kp.forgetFrameHashes(windowID)
 	kp.deleteRemoteVideoImages(windowID)
@@ -91,6 +93,7 @@ func (kp *KittyPassthrough) deleteVirtualImages(windowID string) {
 		// d=I frees the image data as well as the placements: the window is
 		// gone and no cell will name this image again.
 		fmt.Fprintf(&buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
+		kp.forgetKept(windowID, hostID)
 	}
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	delete(kp.virtualImages, windowID)

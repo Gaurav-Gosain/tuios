@@ -20,6 +20,12 @@ import (
 //
 // It takes the same read lock GetTerminalState takes, and holds it for the
 // walk only: the render happens after, off the lock.
+//
+// The grid has no images. The daemon reads only the control keys of a kitty
+// graphics command and keeps no picture (see the passthrough set up in
+// session.go), so it has none to draw. A sixel image cell is drawn blank. The
+// screenshot keys in a client draw the images that client shows; see
+// internal/app/screenshot_images.go.
 func (p *PTY) screenshotGrid(palette *shot.Palette, scrollbackRows int, cursor bool) *shot.Grid {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
@@ -53,7 +59,7 @@ func gridOf(t vt.Terminal, palette *shot.Palette, scrollbackRows int, cursor boo
 		row := g.Cells[i]
 		for x := 0; x < cols && x < len(line); x++ {
 			cell := line[x]
-			row[x] = shot.MakeCell(cell.Content, cell.Width, cell.Style, cell.Link, palette)
+			row[x] = shot.MakeCell(vt.CellText(cell.Content), cell.Width, cell.Style, cell.Link, palette)
 		}
 	}
 
@@ -64,7 +70,7 @@ func gridOf(t vt.Terminal, palette *shot.Palette, scrollbackRows int, cursor boo
 			if cell == nil {
 				continue
 			}
-			row[x] = shot.MakeCell(cell.Content, cell.Width, cell.Style, cell.Link, palette)
+			row[x] = shot.MakeCell(vt.CellText(cell.Content), cell.Width, cell.Style, cell.Link, palette)
 		}
 	}
 

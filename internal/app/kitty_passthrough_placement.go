@@ -669,6 +669,19 @@ func (kp *KittyPassthrough) SetChromeOccluders(rects []cellRect) {
 	kp.chromeOccluders = append(kp.chromeOccluders[:0], rects...)
 }
 
+// replaceChromeOccluders sets the chrome occluders as SetChromeOccluders does,
+// and reports whether the placements need laying out again for it: the set
+// changed and images are showing.
+func (kp *KittyPassthrough) replaceChromeOccluders(rects []cellRect) bool {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	if slices.Equal(kp.chromeOccluders, rects) {
+		return false
+	}
+	kp.chromeOccluders = append(kp.chromeOccluders[:0], rects...)
+	return kp.enabled && !kp.overlayActive
+}
+
 // overlapsChrome reports whether a rectangle touches any chrome occluder.
 func (kp *KittyPassthrough) overlapsChrome(r cellRect) bool {
 	return slices.ContainsFunc(kp.chromeOccluders, r.overlaps)

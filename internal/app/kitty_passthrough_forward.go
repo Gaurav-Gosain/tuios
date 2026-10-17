@@ -308,6 +308,22 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		if kp.absorbDirectFrame(cmd, rawData, windowID, hostID) {
 			return nil
 		}
+		// Kept for a screenshot when it is whole in this one command. The
+		// last chunk of a chunked upload carries only its own part.
+		switch {
+		case cmd.More:
+			if kp.rawChunks == nil {
+				kp.rawChunks = make(map[string]bool)
+			}
+			kp.rawChunks[windowID] = true
+			if hostID != 0 {
+				kp.forgetKept(windowID, hostID)
+			}
+		case kp.rawChunks[windowID]:
+			delete(kp.rawChunks, windowID)
+		default:
+			kp.keepImage(windowID, hostID, keptFromCommand(cmd, cmd.Data))
+		}
 		// Pass through raw (already has framing)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		return nil
@@ -451,6 +467,10 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	// compare against; see emitBitmap.
 	update := kp.emitBitmap(windowID, hostID, pending.Format, pending.Compression,
 		pending.Width, pending.Height, pending.Data, pending.ImageID != 0)
+	kp.keepImage(windowID, hostID, &keptImage{
+		guestID: pending.ImageID, format: pending.Format, compression: pending.Compression,
+		width: pending.Width, height: pending.Height, data: pending.Data,
+	})
 	if update == bitmapFull {
 		if kp.pendingGraphicsFull() {
 			// Drop the bitmap rather than queue it behind a host that is
@@ -671,6 +691,10 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		releaseKittyMedium(cmd, filePath)
 		return
 	}
+
+	// Kept for a screenshot before the host is sent the name: for t=t and
+	// t=s the host deletes the object once it has read it.
+	kp.keepFileMedium(cmd, windowID, hostID, filePath, !reusingID || cmd.ImageID == 0)
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
 	// The host (Ghostty/Kitty) reads the file itself, so there is no need to
@@ -1141,6 +1165,9 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 			kp.imageIDMap[windowID][cmd.ImageID] = hostID
 		}
 	}
+	// Kept for a screenshot. The bytes are read already, so this holds on to
+	// them and copies nothing.
+	kp.keepImage(windowID, hostID, keptFromCommand(cmd, rawPixels))
 
 	// Cell dimensions. Match forwardFileTransmit semantics.
 	imgRows, imgCols := kp.calculateImageCells(cmd)
@@ -1484,6 +1511,7 @@ func (kp *KittyPassthrough) declareVirtualPlacement(windowID string, hostID, pla
 		kp.virtualImages[windowID] = make(map[uint32]bool)
 	}
 	kp.virtualImages[windowID][hostID] = true
+	kp.keepVirtualBox(windowID, hostID, placementID, cols, rows, z)
 
 	kittyPassthroughLog("declareVirtualPlacement: hostID=%d cols=%d rows=%d winID=%s",
 		hostID, cols, rows, windowID[:min(8, len(windowID))])
@@ -1751,6 +1779,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 				// The image is gone. While other placements remain, the
 				// next a=p of the image still needs its size.
 				kp.forgetImagePixels(windowID, cmd.ImageID)
+				kp.forgetKept(windowID, hostID)
 			}
 			kp.forgetFrameHashes(windowID)
 			kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
@@ -1786,6 +1815,7 @@ func (kp *KittyPassthrough) freeWindowImages(windowID string) {
 		kp.releaseHostID(windowID, hostID)
 	}
 	kp.imageIDMap[windowID] = nil
+	kp.forgetKept(windowID, 0)
 	kp.forgetImagePixels(windowID, 0)
 	kp.forgetFrameHashes(windowID)
 	kp.deleteRemoteVideoImages(windowID)

@@ -273,6 +273,7 @@ func rewriteKittyImageID(rawData []byte, hostID uint32) []byte {
 // a broken one.
 type directFrame struct {
 	imageID     uint32
+	guestID     uint32
 	format      vt.KittyGraphicsFormat
 	compression vt.KittyGraphicsCompression
 	width       int
@@ -307,6 +308,7 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 		}
 		pending = &directFrame{
 			imageID:     hostID,
+			guestID:     cmd.ImageID,
 			format:      cmd.Format,
 			compression: cmd.Compression,
 			width:       cmd.Width,
@@ -328,6 +330,10 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 		return true
 	}
 	delete(kp.directFrames, windowID)
+	kp.keepImage(windowID, pending.imageID, &keptImage{
+		guestID: pending.guestID, format: pending.format, compression: pending.compression,
+		width: pending.width, height: pending.height, data: pending.data,
+	})
 
 	// A direct frame stream names its own image id, and the guest's id maps
 	// to one host id for the life of the window, so the next frame arrives

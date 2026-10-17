@@ -3595,6 +3595,22 @@ tuios screenshot --theme catppuccin_mocha
 tuios screenshot --json
 ```
 
+`tuios screenshot` draws no images. The daemon does not keep the pictures
+that programs show with the kitty graphics protocol or with sixel, so the
+image cells are blank. To include the images, take the capture in the TUI:
+press the leader then `C`, or run the `Screenshot` command.
+
+A capture in the TUI draws the images that the client shows:
+
+- A kitty image, a kitty image in Unicode placeholder cells, and a sixel image
+  are drawn at their cells.
+- A pane scrolled into its history shows the images on its screen.
+- `png`, `svg` and `html` draw images. `ansi` and `txt` do not.
+- One capture decodes at most about 25 megapixels of images. An image past
+  that limit is not drawn.
+- A kitty image that a program streams as a temporary file or as shared
+  memory is drawn only if it is not a stream of frames.
+
 Region and full screen captures are not CLI commands. They need a viewport and
 composed chrome, which only an attached client has: press the leader then `C`
 in the TUI and drag, or press `f`.

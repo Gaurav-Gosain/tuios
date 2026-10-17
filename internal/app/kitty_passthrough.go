@@ -177,6 +177,19 @@ type KittyPassthrough struct {
 	lastBitmap   map[string]map[uint32]*bitmapCache
 	directFrames map[string]*directFrame
 
+	// kept is the last payload of each image, by window and host id, for a
+	// screenshot to draw. keptBytes is what the payloads hold and keptSeq
+	// orders them for eviction. virtualBoxes is the box each virtual
+	// placement fills, by window, host id and placement id. See kitty_keep.go.
+	kept         map[string]map[uint32]*keptImage
+	keptBytes    int
+	keptSeq      uint64
+	virtualBoxes map[string]map[uint32]map[uint32]virtualBox
+
+	// rawChunks marks a window whose transmit-only upload is passing through
+	// in chunks, so the last chunk is not kept as if it were a whole image.
+	rawChunks map[string]bool
+
 	// Screen dimensions (updated by RefreshAllPlacements)
 	screenWidth  int
 	screenHeight int
@@ -864,6 +877,7 @@ func (kp *KittyPassthrough) releaseHostID(windowID string, hostID uint32) {
 	}
 	kp.pendingOutput = fmt.Appendf(kp.pendingOutput, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
 	delete(kp.virtualImages[windowID], hostID)
+	kp.forgetKept(windowID, hostID)
 	if hostID < lowHostIDs {
 		if kp.freeLowIDs == nil {
 			kp.freeLowIDs = make(map[uint32]struct{})

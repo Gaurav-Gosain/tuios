@@ -257,12 +257,12 @@ func (m *OS) ScreenshotWindow(index int) tea.Cmd {
 	// region capture is not: it reads the composed frame, whose pane cells
 	// already carry the paint and whose chrome does not.
 	palette := capture.WithPaneBackground(m.shotPalette(), m.Settings.PaneBackgroundResolved(), theme.CurrentThemeID())
-	grid := windowGrid(win, palette, m.screenshotSettings().Cursor)
+	grid, pieces := m.windowShot(win, palette, m.screenshotSettings().Cursor)
 	if grid == nil {
 		m.ShowNotification("That window has no screen to capture.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.renderScreenshot(grid, windowRowTitle(win), false)
+	return m.renderScreenshot(grid, windowRowTitle(win), false, pieces)
 }
 
 // ScreenshotScreen captures the whole composed frame: borders, dock, sidebar
@@ -278,7 +278,8 @@ func (m *OS) ScreenshotRegion(x0, y0, x1, y1 int) tea.Cmd {
 	if m.learnOff(learnNoteShot) {
 		return nil
 	}
-	grid := m.composedGrid(x0, y0, x1, y1)
+	m.settleImagesForCapture()
+	grid, pieces := m.composedShot(x0, y0, x1, y1)
 	if grid == nil {
 		m.ShowNotification("That selection is too small to capture.", "warning", m.Settings.NotificationDuration)
 		return nil
@@ -287,18 +288,37 @@ func (m *OS) ScreenshotRegion(x0, y0, x1, y1 int) tea.Cmd {
 	if x1-x0 != m.GetRenderWidth() || y1-y0 != m.GetRenderHeight() {
 		label = "region"
 	}
-	return m.renderScreenshot(grid, label, true)
+	return m.renderScreenshot(grid, label, true, pieces)
 }
 
-// windowGrid reads a live window's cells into a render grid, under the same
-// read lock every other reader of that emulator takes.
-func windowGrid(win *terminal.Window, palette *shot.Palette, cursor bool) *shot.Grid {
+// settleImagesForCapture lays the kitty images out again without capture
+// mode's chrome, when that chrome cut them on the last frame. The mode has
+// closed by the time a region is taken, but the placements still have the
+// gaps its hint strip and marquee left, and the capture reads them.
+func (m *OS) settleImagesForCapture() {
+	kp := m.KittyPassthrough
+	if kp == nil {
+		return
+	}
+	if kp.replaceChromeOccluders(m.pipOccluders(m.captureOccluders())) {
+		m.GetKittyGraphicsCmd()
+	}
+}
+
+// windowShot reads a live window's cells into a render grid, under the same
+// read lock every other reader of that emulator takes, and finds the images
+// on its screen.
+func (m *OS) windowShot(win *terminal.Window, palette *shot.Palette, cursor bool) (*shot.Grid, []shotPiece) {
 	if win == nil {
-		return nil
+		return nil, nil
 	}
 	win.RLockIO()
 	defer win.RUnlockIO()
-	return terminalGrid(win.Terminal, palette, cursor)
+	g := terminalGrid(win.Terminal, palette, cursor)
+	if g == nil {
+		return nil, nil
+	}
+	return g, m.windowShotPieces(win.ID, win.IsAltScreen(), win.Terminal, g)
 }
 
 // terminalGrid walks an emulator's visible screen into a render grid.
@@ -345,6 +365,23 @@ func (m *OS) composedGrid(x0, y0, x1, y1 int) *shot.Grid {
 	return cropGrid(g, x0, y0, x1, y1)
 }
 
+// composedShot is composedGrid for a screenshot: it also finds the images on
+// the composed screen, placed on the cut-out grid.
+func (m *OS) composedShot(x0, y0, x1, y1 int) (*shot.Grid, []shotPiece) {
+	w, h := m.GetRenderWidth(), m.GetRenderHeight()
+	x0, y0 = max(x0, 0), max(y0, 0)
+	x1, y1 = min(x1, w), min(y1, h)
+	if x1-x0 < 1 || y1-y0 < 1 || w <= 0 || h <= 0 {
+		return nil, nil
+	}
+	g, hits := frameToGridHits(m.composeFrame(), w, h, m.shotPalette(), true)
+	if g == nil {
+		return nil, nil
+	}
+	pieces := m.screenShotPieces(hits)
+	return cropGrid(g, x0, y0, x1, y1), cropShotPieces(pieces, x0, y0)
+}
+
 // frameToGrid parses a composed frame string through a throwaway emulator and
 // returns its cells.
 //
@@ -357,17 +394,32 @@ func (m *OS) composedGrid(x0, y0, x1, y1 int) *shot.Grid {
 // capture comes out as a diagonal smear. Adding the carriage return is what
 // the host would have done.
 func frameToGrid(frame string, w, h int, palette *shot.Palette) *shot.Grid {
+	g, _ := frameToGridHits(frame, w, h, palette, false)
+	return g
+}
+
+// frameToGridHits is frameToGrid that, with images set, also keeps the kitty
+// placeholder cells of the frame and returns the image cells it finds, blanked
+// on the grid.
+func frameToGridHits(frame string, w, h int, palette *shot.Palette, images bool) (*shot.Grid, []shotCellHit) {
 	if w <= 0 || h <= 0 {
-		return nil
+		return nil, nil
 	}
 	if palette == nil {
 		palette = shot.XTermPalette()
 	}
 	em := vt.NewEmulator(w, h)
-	if _, err := em.Write([]byte(strings.ReplaceAll(frame, "\n", "\r\n"))); err != nil {
-		return nil
+	if images {
+		em.SetKittyPlaceholderMode(vt.KittyPlaceholdersKeep)
 	}
-	return terminalGrid(em, palette, false)
+	if _, err := em.Write([]byte(strings.ReplaceAll(frame, "\n", "\r\n"))); err != nil {
+		return nil, nil
+	}
+	g := terminalGrid(em, palette, false)
+	if g == nil || !images {
+		return g, nil
+	}
+	return g, scanImageCells(em, g)
 }
 
 // cropGrid cuts a rectangle out of a grid.
@@ -502,7 +554,7 @@ func (m *OS) screenshotSettings() capture.Settings {
 // Everything that touches a disk or a font file is inside the command. The
 // settings resolution stays here because it only reads memory this goroutine
 // owns, but capture.Frame reads a font file, so it is inside the command.
-func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd {
+func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool, pieces []shotPiece) tea.Cmd {
 	settings := m.screenshotSettings()
 	if settings.Title != "" {
 		settings.Title = m.Settings.FormatWindowTitle(label, m.FocusedWindow+1, "")
@@ -544,7 +596,16 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd
 		}
 		msg.frame, msg.warnings = frame, warnings
 
-		data, raster, err := renderCaptureBytes(settings.Format, grid, frame, maxW > 0)
+		// The pictures are decoded here, off the update loop. The grid the
+		// panel shows is left as it is: the rendered one is a copy with the
+		// images on it.
+		rendered := grid
+		if images := decodeShotPieces(pieces); len(images) > 0 {
+			withImages := *grid
+			withImages.Images = images
+			rendered = &withImages
+		}
+		data, raster, err := renderCaptureBytes(settings.Format, rendered, frame, maxW > 0)
 		if err != nil {
 			msg.err = err
 			return msg

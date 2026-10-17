@@ -145,6 +145,7 @@ func (kp *KittyPassthrough) dropPlacement(windowID string, key placementKey) {
 		if len(slotsOf) == 0 {
 			delete(ix.byHost, key.host)
 			delete(ix.bases, key.host)
+			kp.forgetUnnamedKept(windowID, key.host)
 		}
 	}
 	if p.GuestPlacementID != 0 && ix.guestP[[2]uint32{key.host, p.GuestPlacementID}] == key.slot {
@@ -181,6 +182,7 @@ func (kp *KittyPassthrough) pruneOrder(windowID string, ix *placementIndex) {
 func (kp *KittyPassthrough) dropWindowPlacements(windowID string) {
 	delete(kp.placements, windowID)
 	delete(kp.placeIdx, windowID)
+	kp.forgetUnnamedWindowKept(windowID)
 }
 
 // enforcePlacementCaps takes the oldest a=p record down while the image or
