@@ -256,7 +256,10 @@ func TestEmptyWorkspaceReturnsWhereXpanesRan(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "close-workspace", "--session", "ew", "2"); err != nil {
 		t.Fatalf("close-workspace 2: %v\n%s", err, out)
 	}
-	waitPanesOn(t, term, base, "ew", 2, 0, "close-workspace 2")
+	// Workspace 2 goes, and the pane on 3 moves down to it: a workspace's
+	// number is its position.
+	waitPanesOn(t, term, base, "ew", 3, 0, "close-workspace 2")
+	waitPanesOn(t, term, base, "ew", 2, 1, "the pane from workspace 3 after close-workspace 2")
 	waitShowing(t, base, "ew", 1, "HOME-42", term)
 	alive(t, term, "after the return")
 }
