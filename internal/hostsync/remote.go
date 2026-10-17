@@ -183,13 +183,19 @@ const syncStopFunc = `stopd() { if so=$("$1" kill-server --restart </dev/null 2>
 //	$1 the target, as syncResolveArg reads it
 //	$2 the binary's sha256
 //	$3 its size in bytes
-//	$4 1 to restart the daemon, 0 to leave it
+//	$4 the daemon: 0 to leave it, 1 to upgrade it live or else restart it,
+//	   2 to upgrade it live or else leave it
 //	$5 the old binary, which stops the old daemon, or "-"
 //
 // The binary is written to a temp file in the target's own folder, checked,
 // run once, and only then renamed onto the target. A rename is atomic and
 // leaves the running daemon's file alone: the daemon keeps the file it
 // opened. The temp file is removed on every way out.
+//
+// A binary with `daemon upgrade --or-restart` moves the daemon onto itself
+// once it is in place, live where it can (syncUpgradeStep). One without it is
+// from before live upgrades: the old binary stops the daemon before the
+// rename and the new one starts it after, as a restart.
 func InstallScript() string {
 	return strings.Join([]string{
 		syncResolveArg,
@@ -205,12 +211,15 @@ func InstallScript() string {
 		`if [ -n "$h" ]; then if [ "$h" = "$2" ]; then :; else echo "fail=hash"; exit 4; fi; fi`,
 		`chmod 755 "$t"`,
 		`if v=$("$t" --version </dev/null 2>&1); then echo "staged=$(echo "$v" | head -n 1)"; else echo "fail=run"; echo "$v" | head -n 3 | while IFS= read -r l; do echo "out=$l"; done; exit 5; fi`,
+		`live=0; if [ "$4" != 0 ]; then ` + syncLiveProbe(`$t`) + `; fi`,
 		`stopped=0`,
 		syncStopFunc,
-		`if [ "$4" = 1 ]; then o=$5; if [ "$o" = - ]; then o=$t; fi; if stopd "$o"; then stopped=1; echo "stopped=1"; else echo "stopfail=1"; fi; fi`,
+		`if [ "$4" = 1 ] && [ "$live" = 0 ]; then o=$5; if [ "$o" = - ]; then o=$t; fi; if stopd "$o"; then stopped=1; echo "stopped=1"; else echo "stopfail=1"; fi; fi`,
+		`if [ "$4" = 2 ] && [ "$live" = 0 ]; then echo "nolive=1"; fi`,
 		`mv -f "$t" "$a" || { echo "fail=move"; exit 6; }`,
 		`echo "target=$a"`,
 		`if [ "$stopped" = 1 ]; then if "$a" start-server </dev/null >/dev/null 2>&1; then echo "started=1"; else echo "startfail=1"; fi; fi`,
+		`if [ "$live" = 1 ]; then ` + syncUpgradeStep(`$4`) + `; fi`,
 		`"$a" --version </dev/null 2>&1 | head -n 1 | while IFS= read -r l; do echo "after=$l"; done`,
 		syncFirstFunc,
 		`q=; for s in "$SHELL" sh; do q=$("$s" -l -c "command -v tuios" </dev/null 2>/dev/null | first); if [ -n "$q" ]; then break; fi; done`,
@@ -218,16 +227,42 @@ func InstallScript() string {
 	}, "; ")
 }
 
-// RestartScript stops the daemon and starts it again with the binary in
-// $1, as syncResolveArg reads it. kill-server saves every session first, and
-// the new daemon restores them.
+// RestartScript moves the daemon onto the binary in $1, as syncResolveArg
+// reads it. $2 is the mode of InstallScript's $4: 1 upgrades live or else
+// restarts, 2 upgrades live or else leaves the daemon. A binary from before
+// live upgrades restarts it: kill-server saves every session first, and the
+// new daemon restores them.
 func RestartScript() string {
 	return strings.Join([]string{
 		syncResolveArg,
+		`live=0; ` + syncLiveProbe(`$a`),
+		`if [ "$live" = 1 ]; then ` + syncUpgradeStep(`$2`) + `; exit 0; fi`,
+		`if [ "$2" = 2 ]; then echo "nolive=1"; exit 0; fi`,
 		syncStopFunc,
 		`if stopd "$a"; then echo "stopped=1"; else echo "stopfail=1"; exit 7; fi`,
 		`if "$a" start-server </dev/null >/dev/null 2>&1; then echo "started=1"; else echo "startfail=1"; exit 7; fi`,
 	}, "; ")
+}
+
+// syncLiveProbe sets live=1 when the binary in the shell word bin has `daemon
+// upgrade --or-restart`. Its help is the one answer every build gives without
+// a daemon, and a build without the flag never prints its name.
+func syncLiveProbe(bin string) string {
+	return `case $("` + bin + `" daemon upgrade --help </dev/null 2>&1) in *or-restart*) live=1;; esac`
+}
+
+// syncUpgradeStep runs `daemon upgrade` with the installed binary $a, and
+// prints its JSON outcome as upgrade=. mode is the shell word that holds the
+// mode: 2 leaves the daemon when it cannot be upgraded live, and anything
+// else restarts it then. Both the upgrade and a restart run against the
+// default server of the machine, the one the link reaches, or on this machine
+// the server this sync runs with, which TUIOS_SERVER carries.
+//
+// The line goes out through printf %s: the JSON escapes a newline in a message
+// as a backslash and an n, and the echo of macOS's sh turns that back into a
+// newline, which cuts the line in two.
+func syncUpgradeStep(mode string) string {
+	return `if [ "` + mode + `" = 2 ]; then r=; else r=--or-restart; fi; "$a" daemon upgrade --binary "$a" $r --json </dev/null 2>/dev/null | while IFS= read -r l; do printf "upgrade=%s" "$l"; echo; done`
 }
 
 // StartScript starts the daemon with the binary in $1, as syncResolveArg
