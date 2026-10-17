@@ -35,3 +35,6 @@ func (m *OS) applyLauncherIcons(launcherIconsMsg) {}
 func (m *OS) flushLauncherIconsForFrame() {}
 
 func (m *OS) clearLauncherIcons() {}
+
+// shotPieces has no icons to give a capture.
+func (*launcherIcons) shotPieces() []shotPiece { return nil }

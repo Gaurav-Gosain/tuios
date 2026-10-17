@@ -6869,3 +6869,26 @@ huge one.
 
 The crop case fails on `c878e4d` as well ("12x26 cells, want 12x12"). Run on
 2026-10-17.
+
+## A screen capture shows the reply previews and the launcher icons
+
+`TestReplyPreviewInScreenCapture` attaches a reply editor to an agent row on a
+kitty host. It pastes the path of a 320x60 gradient PNG and waits for the
+preview's kitty placement on the host. Then it takes the full screen from
+capture mode. The PNG must hold at least 5000 pixels of the gradient, and
+their red must rise from left to right.
+
+`TestLauncherIconsInScreenCapture` opens the launcher over six apps whose
+icons are a solid (11, 222, 99). It waits until the host holds all six
+placements, then takes the full screen from capture mode. The PNG must hold
+at least 1000 pixels of that colour.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A screen capture showed blank cells under the reply previews | yes | `screenShotPieces` without the `replyPreview.shotPieces` call | `TestReplyPreviewInScreenCapture` ("has 928 pixels of the image, want at least 5000") | **caught** |
+| A screen capture showed blank cells under the launcher icons | yes | `screenShotPieces` without the `launcherIcons.shotPieces` call | `TestLauncherIconsInScreenCapture` ("has 0 pixels of the icons, want at least 1000") | **caught** |
+
+The fixed build passes both, `TestKittyImageSurvivesCaptureMode`, every
+`TestLauncher*`, every `TestScreenshot*` and `TestRichRowReplyAndRecap`.

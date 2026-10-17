@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
 	"image/png"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -132,6 +135,124 @@ func TestKittyImageSurvivesCaptureMode(t *testing.T) {
 	}
 }
 
+// TestReplyPreviewInScreenCapture takes the whole screen while the reply
+// editor shows an image preview on a kitty host. tuios places the preview on
+// the host itself, beside the kitty passthrough, so the passthrough does not
+// list it, and the capture showed the blank cells under it.
+//
+// How this could pass wrongly, written down first:
+//   - the preview might be drawn as block glyphs, which are cells: the host
+//     wire is checked for a placement in the preview's id range first;
+//   - the pixels might come from a pane's image: no pane shows one;
+//   - the shot might be of a frame without the editor: the gradient is
+//     checked, and nothing else on the screen draws it.
+//
+// Negative control: with the call to replyPreview.shotPieces in
+// screenShotPieces removed, the PNG holds none of the gradient. See
+// NEGATIVE_CONTROLS.md.
+func TestReplyPreviewInScreenCapture(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-shotreply", "--detach"); err != nil {
+		t.Fatalf("create the agent's session: %v\n%s", err, out)
+	}
+	host := newKittyHost()
+	term := startIn(t, base, startOpts{
+		args: []string{"attach", "e2e-shotreply"},
+		env:  []string{"TUIOS_SIXEL_GRAPHICS=0"},
+		out:  host,
+	})
+	host.answerProbe(t, term)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	dir := shotDir(t, base)
+	setShotOption(t, term, base, "screenshot.directory", dir)
+	setShotOption(t, term, base, "screenshot.format", "png")
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "window management mode", "Window management mode")
+	time.Sleep(insertGuard)
+
+	hook := func(payload string) {
+		t.Helper()
+		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-shotreply", "--window", "0", "--timeout", "10s")
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Stdin = strings.NewReader(payload)
+		if out, err := cmd.CombinedOutput(); err != nil || len(out) != 0 {
+			t.Fatalf("the hook for %s failed or printed: %v\n%s", payload, err, out)
+		}
+	}
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"e2e-shotreply","prompt":"plot the latency"}`)
+	hook(`{"hook_event_name":"PreToolUse","session_id":"e2e-shotreply","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`)
+	waitText(t, term, "the working row", "Bash: go test")
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(insertGuard)
+	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the reply editor", "Reply to", "Type your reply.")
+
+	// A wide gradient, so the thumbnail is as wide as the strip allows: red
+	// rises from left to right, green is at least 40, blue is 99.
+	const w, h = 320, 60
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.Set(x, y, color.RGBA{uint8(x * 255 / w), uint8(40 + y*200/h), 99, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	pngPath := filepath.Join(t.TempDir(), "graph.png")
+	if err := os.WriteFile(pngPath, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host.mark("preview")
+	if err := term.Paste(pngPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// The preview is a kitty placement of tuios's own, at 0xF2000000 and up.
+	placed := false
+	deadline := time.Now().Add(uiTimeout)
+	for !placed && time.Now().Before(deadline) {
+		for _, c := range wireCmds(host.bytes()) {
+			if c.phase == "preview" && c.action == "p" && c.image >= 0xF200_0000 && c.image < 0xF300_0000 {
+				placed = true
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !placed {
+		t.Fatalf("the reply preview was never placed on the host\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "reply-preview-before-capture")
+
+	before := len(shotFiles(t, dir))
+	openCaptureMode(t, term)
+	if err := term.SendKeys("f"); err != nil {
+		t.Fatal(err)
+	}
+	files := waitForShot(t, term, dir, before+1)
+	shotPath := files[len(files)-1]
+	if data, err := os.ReadFile(shotPath); err == nil {
+		_ = os.WriteFile(filepath.Join(artifactDir(t), "reply-preview-capture.png"), data, 0o644)
+	}
+	checkIcatInPicture(t, shotPath)
+}
+
 // findCapturePNG returns the first finished PNG capture under base, or "".
 func findCapturePNG(base string) string {
 	var found string
@@ -208,4 +329,94 @@ func checkIcatInPicture(t *testing.T, path string) {
 		t.Fatalf("the image in %s does not rise in red from left to right (left %.0f, right %.0f)",
 			path, leftR/max(leftN, 1), rightR/max(rightN, 1))
 	}
+}
+
+// TestLauncherIconsInScreenCapture takes the whole screen while the launcher
+// shows its icons on a kitty host. The icons are tuios's own kitty pictures,
+// placed as the reply previews are, and the capture showed blank cells.
+//
+// Each icon is a solid (11, 222, 99), a colour the theme does not draw, so
+// the pixels counted are the icons and nothing else.
+//
+// Negative control: with the call to launcherIcons.shotPieces in
+// screenShotPieces removed, the PNG holds none of that colour. See
+// NEGATIVE_CONTROLS.md.
+func TestLauncherIconsInScreenCapture(t *testing.T) {
+	const apps = 6
+	stream := &hostStream{}
+	base := t.TempDir()
+	plantApps(t, base, apps)
+	dir := shotDir(t, base)
+	writeConfig(t, base, fmt.Sprintf("[screenshot]\ndirectory = %q\nformat = \"png\"\n", dir))
+	icons := filepath.Join(base, "XDG_DATA_HOME", "icons", "hicolor", "apps")
+	for i := range apps {
+		img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+		for y := range 32 {
+			for x := range 32 {
+				img.Set(x, y, color.RGBA{11, 222, 99, 255})
+			}
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(icons, fmt.Sprintf("zzapp%02d.png", i)), buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	term := startIn(t, base, startOpts{args: []string{"--standalone"}, env: iconEnv(base), out: stream})
+	waitBoot(t, term)
+	f := &launcherFixture{term: term, stream: stream, base: base}
+	f.openWithQuery(t, "zzapp", apps)
+	// A decode that lands on a still panel waits for the next frame to be
+	// placed (see requirePlaced), so the selection is moved until every row
+	// has its icon.
+	f.requirePlaced(t)
+	deadline := time.Now().Add(uiTimeout)
+	for len(f.live()) < apps {
+		if !time.Now().Before(deadline) {
+			t.Fatalf("only %d of %d icons were placed on the host\n%s", len(f.live()), apps, f.term.Snapshot())
+		}
+		f.nudgeSelection()
+		f.waitPlacements(func(p []string) bool { return len(p) >= apps }, nudgeBudget)
+	}
+
+	before := len(shotFiles(t, dir))
+	openCaptureMode(t, f.term)
+	if err := f.term.SendKeys("f"); err != nil {
+		t.Fatal(err)
+	}
+	files := waitForShot(t, f.term, dir, before+1)
+	shotPath := files[len(files)-1]
+	data, err := os.ReadFile(shotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(artifactDir(t), "launcher-icons-capture.png"), data, 0o644)
+	pic, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decode %s: %v", shotPath, err)
+	}
+	n := 0
+	b := pic.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := pic.At(x, y).RGBA()
+			if d := absDiff(int(r>>8), 11) + absDiff(int(g>>8), 222) + absDiff(int(bl>>8), 99); d <= 12 {
+				n++
+			}
+		}
+	}
+	// An icon is about one cell square: at least 10 by 20 pixels at the
+	// default scale, so six of them are well over 1000.
+	if n < 1000 {
+		t.Fatalf("the capture %s has %d pixels of the icons, want at least 1000: the icons are not in the picture", shotPath, n)
+	}
+}
+
+func absDiff(a, b int) int {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }

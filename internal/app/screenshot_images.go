@@ -615,9 +615,11 @@ func (m *OS) screenShotPieces(hits []shotCellHit) []shotPiece {
 		}
 	}
 	pieces = append(pieces, placeholderPieces(kittyRects, kept, boxes, cellW, cellH)...)
-	// The reply editor's previews are tuios's own kitty pictures, placed
-	// beside the passthrough rather than through it, so it does not list them.
-	return append(pieces, m.replyPreview.shotPieces()...)
+	// The reply editor's previews and the launcher's icons are tuios's own
+	// kitty pictures, placed beside the passthrough rather than through it, so
+	// it does not list them.
+	pieces = append(pieces, m.replyPreview.shotPieces()...)
+	return append(pieces, m.launcherIcons.shotPieces()...)
 }
 
 // cropShotPieces moves pieces found in screen cells onto a grid cut out at

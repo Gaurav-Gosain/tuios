@@ -10,6 +10,7 @@ import (
 	_ "image/jpeg" // same
 	"image/png"
 	"maps"
+	"math"
 	"os"
 	"sync"
 
@@ -527,4 +528,43 @@ type byteWriter struct{ b []byte }
 func (w *byteWriter) Write(p []byte) (int, error) {
 	w.b = append(w.b, p...)
 	return len(p), nil
+}
+
+// shotPieces is the icons the host shows now, for a screen capture. An icon
+// is drawn at its own pixel size, which is its two by one cell box at the
+// host's cell size, over the cells, as the host draws it.
+func (s *launcherIcons) shotPieces() []shotPiece {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.shown) == 0 {
+		return nil
+	}
+	keys := make(map[uint32]iconKey, len(s.hostID))
+	for k, id := range s.hostID {
+		keys[id] = k
+	}
+	var out []shotPiece
+	for at, pl := range s.shown {
+		k, ok := keys[at.img]
+		if !ok {
+			continue
+		}
+		pix := s.pixels[k]
+		if pix == nil {
+			continue
+		}
+		b := pix.Bounds()
+		out = append(out, shotPiece{
+			key:      at.img,
+			declared: b.Dx() * b.Dy(),
+			decode:   func(int) (image.Image, error) { return pix, nil },
+			source:   func(p image.Image) image.Rectangle { return p.Bounds() },
+			col:      pl.X, row: pl.Y, cols: launcherIconCols, rows: launcherIconRows,
+			z: math.MaxInt32,
+		})
+	}
+	return out
 }
