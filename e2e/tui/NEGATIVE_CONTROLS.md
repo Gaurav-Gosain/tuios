@@ -1298,6 +1298,9 @@ cutting one call site from the tree the tests were written against.
 | A recording drops actions | the Action branch of `Recorder.RecordAction` made to return | `TestTapeRecordingReplaysActions` (the saved tape has no `Action open_settings`) | **caught** |
 | An exported layout that does not parse | the tree before the `GenerateTapeScript` fix | `TestLayoutExportValidates` (`Type command expects a string, got IDENTIFIER` at the command line) | **caught** |
 | SnapFullscreen snaps to a quarter | the tree before the `SnapByDirection` fix | `TestTapeSnapFullscreenFillsTheScreen` (the window is 60x19 of 120x40) | **caught** |
+| No leader menu while a tape sleeps | `stepScript` in `internal/app/update.go` followed by `return m, nil` while the tape holds, as before the fix | `TestTapeExecKeepsTimeAndDrawsTheLeaderMenu` ("the which-key menu never opened"), 1 of 1 run | **caught** |
+| A final Sleep not waited for | the Sleep check in `stepScript` made to skip a finished player | `TestTapeExecKeepsTimeAndDrawsTheLeaderMenu` ("tape exec returned after 3.09s"), 1 of 1 run | **caught** |
+| Both, the tree before the fix | origin/main at 841190970 | `TestTapeExecKeepsTimeAndDrawsTheLeaderMenu` (both messages, exec returned after 3.08s), 2 of 2 runs | **caught** |
 
 `TestExampleTapeRuns` plays `examples/actions_and_waits.tape` and has no
 control of its own: it fails on any of the first two cuts, since the example

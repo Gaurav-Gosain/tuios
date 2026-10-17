@@ -326,3 +326,94 @@ func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error)
 	}
 	return m.armTick(m.framePeriod()), nil
 }
+
+// stepScript runs one step of tape playback on a maintenance tick, and returns
+// the command that carries the next tape command to Update, if any. The tick
+// runs at the frame rate while a tape plays: nextWake arms it.
+//
+// A step that has to hold returns nil, and the tick goes on with the rest of
+// its work. It used to end the tick instead, so for the whole of a Sleep or a
+// wait nothing else the tick does happened: the which-key menu a tape's
+// leader key opened was never drawn, since nothing else drew a frame.
+func (m *OS) stepScript() tea.Cmd {
+	if !m.ScriptMode || m.ScriptPaused || m.ScriptPlayer == nil {
+		return nil
+	}
+	// A Sleep holds the tape, the last one too: a tape that ends on a Sleep
+	// ends when it is over, so tuios tape exec returns only then.
+	if !m.ScriptSleepUntil.IsZero() {
+		if time.Now().Before(m.ScriptSleepUntil) {
+			return nil
+		}
+		m.ScriptSleepUntil = time.Time{}
+	}
+	player := m.ScriptPlayer
+	if player.IsFinished() {
+		if !m.ScriptFinishedTime.IsZero() {
+			return nil
+		}
+		m.ScriptFinishedTime = time.Now()
+		m.reportScriptResult(true, "")
+		// A tape that builds a layout creates panes whose early output (a
+		// split pane's shell prompt, an echo) can land before the client
+		// subscribed, leaving an unfocused pane blank on screen while the
+		// daemon holds the real content. Refresh every pane from the daemon a
+		// beat after playback, once output has settled.
+		if m.DaemonClient != nil {
+			return tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
+				return tapeLayoutRefreshMsg{}
+			})
+		}
+		return nil
+	}
+
+	// Wait for animations to complete before the next command, so playback
+	// stays visually consistent.
+	if m.HasActiveAnimations() {
+		return nil
+	}
+	// Hold the next command until a pane the previous one asked for actually
+	// exists. In a daemon session Split and NewWindow only send the request;
+	// the pane arrives later on a state push, and until it does
+	// GetFocusedWindowID still names the pane the tape was splitting away
+	// from, so the next Type would be typed into the wrong pane.
+	if !m.scriptPaneReady() {
+		return nil
+	}
+	// Hold the next command until Update has run the one before it. See
+	// OS.scriptInFlight.
+	if m.scriptInFlight {
+		return nil
+	}
+	// Hold for a WaitFor until its condition holds. A wait that runs out of
+	// time fails the tape, which stops the player.
+	if m.ScriptWait != nil && !m.checkScriptWait() {
+		return nil
+	}
+	// Hold for a WaitUntilRegex from a command dispatched before.
+	if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
+		return nil
+	}
+
+	next := player.NextCommand()
+	if next == nil {
+		return nil
+	}
+	player.Advance()
+	switch {
+	// Sleep and its Wait alias only delay playback.
+	case (next.Type == tape.CommandTypeSleep || next.Type == tape.CommandTypeWait) && next.Delay > 0:
+		m.ScriptSleepUntil = time.Now().Add(next.Delay)
+	case next.Type == tape.CommandTypeWaitUntilRegex:
+		// Armed here; playback holds above until it resolves. It does not
+		// go to the executor.
+		m.startScriptWaitRegex(next)
+	case next.Type == tape.CommandTypeWaitFor:
+		m.startScriptWait(next)
+	default:
+		// The command runs as a message rather than here.
+		m.scriptInFlight = true
+		return func() tea.Msg { return ScriptCommandMsg{Command: next} }
+	}
+	return nil
+}

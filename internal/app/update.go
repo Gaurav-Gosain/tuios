@@ -1295,99 +1295,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// nothing else is guaranteed to follow it.
 		leftScriptMode := m.maybeExitFinishedScript()
 
-		// Handle script playback if in script mode. The tick runs at the frame
-		// rate while a script plays: nextWake arms it.
+		// Step tape playback. A step that holds (a Sleep, a wait, a pane not
+		// there yet) ends only the step: the rest of the tick still runs, so a
+		// tape that sleeps still draws the prefix menu, a message's burn and
+		// the rest of what the tick draws.
 		var cmds []tea.Cmd
-		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
-			player := m.ScriptPlayer
-			if !player.IsFinished() {
-				// Wait for animations to complete before executing next command
-				// This ensures visual consistency during script playback
-				if m.HasActiveAnimations() {
-					return m, nil
-				}
-
-				// Hold the next command until a pane the previous one asked for
-				// actually exists. In a daemon session Split and NewWindow only
-				// send the request; the pane arrives later on a state push, and
-				// until it does GetFocusedWindowID still names the pane the tape
-				// was splitting away from, so the next Type would be typed into
-				// the wrong pane.
-				if !m.scriptPaneReady() {
-					return m, nil
-				}
-
-				// Hold the next command until Update has run the one before
-				// it. See OS.scriptInFlight.
-				if m.scriptInFlight {
-					return m, nil
-				}
-
-				// Hold for a WaitFor until its condition holds. A wait that
-				// runs out of time fails the tape, which stops the player.
-				if m.ScriptWait != nil && !m.checkScriptWait() {
-					return m, nil
-				}
-
-				// Check if we're blocking on a WaitUntilRegex condition from a
-				// previously dispatched command.
-				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
-					// Condition not met and not timed out yet, keep waiting.
-					return m, nil
-				}
-
-				// Check if we're waiting for a sleep to finish
-				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
-					// Still waiting, don't advance yet
-					return m, nil
-				}
-				// Sleep finished or wasn't waiting, clear the sleep time
-				m.ScriptSleepUntil = time.Time{}
-
-				nextCmd := player.NextCommand()
-				if nextCmd != nil {
-					switch {
-					// Sleep and its Wait alias both just delay playback.
-					case (nextCmd.Type == tape.CommandTypeSleep || nextCmd.Type == tape.CommandTypeWait) && nextCmd.Delay > 0:
-						// Set the sleep deadline
-						m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
-						// Advance to next command but don't execute anything yet
-						player.Advance()
-					case nextCmd.Type == tape.CommandTypeWaitUntilRegex:
-						// Arm the wait; playback blocks above until it resolves.
-						// Don't dispatch it to the executor.
-						m.startScriptWaitRegex(nextCmd)
-						player.Advance()
-					case nextCmd.Type == tape.CommandTypeWaitFor:
-						m.startScriptWait(nextCmd)
-						player.Advance()
-					default:
-						// Queue the command as a message instead of executing directly
-						m.scriptInFlight = true
-						cmds = append(cmds, func() tea.Msg {
-							return ScriptCommandMsg{Command: nextCmd}
-						})
-						// Advance to next command
-						player.Advance()
-					}
-				}
-			} else if player.IsFinished() {
-				// Script just finished: record the time if not already set
-				if m.ScriptFinishedTime.IsZero() {
-					m.ScriptFinishedTime = time.Now()
-					m.reportScriptResult(true, "")
-					// A tape that builds a layout creates panes whose early output
-					// (a split pane's shell prompt, an echo) can land before the
-					// client subscribed, leaving an unfocused pane blank on screen
-					// while the daemon holds the real content. Refresh every pane
-					// from the daemon a beat after playback, once output has settled.
-					if m.DaemonClient != nil {
-						cmds = append(cmds, tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
-							return tapeLayoutRefreshMsg{}
-						}))
-					}
-				}
-			}
+		if cmd := m.stepScript(); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 
 		// Tick handles animations, interactions, whichkey, dock stats, and scripts.

@@ -29,6 +29,10 @@ import (
 //     checkScriptWait's timeout: the wait is dropped, the line after it runs,
 //     and exec exits 0. The Locate call cut from runTapeExec: the message
 //     names line 3 of the sent text, not lib.tape line 2.
+//   - TestTapeExecKeepsTimeAndDrawsTheLeaderMenu: the tree before the fix:
+//     the tick returned early while a Sleep held playback, so no frame was
+//     drawn and the menu never opened; and a final Sleep did not hold the
+//     end of the tape, so exec returned after about 3s.
 //   - TestRunCommandRunsAnyAction: the IsActionName fallback cut from
 //     resolveCommandName: run-command open_settings fails with "unknown
 //     command".
@@ -131,6 +135,49 @@ Run "echo AFTER-$((1+1))"
 	time.Sleep(2 * time.Second)
 	if strings.Contains(term.Screen().Text(), "AFTER-2") {
 		t.Errorf("the tape went on past the failed WaitFor\n%s", term.Snapshot())
+	}
+}
+
+// TestTapeExecKeepsTimeAndDrawsTheLeaderMenu: a leader key a tape presses
+// opens the which-key menu after its delay, as a key from the keyboard does,
+// while the tape sleeps. And exec returns only when the tape's last Sleep is
+// over, so a tape's timing holds to its final line.
+func TestTapeExecKeepsTimeAndDrawsTheLeaderMenu(t *testing.T) {
+	term, base := tapeSession(t, "tapetime")
+	path := writeTape(t, base, "leader.tape", `Press ctrl+b
+Sleep 3s
+Press esc
+Sleep 2s
+`)
+	type result struct {
+		out, errOut string
+		err         error
+		took        time.Duration
+	}
+	done := make(chan result, 1)
+	start := time.Now()
+	go func() {
+		out, errOut, err := splitCLI(t, base, "tape", "exec", "-s", "tapetime", path)
+		done <- result{out, errOut, err, time.Since(start)}
+	}()
+	// The menu opens 500 ms after the leader, inside the first Sleep. Look
+	// for it well before that Sleep ends: the tick that ends a Sleep draws a
+	// frame of its own, and the esc after it closes the menu.
+	menuErr := term.WaitForText("Focus pane", 2*time.Second)
+	if menuErr == nil {
+		saveArtifact(t, term, artifactDir(t), "tape-leader-menu")
+	}
+	res := <-done
+	if res.err != nil {
+		t.Fatalf("tape exec: %v\nstdout: %s\nstderr: %s\n%s", res.err, res.out, res.errOut, term.Snapshot())
+	}
+	if menuErr != nil {
+		t.Errorf("the which-key menu never opened while the tape held the leader: %v\n%s", menuErr, term.Snapshot())
+	}
+	// Sleeps of 3 s and 2 s. A little slack for the clock of the tick that
+	// ends each one, none for a Sleep that was skipped.
+	if res.took < 4900*time.Millisecond {
+		t.Errorf("tape exec returned after %s, before the tape's Sleeps were over", res.took)
 	}
 }
 
