@@ -2788,6 +2788,20 @@ the regenerated skill archive counted in the pull request it follows:
 The theme editor in #827 is most of the growth. No dependency was added. The
 new budgets leave 30,678 and 30,246 bytes of room.
 
+The budgets went to 37,865,000 (linux/amd64) and 35,617,000 (darwin/arm64)
+for tuios look, #859 and #860. Main after #858 measured 37,748,898 and
+35,502,274 bytes (Go 1.26.9), 6,102 and 12,726 bytes under the budgets. The
+two bring it to 37,834,914 and 35,586,226, 86,016 and 83,952 bytes more. By
+pull request, linux/amd64 then darwin/arm64:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #859 apply a shared look with tuios look | 86,016 | 83,952 |
+| #860 load a look's theme in the browser with themeJSON | 0 | 0 |
+
+#860 changes only the browser build. No dependency was added. The new
+budgets leave 30,086 and 30,774 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
