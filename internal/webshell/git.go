@@ -95,8 +95,7 @@ func cmdGit(s *shell, args []string) int {
 	t := s.t
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
 		t.Print("usage: git <command>\r\n\r\n")
-		cols, _ := t.Size()
-		printLines(t, table([][2]string{
+		rows := [][2]string{
 			{"status", "what changed"},
 			{"log", "the history (try --oneline)"},
 			{"diff", "the changes, line by line"},
@@ -104,7 +103,8 @@ func cmdGit(s *shell, args []string) int {
 			{"commit", "commit what is staged (git commit -m \"msg\")"},
 			{"restore", "throw a change away"},
 			{"branch", "list branches"},
-		}, 2, green, cols))
+		}
+		t.Lay(func(cols int) []string { return table(rows, 2, green, cols) })
 		return 0
 	}
 	if args[0] == "--version" || args[0] == "version" {
@@ -187,10 +187,13 @@ func gitStatus(t *TTY, short bool) int {
 	}
 	if len(unstaged) > 0 {
 		t.Print("\r\nChanges not staged for commit:\r\n")
-		cols, _ := t.Size()
-		for _, l := range wrapWords("(git add <file> to stage, git diff to see the change)", cols-2) {
-			t.Print(dim + "  " + l + reset + "\r\n")
-		}
+		t.Lay(func(cols int) []string {
+			var lines []string
+			for _, l := range wrapWords("(git add <file> to stage, git diff to see the change)", cols-2) {
+				lines = append(lines, dim+"  "+l+reset)
+			}
+			return lines
+		})
 		for _, c := range unstaged {
 			t.Printf("\t%s%-10s %s%s\r\n", red, c.status+":", c.path, reset)
 		}
@@ -231,8 +234,8 @@ func gitLog(t *TTY, args []string) int {
 		if oneline {
 			// One commit to a line, cut at the pane edge the way git's
 			// pager shows it.
-			cols, _ := t.Size()
-			t.Print(fit(yellow+c.hash+ref+reset+" "+c.message, cols) + "\r\n")
+			line := yellow + c.hash + ref + reset + " " + c.message
+			t.Lay(func(cols int) []string { return []string{fit(line, cols)} })
 		} else {
 			t.Printf("%scommit %s%s%s\r\n", yellow, c.hash, ref, reset)
 			t.Print("Author: guest <guest@tuios.dev>\r\n")

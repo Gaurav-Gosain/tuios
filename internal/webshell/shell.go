@@ -1,10 +1,13 @@
 package webshell
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ANSI styling kept short on purpose. The shell draws with the 16 ANSI colours
@@ -215,15 +218,31 @@ type shell struct {
 
 func runShell(t *TTY) int {
 	s := &shell{t: t, cwd: Home}
-	t.Print(bold + "tuios" + reset + dim + " web shell. Type " + reset + bold + "help" + reset + dim + " to see what it can do." + reset + "\r\n")
+	t.laid, _ = t.Size()
+	greeting := []string{bold + "tuios" + reset, dim + "web" + reset, dim + "shell." + reset, dim + "Type" + reset, bold + "help" + reset}
+	for _, w := range strings.Fields("to see what it can do.") {
+		greeting = append(greeting, dim+w+reset)
+	}
+	t.Lay(func(cols int) []string { return wrapTokens(greeting, cols) })
 	s.prompt()
-	for chunk := range t.In {
-		if s.feed(chunk) {
-			return s.status
+	for {
+		select {
+		case chunk, ok := <-t.In:
+			if !ok {
+				return 0
+			}
+			if s.feed(chunk) {
+				return s.status
+			}
+		case <-t.Resized():
+			s.repaint()
 		}
 	}
-	return 0
 }
+
+// repaint draws the screen again for the pane's new width, with the line
+// being edited under it.
+func (s *shell) repaint() { s.t.repaint(s.editLine()) }
 
 // runProgram runs one command as a pane's own process, the way a real
 // terminal runs a program it was asked for instead of a shell.
@@ -260,7 +279,24 @@ func (s *shell) prompt() {
 	s.line = s.line[:0]
 	s.cursor = 0
 	s.histPos = len(s.history)
-	s.t.Print(markPrompt + s.promptText() + markInput)
+	s.t.write(markPrompt + s.promptText() + markInput)
+}
+
+// editLine is the prompt and the line being edited, with the cursor moved
+// back to where it is in the line. It is drawn outside the log while it
+// changes, and kept with keepLine once it is done.
+func (s *shell) editLine() string {
+	line := markPrompt + s.promptText() + markInput + s.highlighted()
+	if back := len(s.line) - s.cursor; back > 0 {
+		line += "\x1b[" + strconv.Itoa(back) + "D"
+	}
+	return line
+}
+
+// keepLine puts the finished prompt line in the log. It is on the screen
+// already.
+func (s *shell) keepLine() {
+	s.t.keep(markPrompt + s.promptText() + markInput + s.highlighted())
 }
 
 // redraw repaints the line from the prompt. Lines longer than the pane wrap
@@ -273,7 +309,7 @@ func (s *shell) redraw() {
 	if back := len(s.line) - s.cursor; back > 0 {
 		b.WriteString("\x1b[" + strconv.Itoa(back) + "D")
 	}
-	s.t.Print(b.String())
+	s.t.write(b.String())
 }
 
 // highlighted colours each command word green when the shell runs it and red
@@ -337,11 +373,13 @@ func (s *shell) feed(chunk []byte) bool {
 				s.redraw()
 			}
 		case 0x03: // Ctrl+C
+			s.keepLine()
 			s.t.Print("^C\r\n")
 			s.status = 130
 			s.prompt()
 		case 0x04: // Ctrl+D
 			if len(s.line) == 0 {
+				s.keepLine()
 				s.t.Print("exit\r\n")
 				return true
 			}
@@ -522,14 +560,15 @@ func (s *shell) complete() {
 		s.insert(add...)
 		return
 	}
-	cols, _ := s.t.Size()
+	s.keepLine()
 	s.t.Print("\r\n")
-	printLines(s.t, columns(matches, cols))
+	s.t.Lay(func(cols int) []string { return columns(matches, cols) })
 	s.redraw()
 }
 
 // enter runs the line and reports whether the shell should exit.
 func (s *shell) enter() bool {
+	s.keepLine()
 	s.t.Print("\r\n")
 	line := strings.TrimSpace(string(s.line))
 	if line == "" {
@@ -550,6 +589,9 @@ func (s *shell) enter() bool {
 		}
 	}
 	s.t.Print(markDone(s.status))
+	if s.t.relaidNeeded() {
+		s.t.repaint("")
+	}
 	s.prompt()
 	return false
 }
@@ -670,6 +712,7 @@ func (s *shell) ls(args []string, long bool) int {
 		return s.fail("ls: no such file or directory")
 	}
 	var parts []string
+	var rows [][3]string // mode and owner, size, name
 	for _, e := range list(target) {
 		if strings.HasPrefix(e.name, ".") && !showAll {
 			continue
@@ -685,16 +728,35 @@ func (s *shell) ls(args []string, long bool) int {
 			if e.dir {
 				kind = "drwxr-xr-x"
 			}
-			s.t.Printf("%s%s%s guest %s%6d%s  %s\r\n", dim, kind, reset, green, size, reset, name)
+			rows = append(rows, [3]string{dim + kind + reset + " guest ", fmt.Sprintf("%s%6d%s  ", green, size, reset), name})
 			continue
 		}
 		parts = append(parts, name)
 	}
-	if !long {
-		cols, _ := s.t.Size()
-		printLines(s.t, columns(parts, cols))
+	if long {
+		s.t.Lay(func(cols int) []string { return longListing(rows, cols) })
+	} else {
+		s.t.Lay(func(cols int) []string { return columns(parts, cols) })
 	}
 	return 0
+}
+
+// longListing lays out ls -l rows for a pane cols cells wide. When a row
+// does not fit, the mode and owner go first, then the size, so the names
+// stay whole as long as they can.
+func longListing(rows [][3]string, cols int) []string {
+	for _, from := range []int{0, 1, 2} {
+		lines := make([]string, len(rows))
+		fits := true
+		for i, r := range rows {
+			lines[i] = strings.Join(r[from:], "")
+			fits = fits && ansi.StringWidth(lines[i]) <= cols
+		}
+		if fits || from == 2 {
+			return fitLines(lines, cols)
+		}
+	}
+	return nil
 }
 
 func colourName(e entry) string {
@@ -753,12 +815,13 @@ func splitArgs(line string) []string {
 }
 
 func cmdHelp(t *TTY) int {
-	t.Print(bold + "Things to try" + reset + "\r\n")
-	cols, _ := t.Size()
-	printLines(t, table(summaries, 2, green, cols))
-	t.Print("\r\n")
-	for _, l := range wrapWords("tuios keys: Ctrl+B then ? shows every keybinding.", cols) {
-		t.Print(dim + l + reset + "\r\n")
-	}
+	t.Lay(func(cols int) []string {
+		lines := append([]string{fit(bold+"Things to try"+reset, cols)}, table(summaries, 2, green, cols)...)
+		lines = append(lines, "")
+		for _, l := range wrapWords("tuios keys: Ctrl+B then ? shows every keybinding.", cols) {
+			lines = append(lines, dim+l+reset)
+		}
+		return lines
+	})
 	return 0
 }

@@ -51,15 +51,17 @@ func cmdAgent(s *shell, args []string, _ string) int {
 	if task == "" {
 		task = "add a dark mode toggle to the website"
 	}
-	cols, _ := t.Size()
-	w := min(max(cols-2, 30), 60)
-
-	t.Print(agentOrange + "╭" + strings.Repeat("─", w-2) + "╮" + reset + "\r\n")
-	t.Print(boxLine(w, agentOrange+"✻"+reset+" Welcome to "+bold+"Claude Code"+reset+" (tuios demo)"))
-	t.Print(boxLine(w, ""))
-	t.Print(boxLine(w, agentGrey+"  A pretend agent. Nothing leaves this tab."+reset))
-	t.Print(agentOrange + "╰" + strings.Repeat("─", w-2) + "╯" + reset + "\r\n\r\n")
-	t.Print(agentGrey + "> " + reset + task + "\r\n\r\n")
+	t.Lay(func(cols int) []string {
+		w := agentWidth(cols)
+		return []string{
+			agentOrange + "╭" + strings.Repeat("─", w-2) + "╮" + reset,
+			boxLine(w, agentOrange+"✻"+reset+" Welcome to "+bold+"Claude Code"+reset+" (tuios demo)"),
+			boxLine(w, ""),
+			boxLine(w, agentGrey+"  A pretend agent. Nothing leaves this tab."+reset),
+			agentOrange + "╰" + strings.Repeat("─", w-2) + "╯" + reset,
+		}
+	})
+	t.Print("\r\n" + agentGrey + "> " + reset + task + "\r\n\r\n")
 
 	t.report("working", "Reading the website", "")
 	for _, f := range []struct{ name, note string }{
@@ -76,65 +78,93 @@ func cmdAgent(s *shell, args []string, _ string) int {
 
 	t.report("working", "Thinking", "")
 	start := time.Now()
+	// The spinner is drawn outside the log: it is gone once the agent has
+	// thought, and a line that wrapped would leave half of it behind.
 	for i := range 28 {
 		secs := int(time.Since(start).Seconds())
-		t.Print("\r\x1b[K" + agentOrange + agentSpinner[i%len(agentSpinner)] + reset + " " +
-			agentOrange + "Thinking…" + reset + agentGrey + " (" + strconv.Itoa(secs) + "s · esc to interrupt)" + reset)
+		cols, _ := t.Size()
+		t.write("\r\x1b[K" + fit(agentOrange+agentSpinner[i%len(agentSpinner)]+reset+" "+
+			agentOrange+"Thinking…"+reset+agentGrey+" ("+strconv.Itoa(secs)+"s · esc to interrupt)"+reset, max(cols-1, 1)))
 		if !agentPause(t, 110*time.Millisecond) {
-			t.Print("\r\n")
+			t.write("\r\x1b[K")
 			return agentInterrupted(t)
 		}
 	}
-	t.Print("\r\x1b[K")
+	t.write("\r\x1b[K")
 	t.Print(bold + "●" + reset + " I'll add a toggle button to index.html and a dark theme to style.css.\r\n\r\n")
 	if !agentPause(t, 300*time.Millisecond) {
 		return agentInterrupted(t)
 	}
 
 	t.Print(green + "●" + reset + " " + bold + "Update" + reset + "(projects/website/style.css)\r\n")
-	t.Print(agentGrey + "╭" + strings.Repeat("─", w-2) + "╮" + reset + "\r\n")
-	t.Print(greyBoxLine(w, bold+"Edit file"+reset))
-	t.Print(greyBoxLine(w, agentGrey+"projects/website/style.css"+reset))
-	t.Print(greyBoxLine(w, ""))
-	for _, l := range []string{
-		"  1   h1 { color: hotpink; }",
-		green + "  2 + [data-theme=dark] { background: #11111b; }" + reset,
-		green + "  3 + button.theme { position: fixed; }" + reset,
-	} {
-		t.Print(greyBoxLine(w, l))
-	}
-	t.Print(greyBoxLine(w, ""))
-	t.Print(greyBoxLine(w, "Do you want to make this edit to style.css?"))
 	options := []string{
 		"Yes",
 		"Yes, and don't ask again this session",
 		"No, and tell Claude what to do differently (esc)",
 	}
-	sel := 0
-	drawMenu := func(first bool) {
-		if !first {
-			t.Print("\x1b[" + strconv.Itoa(len(options)+2) + "A\r")
+	// editBox is the edit and the menu under it, with option sel marked.
+	editBox := func(cols, sel int) []string {
+		w := agentWidth(cols)
+		lines := []string{
+			agentGrey + "╭" + strings.Repeat("─", w-2) + "╮" + reset,
+			greyBoxLine(w, bold+"Edit file"+reset),
+			greyBoxLine(w, agentGrey+"projects/website/style.css"+reset),
+			greyBoxLine(w, ""),
 		}
+		for _, l := range []string{
+			"  1   h1 { color: hotpink; }",
+			green + "  2 + [data-theme=dark] { background: #11111b; }" + reset,
+			green + "  3 + button.theme { position: fixed; }" + reset,
+		} {
+			lines = append(lines, greyBoxLine(w, l))
+		}
+		lines = append(lines, greyBoxLine(w, ""), greyBoxLine(w, "Do you want to make this edit to style.css?"))
 		for i, o := range options {
 			if i == sel {
-				t.Print(greyBoxLine(w, agentOrange+"❯ "+strconv.Itoa(i+1)+". "+o+reset))
+				lines = append(lines, greyBoxLine(w, agentOrange+"❯ "+strconv.Itoa(i+1)+". "+o+reset))
 			} else {
-				t.Print(greyBoxLine(w, "  "+strconv.Itoa(i+1)+". "+o))
+				lines = append(lines, greyBoxLine(w, "  "+strconv.Itoa(i+1)+". "+o))
 			}
 		}
-		t.Print(greyBoxLine(w, ""))
-		t.Print(agentGrey + "╰" + strings.Repeat("─", w-2) + "╯" + reset + "\r\n")
+		return append(lines, greyBoxLine(w, ""), agentGrey+"╰"+strings.Repeat("─", w-2)+"╯"+reset)
 	}
-	drawMenu(true)
+	// The box is drawn outside the log while the menu moves. Every line fits
+	// the pane, so moving up its length lands on its first line. The log
+	// keeps the box with the answer marked once there is one.
+	sel := 0
+	drawn := 0
+	drawMenu := func() {
+		cols, _ := t.Size()
+		lines := editBox(cols, sel)
+		var b strings.Builder
+		if drawn > 0 {
+			b.WriteString("\x1b[" + strconv.Itoa(drawn) + "A\r")
+		}
+		for _, l := range lines {
+			b.WriteString("\x1b[K" + l + "\r\n")
+		}
+		drawn = len(lines)
+		t.write(b.String())
+	}
+	drawMenu()
 	t.report("needs_input", "Edit style.css?", "approval")
 	// A bell is how a real agent asks for attention.
 	t.Print("\a")
 
 	choice := -1
 	for choice < 0 {
-		b, ok := <-t.In
-		if !ok {
-			return 0
+		var b []byte
+		select {
+		case in, ok := <-t.In:
+			if !ok {
+				return 0
+			}
+			b = in
+		case <-t.Resized():
+			drawn = 0
+			t.repaint("")
+			drawMenu()
+			continue
 		}
 		for i := 0; i < len(b) && choice < 0; i++ {
 			switch c := b[i]; {
@@ -145,7 +175,7 @@ func cmdAgent(s *shell, args []string, _ string) int {
 					sel = (sel + 1) % len(options)
 				}
 				i += 2
-				drawMenu(false)
+				drawMenu()
 			case c == 0x1b || c == 'n' || c == 'N' || c == '3' || c == 0x03:
 				choice = 2
 			case c == 'y' || c == 'Y' || c == '1':
@@ -156,15 +186,16 @@ func cmdAgent(s *shell, args []string, _ string) int {
 				choice = sel
 			case c == 'j' || c == 0x0e:
 				sel = (sel + 1) % len(options)
-				drawMenu(false)
+				drawMenu()
 			case c == 'k' || c == 0x10:
 				sel = (sel + len(options) - 1) % len(options)
-				drawMenu(false)
+				drawMenu()
 			}
 		}
 	}
 	sel = choice
-	drawMenu(false)
+	drawMenu()
+	t.keepLay(func(cols int) []string { return editBox(cols, choice) })
 	t.Print("\r\n")
 
 	if choice == 2 {
@@ -198,6 +229,8 @@ func agentPause(t *TTY, d time.Duration) bool {
 		select {
 		case <-timer.C:
 			return true
+		case <-t.Resized():
+			t.repaint("")
 		case b, ok := <-t.In:
 			if !ok {
 				return false
@@ -217,14 +250,18 @@ func agentInterrupted(t *TTY) int {
 	return 130
 }
 
+// agentWidth is the width of the agent's boxes in a pane cols cells wide:
+// the pane, up to 60 cells.
+func agentWidth(cols int) int { return max(min(cols, 60), 4) }
+
 // boxLine draws one row of the orange welcome box, padded to width w.
 func boxLine(w int, content string) string {
-	return agentOrange + "│" + reset + " " + padVisible(content, w-4) + " " + agentOrange + "│" + reset + "\r\n"
+	return agentOrange + "│" + reset + " " + padVisible(content, w-4) + " " + agentOrange + "│" + reset
 }
 
 // greyBoxLine draws one row of the grey edit box.
 func greyBoxLine(w int, content string) string {
-	return agentGrey + "│" + reset + " " + padVisible(content, w-4) + " " + agentGrey + "│" + reset + "\r\n"
+	return agentGrey + "│" + reset + " " + padVisible(content, w-4) + " " + agentGrey + "│" + reset
 }
 
 // padVisible pads or cuts a string with escapes in it to width visible cells.

@@ -14,20 +14,7 @@ func cmdTuios(s *shell, args []string, _ string) int {
 	sub := argOr(args, 1, "")
 	switch sub {
 	case "", "help", "--help", "-h":
-		cols, _ := t.Size()
 		intro := strings.Fields("You are already in tuios. Press " + bold + "Ctrl+B" + reset + " then " + bold + "?" + reset + " to see every key.")
-		printLines(t, wrapTokens(intro, cols))
-		t.Print("\r\n")
-		t.Print("In this shell:\r\n")
-		printLines(t, table([][2]string{
-			{"tuios tape play demo.tape", "watch tuios drive itself"},
-			{"tuios tape list", "the tapes here"},
-			{"tuios version", ""},
-		}, 2, green, cols))
-		t.Print("\r\n")
-		for _, l := range wrapWords("These show what they print on a real machine:", cols) {
-			t.Print(dim + l + reset + "\r\n")
-		}
 		real := []string{"tuios ls", "tuios fan", "tuios worktree", "tuios list-agents", "tuios list-verbs", "tuios list-hooks"}
 		var tokens []string
 		for i, name := range real {
@@ -37,9 +24,23 @@ func cmdTuios(s *shell, args []string, _ string) int {
 			}
 			tokens = append(tokens, tok)
 		}
-		for _, l := range wrapTokens(tokens, cols-2) {
-			t.Print("  " + l + "\r\n")
-		}
+		t.Lay(func(cols int) []string {
+			lines := wrapTokens(intro, cols)
+			lines = append(lines, "", "In this shell:")
+			lines = append(lines, table([][2]string{
+				{"tuios tape play demo.tape", "watch tuios drive itself"},
+				{"tuios tape list", "the tapes here"},
+				{"tuios version", ""},
+			}, 2, green, cols)...)
+			lines = append(lines, "")
+			for _, l := range wrapWords("These show what they print on a real machine:", cols) {
+				lines = append(lines, dim+l+reset)
+			}
+			for _, l := range wrapTokens(tokens, cols-2) {
+				lines = append(lines, "  "+l)
+			}
+			return lines
+		})
 		return 0
 	case "version", "--version", "-v":
 		t.Print("tuios (browser demo, the real thing compiled to WebAssembly)\r\n")
@@ -77,10 +78,17 @@ func tuiosTape(s *shell, args []string) int {
 			t.Print("No tapes here.\r\n")
 			return 0
 		}
+		var lines []string
 		for _, n := range names {
-			t.Print("  " + green + prettyPath(n) + reset + "\r\n")
+			lines = append(lines, "  "+green+prettyPath(n)+reset)
 		}
-		t.Print(dim + "Play one with: tuios tape play <file>" + reset + "\r\n")
+		t.Lay(func(cols int) []string {
+			out := fitLines(lines, cols)
+			for _, l := range wrapWords("Play one with: tuios tape play <file>", cols) {
+				out = append(out, dim+l+reset)
+			}
+			return out
+		})
 		return 0
 	}
 	t.Print(yellow + "tuios tape " + sub + reset + " needs a real machine. In the demo, try " + bold + "tuios tape play demo.tape" + reset + "\r\n")

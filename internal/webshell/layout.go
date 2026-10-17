@@ -136,9 +136,11 @@ func fit(s string, cols int) string {
 	return ansi.Truncate(s, max(cols, 1), "…")
 }
 
-// printLines prints each line on a line of its own.
-func printLines(t *TTY, lines []string) {
-	for _, l := range lines {
-		t.Print(l + "\r\n")
+// fitLines cuts each line to at most cols cells.
+func fitLines(lines []string, cols int) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = fit(l, cols)
 	}
+	return out
 }

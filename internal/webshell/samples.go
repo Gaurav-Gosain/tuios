@@ -63,11 +63,14 @@ func printSample(t *TTY, sub string) bool {
 	}
 	// A table cut at the right edge still reads as a table. A wrapped one
 	// does not, so a line too wide for the pane is cut.
-	cols, _ := t.Size()
-	t.Print(dim + "On a real machine, this prints:" + reset + "\r\n")
-	for line := range strings.SplitSeq(s.text, "\n") {
-		t.Print(fit(line, cols) + "\r\n")
-	}
-	t.Print(dim + "More: " + reset + cyan + "tuios.dev/docs/" + s.doc + reset + "\r\n")
+	lines := strings.Split(s.text, "\n")
+	t.Lay(func(cols int) []string {
+		var out []string
+		for _, l := range wrapWords("On a real machine, this prints:", cols) {
+			out = append(out, dim+l+reset)
+		}
+		out = append(out, fitLines(lines, cols)...)
+		return append(out, wrapTokens([]string{dim + "More:" + reset, cyan + "tuios.dev/docs/" + s.doc + reset}, cols)...)
+	})
 	return true
 }

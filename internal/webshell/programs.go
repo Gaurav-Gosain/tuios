@@ -30,10 +30,8 @@ var (
 var started = time.Now()
 
 func cmdFastfetch(t *TTY, _ []string) int {
-	cols, _ := t.Size()
-	for _, line := range fastfetch(cols, time.Since(started).Round(time.Second).String()) {
-		t.Print(line + "\r\n")
-	}
+	uptime := time.Since(started).Round(time.Second).String()
+	t.Lay(func(cols int) []string { return fastfetch(cols, uptime) })
 	return 0
 }
 
@@ -133,32 +131,50 @@ func ellipsize(s string, w int) string {
 }
 
 func cmdColors(t *TTY, _ []string) int {
-	cols, _ := t.Size()
-	// Each of the 16 swatches is four cells, eight to a row when they fit.
-	perRow := max(min(8, cols/4), 1)
+	t.Lay(colors)
+	return 0
+}
+
+// colors lays the palette out for a pane cols cells wide.
+func colors(cols int) []string {
+	var lines []string
+	var b strings.Builder
+	endLine := func() {
+		lines = append(lines, b.String()+reset)
+		b.Reset()
+	}
+	// Each of the 16 swatches is four cells, eight to a row when they fit,
+	// else four or two, so the rows come out even.
+	perRow := 1
+	for _, n := range []int{8, 4, 2} {
+		if n*4 <= cols {
+			perRow = n
+			break
+		}
+	}
 	for row := range 2 {
 		for c := range 8 {
 			bg := 40 + c
 			if row == 1 {
 				bg = 100 + c
 			}
-			t.Printf("\x1b[%d;97m %2d ", bg, c+8*row)
+			fmt.Fprintf(&b, "\x1b[%d;97m %2d ", bg, c+8*row)
 			if (c+1)%perRow == 0 && c < 7 {
-				t.Print(reset + "\r\n")
+				endLine()
 			}
 		}
-		t.Print(reset + "\r\n")
+		endLine()
 	}
 	// The cube strip is 36 swatches of two cells, as many to a row as fit.
 	perRow = max(cols/2, 1)
 	for i := range 36 {
 		if i > 0 && i%perRow == 0 {
-			t.Print(reset + "\r\n")
+			endLine()
 		}
-		t.Printf("\x1b[48;5;%dm  ", 16+i*6)
+		fmt.Fprintf(&b, "\x1b[48;5;%dm  ", 16+i*6)
 	}
-	t.Print(reset + "\r\n")
-	return 0
+	endLine()
+	return lines
 }
 
 // fullscreen runs a program on the alternate screen with the cursor hidden
@@ -332,8 +348,8 @@ var fortunes = []string{
 }
 
 func cmdFortune(t *TTY, _ []string) int {
-	cols, _ := t.Size()
-	printLines(t, wrapWords(fortunes[rand.IntN(len(fortunes))], cols))
+	fortune := fortunes[rand.IntN(len(fortunes))]
+	t.Lay(func(cols int) []string { return wrapWords(fortune, cols) })
 	return 0
 }
 
@@ -342,15 +358,20 @@ func cmdCowsay(t *TTY, args []string) int {
 	if text == "" {
 		text = "moo. try cowsay hello"
 	}
+	t.Lay(func(cols int) []string { return cowsay(text, cols) })
+	return 0
+}
+
+// cowsay draws the cow for a pane cols cells wide.
+func cowsay(text string, cols int) []string {
 	// Like cowsay, wrap the text at 40 columns, or narrower when the pane
 	// is: the bubble adds four cells.
-	cols, _ := t.Size()
 	lines := wrapWords(text, min(40, max(cols-4, 1)))
 	n := 0
 	for _, l := range lines {
 		n = max(n, utf8.RuneCountInString(l))
 	}
-	t.Print(fit(" "+strings.Repeat("_", n+2), cols) + "\r\n")
+	out := []string{fit(" "+strings.Repeat("_", n+2), cols)}
 	for i, l := range lines {
 		left, right := "|", "|"
 		switch {
@@ -361,9 +382,12 @@ func cmdCowsay(t *TTY, args []string) int {
 		case i == len(lines)-1:
 			left, right = "\\", "/"
 		}
-		t.Print(fit(left+" "+l+strings.Repeat(" ", n-utf8.RuneCountInString(l))+" "+right, cols) + "\r\n")
+		out = append(out, fit(left+" "+l+strings.Repeat(" ", n-utf8.RuneCountInString(l))+" "+right, cols))
 	}
-	t.Print(fit(" "+strings.Repeat("-", n+2), cols) + "\r\n")
+	out = append(out, fit(" "+strings.Repeat("-", n+2), cols))
+	// The cow is 28 cells wide, eight of them indent. In a narrower pane it
+	// moves left before it is cut.
+	shift := min(max(28-cols, 0), 8)
 	for _, l := range []string{
 		`        \   ^__^`,
 		`         \  (oo)\_______`,
@@ -371,9 +395,9 @@ func cmdCowsay(t *TTY, args []string) int {
 		`                ||----w |`,
 		`                ||     ||`,
 	} {
-		t.Print(fit(l, cols) + "\r\n")
+		out = append(out, fit(l[shift:], cols))
 	}
-	return 0
+	return out
 }
 
 func cmdTree(s *shell, args []string, _ string) int {
@@ -384,7 +408,7 @@ func cmdTree(s *shell, args []string, _ string) int {
 	if !isDir(root) {
 		return s.fail("tree: " + argOr(args, 1, "") + " is not a directory")
 	}
-	s.t.Print(blue + bold + prettyPath(root) + reset + "\r\n")
+	lines := []string{blue + bold + prettyPath(root) + reset}
 	dirs, nfiles := 0, 0
 	var walk func(dir, indent string)
 	walk = func(dir, indent string) {
@@ -400,7 +424,7 @@ func cmdTree(s *shell, args []string, _ string) int {
 			if i == len(shown)-1 {
 				branch, next = "└── ", "    "
 			}
-			s.t.Print(dim + indent + branch + reset + colourName(e) + "\r\n")
+			lines = append(lines, dim+indent+branch+reset+colourName(e))
 			if e.dir {
 				dirs++
 				walk(dir+"/"+e.name, indent+next)
@@ -410,7 +434,8 @@ func cmdTree(s *shell, args []string, _ string) int {
 		}
 	}
 	walk(strings.TrimSuffix(root, "/"), "")
-	s.t.Printf("\r\n%d directories, %d files\r\n", dirs, nfiles)
+	lines = append(lines, "", fmt.Sprintf("%d directories, %d files", dirs, nfiles))
+	s.t.Lay(func(cols int) []string { return fitLines(lines, cols) })
 	return 0
 }
 
