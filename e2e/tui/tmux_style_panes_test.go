@@ -193,8 +193,10 @@ send_to_workspace_2 = ["alt+i"]
 
 // TestMoveWorkspaceAndSendPane binds move_workspace_right and
 // send_to_workspace_3 and presses them: the pane's workspace follows the swap
-// and the view follows it, then a send puts the pane on workspace 3 while the
-// view stays where it is.
+// with workspace 2 and the view follows it, then a send puts the pane on
+// workspace 3 while the view stays where it is. Workspace 2 holds a pane of its
+// own: a workspace's number is its position, so the only workspace there is has
+// nothing to swap with.
 //
 // Negative control: delete the Register("move_workspace_right", ...) line, or
 // the send_to_workspace_ loop, in internal/input/prefix_tree_actions.go. The
@@ -208,6 +210,9 @@ send_to_workspace_3 = ["alt+i"]
 	pane := waitForSettledGeometryIn(t, base, "mover", 1)[0].ID
 	if ws := listPanes(t, base, "mover")[pane].Workspace; ws != 1 {
 		t.Fatalf("setup: the pane is on workspace %d, want 1", ws)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "mover", "--workspace", "2", "--no-focus"); err != nil {
+		t.Fatalf("setup: a pane on workspace 2: %v\n%s", err, out)
 	}
 
 	if err := term.SendKeys(tuitest.Alt('o')); err != nil {

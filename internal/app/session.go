@@ -281,6 +281,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// The dock's bell and activity marks name workspaces of the session being
 	// left. See workspace_marks.go.
 	m.workspaceMarkSet = nil
+	// A drag's order, and a move in flight, wait for the renumber of the
+	// session they were made in.
+	m.pendingWorkspaceOrder = nil
+	m.workspaceMoveInFlight = false
 	// Clamp to a valid workspace: SwitchToWorkspace rejects workspace < 1, so a
 	// state carrying 0 (legacy, or a freshly created session with no windows)
 	// would strand every subsequently created window on an unreachable workspace.
@@ -538,6 +542,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		return nil
 	}
 	fromPeer := sourceID != ""
+	// A renumber goes first, so everything below reads the windows and the
+	// workspace maps under the numbers the state uses.
+	m.adoptWorkspaceRenumbering(state)
 
 	// The daemon now holds what arrived here, which is not necessarily what
 	// this client last pushed, so the record of that push no longer describes

@@ -844,6 +844,13 @@ type ExecuteCommandPayload struct {
 	// sends it for the pane it opens on an empty workspace, and only to a
 	// daemon whose welcome set EmptyWorkspacePanes.
 	FocusIfShown bool `json:"focus_if_shown,omitempty"`
+	// TabKey is the herdr tab key of Workspace as the client last saw it
+	// (see SessionState.WorkspaceTabKey). The pane a client opens on an empty
+	// workspace is asked for right after the switch that shows it, and the
+	// switch can leave a workspace below it empty, which renumbers it before
+	// the request lands. The key still names it. An older daemon ignores it
+	// and reads Workspace.
+	TabKey int `json:"tab_key,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

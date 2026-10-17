@@ -159,6 +159,9 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	restored.WorkspaceMasterSplits = cloneMasterSplits(state.WorkspaceMasterSplits)
 	restored.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
 	restored.WorkspaceHasCustom = maps.Clone(state.WorkspaceHasCustom)
+	// A display order saved by a build that kept one comes back as the
+	// numbering it showed. See applyLegacyWorkspaceOrder.
+	restored.applyLegacyWorkspaceOrder()
 
 	// A window whose shell will not start is dropped rather than kept. Keeping it
 	// left its PTYID naming the dead daemon's PTY, which nothing will ever answer
@@ -316,13 +319,19 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 	}
 
+	// UpdateState takes the daemon-owned fields from the new session, the
+	// tab keys among them, so they are put back from here afterwards.
+	tabKeys, nextTabKey := restored.WorkspaceTabKeys, restored.NextWorkspaceTabKey
+	masterLayouts := restored.WorkspaceMasterLayout
 	sess.UpdateState(&restored)
 	// After UpdateState, which takes this field from canonical state and would
 	// undo it if the restore wrote it into the pushed snapshot instead.
 	sess.MarkRestored()
 	// The master-stack shapes are daemon-owned in the same way. See
 	// RestoreMasterLayouts.
-	sess.RestoreMasterLayouts(state.WorkspaceMasterLayout)
+	sess.RestoreMasterLayouts(masterLayouts)
+	// The herdr tab keys are daemon-owned in the same way.
+	sess.RestoreWorkspaceTabKeys(tabKeys, nextTabKey)
 	// Whether the rail is shown is daemon-owned in the same way. See
 	// RestoreSidebar.
 	sess.RestoreSidebar(state.Sidebar)

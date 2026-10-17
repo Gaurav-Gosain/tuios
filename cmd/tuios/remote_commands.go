@@ -1194,9 +1194,9 @@ func printSessionInfo(raw json.RawMessage) error {
 		sort.Strings(named)
 		fmt.Printf("%-14s %s\n", "named", strings.Join(named, " "))
 	}
-	// Only a rearranged session prints a row here. The order is presentation, so
-	// the workspaces keep the numbers everything else addresses them by whatever
-	// this says.
+	// Only a daemon of a build that kept a display order beside the numbering
+	// sends one. A current daemon renumbers the workspaces instead and always
+	// sends null.
 	if len(res.WorkspaceOrder) > 0 {
 		shown := make([]string, 0, len(res.WorkspaceOrder))
 		for _, ws := range res.WorkspaceOrder {

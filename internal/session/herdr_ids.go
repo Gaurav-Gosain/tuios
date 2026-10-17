@@ -11,13 +11,15 @@ import (
 // "w<id>:p<n>". tuios maps its own objects onto those three (herdr_api.go):
 //
 //	herdr workspace   tuios session     w<12 hex of the session id>
-//	herdr tab         tuios workspace   w<...>:t<workspace number>
+//	herdr tab         tuios workspace   w<...>:t<workspace tab key>
 //	herdr pane        tuios window      w<...>:p<12 hex of the window id>
 //
 // The ids are made from tuios's own UUIDs, so they stay the same for as long
 // as the session and the window live, whatever the session or the window is
-// renamed to. A tab id is the workspace number, which a workspace keeps
-// through a rename and a reorder. A pane id is found by its window part
+// renamed to. A tab id is the workspace's tab key (see
+// SessionState.WorkspaceTabKey), which a workspace keeps through a rename
+// and a move, while its number follows its position. A pane id is found by
+// its window part
 // alone, so a window that moved to another session is still found by the id
 // a client read before the move.
 //
@@ -44,9 +46,9 @@ func herdrHex(uuid string) string {
 // herdrWorkspaceID is the herdr workspace id of a session.
 func herdrWorkspaceID(sessionID string) string { return "w" + herdrHex(sessionID) }
 
-// herdrTabID is the herdr tab id of workspace n of a session.
-func herdrTabID(sessionID string, n int) string {
-	return herdrWorkspaceID(sessionID) + ":t" + strconv.Itoa(n)
+// herdrTabID is the herdr tab id of the workspace whose tab key is key.
+func herdrTabID(sessionID string, key int) string {
+	return herdrWorkspaceID(sessionID) + ":t" + strconv.Itoa(key)
 }
 
 // herdrPaneID is the herdr pane id of a window in a session.
@@ -82,9 +84,9 @@ func (d *Daemon) herdrFindSession(id string) (*Session, *herdrIDError) {
 	return found, nil
 }
 
-// herdrFindTab finds the session and workspace number a herdr tab id names. The
-// workspace must be one the session has, and a tab: one herdrListedWorkspace
-// lists.
+// herdrFindTab finds the session and workspace number a herdr tab id names,
+// by the workspace's tab key, wherever a move has put the workspace. The
+// workspace must be a tab: one herdrListedWorkspace lists.
 func (d *Daemon) herdrFindTab(id string) (*Session, int, *herdrIDError) {
 	ws, num, ok := strings.Cut(id, ":t")
 	if !ok {
@@ -99,13 +101,11 @@ func (d *Daemon) herdrFindTab(id string) (*Session, int, *herdrIDError) {
 		return nil, 0, herdrNotFound("tab", id)
 	}
 	st := sess.GetState()
-	if n > st.workspaceBound() {
+	at := st.WorkspaceForTabKey(n)
+	if at == 0 || !herdrListedWorkspace(st, at) {
 		return nil, 0, herdrNotFound("tab", id)
 	}
-	if !herdrListedWorkspace(st, n) {
-		return nil, 0, herdrNotFound("tab", id)
-	}
-	return sess, n, nil
+	return sess, at, nil
 }
 
 // herdrFindPane finds the session and window a pane id names. It takes herdr's
@@ -143,15 +143,17 @@ func (d *Daemon) herdrFindPane(id string) (*Session, WindowState, *herdrIDError)
 	return sess, win, nil
 }
 
-// herdrTabFor is the workspace a window's shell starts on, for its
-// HERDR_TAB_ID: spawnWS, the one it is being made on, else the one the window
-// is on, else the one showing. 0 for a scratch workspace, which is not a tab.
-// The state is read only when its lock is free at once: a shell can be
+// herdrTabFor is the tab key of the workspace a window's shell starts on, for
+// its HERDR_TAB_ID: spawnWS, the one it is being made on, else the one the
+// window is on, else the one showing. 0 for a scratch workspace, which is not
+// a tab. The state is read only when its lock is free at once: a shell can be
 // started while the state is being written, and HERDR_TAB_ID is not worth a
-// wait.
+// wait. The key is read from Session.tabKeys, which needs no lock.
 //
-// The variable is fixed when the shell starts, as herdr's is. A window moved
-// to another workspace later keeps the id it started with.
+// The variable is fixed when the shell starts, as herdr's is. The key follows
+// the workspace through a renumber, so the id still names the pane's tab
+// then. A window moved to another workspace later keeps the id it started
+// with.
 func (s *Session) herdrTabFor(windowID string, spawnWS int) int {
 	ws := spawnWS
 	if ws == 0 && s.stateMu.TryRLock() {
@@ -166,5 +168,11 @@ func (s *Session) herdrTabFor(windowID string, spawnWS int) int {
 	if IsScratchWorkspace(ws) {
 		return 0
 	}
-	return max(ws, 1)
+	ws = max(ws, 1)
+	if keys := s.tabKeys.Load(); keys != nil {
+		if k, ok := (*keys)[ws]; ok {
+			return k
+		}
+	}
+	return ws
 }

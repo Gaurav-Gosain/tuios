@@ -1350,10 +1350,11 @@ func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, comm
 //
 // sshFrom, when set, names the window whose ssh the new one follows, as
 // SendNewWindowIntent's does.
-func (c *TUIClient) SendNewWindowFrom(workspace int, cwdFrom, sshFrom string) error {
+func (c *TUIClient) SendNewWindowFrom(workspace, tabKey int, cwdFrom, sshFrom string) error {
 	return c.sendNewWindow(&ExecuteCommandPayload{
 		CommandType:  "NewWindow",
 		Workspace:    workspace,
+		TabKey:       tabKey,
 		CwdFrom:      cwdFrom,
 		SSHFrom:      sshFrom,
 		FocusIfShown: true,

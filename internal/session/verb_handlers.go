@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -1324,13 +1325,18 @@ func (d *Daemon) verbSetWorkspaceOrder(_ *connState, params json.RawMessage) (an
 	if verr != nil {
 		return nil, verr
 	}
-	if err := sess.SetDaemonWorkspaceOrder(p.Order); err != nil {
+	moved, err := sess.RenumberWorkspaces(p.Order)
+	if err != nil {
 		return nil, invalidParam("order", err.Error())
 	}
-	// The stored order is what was kept after sanitising, which is what the
-	// caller has to see: a drag that named a workspace this session no longer
-	// has should read back without it rather than as accepted verbatim.
-	return map[string]any{"type": "workspace_order_set", "workspace_order": sess.GetState().WorkspaceOrder}, nil
+	// workspace_order stays in the answer for a caller written against the
+	// display order, and is always null: the numbering is the order.
+	// renumbered says where each workspace went, by its old number.
+	renumbered := make(map[string]int, len(moved))
+	for from, to := range moved {
+		renumbered[strconv.Itoa(from)] = to
+	}
+	return map[string]any{"type": "workspace_order_set", "workspace_order": nil, "renumbered": renumbered}, nil
 }
 
 func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, *verbError) {

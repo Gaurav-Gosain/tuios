@@ -141,9 +141,11 @@ type herdrEventData struct {
 // event changed: where the window was, and its agent and status.
 type herdrPaneMemo struct {
 	sessionID string
-	workspace int
-	agent     string
-	status    string
+	// tabKey is the tab key of the window's workspace, which names its tab
+	// through any renumber since. See SessionState.WorkspaceTabKey.
+	tabKey int
+	agent  string
+	status string
 }
 
 // herdrTranslator turns tuios events into herdr events for one stream.
@@ -164,15 +166,16 @@ func (d *Daemon) newHerdrTranslator() *herdrTranslator {
 // remember records a session and its windows as they are now.
 func (t *herdrTranslator) remember(s *Session) {
 	t.sessions[s.Name()] = s.ID
-	for _, w := range s.GetState().Windows {
+	st := s.GetState()
+	for _, w := range st.Windows {
 		if !herdrScratch(&w) {
-			t.panes[w.ID] = herdrMemoOf(s, &w)
+			t.panes[w.ID] = herdrMemoOf(s.ID, st, &w)
 		}
 	}
 }
 
-func herdrMemoOf(s *Session, w *WindowState) herdrPaneMemo {
-	m := herdrPaneMemo{sessionID: s.ID, workspace: max(w.Workspace, 1), status: "unknown"}
+func herdrMemoOf(sessionID string, st *SessionState, w *WindowState) herdrPaneMemo {
+	m := herdrPaneMemo{sessionID: sessionID, tabKey: st.WorkspaceTabKey(max(w.Workspace, 1)), status: "unknown"}
 	if w.AgentHarness != "" && w.AgentState != AgentStateNone {
 		m.agent = herdrAgentLabel(w.AgentHarness)
 		m.status = herdrStatus(w.AgentState)
@@ -240,7 +243,7 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		if IsScratchWorkspace(ev.Workspace) {
 			return nil
 		}
-		return []herdrEvent{global("tab_focused", &herdrEventData{TabID: herdrTabID(sess.ID, max(ev.Workspace, 1)), WorkspaceID: wsID})}
+		return []herdrEvent{global("tab_focused", &herdrEventData{TabID: herdrTabID(sess.ID, sess.GetState().WorkspaceTabKey(max(ev.Workspace, 1))), WorkspaceID: wsID})}
 	}
 	if ev.Window == "" {
 		return nil
@@ -262,12 +265,13 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		return nil
 	}
 	prev := t.panes[ev.Window]
-	w, _ := findWindowState(sess.GetState(), ev.Window)
-	t.panes[ev.Window] = herdrMemoOf(sess, &w)
+	st := sess.GetState()
+	w, _ := findWindowState(st, ev.Window)
+	t.panes[ev.Window] = herdrMemoOf(sess.ID, st, &w)
 	switch ev.Type {
 	case EventWindowCreated:
 		out := []herdrEvent{global("pane_created", &herdrEventData{Pane: p})}
-		if herdrCount(sess.GetState(), max(w.Workspace, 1)) == 1 {
+		if herdrCount(st, max(w.Workspace, 1)) == 1 {
 			if tb := v.tab(p.TabID); tb != nil {
 				out = append([]herdrEvent{global("tab_created", &herdrEventData{Tab: tb})}, out...)
 			}
@@ -277,9 +281,14 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		return []herdrEvent{global("pane_updated", &herdrEventData{Pane: p})}
 	case EventWindowMoved:
 		from := cmp.Or(prev.sessionID, sess.ID)
+		if from == sess.ID && prev.tabKey == t.panes[ev.Window].tabKey {
+			// The workspace was renumbered, and the pane is in the tab it was
+			// in: to herdr nothing moved.
+			return nil
+		}
 		return []herdrEvent{global("pane_moved", &herdrEventData{
 			PreviousPaneID: herdrPaneID(from, ev.Window), PreviousWorkspaceID: herdrWorkspaceID(from),
-			PreviousTabID: herdrTabID(from, max(prev.workspace, 1)), Pane: p,
+			PreviousTabID: herdrTabID(from, prev.tabKey), Pane: p,
 		})}
 	}
 	return nil
@@ -300,8 +309,8 @@ func (t *herdrTranslator) closed(ev streamEvent) []herdrEvent {
 	out := []herdrEvent{global("pane_closed", data)}
 	if sess := t.d.manager.GetSessionByID(m.sessionID); sess != nil {
 		st := sess.GetState()
-		if !herdrListedWorkspace(st, m.workspace) {
-			out = append(out, global("tab_closed", &herdrEventData{TabID: herdrTabID(m.sessionID, m.workspace), WorkspaceID: data.WorkspaceID}))
+		if ws := st.WorkspaceForTabKey(m.tabKey); ws == 0 || !herdrListedWorkspace(st, ws) {
+			out = append(out, global("tab_closed", &herdrEventData{TabID: herdrTabID(m.sessionID, m.tabKey), WorkspaceID: data.WorkspaceID}))
 		}
 	}
 	return out
@@ -310,12 +319,13 @@ func (t *herdrTranslator) closed(ev streamEvent) []herdrEvent {
 // agentState is what one agent-state event says: an agent that came or
 // went, and a status that changed.
 func (t *herdrTranslator) agentState(sess *Session, window, paneID, wsID string) []herdrEvent {
-	w, ok := findWindowState(sess.GetState(), window)
+	st := sess.GetState()
+	w, ok := findWindowState(st, window)
 	if !ok {
 		return nil
 	}
 	prev := t.panes[window]
-	now := herdrMemoOf(sess, &w)
+	now := herdrMemoOf(sess.ID, st, &w)
 	t.panes[window] = now
 	var out []herdrEvent
 	if prev.agent != now.agent {

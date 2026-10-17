@@ -25,6 +25,7 @@ import (
 // session state without coming here, so only the client that made the
 // switch opens the pane, and the session gets one.
 func (m *OS) SwitchToWorkspace(workspace int) {
+	workspace = m.newWorkspaceSlot(workspace)
 	from := m.CurrentWorkspace
 	var fromPane *terminal.Window
 	if fw := m.GetFocusedWindow(); fw != nil && fw.Workspace == from && !fw.IsScratch {
@@ -32,6 +33,32 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	}
 	m.switchToWorkspace(workspace, -1)
 	m.openPaneOnEmptyWorkspace(from, workspace, fromPane)
+}
+
+// workspaceTabKey is the tab key of workspace ws as this client last adopted
+// the session's keys: the number itself in a session never renumbered.
+func (m *OS) workspaceTabKey(ws int) int {
+	if k, ok := m.workspaceTabKeys[ws]; ok {
+		return k
+	}
+	return ws
+}
+
+// newWorkspaceSlot is where a switch to workspace lands. A daemon session
+// numbers its workspaces 1 to their count (see the session's
+// noteWorkspacesLocked), so a switch to a number past the last one opens the
+// next one instead: opt+5 with three workspaces opens workspace 4. Landing
+// there at once, rather than on 5 until the daemon renumbers it, keeps a pane
+// opened right after the switch on the workspace the user sees.
+func (m *OS) newWorkspaceSlot(workspace int) int {
+	if !m.IsDaemonSession || session.IsScratchWorkspace(workspace) {
+		return workspace
+	}
+	occupied := m.occupiedWorkspaceNumbers()
+	if slices.Contains(occupied, workspace) {
+		return workspace
+	}
+	return min(workspace, len(occupied)+1)
 }
 
 // NextWorkspace switches to the next workspace that holds at least one
@@ -125,7 +152,7 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		// does not hold back this client's pushes the way addDaemonWindow's
 		// intent does: a push that leaves the pane out is reconciled by the
 		// daemon, and holding one back would lose the next switch.
-		if err := m.DaemonClient.SendNewWindowFrom(workspace, cwdFrom, sshFrom); err != nil {
+		if err := m.DaemonClient.SendNewWindowFrom(workspace, m.workspaceTabKey(workspace), cwdFrom, sshFrom); err != nil {
 			m.LogError("Failed to ask the daemon for a pane on workspace %d: %v", workspace, err)
 			return
 		}

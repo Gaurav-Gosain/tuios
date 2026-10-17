@@ -1589,7 +1589,9 @@ tuios close-workspace [flags] [workspace]
 - `--json`: Output the result as JSON
 
 Scratch panes stay open. To close a scratch group, name its scratch workspace.
-A pane that runs this command needs the `admin` grant. The
+When the workspace goes, the workspaces above it move down one. See
+[CONFIGURATION.md](CONFIGURATION.md#workspace-numbers). A pane that runs this
+command needs the `admin` grant. The
 `close_workspace` action does the same from the keyboard, and the `Close` row of
 a workspace tab's right-click menu in the dock does it for that tab's workspace.
 See [KEYBINDINGS.md](KEYBINDINGS.md#close-every-pane-on-a-workspace).
@@ -3440,7 +3442,7 @@ and `host focus` only while a client is attached.
 | `current_workspace` | Active workspace number |
 | `num_workspaces` | Number of workspaces the session has |
 | `workspace_names` | Named workspaces, keyed by number. A workspace with no name is left out |
-| `workspace_order` | The workspace order when it was rearranged, `null` for the plain ascending order |
+| `workspace_order` | Always `null`. A workspace's number is its position, so moving one renumbers it. Kept for scripts that read it |
 | `window_count` | Number of windows across all workspaces |
 | `tiling_mode` | `tiling` or `floating` |
 | `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling`, or `unknown` before a client has reported one |

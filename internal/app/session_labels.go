@@ -2,7 +2,6 @@ package app
 
 import (
 	"maps"
-	"slices"
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -26,12 +25,10 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 		wt := *state.Worktree
 		m.SessionWorktree = &wt
 	}
-	// A drag in flight owns the arrangement until the pointer comes up. Adopting
-	// mid-drag would snap the pills back under the pointer on any push that
-	// happened to land, and the push that matters is this client's own.
-	if !m.dockWorkspaceDrag.Dragging {
-		m.WorkspaceOrder = slices.Clone(state.WorkspaceOrder)
-	}
+	// The tab keys are what the next state's renumber is read against. See
+	// adoptWorkspaceRenumbering.
+	m.workspaceTabKeys = maps.Clone(state.WorkspaceTabKeys)
+	m.workspaceTabKeysKnown = true
 	if len(state.WorkspaceNames) == 0 {
 		m.WorkspaceNames = nil
 		return

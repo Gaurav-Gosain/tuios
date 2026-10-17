@@ -52,14 +52,14 @@ func TestWorkspaceCycleSkipsEmptyWorkspaces(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "setup")
-	toWindowMode(t, term)
-	sendKeys(t, term, tuitest.Alt("3"))
-	waitShowing(t, base, sess, 3, "", term)
-	newWindow(t, term)
+	// The pane goes on workspace 3 straight from the command line: opt+3
+	// would open workspace 2, the next one, and leave no empty workspace
+	// between them to skip.
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "3", "--no-focus"); err != nil {
+		t.Fatalf("new-window on 3: %v\n%s", err, out)
+	}
 	waitPanesOn(t, term, base, sess, 3, 1, "the pane on workspace 3")
 	toWindowMode(t, term)
-	sendKeys(t, term, tuitest.Alt("1"))
-	waitShowing(t, base, sess, 1, "", term)
 
 	var log string
 	for _, step := range []struct {

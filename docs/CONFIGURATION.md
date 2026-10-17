@@ -804,6 +804,22 @@ command that joins its arguments into a shell line, such as `swaymsg exec --`
 or `hyprctl dispatch exec`. With such a command, the text of a desktop entry
 becomes shell code. Any installed package can write a desktop entry.
 
+## Workspace numbers
+
+A workspace's number is its position. Moving a workspace with
+`move_workspace_left` or `move_workspace_right`, or dragging its tab in the
+dock, renumbers it. A workspace exists while it holds a pane or is on screen.
+When a workspace that held a pane stops existing, because its last pane
+closed or moved away and it is not on screen, it loses its name and every
+workspace above it moves down one: closing workspace 2 of 1, 2 and 3 leaves
+1 and 2. An empty workspace you only looked at goes without moving anything.
+
+`Alt+N` with a number past the last workspace opens the next one: with three
+workspaces, `Alt+5` opens workspace 4. When the workspace on screen is empty,
+it is the new one, and `Alt+N` to an unused number stays on it. A pane put
+directly on a higher number, with `tuios new-window --workspace 7` or
+`send_to_workspace_7`, keeps that number until a workspace below it goes.
+
 ## When a workspace becomes empty
 
 When the last pane on the workspace on screen closes, tuios shows the
@@ -1337,6 +1353,9 @@ bold, and draws the others in dim text on the bar's own ground, so it still
 shows where you are. A value that is not a colour is ignored, with a
 warning, as if it were unset.
 Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
+`{index}` is the workspace's number, which is its position: dragging a tab to
+another place, or moving the workspace with `move_workspace_left` and
+`move_workspace_right`, renumbers it, and `Alt+N` goes to it by its new number.
 The flat style shows even a lone workspace and drops the `+` tab unless
 `show_add` is on. With no `[dock.tabs]` table the strip is unchanged.
 

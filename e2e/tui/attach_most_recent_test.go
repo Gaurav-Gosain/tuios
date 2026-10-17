@@ -45,7 +45,9 @@ func TestBareAttachLandsOnTheSessionTypedInLast(t *testing.T) {
 		if i%2 == 0 {
 			typeInSession(t, base, target, i)
 		} else {
-			switchWorkspaceIn(t, base, target, i+2)
+			// Workspace 2: a switch past the next workspace opens the next
+			// one, so a higher number would land there all the same.
+			switchWorkspaceIn(t, base, target, 2)
 		}
 		got := bareAttachLandsOn(t, base)
 		if got != target {

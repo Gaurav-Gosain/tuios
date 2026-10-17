@@ -306,21 +306,12 @@ func herdrCount(st *SessionState, ws int) int {
 	return n
 }
 
-// herdrWorkspaceOrder is a session's workspaces in display order.
+// herdrWorkspaceOrder is a session's workspaces in display order, which is
+// the order of their numbers.
 func herdrWorkspaceOrder(st *SessionState) []int {
-	bound := st.workspaceBound()
-	seen := make(map[int]bool, bound)
-	order := make([]int, 0, bound)
-	for _, ws := range st.WorkspaceOrder {
-		if ws >= 1 && ws <= bound && !seen[ws] {
-			seen[ws] = true
-			order = append(order, ws)
-		}
-	}
-	for ws := 1; ws <= bound; ws++ {
-		if !seen[ws] {
-			order = append(order, ws)
-		}
+	order := make([]int, 0, st.workspaceBound())
+	for ws := 1; ws <= st.workspaceBound(); ws++ {
+		order = append(order, ws)
 	}
 	return order
 }
@@ -348,11 +339,11 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 		label = sess.Name()
 	}
 	tabs := herdrOrderedTabs(st)
-	activeTab := herdrTabID(sess.ID, max(st.CurrentWorkspace, 1))
+	activeTab := herdrTabID(sess.ID, st.WorkspaceTabKey(max(st.CurrentWorkspace, 1)))
 	if IsScratchWorkspace(st.CurrentWorkspace) && len(tabs) > 0 {
 		// A scratch workspace is showing, and it is not a tab. The tab the
 		// person comes back to is the first one.
-		activeTab = herdrTabID(sess.ID, tabs[0])
+		activeTab = herdrTabID(sess.ID, st.WorkspaceTabKey(tabs[0]))
 	}
 	w := herdrWorkspace{
 		WorkspaceID: wsID, Number: number, Label: label, Focused: active,
@@ -425,17 +416,17 @@ func herdrOrderedTabs(st *SessionState) []int {
 }
 
 // herdrTabRecord is herdr's TabInfo for workspace ws, the n-th listed tab.
-// herdr's number is the tab's own and stays through a move, as a tuios
-// workspace number does, so it is the workspace number. An unnamed
-// workspace's label is its number, which is what herdr shows for an
-// unnamed tab.
+// herdr's number is the tab's own and stays through a move, so it is the
+// workspace's tab key, which the id is made from too (see
+// SessionState.WorkspaceTabKey). An unnamed workspace's label is its
+// workspace number, which is what the dock shows for it.
 func herdrTabRecord(sess *Session, st *SessionState, ws, _ int, active bool, panes []herdrPaneInfo) herdrTab {
 	label := st.WorkspaceNames[ws]
 	if label == "" {
 		label = strconv.Itoa(ws)
 	}
 	t := herdrTab{
-		TabID: herdrTabID(sess.ID, ws), WorkspaceID: herdrWorkspaceID(sess.ID), Number: ws,
+		TabID: herdrTabID(sess.ID, st.WorkspaceTabKey(ws)), WorkspaceID: herdrWorkspaceID(sess.ID), Number: st.WorkspaceTabKey(ws),
 		Label: label, Focused: active && ws == st.CurrentWorkspace, PaneCount: len(panes),
 		AgentStatus: "unknown",
 	}
@@ -453,7 +444,7 @@ func (d *Daemon) herdrPaneRecord(sess *Session, st *SessionState, win *WindowSta
 		PaneID:        herdrPaneID(sess.ID, win.ID),
 		TerminalID:    "term_" + herdrHex(win.PTYID),
 		WorkspaceID:   herdrWorkspaceID(sess.ID),
-		TabID:         herdrTabID(sess.ID, max(win.Workspace, 1)),
+		TabID:         herdrTabID(sess.ID, st.WorkspaceTabKey(max(win.Workspace, 1))),
 		Focused:       active && win.ID == st.FocusedWindowID && win.Workspace == st.CurrentWorkspace,
 		Cwd:           win.Cwd,
 		ForegroundCwd: win.Cwd,
@@ -516,7 +507,7 @@ func herdrAgentFromPane(p herdrPaneInfo, win *WindowState) herdrAgentInfo {
 // visible pane's rectangle in the session's area.
 func herdrLayoutOf(sess *Session, st *SessionState, ws int, panes []herdrPaneInfo) herdrLayout {
 	l := herdrLayout{
-		WorkspaceID: herdrWorkspaceID(sess.ID), TabID: herdrTabID(sess.ID, ws),
+		WorkspaceID: herdrWorkspaceID(sess.ID), TabID: herdrTabID(sess.ID, st.WorkspaceTabKey(ws)),
 		Area:  herdrRect{Width: st.Width, Height: st.Height},
 		Panes: []herdrLayoutPane{}, Splits: []struct{}{},
 	}

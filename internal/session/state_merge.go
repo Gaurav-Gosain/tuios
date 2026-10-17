@@ -71,13 +71,13 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.FocusHistory == nil {
 		incoming.FocusHistory = canonical.FocusHistory
 	}
-	// The order is daemon-owned for the same reason the names are, and an
-	// ordinary client sync omits it, so a nil incoming means "not sent" rather
-	// than "cleared". Without this a client that has never reordered anything
-	// would flatten the arrangement every other client is looking at.
-	if incoming.WorkspaceOrder == nil {
-		incoming.WorkspaceOrder = canonical.WorkspaceOrder
-	}
+	// The herdr tab keys are written by a renumber and when a tab closes, both
+	// daemon-side, so canonical wins. A display order is never kept: a build
+	// that sent one arranged without renumbering, and the session's numbering
+	// is the arrangement.
+	incoming.WorkspaceTabKeys = canonical.WorkspaceTabKeys
+	incoming.NextWorkspaceTabKey = canonical.NextWorkspaceTabKey
+	incoming.WorkspaceOrder = nil
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}

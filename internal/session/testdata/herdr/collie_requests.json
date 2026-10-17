@@ -38,7 +38,7 @@
     {"call": "closePane", "method": "pane.close", "params": {"pane_id": "$TABPANE"},
      "type": "ok", "read": []},
     {"call": "closeTab", "method": "tab.close", "params": {"tab_id": "$TAB"},
-     "type": "ok", "read": []},
+     "error": "tab_not_found"},
     {"call": "createWorkspace", "method": "workspace.create", "params": {"cwd": "$CWD", "focus": false, "label": "phone space"},
      "type": "workspace_created", "read": ["workspace.label", "root_pane.pane_id", "root_pane.workspace_id", "root_pane.tab_id", "root_pane.cwd"]},
     {"call": "listWorktrees", "method": "worktree.list", "params": {"cwd": "$REPO"},

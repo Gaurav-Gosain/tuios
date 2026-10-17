@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -114,73 +115,134 @@ func (m *OS) JoinMarkedPane(dir layout.PreselectionDir) {
 
 // MoveWorkspaceBy swaps the current workspace with the one delta places
 // away and follows it, so the panes keep their layout and the workspace
-// moves along the dock: tmux's swap-window -d -t -1 / +1.
-func (m *OS) MoveWorkspaceBy(delta int) {
+// moves along the dock: tmux's swap-window -d -t -1 / +1. Both workspaces
+// are renumbered, so the moved one answers to its new number.
+func (m *OS) MoveWorkspaceBy(delta int) tea.Cmd {
 	from := m.CurrentWorkspace
 	to := from + delta
 	if session.IsScratchWorkspace(from) || to < 1 || to > m.NumWorkspaces {
+		return nil
+	}
+	// Past the last workspace there is nothing to swap with: a daemon session
+	// numbers its workspaces 1 to their count.
+	if m.IsDaemonSession && !slices.Contains(m.occupiedWorkspaceNumbers(), to) {
+		return nil
+	}
+	// The order is the two workspaces as they will stand, lower number first.
+	order := []int{to, from}
+	if delta < 0 {
+		order = []int{from, to}
+	}
+	cmd := m.RenumberWorkspaces(order)
+	if cmd != nil || !m.IsDaemonSession {
+		m.ShowNotification(fmt.Sprintf("Workspace %d moved to %d", from, to), "info", m.Settings.NotificationDuration)
+	}
+	return cmd
+}
+
+// RenumberWorkspaces puts the workspaces named in order into that order: they
+// take the numbers they hold between them, smallest first (see
+// session.SessionState.renumberWorkspaces). A daemon session asks the daemon,
+// which renumbers the session for every client at once, and this client takes
+// the move from the state it publishes (see adoptWorkspaceRenumbering). A
+// session with no daemon renumbers here.
+//
+// One renumber is asked for at a time. The order names workspaces by the
+// numbers this client shows, and until the daemon's renumber arrives those are
+// the numbers from before it: a second move sent in that gap would name the
+// wrong workspaces, so it is dropped, and the user moves again once the first
+// one has landed.
+func (m *OS) RenumberWorkspaces(order []int) tea.Cmd {
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		if m.workspaceMoveInFlight {
+			return nil
+		}
+		cmd := setWorkspaceOrderCmd(m.verbDialer(), m.SessionName, order)
+		m.workspaceMoveInFlight = cmd != nil
+		return cmd
+	}
+	m.renumberLocalWorkspaces(workspaceSlots(order))
+	return nil
+}
+
+// workspaceSlots is where each workspace in order goes: the workspaces named
+// take the numbers they hold between them, smallest first, in that order.
+func workspaceSlots(order []int) map[int]int {
+	slots := slices.Sorted(slices.Values(order))
+	newOf := make(map[int]int, len(order))
+	for i, ws := range order {
+		if slots[i] != ws {
+			newOf[ws] = slots[i]
+		}
+	}
+	return newOf
+}
+
+// adoptWorkspaceRenumbering applies, to what this client keeps by workspace
+// number, a renumber the daemon made: it reads where each workspace went from
+// the herdr tab keys, which follow a workspace through a move, so a state that
+// arrives after several renumbers still says where each one ended up. It runs
+// before the rest of the state is applied, which then finds every window
+// already on its new workspace.
+func (m *OS) adoptWorkspaceRenumbering(state *session.SessionState) {
+	if !m.workspaceTabKeysKnown {
 		return
+	}
+	newOf := session.WorkspaceRenumbering(m.workspaceTabKeys, state)
+	if newOf == nil {
+		return
+	}
+	m.renumberLocalWorkspaces(newOf)
+	m.pendingWorkspaceOrder = nil
+	m.workspaceMoveInFlight = false
+}
+
+// renumberLocalWorkspaces moves everything the client keeps per workspace
+// number to the workspace's new number. A new map or field keyed by workspace
+// must be added to this list, or a move would leave it describing the wrong
+// workspace.
+func (m *OS) renumberLocalWorkspaces(newOf map[int]int) {
+	if len(newOf) == 0 {
+		return
+	}
+	to := func(ws int) int {
+		if n, ok := newOf[ws]; ok {
+			return n
+		}
+		return ws
 	}
 	for _, w := range m.Windows {
-		switch w.Workspace {
-		case from:
-			w.Workspace = to
-		case to:
-			w.Workspace = from
-		default:
-			continue
+		if n := to(w.Workspace); n != w.Workspace {
+			w.Workspace = n
+			w.MarkPositionDirty()
 		}
-		w.MarkPositionDirty()
 	}
-	m.swapPerWorkspaceState(from, to)
 	// The panes on screen are the same ones, so this is not a switch: no
 	// stream moves and nothing is retiled.
-	m.CurrentWorkspace = to
+	m.CurrentWorkspace = to(m.CurrentWorkspace)
+	m.lastWorkspace = to(m.lastWorkspace)
+	m.scratchBase = to(m.scratchBase)
+	m.SessionCloseWorkspace = to(m.SessionCloseWorkspace)
+	m.menuWorkspace = to(m.menuWorkspace)
+	m.WorkspaceTrees = session.RenumberWorkspaceMap(m.WorkspaceTrees, newOf)
+	m.WorkspaceFocus = session.RenumberWorkspaceMap(m.WorkspaceFocus, newOf)
+	m.FocusHistory = session.RenumberWorkspaceMap(m.FocusHistory, newOf)
+	m.WorkspaceLayouts = session.RenumberWorkspaceMap(m.WorkspaceLayouts, newOf)
+	m.WorkspaceHasCustom = session.RenumberWorkspaceMap(m.WorkspaceHasCustom, newOf)
+	m.WorkspaceMasterRatio = session.RenumberWorkspaceMap(m.WorkspaceMasterRatio, newOf)
+	m.WorkspaceStackRatio = session.RenumberWorkspaceMap(m.WorkspaceStackRatio, newOf)
+	m.WorkspaceMasterSplits = session.RenumberWorkspaceMap(m.WorkspaceMasterSplits, newOf)
+	m.WorkspaceNames = session.RenumberWorkspaceMap(m.WorkspaceNames, newOf)
+	m.WorkspaceMasterLayout = session.RenumberWorkspaceMap(m.WorkspaceMasterLayout, newOf)
+	m.masterSeeded = session.RenumberWorkspaceMap(m.masterSeeded, newOf)
+	m.treeSeen = session.RenumberWorkspaceMap(m.treeSeen, newOf)
+	m.treeDerived = session.RenumberWorkspaceMap(m.treeDerived, newOf)
+	m.treeAnswerUser = session.RenumberWorkspaceMap(m.treeAnswerUser, newOf)
+	m.paneRequests = session.RenumberWorkspaceMap(m.paneRequests, newOf)
+	m.WorkspaceScrollingLayouts = session.RenumberWorkspaceMap(m.WorkspaceScrollingLayouts, newOf)
+	m.pendingScrollColumns = session.RenumberWorkspaceMap(m.pendingScrollColumns, newOf)
+	m.workspaceMarkSet = session.RenumberWorkspaceMap(m.workspaceMarkSet, newOf)
 	m.reconcilePaneStreams()
-	m.SyncStateToDaemon()
-	m.ShowNotification(fmt.Sprintf("Workspace %d moved to %d", from, to), "info", m.Settings.NotificationDuration)
-}
-
-// swapPerWorkspaceState swaps everything the client keeps per workspace
-// number, so it goes with its panes when two workspaces trade places. A new
-// map keyed by workspace must be added to this list, or a move would leave it
-// describing the wrong workspace.
-func (m *OS) swapPerWorkspaceState(a, b int) {
-	swapWorkspaceKeys(m.WorkspaceTrees, a, b)
-	swapWorkspaceKeys(m.WorkspaceFocus, a, b)
-	swapWorkspaceKeys(m.FocusHistory, a, b)
-	swapWorkspaceKeys(m.WorkspaceLayouts, a, b)
-	swapWorkspaceKeys(m.WorkspaceHasCustom, a, b)
-	swapWorkspaceKeys(m.WorkspaceMasterRatio, a, b)
-	swapWorkspaceKeys(m.WorkspaceStackRatio, a, b)
-	swapWorkspaceKeys(m.WorkspaceMasterSplits, a, b)
-	swapWorkspaceKeys(m.WorkspaceNames, a, b)
-	swapWorkspaceKeys(m.WorkspaceMasterLayout, a, b)
-	swapWorkspaceKeys(m.masterSeeded, a, b)
-	swapWorkspaceKeys(m.treeSeen, a, b)
-	swapWorkspaceKeys(m.treeDerived, a, b)
-	swapWorkspaceKeys(m.treeAnswerUser, a, b)
-	swapWorkspaceKeys(m.paneRequests, a, b)
-	swapWorkspaceKeys(m.WorkspaceScrollingLayouts, a, b)
-	swapWorkspaceKeys(m.pendingScrollColumns, a, b)
-}
-
-// swapWorkspaceKeys swaps the entries of two workspaces in a per-workspace
-// map, an absent entry included.
-func swapWorkspaceKeys[V any](mp map[int]V, a, b int) {
-	if mp == nil {
-		return
-	}
-	va, okA := mp[a]
-	vb, okB := mp[b]
-	delete(mp, a)
-	delete(mp, b)
-	if okA {
-		mp[b] = va
-	}
-	if okB {
-		mp[a] = vb
-	}
 }
 
 // NewWorkspaceTarget is the workspace new_workspace goes to: the one the dock's

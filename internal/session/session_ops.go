@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 
@@ -261,6 +260,11 @@ type NewWindowOptions struct {
 	// as a focus move. See ExecuteCommandPayload.FocusIfShown. It means
 	// nothing with Focus set.
 	FocusIfShown bool
+	// TabKey names the workspace by its tab key, which follows it through a
+	// renumber, when the caller read the workspace's number before one it
+	// may not have seen. Zero names it by Workspace alone. See
+	// ExecuteCommandPayload.TabKey.
+	TabKey int
 	// Grants is what the window's process may do through tuios, nil for the
 	// default of [agents.permissions]. It is in force before the process
 	// starts, and it is saved with the window. See pane_grants.go.
@@ -466,6 +470,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 		if opts.Workspace != 0 {
 			workspace = opts.Workspace
+		}
+		if opts.TabKey > 0 {
+			if at := state.WorkspaceForTabKey(opts.TabKey); at > 0 {
+				workspace = at
+			}
 		}
 		// The pane a switch to an empty workspace asks for is one per
 		// workspace, whatever asked: a second client that switched too, or a
@@ -802,42 +811,6 @@ func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
 			state.WorkspaceNames = make(map[int]string)
 		}
 		state.WorkspaceNames[ws] = name
-		return nil
-	})
-}
-
-// SetDaemonWorkspaceOrder records the order the workspaces are shown in. It
-// moves no workspace: every number keeps everything it owns, and the windows,
-// the focus map, the trees and the verbs all go on addressing by number.
-//
-// The order is sanitised rather than trusted, because it arrives from a drag
-// that reads a list the client rendered and the daemon's own list may since
-// have changed: an entry outside the session's range or naming a workspace
-// already placed cannot mean anything, so it is dropped instead of stored.
-//
-// An ascending order is stored as nil. That is the arrangement a session with
-// no order already has, so recording it would leave a trace in serialized state
-// that says nothing, the way an empty name would.
-func (s *Session) SetDaemonWorkspaceOrder(order []int) error {
-	return s.mutateState(func(state *SessionState) error {
-		bound := state.workspaceBound()
-		clean := make([]int, 0, len(order))
-		seen := make(map[int]bool, len(order))
-		for _, ws := range order {
-			if ws < 1 || ws > bound || seen[ws] {
-				continue
-			}
-			seen[ws] = true
-			clean = append(clean, ws)
-		}
-		if len(clean) == 0 && len(order) > 0 {
-			return fmt.Errorf("no workspace in the order is in range (1-%d)", bound)
-		}
-		if slices.IsSorted(clean) {
-			state.WorkspaceOrder = nil
-			return nil
-		}
-		state.WorkspaceOrder = clean
 		return nil
 	})
 }

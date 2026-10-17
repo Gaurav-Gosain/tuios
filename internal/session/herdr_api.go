@@ -670,7 +670,7 @@ func (d *Daemon) herdrTabInfo(cs *connState, id string) (*herdrResult, *herdrErr
 	if herr != nil {
 		return nil, herr
 	}
-	if t := v.tab(herdrTabID(sess.ID, ws)); t != nil {
+	if t := v.tab(herdrTabID(sess.ID, sess.GetState().WorkspaceTabKey(ws))); t != nil {
 		return &herdrResult{Type: "tab_info", Tab: t}, nil
 	}
 	return nil, herdrNotFound("tab", id).herdr()
@@ -760,8 +760,10 @@ func (d *Daemon) herdrTabVerb(cs *connState, id, verb string, args herdrArgs, fa
 	return d.herdrTabInfo(cs, id)
 }
 
-// herdrTabMove is set-workspace-order. insert_index counts places in the
-// session's tab list before the tab is taken out, as herdr's does.
+// herdrTabMove is set-workspace-order, which renumbers the workspaces: the
+// tabs take the numbers they hold between them in their new order, and keep
+// their ids. insert_index counts places in the session's tab list before the
+// tab is taken out, as herdr's does.
 func (d *Daemon) herdrTabMove(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if *in.InsertIndex < 0 {
 		return nil, herdrErr("invalid_request", "invalid request: insert_index must not be negative")
@@ -770,7 +772,7 @@ func (d *Daemon) herdrTabMove(cs *connState, in *herdrIn) (*herdrResult, *herdrE
 	if ierr != nil {
 		return nil, ierr.herdr()
 	}
-	order := herdrWorkspaceOrder(sess.GetState())
+	order := herdrOrderedTabs(sess.GetState())
 	from := slices.Index(order, ws)
 	at := min(*in.InsertIndex, len(order))
 	order = slices.Insert(order, at, ws)
