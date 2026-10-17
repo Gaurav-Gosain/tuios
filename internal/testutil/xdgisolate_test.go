@@ -17,6 +17,15 @@ var subprocessHarness = map[string]bool{
 	"e2e": true,
 }
 
+// libraryInWaiting lists the packages that are to become modules of their
+// own, so they import no tuios package, testutil included, and cannot call
+// RunIsolated. TestComposerImportsNoTuiosPackage in cmd/tuios holds the
+// imports. They read no XDG directory: the host gives them every file they
+// show. Adding one is a decision, as for subprocessHarness.
+var libraryInWaiting = map[string]bool{
+	"internal/composer": true,
+}
+
 // TestEveryTestPackageIsolatesTheXDGTree is the cheap half of the guard, and
 // the one that names the package at fault.
 //
@@ -50,7 +59,7 @@ func TestEveryTestPackageIsolatesTheXDGTree(t *testing.T) {
 			return filepath.SkipDir
 		}
 		rel, _ := filepath.Rel(root, path)
-		if !subprocessHarness[rel] && !isolatedOrTestFree(t, path) {
+		if !subprocessHarness[rel] && !libraryInWaiting[rel] && !isolatedOrTestFree(t, path) {
 			missing = append(missing, rel)
 		}
 		return nil
