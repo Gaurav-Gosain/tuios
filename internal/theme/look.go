@@ -148,6 +148,17 @@ func RemoveLookAsset(glyphs bool, id string) error {
 	return err
 }
 
+// LookAssetThere reports whether a theme or glyph set file is at id. A look
+// must not write over a file it did not install.
+func LookAssetThere(glyphs bool, id string) bool {
+	dir, err := lookAssetDir(glyphs)
+	if err != nil || !ValidThemeID(id) {
+		return false
+	}
+	_, err = os.Lstat(filepath.Join(dir, id+".json"))
+	return err == nil
+}
+
 func lookAssetDir(glyphs bool) (string, error) {
 	if glyphs {
 		return GetGlyphsDir()
@@ -155,7 +166,13 @@ func lookAssetDir(glyphs bool) (string, error) {
 	return GetThemesDir()
 }
 
-// hasControl reports whether s holds a control character.
+// hasControl reports whether s holds a control character or a bidi control,
+// which reorders the text a terminal shows around it.
 func hasControl(s string) bool {
-	return strings.IndexFunc(s, unicode.IsControl) >= 0
+	return strings.IndexFunc(s, IsUnsafeRune) >= 0
+}
+
+// IsUnsafeRune reports whether r is a control character or a bidi control.
+func IsUnsafeRune(r rune) bool {
+	return unicode.IsControl(r) || r == 0x200e || r == 0x200f || r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069
 }

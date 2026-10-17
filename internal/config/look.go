@@ -182,28 +182,27 @@ var lookKeys = []string{
 	"spotlight.radius",
 }
 
-var lookKeySet = func() map[string]bool {
-	m := make(map[string]bool, len(lookKeys))
-	for _, k := range lookKeys {
-		if _, ok := LookupOption(k); ok {
-			m[k] = true
-		}
-	}
-	return m
-}()
-
 // LookKeys returns the options a look may set, sorted.
 func LookKeys() []string {
-	out := make([]string, 0, len(lookKeySet))
-	for k := range lookKeySet {
-		out = append(out, k)
+	out := make([]string, 0, len(lookKeys))
+	for _, k := range lookKeys {
+		if IsLookKey(k) {
+			out = append(out, k)
+		}
 	}
 	slices.Sort(out)
 	return out
 }
 
-// IsLookKey reports whether a look may set the option at path.
-func IsLookKey(path string) bool { return lookKeySet[path] && !ReachesHost(path) }
+// IsLookKey reports whether a look may set the option at path: it is on the
+// list, a registered option, and does not reach the host.
+func IsLookKey(path string) bool {
+	if !slices.Contains(lookKeys, path) || ReachesHost(path) {
+		return false
+	}
+	_, ok := LookupOption(path)
+	return ok
+}
 
 // hostReaching are the options inside the look and appearance sections that
 // run a program, name a file, or write the host clipboard. Neither a look nor
@@ -302,7 +301,8 @@ func ParseLook(data []byte) (*Look, error) {
 	}
 	raw := map[string]any{}
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("the look is not valid TOML: %w", err)
+		// The error can quote a key, and a stranger names the keys.
+		return nil, fmt.Errorf("the look is not valid TOML: %s", lookOneLine(err.Error()))
 	}
 	switch v := raw["look"].(type) {
 	case nil:
@@ -417,9 +417,7 @@ func (lk *Look) readAsset(raw map[string]any, key string, glyphs bool) (string, 
 	if own == "" {
 		return "", fmt.Errorf("[%s] needs an id", key)
 	}
-	if strings.HasPrefix(own, LookAssetPrefix) {
-		own = strings.TrimPrefix(own, LookAssetPrefix)
-	}
+	own = strings.TrimPrefix(own, LookAssetPrefix)
 	id := LookAssetPrefix + own
 	if !theme.ValidThemeID(own) || !theme.ValidThemeID(id) {
 		return "", fmt.Errorf("[%s] id %q cannot be a file name. Use a-z, 0-9, '-', '_' and '.'", key, own)
@@ -462,7 +460,7 @@ func (lk *Look) bindAsset(values map[string]any, path, own string, asset *LookAs
 	case v == own || v == asset.ID:
 		values[path] = asset.ID
 	default:
-		return fmt.Errorf("the look carries %s %q, but %s names %v. Remove %s or set it to %q", path[strings.LastIndex(path, ".")+1:], own, path, v, path, own)
+		return fmt.Errorf("the look carries %s %q, but %s names %q. Remove %s or set it to %q", path[strings.LastIndex(path, ".")+1:], own, path, lookValueText(v), path, own)
 	}
 	return nil
 }
@@ -476,23 +474,34 @@ func (lk *Look) walk(m map[string]any, prefix []string, values map[string]any) {
 		v := m[k]
 		if sub, ok := v.(map[string]any); ok {
 			if !lookTableHasKey(dotted) {
-				lk.Left = append(lk.Left, dotted)
+				lk.Left = append(lk.Left, lookKeyShown(dotted))
 				continue
 			}
 			lk.walk(sub, path, values)
 			continue
 		}
 		if !IsLookKey(dotted) {
-			lk.Left = append(lk.Left, dotted)
+			lk.Left = append(lk.Left, lookKeyShown(dotted))
 			continue
 		}
 		values[dotted] = v
 	}
 }
 
+// lookKeyShown is a key name as the plan prints it. A stranger names the keys,
+// and a quoted TOML key may hold an escape sequence, which would reach the
+// terminal (an OSC 52 clipboard write, say) when the plan lists the keys it
+// leaves out. A name with anything but graphic characters is printed quoted.
+func lookKeyShown(key string) string {
+	if strings.IndexFunc(key, func(r rune) bool { return !unicode.IsGraphic(r) }) < 0 {
+		return key
+	}
+	return strconv.QuoteToGraphic(key)
+}
+
 // lookTableHasKey reports whether some look key is inside the table at path.
 func lookTableHasKey(path string) bool {
-	for k := range lookKeySet {
+	for _, k := range lookKeys {
 		if strings.HasPrefix(k, path+".") {
 			return true
 		}
@@ -544,7 +553,18 @@ func (lk *Look) fragment() ([]byte, error) {
 	return toml.Marshal(root)
 }
 
-func hasControlChar(s string) bool { return strings.IndexFunc(s, unicode.IsControl) >= 0 }
+// lookOneLine replaces each control character and bidi control in s with a
+// space.
+func lookOneLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if theme.IsUnsafeRune(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+func hasControlChar(s string) bool { return strings.IndexFunc(s, theme.IsUnsafeRune) >= 0 }
 
 func lookSortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
@@ -567,8 +587,10 @@ type InstalledLook struct {
 }
 
 // Header lines of config.d/look.toml. tuios reads them back to know what to
-// remove.
+// remove. lookHeadMark starts the first line, and a file without it is the
+// person's own: tuios never replaces or deletes it.
 const (
+	lookHeadMark   = "# A tuios look. "
 	lookHeadName   = "# look: "
 	lookHeadSource = "# source: "
 	lookHeadTheme  = "# theme: "
@@ -590,6 +612,9 @@ func ReadInstalledLook(mainPath string) (*InstalledLook, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if !strings.HasPrefix(string(data), lookHeadMark) {
+		return nil, fmt.Errorf("%s is your own file, not a look tuios applied. tuios does not change it. Rename it to use tuios look", filepath.Join(DropInDirName, LookFileName))
 	}
 	il := &InstalledLook{Path: path}
 	for line := range strings.Lines(string(data)) {
@@ -637,23 +662,15 @@ func (lk *Look) render(source string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	oneLine := func(s string) string {
-		return strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) {
-				return ' '
-			}
-			return r
-		}, s)
-	}
 	var b strings.Builder
-	b.WriteString("# A tuios look. \"tuios look apply\" wrote this file.\n")
+	b.WriteString(lookHeadMark + "\"tuios look apply\" wrote this file.\n")
 	b.WriteString("# \"tuios look remove\" deletes it. The next apply replaces it.\n")
 	b.WriteString("# config.toml wins over this file. Change settings there.\n")
 	if lk.Name != "" {
-		b.WriteString(lookHeadName + oneLine(lk.Name) + "\n")
+		b.WriteString(lookHeadName + lookOneLine(lk.Name) + "\n")
 	}
 	if source != "" {
-		b.WriteString(lookHeadSource + oneLine(source) + "\n")
+		b.WriteString(lookHeadSource + lookOneLine(source) + "\n")
 	}
 	if lk.Theme != nil {
 		b.WriteString(lookHeadTheme + lk.Theme.ID + "\n")
@@ -716,6 +733,23 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 	}
 	if !fileWritable(LookPath(lc.Main)) {
 		return nil, fmt.Errorf("tuios cannot write %s. The config is read-only, so tuios cannot change the look", displayPath(lc.Main, filepath.Dir(LookPath(lc.Main))))
+	}
+
+	// A theme or glyph set of the person's own may already have the id the
+	// look installs. Only an asset the installed look recorded is replaced.
+	if lk != nil {
+		for _, a := range []struct {
+			asset  *LookAsset
+			glyphs bool
+			kind   string
+		}{{lk.Theme, false, "theme"}, {lk.Glyphs, true, "glyph set"}} {
+			if a.asset == nil || cur != nil && (a.asset.ID == cur.Theme && !a.glyphs || a.asset.ID == cur.Glyphs && a.glyphs) {
+				continue
+			}
+			if theme.LookAssetThere(a.glyphs, a.asset.ID) {
+				return nil, fmt.Errorf("a %s named %s is there already, and no look installed it. tuios does not replace it. Rename it to apply this look", a.kind, a.asset.ID)
+			}
+		}
 	}
 
 	next := &LayeredConfig{Main: lc.Main, Layered: true}

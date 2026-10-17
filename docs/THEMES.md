@@ -386,6 +386,11 @@ those keys. When you change a look key in the settings, tuios writes the
 change to `config.toml`. The next `tuios look apply` or `tuios look remove`
 then keeps your change.
 
+tuios does not replace or delete a file of your own. If `config.d/look.toml`
+is a file that tuios did not write, `tuios look` stops. It also stops if a
+theme or glyph set with the `look-<id>` name is there and no look installed
+it. Rename that file, then apply the look again.
+
 ## Defaults for Omitted Colors
 
 Every color field is optional. A field you leave out is filled in rather than

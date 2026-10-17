@@ -18,7 +18,8 @@ import (
 //     daemon gets through, at the top level, nested in an allowed section,
 //     or as an array of tables;
 //   - a value gets through that the option's own check refuses;
-//   - a string carries an escape sequence into the frame;
+//   - a string carries an escape sequence into the frame, or a key name or an
+//     error carries one into the terminal that shows the plan;
 //   - a theme or glyph set id is a path and writes outside its directory;
 //   - an oversized file or a future version is read anyway.
 //
@@ -75,6 +76,11 @@ func TestParseLookBoundary(t *testing.T) {
 		{name: "glyph escape", body: "[glyphs]\nid = \"g\"\nclose = \"\\u001b[31mX\"", err: "control character"},
 		{name: "glyph id with a path", body: "[glyphs]\nid = \"../g\"", err: "cannot be a file name"},
 		{name: "theme not a table", body: "theme = \"nord\"", err: "must be a table"},
+		{name: "bidi control in name", body: "name = \"abc\u202edef\"", err: "name"},
+		{name: "escape in a theme the look names", body: "[appearance]\ntheme = \"\\u001b[2J\"\n[theme]\nid = \"x\"\nbase = \"nord\"", err: `"\x1b[2J"`},
+		{name: "escape in a key name", body: "\"\\u001b]52;c;eA==\\u0007\" = 1", left: `"\x1b]52;c;eA==\a"`},
+		{name: "escape in a nested key name", body: "[appearance]\n\"x\\u001b[2J\" = 1", left: `"appearance.x\x1b[2J"`},
+		{name: "escape in a repeated key name", body: "\"\\u001b[2J\" = 1\n\"\\u001b[2J\" = 2", err: "already defined"},
 		{name: "oversized", body: "name = \"" + strings.Repeat("a", MaxLookBytes) + "\"", err: "larger than"},
 	}
 	for _, tc := range cases {
@@ -90,6 +96,9 @@ func TestParseLookBoundary(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), tc.err) {
 					t.Fatalf("error %q does not mention %q", err, tc.err)
+				}
+				if strings.IndexFunc(err.Error(), theme.IsUnsafeRune) >= 0 {
+					t.Fatalf("error %q carries a control character to the terminal", err)
 				}
 				return
 			}
@@ -282,6 +291,53 @@ func TestLookReadOnlyConfig(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Fatalf("PlanLook on a read-only config: %v", err)
 	}
+}
+
+// TestLookLeavesOwnFilesAlone holds apply and remove off the person's own
+// files: a config.d/look.toml tuios did not write, and a theme or glyph set
+// that already has the id a look would install.
+func TestLookLeavesOwnFilesAlone(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(main, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lk := mustParseLook(t, "look = 1\n[appearance]\ngap = 1\n[theme]\nid = \"own\"\nbase = \"nord\"\n")
+
+	themes, err := theme.GetThemesDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(themes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ownTheme := filepath.Join(themes, "look-own.json")
+	const themeBody = `{"id":"look-own","base":"dracula"}`
+	if err := os.WriteFile(ownTheme, []byte(themeBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(ownTheme) })
+	if _, err := PlanLook(main, lk, "test"); err == nil || !strings.Contains(err.Error(), "look-own") {
+		t.Fatalf("PlanLook over a theme of the person's own: %v", err)
+	}
+	assertFile(t, ownTheme, themeBody)
+	_ = os.Remove(ownTheme)
+
+	own := LookPath(main)
+	if err := os.MkdirAll(filepath.Dir(own), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const ownBody = "# mine\n[appearance]\ngap = 7\n"
+	if err := os.WriteFile(own, []byte(ownBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PlanLook(main, lk, "test"); err == nil || !strings.Contains(err.Error(), "your own file") {
+		t.Fatalf("PlanLook over a look.toml of the person's own: %v", err)
+	}
+	if _, err := PlanLookRemove(main); err == nil || !strings.Contains(err.Error(), "your own file") {
+		t.Fatalf("PlanLookRemove of a look.toml of the person's own: %v", err)
+	}
+	assertFile(t, own, ownBody)
 }
 
 func mustParseLook(t *testing.T, body string) *Look {

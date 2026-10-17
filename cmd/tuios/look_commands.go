@@ -414,7 +414,7 @@ func readLookFile(path string) ([]byte, error) {
 func readCapped(r io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(r, config.MaxLookBytes+1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read the look: %w", err)
 	}
 	if len(data) > config.MaxLookBytes {
 		return nil, fmt.Errorf("the look is larger than %d KiB", config.MaxLookBytes>>10)
