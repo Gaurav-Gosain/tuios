@@ -17,6 +17,14 @@ type bufPipe struct {
 	cond   *sync.Cond
 	buf    bytes.Buffer
 	closed bool
+	notify func()
+}
+
+// setNotify sets the function Write calls after it queues data. nil clears it.
+func (p *bufPipe) setNotify(fn func()) {
+	p.mu.Lock()
+	p.notify = fn
+	p.mu.Unlock()
 }
 
 // maxBufPipeBytes bounds the buffer so a guest that spams query-generating
@@ -30,18 +38,25 @@ func newBufPipe() *bufPipe {
 }
 
 // Write appends data and never blocks. It drops the write if the pipe is closed
-// or the buffer is already at the cap (the drainer is not keeping up).
+// or the buffer is already at the cap (the drainer is not keeping up). The
+// notify function runs after the lock is released, so it may drain the pipe.
 func (p *bufPipe) Write(b []byte) (int, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.closed {
+		p.mu.Unlock()
 		return 0, io.ErrClosedPipe
 	}
 	if p.buf.Len()+len(b) > maxBufPipeBytes {
+		p.mu.Unlock()
 		return len(b), nil
 	}
 	p.buf.Write(b)
 	p.cond.Signal()
+	notify := p.notify
+	p.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
 	return len(b), nil
 }
 

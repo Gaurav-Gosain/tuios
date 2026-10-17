@@ -33,6 +33,11 @@ type Terminal interface {
 	// blocking, or nil when there are none. A host that drains after each
 	// Write uses it instead of a goroutine blocked in Read.
 	TakeResponses() []byte
+	// OnResponse sets a function called each time a response is queued, on
+	// the goroutine that queued it, which is not always the one calling
+	// Write: a cell size change and a kitty file upload queue theirs from
+	// elsewhere. It must not block. nil clears it.
+	OnResponse(fn func())
 	// WriteResponse queues data to come out of Read, for a response made outside
 	// the emulator.
 	WriteResponse(data []byte)

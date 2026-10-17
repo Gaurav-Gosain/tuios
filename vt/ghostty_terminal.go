@@ -488,6 +488,10 @@ func (t *GhosttyTerminal) TakeResponses() []byte {
 	return t.pipe.take()
 }
 
+// OnResponse sets a function called each time a response is queued, on the
+// goroutine that queued it. It must not block. nil clears it.
+func (t *GhosttyTerminal) OnResponse(fn func()) { t.pipe.setNotify(fn) }
+
 // WriteResponse injects a response produced outside the emulator.
 func (t *GhosttyTerminal) WriteResponse(data []byte) {
 	_, _ = t.pipe.Write(data)

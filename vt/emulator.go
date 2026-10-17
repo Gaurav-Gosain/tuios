@@ -1402,6 +1402,10 @@ func (e *Emulator) TakeResponses() []byte {
 	return e.pipe.take()
 }
 
+// OnResponse sets a function called each time a reply is queued, on the
+// goroutine that queued it. It must not block. nil clears it.
+func (e *Emulator) OnResponse(fn func()) { e.pipe.setNotify(fn) }
+
 // Close closes the terminal.
 func (e *Emulator) Close() error {
 	if e.closed.Load() {
