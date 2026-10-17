@@ -3610,6 +3610,9 @@ A capture in the TUI draws the images that the client shows:
   that limit is not drawn.
 - A kitty image that a program streams as a temporary file or as shared
   memory is drawn only if it is not a stream of frames.
+- A client keeps at most 8 MiB of kitty images for captures. When it needs
+  more, it drops the images that are not on the screen first, then the
+  oldest. A dropped image is not drawn.
 
 Region and full screen captures are not CLI commands. They need a viewport and
 composed chrome, which only an attached client has: press the leader then `C`

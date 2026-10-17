@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"path/filepath"
 
 	"tuios.dev/vt"
 )
@@ -24,7 +25,9 @@ import (
 // bytes as the guest sent them, still encoded. It keeps a reference to a
 // buffer it already holds wherever it can, so keeping costs no copy and no
 // work per frame, only the memory of one payload per image, under
-// maxKeptImageBytes for the whole connection. Nothing is decoded until a
+// maxKeptImageBytes for the whole connection. Every client that shows images
+// pays that memory, whether or not it ever takes a screenshot, so the bound
+// is small and the images least likely to be in a screenshot go first. Nothing is decoded until a
 // screenshot asks, and a screenshot decodes only the images it shows (see
 // screenshot_images.go).
 //
@@ -35,14 +38,18 @@ import (
 //     is not read: the entry is dropped instead, and the capture leaves that
 //     image out rather than show a frame it is not showing.
 //   - A file (t=f) is not read at all. Its path is kept and read when a
-//     screenshot asks.
+//     screenshot asks, after the checks kittyMediumPath made are made again,
+//     since the pane can swap the file for something else in between.
 //
 // An image the guest sends in chunks without placing it (a=t with m=1) is
 // forwarded chunk by chunk and never whole, so it is not kept.
 
-// maxKeptImageBytes bounds the payloads one connection keeps. Past it the
-// oldest are dropped, and a screenshot leaves those images out.
-const maxKeptImageBytes = 32 << 20
+// maxKeptImageBytes bounds the payloads one connection keeps. Past it entries
+// are dropped, those with no placement on the host first and then the oldest,
+// and a screenshot leaves those images out. A screen of PNGs fits in it with
+// room to spare. A single image larger than it is not kept. A payload counts
+// at its capacity: a buffer grown chunk by chunk holds more than its length.
+const maxKeptImageBytes = 8 << 20
 
 // keptImage is the last payload of one image. It is not changed after it is
 // made: a new transmission makes a new entry, so a screenshot can read one
@@ -73,7 +80,7 @@ func (kp *KittyPassthrough) keepImage(windowID string, hostID uint32, k *keptIma
 	if hostID == 0 {
 		return
 	}
-	if k == nil || (len(k.data) == 0 && k.path == "") || len(k.data) > maxKeptImageBytes {
+	if k == nil || (len(k.data) == 0 && k.path == "") || cap(k.data) > maxKeptImageBytes {
 		kp.forgetKept(windowID, hostID)
 		return
 	}
@@ -84,26 +91,36 @@ func (kp *KittyPassthrough) keepImage(windowID string, hostID uint32, k *keptIma
 		kp.kept[windowID] = make(map[uint32]*keptImage)
 	}
 	if old := kp.kept[windowID][hostID]; old != nil {
-		kp.keptBytes -= len(old.data)
+		kp.keptBytes -= cap(old.data)
 	}
 	kp.keptSeq++
 	k.seq = kp.keptSeq
 	kp.kept[windowID][hostID] = k
-	kp.keptBytes += len(k.data)
+	kp.keptBytes += cap(k.data)
 	for kp.keptBytes > maxKeptImageBytes {
 		kp.evictOldestKept()
 	}
 }
 
-// evictOldestKept drops the entry kept longest ago.
+// evictOldestKept drops the entry kept longest ago among those the host is
+// not showing, or the oldest of all when it shows every one. An image
+// scrolled out of view or deleted from the screen is less likely to be in a
+// screenshot than one on it.
 func (kp *KittyPassthrough) evictOldestKept() {
 	var oldWin string
 	var oldID uint32
 	var oldSeq uint64
+	oldShown := true
 	for win, ids := range kp.kept {
 		for id, k := range ids {
-			if oldSeq == 0 || k.seq < oldSeq {
-				oldWin, oldID, oldSeq = win, id, k.seq
+			if len(k.data) == 0 {
+				continue // a path costs nothing to keep
+			}
+			// The entry just kept has no placement yet: the record is made
+			// after the payload. It is the one most likely to be on screen.
+			shown := k.seq == kp.keptSeq || kp.keptShown(win, id)
+			if oldSeq == 0 || (oldShown && !shown) || (shown == oldShown && k.seq < oldSeq) {
+				oldWin, oldID, oldSeq, oldShown = win, id, k.seq, shown
 			}
 		}
 	}
@@ -114,28 +131,50 @@ func (kp *KittyPassthrough) evictOldestKept() {
 	kp.forgetKept(oldWin, oldID)
 }
 
-// forgetKept drops one image's entry, or every entry of a window when hostID
-// is 0. The caller holds kp.mu.
-func (kp *KittyPassthrough) forgetKept(windowID string, hostID uint32) {
-	ids := kp.kept[windowID]
-	if ids == nil {
-		return
+// keptShown reports whether the host shows any placement of an image now,
+// or the image has a virtual placement, whose cells may be on screen.
+func (kp *KittyPassthrough) keptShown(windowID string, hostID uint32) bool {
+	if len(kp.virtualBoxes[windowID][hostID]) > 0 {
+		return true
 	}
+	ix := kp.placeIdx[windowID]
+	if ix == nil {
+		return false
+	}
+	for slot := range ix.byHost[hostID] {
+		if p := kp.placements[windowID][placementKey{hostID, slot}]; p != nil && !p.Hidden {
+			return true
+		}
+	}
+	return false
+}
+
+// forgetKept drops one image's entry and its virtual boxes, or those of every
+// image of a window when hostID is 0. The boxes go even where no payload was
+// kept: a virtual placement of an image sent in chunks records a box too.
+// The caller holds kp.mu.
+func (kp *KittyPassthrough) forgetKept(windowID string, hostID uint32) {
 	if hostID == 0 {
-		for _, k := range ids {
-			kp.keptBytes -= len(k.data)
+		for _, k := range kp.kept[windowID] {
+			kp.keptBytes -= cap(k.data)
 		}
 		delete(kp.kept, windowID)
 		delete(kp.virtualBoxes, windowID)
 		return
 	}
-	if k := ids[hostID]; k != nil {
-		kp.keptBytes -= len(k.data)
-		delete(ids, hostID)
+	if boxes := kp.virtualBoxes[windowID]; boxes != nil {
+		delete(boxes, hostID)
+		if len(boxes) == 0 {
+			delete(kp.virtualBoxes, windowID)
+		}
 	}
-	delete(kp.virtualBoxes[windowID], hostID)
-	if len(ids) == 0 {
-		delete(kp.kept, windowID)
+	ids := kp.kept[windowID]
+	if k := ids[hostID]; k != nil {
+		kp.keptBytes -= cap(k.data)
+		delete(ids, hostID)
+		if len(ids) == 0 {
+			delete(kp.kept, windowID)
+		}
 	}
 }
 
@@ -216,7 +255,7 @@ func (kp *KittyPassthrough) keepFileMedium(cmd *vt.KittyCommand, windowID string
 		kp.forgetKept(windowID, hostID)
 		return
 	}
-	data, err := readKittyMedium(path, cmd.Offset, cmd.Size, maxKeptImageBytes)
+	data, err := readKittyMedium(path, cmd.Offset, cmd.Size, maxKeptImageBytes, false)
 	if err != nil {
 		kp.forgetKept(windowID, hostID)
 		return
@@ -226,10 +265,23 @@ func (kp *KittyPassthrough) keepFileMedium(cmd *vt.KittyCommand, windowID string
 }
 
 // readKittyMedium reads the bytes a file medium names: size bytes from
-// offset, or the rest of the file when size is 0. It refuses anything that is
-// not a regular file and anything larger than limit.
-func readKittyMedium(path string, offset, size, limit int) ([]byte, error) {
-	f, err := os.Open(path) // #nosec G304 - checked by kittyMediumPath
+// offset, or the rest of the file when size is 0. path is what
+// kittyMediumPath resolved, so it has no symlink in it. It refuses anything
+// that is not a regular file and anything larger than limit.
+//
+// The pane can change the file between the check and the read: put a symlink
+// or a named pipe in its place. The open follows no symlink in the last part
+// of the path and does not wait for a writer, and the open file is checked
+// again. With recheck set, which is for a path kept since an earlier frame,
+// the whole path is resolved again, and the file must still be the pane's
+// own and outside the places kitty refuses.
+func readKittyMedium(path string, offset, size, limit int, recheck bool) ([]byte, error) {
+	if recheck {
+		if resolved, err := filepath.EvalSymlinks(path); err != nil || resolved != path || vt.KittySensitivePath(path) {
+			return nil, errors.New("the path changed")
+		}
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|openNonblock|openNoFollow, 0) // #nosec G304 - checked by kittyMediumPath
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +290,7 @@ func readKittyMedium(path string, offset, size, limit int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() || (recheck && !ownedByMe(info)) {
 		return nil, errors.New("not a regular file")
 	}
 	n := info.Size() - int64(max(offset, 0))
@@ -271,7 +323,7 @@ func (k *keptImage) decode(maxPixels int) (image.Image, error) {
 	data := k.data
 	if k.path != "" {
 		var err error
-		data, err = readKittyMedium(k.path, k.offset, k.size, maxPassthroughTransmitBytes)
+		data, err = readKittyMedium(k.path, k.offset, k.size, maxPassthroughTransmitBytes, true)
 		if err != nil {
 			return nil, err
 		}
