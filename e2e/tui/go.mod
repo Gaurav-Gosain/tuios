@@ -44,7 +44,7 @@ require (
 	github.com/xo/terminfo v1.0.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	tuios.dev/shot v0.0.0-20261017045621-c32143634549
+	tuios.dev/shot v0.1.0
 )
 
 replace github.com/Gaurav-Gosain/tuios => ../..
