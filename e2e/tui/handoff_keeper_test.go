@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -351,10 +352,24 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 }
 
 // statusKeptForNonParent says whether the kernel tells a process that is not
-// a pane's parent how the pane ended: kqueue NOTE_EXITSTATUS on macOS. On
-// Linux the daemon a keeper brought back hears a pane end with its status
-// unknown.
+// a pane's parent how the pane ended: kqueue NOTE_EXITSTATUS on macOS, and on
+// Linux PIDFD_INFO_EXIT, from 6.15. Elsewhere the daemon a keeper brought back
+// hears a pane end with its status unknown.
 func statusKeptForNonParent(t *testing.T) bool {
 	t.Helper()
-	return runtime.GOOS == "darwin"
+	switch runtime.GOOS {
+	case "darwin":
+		return true
+	case "linux":
+		raw, err := os.ReadFile("/proc/sys/kernel/osrelease")
+		if err != nil {
+			t.Fatalf("read the kernel release: %v", err)
+		}
+		var major, minor int
+		if _, err := fmt.Sscanf(string(raw), "%d.%d", &major, &minor); err != nil {
+			t.Fatalf("parse the kernel release %q: %v", raw, err)
+		}
+		return major > 6 || major == 6 && minor >= 15
+	}
+	return false
 }

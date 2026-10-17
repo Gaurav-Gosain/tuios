@@ -2793,7 +2793,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			returns: []verbParam{
 				{Name: "condition", Type: "string", Description: "The condition that matched."},
 				{Name: "window", Type: "string", Description: "The window that matched, for a condition about a window."},
-				{Name: "exit_code", Type: "int", Description: "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine, or on Linux for a program whose parent died before a live upgrade's keeper brought the daemon back."},
+				{Name: "exit_code", Type: "int", Description: "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine, or on Linux before 6.15 for a program whose parent died before a live upgrade's keeper brought the daemon back."},
 				{Name: "signal", Type: "int", Description: "For window-exit: the signal that ended the process. Omitted when it exited on its own."},
 				{Name: "new", Type: "bool", Description: "For window-output: true when the wait matched only output written after it started."},
 			},

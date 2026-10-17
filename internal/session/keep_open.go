@@ -191,7 +191,7 @@ func exitResult(p *PTY, res map[string]any) {
 
 // exitStatusLost says a process's recorded end carries no status: a code of
 // -1 with no signal, which a signal never leaves. It is what a process this
-// daemon cannot reap records. On Linux that is a pane whose parent died in a
-// keeper's recovery (handoff_keeper.go): the image the keeper starts hears it
-// end through a pidfd, which does not say how.
+// daemon cannot reap records when the kernel does not say how it ended. On
+// Linux before 6.15 that is a pane whose parent died in a keeper's recovery
+// (handoff_keeper.go): see waitForeignExit.
 func exitStatusLost(code, sig int) bool { return code < 0 && sig == 0 }
