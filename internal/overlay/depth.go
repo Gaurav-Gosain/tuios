@@ -155,11 +155,26 @@ func To256(c color.Color) color.Color {
 	case ansi.IndexedColor, ansi.BasicColor:
 		return v
 	}
-	if okChroma(c) < greyChroma {
+	ch := okChroma(c)
+	if ch < greyChroma {
 		return nearestGrey(c)
 	}
-	return nearest256(c)
+	q := nearest256(c)
+	if ch < tintChroma {
+		// A tinted near-neutral, such as a dark theme's ground: the cube's
+		// coloured entries are far more saturated than it at low lightness,
+		// so solarized's #001e27 went to the navy 17 and h4x0r's #200101 to
+		// the red 52, with red text on it. The grey wins when it is nearer.
+		if g := nearestGrey(c); Distance(g, c) < Distance(q, c) {
+			return g
+		}
+	}
+	return q
 }
+
+// tintChroma is the OKLab chroma below which To256 lets a grey compete with
+// the coloured entries. The least saturated accent tuios ships sits at 0.06.
+const tintChroma = 0.06
 
 // xterm256Lab is entries 16 to 255 of the xterm palette in OKLab. It is
 // built on first use rather than at package initialisation, like the

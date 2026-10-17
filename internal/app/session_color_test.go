@@ -340,12 +340,11 @@ func TestSessionPoolRebuildsWhenTheThemeChangesUnderTheSameGround(t *testing.T) 
 
 // TestSessionPoolRebuildsOnADepthChange is the other cache case: the first
 // frames render before the profile message arrives, so a pool built at
-// truecolor must not survive a switch to 256 colours. On gruvbox_dark the pool
-// folds differently at the two depths: two of its accents land on one 256
-// entry. (Nord used to, until its accents stopped landing on the same few
-// cube entries.)
+// truecolor must not survive a switch to 256 colours. On kanagawa the pool
+// folds differently at the two depths: it has 10 entries at truecolor and 9
+// at 256.
 func TestSessionPoolRebuildsOnADepthChange(t *testing.T) {
-	withTheme(t, "gruvbox_dark")
+	withTheme(t, "kanagawa")
 	m, _ := sessionColorOS(t, 120, 40)
 
 	prev := overlay.CurrentDepth()
@@ -357,6 +356,6 @@ func TestSessionPoolRebuildsOnADepthChange(t *testing.T) {
 	narrow := m.sessionPool()
 
 	if len(wide) == len(narrow) {
-		t.Errorf("a depth change served a pool of %d both times; gruvbox_dark folds differently at 256", len(narrow))
+		t.Errorf("a depth change served a pool of %d both times; kanagawa folds differently at 256", len(narrow))
 	}
 }
