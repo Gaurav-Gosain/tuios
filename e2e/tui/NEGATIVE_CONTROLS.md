@@ -9296,6 +9296,21 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestSelfExecFreezesPaneDuringHandoff|TestHandoffPutBackAppliesWhatWasHeld)$' .
 ```
 
+### Hooks are held across a handoff
+
+- `TestHandoffHoldsHooks`: an `after-workspace-switch` hook sleeps 3 s and appends to a file. A `select-workspace` on a connection opened before the handoff, answered by the old image, lands in a 1.5 s hold between the manifest and the exec. "exec": after the handoff, once the hook would have ended, the daemon must have no `<defunct>` child and the file must be empty. "put back": the binary is replaced in the hold, the handoff is put back, and the hook must run once.
+
+The hooks wait on the pipe holds of `handoff_refuse.go`, which shut once the panes are frozen; there is no hold of their own in the hooks manager. Run on 2026-10-31 on macOS arm64 (Darwin 27, Go 1.27.3) against `pr/live-handoff-5`, one build per control.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| A hook takes no pipe hold | drop `m.SetHold(d.pipes.hold)` in `loadHooks` | `TestHandoffHoldsHooks/exec`: "the daemon has zombie children after the handoff: [5257 <defunct> <defunct>]", "a hook fired in the handoff's hold ran across the exec: \"ran\\n\"" | **caught** |
+| A put-back leaves the waiting hooks waiting | drop `close(p.closed)` from `pipeHolds.open` | `TestHandoffHoldsHooks/put_back`: "the hook held during the handoff ran 0 times after the put-back, want once" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestHandoffHoldsHooks$' .
+```
+
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on
