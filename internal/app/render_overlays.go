@@ -451,7 +451,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// The message view is drawn after the log viewer, which opens it.
 	layers = m.renderMessageView(layers)
 
-	showScriptIndicator := true
+	showScriptIndicator := m.tapeStatusShown()
 	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {
 		elapsed := time.Since(m.ScriptFinishedTime)
 		if elapsed > scriptDoneLinger {

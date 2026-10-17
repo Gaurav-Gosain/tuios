@@ -1201,6 +1201,11 @@ var optionSpecs = []Option{
 		Description: "Open the review dialog on detection instead of only badging it",
 		Default:     "false",
 	},
+	{
+		Path: "tape.show_status", Type: OptionBool, Section: "tape",
+		Description: "Show the RUNNING pill and a message while a tape plays",
+		Default:     "true",
+	},
 
 	// [dock]
 	// The three component lists and the [dock.custom] tables are absent for the

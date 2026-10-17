@@ -2983,7 +2983,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// the tape ends, by reportScriptResult.
 			cmd, err = m.executeTapeScript(msg.TapeScript, msg.RequestID)
 			if err == nil {
-				m.ShowNotification(notificationMsg, "info", m.Settings.NotificationDuration)
+				if m.tapeStatusShown() {
+					m.ShowNotification(notificationMsg, "info", m.Settings.NotificationDuration)
+				}
 				return m, tea.Batch(cmd, relisten)
 			}
 		default:

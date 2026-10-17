@@ -288,6 +288,12 @@ func (m *OS) evaluateTapeDir(dir string) {
 	m.ShowNotification(message, notifType, tapeBannerDuration)
 }
 
+// tapeStatusShown reports whether a playing tape draws its status pill and
+// its start message ([tape] show_status, on by default).
+func (m *OS) tapeStatusShown() bool {
+	return m.UserConfig == nil || m.UserConfig.Tape.TapeStatusShown()
+}
+
 // tapeAutoReviewEnabled reports whether the user opted into auto-opening the
 // review dialog on detection ([tape] auto_review = true).
 func (m *OS) tapeAutoReviewEnabled() bool {

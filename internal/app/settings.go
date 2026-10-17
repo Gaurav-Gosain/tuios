@@ -724,6 +724,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows([]settingsRow{
 			opt("tape.autorun"),
 			opt("tape.auto_review"),
+			opt("tape.show_status"),
 		}),
 	}
 

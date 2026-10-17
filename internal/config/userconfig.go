@@ -201,6 +201,15 @@ type StartupConfig struct {
 type TapeConfig struct {
 	Autorun    string `toml:"autorun"`     // off | ask | auto (default: ask)
 	AutoReview bool   `toml:"auto_review"` // auto-open the review dialog on detection (default: false)
+	// ShowStatus draws the RUNNING pill and the "running a tape" message while
+	// a tape plays. Nil means shown. A recording made with a tape turns it off,
+	// so the frames show the app and not the player.
+	ShowStatus *bool `toml:"show_status"`
+}
+
+// TapeStatusShown reports whether a playing tape shows its status pill.
+func (c TapeConfig) TapeStatusShown() bool {
+	return c.ShowStatus == nil || *c.ShowStatus
 }
 
 // DaemonConfig holds daemon-related settings
