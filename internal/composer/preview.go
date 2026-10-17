@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // Image previews.
@@ -174,17 +172,17 @@ func (m *Model) renderStrip(width int, in inks) []string {
 		return nil
 	}
 	mode := m.previewMode()
-	dim := overlay.Style(in.surface).Foreground(overlay.Readable(in.pal.FgDim, in.surface))
-	pad := overlay.Style(in.surface).Render(strings.Repeat(" ", gutter))
+	dim := on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface))
+	pad := on(in.surface).Render(strings.Repeat(" ", gutter))
 	if mode == PreviewText {
 		out := make([]string, 0, min(len(imgs), maxThumbs)+1)
 		for i, b := range imgs {
 			if i == maxThumbs {
-				out = append(out, overlay.Fill(pad+dim.Render("+"+strconv.Itoa(len(imgs)-maxThumbs)+" more"), width, in.surface))
+				out = append(out, fill(pad+dim.Render("+"+strconv.Itoa(len(imgs)-maxThumbs)+" more"), width, in.surface))
 				break
 			}
 			line := "Image #" + strconv.Itoa(b.n) + " · " + b.img.measureWords() + " · " + byteWords(len(b.img.Data))
-			out = append(out, overlay.Fill(pad+dim.Render(ansi.Truncate(line, width-gutter, "…")), width, in.surface))
+			out = append(out, fill(pad+dim.Render(ansi.Truncate(line, width-gutter, "…")), width, in.surface))
 		}
 		return out
 	}
@@ -203,7 +201,7 @@ func (m *Model) renderStrip(width int, in inks) []string {
 		}
 		if shown > 0 {
 			for r := range rows {
-				rows[r].WriteString(overlay.Style(in.surface).Render(" "))
+				rows[r].WriteString(on(in.surface).Render(" "))
 			}
 			col++
 		}
@@ -211,7 +209,7 @@ func (m *Model) renderStrip(width int, in inks) []string {
 		if mode == PreviewCells {
 			cells = m.preview.Cells(b.img, cols, h)
 		}
-		blank := overlay.Style(in.field).Render(strings.Repeat(" ", cols))
+		blank := on(in.field).Render(strings.Repeat(" ", cols))
 		for r := range ThumbRows {
 			if r < len(cells) {
 				rows[r].WriteString(cells[r])
@@ -232,7 +230,7 @@ func (m *Model) renderStrip(width int, in inks) []string {
 	}
 	out := make([]string, len(rows))
 	for r := range rows {
-		out[r] = overlay.Fill(rows[r].String(), width, in.surface)
+		out[r] = fill(rows[r].String(), width, in.surface)
 	}
 	return out
 }
@@ -254,13 +252,13 @@ func byteWords(n int) string {
 func (m *Model) renderImageView(width int, in inks) []string {
 	p := m.pager
 	img := p.block.img
-	head := overlay.Style(in.surface).Foreground(overlay.Readable(in.pal.Fg, in.surface)).Bold(true).
+	head := on(in.surface).Foreground(in.st.readable(in.st.Text, in.surface)).Bold(true).
 		Render("Image #" + strconv.Itoa(p.block.n))
-	head += overlay.Style(in.surface).Foreground(overlay.Readable(in.pal.FgDim, in.surface)).
+	head += on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface)).
 		Render(" · " + img.measureWords() + " · " + byteWords(len(img.Data)))
-	out := []string{overlay.Fill(ansi.Truncate(head, width, "…"), width, in.surface)}
-	dim := overlay.Style(in.surface).Foreground(overlay.Readable(in.pal.FgDim, in.surface))
-	pad := overlay.Style(in.surface).Render(strings.Repeat(" ", gutter))
+	out := []string{fill(ansi.Truncate(head, width, "…"), width, in.surface)}
+	dim := on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface))
+	pad := on(in.surface).Render(strings.Repeat(" ", gutter))
 	mode := m.previewMode()
 	if mode == PreviewText {
 		p.viewCols, p.viewRows = 0, 0
@@ -269,7 +267,7 @@ func (m *Model) renderImageView(width int, in inks) []string {
 			line += " Press o to open the image."
 		}
 		for _, l := range wrapWords(line, width-gutter) {
-			out = append(out, overlay.Fill(pad+dim.Render(l), width, in.surface))
+			out = append(out, fill(pad+dim.Render(l), width, in.surface))
 		}
 		return out
 	}
@@ -279,13 +277,13 @@ func (m *Model) renderImageView(width int, in inks) []string {
 	if mode == PreviewCells {
 		cells = m.preview.Cells(img, cols, rows)
 	}
-	blank := overlay.Style(in.field).Render(strings.Repeat(" ", cols))
+	blank := on(in.field).Render(strings.Repeat(" ", cols))
 	for r := range rows {
 		line := blank
 		if r < len(cells) {
 			line = cells[r]
 		}
-		out = append(out, overlay.Fill(pad+line, width, in.surface))
+		out = append(out, fill(pad+line, width, in.surface))
 	}
 	if mode == PreviewPixels {
 		m.places = append(m.places, Placement{Image: img, Row: 1, Col: gutter, Cols: cols, Rows: rows})

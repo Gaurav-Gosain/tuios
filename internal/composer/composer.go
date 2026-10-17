@@ -120,6 +120,9 @@ type Model struct {
 	frame   []string
 	frameAt frameKey
 	drawn   uint64
+	// hints is the last list Hints made, and hintsAt what it was made for.
+	hints   []Hint
+	hintsAt hintsKey
 
 	// preview draws pictures of the images, nil for words only. places is
 	// where the last frame put them.

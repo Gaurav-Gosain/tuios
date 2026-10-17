@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // History: the messages sent to the same target before, which up brings back.
@@ -234,37 +232,37 @@ func (m *Model) historyKey(msg tea.KeyPressMsg) {
 // renderHistorySearch draws the open search under the editor.
 func (m *Model) renderHistorySearch(width int, in inks) []string {
 	s := m.hsearch
-	pal := in.pal
+	st := &in.st
 	bg := in.surface
-	pad := overlay.Style(bg).Render(strings.Repeat(" ", gutter))
-	dim := overlay.Style(bg).Foreground(overlay.Readable(pal.FgDim, bg))
-	out := []string{overlay.Fill(pad+dim.Render("history: ")+overlay.Style(bg).Foreground(overlay.Readable(pal.Fg, bg)).Render(s.query)+overlay.Cursor(" ", bg, in.text), width, bg)}
+	pad := on(bg).Render(strings.Repeat(" ", gutter))
+	dim := on(bg).Foreground(st.readable(st.Dim, bg))
+	out := []string{fill(pad+dim.Render("history: ")+on(bg).Foreground(st.readable(st.Text, bg)).Render(s.query)+cursor(" ", bg, in.text), width, bg)}
 	matches := m.historyMatches()
 	if len(matches) == 0 {
-		return append(out, overlay.Fill(pad+dim.Render("No message sent before holds that."), width, bg))
+		return append(out, fill(pad+dim.Render("No message sent before holds that."), width, bg))
 	}
 	sel := min(s.sel, len(matches)-1)
 	top := max(0, min(sel-historyRows+1, len(matches)-historyRows))
 	for i := top; i < len(matches) && i < top+historyRows; i++ {
-		st := overlay.RowState{Cursor: i == sel, Focused: true}
-		ground := pal.Ground(st, bg)
+		selected := i == sel
+		ground := st.ground(selected, bg)
 		line, _, more := strings.Cut(strings.TrimSpace(JoinParts(m.hist[matches[i]].Parts)), "\n")
 		line = strings.Join(strings.Fields(line), " ")
 		if more {
 			line += " …"
 		}
-		row := overlay.Style(ground).Foreground(overlay.Readable(pal.FgMute, ground)).Render(strconv.Itoa(len(m.hist)-matches[i])+" ") +
-			overlay.Style(ground).Foreground(overlay.Readable(pal.Fg, ground)).Render(line)
-		out = append(out, pad+pal.Row(ansi.Truncate(row, width-gutter, "…"), width-gutter, st, bg))
+		row := on(ground).Foreground(st.readable(st.Muted, ground)).Render(strconv.Itoa(len(m.hist)-matches[i])+" ") +
+			on(ground).Foreground(st.readable(st.Text, ground)).Render(line)
+		out = append(out, pad+st.row(ansi.Truncate(row, width-gutter, "…"), width-gutter, selected, bg))
 	}
 	return out
 }
 
 // historyHints are the editor's keys while the search is open.
-func historyHints() []overlay.Hint {
-	return []overlay.Hint{
-		{Key: overlay.EnterKey(), Label: "load"},
-		{Key: arrow("↑↓", "up/down"), Label: "choose"},
+func historyHints(ascii bool) []Hint {
+	return []Hint{
+		{Key: enterKey(ascii), Label: "load"},
+		{Key: arrowKeys(ascii), Label: "choose"},
 		{Key: "esc", Label: "close"},
 	}
 }

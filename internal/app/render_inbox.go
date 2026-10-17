@@ -543,7 +543,7 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	if p.Composing {
 		body = append(body, "")
 		add(pal.FgDim, "Answer:")
-		for _, l := range p.Answer.Render(max(textW-2, 8), pal, bg) {
+		for _, l := range p.Answer.Render(max(textW-2, 8), composerStyles(pal), bg) {
 			body = append(body, overlay.Style(bg).Render("  ")+l)
 		}
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}

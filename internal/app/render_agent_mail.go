@@ -188,7 +188,7 @@ func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit
 	}
 	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	if st.Comp != nil {
-		hints = st.Comp.Hints()
+		hints = composerHints(st.Comp.Hints(overlay.UseASCII()))
 	}
 	draft := m.agentMailDraftLines("message: ", width)
 	extra := 1 + len(draft)
@@ -234,7 +234,7 @@ func (m *OS) agentMailDraftLines(prompt string, width int) []string {
 	if st.Comp == nil {
 		return out
 	}
-	return append(out, st.Comp.Render(max(width, 8), pal, bg)...)
+	return append(out, st.Comp.Render(max(width, 8), composerStyles(pal), bg)...)
 }
 
 // agentMailWindowName is what to call a window the overlay was opened for.
@@ -426,7 +426,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 	if st.Composing {
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 		if st.Comp != nil {
-			hints = st.Comp.Hints()
+			hints = composerHints(st.Comp.Hints(overlay.UseASCII()))
 		}
 		draft = m.agentMailDraftLines("reply: ", width)
 		extra += 1 + len(draft)

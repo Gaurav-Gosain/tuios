@@ -936,7 +936,7 @@ func (m *OS) inboxReplyDetail() (detail func(width int) []string, hints []overla
 	if ed == nil {
 		return nil, nil, false
 	}
-	return ed.lines, ed.comp.Hints(), true
+	return ed.lines, composerHints(ed.comp.Hints(overlay.UseASCII())), true
 }
 
 // lines is the editor as drawn at width. The lines are kept until the width,
@@ -948,7 +948,7 @@ func (ed *inboxReplyEditor) lines(width int) []string {
 	inner := max(width-2, 8)
 	// The composer keeps its own last frame, so this call is cheap when
 	// nothing changed, and Drawn says whether it drew a new one.
-	body := ed.comp.Render(inner, pal, pal.Surface)
+	body := ed.comp.Render(inner, composerStyles(pal), pal.Surface)
 	key := inboxReplyFrame{width: width, theme: theme.Generation(), drawn: ed.comp.Drawn()}
 	if ed.frame != nil && ed.frameAt == key {
 		return ed.frame

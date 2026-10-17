@@ -84,3 +84,23 @@ func why(t *testing.T, bad string) string {
 	}
 	return "imported by:\n" + strings.Join(hits, "\n")
 }
+
+// The composer is a library in waiting: the plan is to publish it as
+// tuios.dev/composer once it has settled. It takes its look from a Styles
+// value the host fills, so the move is a rename only while nothing in it,
+// its tests included, imports a tuios package. Nothing else would notice an
+// import of internal/overlay creeping back in.
+func TestComposerImportsNoTuiosPackage(t *testing.T) {
+	const self = "github.com/Gaurav-Gosain/tuios/internal/composer"
+	out, err := exec.Command("go", "list", "-deps", "-test", "./../../internal/composer").Output()
+	if err != nil {
+		t.Fatalf("go list -deps -test internal/composer: %v", err)
+	}
+	for l := range strings.SplitSeq(string(out), "\n") {
+		pkg := strings.TrimSpace(l)
+		if !strings.HasPrefix(pkg, "github.com/Gaurav-Gosain/tuios/") || strings.HasPrefix(pkg, self) {
+			continue
+		}
+		t.Errorf("internal/composer or its tests import %s", pkg)
+	}
+}

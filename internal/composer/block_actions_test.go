@@ -3,8 +3,6 @@ package composer
 import (
 	"strings"
 	"testing"
-
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 func TestBlockOpenExpandRemove(t *testing.T) {
@@ -13,7 +11,7 @@ func TestBlockOpenExpandRemove(t *testing.T) {
 	m.Paste(lines(42), false)
 
 	// The keys act on the block right before the cursor, and only then.
-	if hints := m.Hints(); hints[0].Key != "ctrl+o" {
+	if hints := m.Hints(false); hints[0].Key != "ctrl+o" {
 		t.Fatalf("hints after a block = %+v, want its keys", hints)
 	}
 	press(m, "left")
@@ -27,13 +25,13 @@ func TestBlockOpenExpandRemove(t *testing.T) {
 	if !m.Opened() {
 		t.Fatal("ctrl+o did not open the block")
 	}
-	pal := theme.UI()
-	frame := strings.Join(m.Render(60, pal, pal.Surface), "\n")
+	st := testStyles()
+	frame := strings.Join(m.Render(60, st, testSurface), "\n")
 	if !strings.Contains(frame, "line 01 of the paste") || strings.Contains(frame, "line 42 of the paste") {
 		t.Fatalf("the open block does not start at its first line:\n%s", frame)
 	}
 	press(m, "end")
-	frame = strings.Join(m.Render(60, pal, pal.Surface), "\n")
+	frame = strings.Join(m.Render(60, st, testSurface), "\n")
 	if !strings.Contains(frame, "line 42 of the paste") {
 		t.Fatalf("end did not scroll to the last line:\n%s", frame)
 	}

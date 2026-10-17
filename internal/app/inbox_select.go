@@ -82,7 +82,7 @@ func (m *OS) selectLine(width int) string {
 	pal := theme.UI()
 	bg := pal.Surface
 	label := overlay.Style(bg).Foreground(overlay.Readable(pal.FgDim, bg)).Render("select ")
-	lines := m.Inbox.selectEd.Render(max(width-7, 8), pal, bg)
+	lines := m.Inbox.selectEd.Render(max(width-7, 8), composerStyles(pal), bg)
 	if len(lines) == 0 {
 		return label
 	}

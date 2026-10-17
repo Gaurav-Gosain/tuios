@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // @ completion.
@@ -177,38 +175,38 @@ func (m *Model) renderMentions(width int, in inks) []string {
 	if m.mention == nil {
 		return nil
 	}
-	pal := in.pal
+	st := &in.st
 	bg := in.surface
-	pad := overlay.Style(bg).Render(strings.Repeat(" ", gutter))
+	pad := on(bg).Render(strings.Repeat(" ", gutter))
 	if len(items) == 0 {
-		dim := overlay.Style(bg).Foreground(overlay.Readable(pal.FgDim, bg))
-		return []string{overlay.Fill(pad+dim.Render("No pane, agent or file matches."), width, bg)}
+		dim := on(bg).Foreground(st.readable(st.Dim, bg))
+		return []string{fill(pad+dim.Render("No pane, agent or file matches."), width, bg)}
 	}
 	sel := min(m.mention.sel, len(items)-1)
 	top := max(0, min(sel-mentionRows+1, len(items)-mentionRows))
 	out := make([]string, 0, mentionRows)
 	for i := top; i < len(items) && i < top+mentionRows; i++ {
 		it := items[i]
-		st := overlay.RowState{Cursor: i == sel, Focused: true}
-		ground := pal.Ground(st, bg)
-		s := overlay.Style(ground)
+		selected := i == sel
+		ground := st.ground(selected, bg)
+		s := on(ground)
 		badge := mentionBadges[it.Kind]
-		row := s.Foreground(overlay.Readable(pal.FgMute, ground)).Render(badge+strings.Repeat(" ", 6-len(badge))) +
-			s.Foreground(overlay.Readable(pal.Fg, ground)).Render(it.Label)
+		row := s.Foreground(st.readable(st.Muted, ground)).Render(badge+strings.Repeat(" ", 6-len(badge))) +
+			s.Foreground(st.readable(st.Text, ground)).Render(it.Label)
 		if it.Note != "" {
-			row += s.Foreground(overlay.Readable(pal.FgDim, ground)).Render("  " + it.Note)
+			row += s.Foreground(st.readable(st.Dim, ground)).Render("  " + it.Note)
 		}
 		row = ansi.Truncate(row, width-gutter, "…")
-		out = append(out, pad+pal.Row(row, width-gutter, st, bg))
+		out = append(out, pad+st.row(row, width-gutter, selected, bg))
 	}
 	return out
 }
 
 // mentionHints are the editor's keys while the list is open.
-func mentionHints() []overlay.Hint {
-	return []overlay.Hint{
+func mentionHints(ascii bool) []Hint {
+	return []Hint{
 		{Key: "tab", Label: "insert"},
-		{Key: arrow("↑↓", "up/down"), Label: "choose"},
+		{Key: arrowKeys(ascii), Label: "choose"},
 		{Key: "esc", Label: "close"},
 	}
 }

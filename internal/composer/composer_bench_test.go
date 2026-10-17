@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // BenchmarkKeystroke16KiB is the composer's perf budget: one typed key and
@@ -17,7 +15,7 @@ func BenchmarkKeystroke16KiB(b *testing.B) {
 	line := "the quick brown fox jumps over the lazy dog, 0123456789 and more\n"
 	m.Insert(strings.Repeat(line, (16<<10)/len(line)), false)
 	m.cur = len(m.cells) / 2
-	pal := theme.UI()
+	st := testStyles()
 	a := tea.KeyPressMsg{Code: 'a', Text: "a"}
 	bs := tea.KeyPressMsg{Code: tea.KeyBackspace}
 	b.ReportAllocs()
@@ -29,7 +27,7 @@ func BenchmarkKeystroke16KiB(b *testing.B) {
 			m.Update(bs, false)
 		}
 		i++
-		m.Render(80, pal, pal.Surface)
+		m.Render(80, st, testSurface)
 	}
 }
 
@@ -39,10 +37,10 @@ func BenchmarkKeystroke16KiB(b *testing.B) {
 func BenchmarkFrameUnchanged(b *testing.B) {
 	m := New(Options{})
 	m.Insert(strings.Repeat("the quick brown fox jumps over the lazy dog\n", 8), false)
-	pal := theme.UI()
-	m.Render(80, pal, pal.Surface)
+	st := testStyles()
+	m.Render(80, st, testSurface)
 	b.ReportAllocs()
 	for b.Loop() {
-		m.Render(80, pal, pal.Surface)
+		m.Render(80, st, testSurface)
 	}
 }

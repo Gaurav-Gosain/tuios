@@ -2,8 +2,6 @@ package composer
 
 import (
 	"image/color"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // frameKey is everything a frame depends on. Render keeps the last frame and
@@ -27,15 +25,19 @@ type frameKey struct {
 	hopen   bool
 	hsearch string
 	hsel    int
-	depth   overlay.Depth
-	colours [10][4]uint32
+	plain   bool
+	sigil   string
+	colours [9][4]uint32
 }
 
 // frameKey is the key of a frame drawn now at width.
-func (m *Model) frameKey(width int, pal overlay.Palette, surface color.Color) frameKey {
+//
+// The functions of st are not in the key. A host that changes what they do
+// changes a colour or a flag of st with them.
+func (m *Model) frameKey(width int, st *Styles, surface color.Color) frameKey {
 	k := frameKey{
 		ver: m.ver, cur: m.cur, top: m.top, width: width, notice: m.notice,
-		pager: m.pager, ascii: overlay.UseASCII(), depth: pal.Depth,
+		pager: m.pager, ascii: st.ASCII, plain: st.Plain, sigil: st.Sigil,
 	}
 	if m.pager != nil {
 		k.pagerTop = m.pager.top
@@ -52,9 +54,9 @@ func (m *Model) frameKey(width int, pal overlay.Palette, surface color.Color) fr
 		k.mentionAt, k.mentionSel = m.mention.at, m.mention.sel
 		k.mentionV = m.completer.Version()
 	}
-	// Colours are compared by value: a palette's fields are interfaces, and
-	// comparing them with == can panic on a type that is not comparable.
-	for i, c := range [...]color.Color{surface, pal.Card, pal.Fg, pal.FgMute, pal.FgDim, pal.AccentBright, pal.Accent, pal.Warning, pal.RowSel, pal.RowSelQuiet} {
+	// Colours are compared by value: they are interfaces, and comparing them
+	// with == can panic on a type that is not comparable.
+	for i, c := range [...]color.Color{surface, st.Field, st.Text, st.Muted, st.Dim, st.Key, st.Accent, st.Warning, st.Selected} {
 		k.colours[i] = rgba(c)
 	}
 	return k
@@ -68,7 +70,7 @@ func rgba(c color.Color) [4]uint32 {
 	r, g, b, a := c.RGBA()
 	// NoColor and a transparent black both read as zero; the alpha bit
 	// tells a real colour from none.
-	if !overlay.IsNoColor(c) {
+	if !noColor(c) {
 		a |= 1 << 31
 	}
 	return [4]uint32{r, g, b, a}

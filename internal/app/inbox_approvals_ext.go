@@ -565,7 +565,7 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 				lines = append(lines, overlay.Fill(st.Foreground(pal.Fg).Render("  "+l), width, bg))
 			}
 			lines = append(lines, overlay.Fill(st.Foreground(overlay.Readable(pal.FgDim, bg)).Render("  Reason:"), width, bg))
-			for _, l := range r.ed.Render(max(width-2, 8), pal, bg) {
+			for _, l := range r.ed.Render(max(width-2, 8), composerStyles(pal), bg) {
 				lines = append(lines, st.Render("  ")+l)
 			}
 			return lines

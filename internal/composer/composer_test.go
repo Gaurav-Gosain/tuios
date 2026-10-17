@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // The composer is a state machine whose faults are quiet: a block cut in
@@ -14,6 +15,25 @@ import (
 // the wrong place. These tests hold the four things that would go wrong
 // without a sound: block atomicity, undo and redo, wrap with wide characters,
 // and the expansion at send.
+
+// testStyles is a truecolor look for the tests and the benchmarks. A host
+// fills Styles from its own theme.
+func testStyles() Styles {
+	return Styles{
+		Field:    lipgloss.Color("#1e1e2e"),
+		Text:     lipgloss.Color("#cdd6f4"),
+		Muted:    lipgloss.Color("#a6adc8"),
+		Dim:      lipgloss.Color("#7f849c"),
+		Key:      lipgloss.Color("#b4befe"),
+		Accent:   lipgloss.Color("#89b4fa"),
+		Warning:  lipgloss.Color("#f9e2af"),
+		Selected: lipgloss.Color("#45475a"),
+		Sigil:    "›",
+	}
+}
+
+// testSurface is the ground around the editor in the tests.
+var testSurface = lipgloss.Color("#181825")
 
 func key(s string) tea.KeyPressMsg {
 	switch s {

@@ -6,8 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // pagerExtraRows is how many more rows the open block takes than the editor
@@ -105,19 +103,19 @@ func (m *Model) renderPager(width int, in inks) []string {
 	p.top = min(max(p.top, 0), max(len(p.lines)-page, 0))
 	end := min(p.top+page, len(p.lines))
 
-	head := overlay.Style(in.surface).Foreground(overlay.Readable(in.pal.Fg, in.surface)).Bold(true).
+	head := on(in.surface).Foreground(in.st.readable(in.st.Text, in.surface)).Bold(true).
 		Render("Pasted text #" + strconv.Itoa(p.block.n))
 	where := " · " + p.block.measureWords()
 	if len(p.lines) > page {
 		where += " · rows " + strconv.Itoa(p.top+1) + " to " + strconv.Itoa(end) + " of " + strconv.Itoa(len(p.lines))
 	}
-	head += overlay.Style(in.surface).Foreground(overlay.Readable(in.pal.FgDim, in.surface)).Render(where)
+	head += on(in.surface).Foreground(in.st.readable(in.st.Dim, in.surface)).Render(where)
 	out := make([]string, 0, page+1)
-	out = append(out, overlay.Fill(ansi.Truncate(head, width, "…"), width, in.surface))
-	text := overlay.Style(in.field).Foreground(in.text)
-	pad := overlay.Style(in.field).Render(strings.Repeat(" ", gutter))
+	out = append(out, fill(ansi.Truncate(head, width, "…"), width, in.surface))
+	text := on(in.field).Foreground(in.text)
+	pad := on(in.field).Render(strings.Repeat(" ", gutter))
 	for _, l := range p.lines[p.top:end] {
-		out = append(out, overlay.Fill(pad+text.Render(l), width, in.field))
+		out = append(out, fill(pad+text.Render(l), width, in.field))
 	}
 	return out
 }

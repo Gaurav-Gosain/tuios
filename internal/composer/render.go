@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // gutter is the cells in front of each row: the sigil on the first row of the
@@ -19,7 +17,7 @@ const blockMix = 0.18
 
 // inks are the colours one frame is drawn with, worked out once per frame.
 type inks struct {
-	pal                  overlay.Palette
+	st                   Styles
 	surface, field       color.Color
 	text, mute, dim, key color.Color
 	block                color.Color
@@ -30,36 +28,36 @@ type inks struct {
 	blank string
 }
 
-// newInks takes a frame's colours from the palette. surface is the ground
+// newInks takes a frame's colours from the styles. surface is the ground
 // around the editor, the panel's.
-func newInks(pal overlay.Palette, surface color.Color) inks {
-	in := inks{pal: pal, surface: surface, field: pal.Card}
-	in.text = overlay.Readable(pal.Fg, in.field)
-	in.mute = overlay.Readable(pal.FgMute, in.field)
-	in.dim = overlay.Readable(pal.FgDim, in.field)
-	in.key = overlay.Readable(pal.AccentBright, in.field)
+func newInks(st Styles, surface color.Color) inks {
+	in := inks{st: st, surface: surface, field: st.Field}
+	in.text = st.readable(st.Text, in.field)
+	in.mute = st.readable(st.Muted, in.field)
+	in.dim = st.readable(st.Dim, in.field)
+	in.key = st.readable(st.Key, in.field)
 	in.block = in.field
-	if pal.Depth != overlay.Depth16 && !overlay.IsNoColor(in.field) {
-		in.block = overlay.Shown(overlay.MixColors(in.field, pal.Accent, blockMix))
+	if st.Blend != nil && !noColor(in.field) {
+		in.block = st.Blend(in.field, st.Accent, blockMix)
 	}
-	in.selected = pal.Ground(overlay.RowState{Cursor: true, Focused: true}, in.block)
-	in.blockText = overlay.Readable(pal.Fg, in.block)
-	in.blockNum = overlay.Readable(pal.AccentBright, in.block)
-	in.blockDim = overlay.Readable(pal.FgDim, in.block)
+	in.selected = st.Selected
+	in.blockText = st.readable(st.Text, in.block)
+	in.blockNum = st.readable(st.Key, in.block)
+	in.blockDim = st.readable(st.Dim, in.block)
 	return in
 }
 
-// Render draws the editor at width cells, on surface, the ground of the panel
-// it sits in. Every line it returns is width cells wide and carries its own
+// Render draws the editor at width cells in st, on surface, the ground of the
+// panel it sits in. Every line it returns is width cells wide and carries its own
 // colours. It is the editor's rows, then the notice when there is one; while
 // a block is open it is the block instead.
-func (m *Model) Render(width int, pal overlay.Palette, surface color.Color) []string {
+func (m *Model) Render(width int, st Styles, surface color.Color) []string {
 	width = max(width, gutter+4)
-	key := m.frameKey(width, pal, surface)
+	key := m.frameKey(width, &st, surface)
 	if m.frame != nil && m.frameAt == key {
 		return m.frame
 	}
-	m.frame, m.frameAt = m.render(width, pal, surface), key
+	m.frame, m.frameAt = m.render(width, st, surface), key
 	m.drawn++
 	return m.frame
 }
@@ -69,8 +67,8 @@ func (m *Model) Render(width int, pal overlay.Palette, surface color.Color) []st
 func (m *Model) Drawn() uint64 { return m.drawn }
 
 // render draws a frame the cache does not hold.
-func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []string {
-	in := newInks(pal, surface)
+func (m *Model) render(width int, st Styles, surface color.Color) []string {
+	in := newInks(st, surface)
 	m.places = m.places[:0]
 	if m.pager != nil && m.pager.block.img != nil {
 		return m.renderImageView(width, in)
@@ -88,30 +86,30 @@ func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []st
 
 	out := m.renderStrip(width, in)
 	sel := m.selectedBlock()
-	in.blank = overlay.Style(in.field).Render("  ")
+	in.blank = on(in.field).Render("  ")
 	for r := m.top; r < m.top+shown; r++ {
 		var b strings.Builder
 		b.WriteString(m.gutterMark(r, len(rows), shown, in))
 		if len(m.cells) == 0 {
-			b.WriteString(overlay.Cursor(" ", in.field, in.text))
+			b.WriteString(cursor(" ", in.field, in.text))
 			if m.opt.Placeholder != "" {
 				ph := ansi.Truncate(m.opt.Placeholder, textW, "…")
-				b.WriteString(overlay.Style(in.field).Foreground(in.mute).Render(ph))
+				b.WriteString(on(in.field).Foreground(in.mute).Render(ph))
 			}
 		} else {
 			m.renderRow(&b, rows[r], r == cr, textW, sel, in)
 		}
-		out = append(out, overlay.Fill(b.String(), width, in.field))
+		out = append(out, fill(b.String(), width, in.field))
 	}
 	out = append(out, m.renderMentions(width, in)...)
 	if m.hsearch != nil {
 		out = append(out, m.renderHistorySearch(width, in)...)
 	}
 	if m.notice != "" {
-		warn := overlay.Readable(pal.Warning, surface)
+		warn := st.readable(st.Warning, surface)
 		for _, l := range wrapWords(m.notice, width-gutter) {
-			out = append(out, overlay.Fill(overlay.Style(surface).Render(strings.Repeat(" ", gutter))+
-				overlay.Style(surface).Foreground(warn).Render(l), width, surface))
+			out = append(out, fill(on(surface).Render(strings.Repeat(" ", gutter))+
+				on(surface).Foreground(warn).Render(l), width, surface))
 		}
 	}
 	return out
@@ -121,30 +119,30 @@ func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []st
 // first row, an arrow on the first or last row shown when more of the draft
 // is past it.
 func (m *Model) gutterMark(r, rows, shown int, in inks) string {
-	style := overlay.Style(in.field)
+	style := on(in.field)
 	switch {
 	case r == 0:
-		return style.Foreground(in.key).Bold(true).Render(overlay.Sigil())
+		return style.Foreground(in.key).Bold(true).Render(in.st.Sigil + " ")
 	case r == m.top && m.top > 0:
-		return style.Foreground(in.mute).Render(arrow("↑", "^") + " ")
+		return style.Foreground(in.mute).Render(in.st.arrow("↑", "^") + " ")
 	case r == m.top+shown-1 && r < rows-1:
-		return style.Foreground(in.mute).Render(arrow("↓", "v") + " ")
+		return style.Foreground(in.mute).Render(in.st.arrow("↓", "v") + " ")
 	}
 	return in.blank
 }
 
-// arrow is glyph, or ascii where the terminal draws only ASCII.
-func arrow(glyph, ascii string) string {
-	if overlay.UseASCII() {
-		return ascii
+// arrowKeys names the up and down keys.
+func arrowKeys(ascii bool) string {
+	if ascii {
+		return "up/down"
 	}
-	return glyph
+	return "↑↓"
 }
 
 // renderRow writes one row of the draft. Text is drawn in runs, so a row
 // costs a few styled strings and not one per character.
 func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW int, sel *block, in inks) {
-	textStyle := overlay.Style(in.field).Foreground(in.text)
+	textStyle := on(in.field).Foreground(in.text)
 	var run strings.Builder
 	flush := func() {
 		if run.Len() > 0 {
@@ -156,7 +154,7 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 		c := m.cells[i]
 		if hasCursor && i == m.cur {
 			flush()
-			b.WriteString(overlay.Cursor(cursorText(c), in.field, in.text))
+			b.WriteString(cursor(cursorText(c), in.field, in.text))
 			if c.block != nil {
 				// The cursor cell took the bracket. The rest of the
 				// label follows it.
@@ -177,7 +175,7 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 	}
 	flush()
 	if hasCursor && m.cur == row.end && (row.end == len(m.cells) || !row.soft) {
-		b.WriteString(overlay.Cursor(" ", in.field, in.text))
+		b.WriteString(cursor(" ", in.field, in.text))
 	}
 }
 
@@ -202,11 +200,11 @@ func renderBlock(bl *block, maxW int, selected, skipOpen bool, in inks) string {
 	ground, text, num, dim := in.block, in.blockText, in.blockNum, in.blockDim
 	if selected {
 		ground = in.selected
-		text = overlay.Readable(in.pal.Fg, ground)
-		num = overlay.Readable(in.pal.AccentBright, ground)
-		dim = overlay.Readable(in.pal.FgDim, ground)
+		text = in.st.readable(in.st.Text, ground)
+		num = in.st.readable(in.st.Key, ground)
+		dim = in.st.readable(in.st.Dim, ground)
 	}
-	st := overlay.Style(ground)
+	st := on(ground)
 	var s string
 	if ansi.StringWidth(bl.label) > maxW {
 		label := ansi.Truncate(bl.label, maxW, "…")
@@ -228,7 +226,7 @@ func renderBlock(bl *block, maxW int, selected, skipOpen bool, in inks) string {
 		// At 16 colours a selected block is underlined, not reversed: the
 		// cursor right after it is drawn in reverse video, and two reversed
 		// spans side by side read as one bar with no cursor in it.
-		s = in.pal.Mark(s, overlay.RowState{Cursor: true})
+		s = in.st.underline(s)
 	}
 	return s
 }
@@ -257,55 +255,108 @@ func wrapWords(s string, width int) []string {
 	return out
 }
 
-// Hints are the keys the editor offers now, for the host's footer.
-func (m *Model) Hints() []overlay.Hint {
+// Hints are the keys the editor offers now, for the host's footer. ascii
+// names the keys in ASCII, as Styles.ASCII draws the editor.
+//
+// The list is kept until the keys change, so a footer drawn every frame
+// costs no allocation. It is shared: do not change it.
+func (m *Model) Hints(ascii bool) []Hint {
+	k := hintsKey{state: m.hintState(), ascii: ascii}
+	if k.state == hintsImage && m.preview != nil {
+		k.canOpen = m.preview.CanOpen()
+	}
+	if m.hints == nil || m.hintsAt != k {
+		m.hints, m.hintsAt = m.opt.hints(k), k
+	}
+	return m.hints
+}
+
+// The editor's states, as its keys tell them apart.
+const (
+	hintsDraft = iota
+	hintsPager
+	hintsHistory
+	hintsMention
+	hintsImage
+	hintsImageBlock
+	hintsPasteBlock
+)
+
+// hintsKey is what the hints depend on.
+type hintsKey struct {
+	state          int
+	ascii, canOpen bool
+}
+
+// hintState is the state the editor is in, for its keys.
+func (m *Model) hintState() int {
 	switch {
 	case m.pager != nil && m.pager.block.img == nil:
-		return []overlay.Hint{
-			{Key: arrow("↑↓", "up/down"), Label: "scroll"},
+		return hintsPager
+	case m.hsearch != nil:
+		return hintsHistory
+	case m.mention != nil:
+		return hintsMention
+	case m.pager != nil && m.pager.block.img != nil:
+		return hintsImage
+	case m.selectedBlock() != nil && m.selectedPaste() == nil:
+		return hintsImageBlock
+	case m.selectedBlock() != nil:
+		return hintsPasteBlock
+	}
+	return hintsDraft
+}
+
+// hints are the keys of one state.
+func (o Options) hints(k hintsKey) []Hint {
+	ascii := k.ascii
+	switch k.state {
+	case hintsPager:
+		return []Hint{
+			{Key: arrowKeys(ascii), Label: "scroll"},
 			{Key: "ctrl+e", Label: "expand"},
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "back"},
 		}
-	case m.hsearch != nil:
-		return historyHints()
-	case m.mention != nil:
-		return mentionHints()
-	case m.pager != nil && m.pager.block.img != nil:
-		hints := []overlay.Hint{}
-		if m.preview != nil && m.preview.CanOpen() {
-			hints = append(hints, overlay.Hint{Key: "o", Label: "open in viewer"})
+	case hintsHistory:
+		return historyHints(ascii)
+	case hintsMention:
+		return mentionHints(ascii)
+	case hintsImage:
+		hints := []Hint{}
+		if k.canOpen {
+			hints = append(hints, Hint{Key: "o", Label: "open in viewer"})
 		}
 		return append(hints,
-			overlay.Hint{Key: "backspace", Label: "remove"},
-			overlay.Hint{Key: "esc", Label: "back"},
+			Hint{Key: "backspace", Label: "remove"},
+			Hint{Key: "esc", Label: "back"},
 		)
-	case m.selectedBlock() != nil && m.selectedPaste() == nil:
-		return []overlay.Hint{
+	case hintsImageBlock:
+		return []Hint{
 			{Key: "ctrl+o", Label: "view"},
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "close"},
 		}
-	case m.selectedBlock() != nil:
-		return []overlay.Hint{
+	case hintsPasteBlock:
+		return []Hint{
 			{Key: "ctrl+o", Label: "open"},
 			{Key: "ctrl+e", Label: "expand"},
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "close"},
 		}
 	}
-	if m.opt.SingleLine {
-		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
+	if o.SingleLine {
+		return []Hint{{Key: enterKey(ascii), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	}
-	hints := []overlay.Hint{
-		{Key: overlay.EnterKey(), Label: "send"},
+	hints := []Hint{
+		{Key: enterKey(ascii), Label: "send"},
 		{Key: "ctrl+j", Label: "new line"},
 	}
-	if m.opt.Images {
-		hints = append(hints, overlay.Hint{Key: "ctrl+v", Label: "paste image"})
+	if o.Images {
+		hints = append(hints, Hint{Key: "ctrl+v", Label: "paste image"})
 	}
 	return append(hints,
-		overlay.Hint{Key: "ctrl+z", Label: "undo", Priority: overlay.HintOptional},
-		overlay.Hint{Key: "esc", Label: "close"},
+		Hint{Key: "ctrl+z", Label: "undo", Optional: true},
+		Hint{Key: "esc", Label: "close"},
 	)
 }
