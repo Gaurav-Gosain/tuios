@@ -241,3 +241,33 @@ func TestFederationLinkRedialsAfterUpgrade(t *testing.T) {
 		t.Errorf("ASSERTION: after the upgrade the daemon has %d live and %d defunct link children, want %d live and none defunct: %v", liveAfter, deadAfter, liveBefore, after)
 	}
 }
+
+// TestDaemonUpgradeRefusalNamesTheServer refuses an upgrade of a named server
+// and reads the command the refusal tells the reader to run. On a named server
+// it has to carry --server, because a bare `tuios kill-server` stops the
+// default daemon and every program running in it.
+func TestDaemonUpgradeRefusalNamesTheServer(t *testing.T) {
+	base := t.TempDir()
+	const server = "e2e-upname"
+	if out, err := handoffCLI(t, base, 30*time.Second, "--server", server, "start-server"); err != nil {
+		t.Fatalf("start-server: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { _, _ = handoffCLI(t, base, 30*time.Second, "--server", server, "kill-server") })
+	notTuios, err := exec.LookPath("false")
+	if err != nil {
+		t.Fatalf("find false: %v", err)
+	}
+
+	text, err := handoffCLI(t, base, 60*time.Second, "--server", server, "daemon", "upgrade", "--binary", notTuios)
+	writeHandoffArtifact(t, map[string]any{"server": server, "text": text, "error": errString(err)})
+
+	if err == nil {
+		t.Fatalf("ASSERTION: an upgrade to %s was not refused:\n%s", notTuios, text)
+	}
+	if want := "'tuios --server " + server + " kill-server'"; !strings.Contains(text, want) {
+		t.Errorf("ASSERTION: the refusal on server %s does not say to run %s:\n%s", server, want, text)
+	}
+	if strings.Contains(text, "'tuios kill-server'") {
+		t.Errorf("ASSERTION: the refusal on server %s says to run the bare 'tuios kill-server', which stops the default daemon:\n%s", server, text)
+	}
+}
