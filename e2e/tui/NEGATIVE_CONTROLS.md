@@ -9618,6 +9618,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_MEASURE=1 \
 - `TestDaemonUpgradeKeepsPaneProcesses` (PR 4) is driven by the command from this PR on.
 - `TestAttachedClientIsToldToReattach`: a real attached client exits with status 0 and prints "The daemon was upgraded to dev. Your programs are still running. Run 'tuios attach e2e-reattach' to continue."; the command reports "1 attached client was told to attach again".
 - `TestFederationLinkRedialsAfterUpgrade`: a daemon linked to a host through the ssh stand-in of `hosts_manage_test.go` has the link up after the upgrade, with one live link child, a new one, and none defunct.
+- `TestFederationLinkToAnotherMachineAfterUpgrade` (`daemon_upgrade_sshd_test.go`, opt in with `TUIOS_E2E_SSHD=1`): the far end of the link is another machine, a Docker container from `testdata/sshd` running sshd and its own daemon of a Linux build of the checkout, reached with the real `ssh` through `TUIOS_SSH` and a client config, key and known_hosts file of the test's own (`-F`, nothing in `~/.ssh`). After the upgrade the link is up, the daemon kept its pid on a new image and has one live ssh child for the link, a new one, and no defunct child, the old image's ssh pid is no longer its child, the container runs one `stdio-proxy` and not two, and the local pane kept its pid. The test skips without Docker, a Linux engine or ssh.
 - `TestDaemonUpgradeRefusalNamesTheServer`: an upgrade of a named server to `false` is refused, and the refusal says to run `tuios --server <name> kill-server`, never the bare `tuios kill-server` that stops the default daemon.
 - `TestDaemonUpgradeFromAPaneIsRefused`: a pane under the default open mode, which holds admin, runs `tuios daemon upgrade --binary <copy>` with no client attached. It must exit non-zero with "daemon-upgrade is for the person", the daemon's image must not change, and the same upgrade from outside every pane then goes through. Run on 2026-10-28 on macOS arm64 (Go 1.26.10). With a client attached the pane's upgrade asks the person; see "A pane's upgrade confirmed at a client" below.
 
@@ -9631,12 +9632,20 @@ Run on 2026-10-17 on macOS arm64, one build per control.
 | The refusal names no server | `killServerCommand` returns the bare `tuios kill-server` | `TestDaemonUpgradeRefusalNamesTheServer`: "the refusal on server e2e-upname does not say to run 'tuios --server e2e-upname kill-server'", "… says to run the bare 'tuios kill-server', which stops the default daemon" | **caught** |
 | A pane with admin may upgrade (2026-10-28) | the `mayActAsHuman` check in `verbDaemonUpgrade` made false | `TestDaemonUpgradeFromAPaneIsRefused`, 2 runs of 2: "a pane upgraded the daemon ({PID:38155 Instance:3731d834-…} then {PID:38155 Instance:bef886f4-…})" | **caught** |
 | The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | none | **not caught** |
+| The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | `TestFederationLinkToAnotherMachineAfterUpgrade`, 3 of 3 runs: "after the upgrade the daemon has defunct children nothing waits for: [49297 <defunct> <defunct>]", "the old image's ssh, pid 49297, is still the daemon's child after the upgrade". `TestFederationLinkRedialsAfterUpgrade` still passes, see below | **caught** |
 
-The last control is not caught by this rig. The stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to a real machine does not end that way; with the stop cut, its ssh child would stay this pid's child across the exec, unread and never waited for. The stop is kept on the strength of that reasoning, not of a test.
+The last control is caught only by the link to the container. In `TestFederationLinkRedialsAfterUpgrade` the stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to another machine is not a client of the daemon, so its ssh is still running at the exec. The exec closes the old image's ends of the ssh's pipes (Go opens them close-on-exec), ssh sees its input end, the far `stdio-proxy` exits, and ssh exits within the 10 s the test waits: the container is back to one proxy. Nothing in the new image waits for that pid (every wait in the daemon is for a pane's own pid), so it stays a defunct child of the daemon for the daemon's life, one more per link at every upgrade. The stop is needed: it closes the link and lets the old image's `cmd.Wait` reap the ssh before the exec.
+
+The container test needs Docker with a Linux engine. The first run builds the image `tuios-e2e-sshd` (one `apk add openssh-server`, so the network); later runs reuse it. `TUIOS_E2E_SSHD_IMAGE` renames the image and the containers, which are removed when the test ends. The test builds the checkout for the engine's architecture with `CGO_ENABLED=0` and copies it into the container. Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9, Docker 29.2.1, linux/arm64, `--cpus 2`) against feat/live-handoff-sshd-test.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestDaemonUpgradeCommandKeepsPanes|TestAttachedClientIsToldToReattach|TestFederationLinkRedialsAfterUpgrade|TestDaemonUpgradeRefusalNamesTheServer|TestDaemonUpgradeFromAPaneIsRefused)$' .
+```
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_SSHD=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestFederationLinkToAnotherMachineAfterUpgrade$' .
 ```
 
 ### A pane's upgrade confirmed at a client
