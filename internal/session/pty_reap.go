@@ -72,15 +72,23 @@ func (p *PTY) monitorExit() {
 		// its exit is heard where its bytes stop instead: see readOutput.
 		return
 	}
-	if canPeekExit {
-		// An error here (ECHILD) is answered by the reap below, which fails
-		// the same way and records the status as unknown.
-		_ = peekExit(p.proc.Pid)
+	// ECHILD for an adopted pane is a process that is not this one's child:
+	// the daemon a handoff's keeper started has a pid of its own, and the
+	// panes it took back belong to init. Their exit is still heard, through
+	// the kernel's process events, with the status only where those carry
+	// it. Any other error is answered by the reap below, which fails the same
+	// way and records the status as unknown.
+	foreign := canPeekExit && errors.Is(peekExit(p.proc.Pid), syscall.ECHILD) && p.cmd == nil
+	var code, sig int
+	if foreign {
+		code, sig = waitForeignExit(p.proc.Pid)
 	}
 
 	p.reap.enter()
 	defer p.reap.leave()
-	code, sig := p.reapProcess()
+	if !foreign {
+		code, sig = p.reapProcess()
+	}
 	if sig > 0 {
 		p.exitSignal.Store(int32(sig))
 	}
