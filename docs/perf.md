@@ -2833,6 +2833,19 @@ The budgets went down to 37,955,000 (linux/amd64) and 35,686,000
 (darwin/arm64) after the cut. Each keeps about the room it had before it,
 21,782 and 13,582 bytes.
 
+Packing the bundled harness manifests cut 65,536 bytes from
+linux/amd64 and 66,368 from darwin/arm64. internal/harness/manifests/*.toml (99,108 bytes)
+go into the binary as one gzipped tar of 23,739 bytes. Load unpacks it each
+time it runs and keeps nothing, and TestBundledArchiveMatchesFiles holds the
+archive to the files. Main at 586469de measured 37,933,218 and 35,672,418
+bytes (Go 1.26.9), and the change measured 37,867,682 and 35,606,050.
+A benchmark of `Load()` with no user folder went from 1.21 ms to 1.61 ms.
+Load runs once per daemon start, and allocates 60 KB more on the way.
+
+The budgets went down to 37,890,000 (linux/amd64) and 35,620,000
+(darwin/arm64) after the cut. Each keeps the room it had before it,
+22,318 and 13,950 bytes.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
