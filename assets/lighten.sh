@@ -19,7 +19,7 @@
 # run at the lowest priority, because an encode takes every core it can get.
 set -eu
 
-gif=$1
+gif=${1:-}
 mode=${2:-}
 case $gif in
 *.gif) ;;
