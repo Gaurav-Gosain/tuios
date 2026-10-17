@@ -1828,10 +1828,10 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbSetWorkspaceName,
 		},
 		"set-workspace-order": {
-			description: "Set the order the workspaces are shown in. Only the display order changes: verbs, keys and windows still address each workspace by its number.",
+			description: "Put the workspaces in an order, renumbering them: a workspace's number is its position. Each workspace takes its panes, name, focus and layout to its new number.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "order", Type: "[]int", Required: true, Description: "Workspace numbers in the order to show them. Numbers outside the session's range and repeats are dropped. A workspace the list omits keeps its place after the ones named. An ascending order clears the arrangement."},
+				{Name: "order", Type: "[]int", Required: true, Description: "Workspace numbers in their new order. The workspaces named take the numbers they hold between them, smallest first, in this order: [3,1,2] makes 3 workspace 1, 1 workspace 2 and 2 workspace 3. A workspace the list omits keeps its number. Numbers outside the session's range and repeats are dropped."},
 			},
 			examples: []string{`{"id":1,"verb":"set-workspace-order","params":{"session":"work","order":[3,1,2]}}`},
 			handler:  (*Daemon).verbSetWorkspaceOrder,

@@ -273,7 +273,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// The order arranges the rail's terminals section and the dock's pills both,
 	// and a draft one is live for the length of a drag, so it is drawn state and
 	// belongs in here.
-	for _, ws := range m.WorkspaceOrder {
+	for _, ws := range m.pendingWorkspaceOrder {
 		mixI(ws)
 	}
 	mixB(m.dockWorkspaceDrag.Dragging)

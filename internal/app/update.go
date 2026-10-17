@@ -2261,6 +2261,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.handlePasteBufferDeleted(msg)
 		return m, nil
 
+	case WorkspaceRenumberedMsg:
+		return m, m.handleWorkspaceRenumbered(msg)
+
 	case RenameAppliedMsg:
 		if msg.Err != nil {
 			what := msg.What

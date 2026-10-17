@@ -203,9 +203,9 @@ func (m *Manager) SetHerdrBin(path string) {
 // naming tuios's own socket, HERDR_PANE_ID, HERDR_TAB_ID and
 // HERDR_WORKSPACE_ID naming the pane, its workspace and its session in
 // herdr's form (herdr_ids.go), and HERDR_BIN_PATH naming the herdr link, for
-// a tool that runs herdr's CLI rather than the socket. workspace is the tuios
-// workspace the pane starts on, which is herdr's tab; 0 gives no
-// HERDR_TAB_ID. A pane gets it when the daemon listens on the socket and
+// a tool that runs herdr's CLI rather than the socket. workspace is the tab
+// key of the tuios workspace the pane starts on, which is herdr's tab (see
+// herdrTabFor); 0 gives no HERDR_TAB_ID. A pane gets it when the daemon listens on the socket and
 // [agents] herdr_protocol is not off: every pane by default, as in herdr, or
 // with "agents" only a pane that starts a harness known to report this way.
 // See herdr_compat.go.
