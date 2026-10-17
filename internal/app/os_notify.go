@@ -369,13 +369,17 @@ func (m *OS) DismissNotifications() bool {
 // message draws nothing and removes nothing, so the notice stayed up for its
 // whole lifetime after the state had ended. Only matching entries go, so a
 // message that arrived in the meantime keeps its place.
+//
+// Only tuios's own notices match. A pane writes the text of its notifications
+// (OSC 9, tuios notify), so a pane that sent "ZOOM" carries a Target and keeps
+// its message when the user unzooms.
 func (m *OS) ClearNotification(message string) bool {
 	if len(m.Notifications) == 0 {
 		return false
 	}
 	kept := m.Notifications[:0]
 	for _, n := range m.Notifications {
-		if n.Message != message {
+		if n.Target != nil || n.Message != message {
 			kept = append(kept, n)
 		}
 	}
