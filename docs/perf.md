@@ -2761,6 +2761,33 @@ the regenerated skill archive counted in the pull request it follows:
 test. No dependency was added. The new budgets leave 30,246 and 30,526 bytes
 of room.
 
+The budgets went to 37,755,000 (linux/amd64) and 35,515,000 (darwin/arm64)
+for the theme and chrome styling stack, #811 to #837. Main after #839
+measured 37,490,850 and 35,266,018 bytes (Go 1.26.9), 26,150 and 13,982 bytes
+under the budgets. The stack brings it to 37,724,322 and 35,484,754, 233,472
+and 218,736 bytes more. By pull request, linux/amd64 then darwin/arm64, with
+the regenerated skill archive counted in the pull request it follows:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #811 show the prefix on the mode pill | 0 | 96 |
+| #813 export and share a theme | 28,672 | 16,688 |
+| #815 roles for border states, rule, status, dots and grounds | 24,576 | 16,736 |
+| #816 match the host terminal's colours with theme none | 8,192 | 112 |
+| #818 a light and dark theme pair | 4,096 | 16,592 |
+| #820 colour the focused border by state | 0 | 0 |
+| #821 a gradient on the focused border | 20,480 | 16,832 |
+| #824 title style and place | 8,192 | 192 |
+| #827 edit a theme in a side sheet | 77,824 | 100,384 |
+| #829 the quick tab, contrast fix and role flash in the theme editor | 16,384 | 16,816 |
+| #831 a style for the rail's current row | 8,192 | 144 |
+| #834 a style for the rail's section headers, and section icons | 12,288 | 16,800 |
+| #836 roomy spacing between the rail's sections | 4,096 | 80 |
+| #837 bell, activity and attention marks on workspace tabs | 20,480 | 17,264 |
+
+The theme editor in #827 is most of the growth. No dependency was added. The
+new budgets leave 30,678 and 30,246 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
