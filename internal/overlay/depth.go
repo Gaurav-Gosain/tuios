@@ -171,19 +171,67 @@ var xterm256Lab = sync.OnceValue(func() (t [240]lab) {
 	return t
 })
 
-// nearest256 is the entry from 16 to 255 nearest c in OKLab. The sixteen
-// below 16 are left out because the terminal's palette decides them.
+// nearest256 is the coloured entry from 16 to 255 nearest c in OKLab. The
+// sixteen below 16 are left out because the terminal's palette decides them,
+// and so are the greys: To256 sends only a colour with chroma here, and a
+// dark or a pale one could otherwise land on a grey nearer it in lightness,
+// which is how a dark navy came out as 236.
 func nearest256(c color.Color) color.Color {
 	v := toLab(c)
-	best, bestD := 0, math.Inf(1)
-	table := xterm256Lab()
-	for i, e := range table {
-		dl, da, db := v.l-e.l, v.a-e.a, v.b-e.b
-		if d := dl*dl + da*da + db*db; d < bestD {
-			best, bestD = i, d
+	vc := math.Hypot(v.a, v.b)
+	best, bestD := uint8(16), math.Inf(1)
+	for _, e := range xterm256Coloured() {
+		dl, da, db, dc := v.l-e.l, v.a-e.a, v.b-e.b, vc-e.c
+		dh2 := max(da*da+db*db-dc*dc, 0)
+		if d := dl*dl + dc*dc + hueWeight*dh2; d < bestD {
+			best, bestD = e.idx, d
 		}
 	}
-	return ansi.IndexedColor(uint8(16 + best)) // #nosec G115 -- best is within [0, 239].
+	return ansi.IndexedColor(best)
+}
+
+// colouredEntry is an entry of the xterm palette that is not a grey, in OKLab
+// with its chroma worked out.
+type colouredEntry struct {
+	l, a, b, c float64
+	idx        uint8
+}
+
+// xterm256Coloured is the entries from 16 to 255 that are not greys, built on
+// first use. nearest256 runs once per colour a palette or a theme is built
+// from, and the review overlay steps its mixes down each time it draws, so
+// the chroma is computed here once rather than for each entry on every call.
+var xterm256Coloured = sync.OnceValue(func() []colouredEntry {
+	table := xterm256Lab()
+	out := make([]colouredEntry, 0, len(table))
+	for i, e := range table {
+		if neutralEntry(i) {
+			continue
+		}
+		out = append(out, colouredEntry{l: e.l, a: e.a, b: e.b, c: math.Hypot(e.a, e.b), idx: uint8(16 + i)}) // #nosec G115 -- i is within [0, 239].
+	}
+	return out
+})
+
+// hueWeight is how much more a step in hue counts than the same step in
+// lightness or chroma when nearest256 chooses an entry.
+//
+// The cube has six levels per channel, so a dark or a muted colour is often
+// about as far from an entry of its own hue as from one of another hue that is
+// nearer it in lightness. Plain OKLab distance then took the other hue: a dark
+// green went to a dark red, and a slate blue to a purple. A hue change is what
+// a reader notices, a lightness step is not, so hue is weighted. The hue part
+// of the distance is the part of the a-b distance that chroma does not
+// explain.
+const hueWeight = 4
+
+// neutralEntry reports whether entry 16+i of the xterm palette is a grey: the
+// ramp from 232, or a cube entry with three equal channels.
+func neutralEntry(i int) bool {
+	if i >= 216 {
+		return true
+	}
+	return i/36 == (i/6)%6 && (i/6)%6 == i%6
 }
 
 // greyChroma is the OKLab chroma below which a colour is placed on the grey
@@ -233,8 +281,28 @@ func ReadableEntry256(c color.Color, grounds []color.Color, floor float64) color
 		return q
 	}
 	v := toLab(c)
-	hue := math.Atan2(v.b, v.a)
 	table := xterm256Lab()
+	if okChroma(c) < greyChroma {
+		// A neutral has no hue to keep. Searching by hue picked whichever
+		// cube entry the noise in a grey's a and b pointed at, so a grey
+		// accent on a light ground came out green. The neutral entry nearest
+		// in lightness that reads is the answer.
+		var best color.Color
+		bestD := math.Inf(1)
+		for i, e := range table {
+			if !neutralEntry(i) {
+				continue
+			}
+			if d := math.Abs(v.l - e.l); d < bestD {
+				q := ansi.IndexedColor(uint8(16 + i)) // #nosec G115 -- i is within [0, 239].
+				if reads(q) {
+					best, bestD = q, d
+				}
+			}
+		}
+		return best
+	}
+	hue := math.Atan2(v.b, v.a)
 	var best color.Color
 	bestD := math.Inf(1)
 	for i := range 216 {

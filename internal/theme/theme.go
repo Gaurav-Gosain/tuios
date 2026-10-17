@@ -159,6 +159,45 @@ func GetANSIPalette() [16]color.Color {
 	return pal
 }
 
+// EmulatorColors is the theme as a pane's emulator is given it, at the depth
+// the frame is drawn at. ok is false when no theme is in force, and at 16
+// colours, where the sixteen are the terminal's own slots and fg and bg its
+// default colours, as slotColor has them.
+//
+// At 256 colours each colour is already the palette entry the chrome would
+// pick (overlay.To256). Left in truecolor, a cell reached the frame writer as
+// RGB and was stepped down by its cube-first rule: nord's #2e3440 ground
+// became the teal 23 and Latte's red the grey 241. Converted here, it is done
+// once per theme or depth change and never per cell.
+//
+// The colours a pane is told in answer to OSC 4, 10 and 11 are not these: a
+// program asking for the palette gets the theme's own values.
+func EmulatorColors() (fg, bg, cur color.Color, pal [16]color.Color, ok bool) {
+	if !IsEnabled() {
+		return nil, nil, nil, pal, false
+	}
+	d := Depth()
+	if d == overlay.Depth16 {
+		return nil, nil, nil, pal, false
+	}
+	fg, bg, cur, pal = TerminalFg(), TerminalBg(), TerminalCursor(), GetANSIPalette()
+	if d == overlay.Depth256 {
+		fg, bg, cur = to256(fg), to256(bg), to256(cur)
+		for i := range pal {
+			pal[i] = to256(pal[i])
+		}
+	}
+	return fg, bg, cur, pal, true
+}
+
+// to256 is overlay.To256 that leaves a nil colour nil.
+func to256(c color.Color) color.Color {
+	if c == nil {
+		return nil
+	}
+	return overlay.To256(c)
+}
+
 // ANSIOrder returns a theme's sixteen ANSI colours in index order, 0 to 15:
 // the eight normal colours then the eight bright ones.
 //

@@ -2056,7 +2056,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// is learned from the same message the writer was configured from, and
 		// every cached row built for another depth is dropped.
 		if theme.ColorProfile() != msg.Profile {
+			depth := theme.Depth()
 			theme.SetColorProfile(msg.Profile)
+			// The panes hold the theme's colours at the depth they were
+			// given, so a new depth gives them again.
+			if theme.Depth() != depth {
+				m.UpdateAllWindowThemes()
+			}
 			// A profile with no colour shows images as the box, not glyphs.
 			m.refreshImageSymbols()
 			m.MarkAllDirty()

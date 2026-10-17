@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -207,7 +208,11 @@ func resolveGround(setting, themeID string) ground {
 	case config.BackgroundOff:
 		return g
 	case config.BackgroundTheme:
-		if themeID == "" {
+		// At 16 colours a ground is the terminal's own background (see
+		// overlay.Depth16). The frame writer stepped the theme's ground down
+		// to the nearest of the sixteen, so a dark slate ground came out the
+		// terminal's blue.
+		if themeID == "" || theme.Depth() == overlay.Depth16 {
 			return g
 		}
 		bg := theme.TerminalBg()
@@ -230,6 +235,15 @@ func resolveGround(setting, themeID string) ground {
 			}
 		}
 	}
+	// At 256 colours the ground is the palette entry the chrome would pick,
+	// chosen here once. Left in truecolor, the frame writer stepped it down
+	// cube first, and nord's #2e3440 became the teal 23.
+	if theme.Depth() == overlay.Depth256 {
+		g.bg = overlay.To256(g.bg)
+		if g.fg != nil {
+			g.fg = overlay.To256(g.fg)
+		}
+	}
 	g.key = setting + "\x00" + themeID + "\x00" + strconv.FormatUint(theme.Generation(), 10) + "\x00" + theme.Depth().String()
 	g.bgSGR = sgrColor(48, g.bg)
 	if g.fg != nil {
@@ -238,9 +252,12 @@ func resolveGround(setting, themeID string) ground {
 	return g
 }
 
-// sgrColor is the SGR sequence that sets a truecolor foreground (38) or
-// background (48).
+// sgrColor is the SGR sequence that sets a foreground (38) or background (48):
+// a palette index for a 256-colour entry, truecolor for anything else.
 func sgrColor(which int, c color.Color) string {
+	if i, ok := c.(ansi.IndexedColor); ok {
+		return fmt.Sprintf("\x1b[%d;5;%dm", which, i)
+	}
 	r, g, b, _ := c.RGBA()
 	return fmt.Sprintf("\x1b[%d;2;%d;%d;%dm", which, r>>8, g>>8, b>>8)
 }

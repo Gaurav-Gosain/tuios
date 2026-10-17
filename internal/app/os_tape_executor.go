@@ -1023,12 +1023,12 @@ func (m *OS) SetTheme(themeName string) error {
 	// Update terminal colors for all windows
 	for _, w := range m.Windows {
 		if w != nil && w.Terminal != nil {
-			if theme.IsEnabled() {
+			if fg, _, cur, pal, ok := theme.EmulatorColors(); ok {
 				w.Terminal.SetThemeColors(
-					theme.TerminalFg(),
+					fg,
 					nil, // Always use transparent background
-					theme.TerminalCursor(),
-					theme.GetANSIPalette(),
+					cur,
+					pal,
 				)
 			} else {
 				// Disable theme colors
