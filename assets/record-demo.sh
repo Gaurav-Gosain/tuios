@@ -1,5 +1,8 @@
 #!/bin/sh
-# Records assets/demo.gif for the README.
+# Records assets/tuios.gif, the recording under Features in the README.
+#
+# assets/demo.gif, the recording at the top, is a screen recording of a
+# desktop and has no tape. assets/lighten.sh makes the light copies of it.
 #
 #   assets/record-demo.sh          # uses the tuios first on $PATH
 #
@@ -52,3 +55,5 @@ cp -r "$HOME/.config/tuios" "$root/config/tuios"
 
 cd "$here"
 vhs "$@" demo.tape
+# The same frames in fewer bytes. Without gifsicle the GIF stays as vhs wrote it.
+./lighten.sh tuios.gif --gif

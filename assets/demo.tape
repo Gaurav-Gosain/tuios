@@ -28,7 +28,7 @@
 #   has no Alt+Space or Alt+Escape. The launcher is opened from its command
 #   palette row instead, which prints the alt+space shortcut on screen anyway.
 #
-Output "demo.gif"
+Output "tuios.gif"
 
 Require tuios
 
