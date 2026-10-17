@@ -182,20 +182,22 @@ func (h *syncHost) sha(t *testing.T) string {
 
 // syncResultRow is the part of one JSON row the tests read.
 type syncResultRow struct {
-	Host          string `json:"host"`
-	Before        string `json:"before"`
-	After         string `json:"after"`
-	InstallPath   string `json:"install_path"`
-	Installed     bool   `json:"installed"`
-	Action        string `json:"action"`
-	RestartNeeded bool   `json:"restart_needed"`
-	Error         string `json:"error"`
+	Host          string   `json:"host"`
+	Before        string   `json:"before"`
+	After         string   `json:"after"`
+	InstallPath   string   `json:"install_path"`
+	Installed     bool     `json:"installed"`
+	Action        string   `json:"action"`
+	RestartNeeded bool     `json:"restart_needed"`
+	Error         string   `json:"error"`
+	Notes         []string `json:"notes"`
 	Daemon        struct {
 		State        string `json:"state"`
 		Version      string `json:"version"`
 		PID          int    `json:"pid"`
 		SessionCount int    `json:"session_count"`
 		Restarted    bool   `json:"restarted"`
+		Upgraded     bool   `json:"upgraded"`
 		Started      bool   `json:"started"`
 		Sessions     []struct {
 			Name string `json:"name"`
@@ -386,12 +388,10 @@ func TestHostsSync(t *testing.T) {
 	}
 }
 
-// TestHostsSyncRestartWithYes restarts a daemon of the old version with
-// --restart --yes, and checks that the new daemon runs the new version and
-// brings the session back. A client attached on old has to reattach by
-// itself, in the same process: the sync stops the daemon with kill-server
-// --restart, as restart-server does. A plain kill-server says "stop", and the
-// client quits.
+// TestHostsSyncRestartWithYes moves the daemon of an old host onto the new
+// version with --restart --yes. The daemon is from a build with live upgrades,
+// so it is upgraded live: it keeps its pid and the program in its pane, runs
+// the new version from the installed path, and keeps its session.
 func TestHostsSyncRestartWithYes(t *testing.T) {
 	next := syncNextBinary(t)
 	f := newSyncFleet(t, []string{"old"}, nil)
@@ -400,46 +400,52 @@ func TestHostsSyncRestartWithYes(t *testing.T) {
 	if out, err := old.run(t, "new", "work", "--detach"); err != nil {
 		t.Fatalf("start the daemon on old: %v\n%s", err, out)
 	}
-	attached := attachIn(t, old.base, "work", startOpts{cols: 160, rows: 40})
+	if out, err := old.run(t, "new-window", "sleeper", "-s", "work", "--", "sleep", "600"); err != nil {
+		t.Fatalf("start a program on old: %v\n%s", err, out)
+	}
 	before, out, err := f.syncJSON(t, "--binary", next, "--dry-run")
 	if err != nil || before["old"].Daemon.PID == 0 {
 		t.Fatalf("read old: %v\n%s", err, out)
 	}
+	img := helloImage(t, old.base)
+	panes := panePIDs(t, old.base, "work")
 
 	rows, out, err := f.syncJSON(t, "--binary", next, "--restart", "--yes")
 	saveSyncArtifact(t, "restart.json", out)
 	if err != nil {
 		t.Fatalf("ASSERTION: sync --restart --yes failed: %v\n%s", err, out)
 	}
-	if r := rows["old"]; !r.Installed || !r.Daemon.Restarted || r.RestartNeeded {
-		t.Errorf("ASSERTION: old was not installed and restarted: %+v\n%s", r, out)
+	r := rows["old"]
+	if !r.Installed || !r.Daemon.Upgraded || r.Daemon.Restarted || r.RestartNeeded || !strings.Contains(r.Action, "daemon upgraded live") {
+		t.Errorf("ASSERTION: old was not installed and upgraded live: %+v\n%s", r, out)
 	}
 
-	deadline := time.Now().Add(20 * time.Second)
-	var now map[string]syncResultRow
-	for time.Now().Before(deadline) {
-		now, out, _ = f.syncJSON(t, "--binary", next, "--dry-run")
-		if d := now["old"].Daemon; d.Version == syncNextVersion && d.SessionCount == 1 {
-			break
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	after := helloImage(t, old.base)
+	afterPanes := panePIDs(t, old.base, "work")
+	exe := executableOf(t, after.PID)
+	now, out, _ := f.syncJSON(t, "--binary", next, "--dry-run")
 	saveSyncArtifact(t, "after-restart.json", out)
-	d := now["old"].Daemon
-	if d.Version != syncNextVersion || d.PID == before["old"].Daemon.PID {
-		t.Errorf("ASSERTION: the daemon on old does not run the new version: %+v\n%s", d, out)
+	writeHandoffArtifact(t, map[string]any{"before": img, "after": after, "panes_before": panes, "panes_after": afterPanes, "executable_after": exe, "row": r})
+	if after.PID != img.PID || after.Instance == img.Instance || after.Version != syncNextVersion {
+		t.Errorf("ASSERTION: the daemon on old is %+v after the sync, from %+v; want the same pid, a new image and %s", after, img, syncNextVersion)
 	}
-	if d.SessionCount != 1 || len(d.Sessions) != 1 || d.Sessions[0].Name != "work" {
-		t.Errorf("ASSERTION: the session did not come back after the restart: %+v\n%s", d, out)
+	if !sameFile(exe, old.bin) {
+		t.Errorf("ASSERTION: the daemon on old runs %s, want the installed %s", exe, old.bin)
+	}
+	if len(panes) != 2 {
+		t.Fatalf("old had %d panes before the sync, want 2: %v", len(panes), panes)
+	}
+	for id, pid := range panes {
+		if afterPanes[id] != pid {
+			t.Errorf("ASSERTION: window %s had pid %d, and %d after the sync", id, pid, afterPanes[id])
+		}
+	}
+	d := now["old"].Daemon
+	if d.Version != syncNextVersion || d.SessionCount != 1 || len(d.Sessions) != 1 || d.Sessions[0].Name != "work" {
+		t.Errorf("ASSERTION: the daemon on old does not run the new version with its session: %+v\n%s", d, out)
 	}
 	if now["old"].RestartNeeded || now["old"].Action != "up to date" {
-		t.Errorf("ASSERTION: after the restart, old still plans %q (restart needed %v)\n%s", now["old"].Action, now["old"].RestartNeeded, out)
-	}
-	if err := attached.WaitForText("tuios reattached", bootTimeout); err != nil {
-		t.Errorf("ASSERTION: the client attached on old did not reattach after the sync restarted its daemon: %v\n%s", err, attached.Snapshot())
-	}
-	if code, exited := attached.ExitCode(); exited {
-		t.Errorf("ASSERTION: the client attached on old quit (code %d) instead of reattaching", code)
+		t.Errorf("ASSERTION: after the sync, old still plans %q (restart needed %v)\n%s", now["old"].Action, now["old"].RestartNeeded, out)
 	}
 }
 
@@ -629,4 +635,11 @@ func TestRestartServerFromAPaneLeavesADaemon(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// sameFile reports whether two paths name one file, through any links.
+func sameFile(a, b string) bool {
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
