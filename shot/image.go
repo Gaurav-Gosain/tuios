@@ -134,16 +134,10 @@ func drawPNGImages(dst *image.RGBA, g *Grid, l layout, below bool) {
 // URI. Only the visible part is encoded, so a picture that is mostly off the
 // grid costs only what is on it.
 func imageDataURI(pixels image.Image, src image.Rectangle) (string, bool) {
-	var part image.Image = pixels
-	if sub, ok := pixels.(interface {
-		SubImage(image.Rectangle) image.Image
-	}); ok {
-		part = sub.SubImage(src)
-	} else {
-		rgba := image.NewRGBA(image.Rect(0, 0, src.Dx(), src.Dy()))
-		xdraw.Copy(rgba, image.Point{}, pixels, src, xdraw.Src, nil)
-		part = rgba
-	}
+	// A copy rather than SubImage: asking for SubImage through an interface
+	// links the method of every image type in the standard library.
+	part := image.NewNRGBA(image.Rect(0, 0, src.Dx(), src.Dy()))
+	xdraw.Copy(part, image.Point{}, pixels, src, xdraw.Src, nil)
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.BestSpeed}
 	if err := enc.Encode(&buf, part); err != nil {
