@@ -3819,6 +3819,10 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// os is the daemon's GOOS. A client attached from another machine
 		// builds a command line for this one: sh -c here, cmd /C on Windows.
 		"os": runtime.GOOS,
+		// handoff is the live handoff manifest version this image writes,
+		// which the binary tuios daemon upgrade names must read. The CLI
+		// running the upgrade may be of another build.
+		"handoff": HandoffVersion,
 	}
 	// upgrade says this image took its panes over in a live upgrade, and
 	// what that measured. daemon upgrade waits for it.
