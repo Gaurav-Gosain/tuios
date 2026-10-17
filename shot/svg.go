@@ -73,9 +73,11 @@ func RenderSVG(g *Grid, f *Frame) []byte {
 		fmt.Fprintf(&b, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s" shape-rendering="crispEdges"/>`+"\n",
 			fnum(x0), fnum(y0), fnum(x1-x0), fnum(y1-y0), Hex(r.color))
 	}
+	writeSVGImages(&b, g, l, true)
 	for _, r := range textRuns(g) {
 		writeSVGRun(&b, r, l)
 	}
+	writeSVGImages(&b, g, l, false)
 	b.WriteString("</g>\n</svg>\n")
 	return []byte(b.String())
 }
@@ -304,4 +306,34 @@ func fnum(f float64) string {
 func xmlEscape(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
 	return r.Replace(s)
+}
+
+// writeSVGImages writes the images of one layer as <image> elements with PNG
+// data URIs, inside a nested <svg> the size of the grid, which clips them to
+// it.
+func writeSVGImages(b *strings.Builder, g *Grid, l layout, below bool) {
+	opened := false
+	for _, img := range g.Images {
+		if img.Below != below {
+			continue
+		}
+		c, ok := img.cut(g.Cols, g.Rows)
+		if !ok {
+			continue
+		}
+		uri, ok := imageDataURI(img.Pixels, c.src)
+		if !ok {
+			continue
+		}
+		if !opened {
+			fmt.Fprintf(b, `<svg width="%s" height="%s" overflow="hidden">`+"\n",
+				fnum(float64(g.Cols)*l.cw), fnum(float64(g.Rows)*l.ch))
+			opened = true
+		}
+		fmt.Fprintf(b, `<image x="%s" y="%s" width="%s" height="%s" preserveAspectRatio="none" href="%s"/>`+"\n",
+			fnum(c.col0*l.cw), fnum(c.row0*l.ch), fnum((c.col1-c.col0)*l.cw), fnum((c.row1-c.row0)*l.ch), uri)
+	}
+	if opened {
+		b.WriteString("</svg>\n")
+	}
 }

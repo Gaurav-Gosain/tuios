@@ -47,12 +47,26 @@ func RenderHTML(g *Grid, f *Frame) []byte {
 		}
 	}
 
-	fmt.Fprintf(&b, `<pre style="color:%s;background:%s">`, Hex(g.FG), Hex(g.BG))
+	images := len(g.Images) > 0
+	if images {
+		// The images are placed on the cell grid in ch and em, so the box they
+		// sit in carries the same font as the text.
+		fmt.Fprintf(&b, `<div style="position:relative;display:inline-block;vertical-align:top;overflow:hidden;font-family:%s;font-size:14px;background:%s">`+"\n",
+			family, Hex(g.BG))
+		writeHTMLImages(&b, g, true)
+		fmt.Fprintf(&b, `<pre style="position:relative;z-index:1;color:%s">`, Hex(g.FG))
+	} else {
+		fmt.Fprintf(&b, `<pre style="color:%s;background:%s">`, Hex(g.FG), Hex(g.BG))
+	}
 	for y := 0; y < g.Rows; y++ {
 		writeHTMLRow(&b, g, y)
 		b.WriteByte('\n')
 	}
 	b.WriteString("</pre>\n")
+	if images {
+		writeHTMLImages(&b, g, false)
+		b.WriteString("</div>\n")
+	}
 	if framed {
 		b.WriteString("</div>\n</div>\n")
 	}
@@ -161,4 +175,34 @@ func writeHTMLSpan(b *strings.Builder, g *Grid, c Cell, text string) {
 		return
 	}
 	fmt.Fprintf(b, `%s<span style="%s">%s</span>%s`, open, strings.Join(css, ";"), escaped, close)
+}
+
+// writeHTMLImages writes the images of one layer as absolutely placed <img>
+// elements with PNG data URIs. A row is 1.3em, the line height of the <pre>,
+// and a column is 1ch.
+//
+// An image below the text sits under the whole <pre>, so a cell with a
+// background of its own covers it. PNG and SVG draw such an image over the
+// cell backgrounds, as kitty does. HTML has no layer between a span's
+// background and its text.
+func writeHTMLImages(b *strings.Builder, g *Grid, below bool) {
+	z := 2
+	if below {
+		z = 0
+	}
+	for _, img := range g.Images {
+		if img.Below != below {
+			continue
+		}
+		c, ok := img.cut(g.Cols, g.Rows)
+		if !ok {
+			continue
+		}
+		uri, ok := imageDataURI(img.Pixels, c.src)
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(b, `<img alt="" src="%s" style="position:absolute;z-index:%d;left:%sch;top:%sem;width:%sch;height:%sem">`+"\n",
+			uri, z, fnum(c.col0), fnum(c.row0*1.3), fnum(c.col1-c.col0), fnum((c.row1-c.row0)*1.3))
+	}
 }

@@ -77,9 +77,11 @@ func Raster(g *Grid, f *Frame) (*image.RGBA, error) {
 		fillRect(img, l.gridX+float64(r.col)*cw, l.gridY+float64(r.row)*ch,
 			float64(r.cells)*cw, ch, r.color)
 	}
+	drawPNGImages(img, g, l, true)
 	for _, r := range textRuns(g) {
 		drawPNGRun(img, r, l, faces, g)
 	}
+	drawPNGImages(img, g, l, false)
 	return img, nil
 }
 

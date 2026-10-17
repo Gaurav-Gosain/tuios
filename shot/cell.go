@@ -118,6 +118,9 @@ type Grid struct {
 	// FG and BG are the resolved default colors, used for the card ground
 	// and for any styling derived from the content.
 	FG, BG Color
+	// Images are the pictures on the screen, drawn in order: a later image
+	// in the same layer goes over an earlier one. See Image.
+	Images []Image
 }
 
 // NewGrid allocates a blank grid with every cell on the default colors.

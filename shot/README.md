@@ -127,6 +127,33 @@ cell. tuios fills the fallback list from fontconfig.
 SVG and HTML name `Frame.FontFamily` and let the viewer pick the fonts. With
 `Frame.EmbedFont`, they also carry `Frame.Font` as an `@font-face`.
 
+## Images
+
+A grid can carry pictures, such as the ones a program shows with the kitty
+graphics protocol or with sixel. Put each one in `Grid.Images`:
+
+```go
+g.Images = append(g.Images, shot.Image{
+	Pixels: pic,                       // any image.Image
+	Col: 2, Row: 1, Cols: 30, Rows: 8, // the box of cells it fills
+	Source: image.Rect(0, 0, 240, 160), // the part of pic in the box
+})
+```
+
+- The image fills its box. `Source` is the part of `Pixels` that goes into the
+  box. An empty `Source` is the whole image.
+- A `Source` that is larger than `Pixels` draws nothing past the edge of the
+  image. Use this to keep an image at its own size in a larger box.
+- The part of a box outside the grid is cut off.
+- `Below` draws the image under the text, as kitty does for a negative
+  z-index. Otherwise the image goes over the text.
+- PNG draws images at the frame's cell size. SVG and HTML embed each image as
+  a PNG data URI. They encode only the part of the image on the grid.
+- ANSI and text output have no images.
+
+shot does not decode a terminal's image data. The caller decodes it and
+bounds its size.
+
 ## The API
 
 - `Grid`, `Cell` and `NewGrid` are the screen. `FromScreen` and `MakeCell`
@@ -140,6 +167,7 @@ SVG and HTML name `Frame.FontFamily` and let the viewer pick the fonts. With
   shadow and the fonts. `BuildFrame` makes one from a `FrameSpec` in config
   spellings, such as `"window"` and `"#1e1e2e..#313244"`.
 - `Font`, `MissingGlyphs` and `Frame.Fallback` choose the faces.
+- `Image` and `Grid.Images` put pictures on the grid.
 
 ## Stability
 
