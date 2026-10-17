@@ -764,7 +764,7 @@ func handleToggleZoom(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if fw != nil && fw.Zoomed {
 		o.ShowNotification("ZOOM", "info", o.Settings.NotificationDuration)
 	} else {
-		o.ShowNotification("", "info", 0) // clear
+		o.ClearNotification("ZOOM")
 	}
 	return o, nil
 }

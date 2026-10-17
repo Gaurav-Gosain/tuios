@@ -197,9 +197,21 @@ func TestMinimizeAndRestore(t *testing.T) {
 	alive(t, term, "after minimize/restore")
 }
 
+// zoomNoticeShown reports whether the dock shows the ZOOM notice. The marker
+// the test prints also starts with ZOOM, so its count is taken off.
+func zoomNoticeShown(frame string) bool {
+	return strings.Count(frame, "ZOOM") > strings.Count(frame, "ZOOMMARK")
+}
+
+// zoomNoticeGone is how long the ZOOM notice may stay after an unzoom. The
+// notice lives for six seconds, so a notice that is only waited out fails.
+const zoomNoticeGone = 2 * time.Second
+
 // TestZoomToggle zooms a window to fill the screen and back, asserting content
 // survives both transitions. Zoom resizes the emulator, which is the operation
-// that tore the cell buffer when it ran without the window's I/O lock.
+// that tore the cell buffer when it ran without the window's I/O lock. It also
+// asserts that the dock's ZOOM notice comes up with the zoom and leaves with
+// it, through the prefix key and through the bare z of window management mode.
 func TestZoomToggle(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)
@@ -219,18 +231,26 @@ func TestZoomToggle(t *testing.T) {
 		t.Fatalf("marked window never refocused: %v\n%s", err, term.Snapshot())
 	}
 
-	for i := range 3 {
-		if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
+	prefix := []any{tuitest.Ctrl('b'), "z"}
+	bare := []any{"z"}
+	for i, keys := range [][]any{prefix, prefix, prefix, bare} {
+		if err := term.SendKeys(keys...); err != nil {
 			t.Fatalf("zoom %d: %v", i, err)
 		}
 		if err := term.WaitForText("ZOOMMARK-55", uiTimeout); err != nil {
 			t.Fatalf("content lost entering zoom, round %d: %v\n%s", i, err, term.Snapshot())
 		}
-		if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return zoomNoticeShown(s.Text()) }, uiTimeout); err != nil {
+			t.Fatalf("no ZOOM notice after zooming, round %d: %v\n%s", i, err, term.Snapshot())
+		}
+		if err := term.SendKeys(keys...); err != nil {
 			t.Fatalf("unzoom %d: %v", i, err)
 		}
 		if err := term.WaitForText("ZOOMMARK-55", uiTimeout); err != nil {
 			t.Fatalf("content lost leaving zoom, round %d: %v\n%s", i, err, term.Snapshot())
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !zoomNoticeShown(s.Text()) }, zoomNoticeGone); err != nil {
+			t.Fatalf("the ZOOM notice stayed after unzooming, round %d: %v\n%s", i, err, term.Snapshot())
 		}
 	}
 	alive(t, term, "after zoom toggling")

@@ -345,6 +345,8 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleZoom()
 	if fw := o.GetFocusedWindow(); fw != nil && fw.Zoomed {
 		o.ShowNotification("ZOOM", "info", o.Settings.NotificationDuration)
+	} else {
+		o.ClearNotification("ZOOM")
 	}
 	return o, nil
 }

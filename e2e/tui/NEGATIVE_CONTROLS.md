@@ -6808,3 +6808,17 @@ Run on 2026-10-17.
 
 The fixed build passes `TestDockTabsFlatStripTwoWorkspaces`,
 `TestDockTabAttentionInk`, the other `TestDockTabs*` and `TestIdleCostStaysLow`.
+
+## The ZOOM notice stays after unzoom
+
+`TestZoomToggle` now requires the dock's ZOOM notice after each zoom, and
+requires it gone within two seconds of each unzoom. The notice lives for six
+seconds. Rounds 0 to 2 use `prefix z`, round 3 uses the bare `z` of window
+management mode.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| `prefix z` never cleared the notice | yes | `actions.go` and `prefix_actions.go` as on main | `TestZoomToggle` ("the ZOOM notice stayed after unzooming, round 0") | **caught** |
+| Bare `z` cleared with an empty message, which removes nothing | yes | `handleToggleZoom` back to `ShowNotification("", ...)` | `TestZoomToggle` ("the ZOOM notice stayed after unzooming, round 3") | **caught** |

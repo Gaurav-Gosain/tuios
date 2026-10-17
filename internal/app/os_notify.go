@@ -361,6 +361,30 @@ func (m *OS) DismissNotifications() bool {
 	return true
 }
 
+// ClearNotification takes the live messages that read exactly message off the
+// dock and reports whether there were any.
+//
+// A notice that names a state, such as "ZOOM", has to leave when the state
+// does. ShowNotification with an empty message cannot do that: an empty
+// message draws nothing and removes nothing, so the notice stayed up for its
+// whole lifetime after the state had ended. Only matching entries go, so a
+// message that arrived in the meantime keeps its place.
+func (m *OS) ClearNotification(message string) bool {
+	if len(m.Notifications) == 0 {
+		return false
+	}
+	kept := m.Notifications[:0]
+	for _, n := range m.Notifications {
+		if n.Message != message {
+			kept = append(kept, n)
+		}
+	}
+	removed := len(kept) != len(m.Notifications)
+	clear(m.Notifications[len(kept):])
+	m.Notifications = kept
+	return removed
+}
+
 // dismissVisibleNotification pops the message the block is currently drawing,
 // revealing whatever was queued behind it. This is the granularity esc never
 // had: the mouse addresses one message at a time, so the +N counter doubles as
