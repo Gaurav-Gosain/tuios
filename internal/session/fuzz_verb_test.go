@@ -94,7 +94,7 @@ func FuzzVerbDispatch(f *testing.F) {
 		f.Add([]byte(s))
 	}
 	for _, v := range fuzzReadVerbs {
-		if _, ok := verbRegistry[v]; !ok {
+		if _, ok := verbRegistry()[v]; !ok {
 			f.Fatalf("fuzzReadVerbs names %q, which is not a verb", v)
 		}
 		f.Add([]byte(`{"id":7,"verb":"` + v + `","params":{}}`))
@@ -125,7 +125,7 @@ func FuzzVerbDispatch(f *testing.F) {
 
 		var req verbRequest
 		decoded := json.Unmarshal(line, &req) == nil
-		entry, known := verbRegistry[req.Verb]
+		entry, known := verbRegistry()[req.Verb]
 
 		if decoded && known && !safe[req.Verb] {
 			// Gates only. checkParamNames must refuse exactly the names

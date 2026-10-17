@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
@@ -254,14 +255,29 @@ func selectWriteParams(what string) []verbParam {
 	}
 }
 
-// verbRegistry is the dispatch table for every JSON verb the daemon supports.
-// It is built once at package init so list-verbs and dispatch share one source
-// of truth. It is populated in init() to avoid a static initialization cycle
-// (list-verbs reads the registry).
-var verbRegistry map[string]verbEntry
+// verbRegistry returns the dispatch table for every JSON verb the daemon
+// supports, so list-verbs and dispatch share one source of truth.
+//
+// It is built on first use, not in init. A table that init builds is reachable
+// in every program that links this package, and so is every handler it names,
+// which is most of the daemon. The browser build links this package for its
+// types and never runs a daemon, and the table alone kept about 3 MB of daemon
+// code in it. A function rather than a package-level initializer, because the
+// table names list-verbs, which reads the table: an initializer would be a
+// static initialization cycle.
+func verbRegistry() map[string]verbEntry {
+	verbRegistryOnce.Do(func() { verbRegistryMap = buildVerbRegistry() })
+	return verbRegistryMap
+}
 
-func init() {
-	verbRegistry = map[string]verbEntry{
+var (
+	verbRegistryOnce sync.Once
+	verbRegistryMap  map[string]verbEntry
+)
+
+// buildVerbRegistry makes the table verbRegistry returns.
+func buildVerbRegistry() map[string]verbEntry {
+	table := map[string]verbEntry{
 		"hello": {
 			description: "Handshake: report the protocol version this daemon speaks and the version range it accepts. Also tells the daemon the caller's terminal, so a session this connection later creates (new-session, switch-session's create) gets it rather than the daemon's fallback.",
 			params: []verbParam{
@@ -2324,26 +2340,27 @@ func init() {
 	}
 	// The verbs of the agent review, triage, queue and approval work, kept in
 	// a file of their own. See verb_protocol_agents.go.
-	maps.Copy(verbRegistry, agentWorkVerbs())
+	maps.Copy(table, agentWorkVerbs())
 	// The checkpoint verbs. See verb_checkpoint.go.
-	maps.Copy(verbRegistry, checkpointVerbs())
+	maps.Copy(table, checkpointVerbs())
 	// The ship verbs. See verb_ship.go.
-	maps.Copy(verbRegistry, shipVerbs())
+	maps.Copy(table, shipVerbs())
 	// The paste buffer verbs. See verb_buffers.go.
-	maps.Copy(verbRegistry, bufferVerbs())
+	maps.Copy(table, bufferVerbs())
 	// The file verbs, transfers, the drop folder and previews. See
 	// verb_files.go, transfer.go, drop_files.go and verb_preview.go.
-	maps.Copy(verbRegistry, fileVerbs())
-	maps.Copy(verbRegistry, transferVerbs())
-	maps.Copy(verbRegistry, dropVerbs())
-	maps.Copy(verbRegistry, previewVerbs())
+	maps.Copy(table, fileVerbs())
+	maps.Copy(table, transferVerbs())
+	maps.Copy(table, dropVerbs())
+	maps.Copy(table, previewVerbs())
 	// The tree stream, the check-ahead and the link speed test. See
 	// transfer_tree.go and transfer_speed.go.
-	maps.Copy(verbRegistry, treeVerbs())
-	maps.Copy(verbRegistry, speedVerbs())
+	maps.Copy(table, treeVerbs())
+	maps.Copy(table, speedVerbs())
 	// search-panes, command-history and list-ports. See verb_find.go and
 	// verb_ports.go.
-	maps.Copy(verbRegistry, findVerbs())
+	maps.Copy(table, findVerbs())
+	return table
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming
@@ -2518,7 +2535,7 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 // socket's adapters (herdr_api.go), so a herdr client in a pane is held to
 // exactly what the same call as a verb would be.
 func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (verbEntry, json.RawMessage, *verbError) {
-	entry, ok := verbRegistry[verb]
+	entry, ok := verbRegistry()[verb]
 	if !ok {
 		known := knownVerbNames()
 		return verbEntry{}, nil, hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(verb), &VerbHint{
@@ -2700,7 +2717,7 @@ func (d *Daemon) verbListVerbs(_ *connState, params json.RawMessage) (any, *verb
 	}
 
 	if p.Verb != "" {
-		entry, ok := verbRegistry[p.Verb]
+		entry, ok := verbRegistry()[p.Verb]
 		if !ok {
 			known := knownVerbNames()
 			return nil, hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(p.Verb), &VerbHint{
@@ -2723,7 +2740,7 @@ func (d *Daemon) verbListVerbs(_ *connState, params json.RawMessage) (any, *verb
 	names := knownVerbNames()
 	verbs := make([]verbDoc, 0, len(names))
 	for _, name := range names {
-		verbs = append(verbs, describeVerb(name, verbRegistry[name]))
+		verbs = append(verbs, describeVerb(name, verbRegistry()[name]))
 	}
 	return map[string]any{
 		"type":           "verb_list",
@@ -2760,7 +2777,7 @@ func VerbDocs() []VerbDoc {
 	names := knownVerbNames()
 	out := make([]VerbDoc, 0, len(names))
 	for _, name := range names {
-		out = append(out, describeVerb(name, verbRegistry[name]))
+		out = append(out, describeVerb(name, verbRegistry()[name]))
 	}
 	return out
 }

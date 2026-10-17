@@ -150,9 +150,9 @@ func TestHandshakeToleratesDaemonWithoutHelloVerb(t *testing.T) {
 
 	// Temporarily remove the hello verb from the registry to reproduce a daemon
 	// built before the handshake existed.
-	entry := verbRegistry["hello"]
-	delete(verbRegistry, "hello")
-	t.Cleanup(func() { verbRegistry["hello"] = entry })
+	entry := verbRegistry()["hello"]
+	delete(verbRegistry(), "hello")
+	t.Cleanup(func() { verbRegistry()["hello"] = entry })
 
 	client, err := DialVerbClientAs("1.4.0")
 	if err != nil {

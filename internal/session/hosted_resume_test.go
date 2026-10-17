@@ -141,7 +141,7 @@ func TestClosingAResumablePaneEndsItAtOnce(t *testing.T) {
 // open-pane has no resumable refuses it by name, and the owner asks again
 // without it and gets the pane that ends with the link, as before.
 func TestAFarDaemonFromBeforeResumablePanesStillOpensAPane(t *testing.T) {
-	old := verbRegistry["open-pane"]
+	old := verbRegistry()["open-pane"]
 	old.params = slices.DeleteFunc(slices.Clone(old.params), func(p verbParam) bool { return p.Name == "resumable" || p.Name == "resume" })
 
 	owner, far := net.Pipe()

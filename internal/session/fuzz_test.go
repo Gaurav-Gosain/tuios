@@ -94,7 +94,7 @@ func FuzzClosestMatch(f *testing.F) {
 				t.Fatalf("closestMatch(%q) suggested its own input", target)
 			}
 			if got != "" {
-				if _, ok := verbRegistry[got]; !ok {
+				if _, ok := verbRegistry()[got]; !ok {
 					t.Fatalf("closestMatch(%q) suggested unregistered verb %q", target, got)
 				}
 			}

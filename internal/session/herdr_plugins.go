@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
@@ -19,29 +20,46 @@ import (
 // result shape (src/api/schema/plugins.rs at herdrTargetVersion), so a
 // plugin or a tool that drives herdr's plugins drives tuios's the same way.
 
-// herdrPluginMethods are the methods this file answers.
-var herdrPluginMethods = map[string]func(d *Daemon, cs *connState, params json.RawMessage) (any, *herdrError){
-	"plugin.list":   (*Daemon).herdrPluginList,
-	"plugin.link":   (*Daemon).herdrPluginLink,
-	"plugin.unlink": (*Daemon).herdrPluginUnlink,
-	"plugin.enable": func(d *Daemon, cs *connState, p json.RawMessage) (any, *herdrError) {
-		return d.herdrPluginSetEnabled(cs, p, true)
-	},
-	"plugin.disable": func(d *Daemon, cs *connState, p json.RawMessage) (any, *herdrError) {
-		return d.herdrPluginSetEnabled(cs, p, false)
-	},
-	"plugin.action.list":   (*Daemon).herdrPluginActionList,
-	"plugin.action.invoke": (*Daemon).herdrPluginActionInvoke,
-	"plugin.log.list":      (*Daemon).herdrPluginLogList,
-	"plugin.pane.open":     (*Daemon).herdrPluginPaneOpen,
-	"plugin.pane.focus":    (*Daemon).herdrPluginPaneFocus,
-	"plugin.pane.close":    (*Daemon).herdrPluginPaneClose,
-	"popup.close":          (*Daemon).herdrPopupClose,
+// herdrPluginMethods returns the methods this file answers. It is built on
+// first use and not at package init, for the reason verbRegistry gives.
+func herdrPluginMethods() map[string]herdrPluginMethod {
+	herdrPluginMethodsOnce.Do(func() { herdrPluginMethodsMap = buildHerdrPluginMethods() })
+	return herdrPluginMethodsMap
+}
+
+// herdrPluginMethod answers one plugin method.
+type herdrPluginMethod = func(d *Daemon, cs *connState, params json.RawMessage) (any, *herdrError)
+
+var (
+	herdrPluginMethodsOnce sync.Once
+	herdrPluginMethodsMap  map[string]herdrPluginMethod
+)
+
+// buildHerdrPluginMethods makes the table herdrPluginMethods returns.
+func buildHerdrPluginMethods() map[string]herdrPluginMethod {
+	return map[string]herdrPluginMethod{
+		"plugin.list":   (*Daemon).herdrPluginList,
+		"plugin.link":   (*Daemon).herdrPluginLink,
+		"plugin.unlink": (*Daemon).herdrPluginUnlink,
+		"plugin.enable": func(d *Daemon, cs *connState, p json.RawMessage) (any, *herdrError) {
+			return d.herdrPluginSetEnabled(cs, p, true)
+		},
+		"plugin.disable": func(d *Daemon, cs *connState, p json.RawMessage) (any, *herdrError) {
+			return d.herdrPluginSetEnabled(cs, p, false)
+		},
+		"plugin.action.list":   (*Daemon).herdrPluginActionList,
+		"plugin.action.invoke": (*Daemon).herdrPluginActionInvoke,
+		"plugin.log.list":      (*Daemon).herdrPluginLogList,
+		"plugin.pane.open":     (*Daemon).herdrPluginPaneOpen,
+		"plugin.pane.focus":    (*Daemon).herdrPluginPaneFocus,
+		"plugin.pane.close":    (*Daemon).herdrPluginPaneClose,
+		"popup.close":          (*Daemon).herdrPopupClose,
+	}
 }
 
 // herdrPluginCall answers a plugin method. handled is false for any other.
 func (d *Daemon) herdrPluginCall(cs *connState, method string, params json.RawMessage) (any, *herdrError, bool) {
-	fn, ok := herdrPluginMethods[method]
+	fn, ok := herdrPluginMethods()[method]
 	if !ok {
 		return nil, nil, false
 	}

@@ -616,7 +616,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	if verr := d.agentsOffRefusal(verb, params); verr != nil {
 		return nil, verr
 	}
-	entry, ok := verbRegistry[verb]
+	entry, ok := verbRegistry()[verb]
 	if !ok {
 		return nil, newVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(verb))
 	}

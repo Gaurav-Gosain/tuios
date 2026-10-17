@@ -24,13 +24,13 @@ import (
 // verb added without an entry would be refused over every link, and an entry
 // for a verb that does not exist is a policy for nothing.
 func TestEveryVerbHasALinkPolicy(t *testing.T) {
-	for verb := range verbRegistry {
+	for verb := range verbRegistry() {
 		if _, ok := verbCapabilities[verb]; !ok {
 			t.Errorf("verb %s has no entry in verbCapabilities, so it is refused over every link", verb)
 		}
 	}
 	for verb := range verbCapabilities {
-		if _, ok := verbRegistry[verb]; !ok {
+		if _, ok := verbRegistry()[verb]; !ok {
 			t.Errorf("verbCapabilities names %s, which is not a verb", verb)
 		}
 	}

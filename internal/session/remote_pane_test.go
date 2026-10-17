@@ -738,7 +738,7 @@ func TestThePaneIsNotAskedOncePerTick(t *testing.T) {
 // Negative control: without the retry in openPaneReply, the open fails with
 // "verb open-pane has no parameter window".
 func TestAFarDaemonFromBeforeReportsStillOpensAPane(t *testing.T) {
-	old := verbRegistry["open-pane"]
+	old := verbRegistry()["open-pane"]
 	old.params = slices.DeleteFunc(slices.Clone(old.params), func(p verbParam) bool { return p.Name == "window" })
 
 	owner, far := net.Pipe()

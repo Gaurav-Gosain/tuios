@@ -47,7 +47,7 @@ func TestUnknownParamIsRefused(t *testing.T) {
 // parameter of every verb is what catches that, and it caught two (capture-pane
 // scrollback/ansi and wait-for source) when the check went in.
 func TestDeclaredParamsAreAllAccepted(t *testing.T) {
-	for name, entry := range verbRegistry {
+	for name, entry := range verbRegistry() {
 		for _, p := range entry.params {
 			if verr := checkParamNames(name, entry, json.RawMessage(`{"`+p.Name+`":null}`)); verr != nil {
 				t.Errorf("verb %s refuses its own declared parameter %s: %v", name, p.Name, verr)
@@ -61,7 +61,7 @@ func TestDeclaredParamsAreAllAccepted(t *testing.T) {
 // with no description, or a parameter with no description or type, is a verb
 // that can only be used by reading the source.
 func TestEveryVerbIsDocumentedWellEnoughToCall(t *testing.T) {
-	for name, entry := range verbRegistry {
+	for name, entry := range verbRegistry() {
 		if strings.TrimSpace(entry.description) == "" {
 			t.Errorf("verb %s has no description", name)
 		}

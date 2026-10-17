@@ -701,7 +701,7 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 		m = map[string]json.RawMessage{}
 	}
 	declares := func(name string) bool {
-		entry, ok := verbRegistry[verb]
+		entry, ok := verbRegistry()[verb]
 		return ok && slices.ContainsFunc(entry.params, func(p verbParam) bool { return p.Name == name })
 	}
 	str := func(name string) string {

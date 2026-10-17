@@ -298,15 +298,15 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 	t.Chdir(testutil.GitRepo(t))
 	d, socketPath := startTestDaemon(t)
 
-	names := make([]string, 0, len(verbRegistry))
-	for name := range verbRegistry {
+	names := make([]string, 0, len(verbRegistry()))
+	for name := range verbRegistry() {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
 	seen := map[string]bool{}
 	for _, name := range names {
-		entry := verbRegistry[name]
+		entry := verbRegistry()[name]
 		if len(entry.examples) == 0 {
 			t.Errorf("verb %q documents no example, so nothing here can call it", name)
 			continue
@@ -420,7 +420,7 @@ var verbsWithNoDocumentedResult = map[string]bool{
 // A result schema is what lets the test check that a handler filled anything
 // in, so a verb without one is a verb the check cannot hold to much.
 func TestVerbResultSchemasAreDeclaredOrListed(t *testing.T) {
-	for name, entry := range verbRegistry {
+	for name, entry := range verbRegistry() {
 		if len(entry.returns) == 0 && !verbsWithNoDocumentedResult[name] {
 			t.Errorf("verb %q names no return fields: document them in its registry "+
 				"entry, or add it to verbsWithNoDocumentedResult", name)
@@ -430,7 +430,7 @@ func TestVerbResultSchemasAreDeclaredOrListed(t *testing.T) {
 		}
 	}
 	for name := range verbsWithNoDocumentedResult {
-		if _, ok := verbRegistry[name]; !ok {
+		if _, ok := verbRegistry()[name]; !ok {
 			t.Errorf("verbsWithNoDocumentedResult names %q, which the registry does not have", name)
 		}
 	}

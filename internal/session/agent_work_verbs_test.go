@@ -42,7 +42,7 @@ var agentWorkVerbTable = []struct {
 
 func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
 	for _, row := range agentWorkVerbTable {
-		if _, ok := verbRegistry[row.verb]; !ok {
+		if _, ok := verbRegistry()[row.verb]; !ok {
 			t.Errorf("%s is not registered", row.verb)
 			continue
 		}

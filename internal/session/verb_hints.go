@@ -342,8 +342,8 @@ func editDistance(a, b string) int {
 
 // knownVerbNames returns every registered verb name in sorted order.
 func knownVerbNames() []string {
-	names := make([]string, 0, len(verbRegistry))
-	for name := range verbRegistry {
+	names := make([]string, 0, len(verbRegistry()))
+	for name := range verbRegistry() {
 		names = append(names, name)
 	}
 	sort.Strings(names)

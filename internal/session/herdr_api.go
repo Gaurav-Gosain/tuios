@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -240,16 +241,27 @@ type herdrMethod struct {
 	required []string
 }
 
-// herdrMethods are the methods tuios answers besides the pane reports, with
-// the params each must have.
-var herdrMethods map[string]herdrMethod
+// herdrMethods returns the methods tuios answers besides the pane reports,
+// with the params each must have. It is built on first use and not in init,
+// for the reason verbRegistry gives: a table init builds keeps every handler
+// it names in every program that links this package.
+func herdrMethods() map[string]herdrMethod {
+	herdrMethodsOnce.Do(func() { herdrMethodsMap = buildHerdrMethods() })
+	return herdrMethodsMap
+}
 
-func init() {
+var (
+	herdrMethodsOnce sync.Once
+	herdrMethodsMap  map[string]herdrMethod
+)
+
+// buildHerdrMethods makes the table herdrMethods returns.
+func buildHerdrMethods() map[string]herdrMethod {
 	pane := []string{"pane_id"}
 	tab := []string{"tab_id"}
 	ws := []string{"workspace_id"}
 	target := []string{"target"}
-	herdrMethods = map[string]herdrMethod{
+	return map[string]herdrMethod{
 		"ping":             {run: (*Daemon).herdrPing},
 		"session.snapshot": {run: (*Daemon).herdrSnapshot},
 
@@ -341,7 +353,7 @@ var herdrUnsupported = []string{
 // herdrAPICall answers a method that is not a pane report. handled is false
 // for a method herdr does not have.
 func (d *Daemon) herdrAPICall(cs *connState, method string, params json.RawMessage) (any, *herdrError, bool) {
-	m, ok := herdrMethods[method]
+	m, ok := herdrMethods()[method]
 	if !ok {
 		// The plugin methods are answered by the plugin host. See
 		// herdr_plugins.go.
