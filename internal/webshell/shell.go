@@ -235,7 +235,10 @@ func runShell(t *TTY) int {
 				return s.status
 			}
 		case <-t.Resized():
-			s.repaint()
+			// A change of height alone needs no new layout.
+			if t.relaidNeeded() {
+				s.repaint()
+			}
 		}
 	}
 }

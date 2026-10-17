@@ -230,7 +230,9 @@ func agentPause(t *TTY, d time.Duration) bool {
 		case <-timer.C:
 			return true
 		case <-t.Resized():
-			t.repaint("")
+			if t.relaidNeeded() {
+				t.repaint("")
+			}
 		case b, ok := <-t.In:
 			if !ok {
 				return false

@@ -37,6 +37,12 @@ const maxLogBytes = 256 << 10
 // layBytes is what a layout block counts towards maxLogBytes.
 const layBytes = 2 << 10
 
+// rawChunk is how far one raw block grows before the next write starts a
+// new one. Output with no layout between would otherwise pile up in one
+// block that trim, which drops whole blocks, could never shorten, and every
+// write would copy it.
+const rawChunk = 4 << 10
+
 // The sequences the log reads in what it keeps.
 const (
 	seqAltOn  = "\x1b[?1049h"
@@ -85,7 +91,7 @@ func (l *screenLog) appendRaw(s string) {
 	if s == "" || l.alt {
 		return
 	}
-	if n := len(l.blocks); n > 0 && l.blocks[n-1].lay == nil {
+	if n := len(l.blocks); n > 0 && l.blocks[n-1].lay == nil && len(l.blocks[n-1].raw) < rawChunk {
 		l.blocks[n-1].raw += s
 	} else {
 		l.blocks = append(l.blocks, logBlock{raw: s})
@@ -97,12 +103,22 @@ func (l *screenLog) appendRaw(s string) {
 func (l *screenLog) trim() {
 	for l.size > maxLogBytes && len(l.blocks) > 1 {
 		b := l.blocks[0]
+		l.blocks[0] = logBlock{} // let the dropped block be collected
 		l.blocks = l.blocks[1:]
 		if b.lay != nil {
 			l.size -= layBytes
 		} else {
 			l.size -= len(b.raw)
 		}
+	}
+	// One write bigger than the bound is kept from its last whole line.
+	if b := &l.blocks[0]; l.size > maxLogBytes && b.lay == nil {
+		cut := len(b.raw) - maxLogBytes
+		if i := strings.IndexByte(b.raw[cut:], '\n'); i >= 0 {
+			cut += i + 1
+		}
+		b.raw = strings.Clone(b.raw[cut:])
+		l.size = len(b.raw)
 	}
 }
 

@@ -134,13 +134,15 @@ func (t *TTY) keep(s string) { t.log.write(s) }
 // break. The scrollback is cleared with the screen because the log holds it
 // too.
 func (t *TTY) repaint(tail string) {
-	cols, _ := t.Size()
-	t.laid = cols
-	// This repaint answers any resize still waiting to be read.
+	// This repaint answers any resize still waiting to be read. The signal
+	// is taken before the size is read, so a resize that lands after the
+	// read leaves a signal for the next repaint.
 	select {
 	case <-t.Resized():
 	default:
 	}
+	cols, _ := t.Size()
+	t.laid = cols
 	t.write("\x1b[H\x1b[2J\x1b[3J" + t.log.replay(cols) + tail)
 }
 

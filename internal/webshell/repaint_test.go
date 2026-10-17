@@ -97,3 +97,27 @@ func TestRepaintFitsThePane(t *testing.T) {
 		}
 	}
 }
+
+// TestLogStaysBounded prints far more plain output than the log keeps, with
+// no layout in between to split it into blocks. The log must stay near its
+// bound and keep the newest output.
+func TestLogStaysBounded(t *testing.T) {
+	var l screenLog
+	l.layout(func(int) []string { return []string{"x"} })
+	line := strings.Repeat("a", 79) + "\r\n"
+	for range 20000 {
+		l.write(line)
+	}
+	l.write("last\r\n")
+	if l.size > maxLogBytes+rawChunk {
+		t.Fatalf("the log holds %d bytes, bound %d", l.size, maxLogBytes)
+	}
+	if !strings.HasSuffix(l.replay(80), "last\r\n") {
+		t.Fatal("the log lost the newest output")
+	}
+	// One write bigger than the bound.
+	l.write(strings.Repeat(line, 2*maxLogBytes/len(line)))
+	if l.size > maxLogBytes {
+		t.Fatalf("after one big write the log holds %d bytes, bound %d", l.size, maxLogBytes)
+	}
+}
