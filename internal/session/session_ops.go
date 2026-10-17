@@ -260,6 +260,11 @@ type NewWindowOptions struct {
 	// as a focus move. See ExecuteCommandPayload.FocusIfShown. It means
 	// nothing with Focus set.
 	FocusIfShown bool
+	// TabKey names the workspace by its tab key, which follows it through a
+	// renumber, when the caller read the workspace's number before one it
+	// may not have seen. Zero names it by Workspace alone. See
+	// ExecuteCommandPayload.TabKey.
+	TabKey int
 	// Grants is what the window's process may do through tuios, nil for the
 	// default of [agents.permissions]. It is in force before the process
 	// starts, and it is saved with the window. See pane_grants.go.
@@ -465,6 +470,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 		if opts.Workspace != 0 {
 			workspace = opts.Workspace
+		}
+		if opts.TabKey > 0 {
+			if at := state.WorkspaceForTabKey(opts.TabKey); at > 0 {
+				workspace = at
+			}
 		}
 		// The pane a switch to an empty workspace asks for is one per
 		// workspace, whatever asked: a second client that switched too, or a

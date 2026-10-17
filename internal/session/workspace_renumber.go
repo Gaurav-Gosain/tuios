@@ -272,16 +272,29 @@ func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 		s.workspaceTrail[i] = to(ws)
 	}
 	s.tabListed = RenumberWorkspaceMap(s.tabListed, newOf)
+	s.existed = RenumberWorkspaceMap(s.existed, newOf)
+	s.hadPanes = RenumberWorkspaceMap(s.hadPanes, newOf)
 }
 
-// noteTabsLocked retires the tab key of every workspace that stopped being a
-// herdr tab since the last change, so a tab made there later gets a key no
-// client has seen. It runs after every change to the state, a client's push
-// included. The caller holds stateMu.
-func (s *Session) noteTabsLocked() {
+// noteWorkspacesLocked runs after every change to the state, a client's push
+// included, and keeps a workspace's number its position:
+//
+//   - A workspace exists while it holds a pane or is the one shown. When one
+//     that has held a pane stops existing it loses its name, and every
+//     workspace above it moves down one, so closing workspace 2 of three
+//     leaves 1 and 2. An empty workspace that was only looked at goes without
+//     moving anything, and a number past the last workspace that a pane is put
+//     on directly stays as it is until something below it goes: only a
+//     workspace going away renumbers.
+//   - A workspace that stops being a herdr tab gives up its tab key, so a tab
+//     made there later gets a key no client has seen.
+//
+// It reports whether it renumbered, which the caller counts as a daemon
+// mutation. The caller holds stateMu.
+func (s *Session) noteWorkspacesLocked() bool {
 	st := s.state
 	if st == nil {
-		return
+		return false
 	}
 	// Published for herdrTabFor whatever happens below. The map is never
 	// written in place, so a reader of this copy needs no lock.
@@ -289,6 +302,90 @@ func (s *Session) noteTabsLocked() {
 		keys := st.WorkspaceTabKeys
 		s.tabKeys.Store(&keys)
 	}()
+	exists := st.existingWorkspaces()
+	if s.hadPanes == nil {
+		s.hadPanes = make(map[int]bool)
+	}
+	var gone []int
+	for ws := range s.existed {
+		if ws <= st.workspaceBound() && !exists[ws] && s.hadPanes[ws] {
+			gone = append(gone, ws)
+		}
+	}
+	for ws := range s.hadPanes {
+		if !exists[ws] {
+			delete(s.hadPanes, ws)
+		}
+	}
+	for i := range st.Windows {
+		if w := &st.Windows[i]; !w.Scratch {
+			s.hadPanes[max(w.Workspace, 1)] = true
+		}
+	}
+	for _, ws := range gone {
+		if st.WorkspaceNames[ws] != "" {
+			names := maps.Clone(st.WorkspaceNames)
+			delete(names, ws)
+			st.WorkspaceNames = names
+		}
+	}
+	s.existed = exists
+	s.retireTabKeysLocked()
+
+	newOf := st.closeUp(gone)
+	if newOf == nil {
+		return false
+	}
+	st.renumberWorkspaces(newOf)
+	s.renumberSessionRecordsLocked(newOf)
+	return true
+}
+
+// existingWorkspaces is the workspaces that exist: each one holding a pane,
+// and the one shown.
+//
+// Workspace 0, which a state from before workspaces were numbered from 1
+// carries, is workspace 1.
+func (st *SessionState) existingWorkspaces() map[int]bool {
+	exists := map[int]bool{max(st.CurrentWorkspace, 1): true}
+	for i := range st.Windows {
+		if w := &st.Windows[i]; !w.Scratch {
+			exists[max(w.Workspace, 1)] = true
+		}
+	}
+	return exists
+}
+
+// closeUp is the renumber that closes the places of the workspaces in gone:
+// every workspace above one moves down one, and the places go to the end. Nil
+// when nothing moves.
+func (st *SessionState) closeUp(gone []int) map[int]int {
+	if len(gone) == 0 {
+		return nil
+	}
+	order := make([]int, 0, st.workspaceBound())
+	for ws := 1; ws <= st.workspaceBound(); ws++ {
+		if !slices.Contains(gone, ws) {
+			order = append(order, ws)
+		}
+	}
+	order = append(order, slices.Sorted(slices.Values(gone))...)
+	newOf := make(map[int]int)
+	for i, ws := range order {
+		if ws != i+1 {
+			newOf[ws] = i + 1
+		}
+	}
+	if len(newOf) == 0 {
+		return nil
+	}
+	return newOf
+}
+
+// retireTabKeysLocked gives a workspace that stopped being a herdr tab since
+// the last change a new tab key. The caller holds stateMu.
+func (s *Session) retireTabKeysLocked() {
+	st := s.state
 	bound := st.workspaceBound()
 	listed := make(map[int]bool)
 	for ws := 1; ws <= bound; ws++ {
@@ -316,6 +413,14 @@ func (s *Session) noteTabsLocked() {
 		next++
 	}
 	st.WorkspaceTabKeys, st.NextWorkspaceTabKey = keys, next
+}
+
+// noteRenumberLocked records that the change at the current version
+// renumbered the workspaces: a push built before it holds the old numbering in
+// its maps and its focus. The caller holds stateMu.
+func (s *Session) noteRenumberLocked() {
+	s.renumberedAt = s.state.Version
+	s.focusMovedVersion = s.state.Version
 }
 
 // workspaceRenumberMissedLocked reports whether a push built at base predates

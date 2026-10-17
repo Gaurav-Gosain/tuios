@@ -1589,7 +1589,9 @@ tuios close-workspace [flags] [workspace]
 - `--json`: Output the result as JSON
 
 Scratch panes stay open. To close a scratch group, name its scratch workspace.
-A pane that runs this command needs the `admin` grant. The
+When the workspace goes, the workspaces above it move down one. See
+[CONFIGURATION.md](CONFIGURATION.md#workspace-numbers). A pane that runs this
+command needs the `admin` grant. The
 `close_workspace` action does the same from the keyboard, and the `Close` row of
 a workspace tab's right-click menu in the dock does it for that tab's workspace.
 See [KEYBINDINGS.md](KEYBINDINGS.md#close-every-pane-on-a-workspace).

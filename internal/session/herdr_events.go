@@ -144,8 +144,8 @@ type herdrPaneMemo struct {
 	// tabKey is the tab key of the window's workspace, which names its tab
 	// through any renumber since. See SessionState.WorkspaceTabKey.
 	tabKey int
-	agent     string
-	status    string
+	agent  string
+	status string
 }
 
 // herdrTranslator turns tuios events into herdr events for one stream.

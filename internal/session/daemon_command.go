@@ -161,7 +161,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 			var win WindowState
 			if err == nil {
 				win, err = session.AddDaemonWindowWith(NewWindowOptions{
-					FocusIfShown: true, Cwd: payload.Cwd, Workspace: payload.Workspace,
+					FocusIfShown: true, Cwd: payload.Cwd, Workspace: payload.Workspace, TabKey: payload.TabKey,
 					Name: name, Command: command, Env: newWindowEnv,
 				}, onExit)
 			}

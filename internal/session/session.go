@@ -1290,8 +1290,14 @@ type Session struct {
 	// push built before it holds the old numbering. See RenumberWorkspaces.
 	renumberedAt int
 	// tabListed is the workspaces that were herdr tabs at the last change, so
-	// one that stops being a tab gives up its tab key. See noteTabsLocked.
+	// one that stops being a tab gives up its tab key, and existed is the
+	// workspaces that existed then, so one that stops existing is compacted
+	// away. See noteWorkspacesLocked.
 	tabListed map[int]bool
+	existed   map[int]bool
+	// hadPanes is the workspaces that have held a pane since they last came
+	// into existence: only such a workspace closes up its place when it goes.
+	hadPanes map[int]bool
 	// tabKeys is the state's WorkspaceTabKeys as last written, readable
 	// without stateMu, for a shell started while the state is being written.
 	// See herdrTabFor.
@@ -3264,7 +3270,14 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		}
 	}
 	s.TouchActive()
-	s.noteTabsLocked()
+	if s.noteWorkspacesLocked() {
+		// The push left a workspace empty or opened one past the last, and
+		// the session renumbered: a daemon-side change the sender has not
+		// seen, so it is answered with the state.
+		s.state.Version++
+		s.noteRenumberLocked()
+		accepted = false
+	}
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return accepted, behind, s.changeSeq
@@ -3339,7 +3352,9 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 		s.focusMovedVersion = s.state.Version
 	}
 	s.focusIntent, s.focusNeutral = false, false
-	s.noteTabsLocked()
+	if s.noteWorkspacesLocked() {
+		s.noteRenumberLocked()
+	}
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil

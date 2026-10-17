@@ -809,6 +809,10 @@ entry, with the same dialog, but it acts on the tab's workspace instead of the
 current one. It is dimmed when the workspace has no pane to close. Closing a
 workspace that is not on screen leaves the view where it is.
 
+When the closed workspace is not on screen, or when tuios goes back from it,
+the workspaces above it move down one, so the numbers follow the positions.
+See [CONFIGURATION.md](CONFIGURATION.md#workspace-numbers).
+
 `tuios close-workspace` does the same from a shell. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-close-workspace).
 

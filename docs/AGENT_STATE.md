@@ -602,9 +602,10 @@ is on its own tab, and that holds with this mapping. tuios sets the variable
 when the pane's shell starts, as herdr does. A pane that you move to another
 workspace keeps the id it started with.
 
-A tuios workspace is a fixed slot, and herdr lists only the tabs that exist.
-So a workspace is a tab when it holds a window, has a name, or is the one that
-shows. A scratch terminal is not a pane to a herdr client, and a scratch
+herdr lists only the tabs that exist. So a workspace is a tab when it holds a
+window, has a name, or is the one that shows. A tab whose last pane closes
+goes, as in herdr: its workspace loses its name, and its tab id names no tab
+from then on. A scratch terminal is not a pane to a herdr client, and a scratch
 workspace is not a tab. They are not in the snapshot, the lists or the
 events. A tab's `number` is its tab number, the one in its id. An unnamed
 tab's `label` is its workspace number, which is what the dock shows.
