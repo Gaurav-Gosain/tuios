@@ -306,17 +306,6 @@ var pageSections = map[string]bool{
 	"hints": true, "panes": true, "scratch": true, "workspaces": true,
 }
 
-// pageRefused are the options inside those sections that run a program, name
-// a file, or write the host clipboard.
-var pageRefused = map[string]bool{
-	"appearance.link_opener":            true,
-	"appearance.preferred_shell":        true,
-	"appearance.selection.copy_command": true,
-	"appearance.selection.osc52_write":  true,
-	"appearance.sidebar.editor":         true,
-	"appearance.sidebar.file_delete":    true,
-}
-
 // pageSettable reports the registry path the page's set command may change
 // for path, or false. It takes the spellings OS.SetConfig takes: the full
 // path, or the bare name of an appearance option. An unknown path is refused,
@@ -330,7 +319,7 @@ func pageSettable(path string) (string, bool) {
 		path = "appearance." + path
 		opt, ok = config.LookupOption(path)
 	}
-	if !ok || !pageSections[opt.Section] || pageRefused[path] {
+	if !ok || !pageSections[opt.Section] || config.ReachesHost(path) {
 		return "", false
 	}
 	return path, true

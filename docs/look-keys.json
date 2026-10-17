@@ -1,0 +1,522 @@
+{
+  "look": 1,
+  "keys": [
+    {
+      "path": "appearance.animation_speed",
+      "type": "int",
+      "min": 25,
+      "max": 400
+    },
+    {
+      "path": "appearance.background",
+      "type": "string",
+      "accepted": [
+        "off",
+        "theme"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.border_focused_color",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.border_focused_gradient",
+      "type": "string"
+    },
+    {
+      "path": "appearance.border_gradient_angle",
+      "type": "int",
+      "max": 359
+    },
+    {
+      "path": "appearance.border_style",
+      "type": "string",
+      "accepted": [
+        "rounded",
+        "normal",
+        "thick",
+        "double",
+        "block",
+        "outer-half-block",
+        "inner-half-block",
+        "ascii",
+        "hidden",
+        "glyphs"
+      ]
+    },
+    {
+      "path": "appearance.border_unfocused_color",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.clock_format",
+      "type": "string"
+    },
+    {
+      "path": "appearance.desktop_background",
+      "type": "string",
+      "accepted": [
+        "off",
+        "theme"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.dim_foreground",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.dim_multifocus",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.dim_unfocused",
+      "type": "int",
+      "max": 90
+    },
+    {
+      "path": "appearance.dock_background",
+      "type": "string",
+      "accepted": [
+        "off",
+        "theme"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.dock_compact",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.dock_mode_icon_terminal",
+      "type": "string"
+    },
+    {
+      "path": "appearance.dock_mode_icon_tiling",
+      "type": "string"
+    },
+    {
+      "path": "appearance.dock_mode_icon_window",
+      "type": "string"
+    },
+    {
+      "path": "appearance.dock_pill_caps",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.dock_prefix_indicator",
+      "type": "string",
+      "accepted": [
+        "pill",
+        "badge"
+      ]
+    },
+    {
+      "path": "appearance.dock_workspace_label_max",
+      "type": "int",
+      "max": 200
+    },
+    {
+      "path": "appearance.dock_workspace_tab_format",
+      "type": "string"
+    },
+    {
+      "path": "appearance.dock_workspace_tabs",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.dockbar_position",
+      "type": "string",
+      "accepted": [
+        "bottom",
+        "top",
+        "hidden"
+      ]
+    },
+    {
+      "path": "appearance.drop_preview",
+      "type": "string",
+      "accepted": [
+        "fill",
+        "outline",
+        "off"
+      ]
+    },
+    {
+      "path": "appearance.gap",
+      "type": "int",
+      "max": 8
+    },
+    {
+      "path": "appearance.glyphs",
+      "type": "string"
+    },
+    {
+      "path": "appearance.hide_scrollbar",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.hide_window_buttons",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.modal_dim",
+      "type": "int",
+      "max": 90
+    },
+    {
+      "path": "appearance.motion",
+      "type": "string",
+      "accepted": [
+        "none",
+        "basic",
+        "full"
+      ]
+    },
+    {
+      "path": "appearance.pane_background",
+      "type": "string",
+      "accepted": [
+        "off",
+        "theme"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.panel_padding",
+      "type": "int",
+      "min": 1,
+      "max": 6
+    },
+    {
+      "path": "appearance.scrollbar.style",
+      "type": "string",
+      "accepted": [
+        "thin",
+        "track"
+      ]
+    },
+    {
+      "path": "appearance.scrollbar.thumb",
+      "type": "string"
+    },
+    {
+      "path": "appearance.scrollbar.tint",
+      "type": "string",
+      "accepted": [
+        "quiet",
+        "border",
+        "muted"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.scrollbar.track",
+      "type": "string"
+    },
+    {
+      "path": "appearance.selection.bg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.bold",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.selection.cursor_bg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.cursor_fg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.fg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.flash",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.selection.flash_color",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.flash_ms",
+      "type": "int",
+      "min": 80,
+      "max": 3000
+    },
+    {
+      "path": "appearance.selection.flash_style",
+      "type": "string",
+      "accepted": [
+        "diagonal",
+        "diagonal-reverse",
+        "horizontal",
+        "vertical"
+      ]
+    },
+    {
+      "path": "appearance.selection.match_bg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.match_fg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.search_bg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.selection.search_fg",
+      "type": "string",
+      "color": true
+    },
+    {
+      "path": "appearance.session_border",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.session_colors",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.shared_borders",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.show_clock",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.show_cpu",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.show_ram",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.background",
+      "type": "string",
+      "accepted": [
+        "off",
+        "theme"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.sidebar.density",
+      "type": "string",
+      "accepted": [
+        "normal",
+        "roomy"
+      ]
+    },
+    {
+      "path": "appearance.sidebar.enabled",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.file_icon_colors",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.file_icons",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.header_case",
+      "type": "string",
+      "accepted": [
+        "lowercase",
+        "uppercase"
+      ]
+    },
+    {
+      "path": "appearance.sidebar.header_style",
+      "type": "string",
+      "accepted": [
+        "auto",
+        "plain",
+        "rule",
+        "pill",
+        "icon"
+      ]
+    },
+    {
+      "path": "appearance.sidebar.marquee",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.position",
+      "type": "string",
+      "accepted": [
+        "left",
+        "right",
+        "hidden"
+      ]
+    },
+    {
+      "path": "appearance.sidebar.row_style",
+      "type": "string",
+      "accepted": [
+        "bar",
+        "marker",
+        "underline",
+        "pill"
+      ]
+    },
+    {
+      "path": "appearance.sidebar.show_counts",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.show_glyphs",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.show_numbers",
+      "type": "bool"
+    },
+    {
+      "path": "appearance.sidebar.width",
+      "type": "int"
+    },
+    {
+      "path": "appearance.theme",
+      "type": "string"
+    },
+    {
+      "path": "appearance.theme_light",
+      "type": "string"
+    },
+    {
+      "path": "appearance.theme_transition",
+      "type": "string",
+      "accepted": [
+        "none",
+        "circle",
+        "fade"
+      ]
+    },
+    {
+      "path": "appearance.theme_transition_duration",
+      "type": "int",
+      "min": 100,
+      "max": 2000
+    },
+    {
+      "path": "appearance.window_button_position",
+      "type": "string",
+      "accepted": [
+        "right",
+        "left"
+      ]
+    },
+    {
+      "path": "appearance.window_button_style",
+      "type": "string",
+      "accepted": [
+        "pill",
+        "dots"
+      ]
+    },
+    {
+      "path": "appearance.window_chrome_background",
+      "type": "string",
+      "accepted": [
+        "off",
+        "theme"
+      ],
+      "color": true
+    },
+    {
+      "path": "appearance.window_title_align",
+      "type": "string",
+      "accepted": [
+        "auto",
+        "left",
+        "center",
+        "right"
+      ]
+    },
+    {
+      "path": "appearance.window_title_format",
+      "type": "string"
+    },
+    {
+      "path": "appearance.window_title_position",
+      "type": "string",
+      "accepted": [
+        "bottom",
+        "top",
+        "hidden"
+      ]
+    },
+    {
+      "path": "appearance.window_title_style",
+      "type": "string",
+      "accepted": [
+        "pill",
+        "tab",
+        "plain"
+      ]
+    },
+    {
+      "path": "appearance.zen_mode",
+      "type": "string",
+      "accepted": [
+        "disabled",
+        "always",
+        "mouse"
+      ]
+    },
+    {
+      "path": "appearance.zoom_animation",
+      "type": "bool"
+    },
+    {
+      "path": "dock.clock.format",
+      "type": "string"
+    },
+    {
+      "path": "spotlight.dim",
+      "type": "int",
+      "min": 10,
+      "max": 95
+    },
+    {
+      "path": "spotlight.edge",
+      "type": "string",
+      "accepted": [
+        "hard",
+        "soft"
+      ]
+    },
+    {
+      "path": "spotlight.enabled",
+      "type": "bool"
+    },
+    {
+      "path": "spotlight.radius",
+      "type": "int",
+      "min": 2,
+      "max": 200
+    }
+  ]
+}

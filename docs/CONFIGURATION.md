@@ -144,7 +144,9 @@ They write only the keys you changed, and never copy the other files into
 config.toml. A change made while a file changed on disk keeps the new values
 of that file. Each change goes to one file:
 
-- A key that a file sets goes to the last file that sets it.
+- A key that a file sets goes to the last file that sets it. The look file,
+  `config.d/look.toml`, is not a target: a change to a key that it sets goes
+  to config.toml. See [Looks](THEMES.md#looks).
 - A new entry in a table of entries, such as a new `[hosts.NAME]`, goes to the
   last writable file that has entries in that table.
 - Any other new key goes to config.toml.

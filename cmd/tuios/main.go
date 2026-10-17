@@ -3106,7 +3106,7 @@ command in authorized_keys to make the policy a boundary:
 	}
 	stdioProxyCmd.Flags().StringVar(&stdioProxyAs, "as", "", "Name of the machine the link comes from, for its link policy. Overrides the name that machine gives")
 
-	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
+	rootCmd.AddCommand(sshCmd, configCmd, newLookCommand(), keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
 	rootCmd.AddCommand(newDetachClientCmd())

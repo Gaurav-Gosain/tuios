@@ -377,14 +377,14 @@ func TestSetRefusesHostOptions(t *testing.T) {
 	}
 
 	// An option added later that names a program or a path has to be refused
-	// on purpose, or listed in pageRefused.
+	// on purpose, or refused by config.ReachesHost.
 	for _, opt := range config.Options() {
 		if _, ok := pageSettable(opt.Path); !ok {
 			continue
 		}
 		for _, word := range []string{"command", "opener", "editor", "shell", "directory", "_file", "osc52", "url", "root"} {
 			if strings.Contains(opt.Path, word) {
-				t.Errorf("the page may set %s; refuse it in pageRefused or say here why it is safe", opt.Path)
+				t.Errorf("the page may set %s; refuse it in config.ReachesHost or say here why it is safe", opt.Path)
 			}
 		}
 	}

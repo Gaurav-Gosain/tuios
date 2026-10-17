@@ -341,7 +341,14 @@ func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 	owner := -1
 	if len(holders) > 0 {
 		owner = holders[len(holders)-1]
-		if w.writable(owner) {
+		// The look file is never a write target. A change there would be
+		// undone by the next look apply or remove, so it goes to config.toml,
+		// which comes after it.
+		if w.lc.Layers[owner].isLook() {
+			if main := len(w.lc.Layers) - 1; w.writable(main) {
+				return main, nil
+			}
+		} else if w.writable(owner) {
 			return owner, nil
 		}
 	} else {
@@ -350,7 +357,7 @@ func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 		for n := len(path) - 1; n >= 1 && owner < 0; n-- {
 			for i := len(w.lc.Layers) - 1; i >= 0; i-- {
 				v, ok := lookupPath(w.lc.Layers[i].Values, path[:n])
-				if !ok || !isEntryCollection(v) {
+				if !ok || !isEntryCollection(v) || w.lc.Layers[i].isLook() {
 					continue
 				}
 				if w.writable(i) {

@@ -15,6 +15,7 @@ overlays, the dockbar) from them.
 - [Theme File Format](#theme-file-format)
 - [Start from Another Theme](#start-from-another-theme)
 - [Export and Share a Theme](#export-and-share-a-theme)
+- [Looks](#looks)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
 - [Chrome Colors](#chrome-colors)
 - [Colour Depth](#colour-depth)
@@ -324,6 +325,66 @@ tuios-theme:v1:eyJpZCI6ImRyYWN1bGEtZW1iZXIiLCJiYXNlIjoiZHJhY3VsYSIs...
 ```
 
 The part after `tuios-theme:v1:` is the file in base64url with no padding.
+
+## Looks
+
+A look is one TOML file that sets how tuios looks: theme, glyph set, borders,
+gaps, dock and rail style. It can also hold a theme and a glyph set. The
+[gallery](https://tuios.dev/gallery) shares looks, and `tuios look apply`
+installs one. [CLI_REFERENCE.md](CLI_REFERENCE.md#looks-tuios-look) describes
+the commands.
+
+```toml
+look = 1                        # the format version, required
+name = "Tokyo blocks"           # optional
+author = "someone"              # optional
+
+[appearance]
+border_style = "rounded"
+gap = 1
+
+[appearance.sidebar]
+row_style = "pill"
+
+[theme]                         # optional: a theme, with the keys of a theme file
+id = "tokyo"
+base = "tokyonight"
+bg = "#16161e"
+
+[theme.chrome]
+accent = "#7aa2f7"
+
+[glyphs]                        # optional: a glyph set, with the keys of a glyph set file
+id = "tokyo"
+close = "x"
+```
+
+- `look = 1` is the format version. A tuios that reads an older version
+  refuses a newer look and tells you to update.
+- The option tables take the look keys only. `tuios look keys` lists them.
+  The keys set colour, theme, glyphs, borders, gaps, titles, the dock, the
+  rail, the scrollbar, selection colours and the spotlight.
+- A look cannot set a key that runs a program, names a file or a folder, or
+  changes a host, the daemon, keybindings, hooks or startup. tuios leaves out
+  such a key and names it.
+- tuios checks each value as `tuios set-config` does. A value that is not
+  correct stops the look. A string cannot hold a control character.
+- `[theme]` takes the keys of a [theme file](#theme-file-format). Put the
+  chrome roles in `[theme.chrome]`. `id` is required. tuios installs the theme
+  as `look-<id>`, and `appearance.theme` names it. If you set
+  `appearance.theme`, set it to the theme's `id`.
+- `[glyphs]` takes the keys of a glyph set file
+  ([GLYPHS.md](GLYPHS.md)). `id` is required. tuios installs it as
+  `look-<id>`, and `appearance.glyphs` names it.
+- A look file is 64 KiB at most. A theme or a glyph set in it is 32 KiB at
+  most.
+
+tuios writes the look to `config.d/look.toml` and does not change
+`config.toml`. `config.toml` wins over `config.d`, so a key that
+`config.toml` sets hides the same key in the look. `tuios look apply` names
+those keys. When you change a look key in the settings, tuios writes the
+change to `config.toml`. The next `tuios look apply` or `tuios look remove`
+then keeps your change.
 
 ## Defaults for Omitted Colors
 

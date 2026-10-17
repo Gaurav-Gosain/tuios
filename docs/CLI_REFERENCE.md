@@ -10,6 +10,7 @@ This document provides a complete reference for TUIOS command-line interface.
 - [Commands](#commands)
   - [Root Command](#root-command)
   - [Theming](#theming)
+    - [Looks: tuios look](#looks-tuios-look)
   - [Agent Skill](#agent-skill)
   - [Daemon Mode (Session Persistence)](#daemon-mode-session-persistence)
   - [Remote Control Commands](#remote-control-commands)
@@ -255,6 +256,52 @@ alias tuios='tuios --theme nord'
 #!/bin/bash
 exec tuios --theme dracula "$@"
 ```
+
+### Looks: `tuios look`
+
+A look is a small TOML file that sets how tuios looks: theme, glyph set,
+borders, gaps, dock and rail style. The [gallery](https://tuios.dev/gallery)
+shares looks. [docs/THEMES.md](THEMES.md#looks) describes the file.
+
+```bash
+# Apply a look from the gallery
+tuios look apply tuios.dev/r/tokyo-blocks
+
+# Apply a look from an https URL or from a file
+tuios look apply https://example.com/my.look.toml
+tuios look apply ./my.look.toml
+
+# Show the look in use
+tuios look show
+
+# Remove the look and the theme it installed
+tuios look remove
+
+# List the keys a look can set
+tuios look keys
+tuios look keys --json
+```
+
+`tuios look apply <source>`:
+
+- The source is a gallery id (`tuios.dev/r/ID` or `ID`), an https URL, or a
+  local file. tuios downloads only over https.
+- tuios shows the changes and asks before it writes. Use `--yes` to skip the
+  question. A run with no terminal needs `--yes`.
+- tuios writes the look to `config.d/look.toml`. It does not change
+  `config.toml`.
+- A theme or glyph set in the look goes into the themes or glyphs folder. Its
+  name starts with `look-`.
+- A running tuios reloads the config. You do not restart.
+- A look can set only look keys. tuios leaves out every other key and names
+  it. A value that is not correct stops the look.
+- `config.toml` wins over `config.d`. tuios names each key that `config.toml`
+  sets, because the look does not change that key.
+- A new look replaces the look in use.
+- A config folder that tuios cannot write stops the command.
+
+`tuios look remove` deletes `config.d/look.toml` and the theme and glyph set
+that the look installed. Use `--yes` to skip the question.
 
 ---
 
