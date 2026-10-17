@@ -59,6 +59,8 @@ func (m *OS) appendLog(entry LogMessage) {
 // LogInfo logs an informational message. INFO logs are skipped entirely unless
 // verbose logging is enabled, so the format string and args are never evaluated
 // into the ring buffer in the common (non-debug) case.
+//
+//go:noinline
 func (m *OS) LogInfo(format string, args ...any) {
 	if !verboseLog {
 		return
@@ -145,6 +147,8 @@ func (m *OS) LogWarn(format string, args ...any) {
 }
 
 // LogError logs an error message.
+//
+//go:noinline
 func (m *OS) LogError(format string, args ...any) {
 	m.Log("ERROR", format, args...)
 }
@@ -195,6 +199,8 @@ func notificationLifetime(notifType string, requested time.Duration, s *config.S
 //
 // Severity comes from notifType, and duration is a floor rather than the whole
 // answer (see notificationLifetime).
+//
+//go:noinline
 func (m *OS) ShowNotification(message, notifType string, duration time.Duration) {
 	m.showNotification(message, notifType, "", duration, nil)
 }

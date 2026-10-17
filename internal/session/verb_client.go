@@ -165,6 +165,8 @@ func (c *VerbClient) Host() string { return c.host }
 func (c *VerbClient) Daemon() *DaemonHandshake { return c.daemon }
 
 // Close closes the underlying connection. It is safe on a nil client.
+//
+//go:noinline
 func (c *VerbClient) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
@@ -198,6 +200,8 @@ const defaultCallTimeout = 30 * time.Second
 
 // Call sends a verb request with the given params (may be nil) and returns the
 // raw result object. A daemon error envelope is returned as a *VerbCallError.
+//
+//go:noinline
 func (c *VerbClient) Call(verb string, params any) (json.RawMessage, error) {
 	return c.CallWithTimeout(verb, params, defaultCallTimeout)
 }

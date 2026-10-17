@@ -187,6 +187,8 @@ func (h *VerbHint) empty() bool {
 
 // hintedVerbError builds a *verbError carrying a hint. A hint with no populated
 // field is dropped so the envelope stays clean.
+//
+//go:noinline
 func hintedVerbError(code, message string, hint *VerbHint) *verbError {
 	e := newVerbError(code, message)
 	if !hint.empty() {
@@ -197,6 +199,8 @@ func hintedVerbError(code, message string, hint *VerbHint) *verbError {
 
 // invalidParam builds an invalid_params error naming the offending parameter and
 // the values it accepts (accepted may be nil when the set is open).
+//
+//go:noinline
 func invalidParam(param, message string, accepted ...string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, message, &VerbHint{
 		Param:    param,

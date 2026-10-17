@@ -41,6 +41,7 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Code + ": " + e.Msg }
 
+//go:noinline
 func errf(code, format string, args ...any) *Error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, args...)}
 }

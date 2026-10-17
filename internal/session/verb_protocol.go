@@ -167,6 +167,8 @@ type verbError struct {
 func (e *verbError) Error() string { return e.Code + ": " + e.Message }
 
 // newVerbError builds a *verbError with the given code and message.
+//
+//go:noinline
 func newVerbError(code, message string) *verbError {
 	return &verbError{Code: code, Message: message}
 }

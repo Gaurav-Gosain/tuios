@@ -226,6 +226,8 @@ func contextMenuWindowName(m *OS, windowIndex int, fallback string) string {
 }
 
 // item builds a row, resolving its key hint from the live registry.
+//
+//go:noinline
 func (m *OS) item(icon, label, action string, dim bool) ContextMenuItem {
 	return ContextMenuItem{
 		Icon:   icon,

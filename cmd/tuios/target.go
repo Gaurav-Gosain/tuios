@@ -104,6 +104,8 @@ func (t *verbTarget) Close() {
 // params puts the resolved session, and the window when the verb has one,
 // into a parameter map. The window is set only when the caller passed the
 // key, because a verb without a window parameter must not be sent one.
+//
+//go:noinline
 func (t *verbTarget) params(p map[string]any) map[string]any {
 	if p == nil {
 		p = map[string]any{}

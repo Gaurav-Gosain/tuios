@@ -70,6 +70,7 @@ const (
 // herdrError is a failed method: herdr's error code and message.
 type herdrError struct{ code, msg string }
 
+//go:noinline
 func herdrErr(code, msg string) *herdrError { return &herdrError{code: code, msg: msg} }
 
 func (e *herdrIDError) herdr() *herdrError { return herdrErr(e.code, e.msg) }

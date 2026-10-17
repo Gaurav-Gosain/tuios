@@ -285,6 +285,8 @@ func Log(path, base string) (string, error) {
 
 // run executes git in dir and returns its stdout. A failure carries git's own
 // stderr, which is the message a person needs.
+//
+//go:noinline
 func run(dir string, args ...string) (string, error) {
 	return runEnv(dir, nil, args...)
 }

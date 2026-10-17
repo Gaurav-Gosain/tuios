@@ -71,6 +71,7 @@ type UsageError struct {
 	Code int
 }
 
+//go:noinline
 func usage(msg string) *UsageError { return &UsageError{Msg: msg, Code: 2} }
 
 func missing(flag string) *UsageError { return usage("missing value for " + flag) }
@@ -186,6 +187,8 @@ type valueFn = func(flag string) (string, *UsageError)
 // walk calls fn for each argument in turn. fn reads a flag's value with the
 // value func it is given, which takes the next argument, as herdr's parsers
 // do with args.get(index + 1).
+//
+//go:noinline
 func walk(args []string, fn func(arg string, value valueFn) *UsageError) *UsageError {
 	for i := 0; i < len(args); i++ {
 		took := false

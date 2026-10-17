@@ -323,6 +323,8 @@ func (d *Daemon) reply(cs *connState, req *Message, msgType MessageType, payload
 }
 
 // replyError sends an error as the answer to req. See reply.
+//
+//go:noinline
 func (d *Daemon) replyError(cs *connState, req *Message, code int, message string) error {
 	return d.reply(cs, req, MsgError, &ErrorPayload{
 		Code:    code,

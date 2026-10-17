@@ -416,6 +416,8 @@ const maxHintSession = 64
 // type: a harness that changes a field's type costs that field, not the hook.
 type fields map[string]any
 
+//
+//go:noinline
 func (f fields) str(key string) string {
 	if v, ok := f[key].(string); ok {
 		return v
@@ -441,6 +443,8 @@ func eventName(in Input, p fields) string {
 }
 
 // first is the first of keys holding a non-empty string.
+//
+//go:noinline
 func (f fields) first(keys ...string) string {
 	for _, k := range keys {
 		if v := f.str(k); v != "" {

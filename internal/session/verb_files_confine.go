@@ -340,6 +340,8 @@ func (f fileFS) MkdirAll(path string, perm os.FileMode) error {
 }
 
 // Close releases the root. A file opened through it stays open.
+//
+//go:noinline
 func (f fileFS) Close() {
 	if f.root != nil {
 		_ = f.root.Close()
