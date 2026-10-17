@@ -220,6 +220,10 @@ func (r *handoffRun) prepare() error {
 	if d.federation != nil {
 		d.federation.Stop()
 	}
+	// A hook that started since the refusal check is waited for here. One
+	// fired later either holds a pipe when the holds shut below, and the
+	// handoff is refused, or waits on them: a put-back starts it, and the
+	// exec ends it before it ran (handoff_refuse.go).
 	if d.hooks != nil {
 		d.hooks.WaitTimeout(hookDrainTimeout)
 	}
