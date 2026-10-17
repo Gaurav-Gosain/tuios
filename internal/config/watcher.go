@@ -360,7 +360,7 @@ func (cw *Watcher) watchAsset(dir string) {
 	// name behind the new target is never reported. The directory the link
 	// resolves to is watched instead, and dropped when the link moves.
 	to := linkTarget(dir)
-	if old := cw.links[dir]; old != "" {
+	if old := cw.links[dir]; old != "" && !cw.watchedElsewhere(old, dir) {
 		_ = cw.watcher.Remove(old)
 	}
 	watch := dir
@@ -376,6 +376,23 @@ func (cw *Watcher) watchAsset(dir string) {
 	if len(cw.links) > 0 && cw.relinkTimer == nil {
 		cw.relinkTimer = time.AfterFunc(relinkPoll, cw.relink)
 	}
+}
+
+// watchedElsewhere reports whether path is still watched for something other
+// than the link at dir: another asset directory's target, an asset directory
+// itself, or a directory the config is read from. fsnotify keeps one watch per
+// path, so removing it for dir would remove it for those too. Called with
+// cw.mu held.
+func (cw *Watcher) watchedElsewhere(path, dir string) bool {
+	if cw.dirs[path] || cw.assets[path] {
+		return true
+	}
+	for d, to := range cw.links {
+		if d != dir && to == path {
+			return true
+		}
+	}
+	return false
 }
 
 // isAssetDir reports whether dir is an asset directory under watch, or the
