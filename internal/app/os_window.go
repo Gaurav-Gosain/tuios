@@ -743,7 +743,10 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 		// untiled session cannot leave the flag on a pane for whenever tiling is
 		// next turned on.
 		window.Opening = true
-		if m.UseScrollingLayout {
+		// Only BSP places a new pane by splitting the tree. The tree path
+		// ends in ApplyBSPLayout, so under master-stack it laid the panes
+		// out as BSP while the session still said master-stack.
+		if m.UseScrollingLayout || !m.UseBSPLayout {
 			m.TileAllWindows()
 		} else {
 			tree := m.GetOrCreateBSPTree()
