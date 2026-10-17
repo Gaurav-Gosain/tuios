@@ -52,6 +52,20 @@ frame.
 | `tuios.commands()` | the command names `tuios.command` accepts |
 | `tuios.stop()` | end the program. The promise `go.run` returned resolves, and no event is sent. Drop every reference to the API and to the `Go` object after it, so the browser can free the memory. A call to the API after it throws an error |
 
+After `tuios.stop()`, the timers that the Go runtime set can still fire.
+Each one then throws "Go program has already exited". Clear them when the
+promise from `go.run` resolves:
+
+```js
+go.run(instance).then(() => {
+  for (const id of go._scheduledTimeouts.values()) clearTimeout(id);
+  go._scheduledTimeouts.clear();
+});
+```
+
+Do not call `tuios.stop()` from an `onOutput` or `onEvent` callback. The
+call that sent the output or the event then throws a `TypeError`.
+
 ## Events
 
 Every event is `{type, data, windowId?, state?}`. `windowId` is set when the
