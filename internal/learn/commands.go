@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
@@ -21,7 +22,7 @@ import (
 // that keeps the two in step.
 var Commands = []string{
 	"action", "agent", "cascade", "celebrate", "closeWindow", "layout", "mode",
-	"newWindow", "notify", "reset", "set", "tape", "theme", "tiling", "type", "workspace",
+	"newWindow", "notify", "reset", "set", "tape", "theme", "themeJSON", "tiling", "type", "workspace",
 }
 
 // RunCommand lets the page set the scene for a step or play a step for the
@@ -86,6 +87,14 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 		_ = o.SetMode(arg(0))
 	case "theme":
 		m.setTheme(arg(0))
+	case "themeJSON":
+		// A theme a look carries, as the JSON of a theme file. It is checked
+		// as tuios look apply checks it, registered in this tab only as
+		// look-<id>, and selected. A theme that fails the check does nothing.
+		id := config.LookAssetPrefix + strings.TrimPrefix(arg(0), config.LookAssetPrefix)
+		if err := theme.RegisterLookTheme(id, []byte(arg(1))); err == nil {
+			m.setTheme(id)
+		}
 	case "set":
 		// Any option tuios set-config takes, by the same path, such as
 		// appearance.glyphs or appearance.background. It changes this tab's

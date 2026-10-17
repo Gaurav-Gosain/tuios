@@ -176,3 +176,22 @@ func hasControl(s string) bool {
 func IsUnsafeRune(r rune) bool {
 	return unicode.IsControl(r) || r == 0x200e || r == 0x200f || r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069
 }
+
+// RegisterLookTheme checks a theme as CheckLookTheme does and registers it
+// under id in this process only. Nothing is written to disk. The browser build
+// uses it to show a look's theme in a tab.
+func RegisterLookTheme(id string, data []byte) error {
+	out, err := CheckLookTheme(id, data)
+	if err != nil {
+		return err
+	}
+	f, err := readThemeFile(id+".json", out)
+	if err != nil {
+		return err
+	}
+	r, err := mergeBase(f)
+	if err != nil {
+		return err
+	}
+	return registerResolved(r)
+}

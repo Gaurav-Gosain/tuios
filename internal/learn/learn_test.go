@@ -376,6 +376,25 @@ func TestSetRefusesHostOptions(t *testing.T) {
 		t.Errorf("theme after theme dracula and set gap = %q, want dracula", got)
 	}
 
+	// themeJSON takes a look's theme through the tuios look apply check. A
+	// theme that fails it changes nothing.
+	for _, bad := range [][2]string{
+		{"../evil", `{"base":"nord"}`},
+		{"x", `{"base":"no-such-theme"}`},
+		{"x", `{"display_name":"a\u001bb","base":"nord"}`},
+		{"x", `not json`},
+		{"x", `{"base":"nord","chrome":{"accent":7}}`},
+	} {
+		tr.m.RunCommand("themeJSON", bad[0], bad[1])
+		if got := theme.CurrentThemeID(); got != "dracula" {
+			t.Errorf("themeJSON %q %s set the theme %q", bad[0], bad[1], got)
+		}
+	}
+	tr.m.RunCommand("themeJSON", "amber", `{"base":"nord","bg":"#120b02","chrome":{"border":{"unfocused":"#5c3b00"}}}`)
+	if got := theme.CurrentThemeID(); got != "look-amber" {
+		t.Errorf("theme after themeJSON amber = %q, want look-amber", got)
+	}
+
 	// An option added later that names a program or a path has to be refused
 	// on purpose, or refused by config.ReachesHost.
 	for _, opt := range config.Options() {

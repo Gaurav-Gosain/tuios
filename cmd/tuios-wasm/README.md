@@ -143,6 +143,7 @@ races a key. An unknown command or a bad argument does nothing.
 | `workspace` | `n` | switch to workspace n |
 | `mode` | `"window"` or `"terminal"` | set the mode |
 | `theme` | `id` | set the theme |
+| `themeJSON` | `id`, `json` | load a theme file's JSON and set it, for a look that carries its own theme. The theme gets the id `look-<id>` in this tab only. tuios checks it as `tuios look apply` does. A theme that fails the check, such as one with a bad id, a control character or a missing base, does nothing. A `theme` event follows |
 | `set` | `path`, `value` | set an option by its `tuios set-config` path, such as `set("appearance.glyphs", "ascii")`. It changes this tab's config and nothing else. It takes the look and input options only. An option that runs a program, names a file or writes the clipboard does nothing. A `setting` event follows for the glyph set and the border style, and a `theme` event for the theme |
 | `type` | `text` | type into the focused pane, as if typed |
 | `action` | `name` | run a keybinding action by name, as its key would. The page then sees the same `action` event |
