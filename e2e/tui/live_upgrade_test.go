@@ -1461,3 +1461,73 @@ func TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary(t *testing.T) {
 		t.Errorf("ASSERTION: the counter jumps from %d to %d", ticks[i-1], ticks[i])
 	}
 }
+
+// keptBinary is the binary the daemon under base kept for a fallback, and
+// whether it is the file the test runs (a hard link) or a copy of it.
+func keptBinary(t *testing.T, base string) (path, keptAs string) {
+	t.Helper()
+	_ = filepath.WalkDir(base, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && d.Name() == "tuios.prev" {
+			path = p
+		}
+		return nil
+	})
+	if path == "" {
+		return "", "none"
+	}
+	bin, err1 := os.Stat(tuiosBin)
+	kept, err2 := os.Stat(path)
+	if err1 == nil && err2 == nil && os.SameFile(bin, kept) {
+		return path, "link"
+	}
+	return path, "copy"
+}
+
+// TestDaemonUpgradeRightAfterAnUpgrade asks for a second upgrade the moment
+// the first new image answers. An image keeps its own binary, for a later
+// upgrade to fall back to, only once it serves and its keeper has stood down.
+// Where the binary and the daemon's state are on different file systems that
+// is a copy of some 45 MB, and an upgrade asked for while it ran was refused
+// with "this daemon kept no copy of its binary". It must wait for the copy
+// and go through.
+//
+// The span is only wide enough to hit where the binary is copied: the
+// artifact says which it was ("kept_as"). On Linux, with the test binary on
+// another file system than the temporary folder, it is a copy.
+func TestDaemonUpgradeRightAfterAnUpgrade(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const sess = "e2e-twice"
+	win := newCommandWindow(t, base, sess, "sleeper", false, "sh", "-c", "echo pid-$$; exec sleep 600")
+	waitHandoffPane(t, base, sess, win, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
+	before := panePIDs(t, base, sess)
+	img := helloImage(t, base)
+
+	_ = mustCall(t, base, "test-handoff", map[string]any{})
+	first := awaitNewImage(t, base, img, 20*time.Second)
+	_, secondErr := callVerb(t, base, "test-handoff", map[string]any{})
+	second := first
+	if secondErr == nil {
+		second = awaitNewImage(t, base, first, 20*time.Second)
+	}
+	kept, keptAs := keptBinary(t, base)
+	afterPIDs := panePIDs(t, base, sess)
+
+	writeHandoffArtifact(t, map[string]any{
+		"os": runtime.GOOS, "pid": img.PID, "pid_after": second.PID,
+		"images":       []string{img.Instance, first.Instance, second.Instance},
+		"second_error": errString(secondErr), "kept": kept, "kept_as": keptAs,
+		"panes_before": before, "panes_after": afterPIDs,
+	})
+	if secondErr != nil {
+		t.Fatalf("ASSERTION: an upgrade asked for as the first new image answered was refused (binary kept as %s): %v", keptAs, secondErr)
+	}
+	if second.PID != img.PID {
+		t.Errorf("ASSERTION: the daemon's pid changed from %d to %d", img.PID, second.PID)
+	}
+	for id, pid := range before {
+		if afterPIDs[id] != pid {
+			t.Errorf("ASSERTION: window %s had pid %d, and %d after two upgrades", id, pid, afterPIDs[id])
+		}
+	}
+}
