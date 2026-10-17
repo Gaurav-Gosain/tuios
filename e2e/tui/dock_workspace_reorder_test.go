@@ -78,9 +78,8 @@ func pillOrder(line string, names ...string) []string {
 //
 // It is an on-screen test because the hit rectangles it depends on only exist as
 // a side effect of the renderer drawing the strip, so nothing below the real
-// frame can tell whether a pill was picked up at all. The second half is the
-// half that matters: after the drag the workspace numbers are unchanged, so the
-// keys that address a workspace by number still land where they always did.
+// frame can tell whether a pill was picked up at all. The second half checks the
+// daemon renumbered the workspaces to the order the strip shows.
 func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -153,29 +152,20 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 			pillOrder(after, "EDIT", "REVW", "DPLY"), err, term.Snapshot())
 	}
 
-	// The arrangement is presentation. Every workspace keeps its number, so the
-	// key that addresses workspace 1 still reaches the workspace called EDIT,
-	// wherever the drag put its pill.
+	// A workspace's number is its position, so the drag renumbered all three:
+	// EDIT, dragged to the end, is workspace 3, and the two it passed moved up
+	// one. No display order is left beside the numbering.
 	out, err := tuiosCLI(t, base, "session-info", "--session", "work")
 	if err != nil {
 		t.Fatalf("session-info: %v: %s", err, out)
 	}
-	if !strings.Contains(out, "1=EDIT") {
-		t.Errorf("workspace 1 stopped being the one named EDIT:\n%s", out)
+	for _, want := range []string{"1=REVW", "2=DPLY", "3=EDIT"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the daemon does not have %s after the drag:\n%s", want, out)
+		}
 	}
-	if !strings.Contains(out, "order") {
-		t.Errorf("the daemon never took the arrangement:\n%s", out)
-	}
-
-	// And the daemon still answers to the number, which is the assertion that
-	// fails if a reorder had renumbered anything.
-	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "1"); err != nil {
-		t.Fatalf("switch to workspace 1: %v", err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return countWindows(s) == 1
-	}, uiTimeout); err != nil {
-		t.Fatalf("workspace 1 did not come back with its one pane: %v\n%s", err, term.Snapshot())
+	if strings.Contains(out, "order") {
+		t.Errorf("the daemon kept a display order beside the numbering:\n%s", out)
 	}
 
 	alive(t, term, "after dragging a workspace pill")
