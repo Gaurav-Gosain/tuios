@@ -4,12 +4,16 @@
     {
       "path": "appearance.animation_speed",
       "type": "int",
+      "description": "Percent window animations run at: 100 as shipped, 200 twice as fast, 50 half as fast",
+      "default": "100",
       "min": 25,
       "max": 400
     },
     {
       "path": "appearance.background",
       "type": "string",
+      "description": "Background painted on every surface not set on its own (panes, desktop, window chrome, dock, rail): off (your terminal shows through), theme, or a colour (#rrggbb, 0-255, a slot name or a role name)",
+      "default": "off",
       "accepted": [
         "off",
         "theme"
@@ -19,20 +23,28 @@
     {
       "path": "appearance.border_focused_color",
       "type": "string",
+      "description": "Colour overriding the focused pane's border: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
+      "default": "",
       "color": true
     },
     {
       "path": "appearance.border_focused_gradient",
-      "type": "string"
+      "type": "string",
+      "description": "Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour",
+      "default": ""
     },
     {
       "path": "appearance.border_gradient_angle",
       "type": "int",
+      "description": "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom",
+      "default": "45",
       "max": 359
     },
     {
       "path": "appearance.border_style",
       "type": "string",
+      "description": "Border style drawn around every pane",
+      "default": "rounded",
       "accepted": [
         "rounded",
         "normal",
@@ -49,15 +61,21 @@
     {
       "path": "appearance.border_unfocused_color",
       "type": "string",
+      "description": "Colour overriding an unfocused pane's border: #585b70, a slot name such as bright_black, or a role such as muted",
+      "default": "",
       "color": true
     },
     {
       "path": "appearance.clock_format",
-      "type": "string"
+      "type": "string",
+      "description": "Go time layout the clock is drawn with, e.g. 15:04 or Mon 3:04PM",
+      "default": "15:04"
     },
     {
       "path": "appearance.desktop_background",
       "type": "string",
+      "description": "Background behind and between panes, including gaps and an empty workspace: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "default": "",
       "accepted": [
         "off",
         "theme"
@@ -66,20 +84,28 @@
     },
     {
       "path": "appearance.dim_foreground",
-      "type": "bool"
+      "type": "bool",
+      "description": "Let dim_unfocused dim a pane's text too, not only its background",
+      "default": "true"
     },
     {
       "path": "appearance.dim_multifocus",
-      "type": "bool"
+      "type": "bool",
+      "description": "Dim the panes in the multifocus set like other panes you are not in",
+      "default": "false"
     },
     {
       "path": "appearance.dim_unfocused",
       "type": "int",
+      "description": "How much tuios fades a pane you are not in, as a percent. 0 is off.",
+      "default": "0",
       "max": 90
     },
     {
       "path": "appearance.dock_background",
       "type": "string",
+      "description": "Background under the dock: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "default": "",
       "accepted": [
         "off",
         "theme"
@@ -88,27 +114,39 @@
     },
     {
       "path": "appearance.dock_compact",
-      "type": "bool"
+      "type": "bool",
+      "description": "Draw the dock as one row with no rule. The panes get one more row",
+      "default": "false"
     },
     {
       "path": "appearance.dock_mode_icon_terminal",
-      "type": "string"
+      "type": "string",
+      "description": "Icon in the mode pill in terminal mode. An empty value shows no icon. default uses the icon of the glyph set",
+      "default": "default"
     },
     {
       "path": "appearance.dock_mode_icon_tiling",
-      "type": "string"
+      "type": "string",
+      "description": "Icon in the mode pill while tiling is on. An empty value shows no icon. default uses the icon of the glyph set",
+      "default": "default"
     },
     {
       "path": "appearance.dock_mode_icon_window",
-      "type": "string"
+      "type": "string",
+      "description": "Icon in the mode pill in window mode. An empty value shows no icon. default uses the icon of the glyph set",
+      "default": "default"
     },
     {
       "path": "appearance.dock_pill_caps",
-      "type": "bool"
+      "type": "bool",
+      "description": "Draw rounded caps on every dock pill: the mode chip, the workspace tabs and the minimized windows. Off draws flat pills",
+      "default": "true"
     },
     {
       "path": "appearance.dock_prefix_indicator",
       "type": "string",
+      "description": "Where the dock shows an armed leader key: pill colours the mode pill, badge draws a separate badge",
+      "default": "pill",
       "accepted": [
         "pill",
         "badge"
@@ -117,19 +155,27 @@
     {
       "path": "appearance.dock_workspace_label_max",
       "type": "int",
+      "description": "Cells a workspace pill's label may span before the pill cuts it (0 draws the whole name and scrolls the strip instead)",
+      "default": "12",
       "max": 200
     },
     {
       "path": "appearance.dock_workspace_tab_format",
-      "type": "string"
+      "type": "string",
+      "description": "Workspace tab template accepting {index}, {name}, {icon} and {zoom} (empty: {name})",
+      "default": ""
     },
     {
       "path": "appearance.dock_workspace_tabs",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the clickable workspace strip in the dock",
+      "default": "true"
     },
     {
       "path": "appearance.dockbar_position",
       "type": "string",
+      "description": "Edge the dock sits on, or hidden",
+      "default": "top",
       "accepted": [
         "bottom",
         "top",
@@ -139,6 +185,8 @@
     {
       "path": "appearance.drop_preview",
       "type": "string",
+      "description": "What a BSP drag shows where the pane would land: a frame with a tint inside, the frame only, or nothing",
+      "default": "fill",
       "accepted": [
         "fill",
         "outline",
@@ -148,28 +196,40 @@
     {
       "path": "appearance.gap",
       "type": "int",
+      "description": "Cells of empty ground kept between two neighbouring tiled panes",
+      "default": "0",
       "max": 8
     },
     {
       "path": "appearance.glyphs",
-      "type": "string"
+      "type": "string",
+      "description": "Chrome glyph set: the characters the border, controls, rules and rail marks are drawn with",
+      "default": "default"
     },
     {
       "path": "appearance.hide_scrollbar",
-      "type": "bool"
+      "type": "bool",
+      "description": "Hide the scrollbar thumb on the pane border",
+      "default": "false"
     },
     {
       "path": "appearance.hide_window_buttons",
-      "type": "bool"
+      "type": "bool",
+      "description": "Hide the minimize, maximize and close buttons",
+      "default": "false"
     },
     {
       "path": "appearance.modal_dim",
       "type": "int",
+      "description": "How much the screen behind a modal panel is darkened, as a percent. 0 is off.",
+      "default": "30",
       "max": 90
     },
     {
       "path": "appearance.motion",
       "type": "string",
+      "description": "How much moves: none, basic (window slides and the copy sweep), or full (also overlay fades and the working-agent shimmer)",
+      "default": "full",
       "accepted": [
         "none",
         "basic",
@@ -179,6 +239,8 @@
     {
       "path": "appearance.pane_background",
       "type": "string",
+      "description": "Background behind pane content: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "default": "",
       "accepted": [
         "off",
         "theme"
@@ -188,12 +250,16 @@
     {
       "path": "appearance.panel_padding",
       "type": "int",
+      "description": "Columns of padding each side of an overlay panel's content",
+      "default": "2",
       "min": 1,
       "max": 6
     },
     {
       "path": "appearance.scrollbar.style",
       "type": "string",
+      "description": "Hairline thumb over the content column, or a full-height track",
+      "default": "track",
       "accepted": [
         "thin",
         "track"
@@ -201,11 +267,15 @@
     },
     {
       "path": "appearance.scrollbar.thumb",
-      "type": "string"
+      "type": "string",
+      "description": "One-cell glyph for the thumb. Empty uses the style's own.",
+      "default": ""
     },
     {
       "path": "appearance.scrollbar.tint",
       "type": "string",
+      "description": "Bar colour: quiet, border, muted, or a colour (#rrggbb, 0-255, a slot name or a role name)",
+      "default": "quiet",
       "accepted": [
         "quiet",
         "border",
@@ -215,50 +285,70 @@
     },
     {
       "path": "appearance.scrollbar.track",
-      "type": "string"
+      "type": "string",
+      "description": "One-cell glyph for the track, or none. Empty uses the style's own.",
+      "default": ""
     },
     {
       "path": "appearance.selection.bg",
       "type": "string",
+      "description": "Background behind selected text",
+      "default": "#45475A",
       "color": true
     },
     {
       "path": "appearance.selection.bold",
-      "type": "bool"
+      "type": "bool",
+      "description": "Draw selected text bold as well as tinted",
+      "default": "false"
     },
     {
       "path": "appearance.selection.cursor_bg",
       "type": "string",
+      "description": "Background of the copy mode cursor block",
+      "default": "#39C5CF",
       "color": true
     },
     {
       "path": "appearance.selection.cursor_fg",
       "type": "string",
+      "description": "Text colour under the copy mode cursor. Empty keeps it.",
+      "default": "#08222B",
       "color": true
     },
     {
       "path": "appearance.selection.fg",
       "type": "string",
+      "description": "Selected text colour. Empty keeps the colour it already has.",
+      "default": "",
       "color": true
     },
     {
       "path": "appearance.selection.flash",
-      "type": "bool"
+      "type": "bool",
+      "description": "Sweep a band of light over text that was just copied. Set motion to none to turn it off.",
+      "default": "true"
     },
     {
       "path": "appearance.selection.flash_color",
       "type": "string",
+      "description": "The light the copy sweep is made of",
+      "default": "",
       "color": true
     },
     {
       "path": "appearance.selection.flash_ms",
       "type": "int",
+      "description": "Milliseconds one copy sweep takes",
+      "default": "420",
       "min": 80,
       "max": 3000
     },
     {
       "path": "appearance.selection.flash_style",
       "type": "string",
+      "description": "The shape the copy sweep takes",
+      "default": "diagonal",
       "accepted": [
         "diagonal",
         "diagonal-reverse",
@@ -269,50 +359,72 @@
     {
       "path": "appearance.selection.match_bg",
       "type": "string",
+      "description": "Background behind the match the cursor is on",
+      "default": "#E5A93D",
       "color": true
     },
     {
       "path": "appearance.selection.match_fg",
       "type": "string",
+      "description": "Text colour of the match the cursor is on. Empty keeps it.",
+      "default": "#1C1B19",
       "color": true
     },
     {
       "path": "appearance.selection.search_bg",
       "type": "string",
+      "description": "Background behind every search match",
+      "default": "#8A6D2F",
       "color": true
     },
     {
       "path": "appearance.selection.search_fg",
       "type": "string",
+      "description": "Text colour of a search match. Empty keeps the colour it has.",
+      "default": "#F5E7C8",
       "color": true
     },
     {
       "path": "appearance.session_border",
-      "type": "bool"
+      "type": "bool",
+      "description": "Carry the session's colour on every pane border, not only on the rail",
+      "default": "false"
     },
     {
       "path": "appearance.session_colors",
-      "type": "bool"
+      "type": "bool",
+      "description": "Give each session its own colour on the rail and in the switcher",
+      "default": "true"
     },
     {
       "path": "appearance.shared_borders",
-      "type": "bool"
+      "type": "bool",
+      "description": "Draw one border between neighbouring tiled panes, in every layout",
+      "default": "false"
     },
     {
       "path": "appearance.show_clock",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the clock overlay",
+      "default": "false"
     },
     {
       "path": "appearance.show_cpu",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the CPU graph in the dock",
+      "default": "false"
     },
     {
       "path": "appearance.show_ram",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show RAM usage in the dock",
+      "default": "false"
     },
     {
       "path": "appearance.sidebar.background",
       "type": "string",
+      "description": "Background under the rail: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "default": "",
       "accepted": [
         "off",
         "theme"
@@ -322,6 +434,8 @@
     {
       "path": "appearance.sidebar.density",
       "type": "string",
+      "description": "Space between the rail's sections: normal, or roomy for a blank row in front of each section after the first",
+      "default": "normal",
       "accepted": [
         "normal",
         "roomy"
@@ -329,19 +443,27 @@
     },
     {
       "path": "appearance.sidebar.enabled",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the session rail",
+      "default": "true"
     },
     {
       "path": "appearance.sidebar.file_icon_colors",
-      "type": "bool"
+      "type": "bool",
+      "description": "Draw each file icon in its file type's own colour",
+      "default": "true"
     },
     {
       "path": "appearance.sidebar.file_icons",
-      "type": "bool"
+      "type": "bool",
+      "description": "Draw a nerd font icon per file type in the files section",
+      "default": "true"
     },
     {
       "path": "appearance.sidebar.header_case",
       "type": "string",
+      "description": "How the rail's section headers read: lowercase keeps the quiet furniture look, uppercase draws them as headings",
+      "default": "lowercase",
       "accepted": [
         "lowercase",
         "uppercase"
@@ -350,6 +472,8 @@
     {
       "path": "appearance.sidebar.header_style",
       "type": "string",
+      "description": "How a rail section header is drawn: auto, plain, rule, pill, or icon with the section's icon",
+      "default": "auto",
       "accepted": [
         "auto",
         "plain",
@@ -360,11 +484,15 @@
     },
     {
       "path": "appearance.sidebar.marquee",
-      "type": "bool"
+      "type": "bool",
+      "description": "Scroll a hovered row's overflowing title",
+      "default": "true"
     },
     {
       "path": "appearance.sidebar.position",
       "type": "string",
+      "description": "Edge the rail sits on, or hidden",
+      "default": "right",
       "accepted": [
         "left",
         "right",
@@ -374,6 +502,8 @@
     {
       "path": "appearance.sidebar.row_style",
       "type": "string",
+      "description": "How the rail marks the row you are on: bar in the gutter, marker glyph, underline, or pill",
+      "default": "bar",
       "accepted": [
         "bar",
         "marker",
@@ -383,31 +513,45 @@
     },
     {
       "path": "appearance.sidebar.show_counts",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the window count on each session row",
+      "default": "true"
     },
     {
       "path": "appearance.sidebar.show_glyphs",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the agent-state glyph on each row",
+      "default": "true"
     },
     {
       "path": "appearance.sidebar.show_numbers",
-      "type": "bool"
+      "type": "bool",
+      "description": "Show the switch number ahead of each session name",
+      "default": "false"
     },
     {
       "path": "appearance.sidebar.width",
-      "type": "int"
+      "type": "int",
+      "description": "Preferred rail width in columns on a wide screen",
+      "default": "24"
     },
     {
       "path": "appearance.theme",
-      "type": "string"
+      "type": "string",
+      "description": "Colour theme name. Empty follows Omarchy when it is installed, else keeps your terminal's colours. none always keeps them.",
+      "default": ""
     },
     {
       "path": "appearance.theme_light",
-      "type": "string"
+      "type": "string",
+      "description": "Theme to use while the terminal is light. Empty uses theme for both. theme is then the dark theme",
+      "default": ""
     },
     {
       "path": "appearance.theme_transition",
       "type": "string",
+      "description": "How tuios shows a theme change: none, circle (the new theme grows from the middle of the screen) or fade",
+      "default": "none",
       "accepted": [
         "none",
         "circle",
@@ -417,12 +561,16 @@
     {
       "path": "appearance.theme_transition_duration",
       "type": "int",
+      "description": "Milliseconds a theme transition takes at animation speed 100",
+      "default": "450",
       "min": 100,
       "max": 2000
     },
     {
       "path": "appearance.window_button_position",
       "type": "string",
+      "description": "Which end of the title bar the window controls sit on",
+      "default": "left",
       "accepted": [
         "right",
         "left"
@@ -431,6 +579,8 @@
     {
       "path": "appearance.window_button_style",
       "type": "string",
+      "description": "Window controls as a filled pill or as macOS traffic lights",
+      "default": "dots",
       "accepted": [
         "pill",
         "dots"
@@ -439,6 +589,8 @@
     {
       "path": "appearance.window_chrome_background",
       "type": "string",
+      "description": "Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
+      "default": "",
       "accepted": [
         "off",
         "theme"
@@ -448,6 +600,8 @@
     {
       "path": "appearance.window_title_align",
       "type": "string",
+      "description": "Where a pane's title sits on its row. auto keeps it away from the window buttons",
+      "default": "auto",
       "accepted": [
         "auto",
         "left",
@@ -457,11 +611,15 @@
     },
     {
       "path": "appearance.window_title_format",
-      "type": "string"
+      "type": "string",
+      "description": "Title template accepting {title}, {index} and {cwd}",
+      "default": ""
     },
     {
       "path": "appearance.window_title_position",
       "type": "string",
+      "description": "Edge of the pane the title is drawn on",
+      "default": "top",
       "accepted": [
         "bottom",
         "top",
@@ -471,6 +629,8 @@
     {
       "path": "appearance.window_title_style",
       "type": "string",
+      "description": "Shape of a pane's title: pill has rounded caps, tab is a plain fill, plain is the text on the border",
+      "default": "pill",
       "accepted": [
         "pill",
         "tab",
@@ -480,6 +640,8 @@
     {
       "path": "appearance.zen_mode",
       "type": "string",
+      "description": "When window borders are hidden: never, always, or while the mouse is idle",
+      "default": "disabled",
       "accepted": [
         "disabled",
         "always",
@@ -488,21 +650,29 @@
     },
     {
       "path": "appearance.zoom_animation",
-      "type": "bool"
+      "type": "bool",
+      "description": "Slide a pane between its tile and the zoom box instead of swapping the two in one frame",
+      "default": "true"
     },
     {
       "path": "dock.clock.format",
-      "type": "string"
+      "type": "string",
+      "description": "Go time layout the clock renders in (empty means 15:04); a layout without seconds refreshes once a minute",
+      "default": ""
     },
     {
       "path": "spotlight.dim",
       "type": "int",
+      "description": "Percent of its light an unlit cell loses",
+      "default": "75",
       "min": 10,
       "max": 95
     },
     {
       "path": "spotlight.edge",
       "type": "string",
+      "description": "Cut the beam at its edge, or fade it out. A fade sends about three times the bytes each time the beam moves",
+      "default": "hard",
       "accepted": [
         "hard",
         "soft"
@@ -510,11 +680,15 @@
     },
     {
       "path": "spotlight.enabled",
-      "type": "bool"
+      "type": "bool",
+      "description": "Light one part of the screen and dim the rest",
+      "default": "false"
     },
     {
       "path": "spotlight.radius",
       "type": "int",
+      "description": "Half the beam's height, in rows",
+      "default": "10",
       "min": 2,
       "max": 200
     }

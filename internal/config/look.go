@@ -224,12 +224,14 @@ func ReachesHost(path string) bool { return hostReaching[path] }
 
 // LookKeyInfo is one look key as the shared list publishes it.
 type LookKeyInfo struct {
-	Path     string   `json:"path"`
-	Type     string   `json:"type"`
-	Accepted []string `json:"accepted,omitempty"`
-	Min      int      `json:"min,omitempty"`
-	Max      int      `json:"max,omitempty"`
-	Color    bool     `json:"color,omitempty"`
+	Path        string   `json:"path"`
+	Type        string   `json:"type"`
+	Description string   `json:"description"`
+	Default     string   `json:"default"`
+	Accepted    []string `json:"accepted,omitempty"`
+	Min         int      `json:"min,omitempty"`
+	Max         int      `json:"max,omitempty"`
+	Color       bool     `json:"color,omitempty"`
 }
 
 // LookKeyList is the look key list the tuios.dev gallery vendors, so the
@@ -245,8 +247,9 @@ func LookKeysJSON() ([]byte, error) {
 	for _, k := range LookKeys() {
 		opt, _ := LookupOption(k)
 		list.Keys = append(list.Keys, LookKeyInfo{
-			Path: k, Type: opt.Type, Accepted: opt.Accepted,
-			Min: opt.Min, Max: opt.Max, Color: opt.Color,
+			Path: k, Type: opt.Type, Description: opt.Description, Default: opt.Default,
+			Accepted: opt.Accepted,
+			Min:      opt.Min, Max: opt.Max, Color: opt.Color,
 		})
 	}
 	out, err := json.MarshalIndent(list, "", "  ")
