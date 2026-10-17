@@ -9275,6 +9275,27 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_OLD_BIN=/path/to/tuios-v0.12.
   go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
 ```
 
+### A quiesced pane is frozen
+
+- `TestSelfExecFreezesPaneDuringHandoff`: a probe pane turns on modes 2048 and 2031 and prints, through `cat -v`, every reply it hears, and on `SIGWINCH` or `SIGUSR1` the size the kernel gives it. A `test-handoff` is held 2.5 s between the manifest and the exec, and in the hold a `resize` to 117x33 and a `stream-pane` with a light `viewer` report go out on connections opened before the handoff; the test checks the old image answered them. After the exec the pane must be the size it was written down at, the kernel must give the program the same size, and the program must have heard no size report, no `SIGWINCH` and no scheme report in the span. A resize and a light push to the new image must then reach the program.
+- `TestHandoffPutBackAppliesWhatWasHeld`: the same calls in the hold of a handoff to a copy of the binary, which is replaced in the hold by a script that is not a tuios, so the exec runs the preflight again, it fails, and the daemon is put back with its clients attached. The pane must then be 117x33, the kernel must give the program 117x33, and the program's last size report must be 33x117 and its last scheme report light.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff, one build per control. The first two controls were run again on 2026-10-31 (Go 1.27.3) against `pr/live-handoff-5`, where this fix follows the keeper, and were caught with the same messages.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| A resize reaches a frozen pane | the `frozen` check at the top of `resizeStreamLocked` made `if false` | `TestSelfExecFreezesPaneDuringHandoff`: "after the handoff the pane is 28x98 and the kernel gives its program 33x117", "the program heard 2 in-band size reports by the handoff's end, 1 before it: [28x98 33x117]", "the program read its size 3 times by the handoff's end, want 2" | **caught** |
+| A colour push reaches a held session | the `reportsHeld` check in `applyReportColors` made `if false` | `TestSelfExecFreezesPaneDuringHandoff`: "the program heard 1 scheme reports by the handoff's end, 0 before it: [2]" | **caught** |
+| A put-back drops the held size | `Resume`'s `thaw` skips the `resizeStreamLocked` of the held size | `TestHandoffPutBackAppliesWhatWasHeld`: "after the put-back the pane is 28x98, want 33x117", "the kernel gives the program 28x98", "the program's last in-band size report is not 33x117: [28x98]" | **caught** |
+| A put-back drops the held colours | `releaseReportColors` skips the apply of the push it held | `TestHandoffPutBackAppliesWhatWasHeld`: "the program was not told of the light scheme pushed during the freeze: []" | **caught** |
+
+Not covered by a test: the cell size in pixels a TUI client reports (`UpdatePixelDimensions`), which no verb sends. It is held by the same flag, under `terminalMu` for the emulator and `winsizeMu` for the kernel, and applied by the same `thaw`.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestSelfExecFreezesPaneDuringHandoff|TestHandoffPutBackAppliesWhatWasHeld)$' .
+```
+
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on

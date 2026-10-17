@@ -969,6 +969,14 @@ type PTY struct {
 	respMu   sync.Mutex
 	respWake chan struct{}
 	vtDone   chan struct{}
+	// frozen holds the pane's size and cell size from the quiesce to Resume,
+	// so nothing changes the emulator, the kernel's window size or the
+	// replies after the pane is written down. frozenW and frozenH (guarded by
+	// streamMu) and frozenCellW and frozenCellH (guarded by winsizeMu) are
+	// the last asked meanwhile, which Resume applies. See pty_quiesce.go.
+	frozen                   atomic.Bool
+	frozenW, frozenH         int
+	frozenCellW, frozenCellH int
 	// rawLog appends every byte the process writes, when TUIOS_PTY_LOG asks
 	// for it, and is nil otherwise. See pty_log.go.
 	rawLog *ptyLogger
@@ -1386,6 +1394,11 @@ type Session struct {
 	// OSC 4.
 	reportPalHex string
 	reportPal    [16]color.Color
+	// reportsHeld keeps a push of the colours from the emulators while a
+	// handoff writes the session down, and reportHeld is the last push
+	// meanwhile. Both guarded by ptysMu. See holdReportColors.
+	reportsHeld bool
+	reportHeld  *heldReportColors
 	// tuiClients is how many TUI clients show the session, as
 	// Daemon.refreshTreeOps last counted. viewers are the streams that
 	// show a pane on their own. See pane_viewers.go.
@@ -4618,7 +4631,7 @@ func (p *PTY) Size() (width, height int) {
 func (p *PTY) SetCellSize(cellWidth, cellHeight int) {
 	p.terminalMu.Lock()
 	defer p.terminalMu.Unlock()
-	if p.terminal != nil && cellWidth > 0 && cellHeight > 0 {
+	if p.terminal != nil && cellWidth > 0 && cellHeight > 0 && !p.frozen.Load() {
 		p.terminal.SetCellSize(cellWidth, cellHeight)
 	}
 }
@@ -4638,6 +4651,10 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 
 	p.winsizeMu.Lock()
 	defer p.winsizeMu.Unlock()
+	if p.frozen.Load() {
+		p.frozenCellW, p.frozenCellH = cellWidth, cellHeight
+		return nil
+	}
 	if p.cellWidth == cellWidth && p.cellHeight == cellHeight {
 		return nil
 	}
@@ -4711,6 +4728,12 @@ func (p *PTY) Resize(width, height int) error {
 
 // resizeStreamLocked is Resize with streamMu held and the lease applied.
 func (p *PTY) resizeStreamLocked(width, height int) error {
+	if p.frozen.Load() {
+		if width > 0 && height > 0 {
+			p.frozenW, p.frozenH = width, height
+		}
+		return nil
+	}
 	p.terminalMu.Lock()
 	unchanged := width > 0 && height > 0 && p.width == width && p.height == height
 	oldW, oldH := p.width, p.height
