@@ -135,13 +135,20 @@ func BenchmarkEventPublishNoSubs(b *testing.B) {
 // once the pane's mark is set, which is every chunk but the first after a
 // subscription change: the event type compare and one atomic load. See
 // pane_marks.go.
+//
+// The event type is read from a variable. With the constant, the compiler
+// folds the type compare away and the benchmark measures half the cost.
 func BenchmarkPaneMarkRaised(b *testing.B) {
 	p := benchPTY(0)
 	p.raisePaneMark(PaneMarkOutput)
 	b.ReportAllocs()
 	for b.Loop() {
-		if bit := paneMarkBit(EventOutput); bit != 0 && p.raisePaneMark(bit) {
+		if bit := paneMarkBit(benchPaneMarkEvent); bit != 0 && p.raisePaneMark(bit) {
 			b.Fatal("a set mark was raised again")
 		}
 	}
 }
+
+// benchPaneMarkEvent is the event type BenchmarkPaneMarkRaised passes, a
+// variable so the compare runs as it does per chunk.
+var benchPaneMarkEvent = EventOutput

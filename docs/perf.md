@@ -3765,7 +3765,8 @@ and sends nothing until a client subscribes to the pane or drops it. No
 timer is armed.
 
 `BenchmarkPaneMarkRaised` (new): the per-chunk cost once the bit is set,
-1.1 ns, 0 allocs.
+2.1 ns, 0 allocs. A first run passed the event type as a constant, which the
+compiler folded, and read 1.1 ns.
 
 `BenchmarkE2EFlood`, 10 runs of 8 x 16 MiB each side, benchstat:
 287.6 ms before, 294.2 ms after, p=0.123, no significant change. Allocations
