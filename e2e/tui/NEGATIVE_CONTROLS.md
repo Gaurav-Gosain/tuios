@@ -6786,3 +6786,21 @@ Run on 2026-10-17.
 |---|---|---|---|---|
 | No mark was kept | yes | `noteWorkspaceMark` always returns false | `TestDockTabsFlatStripTwoWorkspaces` ("a bell and output on workspace 1 never marked its tab") | **caught** |
 | The tab ignored attention | yes | `dockTab` never takes the attention ink | `TestDockTabAttentionInk` ("tab 1 never took attention_fg while its pane waited") | **caught** |
+
+### Over a daemon
+
+`TestDockTabsFlatStripTwoWorkspaces` now attaches to a daemon (`new e2e`). A
+client streams only the panes of the workspace it shows, so before the fix
+the bell and output of workspace 1 never reached it. The daemon now sends
+one `MsgPaneMark` per pane per edge (`internal/session/pane_marks.go`).
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A client never heard of a pane out of view | yes | build of 21f896044, the PR head before the fix | `TestDockTabsFlatStripTwoWorkspaces` ("a bell and output on workspace 1 never marked its tab") | **caught** |
+| The edge never re-armed when a client stopped looking | yes | `rearmPaneMarks` dropped from `handleUnsubscribePTY` | `TestDockTabsFlatStripTwoWorkspaces` (same message) | **caught** |
+| No mark was kept, over a daemon | yes | `noteWorkspaceMark` always returns false | `TestDockTabsFlatStripTwoWorkspaces` (same message) | **caught** |
+
+The fixed build passes `TestDockTabsFlatStripTwoWorkspaces`,
+`TestDockTabAttentionInk`, the other `TestDockTabs*` and `TestIdleCostStaysLow`.

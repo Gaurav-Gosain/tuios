@@ -892,6 +892,10 @@ type PTY struct {
 	// byte was laid out at.
 	resizeMarks []resizeMark
 
+	// paneMarks holds the pane marks already reported for the subscriptions
+	// of the moment, as paneMark bits. See pane_marks.go.
+	paneMarks atomic.Uint32
+
 	// Subscribers for raw output streaming.
 	subscribers   map[string]*ptySubscriber
 	subscribersMu sync.RWMutex
@@ -1337,6 +1341,9 @@ type Session struct {
 	// hub (e.g. bare unit tests).
 	eventSink   func(SessionEvent)
 	eventSinkMu sync.RWMutex
+	// paneMarkSink, when set, is told the first output or bell of a pane
+	// since its subscriptions last changed. See pane_marks.go.
+	paneMarkSink atomic.Pointer[paneMarkFunc]
 
 	// stateSink, when set, receives the canonical state after every daemon-side
 	// mutation, so an attached client can be told what the daemon just did. The
@@ -2367,7 +2374,12 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	pty.emit = func(ev SessionEvent) {
 		ev.Window = sp.windowID
 		ev.PTYID = id
-		pty.owner().emit(ev)
+		owner := pty.owner()
+		owner.emit(ev)
+		// Per chunk this is one compare and one atomic load. See pane_marks.go.
+		if bit := paneMarkBit(ev.Type); bit != 0 && pty.raisePaneMark(bit) {
+			owner.notePaneMark(id, sp.windowID, bit)
+		}
 	}
 	// The pane's folder and branch label its session in the listing. The
 	// branch is read on its own goroutine after a move.

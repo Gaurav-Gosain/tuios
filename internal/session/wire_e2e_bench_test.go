@@ -173,6 +173,69 @@ func BenchmarkE2EFlood(b *testing.B) {
 	b.ReportMetric(float64(writes)/float64(b.N), "writes/op")
 }
 
+// BenchmarkE2EBackgroundFlood is a pane the client does not stream printing
+// 16 MiB per iteration, as a pane on a workspace out of view does. The client
+// is told once, by MsgPaneMark, and then hears nothing more from it: the
+// benchmark fails if a second mark arrives, and reports the reads the client
+// made during the floods, which a pane it does not stream should not cause.
+// See pane_marks.go.
+func BenchmarkE2EBackgroundFlood(b *testing.B) {
+	rig := newE2ERig(b)
+	var marks atomic.Int64
+	rig.c.OnPaneMark(func(PaneMarkPayload) { marks.Add(1) })
+	bg, err := rig.c.CreatePTY("bench", "", 200, 50)
+	if err != nil {
+		b.Fatalf("create pty: %v", err)
+	}
+	s := rig.d.manager.GetSession("bench")
+	if s == nil {
+		b.Fatal("no session")
+	}
+	pty := s.GetPTY(bg)
+	seq := func() int64 {
+		pty.outputMu.RLock()
+		defer pty.outputMu.RUnlock()
+		return pty.outputSeq
+	}
+	// The shell's prompt is the pane's first output. Its mark arrives before
+	// anything is measured.
+	deadline := time.Now().Add(10 * time.Second)
+	for marks.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if marks.Load() != 1 {
+		b.Fatalf("the prompt of a pane out of view raised %d marks, want 1", marks.Load())
+	}
+	rig.drain(300 * time.Millisecond)
+
+	line := strings.Repeat("x", 99)
+	const mib = 16
+	cmd := "yes '" + line + "' | head -c " + itoaBench(mib<<20) + "\n"
+	b.ResetTimer()
+	r0 := rig.conn.reads.Load()
+	for b.Loop() {
+		want := seq() + mib<<20
+		if err := rig.c.WritePTY(bg, []byte(cmd)); err != nil {
+			b.Fatal(err)
+		}
+		deadline := time.Now().Add(60 * time.Second)
+		for seq() < want {
+			if time.Now().After(deadline) {
+				b.Fatalf("the flood did not finish: %d of %d bytes", seq()-want+mib<<20, mib<<20)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	b.StopTimer()
+	// A mark sent late would land here.
+	time.Sleep(100 * time.Millisecond)
+	if n := marks.Load(); n != 1 {
+		b.Fatalf("a pane out of view raised %d marks over %d floods, want 1", n, b.N)
+	}
+	b.ReportMetric(float64(marks.Load()-1)/float64(b.N), "marks/op")
+	b.ReportMetric(float64(rig.conn.reads.Load()-r0)/float64(b.N), "client-reads/op")
+}
+
 // BenchmarkE2EKeystroke is one keypress and its echo: the client writes one
 // byte, the shell echoes it, and the daemon streams the echo back. The round
 // trip is what a user waits for between pressing a key and seeing it, less the

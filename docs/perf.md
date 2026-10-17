@@ -3750,3 +3750,27 @@ time and sleep again: no message and no frame.
 Same harness, default clock, 130 s runs, 2 runs each: 6.6 to 7.6 context
 switches a second with the check against 6.1 to 6.7 without, 0.02 to 0.03% CPU
 either way, and still 2 clock frames in 120 s.
+
+## 2026-10 workspace tab marks over a daemon
+
+A client attached to a daemon streams only the panes it shows. The dock's
+`bell_marker` and `activity_marker` need the bell and output of panes it does
+not show. The daemon sends `MsgPaneMark` for them, offered as `PaneMarks` in
+the welcome and asked for in the hello (`internal/session/pane_marks.go`).
+
+Each pane keeps one atomic bit per mark. The first output or bell after a
+subscription change sets it and sends one message to each client that does
+not stream the pane. Every later chunk costs one compare and one atomic load,
+and sends nothing until a client subscribes to the pane or drops it. No
+timer is armed.
+
+`BenchmarkPaneMarkRaised` (new): the per-chunk cost once the bit is set,
+1.1 ns, 0 allocs.
+
+`BenchmarkE2EFlood`, 10 runs of 8 x 16 MiB each side, benchstat:
+287.6 ms before, 294.2 ms after, p=0.123, no significant change. Allocations
+6.52k and 6.48k, p=0.645.
+
+`BenchmarkE2EBackgroundFlood` (new): a pane the client does not stream
+prints 16 MiB per iteration. The client gets 1 mark, for the pane's prompt,
+then 0 marks and 0 socket reads per flood. It fails on a second mark.

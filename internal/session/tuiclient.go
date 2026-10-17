@@ -272,6 +272,8 @@ type TUIClient struct {
 	// sessionsChangedHandler takes the daemon's MsgSessionsChanged push. See
 	// OnSessionsChanged.
 	sessionsChangedHandler func()
+	// paneMarkHandler takes the daemon's MsgPaneMark push. See OnPaneMark.
+	paneMarkHandler func(PaneMarkPayload)
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
 	// and pasteBarriers the pings behind them, by request id, under
@@ -415,6 +417,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		ColorTerm: c.ColorTerm,
 		// See daemon_listing_push.go.
 		ListingPush: true,
+		// See pane_marks.go.
+		PaneMarks: true,
 	}
 
 	// Add graphics capabilities if provided
@@ -1132,6 +1136,15 @@ func (c *TUIClient) OnSessionsChanged(handler func()) {
 	c.multiClientMu.Unlock()
 }
 
+// OnPaneMark registers the handler for MsgPaneMark, the daemon's push when a
+// pane this client does not stream rang the bell or printed. It runs on the
+// read-loop goroutine, so it only queues. See pane_marks.go.
+func (c *TUIClient) OnPaneMark(handler func(PaneMarkPayload)) {
+	c.multiClientMu.Lock()
+	c.paneMarkHandler = handler
+	c.multiClientMu.Unlock()
+}
+
 // ListingPush reports whether the daemon pushes listing changes, so the
 // listing needs no poll.
 func (c *TUIClient) ListingPush() bool { return c.listingPush.Load() }
@@ -1844,6 +1857,15 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.multiClientMu.RUnlock()
 		if handler != nil {
 			handler()
+		}
+
+	case MsgPaneMark:
+		c.multiClientMu.RLock()
+		handler := c.paneMarkHandler
+		c.multiClientMu.RUnlock()
+		var payload PaneMarkPayload
+		if handler != nil && msg.ParsePayload(&payload) == nil {
+			handler(payload)
 		}
 
 	case MsgDetached:

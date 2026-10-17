@@ -210,6 +210,8 @@ type ClientEvent struct {
 	Generation uint64
 	// Mail is the push behind an "agent-mail" event.
 	Mail session.AgentMailPayload
+	// PaneMark is the push behind a "pane-mark" event.
+	PaneMark session.PaneMarkPayload
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -531,6 +533,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return HostsChangedMsg{}
 	case "sessions-changed":
 		return SessionsChangedMsg{}
+	case "pane-mark":
+		return PaneMarkMsg{Mark: event.PaneMark}
 	case "paste-refused":
 		return PasteRefusedMsg{Message: event.Reason}
 	case "agent-mail-mark":
@@ -1723,6 +1727,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case PasteRefusedMsg:
 		m.ShowNotification(msg.Message, "error", m.Settings.NotificationDuration)
+		return m, ListenForClientEvents(m.ClientEventChan)
+
+	case PaneMarkMsg:
+		// A pane out of view rang the bell or printed. One push per pane
+		// until this client looks at it again. It came off the client event
+		// channel, so the listener is armed again here.
+		if m.notePaneMark(msg.Mark) {
+			m.MarkAllDirty()
+		} else {
+			m.renderSkipped = true
+		}
 		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case HostsChangedMsg:

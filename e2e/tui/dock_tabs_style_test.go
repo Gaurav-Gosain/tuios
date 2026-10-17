@@ -114,7 +114,10 @@ number_glyphs = ["A"]
 bell_marker = "!"
 activity_marker = "#"
 `)
-	term := startIn(t, base, startOpts{cols: 120, rows: 30})
+	// Attached to a daemon, as tuios runs by default. The client streams
+	// only the panes it shows, so the bell and output of workspace 1 reach
+	// it only as the daemon's pane mark.
+	term := startIn(t, base, startOpts{cols: 120, rows: 30, args: []string{"new", "e2e"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(dockRow(s), "1:0")
 	}, bootTimeout); err != nil {
@@ -122,7 +125,9 @@ activity_marker = "#"
 	}
 
 	// A lone workspace is already one flat tab, with no separator and no "+".
-	if row := dockRow(term.Screen()); strings.Contains(row, "|") || strings.Contains(row, "+") {
+	// Only the strip is read, up to the window readout: a daemon client
+	// draws its own "+" for a new session at the right end of the bar.
+	if row := dockRow(term.Screen()); strings.ContainsAny(row[:strings.Index(row, "1:0")], "|+") {
 		t.Fatalf("a lone flat tab drew a separator or a \"+\": %s", row)
 	}
 

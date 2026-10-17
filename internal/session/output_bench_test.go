@@ -130,3 +130,18 @@ func BenchmarkEventPublishNoSubs(b *testing.B) {
 		})
 	})
 }
+
+// BenchmarkPaneMarkRaised is what each chunk of output adds for pane marks
+// once the pane's mark is set, which is every chunk but the first after a
+// subscription change: the event type compare and one atomic load. See
+// pane_marks.go.
+func BenchmarkPaneMarkRaised(b *testing.B) {
+	p := benchPTY(0)
+	p.raisePaneMark(PaneMarkOutput)
+	b.ReportAllocs()
+	for b.Loop() {
+		if bit := paneMarkBit(EventOutput); bit != 0 && p.raisePaneMark(bit) {
+			b.Fatal("a set mark was raised again")
+		}
+	}
+}

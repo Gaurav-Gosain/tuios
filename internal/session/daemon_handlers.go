@@ -18,6 +18,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.hello = &payload
 	cs.mu.Lock()
 	cs.listingPush = payload.ListingPush
+	cs.paneMarks = payload.PaneMarks
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
 	cs.scratchWS = payload.ScratchWorkspaces
@@ -100,6 +101,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		DetachOthers: true,
 		// See daemon_listing_push.go.
 		ListingPush: true,
+		// See pane_marks.go.
+		PaneMarks: true,
 	})
 }
 
@@ -1099,6 +1102,9 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 		cs.ptySubscriptions[payload.PTYID] = sub
 	}
 	cs.mu.Unlock()
+	// A client looks at the pane now. Its next output and bell are reported
+	// again to the clients that do not. See pane_marks.go.
+	pty.rearmPaneMarks()
 	if !paces {
 		pty.SetPacing(cs.clientID, false)
 	}
@@ -1140,6 +1146,9 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 		cs.mu.Lock()
 		cs.ptyResume[payload.PTYID] = resume
 		cs.mu.Unlock()
+		// The client stopped looking at the pane, so its next output and bell
+		// are news to it. See pane_marks.go.
+		pty.rearmPaneMarks()
 		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s at %d", cs.clientID, shortID(payload.PTYID), resume)
 	}
 

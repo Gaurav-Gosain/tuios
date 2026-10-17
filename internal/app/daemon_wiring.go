@@ -128,6 +128,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a listing change")
 		}
 	})
+	// A pane this client does not stream rang the bell or printed. The dock
+	// marks its workspace tab in Update; see PaneMarkMsg.
+	client.OnPaneMark(func(mark session.PaneMarkPayload) {
+		if m.QueueClientEvent(ClientEvent{Type: "pane-mark", PaneMark: mark}) {
+			clientLog("ClientEventChan full, displaced an event for a pane mark")
+		}
+	})
 	// A paste the daemon refused twice, or one too large to send. The person
 	// is told, so a paste never vanishes. See session/paste_retry.go.
 	client.OnPasteRefused(func(_, message string) {

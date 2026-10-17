@@ -1357,6 +1357,9 @@ activity_marker = "#"         # after the label when a pane on it printed
 - A mark stays until you look at the workspace.
 - The current workspace's tab never carries them.
 - With a key empty, tuios draws nothing for it and keeps no record.
+- Attached to a daemon, the marks need a daemon of this version or newer.
+  An older daemon does not report a pane on another workspace, so its tab
+  gets no bell or activity mark.
 
 `examples/dock/README.md` is the full contract and five working recipes.
 

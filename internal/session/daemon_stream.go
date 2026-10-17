@@ -358,10 +358,19 @@ func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedP
 	// Written with the reply, under sendMu: a message sent to the client
 	// for this session after this point cannot overtake the reply.
 	cs.repliedSession = payload.SessionID
+	paneMarks := cs.paneMarks
 	cs.mu.Unlock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err = WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()
+	// A client that reads pane marks hears the first output and bell of each
+	// pane after it arrives, not only of the panes no client looked at since.
+	// See pane_marks.go.
+	if paneMarks {
+		if s := d.manager.GetSessionByID(payload.SessionID); s != nil {
+			s.rearmPaneMarks()
+		}
+	}
 
 	if err != nil {
 		// Same treatment as any other failed write: framing is unrecoverable,

@@ -518,6 +518,9 @@ type connState struct {
 	// listingPush says the client's hello set ListingPush: it reads
 	// MsgSessionsChanged. Guarded by mu. See daemon_listing_push.go.
 	listingPush bool
+	// paneMarks says the client's hello set PaneMarks: it reads MsgPaneMark.
+	// Guarded by mu. See pane_marks.go.
+	paneMarks bool
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
@@ -1024,6 +1027,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
 	s.SetHostShownProbe(func() bool { return d.sessionShown(sessionID) })
+	// A pane's first output or bell since its subscriptions changed. See
+	// pane_marks.go.
+	s.SetPaneMarkSink(func(ptyID, windowID string, mark uint32) {
+		d.goTracked(func() { d.sendPaneMark(sessionID, ptyID, windowID, mark) })
+	})
 	s.SetEventSink(func(ev SessionEvent) {
 		// Read per event, not once at creation: a rename changes it, and
 		// every record made from here must carry the name the session has now.

@@ -169,6 +169,11 @@ const (
 	// only to a client whose hello set ListingPush. See
 	// daemon_listing_push.go.
 	MsgSessionsChanged
+	// MsgPaneMark tells a client that a pane it does not stream rang the
+	// bell or printed, once until the client subscribes to the pane or drops
+	// it. The daemon sends it only to a client whose hello set PaneMarks.
+	// See pane_marks.go.
+	MsgPaneMark
 )
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
@@ -292,6 +297,9 @@ type HelloPayload struct {
 	// ListingPush says the client reads MsgSessionsChanged. The daemon sends
 	// it to no other client. See daemon_listing_push.go.
 	ListingPush bool `json:"listing_push,omitzero"`
+	// PaneMarks says the client reads MsgPaneMark. The daemon sends it to no
+	// other client. See pane_marks.go.
+	PaneMarks bool `json:"pane_marks,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -355,6 +363,10 @@ type WelcomePayload struct {
 	// hello set ListingPush. Such a client stops polling the listing. A
 	// client that does not see it (a daemon that predates it) keeps polling.
 	ListingPush bool `json:"listing_push,omitzero"`
+	// PaneMarks says the daemon sends MsgPaneMark to a client whose hello set
+	// PaneMarks. A client that does not see it (a daemon that predates it)
+	// marks no tab for a pane it does not stream.
+	PaneMarks bool `json:"pane_marks,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.
