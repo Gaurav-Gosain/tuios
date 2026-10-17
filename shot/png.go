@@ -252,16 +252,28 @@ func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW,
 		Dot:  fixed.Point26_6{X: floatToFixed(x), Y: floatToFixed(baseline)},
 	}
 	// Center the glyph in its cell when the face advance disagrees with
-	// the grid, so a substituted glyph does not lean left.
+	// the grid, so a substituted glyph does not lean left. A face with a
+	// wider advance, such as Noto Sans Mono's two-column ◆ and ▤, has its ink
+	// centered instead: centering the advance box alone puts the ink half a
+	// cell to the right, over the next cell.
 	if adv, ok := face.GlyphAdvance(r); ok {
 		off := (cellW - fixedToFloat(adv)) / 2
-		if off > 0.5 {
+		switch {
+		case off > 0.5:
 			d.Dot.X = floatToFixed(x + off)
+		case off < -0.5:
+			if b, _, ok := face.GlyphBounds(r); ok {
+				ink := fixedToFloat(b.Max.X - b.Min.X)
+				d.Dot.X = floatToFixed(x + (cellW-ink)/2 - fixedToFloat(b.Min.X))
+			}
 		}
 	}
+	start := d.Dot
 	d.DrawString(cl)
 	if bold && doubleStrike {
-		d.Dot = fixed.Point26_6{X: floatToFixed(x + 1), Y: floatToFixed(baseline)}
+		// The second strike starts one pixel right of the first, centering
+		// included, so the two inks overlap.
+		d.Dot = fixed.Point26_6{X: start.X + fixed.I(1), Y: start.Y}
 		d.DrawString(cl)
 	}
 	_ = italic // no italic face embedded; the honest limitation is documented

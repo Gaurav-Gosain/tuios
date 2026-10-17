@@ -58,3 +58,21 @@ func TestLinksSurviveAsAnchors(t *testing.T) {
 		}
 	}
 }
+
+// TestBoldCellWithoutBoldFont keeps a bold cell from crashing the PNG render
+// when the frame names a font and no bold cut, which is every capture with
+// screenshot.font_file set.
+//
+// Negative control: dropping the empty-data check in faceSet.parse panicked
+// in sfnt.ParseCollection.
+func TestBoldCellWithoutBoldFont(t *testing.T) {
+	regular, _, err := goMonoFonts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := NewGrid(4, 1, RGB(0xe5, 0xe5, 0xe5), RGB(0, 0, 0))
+	put(g, 0, 0, "ab", func(c *Cell) { c.Bold = true })
+	if _, err := Render(FormatPNG, g, &Frame{Font: Font{Data: regular}}); err != nil {
+		t.Fatal(err)
+	}
+}

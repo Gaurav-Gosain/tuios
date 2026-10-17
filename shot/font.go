@@ -1,6 +1,7 @@
 package shot
 
 import (
+	"errors"
 	"fmt"
 
 	"golang.org/x/image/font"
@@ -107,6 +108,11 @@ func (fs *faceSet) parse(e *faceEntry) error {
 		return nil
 	}
 	e.parsed = true
+	if len(e.src.Data) == 0 {
+		// An empty font is a face the caller does not have, such as the bold
+		// cut of a font with none. sfnt.ParseCollection panics on it.
+		return errors.New("parse font: no font data")
+	}
 	coll, err := sfnt.ParseCollection(e.src.Data)
 	if err != nil {
 		return fmt.Errorf("parse font: %w", err)

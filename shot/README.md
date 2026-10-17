@@ -120,8 +120,9 @@ noto, _ := os.ReadFile("/usr/share/fonts/noto/NotoSansMono-Regular.ttf")
 frame.Fallback = append(frame.Fallback, shot.Font{Data: noto})
 ```
 
-shot reads each fallback face only when a glyph reaches it, and looks up each
-glyph once per render. tuios fills the fallback list from fontconfig.
+shot parses a fallback face only when a glyph needs it, and looks up each
+glyph once per render. A glyph wider than its cell is centred on the
+cell. tuios fills the fallback list from fontconfig.
 
 SVG and HTML name `Frame.FontFamily` and let the viewer pick the fonts. With
 `Frame.EmbedFont`, they also carry `Frame.Font` as an `@font-face`.
