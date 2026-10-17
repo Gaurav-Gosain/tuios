@@ -7994,8 +7994,8 @@ Conditions:
 - `window-exit` resolves when the target window's shell process exits. The
   result carries `exit_code` (-1 when a signal stopped the process) and
   `signal` when a signal stopped it. Both are omitted when the status is not
-  known, such as for a window on another machine, or on Linux for a program
-  whose parent died before a live upgrade's keeper brought the
+  known, such as for a window on another machine, or on Linux before 6.15 for
+  a program whose parent died before a live upgrade's keeper brought the
   daemon back. An older client ignores them.
 - `window-idle` resolves after the target window produces no output for `idle`
   milliseconds.

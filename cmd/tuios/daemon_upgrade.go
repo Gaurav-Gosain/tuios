@@ -422,7 +422,7 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		return o, &diagnosticError{
 			What:  fmt.Sprintf("%s died before it was up, so the daemon was started again from %s, as pid %d (was %d).", binary, o.To, after.PID, before.PID),
 			Cause: "the new binary crashed or was killed while it took the panes over. The keeper the upgrade left holding them brought the previous binary back. The daemon log says what it saw.",
-			Fix:   "every program is still running, with the same pid. The daemon is no longer their parent: on Linux the exit status of a program that ends from now on is not known. Run 'tuios logs' to see what failed.",
+			Fix:   "every program is still running, with the same pid. The daemon is no longer their parent: on Linux before 6.15 the exit status of a program that ends from now on is not known. Run 'tuios logs' to see what failed.",
 		}
 	}
 	if o.Fallback {
