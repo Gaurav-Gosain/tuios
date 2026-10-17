@@ -9740,7 +9740,7 @@ Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against the branch feat/
 | The keeper runs the daemon's own `/proc/self/fd/N` (Linux, 2026-10-28) | `keeperBinary` returns `prev.path`, which names the binary's descriptor in the daemon, not where the keeper holds it | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, 2 runs of 2, in Docker (`golang:1.26.10`, Linux arm64): "call hello: exit status 3: The TUIOS daemon is not running, but a stale socket is left over" (the keeper could not exec the previous binary, and the panes ended) | **caught** |
 | The keeper starts with stderr on `/dev/null` (macOS, 2026-11-01) | `startKeeper` gives the keeper `null.Fd()` as descriptor 2 instead of `keeperStderr(null)` | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, and only its new assertion: "the restored daemon's stderr is \"/dev/null\", want the daemon log …/XDG_STATE_HOME/tuios/daemon.log" (the first daemon's read the daemon log) | **caught** |
 
-The wait control is caught only by the exit status, which the test checks on macOS alone: on Linux a non-child's status is not known, so there the same cut would leave the exit code at -1 either way and pass. The pane's pid, its output and the restored daemon all look right under that cut, because a recorded exit does not close a window by itself.
+The wait control is caught here only by the exit status, which the test checked on macOS alone: on Linux a non-child's status was not known, so there the same cut left the exit code at -1 either way and passed. The pane's pid, its output and the restored daemon all look right under that cut, because a recorded exit does not close a window by itself. The test now also checks that the pane does not read as exited before it is told to exit, which catches the cut on Linux: see "Linux" below.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
@@ -9985,6 +9985,29 @@ Not covered by a test: a `close_on_exit` or popup pane that the old image reaped
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_PREV_BIN=/path/to/tuios-handoff-v3 \
   go test -count=1 -run '^(TestSelfExecClosesCloseOnExitWindows|TestSelfExecKeepsWorkspaceReturn|TestSelfExecKeepsSessionOrder|TestSelfExecKeepsPluginPane|TestSelfExecKeepsProtocolPane|TestSelfExecKeepsPaneCreator|TestSelfExecFollowsMovedWindow|TestSelfExecKeepsReportColors|TestDaemonUpgradeAcrossHandoffVersions)$' .
+### Linux
+
+The live-handoff tests on Linux arm64: a Debian 13 container (Go 1.26.9, `CGO_ENABLED=0`, 3 CPUs, the default seccomp profile) on colima's kernel 6.8, and an Ubuntu 26.04 VM with kernel 7.0 for what depends on the kernel. Each control is a patch applied to a copy of the source for one build; the rest of the tree is the branch feat/live-handoff-linux.
+
+- `TestDaemonUpgradeRightAfterAnUpgrade`: the second upgrade is asked for the moment the first new image answers hello, and must go through with every pane's pid. Its artifact says whether the kept `tuios.prev` was a link or a copy of the binary; only a copy (the binary on another file system than the state folder, as `/out/bin` on a volume against `/tmp` in the container) leaves a span wide enough to hit. On macOS, with both on one volume, it is a link, and the test cannot catch the control there.
+- `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, extended: after the recovery, a `wait-for window-exit` with a 300 ms timeout must time out while the pane's program still runs; after it is told to exit, its process must be gone, and wait-for and the kept-open window must give 9 where the kernel tells a non-parent the status (macOS; Linux 6.15 and later, read from `/proc/sys/kernel/osrelease`), and elsewhere omit `exit_code` and say "[The program ended. Its exit status is not known.]".
+
+Run on 2026-10-17, one build per control.
+
+| Control | How | Kernel | Test that fails | Verdict |
+| --- | --- | --- | --- | --- |
+| The kept binary is not waited for | the fix reverted: `prevMu` taken only inside `keepPrevBinary` | 6.8 | `TestDaemonUpgradeRightAfterAnUpgrade`: "an upgrade asked for as the first new image answered was refused (binary kept as copy): ... this daemon kept no copy of its binary to fall back to"; `TestSelfExecAdoptsPanes/fork_in_the_exposed_window`: the same refusal | **caught** |
+| No wait for a pane that is not the daemon's child | `&& false` appended to the `foreign` condition in `monitorExit`, after the peek | 6.8 | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "the pane read as exited while its program still ran: <nil>" | **caught** |
+| wait-for reports a lost status as -1 | the `exitStatusLost` check cut from `exitResult` | 6.8 | every case: "wait-for reports exit_code -1 for a pane whose status this kernel does not give a non-parent" | **caught** |
+| The window shows a lost status as -1 | the `exitStatusLost` case cut from `exitNoteText` | 6.8 | every case: "the kept-open pane says \"[The program exited with status -1.]\", want the status named as not known" | **caught** |
+| No status from the pidfd | `waitForeignExit` returns `-1, 0` after poll instead of `pidfdExitStatus` | 7.0 | every case: "the pane that exited 9 after the crash reads 0 (known false)", "the kept-open pane says \"[The program ended. Its exit status is not known.]\" after its program exited 9" | **caught** |
+| No wait for the reap | `pidfdExitStatus(fd, 0)`: one try as poll fires | 7.0 | `killed-at-start` and `killed-once-serving`: the same two messages; `panic-while-adopting` and `fallback-also-dies` passed, where init had reaped the pane before the first try | **caught** (2 of 4 cases) |
+
+A first form of the wait control, `false &&` in front of the condition, also skipped the non-reaping peek, so the old image's `monitorExit` reaped with the gate held and the first handoff hung in `reapGate.shut`. That is a broken control, not a finding: the peek is what the gate relies on, and the control kept above leaves it in.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestDaemonUpgradeRightAfterAnUpgrade|TestSelfExecAdoptsPanes|TestDaemonUpgradeSurvivesACrashOfTheNewImage)$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog
