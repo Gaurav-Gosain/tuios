@@ -577,6 +577,7 @@ build before ids were saved has none, and that session gets a new id once.
 tuios daemon upgrade                          # to the tuios running the command
 tuios daemon upgrade --binary ~/bin/tuios-next
 tuios --server test daemon upgrade --binary ./tuios
+tuios daemon upgrade --binary ~/.local/bin/tuios --or-restart   # live, else a restart
 ```
 
 The new binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The daemon then pauses every pane, writes down what each holds, and execs the new binary, which takes the panes over. The pause is well under a second, and a program writing output during it waits and loses nothing. If the new binary cannot take the panes over, the daemon goes back to the binary it was running, with every pane, and the command says so. If the new binary crashes or is killed before it is up, a keeper process the upgrade started holding every pane's terminal brings the binary that was running back in its place: every program keeps running, the daemon comes back under a new pid, and the command says so. A daemon brought back this way is no longer the parent of those programs: it learns when one ends, with its exit status on macOS, without it on Linux.
@@ -586,6 +587,15 @@ Attached clients are dropped, and a tuios client on this machine attaches again 
 The daemon refuses an upgrade while it holds something it cannot hand over: a pane hosted for another machine or one running on another machine, a running `tuios fan verify` check, or a popup capturing its output. It is refused on Windows, where `tuios restart-server` moves the daemon to another build and stops every program in every pane.
 
 Run from inside a pane, the upgrade asks you first. The binary named runs as the daemon, which holds every pane's terminal, so a pane does not get one by asking. Every attached client shows a dialog with the binary's full path, its version and the pane that asked. No is the default, and only a key you press at a client answers it: bytes a pane writes, a paste, keys sent with `tuios send-keys` or a tape, a key on another machine, an answer from the Inbox or a `gui-bridge` renderer, and a client too old to show the dialog do not. The first answer counts and closes the dialog on the other clients. No, Esc, a minute without an answer, or no client attached refuses the upgrade, and nothing changes. A view-only client, such as `tuios-web --read-only`, cannot answer, so it does not count as one, and neither does a `gui-bridge` renderer or a client too old to show the dialog. A `gui-bridge` renderer cannot call `daemon-upgrade` at all. A plugin is refused without a dialog, and an upgrade from a terminal outside tuios needs none. The dialog rides the Inbox, so with `[agents] enabled = false` a pane's upgrade is refused. With no client attached or the agent features off, the refusal comes before the daemon runs the binary at all. The dialog stops mistakes and agents, not a local process that wants to get past it: tuios tells a pane by its process, so a process that leaves its pane and its environment behind, such as `env -i HOME="$HOME" setsid -f tuios daemon upgrade --binary <path>`, runs as one outside every pane and needs no dialog. So can a pane that can log in to this machine's `tuios ssh`: a client attached that way counts, and the keys typed through it answer the dialog, with the pane's environment unchanged. That is the limit of every verb that only the person may call.
+
+`--or-restart` is for scripts that install a tuios and want the daemon on it in any case: when the daemon cannot be upgraded live, the command says why and restarts it with the binary instead, which ends the programs. With no daemon running it starts one. A daemon that went back to its old binary is not restarted, since its programs still run. The paths that install tuios use it:
+
+| Path | What it does with a running daemon |
+|------|-----------------------------------|
+| `tuios hosts sync --restart` | Upgrades each old daemon live, on its own host, and restarts the ones that cannot be. Run from a pane of this machine's daemon, `--local` only upgrades it live and leaves it when it cannot. See [Keeping Hosts on One Version](#keeping-hosts-on-one-version) |
+| `scripts/install.sh --upgrade-server` | Upgrades the default server's daemon live, or leaves it on the previous build and says why. Its prompt offers the same as `u`. `--kill-server` stops the daemon |
+| `tuios update` | Leaves the daemon, and prints `tuios daemon upgrade`, then `tuios kill-server` for when it cannot be upgraded live |
+| `just restart` (in a checkout) | `tuios daemon upgrade --binary <tuios on PATH> --or-restart` |
 
 The command, its output and everything it keeps and ends are in [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-daemon-upgrade). The design is in [design/live-handoff.md](design/live-handoff.md).
 
@@ -1086,12 +1096,7 @@ tuios hosts sync --dry-run    # see what would change
 tuios hosts sync --dev        # install a build of this checkout everywhere
 ```
 
-The daemon on a host keeps running the old version, and its sessions keep
-running. The row for the host gives the command to restart it. Add
-`--restart` to restart them in the same run: sync lists the sessions and the
-programs that a restart ends, and asks first. The sessions come back after the
-restart with their layouts and new shells. See
-[`tuios hosts sync`](CLI_REFERENCE.md#tuios-hosts-sync).
+The daemon on a host keeps running the old version, and its sessions keep running. The row for the host gives the command to move it. Add `--restart` to move them in the same run. Each daemon is [upgraded live](#upgrading-the-daemon-without-ending-programs) where it can be, keeping every program in its panes, and restarted where it cannot, with the reason in its row: a daemon from before live upgrades, or one that refuses. A restarted daemon's sessions come back with their layouts and new shells. sync lists the sessions and the programs that a restart would end, and asks first. See [`tuios hosts sync`](CLI_REFERENCE.md#tuios-hosts-sync).
 
 ## Starting the Daemon on a Host
 

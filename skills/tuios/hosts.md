@@ -55,11 +55,16 @@ tuios list-agents --all-hosts
 `--repos-root DIR` for where its checkouts live. A change takes effect at once.
 
 `hosts sync` installs the version of this machine where a host differs. It never
-restarts a daemon unless given `--restart`, and a restart ends every program in
-the panes of that daemon. Without a terminal, `--restart` also needs `--yes`.
-Do not pass either unless the person asked for a restart. Each row of `--json`
+touches a daemon unless given `--restart`. With it, each old daemon is upgraded
+live where it can be, which keeps every program in its panes
+(`daemon.upgraded` in a `--json` row), and restarted where it cannot, which
+ends every program in the panes of that daemon (`daemon.restarted`, with the
+reason in `notes`). Without a terminal, `--restart` also needs `--yes`. Do not
+pass either unless the person asked to move the daemons. Each row of `--json`
 has `restart_needed` and `restart_command`, and `daemon.sessions[].busy` lists
-the panes a restart would end.
+the panes a restart would end. From a pane of this machine's daemon, `--local
+--restart` only upgrades that daemon live, and leaves it with a note when it
+cannot.
 
 A host behind Tailscale SSH in check mode waits for the person to sign in in
 a browser. Its link reports `tailscale_check` with `approval_url` (the table of

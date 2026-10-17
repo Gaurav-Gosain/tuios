@@ -2062,8 +2062,9 @@ picked the top. `paste-buffer` with no `-b` then typed the older buffer.
 `TestHostsSync` syncs four fake hosts: one with no tuios, one with the new
 version, one with the old version and a daemon that runs `sleep` in a pane,
 and one with no machine behind its address. `TestHostsSyncRestartWithYes`
-restarts the daemon of an old host. Each control changed one line, built the
-binary, and ran the named test.
+moves the daemon of an old host, which upgrades it live (see "Live handoff"
+for the controls of that). Each control changed one line, built the binary,
+and ran the named test.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
@@ -9735,6 +9736,36 @@ The wait control is caught only by the exit status, which the test checks on mac
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestDaemonUpgradeKeeperStandsDown|TestDaemonUpgradeSurvivesACrashOfTheNewImage|TestDaemonUpgradeFallsBackToPreviousBinary)$' .
+### The paths that install tuios and move the daemon
+
+`e2e/tui/upgrade_paths_test.go` and `TestHostsSyncRestartWithYes` drive `tuios daemon upgrade --or-restart`, the one helper every install path uses, through those paths. The hosts are the fake hosts of `hosts_sync_test.go`: a real isolation root and daemon each, behind an ssh stand-in, where the install and upgrade scripts run in a real `sh`. The new version is a build of the checkout stamped `e2e-sync-next`, so the `daemon upgrade` that runs on a host is the checkout's own: a control in the helper is applied to the source for the run, not only to `TUIOS_E2E_BIN`.
+
+- `TestHostsSyncRestartWithYes`: `hosts sync --restart --yes` on a host whose daemon has live upgrades. The row says `daemon upgraded live`; the daemon keeps its pid, gets a new image of `e2e-sync-next`, keeps the session and both pane pids, one of them `sleep 600`.
+- `TestHostsSyncLocalUpgradesTheNamedServerLive`: `tuios --server e2e-lhsync hosts sync --local --restart --yes`, the shape of `just deploy`, with a default daemon and a named one, each running `sleep 600`. The PATH holds only a copy of the old tuios under the isolation root, so the local probe installs there. The named daemon is upgraded live with its pid and panes; the default daemon keeps its image, version and panes.
+- `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: the host's daemon is `TUIOS_E2E_BASELINE_BIN`, upstream main at 72c1c367. It answers `unknown_verb`, so sync restarts it with the new binary; the row says `daemon restarted` with the note "The daemon could not be upgraded live, so it was restarted: the daemon (e2e-baseline-72c1c367, pid N) predates live upgrades.", and the session comes back on a new daemon of `e2e-sync-next`. Skipped without the variable.
+- `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: the same baseline daemon on this machine, with `hosts sync --local --restart --yes` run as if from one of its panes (`TUIOS_PANE_ID` set). The binary is installed, the daemon is neither upgraded nor restarted, its image and panes are unchanged, and the row's note says it predates live upgrades and was not restarted. Skipped without the variable.
+- `TestHostsSyncReportsAFallbackAndDoesNotRestart`: the host's daemon runs with `TUIOS_TEST_HANDOFF_FAIL=error`, so the new image cannot adopt the panes and the daemon goes back to `tuios.prev`. sync fails the host with "the new binary could not take the panes over", exits 1, and the daemon keeps its pid, the old version and both pane pids.
+- `TestDaemonUpgradeOrRestartStartsTheNamedServer`: `tuios --server e2e-lhstart daemon upgrade --binary <copy> --or-restart --json` with no daemon reports `started` with the reason "no daemon is running", the named server runs the copy as the reported pid, and `kill-server` on the default server finds nothing running.
+- `TestInstallScriptUpgradesTheDaemonLive`: `scripts/install.sh --prefix <root>/prefix --upgrade-server`, with the isolation root's XDG folders (the test refuses to run when its runtime folder is not the root's own) and the real Go caches. The script builds the checkout, installs it, prints `==> upgrading the daemon live` and the command's report, and the daemon keeps its pid and panes on a new image of the installed `dev+COMMIT-dirty`.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff-upgrade-paths, one build per control, with the source patched for the run where the control is in the helper.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The helper always restarts | `upgradeLive` in `upgradeDaemon` replaced by a `notLiveError` | `TestHostsSyncRestartWithYes`: "old was not installed and upgraded live: ... Action:installed, daemon restarted", "the daemon on old is {PID:52397 ...} after the sync, from {PID:52242 ...}", "window ... had pid 52245, and 52398 after the sync"; `TestHostsSyncLocalUpgradesTheNamedServerLive`: "the panes of server e2e-lhsync were ... and are ..."; `TestInstallScriptUpgradesTheDaemonLive`: "install.sh did not report a live upgrade", the same image after the install | **caught** |
+| A refusal is not restarted | `return o, err` at the top of the `daemon-upgrade` error branch | `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: "sync --restart --yes failed: exit status 1" | **caught** |
+| The daemon from before live upgrades is a plain refusal | the `ErrVerbUnknownVerb` branch made `if false` | `TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades`: "the row does not say the daemon was restarted because it predates live upgrades: [... restarted: the daemon refused: unknown verb daemon-upgrade.]" | **caught** |
+| No daemon is a failure | the `!session.IsDaemonRunning()` branch in `upgradeLive` made `if false` | `TestDaemonUpgradeOrRestartStartsTheNamedServer`: "daemon upgrade --or-restart with no daemon did not start one: exit status 3" | **caught** |
+| A fallback is restarted | a fallback outcome turned into a `notLiveError` in `upgradeDaemon` | `TestHostsSyncReportsAFallbackAndDoesNotRestart`: "sync did not fail the host with the fallback, or moved the daemon: <nil> ... daemon restarted", "the daemon is {PID:55120 ... Version:e2e-sync-next} after the fallback, from {PID:55022 ...}", the pane pids changed | **caught** |
+| The upgrade drops the server | `TUIOS_SERVER=` before `"$a" daemon upgrade` in `syncUpgradeStep` | `TestHostsSyncLocalUpgradesTheNamedServerLive`: "server e2e-lhsync is {... Version:dev} after the sync", "the default daemon changed when server e2e-lhsync was synced: {... Version:dev} then {... Version:e2e-sync-next}" | **caught** |
+| A pane restarts like anywhere else | the `t.liveOnly` case cut from `restartMode` | `TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade`: "the row says the daemon moved ... daemon restarted", "the daemon changed: {PID:55450 ...} then {PID:55516 ...}" | **caught** |
+| install.sh ignores the upgrade answer | the `upgrade)` case of the daemon action renamed | `TestInstallScriptUpgradesTheDaemonLive`: "install.sh did not report a live upgrade", "the daemon is {PID:55994 Instance:7f2b0b83... Version:dev} after the install, from the same" | **caught** |
+
+The "The restart" control of "tuios hosts sync" (`t.restart = true` made `false` in `planSyncTarget`) was run again on this branch: `TestHostsSyncRestartWithYes` fails with "old was not installed and upgraded live" and "after the sync, old still plans \"up to date, daemon restart needed\"". **caught**.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BASELINE_BIN=/path/to/older/tuios \
+  go test -count=1 -run '^(TestHostsSyncRestartWithYes|TestHostsSyncLocalUpgradesTheNamedServerLive|TestHostsSyncRestartsADaemonThatPredatesLiveUpgrades|TestHostsSyncInAPaneLeavesADaemonItCannotUpgrade|TestHostsSyncReportsAFallbackAndDoesNotRestart|TestDaemonUpgradeOrRestartStartsTheNamedServer|TestInstallScriptUpgradesTheDaemonLive)$' .
 ```
 
 ### The paths that install tuios and move the daemon
