@@ -123,6 +123,11 @@ func (m *OS) MoveWorkspaceBy(delta int) tea.Cmd {
 	if session.IsScratchWorkspace(from) || to < 1 || to > m.NumWorkspaces {
 		return nil
 	}
+	// Past the last workspace there is nothing to swap with: a daemon session
+	// numbers its workspaces 1 to their count.
+	if m.IsDaemonSession && !slices.Contains(m.occupiedWorkspaceNumbers(), to) {
+		return nil
+	}
 	// The order is the two workspaces as they will stand, lower number first.
 	order := []int{to, from}
 	if delta < 0 {
