@@ -9231,6 +9231,29 @@ The pin taken before the checks has no control: a file swapped between it and th
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestPaneUpgradeRefusesAnAnswerFromTheGUIBridge|TestPaneUpgradeRefusedWithoutYes|TestPaneUpgradeRunsNoFileWithoutADialog)$' .
+### The keeper: a crash of the new image after the swap
+
+`e2e/tui/handoff_keeper_test.go`, for section 7.1 of the spec. The daemon runs with `TUIOS_TEST_HANDOFF=1`; `TUIOS_TEST_HANDOFF_CRASH` ends the image a handoff execs at `start` (SIGKILL first thing in `RunAdopted`), `adopt` (with every pane rebuilt, before the fallback is disarmed), `serve` (after it serves, before it releases the keeper) or `fallback` (in the in-place fallback image), and `TUIOS_TEST_HANDOFF_CRASH_MODE=panic` makes it a panic in a goroutine of its own instead of SIGKILL.
+
+- `TestDaemonUpgradeKeeperStandsDown`: an upgrade held 1.5 s between the manifest write and the exec. During the hold exactly one keeper runs, as the daemon's child (the positive half, which shows the `ps` search finds one). After the new image answers no keeper is left (the first `ps` already finds none) and the daemon has no defunct child; the pane keeps its pid.
+- `TestDaemonUpgradeSurvivesACrashOfTheNewImage`, four cases: `killed-at-start`, `panic-while-adopting`, `killed-once-serving`, and `fallback-also-dies` (`TUIOS_TEST_HANDOFF_FAIL=error` with the fallback image killed). `tuios daemon upgrade --json` reports `recovered` and "died before it was up" and exits 1; the daemon answers from the kept `tuios.prev` under a new pid, the old pid is gone; every pane keeps its pid; a 20 ms counter goes on past where it stood, with no gap except in `killed-once-serving`, where the dead image had read some (one gap in the recorded run); a pane told to exit 9 afterwards reads 9 on macOS; no keeper is left. Each case writes `handoff.json` with the pids, the command's output, the image's stats, the counter and the exit status.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against the branch feat/live-handoff-keeper, one build per control. Each control was run against the regex below plus `TestDaemonUpgradeFallsBackToPreviousBinary`.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| No keeper | `startKeeper` returns `nil, nil` | `TestDaemonUpgradeKeeperStandsDown`: "0 keepers while the upgrade was held, want 1"; every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "call hello: ... The TUIOS daemon is not running, but a stale socket is left over" (the panes ended with the image) | **caught** |
+| The fallback exec closes the keeper's socket | the keeper's descriptor left out of `adoptFallback.prepare` | `TestDaemonUpgradeFallsBackToPreviousBinary/error` and `/hang`: "the daemon's pid changed from 67349 to 67453" (the keeper took the socket's end as the daemon's death and started a second daemon beside the fallback image). The crash cases pass | **caught** |
+| The new image never releases the keeper | `d.releaseKeeper()` cut from `adopt` | `TestDaemonUpgradeKeeperStandsDown`: "a keeper is still there 3.094s after the new image was up", "the daemon has a child left from the keeper" | **caught** |
+| The released keeper is not reaped | `go reapKeeper(k.pid)` cut from `releaseKeeper` | `TestDaemonUpgradeKeeperStandsDown`: "the daemon has a child left from the keeper: \"70118 <defunct> <defunct>\"" | **caught** |
+| No wait for a pane that is not the daemon's child | `monitorExit` ignores the peek's `ECHILD` and reaps as before | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "the pane that exited 9 after the crash reads -1" | **caught** (macOS only, see below) |
+| The keeper's descriptor map is ignored | `keptAt` returns the number unchanged | every case of `TestDaemonUpgradeSurvivesACrashOfTheNewImage`: "The TUIOS daemon is not running, but a stale socket is left over" (the restored image read the old image's numbers and could not adopt) | **caught** |
+
+The wait control is caught only by the exit status, which the test checks on macOS alone: on Linux a non-child's status is not known, so there the same cut would leave the exit code at -1 either way and pass. The pane's pid, its output and the restored daemon all look right under that cut, because a recorded exit does not close a window by itself.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestDaemonUpgradeKeeperStandsDown|TestDaemonUpgradeSurvivesACrashOfTheNewImage|TestDaemonUpgradeFallsBackToPreviousBinary)$' .
 ```
 #### Third review: only a client that shows the dialog counts, and the bridge cannot upgrade
 
