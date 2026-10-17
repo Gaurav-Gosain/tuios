@@ -575,7 +575,7 @@ tuios daemon upgrade --binary ~/bin/tuios-next
 tuios --server test daemon upgrade --binary ./tuios
 ```
 
-The new binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The daemon then pauses every pane, writes down what each holds, and execs the new binary, which takes the panes over. The pause is well under a second, and a program writing output during it waits and loses nothing. If the new binary cannot take the panes over, the daemon goes back to the binary it was running, with every pane, and the command says so.
+The new binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The daemon then pauses every pane, writes down what each holds, and execs the new binary, which takes the panes over. The pause is well under a second, and a program writing output during it waits and loses nothing. If the new binary cannot take the panes over, the daemon goes back to the binary it was running, with every pane, and the command says so. If the new binary crashes or is killed before it is up, a keeper process the upgrade started holding every pane's terminal brings the binary that was running back in its place: every program keeps running, the daemon comes back under a new pid, and the command says so. A daemon brought back this way is no longer the parent of those programs: it learns when one ends, with its exit status on macOS, without it on Linux.
 
 Attached clients are dropped. A tuios client says the daemon is being upgraded and that the programs are still running, and exits; run `tuios attach <session>` to continue. Copy-mode state and input mode start fresh, as for any attach. Each pane carries the last 1000 lines of its history; deeper history is not carried.
 
