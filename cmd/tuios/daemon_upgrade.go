@@ -15,9 +15,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
+
+// killServerCommand is the kill-server command for the daemon being upgraded.
+// On a named server it carries --server, since the bare command stops the
+// default daemon.
+func killServerCommand() string {
+	if name := serverscope.Name(); name != "" {
+		return "tuios --server " + name + " kill-server"
+	}
+	return "tuios kill-server"
+}
 
 // adoptFDFlag is the daemon command's flag naming the descriptor a live
 // upgrade's manifest is on.
@@ -179,7 +190,7 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 		return &diagnosticError{
 			What:  fmt.Sprintf("%s cannot take the daemon over: %v.", binary, err),
 			Cause: "it is not a tuios, or a tuios from before live upgrades.",
-			Fix:   "pass a tuios with --binary, or run 'tuios kill-server' to restart the daemon, which ends running programs.",
+			Fix:   "pass a tuios with --binary, or run '" + killServerCommand() + "' to restart the daemon, which ends running programs.",
 		}
 	}
 	say("Checking %s (%s) accepts this daemon's state (handoff v%d)... ", binary, acc.Version, session.HandoffVersion)
@@ -194,7 +205,7 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 			return &diagnosticError{
 				What:  fmt.Sprintf("The daemon (%s, pid %d) predates live upgrades.", before.Version, before.PID),
 				Cause: "it is from a build that cannot hand its panes over.",
-				Fix:   "run 'tuios kill-server' and start it again, which ends running programs. The next upgrade can be live.",
+				Fix:   "run '" + killServerCommand() + "' and start it again, which ends running programs. The next upgrade can be live.",
 			}
 		}
 		if errors.As(err, &verr) {
