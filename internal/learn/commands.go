@@ -2,6 +2,7 @@ package learn
 
 import (
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,7 +117,12 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 				o.ToggleAutoTiling()
 			}
 		case path == "startup.layout":
-			m.RunCommand("layout", arg(1))
+			// Only a scheme tuios look apply takes. The layout command
+			// cycles three times on a name it does not know, which ends
+			// where it started but flashes three notifications.
+			if slices.Contains(config.LayoutModes, arg(1)) {
+				m.RunCommand("layout", arg(1))
+			}
 		case config.IsLookFileKey(path):
 			// The dock's lists and its tabs table: the dock reads them from
 			// the config on each frame.

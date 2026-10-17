@@ -455,4 +455,11 @@ func TestSetLookItems(t *testing.T) {
 	if !o.AutoTiling || o.LayoutModeName() != "master-stack" {
 		t.Errorf("tiling %v, layout %q, want tiled master-stack", o.AutoTiling, o.LayoutModeName())
 	}
+	// A name tuios look apply refuses does nothing: no layout cycle and no
+	// notification.
+	before := len(o.Notifications)
+	tr.m.RunCommand("set", "startup.layout", "spiral")
+	if o.LayoutModeName() != "master-stack" || len(o.Notifications) != before {
+		t.Errorf("layout %q, %d notifications, want master-stack and %d", o.LayoutModeName(), len(o.Notifications), before)
+	}
 }

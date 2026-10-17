@@ -373,8 +373,8 @@ close = "x"
 - The option tables take the look keys only. `tuios look keys` lists them.
   The keys set colour, theme, glyphs, borders, gaps, titles, the dock, the
   rail, the scrollbar, selection colours and the spotlight. They also set the
-  layout: `tiled` and `layout` in `[startup]`, the master and scrolling
-  sizes, and the zoom size.
+  layout: `tiled` and `layout` in `[startup]`, the side and size of the
+  master pane, the width of a scrolling column, and the zoom size.
 - A look cannot set a key that runs a program, names a file or a folder, or
   changes a host, the daemon, keybindings, hooks or other startup keys. tuios
   leaves out such a key and names it.
@@ -383,7 +383,8 @@ close = "x"
   tuios leaves out an item such as `custom/clock` and names it, and keeps the
   other items. A look cannot set `[dock.custom]`.
 - `appearance.sidebar.sections` can name every rail section but `custom`.
-  tuios leaves out `custom` and keeps the other sections. A look cannot set
+  tuios leaves out `custom` and keeps the other sections. A layout with no
+  section left, such as `spacer` alone, is left out. A look cannot set
   `[appearance.sidebar.custom]`.
 - tuios checks each value as `tuios set-config` does. A value that is not
   correct stops the look. A string cannot hold a control character.
