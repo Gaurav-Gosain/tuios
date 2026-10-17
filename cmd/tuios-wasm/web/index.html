@@ -203,6 +203,10 @@ function loadVtgl() {
       }
       if (tap) tap.push(bytes);
       term.write(bytes);
+      // tuios sends one write per frame already. webterm holds a write until
+      // the next animation frame, and xterm paints it on the frame after, so
+      // without the flush every keystroke's echo waits an extra frame.
+      term.flush();
     });
     api.onEvent(onEvent);
     // webterm hands keyboard and mouse bytes to the attached transport.
