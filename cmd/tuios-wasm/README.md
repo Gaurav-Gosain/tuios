@@ -143,7 +143,7 @@ races a key. An unknown command or a bad argument does nothing.
 | `workspace` | `n` | switch to workspace n |
 | `mode` | `"window"` or `"terminal"` | set the mode |
 | `theme` | `id` | set the theme |
-| `set` | `path`, `value` | set any option `tuios set-config` takes, by the same path, such as `set("appearance.glyphs", "ascii")`. It changes this tab's config and nothing else. A `setting` event follows for the glyph set and the border style |
+| `set` | `path`, `value` | set an option by its `tuios set-config` path, such as `set("appearance.glyphs", "ascii")`. It changes this tab's config and nothing else. It takes the look and input options only. An option that runs a program, names a file or writes the clipboard does nothing. A `setting` event follows for the glyph set and the border style, and a `theme` event for the theme |
 | `type` | `text` | type into the focused pane, as if typed |
 | `action` | `name` | run a keybinding action by name, as its key would. The page then sees the same `action` event |
 | `agent` | `state`, `message?`, `kind?` | set the focused pane's agent state, without waiting for the fake agent |
