@@ -2822,6 +2822,17 @@ does not carry, and the item checks of the dock lists and the rail sections.
 No dependency was added. The new budgets leave 30,206 and 30,262 bytes of
 room.
 
+Writing the config file header from two constants cut 32,768 bytes from
+linux/amd64 and 33,024 from darwin/arm64. configFileHeader made 104
+`strings.Builder.WriteString` calls, and each inlined call compiled to about
+200 bytes of code. The output is the same bytes. Main at f49021ed measured
+37,965,986 and 35,705,442 bytes (Go 1.26.9), and the change measured
+37,933,218 and 35,672,418.
+
+The budgets went down to 37,955,000 (linux/amd64) and 35,686,000
+(darwin/arm64) after the cut. Each keeps about the room it had before it,
+21,782 and 13,582 bytes.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
