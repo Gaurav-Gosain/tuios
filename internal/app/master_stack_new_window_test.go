@@ -49,3 +49,30 @@ func boxes(m *OS) [][4]int {
 	}
 	return out
 }
+
+// TestFloatToggleKeepsTheMasterStackLayout is the same report on the float
+// key: floating a pane and tiling it again went through the BSP tree, which
+// ends in ApplyBSPLayout, so the panes came back as a BSP spiral.
+func TestFloatToggleKeepsTheMasterStackLayout(t *testing.T) {
+	m := newStartupOS(t, false, true)
+	defer closeWindows(m)
+	m.AutoTiling = true
+	m.UseBSPLayout = true
+	for range 5 {
+		m.AddWindow("")
+	}
+	m.EnableMasterStackLayout()
+	m.CompleteAllAnimations()
+	m.FocusWindow(2)
+
+	for _, step := range []string{"float", "tile again"} {
+		m.ToggleFloating()
+		m.CompleteAllAnimations()
+		got := boxes(m)
+		m.TileAllWindows()
+		m.CompleteAllAnimations()
+		if want := boxes(m); fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("after %s the boxes are %v, master-stack places them at %v", step, got, want)
+		}
+	}
+}

@@ -910,6 +910,12 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.ScrollingOnWindowAdded(w)
 			continue
 		}
+		// Master-stack places panes by order, not by the tree, and
+		// AddWindowToBSPTree would lay them out as BSP. The peer that tiled
+		// the pane placed it, and its rectangles arrive in this sync.
+		if !m.UseBSPLayout {
+			continue
+		}
 		if tree := m.WorkspaceTrees[m.CurrentWorkspace]; tree != nil {
 			intID := m.GetWindowIntID(w.ID)
 			if !slices.Contains(tree.GetAllWindowIDs(), intID) {

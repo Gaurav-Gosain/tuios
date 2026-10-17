@@ -37,8 +37,13 @@ func (m *OS) ToggleFloating() {
 				sl := m.GetOrCreateScrollingLayout()
 				sl.RemoveWindow(m.GetWindowIntID(fw.ID))
 				m.ScrollingSetPositions()
-			} else {
+			} else if m.UseBSPLayout {
 				m.RemoveWindowFromBSPTree(fw)
+			} else {
+				// Master-stack has no tree to take the pane out of. The BSP
+				// call above ends in ApplyBSPLayout, which would lay the
+				// rest out as BSP.
+				m.TileAllWindows()
 			}
 		}
 		fw.SetTiled(false)
@@ -55,8 +60,10 @@ func (m *OS) ToggleFloating() {
 					sl.AddColumn(intID)
 				}
 				m.TileAllWindows()
-			} else {
+			} else if m.UseBSPLayout {
 				m.AddWindowToBSPTree(fw)
+			} else {
+				m.TileAllWindows()
 			}
 		}
 		fw.InvalidateCache()
