@@ -6,7 +6,7 @@ import (
 )
 
 // What the daemon keeps about a window outside its session's state, carried
-// across a live handoff (docs/design/live-handoff.md, section 7.2): the plugin
+// across a live handoff (docs/design/live-handoff.md, section 7.3): the plugin
 // that opened a pane, the protocol a start-agent --protocol pane speaks, the
 // pane that opened another one, and the sessions a window was moved out of.
 // Each is daemon memory keyed by window id, and each changes what a call
