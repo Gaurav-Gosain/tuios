@@ -161,6 +161,11 @@ func main() {
 		tea.WithFilter(learn.Filter),
 	)
 	prog = tea.NewProgram(model, opts...)
+	// Every tuios program is bound to its model. Unbound, the frame ticker
+	// never stops at idle, kickFlush does nothing, so every frame waits for
+	// the next tick, and panes keep the default render floor instead of one
+	// frame at the session's rate.
+	osModel.BindProgram(prog)
 
 	api := js.Global().Get("Object").New()
 	api.Set("onOutput", js.FuncOf(func(_ js.Value, args []js.Value) any {
