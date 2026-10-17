@@ -25,7 +25,7 @@ import (
 // gone, so the daemon's process is gone, and the keeper execs the previous
 // binary in its own place with the descriptors it holds. That image adopts the
 // panes from the manifest as a fallback does, as a daemon with a new pid. See
-// docs/design/live-handoff.md, section 7, for each way this can end.
+// docs/design/live-handoff.md, section 7.1, for each way this can end.
 
 // handoffKeptEnv is set by a keeper on the image it execs. It maps each
 // descriptor number the manifest names to the number the keeper holds it at.

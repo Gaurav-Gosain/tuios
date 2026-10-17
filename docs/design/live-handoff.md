@@ -10,7 +10,7 @@ Status: implemented as PR 2 to PR 5 on the branch `feat/live-handoff-impl`; sect
   - it stays the **parent** of every pane, and exit detection keeps working through `wait4` with real exit codes;
   - the listening socket never closes, so CLI (command-line interface) and MCP (Model Context Protocol) calls made during the swap wait in the backlog instead of failing;
   - the old heap is freed at the exec, so two daemon heaps never coexist.
-  The cost: there is no old process to roll back to after the exec. A preflight that runs the exact binary file, a hardlinked copy of the old binary to re-exec, and a watchdog are the mitigation. Section 2.1 settles exec in place over a second process, with measured evidence.
+  The cost: there is no old process to roll back to after the exec. A preflight that runs the exact binary file, a hardlinked copy of the old binary to re-exec, a watchdog, and a keeper process that holds a copy of every pane's descriptor until the new image is up are the mitigation (section 7.1). Section 2.1 settles exec in place over a second process, with measured evidence.
 - **Exit detection today** is `exec.Cmd.Wait` in a `monitorExit` goroutine per pane (`internal/session/session.go:4859-4875`). It only works for the process's own children. Exec in place preserves the parent relationship, so the adopted pane waits on `os.FindProcess(pid).Wait()`. Measured on macOS (Darwin 27) and Linux 6.8 with Go 1.26.9: same pid after `execve`, a pre-exec zombie reaped with status 7, a later exit with status 9 (Appendix A). One change is still required in the **old** image: a `Wait` that is already blocked reaps a child that exits mid-handoff, and its status is lost at exec (reproduced). So `monitorExit` becomes a two-step wait, a non-reaping peek followed by a reap behind a per-pane gate, and the handoff closes that gate (section 2.2). In a spawn-a-second-daemon design the new daemon is **not** the parent:
   - on Linux a non-child cannot get an exit status at all; only a subreaper that is an ancestor of every pane from daemon start can;
   - on macOS kqueue `EVFILT_PROC` with `NOTE_EXITSTATUS` delivers a non-child's real status, but registration fails with ESRCH on a pane that is already a zombie;
@@ -183,7 +183,7 @@ Negative controls, each cutting a call site:
 | Exit codes | Kept on both OSes. Parenthood is unchanged | Two platform-specific paths. macOS: kqueue `NOTE_EXITSTATUS` on a non-child, and the old daemon must keep reaping and forwarding until every watch is registered, because registering on a zombie fails with ESRCH. Linux: a non-child gets ECHILD. Only a subreaper that is an ancestor of every pane from daemon start sees the status, which means a permanent extra process (the reaper shim) whose own upgrade is the next problem | `docs/design/live-handoff-probes/macos/p1_kqueue_proc.c`, `docs/design/live-handoff-probes/linux/nonchild.go` |
 | Memory | About 200–340 MB transient (busy, 1000 rows), with the GC tuning of section 3.2 | About 300–450 MB: both heaps plus the apply peak | `docs/design/live-handoff-probes/measure/` |
 | Pause | Exec plus Go init: 11–31 ms once warm | Spawn plus init, about the same | `docs/design/live-handoff-probes/macos/p3/main.go` |
-| Rollback | Re-exec of a hardlinked old binary. A post-exec hard crash ends every pane, as a crash does today | True rollback until commit | |
+| Rollback | Re-exec of a hardlinked old binary. A post-exec hard crash before the new image is up is caught by the keeper, which brings the old binary back under a new pid (section 7.1). After that, a crash ends every pane, as it does today | True rollback until commit | |
 
 What the second process buys is true rollback until commit. Exec in place bounds, but does not remove, that weakness with these:
 - **Preflight on the same inode.** Run `<new> daemon handoff-accepts`, which prints its accepted manifest version range, protocol versions and backend (pure or ghostty), and exits. Do this before any pause. A binary that cannot run, or does not accept the version, is refused with nothing changed. It also proves the new binary starts at all: package init and flag parsing run here, the same code that would run first after `execve`. Record the device and inode the preflight ran, and check them again just before `execve`. The first exec of a newly written binary on macOS costs 0.3–0.5 s (tuios: p50 318 ms, max 531 ms; probably the code-signature or first-launch assessment, cause not confirmed), against 11–17 ms warm. The preflight pays it outside the pause, but only for that inode: an installer that replaces the file between preflight and exec re-pays it, so a changed inode means preflight again.
@@ -210,7 +210,7 @@ What the second process buys is true rollback until commit. Exec in place bounds
   The adopt path must skip or guard each one, in the new image and in the fallback alike, or a pane's ssh agent link vanishes under a running agent.
 - **Same argv and env.** The new image is exec'd with the daemon's original flags (socket, server name, debug, config) and its original environment. For example `startSSHAgent` reads `SSH_AUTH_SOCK` from the env (`internal/session/ssh_agent_follow.go:204`).
 
-The residual risk is a new image that dies hard before its fallback: a runtime fatal error such as a concurrent map write or out of memory, or `SIGKILL`. Every pane then hangs up, as in today's daemon crash. Section 6 lists it.
+A new image that dies hard before its fallback can run (a runtime fatal error such as a concurrent map write or out of memory, or `SIGKILL`) would take every master with it. The implementation adds a keeper for that window: a process of the old binary that holds a copy of every carried descriptor until the new image is up, and execs the old binary in its own place if the new image dies first. Section 7.1 has its design and failure modes; section 6 the risk that remains.
 
 ### 2.2 Exit detection today and after adoption
 
@@ -325,6 +325,7 @@ sequenceDiagram
         D-->>U: refused, nothing changed
     end
     D->>D: stop accepting (deadline, not close), stop forkers: plugins, federation, hooks, probes
+    D->>D: start the keeper (tuios.prev) holding copies of the masters, sockets, lock and manifest fd (section 7.1)
     D->>D: close reap gates, quiesce every PTY, drain vtWriter and responses
     D->>D: capture snapshots, stream manifest to fd K, fsync
     alt any failure so far
@@ -339,6 +340,10 @@ sequenceDiagram
         N->>N: execve(state/handoff/tuios.prev, original argv + --adopt-fd=K)
     end
     N->>N: start federation, plugins, accept on inherited listener
+    N->>N: release the keeper (one byte on its socket), reap it
+    alt the new image dies before it releases the keeper
+        N->>N: the keeper execs tuios.prev in its own place with the fds it holds, under its own pid
+    end
     U->>N: hello (queued in backlog) and answer has new build id
     N-->>U: upgraded
 ```
@@ -574,7 +579,7 @@ E2E tests:
 ## 6. Risks and open questions for the maintainer
 
 Risks:
-- **Post-exec hard crash.** A new image that dies before its fallback ends every pane, as a crash does today. Causes: a runtime fatal error, out of memory, or `SIGKILL`. Mitigations: the preflight runs init and flag parsing, the watchdog, the fallback re-exec, and the cross-version E2E. Is this residual risk acceptable for an opt-in feature?
+- **Post-exec hard crash.** A new image that dies before it is up (a runtime fatal error, out of memory, or `SIGKILL`) no longer ends the panes: the keeper of section 7.1 brings the old binary back with them, under a new pid. What remains: the daemon so brought back is not the panes' parent, so on Linux it hears a pane end without its exit status until the next restart; bytes the dead image read after it started serving are lost; and a crash of the image the keeper started, or of the new image after it released the keeper, ends every pane as a crash does today. Mitigations for those: the preflight runs init and flag parsing, the watchdog, the fallback re-exec, and the cross-version E2E.
 - **Fork during the exposed-fd window.** Mitigated by stopping forkers plus `syscall.ForkLock`. One missed fork site can leak a PTY master, so the pane never hangs up, or leak the start lock, so the daemon can never start again. PR 2's fork control guards it.
 - **Apply memory peak.** The new image peaks at about 2× its rebuilt heap while it applies history, up to +342 MB for 60 busy truecolor panes on 18 workers (section 3.2). With the apply on 4 workers at `GOGC=25` the implementation peaks at 124–126 MB of HeapInuse for 60 busy palette panes, against 182–187 MB at the default (section 3.2).
 - **Pipe read ends.** verify-fan, `capture_stdout` popups, plugin commands and hook commands hold pipe read ends that close at exec, and the child's next write dies of SIGPIPE (section 2.3). The handoff refuses while any of them runs. A new feature that keeps a pipe read end is the same hazard, so the refusal check lists them in one place.
@@ -612,6 +617,48 @@ Where the implementation departs from the spec above, or settles what it left op
 - **Pipes the daemon reads.** Besides a fan check and a capturing popup, a plugin command (stdout and stderr) and a hook command (stderr) are read on pipes, and each takes a hold while it runs. The handoff is refused while any hold is taken. Once the panes are frozen the holds are shut until the handoff is put back: a hook that fires meanwhile waits, so it runs if the handoff is put back and never starts if it goes through, and a plugin command is refused with `plugin_host_upgrading`. A plugin whose startup command runs as a service holds the daemon for as long as it runs, so the plugin has to be turned off for an upgrade.
 - **A fallback that cannot run.** When the watchdog fires and the fallback exec fails, or there is no fallback to run, the adopting image exits rather than hold every pane and serve nothing, and the panes hang up as in a crash.
 - **The preflight refuses a binary someone else could have put there.** One owned by neither the daemon's user nor root, or writable by its group or others, is refused before it is run. `daemon handoff-accepts` prints the manifest range it reads, its backend, version and system; the protocol ranges the spec lists are left out until the client-follow step checks them.
+
+
+### 7.1 The keeper: a crash of the new image after the swap
+
+The fallback and the watchdog are code in the new image, so they cannot help when that image dies hard: a fatal runtime error (a concurrent map write, a panic in a goroutine no recover covers), the out-of-memory killer, `SIGKILL`, or the kernel killing the image as it starts (on macOS a code-signature refusal kills the process after `execve` has already replaced it). The new image is then the only process holding the masters, and every pane's program gets its hangup. The keeper closes that window (`internal/session/handoff_keeper.go`, `handoff_keeper_unix.go`).
+
+**Mechanism.**
+- Before any pane stops, the old image starts `tuios.prev daemon handoff-keeper --hold=<fds> -- <restore argv>` with `syscall.ForkExec`, in a session of its own, under `ForkLock` for reading. Its file list is exactly stdin, stdout and stderr on `/dev/null`, one end of a socket pair at 3, and from 4 on a copy of every descriptor the exec carries: the manifest (made, empty, before the keeper starts, written once the panes stop), each pane's master, the listening sockets and the start lock. `os/exec` is not used, because its `ExtraFiles` call `Fd()`, which turns a listener's shared file description blocking.
+- The daemon's end of the pair is close-on-exec like everything else, is carried across the handoff's exec (it is in the manifest's daemon record and the exec's descriptor list) and across the in-place fallback's exec (it is in `adoptFallback`'s list).
+- The image that is up writes one byte and closes the socket as its last step of adoption, after it serves, and reaps the keeper by pid: the keeper is the old image's child, so it is the new image's child too. A handoff put back, an exec that fails, or a `shutdown` (kill-server, `SIGTERM`) releases it the same way.
+- The keeper blocks in `read`. A byte means stand down, and it exits. End of file (or a reset) means every copy of the daemon's end is closed, which happens only when the daemon's process is gone. It then sets close-on-exec on its socket and execs the restore argv (`tuios.prev` with the daemon's own flags and `--adopt-fd=K`, K as the old image numbered it), with `TUIOS_HANDOFF_FALLBACK=1` and `TUIOS_HANDOFF_KEPT` mapping each number the manifest names to the number the keeper holds it at.
+- The image so started maps the manifest's descriptor numbers through `TUIOS_HANDOFF_KEPT` and adopts the panes as a fallback does, from the manifest: the emulators are rebuilt from the snapshots, and the programs' output since then is still in the kernel buffers. Nothing is snapshotted again. It reports `fallback` and `recovered` (the `hello` `upgrade` field, the `daemon-upgraded` event's state, and `tuios daemon upgrade`), and it does not fall back again.
+
+**Why this shape.** Go cannot fork without exec, so options (a) and (b) of the brief are one design here: a child started before the exec. Passing the descriptors by inheritance needs no `SCM_RIGHTS`. Death is detected by end of file on a socket, which is portable, fires on `SIGKILL`, costs no polling, and avoids `PR_SET_PDEATHSIG`, which on Linux fires when the forking thread exits and so can fire at the old image's own `execve` in a multithreaded Go process. Being the daemon pid's child across the exec is what lets the new image reap it. When the daemon dies, the keeper is reparented to init or launchd and becomes the daemon itself by exec, so nothing is left to reap. The keeper costs one fork and exec of a binary already warm (the hard link of the running image), before the pause. Measured with `TestDaemonUpgradeMeasuresABusyDaemon` (60 busy panes, 1000 rows each), two runs each on the same machine: the pause from the first pane stopping to every pane reading again was 283 and 301 ms without the keeper (the build before it) and 286 and 293 ms with it, so no change within the noise. The command's end-to-end time was 762 and 785 ms without and 958 and 760 ms with; the 958 run had a 634 ms preflight against about 440 ms in the others, so the keeper's own start is not separable from that noise.
+
+**What a recovery loses.**
+- The daemon's pid: it is the keeper's pid now, and the pid file says so. The panes keep their pids, terminals and screens, but their parent died, so they belong to init or launchd. `monitorExit` sees `ECHILD` from its peek and waits through the kernel's process events instead (`waitForeignExit`): on macOS kqueue `EVFILT_PROC` with `NOTE_EXITSTATUS` gives the real status of a non-child (section 2.2, `p1`); on Linux a pidfd says only that the process ended, so the status is `-1`. This lasts until the daemon next restarts, which ends the programs anyway.
+- Connections the dead image had accepted. Callers in the listener's backlog are answered by the image the keeper started.
+- When the image died after it started reading the panes (the `serve` point below), what it read: the restored emulators start from the manifest's snapshots, so that output never reaches them. In the E2E run of that case the counter had one gap. Plugins and federation children the dead image started are orphaned, and end when their pipes do.
+
+**Failure modes.**
+
+| When or what | What happens |
+|---|---|
+| The exec itself fails (returns) | The old image puts everything back and releases the keeper, which exits; the old image reaps it |
+| The new image dies at any point from `execve` to the end of adoption: before Go init finishes, while reading the manifest, while rebuilding emulators, after the fallback is disarmed and serving has begun | Its end of the socket closes with the process. The keeper sees end of file and execs `tuios.prev`, which adopts the panes under the keeper's pid |
+| Adoption fails cleanly or hangs | The in-place fallback re-execs `tuios.prev` in pid P, carrying the keeper's socket; that image releases the keeper |
+| The in-place fallback image dies too | The keeper restores, a second try of `tuios.prev`, now as a non-parent |
+| The image the keeper started dies | The panes end, as in a crash. There is no keeper of the keeper |
+| The new image dies after it released the keeper | An ordinary daemon crash: the panes end |
+| Release racing a crash | The byte is in the socket before the close, and the keeper reads data before end of file. A crash after the write is the row above; one before it is a recovery. There is no third outcome |
+| The old image dies after starting the keeper and before its exec | The keeper restores from the manifest. If the manifest is complete the panes are taken back; if not, the restored image refuses it and exits, and the panes end, as they would have without the keeper |
+| The keeper dies (killed) before the release | The new image loses only the protection. Its release write fails with `EPIPE` (Go returns it as an error for descriptors other than 1 and 2, with no `SIGPIPE`), and it reaps the dead keeper |
+| A deliberate stop of the new image before it is up (kill-server, `SIGTERM`) | `shutdown` releases the keeper first, so a daemon stopped on purpose is not brought back. Only a death the image did not choose leaves the socket closed with no byte |
+| Two daemons | The keeper acts only when every copy of the daemon's end is closed, and both execs carry it, so the daemon's process is gone. One process serves the listener at any time; the start lock's open file description is held by the keeper throughout, so no `start-server` wins it in between |
+| Descriptors leaking into pane programs | The keeper starts before any descriptor loses close-on-exec, from a file list that names only what it holds; no pane can start (the handoff holds `paneLife`). The keeper starts nothing but its final exec, and the image it starts sets close-on-exec on every descriptor it adopts. Its socket is set close-on-exec before that exec |
+| The keeper outliving a successful upgrade | It exits on the release byte, written as soon as the new image serves. In every E2E run the first `ps` after the new image answered already listed no keeper (that one `ps` took 74–86 ms) |
+| Zombies | The image that releases the keeper reaps it; the old image reaps it on a put-back. A keeper that restores is the daemon; the dead image is reaped by its own parent. `TestDaemonUpgradeKeeperStandsDown` checks the daemon has no defunct child after an upgrade |
+| Idle cost | None after the release: the keeper has exited and been reaped. Before it, one process blocked in `read` |
+| An older new binary that knows no keeper | It would never release it, and a later kill-server would look like a crash. The keeper record moved `HandoffVersion` to 3, so the preflight refuses such a binary |
+
+**Tested.** `TestDaemonUpgradeSurvivesACrashOfTheNewImage` ends the new image with `TUIOS_TEST_HANDOFF_CRASH`: `SIGKILL` at the top of `RunAdopted`; a panic in a goroutine of its own after every pane is rebuilt and before the fallback is disarmed; `SIGKILL` after it serves and before the release; and a failed adoption whose in-place fallback is killed too. `TestDaemonUpgradeKeeperStandsDown` covers the keeper's life when nothing goes wrong. `e2e/tui/NEGATIVE_CONTROLS.md` records a control per piece. Only macOS was run; the Linux path (pidfd wait, memfd manifest copy held by the keeper) is built and vetted, not run.
 
 ## Appendix A: measurements made for this spec
 
