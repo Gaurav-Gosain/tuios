@@ -2846,6 +2846,19 @@ The budgets went down to 37,890,000 (linux/amd64) and 35,620,000
 (darwin/arm64) after the cut. Each keeps the room it had before it,
 22,318 and 13,950 bytes.
 
+Keeping cold helpers out of line cut 237,568 bytes from
+linux/amd64 and 214,512 from darwin/arm64. The compiler inlined small constructors and
+wrappers at hundreds of call sites each: invalidParam 369 times,
+ShowNotification 513, VerbClient.Close and Call about 120 each, herdrcli's
+usage 274. `//go:noinline` on 21 of them, each on an error, notification,
+log, CLI or context menu path, leaves one copy. Main at 96a0b240 measured 37,867,682 and 35,606,050
+bytes (Go 1.26.9), and the change measured 37,630,114 and 35,391,538. Before a new `//go:noinline`, check that the
+function is off every render, keystroke and broadcast path.
+
+The budgets went down to 37,652,000 (linux/amd64) and 35,405,000
+(darwin/arm64) after the cut. Each keeps the room it had before it,
+21,886 and 13,462 bytes.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
