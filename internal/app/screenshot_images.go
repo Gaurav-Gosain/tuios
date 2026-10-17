@@ -495,7 +495,7 @@ func placeholderPieces(rects []shotHitRect, kept map[uint32]*keptImage, boxes ma
 			// A cell that names no placement, or one tuios did not see, takes
 			// the image's only box when it has one.
 			for _, b := range boxes[r.key.id] {
-				box, ok = b, true
+				box = b
 				break
 			}
 		}
