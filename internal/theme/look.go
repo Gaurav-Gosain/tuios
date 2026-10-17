@@ -40,10 +40,21 @@ func CheckLookTheme(id string, data []byte) ([]byte, error) {
 	if hasControl(f.DisplayName) || hasControl(f.Base) {
 		return nil, fmt.Errorf("the theme has a control character in its name")
 	}
+	// A role is a colour, or a group of colours such as border.unfocused.
 	for k, v := range f.Chrome {
-		s, ok := v.(string)
-		if !ok || hasControl(s) {
-			return nil, fmt.Errorf("theme chrome %s must be a colour", k)
+		group, isGroup := v.(map[string]any)
+		if !isGroup {
+			group = map[string]any{"": v}
+		}
+		for field, c := range group {
+			s, ok := c.(string)
+			if !ok || hasControl(s) {
+				name := k
+				if field != "" {
+					name += "." + field
+				}
+				return nil, fmt.Errorf("theme chrome %s must be a colour", name)
+			}
 		}
 	}
 	EnsureRegistry()

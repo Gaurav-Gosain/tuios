@@ -71,6 +71,7 @@ func TestParseLookBoundary(t *testing.T) {
 		{name: "theme without id", body: "[theme]\nbase = \"nord\"", err: "needs an id"},
 		{name: "theme unknown base", body: "[theme]\nid = \"x\"\nbase = \"nope\"", err: "base"},
 		{name: "theme and another theme", body: "[appearance]\ntheme = \"nord\"\n[theme]\nid = \"x\"\nbase = \"nord\"", err: "appearance.theme"},
+		{name: "theme chrome group not a colour", body: "[theme]\nid = \"x\"\nbase = \"nord\"\n[theme.chrome.border]\nunfocused = 3", err: "border.unfocused"},
 		{name: "glyph escape", body: "[glyphs]\nid = \"g\"\nclose = \"\\u001b[31mX\"", err: "control character"},
 		{name: "glyph id with a path", body: "[glyphs]\nid = \"../g\"", err: "cannot be a file name"},
 		{name: "theme not a table", body: "theme = \"nord\"", err: "must be a table"},
@@ -223,6 +224,9 @@ x = "evil"
 	}
 
 	// A second look replaces the first and its theme.
+	// A theme may nest chrome roles in groups, as theme files do.
+	mustParseLook(t, "look = 1\n[theme]\nid = \"grouped\"\nbase = \"nord\"\n[theme.chrome.border]\nunfocused = \"#5c3b00\"\n")
+
 	second := mustParseLook(t, "look = 1\nname = \"Second\"\n[appearance]\nborder_style = \"rounded\"\n[theme]\nid = \"second\"\nbase = \"nord\"\n")
 	plan, err = PlanLook(main, second, "test")
 	if err != nil {
