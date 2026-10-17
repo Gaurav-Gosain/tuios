@@ -43,12 +43,12 @@ A look may set only look keys. "tuios look keys" lists them.`,
 		Use:   "apply <source>",
 		Short: "Apply a look from the gallery, an https URL or a file",
 		Long: `Apply a look. The source is a gallery id (tuios.dev/r/ID or ID), an https URL,
-or a local file.
+or a local file. Each look on tuios.dev/gallery shows the command with its id.
 
 tuios shows the changes and asks first. Use --yes to skip the question. A run
 with no terminal needs --yes. tuios leaves out every key that a look cannot set
 and names it. A running tuios reloads the config, so you do not restart.`,
-		Example: `  tuios look apply tuios.dev/r/tokyo-blocks
+		Example: `  tuios look apply tuios.dev/r/<id>
   tuios look apply https://example.com/my.look.toml
   tuios look apply ./my.look.toml --yes`,
 		Args: cobra.ExactArgs(1),

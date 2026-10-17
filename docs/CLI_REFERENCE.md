@@ -264,8 +264,8 @@ borders, gaps, dock and rail style. The [gallery](https://tuios.dev/gallery)
 shares looks. [docs/THEMES.md](THEMES.md#looks) describes the file.
 
 ```bash
-# Apply a look from the gallery
-tuios look apply tuios.dev/r/tokyo-blocks
+# Apply a look from the gallery. Each look there shows this command with its id.
+tuios look apply tuios.dev/r/<id>
 
 # Apply a look from an https URL or from a file
 tuios look apply https://example.com/my.look.toml
