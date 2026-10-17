@@ -6892,3 +6892,33 @@ Run on 2026-10-17.
 
 The fixed build passes both, `TestKittyImageSurvivesCaptureMode`, every
 `TestLauncher*`, every `TestScreenshot*` and `TestRichRowReplyAndRecap`.
+
+## A hook report lands only on the pane its harness runs in
+
+`TestAgentReportOnlyFromTheHarnessInThePane` runs the real Claude Code hook
+under a stand-in harness (`testdata/fakeharness`), a process that is not a
+shell, so the hook reports it as `harness_pid`. Outside the pane, the harness
+runs in a session of its own with no terminal and carries the pane's
+`TUIOS_PANE_ID` and `TUIOS_SESSION`: its prompt, its `SubagentStart` and a
+Droid `SessionStart` must each be refused with `foreign_pane`, and the pane
+must stay `none` and unlisted by `list-agents`. The positive halves: the same
+harness and hook run from the pane's shell set the pane to `working`, and a
+harness outside the pane whose environment names no pane may still choose it
+with `--window`. The test writes each hook's `--explain` line and the pane's
+state after it to `agent-report-own-pane.log` in its artifact directory.
+
+Run on 2026-10-18 on macOS.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A harness outside the pane, with the pane's inherited `TUIOS_PANE_ID`, set its state | yes | `verbSetAgentState` without the `harnessOutsidePane` call | `TestAgentReportOnlyFromTheHarnessInThePane` ("applied=true reason=\"\", want refused with foreign_pane"; the pane then held `phantom-1` and refused the pane's own harness with `foreign_session`) | **caught** |
+| The same, on the branch's base | yes | `upstream/main` at `ccde47cf`, built unchanged | the same test, with the same first failure | **caught** |
+| The same, for `report-agent-activity` and `set-agent-session` too | yes | all three `harnessOutsidePane` calls in `verb_handlers.go` cut | the same test ("a subagent ...: reason=\"\"", "a conversation id ...: reason=\"foreign_harness\"", "want refused with foreign_pane") | **caught** |
+
+The fixed build passes it three runs in a row (`-count=3`).
+
+`TestOpenCodeV2PluginReportsOnlyItsSession` and
+`TestPluginsReportBlockingPrompts` ran their plugin driver from the test
+process with the pane's `TUIOS_PANE_ID`, which is the case this fix refuses,
+and failed against it. The driver now runs in the pane, as a harness's plugins
+do, and both pass on the fixed build and on `ccde47cf`.

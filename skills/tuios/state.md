@@ -221,7 +221,9 @@ Not applied: a higher-ranked source owns this pane. It still reports working.
 
 A script that must know whether its report took should match that line. Over
 the socket the result carries `applied: false` and a `reason` of `outranked`,
-`if_state`, `foreign_session` or `foreign_harness`.
+`if_state`, `foreign_pane`, `foreign_session` or `foreign_harness`.
+`foreign_pane` is a hook whose harness inherited the pane's `TUIOS_PANE_ID`
+but runs outside the pane.
 
 ## Reading state back
 

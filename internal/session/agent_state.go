@@ -145,6 +145,11 @@ type AgentReport struct {
 	// is one of these right now. It is how a hook says "clear the block once
 	// the tool ran" without also turning a finished pane back to working.
 	IfState []AgentState
+	// foreignPane says the harness that ran the hook does not run in the pane
+	// the report names. The verb handler sets it from harnessOutsidePane, and
+	// the report is then refused with foreign_pane before anything else is
+	// read.
+	foreignPane bool
 	// paneWroteAt is the unix-nano time the pane last produced output, as the
 	// source read it at the moment it looked. Only the daemon's own looks set
 	// it (the title, the screen and a notification). blockerOverridesClaim reads
@@ -202,7 +207,16 @@ const (
 	// agentRefusedForeignHarness is a hook report from a harness other than
 	// the one that reported the pane mid-turn.
 	agentRefusedForeignHarness = "foreign_harness"
+	// agentRefusedForeignPane is a hook report from a harness that does not
+	// run in the pane it names. See harnessOutsidePane.
+	agentRefusedForeignPane = "foreign_pane"
 )
+
+// refusedAsForeign says reason refused a report as another agent's, whose
+// activity and folder are not the pane's agent's.
+func refusedAsForeign(reason string) bool {
+	return reason == agentRefusedForeignSession || reason == agentRefusedForeignHarness || reason == agentRefusedForeignPane
+}
 
 // errAgentReportRefused carries a refusal reason out of mutateState.
 type errAgentReportRefused string
@@ -272,6 +286,9 @@ func (s *Session) guardReport(target string, r AgentReport, strict bool) (string
 		return "", AgentStateNone, "", err
 	}
 	w := &s.state.Windows[idx]
+	if r.foreignPane {
+		return w.ID, w.AgentState, agentRefusedForeignPane, nil
+	}
 	claim, held := s.agentClaims[w.ID]
 	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r)
 	switch {
@@ -309,6 +326,10 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			return err
 		}
 		w := &st.Windows[idx]
+		if r.foreignPane {
+			effective = w.AgentState
+			return errAgentReportRefused(agentRefusedForeignPane)
+		}
 		claim, held := s.agentClaims[w.ID]
 		if lookRepeatsClaim(claim, held, w, r) {
 			effective = w.AgentState

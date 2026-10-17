@@ -3699,6 +3699,18 @@ the one that owns the pane. These filters keep those events off the pane:
   is not a shell or `env`. A nested run is a process of its own, so it is still
   refused. A hook that cannot read its ancestors (Windows, or a sandbox with its
   own pid namespace) sends no pid and gets the plain rule.
+- A harness that leaves its pane keeps the pane's `TUIOS_PANE_ID`, and so do
+  its hooks. Claude Code's background sessions do: Claude Code's own daemon
+  starts them on its own terminal, with the environment of the pane that asked
+  for them. The daemon refuses a report with `foreign_pane` when its
+  `harness_pid` is a process whose own environment names the pane in
+  `TUIOS_PANE_ID` and which is not the pane's process, not on the pane's
+  terminal and not descended from it. The pane's state, its row and its
+  activity stay as they were. A pane chosen with `--window` by a harness whose
+  environment names another pane, or none, is the caller's choice and is
+  taken. A report with no `harness_pid`, a call over a link, a pane on another
+  machine, a harness that has already exited and a platform with no process
+  reader (Windows) are not checked.
 
 ### Session identity
 
