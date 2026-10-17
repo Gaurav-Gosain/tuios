@@ -61,6 +61,11 @@ func (f *adoptFallback) prepare(m *handoffManifest) {
 	for _, p := range m.Panes {
 		f.fds = append(f.fds, p.FD)
 	}
+	// The keeper's socket crosses this exec too. Closed by it, it would tell
+	// the keeper the daemon is gone while the fallback image runs.
+	if m.Daemon.Keeper.PID > 0 && m.Daemon.Keeper.FD >= 0 {
+		f.fds = append(f.fds, m.Daemon.Keeper.FD)
+	}
 }
 
 // keep holds v for as long as the fallback may run.
@@ -169,4 +174,46 @@ func handoffTestFailure() error {
 		panic("adoption panicked on purpose (TUIOS_TEST_HANDOFF_FAIL=panic)")
 	}
 	return nil
+}
+
+// How this image was started, read before adoption clears the variables
+// that say so, for handoffTestCrash's points after that.
+var (
+	startedAsFallback = os.Getenv(handoffFallbackEnv) != ""
+	startedByKeeper   = os.Getenv(handoffKeptEnv) != ""
+)
+
+// The points of an adoption a test can end the new image at.
+const (
+	crashAtStart       = "start"
+	crashWhileAdopting = "adopt"
+	crashServing       = "serve"
+)
+
+// handoffTestCrash ends this image hard when a test asks, as a fatal runtime
+// error or the out-of-memory killer would, with no recover and no fallback
+// able to run: TUIOS_TEST_HANDOFF_CRASH names the point, start, adopt or
+// serve, and TUIOS_TEST_HANDOFF_CRASH_MODE is kill (SIGKILL, the default) or
+// panic (in a goroutine of its own). It fires in the image a handoff execs;
+// fallback fires at the adopt point of the fallback image instead. It never
+// fires in an image a keeper started.
+func handoffTestCrash(point string) {
+	if os.Getenv(handoffTestEnv) != "1" || startedByKeeper {
+		return
+	}
+	want := os.Getenv("TUIOS_TEST_HANDOFF_CRASH")
+	here := want == point && !startedAsFallback
+	inTheFallback := want == "fallback" && point == crashWhileAdopting && startedAsFallback
+	if !here && !inTheFallback {
+		return
+	}
+	LogError("Live upgrade: crashing on purpose at %s (TUIOS_TEST_HANDOFF_CRASH=%s)", point, want)
+	if os.Getenv("TUIOS_TEST_HANDOFF_CRASH_MODE") == "panic" {
+		go func() { panic("the new image crashed on purpose (TUIOS_TEST_HANDOFF_CRASH)") }()
+		select {}
+	}
+	if self, err := os.FindProcess(os.Getpid()); err == nil {
+		_ = self.Kill()
+	}
+	select {}
 }

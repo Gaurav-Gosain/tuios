@@ -89,6 +89,30 @@ func handoffAcceptsCommand() *cobra.Command {
 	}
 }
 
+// handoffKeeperCommand is the keeper a live upgrade starts before it stops
+// the panes: it holds a copy of the descriptors the exec carries, and if the
+// new image dies before it is up, it execs the previous binary in its own
+// place to take the panes back. The daemon starts it; nobody else should. See
+// internal/session/handoff_keeper.go.
+func handoffKeeperCommand() *cobra.Command {
+	var hold string
+	cmd := &cobra.Command{
+		Use:    "handoff-keeper --hold FD,... -- BINARY ARGS...",
+		Short:  "Hold a live upgrade's descriptors until the new daemon image is up",
+		Hidden: true,
+		Args:   cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fds, err := session.ParseKeeperHold(hold)
+			if err != nil {
+				return err
+			}
+			return session.RunHandoffKeeper(fds, args)
+		},
+	}
+	cmd.Flags().StringVar(&hold, "hold", "", "The descriptor numbers the manifest names, in the order this process holds them from descriptor 4")
+	return cmd
+}
+
 // daemonUpgradeCommand is `tuios daemon upgrade`: a live upgrade of the
 // running daemon to another binary, with every pane's program still running.
 func daemonUpgradeCommand() *cobra.Command {
@@ -137,16 +161,19 @@ const daemonUpgradeWait = 60 * time.Second
 
 // upgradeOutcome is what daemon upgrade reports.
 type upgradeOutcome struct {
-	PID      int                   `json:"pid"`
-	From     string                `json:"from"`
-	To       string                `json:"to"`
-	Binary   string                `json:"binary"`
-	Panes    int                   `json:"panes"`
-	Clients  int                   `json:"clients"`
-	Seconds  float64               `json:"seconds"`
-	Fallback bool                  `json:"fallback"`
-	Instance string                `json:"instance"`
-	Handoff  *session.HandoffStats `json:"handoff,omitempty"`
+	PID      int     `json:"pid"`
+	From     string  `json:"from"`
+	To       string  `json:"to"`
+	Binary   string  `json:"binary"`
+	Panes    int     `json:"panes"`
+	Clients  int     `json:"clients"`
+	Seconds  float64 `json:"seconds"`
+	Fallback bool    `json:"fallback"`
+	// Recovered is a new image that died before it was up, after which the
+	// keeper started the previous binary under a pid of its own.
+	Recovered bool                  `json:"recovered"`
+	Instance  string                `json:"instance"`
+	Handoff   *session.HandoffStats `json:"handoff,omitempty"`
 }
 
 func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
@@ -244,11 +271,18 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON bool) error {
 		Instance: after.Instance, Handoff: after.Upgrade,
 	}
 	if after.Upgrade != nil {
-		o.Fallback = after.Upgrade.Fallback
+		o.Fallback, o.Recovered = after.Upgrade.Fallback, after.Upgrade.Recovered
 	}
 	if asJSON {
 		data, _ := json.Marshal(o)
 		fmt.Fprintln(out, string(data))
+	}
+	if o.Recovered {
+		return &diagnosticError{
+			What:  fmt.Sprintf("%s died before it was up, so the daemon was started again from %s, as pid %d (was %d).", binary, o.To, after.PID, before.PID),
+			Cause: "the new binary crashed or was killed while it took the panes over. The keeper the upgrade left holding them brought the previous binary back. The daemon log says what it saw.",
+			Fix:   "every program is still running, with the same pid. The daemon is no longer their parent: on Linux the exit status of a program that ends from now on is not known. Run 'tuios logs' to see what failed.",
+		}
 	}
 	if o.Fallback {
 		return &diagnosticError{
