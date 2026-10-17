@@ -101,8 +101,11 @@ type handoffDaemon struct {
 	Fallback string `json:"fallback"`
 	// FallbackFD is the descriptor Fallback names, carried across the exec,
 	// or -1 when Fallback is a file by name.
-	FallbackFD int          `json:"fallback_fd"`
-	Stats      HandoffStats `json:"stats"`
+	FallbackFD int `json:"fallback_fd"`
+	// Keeper is the process holding a copy of the descriptors until the new
+	// image is up. See handoff_keeper.go.
+	Keeper handoffKeeperRecord `json:"keeper"`
+	Stats  HandoffStats        `json:"stats"`
 }
 
 // handoffManifest is a manifest as read.

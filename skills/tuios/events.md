@@ -102,7 +102,7 @@ Every type, and what it reports:
 | `task-claimed`, `task-finished` | A pane took a task card, or finished it: `task` is the card's row, `window` the pane (`tuios --skill tasks`) |
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made carries `reason`: `pane closed`, `agent left` or `restart` |
 | `tml-event` | A person ran an `emit` on a TML surface, or the surface closed: `tml` has `surface`, `name`, `value`, `reason` (on a close) and `version`. Opt-in |
-| `daemon-upgraded` | A live upgrade (`tuios daemon upgrade`) replaced the daemon: `title` is the build the panes came from, `body` the build that has them, `state` is `upgraded` or `fallback` |
+| `daemon-upgraded` | A live upgrade (`tuios daemon upgrade`) replaced the daemon: `title` is the build the panes came from, `body` the build that has them, `state` is `upgraded`, `fallback`, or `recovered` when the new image died and the previous binary took the panes back under a new daemon pid |
 | `gap` | Events were lost. See below |
 
 The hook names (`after-new-window` and the rest) are not event types. The

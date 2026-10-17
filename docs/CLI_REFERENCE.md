@@ -1423,7 +1423,7 @@ tuios --server test daemon upgrade --binary ./tuios   # upgrades only the daemon
 
 **Output:**
 ```
-Checking /usr/local/bin/tuios (v0.10.1) accepts this daemon's state (handoff v2)... ok
+Checking /usr/local/bin/tuios (v0.10.1) accepts this daemon's state (handoff v3)... ok
 Paused 4 panes, saved their screens (34.3 KB).
 Starting v0.10.1 in place (pid 8615 kept)...
 Upgraded in 0.06 s. 4 panes and their programs kept.

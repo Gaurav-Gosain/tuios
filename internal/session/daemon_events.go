@@ -61,8 +61,10 @@ const (
 	// EventDaemonUpgraded is the daemon's image replaced by a live upgrade,
 	// with every pane still running. Title is the build the panes came from
 	// and Body the build that has them now; State is fallback when the new
-	// binary could not take them and the previous one did. Raised once, by
-	// the image that took the panes over.
+	// binary could not take them and the previous one did, and recovered
+	// when the new image died first and the previous binary was started by
+	// the handoff's keeper, under a new pid. Raised once, by the image that
+	// took the panes over.
 	EventDaemonUpgraded = "daemon-upgraded"
 	EventSessionClosed  = "session-closed" // a session was terminated
 	EventGap            = "gap"            // slow-subscriber marker: N events were dropped
