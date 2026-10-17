@@ -48,7 +48,7 @@ import (
 // pane's close_on_exit; a session's creation and last activity, workspace
 // return and report colours; and the daemon's plugin panes, protocol panes,
 // pane creators and moved windows. See docs/design/live-handoff.md, section
-// 7.2. An older manifest reads with each of them empty, which is what an
+// 7.3. An older manifest reads with each of them empty, which is what an
 // older image adopted, so MinHandoffVersion stays at 2. An image of version
 // 3 or older refuses a version 4 manifest, and its preflight answer says so
 // before anything pauses.
