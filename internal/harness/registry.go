@@ -1,8 +1,13 @@
 package harness
 
 import (
-	"embed"
-	"io/fs"
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	_ "embed"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,8 +15,47 @@ import (
 	"strings"
 )
 
-//go:embed manifests/*.toml
-var bundled embed.FS
+//go:generate go run gen.go
+
+// bundledArchive is manifests/*.toml packed by gen.go, each file under its
+// base name. The gzipped tar is about a quarter of the files' size. Run `go
+// generate ./internal/harness` after editing a bundled manifest.
+// TestBundledArchiveMatchesFiles fails while the archive is stale.
+//
+//go:embed manifests.tar.gz
+var bundledArchive []byte
+
+// bundledFile is one manifest from the archive, named "manifests/<file>".
+type bundledFile struct {
+	name string
+	data []byte
+}
+
+// bundledFiles unpacks the archive in name order. It unpacks on each call and
+// keeps nothing, because Load runs once per daemon start and a kept copy would
+// sit in memory for the life of the process.
+func bundledFiles() ([]bundledFile, error) {
+	zr, err := gzip.NewReader(bytes.NewReader(bundledArchive))
+	if err != nil {
+		return nil, fmt.Errorf("bundled manifests: %w", err)
+	}
+	tr := tar.NewReader(zr)
+	var out []bundledFile
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return out, nil
+		}
+		if err != nil {
+			return out, fmt.Errorf("bundled manifests: %w", err)
+		}
+		data := make([]byte, h.Size)
+		if _, err := io.ReadFull(tr, data); err != nil {
+			return out, fmt.Errorf("bundled manifests: %s: %w", h.Name, err)
+		}
+		out = append(out, bundledFile{name: "manifests/" + h.Name, data: data})
+	}
+}
 
 // Registry is the loaded set of harness manifests, ordered so a lookup is
 // deterministic.
@@ -45,17 +89,14 @@ func Load(dirs ...string) (*Registry, []LoadError) {
 	byID := map[string]*Manifest{}
 	var errs []LoadError
 
-	entries, _ := fs.ReadDir(bundled, "manifests")
-	for _, e := range entries {
-		name := "manifests/" + e.Name()
-		data, err := fs.ReadFile(bundled, name)
+	files, err := bundledFiles()
+	if err != nil {
+		errs = append(errs, LoadError{Source: "manifests.tar.gz", Err: err})
+	}
+	for _, f := range files {
+		m, err := parseManifest(f.name, f.data)
 		if err != nil {
-			errs = append(errs, LoadError{Source: name, Err: err})
-			continue
-		}
-		m, err := parseManifest(name, data)
-		if err != nil {
-			errs = append(errs, LoadError{Source: name, Err: err})
+			errs = append(errs, LoadError{Source: f.name, Err: err})
 			continue
 		}
 		m.source = "bundled"

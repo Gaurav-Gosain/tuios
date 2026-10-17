@@ -1,7 +1,6 @@
 package harness
 
 import (
-	"io/fs"
 	"maps"
 	"strings"
 	"testing"
@@ -210,16 +209,12 @@ func FuzzManifestRules(f *testing.F) {
 // check over an arbitrary tail. A manifest is hand-edited by users, so what
 // parses has to be safe to run.
 func FuzzManifest(f *testing.F) {
-	entries, err := fs.ReadDir(bundled, "manifests")
+	files, err := bundledFiles()
 	if err != nil {
 		f.Fatal(err)
 	}
-	for _, e := range entries {
-		data, err := fs.ReadFile(bundled, "manifests/"+e.Name())
-		if err != nil {
-			f.Fatal(err)
-		}
-		f.Add(data, "esc to interrupt\nDo you want to proceed?")
+	for _, file := range files {
+		f.Add(file.data, "esc to interrupt\nDo you want to proceed?")
 	}
 	f.Add([]byte("schema_version = 1\nid = \"x\"\n[detect]\ncomm = [\"xagent\"]\n"+
 		"[screen]\nenabled = true\n"+

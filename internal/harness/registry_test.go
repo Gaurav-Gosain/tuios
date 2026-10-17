@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,5 +158,34 @@ func write(t *testing.T, dir, name, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+// TestBundledArchiveMatchesFiles holds manifests.tar.gz to manifests/*.toml:
+// the same names in the same order with the same bytes. It fails when a
+// bundled manifest is edited without `go generate ./internal/harness`.
+func TestBundledArchiveMatchesFiles(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("manifests", "*.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := bundledFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != len(paths) {
+		t.Fatalf("the archive holds %d manifests and manifests/ holds %d; run go generate ./internal/harness", len(files), len(paths))
+	}
+	for i, p := range paths {
+		want, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if files[i].name != filepath.ToSlash(p) {
+			t.Fatalf("archive entry %d is %s, want %s; run go generate ./internal/harness", i, files[i].name, p)
+		}
+		if !bytes.Equal(files[i].data, want) {
+			t.Errorf("%s differs from its copy in the archive; run go generate ./internal/harness", p)
+		}
 	}
 }
