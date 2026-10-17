@@ -227,6 +227,12 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		d.remoteHolds.note(h.Window, remoteHold{host: h.Host, session: h.Session, id: h.ID}, true)
 	}
 	d.loadStores(true)
+	// The binary a later handoff falls back to is kept below, once the keeper
+	// has stood down, since the keeper would exec it. A handoff asked for as
+	// soon as this image serves waits for it rather than being refused: a
+	// copy, where a link would cross file systems, takes a while.
+	d.prevMu.Lock()
+	defer d.prevMu.Unlock()
 	d.serve()
 	// A delegated child that finished while the daemon was handed over is
 	// still answered for.
@@ -247,7 +253,7 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		_ = f.Close()
 	}
 	// This image is the one a later handoff falls back to.
-	d.keepPrevBinary()
+	d.keepPrevBinaryLocked()
 	// The copies the images before this one ran from are no longer needed.
 	removeOldCopies()
 	LogBasic("Live upgrade: adopted %d sessions and %d panes from %s (paused %.0f ms, apply %.0f ms, peak heap in use %d MB)",
