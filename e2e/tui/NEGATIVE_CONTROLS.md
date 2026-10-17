@@ -6832,3 +6832,23 @@ to right. It passes on the branch, in the standalone TUI and against a daemon.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A screenshot showed the blank cells under a kitty image (issue 678) | the decode in `decodeShotPieces` | it returns nil (`if true`) | `TestKittyImageSurvivesCaptureMode/standalone` and `/daemon` ("has 454 pixels of the image, want at least 5000") | **caught** |
+## A cell box from one stated dimension
+
+`e2e/tui/kitty_placement_one_axis_test.go` sends one `a=T` per shape: only
+`c=12`, only `r=4`, both, and neither, on a square and a wide picture, plus one
+`a=t` followed by `a=p` with `c=12` for the shape a guest places later. One
+picture is 512x300, where the aspect lands between two rows, so the rounding is
+pinned and not just the exact divisions.
+`TUIOS_CELL_SIZE` pins the cells at 10x20px. The test reads the cell box out of
+the placement tuios puts on the wire.
+
+The control is the commit before the fix, `c878e4d`, built as the binary the
+suite runs against.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A placement sized its missing axis from the bitmap's pixels | yes, the whole fix | build `c878e4d` | `.../width_only_keeps_the_aspect` ("12x26 cells, want 12x6"), `.../width_only_on_a_wide_picture` ("12x13 cells, want 12x3"), `.../height_only_keeps_the_aspect` ("52x4 cells, want 16x4"), `.../width_only_rounds_up` ("12x15 cells, want 12x4"), `.../placed_later_keeps_the_aspect` ("12x26 cells, want 12x6") | **caught** |
+
+`both_given` and `neither_given` pass on the broken build as well: the fix does
+not touch their boxes, which is the positive half of the control. Run on
+2026-10-17.

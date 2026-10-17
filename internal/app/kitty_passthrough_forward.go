@@ -433,20 +433,14 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		}
 	}
 
-	// Calculate image cell dimensions
-	imgRows := pending.Rows
-	imgCols := pending.Columns
-	if imgRows == 0 || imgCols == 0 {
-		caps := kp.hostCaps()
-		if caps.CellWidth > 0 && caps.CellHeight > 0 {
-			if imgRows == 0 && pending.Height > 0 {
-				imgRows = (pending.Height + caps.CellHeight - 1) / caps.CellHeight
-			}
-			if imgCols == 0 && pending.Width > 0 {
-				imgCols = (pending.Width + caps.CellWidth - 1) / caps.CellWidth
-			}
-		}
-	}
+	// pending carries what the first chunk said about the box and the pixel size;
+	// a continuation chunk has only data.
+	imgRows, imgCols := kp.calculateImageCells(&vt.KittyCommand{
+		Columns: pending.Columns,
+		Rows:    pending.Rows,
+		Width:   pending.Width,
+		Height:  pending.Height,
+	})
 
 	displayCols := imgCols
 	displayRows := imgRows

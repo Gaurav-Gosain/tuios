@@ -938,31 +938,43 @@ func (kp *KittyPassthrough) allocateHostID() uint32 {
 	return id
 }
 
-// calculateImageCells calculates the number of rows and columns the image will occupy.
-// Uses cmd.Rows/Columns if specified, otherwise calculates from pixel dimensions and cell size.
+// calculateImageCells returns the number of cells the image occupies. A guest
+// that states both c= and r= is not second-guessed. One that states a single
+// dimension asks the host to fit the other one, keeping the picture's aspect.
+// One that states neither gets the picture's pixel size in cells, which the
+// caller supplies: from s= and v=, a PNG header, or the placement record.
 func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, cols int) {
-	if cmd.Rows > 0 {
-		rows = cmd.Rows
-	}
-	if cmd.Columns > 0 {
-		cols = cmd.Columns
+	rows, cols = cmd.Rows, cmd.Columns
+	if rows > 0 && cols > 0 {
+		return rows, cols
 	}
 
-	// If rows/cols not specified, calculate from image dimensions
-	if rows == 0 || cols == 0 {
-		caps := kp.hostCaps()
-		kittyPassthroughLog("calculateImageCells: imgPixels=(%d,%d), cmdRC=(%d,%d), cellSize=(%d,%d)",
-			cmd.Width, cmd.Height, cmd.Columns, cmd.Rows, caps.CellWidth, caps.CellHeight)
-		if caps.CellWidth > 0 && caps.CellHeight > 0 {
-			if rows == 0 && cmd.Height > 0 {
-				rows = (cmd.Height + caps.CellHeight - 1) / caps.CellHeight
+	caps := kp.hostCaps()
+	kittyPassthroughLog("calculateImageCells: imgPixels=(%d,%d), cmdRC=(%d,%d), cellSize=(%d,%d)",
+		cmd.Width, cmd.Height, cmd.Columns, cmd.Rows, caps.CellWidth, caps.CellHeight)
+	if caps.CellWidth > 0 && caps.CellHeight > 0 {
+		// One dimension fixed: apply the picture's aspect to the fixed span, then
+		// count the cells it takes.
+		switch {
+		case cols > 0 && cmd.Width > 0 && cmd.Height > 0:
+			rows = ceilDiv(cols*caps.CellWidth*cmd.Height, cmd.Width*caps.CellHeight)
+		case rows > 0 && cmd.Width > 0 && cmd.Height > 0:
+			cols = ceilDiv(rows*caps.CellHeight*cmd.Width, cmd.Height*caps.CellWidth)
+		default:
+			if rows == 0 {
+				rows = ceilDiv(cmd.Height, caps.CellHeight)
 			}
-			if cols == 0 && cmd.Width > 0 {
-				cols = (cmd.Width + caps.CellWidth - 1) / caps.CellWidth
+			if cols == 0 {
+				cols = ceilDiv(cmd.Width, caps.CellWidth)
 			}
 		}
 	}
 
 	kittyPassthroughLog("calculateImageCells: result rows=%d, cols=%d", rows, cols)
 	return rows, cols
+}
+
+// ceilDiv divides a by b, rounding up: a partial cell is a cell.
+func ceilDiv(a, b int) int {
+	return (a + b - 1) / b
 }
