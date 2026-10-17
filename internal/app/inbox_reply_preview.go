@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -456,4 +457,40 @@ func (m *OS) replyPreviewClosed() {
 // replyPreviewAttach gives the open draft the previewer.
 func (m *OS) replyPreviewAttach(comp *composer.Model) {
 	comp.SetPreviewer(m.replyPreviewer())
+}
+
+// shotPieces is the previews the host shows now, for a screen capture. Each
+// picture is already the size of its cell box, and it is drawn over the
+// cells, as the host draws it. A nil previewer has none.
+func (p *replyPreview) shotPieces() []shotPiece {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []shotPiece
+	for _, pl := range p.shown {
+		pic := p.pics[pl.key]
+		if pic == nil || len(pic.png) == 0 {
+			continue
+		}
+		data := pic.png
+		out = append(out, shotPiece{
+			key: pl.key,
+			decode: func(maxPixels int) (image.Image, error) {
+				cfg, err := png.DecodeConfig(bytes.NewReader(data))
+				if err != nil {
+					return nil, err
+				}
+				if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > maxPixels/cfg.Height {
+					return nil, errImageTooLarge
+				}
+				return png.Decode(bytes.NewReader(data))
+			},
+			source: func(pix image.Image) image.Rectangle { return pix.Bounds() },
+			col:    pl.x, row: pl.y, cols: pl.cols, rows: pl.rows,
+			z: math.MaxInt32,
+		})
+	}
+	return out
 }
