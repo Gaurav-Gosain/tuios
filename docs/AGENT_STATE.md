@@ -578,11 +578,18 @@ to tuios reads `server`.
 | herdr | tuios | Id |
 | --- | --- | --- |
 | workspace | session | `w` and the first 12 hex digits of the session id |
-| tab | workspace (a numbered slot of the session) | `<workspace id>:t<workspace number>` |
+| tab | workspace (a numbered slot of the session) | `<workspace id>:t<tab number>` |
 | pane | window | `<workspace id>:p` and the first 12 hex digits of the window id |
 
 The ids stay the same while the session and the window exist. A rename does
 not change them. A pane id also finds a window that moved to another session.
+
+A tab's number is its own, as in herdr. A tuios workspace's number is its
+position, so moving a workspace (`tab.move`, the move keys, a drag of its dock
+pill) renumbers it, but its tab keeps its tab number and so its id. A tab
+number is never used twice: a workspace that stops being a tab gives its
+number up, and a tab made there later gets a new one. In a session that was
+never moved and never closed a tab, a tab's number is its workspace number.
 Where herdr takes a pane id, tuios also takes the window id, or 8 or more of
 its first hex digits.
 
@@ -599,8 +606,8 @@ A tuios workspace is a fixed slot, and herdr lists only the tabs that exist.
 So a workspace is a tab when it holds a window, has a name, or is the one that
 shows. A scratch terminal is not a pane to a herdr client, and a scratch
 workspace is not a tab. They are not in the snapshot, the lists or the
-events. A tab's `number` is the workspace number. An unnamed tab's `label` is
-its number.
+events. A tab's `number` is its tab number, the one in its id. An unnamed
+tab's `label` is its workspace number, which is what the dock shows.
 
 Agent state maps onto herdr's `agent_status`:
 
@@ -656,7 +663,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `tab.create` | `new-window`, `set-workspace-name` | uses the first workspace that is not a tab. Fails with `tab_create_failed` when all are in use |
 | `tab.rename` | `set-workspace-name` | |
 | `tab.focus` | `select-workspace` | |
-| `tab.move` | `set-workspace-order` | |
+| `tab.move` | `set-workspace-order` | renumbers the workspaces to the new tab order: the tabs take the workspace numbers they hold between them. Every tab keeps its id |
 | `tab.close` | `close-window` for each pane, `set-workspace-name` | shows the nearest tab that holds a pane |
 | `pane.list`, `pane.get`, `pane.current`, `pane.layout` | `list-windows` | |
 | `pane.read`, `agent.read` | `capture-pane` | `recent` reads 80 lines when `lines` is not given, 1000 at most. `recent_unwrapped` reads as `recent`, because tuios does not join wrapped rows. `detection` reads as `visible` |

@@ -842,7 +842,7 @@ section where you want them.
 | `break_pane` | Moves the focused pane to the first workspace with no pane and goes with it, as tmux `break-pane` does. |
 | `last_session` | Goes back to the session you were on before this one, as tmux `switch-client -l` does. |
 | `send_prefix` | Sends the leader key to the program in the focused pane, as pressing the leader two times in terminal mode does. Use it for screen's `C-a a`, or for a tmux in the pane. |
-| `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. |
+| `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. The two workspaces trade numbers, so the moved one answers to its new number. |
 | `send_to_workspace_1` to `send_to_workspace_9` | Sends the focused pane to that workspace. |
 | `cycle_layout` | Cycles BSP, master-stack and scrolling. |
 | `reload_config` | Reads `config.toml` again, as the "Reload config" palette row does. |

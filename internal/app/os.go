@@ -750,15 +750,24 @@ type OS struct {
 	// session state, so the rail reads the attached row from live state exactly
 	// as it reads the rest of that row.
 	SessionWorktree *session.WorktreeInfo
-	// WorkspaceNames maps a workspace number to its daemon-owned label. The
-	// number stays the workspace's identity and is what an unnamed workspace
-	// shows, so an absent entry is not a missing label but the normal case.
+	// WorkspaceNames maps a workspace number to its daemon-owned label. An
+	// unnamed workspace shows its number, so an absent entry is not a missing
+	// label but the normal case.
 	WorkspaceNames map[int]string
-	// WorkspaceOrder is the daemon-owned order the workspaces are shown in. It
-	// arranges and never addresses: the number stays the identity, so nothing
-	// keyed by one moves when this does. Empty is the plain ascending order.
-	WorkspaceOrder    []int
-	RestoredFromState bool // True after RestoreFromState, cleared after first resize
+	// pendingWorkspaceOrder is the order a drag of the dock's pills dropped
+	// them in, shown until the daemon's renumber arrives, so the strip does
+	// not snap back for the length of the round trip. See workspace_order.go.
+	pendingWorkspaceOrder []int
+	// workspaceTabKeys is the session's herdr tab keys as this client last
+	// adopted them, which is what a renumber is read against. See
+	// adoptWorkspaceRenumbering. workspaceTabKeysKnown is false until a state
+	// has been adopted.
+	workspaceTabKeys      map[int]int
+	workspaceTabKeysKnown bool
+	// workspaceMoveInFlight is set while a renumber this client asked for has
+	// not come back in a state. See RenumberWorkspaces.
+	workspaceMoveInFlight bool
+	RestoredFromState     bool // True after RestoreFromState, cleared after first resize
 	// DaemonStateVersion is the daemon state version this client last saw. It is
 	// echoed back on every state sync so the daemon can tell a snapshot built
 	// from its current state apart from one built before a mutation of its own.

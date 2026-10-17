@@ -56,12 +56,10 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		return o, nil
 	})
 	d.Register("move_workspace_left", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		o.MoveWorkspaceBy(-1)
-		return o, nil
+		return o, o.MoveWorkspaceBy(-1)
 	})
 	d.Register("move_workspace_right", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		o.MoveWorkspaceBy(1)
-		return o, nil
+		return o, o.MoveWorkspaceBy(1)
 	})
 	for i := 1; i <= 9; i++ {
 		d.Register("send_to_workspace_"+strconv.Itoa(i), func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

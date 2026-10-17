@@ -483,23 +483,28 @@ type SessionState struct {
 	//
 	// BSP tiling state
 
-	// WorkspaceNames maps a workspace number to its optional label. The number
-	// stays the workspace's identity and its fallback label: everything that
-	// addresses a workspace (the window's Workspace field, WorkspaceFocus,
-	// WorkspaceTrees, the verbs, TUIOS_WORKSPACE) keeps using the number, and a
-	// workspace with no entry here is unnamed and renders as its number, exactly
-	// as every workspace did before this existed. Naming one is a daemon-owned
-	// change so it survives a reattach and every attached client sees it.
+	// WorkspaceNames maps a workspace number to its optional label. A workspace
+	// with no entry here is unnamed and renders as its number. Naming one is a
+	// daemon-owned change so it survives a reattach and every attached client
+	// sees it. A workspace's number is its position, and a move renumbers the
+	// name with the rest of the workspace (see workspace_renumber.go).
 	WorkspaceNames map[int]string `json:"workspace_names,omitempty"`
-	// WorkspaceOrder is the order the workspaces are shown in, and only that.
-	// The number stays the identity, so the window's Workspace field,
-	// WorkspaceFocus, WorkspaceTrees, the verbs and TUIOS_WORKSPACE all keep
-	// addressing by number and none of them moves when this does. It sits beside
-	// the names because it is the same kind of thing: a presentation choice the
-	// daemon owns so it survives a reattach and every attached client sees the
-	// one arrangement. Absent means the plain ascending order, which is what
-	// every session had before this existed.
-	WorkspaceOrder  []int                      `json:"workspace_order,omitempty"`
+	// WorkspaceOrder is a display order saved by a build that arranged the
+	// workspaces without renumbering them. It is read so such a state still
+	// loads, applied once as a renumber when the session is restored, and never
+	// written: a move renumbers the workspaces instead.
+	WorkspaceOrder []int `json:"workspace_order,omitempty"`
+	// WorkspaceTabKeys is, by workspace number, the herdr tab number of the
+	// workspace: a number of its own that moves with it through a renumber, so
+	// a herdr tab id read before a move names the same tab after it. Nil until
+	// a session is first renumbered or a tab closes, and then every
+	// workspace's key is its number. Daemon-owned: a client push never sets
+	// it. See workspace_renumber.go.
+	WorkspaceTabKeys map[int]int `json:"workspace_tab_keys,omitempty"`
+	// NextWorkspaceTabKey is the next tab key to hand out. Keys are never
+	// reused, as herdr's tab numbers are not.
+	NextWorkspaceTabKey int `json:"next_workspace_tab_key,omitempty"`
+
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
@@ -1281,6 +1286,16 @@ type Session struct {
 	// loses its last pane the session goes back along it. See
 	// empty_workspace.go.
 	workspaceTrail []int
+	// renumberedAt is the version of the last renumber of the workspaces. A
+	// push built before it holds the old numbering. See RenumberWorkspaces.
+	renumberedAt int
+	// tabListed is the workspaces that were herdr tabs at the last change, so
+	// one that stops being a tab gives up its tab key. See noteTabsLocked.
+	tabListed map[int]bool
+	// tabKeys is the state's WorkspaceTabKeys as last written, readable
+	// without stateMu, for a shell started while the state is being written.
+	// See herdrTabFor.
+	tabKeys atomic.Pointer[map[int]int]
 	// returnTo is, by workspace, the workspace to show first when that one
 	// loses its last pane, guarded by stateMu. tuios xpanes sets it to the
 	// workspace that ran it.
@@ -3196,6 +3211,13 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			}
 			accepted = false
 		}
+		// A push built before a renumber keys its workspace maps by the old
+		// numbers. The windows and the focus were taken from the session
+		// above, and the maps are taken with them.
+		if s.workspaceRenumberMissedLocked(state.BaseVersion) {
+			takeWorkspaceMapsFrom(state, prev)
+			accepted = false
+		}
 		retainDaemonExclusive(state, prev)
 		// While a client too old for scratch workspaces is attached, a push
 		// cannot put the focus on one: that client would draw it nowhere.
@@ -3242,6 +3264,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		}
 	}
 	s.TouchActive()
+	s.noteTabsLocked()
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return accepted, behind, s.changeSeq
@@ -3316,6 +3339,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 		s.focusMovedVersion = s.state.Version
 	}
 	s.focusIntent, s.focusNeutral = false, false
+	s.noteTabsLocked()
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil

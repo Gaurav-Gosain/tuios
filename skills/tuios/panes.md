@@ -34,9 +34,10 @@ with the names that do exist, so pick another name rather than assuming you took
 it over.
 
 `tuios session-info -s work` reports the workspace you are on, how many exist,
-the tiling mode, any workspace names and, when the workspaces were rearranged,
-their display `order`. They keep their numbers, so `select-workspace 2` still
-means workspace 2.
+the tiling mode and any workspace names. A workspace's number is its position:
+moving one, with the move keys, by dragging its dock pill or with
+`set-workspace-order`, renumbers it, and `select-workspace 2` then means
+whatever workspace is second now.
 
 ## Opening a pane and running work in it
 

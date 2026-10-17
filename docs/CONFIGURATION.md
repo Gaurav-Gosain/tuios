@@ -1337,6 +1337,9 @@ bold, and draws the others in dim text on the bar's own ground, so it still
 shows where you are. A value that is not a colour is ignored, with a
 warning, as if it were unset.
 Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
+`{index}` is the workspace's number, which is its position: dragging a tab to
+another place, or moving the workspace with `move_workspace_left` and
+`move_workspace_right`, renumbers it, and `Alt+N` goes to it by its new number.
 The flat style shows even a lone workspace and drops the `+` tab unless
 `show_add` is on. With no `[dock.tabs]` table the strip is unchanged.
 

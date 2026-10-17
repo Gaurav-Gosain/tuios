@@ -3440,7 +3440,7 @@ and `host focus` only while a client is attached.
 | `current_workspace` | Active workspace number |
 | `num_workspaces` | Number of workspaces the session has |
 | `workspace_names` | Named workspaces, keyed by number. A workspace with no name is left out |
-| `workspace_order` | The workspace order when it was rearranged, `null` for the plain ascending order |
+| `workspace_order` | Always `null`. A workspace's number is its position, so moving one renumbers it. Kept for scripts that read it |
 | `window_count` | Number of windows across all workspaces |
 | `tiling_mode` | `tiling` or `floating` |
 | `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling`, or `unknown` before a client has reported one |

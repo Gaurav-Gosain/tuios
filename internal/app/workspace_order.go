@@ -1,33 +1,26 @@
 package app
 
 import (
+	"encoding/json"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The dock's workspace pills can be dragged into any arrangement, and what that
-// arrangement is has one careful answer.
+// The dock's workspace pills can be dragged into any arrangement, and a
+// workspace's number is its position: dropping a pill renumbers the workspaces
+// to the order the strip shows, the way the move keys do (see
+// RenumberWorkspaces). The pill's {index}, opt+N, the verbs and every attached
+// client then agree with where it is drawn.
 //
-// A workspace's number is its identity. It is what the window's Workspace field
-// carries, what WorkspaceFocus and WorkspaceTrees are keyed by, what leader+1..9
-// and opt+1..9 press, what every verb takes, what TUIOS_WORKSPACE exports to a
-// hook, and what a resurrected session comes back addressed by. Renumbering on a
-// drag would have to move all of that at once and would break every one of those
-// addresses for a gesture that meant "put this one first".
-//
-// So the drag sets a display order and nothing else, which is the same kind of
-// thing naming a workspace already is: the dock shows a workspace's name rather
-// than its number, so what the pill says and what the key presses are already
-// separate. The order is one more choice of that kind, and it is held to the
-// rule the name is: it is daemon-owned and session-scoped, so every client
-// attached to a session sees the one arrangement, and it is applied at exactly
-// one place, so no two surfaces can disagree about it.
-//
-// That one place is workspaceDisplayOrder. The dock strip, the workspace
-// switcher and the rail's terminals section all arrange through it, which is
-// what stops a reorder from being visible in the dock and invisible everywhere
-// else. Nothing that addresses a workspace goes near it.
+// The renumber is the daemon's, so every client attached to the session takes
+// the same one. Between the drop and the state that carries it, the strip keeps
+// drawing the dropped order (pendingWorkspaceOrder), so the pills do not snap
+// back for the length of the round trip. workspaceDisplayOrder is where that
+// order and a drag's draft are applied: the dock strip, the workspace switcher
+// and the rail's terminals section all arrange through it.
 
 // dockWorkspaceDragState is the click-or-drag gesture on a dock workspace pill,
 // modelled on the rail's session reorder because it is the same gesture: a left
@@ -52,25 +45,20 @@ type dockWorkspaceDragState struct {
 
 // workspaceRank is the position the display order puts workspace ws in, and a
 // number past every ranked one for a workspace the order does not mention.
-//
-// An unranked workspace sorting last is the rail's rule for an undragged
-// session, and it is here for the same reason: a workspace made after the
-// arrangement was set appends where the numbering put it rather than pushing
-// into the middle of an order the user chose.
 func (m *OS) workspaceRank(ws int) int {
-	for i, n := range m.WorkspaceOrder {
+	for i, n := range m.pendingWorkspaceOrder {
 		if n == ws {
 			return i
 		}
 	}
-	return len(m.WorkspaceOrder) + ws
+	return len(m.pendingWorkspaceOrder) + ws
 }
 
-// workspaceDisplayOrder arranges workspace numbers the way this session shows
-// them. It is the one place the order is applied, and it is a no-op for a
-// session that has never been rearranged, which is nearly all of them.
+// workspaceDisplayOrder arranges workspace numbers the way this client shows
+// them: by number, except while a drag is in flight or its drop is on its way
+// to the daemon.
 func (m *OS) workspaceDisplayOrder(ws []int) []int {
-	order := m.WorkspaceOrder
+	order := m.pendingWorkspaceOrder
 	if m.dockWorkspaceDrag.Dragging {
 		order = m.dockWorkspaceDrag.Order
 	}
@@ -165,8 +153,8 @@ func (m *OS) DockWorkspaceDragMotion(x, y int) bool {
 	return true
 }
 
-// DockWorkspaceDragRelease finishes the gesture: a drag commits its draft and
-// sends it to the daemon, and a release that never left the pill performs the
+// DockWorkspaceDragRelease finishes the gesture: a drag renumbers the
+// workspaces to its draft, and a release that never left the pill performs the
 // switch the press deferred.
 func (m *OS) DockWorkspaceDragRelease(x, y int) (bool, tea.Cmd) {
 	d := m.dockWorkspaceDrag
@@ -176,11 +164,17 @@ func (m *OS) DockWorkspaceDragRelease(x, y int) (bool, tea.Cmd) {
 	m.dockWorkspaceDrag = dockWorkspaceDragState{}
 
 	if d.Dragging {
-		// Applied here as well as sent, so the strip keeps the arrangement the
-		// pointer just built rather than snapping back to the old one and jumping
-		// again when the daemon's push lands.
-		m.WorkspaceOrder = d.Order
-		return true, setWorkspaceOrderCmd(m.verbDialer(), m.SessionName, d.Order)
+		if slices.IsSorted(d.Order) {
+			return true, nil
+		}
+		// Drawn until the renumber lands, so the strip keeps the arrangement
+		// the pointer just built rather than snapping back to the old one and
+		// jumping again when the daemon's state arrives.
+		cmd := m.RenumberWorkspaces(d.Order)
+		if cmd != nil {
+			m.pendingWorkspaceOrder = d.Order
+		}
+		return true, cmd
 	}
 	if ws := m.DockWorkspacePillAt(x, y); ws == d.Workspace {
 		m.SwitchToWorkspace(ws)
@@ -188,14 +182,80 @@ func (m *OS) DockWorkspaceDragRelease(x, y int) (bool, tea.Cmd) {
 	return true, nil
 }
 
-// setWorkspaceOrderCmd writes the arrangement through the daemon, which owns it
-// for the same reason it owns the workspace names: it has to survive a reattach
-// and reach every other client attached to the session.
+// WorkspaceRenumberedMsg is the daemon's answer to a renumber. Legacy says the
+// daemon is from a build that only recorded a display order, so the client
+// renumbers its own state and pushes it, as clients did before the daemon
+// renumbered.
+type WorkspaceRenumberedMsg struct {
+	Order  []int
+	Legacy bool
+	// Moved says the daemon renumbered something, so a state carrying the
+	// renumber is on its way.
+	Moved bool
+	Err   error
+}
+
+// setWorkspaceOrderCmd asks the daemon to renumber the session's workspaces
+// to order. The daemon owns the numbering for the same reason it owns the
+// workspace names: it has to survive a reattach and reach every other client
+// attached to the session. The call is made from a command, never from
+// Update, for the reason labelVerbCmd gives.
 func setWorkspaceOrderCmd(dial agentMailDial, sessionName string, order []int) tea.Cmd {
 	if sessionName == "" || len(order) == 0 {
 		return nil
 	}
-	return labelVerbCmd(dial, "Arrange", "set-workspace-order", map[string]any{
-		"session": sessionName, "order": order,
+	return func() tea.Msg {
+		c, err := dial()
+		if err != nil {
+			return WorkspaceRenumberedMsg{Order: order, Err: err}
+		}
+		defer func() { _ = c.Close() }()
+		raw, err := c.Call("set-workspace-order", map[string]any{"session": sessionName, "order": order})
+		if err != nil {
+			if stale := session.StaleDaemonError("set-workspace-order", err); stale != nil {
+				err = stale
+			}
+			return WorkspaceRenumberedMsg{Order: order, Err: err}
+		}
+		var res struct {
+			Renumbered map[string]int `json:"renumbered"`
+		}
+		_ = json.Unmarshal(raw, &res)
+		return WorkspaceRenumberedMsg{Order: order, Legacy: res.Renumbered == nil, Moved: len(res.Renumbered) > 0}
+	}
+}
+
+// handleWorkspaceRenumbered settles a renumber the daemon answered. A failed
+// one leaves the pills where they were. A daemon too old to renumber took the
+// order as a display order and moved nothing, so the client moves its own
+// workspaces and pushes them, which that daemon takes.
+//
+// That daemon also stored the order as a display order, which its other
+// clients would apply on top of the numbering, and which a later daemon would
+// apply again on restore. Sending the same workspaces in ascending order is
+// how such a daemon clears it.
+func (m *OS) handleWorkspaceRenumbered(msg WorkspaceRenumberedMsg) tea.Cmd {
+	if msg.Err != nil {
+		m.pendingWorkspaceOrder = nil
+		m.workspaceMoveInFlight = false
+		m.ShowNotification("Moving the workspace failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		return nil
+	}
+	if !msg.Legacy {
+		if !msg.Moved {
+			m.workspaceMoveInFlight = false
+		}
+		return nil
+	}
+	m.pendingWorkspaceOrder = nil
+	m.workspaceMoveInFlight = false
+	m.renumberLocalWorkspaces(workspaceSlots(msg.Order))
+	m.SyncStateToDaemon()
+	return labelVerbCmd(m.verbDialer(), workspaceArrangeWhat, "set-workspace-order", map[string]any{
+		"session": m.SessionName, "order": slices.Sorted(slices.Values(msg.Order)),
 	})
 }
+
+// workspaceArrangeWhat names a renumber in the notice of a failed daemon
+// write.
+const workspaceArrangeWhat = "Arrange"
