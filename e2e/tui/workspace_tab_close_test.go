@@ -28,7 +28,8 @@ import (
 //     workspace's panes are checked to still be there.
 //   - The tab's workspace could be the current one only by accident. The
 //     current-tab and palette tests close workspace 1 while workspace 2 keeps
-//     its pane, which is the positive half of the first test.
+//     its pane, which is the positive half of the first test. A workspace's
+//     number is its position, so that pane is on workspace 1 afterwards.
 
 const wsCloseSession = "wc"
 
@@ -117,6 +118,18 @@ func openTabClose(t *testing.T, term *tuitest.Terminal, tab, question string) {
 	}
 }
 
+// workspaceNamesOf is the session's workspace names, keyed by number.
+func workspaceNamesOf(t *testing.T, base, sess string) map[string]string {
+	t.Helper()
+	info, err := daemonJSON[struct {
+		WorkspaceNames map[string]string `json:"workspace_names"`
+	}](base, "session-info", "-s", sess)
+	if err != nil {
+		t.Fatalf("session-info: %v", err)
+	}
+	return info.WorkspaceNames
+}
+
 // confirmClose takes the dialog's destructive row, which is not the default.
 func confirmClose(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
@@ -172,9 +185,14 @@ func TestWorkspaceTabCloseOnTheCurrentTab(t *testing.T) {
 
 	openTabClose(t, term, "homews", "Close every pane on workspace 1 (homews)?")
 	confirmClose(t, term)
-	waitPanesOn(t, term, base, wsCloseSession, 1, 0, "closing workspace 1 from its tab")
-	if n := panesOn(t, base, wsCloseSession, 2); n != 1 {
-		t.Fatalf("closing workspace 1 from its tab left workspace 2 with %d panes, want 1\n%s", n, term.Snapshot())
+	// Workspace 1 stops existing, so farws, the one left, becomes workspace 1:
+	// workspace 2 empties when it moves down.
+	waitPanesOn(t, term, base, wsCloseSession, 2, 0, "closing workspace 1 from its tab")
+	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
+		t.Fatalf("closing workspace 1 from its tab left workspace 1 with %d panes, want farws's 1\n%s", n, term.Snapshot())
+	}
+	if names := workspaceNamesOf(t, base, wsCloseSession); names["1"] != "farws" || len(names) != 1 {
+		t.Fatalf("closing workspace 1 from its tab left the names %v, want farws on 1 alone", names)
 	}
 	alive(t, term, "after closing workspace 1 from its tab")
 }
@@ -203,9 +221,14 @@ func TestCloseWorkspaceFromThePaletteClosesTheCurrentOne(t *testing.T) {
 	// workspace" for the row's full name.
 	runPaletteRow(t, term, "close works", "Close workspace", "Close every pane on workspace 1 (homews)?")
 	confirmClose(t, term)
-	waitPanesOn(t, term, base, wsCloseSession, 1, 0, "closing workspace 1 from the palette")
-	if n := panesOn(t, base, wsCloseSession, 2); n != 1 {
-		t.Fatalf("closing workspace 1 from the palette left workspace 2 with %d panes, want 1\n%s", n, term.Snapshot())
+	// Workspace 1 stops existing, so farws, the one left, becomes workspace 1:
+	// workspace 2 empties when it moves down.
+	waitPanesOn(t, term, base, wsCloseSession, 2, 0, "closing workspace 1 from the palette")
+	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
+		t.Fatalf("closing workspace 1 from the palette left workspace 1 with %d panes, want farws's 1\n%s", n, term.Snapshot())
+	}
+	if names := workspaceNamesOf(t, base, wsCloseSession); names["1"] != "farws" || len(names) != 1 {
+		t.Fatalf("closing workspace 1 from the palette left the names %v, want farws on 1 alone", names)
 	}
 	alive(t, term, "after closing workspace 1 from the palette")
 }
@@ -225,9 +248,14 @@ func TestCloseWorkspaceFromAKeyClosesTheCurrentOne(t *testing.T) {
 		t.Fatalf("ctrl+b alt+x did not ask to close workspace 1: %v\n%s", err, term.Snapshot())
 	}
 	confirmClose(t, term)
-	waitPanesOn(t, term, base, wsCloseSession, 1, 0, "closing workspace 1 from the key")
-	if n := panesOn(t, base, wsCloseSession, 2); n != 1 {
-		t.Fatalf("closing workspace 1 from the key left workspace 2 with %d panes, want 1\n%s", n, term.Snapshot())
+	// Workspace 1 stops existing, so farws, the one left, becomes workspace 1:
+	// workspace 2 empties when it moves down.
+	waitPanesOn(t, term, base, wsCloseSession, 2, 0, "closing workspace 1 from the key")
+	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
+		t.Fatalf("closing workspace 1 from the key left workspace 1 with %d panes, want farws's 1\n%s", n, term.Snapshot())
+	}
+	if names := workspaceNamesOf(t, base, wsCloseSession); names["1"] != "farws" || len(names) != 1 {
+		t.Fatalf("closing workspace 1 from the key left the names %v, want farws on 1 alone", names)
 	}
 	alive(t, term, "after closing workspace 1 from the key")
 }

@@ -361,13 +361,13 @@ func TestSwitchToAnEmptySessionTakesItsLayout(t *testing.T) {
 		t.Fatalf("the client never showed blank: %v\n%s", err, term.Snapshot())
 	}
 	// A workspace switch in the client sends its layout to the daemon before
-	// the daemon sends blank's state again.
-	for _, ws := range []int{2, 1} {
-		if err := term.SendKeys(tuitest.Alt(rune('0' + ws))); err != nil {
-			t.Fatalf("press alt+%d: %v", ws, err)
-		}
-		waitWorkspace(t, base, "blank", ws)
+	// the daemon sends blank's state again. Workspace 1 held the closed pane,
+	// so it goes when the switch leaves it, and workspace 2 becomes 1.
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("press alt+2: %v", err)
 	}
+	time.Sleep(insertGuard)
+	waitWorkspace(t, base, "blank", 1)
 	if info := sessionInfoOf(t, base, "blank"); info.LayoutMode != "master-stack" {
 		t.Fatalf("ASSERTION: blank has layout mode %q after the switch from home, want master-stack", info.LayoutMode)
 	}

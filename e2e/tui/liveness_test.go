@@ -153,13 +153,14 @@ func TestLivenessWorkspaceSwitchChangesTheScreen(t *testing.T) {
 		t.Fatalf("the pane never showed its own output: %v\n%s", err, term.Snapshot())
 	}
 
-	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "3"); err != nil {
-		t.Fatalf("switch to workspace 3: %v", err)
+	// Workspace 2, the next one: a switch past it opens it all the same.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
+		t.Fatalf("switch to workspace 2: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), want) && dockWorkspace(s) == 3
+		return !strings.Contains(s.Text(), want) && dockWorkspace(s) == 2
 	}, uiTimeout); err != nil {
-		t.Fatalf("workspace 3 still shows workspace 1's pane: %v\n%s", err, term.Snapshot())
+		t.Fatalf("workspace 2 still shows workspace 1's pane: %v\n%s", err, term.Snapshot())
 	}
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "1"); err != nil {

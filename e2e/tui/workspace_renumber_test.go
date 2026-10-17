@@ -359,3 +359,91 @@ func TestWorkspaceMoveKeyTwiceQuickly(t *testing.T) {
 	}
 	alive(t, term, "after two quick moves")
 }
+
+// TestWorkspaceCloseRenumbersTheRest closes a workspace in the middle, from its
+// dock tab, and one at the start, through the close-workspace verb: each time
+// the workspaces above it move down one, so the numbers stay 1 to the count, the
+// pills and opt+N agree with the daemon, and a herdr tab id read before the
+// close still names the same tab.
+func TestWorkspaceCloseRenumbersTheRest(t *testing.T) {
+	term, base := renumberSetup(t)
+	dplyID := herdrTabIDByLabel(t, base, "DPLY")
+
+	openTabClose(t, term, "2·REVW", "Close every pane on workspace 2 (REVW)?")
+	confirmClose(t, term)
+	waitPills(t, term, "1·EDIT", "2·DPLY")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "3·") && !screenHas(s, "REVW") }, uiTimeout); err != nil {
+		t.Fatalf("the closed workspace or its old number is still on the dock: %v\n%s", err, term.Snapshot())
+	}
+	info := wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "DPLY"})
+	if len(info.WorkspaceNames) != 2 {
+		t.Fatalf("names after the close are %v, want EDIT and DPLY only", info.WorkspaceNames)
+	}
+	wantPanesOn(t, base, map[int]string{1: "EDIT", 2: "DPLY"})
+	wantHerdrTab(t, base, dplyID, "DPLY")
+	altReaches(t, term, '2', "DPLY")
+	altReaches(t, term, '1', "EDIT")
+
+	// The verb, on the workspace that is not in view: EDIT goes, DPLY is 1.
+	altReaches(t, term, '2', "DPLY")
+	if out, err := tuiosCLI(t, base, "close-workspace", "1", "-s", renumberSession); err != nil {
+		t.Fatalf("close-workspace 1: %v: %s", err, out)
+	}
+	waitPills(t, term, "1·DPLY")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "2·") && !screenHas(s, "EDIT") }, uiTimeout); err != nil {
+		t.Fatalf("the dock still shows a second workspace: %v\n%s", err, term.Snapshot())
+	}
+	wantNumbering(t, base, map[string]string{"1": "DPLY"})
+	wantPanesOn(t, base, map[int]string{1: "DPLY"})
+	wantHerdrTab(t, base, dplyID, "DPLY")
+	alive(t, term, "after closing workspaces")
+}
+
+// TestWorkspaceSwitchPastTheLastOpensTheNext presses opt+5 with three
+// workspaces: it opens workspace 4, a pane made there stays on 4, and an empty
+// workspace left behind goes away without moving the others.
+func TestWorkspaceSwitchPastTheLastOpensTheNext(t *testing.T) {
+	term, base := renumberSetup(t)
+
+	if err := term.SendKeys(tuitest.Alt('5')); err != nil {
+		t.Fatalf("press alt+5: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		m := renumberDockStatus(s)
+		return m != nil && m[0] == "4:0"
+	}, uiTimeout); err != nil {
+		t.Fatalf("opt+5 with three workspaces did not open workspace 4: %v\n%s", err, term.Snapshot())
+	}
+	newWindow(t, term)
+	out, err := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v", err)
+	}
+	var payload struct {
+		WorkspaceWindows []int `json:"workspace_windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil || len(payload.WorkspaceWindows) < 5 {
+		t.Fatalf("list-windows output: %v\n%s", err, out)
+	}
+	if got := payload.WorkspaceWindows; got[3] != 1 || got[4] != 0 {
+		t.Fatalf("panes by workspace are %v, want the new pane on 4 and none on 5", got)
+	}
+	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"})
+
+	// An empty workspace that is left stops existing, and nothing moves.
+	if err := term.SendKeys(tuitest.Alt('7')); err != nil {
+		t.Fatalf("press alt+7: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		m := renumberDockStatus(s)
+		return m != nil && m[0] == "5:0"
+	}, uiTimeout); err != nil {
+		t.Fatalf("opt+7 with four workspaces did not open workspace 5: %v\n%s", err, term.Snapshot())
+	}
+	altReaches(t, term, '1', "EDIT")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "5·") }, uiTimeout); err != nil {
+		t.Fatalf("the empty workspace 5 stayed on the dock after it was left: %v\n%s", err, term.Snapshot())
+	}
+	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"})
+	alive(t, term, "after opening workspaces past the last")
+}

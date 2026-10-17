@@ -172,7 +172,8 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 
 	// 2. A switch from a workspace with no pane takes the session's start
 	// directory. The pane on 2 exits, and return_when_empty is off, so the
-	// session stays on 2 with nothing focused.
+	// session stays on 2 with nothing focused. opt+5 opens the next workspace,
+	// 3, and workspace 2, left with no pane, goes, so 3 becomes 2.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("exit", tuitest.Enter); err != nil {
 		t.Fatalf("type exit: %v", err)
@@ -180,27 +181,28 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	waitPanesOn(t, term, base, sess, 2, 0, "the shell on workspace 2 exits")
 	// The splash on an empty workspace is window mode already.
 	sendKeys(t, term, tuitest.Alt("5"))
-	waitShowing(t, base, sess, 5, "", term)
-	exactlyPanesOn(t, term, base, sess, 5, 1, "the switch to workspace 5 from an empty workspace")
-	if got := cwdOnWorkspace(t, base, sess, 5, start); got != start {
-		t.Errorf("ASSERTION: the pane on workspace 5 is in %q, want the session's start directory %q", got, start)
+	waitShowing(t, base, sess, 2, "", term)
+	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to a new workspace from an empty workspace")
+	if got := cwdOnWorkspace(t, base, sess, 2, start); got != start {
+		t.Errorf("ASSERTION: the pane on workspace 2 is in %q, want the session's start directory %q", got, start)
 	}
 
 	// 3. move_and_follow brings its own pane: workspace 7 holds that pane
-	// and no other.
+	// and no other. Workspace 2, which it leaves, goes, so that is
+	// workspace 6 afterwards.
 	var moved string
 	for _, r := range xpanesRowsIn(t, base, sess) {
-		if r.Workspace == 5 {
+		if r.Workspace == 2 {
 			moved = r.ID
 		}
 	}
 	toWindowMode(t, term)
 	sendKeys(t, term, tuitest.Alt("m"))
-	waitShowing(t, base, sess, 7, "", term)
-	exactlyPanesOn(t, term, base, sess, 7, 1, "move_and_follow to workspace 7")
+	waitShowing(t, base, sess, 6, "", term)
+	exactlyPanesOn(t, term, base, sess, 6, 1, "move_and_follow to workspace 7")
 	for _, r := range xpanesRowsIn(t, base, sess) {
-		if r.Workspace == 7 && r.ID != moved {
-			t.Errorf("ASSERTION: workspace 7 holds %s, not the pane that moved there (%s)", r.ID, moved)
+		if r.Workspace == 6 && r.ID != moved {
+			t.Errorf("ASSERTION: workspace 6 holds %s, not the pane that moved there (%s)", r.ID, moved)
 		}
 	}
 
@@ -217,7 +219,7 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 			counts[r.Workspace]++
 		}
 		for ws, n := range counts {
-			if ws != 1 && ws != 5 && ws != 7 && n >= 2 {
+			if ws != 1 && ws != 6 && n >= 2 {
 				xws = ws
 			}
 		}
@@ -237,11 +239,11 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	}
 	waitShowing(t, base, sess, 4, "", term)
 	exactlyPanesOn(t, term, base, sess, 4, 0, "run-command SwitchWorkspace")
-	if out, err := tuiosCLI(t, base, "select-workspace", "--session", sess, "6"); err != nil {
-		t.Fatalf("select-workspace 6: %v\n%s", err, out)
+	if out, err := tuiosCLI(t, base, "select-workspace", "--session", sess, "5"); err != nil {
+		t.Fatalf("select-workspace 5: %v\n%s", err, out)
 	}
-	waitShowing(t, base, sess, 6, "", term)
-	exactlyPanesOn(t, term, base, sess, 6, 0, "select-workspace")
+	waitShowing(t, base, sess, 5, "", term)
+	exactlyPanesOn(t, term, base, sess, 5, 0, "select-workspace")
 
 	saveWindowList(t, base, sess, filepath.Join(artifactDir(t), "list-windows.json"))
 	alive(t, term, "after the switches")
@@ -306,21 +308,18 @@ func TestEmptyWorkspacePaneSettingReloads(t *testing.T) {
 
 	writeConfigAtomically(t, cfg, []byte("[workspaces]\nnew_window_when_empty = true\n"))
 	// The reload lands some time after the write. Each round goes to
-	// workspace 1 and back to an empty workspace, so a round before the
-	// reload opens nothing and the first one after it opens a pane.
+	// workspace 1 and back to a new workspace, so a round before the
+	// reload opens nothing and the first one after it opens a pane. The
+	// empty workspace a round leaves goes, so the new one is always 2.
 	ws := 2
 	deadline := time.Now().Add(uiTimeout)
-	for panesOn(t, base, sess, ws) == 0 {
-		if time.Now().After(deadline) {
+	for round := 0; panesOn(t, base, sess, ws) == 0; round++ {
+		if time.Now().After(deadline) || round == 8 {
 			t.Fatalf("ASSERTION: no switch opened a pane after the file turned the setting on\n%s", term.Snapshot())
-		}
-		ws++
-		if ws > 9 {
-			t.Fatalf("ASSERTION: no switch to workspaces 3 to 9 opened a pane after the reload\n%s", term.Snapshot())
 		}
 		sendKeys(t, term, tuitest.Alt("1"))
 		waitShowing(t, base, sess, 1, "", term)
-		sendKeys(t, term, tuitest.Alt(strconv.Itoa(ws)))
+		sendKeys(t, term, tuitest.Alt(strconv.Itoa(ws+1+round%3)))
 		waitShowing(t, base, sess, ws, "", term)
 		time.Sleep(time.Second)
 	}

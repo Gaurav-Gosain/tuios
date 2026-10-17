@@ -1,7 +1,9 @@
 package tuie2e
 
 import (
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,8 +50,9 @@ const (
 	kittyAltShift8Base = "\x1b[176::56;4u"
 
 	// optionNote is the start of the one-time note about Option not being
-	// sent as Alt.
-	optionNote = "Your Option key types characters"
+	// sent as Alt: as much as the dock shows beside a pill for every
+	// workspace the fixture opens.
+	optionNote = "Your Option key types"
 
 	// escPlus8, escPlus3, escPlus1 and escPlusHash are the left Option key as
 	// Meta (WezTerm) or Esc+ (iTerm2): ESC, then the character the key types
@@ -102,8 +105,28 @@ func macSessionOn(t *testing.T, base, session, config, source string) *tuitest.T
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "one pane")
 	waitWorkspace(t, base, session, 1)
+	rows := xpanesRowsIn(t, base, session)
+	if len(rows) != 1 {
+		t.Fatalf("the session has %d panes, want 1", len(rows))
+	}
+	macPanes.Store(session, rows[0].ID)
+	// A workspace's number is its position, and opt+N past the last one opens
+	// the next one. Every workspace holds a pane, so each opt+N reaches its
+	// own number and a key read as the wrong digit lands somewhere else.
+	// Workspace 1 holds a second one, so the pane under test can move away
+	// without workspace 1 going.
+	for ws := 1; ws <= 9; ws++ {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", session, "--workspace", strconv.Itoa(ws), "--no-focus"); err != nil {
+			t.Fatalf("a pane on workspace %d: %v\n%s", ws, err, out)
+		}
+	}
+	time.Sleep(insertGuard)
 	return term
 }
+
+// macPanes is the pane each macSession made, by session: the pane the
+// keys act on, among the ones that hold the other workspaces open.
+var macPanes sync.Map
 
 // press sends one raw key sequence.
 func press(t *testing.T, term *tuitest.Terminal, what, seq string) {
@@ -116,11 +139,14 @@ func press(t *testing.T, term *tuitest.Terminal, what, seq string) {
 // paneWorkspace is the workspace the session's only pane is on.
 func paneWorkspace(t *testing.T, base, session string) int {
 	t.Helper()
-	rows := xpanesRowsIn(t, base, session)
-	if len(rows) != 1 {
-		t.Fatalf("the session has %d panes, want 1", len(rows))
+	id, _ := macPanes.Load(session)
+	for _, r := range xpanesRowsIn(t, base, session) {
+		if r.ID == id {
+			return r.Workspace
+		}
 	}
-	return rows[0].Workspace
+	t.Fatalf("the pane under test is gone from %s", session)
+	return 0
 }
 
 // waitPaneOn waits for the pane to be on workspace ws. A move and its follow
