@@ -328,3 +328,77 @@ func ReadableEntry256(c color.Color, grounds []color.Color, floor float64) color
 	}
 	return best
 }
+
+// warningApartHue is the least OKLab hue gap, in degrees, a 256-colour warning
+// keeps from the error ink. #af0000 and #af005f are 30 degrees apart and read
+// as the same red in one cell.
+const warningApartHue = 35
+
+// amberHue is the OKLab hue, in degrees, of the cube's ambers (#875f00,
+// #af8700), the hue a warning is moved to when it would read as an error.
+const amberHue = 75
+
+// amberBand is how far, in degrees, from amberHue an entry may sit and still
+// read as a warning: from orange to olive.
+const amberBand = 40
+
+// WarningApart256 keeps a 256-colour warning from reading as the error ink.
+//
+// A light theme's yellow is often a rust or a brown, and on a light ground only
+// the dark cube entries read. The entry nearest it in hue can then be a red
+// beside the error's own (seoulbones_light, zenbones), so a warning and a
+// failure looked the same. When warning sits within warningApartHue of errInk,
+// it returns the entry from orange to olive nearest amber in hue that reads on
+// every ground, nearest warning's lightness among equals.
+//
+// It returns warning unchanged when the two are apart, when either is a
+// neutral, or when no amber reads. The last is left alone on purpose: on a
+// light theme's cursor row no amber clears the mark floor for gruvbox_light or
+// tokyo_night_light, and a warning that reads beats one that differs.
+func WarningApart256(warning, errInk color.Color, grounds []color.Color, floor float64) color.Color {
+	if warning == nil || errInk == nil || okChroma(warning) < greyChroma || okChroma(errInk) < greyChroma {
+		return warning
+	}
+	w, e := toLab(warning), toLab(errInk)
+	gap := math.Abs(math.Atan2(w.b, w.a) - math.Atan2(e.b, e.a))
+	if gap > math.Pi {
+		gap = 2*math.Pi - gap
+	}
+	if gap*180/math.Pi >= warningApartHue {
+		return warning
+	}
+	// The cube entries from yellow to orange that read, nearest amber in hue,
+	// and nearest warning's lightness among equals.
+	table := xterm256Lab()
+	var best color.Color
+	bestD := math.Inf(1)
+	for i := range 216 {
+		if neutralEntry(i) {
+			continue
+		}
+		v := table[i]
+		hue := math.Atan2(v.b, v.a) * 180 / math.Pi
+		if hue < amberHue-amberBand || hue > amberHue+amberBand {
+			continue
+		}
+		q := ansi.IndexedColor(uint8(16 + i)) // #nosec G115 -- i is within [0, 215].
+		readsAll := true
+		for _, g := range grounds {
+			if ContrastRatio(q, Shown(g)) < floor {
+				readsAll = false
+				break
+			}
+		}
+		if !readsAll {
+			continue
+		}
+		dh, dl := (hue-amberHue)/180*math.Pi, v.l-w.l
+		if d := dh*dh + dl*dl; d < bestD {
+			best, bestD = q, d
+		}
+	}
+	if best != nil {
+		return best
+	}
+	return warning
+}

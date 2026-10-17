@@ -412,6 +412,9 @@ func liftOnLight(p *overlay.Palette, d overlay.Depth) {
 		}
 		*it.ink = c
 	}
+	if d == overlay.Depth256 {
+		p.Warning = overlay.WarningApart256(p.Warning, p.Warn, rows, MarkFloor)
+	}
 }
 
 // GroundUI is UI for chrome written straight on the terminal's own
