@@ -11,7 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuitest"
 
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 )
 
 // Pasting an image from the clipboard puts it in a file on the machine where

@@ -2442,7 +2442,7 @@ prune commands. That brought the build to 33,034,402 and 31,077,826 bytes
 
 The budgets went to 33,172,000 (linux/amd64) and 31,198,000 (darwin/arm64)
 for images drawn as block glyphs on a host without graphics: the glyph
-encoder (`internal/mosaic`), its glyph tables, the 16-colour floor, the
+encoder (`shot/mosaic`), its glyph tables, the 16-colour floor, the
 drawing pass and the `image_symbols` option. It links no new package. On Go
 1.26.6 the build measured 33,136,802 and 31,162,594 bytes, 69,632 and 51,248
 over origin/main at ebeee191. On linux/amd64, 64 KiB of that is a section

@@ -18,8 +18,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/shot/mosaic"
 )
 
 // Previews of the images in a reply (see composer/preview.go for the layout).
@@ -30,7 +30,7 @@ import (
 //   - kitty graphics, when the host terminal has them and said how large a
 //     cell is: the picture is uploaded once per image and size and placed
 //     after the frame, as the launcher's icons are (launcher_icons.go).
-//   - block glyphs from internal/mosaic otherwise, at 256 colours and
+//   - block glyphs from shot/mosaic otherwise, at 256 colours and
 //     truecolor. They are ordinary cells, so they need nothing after the frame.
 //     A sixel host gets these too: sixel cannot take a placement down, which
 //     a panel that moves and closes needs, so the launcher and the screenshot

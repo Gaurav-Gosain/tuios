@@ -67,8 +67,8 @@ func TestOnlyAnAskedForFontIsEmbedded(t *testing.T) {
 	if host.HostFontFamily == "" {
 		t.Skip("could not read a PostScript name back for the host face")
 	}
-	f, _ := Frame(host, p, false)
-	if len(f.FontData) == 0 {
+	f, _ := Frame(host, p, nil, false)
+	if len(f.Font.Data) == 0 {
 		t.Fatal("the host font did not reach the raster")
 	}
 	if f.EmbedFont {
@@ -76,8 +76,8 @@ func TestOnlyAnAskedForFontIsEmbedded(t *testing.T) {
 	}
 
 	named := SettingsFrom(config.ScreenshotConfig{FontFile: face.File}, "", "")
-	f, _ = Frame(named, p, false)
-	if len(f.FontData) == 0 {
+	f, _ = Frame(named, p, nil, false)
+	if len(f.Font.Data) == 0 {
 		t.Fatal("the named font file did not reach the raster")
 	}
 	if !f.EmbedFont {

@@ -3,7 +3,7 @@
 // set id into the concrete palette and frame that shot.Render wants, and it
 // names and writes the file.
 //
-// It sits outside internal/shot on purpose. shot is a leaf: it knows cells,
+// It sits outside tuios.dev/shot on purpose. shot is a library: it knows cells,
 // colours and geometry and nothing about tuios. This package knows tuios and
 // nothing about rasterisation, so the daemon and the client can both ask for
 // the same picture without either of them re-deriving a default.
@@ -24,8 +24,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/shot"
 )
 
 // Settings is one resolved screenshot request: the config section with any
@@ -179,11 +179,14 @@ func toShot(c color.Color, def shot.Color) shot.Color {
 	return shot.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
-// Frame builds the resolved dressing for a render. plain forces the bare card
-// with no title bar, which is what a region or full-screen capture gets: it is
-// not a window, so a window title bar would be a claim about it that is not
-// true.
-func Frame(s Settings, p *shot.Palette, plain bool) (*shot.Frame, []string) {
+// Frame builds the resolved dressing for a render of g. plain forces the bare
+// card with no title bar, which is what a region or full-screen capture gets:
+// it is not a window, so a window title bar would be a claim about it that is
+// not true.
+//
+// g is read for the glyphs the resolved font lacks, and Frame adds a fallback
+// face for each one that fontconfig can name. A nil g skips that.
+func Frame(s Settings, p *shot.Palette, g *shot.Grid, plain bool) (*shot.Frame, []string) {
 	var warnings []string
 	spec := shot.FrameSpec{
 		Frame:      s.Frame,
@@ -201,8 +204,7 @@ func Frame(s Settings, p *shot.Palette, plain bool) (*shot.Frame, []string) {
 	}
 	regular, bold, fontWarn := resolveFontFiles(s)
 	warnings = append(warnings, fontWarn...)
-	spec.FontData, spec.FontIndex = regular.Data, regular.Index
-	spec.BoldFontData, spec.BoldFontIndex = bold.Data, bold.Index
+	spec.Font, spec.BoldFont = regular, bold
 	// Only a font the user named by file is written into SVG and HTML output.
 	// A font found by asking the terminal was found so the raster has icons in
 	// it; copying three megabytes of it into every exported SVG is a different
@@ -219,7 +221,9 @@ func Frame(s Settings, p *shot.Palette, plain bool) (*shot.Frame, []string) {
 		warnings = append(warnings, "The glyph set has no window marks. The macOS lights were drawn.")
 		spec.Controls = "auto"
 	}
-	return shot.BuildFrame(spec, in), warnings
+	frame := shot.BuildFrame(spec, in)
+	fillFallbacks(g, frame)
+	return frame, warnings
 }
 
 // FontFallbackNotice is the one line a capture carries when it was drawn in the
@@ -235,11 +239,11 @@ const FontFallbackNotice = "Icons need your terminal font. Set screenshot.font_f
 //
 // A file that will not read is a warning and a fallthrough, not a failure. The
 // capture is the point; the font is how it looks.
-func resolveFontFiles(s Settings) (regular, bold fontBytes, warnings []string) {
+func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 	if s.FontFile != "" {
 		data, err := os.ReadFile(s.FontFile) // #nosec G304 - the path is the operator's own config
 		if err == nil {
-			return fontBytes{Data: data}, fontBytes{}, nil
+			return shot.Font{Data: data}, shot.Font{}, nil
 		}
 		warnings = append(warnings, "The font file could not be read. Another font was used.")
 	}
@@ -252,7 +256,7 @@ func resolveFontFiles(s Settings) (regular, bold fontBytes, warnings []string) {
 			if boldOK && (boldFace.File != face.File || boldFace.Index != face.Index) {
 				bold = readFontBytes(boldFace)
 			}
-			return fontBytes{Data: data, Index: face.Index}, bold, warnings
+			return shot.Font{Data: data, Index: face.Index}, bold, warnings
 		}
 	}
 	if face, ok := FontByFamily(s.FontFamily); ok {
@@ -260,25 +264,19 @@ func resolveFontFiles(s Settings) (regular, bold fontBytes, warnings []string) {
 			if boldFace, boldOK := BoldFontByFamily(s.FontFamily, face); boldOK {
 				bold = readFontBytes(boldFace)
 			}
-			return fontBytes{Data: data, Index: face.Index}, bold, warnings
+			return shot.Font{Data: data, Index: face.Index}, bold, warnings
 		}
 	}
-	return fontBytes{}, fontBytes{}, warnings
-}
-
-// fontBytes is a font file's contents and the face to take from it.
-type fontBytes struct {
-	Data  []byte
-	Index int
+	return shot.Font{}, shot.Font{}, warnings
 }
 
 // readFontBytes loads a resolved face, or nothing when the file will not read.
-func readFontBytes(face FontFace) fontBytes {
+func readFontBytes(face FontFace) shot.Font {
 	data, err := os.ReadFile(face.File) // #nosec G304 - a font file the resolver found
 	if err != nil {
-		return fontBytes{}
+		return shot.Font{}
 	}
-	return fontBytes{Data: data, Index: face.Index}
+	return shot.Font{Data: data, Index: face.Index}
 }
 
 // accentsOf picks the wash seeds: the theme's blue and magenta, the two

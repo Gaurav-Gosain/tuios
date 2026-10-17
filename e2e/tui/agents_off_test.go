@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The agent switch, [agents] enabled = false, on a real daemon and a real
@@ -137,7 +137,7 @@ func railHasAgent(s tuitest.Screen, railCol int, pane string) bool {
 	return false
 }
 
-// railShot saves the frame as text and as a PNG drawn by internal/shot.
+// railShot saves the frame as text and as a PNG drawn by tuios.dev/shot.
 func railShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := artifactDir(t)

@@ -24,8 +24,8 @@ const (
 	svgCellH = svgFontSize * 1.3
 )
 
-// RenderSVG renders the grid, frame, and decorations to an SVG document.
-func RenderSVG(g *Grid, f *Frame, decorations []Decoration) []byte {
+// RenderSVG renders the grid and frame to an SVG document.
+func RenderSVG(g *Grid, f *Frame) []byte {
 	l := computeLayout(g, f, svgCellW, svgCellH, 1)
 	var b strings.Builder
 	b.Grow(1 << 15)
@@ -76,7 +76,6 @@ func RenderSVG(g *Grid, f *Frame, decorations []Decoration) []byte {
 	for _, r := range textRuns(g) {
 		writeSVGRun(&b, r, l)
 	}
-	_ = decorations // reserved: annotation shapes land in this group
 	b.WriteString("</g>\n</svg>\n")
 	return []byte(b.String())
 }
@@ -95,9 +94,9 @@ func writeSVGDefs(b *strings.Builder, g *Grid, f *Frame, l layout, family string
 				fnum(l.ch*0.45), fnum(l.ch*0.6))
 		}
 	}
-	if f != nil && f.EmbedFont && len(f.FontData) > 0 {
+	if f != nil && f.EmbedFont && len(f.Font.Data) > 0 {
 		fmt.Fprintf(b, `<style>@font-face{font-family:%q;src:url(data:font/ttf;base64,%s);}</style>`+"\n",
-			svgPrimaryFamily(family), base64.StdEncoding.EncodeToString(f.FontData))
+			svgPrimaryFamily(family), base64.StdEncoding.EncodeToString(f.Font.Data))
 	}
 	fmt.Fprintf(b, `<style>text{font-family:%s;font-size:%spx;white-space:pre;}</style>`+"\n",
 		xmlEscape(family), fnum(svgFontSize))
@@ -117,7 +116,7 @@ func svgPrimaryFamily(stack string) string {
 func writeSVGTitleBar(b *strings.Builder, g *Grid, f *Frame, l layout, family string) {
 	barY := l.cardY
 	// A hairline under the bar, quiet against the card.
-	rule := Mix(g.BG, g.FG, 0.12)
+	rule := mix(g.BG, g.FG, 0.12)
 	fmt.Fprintf(b, `<rect x="%s" y="%s" width="%s" height="1" fill="%s"/>`+"\n",
 		fnum(l.cardX), fnum(barY+l.titleH-1), fnum(l.cardW), Hex(rule))
 
@@ -145,7 +144,7 @@ func writeSVGTitleBar(b *strings.Builder, g *Grid, f *Frame, l layout, family st
 	if f.Title != "" {
 		fmt.Fprintf(b, `<text x="%s" y="%s" text-anchor="middle" fill="%s">%s</text>`+"\n",
 			fnum(l.cardX+l.cardW/2), fnum(cy+svgFontSize*0.34),
-			Hex(Mix(g.FG, g.BG, 0.3)), xmlEscape(f.Title))
+			Hex(mix(g.FG, g.BG, 0.3)), xmlEscape(f.Title))
 	}
 	_ = family
 }

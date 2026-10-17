@@ -1,7 +1,7 @@
 package session
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 	"tuios.dev/vt"
 )
 

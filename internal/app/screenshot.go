@@ -12,9 +12,9 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/shot"
 	"tuios.dev/vt"
 )
 
@@ -532,14 +532,14 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd
 			// it is the painted one when there is one.
 			palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
 		}
-		frame, warnings := capture.Frame(settings, palette, plain)
+		frame, warnings := capture.Frame(settings, palette, grid, plain)
 		if paletteWarn != "" {
 			// The no-theme notice rides with the rest of the warnings rather
 			// than being raised on its own, so it arrives with the capture it
 			// describes instead of ahead of it.
 			warnings = append([]string{paletteWarn}, warnings...)
 		}
-		if len(frame.FontData) == 0 && shot.HasPrivateUse(grid) {
+		if len(frame.Font.Data) == 0 && shot.HasPrivateUse(grid) {
 			warnings = append(warnings, capture.FontFallbackNotice)
 		}
 		msg.frame, msg.warnings = frame, warnings
@@ -590,7 +590,7 @@ func renderCaptureBytes(format shot.Format, g *shot.Grid, f *shot.Frame, wantPix
 		}
 		return data, img, nil
 	}
-	data, err := shot.Render(format, g, f, nil)
+	data, err := shot.Render(format, g, f)
 	if err != nil {
 		return nil, nil, err
 	}

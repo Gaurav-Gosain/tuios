@@ -18,9 +18,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/spf13/cobra"
+	"tuios.dev/shot"
 	"tuios.dev/vt"
 )
 

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
+	"tuios.dev/shot/mosaic"
 )
 
 // BenchmarkSymbolImageFrame is the keystroke frame of a pane that shows a

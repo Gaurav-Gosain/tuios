@@ -28,6 +28,7 @@ on:
       - progstatus/**
       - vt/**
       - swatch/**
+      - shot/**
       - cmd/**
       - .github/workflows/docker-build.yml
   pull_request:
@@ -41,6 +42,7 @@ on:
       - progstatus/**
       - vt/**
       - swatch/**
+      - shot/**
       - cmd/**
       - .github/workflows/docker-build.yml
   workflow_dispatch:

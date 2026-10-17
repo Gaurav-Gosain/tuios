@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/shot"
 )
 
 // A palette index cannot say what colour it is: only the terminal drawing it

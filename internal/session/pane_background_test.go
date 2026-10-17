@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 	"tuios.dev/vt"
 )
 

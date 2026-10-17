@@ -3,7 +3,7 @@ package shot
 import (
 	"math"
 
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
+	"tuios.dev/shot/mosaic"
 )
 
 // Procedural geometry for the glyph ranges a font cannot be trusted with.
@@ -44,8 +44,8 @@ type gpath struct {
 	crisp   bool
 }
 
-// IsProcedural reports whether r is drawn as geometry instead of font text.
-func IsProcedural(r rune) bool {
+// isProcedural reports whether r is drawn as geometry instead of font text.
+func isProcedural(r rune) bool {
 	switch {
 	case r >= 0x2500 && r <= 0x259F:
 		return true
@@ -73,7 +73,7 @@ func IsProcedural(r rune) bool {
 // coordinates, snapped to the pixel grid as the note at the top of this file
 // says. ok is false when r is not in a covered range.
 func proceduralPaths(r rune, x, y, w, h float64) ([]gpath, bool) {
-	if !IsProcedural(r) {
+	if !isProcedural(r) {
 		return nil, false
 	}
 	// The cell's own edges, on whole pixels. Rounding the absolute position of

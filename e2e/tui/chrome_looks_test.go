@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuitest"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/shot"
 )
 
 // The chrome under a light theme and a dark terminal, at each colour depth and

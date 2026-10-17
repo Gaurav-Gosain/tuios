@@ -8,7 +8,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuitest"
 
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 )
 
 // The way out of the spotlight, driven against the real binary.

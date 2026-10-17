@@ -21,11 +21,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"tuios.dev/shot"
 )
 
 // runListVerbs prints the control protocol's verb catalog. It is the discovery

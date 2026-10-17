@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"tuios.dev/shot/mosaic"
 	"tuios.dev/vt"
 )
 
@@ -40,7 +40,7 @@ const (
 	// host that has kitty graphics and not sixel.
 	sixelViaKitty
 	// sixelSymbols draws the image as block glyphs, for a host with neither
-	// (see internal/mosaic). It is text, so nothing is sent beside the frame.
+	// (see shot/mosaic). It is text, so nothing is sent beside the frame.
 	sixelSymbols
 )
 

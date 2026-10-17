@@ -10,8 +10,6 @@ import (
 	"math"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
-	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/vector"
 )
@@ -19,16 +17,17 @@ import (
 // PNG backend: direct cell rasterization, not SVG-to-PNG. freeze's route
 // (resvg compiled to WASM) works but drags a WASM runtime into the binary;
 // the direct blitter shares the procedural glyph code the SVG backend needs
-// anyway and renders in milliseconds. Embedded Go Mono regular and bold are
-// the fallback faces; Frame.FontData loads the user's own font so their
-// Nerd Font icons render, and a glyph in neither font draws as a dotted
-// outline box: visible tofu rather than silent blanks.
+// anyway and renders in milliseconds. Frame.Font loads the user's own font so
+// their Nerd Font icons render, Frame.Fallback adds faces for the glyphs it
+// lacks, and embedded Go Mono regular and bold come last. A glyph in none of
+// them draws as a dotted outline box: visible tofu rather than silent blanks.
+// font.go holds the search order.
 
 const pngBaseFontSize = 14.0
 
-// RenderPNG renders the grid, frame, and decorations to PNG bytes.
-func RenderPNG(g *Grid, f *Frame, decorations []Decoration) ([]byte, error) {
-	img, err := Raster(g, f, decorations...)
+// RenderPNG renders the grid and frame to PNG bytes.
+func RenderPNG(g *Grid, f *Frame) ([]byte, error) {
+	img, err := Raster(g, f)
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +41,7 @@ func RenderPNG(g *Grid, f *Frame, decorations []Decoration) ([]byte, error) {
 // them shrunk to the box it will draw them in. Rendering twice cost a full
 // second on a full-screen capture and produced two pictures that had to be kept
 // in step; rendering once and encoding twice cannot drift.
-func Raster(g *Grid, f *Frame, decorations ...Decoration) (*image.RGBA, error) {
-	_ = decorations
+func Raster(g *Grid, f *Frame) (*image.RGBA, error) {
 	scale := 2
 	if f != nil && f.Scale >= 1 && f.Scale <= 4 {
 		scale = f.Scale
@@ -149,110 +147,6 @@ func Downscale(img *image.RGBA, maxW, maxH int) *image.RGBA {
 	return out
 }
 
-// faceSet is the resolved fallback order: the user's font first when there is
-// one, then Go Mono, each with its bold cut when one was found.
-type faceSet struct {
-	user, userBold, regular, bold                 font.Face
-	userFont, userBoldFont, regularFont, boldFont *sfnt.Font
-	size                                          float64
-	buf                                           sfnt.Buffer
-}
-
-// parseFontFace reads one face out of font bytes that may hold several.
-//
-// opentype.Parse refuses a collection outright ("invalid single font"), and
-// since fontconfig answers "Menlo" with a .ttc, that refusal would fail the
-// whole capture rather than cost it its icons. ParseCollection reads a plain
-// TTF or OTF as a collection of one, so it is the single path for both.
-func parseFontFace(data []byte, index int) (*sfnt.Font, error) {
-	coll, err := sfnt.ParseCollection(data)
-	if err != nil {
-		return nil, fmt.Errorf("parse font: %w", err)
-	}
-	if index < 0 || index >= coll.NumFonts() {
-		// An index the file does not have is a resolver and a file that
-		// disagree. The first face is a font from the family that was asked
-		// for, which beats no capture at all.
-		index = 0
-	}
-	font, err := coll.Font(index)
-	if err != nil {
-		return nil, fmt.Errorf("font %d of collection: %w", index, err)
-	}
-	return font, nil
-}
-
-func loadFaces(f *Frame, size float64) (*faceSet, error) {
-	fs := &faceSet{size: size}
-	opts := &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull}
-	regularTTF, boldTTF, err := goMonoFonts()
-	if err != nil {
-		return nil, fmt.Errorf("inflate embedded font: %w", err)
-	}
-	if fs.regularFont, err = opentype.Parse(regularTTF); err != nil {
-		return nil, fmt.Errorf("parse embedded font: %w", err)
-	}
-	if fs.regular, err = opentype.NewFace(fs.regularFont, opts); err != nil {
-		return nil, fmt.Errorf("embedded face: %w", err)
-	}
-	if fs.boldFont, err = opentype.Parse(boldTTF); err != nil {
-		return nil, fmt.Errorf("parse embedded bold font: %w", err)
-	}
-	if fs.bold, err = opentype.NewFace(fs.boldFont, opts); err != nil {
-		return nil, fmt.Errorf("embedded bold face: %w", err)
-	}
-	if f != nil && len(f.FontData) > 0 {
-		uf, err := parseFontFace(f.FontData, f.FontIndex)
-		if err != nil {
-			return nil, fmt.Errorf("screenshot.font_file did not parse: %w", err)
-		}
-		face, err := opentype.NewFace(uf, opts)
-		if err != nil {
-			return nil, fmt.Errorf("screenshot.font_file face: %w", err)
-		}
-		fs.userFont, fs.user = uf, face
-		// The bold cut is optional and its failure is not the capture's. A font
-		// that will not parse as bold leaves the double-strike in place, which
-		// is what happened before there was a bold cut at all.
-		if len(f.BoldFontData) > 0 {
-			if bf, berr := parseFontFace(f.BoldFontData, f.BoldFontIndex); berr == nil {
-				if bface, berr := opentype.NewFace(bf, opts); berr == nil {
-					fs.userBoldFont, fs.userBold = bf, bface
-				}
-			}
-		}
-	}
-	return fs, nil
-}
-
-// cellSize derives the grid cell from the primary face: the advance of "M"
-// wide, the face's own line box tall.
-//
-// Both dimensions are measured from the font. A hardcoded 1.25 em height
-// against JetBrainsMono (advance 0.600 em, hhea line box 1.320 em) gives an
-// aspect of 0.486 where the terminal draws 0.455, so every capture comes out
-// about seven percent wider per cell than the screen it pictures. Metrics().Height is
-// ascent - descent + lineGap, which is the same line box kitty and ghostty
-// size their cells from, so taking it makes the picture's aspect the host's.
-func (fs *faceSet) cellSize() (float64, float64) {
-	face := fs.regular
-	if fs.user != nil {
-		face = fs.user
-	}
-	adv, ok := face.GlyphAdvance('M')
-	if !ok || adv == 0 {
-		adv = fixed.I(int(fs.size * 0.6))
-	}
-	cw := fixedToFloat(adv)
-	ch := fixedToFloat(face.Metrics().Height)
-	if ch <= 0 {
-		// A face with no usable metrics still has to draw somewhere. The old
-		// hardcode is the fallback rather than the rule.
-		ch = fs.size * 1.25
-	}
-	return cw, ch
-}
-
 // fitCellToTerminal gives the raster's cell the shape of the cell of the
 // terminal being pictured.
 //
@@ -280,31 +174,6 @@ func fitCellToTerminal(f *Frame, cw, ch float64) (float64, float64) {
 	return cw, cw / f.CellAspect
 }
 
-// pick returns the face and font that can draw r, honoring bold, or nil
-// when nothing covers it (tofu).
-func (fs *faceSet) pick(r rune, bold bool) (font.Face, bool) {
-	if bold && fs.userBoldFont != nil {
-		if idx, err := fs.userBoldFont.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
-			return fs.userBold, false
-		}
-	}
-	if fs.userFont != nil {
-		if idx, err := fs.userFont.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
-			// No bold cut for this glyph, so the caller thickens it by hand.
-			return fs.user, bold
-		}
-	}
-	if bold {
-		if idx, err := fs.boldFont.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
-			return fs.bold, false
-		}
-	}
-	if idx, err := fs.regularFont.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
-		return fs.regular, false
-	}
-	return nil, false
-}
-
 func fixedToFloat(v fixed.Int26_6) float64 { return float64(v) / 64 }
 
 func drawPNGRun(img *image.RGBA, r run, l layout, faces *faceSet, g *Grid) {
@@ -314,7 +183,7 @@ func drawPNGRun(img *image.RGBA, r run, l layout, faces *faceSet, g *Grid) {
 	c := r.cell
 	ink := c.FG
 	if c.Faint {
-		ink = Mix(c.FG, c.BG, 0.45)
+		ink = mix(c.FG, c.BG, 0.45)
 	}
 
 	if r.procedural != 0 {
@@ -324,7 +193,7 @@ func drawPNGRun(img *image.RGBA, r run, l layout, faces *faceSet, g *Grid) {
 		for _, p := range paths {
 			pc := ink
 			if p.opacity > 0 {
-				pc = Mix(c.BG, ink, p.opacity)
+				pc = mix(c.BG, ink, p.opacity)
 			}
 			fillPath(img, p, 0, 0, pc)
 		}
@@ -447,7 +316,7 @@ func drawPNGDecor(img *image.RGBA, r run, x, y, w float64, l layout, ink Color) 
 }
 
 func drawPNGTitleBar(img *image.RGBA, g *Grid, f *Frame, l layout, faces *faceSet) {
-	rule := Mix(g.BG, g.FG, 0.12)
+	rule := mix(g.BG, g.FG, 0.12)
 	fillRect(img, l.cardX, l.cardY+l.titleH-1, l.cardW, 1, rule)
 	cy := l.cardY + l.titleH/2
 	r := l.titleH * 0.17
@@ -476,7 +345,7 @@ func drawPNGTitleBar(img *image.RGBA, g *Grid, f *Frame, l layout, faces *faceSe
 	case ControlsNone:
 	}
 	if f.Title != "" {
-		ink := Mix(g.FG, g.BG, 0.3)
+		ink := mix(g.FG, g.BG, 0.3)
 		tw := float64(len([]rune(f.Title))) * l.cw
 		tx := l.cardX + (l.cardW-tw)/2
 		baseline := cy + faces.size*0.34
@@ -572,7 +441,7 @@ func fillDiagonalGradient(img *image.RGBA, start, end Color) {
 	}
 	lut := make([]Color, w+h)
 	for d := range lut {
-		lut[d] = Mix(start, end, float64(d)/span)
+		lut[d] = mix(start, end, float64(d)/span)
 	}
 	for y := range h {
 		row := img.Pix[y*img.Stride : y*img.Stride+w*4]

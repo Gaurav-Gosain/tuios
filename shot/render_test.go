@@ -29,8 +29,8 @@ func TestHTMLAndSVGEscapeTheirContent(t *testing.T) {
 	g := NewGrid(24, 1, RGB(0xff, 0xff, 0xff), RGB(0, 0, 0))
 	put(g, 0, 0, `<script>&"x"`, nil)
 	for name, out := range map[string]string{
-		"svg":  string(RenderSVG(g, nil, nil)),
-		"html": string(RenderHTML(g, nil, nil)),
+		"svg":  string(RenderSVG(g, nil)),
+		"html": string(RenderHTML(g, nil)),
 	} {
 		if strings.Contains(out, "<script>") {
 			t.Errorf("%s left the markup live", name)
@@ -50,8 +50,8 @@ func TestLinksSurviveAsAnchors(t *testing.T) {
 	g := NewGrid(8, 1, RGB(0xff, 0xff, 0xff), RGB(0, 0, 0))
 	put(g, 0, 0, "click", func(c *Cell) { c.Link = "https://example.com/a?b=1&c=2" })
 	for name, out := range map[string]string{
-		"svg":  string(RenderSVG(g, nil, nil)),
-		"html": string(RenderHTML(g, nil, nil)),
+		"svg":  string(RenderSVG(g, nil)),
+		"html": string(RenderHTML(g, nil)),
 	} {
 		if !strings.Contains(out, `<a href="https://example.com/a?b=1&amp;c=2">`) {
 			t.Errorf("%s carries no escaped anchor:\n%s", name, out)

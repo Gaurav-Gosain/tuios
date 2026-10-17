@@ -1,8 +1,17 @@
-// Package shot renders a grid of resolved terminal cells to SVG, PNG, ANSI,
-// HTML, or plain text, with an optional frame around it. It is a leaf
-// package: no goroutines, no timers, no globals. A render is one pure call
-// from grid to bytes, so both the daemon and the client can link it and call
-// it from wherever a capture happens to live.
+// Package shot renders a grid of terminal cells to PNG, SVG, HTML, ANSI or
+// plain text, with an optional frame around it.
+//
+// A Grid holds resolved cells: each one has its text, its colours as RGB and
+// its attributes. Build one cell by cell with NewGrid, or read a terminal
+// emulator's screen with FromScreen. Render then turns the grid into the
+// bytes of one format. A render is one call from grid to bytes, with no
+// goroutines and no timers.
+//
+// PNG draws text with Frame.Font, then each face of Frame.Fallback, then the
+// Go Mono it embeds. Box drawing, block elements, braille and powerline
+// glyphs are drawn as shapes, so they join up whatever the font. A glyph no
+// face has draws as a dotted box. MissingGlyphs lists those glyphs, so a
+// caller with a font database can add fallback faces for them.
 package shot
 
 import (
@@ -38,17 +47,17 @@ func ParseHex(s string) (Color, bool) {
 	return RGB(r, g, b), true
 }
 
-// Mix blends a toward b by t in [0,1], per channel in sRGB. Good enough for
+// mix blends a toward b by t in [0,1], per channel in sRGB. Good enough for
 // deriving wash stops and chrome tints; this is styling, not color science.
-func Mix(a, b Color, t float64) Color {
+func mix(a, b Color, t float64) Color {
 	lerp := func(x, y uint8) uint8 {
 		return uint8(float64(x) + (float64(y)-float64(x))*t + 0.5)
 	}
 	return Color{R: lerp(a.R, b.R), G: lerp(a.G, b.G), B: lerp(a.B, b.B), A: 255}
 }
 
-// Luma is the WCAG relative luminance of c.
-func Luma(c Color) float64 {
+// luma is the WCAG relative luminance of c.
+func luma(c Color) float64 {
 	lin := func(v uint8) float64 {
 		f := float64(v) / 255
 		if f <= 0.04045 {
@@ -123,18 +132,6 @@ func NewGrid(cols, rows int, fg, bg Color) *Grid {
 		g.Cells[y] = row
 	}
 	return g
-}
-
-// Decoration is a cell-addressed annotation shape. Nothing constructs one
-// yet; the parameter exists so the render signature does not change when
-// annotation lands (design section 13), and so the backends' cell-to-pixel
-// transform is already the address space annotations will use.
-type Decoration struct {
-	Kind       string
-	Col, Row   int
-	Cols, Rows int
-	Color      Color
-	Note       string
 }
 
 // HasPrivateUse reports whether the grid holds a glyph from a private use area.

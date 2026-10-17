@@ -38,7 +38,7 @@ func textRuns(g *Grid) []run {
 			}
 			r := firstRune(c.Cluster)
 			single := len(c.Cluster) == len(string(r))
-			procedural := c.Width == 1 && single && IsProcedural(r)
+			procedural := c.Width == 1 && single && isProcedural(r)
 			multi := c.Cluster != "" && !single
 			if procedural || c.Width == 2 || multi {
 				flush()
@@ -203,18 +203,17 @@ type Frame struct {
 
 	// FontFamily is the CSS font stack for SVG and HTML.
 	FontFamily string
-	// FontData embeds a font: SVG and HTML inline it as @font-face, PNG
-	// rasterizes with it. Nil means reference-only SVG/HTML and the
-	// embedded Go Mono for PNG.
-	FontData []byte
-	// BoldFontData is the bold cut of FontData. Nil double-strikes instead.
-	BoldFontData []byte
-	// FontIndex and BoldFontIndex select a face inside FontData when the file
-	// is a collection. macOS ships most of its own monospace faces as .ttc,
-	// and fontconfig answers with them on every platform, so the bytes a
-	// resolver hands over are regularly several faces rather than one.
-	FontIndex, BoldFontIndex int
-	// EmbedFont allows SVG and HTML to inline FontData as an @font-face. Only
+	// Font is the font PNG rasterizes with, and the one SVG and HTML inline
+	// as an @font-face when EmbedFont is set. No Data means reference-only
+	// SVG and HTML and the embedded Go Mono for PNG.
+	Font Font
+	// BoldFont is the bold cut of Font. No Data double-strikes bold cells.
+	BoldFont Font
+	// Fallback lists the faces PNG looks in, in order, for a glyph Font does
+	// not have. Go Mono comes after them. MissingGlyphs says which runes
+	// still need a face.
+	Fallback []Font
+	// EmbedFont allows SVG and HTML to inline Font as an @font-face. Only
 	// a font the user named themselves earns that: embedding turns a kilobyte
 	// of SVG into megabytes, and a font tuios found by asking the terminal was
 	// found for the raster, not for the export.
@@ -269,18 +268,18 @@ func computeLayout(g *Grid, f *Frame, cw, ch, scale float64) layout {
 // contrastRatio is WCAG contrast between two colors, local so the package
 // stays a leaf (overlay has the same math for chrome).
 func contrastRatio(a, b Color) float64 {
-	la, lb := Luma(a), Luma(b)
+	la, lb := luma(a), luma(b)
 	if la < lb {
 		la, lb = lb, la
 	}
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// DeriveWash builds the auto gradient: two accent-family stops blended
+// deriveWash builds the auto gradient: two accent-family stops blended
 // toward the content background until they sit quietly next to it. A
 // gruvbox pane gets a gruvbox wash, a catppuccin pane gets theirs, because
 // the stops start from the theme's own accents.
-func DeriveWash(bg Color, accents []Color) (Color, Color) {
+func deriveWash(bg Color, accents []Color) (Color, Color) {
 	a1, a2 := bg, bg
 	if len(accents) > 0 {
 		a1 = accents[0]
@@ -289,8 +288,8 @@ func DeriveWash(bg Color, accents []Color) (Color, Color) {
 	if len(accents) > 1 {
 		a2 = accents[1]
 	}
-	start := quietStop(Mix(a1, bg, 0.45), bg)
-	end := quietStop(Mix(a2, bg, 0.6), bg)
+	start := quietStop(mix(a1, bg, 0.45), bg)
+	end := quietStop(mix(a2, bg, 0.6), bg)
 	return start, end
 }
 
@@ -299,7 +298,7 @@ func DeriveWash(bg Color, accents []Color) (Color, Color) {
 // legible as a shape against the content.
 func quietStop(c, bg Color) Color {
 	for i := 0; i < 16 && contrastRatio(c, bg) > 2.2; i++ {
-		c = Mix(c, bg, 0.2)
+		c = mix(c, bg, 0.2)
 	}
 	return c
 }

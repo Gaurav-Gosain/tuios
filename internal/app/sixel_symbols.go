@@ -9,12 +9,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/shot/mosaic"
 	"tuios.dev/vt"
 )
 
@@ -23,7 +23,7 @@ import (
 // The Linux console under kmscon, and any terminal without sixel and kitty
 // graphics, can show a pane's image only as text. In that case the sixel
 // passthrough runs in sixelSymbols mode: each image is drawn as block glyphs
-// (internal/mosaic), one glyph with two colours per image cell, and a pass
+// (shot/mosaic), one glyph with two colours per image cell, and a pass
 // over the composed canvas puts those glyphs where the image's marker cells
 // are. Everything the marker model gives a picture holds: the glyphs move
 // with the pane, scroll into the scrollback, are cut by popups and other

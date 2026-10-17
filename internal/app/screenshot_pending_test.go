@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 )
 
 // The preview-first contract: the panel is up on the frame the gesture ended

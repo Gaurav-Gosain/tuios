@@ -18,6 +18,7 @@ on:
       - "progstatus/**"
       - "vt/**"
       - "swatch/**"
+      - "shot/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"

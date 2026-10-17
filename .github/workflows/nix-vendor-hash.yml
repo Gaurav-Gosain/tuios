@@ -17,6 +17,8 @@ on:
       - vt/go.sum
       - swatch/go.mod
       - swatch/go.sum
+      - shot/go.mod
+      - shot/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock
@@ -32,6 +34,8 @@ on:
       - vt/go.sum
       - swatch/go.mod
       - swatch/go.sum
+      - shot/go.mod
+      - shot/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock

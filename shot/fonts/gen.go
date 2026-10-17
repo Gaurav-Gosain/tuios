@@ -4,11 +4,19 @@
 // version in go.mod. Run it from the repository root after changing that
 // version:
 //
-//	go run ./internal/shot/fonts/gen.go
+//	go run ./shot/fonts/gen.go
 //
 // The gofont packages hold each face as a []byte literal, 350 KB for the
 // two that PNG screenshots use; gzipped they are 157 KB, and they are
 // inflated on the first PNG. README is the fonts' licence.
+//
+// The committed files are then recompressed with zopfli, which writes the
+// same gzip format 6.6 KB smaller and costs nothing to read:
+//
+//	zopfli --gzip --i100 shot/fonts/Go-Mono.ttf shot/fonts/Go-Mono-Bold.ttf
+//
+// on the inflated files. Without zopfli, this program's output is correct
+// and a little larger.
 package main
 
 import (
@@ -38,7 +46,7 @@ func main() {
 		if err := zw.Close(); err != nil {
 			panic(err)
 		}
-		if err := os.WriteFile("internal/shot/fonts/"+name, buf.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile("shot/fonts/"+name, buf.Bytes(), 0o644); err != nil {
 			panic(err)
 		}
 		fmt.Printf("%s: %d -> %d bytes\n", name, len(ttf), buf.Len())

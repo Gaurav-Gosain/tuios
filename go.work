@@ -6,6 +6,7 @@ use (
 	.
 	./e2e/tui
 	./progstatus
+	./shot
 	./swatch
 	./vt
 )

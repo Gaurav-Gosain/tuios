@@ -56,22 +56,21 @@ func (f Format) MediaType() string {
 }
 
 // Render renders the grid in the given format. The frame applies to the
-// pixel formats and HTML; ANSI and text are frameless by nature. The
-// decorations slice is the annotation hook from the design's section 13 and
-// is empty everywhere today.
-func Render(format Format, g *Grid, f *Frame, decorations []Decoration) ([]byte, error) {
+// pixel formats and HTML. ANSI and text have no frame. A nil frame renders
+// the bare grid.
+func Render(format Format, g *Grid, f *Frame) ([]byte, error) {
 	if g == nil || g.Cols <= 0 || g.Rows <= 0 {
 		return nil, fmt.Errorf("empty grid")
 	}
 	switch format {
 	case FormatPNG:
-		return RenderPNG(g, f, decorations)
+		return RenderPNG(g, f)
 	case FormatSVG:
-		return RenderSVG(g, f, decorations), nil
+		return RenderSVG(g, f), nil
 	case FormatANSI:
 		return RenderANSI(g), nil
 	case FormatHTML:
-		return RenderHTML(g, f, decorations), nil
+		return RenderHTML(g, f), nil
 	case FormatText:
 		return RenderText(g), nil
 	}

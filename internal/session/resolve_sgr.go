@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 )
 
 // This file implements resolved colour capture for capture-pane.

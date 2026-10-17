@@ -149,6 +149,34 @@ func MakeCell(content string, width int, style uv.Style, link uv.Link, p *Palett
 	return c
 }
 
+// Screen is a terminal screen that FromScreen can read. The emulators of
+// tuios.dev/vt satisfy it.
+type Screen interface {
+	Width() int
+	Height() int
+	// CellAt returns the cell at column x, row y, or nil for a blank cell.
+	CellAt(x, y int) *uv.Cell
+}
+
+// FromScreen resolves every cell of s into a new grid. p supplies the colours
+// for the default, basic and indexed colours. A nil p is XTermPalette.
+func FromScreen(s Screen, p *Palette) *Grid {
+	if p == nil {
+		p = XTermPalette()
+	}
+	cols, rows := s.Width(), s.Height()
+	g := NewGrid(max(cols, 0), max(rows, 0), p.FG, p.BG)
+	for y := range g.Rows {
+		row := g.Cells[y]
+		for x := range g.Cols {
+			if c := s.CellAt(x, y); c != nil {
+				row[x] = MakeCell(c.Content, c.Width, c.Style, c.Link, p)
+			}
+		}
+	}
+	return g
+}
+
 // ReverseCursor folds the cursor into the grid by swapping the cell's
 // colors, the way a block cursor reads.
 func (g *Grid) ReverseCursor(x, y int) {
@@ -171,16 +199,16 @@ type FrameSpec struct {
 	Controls   string // auto, macos, glyphs, none
 	Title      string
 	FontFamily string
-	FontData   []byte
-	// BoldFontData is the bold cut of FontData, when the resolver found one.
-	// Without it a bold cell is double-struck, which thickens a glyph without
-	// making it the bold letterform the terminal drew.
-	BoldFontData []byte
-	// FontIndex and BoldFontIndex select a face inside a font collection. Zero
-	// is the first face, which is also the answer for a plain single font.
-	FontIndex, BoldFontIndex int
+	// Font is the font to rasterize with. No Data means Go Mono.
+	Font Font
+	// BoldFont is the bold cut of Font, when the resolver found one. Without
+	// it a bold cell is double-struck, which thickens a glyph without making
+	// it the bold letterform the terminal drew.
+	BoldFont Font
+	// Fallback is the list of faces for glyphs Font does not have.
+	Fallback []Font
 	// EmbedFont says the font may be written into SVG and HTML output as an
-	// @font-face. It is separate from FontData because the two questions are
+	// @font-face. It is separate from Font because the two questions are
 	// different: PNG has to rasterize with a real file, and a file found for
 	// it by asking the terminal is not a file the user asked to have three
 	// megabytes of copied into every SVG they export.
@@ -216,10 +244,9 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 		Shadow:        spec.Shadow,
 		Title:         spec.Title,
 		FontFamily:    spec.FontFamily,
-		FontData:      spec.FontData,
-		BoldFontData:  spec.BoldFontData,
-		FontIndex:     spec.FontIndex,
-		BoldFontIndex: spec.BoldFontIndex,
+		Font:          spec.Font,
+		BoldFont:      spec.BoldFont,
+		Fallback:      spec.Fallback,
 		EmbedFont:     spec.EmbedFont,
 		Scale:         spec.Scale,
 		CellAspect:    in.CellAspect,
@@ -255,7 +282,7 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 	case spec.Background == "none":
 		f.Transparent = true
 	case spec.Background == "" || spec.Background == "auto":
-		f.WashStart, f.WashEnd = DeriveWash(p.BG, accents)
+		f.WashStart, f.WashEnd = deriveWash(p.BG, accents)
 	case strings.Contains(spec.Background, ".."):
 		parts := strings.SplitN(spec.Background, "..", 2)
 		a, okA := ParseHex(parts[0])
@@ -263,13 +290,13 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 		if okA && okB {
 			f.WashStart, f.WashEnd = a, b
 		} else {
-			f.WashStart, f.WashEnd = DeriveWash(p.BG, accents)
+			f.WashStart, f.WashEnd = deriveWash(p.BG, accents)
 		}
 	default:
 		if c, ok := ParseHex(spec.Background); ok {
 			f.WashStart, f.WashEnd = c, c
 		} else {
-			f.WashStart, f.WashEnd = DeriveWash(p.BG, accents)
+			f.WashStart, f.WashEnd = deriveWash(p.BG, accents)
 		}
 	}
 	return f

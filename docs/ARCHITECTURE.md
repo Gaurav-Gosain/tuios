@@ -871,7 +871,7 @@ the frame's text in the same write:
 - On a host with kitty graphics and no sixel, as a kitty image with one
   placement per rectangle, cropped with a source rectangle.
 - On a host with neither, as block glyphs (`internal/app/sixel_symbols.go`,
-  `internal/mosaic`): one glyph with a foreground and a background colour per
+  `shot/mosaic`): one glyph with a foreground and a background colour per
   image cell. Each cell is split into sub-cells (2x4 for octants, 2x3 for
   sextants, 2x2 for quadrants, 1x2 for half blocks), each the average of the
   pixels under it in linear light, and the sub-cells are split into the two

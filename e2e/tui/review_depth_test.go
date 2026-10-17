@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The review overlay's diff at each colour depth a terminal can have, on a
@@ -31,7 +31,7 @@ import (
 //     code keeps its colours and its marks under it.
 //
 // Each frame is saved as text, as styled text and as a PNG drawn by tuios's
-// own renderer (internal/shot), with the palette a terminal of that kind
+// own renderer (tuios.dev/shot), with the palette a terminal of that kind
 // paints the sixteen slots with.
 
 // reviewDepthBase is the file the fan's base commit holds; reviewDepthNew is

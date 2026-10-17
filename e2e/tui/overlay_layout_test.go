@@ -13,7 +13,7 @@ import (
 // is empty in the middle of it.
 //
 // Every step saves the frame as text, styled text and a PNG drawn by tuios's
-// own renderer (internal/shot), at 120x40 and 80x24, on a dark terminal and
+// own renderer (tuios.dev/shot), at 120x40 and 80x24, on a dark terminal and
 // under a light theme, and at 256 and 16 colours at 120x40.
 
 // overlayLayoutRun is one terminal the layouts are drawn in.

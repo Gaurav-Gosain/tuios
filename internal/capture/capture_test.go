@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"tuios.dev/shot"
 )
 
 // TestFileNameIsSortableAndSafe pins the generated name: a slug a filesystem
@@ -53,11 +53,11 @@ func TestUnreadableFontFileWarnsInsteadOfFailing(t *testing.T) {
 	// running it happens to have installed.
 	s.FontFamily, s.HostFontFamily = "", ""
 	p, _ := Palette("")
-	f, warnings := Frame(s, p, false)
+	f, warnings := Frame(s, p, nil, false)
 	if f == nil {
 		t.Fatal("a missing font file lost the frame")
 	}
-	if len(f.FontData) != 0 {
+	if len(f.Font.Data) != 0 {
 		t.Error("a missing font file still produced font data")
 	}
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "font file") {

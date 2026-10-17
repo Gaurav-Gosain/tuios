@@ -17,9 +17,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The host terminal's own colours, told to the programs in the panes and used
@@ -138,7 +138,7 @@ func renderScreenPNG(t *testing.T, s tuitest.Screen, p *shot.Palette, path strin
 			g.Cells[y][x] = shot.MakeCell(c.Content, c.Width, style, uv.Link{}, p)
 		}
 	}
-	data, err := shot.RenderPNG(g, nil, nil)
+	data, err := shot.RenderPNG(g, nil)
 	if err != nil {
 		t.Fatalf("render %s: %v", path, err)
 	}

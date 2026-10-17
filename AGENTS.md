@@ -112,8 +112,8 @@ docker run -it --rm tuios
 Some parts of tuios are Go modules of their own, published under
 `tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
 that points the go command at the folder in this repository. They are
-`progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`) and `swatch/`
-(`tuios.dev/swatch`).
+`progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
+(`tuios.dev/swatch`) and `shot/` (`tuios.dev/shot`).
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -179,7 +179,6 @@ tuios/
 │   ├── review/             # Reading a worktree's diff, and the notes left on it
 │   ├── diffview/           # Drawing diff lines: chroma highlighting, split layout, changed words
 │   ├── capture/            # Turns a screenshot request and config into what shot renders
-│   ├── shot/               # Renders a cell grid to SVG, PNG, ANSI, HTML or text
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── memtrim/            # Gives the heap a burst left behind back to the OS once the process settles
@@ -213,6 +212,7 @@ tuios/
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil)
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
+├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells
 ├── swatch/                 # tuios.dev/swatch, a Go module of its own: desktop theme palettes (Omarchy), followed live
 ├── vt/                     # tuios.dev/vt, a Go module of its own: the terminal emulator, pure Go, plus libghostty-vt behind -tags ghostty
 │   ├── emulator.go         # The pure Go Emulator and its write path

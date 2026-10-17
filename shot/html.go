@@ -12,8 +12,7 @@ import (
 // no fonts installed. The frame carries over as CSS on two nested divs.
 
 // RenderHTML renders the grid and frame to a standalone HTML document.
-func RenderHTML(g *Grid, f *Frame, decorations []Decoration) []byte {
-	_ = decorations
+func RenderHTML(g *Grid, f *Frame) []byte {
 	var b strings.Builder
 	b.Grow(1 << 15)
 	b.WriteString("<!doctype html>\n<meta charset=\"utf-8\">\n")
@@ -23,9 +22,9 @@ func RenderHTML(g *Grid, f *Frame, decorations []Decoration) []byte {
 		family = f.FontFamily
 	}
 	b.WriteString("<style>\n")
-	if f != nil && f.EmbedFont && len(f.FontData) > 0 {
+	if f != nil && f.EmbedFont && len(f.Font.Data) > 0 {
 		fmt.Fprintf(&b, "@font-face{font-family:%q;src:url(data:font/ttf;base64,%s);}\n",
-			svgPrimaryFamily(family), base64.StdEncoding.EncodeToString(f.FontData))
+			svgPrimaryFamily(family), base64.StdEncoding.EncodeToString(f.Font.Data))
 	}
 	fmt.Fprintf(&b, "pre{margin:0;font-family:%s;font-size:14px;line-height:1.3;}\n", family)
 	b.WriteString("a{color:inherit;}\n</style>\n")
@@ -80,7 +79,7 @@ func writeHTMLTitleBar(b *strings.Builder, g *Grid, f *Frame) {
 	}
 	if f.Title != "" {
 		fmt.Fprintf(b, `<span style="flex:1;text-align:center;color:%s;font-family:%s;font-size:13px">%s</span>`,
-			Hex(Mix(g.FG, g.BG, 0.3)), f.FontFamily, html.EscapeString(f.Title))
+			Hex(mix(g.FG, g.BG, 0.3)), f.FontFamily, html.EscapeString(f.Title))
 		// Balance the controls so the title centers on the card.
 		b.WriteString(`<span style="width:47px"></span>`)
 	}

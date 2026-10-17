@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The chrome at each colour depth a terminal can have. The depth is what the
@@ -19,7 +19,7 @@ import (
 // (Apple Terminal, mosh, tmux without Tc), and COLORTERM=truecolor is 24-bit.
 //
 // Each run saves the frame as text, as styled text and as a PNG drawn by
-// tuios's own renderer (internal/shot) from the cells the terminal received,
+// tuios's own renderer (tuios.dev/shot) from the cells the terminal received,
 // with the palette a terminal of that kind would paint the sixteen slots with.
 
 // chromeDepth is one terminal the chrome is drawn for.
@@ -80,7 +80,7 @@ func resolveCell(c tuitest.Color, p *shot.Palette, def shot.Color) shot.Color {
 	return def
 }
 
-// savePNG draws the screen through internal/shot and writes it beside the
+// savePNG draws the screen through tuios.dev/shot and writes it beside the
 // text artifacts, so the frame can be looked at the way the terminal shows it.
 func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) {
 	t.Helper()
@@ -105,7 +105,7 @@ func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) 
 			g.Cells[y][x] = cell
 		}
 	}
-	data, err := shot.RenderPNG(g, nil, nil)
+	data, err := shot.RenderPNG(g, nil)
 	if err != nil {
 		t.Fatalf("render %s: %v", name, err)
 	}

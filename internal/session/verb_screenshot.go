@@ -7,8 +7,8 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/shot"
 )
 
 // The screenshot verb renders a window to a styled image and writes it.
@@ -102,10 +102,10 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	settings.Title = d.screenshotTitle(sess, p.Window, settings.Title)
-	frame, frameWarnings := capture.Frame(settings, palette, false)
+	frame, frameWarnings := capture.Frame(settings, palette, grid, false)
 	warnings = append(warnings, frameWarnings...)
 
-	data, err := shot.Render(settings.Format, grid, frame, nil)
+	data, err := shot.Render(settings.Format, grid, frame)
 	if err != nil {
 		return nil, newVerbError(ErrVerbCommandFailed, err.Error())
 	}

@@ -18,6 +18,7 @@ on:
       - "progstatus/**"
       - "vt/**"
       - "swatch/**"
+      - "shot/**"
       - "cmd/tuios-web/**"
       - "internal/app/**"
       - "internal/input/**"

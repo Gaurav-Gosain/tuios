@@ -27,7 +27,7 @@ At 16 colours the glyphs are always half blocks, dithered to the 16 colours.
 
 ## What tuios does
 
-`internal/mosaic` turns a picture into cells. A cell is split into sub-cells:
+`shot/mosaic` turns a picture into cells. A cell is split into sub-cells:
 2x4 for octants, 2x3 for sextants, 2x2 for quadrants and 1x2 for half blocks.
 Each sub-cell is the average of the pixels under it, taken in linear light.
 The sub-cells are then split into the two groups whose means in OKLab leave
@@ -77,7 +77,7 @@ change in the settings page applies on the next frame, except to images that
 arrived while it was `off`: those were never decoded and keep the box.
 
 `tuios screenshot` and the e2e frames draw sextants and octants themselves
-(`internal/shot`), as kitty and Ghostty do, since the embedded font has none.
+(`shot`), as kitty and Ghostty do, since the embedded font has none.
 
 ### Not done
 
