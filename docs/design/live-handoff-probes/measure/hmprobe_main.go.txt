@@ -1,0 +1,30 @@
+// Temporary probe: creates a detached session at WxH (the CLI hardcodes 80x24,
+// cmd/tuios/session_commands.go:276-278). Build: copy to <worktree>/cmd/zz-hmprobe/main.go,
+// go build -o <scratch>/hmprobe ./cmd/zz-hmprobe, then rm -rf cmd/zz-hmprobe.
+package main
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+)
+
+func main() {
+	if err := serverscope.ApplyEnv(); err != nil {
+		panic(err)
+	}
+	w, _ := strconv.Atoi(os.Args[2])
+	h, _ := strconv.Atoi(os.Args[3])
+	c := session.NewClient(&session.ClientConfig{Version: "dev"})
+	if err := c.Connect(); err != nil {
+		panic(err)
+	}
+	defer c.Close()
+	if err := c.CreateDetachedSessionIn(os.Args[1], w, h, "/tmp"); err != nil {
+		panic(err)
+	}
+	fmt.Println("ok")
+}

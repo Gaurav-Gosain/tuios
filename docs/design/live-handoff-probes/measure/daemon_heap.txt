@@ -1,0 +1,15 @@
+idle 200x50|0 panes|HeapAlloc=4784KB|HeapInuse=6717KB|Sys=19646KB|RSS=34240KiB
+idle 200x50|60 panes t+3s|HeapAlloc=17010KB|HeapInuse=20275KB|Sys=63904KB|RSS=80640KiB
+idle 200x50|60 panes t+35s (after 30s release loop)|HeapAlloc=17036KB|HeapInuse=20340KB|Sys=63904KB|RSS=66976KiB
+w60 stty: 48 198
+children: 60
+print1000 200x50|0 panes|HeapAlloc=4779KB|HeapInuse=6520KB|Sys=20662KB|RSS=34128KiB
+print1000 200x50|60 panes t+3s|HeapAlloc=100068KB|HeapInuse=106070KB|Sys=224688KB|RSS=241056KiB
+print1000 200x50|60 panes t+35s (after 30s release loop)|HeapAlloc=100093KB|HeapInuse=106078KB|Sys=224753KB|RSS=162928KiB
+w60 stty: 48 198
+children: 60
+print1000 80x24|0 panes|HeapAlloc=4785KB|HeapInuse=6684KB|Sys=19663KB|RSS=33776KiB
+print1000 80x24|60 panes t+3s|HeapAlloc=48420KB|HeapInuse=53862KB|Sys=122820KB|RSS=140832KiB
+print1000 80x24|60 panes t+35s (after 30s release loop)|HeapAlloc=48456KB|HeapInuse=53862KB|Sys=123345KB|RSS=141264KiB
+w60 stty: 22 78
+children: 60

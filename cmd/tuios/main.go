@@ -661,6 +661,7 @@ run this command manually.`,
 
 	var daemonLogLevel string
 	var daemonNoRestore bool
+	var daemonAdoptFD int
 	daemonCmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Run the TUIOS daemon in the foreground",
@@ -686,11 +687,18 @@ Debug log levels:
 			// the process a memory question is about. --pprof is a
 			// persistent flag, so it has to be honoured here too.
 			startPprofServer()
+			if daemonAdoptFD > 0 {
+				return runAdoptingDaemon(daemonAdoptFD)
+			}
 			return runDaemon(true, daemonNoRestore)
 		},
 	}
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "", "Debug log level: off, errors, basic, messages, verbose, trace")
 	daemonCmd.Flags().BoolVar(&daemonNoRestore, "no-restore", false, "Do not auto-restore saved sessions on start (use 'tuios resurrect' to restore on demand)")
+	// Set only by a live upgrade, which execs the next daemon image with the
+	// descriptor of the manifest its predecessor wrote. See daemon_upgrade.go.
+	daemonCmd.Flags().IntVar(&daemonAdoptFD, adoptFDFlag, 0, "Adopt the panes a live upgrade handed over on this descriptor")
+	_ = daemonCmd.Flags().MarkHidden(adoptFDFlag)
 
 	killDaemonCmd := &cobra.Command{
 		Use:   "kill-server",
