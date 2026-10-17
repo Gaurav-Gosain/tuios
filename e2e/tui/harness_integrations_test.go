@@ -1,7 +1,6 @@
 package tuie2e
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -9,9 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -494,13 +495,11 @@ func TestQwenApprovalFromTheInbox(t *testing.T) {
 
 // pluginDriver loads a real plugin tuios installed, under node, with a
 // stand-in for the harness's plugin API, and emits the events the test writes
-// to it, one JSON line each. The plugin runs the real tuios agent-hook for
-// every event, against the test's daemon, for the pane named in the
-// environment.
+// to it, one JSON line each. It runs in the pane, and the plugin runs the real
+// tuios agent-hook for every event, against the test's daemon, for the pane
+// named in the environment.
 type pluginDriver struct {
-	cmd   *exec.Cmd
 	stdin io.WriteCloser
-	ready chan struct{}
 }
 
 // pluginLoadDeadline is a failsafe, not a budget. The driver says when the
@@ -594,72 +593,75 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 			}
 		}
 	}
-	driver := filepath.Join("testdata", "plugindriver.mjs")
-	abs, _ := filepath.Abs(driver)
-	cmd := exec.Command(node, abs, harness, file)
-	cmd.Dir = workDirIn(t, base)
-	cmd.Env = os.Environ()
+	// The driver runs in the pane, the way a harness runs its plugins in the
+	// pane it was started in: the daemon takes a hook's report only from a
+	// harness on the pane's terminal or below its process. Events reach it
+	// through a fifo, and what it prints goes to a file.
+	driver, _ := filepath.Abs(filepath.Join("testdata", "plugindriver.mjs"))
+	dir := filepath.Join(base, "plugin-driver-"+harness)
+	mustMkdir(dir)
+	events, outFile, errFile := filepath.Join(dir, "events"), filepath.Join(dir, "stdout"), filepath.Join(dir, "stderr")
+	if err := syscall.Mkfifo(events, 0o600); err != nil {
+		t.Fatalf("make the driver's event fifo: %v", err)
+	}
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+	words := []string{"cd", quote(workDirIn(t, base)), "&&", "env"}
 	for _, key := range xdgKeys {
-		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		words = append(words, quote(key+"="+xdgDir(base, key)))
 	}
-	// After the isolation keys, so this plugin's own HOME wins over the
-	// suite's.
-	cmd.Env = append(cmd.Env, env...)
-	cmd.Env = append(cmd.Env, "TUIOS_ENV=1", "TUIOS_SESSION="+session, "TUIOS_PANE_ID="+window)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
+	for _, kv := range append(env, "TUIOS_ENV=1") {
+		words = append(words, quote(kv))
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
+	words = append(words, quote(node), quote(driver), quote(harness), quote(file),
+		"<"+quote(events), ">"+quote(outFile), "2>"+quote(errFile)+";",
+		"printf", `'DRIVER-%s\n'`, "EXITED", ">>"+quote(outFile))
+	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", window, strings.Join(words, " ")+"\n"); err != nil {
+		t.Fatalf("start the %s plugin driver in its pane: %v\n%s", harness, err, out)
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start node: %v", err)
-	}
-	d := &pluginDriver{cmd: cmd, stdin: stdin, ready: make(chan struct{})}
-	// closed is closed when node closes its stdout, which it does when it
-	// exits: a driver that dies before DRIVER-READY fails the wait at once.
-	closed := make(chan struct{})
+	opened := make(chan io.WriteCloser, 1)
 	go func() {
-		defer close(closed)
-		sc := bufio.NewScanner(stdout)
-		for sc.Scan() {
-			if sc.Text() == "DRIVER-READY" {
-				close(d.ready)
-			}
+		// Opening a fifo to write waits for its reader, the driver's shell.
+		if w, err := os.OpenFile(events, os.O_WRONLY, 0); err == nil {
+			opened <- w
 		}
 	}()
-	t.Cleanup(func() {
-		_ = stdin.Close()
-		done := make(chan struct{})
-		go func() { <-closed; _ = cmd.Wait(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
-			<-done
+	printed := func(line string) bool {
+		data, _ := os.ReadFile(outFile)
+		return slices.Contains(strings.Split(string(data), "\n"), line)
+	}
+	stderr := func() string {
+		data, _ := os.ReadFile(errFile)
+		return string(data)
+	}
+	d := &pluginDriver{}
+	start := time.Now()
+	deadline := start.Add(pluginLoadDeadline)
+	for !printed("DRIVER-READY") {
+		if printed("DRIVER-EXITED") {
+			t.Fatalf("the %s plugin driver exited before the plugin loaded:\n%s", harness, stderr())
 		}
-		if t.Failed() && stderr.Len() > 0 {
-			t.Logf("plugin driver stderr:\n%s", stderr.String())
+		if time.Now().After(deadline) {
+			t.Fatalf("the %s plugin did not load in %v:\n%s", harness, pluginLoadDeadline, stderr())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	select {
+	case d.stdin = <-opened:
+	case <-time.After(uiTimeout):
+		t.Fatalf("the %s plugin driver never opened its event fifo", harness)
+	}
+	t.Logf("the %s plugin loaded in %v", harness, time.Since(start).Round(time.Millisecond))
+	t.Cleanup(func() {
+		_ = d.stdin.Close()
+		for end := time.Now().Add(5 * time.Second); !printed("DRIVER-EXITED") && time.Now().Before(end); {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if t.Failed() {
+			if text := stderr(); text != "" {
+				t.Logf("plugin driver stderr:\n%s", text)
+			}
 		}
 	})
-	start := time.Now()
-	select {
-	case <-d.ready:
-		t.Logf("the %s plugin loaded in %v", harness, time.Since(start).Round(time.Millisecond))
-	case <-closed:
-		select {
-		case <-d.ready:
-			t.Fatalf("the %s plugin driver exited right after the plugin loaded:\n%s", harness, stderr.String())
-		default:
-		}
-		t.Fatalf("the %s plugin driver exited before the plugin loaded:\n%s", harness, stderr.String())
-	case <-time.After(pluginLoadDeadline):
-		t.Fatalf("the %s plugin did not load in %v:\n%s", harness, pluginLoadDeadline, stderr.String())
-	}
 	return d
 }
 

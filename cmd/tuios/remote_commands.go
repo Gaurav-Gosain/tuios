@@ -1559,6 +1559,8 @@ func agentRefusalText(reason string) string {
 		return "the pane's agent is mid-turn in another conversation, so this looks like a nested run."
 	case "foreign_harness":
 		return "another harness reported this pane mid-turn, so this looks like a nested run."
+	case "foreign_pane":
+		return "the harness that ran the hook does not run in this pane; it inherited the pane's TUIOS_PANE_ID."
 	default:
 		// outranked, or a daemon that predates reasons.
 		return "a higher-ranked source owns this pane."

@@ -20,6 +20,8 @@ type AgentSessionReport struct {
 	// HarnessPID is the pid of the harness process that ran the hook, 0 when
 	// unknown. See applyAgentSession for what it decides.
 	HarnessPID int
+	// foreignPane is AgentReport's: the harness does not run in the pane.
+	foreignPane bool
 	// HarnessIsCaller is AgentReport.HarnessIsCaller.
 	HarnessIsCaller bool
 }
@@ -36,7 +38,9 @@ var errAgentSessionUnchanged = errors.New("agent session is unchanged")
 // attribution: attribution is the foreground-process detector's to give, and a
 // window this report attributed would read as an agent pane with no state.
 //
-// Two guards keep a nested run off the pane, the same two set-agent-state has:
+// A report from a harness that does not run in the pane is refused with
+// foreign_pane first (harnessOutsidePane). Two guards keep a nested run off
+// the pane, the same two set-agent-state has:
 //
 //   - A window attributed to another harness refuses with foreign_harness. That
 //     is a harness a tool call started inside the pane's own agent, and its
@@ -65,6 +69,10 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		}
 		w := &st.Windows[idx]
 		stored = w.AgentSessionID
+		if r.foreignPane {
+			reason = agentRefusedForeignPane
+			return errAgentReportRefused(reason)
+		}
 		if w.AgentHarness != "" && w.AgentHarness != r.Harness {
 			reason = agentRefusedForeignHarness
 			return errAgentReportRefused(reason)
