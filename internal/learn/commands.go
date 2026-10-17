@@ -85,14 +85,24 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 	case "mode":
 		_ = o.SetMode(arg(0))
 	case "theme":
-		_ = o.SetTheme(arg(0))
+		m.setTheme(arg(0))
 	case "set":
 		// Any option tuios set-config takes, by the same path, such as
 		// appearance.glyphs or appearance.background. It changes this tab's
 		// copy of the config and nothing on disk. A docs page uses it to
 		// start a demo in the look the page is about.
-		if err := o.SetConfig(arg(0), arg(1)); err == nil {
-			o.MarkAllDirty()
+		// Only an option that changes how the screen looks goes through. See
+		// pageSettable for the ones refused.
+		path, ok := pageSettable(arg(0))
+		switch {
+		case !ok:
+		case path == "appearance.theme":
+			// The theme command's path, which also recolours the panes.
+			m.setTheme(arg(1))
+		default:
+			if err := o.SetConfig(path, arg(1)); err == nil {
+				o.MarkAllDirty()
+			}
 		}
 	case "type":
 		// Types into the focused pane, for a step that plays itself.
@@ -280,4 +290,57 @@ func Actions() map[string]string {
 	out := make(map[string]string, len(config.ActionDescriptions))
 	maps.Copy(out, config.ActionDescriptions)
 	return out
+}
+
+// pageSections are the config sections whose options only change how the
+// screen looks or how input moves through it.
+//
+// The rest name a host program, a file or folder, the daemon, or startup:
+// tape.autorun, screenshot.directory, launcher.gui_command,
+// notifications.agent.command, daemon.*. None of them work in a browser tab,
+// where os/exec and the file system fail, but a page has no reason to reach
+// them, and a section added later stays shut until it is listed here.
+var pageSections = map[string]bool{
+	"appearance": true, "dock": true, "sidebar": true, "scrollbar": true,
+	"selection": true, "screensaver": true, "spotlight": true, "pip": true,
+	"hints": true, "panes": true, "scratch": true, "workspaces": true,
+}
+
+// pageRefused are the options inside those sections that run a program, name
+// a file, or write the host clipboard.
+var pageRefused = map[string]bool{
+	"appearance.link_opener":            true,
+	"appearance.preferred_shell":        true,
+	"appearance.selection.copy_command": true,
+	"appearance.selection.osc52_write":  true,
+	"appearance.sidebar.editor":         true,
+	"appearance.sidebar.file_delete":    true,
+}
+
+// pageSettable reports the registry path the page's set command may change
+// for path, or false. It takes the spellings OS.SetConfig takes: the full
+// path, or the bare name of an appearance option. An unknown path is refused,
+// so it does nothing.
+func pageSettable(path string) (string, bool) {
+	if path == "animations" {
+		path = "appearance.animations_enabled"
+	}
+	opt, ok := config.LookupOption(path)
+	if !ok && !strings.Contains(path, ".") {
+		path = "appearance." + path
+		opt, ok = config.LookupOption(path)
+	}
+	if !ok || !pageSections[opt.Section] || pageRefused[path] {
+		return "", false
+	}
+	return path, true
+}
+
+// setTheme switches the theme and records it in the tab's config. A set call
+// re-applies that config, so without the record the next set would put back
+// the theme the config held.
+func (m *Model) setTheme(name string) {
+	if err := m.OS.SetTheme(name); err == nil && m.OS.UserConfig != nil {
+		_ = config.SetOptionValue(m.OS.UserConfig, "appearance.theme", name)
+	}
 }

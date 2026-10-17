@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 	"github.com/charmbracelet/x/xpty"
 )
@@ -314,6 +315,77 @@ func TestCommandsListMatchesRunCommand(t *testing.T) {
 	} {
 		if !strings.Contains(string(readme), "`"+typ+"`") {
 			t.Errorf("README does not document the %q event", typ)
+		}
+	}
+}
+
+// TestSetRefusesHostOptions is the boundary between the page and the host:
+// the page's set command must not reach an option that runs a program, names
+// a file, or writes the host clipboard, and an unknown path must change
+// nothing.
+func TestSetRefusesHostOptions(t *testing.T) {
+	tr := newTour(t)
+	o := tr.m.OS
+	snapshot := func() map[string]string {
+		vals := map[string]string{}
+		for _, opt := range config.Options() {
+			vals[opt.Path], _ = config.GetOptionValue(o.UserConfig, opt.Path)
+		}
+		return vals
+	}
+
+	before := snapshot()
+	beforeCopy, beforeOpener := o.Settings.CopyCommand, o.Settings.LinkOpener
+	for _, path := range []string{
+		"appearance.selection.copy_command", "selection.copy_command",
+		"appearance.link_opener", "link_opener",
+		"notifications.agent.command", "tape.autorun", "launcher.gui_command",
+		"screenshot.directory", "appearance.sidebar.editor", "appearance.sidebar.file_delete",
+		"appearance.preferred_shell", "preferred_shell", "daemon.window_size",
+		"no.such.option", "",
+	} {
+		tr.m.RunCommand("set", path, "touch /tmp/tuios-pwned")
+	}
+	tr.m.RunCommand("set", "appearance.selection.osc52_write", "on")
+	tr.m.RunCommand("set", "tape.autorun", "auto")
+	if o.Settings.CopyCommand != beforeCopy || o.Settings.LinkOpener != beforeOpener {
+		t.Errorf("a refused path changed the settings: copy_command %q, link_opener %q",
+			o.Settings.CopyCommand, o.Settings.LinkOpener)
+	}
+	for path, val := range snapshot() {
+		if before[path] != val {
+			t.Errorf("a refused path changed %s from %q to %q", path, before[path], val)
+		}
+	}
+
+	// The options the docs page uses still go through, by both spellings.
+	tr.m.RunCommand("set", "appearance.border_style", "double")
+	tr.m.RunCommand("set", "glyphs", "ascii")
+	after := snapshot()
+	if after["appearance.border_style"] != "double" || after["appearance.glyphs"] != "ascii" {
+		t.Errorf("set border_style/glyphs = %q/%q, want double/ascii",
+			after["appearance.border_style"], after["appearance.glyphs"])
+	}
+
+	// A later set must not put back an older theme: set re-applies the
+	// tab's config, which has to hold the theme the page chose last.
+	o.UserConfig.Appearance.Theme = "gruvbox_dark"
+	tr.m.RunCommand("theme", "dracula")
+	tr.m.RunCommand("set", "appearance.gap", "1")
+	if got := theme.CurrentThemeID(); got != "dracula" {
+		t.Errorf("theme after theme dracula and set gap = %q, want dracula", got)
+	}
+
+	// An option added later that names a program or a path has to be refused
+	// on purpose, or listed in pageRefused.
+	for _, opt := range config.Options() {
+		if _, ok := pageSettable(opt.Path); !ok {
+			continue
+		}
+		for _, word := range []string{"command", "opener", "editor", "shell", "directory", "_file", "osc52", "url", "root"} {
+			if strings.Contains(opt.Path, word) {
+				t.Errorf("the page may set %s; refuse it in pageRefused or say here why it is safe", opt.Path)
+			}
 		}
 	}
 }
