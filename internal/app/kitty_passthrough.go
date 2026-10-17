@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -940,11 +941,15 @@ func (kp *KittyPassthrough) allocateHostID() uint32 {
 
 // calculateImageCells returns the number of cells the image occupies. A guest
 // that states both c= and r= is not second-guessed. One that states a single
-// dimension asks the host to fit the other one, keeping the picture's aspect.
-// One that states neither gets the picture's pixel size in cells, which the
-// caller supplies: from s= and v=, a PNG header, or the placement record.
+// dimension asks the host to fit the other one, keeping the aspect of the
+// source rectangle (the whole picture unless x, y, w and h crop it), as kitty
+// does. One that states neither gets the picture's pixel size in cells, which
+// the caller supplies: from s= and v=, a PNG header, or the placement record.
+//
+// Every number here comes from the guest, so none of them is trusted: a
+// negative one counts as unstated, and the box is held to maxBoxCells a side.
 func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, cols int) {
-	rows, cols = cmd.Rows, cmd.Columns
+	rows, cols = clampCells(cmd.Rows), clampCells(cmd.Columns)
 	if rows > 0 && cols > 0 {
 		return rows, cols
 	}
@@ -953,19 +958,23 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 	kittyPassthroughLog("calculateImageCells: imgPixels=(%d,%d), cmdRC=(%d,%d), cellSize=(%d,%d)",
 		cmd.Width, cmd.Height, cmd.Columns, cmd.Rows, caps.CellWidth, caps.CellHeight)
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
-		// One dimension fixed: apply the picture's aspect to the fixed span, then
+		srcW := sourceSpan(cmd.Width, cmd.SourceX, cmd.SourceWidth)
+		srcH := sourceSpan(cmd.Height, cmd.SourceY, cmd.SourceHeight)
+		// One dimension fixed: apply the source's aspect to the fixed span, then
 		// count the cells it takes.
 		switch {
-		case cols > 0 && cmd.Width > 0 && cmd.Height > 0:
-			rows = ceilDiv(cols*caps.CellWidth*cmd.Height, cmd.Width*caps.CellHeight)
-		case rows > 0 && cmd.Width > 0 && cmd.Height > 0:
-			cols = ceilDiv(rows*caps.CellHeight*cmd.Width, cmd.Height*caps.CellWidth)
+		case cols > 0 && srcW > 0 && srcH > 0:
+			rows = fitCells(float64(cols)*float64(caps.CellWidth)*float64(srcH),
+				float64(srcW)*float64(caps.CellHeight))
+		case rows > 0 && srcW > 0 && srcH > 0:
+			cols = fitCells(float64(rows)*float64(caps.CellHeight)*float64(srcW),
+				float64(srcH)*float64(caps.CellWidth))
 		default:
 			if rows == 0 {
-				rows = ceilDiv(cmd.Height, caps.CellHeight)
+				rows = fitCells(float64(cmd.Height), float64(caps.CellHeight))
 			}
 			if cols == 0 {
-				cols = ceilDiv(cmd.Width, caps.CellWidth)
+				cols = fitCells(float64(cmd.Width), float64(caps.CellWidth))
 			}
 		}
 	}
@@ -974,7 +983,36 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 	return rows, cols
 }
 
-// ceilDiv divides a by b, rounding up: a partial cell is a cell.
-func ceilDiv(a, b int) int {
-	return (a + b - 1) / b
+// maxBoxCells bounds each side of a placement's box. No screen comes near it,
+// and it keeps a guest's c=, r=, s= or v= from overflowing an int.
+const maxBoxCells = 1 << 16
+
+// clampCells is a guest's cell count held to [0, maxBoxCells].
+func clampCells(n int) int {
+	return min(max(n, 0), maxBoxCells)
+}
+
+// fitCells is pixels/cell rounded up, since a partial cell is a cell, and held
+// to [0, maxBoxCells]. It works in floats so no product of guest numbers can
+// overflow or reach a division by zero.
+func fitCells(pixels, cell float64) int {
+	if pixels <= 0 || cell <= 0 {
+		return 0
+	}
+	return int(min(math.Ceil(pixels/cell), maxBoxCells))
+}
+
+// sourceSpan is how many pixels of one axis a source rectangle shows: span
+// when the guest gives it, otherwise the rest of the picture past off. It is
+// cut to the picture when the picture's size is known, as kitty shows only
+// the part of the rectangle inside the picture.
+func sourceSpan(full, off, span int) int {
+	off = max(off, 0)
+	if full > 0 {
+		rest := max(full-off, 0)
+		if span <= 0 || span > rest {
+			return rest
+		}
+	}
+	return max(span, 0)
 }

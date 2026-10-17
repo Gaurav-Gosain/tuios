@@ -4,8 +4,9 @@
 //
 // Usage: oneaxis MODE [WxH]
 //
-// MODE is width (c=12), height (r=4), both, none, or place: the last transmits
-// with a=t and then places with c=12, the other path a guest can take. WxH is
+// MODE is width (c=12), height (r=4), both, none, crop (c=12 over the left
+// half of the picture), or place: the last transmits with a=t and then places
+// with c=12, the other path a guest can take. WxH is
 // the picture's size, 512x512 unless given.
 //
 // It prints ONE-AXIS-DONE once the image is on the wire and then holds, so the
@@ -55,6 +56,10 @@ func main() {
 		params = fmt.Sprintf(",r=%d", rows)
 	case "both":
 		params = fmt.Sprintf(",c=%d,r=%d", cols, rows)
+	case "crop":
+		// The left half of the picture: the fitted axis follows its aspect,
+		// not the whole picture's.
+		params = fmt.Sprintf(",c=%d,x=0,y=0,w=%d,h=%d", cols, width/2, height)
 	case "none":
 	case "place":
 		action = "t"

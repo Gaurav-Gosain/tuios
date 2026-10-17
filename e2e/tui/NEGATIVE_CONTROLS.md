@@ -6852,3 +6852,20 @@ suite runs against.
 `both_given` and `neither_given` pass on the broken build as well: the fix does
 not touch their boxes, which is the positive half of the control. Run on
 2026-10-17.
+
+### The source rectangle and guest numbers
+
+kitty fits the missing axis to the aspect of the source rectangle, so the test
+gained a `crop` case: `c=12` over the left half of a 512x512 picture
+(`w=256,h=512`), which wants 12x12. `TestKittyBoxFromHostileSizes` in
+`internal/app/kitty_cells_bounds_test.go` feeds the sizing the numbers a guest
+can write: an `s=` or `v=` past the int range, a negative `c=` or `r=`, and a
+huge one.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The fitted axis took the whole picture's aspect, not the source rectangle's | yes | build `75b3976` | `.../width_only_keeps_the_crop's_aspect` ("12x6 cells, want 12x12") | **caught** |
+| `s=4611686018427387904` with `c=12` wrapped the divisor to zero and panicked | yes | test run at `75b3976` | `TestKittyBoxFromHostileSizes/s_past_int_range_with_c` ("integer divide by zero") | **caught** |
+
+The crop case fails on `c878e4d` as well ("12x26 cells, want 12x12"). Run on
+2026-10-17.

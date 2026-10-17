@@ -32,6 +32,7 @@ func TestKittyPlacementSizingFromOneAxis(t *testing.T) {
 		{"height only keeps the aspect", "height", "512x256", 16, 4},
 		{"width only rounds up", "width", "512x300", 12, 4},
 		{"both given are the guest's own", "both", "512x256", 12, 4},
+		{"width only keeps the crop's aspect", "crop", "512x512", 12, 12},
 		{"placed later keeps the aspect", "place", "512x512", 12, 6},
 		{"neither given uses the pixel size", "none", "512x512", 52, 26},
 	} {
