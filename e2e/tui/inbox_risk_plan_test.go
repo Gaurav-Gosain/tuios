@@ -159,13 +159,19 @@ func TestInboxKeepsAPlanPlanningWithAReason(t *testing.T) {
 	if err := term.SendKeys("n"); err != nil {
 		t.Fatalf("n: %v", err)
 	}
-	if err := term.WaitForText("Reason: _", uiTimeout); err != nil {
+	// The reason is a one-line composer under a "Reason:" label, with a
+	// placeholder until the first key.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Reason:", "Type the reason, or press enter to deny without one.")
+	}, uiTimeout); err != nil {
 		t.Fatalf("n did not open the reason line: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("split step 2"); err != nil {
 		t.Fatalf("type the reason: %v", err)
 	}
-	if err := term.WaitForText("Reason: split step 2_", uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Reason:", "split step 2") && !strings.Contains(s.Text(), "Type the reason")
+	}, uiTimeout); err != nil {
 		t.Fatalf("the reason was not typed: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
