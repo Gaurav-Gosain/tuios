@@ -2814,6 +2814,14 @@ the part of an image it shows instead of asking for SubImage through an
 interface, which would link that method of every image type. The new budgets
 leave 30,974 and 30,702 bytes of room.
 
+The budgets went to 37,988,000 (linux/amd64) and 35,719,000 (darwin/arm64)
+when a look learned the layout keys, the dock lists, the dock tabs and the
+rail sections. Main measured 37,925,026 and 35,655,298 bytes (Go 1.26.9).
+The change adds 32,768 and 33,440 bytes: the checks of the keys the registry
+does not carry, and the item checks of the dock lists and the rail sections.
+No dependency was added. The new budgets leave 30,206 and 30,262 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
