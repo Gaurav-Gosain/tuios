@@ -4622,8 +4622,13 @@ Response:
 
 `state` is what the window shows after the call. `reason` is present only when
 `applied` is false: `outranked` (a higher-ranked source owns the window),
-`if_state` (the condition did not hold), `foreign_session` or
-`foreign_harness`. The last two refuse a report carrying `agent_session_id`
+`if_state` (the condition did not hold), `foreign_pane`, `foreign_session` or
+`foreign_harness`. `foreign_pane` refuses a report whose `harness_pid` is a
+local process that inherited the pane in `TUIOS_PANE_ID` but runs outside it:
+not the pane's process, not on its terminal and not descended from it. A
+report without `harness_pid`, from a link, for a pane on another machine, or
+from a harness that cannot be read (it exited, or the platform has no process
+reader) is not checked. The last two refuse a report carrying `agent_session_id`
 while the window's own harness is `working` or `needs_input` by its own report
 and the report names a different session, or comes from a different harness:
 a nested run, such as a `claude -p` a tool call started inside the pane. At rest
@@ -4662,8 +4667,10 @@ The id is stored as the window's `agent_session_id`, the field
 `set-agent-state` writes, persisted and read back by `get-agent-state` and
 `list-agents`. `agent_session_id` in the result is the id the window holds after
 the call. A report naming the id the window already holds is applied and changes
-nothing. Two refusals keep a nested run off the pane, with `applied: false`:
+nothing. Three refusals keep another agent's id off the pane, with `applied: false`:
 
+- `foreign_pane`: the report's `harness_pid` runs outside the pane its
+  environment names, as for `set-agent-state`.
 - `foreign_harness`: the window is attributed to a different harness.
 - `foreign_session`: the window is `working` or `needs_input`, holds a different
   id, and that id was reported by a known harness process other than the
@@ -4767,8 +4774,10 @@ The pane's subagents:
 The guard: a report naming a conversation other than the one the window
 holds is refused with `reason: foreign_session`, and one naming a harness
 other than the one it is attributed to with `foreign_harness`, at rest as well
-as mid-turn. A state report from another conversation takes a pane at rest
-over; this report never takes a pane over, so another conversation's
+as mid-turn, and one whose `harness_pid` runs outside the pane with
+`foreign_pane`, as for `set-agent-state`. A state report from another
+conversation takes a pane at rest over; this report never takes a pane over,
+so another conversation's
 subagent is not the pane's, such as one a `claude -p` the agent left running
 in the background starts.
 
