@@ -2,6 +2,7 @@ package learn
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -406,5 +407,52 @@ func TestSetRefusesHostOptions(t *testing.T) {
 				t.Errorf("the page may set %s; refuse it in config.ReachesHost or say here why it is safe", opt.Path)
 			}
 		}
+	}
+}
+
+// TestSetLookItems holds the page's set command to what a look file may hold:
+// a dock list or a rail layout with an item a look leaves out, such as a
+// custom dock cell, changes nothing. A list of built-ins and the startup
+// layout keys go through, so the gallery's Try it shows them.
+func TestSetLookItems(t *testing.T) {
+	tr := newTour(t)
+	o := tr.m.OS
+	right := o.UserConfig.Dock.DockList("right")
+	sections := o.UserConfig.Appearance.Sidebar.Sections
+
+	tr.m.RunCommand("set", "dock.right", `["custom/x","clock"]`)
+	tr.m.RunCommand("set", "dock.right", `["made-up"]`)
+	tr.m.RunCommand("set", "dock.custom.x.command", "touch /tmp/tuios-pwned")
+	tr.m.RunCommand("set", "appearance.sidebar.sections", "files,custom")
+	tr.m.RunCommand("set", "startup.daemon", "false")
+	if got := o.UserConfig.Dock.DockList("right"); !slices.Equal(got, right) {
+		t.Errorf("a refused set changed dock.right to %q", got)
+	}
+	if len(o.UserConfig.Dock.Custom) != 0 {
+		t.Errorf("the page defined a custom dock cell: %v", o.UserConfig.Dock.Custom)
+	}
+	if got := o.UserConfig.Appearance.Sidebar.Sections; got != sections {
+		t.Errorf("a refused set changed the rail layout to %q", got)
+	}
+
+	tr.m.RunCommand("set", "dock.left", `["workspaces"]`)
+	tr.m.RunCommand("set", "dock.tabs.style", "flat")
+	tr.m.RunCommand("set", "dock.tabs.number_glyphs", `["一","二"]`)
+	tr.m.RunCommand("set", "appearance.sidebar.sections", "sessions,git")
+	if got := o.UserConfig.Dock.DockList("left"); !slices.Equal(got, []string{"workspaces"}) {
+		t.Errorf("dock.left = %q, want [workspaces]", got)
+	}
+	if tabs := o.UserConfig.Dock.Tabs; !tabs.Flat() || tabs.Icon(1) != "一" {
+		t.Errorf("dock.tabs = %+v", tabs)
+	}
+	if got := o.UserConfig.Appearance.Sidebar.Sections; got != "sessions,git" {
+		t.Errorf("sections = %q, want sessions,git", got)
+	}
+
+	tr.m.RunCommand("set", "startup.tiled", "false")
+	tr.m.RunCommand("set", "startup.tiled", "true")
+	tr.m.RunCommand("set", "startup.layout", "master-stack")
+	if !o.AutoTiling || o.LayoutModeName() != "master-stack" {
+		t.Errorf("tiling %v, layout %q, want tiled master-stack", o.AutoTiling, o.LayoutModeName())
 	}
 }

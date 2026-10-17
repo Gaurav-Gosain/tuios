@@ -120,6 +120,15 @@ var lookKeys = []string{
 	"appearance.window_title_style",
 	"appearance.hide_scrollbar",
 	"appearance.drop_preview",
+	// Layout: where the panes go and how big they are. These place panes and
+	// size them, and do nothing else.
+	"startup.tiled",
+	"startup.layout",
+	"appearance.master_position",
+	"appearance.master_ratio",
+	"appearance.scroll_column_width",
+	"appearance.zoom_size",
+	"appearance.zoom_max_width",
 	// Motion.
 	"appearance.motion",
 	"appearance.animation_speed",
@@ -156,6 +165,8 @@ var lookKeys = []string{
 	"appearance.sidebar.file_icons",
 	"appearance.sidebar.file_icon_colors",
 	"appearance.sidebar.marquee",
+	// Each item is checked on its own: see lookItemRules.
+	"appearance.sidebar.sections",
 	// The scrollbar.
 	"appearance.scrollbar.style",
 	"appearance.scrollbar.thumb",
@@ -184,19 +195,26 @@ var lookKeys = []string{
 
 // LookKeys returns the options a look may set, sorted.
 func LookKeys() []string {
-	out := make([]string, 0, len(lookKeys))
+	out := make([]string, 0, len(lookKeys)+len(lookFileKeys))
 	for _, k := range lookKeys {
 		if IsLookKey(k) {
 			out = append(out, k)
 		}
+	}
+	for k := range lookFileKeys {
+		out = append(out, k)
 	}
 	slices.Sort(out)
 	return out
 }
 
 // IsLookKey reports whether a look may set the option at path: it is on the
-// list, a registered option, and does not reach the host.
+// list, a registered option, and does not reach the host, or it is one of the
+// dock keys the registry does not carry (see lookFileKeys).
 func IsLookKey(path string) bool {
+	if _, ok := lookFileKeys[path]; ok {
+		return true
+	}
 	if !slices.Contains(lookKeys, path) || ReachesHost(path) {
 		return false
 	}
@@ -231,6 +249,14 @@ type LookKeyInfo struct {
 	Min         int      `json:"min,omitempty"`
 	Max         int      `json:"max,omitempty"`
 	Color       bool     `json:"color,omitempty"`
+	// Items are the names one item may be, for a list, or for a string of
+	// items joined by Split. An item may carry ":share" after the name.
+	Items    []string `json:"items,omitempty"`
+	Split    string   `json:"split,omitempty"`
+	MaxItems int      `json:"max_items,omitempty"`
+	// MaxBytes caps a text value, or one list item, below the 512 bytes
+	// every text value has.
+	MaxBytes int `json:"max_bytes,omitempty"`
 }
 
 // LookKeyList is the look key list the tuios.dev gallery vendors, so the
@@ -244,12 +270,32 @@ type LookKeyList struct {
 func LookKeysJSON() ([]byte, error) {
 	list := LookKeyList{Look: LookVersion}
 	for _, k := range LookKeys() {
+		if spec, ok := lookFileKeys[k]; ok {
+			info := LookKeyInfo{
+				Path: k, Type: spec.Type, Description: spec.Description, Default: spec.Default,
+				Color: spec.Color, MaxItems: spec.MaxItems,
+			}
+			if spec.MaxBytes < maxLookString {
+				info.MaxBytes = spec.MaxBytes
+			}
+			if spec.Type == LookList {
+				info.Items = spec.Accepted
+			} else {
+				info.Accepted = spec.Accepted
+			}
+			list.Keys = append(list.Keys, info)
+			continue
+		}
 		opt, _ := LookupOption(k)
-		list.Keys = append(list.Keys, LookKeyInfo{
+		info := LookKeyInfo{
 			Path: k, Type: opt.Type, Description: opt.Description, Default: opt.Default,
 			Accepted: opt.Accepted,
 			Min:      opt.Min, Max: opt.Max, Color: opt.Color,
-		})
+		}
+		if items, ok := lookItemKeys(k); ok {
+			info.Items, info.Split = items, ","
+		}
+		list.Keys = append(list.Keys, info)
 	}
 	out, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
@@ -278,7 +324,7 @@ type Look struct {
 // LookSetting is one option a look sets.
 type LookSetting struct {
 	Path  string
-	Value any // bool, int64 or string, as TOML holds it
+	Value any // bool, int64, string or []string, as TOML holds it
 }
 
 // Text is the value as set-config would take it.
@@ -345,7 +391,9 @@ func ParseLook(data []byte) (*Look, error) {
 		}
 	}
 	values := map[string]any{}
-	lk.walk(options, nil, values)
+	if err := lk.walk(options, nil, values); err != nil {
+		return nil, err
+	}
 	slices.Sort(lk.Left)
 
 	if err := lk.bindAsset(values, "appearance.theme", themeOwn, lk.Theme); err != nil {
@@ -361,7 +409,12 @@ func ParseLook(data []byte) (*Look, error) {
 		s := LookSetting{Path: path, Value: v}
 		installed := (lk.Theme != nil && path == "appearance.theme" && v == lk.Theme.ID) ||
 			(lk.Glyphs != nil && path == "appearance.glyphs" && v == lk.Glyphs.ID)
-		if !installed {
+		switch _, file := lookFileKeys[path]; {
+		case file:
+			if err := checkLookFileValue(path, v); err != nil {
+				return nil, err
+			}
+		case !installed:
 			if err := SetOptionValue(scratch, path, s.Text()); err != nil {
 				return nil, err
 			}
@@ -466,8 +519,9 @@ func (lk *Look) bindAsset(values map[string]any, path, own string, asset *LookAs
 }
 
 // walk sorts the look's keys into values, the ones a look may set, and
-// lk.Left.
-func (lk *Look) walk(m map[string]any, prefix []string, values map[string]any) {
+// lk.Left. A list checked item by item keeps its allowed items, and each
+// other item goes to lk.Left.
+func (lk *Look) walk(m map[string]any, prefix []string, values map[string]any) error {
 	for _, k := range lookSortedKeys(m) {
 		path := append(slices.Clone(prefix), k)
 		dotted := strings.Join(path, ".")
@@ -477,15 +531,29 @@ func (lk *Look) walk(m map[string]any, prefix []string, values map[string]any) {
 				lk.Left = append(lk.Left, lookKeyShown(dotted))
 				continue
 			}
-			lk.walk(sub, path, values)
+			if err := lk.walk(sub, path, values); err != nil {
+				return err
+			}
 			continue
 		}
 		if !IsLookKey(dotted) {
 			lk.Left = append(lk.Left, lookKeyShown(dotted))
 			continue
 		}
-		values[dotted] = v
+		kept, dropped, err := lookItems(dotted, v)
+		if err != nil {
+			return err
+		}
+		for _, item := range dropped {
+			lk.Left = append(lk.Left, lookItemShown(dotted, item))
+		}
+		if kept == nil {
+			lk.Left = append(lk.Left, lookKeyShown(dotted))
+			continue
+		}
+		values[dotted] = kept
 	}
+	return nil
 }
 
 // lookKeyShown is a key name as the plan prints it. A stranger names the keys,
@@ -501,7 +569,7 @@ func lookKeyShown(key string) string {
 
 // lookTableHasKey reports whether some look key is inside the table at path.
 func lookTableHasKey(path string) bool {
-	for _, k := range lookKeys {
+	for _, k := range LookKeys() {
 		if strings.HasPrefix(k, path+".") {
 			return true
 		}
@@ -519,6 +587,22 @@ func lookValueText(v any) string {
 		return strconv.FormatBool(v)
 	case int64:
 		return strconv.FormatInt(v, 10)
+	case []string:
+		quoted := make([]string, len(v))
+		for i, s := range v {
+			quoted[i] = strconv.Quote(s)
+		}
+		return "[" + strings.Join(quoted, ", ") + "]"
+	case []any:
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return fmt.Sprintf("%v (a %T)", v, v)
+			}
+			items = append(items, s)
+		}
+		return lookValueText(items)
 	default:
 		return fmt.Sprintf("%v (a %T)", v, v)
 	}
@@ -533,6 +617,12 @@ func (lk *Look) fragment() ([]byte, error) {
 		case string:
 			if len(v) > maxLookString || hasControlChar(v) {
 				return nil, fmt.Errorf("%s must be one line of at most %d bytes", s.Path, maxLookString)
+			}
+		case []string:
+			for _, item := range v {
+				if len(item) > maxLookString || hasControlChar(item) {
+					return nil, fmt.Errorf("each item of %s must be one line of at most %d bytes", s.Path, maxLookString)
+				}
 			}
 		case bool, int64:
 		default:
@@ -790,6 +880,12 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		to, _ := GetOptionValue(after, opt.Path)
 		if from != to {
 			p.Changes = append(p.Changes, LookChange{Path: opt.Path, From: from, To: to})
+		}
+	}
+	for _, path := range lookSortedKeys(lookFileKeys) {
+		from, to := lookFileValueText(before, path), lookFileValueText(after, path)
+		if from != to {
+			p.Changes = append(p.Changes, LookChange{Path: path, From: from, To: to})
 		}
 	}
 	if lk != nil {

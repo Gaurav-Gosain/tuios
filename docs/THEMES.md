@@ -345,6 +345,15 @@ gap = 1
 
 [appearance.sidebar]
 row_style = "pill"
+sections = "sessions,terminals,git"
+
+[dock]
+left = ["mode", "workspaces"]
+right = ["clock", "session-controls"]
+
+[dock.tabs]
+style = "flat"
+number_glyphs = ["一", "二", "三"]
 
 [theme]                         # optional: a theme, with the keys of a theme file
 id = "tokyo"
@@ -363,10 +372,19 @@ close = "x"
   refuses a newer look and tells you to update.
 - The option tables take the look keys only. `tuios look keys` lists them.
   The keys set colour, theme, glyphs, borders, gaps, titles, the dock, the
-  rail, the scrollbar, selection colours and the spotlight.
+  rail, the scrollbar, selection colours and the spotlight. They also set the
+  layout: `tiled` and `layout` in `[startup]`, the master and scrolling
+  sizes, and the zoom size.
 - A look cannot set a key that runs a program, names a file or a folder, or
-  changes a host, the daemon, keybindings, hooks or startup. tuios leaves out
-  such a key and names it.
+  changes a host, the daemon, keybindings, hooks or other startup keys. tuios
+  leaves out such a key and names it.
+- A look can set the dock lists `left`, `center` and `right` in `[dock]`, and
+  the tab keys in `[dock.tabs]`. A dock list can name built-in cells only.
+  tuios leaves out an item such as `custom/clock` and names it, and keeps the
+  other items. A look cannot set `[dock.custom]`.
+- `appearance.sidebar.sections` can name every rail section but `custom`.
+  tuios leaves out `custom` and keeps the other sections. A look cannot set
+  `[appearance.sidebar.custom]`.
 - tuios checks each value as `tuios set-config` does. A value that is not
   correct stops the look. A string cannot hold a control character.
 - `[theme]` takes the keys of a [theme file](#theme-file-format). Put the

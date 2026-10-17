@@ -219,6 +219,27 @@
       "default": "false"
     },
     {
+      "path": "appearance.master_position",
+      "type": "string",
+      "description": "Side the master panes take in the master-stack layout. Center puts the stack on both sides.",
+      "default": "left",
+      "accepted": [
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "center"
+      ]
+    },
+    {
+      "path": "appearance.master_ratio",
+      "type": "int",
+      "description": "Width of the master pane in the master-stack layout, as a percent of the screen",
+      "default": "50",
+      "min": 10,
+      "max": 90
+    },
+    {
       "path": "appearance.modal_dim",
       "type": "int",
       "description": "How much the screen behind a modal panel is darkened, as a percent. 0 is off.",
@@ -254,6 +275,14 @@
       "default": "2",
       "min": 1,
       "max": 6
+    },
+    {
+      "path": "appearance.scroll_column_width",
+      "type": "int",
+      "description": "Width of a column in the scrolling layout, as a percent of the screen",
+      "default": "55",
+      "min": 20,
+      "max": 100
     },
     {
       "path": "appearance.scrollbar.style",
@@ -512,6 +541,21 @@
       ]
     },
     {
+      "path": "appearance.sidebar.sections",
+      "type": "string",
+      "description": "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat.",
+      "default": "sessions:25,terminals,files:25,agents:34",
+      "items": [
+        "sessions",
+        "terminals",
+        "files",
+        "agents",
+        "git",
+        "spacer"
+      ],
+      "split": ","
+    },
+    {
       "path": "appearance.sidebar.show_counts",
       "type": "bool",
       "description": "Show the window count on each session row",
@@ -655,10 +699,201 @@
       "default": "true"
     },
     {
+      "path": "appearance.zoom_max_width",
+      "type": "int",
+      "description": "Width in cells of a zoomed pane. 0 fills the screen.",
+      "default": "0"
+    },
+    {
+      "path": "appearance.zoom_size",
+      "type": "int",
+      "description": "How much of the screen a zoomed pane takes, as a percent. Below 100 the layout around it stays visible at the edges.",
+      "default": "95",
+      "min": 50,
+      "max": 100
+    },
+    {
+      "path": "dock.center",
+      "type": "list",
+      "description": "The built-in cells in the middle of the dock, in order. An empty list draws nothing there.",
+      "default": "[\"windows\"]",
+      "items": [
+        "clock",
+        "copy-help",
+        "cpu",
+        "mode",
+        "notifications",
+        "ram",
+        "session",
+        "session-controls",
+        "tape",
+        "trail",
+        "transfers",
+        "windows",
+        "workspaces"
+      ],
+      "max_items": 26,
+      "max_bytes": 32
+    },
+    {
       "path": "dock.clock.format",
       "type": "string",
       "description": "Go time layout the clock renders in (empty means 15:04); a layout without seconds refreshes once a minute",
       "default": ""
+    },
+    {
+      "path": "dock.left",
+      "type": "list",
+      "description": "The built-in cells on the left end of the dock, in order. An empty list draws nothing there.",
+      "default": "[\"mode\", \"workspaces\", \"trail\", \"tape\"]",
+      "items": [
+        "clock",
+        "copy-help",
+        "cpu",
+        "mode",
+        "notifications",
+        "ram",
+        "session",
+        "session-controls",
+        "tape",
+        "trail",
+        "transfers",
+        "windows",
+        "workspaces"
+      ],
+      "max_items": 26,
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.right",
+      "type": "list",
+      "description": "The built-in cells on the right end of the dock, in order. An empty list draws nothing there.",
+      "default": "[\"transfers\", \"notifications\", \"copy-help\", \"cpu\", \"ram\", \"clock\", \"session-controls\"]",
+      "items": [
+        "clock",
+        "copy-help",
+        "cpu",
+        "mode",
+        "notifications",
+        "ram",
+        "session",
+        "session-controls",
+        "tape",
+        "trail",
+        "transfers",
+        "windows",
+        "workspaces"
+      ],
+      "max_items": 26,
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.tabs.active_bg",
+      "type": "string",
+      "description": "Background colour of the flat tab of the current workspace",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "dock.tabs.active_bold",
+      "type": "bool",
+      "description": "Draw the flat tab of the current workspace in bold",
+      "default": "false"
+    },
+    {
+      "path": "dock.tabs.active_fg",
+      "type": "string",
+      "description": "Text colour of the flat tab of the current workspace",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "dock.tabs.activity_marker",
+      "type": "string",
+      "description": "Text after the label of a workspace whose pane printed since you looked. Empty shows none.",
+      "default": "",
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.tabs.attention_fg",
+      "type": "string",
+      "description": "Text colour of the tab of a workspace with a pane that waits for you",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "dock.tabs.bell_marker",
+      "type": "string",
+      "description": "Text after the label of a workspace whose pane rang the bell. Empty shows none.",
+      "default": "",
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.tabs.inactive_bg",
+      "type": "string",
+      "description": "Background colour of the flat tabs of the other workspaces",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "dock.tabs.inactive_bold",
+      "type": "bool",
+      "description": "Draw the flat tabs of the other workspaces in bold",
+      "default": "false"
+    },
+    {
+      "path": "dock.tabs.inactive_fg",
+      "type": "string",
+      "description": "Text colour of the flat tabs of the other workspaces",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "dock.tabs.number_glyphs",
+      "type": "list",
+      "description": "What {icon} in appearance.dock_workspace_tab_format shows for each workspace, the first item for workspace 1. A workspace past the end shows its number.",
+      "default": "[]",
+      "max_items": 9,
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.tabs.separator",
+      "type": "string",
+      "description": "Text between two flat tabs. Empty is one blank column.",
+      "default": "",
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.tabs.separator_fg",
+      "type": "string",
+      "description": "Colour of the text between two flat tabs",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "dock.tabs.show_add",
+      "type": "bool",
+      "description": "Keep the + tab in the flat style",
+      "default": "false"
+    },
+    {
+      "path": "dock.tabs.style",
+      "type": "string",
+      "description": "How the workspace strip draws its tabs: pill, or flat for coloured runs of text",
+      "default": "",
+      "accepted": [
+        "",
+        "pill",
+        "flat"
+      ],
+      "max_bytes": 32
+    },
+    {
+      "path": "dock.tabs.zoom_marker",
+      "type": "string",
+      "description": "What {zoom} shows on the tab of the current workspace while a pane in it is zoomed",
+      "default": "",
+      "max_bytes": 32
     },
     {
       "path": "spotlight.dim",
@@ -691,6 +926,23 @@
       "default": "10",
       "min": 2,
       "max": 200
+    },
+    {
+      "path": "startup.layout",
+      "type": "string",
+      "description": "Tiling scheme a new session starts in. An existing session keeps its own.",
+      "default": "bsp",
+      "accepted": [
+        "bsp",
+        "master-stack",
+        "scrolling"
+      ]
+    },
+    {
+      "path": "startup.tiled",
+      "type": "bool",
+      "description": "Start a new session tiled instead of floating. False when the config file has no [startup] table.",
+      "default": "true"
     }
   ]
 }

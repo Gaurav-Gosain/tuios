@@ -105,9 +105,24 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 		path, ok := pageSettable(arg(0))
 		switch {
 		case !ok:
+		case config.CheckLookItems(path, arg(1)) != nil:
+			// A list item a look leaves out, such as a custom dock cell.
 		case path == "appearance.theme":
 			// The theme command's path, which also recolours the panes.
 			m.setTheme(arg(1))
+		case path == "startup.tiled":
+			// A tab has no new session to start, so tiling changes now.
+			if on, err := strconv.ParseBool(arg(1)); err == nil && on != o.AutoTiling {
+				o.ToggleAutoTiling()
+			}
+		case path == "startup.layout":
+			m.RunCommand("layout", arg(1))
+		case config.IsLookFileKey(path):
+			// The dock's lists and its tabs table: the dock reads them from
+			// the config on each frame.
+			if err := config.SetLookValue(o.UserConfig, path, arg(1)); err == nil {
+				o.MarkAllDirty()
+			}
 		default:
 			if err := o.SetConfig(path, arg(1)); err == nil {
 				o.MarkAllDirty()
@@ -317,9 +332,13 @@ var pageSections = map[string]bool{
 
 // pageSettable reports the registry path the page's set command may change
 // for path, or false. It takes the spellings OS.SetConfig takes: the full
-// path, or the bare name of an appearance option. An unknown path is refused,
-// so it does nothing.
+// path, or the bare name of an appearance option. Every look key goes
+// through as well, so the gallery's Try it shows what tuios look apply sets.
+// An unknown path is refused, so it does nothing.
 func pageSettable(path string) (string, bool) {
+	if config.IsLookKey(path) {
+		return path, true
+	}
 	if path == "animations" {
 		path = "appearance.animations_enabled"
 	}

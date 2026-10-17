@@ -51,11 +51,29 @@ func TestParseLookBoundary(t *testing.T) {
 		{name: "daemon", body: "[daemon]\nlog_level = \"debug\"", left: "daemon"},
 		{name: "permissions", body: "[permissions]\nx = 1", left: "permissions"},
 		{name: "plugins", body: "[plugins]\nx = 1", left: "plugins"},
-		{name: "startup layout", body: "[startup]\nlayout = \"x\"", left: "startup"},
+		{name: "startup daemon", body: "[startup]\ndaemon = false", left: "startup.daemon"},
+		{name: "startup default window", body: "[startup]\nopen_default_window = true", left: "startup.open_default_window"},
+		{name: "dock session cell", body: "[dock.session]\nformat = \"{session}\"", left: "dock.session"},
+		{name: "sidebar custom command", body: "[appearance.sidebar.custom]\ncommand = \"evil\"", left: "appearance.sidebar.custom"},
 		{name: "behaviour option", body: "[appearance]\nfocus_follows_mouse = true", left: "appearance.focus_follows_mouse"},
 		{name: "unknown appearance key", body: "[appearance]\nmade_up = 1", left: "appearance.made_up"},
 
 		{name: "no version", body: "[appearance]\ngap = 1", err: "look = 1"},
+		{name: "startup layout", body: "[startup]\nlayout = \"x\"", err: "startup.layout"},
+		{name: "master ratio out of range", body: "[appearance]\nmaster_ratio = 99", err: "appearance.master_ratio"},
+		{name: "master position", body: "[appearance]\nmaster_position = \"sideways\"", err: "appearance.master_position"},
+		{name: "dock list not a list", body: "[dock]\nleft = \"mode\"", err: "dock.left must be a list"},
+		{name: "dock list of numbers", body: "[dock]\nleft = [1, 2]", err: "dock.left must be a list"},
+		{name: "dock list too long", body: "[dock]\nleft = [" + strings.Repeat("\"mode\",", 40) + "]", err: "at most"},
+		{name: "escape in a dock item", body: "[dock]\nright = [\"\\u001b]52;c;eA==\\u0007\"]", err: "dock.right"},
+		{name: "tab style", body: "[dock.tabs]\nstyle = \"spiky\"", err: "dock.tabs.style"},
+		{name: "tab colour", body: "[dock.tabs]\nactive_fg = \"notacolour\"", err: "dock.tabs.active_fg"},
+		{name: "tab bold not a bool", body: "[dock.tabs]\nactive_bold = \"yes\"", err: "dock.tabs.active_bold"},
+		{name: "escape in a tab separator", body: "[dock.tabs]\nseparator = \"\\u001b[2J\"", err: "dock.tabs.separator"},
+		{name: "long tab marker", body: "[dock.tabs]\nbell_marker = \"" + strings.Repeat("x", 64) + "\"", err: "dock.tabs.bell_marker"},
+		{name: "escape in a workspace glyph", body: "[dock.tabs]\nnumber_glyphs = [\"I\", \"\\u001b[2J\"]", err: "number_glyphs"},
+		{name: "too many workspace glyphs", body: "[dock.tabs]\nnumber_glyphs = [" + strings.Repeat("\"I\",", 10) + "]", err: "at most 9"},
+		{name: "sections not text", body: "[appearance.sidebar]\nsections = [\"files\"]", err: "appearance.sidebar.sections must be text"},
 		{name: "future version", body: "look = 2", err: "Update tuios"},
 		{name: "bad version type", body: "look = \"1\"", err: "whole number"},
 		{name: "bad int", body: "[appearance]\ngap = \"lots\"", err: "appearance.gap"},
@@ -386,4 +404,265 @@ func themeFileThere(t *testing.T, id string) bool {
 	}
 	_, err = os.Stat(filepath.Join(dir, id+".json"))
 	return err == nil
+}
+
+// TestParseLookItems holds the keys a look sets item by item. A dock list may
+// name only built-in cells: "custom/NAME" draws a [dock.custom.NAME] cell,
+// whose command runs, and the person's own config may define one that no list
+// names yet. A rail layout may name every built-in section but custom, whose
+// command appearance.sidebar.custom sets. Each such item is left out and
+// named, and the rest of the list applies. The layout and dock tab keys a
+// look may set come through with their values.
+func TestParseLookItems(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want map[string]string // path to Text() of the setting; "" must be absent
+		left []string
+	}{
+		{
+			name: "custom cell in a dock list",
+			body: "[dock]\nleft = [\"mode\", \"workspaces\"]\nright = [\"custom/weather\", \"clock\", \"session-controls\"]",
+			want: map[string]string{
+				"dock.left":  `["mode", "workspaces"]`,
+				"dock.right": `["clock", "session-controls"]`,
+			},
+			left: []string{"dock.right: custom/weather"},
+		},
+		{
+			name: "dock list of custom cells only",
+			body: "[dock]\ncenter = [\"custom/np\"]",
+			want: map[string]string{"dock.center": `[]`},
+			left: []string{"dock.center: custom/np"},
+		},
+		{
+			name: "unknown dock cell",
+			body: "[dock]\nleft = [\"workspaces\", \"rm -rf\"]",
+			want: map[string]string{"dock.left": `["workspaces"]`},
+			left: []string{"dock.left: rm -rf"},
+		},
+		{
+			name: "empty dock list",
+			body: "[dock]\ncenter = []",
+			want: map[string]string{"dock.center": `[]`},
+		},
+		{
+			name: "custom table beside its list item",
+			body: "[dock]\nright = [\"custom/x\"]\n[dock.custom.x]\ncommand = \"evil\"",
+			want: map[string]string{"dock.right": `[]`},
+			left: []string{"dock.custom", "dock.right: custom/x"},
+		},
+		{
+			name: "custom rail section",
+			body: "[appearance.sidebar]\nsections = \"sessions,terminals,files,custom\"",
+			want: map[string]string{"appearance.sidebar.sections": "sessions,terminals,files"},
+			left: []string{"appearance.sidebar.sections: custom"},
+		},
+		{
+			name: "custom rail section with a share",
+			body: "[appearance.sidebar]\nsections = \"sessions:40, CUSTOM:30 ,spacer,git\"",
+			want: map[string]string{"appearance.sidebar.sections": "sessions:40,spacer,git"},
+			left: []string{"appearance.sidebar.sections: CUSTOM:30"},
+		},
+		{
+			name: "rail layout of the custom section only",
+			body: "[appearance.sidebar]\nsections = \"custom,spacer\"",
+			want: map[string]string{"appearance.sidebar.sections": ""},
+			left: []string{"appearance.sidebar.sections", "appearance.sidebar.sections: custom"},
+		},
+		{
+			name: "rail custom table",
+			body: "[appearance.sidebar]\nsections = \"files\"\n[appearance.sidebar.custom]\ncommand = \"evil\"",
+			want: map[string]string{"appearance.sidebar.sections": "files"},
+			left: []string{"appearance.sidebar.custom"},
+		},
+		{
+			name: "dock tabs",
+			body: "[dock.tabs]\nstyle = \"flat\"\nseparator = \" \\u2022 \"\nseparator_fg = \"#4f5b58\"\nactive_fg = \"#272e33\"\n" +
+				"active_bg = \"accent\"\nactive_bold = true\ninactive_fg = \"#859289\"\nnumber_glyphs = [\"I\", \"II\", \"\\u4e09\", \"\\U000f075a\"]\n" +
+				"zoom_marker = \"Z\"\nshow_add = true\nattention_fg = \"red\"\nbell_marker = \"!\"\nactivity_marker = \"*\"",
+			want: map[string]string{
+				"dock.tabs.style":           "flat",
+				"dock.tabs.separator":       " \u2022 ",
+				"dock.tabs.separator_fg":    "#4f5b58",
+				"dock.tabs.active_bg":       "accent",
+				"dock.tabs.active_bold":     "true",
+				"dock.tabs.number_glyphs":   `["I", "II", "三", "\U000f075a"]`,
+				"dock.tabs.show_add":        "true",
+				"dock.tabs.activity_marker": "*",
+			},
+		},
+		{
+			name: "layout",
+			body: "[startup]\ntiled = true\nlayout = \"master-stack\"\n[appearance]\nmaster_position = \"center\"\nmaster_ratio = 46\n" +
+				"scroll_column_width = 40\nzoom_size = 100\nzoom_max_width = 92",
+			want: map[string]string{
+				"startup.tiled":                  "true",
+				"startup.layout":                 "master-stack",
+				"appearance.master_position":     "center",
+				"appearance.master_ratio":        "46",
+				"appearance.scroll_column_width": "40",
+				"appearance.zoom_size":           "100",
+				"appearance.zoom_max_width":      "92",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lk, err := ParseLook([]byte("look = 1\n" + tc.body))
+			if err != nil {
+				t.Fatalf("ParseLook: %v", err)
+			}
+			got := map[string]string{}
+			for _, s := range lk.Settings {
+				got[s.Path] = s.Text()
+			}
+			for path, want := range tc.want {
+				v, set := got[path]
+				switch {
+				case want == "" && set:
+					t.Errorf("the look sets %s = %s", path, v)
+				case want != "" && v != want:
+					t.Errorf("%s = %q, want %q", path, v, want)
+				}
+			}
+			left := slices.Clone(tc.left)
+			slices.Sort(left)
+			if !slices.Equal(lk.Left, left) {
+				t.Errorf("Left = %q, want %q", lk.Left, left)
+			}
+			// What the look writes must load as the same config.
+			frag, err := lk.fragment()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := ParseUserConfig(frag)
+			if err != nil {
+				t.Fatalf("the fragment does not load: %v\n%s", err, frag)
+			}
+			for _, side := range []string{"left", "center", "right"} {
+				for _, name := range cfg.Dock.DockList(side) {
+					if !IsDockBuiltin(name) {
+						t.Errorf("the written dock.%s names %q", side, name)
+					}
+				}
+			}
+			if strings.Contains(cfg.Appearance.Sidebar.Sections, SidebarSectionCustom) {
+				t.Errorf("the written rail layout %q names the custom section", cfg.Appearance.Sidebar.Sections)
+			}
+		})
+	}
+}
+
+// TestLookDockApply applies a look with dock lists and tabs over a config
+// that defines a custom cell no list names. The plan names the dock changes,
+// the config in force draws the look's built-ins, and the custom cell stays
+// off the bar.
+func TestLookDockApply(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "config.toml")
+	original := "[dock.custom.mine]\ncommand = \"date\"\n"
+	if err := os.WriteFile(main, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lk := mustParseLook(t, `look = 1
+[dock]
+left = ["workspaces"]
+right = ["custom/mine", "clock"]
+[dock.tabs]
+style = "flat"
+number_glyphs = ["I", "II"]
+[appearance.sidebar]
+sections = "files,custom"
+`)
+	plan, err := PlanLook(main, lk, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ path, to string }{
+		{"dock.left", `["workspaces"]`},
+		{"dock.right", `["clock"]`},
+		{"dock.tabs.style", "flat"},
+		{"dock.tabs.number_glyphs", `["I", "II"]`},
+		{"appearance.sidebar.sections", "files"},
+	} {
+		if !hasChange(plan, c.path, c.to) {
+			t.Errorf("the plan does not change %s to %s: %v", c.path, c.to, plan.Changes)
+		}
+	}
+	if err := plan.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	assertFile(t, main, original)
+	cfg := loadEffective(t, main)
+	if got := cfg.Dock.DockList("right"); !slices.Equal(got, []string{"clock"}) {
+		t.Errorf("dock.right in force = %q", got)
+	}
+	if !cfg.Dock.Tabs.Flat() || cfg.Dock.Tabs.Icon(2) != "II" {
+		t.Errorf("dock.tabs in force = %+v", cfg.Dock.Tabs)
+	}
+	if cfg.Appearance.Sidebar.Sections != "files" {
+		t.Errorf("sections in force = %q", cfg.Appearance.Sidebar.Sections)
+	}
+	il, err := ReadInstalledLook(main)
+	if err != nil || il == nil {
+		t.Fatalf("ReadInstalledLook: %v", err)
+	}
+	for _, s := range il.Settings {
+		if s.Path == "dock.right" && s.Text() != `["clock"]` {
+			t.Errorf("look.toml holds dock.right = %s", s.Text())
+		}
+	}
+}
+
+// TestSetLookValue is the browser page's way to set a look key (see
+// internal/learn). It takes what a look file may hold, and refuses a list
+// with an item a look leaves out instead of dropping the item.
+func TestSetLookValue(t *testing.T) {
+	cfg := DefaultConfig()
+	for _, tc := range []struct{ path, text string }{
+		{"dock.left", `["mode","workspaces"]`},
+		{"dock.center", `[]`},
+		{"dock.tabs.style", "flat"},
+		{"dock.tabs.active_bold", "true"},
+		{"dock.tabs.number_glyphs", `["一","二"]`},
+		{"appearance.sidebar.sections", "sessions,files"},
+		{"appearance.master_ratio", "46"},
+	} {
+		if err := SetLookValue(cfg, tc.path, tc.text); err != nil {
+			t.Errorf("SetLookValue(%s, %s): %v", tc.path, tc.text, err)
+		}
+	}
+	if got := cfg.Dock.DockList("left"); !slices.Equal(got, []string{"mode", "workspaces"}) {
+		t.Errorf("dock.left = %q", got)
+	}
+	if cfg.Dock.Center == nil || len(*cfg.Dock.Center) != 0 {
+		t.Errorf("dock.center = %v, want an empty list", cfg.Dock.Center)
+	}
+	if !cfg.Dock.Tabs.Flat() || !cfg.Dock.Tabs.ActiveBold || cfg.Dock.Tabs.Icon(2) != "二" {
+		t.Errorf("dock.tabs = %+v", cfg.Dock.Tabs)
+	}
+	before := *cfg
+	for _, tc := range []struct{ path, text string }{
+		{"dock.right", `["custom/x","clock"]`},
+		{"dock.right", `["clock","made-up"]`},
+		{"dock.right", `clock`},
+		{"dock.custom.x.command", "evil"},
+		{"appearance.sidebar.sections", "files,custom"},
+		{"appearance.sidebar.sections", "custom:20"},
+		{"dock.tabs.style", "spiky"},
+		{"dock.tabs.separator", "\x1b[2J"},
+		{"appearance.sidebar.editor", "evil"},
+		{"startup.daemon", "false"},
+	} {
+		if err := SetLookValue(cfg, tc.path, tc.text); err == nil {
+			t.Errorf("SetLookValue(%s, %q) was accepted", tc.path, tc.text)
+		}
+	}
+	if got := cfg.Dock.DockList("right"); !slices.Equal(got, before.Dock.DockList("right")) {
+		t.Errorf("a refused set changed dock.right to %q", got)
+	}
+	if cfg.Appearance.Sidebar.Sections != "sessions,files" {
+		t.Errorf("a refused set changed the sections to %q", cfg.Appearance.Sidebar.Sections)
+	}
 }
