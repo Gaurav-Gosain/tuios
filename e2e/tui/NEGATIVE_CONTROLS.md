@@ -9950,6 +9950,41 @@ The `TUIOS_PANE_ID` case alone (without the first control) is not caught by thes
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^(TestHostsSyncInAPaneUpgradesLiveAfterYes|TestHostsSyncInAPaneLeavesTheDaemonWithoutYes|TestOrRestartFromAPaneNeverRestarts)$' .
+### What a window holds outside the session state (handoff version 4)
+
+`e2e/tui/handoff_settings_test.go` covers what section 7.2 of the spec carries from version 4 on. Each test hands the panes to a new image with `test-handoff` and checks the window is still there before it checks the setting.
+
+- `TestSelfExecClosesCloseOnExitWindows`: three windows made with `new-window`. "during" (`close_on_exit`) exits 2 s after it starts, inside a 3.5 s hold between the manifest and the exec, and must close once the new image is up; "after" (`close_on_exit`) exits when a line is typed after the handoff and must close; "plain" exits the same way and must stay, reading 4. The handoff must carry four panes, so "during" was not closed by the old image first.
+- `TestSelfExecKeepsWorkspaceReturn`: two sessions with a `close_on_exit` job pane alone on workspace 5, which they show. "ret" came there with `select-workspace` `return_to` 3 from workspace 1, as `xpanes` does; "trail" came from 3, which it came to from 1. When the job exits after the handoff both must show 3.
+- `TestSelfExecKeepsSessionOrder`: five sessions made in the reverse of their names' order, the second used last. After the handoff `list-sessions` lists them in the same order with the same `created` and `last_active` seconds, and `session-info` with no session names the same one. The handoff runs more than a second after the last activity, so a session stamped at the handoff reports a later second.
+- `TestSelfExecKeepsPluginPane`: a herdr plugin's split pane (fixture `panes`, entry `side`) answers `plugin.pane.focus` before and after the handoff, and its window closes when its program is sent `SIGTERM` after it.
+- `TestSelfExecKeepsProtocolPane`: `start-agent <fakeacp> --protocol acp`; `list-agents` names protocol `acp` before and after.
+- `TestSelfExecKeepsPaneCreator`: with `[agents] enabled = false`, pane A opens B with `tuios call new-window`, and both B and the control C (opened by the test) run `cat` as a job of their shell. A's `send-text` into B exits 0 and into C exits 1 before the handoff and after, and B shows A's text.
+- `TestSelfExecFollowsMovedWindow`: a window moved from alpha to beta takes `set-agent-state` naming alpha and the window before and after the handoff, and beta reads the state.
+- `TestSelfExecKeepsReportColors`: a client with the `dracula` theme behind the light stand-in host pushes the theme's colours, then closes. After the handoff, with no client attached, the pane's OSC 11, 10 and 4;1 answers are still the theme's.
+- `TestDaemonUpgradeAcrossHandoffVersions`, with `TUIOS_E2E_HANDOFF_PREV_BIN` naming a build of upstream main at 6c31c3c10 (handoff version 3): a daemon of that build hands its panes to this one, which adopts them with the same pids and a counter with no gap; this build's daemon refuses to hand over to that build ("cannot read this daemon's state. This daemon writes handoff v4, and that binary reads v2 to v3") with nothing changed; and a version 3 daemon whose new image fails to adopt (`TUIOS_TEST_HANDOFF_FAIL=error`) falls back to `tuios.prev`, the version 3 binary, with the same pids. Skipped without the variable.
+
+Run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against feat/live-handoff-close-on-exit, one build per control, each cutting one line from the manifest writer.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Drop `CloseOnExit` | `CloseOnExit: p.closeOnExit` cut from `handoffRecord` | `TestSelfExecClosesCloseOnExitWindows`: "the close_on_exit window whose program exited during the handoff stayed open", "the close_on_exit window whose program exited after the handoff stayed open" | **caught** |
+| Drop `ReturnTo` | `rec.ReturnTo = maps.Clone(s.returnTo)` cut from `Session.handoffRecord` | `TestSelfExecKeepsWorkspaceReturn`: "session ret shows workspace 1 after its job ended, want 3" | **caught** |
+| Drop `WorkspaceTrail` | `rec.WorkspaceTrail = ...` cut | `TestSelfExecKeepsWorkspaceReturn`: "session trail shows workspace 1 after its job ended, want 3" | **caught** |
+| Drop `Created` | `rec.Created = ...` cut | `TestSelfExecKeepsSessionOrder`: "session e2e-ord-e reports it was created at 1792210438 after the handoff, and at 1792210436 before", and the same for the other four. An earlier version of the test checked only the order and `session-info`, and passed under this control in two runs of three: five sessions in a small map come back in a rotation of the order they were made in, so the times are what is checked now | **caught** |
+| Drop `LastActive` | `rec.LastActive = ...` cut | `TestSelfExecKeepsSessionOrder`: "a call naming no session acts on \"e2e-ord-a\" after the handoff, and on \"e2e-ord-d\" before", "session e2e-ord-e reports it was last active at 1792210441 after the handoff, and at 1792210440 before" | **caught** |
+| Drop `ReportColors` | `rec.ReportColors = ...` cut | `TestSelfExecKeepsReportColors`: "after the handoff a pane's OSC 11 query was answered \"rgb:0000/0000/0000\", want the theme's \"rgb:1e1e/1f1f/2828\"", and the same for OSC 10 and 4;1 | **caught** |
+| Drop `PluginPanes` | the `dr.PluginPanes[id] = ...` line cut from `handoffWindowRecords` | `TestSelfExecKeepsPluginPane`: "after the handoff plugin.pane.focus answered map[code:plugin_pane_not_found ...], want plugin_pane_focused" | **caught** |
+| Drop `ProtocolPanes` | `dr.ProtocolPanes = ...` cut | `TestSelfExecKeepsProtocolPane`: "list-agents names protocol \"\" after the handoff, want acp" | **caught** |
+| Drop `PaneCreators` | `dr.PaneCreators = ...` cut | `TestSelfExecKeepsPaneCreator`: "after the handoff A typing into the pane it opened exited 1 (B shows it: false), want 0" | **caught** |
+| Drop `MovedWindows` | the `dr.MovedWindows[id] = rec` line cut | `TestSelfExecFollowsMovedWindow`: "after the handoff a call naming alpha did not reach the moved window: ... window_not_found" | **caught** |
+| Refuse older manifests | `MinHandoffVersion = 4` | `TestDaemonUpgradeAcrossHandoffVersions/older_to_newer_and_back` and `/fallback_to_the_older_binary`: "cannot read this daemon's state. This daemon writes handoff v3, and that binary reads v4 to v4" (run again on 2026-11-03 on macOS arm64, Go 1.27.3, with the previous build at upstream main 6c31c3c10) | **caught** |
+
+Not covered by a test: a `close_on_exit` or popup pane that the old image reaped before the reap gates shut, and whose queued close had not run when the manifest was written. The window between the reap and the close is a goroutine's start, and no hook holds it open; the new image's close of such a pane is checked by reading `adopt`.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_PREV_BIN=/path/to/tuios-handoff-v3 \
+  go test -count=1 -run '^(TestSelfExecClosesCloseOnExitWindows|TestSelfExecKeepsWorkspaceReturn|TestSelfExecKeepsSessionOrder|TestSelfExecKeepsPluginPane|TestSelfExecKeepsProtocolPane|TestSelfExecKeepsPaneCreator|TestSelfExecFollowsMovedWindow|TestSelfExecKeepsReportColors|TestDaemonUpgradeAcrossHandoffVersions)$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog
