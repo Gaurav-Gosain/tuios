@@ -211,10 +211,13 @@ func TestDaemonUpgradeKeeperStandsDown(t *testing.T) {
 //
 // In each: every pane keeps its pid; the counter goes on, with no gap except
 // where noted; the daemon answers, from the kept tuios.prev under a new pid;
-// the command reports the recovery; a pane that exits afterwards is heard
-// (with its status, 9, on macOS, where kqueue reports a non-child's status);
-// the restored image's stderr is the daemon log, as the first daemon's is, so
-// a panic in it leaves a trace; and no keeper is left.
+// the command reports the recovery; a pane told to exit afterwards does not
+// read as exited before it is told, and is heard when it does, its kept-open
+// window saying how; the restored image's stderr is the daemon log, as the
+// first daemon's is, so a panic in it leaves a trace; and no keeper is left.
+// The status is 9 where the kernel tells a non-parent
+// (statusKeptForNonParent), and elsewhere wait-for omits it and the window
+// says it is not known.
 func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -261,8 +264,14 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 			ticks := counterLines(mustScrollback(t, base, sess, counter), "k-")
 			_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": exiter, "text": "ping\n"})
 			waitHandoffPane(t, base, sess, exiter, regexp.MustCompile(`^got-ping`), 10*time.Second)
+			// The program still runs, so its window must not read as exited:
+			// a daemon that took the failed wait of a non-parent for the end
+			// would mark it at once.
+			_, earlyErr := callVerb(t, base, "wait-for", map[string]any{"session": sess, "window": exiter, "condition": "window-exit", "timeout": 300})
 			_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": exiter, "text": "quit\n"})
-			code := windowExitCode(t, base, sess, exiter, 10*time.Second)
+			code, known := windowExit(t, base, sess, exiter, 10*time.Second)
+			exiterGone := !processRunning(before[exiter])
+			note := waitHandoffPane(t, base, sess, exiter, regexp.MustCompile(`\[The program (exited with status -?\d+|ended\. Its exit status is not known)\.\]`), 10*time.Second)[0]
 			gone, left := awaitNoKeeper(t, base, 3*time.Second)
 
 			writeHandoffArtifact(t, map[string]any{
@@ -271,7 +280,9 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 				"executable_after": exe, "panes_before": before, "panes_after": afterPIDs,
 				"upgrade_output": out, "upgrade_error": errString(upErr), "outcome": outcome, "took_ms": took.Milliseconds(),
 				"stats": stats, "ticks_before_last": lastOf(ticksBefore), "ticks_checked": len(ticks), "tick_gap_at": firstGap(ticks),
-				"exit_after": code, "keepers_left": left, "keeper_gone_ms": gone.Milliseconds(),
+				"exit_after": code, "exit_known": known, "exit_note": note, "exited_before_quit": earlyErr == nil,
+				"exiter_gone": exiterGone, "kernel_keeps_status": statusKeptForNonParent(t),
+				"keepers_left": left, "keeper_gone_ms": gone.Milliseconds(),
 				"daemon_log": logPath, "stderr_before": stderrBefore, "stderr_after": stderrAfter,
 			})
 
@@ -311,12 +322,39 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 			} else if i := firstGap(ticks); i >= 0 && !tc.gapsOK {
 				t.Errorf("ASSERTION: the counter jumps from %d to %d", ticks[i-1], ticks[i])
 			}
-			if runtime.GOOS == "darwin" && code != 9 {
-				t.Errorf("ASSERTION: the pane that exited 9 after the crash reads %d", code)
+			if earlyErr == nil || !strings.Contains(earlyErr.Error(), "timed out") {
+				t.Errorf("ASSERTION: the pane read as exited while its program still ran: %v", earlyErr)
+			}
+			if !exiterGone {
+				t.Errorf("ASSERTION: the pane's program %d still runs after it was told to exit", before[exiter])
+			}
+			if statusKeptForNonParent(t) {
+				if !known || code != 9 {
+					t.Errorf("ASSERTION: the pane that exited 9 after the crash reads %d (known %v)", code, known)
+				}
+				if note != "[The program exited with status 9.]" {
+					t.Errorf("ASSERTION: the kept-open pane says %q after its program exited 9", note)
+				}
+			} else {
+				if known {
+					t.Errorf("ASSERTION: wait-for reports exit_code %d for a pane whose status this kernel does not give a non-parent", code)
+				}
+				if note != "[The program ended. Its exit status is not known.]" {
+					t.Errorf("ASSERTION: the kept-open pane says %q, want the status named as not known", note)
+				}
 			}
 			if len(left) > 0 {
 				t.Errorf("ASSERTION: a keeper is still there after the recovery: %q", left)
 			}
 		})
 	}
+}
+
+// statusKeptForNonParent says whether the kernel tells a process that is not
+// a pane's parent how the pane ended: kqueue NOTE_EXITSTATUS on macOS. On
+// Linux the daemon a keeper brought back hears a pane end with its status
+// unknown.
+func statusKeptForNonParent(t *testing.T) bool {
+	t.Helper()
+	return runtime.GOOS == "darwin"
 }
