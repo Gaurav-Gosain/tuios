@@ -285,6 +285,18 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	// The thread draws the newest; the page bound holds the rest.
 	if n := len(t.entries); n > 200 {
 		t.entries = append(t.entries[:0], t.entries[n-200:]...)
+		// The cards of the entries cut go with them.
+		if len(t.cards) > len(t.entries) {
+			keep := make(map[string]bool, len(t.entries))
+			for _, en := range t.entries {
+				keep[en.ID] = true
+			}
+			for id := range t.cards {
+				if !keep[id] {
+					delete(t.cards, id)
+				}
+			}
+		}
 	}
 	if msg.cursor != "" {
 		t.cursor = msg.cursor
@@ -424,7 +436,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 	}
 	key := threadBodyKey{
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
-		width: width, minute: now.Unix() / 60, ascii: overlay.UseASCII(),
+		width: width, minute: threadMinute(e, now), ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
 		expand: t.expandAll, changes: m.Inbox.ck.tab == 1,
 	}
@@ -434,6 +446,16 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 	t.hits = nil
 	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
 	return t.body
+}
+
+// threadMinute is the minute a thread's lines depend on: a recap says how
+// long ago a turn ended, and a transcript's cards carry clock times only, so
+// a minute passing builds them again for nothing.
+func threadMinute(e sidebarAgentEntry, now time.Time) int64 {
+	if threadTranscriptHarness(e.Harness) {
+		return 0
+	}
+	return now.Unix() / 60
 }
 
 // threadBodyLines draws threadBody. A conversation is drawn from its newest

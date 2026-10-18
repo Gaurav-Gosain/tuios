@@ -148,7 +148,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	// thread that grows by one entry draws only that one.
 	gen := theme.Generation()
 	cached := func(en threadEntry, variant int, build func() []ckLine) {
-		key := ckCardKey{width: width, theme: gen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth,
+		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth,
 			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status}
 		if card, ok := t.cards[en.ID]; ok && card.key == key {
 			items = ckAddItem(items, card.item, blank)
@@ -291,7 +291,7 @@ type ckCard struct {
 // a transcript never changes once written.
 type ckCardKey struct {
 	width                   int
-	theme                   uint64
+	theme, look             uint64
 	depth                   overlay.Depth
 	ascii, nerd             bool
 	folded, expand, changes bool
