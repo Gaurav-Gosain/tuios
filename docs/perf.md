@@ -2876,10 +2876,14 @@ linux/amd64 then darwin/arm64:
 | pull request | linux/amd64 | darwin/arm64 | budgets |
 |---|---|---|---|
 | the agents cockpit: grouped fleet and rich rows | 53,248 | 50,992 | 37,721,000 and 35,464,000 |
+| thread cards from transcripts | 77,824 | 67,840 | 37,798,000 and 35,532,000 |
 
 The fleet pull request measured 37,662,882 and 35,408,882 bytes before it and
 37,716,130 and 35,459,874 after (Go 1.26.9). It deletes the Inbox panel's list,
-the agents view and the thread panel it replaces. linux/amd64 grows by whole 4 KB pages, so darwin/arm64 is the measure of a change.
+the agents view and the thread panel it replaces. linux/amd64 grows by whole 4 KB pages, so darwin/arm64 is the measure of a change. The thread cards measured
+37,793,954 and 35,527,714 bytes. The card append is kept out of line with
+`//go:noinline`: inlined at each card it cost 8 KB more on both targets, and
+the thread is drawn once per change, never per frame.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
