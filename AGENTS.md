@@ -113,7 +113,7 @@ Some parts of tuios are Go modules of their own, published under
 `tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
 that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
-(`tuios.dev/swatch`) and `shot/` (`tuios.dev/shot`).
+(`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`) and `tml/` (`tuios.dev/tml`).
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -133,7 +133,7 @@ that points the go command at the folder in this repository. They are
   that imports it, because `go mod tidy` drops a requirement nothing imports.
   Until then `scripts/library-pins.sh` skips it.
 - `./...` from the root stops at a nested module. Name a library to test it:
-  `go test ./progstatus/... ./vt/...`.
+  `go test ./progstatus/... ./vt/... ./tml/...`.
 - A library imports no `github.com/Gaurav-Gosain/tuios/...` package.
 - A branch made before `internal/vt` became `vt/` crosses the move with
   `scripts/vt-rename.sh` after a rebase.
@@ -214,6 +214,7 @@ tuios/
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells
 ├── swatch/                 # tuios.dev/swatch, a Go module of its own: desktop theme palettes (Omarchy), followed live
+├── tml/                    # tuios.dev/tml, a Go module of its own: the TML markup for surfaces (codecs, validator, expressions, JSON Patch); draws nothing
 ├── vt/                     # tuios.dev/vt, a Go module of its own: the terminal emulator, pure Go, plus libghostty-vt behind -tags ghostty
 │   ├── emulator.go         # The pure Go Emulator and its write path
 │   ├── parser.go           # Parser state machine

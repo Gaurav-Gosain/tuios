@@ -1,7 +1,7 @@
 name: Go libraries
 
 # The Go libraries in this repository, each a module of its own under a
-# tuios.dev import path (progstatus/, vt/, swatch/ and shot/). CI and local builds use the
+# tuios.dev import path (progstatus/, vt/, swatch/, shot/ and tml/). CI and local builds use the
 # folders through go.work. `go install .../cmd/tuios@vX` and the release use
 # the versions go.mod pins. This workflow keeps the two in step, and tests each
 # library alone, as an importer gets it.
@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [progstatus, vt, swatch, shot]
+        dir: [progstatus, vt, swatch, shot, tml]
     defaults:
       run:
         working-directory: ${{ matrix.dir }}

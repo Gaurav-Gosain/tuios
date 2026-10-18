@@ -8,6 +8,7 @@ use (
 	./progstatus
 	./shot
 	./swatch
+	./tml
 	./vt
 )
 

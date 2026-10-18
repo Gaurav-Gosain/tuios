@@ -19,6 +19,7 @@ on:
       - swatch/go.sum
       - shot/go.mod
       - shot/go.sum
+      - tml/go.mod
       - tuios.nix
       - flake.nix
       - flake.lock
@@ -36,6 +37,7 @@ on:
       - swatch/go.sum
       - shot/go.mod
       - shot/go.sum
+      - tml/go.mod
       - tuios.nix
       - flake.nix
       - flake.lock

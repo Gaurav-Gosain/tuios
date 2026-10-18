@@ -74,13 +74,13 @@ jobs:
         # the job the change belongs to.
         #
         # go mod tidy ignores go.work, so it needs each Go library of this
-        # repository (progstatus/, vt/, swatch/, shot/) at the version go.mod pins.
+        # repository (progstatus/, vt/, swatch/, shot/, tml/) at the version go.mod pins.
         # The libraries come from a GOPROXY directory built from the pinned
         # commits, so the check does not depend on tuios.dev.
         run: |
           scripts/library-pins.sh proxy "$RUNNER_TEMP/libproxy"
           export GOPROXY="file://$RUNNER_TEMP/libproxy,$(go env GOPROXY)" GONOSUMDB=tuios.dev
-          for dir in . e2e/tui progstatus vt swatch shot; do
+          for dir in . e2e/tui progstatus vt swatch shot tml; do
             if ! (cd "$dir" && GOWORK=off go mod tidy -diff); then
               echo "$dir/go.mod is not tidy; run: (cd $dir && go mod tidy)" >&2
               exit 1
@@ -89,10 +89,10 @@ jobs:
 
       # ./... stops at a nested module, so the libraries are named too.
       - name: Vet
-        run: go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/...
+        run: go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/...
 
       - name: Build
-        run: go build ./... ./progstatus/... ./vt/... ./swatch/... ./shot/...
+        run: go build ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/...
 
       - name: Example tapes validate
         # Every example under examples/ is held to the parser the release
@@ -115,7 +115,7 @@ jobs:
         # -count=1 because the test cache replays a pass across a change the
         # cache key does not see, which is how a mutation sweep can come back
         # green on code that no longer exists.
-        run: go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... -count=1 -timeout 20m
+        run: go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... -count=1 -timeout 20m
 
   windows:
     name: go test (windows)
@@ -158,4 +158,4 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Test with the race detector
-        run: go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... -race -count=1 -timeout 80m
+        run: go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... -race -count=1 -timeout 80m

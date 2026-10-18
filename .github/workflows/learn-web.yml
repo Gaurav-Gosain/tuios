@@ -19,6 +19,7 @@ on:
       - "vt/**"
       - "swatch/**"
       - "shot/**"
+      - "tml/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"

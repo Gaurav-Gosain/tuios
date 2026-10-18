@@ -94,6 +94,8 @@ jobs:
             targets: FuzzParsePaletteReply
           - pkg: swatch/termconfig
             targets: FuzzParse
+          - pkg: tml
+            targets: FuzzParseXML FuzzParseJSON FuzzExpr FuzzPatch
 
     steps:
       - uses: actions/checkout@v7

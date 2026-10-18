@@ -43,6 +43,7 @@ on:
       - "progstatus/**"
       - "swatch/**"
       - "shot/**"
+      - "tml/**"
   pull_request:
     paths:
       - "vt/**"
@@ -73,6 +74,7 @@ on:
       - "progstatus/**"
       - "swatch/**"
       - "shot/**"
+      - "tml/**"
   workflow_dispatch:
 
 permissions:

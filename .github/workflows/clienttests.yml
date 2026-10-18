@@ -19,6 +19,7 @@ on:
       - "vt/**"
       - "swatch/**"
       - "shot/**"
+      - "tml/**"
       - "cmd/tuios-web/**"
       - "internal/app/**"
       - "internal/input/**"
