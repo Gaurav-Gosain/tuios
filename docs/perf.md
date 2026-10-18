@@ -2868,6 +2868,19 @@ bytes (Go 1.26.9). The change adds 16,384 and 16,848 bytes. On linux/amd64 it
 measured 8,192 at e77a6641; the rest is alignment against #879. No dependency
 was added. The new budgets leave 5,214 and 17,294 bytes of room.
 
+The agents cockpit, wave 1 of ~/dev/tuios-notes/cockpit/DESIGN.md, raises the
+budgets once per pull request. Each pull request measures main or the branch
+under it, and sets the budget about 4 KB over its own size. By pull request,
+linux/amd64 then darwin/arm64:
+
+| pull request | linux/amd64 | darwin/arm64 | budgets |
+|---|---|---|---|
+| the agents cockpit: grouped fleet and rich rows | 53,248 | 50,992 | 37,721,000 and 35,464,000 |
+
+The fleet pull request measured 37,662,882 and 35,408,882 bytes before it and
+37,716,130 and 35,459,874 after (Go 1.26.9). It deletes the Inbox panel's list,
+the agents view and the thread panel it replaces. linux/amd64 grows by whole 4 KB pages, so darwin/arm64 is the measure of a change.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
