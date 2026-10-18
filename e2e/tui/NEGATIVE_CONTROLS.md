@@ -6975,3 +6975,16 @@ The controls were run on 2026-10-18 on branch `feat/theme-change-997`.
 | The notice only on a dark and light flip, which is `main` before the change | `Emulator.SetReportColors`: `changed` is a change of `isLightBackground` | `TestOmarchyThemeSwitchIsFollowed` ("after the switch to Gruvbox the program that turned on mode 2031 was not told dark") | **caught** |
 | Two notices for one theme push, one for the pair and one for the sixteen | `Emulator.SetReportColors`: a write for a changed pair and another for a changed palette | `TestOmarchyThemeSwitchIsFollowed` ("the switch to Gruvbox did not send the program exactly one notice"), `TestConform_ColorSchemeNotice` | **caught** |
 | DSR 996 unanswered | the `case 996` in the private DSR handler cut | `TestConform_ColorSchemeDSR` (every case), `TestStatusReportFormPerBackend` (unit tests in `vt/`, not e2e) | **caught** |
+
+After review, two storms were fixed on the same branch. `TestOmarchyThemeSwitchIsFollowed`
+then moves through the theme picker on the way to Dracula: the pane program must
+get no notice while the picker is open, and one dark notice for the pick.
+`TestThemedDaemonPaneReportsTheTheme` attaches a second client with
+`--theme catppuccin_latte` after input at the first: a pane must keep answering
+Dracula's background, and Nord's after the second client picks Nord. Run on
+2026-10-18.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The report follows each previewed theme | `reportedToPanes`: the hold while the picker or editor is open cut | `TestOmarchyThemeSwitchIsFollowed` ("moving through the theme picker sent the program a notice", "picking Dracula did not send the program exactly one notice") | **caught** |
+| Every client's push sets the report colours | the push handler: the `ownsReportColors` check cut | `TestThemedDaemonPaneReportsTheTheme` ("after a second client on Latte attached, a pane's OSC 11 was answered \"rgb:efef/f1f1/f5f5\", want the first client's Dracula \"rgb:1e1e/1f1f/2828\"") | **caught** |

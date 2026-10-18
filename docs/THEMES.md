@@ -207,6 +207,11 @@ A program can also ask tuios to tell it when the colours change:
   change from one dark theme to another dark theme.
 - tuios sends one notice for each theme change, also when the background, the
   text colour and the sixteen colours all change.
+- While the theme picker or the theme editor is open, tuios sends no notice.
+  The panes show each theme. When you pick a theme, tuios sends one notice.
+  When you cancel, tuios sends nothing.
+- With two or more clients in one session, the panes report the theme of the
+  client that you used last. A client that you do not use does not change it.
 - `CSI ? 996 n` asks for the same report at any time.
 
 Neovim 0.11 and later asks for the background again when the notice comes, and

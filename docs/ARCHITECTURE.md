@@ -353,6 +353,9 @@ follows the terminal's light and dark switch through mode 2031 and DSR 997.
 In the other direction, a `SetReportColors` call that changes any of the
 answers sends a guest that turned on mode 2031 one `CSI ? 997 ; Ps n`
 notice, and the emulator answers `CSI ? 996 n` with the same report.
+`SetThemeColors` sends no notice, so the client holds the report while the
+theme picker or editor previews a theme. In a daemon session only the client
+with the newest input (`MsgClientActivity`) sets the report colours.
 
 **Design Rationale:**
 
