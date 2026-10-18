@@ -45,11 +45,11 @@ func (e *Expr) Funcs() []string { return e.fns }
 // into the expression source.
 type SyntaxError struct {
 	Offset  int
-	Msg     string
+	Message string
 	Suggest string // a likely fix, when there is one
 }
 
-func (e *SyntaxError) Error() string { return fmt.Sprintf("at %d: %s", e.Offset, e.Msg) }
+func (e *SyntaxError) Error() string { return fmt.Sprintf("at %d: %s", e.Offset, e.Message) }
 
 type exprNode interface{}
 
@@ -134,7 +134,7 @@ func lex(src string) ([]token, error) {
 			}
 			f, err := strconv.ParseFloat(src[start:i], 64)
 			if err != nil {
-				return nil, &SyntaxError{Offset: start, Msg: fmt.Sprintf("%q is not a number", src[start:i])}
+				return nil, &SyntaxError{Offset: start, Message: fmt.Sprintf("%q is not a number", src[start:i])}
 			}
 			toks = append(toks, token{kind: tNum, text: src[start:i], num: f, off: start})
 		case c == '\'' || c == '"':
@@ -165,7 +165,7 @@ func lex(src string) ([]token, error) {
 				i++
 			}
 			if !closed {
-				return nil, &SyntaxError{Offset: start, Msg: "the string has no closing quote"}
+				return nil, &SyntaxError{Offset: start, Message: "the string has no closing quote"}
 			}
 			toks = append(toks, token{kind: tStr, text: b.String(), off: start})
 		case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
@@ -191,9 +191,9 @@ func lex(src string) ([]token, error) {
 				continue
 			}
 			if c == '=' {
-				return nil, &SyntaxError{Offset: i, Msg: "assignment is not allowed; use == to compare"}
+				return nil, &SyntaxError{Offset: i, Message: "assignment is not allowed; use == to compare"}
 			}
-			return nil, &SyntaxError{Offset: i, Msg: fmt.Sprintf("unexpected character %q", c)}
+			return nil, &SyntaxError{Offset: i, Message: fmt.Sprintf("unexpected character %q", c)}
 		}
 	}
 	return append(toks, token{kind: tEOF, off: len(src)}), nil
@@ -209,7 +209,7 @@ type exprParser struct {
 // ParseExpr parses one expression.
 func ParseExpr(src string) (*Expr, error) {
 	if len(src) > maxExprLen {
-		return nil, &SyntaxError{Offset: 0, Msg: fmt.Sprintf("the expression is longer than %d bytes", maxExprLen)}
+		return nil, &SyntaxError{Offset: 0, Message: fmt.Sprintf("the expression is longer than %d bytes", maxExprLen)}
 	}
 	toks, err := lex(src)
 	if err != nil {
@@ -221,7 +221,7 @@ func ParseExpr(src string) (*Expr, error) {
 		return nil, err
 	}
 	if t := p.peek(); t.kind != tEOF {
-		return nil, &SyntaxError{Offset: t.off, Msg: fmt.Sprintf("unexpected %q", t.text)}
+		return nil, &SyntaxError{Offset: t.off, Message: fmt.Sprintf("unexpected %q", t.text)}
 	}
 	e := &Expr{src: src, root: root, fns: p.fns}
 	collectDeps(root, &e.deps)
@@ -249,7 +249,7 @@ func (p *exprParser) expect(s string) error {
 		if t.kind == tEOF {
 			got = "the end"
 		}
-		return &SyntaxError{Offset: t.off, Msg: fmt.Sprintf("expected %q, found %q", s, got)}
+		return &SyntaxError{Offset: t.off, Message: fmt.Sprintf("expected %q, found %q", s, got)}
 	}
 	return nil
 }
@@ -257,7 +257,7 @@ func (p *exprParser) expect(s string) error {
 func (p *exprParser) enter() error {
 	p.depth++
 	if p.depth > maxExprDepth {
-		return &SyntaxError{Offset: p.peek().off, Msg: fmt.Sprintf("the expression nests deeper than %d levels", maxExprDepth)}
+		return &SyntaxError{Offset: p.peek().off, Message: fmt.Sprintf("the expression nests deeper than %d levels", maxExprDepth)}
 	}
 	return nil
 }
@@ -357,7 +357,7 @@ func (p *exprParser) postfix() (exprNode, error) {
 			p.next()
 			t := p.next()
 			if t.kind != tIdent {
-				return nil, &SyntaxError{Offset: t.off, Msg: "expected a field name after ."}
+				return nil, &SyntaxError{Offset: t.off, Message: "expected a field name after ."}
 			}
 			x = &memberNode{x, t.text}
 		case p.isOp("["):
@@ -448,7 +448,7 @@ func (p *exprParser) primary() (exprNode, error) {
 				}
 				k := p.next()
 				if k.kind != tIdent && k.kind != tStr {
-					return nil, &SyntaxError{Offset: k.off, Msg: "expected a key in the object"}
+					return nil, &SyntaxError{Offset: k.off, Message: "expected a key in the object"}
 				}
 				if err := p.expect(":"); err != nil {
 					return nil, err
@@ -464,9 +464,9 @@ func (p *exprParser) primary() (exprNode, error) {
 			return obj, nil
 		}
 	case tEOF:
-		return nil, &SyntaxError{Offset: t.off, Msg: "the expression ends too early"}
+		return nil, &SyntaxError{Offset: t.off, Message: "the expression ends too early"}
 	}
-	return nil, &SyntaxError{Offset: t.off, Msg: fmt.Sprintf("unexpected %q", t.text)}
+	return nil, &SyntaxError{Offset: t.off, Message: fmt.Sprintf("unexpected %q", t.text)}
 }
 
 // staticPath returns the root and pointer a chain of member and constant

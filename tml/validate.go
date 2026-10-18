@@ -2,7 +2,6 @@ package tml
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -64,9 +63,7 @@ type validator struct {
 	errors   int
 	ids      map[string]string // id -> pointer
 	tabRefs  []tabRef
-	images   int
 	nodes    int
-	expanded int
 }
 
 type tabRef struct {
@@ -75,27 +72,18 @@ type tabRef struct {
 	pos Pos
 }
 
-// scope is what names an expression may start with at a node. elems holds,
-// for each element name of an enclosing each or list, the elements it ranges
-// over, so a nested each through item.kids can be counted.
+// scope is what names an expression may start with at a node.
 type scope struct {
 	roots  map[string]bool
-	elems  map[string][]any
 	inForm bool
 }
 
-// maxMult caps the product of nested each counts.
-const maxMult = 1 << 30
-
 func newValidator(doc *Node, opts *ValidateOptions) *validator {
-	v := &validator{doc: doc, lim: DefaultLimits(), ids: map[string]string{}}
+	v := &validator{doc: doc, ids: map[string]string{}}
 	if opts != nil {
 		v.opts = *opts
-		if opts.Limits != nil {
-			v.lim = *opts.Limits
-		}
 	}
-	v.lim.Problems = max(v.lim.Problems, 1)
+	v.lim = v.opts.Limits.resolve()
 	return v
 }
 
@@ -138,31 +126,28 @@ func (v *validator) run() {
 		v.add(Problem{Code: CodeBadRoot, Message: fmt.Sprintf("<%s> cannot be the root. Use tml, or a block component such as row.", root.Type)}, root.Pos)
 	}
 	if sv, ok := root.Attr("state"); ok && root.Type == "tml" {
-		if sv.Kind != Object {
+		if sv.Kind != KindObject {
 			v.add(Problem{At: "/state", Code: CodeBadValue, Message: "state must be a JSON object, such as {\"count\": 0}."}, root.Pos)
 		} else if st, err := root.State(); err != nil {
 			// The store loads the state the same way, so a state the store
 			// refuses fails here too.
 			v.add(Problem{At: "/state", Code: CodeBadValue, Message: fmt.Sprintf("The state does not load: %v.", err)}, root.Pos)
-		} else if _, err := NewStore(st, v.lim); err != nil {
+		} else if _, err := NewStore(st, &v.lim); err != nil {
 			v.add(Problem{At: "/state", Code: CodeLimit, Message: sentence(strings.ToUpper(err.Error()[:1]) + err.Error()[1:])}, root.Pos)
 		} else {
 			v.state = st
 		}
 	}
 	sc := scope{roots: map[string]bool{"state": true, "view": true}}
-	v.node(root, "", nil, sc, 1, 1)
+	v.node(root, "", nil, sc, 1)
 	for _, r := range v.tabRefs {
 		ptr, ok := v.ids[r.id]
 		if !ok || v.doc.At(ptr) == nil || v.doc.At(ptr).Type != "tab" {
 			v.add(Problem{At: r.at, Code: CodeBadAction, Message: fmt.Sprintf("tab('%s') names no tab. Give a <tab> that id.", r.id), Accepted: v.tabIDs()}, r.pos)
 		}
 	}
-	if v.images > v.lim.Images {
-		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("The document has %d images after each expands. The limit is %d.", v.images, v.lim.Images)}, Pos{})
-	}
-	if v.expanded > v.lim.Each {
-		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("each and list expand to %d nodes with this state. The limit is %d.", v.expanded, v.lim.Each)}, Pos{})
+	for _, msg := range measure(root, v.state).check(v.lim) {
+		v.add(Problem{Code: CodeLimit, Message: msg}, Pos{})
 	}
 }
 
@@ -202,18 +187,7 @@ func candidates(parent *Component) []string {
 	return out
 }
 
-// mult multiplies two counts, capped.
-func mult(a, b int) int {
-	if a == 0 || b == 0 {
-		return 0
-	}
-	if a > maxMult/b {
-		return maxMult
-	}
-	return a * b
-}
-
-func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth, times int) {
+func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth int) {
 	v.nodes++
 	if v.nodes == v.lim.Nodes+1 {
 		v.add(Problem{At: ptr, Code: CodeLimit, Message: fmt.Sprintf("The document has more than %d nodes.", v.lim.Nodes)}, n.Pos)
@@ -258,18 +232,10 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		}
 	}
 
-	// each repeats the node itself, and binds its element name for it.
+	// each binds its element name for the node itself.
 	nodeScope := sc
-	if each, ok := n.Attr("each"); ok {
-		count, elems := v.elements(each, sc)
-		times = mult(times, count)
-		nodeScope = sc.with(aliasOf(n), elems)
-	}
-	if times > 1 {
-		v.expanded = min(v.expanded+times, maxMult)
-	}
-	if n.Type == "image" {
-		v.images = min(v.images+times, maxMult)
+	if _, ok := n.Attr("each"); ok {
+		nodeScope = sc.with(aliasOf(n))
 	}
 	if n.Type == "form" {
 		nodeScope = nodeScope.form()
@@ -279,22 +245,13 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 	}
 
 	// Children.
-	childScope, childTimes := nodeScope, times
+	childScope := nodeScope
 	if n.Type == "list" {
 		alias := n.AttrString("as")
 		if alias == "" {
 			alias = "item"
 		}
-		var elems []any
-		if items, ok := n.Attr("items"); ok {
-			var count int
-			count, elems = v.elements(items, nodeScope)
-			childTimes = mult(times, count)
-		}
-		childScope = nodeScope.with(alias, elems)
-	}
-	if n.Type == "table" {
-		v.tableRows(n, ptr)
+		childScope = nodeScope.with(alias)
 	}
 	content := ContentBlocks
 	if comp != nil {
@@ -319,9 +276,9 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		}
 		next := childScope
 		if n.Type == "table" && c.Type == "column" {
-			next = childScope.with("value", nil).with("row", nil)
+			next = childScope.with("value").with("row")
 		}
-		v.node(c, cptr, comp, next, depth+1, childTimes)
+		v.node(c, cptr, comp, next, depth+1)
 	}
 	if comp != nil {
 		if comp.MinChildren > 0 && count < comp.MinChildren {
@@ -333,57 +290,6 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 	}
 }
 
-// elements returns how many times a data attribute repeats a node, and the
-// elements, when they are known. A literal array counts its elements. A
-// path into the state counts the array there. A path through an element
-// name (item.kids) counts the longest such array across the elements. A
-// count that cannot be known before the state arrives is 1.
-func (v *validator) elements(data Value, sc scope) (int, []any) {
-	if data.Kind == Array {
-		var arr []any
-		if json.Unmarshal(data.Raw, &arr) != nil {
-			return 1, nil
-		}
-		return len(arr), arr
-	}
-	if data.Kind != String {
-		return 1, nil
-	}
-	root, ptr, err := SplitPath(data.Str)
-	if err != nil {
-		return 1, nil
-	}
-	toks, _ := splitPointer(ptr)
-	if root == "state" {
-		if v.state == nil {
-			return 1, nil
-		}
-		if arr, err := get(v.state, toks); err == nil {
-			if a, ok := arr.([]any); ok {
-				return len(a), a
-			}
-		}
-		return 1, nil
-	}
-	parents, ok := sc.elems[root]
-	if !ok || parents == nil {
-		return 1, nil
-	}
-	longest := 0
-	var all []any
-	for _, p := range parents {
-		if arr, err := get(p, toks); err == nil {
-			if a, ok := arr.([]any); ok {
-				longest = max(longest, len(a))
-				if len(all) < maxMult {
-					all = append(all, a...)
-				}
-			}
-		}
-	}
-	return max(longest, 1), all
-}
-
 func childWord(c *Component) string {
 	if c.Content == ContentOnly && len(c.Children) == 1 {
 		return "<" + c.Children[0] + "> children"
@@ -391,29 +297,17 @@ func childWord(c *Component) string {
 	return "children"
 }
 
-func aliasOf(n *Node) string {
-	if a := n.AttrString("as"); a != "" {
-		return a
-	}
-	return "item"
-}
-
-func (s scope) with(name string, elems []any) scope {
+func (s scope) with(name string) scope {
 	roots := make(map[string]bool, len(s.roots)+1)
 	for k := range s.roots {
 		roots[k] = true
 	}
 	roots[name] = true
-	es := make(map[string][]any, len(s.elems)+1)
-	for k, e := range s.elems {
-		es[k] = e
-	}
-	es[name] = elems
-	return scope{roots: roots, elems: es, inForm: s.inForm}
+	return scope{roots: roots, inForm: s.inForm}
 }
 
 func (s scope) form() scope {
-	out := s.with("form", nil)
+	out := s.with("form")
 	out.inForm = true
 	return out
 }
@@ -434,7 +328,7 @@ func (v *validator) text(n *Node, ptr string, sc scope) {
 	t, err := ParseTemplate(n.Text)
 	if err != nil {
 		te := err.(*TemplateError)
-		v.add(Problem{At: ptr, Code: CodeBadExpression, Message: fmt.Sprintf("The binding in this text does not parse: %s Write {{ for a literal {.", sentence(te.Msg))}, n.Pos)
+		v.add(Problem{At: ptr, Code: CodeBadExpression, Message: fmt.Sprintf("The binding in this text does not parse: %s Write {{ for a literal {.", sentence(te.Message))}, n.Pos)
 		return
 	}
 	for _, e := range t.Exprs() {
@@ -564,33 +458,6 @@ func pointerToPath(ptr string) string {
 		}
 	}
 	return b.String()
-}
-
-func (v *validator) tableRows(n *Node, ptr string) {
-	rows, ok := n.Attr("rows")
-	count := 0
-	switch {
-	case !ok:
-		return
-	case rows.Kind == Array:
-		var arr []any
-		_ = json.Unmarshal(rows.Raw, &arr)
-		count = len(arr)
-	case v.state != nil:
-		root, p, err := SplitPath(rows.Str)
-		if err != nil || root != "state" {
-			return
-		}
-		toks, _ := splitPointer(p)
-		if arr, err := get(v.state, toks); err == nil {
-			if a, ok := arr.([]any); ok {
-				count = len(a)
-			}
-		}
-	}
-	if count > v.lim.TableRows {
-		v.add(Problem{At: ptr + "/rows", Code: CodeLimit, Message: fmt.Sprintf("The table has %d rows. The limit is %d.", count, v.lim.TableRows)}, n.Pos)
-	}
 }
 
 // funcAlias maps a function name from another language to the TML one.
@@ -799,11 +666,11 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 	val := a.Value
 	text := val.Text()
 	// A binding stands in for any value of a bindable attribute.
-	if spec.Bind && val.Kind == String && strings.ContainsAny(text, "{}") {
+	if spec.Bind && val.Kind == KindString && strings.ContainsAny(text, "{}") {
 		t, err := ParseTemplate(text)
 		if err != nil {
 			te := err.(*TemplateError)
-			v.add(Problem{At: at, Code: CodeBadExpression, Message: fmt.Sprintf("The binding in %s does not parse: %s Write {{ for a literal {.", a.Name, sentence(te.Msg))}, a.Pos)
+			v.add(Problem{At: at, Code: CodeBadExpression, Message: fmt.Sprintf("The binding in %s does not parse: %s Write {{ for a literal {.", a.Name, sentence(te.Message))}, a.Pos)
 			return
 		}
 		for _, e := range t.Exprs() {
@@ -832,7 +699,7 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 			v.bad(a, at, "%s must be from %s to %s, not %s.", a.Name, formatNum(spec.Min), formatNum(spec.Max), text)
 		}
 	case TBool:
-		if val.Kind != Bool {
+		if val.Kind != KindBool {
 			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be true or false, not %q.", a.Name, text), Accepted: []string{"false", "true"}}, a.Pos)
 		}
 	case TEnum:
@@ -844,7 +711,7 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 	case TAccent:
 		v.role(a, at, text, true)
 	case TSize:
-		if val.Kind == Number {
+		if val.Kind == KindNumber {
 			if f, _ := val.Float(); f < 0 || f != float64(int64(f)) {
 				v.bad(a, at, "%s must be a whole number of cells, not %s.", a.Name, text)
 			}
@@ -880,7 +747,7 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 		}
 		esc := sc
 		if n.Type == "column" && a.Name == "format" {
-			esc = sc.with("value", nil).with("row", nil)
+			esc = sc.with("value").with("row")
 		}
 		v.expr(e, at, a.Pos, esc)
 	case TAction:
@@ -924,7 +791,7 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 			v.bad(a, at, "pattern is not a valid RE2 regular expression: %v.", err)
 		}
 	case TObject:
-		if val.Kind != Object {
+		if val.Kind != KindObject {
 			v.bad(a, at, "%s must be a JSON object.", a.Name)
 		}
 	}
@@ -932,7 +799,7 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 
 func exprMsg(err error) string {
 	if se, ok := err.(*SyntaxError); ok {
-		return se.Msg
+		return se.Message
 	}
 	return err.Error()
 }
@@ -968,7 +835,7 @@ func (v *validator) role(a Attr, at, text string, accent bool) {
 
 func (v *validator) dataAttr(a Attr, spec AttrSpec, at string, sc scope) {
 	val := a.Value
-	if val.Kind == Array {
+	if val.Kind == KindArray {
 		if spec.Type == TPath {
 			v.bad(a, at, "%s takes a state path such as state.tab, not a literal.", a.Name)
 		}
@@ -1007,7 +874,7 @@ func (v *validator) actions(a Attr, at string, sc scope) {
 		v.add(p, a.Pos)
 		return
 	}
-	asc := sc.with("event", nil)
+	asc := sc.with("event")
 	for _, act := range acts {
 		if act.Name == "tab" {
 			v.tabRefs = append(v.tabRefs, tabRef{act.Literal(0), at, a.Pos})

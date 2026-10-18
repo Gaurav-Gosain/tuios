@@ -19,15 +19,16 @@ type Op struct {
 // PatchError is a patch that cannot apply. Index is the operation that
 // failed. A failed test is Code test_failed: the owner reads the state again.
 type PatchError struct {
-	Index int
-	Code  string
-	Msg   string
+	Index   int
+	Code    string
+	Message string
 }
 
-func (e *PatchError) Error() string { return fmt.Sprintf("op %d: %s", e.Index, e.Msg) }
+func (e *PatchError) Error() string { return fmt.Sprintf("op %d: %s", e.Index, e.Message) }
 
 // DecodePatch decodes a JSON Patch document and checks its size and shape.
-func DecodePatch(src []byte, lim Limits) ([]Op, error) {
+func DecodePatch(src []byte, limits *Limits) ([]Op, error) {
+	lim := limits.resolve()
 	if len(src) > lim.PatchBytes {
 		return nil, &PatchError{-1, CodeLimit, fmt.Sprintf("the patch is %d bytes; the limit is %d bytes", len(src), lim.PatchBytes)}
 	}
@@ -48,18 +49,18 @@ func checkOp(op Op) *PatchError {
 	switch op.Op {
 	case "add", "replace", "test":
 		if op.Value == nil {
-			return &PatchError{Code: CodeSyntax, Msg: op.Op + " needs a value"}
+			return &PatchError{Code: CodeSyntax, Message: op.Op + " needs a value"}
 		}
 	case "move", "copy":
 		if _, err := splitPointer(op.From); err != nil {
-			return &PatchError{Code: CodeSyntax, Msg: "from: " + err.Error()}
+			return &PatchError{Code: CodeSyntax, Message: "from: " + err.Error()}
 		}
 	case "remove":
 	default:
-		return &PatchError{Code: CodeSyntax, Msg: fmt.Sprintf("%q is not an operation; use add, remove, replace, move, copy or test", op.Op)}
+		return &PatchError{Code: CodeSyntax, Message: fmt.Sprintf("%q is not an operation; use add, remove, replace, move, copy or test", op.Op)}
 	}
 	if _, err := splitPointer(op.Path); err != nil {
-		return &PatchError{Code: CodeSyntax, Msg: "path: " + err.Error()}
+		return &PatchError{Code: CodeSyntax, Message: "path: " + err.Error()}
 	}
 	return nil
 }
@@ -114,7 +115,7 @@ func applyPatch(doc any, size int, ops []Op, lim Limits) (any, int, error) {
 
 func overLimit(size int, lim Limits) error {
 	if size > lim.StateBytes {
-		return &PatchError{Code: CodeLimit, Msg: fmt.Sprintf("the state would pass %d bytes, the limit", lim.StateBytes)}
+		return &PatchError{Code: CodeLimit, Message: fmt.Sprintf("the state would pass %d bytes, the limit", lim.StateBytes)}
 	}
 	return nil
 }
@@ -175,7 +176,7 @@ func applyOp(doc any, size int, op Op, lim Limits) (any, int, error) {
 	case "move":
 		from, _ := splitPointer(op.From)
 		if isPrefix(from, path) && len(from) < len(path) {
-			return nil, 0, &PatchError{Code: CodeBadValue, Msg: "cannot move a value into itself"}
+			return nil, 0, &PatchError{Code: CodeBadValue, Message: "cannot move a value into itself"}
 		}
 		d, v, err := remove(doc, from)
 		if err != nil {
@@ -203,11 +204,11 @@ func applyOp(doc any, size int, op Op, lim Limits) (any, int, error) {
 		}
 		got, err := get(doc, path)
 		if err != nil || !equal(got, v) {
-			return nil, 0, &PatchError{Code: CodeTestFailed, Msg: fmt.Sprintf("test at %s failed; read the state again", op.Path)}
+			return nil, 0, &PatchError{Code: CodeTestFailed, Message: fmt.Sprintf("test at %s failed; read the state again", op.Path)}
 		}
 		return doc, size, nil
 	}
-	return nil, 0, &PatchError{Code: CodeSyntax, Msg: "unknown op"}
+	return nil, 0, &PatchError{Code: CodeSyntax, Message: "unknown op"}
 }
 
 func isObjectMember(doc any, path []string) bool {
@@ -224,9 +225,13 @@ func isObjectMember(doc any, path []string) bool {
 func decodeValue(raw json.RawMessage) (any, error) {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, &PatchError{Code: CodeSyntax, Msg: "the value is not JSON: " + err.Error()}
+		return nil, &PatchError{Code: CodeSyntax, Message: "the value is not JSON: " + err.Error()}
 	}
-	return SanitizeValue(v), nil
+	clean, err := SanitizeJSON(v)
+	if err != nil {
+		return nil, &PatchError{Code: CodeBadValue, Message: err.Error()}
+	}
+	return clean, nil
 }
 
 func isPrefix(a, b []string) bool {
@@ -242,7 +247,7 @@ func isPrefix(a, b []string) bool {
 }
 
 func notFound(path []string) error {
-	return &PatchError{Code: CodePathMissing, Msg: "the state has no /" + strings.Join(path, "/")}
+	return &PatchError{Code: CodePathMissing, Message: "the state has no /" + strings.Join(path, "/")}
 }
 
 // arrayIndex reads an RFC 6901 array index: 0, or digits with no leading

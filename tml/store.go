@@ -3,7 +3,6 @@ package tml
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -19,21 +18,21 @@ type Store struct {
 	version uint64
 	size    int
 	lim     Limits
+	doc     *Node // the tree whose each, list and data the patches may grow
 }
 
 // NewStore returns a store holding state. state may be nil. The store keeps
 // a sanitized copy when state holds an unsafe character.
-func NewStore(state map[string]any, lim Limits) (*Store, error) {
+func NewStore(state map[string]any, limits *Limits) (*Store, error) {
+	lim := limits.resolve()
 	if state == nil {
 		state = map[string]any{}
 	}
-	clean, ok := SanitizeValue(state).(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("the state must be a JSON object")
+	v, err := SanitizeJSON(state)
+	if err != nil {
+		return nil, fmt.Errorf("the state is not valid: %v", err)
 	}
-	if err := checkFinite(clean); err != nil {
-		return nil, err
-	}
+	clean := v.(map[string]any)
 	s := &Store{root: clean, lim: lim, size: cappedSize(clean, lim.StateBytes)}
 	if s.size > lim.StateBytes {
 		return nil, fmt.Errorf("the state is over %d bytes, the limit", lim.StateBytes)
@@ -41,36 +40,20 @@ func NewStore(state map[string]any, lim Limits) (*Store, error) {
 	return s, nil
 }
 
-// checkFinite refuses a number that JSON cannot hold.
-func checkFinite(v any) error {
-	switch x := v.(type) {
-	case float64:
-		if math.IsNaN(x) || math.IsInf(x, 0) {
-			return fmt.Errorf("the state holds a number that is not finite")
-		}
-	case []any:
-		for _, e := range x {
-			if err := checkFinite(e); err != nil {
-				return err
-			}
-		}
-	case map[string]any:
-		for _, e := range x {
-			if err := checkFinite(e); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// StoreFor returns the store of a document's state.
-func StoreFor(doc *Node, lim Limits) (*Store, error) {
+// StoreFor returns the store of a document's state. The store keeps the
+// tree, and Apply refuses a patch that would make each, list, the images or
+// the rows of tables, lists, trees and charts pass their limits.
+func StoreFor(doc *Node, lim *Limits) (*Store, error) {
 	st, err := doc.State()
 	if err != nil {
 		return nil, err
 	}
-	return NewStore(st, lim)
+	s, err := NewStore(st, lim)
+	if err != nil {
+		return nil, err
+	}
+	s.doc = doc
+	return s, nil
 }
 
 // State returns the state. The caller must not change it.
@@ -99,6 +82,9 @@ func (s *Store) Get(pointer string) any {
 // unchanged. The size limit is checked after every operation. It returns the
 // JSON Pointers the patch changed.
 func (s *Store) Apply(ops []Op) ([]string, error) {
+	if s.root == nil {
+		s.root, s.lim = map[string]any{}, (*Limits)(nil).resolve()
+	}
 	next, _, err := applyPatch(s.root, s.size, ops, s.lim)
 	if err != nil {
 		return nil, err
@@ -110,6 +96,11 @@ func (s *Store) Apply(ops []Op) ([]string, error) {
 	size := cappedSize(m, s.lim.StateBytes)
 	if size > s.lim.StateBytes {
 		return nil, &PatchError{-1, CodeLimit, fmt.Sprintf("the state would pass %d bytes, the limit", s.lim.StateBytes)}
+	}
+	if s.doc != nil {
+		if over := measure(s.doc, m).check(s.lim); len(over) > 0 {
+			return nil, &PatchError{-1, CodeLimit, "after the patch: " + over[0]}
+		}
 	}
 	s.root, s.size = m, size
 	s.version++
@@ -146,7 +137,7 @@ func (s *Store) Set(path string, value any) ([]string, error) {
 		}
 		cur = next
 	}
-	raw, err := json.Marshal(SanitizeValue(value))
+	raw, err := json.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("set %s: %v", path, err)
 	}

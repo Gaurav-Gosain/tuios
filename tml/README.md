@@ -83,13 +83,13 @@ doc, _, err := tml.Check(src, nil)
 if err != nil {
 	panic(err)
 }
-store, err := tml.StoreFor(doc, tml.DefaultLimits())
+store, err := tml.StoreFor(doc, nil)
 if err != nil {
 	panic(err)
 }
 
 // The owner sends a patch. Apply returns the state paths it changed.
-ops, err := tml.DecodePatch([]byte(`[{"op":"replace","path":"/pct","value":80}]`), tml.DefaultLimits())
+ops, err := tml.DecodePatch([]byte(`[{"op":"replace","path":"/pct","value":80}]`), nil)
 if err != nil {
 	panic(err)
 }
@@ -122,9 +122,10 @@ It prints `[/pct]`, then `0.8 <nil>`. The code is the body of `Example` in
   `Store.Set` pass every string and key through `Sanitize`. `Expr.Eval` and
   `Template.Eval` sanitize what they return. A renderer that reads the store
   directly, such as for table rows, gets clean strings.
-- **Spend an `Expansion` while you expand.** The validator counts `each` and
-  `list` against the state a document arrives with. A patch can grow an
-  array later, so take nodes from `NewExpansion(limits)` as you render.
+- **Use `StoreFor` for a document's state.** The store keeps the tree, and
+  `Apply` refuses a patch that grows `each`, `list`, the images or the rows
+  past their limits. The validator checks the same counts when a document
+  arrives.
 
 ## Syntax
 
@@ -403,7 +404,7 @@ and `bad_root`.
 | Depth | 32 |
 | State | 1 MiB |
 | Nodes that `each` and `list` expand to | 2,000 |
-| Table rows | 50,000 |
+| Rows and data points of tables, lists, trees and charts, after `each` expands | 50,000 |
 | Patch | 64 KiB, 100 a second per surface |
 | Images | 4 per document after `each` expands, 4 MiB each |
 | Problems in one report | 20 |

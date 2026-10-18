@@ -66,7 +66,7 @@ func TestActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, _ := tml.StoreFor(doc, tml.DefaultLimits())
+	store, _ := tml.StoreFor(doc, nil)
 	view := NewView()
 	run := func(src string, env *tml.Env) Result {
 		t.Helper()
@@ -156,5 +156,12 @@ func TestDepsDynamicIndex(t *testing.T) {
 	}
 	if got := d.Affected([]string{"/items/0/name"}); !reflect.DeepEqual(got, []string{"/children/0"}) {
 		t.Errorf("affected %v", got)
+	}
+}
+
+func TestExpansion(t *testing.T) {
+	e := NewExpansion(nil)
+	if !e.Take(1999) || e.Take(2) || !e.Take(1) || e.Left() != 0 {
+		t.Error("the expansion budget does not hold 2,000 nodes")
 	}
 }

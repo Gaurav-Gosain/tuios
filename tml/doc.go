@@ -23,6 +23,12 @@
 // records the state paths it reads (Expr.Deps), so a renderer can redraw
 // only what a patch touches.
 //
+// The host owns the frame. It gives every binding of one frame the same
+// Budget; a nil Budget bounds each call alone. It makes the store of a
+// document with StoreFor, so a patch cannot grow each, list or the rows
+// past the limits. Every string and key that enters a store or a tree, or
+// leaves an evaluation, has passed through Sanitize.
+//
 // It draws nothing, and it imports only the standard library. No code from a
 // document runs: expressions compute values and cannot loop, assign or call
 // out.

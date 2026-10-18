@@ -19,11 +19,11 @@ type tmplPart struct {
 // TemplateError is a binding that does not parse. Offset is a byte offset
 // into the template text.
 type TemplateError struct {
-	Offset int
-	Msg    string
+	Offset  int
+	Message string
 }
 
-func (e *TemplateError) Error() string { return e.Msg }
+func (e *TemplateError) Error() string { return e.Message }
 
 // ParseTemplate splits text into literal runs and bindings.
 func ParseTemplate(s string) (*Template, error) {
@@ -52,7 +52,7 @@ func ParseTemplate(s string) (*Template, error) {
 			e, err := ParseExpr(src)
 			if err != nil {
 				if se, ok := err.(*SyntaxError); ok {
-					return nil, &TemplateError{i + 1 + se.Offset, se.Msg}
+					return nil, &TemplateError{i + 1 + se.Offset, se.Message}
 				}
 				return nil, &TemplateError{i + 1, err.Error()}
 			}

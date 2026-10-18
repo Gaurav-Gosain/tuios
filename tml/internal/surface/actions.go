@@ -163,7 +163,7 @@ func RunActions(doc *tml.Node, store *tml.Store, view *View, source string, acti
 			if !ok {
 				if n, _ := doc.Find(id); n != nil {
 					v, _ := n.Attr("fold")
-					cur = v.Kind == tml.Bool && v.Bool
+					cur = v.Kind == tml.KindBool && v.Bool
 				}
 			}
 			view.Fold[id] = !cur

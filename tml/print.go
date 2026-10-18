@@ -48,7 +48,7 @@ func printXML(b *bytes.Buffer, n *Node, indent int, block bool) {
 		a := &n.Attrs[i]
 		// Only the document root prints its state as an element: the root
 		// is the one node printed at indent 0 as a block.
-		if a.Name == "state" && n.Type == "tml" && a.Value.Kind == Object && indent == 0 && block {
+		if a.Name == "state" && n.Type == "tml" && a.Value.Kind == KindObject && indent == 0 && block {
 			state = &a.Value
 			continue
 		}
@@ -229,11 +229,11 @@ func printJSON(b *bytes.Buffer, n *Node) {
 		writeJSONString(b, a.Name)
 		b.WriteByte(':')
 		switch a.Value.Kind {
-		case Number:
+		case KindNumber:
 			b.WriteString(a.Value.Str)
-		case Bool:
+		case KindBool:
 			b.WriteString(strconv.FormatBool(a.Value.Bool))
-		case Array, Object:
+		case KindArray, KindObject:
 			b.Write(a.Value.Raw)
 		default:
 			writeJSONString(b, a.Value.Str)

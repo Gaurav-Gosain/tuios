@@ -59,7 +59,7 @@ func (d *Deps) walk(n *tml.Node, ptr string, scope map[string]string) {
 
 	// each binds its alias for the node itself, and list for its children.
 	inner := scope
-	if each, ok := n.Attr("each"); ok && each.Kind == tml.String {
+	if each, ok := n.Attr("each"); ok && each.Kind == tml.KindString {
 		if base, ok := dataPointer(each.Str, scope); ok {
 			paths = appendUnique(paths, base)
 			inner = withAlias(scope, aliasOf(n), base)
@@ -77,13 +77,13 @@ func (d *Deps) walk(n *tml.Node, ptr string, scope map[string]string) {
 				addExpr(e)
 			}
 		case tml.TData, tml.TPath:
-			if a.Value.Kind == tml.String {
+			if a.Value.Kind == tml.KindString {
 				if p, ok := dataPointer(a.Value.Str, inner); ok {
 					paths = appendUnique(paths, p)
 				}
 			}
 		default:
-			if a.Value.Kind == tml.String {
+			if a.Value.Kind == tml.KindString {
 				addTemplate(a.Value.Str)
 			}
 		}
@@ -91,13 +91,13 @@ func (d *Deps) walk(n *tml.Node, ptr string, scope map[string]string) {
 	childScope := inner
 	switch n.Type {
 	case "list":
-		if items, ok := n.Attr("items"); ok && items.Kind == tml.String {
+		if items, ok := n.Attr("items"); ok && items.Kind == tml.KindString {
 			if base, ok := dataPointer(items.Str, inner); ok {
 				childScope = withAlias(inner, n.AttrString("as"), base)
 			}
 		}
 	case "table":
-		if rows, ok := n.Attr("rows"); ok && rows.Kind == tml.String {
+		if rows, ok := n.Attr("rows"); ok && rows.Kind == tml.KindString {
 			if base, ok := dataPointer(rows.Str, inner); ok {
 				childScope = withAlias(withAlias(inner, "row", base), "value", base)
 			}

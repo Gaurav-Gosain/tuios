@@ -38,13 +38,13 @@ func Example() {
 	if err != nil {
 		panic(err)
 	}
-	store, err := tml.StoreFor(doc, tml.DefaultLimits())
+	store, err := tml.StoreFor(doc, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	// The owner sends a patch. Apply returns the state paths it changed.
-	ops, err := tml.DecodePatch([]byte(`[{"op":"replace","path":"/pct","value":80}]`), tml.DefaultLimits())
+	ops, err := tml.DecodePatch([]byte(`[{"op":"replace","path":"/pct","value":80}]`), nil)
 	if err != nil {
 		panic(err)
 	}

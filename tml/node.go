@@ -2,6 +2,7 @@ package tml
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 )
 
@@ -21,11 +22,11 @@ type Kind uint8
 // both encodings share. Array and Object hold JSON: the root's state, and a
 // literal array in a data attribute such as sparkline values.
 const (
-	String Kind = iota
-	Number
-	Bool
-	Array
-	Object
+	KindString Kind = iota
+	KindNumber
+	KindBool
+	KindArray
+	KindObject
 )
 
 // Value is an attribute value. A Number keeps its literal text, so a document
@@ -39,22 +40,22 @@ type Value struct {
 }
 
 // StringValue returns a string Value.
-func StringValue(s string) Value { return Value{Kind: String, Str: s} }
+func StringValue(s string) Value { return Value{Kind: KindString, Str: s} }
 
 // NumberValue returns a number Value with the shortest text for f.
 func NumberValue(f float64) Value {
-	return Value{Kind: Number, Str: strconv.FormatFloat(f, 'f', -1, 64)}
+	return Value{Kind: KindNumber, Str: strconv.FormatFloat(f, 'f', -1, 64)}
 }
 
 // BoolValue returns a boolean Value.
-func BoolValue(b bool) Value { return Value{Kind: Bool, Bool: b} }
+func BoolValue(b bool) Value { return Value{Kind: KindBool, Bool: b} }
 
 // Text returns the value as it is written in an XML attribute.
 func (v Value) Text() string {
 	switch v.Kind {
-	case Bool:
+	case KindBool:
 		return strconv.FormatBool(v.Bool)
-	case Array, Object:
+	case KindArray, KindObject:
 		return string(v.Raw)
 	default:
 		return v.Str
@@ -64,7 +65,7 @@ func (v Value) Text() string {
 // Float returns a Number as a float64. The second result is false for any
 // other kind, and for a number that does not parse.
 func (v Value) Float() (float64, bool) {
-	if v.Kind != Number {
+	if v.Kind != KindNumber {
 		return 0, false
 	}
 	f, err := strconv.ParseFloat(v.Str, 64)
@@ -214,7 +215,7 @@ func (n *Node) Clone() *Node {
 // renderer.
 func (n *Node) State() (map[string]any, error) {
 	v, ok := n.Attr("state")
-	if !ok || v.Kind != Object {
+	if !ok || v.Kind != KindObject {
 		return map[string]any{}, nil
 	}
 	var m map[string]any
@@ -224,5 +225,31 @@ func (n *Node) State() (map[string]any, error) {
 	if m == nil {
 		m = map[string]any{}
 	}
-	return SanitizeValue(m).(map[string]any), nil
+	clean, err := SanitizeJSON(m)
+	if err != nil {
+		return nil, err
+	}
+	return clean.(map[string]any), nil
+}
+
+// Decode returns the JSON value of an array or object attribute, such as a
+// literal rows array. The parsers have already passed its strings and keys
+// through Sanitize.
+func (v Value) Decode() (any, error) {
+	if v.Kind != KindArray && v.Kind != KindObject {
+		return nil, fmt.Errorf("the value is a %s, not an array or object", v.kindName())
+	}
+	var out any
+	err := json.Unmarshal(v.Raw, &out)
+	return out, err
+}
+
+func (v Value) kindName() string {
+	switch v.Kind {
+	case KindNumber:
+		return "number"
+	case KindBool:
+		return "boolean"
+	}
+	return "string"
 }

@@ -68,27 +68,27 @@ func ParseActions(s string) ([]Action, error) {
 		e, err := ParseExpr(src)
 		if err != nil {
 			if se, ok := err.(*SyntaxError); ok {
-				return nil, &SyntaxError{Offset: seg[0] + se.Offset, Msg: se.Msg}
+				return nil, &SyntaxError{Offset: seg[0] + se.Offset, Message: se.Message}
 			}
 			return nil, err
 		}
 		call, ok := e.root.(*callNode)
 		if !ok {
-			return nil, &SyntaxError{Offset: seg[0], Msg: fmt.Sprintf("%q is not an action call; write one such as emit('name')", strings.TrimSpace(src))}
+			return nil, &SyntaxError{Offset: seg[0], Message: fmt.Sprintf("%q is not an action call; write one such as emit('name')", strings.TrimSpace(src))}
 		}
 		spec, ok := findAction(call.name)
 		if !ok {
 			msg := fmt.Sprintf("%s is not an action", call.name)
-			return nil, &SyntaxError{Offset: seg[0] + call.off, Msg: msg, Suggest: suggest(call.name, ActionNames())}
+			return nil, &SyntaxError{Offset: seg[0] + call.off, Message: msg, Suggest: suggest(call.name, ActionNames())}
 		}
 		if len(call.args) < spec.min || len(call.args) > spec.max {
-			return nil, &SyntaxError{Offset: seg[0] + call.off, Msg: fmt.Sprintf("%s takes %s", call.name, argCount(spec.min, spec.max))}
+			return nil, &SyntaxError{Offset: seg[0] + call.off, Message: fmt.Sprintf("%s takes %s", call.name, argCount(spec.min, spec.max))}
 		}
 		a := Action{Name: call.name, Off: seg[0] + call.off}
 		for i, arg := range call.args {
 			if i < spec.literal {
 				if _, ok := literalString(arg); !ok {
-					return nil, &SyntaxError{Offset: seg[0] + call.off, Msg: fmt.Sprintf("argument %d of %s must be a quoted string", i+1, call.name)}
+					return nil, &SyntaxError{Offset: seg[0] + call.off, Message: fmt.Sprintf("argument %d of %s must be a quoted string", i+1, call.name)}
 				}
 			}
 			sub := &Expr{src: src, root: arg}
@@ -96,7 +96,7 @@ func ParseActions(s string) ([]Action, error) {
 			a.Args = append(a.Args, sub)
 		}
 		if err := checkActionArgs(a); err != nil {
-			return nil, &SyntaxError{Offset: a.Off, Msg: err.Error()}
+			return nil, &SyntaxError{Offset: a.Off, Message: err.Error()}
 		}
 		out = append(out, a)
 	}

@@ -161,10 +161,14 @@ func (p *jsonParser) object(depth, start int) (*Node, error) {
 		if err != nil {
 			return nil, p.fail(a.pos.Offset, CodeSyntax, "The value of %s is not valid: %v.", a.name, err)
 		}
-		if v.Kind == String {
+		if v.Kind == KindString {
 			v.Str = Sanitize(v.Str)
 		}
-		n.Attrs = append(n.Attrs, Attr{Name: a.name, Value: typedValue(n.Type, a.name, v.Text()), Pos: a.pos})
+		tv, err := typedValue(n.Type, a.name, v.Text())
+		if err != nil {
+			return nil, p.fail(a.pos.Offset, CodeBadValue, "The value of %s is not valid: %v.", a.name, err)
+		}
+		n.Attrs = append(n.Attrs, Attr{Name: a.name, Value: tv, Pos: a.pos})
 	}
 	return n, nil
 }
@@ -260,12 +264,12 @@ func rawToValue(raw json.RawMessage) (Value, error) {
 		if err := json.Compact(&buf, raw); err != nil {
 			return Value{}, err
 		}
-		k := Array
+		k := KindArray
 		if raw[0] == '{' {
-			k = Object
+			k = KindObject
 		}
 		return Value{Kind: k, Raw: buf.Bytes()}, nil
 	default:
-		return Value{Kind: Number, Str: string(raw)}, nil
+		return Value{Kind: KindNumber, Str: string(raw)}, nil
 	}
 }

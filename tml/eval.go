@@ -78,29 +78,39 @@ func withBudget(env *Env) *Env {
 	return env
 }
 
-// sanitizeCharged sanitizes a result and charges a step per eight values it
-// visits.
+// sanitizeCharged sanitizes a result and charges for the scan: a step per
+// value and per 32 bytes of string and key. A string result longer than
+// 64 KiB is cut first, so a large state string cannot be scanned in full
+// for every binding.
 func sanitizeCharged(v any, b *Budget) (any, error) {
-	n := 0
+	if s, ok := v.(string); ok {
+		s = cutRunes(s, maxString)
+		if err := b.spendBytes(len(s)); err != nil {
+			return nil, err
+		}
+		return Sanitize(s), nil
+	}
+	cost := 0
 	var count func(any)
 	count = func(v any) {
-		n++
+		cost++
 		switch x := v.(type) {
+		case string:
+			cost += len(x) / 32
 		case []any:
 			for _, e := range x {
 				count(e)
 			}
 		case map[string]any:
-			for _, e := range x {
+			for k, e := range x {
+				cost += len(k) / 32
 				count(e)
 			}
 		}
 	}
-	if _, scalar := v.(string); !scalar {
-		count(v)
-		if err := b.spend(n / 8); err != nil {
-			return nil, err
-		}
+	count(v)
+	if err := b.spend(cost); err != nil {
+		return nil, err
 	}
 	return SanitizeValue(v), nil
 }
@@ -335,9 +345,12 @@ func Truthy(v any) bool {
 }
 
 // normalize turns the other numeric types into float64, so code that builds
-// an Env by hand can pass int.
+// an Env by hand can pass int. Any value outside the JSON model, such as a
+// []string, reads as null: Env values must be JSON values.
 func normalize(v any) any {
 	switch x := v.(type) {
+	case nil, bool, float64, string, []any, map[string]any:
+		return v
 	case int:
 		return float64(x)
 	case int64:
@@ -345,7 +358,7 @@ func normalize(v any) any {
 	case float32:
 		return float64(x)
 	}
-	return v
+	return nil
 }
 
 func toNum(v any) (float64, bool) {
@@ -752,6 +765,9 @@ func call(name string, a []any, env *Env) (any, error) {
 			sep = s
 		}
 		var b strings.Builder
+		if err := bud.spend(len(arr)); err != nil {
+			return nil, err
+		}
 		for i, v := range arr {
 			if i > 0 {
 				b.WriteString(sep)

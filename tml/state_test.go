@@ -33,7 +33,7 @@ func TestPatchRFC6902(t *testing.T) {
 		{`{"a":{"b":1}}`, `[{"op":"copy","from":"/a","path":"/c"}]`, `{"a":{"b":1},"c":{"b":1}}`},
 	}
 	for _, c := range cases {
-		ops, err := DecodePatch([]byte(c.patch), DefaultLimits())
+		ops, err := DecodePatch([]byte(c.patch), nil)
 		if err != nil {
 			t.Fatalf("%s: %v", c.patch, err)
 		}
@@ -54,7 +54,7 @@ func TestPatchRFC6902(t *testing.T) {
 		{`{"a":{"b":1}}`, `[{"op":"move","from":"/a","path":"/a/b/c"}]`},
 		{`{}`, `[{"op":"replace","path":"/x","value":1}]`},
 	} {
-		ops, err := DecodePatch([]byte(c.patch), DefaultLimits())
+		ops, err := DecodePatch([]byte(c.patch), nil)
 		if err != nil {
 			continue
 		}
@@ -72,18 +72,18 @@ func TestPatchRFC6902(t *testing.T) {
 func TestStore(t *testing.T) {
 	lim := DefaultLimits()
 	lim.StateBytes = 64
-	s, err := NewStore(map[string]any{"n": 1.0, "items": []any{}}, lim)
+	s, err := NewStore(map[string]any{"n": 1.0, "items": []any{}}, &lim)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ops, _ := DecodePatch([]byte(`[{"op":"replace","path":"/n","value":2},{"op":"test","path":"/n","value":3}]`), lim)
+	ops, _ := DecodePatch([]byte(`[{"op":"replace","path":"/n","value":2},{"op":"test","path":"/n","value":3}]`), &lim)
 	if _, err := s.Apply(ops); err == nil {
 		t.Fatal("a failed test applied")
 	}
 	if s.Get("/n") != 1.0 || s.Version() != 0 {
 		t.Fatalf("a failed patch changed the store: %v", s.State())
 	}
-	ops, _ = DecodePatch([]byte(`[{"op":"add","path":"/items/-","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]`), lim)
+	ops, _ = DecodePatch([]byte(`[{"op":"add","path":"/items/-","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]`), &lim)
 	if _, err := s.Apply(ops); err == nil {
 		t.Fatal("a patch past the state limit applied")
 	}
@@ -94,7 +94,7 @@ func TestStore(t *testing.T) {
 	if !reflect.DeepEqual(changed, []string{"/form", "/form/title"}) || s.Get("/form/title") != "x" {
 		t.Errorf("changed %v, state %v", changed, s.State())
 	}
-	if _, err := DecodePatch(make([]byte, lim.PatchBytes+1), lim); err == nil {
+	if _, err := DecodePatch(make([]byte, lim.PatchBytes+1), &lim); err == nil {
 		t.Error("a patch past the size limit decoded")
 	}
 }

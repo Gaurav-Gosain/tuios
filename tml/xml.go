@@ -17,10 +17,10 @@ type ParseOptions struct {
 }
 
 func (o *ParseOptions) limits() Limits {
-	if o == nil || o.Limits == nil {
-		return DefaultLimits()
+	if o == nil {
+		return (*Limits)(nil).resolve()
 	}
-	return *o.Limits
+	return o.Limits.resolve()
 }
 
 // Parse parses a document in either encoding. A document whose first
@@ -301,7 +301,11 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 			return nil, err
 		}
 		p.pos = vstart + end + 1
-		n.Attrs = append(n.Attrs, Attr{Name: an, Value: typedValue(typ, an, Sanitize(val)), Pos: p.posAt(aoff)})
+		tv, err := typedValue(typ, an, Sanitize(val))
+		if err != nil {
+			return nil, p.fail(aoff, CodeBadValue, "The value of %s is not valid: %v.", an, err)
+		}
+		n.Attrs = append(n.Attrs, Attr{Name: an, Value: tv, Pos: p.posAt(aoff)})
 	}
 
 	// Content.
@@ -455,14 +459,14 @@ func (p *xmlParser) absorbState(root *Node) error {
 		if strings.TrimSpace(src) == "" {
 			src = "{}"
 		}
-		var buf bytes.Buffer
-		if err := json.Compact(&buf, []byte(src)); err != nil {
-			return p.fail(c.Pos.Offset, CodeSyntax, "<state> is not valid JSON: %v.", err)
+		raw, err := canonicalJSON([]byte(src))
+		if err != nil {
+			return p.fail(c.Pos.Offset, CodeSyntax, "<state> is not valid: %v.", err)
 		}
-		if buf.Len() == 0 || buf.Bytes()[0] != '{' {
+		if len(raw) == 0 || raw[0] != '{' {
 			return p.fail(c.Pos.Offset, CodeBadValue, "<state> must hold a JSON object, such as {\"count\": 0}.")
 		}
-		root.Attrs = append(root.Attrs, Attr{Name: "state", Value: Value{Kind: Object, Raw: buf.Bytes()}, Pos: c.Pos})
+		root.Attrs = append(root.Attrs, Attr{Name: "state", Value: Value{Kind: KindObject, Raw: raw}, Pos: c.Pos})
 		root.Children = append(root.Children[:i:i], root.Children[i+1:]...)
 		// Text on both sides of <state> is now one run.
 		if i > 0 && i < len(root.Children) && root.Children[i-1].IsText() && root.Children[i].IsText() {
@@ -549,50 +553,45 @@ func (p *xmlParser) decode(raw []byte, off int) (string, error) {
 // typedValue gives an attribute its canonical value from its text, by the
 // type the catalog gives it. Both parsers use it, so the two encodings of
 // one tree are equal.
-func typedValue(typ, name, text string) Value {
+func typedValue(typ, name, text string) (Value, error) {
 	comp := lookup(typ)
 	if comp == nil {
-		return StringValue(text)
+		return StringValue(text), nil
 	}
 	spec, ok := comp.Spec(name)
 	if !ok {
-		return StringValue(text)
+		return StringValue(text), nil
 	}
 	switch spec.Type {
 	case TString:
 		if !spec.Multiline {
-			return StringValue(oneLine(text))
+			return StringValue(oneLine(text)), nil
 		}
 	case TInt, TNumber:
 		if isJSONNumber(text) {
-			return Value{Kind: Number, Str: text}
+			return Value{Kind: KindNumber, Str: text}, nil
 		}
 	case TBool:
 		if text == "true" || text == "false" {
-			return BoolValue(text == "true")
+			return BoolValue(text == "true"), nil
 		}
-	case TData:
-		if strings.HasPrefix(text, "[") {
-			if raw, ok := compactJSON(text); ok && raw[0] == '[' {
-				return Value{Kind: Array, Raw: raw}
-			}
+	case TData, TObject:
+		open := byte('[')
+		kind := KindArray
+		if spec.Type == TObject {
+			open, kind = '{', KindObject
 		}
-	case TObject:
-		if strings.HasPrefix(text, "{") {
-			if raw, ok := compactJSON(text); ok && raw[0] == '{' {
-				return Value{Kind: Object, Raw: raw}
+		if strings.HasPrefix(text, string(open)) && json.Valid([]byte(text)) {
+			// A literal array or object is data a renderer shows, so its
+			// strings and keys are sanitized here, once.
+			raw, err := canonicalJSON([]byte(text))
+			if err != nil {
+				return Value{}, err
 			}
+			return Value{Kind: kind, Raw: raw}, nil
 		}
 	}
-	return StringValue(text)
-}
-
-func compactJSON(s string) (json.RawMessage, bool) {
-	var buf bytes.Buffer
-	if err := json.Compact(&buf, []byte(s)); err != nil || buf.Len() == 0 {
-		return nil, false
-	}
-	return buf.Bytes(), true
+	return StringValue(text), nil
 }
 
 // isJSONNumber reports whether s is a number in JSON syntax.

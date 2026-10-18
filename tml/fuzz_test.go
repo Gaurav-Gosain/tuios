@@ -48,7 +48,7 @@ func checkTree(t *testing.T, doc *Node) {
 			t.Fatalf("a text run holds an unsafe character: %q", n.Text)
 		}
 		for _, a := range n.Attrs {
-			if a.Value.Kind == String && Sanitize(a.Value.Str) != a.Value.Str {
+			if a.Value.Kind == KindString && Sanitize(a.Value.Str) != a.Value.Str {
 				t.Fatalf("attribute %s holds an unsafe character: %q", a.Name, a.Value.Str)
 			}
 		}
@@ -168,11 +168,11 @@ func FuzzPatch(f *testing.F) {
 		if json.Unmarshal(state, &doc) != nil || doc == nil {
 			return
 		}
-		s, err := NewStore(doc, DefaultLimits())
+		s, err := NewStore(doc, nil)
 		if err != nil {
 			return
 		}
-		ops, err := DecodePatch(patch, DefaultLimits())
+		ops, err := DecodePatch(patch, nil)
 		if err != nil {
 			return
 		}
