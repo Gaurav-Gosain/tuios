@@ -6988,3 +6988,20 @@ Dracula's background, and Nord's after the second client picks Nord. Run on
 | --- | --- | --- | --- |
 | The report follows each previewed theme | `reportedToPanes`: the hold while the picker or editor is open cut | `TestOmarchyThemeSwitchIsFollowed` ("moving through the theme picker sent the program a notice", "picking Dracula did not send the program exactly one notice") | **caught** |
 | Every client's push sets the report colours | the push handler: the `ownsReportColors` check cut | `TestThemedDaemonPaneReportsTheTheme` ("after a second client on Latte attached, a pane's OSC 11 was answered \"rgb:efef/f1f1/f5f5\", want the first client's Dracula \"rgb:1e1e/1f1f/2828\"") | **caught** |
+## The after-theme-change hook
+
+`TestAfterThemeChangeHookFiresOncePerPick` starts on `tokyonight` with an
+`after-theme-change` hook that appends `$TUIOS_EVENT $TUIOS_THEME
+$TUIOS_THEME_BG $TUIOS_THEME_LIGHT` to a file. The file must stay empty after
+startup, hold one line for a Dracula pick typed through the picker, stay at one
+line after a cancelled Latte pick, and hold a second line for a Latte pick,
+with a new background and the light flag `1`. The fixed build passes it and
+the other theme picker and theme editor tests.
+
+The controls were run on 2026-10-18 on branch `feat/after-theme-change-hook`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The hook fires while the picker shows themes | `noteThemeChange`: the theme picker and editor check cut | `TestAfterThemeChangeHookFiresOncePerPick` ("after one pick the hook ran 2 times, want 1") | **caught** |
+| The hook fires at startup | `noteThemeChange`: the first frame no longer only records | `TestAfterThemeChangeHookFiresOncePerPick` ("the hook fired at startup") | **caught** |
+| Nothing checks for a theme change | `composeFrameOnce`: the `noteThemeChange` call cut | `TestAfterThemeChangeHookFiresOncePerPick` ("after one pick the hook ran 0 times, want 1") | **caught** |
