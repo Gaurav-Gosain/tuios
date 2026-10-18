@@ -60,7 +60,7 @@ func TestTranscriptIdentityReadsTheAgentBehindAWrapper(t *testing.T) {
 	typeCommand(t, c, w.ID, "sh -c '"+fake+" 60; true'")
 	explainUntil(t, c, w.ID, func(res map[string]any) bool { return res["matched"] == true })
 
-	_, version := d.paneAgentIdentifier(sess)(w.PTYID)
+	version := d.paneAgentIdentifier(sess)(w.PTYID).version
 	if version != "sleep" {
 		t.Fatalf("version = %q, want the agent's own executable name (sleep), not the wrapper's", version)
 	}

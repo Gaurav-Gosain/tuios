@@ -1740,7 +1740,7 @@ func (d *Daemon) joinReportedTranscript(cs *connState, sess *Session, target, ha
 		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
 		return why
 	}
-	_ = sess.JoinAgentTranscript(w.ID, harnessID, resolved, true)
+	_ = sess.JoinAgentTranscriptAs(w.ID, harnessID, reg.TranscriptFor(harnessID).Reader, resolved, true)
 	return ""
 }
 
@@ -1775,7 +1775,7 @@ func transcriptPathAllowed(tr *harness.Transcript, path string) (string, string)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", "the transcript is not in the harness's transcript folder"
 	}
-	if ok, _ := filepath.Match(tr.Glob, filepath.Base(resolved)); !ok {
+	if !tr.MatchesGlob(realRoot, resolved) {
 		return "", "the transcript file name does not match the harness's pattern"
 	}
 	if info, err := os.Lstat(resolved); err == nil && !info.Mode().IsRegular() {

@@ -26,7 +26,9 @@ type Transcript struct {
 	Reader string `toml:"reader"`
 	// Dir is where the files live, with placeholders resolved by ExpandDir.
 	Dir string `toml:"dir"`
-	// Glob matches the session files inside Dir.
+	// Glob matches the session files inside Dir. It may span folders
+	// ("*/chats/session-*.jsonl"), and then Dir names no placeholder but
+	// {home}, since a path a hook reports is matched against it from Dir.
 	Glob string `toml:"glob"`
 	// Verify names the record fields that must match the pane before a file
 	// found by search is believed. It is what stops a wrong join, which is worse
@@ -35,13 +37,32 @@ type Transcript struct {
 	Verify []string `toml:"verify"`
 }
 
-// ReaderJSONL is the only reader that exists today: one JSON object per line,
-// newest record last, as Claude Code writes. The constant is the name a manifest
-// spells, so adding a harness with the same layout is a manifest and no code.
+// ReaderJSONL is Claude Code's format: one JSON object per line, newest record
+// last. The constant is the name a manifest spells, so adding a harness with
+// the same layout is a manifest and no code. It is the one reader the daemon
+// reads a turn state from (internal/transcript). The others are read only to
+// show the conversation to the person (internal/transcriptview).
 const ReaderJSONL = "claude-code-jsonl"
 
-// knownReaders is the set a manifest may name.
-var knownReaders = map[string]struct{}{ReaderJSONL: {}}
+// knownReaders is the set a manifest may name. Each is a format of
+// internal/transcriptview, which this package does not import, so the names
+// are kept in step by the session package's tests.
+var knownReaders = map[string]struct{}{
+	ReaderJSONL:     {},
+	"codex-rollout": {},
+	"gemini-chat":   {},
+	"qwen-chat":     {},
+}
+
+// KnownReaders returns the reader names a manifest may give.
+func KnownReaders() []string {
+	out := make([]string, 0, len(knownReaders))
+	for name := range knownReaders {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
+}
 
 // verifiableFields are the record fields Verify may name. They are the agent's
 // own identity: which directory it was started in, which build it is, and which
@@ -91,7 +112,26 @@ func checkTranscript(file, id string, t *Transcript) error {
 	if _, err := filepath.Match(t.Glob, "probe"); err != nil {
 		return fmt.Errorf("%s: manifest %q transcript glob %q: %w", file, id, t.Glob, err)
 	}
+	if strings.ContainsRune(t.Glob, '/') && strings.Contains(strings.ReplaceAll(t.Dir, "{home}", ""), "{") {
+		return fmt.Errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
+	}
 	return nil
+}
+
+// MatchesGlob reports whether path, under Root, is a file Glob names. A glob
+// that spans folders is matched against the path from Root, and any other
+// against the file name.
+func (t Transcript) MatchesGlob(root, path string) bool {
+	if !strings.ContainsRune(t.Glob, '/') {
+		ok, _ := filepath.Match(t.Glob, filepath.Base(path))
+		return ok
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	ok, _ := filepath.Match(t.Glob, filepath.ToSlash(rel))
+	return ok
 }
 
 // ExpandDir resolves the placeholders in Dir against a pane's working directory,

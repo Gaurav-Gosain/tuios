@@ -4,6 +4,7 @@ package procinfo
 
 import (
 	"net"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -64,4 +65,14 @@ func EnvVar(pid int, name string) (string, bool) {
 		return "", false
 	}
 	return ProcargsEnvVar(buf, name)
+}
+
+// StartedAt returns when process pid started, and false when it cannot be
+// read.
+func StartedAt(pid int) (time.Time, bool) {
+	us, ok := StartTime(pid)
+	if !ok {
+		return time.Time{}, false
+	}
+	return time.UnixMicro(int64(us)), true
 }

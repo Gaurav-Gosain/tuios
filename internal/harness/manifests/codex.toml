@@ -155,6 +155,19 @@ regex    = ['\S']
 # turns an Enter inside the burst into a newline, which is why the submitter
 # waits between the paste and the Enter. Not measured here: Codex is not
 # installed on the machine these values were written on.
+# Codex writes each session to a rollout, one JSON record per line, at
+# ~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<thread id>.jsonl (codex-rs/
+# rollout in openai/codex). The hook (tuios integration install codex) reports
+# its path. Without the hook the daemon takes the rollout whose session_meta
+# names the pane's directory and that was written since Codex started. The
+# file is read only to show the conversation in the agent thread. It gives no
+# state: the hooks and the screen rules do that.
+[transcript]
+reader = "codex-rollout"
+dir    = "{home}/.codex/sessions"
+glob   = "*/*/*/rollout-*.jsonl"
+verify = ["cwd"]
+
 [input]
 submit          = "cr"
 bracketed_paste = true

@@ -93,6 +93,18 @@ regex    = ['^\s*◇\s+Ready\b']
 # How a prompt is typed in. Gemini CLI is an Ink program: Ink reads a carriage
 # return as return and a line feed as a different key, and Gemini CLI handles
 # a bracketed paste as one paste. Not measured here.
+# Gemini CLI writes each chat under ~/.gemini/tmp/<project>/chats: one JSON
+# record per line since 0.3x (session-<time>-<id>.jsonl), one JSON document
+# before (session-<time>-<id>.json). The hook reports its path. Without the
+# hook the daemon takes the chat whose projectHash is the hash of the pane's
+# directory and that was written since Gemini CLI started. The file is read
+# only to show the conversation in the agent thread.
+[transcript]
+reader = "gemini-chat"
+dir    = "{home}/.gemini/tmp"
+glob   = "*/chats/session-*.json*"
+verify = ["cwd"]
+
 [input]
 submit          = "cr"
 bracketed_paste = true

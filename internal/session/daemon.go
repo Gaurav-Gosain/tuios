@@ -2356,12 +2356,12 @@ func (d *Daemon) agentDetectScan() bool {
 // paneAgentIdentifier reports the working directory and build version of the
 // agent in a pane, which is what a searched transcript candidate is checked
 // against before it is believed.
-func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) (string, string) {
+func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) agentIdentity {
 	resolve := d.foregroundResolver(sess)
-	return func(ptyID string) (string, string) {
+	return func(ptyID string) agentIdentity {
 		info, running := resolve(ptyID)
 		if !running {
-			return "", ""
+			return agentIdentity{}
 		}
 		// The agent's own process, not the wrapper above it: a transcript is
 		// checked against the agent's directory and build, and a shell that

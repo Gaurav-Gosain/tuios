@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -105,4 +106,33 @@ func statToken(stat string, field int) (string, bool) {
 		return "", false
 	}
 	return fields[field-3], true
+}
+
+// StartedAt returns when process pid started, as a wall clock time, and
+// false when it cannot be read. Field 22 of /proc/<pid>/stat counts clock
+// ticks since boot, and /proc/stat's btime says when boot was. A tick is
+// USER_HZ, which Linux fixes at 100 for every program.
+func StartedAt(pid int) (time.Time, bool) {
+	ticks, ok := StartTime(pid)
+	if !ok {
+		return time.Time{}, false
+	}
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return time.Time{}, false
+	}
+	defer clear(data)
+	for line := range strings.SplitSeq(string(data), "\n") {
+		rest, ok := strings.CutPrefix(line, "btime ")
+		if !ok {
+			continue
+		}
+		boot, err := strconv.ParseInt(strings.TrimSpace(rest), 10, 64)
+		if err != nil {
+			return time.Time{}, false
+		}
+		const hz = 100
+		return time.Unix(boot, 0).Add(time.Duration(ticks) * time.Second / hz), true
+	}
+	return time.Time{}, false
 }

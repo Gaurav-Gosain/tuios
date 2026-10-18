@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
 // transcriptDebounce coalesces the several appends one turn produces into one
@@ -44,7 +46,16 @@ type transcriptWatch interface {
 type transcriptJoin struct {
 	windowID string
 	harness  string
-	reader   *transcript.Reader
+	// format is the reader the harness's manifest names. Only Claude Code's
+	// (harness.ReaderJSONL) gives a turn state. Every other format is joined
+	// for the person to read, and its growth raises the transcript event.
+	format string
+	// doc says the harness rewrites the file whole, so its growth is told by
+	// its size and time (docSize, docMod) rather than by an offset.
+	doc     bool
+	docSize int64
+	docMod  time.Time
+	reader  *transcript.Reader
 	// exact records that this join came from the harness telling us its own
 	// transcript path, rather than from searching. A searched join is given up
 	// the moment an exact one arrives for the same window.
@@ -94,6 +105,15 @@ func (s *Session) SetTranscriptWatcher(w transcriptWatch) {
 // exact one, because the harness naming its own file is not a thing a directory
 // search can improve on.
 func (s *Session) JoinAgentTranscript(windowID, harnessID, path string, exact bool) error {
+	return s.JoinAgentTranscriptAs(windowID, harnessID, harness.ReaderJSONL, path, exact)
+}
+
+// JoinAgentTranscriptAs is JoinAgentTranscript for a transcript in the named
+// format, the reader of the harness's manifest.
+func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string, exact bool) error {
+	if format == "" {
+		format = harness.ReaderJSONL
+	}
 	if windowID == "" || path == "" {
 		return errors.New("transcript join needs a window and a path")
 	}
@@ -118,7 +138,10 @@ func (s *Session) JoinAgentTranscript(windowID, harnessID, path string, exact bo
 		}
 		s.releaseJoinLocked(prev)
 	}
-	j := &transcriptJoin{windowID: windowID, harness: harnessID, reader: transcript.NewReader(abs), exact: exact}
+	j := &transcriptJoin{
+		windowID: windowID, harness: harnessID, format: format, reader: transcript.NewReader(abs), exact: exact,
+		doc: transcriptview.IsDocument(format, abs),
+	}
 	if s.transcripts.joins == nil {
 		s.transcripts.joins = make(map[string]*transcriptJoin)
 	}
@@ -205,6 +228,9 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 		return false
 	}
 
+	if j.format != harness.ReaderJSONL {
+		return s.readViewTranscript(windowID, j)
+	}
 	obs, fresh, err := j.reader.Read()
 	if err != nil {
 		// A path that is not a regular file now (a FIFO put in its place)
@@ -240,6 +266,54 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 		return false
 	}
 	return s.applyTranscriptTurn(windowID, harnessID, obs.Turn)
+}
+
+// readViewTranscript reads a join whose format gives no turn state: it
+// notes growth for the transcript event, and nothing else. A JSONL format
+// grows by appends, and its reader's offset says how far, as for Claude
+// Code. A document is rewritten whole, so its size and time say it changed,
+// and its event carries no cursor: an offset into it means nothing.
+func (s *Session) readViewTranscript(windowID string, j *transcriptJoin) bool {
+	var gone bool
+	if j.doc {
+		info, err := os.Stat(j.reader.Path())
+		switch {
+		case err != nil:
+			gone = os.IsNotExist(err)
+		case !info.Mode().IsRegular():
+			gone = true
+		default:
+			s.transcripts.mu.Lock()
+			j.missing = 0
+			changed := info.Size() != j.docSize || !info.ModTime().Equal(j.docMod)
+			j.docSize, j.docMod = info.Size(), info.ModTime()
+			s.transcripts.mu.Unlock()
+			if changed {
+				s.emit(SessionEvent{Type: EventTranscript, Window: windowID})
+			}
+			return false
+		}
+	} else {
+		_, _, err := j.reader.Read()
+		if err == nil {
+			s.transcripts.mu.Lock()
+			j.missing = 0
+			s.transcripts.mu.Unlock()
+			s.noteTranscriptGrowth(windowID, j)
+			return false
+		}
+		gone = errors.Is(err, transcript.ErrNoFile) || errors.Is(err, transcript.ErrNotRegular)
+	}
+	if gone {
+		s.transcripts.mu.Lock()
+		j.missing++
+		drop := j.missing >= transcriptMissingLimit
+		s.transcripts.mu.Unlock()
+		if drop {
+			s.DropAgentTranscript(windowID)
+		}
+	}
+	return false
 }
 
 // applyTranscriptTurn publishes a turn as an agent state.
@@ -322,7 +396,7 @@ func (s *Session) hasTranscriptJoin(windowID string) bool {
 // with a transcript and no join yet. The search is throttled per window and only
 // ever runs for a window that is missing one, so a fully joined session does no
 // work here at all.
-func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(ptyID string) (string, string)) {
+func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(ptyID string) agentIdentity) {
 	if reg == nil {
 		return
 	}
@@ -372,9 +446,9 @@ func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(pty
 		if !s.joinSearchDue(p.windowID) {
 			continue
 		}
-		cwd, version := cwdOf(p.ptyID)
-		if path, ok := searchTranscript(tr, cwd, version); ok {
-			_ = s.JoinAgentTranscript(p.windowID, p.harnessID, path, false)
+		id := cwdOf(p.ptyID)
+		if path, ok := searchTranscript(tr, id); ok {
+			_ = s.JoinAgentTranscriptAs(p.windowID, p.harnessID, tr.Reader, path, false)
 		}
 	}
 }
@@ -394,20 +468,81 @@ func (s *Session) joinSearchDue(windowID string) bool {
 	return true
 }
 
+// agentIdentity is what a searched transcript is checked against: the
+// agent's working directory, its build, and when its process started.
+type agentIdentity struct {
+	cwd, version string
+	// started is zero when the start time cannot be read.
+	started time.Time
+}
+
 // searchTranscript is the hookless join: find the file in the harness's
 // directory that belongs to this pane, and refuse when it cannot be sure.
 //
 // Refusing is the important half. A wrong join attributes one agent's state to
 // another pane, which is a confident lie, where no join is merely no state and
-// the pane behaves as if this source did not exist. So two files
+// the pane behaves as if this source did not exist. So two Claude Code files
 // that both verify means neither is used, and no amount of tie-breaking on
 // modification time is applied: whichever was written most recently is not
 // evidence of which pane is looking at it.
 //
 // This fails for two agents in one directory on one version. The hook is the
 // answer to that, and this is what runs until someone installs it.
-func searchTranscript(tr *harness.Transcript, cwd, version string) (string, bool) {
-	return searchTranscriptIn(tr.ExpandDir(cwd), tr, cwd, version)
+//
+// Another format (searchViewTranscript) gives no state, only the
+// conversation to read, and keeps every session of a project in one folder,
+// so it takes the newest file of the pane's directory, when it is the only
+// one written since the agent started.
+func searchTranscript(tr *harness.Transcript, id agentIdentity) (string, bool) {
+	if tr.Reader != harness.ReaderJSONL {
+		return searchViewTranscript(tr.ExpandDir(id.cwd), tr, id)
+	}
+	return searchTranscriptIn(tr.ExpandDir(id.cwd), tr, id.cwd, id.version)
+}
+
+// searchViewTranscript finds the transcript of a format other than Claude
+// Code's: the files the format says ran in the pane's directory, of which it
+// takes the one written since the agent started. Two such files, or a start
+// time it cannot read with more than one file, is a refusal.
+func searchViewTranscript(dir string, tr *harness.Transcript, id agentIdentity) (string, bool) {
+	if dir == "" || !tr.Verifies("cwd") {
+		return "", false
+	}
+	files, err := filepath.Glob(filepath.Join(dir, tr.Glob))
+	if err != nil || len(files) == 0 {
+		return "", false
+	}
+	var found string
+	var fresh []string
+	for _, f := range files {
+		info, err := os.Lstat(f)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if !transcriptview.Matches(tr.Reader, f, id.cwd) {
+			continue
+		}
+		if found == "" {
+			found = f
+		} else {
+			found = "-"
+		}
+		// A file a session wrote since the agent started. A second of slack
+		// covers a clock that stamps the start late.
+		if !id.started.IsZero() && !info.ModTime().Before(id.started.Add(-time.Second)) {
+			fresh = append(fresh, f)
+		}
+	}
+	if !id.started.IsZero() {
+		// An older file is a session that ended before this agent began.
+		// Joining it would show that conversation, and keep the pane from
+		// joining its own when it appears.
+		if len(fresh) == 1 {
+			return fresh[0], true
+		}
+		return "", false
+	}
+	return found, found != "" && found != "-"
 }
 
 // searchTranscriptIn is searchTranscript with the directory already resolved, so
@@ -452,15 +587,17 @@ func searchTranscriptIn(dir string, tr *harness.Transcript, cwd, version string)
 // (".../share/claude/versions/2.1.222"), and the same string is a field on every
 // record in the file. It is a discriminator that costs a readlink and rules out
 // every transcript written by a different build.
-func paneAgentIdentity(info foregroundInfo) (cwd, version string) {
+func paneAgentIdentity(info foregroundInfo) agentIdentity {
+	var id agentIdentity
 	if info.pid <= 0 {
-		return "", ""
+		return id
 	}
 	if target, err := os.Readlink("/proc/" + strconv.Itoa(info.pid) + "/cwd"); err == nil {
-		cwd = target
+		id.cwd = target
 	}
 	if info.exe != "" {
-		version = filepath.Base(info.exe)
+		id.version = filepath.Base(info.exe)
 	}
-	return cwd, version
+	id.started, _ = procinfo.StartedAt(info.pid)
+	return id
 }
