@@ -17,7 +17,7 @@ import (
 
 // drawReplyArea draws the reply area over rows up to y1 and returns its top
 // row. name is who the reply is for.
-func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name string, x, w, y1, top int) int {
+func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name string, x, w, bodyTop, y1, top int) int {
 	st := &m.Inbox
 	st.ck.edW = w
 	pal := l.pal
@@ -52,7 +52,9 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	if len(images) > 0 {
 		h++
 	}
-	y := max(y1-h, 1)
+	// The area never runs over the focus header and its tabs: on a short
+	// screen the editor gets fewer rows.
+	y := max(y1-h, bodyTop+1)
 	c.hline(x, y-1, w, hzGlyph(), l.edge)
 	c.fill(x, y, w, y1-y, l.panel)
 	c.text(x+2, y, right-24, ckSeg{t: "Reply to ", fg: pal.FgMute}, ckSeg{t: ed.who, fg: pal.FgDim, attrs: ckBold})
@@ -82,12 +84,15 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		c.text(cx, row, right-2, ckSeg{t: "click to view", fg: pal.FgMute})
 		row++
 	}
-	for i, s := range body {
+	fy := y1 - 1
+	// Squeezed under the header, the editor keeps its last rows, where the
+	// cursor most often is, and never draws over its hints.
+	cut := max(len(body)-max(fy-row, 0), 0)
+	for i, s := range body[cut:] {
 		c.draw(x+2, row+i, inner, s)
 	}
 	// The pictures the draft shows are placed relative to the layer.
-	ed.at.x, ed.at.y, ed.at.ok = x+2, row, true
-	fy := y1 - 1
+	ed.at.x, ed.at.y, ed.at.ok = x+2, row-cut, cut == 0
 	c.text(x+2, fy, right-14, hints...)
 	sx := c.textR(right-2, fy, send)
 	st.ck.hits = append(st.ck.hits, ckHit{x0: sx, y0: top + fy, x1: right - 2, y1: top + fy + 1, kind: ckHitAction, action: "send"})

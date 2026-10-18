@@ -444,6 +444,8 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *OS) InboxReplyCancel() {
 	ed := m.Inbox.reply.editor
 	m.Inbox.reply.editor = nil
+	// The image view shows the draft's images: it goes with the editor.
+	m.Inbox.ck.img = nil
 	if ed == nil {
 		return
 	}
@@ -473,6 +475,7 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	if ed.comp.Automated() || m.ProcessingRemoteKeys {
 		m.Inbox.reply.editor = nil
+		m.Inbox.ck.img = nil
 		if ed.closeAfter {
 			m.CloseInbox()
 		}
@@ -511,6 +514,7 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		return nil
 	}
 	m.Inbox.reply.editor = nil
+	m.Inbox.ck.img = nil
 	if ed.closeAfter {
 		m.CloseInbox()
 	}

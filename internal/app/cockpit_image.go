@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -91,7 +93,9 @@ func (m *OS) CockpitImageKey(key string) tea.Cmd {
 		}
 	case "c":
 		if path := m.cockpitSaveImage(); path != "" {
-			return m.CopyToClipboard(path)
+			cmd := m.CopyToClipboard(path)
+			m.ShowNotification("Saved to "+path+". The path is copied.", "success", m.Settings.NotificationDuration)
+			return cmd
 		}
 	}
 	return nil
@@ -129,20 +133,40 @@ func (m *OS) cockpitSaveImage() string {
 	if name == "" {
 		name = "tuios-image-" + time.Now().Format("20060102-150405") + "." + img.Format
 	}
-	path := filepath.Join(dir, filepath.Base(name))
-	if _, err := os.Stat(path); err == nil {
-		path = filepath.Join(dir, strconv.FormatInt(time.Now().Unix(), 10)+"-"+filepath.Base(name))
-	}
-	err := os.MkdirAll(dir, 0o700)
-	if err == nil {
-		err = os.WriteFile(path, img.Data, 0o600)
-	}
+	path, err := ckWriteNew(dir, filepath.Base(name), img.Data)
 	if err != nil {
 		m.ShowNotification("tuios cannot save the image: "+err.Error(), "error", m.Settings.NotificationDuration)
 		return ""
 	}
 	v.saved[v.idx] = path
 	return path
+}
+
+// ckWriteNew writes data to a new file in dir named name, or name with a
+// number in front when one is there already. It never replaces a file and
+// never follows a link: the file is created with O_EXCL.
+func ckWriteNew(dir, name string, data []byte) (string, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	for i := 0; ; i++ {
+		path := filepath.Join(dir, name)
+		if i > 0 {
+			path = filepath.Join(dir, strconv.Itoa(i)+"-"+name)
+		}
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) && i < 1000 {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		_, err = f.Write(data)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		return path, err
+	}
 }
 
 // drawImageView draws the image view over the whole canvas.
@@ -170,8 +194,15 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	p := m.replyPreviewer()
 	m.cockpitImageLayout(c.w, c.h, top)
 	px, py, cols, rows := v.placeX, v.plcY-top, v.cols, v.rows
-	switch v.mode {
-	case composer.PreviewCells:
+	switch {
+	case img.Width <= 0 || img.Height <= 0:
+		// A format tuios cannot decode, such as WebP: no picture comes.
+		msg := "tuios cannot draw this image."
+		if p.CanOpen() {
+			msg += " o opens it in the viewer."
+		}
+		c.text(max(x0+2, (c.w-len(msg))/2), ay+ah/2, x1-2, ckSeg{t: msg, fg: pal.FgDim})
+	case v.mode == composer.PreviewCells:
 		k := p.cellsKey(img, cols, rows)
 		p.mu.Lock()
 		pic := p.pics[k]
@@ -181,9 +212,9 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 				c.draw(px, py+i, cols, s)
 			}
 		}
-	case composer.PreviewText:
+	case v.mode == composer.PreviewText:
 		msg := "This terminal cannot draw the picture."
-		if desktopOpener() != "" {
+		if p.CanOpen() {
 			msg += " o opens it in the viewer."
 		}
 		c.text(max(x0+2, (c.w-len(msg))/2), ay+ah/2, x1-2, ckSeg{t: msg, fg: pal.FgDim})
@@ -194,7 +225,7 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	key := func(k, words string) {
 		hints = append(hints, ckSeg{t: k, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + words + "   ", fg: pal.FgMute})
 	}
-	if desktopOpener() != "" {
+	if p.CanOpen() {
 		key("o", "open in viewer")
 	}
 	key("c", "copy path")

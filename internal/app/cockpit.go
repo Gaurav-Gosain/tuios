@@ -636,8 +636,27 @@ func (m *OS) CockpitMove(delta int) {
 	m.cockpitSetCursor(sel[at])
 	m.Inbox.ck.pending = ""
 	m.cockpitTouch()
+	m.cockpitReplyFollow()
 	// The detail reads that follow a key ask the Inbox's cursors.
 	m.cockpitSync()
+}
+
+// cockpitReplyFollow closes the reply editor, keeping its draft, when the
+// cursor left the agent it writes to: the area under another agent's thread
+// must not send to the one before.
+func (m *OS) cockpitReplyFollow() {
+	ed := m.Inbox.reply.editor
+	if ed == nil || len(ed.targets) > 0 {
+		return
+	}
+	r, ok := m.cockpitSelected()
+	if ok && r.hasItem && r.item.Session == ed.session && r.item.Window == ed.window {
+		return
+	}
+	if e, ok := m.cockpitAgent(); ok && e.SessionID == ed.session && e.WindowID == ed.window {
+		return
+	}
+	m.InboxReplyCancel()
 }
 
 // cockpitSelectKey puts the cursor on the row with key.
@@ -795,6 +814,7 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			double := ck.lastClickKey == h.key && now.Sub(ck.lastClick) <= ckDoubleClick
 			ck.lastClick, ck.lastClickKey = now, h.key
 			m.cockpitSelectKey(h.key)
+			m.cockpitReplyFollow()
 			if double {
 				ck.lastClickKey = ""
 				return m.CockpitGo(), true
@@ -904,6 +924,10 @@ func (m *OS) CockpitHover(x, y int) {
 // detail when it is over the focus area.
 func (m *OS) CockpitWheel(x int, up bool) {
 	ck := &m.Inbox.ck
+	if ck.img != nil {
+		// The image view covers everything behind it.
+		return
+	}
 	if x < ck.fleetW {
 		if up {
 			ck.scroll = max(ck.scroll-3, 0)

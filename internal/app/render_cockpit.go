@@ -1151,7 +1151,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	// the prompt.
 	foot := y1
 	if st.reply.editor != nil || (r.agent >= 0 && e.State != "needs_input") || (r.hasItem && r.item.Kind == session.AttentionMail) {
-		foot = m.drawReplyArea(c, l, e, name, x, w, y1, top)
+		foot = m.drawReplyArea(c, l, e, name, x, w, bodyTop, y1, top)
 	}
 	bodyBot := foot - 1
 	if foot == y1 {

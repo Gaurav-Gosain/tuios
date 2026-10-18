@@ -23,7 +23,7 @@ func (m *OS) replyPixelsReady() bool {
 func (m *OS) flushReplyPreviewForFrame() {
 	p := m.replyPreview
 	var want []previewPlacement
-	if pl, ok := m.cockpitImagePlacement(); ok && m.replyPixelsReady() {
+	if pl, ok := m.cockpitImagePlacement(); ok && m.replyPixelsReady() && m.overlayOnTop("inbox") && m.ContextMenu == nil {
 		// The image view covers the draft: its picture is the one shown.
 		want = append(want, pl)
 	} else if d, ok := m.openDraft(); ok && d.wires.at.ok && m.replyPixelsReady() {

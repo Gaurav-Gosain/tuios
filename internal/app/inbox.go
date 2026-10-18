@@ -1175,6 +1175,8 @@ func (m *OS) CloseInbox() {
 	m.Inbox.Peek = nil
 	m.Inbox.life.pickFor, m.Inbox.life.closeAfterPick = "", false
 	m.Inbox.reply.editor = nil
+	// The image view and its image bytes go with the editor.
+	m.Inbox.ck.img = nil
 	// A bulk allow's sheet is never there when the Inbox opens again: its
 	// settle time was spent on a screen the person may not have read.
 	m.Inbox.agents.sheet = nil
