@@ -30,6 +30,9 @@ func (m *OS) BridgePaletteItems() []CommandPaletteItem {
 	if !m.agentsPageAvailable() {
 		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Name == paletteAgentsSettingsName })
 	}
+	if !m.DaemonRestartAvailable() {
+		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Name == paletteRestartDaemonName })
+	}
 	if len(m.MultifocusSet) == 0 {
 		items = slices.DeleteFunc(items, func(it CommandPaletteItem) bool { return it.Name == paletteMultiCopyName })
 	}

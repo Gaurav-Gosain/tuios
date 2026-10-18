@@ -388,7 +388,7 @@ func threadReadError(err error) string {
 		case session.ErrVerbNoTranscript:
 			return "This agent has no transcript to read yet."
 		case session.ErrVerbUnknownVerb:
-			return "This daemon cannot read transcripts. Restart it with a newer tuios: tuios kill-server"
+			return "This daemon cannot read transcripts. " + restartHintPlain
 		case session.ErrVerbNotHuman:
 			return "Only your own client reads a transcript."
 		}

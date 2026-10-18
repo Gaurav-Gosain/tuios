@@ -70,6 +70,10 @@ type OSOptions struct {
 	// StartInTerminalMode starts the client in terminal mode on the focused
 	// pane, whatever [startup] says and whether the session is new or not.
 	StartInTerminalMode bool
+	// AfterRestart says this client was started by a daemon restart from
+	// the app, so the first frame says the session is back. See
+	// daemon_restart.go.
+	AfterRestart bool
 
 	// NumWorkspaces sets the number of workspaces (default: 9).
 	NumWorkspaces int
@@ -226,6 +230,7 @@ func NewOS(opts OSOptions) *OS {
 		LearnMode:         opts.LearnMode,
 		ShowKeys:          opts.ShowKeys,
 		forceTerminalMode: opts.StartInTerminalMode,
+		afterRestart:      opts.AfterRestart,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,
 

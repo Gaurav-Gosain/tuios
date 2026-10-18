@@ -53,6 +53,9 @@ type restartOptions struct {
 	dryRun bool
 	json   bool
 	last   bool
+	// expect is the digest of the plan the caller agreed to. See
+	// restartplan.Digest.
+	expect string
 	// worker is the plan a detached worker runs. See runRestartWorker.
 	worker string
 	out    io.Writer
@@ -109,6 +112,7 @@ the daemon"), from the version notice, and from the Daemon tab of the settings.`
 	cmd.Flags().BoolVar(&opts.dryRun, "dry-run", false, "Show what a restart stops, and change nothing")
 	cmd.Flags().BoolVar(&opts.json, "json", false, "Write one JSON object per line for each step")
 	cmd.Flags().BoolVar(&opts.last, "last", false, "Show the steps of the last restart")
+	cmd.Flags().StringVar(&opts.expect, "expect", "", "Refuse unless the plan has this digest, the one the app showed")
 	cmd.Flags().StringVar(&opts.worker, "worker", "", "Run the restart of this plan, detached")
 	_ = cmd.Flags().MarkHidden("worker")
 	return cmd
@@ -129,6 +133,17 @@ func runRestartServer(opts restartOptions) error {
 	}
 	if opts.dryRun {
 		return nil
+	}
+	// The app passes the plan the person agreed to. A program that started
+	// since, or a session that went, makes it another plan, and the person
+	// has to see that one first.
+	if opts.expect != "" && opts.expect != restartplan.Digest(rep) {
+		changed := &restartReport{Step: restartplan.StepDone, Error: "What a restart stops changed after you agreed to it.",
+			Fix: "read the new list, then agree again. Nothing was changed."}
+		if opts.json {
+			writeRestartJSON(opts.out, changed)
+		}
+		return restartFailure(changed, opts)
 	}
 	// Every state but a stopped daemon loses something, or may: a daemon
 	// that did not answer is asked about too.

@@ -853,6 +853,9 @@ var ActionDescriptions = map[string]string{
 	"kill_session":      "Kill the session the menu was opened on",
 	"kill_session_next": "Kill session, go to next",
 	"kill_session_quit": "Kill session and quit",
+	// The palette, the settings, the rail's menu for this machine and the
+	// version notice; no default key.
+	"restart_daemon": "Restart the daemon with the newest tuios installed",
 
 	// System
 	"toggle_logs":        "Toggle log viewer",

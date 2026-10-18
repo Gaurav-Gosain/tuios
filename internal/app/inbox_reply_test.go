@@ -150,7 +150,7 @@ func TestReplyOnAnOlderDaemon(t *testing.T) {
 	m.InboxReply()
 	m.InboxReplyType("more")
 	runMsg(t, m, m.InboxReplySend())
-	if !strings.Contains(lastNotice(m).Message, "tuios kill-server") {
+	if msg := lastNotice(m).Message; !strings.Contains(msg, "Restart the daemon") && !strings.Contains(msg, "tuios restart-server") {
 		t.Errorf("the dock said %q", lastNotice(m).Message)
 	}
 	m.InboxReply()

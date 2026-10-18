@@ -363,6 +363,11 @@ func (m *OS) DismissNotifications() bool {
 	if len(m.Notifications) == 0 {
 		return false
 	}
+	for _, n := range m.Notifications {
+		if isRestartNotice(n.Target) {
+			m.restartLater = true
+		}
+	}
 	m.Notifications = nil
 	return true
 }
@@ -402,6 +407,10 @@ func (m *OS) ClearNotification(message string) bool {
 func (m *OS) dismissVisibleNotification() bool {
 	if len(m.Notifications) == 0 {
 		return false
+	}
+	// Dismissing the version notice is the "later" answer, for this run.
+	if isRestartNotice(m.Notifications[len(m.Notifications)-1].Target) {
+		m.restartLater = true
 	}
 	m.Notifications = m.Notifications[:len(m.Notifications)-1]
 	return true

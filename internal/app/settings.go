@@ -718,6 +718,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.resume_agents"),
 		}), daemon.Items[2:]...)...)
 	}
+	// The restart row leads the tab, where a person who came to the daemon's
+	// settings after an update looks first.
+	if m.DaemonRestartAvailable() {
+		daemon.Items = append([]settingItem{m.restartDaemonItem()}, daemon.Items...)
+	}
 
 	tape := settingsCategory{
 		Name: "Tape",

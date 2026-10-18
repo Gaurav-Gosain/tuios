@@ -500,6 +500,11 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ShowSessionClose {
 		return handleSessionCloseInput(msg, o)
 	}
+	// The restart dialog owns the keyboard the same way: while a restart
+	// runs, no key may reach a pane the daemon is about to take away.
+	if o.DaemonRestartOpen() {
+		return handleDaemonRestartInput(msg, o)
+	}
 
 	// Hints mode owns the keyboard while it is open: a letter is part of a
 	// label, and nothing typed while the labels are up may reach the pane or

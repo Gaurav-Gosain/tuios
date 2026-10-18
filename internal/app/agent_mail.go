@@ -1093,7 +1093,7 @@ func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string
 		_, err = client.Call("send-agent-message", params)
 		if err != nil && text == "" && parts != nil && strings.Contains(err.Error(), "text is required") {
 			// A daemon older than parts read no message.
-			err = errors.New("this daemon cannot take images or long pastes in mail. Update the daemon: tuios kill-server")
+			err = errors.New("this daemon cannot take images or long pastes in mail. Update the daemon: tuios restart-server")
 		}
 		// A reply always answers a message, so no reply_to is a new message.
 		return AgentMailSentMsg{Err: err, New: replyTo == 0}

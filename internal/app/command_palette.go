@@ -973,6 +973,18 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The way to move the daemon to the build an update installed.
+			// Left out on a client that cannot restart its daemon.
+			Name:     paletteRestartDaemonName,
+			Shortcut: "stops programs",
+			Bind:     "restart_daemon",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenDaemonRestart()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Reload config",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

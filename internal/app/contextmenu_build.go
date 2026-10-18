@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -493,10 +494,15 @@ func (m *OS) machineMenu(host string) (string, []ContextMenuItem) {
 	if title == "" {
 		title = "Machine"
 	}
-	return title, []ContextMenuItem{
+	items := []ContextMenuItem{
 		m.item(glyphUp, "Move up", "reorder_up", first),
 		m.item(glyphDown, "Move down", "reorder_down", last),
 	}
+	// This machine's daemon is the one this client can restart.
+	if host == federation.LocalHostName && m.DaemonRestartAvailable() {
+		items = append(items, separator(), m.item(glyphRestore, "Restart the daemon", "restart_daemon", false))
+	}
+	return title, items
 }
 
 // ============================================================================

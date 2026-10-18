@@ -239,6 +239,16 @@ type OS struct {
 	// DaemonExitChan carries the two daemon events that end this client: the
 	// session was destroyed, or the connection dropped. See daemon_exit.go.
 	DaemonExitChan chan tea.Msg
+	// restart is the restart dialog. See daemon_restart.go.
+	restart daemonRestart
+	// RestartExec is set with ExitRestarted: what the entry point runs to
+	// bring the client back. RestartFailure is set with ExitRestartFailed.
+	RestartExec    *RestartExec
+	RestartFailure *RestartFailure
+	// restartLater says the person put the version notice off for this run.
+	restartLater bool
+	// afterRestart is OSOptions.AfterRestart.
+	afterRestart   bool
 	Animations     []*ui.Animation // Active animations
 	CPUHistory     []float64       // CPU usage history for graph
 	LastCPUUpdate  time.Time       // Last time CPU was updated
@@ -1984,6 +1994,9 @@ type NotifTarget struct {
 	// ClipboardAsk, when set, names a pane's clipboard write that waits for
 	// the user: activating the message allows it. See clipboard_osc52.go.
 	ClipboardAsk uint64
+	// DaemonRestart marks the version notice: activating it opens the
+	// restart dialog. See warnOnBuildMismatch.
+	DaemonRestart bool
 	// ClipboardVersion counts the changes to that ask's text. It is part of
 	// the target, so a message drawn with one text is not the same message as
 	// one holding another. See clickVisibleNotification.

@@ -452,6 +452,10 @@ the remote client. See 'tuios hosts --help'.`,
 	attachCmd.Flags().BoolVar(&attachForce, "force", false, "Attach even from a pane of the same session")
 	attachCmd.Flags().BoolVarP(&attachDetachOthers, "detach-others", "d", false, "Detach every other client of the session, as tmux attach -d does")
 	attachCmd.Flags().BoolVar(&attachTerminalMode, "terminal-mode", false, "Start in terminal mode, whatever startup.start_in_terminal_mode says")
+	attachCommand = attachCmd
+	// Set by the client a restart from the app starts. See restart_reattach.go.
+	attachCmd.Flags().BoolVar(&attachAfterRestart, "after-restart", false, "Say that the daemon restarted when the client starts")
+	_ = attachCmd.Flags().MarkHidden("after-restart")
 	registerHostNameCompletion(attachCmd, "host")
 
 	var newDetach bool

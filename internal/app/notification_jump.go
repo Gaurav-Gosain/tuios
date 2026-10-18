@@ -76,6 +76,11 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 		m.allowClipboardAsk(t.ClipboardAsk, t.ClipboardVersion)
 		return
 	}
+	// The version notice is answered with the restart dialog.
+	if t.DaemonRestart {
+		m.OpenDaemonRestart()
+		return
+	}
 	// A message about mail lands on the thread, where the reply is, rather than
 	// on the pane that wrote. The marking read it may need is queued, since
 	// this runs inside handlers that return no command.
@@ -183,7 +188,7 @@ func (m *OS) clickVisibleNotification() {
 		return
 	}
 	m.Notifications = m.Notifications[:n-1]
-	if m.notifHit.Cut && !isClipboardAsk(visible.Target) {
+	if m.notifHit.Cut && !isClipboardAsk(visible.Target) && !isRestartNotice(visible.Target) {
 		m.notifHoverEnd()
 		m.openMessageView(m.notificationEntry(visible))
 		return
@@ -195,6 +200,11 @@ func (m *OS) clickVisibleNotification() {
 
 // isClipboardAsk reports whether a target is a pane's clipboard ask.
 func isClipboardAsk(t *NotifTarget) bool { return t != nil && t.ClipboardAsk != 0 }
+
+// isRestartNotice reports whether a target is the version notice. A click on
+// it opens the restart dialog even when the dock cut its text: the dialog
+// says it all again.
+func isRestartNotice(t *NotifTarget) bool { return t != nil && t.DaemonRestart }
 
 // sameDrawnNotification reports whether a is the message b was drawn from,
 // with the same text and the same target.

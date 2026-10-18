@@ -513,6 +513,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		SessionName:     client.SessionName(),
 		// Only a local attach asks for it, and only with --terminal-mode.
 		StartInTerminalMode: host == "" && attachTerminalMode,
+		AfterRestart:        host == "" && attachAfterRestart,
 		AttachedHost:        host,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
@@ -558,8 +559,11 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The client the app ended on, which is not this one after a switch to a
 	// session on a host: that switch opens a new client.
 	exitClient := client
+	var restartExec *app.RestartExec
+	var restartFail *app.RestartFailure
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		reason = finalOS.ExitReason
+		restartExec, restartFail = finalOS.RestartExec, finalOS.RestartFailure
 		if finalOS.DaemonClient != nil {
 			exitClient = finalOS.DaemonClient
 		}
@@ -587,6 +591,15 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)
+	}
+
+	// A restart from the app: the new daemon answers, and the client comes
+	// back on it. See restart_reattach.go.
+	if reason == app.ExitRestarted && restartExec != nil {
+		return reattachAfterRestart(restartExec)
+	}
+	if reason == app.ExitRestartFailed && restartFail != nil {
+		return appRestartFailure(restartFail)
 	}
 
 	// The daemon took this client off the session after the attach: its

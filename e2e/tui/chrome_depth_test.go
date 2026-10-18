@@ -80,6 +80,24 @@ func resolveCell(c tuitest.Color, p *shot.Palette, def shot.Color) shot.Color {
 	return def
 }
 
+// frameFont is the font the PNG frames are drawn in: TUIOS_E2E_FONT and
+// TUIOS_E2E_FONT_BOLD name the files. Unset, shot's own Go Mono draws them.
+func frameFont() *shot.Frame {
+	path := os.Getenv("TUIOS_E2E_FONT")
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	f := &shot.Frame{Font: shot.Font{Data: data}}
+	if bold, err := os.ReadFile(os.Getenv("TUIOS_E2E_FONT_BOLD")); err == nil {
+		f.BoldFont = shot.Font{Data: bold}
+	}
+	return f
+}
+
 // savePNG draws the screen through tuios.dev/shot and writes it beside the
 // text artifacts, so the frame can be looked at the way the terminal shows it.
 func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) {
@@ -105,7 +123,7 @@ func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) 
 			g.Cells[y][x] = cell
 		}
 	}
-	data, err := shot.RenderPNG(g, nil)
+	data, err := shot.RenderPNG(g, frameFont())
 	if err != nil {
 		t.Fatalf("render %s: %v", name, err)
 	}

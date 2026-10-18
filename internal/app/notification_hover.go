@@ -173,6 +173,8 @@ func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 	hint := "Click to show the full message."
 	if isClipboardAsk(msg.Target) {
 		hint = "Click to allow it."
+	} else if isRestartNotice(msg.Target) {
+		hint = "Click to restart the daemon. Press esc for later."
 	}
 	hint = overlay.Truncate(hint, textW)
 	rows = append(rows, dim.Render(pad+hint+strings.Repeat(" ", max(textW-lipgloss.Width(hint), 0))+pad))

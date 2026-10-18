@@ -443,6 +443,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"kill_session":          "context menu row",
 	"kill_session_next":     "context menu row",
 	"kill_session_quit":     "context menu row",
+	"restart_daemon":        "command palette row, rail machine menu row, settings row, version notice",
 	"paste_clipboard":       "context menu row",
 	"repo_new_worktree":     "rail repo header menu row",
 	"session_new_worktree":  "rail session row menu row",

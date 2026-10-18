@@ -890,7 +890,7 @@ func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 	}
 	switch {
 	case st.Unsupported:
-		return []string{"This daemon is too old for the agents view.", "Restart it with a newer tuios: tuios kill-server"}
+		return []string{"This daemon is too old for the agents view.", m.restartHint()}
 	case !m.IsDaemonSession:
 		return []string{"The agents view needs the daemon.", "Start a daemon session with: tuios new"}
 	case st.Filter == session.AttentionMail:

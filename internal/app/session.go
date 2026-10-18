@@ -2330,8 +2330,12 @@ func (m *OS) noteFocusGiven(state *session.SessionState) {
 // tuios from this client. The two still speak, so this is a note and not a
 // refusal, but it is the difference between "the fix does not work" and "the
 // fix is not installed on both sides", and nothing else says it out loud.
+//
+// Where this client can restart the daemon, the note is the way to do it: a
+// click on it, or prefix+j, opens the restart dialog, and esc puts it off for
+// the rest of this run. It stays until it is answered.
 func (m *OS) warnOnBuildMismatch() {
-	if m.DaemonClient == nil || !m.IsDaemonSession {
+	if m.DaemonClient == nil || !m.IsDaemonSession || m.restartLater {
 		return
 	}
 	clientBuild, daemonBuild := m.DaemonClient.BuildMismatch()
@@ -2339,9 +2343,35 @@ func (m *OS) warnOnBuildMismatch() {
 		return
 	}
 	m.LogWarn("Build mismatch: client %s, daemon %s", clientBuild, daemonBuild)
-	m.ShowNotification(fmt.Sprintf(
-		"The daemon is version %s and this window is version %s. To use one version in both, run 'tuios kill-server', then start tuios again.",
-		daemonBuild, clientBuild), "warning", 0)
+	if !m.DaemonRestartAvailable() {
+		m.ShowNotification("The daemon runs "+daemonBuild+" and this window runs "+clientBuild+
+			". Run 'tuios restart-server' on the machine that runs the daemon.", "warning", 0)
+		return
+	}
+	// Two short sentences, so the notice fits the dock of a 100-column
+	// terminal with release versions: what is wrong, then the way out. This
+	// window's version is in the dialog. The whole notice is the click
+	// target, and draws underlined for it; the key is the jump key as it is
+	// bound now.
+	how := "Click it to restart it."
+	if key := contextMenuHint(m.KeybindRegistry, "prefix_jump_notif", &m.Settings); key != "" {
+		how = key + " restarts it."
+	}
+	m.ShowNotificationFrom("The daemon runs "+daemonBuild+". "+how, "warning", 0, NotifTarget{DaemonRestart: true})
+	if n := len(m.Notifications); n > 0 && isRestartNotice(m.Notifications[n-1].Target) {
+		m.Notifications[n-1].Sticky = true
+	}
+}
+
+// announceRestart says the restart worked, on the first frame of the client
+// a restart from the app started.
+func (m *OS) announceRestart() {
+	if !m.afterRestart || m.DaemonClient == nil {
+		return
+	}
+	m.afterRestart = false
+	m.ShowNotification("The daemon restarted on "+m.DaemonClient.DaemonVersion()+". Your session is back.",
+		"success", 2*m.Settings.NotificationDuration)
 }
 
 // AnnounceLayoutReserve tells the daemon what this client keeps for its own

@@ -366,6 +366,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "quit", content, geo, rows)
 	}
 
+	if m.DaemonRestartOpen() {
+		content, geo, rows := m.renderDaemonRestart()
+		layers = m.placeOverlayPanel(layers, overlayKindRestart, content, geo, rows)
+	}
+
 	if m.ShowSessionClose {
 		content, geo, rows := m.renderSessionClose()
 		layers = m.placeOverlayPanel(layers, "sessionclose", content, geo, rows)

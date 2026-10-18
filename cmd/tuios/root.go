@@ -96,6 +96,7 @@ comprehensive keyboard/mouse interactions.`,
 	// reaches the same daemon. main has already applied TUIOS_SERVER; the
 	// flag, when given, replaces it.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		ranCommand = cmd
 		if !cmd.Flags().Changed("server") {
 			return nil
 		}

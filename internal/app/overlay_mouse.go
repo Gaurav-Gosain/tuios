@@ -237,6 +237,10 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.QuitMenuSelected = idx
 	case "sessionclose":
 		m.SessionCloseSelected = idx
+	case overlayKindRestart:
+		if m.restart.phase == restartConfirm {
+			m.restart.selected = idx
+		}
 	case overlayKindLogs:
 		m.LogSelected = idx
 	case "filedialog":
@@ -316,6 +320,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.AggregateViewMove(wheelDelta(up))
 	case "sessionclose":
 		m.SessionCloseMove(wheelDelta(up))
+	case overlayKindRestart:
+		m.DaemonRestartMove(wheelDelta(up))
 	case "filedialog":
 		m.FileConfirmMove(wheelDelta(up))
 	case "accent":
@@ -520,6 +526,8 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "sessionclose":
 		m.SessionCloseSelected = row.Idx
 		return m.SessionCloseActivate(row.Idx)
+	case overlayKindRestart:
+		return m.DaemonRestartActivate(row.Idx)
 	case "filedialog":
 		m.filePrompt.Selected = row.Idx
 		return m.FileConfirmActivate(row.Idx)
@@ -652,6 +660,12 @@ func (m *OS) closeOverlay(kind string) {
 		// Click-away cancels, like esc. Dismissing is the safe answer, so it is
 		// the one an ambiguous gesture gets.
 		m.CloseSessionClose()
+	case overlayKindRestart:
+		// The same rule. A failure that left no daemon is the exception:
+		// CloseDaemonRestart quits then, and an ambiguous gesture must not.
+		if !(m.restart.phase == restartFailed && m.restart.lost) {
+			_ = m.CloseDaemonRestart()
+		}
 	case "filedialog":
 		// Same rule, and it matters more here: the ambiguous gesture must never
 		// be the one that removes a file.

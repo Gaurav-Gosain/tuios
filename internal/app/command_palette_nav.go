@@ -37,6 +37,9 @@ func (m *OS) rebuildPaletteItems() {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteAgentsSettingsName })
 	}
 	// Multi copy mode needs a multifocus set, so it is offered only with one.
+	if !m.DaemonRestartAvailable() {
+		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteRestartDaemonName })
+	}
 	if len(m.MultifocusSet) == 0 {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteMultiCopyName })
 	}

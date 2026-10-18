@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The suite already drives daemon mode through 'tuios new' and 'tuios attach',
@@ -269,4 +273,239 @@ func waitForSessionInfo(t *testing.T, base, name string) sessionInfo {
 	}
 	t.Fatalf("session %q never appeared in the listing; last ls --json:\n%s", name, last)
 	return sessionInfo{}
+}
+
+// restartMidVersion stamps the build the client starts as in
+// TestRestartTheDaemonFromTheVersionNotice: a third version, apart from the
+// daemon's and from the one an update installs.
+const restartMidVersion = "e2e-mid"
+
+var (
+	restartMidOnce sync.Once
+	restartMidBin  string
+	restartMidErr  error
+)
+
+// restartMidBinary builds the client's version once per run.
+func restartMidBinary(t *testing.T) string {
+	t.Helper()
+	restartMidOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "tuios-e2e-restart-mid")
+		if err != nil {
+			restartMidErr = err
+			return
+		}
+		restartMidBin = filepath.Join(dir, "tuios")
+		build := exec.Command("go", "build", "-trimpath", "-ldflags", "-X main.version="+restartMidVersion, "-o", restartMidBin, "./cmd/tuios")
+		build.Dir = "../.."
+		if out, err := build.CombinedOutput(); err != nil {
+			restartMidErr = fmt.Errorf("%v: %s", err, out)
+		}
+	})
+	if restartMidErr != nil {
+		t.Fatalf("build the client's version: %v", restartMidErr)
+	}
+	return restartMidBin
+}
+
+// copyExecutable copies a binary to dst through a rename, the way an update
+// puts a new build in place: a process that runs the old file keeps it.
+func copyExecutable(t *testing.T, src, dst string) {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read %s: %v", src, err)
+	}
+	tmp := dst + ".new"
+	if err := os.WriteFile(tmp, data, 0o755); err != nil { //nolint:gosec // a binary the test runs
+		t.Fatalf("write %s: %v", tmp, err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		t.Fatalf("rename onto %s: %v", dst, err)
+	}
+}
+
+// TestRestartTheDaemonFromTheVersionNotice is the restart from the app, end to
+// end, against real builds.
+//
+// A daemon of this build holds a session with two panes: one printed numbered
+// lines, the other runs sleep. A client of a second build attaches from a path
+// of its own, so the dock shows the version notice. Then a third build is
+// renamed onto the client's path, the way an update replaces a binary. A click
+// on the notice opens the dialog, which has to name the program that stops.
+// r restarts. The client has to come back, by itself, attached to the same
+// session on a daemon of the third build, with both panes, their names and
+// the first pane's history.
+//
+// The ways it could pass without testing that:
+//   - The client could be a new process attached by the test. The client is
+//     found by list-clients, and its pid has to be the pid of the process the
+//     test started: the exec keeps it.
+//   - The daemon could be the old one. Its version is read from the daemon,
+//     and the old one is a different build.
+//   - The new daemon could run /proc/self/exe, the client's old file. That
+//     file is the second build, so the version check fails.
+//   - The history could be the old client's frame. The divider that says the
+//     history was restored is written only by a restore.
+//
+// Frames of the notice, the dialog and the success line are saved as PNG
+// when TUIOS_E2E_FRAMES is set. See NEGATIVE_CONTROLS.md for the controls.
+func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
+	const name = "e2e-restart-ui"
+	const last = 40
+	next := syncNextBinary(t)
+	mid := restartMidBinary(t)
+	frames := os.Getenv("TUIOS_E2E_FRAMES")
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", name, "--name", "history"); err != nil {
+		t.Fatalf("name the first pane: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", name, fmt.Sprintf("i=1; while [ $i -le %d ]; do echo \"RHIST-$i-END\"; i=$((i+1)); done\n", last)); err != nil {
+		t.Fatalf("print history: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", name, "sleeper"); err != nil {
+		t.Fatalf("open the second pane: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", name, "-w", "sleeper", "sleep 300\n"); err != nil {
+		t.Fatalf("start a program: %v\n%s", err, out)
+	}
+
+	// The client runs from a path of its own, which the update replaces.
+	client := filepath.Join(base, "bin", "tuios")
+	if err := os.MkdirAll(filepath.Dir(client), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	copyExecutable(t, mid, client)
+	var term *tuitest.Terminal
+	wire := &syncBuffer{}
+	withBinary("", func() {
+		tuiosBin = client
+		term = startIn(t, base, startOpts{cols: 100, rows: 40, args: []string{"--debug", "new", name}, out: wire})
+	})
+	pid := term.Pid()
+
+	// The whole notice fits the dock of a 100-column terminal.
+	notice := "The daemon runs dev. ctrl+b j restarts it."
+	if err := term.WaitForText(notice, bootTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client never showed the whole version notice: %v\n%s", err, term.Snapshot())
+	}
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-notice")
+	}
+
+	// The update.
+	copyExecutable(t, next, client)
+
+	row, col := findText(t, term, "The daemon runs dev.")
+	leftClick(t, term, col+2, row)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Restart the daemon") && strings.Contains(text, "These stop") &&
+			strings.Contains(text, `sleep in "sleeper" (session `+name+`)`)
+	}, bootTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on the notice did not open the dialog with the program that stops: %v\n%s", err, term.Snapshot())
+	}
+	for _, want := range []string{
+		"Daemon now      dev",
+		"After restart   " + syncNextVersion + "   (from ",
+		"This window     " + restartMidVersion + "   (moves to " + syncNextVersion + " too)",
+		"These come back", "Restart the daemon", "Cancel", "r restart", "esc cancel",
+	} {
+		if !strings.Contains(term.Screen().Text(), want) {
+			t.Errorf("ASSERTION: the dialog does not say %q\n%s", want, term.Snapshot())
+		}
+	}
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-confirm")
+	}
+
+	// The notice and the dialog had to fit 100 columns. The success line is
+	// longer than a 100-column dock, so the terminal widens.
+	if err := term.Resize(130, 40); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	if err := term.SendKeys("r"); err != nil {
+		t.Fatalf("answer the dialog: %v", err)
+	}
+	success := "The daemon restarted on " + syncNextVersion + ". Your session is back."
+	if err := term.WaitForText(success, 2*bootTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client did not come back with the success line: %v\n%s", err, term.Snapshot())
+	}
+	if frames != "" {
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-success")
+	}
+
+	// The old client gave the terminal back before the exec: the reset, the
+	// cursor shown, and then the line that says it attaches again.
+	out := wire.String()
+	again := strings.Index(out, "tuios attaches to session")
+	reset := -1
+	if again >= 0 {
+		reset = strings.LastIndex(out[:again], "\x1b[!p")
+	}
+	if again < 0 || reset < 0 || !strings.Contains(out[reset:again], "\x1b[?25h") {
+		t.Errorf("ASSERTION: the client did not reset the terminal and show the cursor before it started again (reset at %d, line at %d)", reset, again)
+	}
+
+	// The same process, attached to the same session.
+	var clients []struct {
+		PID     int    `json:"pid"`
+		Session string `json:"session"`
+	}
+	withBinary("", func() {
+		tuiosBin = next
+		out, err := tuiosCLI(t, base, "list-clients", "--json")
+		if err != nil || json.Unmarshal([]byte(out), &clients) != nil {
+			t.Fatalf("list-clients: %v\n%s", err, out)
+		}
+		plan, err := tuiosCLI(t, base, "restart-server", "--dry-run")
+		if err != nil || !strings.Contains(plan, "Daemon now      "+syncNextVersion) {
+			t.Errorf("ASSERTION: the daemon does not run the build the update installed: %v\n%s", err, plan)
+		}
+	})
+	found := false
+	for _, c := range clients {
+		found = found || (c.PID == pid && c.Session == name)
+	}
+	if !found {
+		t.Errorf("ASSERTION: the client (pid %d) is not attached to %q after the restart: %+v", pid, name, clients)
+	}
+	// The flags it started with went along, the root's --debug included. The
+	// client was started by new, so the root's flags are not in attach's own
+	// set when the restart reads them.
+	if argv, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err != nil ||
+		!strings.Contains(string(argv), "--debug=true") || !strings.Contains(string(argv), "--no-animations=true") {
+		t.Errorf("ASSERTION: the client started again without its flags: %v %q", err, argv)
+	}
+
+	// The layout and the history.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return countWindows(s) == 2 && strings.Contains(text, fmt.Sprintf("RHIST-%d-END", last)) &&
+			strings.Contains(text, "restored from")
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the panes and the history did not come back: %v\n%s", err, term.Snapshot())
+	}
+	var windows struct {
+		Windows []struct {
+			Name string `json:"display_name"`
+		} `json:"windows"`
+	}
+	out, err := tuiosCLI(t, base, "list-windows", "-s", name, "--json")
+	if err != nil || json.Unmarshal([]byte(out), &windows) != nil {
+		t.Fatalf("list-windows: %v\n%s", err, out)
+	}
+	var names []string
+	for _, w := range windows.Windows {
+		names = append(names, w.Name)
+	}
+	if strings.Join(names, ",") != "history,sleeper" {
+		t.Errorf("ASSERTION: the panes after the restart are %v, want history and sleeper", names)
+	}
+	alive(t, term, "after the restart")
 }

@@ -9,6 +9,8 @@
 package restartplan
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"strconv"
 	"strings"
@@ -228,4 +230,27 @@ func Text(lines []Line) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// Digest names a plan by what a restart would do: the binary and version it
+// starts, the daemon it stops, and every program and agent in its sessions.
+// The app passes the digest of the plan the person agreed to, and the
+// command refuses when the plan it reads now has another one.
+func Digest(r *Report) string {
+	var b strings.Builder
+	b.WriteString(r.Binary + "\x00" + r.Version + "\x00")
+	if d := r.Daemon; d != nil {
+		b.WriteString(d.State + "\x00" + d.Version + "\x00" + strconv.FormatBool(d.Unread) + "\x00")
+		for _, s := range d.Sessions {
+			b.WriteString("s\x00" + s.Name + "\x00")
+			for _, p := range s.Busy {
+				b.WriteString("b\x00" + p.Window + "\x00" + p.Program + "\x00")
+			}
+			for _, a := range s.Resume {
+				b.WriteString("r\x00" + a.Window + "\x00" + a.Harness + "\x00")
+			}
+		}
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:8])
 }

@@ -676,17 +676,17 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 			switch callErr.Code {
 			case session.ErrVerbUnknownVerb:
 				m.Inbox.reply.noQueue = true
-				m.ShowNotification("This daemon cannot queue a reply. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
+				m.ShowNotification("This daemon cannot queue a reply. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 				return
 			case session.ErrVerbInvalidParams:
 				if msg.Parts != nil && msg.Text == "" && strings.Contains(callErr.Message, "text is required") {
 					// A daemon older than parts read no message: the reply
 					// was too large to send as text too, or held an image.
-					m.ShowNotification("This daemon cannot take this reply. Update the daemon to send images and large pastes: tuios kill-server. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					m.ShowNotification("This daemon cannot take images or large pastes. Your draft is kept. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 					return
 				}
 				if strings.Contains(callErr.Message, "a part is text or paste") {
-					m.ShowNotification("Update the daemon to send images: tuios kill-server. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					m.ShowNotification("This daemon cannot take images. Your draft is kept. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 					return
 				}
 				if strings.Contains(callErr.Message, "cannot take images") {
@@ -850,7 +850,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 		var callErr *session.VerbCallError
 		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
 			m.Inbox.reply.noQueue = true
-			m.ShowNotification("This daemon has no queue. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
+			m.ShowNotification("This daemon has no queue. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 			return
 		}
 		m.ShowNotification("Nothing was dropped: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)

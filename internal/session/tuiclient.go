@@ -542,6 +542,13 @@ func (c *TUIClient) noteDaemonBuild(clientVersion, daemonVersion string) {
 // ClientVersion is the build this client announced at the handshake.
 func (c *TUIClient) ClientVersion() string { return c.clientBuild }
 
+// DaemonVersion is the build the daemon named at the handshake.
+func (c *TUIClient) DaemonVersion() string {
+	c.multiClientMu.RLock()
+	defer c.multiClientMu.RUnlock()
+	return c.daemonBuild
+}
+
 // BuildMismatch reports the daemon's build and this client's when they differ,
 // and empty strings when they agree or when either is unknown.
 func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {

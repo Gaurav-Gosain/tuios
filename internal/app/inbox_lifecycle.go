@@ -320,7 +320,7 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 		var callErr *session.VerbCallError
 		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
 			m.Inbox.life.noMark = true
-			m.ShowNotification("This daemon cannot snooze or mark items. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
+			m.ShowNotification("This daemon cannot snooze or mark items. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 			return
 		}
 		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)

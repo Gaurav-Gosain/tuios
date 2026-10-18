@@ -245,6 +245,12 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
+	// The palette row, the rail's menu for this machine, or a key the
+	// person bound. See app/daemon_restart.go.
+	d.Register("restart_daemon", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.OpenDaemonRestart()
+		return o, nil
+	})
 
 	// The worktree dialog's two entry points. A session row's menu names a
 	// session and a repository header's menu names a repository, so they are

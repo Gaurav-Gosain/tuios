@@ -70,12 +70,22 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, hits
 }
 
-// sessionCloseRow draws one answer. The destructive row takes the warn colour
-// on the cursor and stays muted off it, which is the same weight split the dock
-// controls use, so the button and the row that confirms it read as one thing.
+// sessionCloseRow draws one answer.
 func (m *OS) sessionCloseRow(idx, width int, pal overlay.Palette) string {
+	label := "Cancel"
+	if idx == SessionCloseRowClose {
+		label = m.sessionCloseLabel()
+	}
+	return dialogAnswerRow(label, m.SessionCloseSelected == idx, idx == SessionCloseRowClose, width, pal)
+}
+
+// dialogAnswerRow draws one answer of a confirmation. The destructive row
+// takes the warn colour on the cursor and stays muted off it, which is the
+// same weight split the dock controls use, so the button and the row that
+// confirms it read as one thing. The restart dialog draws its answers with it
+// too.
+func dialogAnswerRow(label string, cursor, destructive bool, width int, pal overlay.Palette) string {
 	bg := pal.Canvas
-	cursor := m.SessionCloseSelected == idx
 	if cursor {
 		bg = pal.Surface
 	}
@@ -83,17 +93,15 @@ func (m *OS) sessionCloseRow(idx, width int, pal overlay.Palette) string {
 	if cursor {
 		marker = overlay.SigilMark()
 	}
-
-	label, labelColor := "Cancel", pal.FgDim
-	if idx == SessionCloseRowClose {
-		label, labelColor = m.sessionCloseLabel(), pal.FgMute
-		if cursor {
-			labelColor = pal.Warn
-		}
-	} else if cursor {
+	labelColor := pal.FgDim
+	switch {
+	case destructive && cursor:
+		labelColor = pal.Warn
+	case destructive:
+		labelColor = pal.FgMute
+	case cursor:
 		labelColor = pal.Fg
 	}
-
 	row := overlay.Style(bg).Render(" ") +
 		overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(marker) +
 		overlay.Style(bg).Render(" ") +

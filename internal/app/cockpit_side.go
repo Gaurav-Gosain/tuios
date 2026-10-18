@@ -546,7 +546,7 @@ func (m *OS) applyCheckpoints(msg ckCheckpointsMsg) {
 		case ok && verr.Code == session.ErrVerbNotRepo:
 			cp.err = "Checkpoints need the pane in a git work tree."
 		case ok && verr.Code == session.ErrVerbUnknownVerb:
-			cp.err = "This daemon takes no checkpoints. Restart it with a newer tuios: tuios kill-server"
+			cp.err = "This daemon takes no checkpoints. " + m.restartHint()
 		default:
 			cp.err = "tuios cannot read the checkpoints now: " + printableTitle(msg.err.Error())
 		}

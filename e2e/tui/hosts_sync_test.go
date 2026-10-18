@@ -469,6 +469,18 @@ func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
 		}
 	}
 
+	// A plan the caller did not see is refused, and nothing changes.
+	withBinary("", func() {
+		tuiosBin = next
+		out, err := tuiosCLI(t, base, "restart-server", "--yes", "--expect", "0000000000000000")
+		if err == nil || !strings.Contains(out, "What a restart stops changed after you agreed to it.") {
+			t.Errorf("ASSERTION: a restart with another plan's digest was not refused: %v\n%s", err, out)
+		}
+	})
+	if info := waitForSessionInfo(t, base, name); info.Restored {
+		t.Errorf("ASSERTION: the refused restart restarted the daemon anyway")
+	}
+
 	var done string
 	withBinary("", func() {
 		tuiosBin = next
