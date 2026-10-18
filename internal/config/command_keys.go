@@ -35,6 +35,10 @@ const (
 	CommandTypePopup   = "popup"
 	CommandTypePane    = "pane"
 	CommandTypeShell   = "shell"
+	// CommandTypePluginAction runs a herdr plugin action. The command is
+	// the action id, bare or qualified with the plugin id, as herdr's
+	// [[keys.command]] type = "plugin_action" names it.
+	CommandTypePluginAction = "plugin_action"
 )
 
 // CommandActionPrefix starts the action name of every command entry.
@@ -49,7 +53,8 @@ type CommandBinding struct {
 	// Key is the key that runs the command. "prefix+" puts it after the
 	// leader. Any other key acts in window mode and terminal mode.
 	Key string `toml:"key"`
-	// Type is scratch, popup, pane or shell. Empty means popup.
+	// Type is scratch, popup, pane, shell or plugin_action. Empty means
+	// popup.
 	Type string `toml:"type,omitempty"`
 	// Command is run by sh -c, so it can hold pipes and quotes. A scratch
 	// entry with no command runs the user's shell.
@@ -118,6 +123,9 @@ func (c CommandBinding) Label() string {
 		return d
 	}
 	if cmd := strings.TrimSpace(c.Command); cmd != "" {
+		if c.ResolvedType() == CommandTypePluginAction {
+			return "Plugin action " + cmd
+		}
 		return "Run " + cmd
 	}
 	return c.ResolvedName()
@@ -186,8 +194,8 @@ func commandProblem(c CommandBinding, normalizer *KeyNormalizer) string {
 	switch t := c.ResolvedType(); {
 	case strings.TrimSpace(c.Key) == "":
 		return "The entry has no key. Add a key, for example key = \"prefix+alt+g\"."
-	case t != CommandTypeScratch && t != CommandTypePopup && t != CommandTypePane && t != CommandTypeShell:
-		return fmt.Sprintf("The type %q is not known. Use scratch, popup, pane or shell.", c.Type)
+	case t != CommandTypeScratch && t != CommandTypePopup && t != CommandTypePane && t != CommandTypeShell && t != CommandTypePluginAction:
+		return fmt.Sprintf("The type %q is not known. Use scratch, popup, pane, shell or plugin_action.", c.Type)
 	case strings.TrimSpace(c.Command) == "" && t != CommandTypeScratch:
 		return "The entry has no command. Add a command."
 	case c.ResolvedName() == "":

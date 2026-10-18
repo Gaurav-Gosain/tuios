@@ -2364,8 +2364,11 @@ Without it, a detached session keeps the window until something closes it),
 line that shows the exit status under the last output; not with
 `close_on_exit`), `wait` (default false; answer when the process exits, with
 `exit_code` and, when a signal stopped it, `signal`; not for a window on
-another machine), and `timeout` (with `wait`, milliseconds before the
-`timeout` error; 0 waits with no limit).
+another machine), `timeout` (with `wait`, milliseconds before the
+`timeout` error; 0 waits with no limit), and `env` (an object of variables
+to set in the process; checked as `start-agent` checks its `env`; not for a
+window on another machine, and refused from another machine). `new-session`
+takes the same `env` for its first window.
 
 A daemon that does not know `keep_open` and `wait` refuses them with
 `invalid_params`, as it refuses any parameter it does not know. A daemon from

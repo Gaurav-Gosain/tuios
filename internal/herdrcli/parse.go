@@ -11,7 +11,7 @@ import (
 // Version is the herdr release whose CLI this package follows. It matches
 // the API version the daemon reports (herdrTargetVersion in
 // internal/session/herdr_api.go).
-const Version = "0.9.3"
+const Version = "0.9.5"
 
 // protocolVersion is herdr's private protocol at Version, which the daemon
 // reports in a pong (herdrTargetProtocol in internal/session/herdr_api.go).

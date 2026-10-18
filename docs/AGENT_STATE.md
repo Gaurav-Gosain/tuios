@@ -458,7 +458,7 @@ because a pane may always report for itself.
 
 Tools built for herdr call herdr's CLI through `$HERDR_BIN_PATH`. In a tuios
 pane that variable names a link called `herdr` that points to tuios. tuios
-started under the name `herdr` reads herdr's command line, as herdr 0.9.3
+started under the name `herdr` reads herdr's command line, as herdr 0.9.5
 reads it. It sends each command to `HERDR_SOCKET_PATH` and prints what herdr
 prints:
 
@@ -470,7 +470,7 @@ prints:
 
 `pane send-text`, `pane send-keys`, `pane run` and the report commands print
 nothing when they succeed. `pane read` and `agent read` print the text read.
-`herdr --version` prints `herdr 0.9.3+tuios`. `herdr status server` says
+`herdr --version` prints `herdr 0.9.5+tuios`. `herdr status server` says
 `status: running` when the socket answers, and `status: not running` when
 it does not. `--json` gives the same in herdr's JSON. `endpoint_compatible`
 is always false, because tuios does not serve herdr's client protocol.
@@ -567,10 +567,10 @@ export HERDR_SOCKET_PATH="$XDG_RUNTIME_DIR/tuios/tuios.sock.herdr"
 
 In a tuios pane, `HERDR_SOCKET_PATH` is set already.
 
-tuios follows the API of herdr **0.9.3** (protocol 22). A `ping` answers
-`{"type":"pong","version":"0.9.3+tuios","protocol":22,"server":"tuios"}`.
+tuios follows the API of herdr **0.9.5** (protocol 22). A `ping` answers
+`{"type":"pong","version":"0.9.5+tuios","protocol":22,"server":"tuios"}`.
 `session.snapshot` gives the same version. The `+tuios` part is semver build
-metadata, so a version check reads it as 0.9.3. A tool that must know it talks
+metadata, so a version check reads it as 0.9.5. A tool that must know it talks
 to tuios reads `server`.
 
 #### How tuios maps onto herdr
@@ -724,7 +724,13 @@ with `wait`) takes a `timeout_ms` of 24 hours at most. A longer one fails with
 process may hold 64 connections on the socket at once, and 8 event streams.
 Past that the answer is `rate_limited`.
 
-`env` in a create fails with `unsupported`. A missing parameter answers
+`env` in `workspace.create`, `tab.create` and `pane.split` is set in the
+new pane's process. A variable that starts with `TUIOS_`, and `TMUX` or
+`TMUX_PANE`, fail with `invalid_params`. A `pane.split` with `env` or `cwd`
+opens a new pane on the workspace of the target pane, as a split with no
+attached client does. A tiling client puts it beside the focused pane.
+
+A missing parameter answers
 `invalid_request` with serde's words, for example ``missing field `pane_id` ``.
 An id that finds nothing answers `workspace_not_found`, `tab_not_found` or
 `pane_not_found`.
@@ -745,7 +751,7 @@ These methods answer error `unsupported`. Each row says why.
 
 #### Where tuios differs from herdr
 
-herdr 0.9.3 writes the text of `pane.send_text` to the pane as it is. tuios
+herdr 0.9.5 writes the text of `pane.send_text` to the pane as it is. tuios
 sends it as a paste: control characters are removed, and the text goes in
 bracketed paste delimiters when the program in the pane has bracketed paste
 on. Collie sends a reply as `pane.send_text` and then `pane.send_keys` Enter.
@@ -842,7 +848,7 @@ because tuios does not serve that protocol.
 #### herdr plugins
 
 tuios runs herdr plugins: a folder with a `herdr-plugin.toml` manifest, in
-herdr 0.9.3's format. You do not change the plugin.
+herdr 0.9.5's format. You do not change the plugin.
 
 **Where tuios finds plugins.** tuios looks in four places, in this order:
 
@@ -890,10 +896,26 @@ started by its caller holds.
 | --- | --- |
 | `[[build]]` | Only when you run `tuios plugins build ID`. tuios shows each command before it runs it. |
 | `[[startup]]` | Once, when the daemon starts, and when you enable the plugin while the daemon runs. Disable the plugin or stop the daemon to stop it. |
-| `[[actions]]` | From the command palette, `tuios plugins run ID ACTION`, `herdr plugin action invoke` or `plugin.action.invoke`. |
+| `[[actions]]` | From the command palette, a [command key](KEYBINDINGS.md#command-keys) of type `plugin_action`, `tuios plugins run ID ACTION`, `herdr plugin action invoke` or `plugin.action.invoke`. |
 | `[[events]]` | When the herdr event stream sends the event that the entry names. See [Events](#events). |
 | `[[panes]]` | From the command palette, `tuios plugins open ID PANE`, `herdr plugin pane open` or `plugin.pane.open`. |
 | `[[link_handlers]]` | Not yet. `tuios plugins info` lists them. |
+
+To bind an action to a key, add a command key of type `plugin_action`. The
+`command` is the action id. Write it as `PLUGIN_ID.ACTION_ID` when two plugins
+have an action with the same id. This is herdr's `[[keys.command]]` entry
+under a different table name. tuios does not read herdr's config file, so copy
+the entry into `config.toml`:
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+l"
+type = "plugin_action"
+command = "example.layout.apply"
+description = "Apply layout"
+```
+
+A manifest that starts with a UTF-8 byte order mark loads.
 
 A command is an argv array. No shell reads it. A program with a `/` in its
 name is found from the plugin folder, as in herdr. A program without one is
@@ -955,7 +977,7 @@ tuios reads all 113 manifests of the 115 most starred herdr plugins. These
 parts of a plugin do not run yet:
 
 - `[[link_handlers]]`.
-- `herdr plugin install` and `uninstall`: link a cloned folder with
+- `herdr plugin install`, `update` and `uninstall`: link a cloned folder with
   `tuios plugins link DIR`.
 - A client of herdr's terminal protocol (`terminal.attach`, `herdr agent
   attach`), such as the phone and web clients.
@@ -994,7 +1016,7 @@ When a client reads too slowly and events are lost, the stream sends error
 The mapping follows herdr's `src/api/schema` and `src/app/api` at the version
 above. `herdrTargetVersion` in `internal/session/herdr_api.go` names it. To
 move to a new herdr release, compare its `src/api/schema` with the one at
-`v0.9.3`, and update the methods, fields and events that changed. Then update
+`v0.9.5`, and update the methods, fields and events that changed. Then update
 the version and the Collie fixture in
 `internal/session/testdata/herdr/collie_requests.json`.
 `TestHerdrConformanceCollie` replays that fixture against a daemon.

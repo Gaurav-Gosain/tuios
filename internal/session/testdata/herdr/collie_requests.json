@@ -1,6 +1,6 @@
 {
   "source": "Collie bridge/mux/herdr/client.ts at d0411be (v1.14.2): the request each HerdrClient method sends and the result fields it reads.",
-  "herdr": "0.9.3",
+  "herdr": "0.9.5",
   "steps": [
     {"call": "listWorkspaces", "method": "workspace.list", "params": {},
      "type": "workspace_list", "read": ["workspaces[].workspace_id", "workspaces[].number", "workspaces[].label", "workspaces[].focused", "workspaces[].pane_count", "workspaces[].tab_count", "workspaces[].active_tab_id", "workspaces[].agent_status"]},

@@ -1,6 +1,6 @@
 package herdrcli
 
-// The help text of each command group: herdr's own usage lines at v0.9.3
+// The help text of each command group: herdr's own usage lines at v0.9.5
 // (print_*_help in src/cli), so a person who reads them sees the grammar
 // herdr documents.
 
@@ -34,6 +34,7 @@ var groupHelp = map[string]string{
   herdr session attach, stop and delete act on herdr's own servers, which tuios does not run`,
 	"plugin": `herdr plugin commands:
   herdr plugin install <owner>/<repo>[/subdir...] [--ref REF] [--yes]
+  herdr plugin update [<plugin_id|owner/repo[/subdir...]>...] [--yes]
   herdr plugin uninstall <plugin_id|owner/repo[/subdir...]>
   herdr plugin link <path> [--disabled]
   herdr plugin list [--plugin ID] [--json]
@@ -45,7 +46,7 @@ var groupHelp = map[string]string{
   herdr plugin log list [--plugin ID] [--limit N]
   herdr plugin pane <open|focus|close>
 
-tuios runs install and uninstall as unsupported. It refuses link, unlink,
+tuios runs install, update and uninstall as unsupported. It refuses link, unlink,
 enable and disable from a pane: run tuios plugins from a terminal outside tuios.`,
 	"pane": `herdr pane commands:
   herdr pane list [--workspace <workspace_id>]

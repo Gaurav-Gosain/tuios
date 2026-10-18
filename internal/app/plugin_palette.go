@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -36,6 +37,26 @@ func callPluginMethod(method string, params map[string]any) error {
 		return fmt.Errorf("%v", e["message"])
 	}
 	return nil
+}
+
+// errPluginsNeedDaemon is a plugin action key pressed where no daemon on
+// this machine runs plugins.
+var errPluginsNeedDaemon = errors.New("plugins run in a daemon session on this machine")
+
+// runPluginActionKey runs the plugin action a [[keybindings.command]] entry of
+// type plugin_action names. The daemon finds the action by its id, bare or
+// qualified, and refuses a plugin that is not enabled.
+func (m *OS) runPluginActionKey(c config.CommandBinding) tea.Cmd {
+	label := c.Label()
+	if !m.IsDaemonSession || m.AttachedHost != "" {
+		return func() tea.Msg { return CommandRanMsg{Label: label, Err: errPluginsNeedDaemon} }
+	}
+	ctx := map[string]any{"invocation_source": "keybinding"}
+	if w := m.GetFocusedWindow(); w != nil {
+		ctx["focused_pane_id"] = w.ID
+	}
+	params := map[string]any{"action_id": strings.TrimSpace(c.Command), "context": ctx}
+	return func() tea.Msg { return CommandRanMsg{Label: label, Err: pluginCaller("plugin.action.invoke", params)} }
 }
 
 // pluginPaletteItems are the rows of the enabled plugins.

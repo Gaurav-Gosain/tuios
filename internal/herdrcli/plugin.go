@@ -1,11 +1,11 @@
 package herdrcli
 
-// herdr's plugin commands, from src/cli/plugin.rs at v0.9.3. Each sends the
+// herdr's plugin commands, from src/cli/plugin.rs at v0.9.5. Each sends the
 // plugin.* method herdr's sends, which tuios's plugin host answers (see
 // internal/session/herdr_plugins.go). enable, disable, link and unlink are
 // sent too: the daemon refuses them from a pane, so a plugin or an agent
-// that runs one fails cleanly. install and uninstall clone from the
-// network, which tuios does not do.
+// that runs one fails cleanly. install, update and uninstall clone from
+// the network, which tuios does not do.
 
 func parsePlugin(sub string, args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	switch sub {
@@ -59,7 +59,7 @@ func parsePlugin(sub string, args []string, getenv Env, cwd string) (*Call, *Usa
 			}
 		}
 		return call("cli:plugin", "plugin.link", p), nil
-	case "install", "uninstall":
+	case "install", "update", "uninstall":
 		return local("cli:plugin", "herdr plugin "+sub+" downloads from the network, which tuios does not do. Clone the plugin and run tuios plugins link DIR from a terminal outside tuios"), nil
 	case "action":
 		return parsePluginAction(args)

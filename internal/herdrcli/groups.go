@@ -6,7 +6,7 @@ import (
 )
 
 // herdr's tab, workspace, agent, worktree, notification, api and server
-// commands, from src/cli at v0.9.3.
+// commands, from src/cli at v0.9.5.
 
 // valueFlags reads flags that each take one value into p under the flag's
 // name less "--" with "-" made "_", and --focus and --no-focus into focus.
@@ -582,7 +582,7 @@ func parseServer(sub string, args []string, _ Env, _ string) (*Call, *UsageError
 	return nil, &UsageError{Msg: groupHelp["server"], Code: 2}
 }
 
-// herdrAgentKinds are the agent names herdr 0.9.3 starts (lookup_agent in
+// herdrAgentKinds are the agent names herdr 0.9.5 starts (lookup_agent in
 // src/detect/mod.rs). herdr refuses any other kind before it sends anything.
 var herdrAgentKinds = []string{
 	"pi", "claude", "claude-code", "codex", "gemini", "cursor", "cursor-agent",
