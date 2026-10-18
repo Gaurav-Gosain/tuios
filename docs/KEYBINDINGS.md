@@ -1196,9 +1196,13 @@ Inside it:
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
-| `y` `p` `v` `m` | Resume, pass held mail on, review the changes, open the mailbox |
+| `y` `p` `m` | Resume, pass held mail on, open the mailbox |
 | `x` `*` | Mark an agent, or every agent shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
+| `[` `]` | Switch between the Thread and Changes tabs |
+| `J` `K` | Scroll the thread, or a long plan waiting for a yes |
+| `e` | Show every line of every card in the thread |
+| `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
 | `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
 | `?` | All keys |
@@ -1249,7 +1253,8 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`,
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
-`inbox_help`, `inbox_mark`, `inbox_mark_all`),
+`inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
+`inbox_tab_next`, `inbox_expand`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,

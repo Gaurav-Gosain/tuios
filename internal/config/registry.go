@@ -641,6 +641,9 @@ var ActionDescriptions = map[string]string{
 	"inbox_help":         "Agents view: show every key",
 	"inbox_mark":         "Agents view: mark the agent for a bulk answer",
 	"inbox_mark_all":     "Agents view: mark every agent shown, or clear the marks",
+	"inbox_tab_prev":     "Agents view: the focus's tab to the left",
+	"inbox_tab_next":     "Agents view: the focus's tab to the right",
+	"inbox_expand":       "Agents view: show every line of every card in the thread, or fold them again",
 
 	// The rail's agent rows. They act only while the cursor is on an agent
 	// row, and a key they share with a rail binding keeps its rail meaning on

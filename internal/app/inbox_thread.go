@@ -53,8 +53,12 @@ type threadEntry struct {
 	Status string `json:"status"`
 	Plan   string `json:"plan"`
 	Todos  []struct {
+		Text   string `json:"text"`
 		Status string `json:"status"`
 	} `json:"todos"`
+	At     int64       `json:"at"`
+	ToolID string      `json:"tool_id"`
+	Diff   *threadDiff `json:"diff"`
 }
 
 // agentThread is one agent's thread.
@@ -80,6 +84,14 @@ type agentThread struct {
 	// and style the conversation again.
 	body   []string
 	bodyAt threadBodyKey
+	// hits are what a click on each line of body does, "" for nothing.
+	hits []string
+	// folded are the cards whose fold the person flipped, by entry id;
+	// expandAll shows every line of every card (e); scroll is how many
+	// lines the thread is scrolled up from its newest.
+	folded    map[string]bool
+	expandAll bool
+	scroll    int
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
@@ -90,6 +102,7 @@ type threadBodyKey struct {
 	minute              int64
 	ascii               bool
 	title, message      string
+	expand, changes     bool
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -411,10 +424,12 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
 		width: width, room: room, minute: now.Unix() / 60, ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
+		expand: t.expandAll, changes: m.Inbox.ck.tab == 1,
 	}
 	if t.body != nil && t.bodyAt == key {
 		return t.body
 	}
+	t.hits = nil
 	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
 	return t.body
 }
@@ -445,16 +460,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			note(t.err)
 			return out
 		}
-		var rev [][]string
-		n := 0
-		for i := len(t.entries) - 1; i >= 0 && n < room; i-- {
-			lines := threadEntryLines(t.entries[i], e, width, bg, pal)
-			rev = append(rev, lines)
-			n += len(lines)
-		}
-		for i := len(rev) - 1; i >= 0; i-- {
-			out = append(out, rev[i]...)
-		}
+		out, t.hits = m.threadCardLines(e, t, width, room, m.Inbox.ck.tab == 1)
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}
@@ -506,61 +512,6 @@ func (m *OS) threadMail(e sidebarAgentEntry, width int, bg color.Color, pal over
 		out = append(out, threadAgentLine(ansi.Truncate(line, width-4, "…"), width, bg, pal))
 	}
 	return out
-}
-
-// threadEntryLines draws one transcript entry: the person's words in the
-// plain ink, the agent's behind a gutter mark in the dim ink.
-func threadEntryLines(en threadEntry, e sidebarAgentEntry, width int, bg color.Color, pal overlay.Palette) []string {
-	st := overlay.Style(bg)
-	var out []string
-	switch {
-	case en.Kind == "text" && en.Role == "user":
-		fg := overlay.Readable(pal.Fg, bg)
-		label := st.Foreground(overlay.Readable(pal.AccentBright, bg)).Bold(true).Render("you ")
-		for i, l := range threadWrap(en.Text, max(width-6, 8)) {
-			lead := "    "
-			if i == 0 {
-				lead = ""
-			}
-			out = append(out, overlay.Fill(st.Render("  ")+label+st.Foreground(fg).Render(lead+l), width, bg))
-			label = ""
-		}
-	case en.Kind == "text":
-		for _, l := range threadWrap(en.Text, max(width-4, 8)) {
-			out = append(out, threadAgentLine(l, width, bg, pal))
-		}
-	case en.Kind == "tool_call":
-		status := ""
-		switch en.Status {
-		case "error":
-			status = " (failed)"
-		case "running":
-			status = " (running)"
-		}
-		out = append(out, threadAgentLine(ansi.Truncate(threadToolMark()+" "+en.Tool+" "+printableTitle(en.Target)+status, max(width-4, 8), "…"), width, bg, pal))
-	case en.Kind == "plan":
-		first, _, _ := strings.Cut(strings.TrimSpace(en.Plan), "\n")
-		first = strings.TrimSpace(strings.TrimLeft(first, "#"))
-		out = append(out, threadAgentLine(ansi.Truncate("plan: "+printableTitle(first), max(width-4, 8), "…"), width, bg, pal))
-	case en.Kind == "todos":
-		done := 0
-		for _, td := range en.Todos {
-			if td.Status == "completed" {
-				done++
-			}
-		}
-		out = append(out, threadAgentLine("todos: "+strconv.Itoa(done)+" of "+strconv.Itoa(len(en.Todos))+" done", width, bg, pal))
-	}
-	_ = e
-	return out
-}
-
-// threadToolMark is the mark in front of a tool call.
-func threadToolMark() string {
-	if overlay.UseASCII() {
-		return ">"
-	}
-	return "›"
 }
 
 // threadAgentLine is one line of the agent's: the gutter mark in the edge

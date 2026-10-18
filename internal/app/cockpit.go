@@ -3,11 +3,13 @@ package app
 import (
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -137,6 +139,11 @@ type cockpitState struct {
 	// frame is the last frame drawn, and frameAt what it was drawn from.
 	frame   string
 	frameAt ckFrameKey
+	// tab is the focus tab: 0 the thread, 1 the last turn's changes.
+	tab int
+	// dv is the diff theme the thread's cards draw with, for dvKey.
+	dv    *diffview.Theme
+	dvKey string
 	// cardRoom is how many detail lines the item card showed whole in the
 	// last frame. A plan is read to its end only when its last line fit.
 	cardRoom int
@@ -796,6 +803,8 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			m.cockpitSelectKey(h.key)
 			m.InboxAgentsToggleMark()
 			return nil, true
+		case ckHitTab:
+			m.CockpitTab(h.group - m.Inbox.ck.tab)
 		}
 		return nil, true
 	}
@@ -826,7 +835,22 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.OpenSettingsAt("Agents")
 	case "back":
 		return m.CockpitOpenFocus(false)
+	case "review":
+		m.cockpitSync()
+		cmd, _ := m.InboxReview()
+		return cmd
 	default:
+		if id, ok := strings.CutPrefix(action, "fold:"); ok {
+			if t := m.cockpitThread(); t != nil {
+				if t.folded == nil {
+					t.folded = map[string]bool{}
+				}
+				t.folded[id] = !t.folded[id]
+				t.gen++
+				m.cockpitTouch()
+			}
+			return nil
+		}
 		if n, err := strconv.Atoi(action); err == nil {
 			m.cockpitSync()
 			return m.InboxNumber(n)
@@ -878,10 +902,45 @@ func (m *OS) CockpitWheel(x int, up bool) {
 		m.cockpitTouch()
 		return
 	}
+	if t := m.cockpitThread(); t != nil {
+		if up {
+			t.scroll += 3
+		} else {
+			t.scroll = max(t.scroll-3, 0)
+		}
+		m.cockpitTouch()
+		return
+	}
 	m.cockpitSync()
 	if _, ok := m.InboxDetailScroll(3 * wheelDelta(up)); ok {
 		m.cockpitTouch()
 	}
+}
+
+// cockpitThread is the kept thread of the agent under the cursor, nil when
+// it has none.
+func (m *OS) cockpitThread() *agentThread {
+	e, ok := m.cockpitAgent()
+	if !ok {
+		return nil
+	}
+	return m.Inbox.threads.byKey[agentKey(e)]
+}
+
+// CockpitTab steps the focus tab by delta: the thread, then the last turn's
+// changes.
+func (m *OS) CockpitTab(delta int) {
+	e, _ := m.cockpitAgent()
+	r, _ := m.cockpitSelected()
+	n := len(m.cockpitTabs(e, r))
+	if n == 0 {
+		return
+	}
+	m.Inbox.ck.tab = ((m.Inbox.ck.tab+delta)%n + n) % n
+	if t := m.cockpitThread(); t != nil {
+		t.scroll = 0
+	}
+	m.cockpitTouch()
 }
 
 // cockpitGroupHides reports whether a group shows only its first rows.
@@ -930,6 +989,41 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	case config.ActionInboxHelp:
 		m.CloseInbox()
 		m.OpenHelpAtCategory(HelpCategoryAgents)
+		return nil, true
+	case config.ActionInboxTabPrev, config.ActionInboxTabNext:
+		d := 1
+		if action == config.ActionInboxTabPrev {
+			d = -1
+		}
+		m.CockpitTab(d)
+		return nil, true
+	case config.ActionInboxExpand:
+		if t := m.cockpitThread(); t != nil {
+			t.expandAll = !t.expandAll
+			t.gen++
+			m.cockpitTouch()
+		}
+		return nil, true
+	case config.ActionInboxDetailDown, config.ActionInboxDetailUp:
+		// J and K scroll a plan's detail first, then the thread.
+		d := 1
+		if action == config.ActionInboxDetailUp {
+			d = -1
+		}
+		m.cockpitSync()
+		if cmd, ok := m.InboxDetailScroll(d); ok {
+			return cmd, true
+		}
+		t := m.cockpitThread()
+		if t == nil || len(t.entries) == 0 {
+			return nil, false
+		}
+		if action == config.ActionInboxDetailUp {
+			t.scroll += 3
+		} else {
+			t.scroll = max(t.scroll-3, 0)
+		}
+		m.cockpitTouch()
 		return nil, true
 	case config.ActionInboxNewAgent:
 		return m.CockpitNewAgent(), true

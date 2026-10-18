@@ -385,7 +385,12 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 	}
 	it, ok := m.inboxSelected()
 	if !ok {
-		return nil, false
+		// An agent with no Inbox item: review its pane.
+		e, ok := m.cockpitAgent()
+		if !ok {
+			return nil, false
+		}
+		it = session.AttentionItem{Session: e.SessionID, Window: e.WindowID, Host: e.Host, Name: e.Title}
 	}
 	if it.Host != "" {
 		m.reviewNotify(inboxWho(it)+" is on "+printableTitle(it.Host)+". Attach there to review it", "info", m.Settings.NotificationDuration)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -270,5 +271,138 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, name+".png"), data, 0o644); err != nil {
 		t.Fatalf("save %s: %v", name, err)
+	}
+}
+
+// TestCockpitThreadCards reads a Claude Code transcript as cards: a run of
+// reads folds to one line, the Edit opens on its diff with the changed words
+// lit, the todo list is a plan with its count, and the failed command shows
+// its output. A click on the diff's header folds it, and ] shows the last
+// turn's changes alone.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with the changed
+// range left out of the diff lines the word check fails; with the todos
+// drawn as one line the plan check fails.
+func TestCockpitThreadCards(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	for _, s := range []string{"home200", "home100", "api"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	fixture, err := os.ReadFile(filepath.Join("testdata", "transcript", "cockpit-auth.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(atProjects(base), "src-api", "9a1f0c2e.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, fixture, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "api", "-w", "0", "--name", "api-auth"); err != nil {
+		t.Fatalf("name the pane: %v\n%s", err, out)
+	}
+	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "api", "--window", "api-auth")
+	hook.Dir = workDirIn(t, base)
+	hook.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
+	}
+	hook.Stdin = bytes.NewReader(hookPayload(path, "9a1f0c2e"))
+	if out, err := hook.CombinedOutput(); err != nil {
+		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
+	}
+	for _, args := range [][]string{
+		{"set-agent-state", "working", "-s", "api", "-w", "api-auth", "--harness", "claude-code"},
+		{"set-agent-meta", "-s", "api", "-w", "api-auth", "model=opus-4.5", "context=62%", "diff=+214/-37"},
+	} {
+		if out, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	for _, sz := range [][2]int{{200, 55}, {100, 30}} {
+		// Each size attaches a session of its own, so the two clients do
+		// not share a size.
+		term := startIn(t, base, startOpts{args: []string{"attach", "home" + strconv.Itoa(sz[0])}, cols: sz[0], rows: sz[1], shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+			t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+		}
+		windowManagementMode(t, term)
+		if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+			t.Fatalf("open the cockpit: %v", err)
+		}
+		// The newest card is at the bottom; the plan and the edit above it.
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return containsAll(s.Text(), "Running the auth tests.", "go vet ./internal/auth/...", "refreshSkew declared and not used")
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the thread never showed the failed command's output: %v\n%s", err, term.Snapshot())
+		}
+		// Scroll up to the plan and the edit.
+		for range 4 {
+			if err := term.SendKeys("K"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return containsAll(s.Text(), "2 of 5 done", "Test the boundary at 30 s", "Add(refreshSkew).Before")
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the thread has no plan card or diff card: %v\n%s", err, term.Snapshot())
+		}
+		// The changed words are lit: their cells sit on another ground than
+		// the rest of the added line.
+		s := term.Screen()
+		row := rowWith(s, "Add(refreshSkew).Before")
+		line := []rune(s.Line(row))
+		word := strings.Index(string(line), "Add(refreshSkew)")
+		word = len([]rune(string(line)[:word]))
+		ret := len([]rune(string(line)[:strings.Index(string(line), "return")]))
+		if s.Cell(word, row).Bg == s.Cell(ret, row).Bg {
+			t.Fatalf("ASSERTION: the changed words of the diff are not lit\n%s", term.Snapshot())
+		}
+		saveCockpitFrames(t, term, "thread-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]))
+		// Further up, the three reads and the search are one line.
+		if err := term.SendKeys("K", "K"); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitForText("Read 3 · Search 1", uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the reads did not fold to one line: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys("J", "J"); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitForText("Add(refreshSkew).Before", uiTimeout); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatal(err)
+		}
+
+		// A click on the edit's header folds its diff.
+		hr, hc := findText(t, term, "internal/auth/token.go")
+		mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return !strings.Contains(s.Text(), "Add(refreshSkew).Before")
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: a click on the header did not fold the diff: %v\n%s", err, term.Snapshot())
+		}
+		// ] shows the last turn's changes, each whole.
+		if err := term.SendKeys("]"); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			return strings.Contains(text, "const refreshSkew = 30 * time.Second") && !strings.Contains(text, "2 of 5 done")
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: ] did not show the changes alone: %v\n%s", err, term.Snapshot())
+		}
+		saveCockpitFrames(t, term, "changes-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]))
+		if err := term.SendKeys("["); err != nil {
+			t.Fatal(err)
+		}
+		alive(t, term, "after the thread cards")
 	}
 }

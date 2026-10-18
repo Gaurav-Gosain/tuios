@@ -1591,13 +1591,17 @@ const (
 	ActionInboxDetailUp    = "inbox_detail_up"
 	// The approval card's keys, the keys that open and close the focus on a
 	// narrow screen, help, and the bulk marks.
-	ActionInboxAllow        = "inbox_allow"
-	ActionInboxAllowAlways  = "inbox_allow_always"
-	ActionInboxOpen         = "inbox_open"
-	ActionInboxBack         = "inbox_back"
-	ActionInboxHelp         = "inbox_help"
-	ActionInboxMark         = "inbox_mark"
-	ActionInboxMarkAll      = "inbox_mark_all"
+	ActionInboxAllow       = "inbox_allow"
+	ActionInboxAllowAlways = "inbox_allow_always"
+	ActionInboxOpen        = "inbox_open"
+	ActionInboxBack        = "inbox_back"
+	ActionInboxHelp        = "inbox_help"
+	ActionInboxMark        = "inbox_mark"
+	ActionInboxMarkAll     = "inbox_mark_all"
+	// The focus\'s tabs, and every line of every thread card.
+	ActionInboxTabPrev      = "inbox_tab_prev"
+	ActionInboxTabNext      = "inbox_tab_next"
+	ActionInboxExpand       = "inbox_expand"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1675,6 +1679,9 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxHelp:        {"?"},
 		ActionInboxMark:        {"x"},
 		ActionInboxMarkAll:     {"*"},
+		ActionInboxTabPrev:     {"["},
+		ActionInboxTabNext:     {"]"},
+		ActionInboxExpand:      {"e"},
 	}
 }
 
@@ -3544,6 +3551,9 @@ var yieldingDefaults = map[string]bool{
 	"inbox_help":         true,
 	"inbox_mark":         true,
 	"inbox_mark_all":     true,
+	"inbox_tab_prev":     true,
+	"inbox_tab_next":     true,
+	"inbox_expand":       true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables

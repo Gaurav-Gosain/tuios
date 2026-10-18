@@ -2332,9 +2332,25 @@ group longer than 8 rows shows its first 8 and `+N more`, which a click or
 `right` opens. Needs you never folds.
 
 The thread shows what the agent said and did. For Claude Code it is the
-conversation, read from its transcript: your prompts, its answers, its tool
-calls with their status, plans and todo lists. tuios follows the transcript of
-the selected agent only, and the thread grows as the agent works. For other
+conversation, read from its transcript and drawn as cards:
+
+- Your prompts sit in a panel with an accent bar, labelled with the time and
+  the turn. The agent's answers sit under a label with its harness and the
+  time.
+- Reads and searches fold to one line, and a run of them merges: `Read 3 ·
+  Search 1` and the files.
+- An edit opens on its diff, drawn as the review draws it: line numbers, the
+  code highlighted, and the part of a changed line that changed lit. A card
+  shows its first 8 lines. `e` shows every line of every card, and a click on
+  a card's header folds it.
+- A command that failed shows the end of its output and a `failed` mark.
+- A todo list is a plan: done rows struck through, the running row bold, and
+  a rule that fills as rows are done. Older lists fold to their count.
+
+The newest card is at the bottom. The wheel over the thread, or `J` and `K`,
+scrolls it. `[` and `]` switch between the Thread and Changes tabs: Changes
+shows every edit of the last turn whole. tuios follows the transcript of the
+selected agent only, and the thread grows as the agent works. For other
 agents it is the recap of their turns, their last message, and the last mail
 between them and other agents.
 

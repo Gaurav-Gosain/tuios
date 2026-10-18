@@ -1117,6 +1117,24 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	if c.h < 30 {
 		rule = y + 2
 	}
+	tabs := m.cockpitTabs(e, r)
+	if len(tabs) > 0 {
+		rule++
+		ty, tx := rule-1, x
+		for i, tab := range tabs {
+			x0 := tx
+			if i == st.ck.tab {
+				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.Fg, attrs: ckBold})
+			} else {
+				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.FgMute})
+			}
+			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + ty, x1: tx, y1: top + ty + 1, kind: ckHitTab, group: i})
+			if i == st.ck.tab {
+				defer c.hline(x0, rule, tx-x0, "━", pal.Accent)
+			}
+			tx += 4
+		}
+	}
 	c.hline(x, rule, w, hzGlyph(), l.edge)
 	bodyTop := rule + 2
 	if c.h < 30 {
@@ -1173,15 +1191,56 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	}
 	if r.agent >= 0 && cardTop-bodyTop > 1 {
 		room := cardTop - bodyTop - 1
-		lines := m.threadBody(e, w, room, now)
-		if len(lines) > room {
-			lines = lines[len(lines)-room:]
+		t := st.threads.byKey[agentKey(e)]
+		scroll := 0
+		if t != nil {
+			scroll = t.scroll
 		}
-		ty := cardTop - 1 - len(lines)
-		for i, s := range lines {
-			c.draw(x, ty+i, w, s)
+		lines := m.threadBody(e, w, room+scroll, now)
+		var hits []string
+		if t != nil && len(t.hits) == len(lines) {
+			hits = t.hits
+		}
+		if t != nil {
+			// The thread scrolls no further than its first line.
+			t.scroll = min(scroll, max(len(lines)-room, 0))
+			scroll = t.scroll
+		}
+		end := len(lines) - scroll
+		start := max(end-room, 0)
+		ty := cardTop - 1 - (end - start)
+		for i := start; i < end; i++ {
+			c.draw(x, ty+i-start, w, lines[i])
+			if hits != nil && hits[i] != "" {
+				st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + ty + i - start, x1: right, y1: top + ty + i - start + 1, kind: ckHitAction, action: hits[i]})
+			}
 		}
 	}
+}
+
+// cockpitTabs are the focus tabs for the selected row: the thread and the
+// last turn's changes, for an agent whose transcript tuios reads.
+func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
+	if r.agent < 0 || e.Host != "" || !threadTranscriptHarness(e.Harness) {
+		return nil
+	}
+	n := 0
+	if t := m.Inbox.threads.byKey[agentKey(e)]; t != nil {
+		for i := len(t.entries) - 1; i >= 0; i-- {
+			en := t.entries[i]
+			if en.Kind == "text" && en.Role == "user" {
+				break
+			}
+			if en.Kind == "tool_call" && en.Diff != nil {
+				n++
+			}
+		}
+	}
+	changes := "Changes"
+	if n > 0 {
+		changes += " " + strconv.Itoa(n)
+	}
+	return []string{"Thread", changes}
 }
 
 // ckApprovalLines are a held approval's command, wrapped for the inset, and

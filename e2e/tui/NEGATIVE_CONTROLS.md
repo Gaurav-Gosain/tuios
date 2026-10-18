@@ -7057,3 +7057,18 @@ and `1` leave the approval held. Run on 2026-10-18.
 | A mark is invisible | The mark column in `drawFleetRow` | The mark drawn only when `false` | `TestCockpitBulkActsOnlyOnSeenMarks` ("the mark is not on api-auth's row, or the title does not count it") | **caught** |
 | A bulk key acts on a mark the list does not show | `markedAgents` over `cockpitShownAgents` | `markedAgents` reads the whole agents list | `TestCockpitBulkActsOnlyOnSeenMarks` ("3 did not say no marked agent it can see waits": it rejected the folded agent's approval) | **caught** |
 | A cut command counts as read | The `cut` rule in `drawItemCard` | `noteInboxShown` told the card showed the approval whole, and no cut recorded | `TestCockpitCutApprovalIsNotAnswered` ("a answered an approval whose command was cut: 0 held") | **caught** |
+## The agents cockpit: thread cards
+
+`TestCockpitThreadCards` joins a pane to a Claude Code transcript fixture
+(`testdata/transcript/cockpit-auth.jsonl`: three reads and a search, a todo
+list, an Edit with a structured patch, a failing Bash call) with the real
+hook, and reads it in the cockpit at 200x55 and 100x30.
+
+Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The changed words of a diff line are not lit | n/a, injected | `ckDiffCard` passes no changed range to `diffview.Theme.Code` | `TestCockpitThreadCards` ("the changed words of the diff are not lit") | **caught** |
+| The newest todo list folds to its count like the older ones | n/a, injected | `ckPlanCard` called with `whole` false | `TestCockpitThreadCards` ("the thread has no plan card or diff card") | **caught** |
+| A click on a card's header does nothing | n/a, injected | the diff card's header line has no `fold:` hit | `TestCockpitThreadCards` ("a click on the header did not fold the diff") | **caught** |
+| A tool result between two reads breaks the run | n/a, injected | the run stops at a `tool_result` entry | `TestCockpitThreadCards` ("the reads did not fold to one line") | **caught** |
