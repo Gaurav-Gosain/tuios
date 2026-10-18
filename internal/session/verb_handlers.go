@@ -1600,9 +1600,10 @@ func (d *Daemon) verbReportAgentActivity(cs *connState, params json.RawMessage) 
 		return nil, verr
 	}
 	windowID, state, reason, err := sess.activityReportGuard(target, AgentReport{
-		Harness:    p.Harness,
-		SessionID:  p.AgentSessionID,
-		HarnessPID: p.HarnessPID,
+		Harness:      p.Harness,
+		SessionID:    p.AgentSessionID,
+		HarnessPID:   p.HarnessPID,
+		SharedServer: p.Harness != "" && d.agentMatcher.registry != nil && d.agentMatcher.registry.SharedServer(p.Harness),
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)

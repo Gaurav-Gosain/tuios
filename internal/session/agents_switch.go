@@ -296,6 +296,7 @@ func (s *Session) clearAllAgentState() {
 			windows = append(windows, w.ID)
 			delete(s.agentClaims, w.ID)
 			delete(s.agentHarnessPIDs, w.ID)
+			delete(s.agentSharedGuards, w.ID)
 			if w.AgentState == AgentStateNone && w.AgentHarness == "" && w.AgentMessage == "" &&
 				w.AgentKind == "" && len(w.AgentMeta) == 0 && w.AgentSubagents == 0 && len(w.AgentSubagentList) == 0 {
 				continue

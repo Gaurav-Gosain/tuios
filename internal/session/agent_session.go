@@ -1,6 +1,9 @@
 package session
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // AgentSessionReport is one set-agent-session call: a harness naming the
 // conversation it runs in a pane, without saying anything about its state.
@@ -104,7 +107,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 // guard holds the wrong one. Called with stateMu held.
 func (s *Session) pointSharedGuard(windowID string, r AgentSessionReport) {
 	if g, ok := s.agentSharedGuards[windowID]; ok && g.harness == r.Harness {
-		s.agentSharedGuards[windowID] = sharedGuard{harness: r.Harness, owner: r.SessionID}
+		s.agentSharedGuards[windowID] = sharedGuard{harness: r.Harness, owner: r.SessionID, armedAt: time.Now().UnixNano()}
 	}
 }
 

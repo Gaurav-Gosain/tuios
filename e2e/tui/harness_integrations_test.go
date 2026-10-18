@@ -221,18 +221,20 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 //
 // The other conversation's prompt and approval are refused, mid-turn and at
 // rest, and so is its SessionStart after a compaction. Its SessionStart
-// (a resume) takes the pane over, since it looks like /resume in the pane.
-// The pane's own next approval takes the pane back and reaches the Inbox,
-// and the other conversation is refused again. The same holds after two
-// SessionStarts from elsewhere in a row. Once codex exits and the pane
-// is back at its shell, the guard forgets both conversations.
+// (a resume) takes the pane over, since it looks like /resume in the pane,
+// and the pane's own next approval takes the pane back and reaches the Inbox.
+// That holds after two SessionStarts from elsewhere in a row, and when /new in
+// the pane comes between a takeover and the other conversation's next report.
+// A conversation that never sent a SessionStart is refused throughout. Once
+// codex exits and the pane is back at its shell, the guard forgets them all.
 //
 // Negative controls: with shared_server removed from the codex manifest, or
 // the daemon not reading it, the other conversation's approval lands on the
 // pane mid-turn. With the hook not sending session_start, the guard never
 // arms. With the reclaim removed, the pane's own approval stays hidden after
 // the takeover. With the history cut to one entry, it stays hidden after two
-// takeovers in a row.
+// takeovers in a row. With a reclaim not keeping the owner it displaces, the
+// new conversation's approval stays hidden after /new.
 func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	term, base := agentSessions(t)
 	log := &stateLog{name: "codex-shared-server"}
@@ -251,7 +253,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 
 	hook := func(payload string) { runHook(t, base, "codex", "e2e-agent", win, payload) }
 	const (
-		paneApproval    = `{"hook_event_name":"PermissionRequest","session_id":"cx-pane","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`
 		foreignApproval = `{"hook_event_name":"PermissionRequest","session_id":"cx-quick","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`
 	)
 	inbox := func() string {
@@ -298,48 +299,71 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	refused("other SessionStart after a compaction", "done")
 	saveFrame(t, term, "codex-shared-server-refused")
 
-	// A SessionStart looks like /resume in the pane, and takes it over once.
-	hook(`{"hook_event_name":"SessionStart","session_id":"cx-quick","source":"resume"}`)
-	if st := waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, "other SessionStart"); st.AgentSession != "cx-quick" {
-		t.Fatalf("the SessionStart did not take the pane over: %+v", st)
+	// A SessionStart looks like /resume in the pane, and takes it over.
+	start := func(session, source string) string {
+		return `{"hook_event_name":"SessionStart","session_id":"` + session + `","source":"` + source + `"}`
+	}
+	takeover := func(step, session, source string) {
+		t.Helper()
+		hook(start(session, source))
+		if st := waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, step); st.AgentSession != session {
+			t.Fatalf("%s: the SessionStart did not take the pane over: %+v", step, st)
+		}
+	}
+	// reclaim sends an approval from session and checks it lands: the pane
+	// is that conversation's, and the approval is in the Inbox and the dock.
+	reclaim := func(step, session, command string) {
+		t.Helper()
+		before := readAgentState(t, base, "e2e-agent", win)
+		hook(`{"hook_event_name":"PermissionRequest","session_id":"` + session + `","tool_name":"Bash","tool_input":{"command":"` + command + `"}}`)
+		if st := waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, step); st.AgentSession != session || !strings.Contains(st.Message, command) {
+			t.Fatalf("%s: the approval did not take the pane: %+v", step, st)
+		}
+		if out := inbox(); !strings.Contains(out, command) {
+			t.Fatalf("%s: the Inbox does not list the approval:\n%s", step, out)
+		}
+		// The dock announces a pane that turns blocked. A pane that was
+		// already blocked is not announced again, so only the Inbox is
+		// checked for it.
+		if before.State == "needs_input" {
+			return
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			return strings.Contains(text, "needs approval") && strings.Contains(text, command)
+		}, uiTimeout); err != nil {
+			t.Fatalf("%s: the dock never announced the approval: %v\n%s", step, err, term.Snapshot())
+		}
 	}
 
-	// The pane's own approval takes the pane back and reaches the Inbox.
-	hook(paneApproval)
-	if st := waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, "pane PermissionRequest reclaims"); st.AgentSession != "cx-pane" {
-		t.Fatalf("the pane's own approval did not take the pane back: %+v", st)
-	}
-	if out := inbox(); !strings.Contains(out, "go test ./...") {
-		t.Fatalf("the Inbox does not list the pane's own approval:\n%s", out)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		text := s.Text()
-		return strings.Contains(text, "needs approval") && strings.Contains(text, "go test ./...")
-	}, uiTimeout); err != nil {
-		t.Fatalf("the dock never announced the pane's own approval: %v\n%s", err, term.Snapshot())
-	}
-
-	// And the other conversation is refused again.
-	hook(foreignApproval)
-	refused("other PermissionRequest after the reclaim", "needs_input")
+	takeover("other SessionStart", "cx-quick", "resume")
+	reclaim("pane PermissionRequest reclaims", "cx-pane", "go test ./...")
 	saveFrame(t, term, "codex-shared-server-reclaimed")
 
 	// Two SessionStarts from elsewhere in a row: the pane's own conversation
 	// is still in the guard's history, and its next approval takes it back.
-	hook(`{"hook_event_name":"SessionStart","session_id":"cx-quick","source":"resume"}`)
-	waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, "other SessionStart again")
-	hook(`{"hook_event_name":"SessionStart","session_id":"cx-third","source":"startup"}`)
-	if st := waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, "third SessionStart"); st.AgentSession != "cx-third" {
-		t.Fatalf("the third conversation's SessionStart did not take the pane over: %+v", st)
+	takeover("other SessionStart again", "cx-quick", "resume")
+	takeover("third SessionStart", "cx-third", "startup")
+	reclaim("pane PermissionRequest after two takeovers", "cx-pane", "go test ./...")
+
+	// The other conversation takes the pane, /new in the pane makes cx-new,
+	// and the other conversation reports again and takes the pane back. The
+	// pane's new conversation must still reach the pane with its approval.
+	takeover("other SessionStart before /new", "cx-quick", "resume")
+	takeover("/new in the pane", "cx-new", "startup")
+	reclaim("other PermissionRequest after /new", "cx-quick", "rm -rf build")
+	reclaim("new conversation PermissionRequest", "cx-new", "make lint")
+	saveFrame(t, term, "codex-shared-server-after-new")
+
+	// A conversation that never sent a SessionStart is still refused.
+	hook(`{"hook_event_name":"PermissionRequest","session_id":"cx-stranger","tool_name":"Bash","tool_input":{"command":"curl example.invalid"}}`)
+	if st := readAgentState(t, base, "e2e-agent", win); st.AgentSession != "cx-new" || !strings.Contains(st.Message, "make lint") {
+		t.Fatalf("a conversation with no SessionStart took the pane: %+v", st)
 	}
-	hook(paneApproval)
-	if st := waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, "pane PermissionRequest reclaims again"); st.AgentSession != "cx-pane" {
-		t.Fatalf("the pane's own approval did not take the pane back after two takeovers: %+v", st)
+	if out := inbox(); strings.Contains(out, "curl example.invalid") {
+		t.Fatalf("the Inbox lists the approval of a conversation with no SessionStart:\n%s", out)
 	}
-	hook(foreignApproval)
-	refused("other PermissionRequest after the second reclaim", "needs_input")
-	hook(`{"hook_event_name":"PermissionRequest","session_id":"cx-third","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`)
-	refused("third PermissionRequest after the second reclaim", "needs_input")
+	log.add("%-44s refused", "stranger PermissionRequest")
 
 	// codex exits and the pane is back at its shell: the guard forgets both
 	// conversations, so a report for another one is taken again.

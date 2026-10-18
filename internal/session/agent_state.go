@@ -213,32 +213,42 @@ const (
 )
 
 // sharedGuard is what the guard of a shared-server harness knows about one
-// window: the harness, the conversation that owns the window, and the owners
-// a SessionStart displaced, most recent first. An empty owner means the guard
-// is not armed and every report passes it. Only a report with SessionStart arms
-// it, so a pane whose hooks were installed mid-conversation, or a daemon that
-// restarted, fails open.
+// window: the harness, the conversation that owns the window, and the
+// conversations that owned it before, most recent first. An empty owner means
+// the guard is not armed and every report passes it. Only a report with
+// SessionStart arms it, so a pane whose hooks were installed mid-conversation,
+// or a daemon that restarted, fails open.
 //
 // history is what keeps the guard from locking a pane against its own
-// conversation. A SessionStart from another terminal on the same server looks
-// exactly like /new or /resume in the pane, so it takes the window over, and
-// the owner it displaced goes to the front of history. A conversation in
-// history takes the window back with its next report: the pane's own
-// conversation, whose TUI is in the pane, is in there however many
-// SessionStarts came from elsewhere since, up to sharedGuardHistory. The
-// reclaim drops it from history together with every entry in front of it,
-// which are the takeovers that came after it, so those conversations are
-// refused again until their next SessionStart.
+// conversation, which matters more than keeping a foreign one off it. A
+// SessionStart from another terminal on the same server looks exactly like
+// /new or /resume in the pane, so it takes the window over. Any conversation in
+// history takes the window back with its next report. Either way the owner it
+// displaces goes to the front of history, so the pane's own conversation, whose
+// TUI is in the pane, is always one report away from the window, however the
+// takeovers interleave with /new in the pane. The cost is that a foreign
+// conversation that once sent a SessionStart can take the window back the same
+// way. A conversation that never did is refused.
+//
+// armedAt is when the guard was armed, so the detector's shell sweep does not
+// forget a guard armed after the process reading it acts on was taken.
 type sharedGuard struct {
 	harness, owner string
 	history        []string
+	armedAt        int64
 }
 
-// sharedGuardHistory bounds sharedGuard.history.
+// sharedGuardHistory bounds sharedGuard.history. The oldest entry goes first.
 const sharedGuardHistory = 4
 
-// noteSharedGuard moves the window's guard on for an applied report r. Called with
-// stateMu held.
+// accepts reports whether the armed guard g lets a report about conversation
+// id through without a SessionStart.
+func (g sharedGuard) accepts(id string) bool {
+	return id == g.owner || slices.Contains(g.history, id)
+}
+
+// noteSharedGuard moves the window's guard on for an applied report r. Called
+// with stateMu held.
 func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 	if !r.SharedServer || r.SessionID == "" {
 		return
@@ -253,18 +263,20 @@ func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 		if !r.SessionStart {
 			return
 		}
-		g = sharedGuard{harness: r.Harness, owner: r.SessionID}
+		g = sharedGuard{harness: r.Harness, owner: r.SessionID, armedAt: time.Now().UnixNano()}
 	case r.SessionID == g.owner:
 		return
-	case slices.Contains(g.history, r.SessionID):
-		// A reclaim. Fresh slices throughout: the map holds a copy of g that
-		// shares the old backing array.
-		i := slices.Index(g.history, r.SessionID)
-		g.owner, g.history = r.SessionID, slices.Clone(g.history[i+1:])
 	default:
-		next := make([]string, 0, sharedGuardHistory)
+		// A SessionStart or a reclaim: r's conversation becomes the owner,
+		// leaves history, and the owner it displaces goes to the front. A
+		// fresh slice: the map holds a copy of g that shares the old array.
+		next := make([]string, 0, sharedGuardHistory+1)
 		next = append(next, g.owner)
-		next = append(next, g.history...)
+		for _, id := range g.history {
+			if id != r.SessionID {
+				next = append(next, id)
+			}
+		}
 		g.owner, g.history = r.SessionID, next[:min(len(next), sharedGuardHistory)]
 	}
 	if s.agentSharedGuards == nil {
@@ -318,7 +330,7 @@ func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, g s
 		return ""
 	}
 	if r.SharedServer && g.owner != "" && g.harness == r.Harness && r.SessionID != g.owner {
-		if slices.Contains(g.history, r.SessionID) {
+		if g.accepts(r.SessionID) {
 			return ""
 		}
 		if !r.SessionStart {
@@ -367,12 +379,20 @@ func (s *Session) guardReport(target string, r AgentReport, strict bool) (string
 	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], s.agentSharedGuards[w.ID], r)
 	switch {
 	case reason != "" || !strict:
-	case r.SessionID != "" && w.AgentSessionID != "" && r.SessionID != w.AgentSessionID:
+	case r.SessionID != "" && w.AgentSessionID != "" && r.SessionID != w.AgentSessionID && !sharedAccepts(s.agentSharedGuards[w.ID], r):
 		reason = agentRefusedForeignSession
 	case r.Harness != "" && w.AgentHarness != "" && r.Harness != w.AgentHarness:
 		reason = agentRefusedForeignHarness
 	}
 	return w.ID, w.AgentState, reason, nil
+}
+
+// sharedAccepts reports whether r is from a shared-server harness whose armed
+// guard on the window holds r's conversation. Such a report is not refused for
+// naming a conversation other than the stored one: it is a reclaim waiting for
+// its state report, and hiding the pane's own conversation is the worse error.
+func sharedAccepts(g sharedGuard, r AgentReport) bool {
+	return r.SharedServer && g.owner != "" && g.harness == r.Harness && g.accepts(r.SessionID)
 }
 
 // activityReportGuard is agentReportGuard for report-agent-activity, which

@@ -6922,9 +6922,13 @@ stand-in `codex` holds the pane's foreground. The test checks, in order:
 - Its `SessionStart` with source `resume` takes the pane over.
 - The pane's own approval then takes the pane back and shows in
   `list-attention` and the dock.
-- The other conversation's approval is refused again.
 - After two `SessionStart`s from two other conversations in a row, the pane's
-  own approval still takes the pane back, and both others are refused.
+  own approval still takes the pane back.
+- The other conversation takes the pane, `/new` in the pane starts a new
+  conversation, and the other conversation's approval takes the pane back.
+  The new conversation's approval must still take the pane and reach
+  `list-attention`.
+- A conversation that never sent a `SessionStart` is refused.
 - After codex exits, a third conversation's prompt is taken.
 
 Run on 2026-10-18.
@@ -6944,6 +6948,7 @@ The fixed build passes it, every other `TestMail*` and `TestAgentMail*`,
 | The hook never marked a `SessionStart` | yes | `reportHook` does not send `session_start`, so the guard never arms | same test, same message | **caught** |
 | A takeover hid the pane's own approval | yes | `sessionGuard` without the reclaim from the guard's history | same test ("pane PermissionRequest reclaims: the pane is {State:idle ... AgentSession:cx-quick}, want state needs_input") | **caught** |
 | Two takeovers in a row hid the pane's own approval | yes | `sharedGuardHistory = 1` | same test ("pane PermissionRequest reclaims again: the pane is {State:idle ... AgentSession:cx-third}, want state needs_input") | **caught** |
+| A reclaim dropped the owner it displaced, so `/new` in the pane was locked out | yes | the reclaim pushes the displaced owner only on a `SessionStart` | same test ("new conversation PermissionRequest: the approval did not take the pane: {... AgentSession:cx-quick ...}") | **caught** |
 | The guard outlived codex | yes | the detector's shell sweep disabled | same test ("the guard still held the pane after codex exited") | **caught** |
 | A compaction counted as a new conversation | yes | `translateCodex` sets `SessionStart` for source `compact` | same test ("other SessionStart after a compaction: the pane is {State:idle ... AgentSession:cx-quick}, want state done") | **caught** |
 

@@ -584,6 +584,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		// running, and a claim can now come from a source that is not the detector.
 		delete(s.agentClaims, closed.ID)
 		delete(s.agentHarnessPIDs, closed.ID)
+		delete(s.agentSharedGuards, closed.ID)
 		return nil
 	})
 	if err != nil {

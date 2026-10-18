@@ -525,6 +525,8 @@ const agentDetectMissLimit = 6
 // lock held. ptyID is the PTY the read was taken for, so a window whose PTY was
 // swapped while the read ran is not judged on a read of the old one.
 type detectReading struct {
+	// at is when the reading was taken, before the process was read.
+	at      int64
 	ptyID   string
 	info    foregroundInfo
 	running bool
@@ -619,9 +621,10 @@ func (s *Session) scanAgentDetection(
 		if due != nil && !t.holdsAgent && !due(t.ptyID) {
 			continue
 		}
+		at := time.Now().UnixNano()
 		info, running := resolve(t.ptyID)
 		det, isAgent := identify(info)
-		readings[t.windowID] = detectReading{ptyID: t.ptyID, info: info, running: running, det: det, isAgent: isAgent}
+		readings[t.windowID] = detectReading{at: at, ptyID: t.ptyID, info: info, running: running, det: det, isAgent: isAgent}
 	}
 
 	shell := agentBaseName(s.getShell())
@@ -715,8 +718,9 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		detected := running && r.isAgent
 		// A pane back at its shell has no harness left to protect, so the
 		// shared-server guard forgets its conversations. The stored
-		// AgentSessionID stays, for a later resume.
-		if _, ok := s.agentSharedGuards[w.ID]; ok && !detected && running && info.atShell() && foregroundCommand(info, running, shell) == "" {
+		// AgentSessionID stays, for a later resume. A guard armed after the
+		// reading was taken is newer than what the reading says, so it stays.
+		if g, ok := s.agentSharedGuards[w.ID]; ok && g.armedAt < r.at && !detected && running && info.atShell() && foregroundCommand(info, running, shell) == "" {
 			out.bookkeeping = true
 			if write {
 				delete(s.agentSharedGuards, w.ID)
