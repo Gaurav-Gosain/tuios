@@ -1181,7 +1181,7 @@ func (m *OS) View() tea.View {
 	// cached frame can carry a picture-in-picture box placed for where the
 	// cursor was. Such a frame is composed again rather than reused: the box
 	// must never cover the cursor the same frame shows.
-	if m.renderSkipped && m.cachedViewContent != "" && !m.pipCoversCursor(m.getRealCursor()) {
+	if cur, _ := m.viewCursor(); m.renderSkipped && m.cachedViewContent != "" && !m.pipCoversCursor(cur) {
 		view.SetContent(m.cachedViewContent)
 	} else if !compose() {
 		return m.crashView()
@@ -1210,7 +1210,10 @@ func (m *OS) View() tea.View {
 	m.notePaneFocus()
 	view.DisableBracketedPasteMode = false
 	view.KeyboardEnhancements = m.keyboardEnhancements()
-	view.Cursor = m.getRealCursor()
+	// With no cursor shown, the cursor is parked hidden at the caret, so an
+	// input method opens its window there. See cursor_park.go.
+	var cursorShown bool
+	view.Cursor, cursorShown = m.viewCursor()
 	// The emulator's cursor can move between the read the composed frame
 	// placed the picture-in-picture box by and the read above, since pane
 	// output is written on another goroutine. When the move took it under the
@@ -1219,11 +1222,9 @@ func (m *OS) View() tea.View {
 		if !compose() {
 			return m.crashView()
 		}
-		view.Cursor = m.getRealCursor()
+		view.Cursor, cursorShown = m.viewCursor()
 	}
-	// With no cursor shown, park the host's hidden cursor at the caret, so
-	// an input method opens its window there. See cursor_park.go.
-	view.Cursor = m.parkHostCursor(view.Cursor)
+	m.cursorPark.set(view.Cursor, cursorShown)
 	// The title of the terminal tuios runs in, when a tool set one through
 	// herdr's client.window_title.set. Empty leaves the title alone.
 	view.WindowTitle = m.ClientTitle

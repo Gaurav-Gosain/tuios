@@ -22,10 +22,15 @@ type draftWires struct {
 	// historyAsked says the history was asked for, once per editor.
 	historyAsked bool
 	// at is where the draft's first line was drawn, relative to the panel
-	// it is in, for its pictures.
+	// it is in, for its pictures and its caret. ok says every line was
+	// drawn, which the pictures need. drawn says the editor is on screen,
+	// and top is its first line drawn: a squeezed editor leaves out the
+	// lines above it, and the caret is only on screen at or below it.
 	at struct {
-		x, y int
-		ok   bool
+		x, y  int
+		ok    bool
+		drawn bool
+		top   int
 	}
 }
 

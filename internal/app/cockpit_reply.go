@@ -33,6 +33,11 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 
 	ed := st.reply.editor
 	if ed == nil || m.cockpitReplyMismatch() {
+		if ed != nil {
+			// The editor is not drawn, so nothing may be placed by
+			// where it was last.
+			ed.at.ok, ed.at.drawn = false, false
+		}
 		y := y1 - 3
 		c.hline(x, y-1, w, hzGlyph(), l.edge)
 		c.fill(x, y, w, 3, l.panel)
@@ -94,6 +99,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	}
 	// The pictures the draft shows are placed relative to the layer.
 	ed.at.x, ed.at.y, ed.at.ok = x+2, row-cut, cut == 0
+	ed.at.drawn, ed.at.top = true, cut
 	c.text(x+2, fy, right-14, hints...)
 	sx := c.textR(right-2, fy, send)
 	c.mark(pal, sx, fy, right-2-sx, 1, ckOn)

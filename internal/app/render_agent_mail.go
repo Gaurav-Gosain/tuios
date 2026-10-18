@@ -477,4 +477,5 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 func (m *OS) agentMailDraftAt(geo overlay.Geometry, rows int) {
 	at := &m.AgentMail.wires.at
 	at.x, at.y, at.ok = geo.BodyX, geo.BodyY+rows+2, true
+	at.drawn, at.top = true, 0
 }

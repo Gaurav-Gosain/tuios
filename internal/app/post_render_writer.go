@@ -29,16 +29,21 @@ type PostRenderWriter struct {
 	*os.File
 	mu      sync.Mutex
 	pending []byte
-	// frameHook returns output that must follow each frame: the sixel
-	// images drawn on it. It runs only for the renderer's writes, not for
-	// WriteHost, because it answers for the frame being written. See
-	// SixelPassthrough.FrameBytes.
-	frameHook func(frame []byte) []byte
+	// frameHook edits each frame and returns output that must follow it:
+	// the sixel images drawn on it. It runs only for the renderer's writes,
+	// not for WriteHost, because it answers for the frame being written. See
+	// FrameHook.
+	frameHook FrameHook
 }
+
+// FrameHook runs on each frame the renderer writes. out is the frame to send
+// in its place, which is frame itself unless the hook took something out of
+// it (see cursorPark.frame), and after is the output that has to follow it.
+type FrameHook func(frame []byte) (out, after []byte)
 
 // SetFrameHook installs the function whose output is written after each
 // frame. See PostRenderWriter.frameHook.
-func (w *PostRenderWriter) SetFrameHook(fn func(frame []byte) []byte) {
+func (w *PostRenderWriter) SetFrameHook(fn FrameHook) {
 	w.mu.Lock()
 	w.frameHook = fn
 	w.mu.Unlock()
@@ -87,30 +92,32 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 
 	pending := w.pending
 	w.pending = nil
+	out := p
 	if frame && w.frameHook != nil {
-		if after := w.frameHook(p); len(after) > 0 {
+		var after []byte
+		if out, after = w.frameHook(p); len(after) > 0 {
 			pending = append(pending, after...)
 		}
 	}
 
-	if len(p) == 0 && len(pending) == 0 {
+	if len(out) == 0 && len(pending) == 0 {
 		return 0, nil
 	}
 
 	// One Write for the whole frame: the bracket is worth nothing if this
 	// code is itself what splits it across two syscalls.
-	buf := make([]byte, 0, len(frameSyncBegin)+len(p)+len(pending)+len(frameSyncEnd))
+	buf := make([]byte, 0, len(frameSyncBegin)+len(out)+len(pending)+len(frameSyncEnd))
 	// Contains, not HasPrefix: bubbletea writes an alt-screen mode change
 	// ahead of its own bracket, so the frame that enters or leaves the alt
 	// screen does not start with one.
-	wrap := !bytes.Contains(p, frameSyncBegin)
+	wrap := !bytes.Contains(out, frameSyncBegin)
 	if wrap {
 		buf = append(buf, frameSyncBegin...)
-		buf = append(buf, p...)
+		buf = append(buf, out...)
 		buf = append(buf, pending...)
 		buf = append(buf, frameSyncEnd...)
 	} else {
-		buf = appendInsideSync(buf, p, pending)
+		buf = appendInsideSync(buf, out, pending)
 	}
 
 	if _, err = w.File.Write(buf); err != nil {
@@ -183,7 +190,7 @@ func appendInsideSync(buf, frame, after []byte) []byte {
 type FrameHookWriter struct {
 	w    io.Writer
 	mu   sync.Mutex
-	hook func(frame []byte) []byte
+	hook FrameHook
 }
 
 // NewFrameHookWriter wraps the writer a session's renderer writes to.
@@ -192,7 +199,7 @@ func NewFrameHookWriter(w io.Writer) *FrameHookWriter {
 }
 
 // SetHook installs the function whose output follows each frame.
-func (f *FrameHookWriter) SetHook(fn func(frame []byte) []byte) {
+func (f *FrameHookWriter) SetHook(fn FrameHook) {
 	f.mu.Lock()
 	f.hook = fn
 	f.mu.Unlock()
@@ -202,14 +209,17 @@ func (f *FrameHookWriter) Write(p []byte) (int, error) {
 	f.mu.Lock()
 	hook := f.hook
 	f.mu.Unlock()
-	var after []byte
+	out, after := p, []byte(nil)
 	if hook != nil {
-		after = hook(p)
+		out, after = hook(p)
 	}
 	if len(after) == 0 {
-		return f.w.Write(p)
+		if _, err := f.w.Write(out); err != nil {
+			return 0, err
+		}
+		return len(p), nil
 	}
-	buf := appendInsideSync(make([]byte, 0, len(p)+len(after)), p, after)
+	buf := appendInsideSync(make([]byte, 0, len(out)+len(after)), out, after)
 	if _, err := f.w.Write(buf); err != nil {
 		return 0, err
 	}
@@ -230,14 +240,14 @@ func NewFrameHookFile(f *os.File) *FrameHookFile {
 }
 
 // SetHook installs the function whose output follows each frame.
-func (f *FrameHookFile) SetHook(fn func(frame []byte) []byte) { f.hw.SetHook(fn) }
+func (f *FrameHookFile) SetHook(fn FrameHook) { f.hw.SetHook(fn) }
 
 func (f *FrameHookFile) Write(p []byte) (int, error) { return f.hw.Write(p) }
 
 // FrameWriter is the renderer's writer seen from the graphics side: it runs a
 // hook after each frame, and takes output that is not tied to one.
 type FrameWriter interface {
-	SetFrameHook(fn func(frame []byte) []byte)
+	SetFrameHook(fn FrameHook)
 	WriteOutside(p []byte)
 }
 
@@ -245,13 +255,13 @@ type FrameWriter interface {
 func (w *PostRenderWriter) WriteOutside(p []byte) { _, _ = w.write(p, false) }
 
 // SetFrameHook is SetHook, for FrameWriter.
-func (f *FrameHookWriter) SetFrameHook(fn func(frame []byte) []byte) { f.SetHook(fn) }
+func (f *FrameHookWriter) SetFrameHook(fn FrameHook) { f.SetHook(fn) }
 
 // WriteOutside writes p to the session without running the frame hook.
 func (f *FrameHookWriter) WriteOutside(p []byte) { _, _ = f.w.Write(p) }
 
 // SetFrameHook is SetHook, for FrameWriter.
-func (f *FrameHookFile) SetFrameHook(fn func(frame []byte) []byte) { f.hw.SetHook(fn) }
+func (f *FrameHookFile) SetFrameHook(fn FrameHook) { f.hw.SetHook(fn) }
 
 // WriteOutside writes p to the terminal without running the frame hook.
 func (f *FrameHookFile) WriteOutside(p []byte) { f.hw.WriteOutside(p) }
@@ -263,12 +273,13 @@ func (f *FrameHookFile) WriteOutside(p []byte) { f.hw.WriteOutside(p) }
 // The hook also keeps a parked host cursor hidden. See cursor_park.go.
 func (m *OS) ConnectFrameWriter(w FrameWriter) {
 	park := m.connectCursorPark(w)
-	w.SetFrameHook(func(frame []byte) []byte {
+	w.SetFrameHook(func(frame []byte) ([]byte, []byte) {
 		after := m.GraphicsFrameBytes(frame)
-		if seq := park.afterFrame(frame); len(seq) > 0 {
+		out, seq := park.frame(frame)
+		if len(seq) > 0 {
 			after = append(after[:len(after):len(after)], seq...)
 		}
-		return after
+		return out, after
 	})
 	if m.SixelPassthrough != nil {
 		m.SixelPassthrough.mu.Lock()
