@@ -1,0 +1,3 @@
+# Logins that scripts/contributors.sh leaves out of the README grid.
+# Use it for bot accounts that GitHub reports as users.
+# Write one login per line. Logins that end in [bot] are always left out.
