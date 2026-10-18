@@ -538,4 +538,18 @@ func TestAgentsViewOpenAddsNoIdleCost(t *testing.T) {
 	if len(over) > 0 {
 		t.Fatalf("the open agents view costs more at idle than the closed one:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
 	}
+
+	// An agent that changes group is held in its old one a moment. Once the
+	// hold settles, the open view is back to no wakeups at all.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-w", reply.Windows[0].ID, "--harness", "claude-code"); err != nil {
+		t.Fatalf("report agent 0 working: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Working") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the held row never moved to Working: %v\n%s", err, term.Snapshot())
+	}
+	held := window("agents view open, after a held move")
+	if held.ticks > 2 || held.tickerWakes > 1 || openAgents > 0 || openFrames > 0 {
+		t.Fatalf("ASSERTION: after a held move the open view still wakes the client: %d ticks, %d ticker wakes, %d view ticks, %d frames drawn afresh\n%s",
+			held.ticks, held.tickerWakes, openAgents, openFrames, term.Snapshot())
+	}
 }

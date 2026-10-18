@@ -85,6 +85,7 @@ type agentThread struct {
 // threadBodyKey is what a thread's drawn lines depend on.
 type threadBodyKey struct {
 	gen, mailGen, theme uint64
+	look                uint64
 	width, room         int
 	minute              int64
 	ascii               bool
@@ -407,7 +408,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		return m.threadBodyLines(e, nil, width, room, now)
 	}
 	key := threadBodyKey{
-		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(),
+		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
 		width: width, room: room, minute: now.Unix() / 60, ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
 	}

@@ -42,6 +42,9 @@ type ckLookKey struct {
 	theme        uint64
 	depth        overlay.Depth
 	ascii, plain bool
+	// The palette's grounds and inks: with theme none they follow the host
+	// terminal's colours, which change with no new theme generation.
+	canvas, panel, fg, accent color.Color
 }
 
 // cockpitLook is the look for the depth in force, built again only when the
@@ -50,11 +53,20 @@ type ckLookKey struct {
 func (m *OS) cockpitLook() ckLook {
 	ck := &m.Inbox.ck
 	pal := theme.UI()
-	key := ckLookKey{theme: theme.Generation(), depth: pal.Depth, ascii: overlay.UseASCII(), plain: m.Settings.NoNerdFont}
+	key := ckLookKey{theme: theme.Generation(), depth: pal.Depth, ascii: overlay.UseASCII(), plain: m.Settings.NoNerdFont,
+		canvas: pal.Canvas, panel: pal.Panel, fg: pal.Fg, accent: pal.Accent}
 	if ck.lookAt != key || ck.look.pal.Canvas == nil {
 		ck.look, ck.lookAt = m.buildCockpitLook(pal), key
+		ck.lookGen++
 	}
 	return ck.look
+}
+
+// cockpitLookGen is the generation of the look in force, built now if the
+// palette changed, for a key of something drawn with it.
+func (m *OS) cockpitLookGen() uint64 {
+	m.cockpitLook()
+	return m.Inbox.ck.lookGen
 }
 
 // buildCockpitLook builds the look. At 256 colours every derived ground is
@@ -177,7 +189,7 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 type ckFrameKey struct {
 	w, h, top, bottom    int
 	gen, inbox, mail     uint64
-	marks                uint64
+	marks, look          uint64
 	selectErr            string
 	list                 agentsListKey
 	minute               int64
@@ -210,7 +222,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	st.agents.inFrame = true
 	defer func() { st.agents.inFrame = false }()
 	key := ckFrameKey{
-		marks: st.agents.marksGen, selectErr: st.selectErr,
+		marks: st.agents.marksGen, selectErr: st.selectErr, look: ck.lookGen,
 		w: w, h: h, top: top, bottom: res.Bottom, gen: ck.gen, inbox: st.Gen, mail: m.AgentMail.Gen,
 		list: st.agents.listAt, minute: now.Unix() / 60, theme: theme.Generation(), live: st.Live,
 		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry, hosts: m.federationGen,
@@ -1000,13 +1012,13 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 				words = [4]string{"approve", "accept edits", "keep planning", "say why"}
 			}
 			if slices.Contains(it.Options, session.ApprovalOnce) {
-				hints = append(hints, overlay.Hint{Key: "a", Label: words[0]})
+				hints = append(hints, m.keyHints(config.ActionInboxAllow, words[0])...)
 			}
 			if slices.Contains(it.Options, session.ApprovalAlways) {
-				hints = append(hints, overlay.Hint{Key: "A", Label: words[1]})
+				hints = append(hints, m.keyHints(config.ActionInboxAllowAlways, words[1])...)
 			}
 			if slices.Contains(it.Options, session.ApprovalDeny) {
-				hints = append(hints, overlay.Hint{Key: "r", Label: words[2]})
+				hints = append(hints, m.keyHints(config.ActionInboxReply, words[2])...)
 			}
 			if it.DenyMessage {
 				hints = append(hints, m.keyHints(config.ActionInboxDenyReason, words[3])...)
@@ -1291,9 +1303,14 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			labels[1] = "Always for " + ckTrunc(printableTitle(it.AlwaysScope[0]), 20)
 		}
 		for i, d := range [3]string{session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny} {
-			if key := [3]string{"a", "A", "r"}[i]; slices.Contains(it.Options, d) {
-				btns = append(btns, btn{key, labels[i], key})
+			if !slices.Contains(it.Options, d) {
+				continue
 			}
+			// The button names the key the config binds; its action is the
+			// letter the click answers with.
+			action := [3]string{"a", "A", "r"}[i]
+			key := m.inboxKeyOr([3]string{config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply}[i], action)
+			btns = append(btns, btn{key, labels[i], action})
 		}
 		if it.DenyMessage {
 			btns = append(btns, btn{m.inboxKeyOr(config.ActionInboxDenyReason, "R"), labels[3], "R"})

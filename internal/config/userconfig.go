@@ -1644,14 +1644,14 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxGo:       {"enter"},
 		ActionInboxPeek:     {"space"},
 		ActionInboxDismiss:  {"d", "delete"},
-		ActionInboxReply:    {"r", "i"},
+		ActionInboxReply:    {"r"},
 		ActionInboxResume:   {"y"},
 		ActionInboxPassOn:   {"p"},
 		ActionInboxFilter:   {"f"},
 		ActionInboxSelect:   {"/"},
 		ActionInboxMailbox:  {"m"},
 		ActionInboxClose:    {"esc", "q"},
-		ActionInboxWrite:    {"tab"},
+		ActionInboxWrite:    {"tab", "i"},
 		ActionInboxSort:     {"s"},
 		ActionInboxViewPane: {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
@@ -3255,6 +3255,10 @@ func migrateInboxKeys(cfg *UserConfig) {
 	}
 	if slices.Equal(t[ActionInboxDenyReason], []string{"n"}) {
 		delete(t, ActionInboxDenyReason)
+		cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, RetiredKeybind{
+			Section: "inbox", Action: ActionInboxDenyReason, Keys: []string{"n"},
+			Note: "n starts a new agent now, and inbox_deny_reason moved to R. To keep n, bind inbox_new_agent to another key first.",
+		})
 	}
 }
 
@@ -3266,6 +3270,9 @@ type RetiredKeybind struct {
 	Keys    []string `json:"keys"`
 	// Use is the action that does its work now, empty when none does.
 	Use string `json:"use,omitempty"`
+	// Note says what happened instead, for a binding dropped from an
+	// action tuios still has.
+	Note string `json:"note,omitempty"`
 }
 
 // fillMissingKeybinds fills in any missing keybindings with defaults
@@ -3472,8 +3479,14 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// The cockpit's new Inbox keys yield to a key the user already holds.
 	inboxYield := yieldTakenDefaults("inbox", cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
 	fillMapDefaults(cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
+	// Only the taken key yields: an action keeps its other default keys.
 	for _, y := range inboxYield {
-		delete(cfg.Keybindings.Inbox, y.Action)
+		keys := slices.DeleteFunc(slices.Clone(cfg.Keybindings.Inbox[y.Action]), func(k string) bool { return sameKeyPress(k, y.Key) })
+		if len(keys) == 0 {
+			delete(cfg.Keybindings.Inbox, y.Action)
+		} else {
+			cfg.Keybindings.Inbox[y.Action] = keys
+		}
 	}
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, inboxYield...)
 	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)

@@ -1273,7 +1273,9 @@ action, that action keeps it, and the new action has no key. `tuios keybinds
 doctor` lists each one. `inbox_agents`, the old `tab` that switched the Inbox
 to the agents view, is gone: `inbox_write` has `tab` now, and doctor lists a
 config that still binds `inbox_agents`. A config that kept the old default
-`inbox_deny_reason = ["n"]` moves it to `R`, so `n` starts a new agent.
+`inbox_deny_reason = ["n"]` moves it to `R`, so `n` starts a new agent, and
+doctor says so. When your binding takes one of an action's new keys, only
+that key yields: `inbox_open` keeps `right` when `l` is yours.
 
 The help overlay (`ctrl+b ?`) has an Agents section with all of these, the
 prefix chords, the rail's agent keys and the palette's `@` filter, read from

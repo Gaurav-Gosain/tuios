@@ -7037,6 +7037,7 @@ Run on 2026-10-18.
 | A click on a row goes to the pane, the agents view's old rule | n/a, injected | `CockpitClick` treats every click as the second of a double-click | `TestCockpitGroupsTheFleet` ("a click did not put bench-idle in the focus") | **caught** |
 | `a` does not answer the held approval | n/a, injected | `CockpitKey` without `inbox_allow` among the approval actions | `TestCockpitGroupsTheFleet` ("a never answered the held approval") | **caught** |
 | The open view wakes the client while nothing changes | n/a, injected | `inboxAgentsTick` at one second | `TestAgentsViewOpenAddsNoIdleCost` ("10 ticks of the view") | **caught** |
+| A held row's move waits for a message that never comes | `armCockpitHold`, the one timer for a hold | The hold set with no timer armed | `TestAgentsViewOpenAddsNoIdleCost` ("the held row never moved to Working") | **caught** |
 
 The fixed build passes them, every `TestInbox*`, `TestAskHuman*`,
 `TestChromeLooksAndFooters`, `TestEveryOverlayOwnsItsGround` and the other

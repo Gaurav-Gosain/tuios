@@ -189,12 +189,15 @@ func printKeybindReport(rep config.KeybindReport) {
 	}
 
 	if len(rep.Retired) > 0 {
-		fmt.Printf("\nRETIRED ACTIONS (%s)\n", config.EvidenceCertain)
-		fmt.Println("  tuios no longer has these actions and ignores their keys.")
+		fmt.Printf("\nDROPPED BINDINGS (%s)\n", config.EvidenceCertain)
+		fmt.Println("  tuios dropped these bindings when it loaded the config.")
 		for _, r := range rep.Retired {
-			use := ""
-			if r.Use != "" {
-				use = fmt.Sprintf(" To keep the keys, bind them to %s.", r.Use)
+			use := " tuios no longer has this action."
+			switch {
+			case r.Note != "":
+				use = " " + r.Note
+			case r.Use != "":
+				use += fmt.Sprintf(" To keep the keys, bind them to %s.", r.Use)
 			}
 			fmt.Printf("  %-22s %s in [keybindings.%s].%s\n", r.Action, strings.Join(r.Keys, ", "), r.Section, use)
 		}

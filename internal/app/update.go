@@ -562,7 +562,7 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 func (m *OS) tickNeedsWork() bool {
 	return m.tickAtFrameRate() || len(m.Notifications) > 0 ||
 		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.spotlightMotionPending ||
-		m.tickPolledWork()
+		m.cockpitHoldDue(time.Now()) || m.tickPolledWork()
 }
 
 // tickAtFrameRate reports whether something moves on every frame and the
@@ -1230,6 +1230,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.handleMotionFrame(msg)
 		return m, nil
 
+	case ckHoldMsg:
+		m.cockpitSettleHold(time.Now())
+		return m, nil
+
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
 		// Does NOT trigger rendering unless animations/interactions are active.
@@ -1249,6 +1253,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		m.tickStats.Work++
+
+		// An agent row held in its group a moment moves now.
+		m.cockpitSettleHold(time.Time(msg))
 
 		// Agent alerts whose settle window has closed. Done before the window
 		// sweep below so an alert about a pane that exited this tick is dropped

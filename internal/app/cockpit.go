@@ -154,6 +154,7 @@ type cockpitState struct {
 	// is moving to. holdUntil is when the next held move is due.
 	placed    map[string]ckPlaced
 	holdUntil time.Time
+	holdTimer *time.Timer
 	// back is where the cursor was when ctrl+] left for a pane, for the
 	// view to open on again. Nil once used.
 	back *ckBack
@@ -161,7 +162,10 @@ type cockpitState struct {
 	// was built from. canvas is the grid kept from frame to frame.
 	look   ckLook
 	lookAt ckLookKey
-	canvas *ckCanvas
+	// lookGen counts the looks built, for the keys of what is drawn with
+	// one.
+	lookGen uint64
+	canvas  *ckCanvas
 	// edW is the width the reply editor was last drawn at.
 	edW int
 	// cutKey is the held approval or question the card could not show
@@ -238,11 +242,7 @@ func (m *OS) cockpitRows() []ckRow {
 	ck := &m.Inbox.ck
 	list := m.cockpitList()
 	now := time.Now()
-	if !ck.holdUntil.IsZero() && !now.Before(ck.holdUntil) {
-		// A held move is due: build again, and draw the frame again.
-		ck.holdUntil = time.Time{}
-		m.cockpitTouchRows()
-	}
+	m.cockpitSettleHold(now)
 	key := ckRowsKey{
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH,
 		oneLine: ck.oneLine, minute: now.Unix() / 60,
@@ -429,6 +429,7 @@ func (m *OS) ckHoldGroup(key string, want int, now time.Time) int {
 		if due := p.since.Add(ckHold); now.Before(due) {
 			if ck.holdUntil.IsZero() || due.Before(ck.holdUntil) {
 				ck.holdUntil = due
+				m.armCockpitHold(due.Sub(now))
 			}
 		} else {
 			p.shown = p.want
@@ -436,6 +437,41 @@ func (m *OS) ckHoldGroup(key string, want int, now time.Time) int {
 	}
 	ck.placed[key] = p
 	return p.shown
+}
+
+// ckHoldMsg wakes the client when a held row's move is due.
+type ckHoldMsg struct{}
+
+// armCockpitHold wakes the client after wait, once, for the held move. The
+// hold is found while a frame is drawn, after Update has asked what is due,
+// so a message brings the client back: one timer, moved, never a poll.
+func (m *OS) armCockpitHold(wait time.Duration) {
+	p := m.frameRate.program
+	if p == nil {
+		return
+	}
+	ck := &m.Inbox.ck
+	if ck.holdTimer == nil {
+		ck.holdTimer = time.AfterFunc(wait, func() { p.Send(ckHoldMsg{}) })
+		return
+	}
+	ck.holdTimer.Reset(wait)
+}
+
+// cockpitHoldDue reports whether a held row's move is due: the tick that
+// wakes for it has work, and settles it.
+func (m *OS) cockpitHoldDue(now time.Time) bool {
+	h := m.Inbox.ck.holdUntil
+	return m.ShowInbox && !h.IsZero() && !now.Before(h)
+}
+
+// cockpitSettleHold lets a held row move once its hold is due: the rows are
+// built again, and the frame drawn again.
+func (m *OS) cockpitSettleHold(now time.Time) {
+	if m.cockpitHoldDue(now) {
+		m.Inbox.ck.holdUntil = time.Time{}
+		m.cockpitTouchRows()
+	}
 }
 
 // ckItemMatches reports whether the search's words match an item's own: who
