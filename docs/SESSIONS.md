@@ -121,6 +121,22 @@ same: click it, check the list and press `r`. The command palette has "Restart
 the daemon" too. tuios then starts again in the same session, on the new
 build. See [KEYBINDINGS.md](KEYBINDINGS.md#restart-the-daemon).
 
+The daemon tells its clients why it stops. After `kill-server --restart`,
+which `restart-server` and the app run, it says "restart". After a plain
+`kill-server` it says "stop". A crash says nothing.
+
+- After "restart", a client on this machine waits up to 15 seconds from the
+  goodbye for the new daemon. When the new daemon holds the session, the
+  client attaches to it again by itself and says "The daemon restarted. tuios
+  reattached."
+- After "stop", the client quits at once, as it always did.
+- After a drop with no goodbye, the client waits up to 6 seconds.
+
+Each dial of the wait gives the daemon 2 seconds to answer. Keys typed while
+the client waits are not sent, and the wait note says so. When no daemon comes
+back, or the new daemon does not hold the session, the client quits with the
+same message as before.
+
 More than one client can be attached to the same session at once. All of them
 see the same windows and output. `window_size` in `[daemon]` sets the size of
 the session. See [Session size with more than one client](#session-size-with-more-than-one-client).

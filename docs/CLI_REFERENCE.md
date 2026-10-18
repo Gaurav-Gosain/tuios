@@ -1094,6 +1094,10 @@ save and loses any state written since the last periodic save.
 When no daemon is running, the command reports that and removes a stale socket
 if one is present. It exits 0 in that case.
 
+`--restart` tells the attached clients that a new daemon follows, so they wait
+for it and attach again. Without it the clients quit at once.
+`tuios restart-server` passes it.
+
 ### `tuios restart-server`
 
 Stop the daemon and start it again with the newest tuios installed. Use it
@@ -1156,7 +1160,9 @@ These sessions came back: work, notes.
 
 The app runs this command from the command palette ("Restart the daemon"),
 from the version notice, from the Daemon tab of the settings and from the
-rail's menu for this machine. It then starts again in the same session. See
+rail's menu for this machine. It then starts again in the same session.
+Other attached clients wait up to 15 seconds for the new daemon and attach
+to their session again. See
 [KEYBINDINGS.md](KEYBINDINGS.md#restart-the-daemon).
 
 `--expect DIGEST` refuses the restart unless the plan has that digest. The

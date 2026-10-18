@@ -840,6 +840,12 @@ does the same. The dialog then shows each step: stop the daemon, start the new
 one, attach again. tuios then starts again on the new build, in the same
 session, and says "The daemon restarted on 0.10.2. Your session is back."
 
+Other clients attached to the daemon wait up to 15 seconds for the new one.
+They then attach to their session again by themselves and say "The daemon
+restarted. tuios reattached." While they wait, the dock says "Waiting for the
+daemon. Keys are not sent." With the dock hidden, the middle of the screen
+says it. Keys typed then are not sent to the panes.
+
 When a step fails, the dialog says what happened and what to do next. When
 a program started or stopped after you agreed, the restart does not run, and
 the dialog asks you to read the new list. When your session did not come

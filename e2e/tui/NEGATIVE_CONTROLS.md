@@ -7394,3 +7394,17 @@ The controls were run on 2026-10-18 on branch `feat/restart-daemon-in-app`.
 | The client does not start again | `runDaemonSessionOn`: the `reattachAfterRestart` call cut | `TestRestartTheDaemonFromTheVersionNotice` ("child exited (code 0) before" the success line) | **caught** |
 | The root's flags are not carried | `carriedFlags`: the root's persistent flags not read | `TestRestartTheDaemonFromTheVersionNotice` ("the client started again without its flags", no `--debug=true`) | **caught** |
 | The plan is not checked | `runRestartServer`: the `--expect` check cut | `TestRestartServerMovesTheDaemonToTheNewBuild` ("a restart with another plan's digest was not refused", "the refused restart restarted the daemon anyway") | **caught** |
+
+A second client of the daemon's own build now attaches beside the first. It
+must reattach by itself, in the same process, with both panes and the restore
+divider, and say "The daemon restarted on e2e-sync-next. tuios reattached."
+`TestPlainKillServerEndsClientsAtOnce` stops the daemon with a plain
+kill-server and starts a new one at once: the client must quit within 1 s and
+not reattach. Run on 2026-10-18 on branch `feat/reattach-after-daemon-restart`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A lost connection ends the client, as before | the `DaemonDisconnectedMsg` case: the `beginDaemonReconnect` call cut | `TestRestartTheDaemonFromTheVersionNotice` ("the second client did not reattach", "the second client quit (code 1)") | **caught** |
+| The client attaches and keeps its old panes | `resumeOnNewDaemon`: the `rebuildForSessionOn` call cut | `TestRestartTheDaemonFromTheVersionNotice` ("the second client did not reattach with the panes") | **caught** |
+| The restart does not say "restart" | `runRestart`: `kill-server` without `--restart` | `TestRestartTheDaemonFromTheVersionNotice` ("the second client quit (code 1) instead of reattaching") | **caught** |
+| The client is deaf to "stop" | `beginDaemonReconnect`: the goodbye check cut | `TestPlainKillServerEndsClientsAtOnce` ("the client did not quit within 1 s of a plain kill-server") | **caught** |
