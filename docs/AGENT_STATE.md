@@ -447,12 +447,20 @@ session id and metadata from herdr's script still apply. An agent that
 reports to herdr by itself, such as Crush, is not a herdr script and is never
 dropped.
 
-A report speaks only for the caller's own pane. The daemon places the
-connecting process the way it places every caller (see
-[How a process is placed](#how-a-process-is-placed)). It answers `forbidden` to
-a `pane_id` that is not that pane, and to a process in no pane. The `pane_id`
-can be herdr's form or the window id. Pane grants do not limit these reports,
-because a pane may always report for itself.
+The daemon places the connecting process the way it places every caller
+(see [How a process is placed](#how-a-process-is-placed)). A process in a pane
+reports only for its own pane. The daemon answers `forbidden` to a `pane_id`
+that is not that pane. Pane grants do not limit these reports, because a pane
+may always report for itself.
+
+A process outside every pane can report for any pane, as in herdr. This is
+you in a terminal outside tuios, or a command of a herdr plugin. The daemon
+checks the report as it checks `tuios set-agent-state -w`. Under the default
+mode `open` the report goes through. Under `strict` your own processes
+outside tuios still pass. A plugin's command is started by the daemon, so it
+holds no session, and the daemon answers `forbidden`. A report from another
+machine is refused. `notification.show` names no pane, so it needs a caller
+in a pane. The `pane_id` can be herdr's form or the window id.
 
 #### herdr's command line
 

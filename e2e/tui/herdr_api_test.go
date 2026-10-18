@@ -76,7 +76,8 @@ func buildHerdrClient(t *testing.T) string {
 //     pane.send_text and pane.send_keys reach the pane; tab.create makes a
 //     workspace with the label; the event stream reports a new pane; env
 //     on workspace.create, tab.create and pane.split is set in the new
-//     pane's shell.
+//     pane's shell; a pane.report_agent for a pane goes through, as herdr
+//     lets any client report.
 //   - From inside a pane, with herdr's environment only: pane.current is the
 //     caller's own pane, by the id in HERDR_PANE_ID; typing into a pane that
 //     waits on a prompt is refused, since the pane has no respond grant.
@@ -120,6 +121,15 @@ func TestHerdrSocketAPI(t *testing.T) {
 	if target["agent"] != "claude" || target["agent_status"] != "blocked" {
 		t.Fatalf("an agent on needs_input reads %v / %v", target["agent"], target["agent_status"])
 	}
+
+	// The person, outside every pane, reports for a pane, as a herdr plugin's
+	// command does. herdr lets any client report.
+	callerID := herdrPaneByLabel(t, base, "caller")["pane_id"].(string)
+	herdrCall(t, base, "pane.report_agent", map[string]any{"pane_id": callerID, "source": "e2e-mirror", "agent": "claude", "state": "working"})
+	if got := herdrPaneByLabel(t, base, "caller"); got["agent"] != "claude" || got["agent_status"] != "working" {
+		t.Fatalf("a report from outside every pane reads %v / %v, want claude / working", got["agent"], got["agent_status"])
+	}
+	herdrCall(t, base, "pane.release_agent", map[string]any{"pane_id": callerID, "source": "e2e-mirror", "agent": "claude"})
 
 	// A pane holds its grants: it finds itself, and may not type into a
 	// prompt without respond.

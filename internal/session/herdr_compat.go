@@ -449,7 +449,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		}
 		p.PaneID = window
 	}
-	window, code, msg := d.herdrPane(cs, p.PaneID)
+	window, outside, code, msg := d.herdrPane(cs, req.Method, p.PaneID)
 	if code != "" {
 		return nil, code, msg
 	}
@@ -487,7 +487,12 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 	}
 	harness := herdrHarness(p.Agent)
 	pid := 0
-	if cs != nil {
+	// A report from outside the pane comes from a plugin or a script, not
+	// from the agent, so its process is no anchor for the pane's state.
+	anchorCS := cs
+	if outside {
+		anchorCS = nil
+	} else if cs != nil {
 		pid = cs.peerPID
 	}
 	switch req.Method {
@@ -500,7 +505,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 			// A report names its agent itself, so the name alone earns no
 			// trust: the pane must be running that agent's process.
 			wins := crushScreenWins(harness) && d.windowRunsHarness(window, harness)
-			d.markHerdrClaim(window, d.herdrAnchorsFor(cs, window), wins)
+			d.markHerdrClaim(window, d.herdrAnchorsFor(anchorCS, window), wins)
 			if wins && (p.State == "working" || p.State == "blocked") {
 				// working: the dialog can be up already, and only a look
 				// says so. blocked: the look names what the dialog asks.
@@ -580,20 +585,50 @@ func herdrHarness(agent string) string {
 	return strings.Trim(b.String(), "-_")
 }
 
-// herdrPane places the caller in its pane and checks pane_id names it. The
-// id is herdr's form (HERDR_PANE_ID) or the pane's tuios window id.
-func (d *Daemon) herdrPane(cs *connState, paneID string) (string, string, string) {
+// herdrPane finds the window a report is for. The id is herdr's form
+// (HERDR_PANE_ID) or the pane's tuios window id. A caller in a pane reports
+// only for its own pane. A caller outside every pane (the person, or a
+// plugin's command, which the daemon starts outside every pane) reports for
+// any pane that the tuios verb the report stands for would let it write
+// (herdrReportVerb), as herdr lets any client report. outside is true for
+// that case.
+func (d *Daemon) herdrPane(cs *connState, method, paneID string) (window string, outside bool, code, msg string) {
 	fromPane, window := d.peerPane(cs)
 	if !fromPane || window == "" {
-		return "", "forbidden", "the caller runs in no pane of this tuios"
+		if cs != nil && (cs.viaLink || cs.paneOnly) {
+			return "", false, "forbidden", "a pane report from another machine is refused"
+		}
+		sess, win, ierr := d.herdrFindPane(paneID)
+		if ierr != nil {
+			return "", false, "pane_not_found", "no pane " + echoName(paneID)
+		}
+		raw, _ := json.Marshal(map[string]string{"session": sess.Name(), "window": win.ID})
+		if _, _, verr := d.admitVerb(cs, herdrReportVerb(method), raw); verr != nil {
+			return "", false, "forbidden", verr.Message
+		}
+		return win.ID, true, "", ""
 	}
 	// The caller's own window by herdr's id: the part after ":p" names it.
 	// A scratch terminal, which herdr's lists leave out, reports this way
 	// too.
 	if _, part, ok := strings.Cut(paneID, ":p"); paneID != window && (!ok || part != herdrHex(window)) {
-		return "", "forbidden", "a pane may report only for itself"
+		return "", false, "forbidden", "a pane may report only for itself"
 	}
-	return window, "", ""
+	return window, false, "", ""
+}
+
+// herdrReportVerb is the tuios verb a herdr pane report stands for, whose
+// admission check a report from outside every pane passes.
+func herdrReportVerb(method string) string {
+	switch method {
+	case "pane.report_metadata":
+		return "set-agent-meta"
+	case "pane.report_agent_session":
+		return "set-agent-session"
+	}
+	// pane.report_agent, pane.release_agent and pane.clear_agent_authority
+	// set or clear the pane's state.
+	return "set-agent-state"
 }
 
 // markHerdrClaim records that the pane's state came from a herdr reporter,
