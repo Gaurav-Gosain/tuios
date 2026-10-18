@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -420,7 +422,9 @@ func newPluginsBuildCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPluginBuild(cmd, e.Plugin, herdrplugin.DefaultDirs(path, nil))
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer stop()
+			return runPluginBuild(ctx, cmd, e.Plugin, herdrplugin.DefaultDirs(path, nil))
 		},
 	}
 }

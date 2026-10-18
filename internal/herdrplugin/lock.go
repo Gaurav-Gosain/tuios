@@ -250,6 +250,9 @@ func hasControl(s string) bool {
 // a transport helper (transport::address), or that holds a control
 // character.
 func CheckSource(s string) error {
+	if strings.HasPrefix(strings.ToLower(s), "http://") {
+		return errors.New("tuios does not get plugins over plain http. Use https")
+	}
 	if s == "" || s[0] == '-' || strings.Contains(s, "::") || hasControl(s) {
 		return fmt.Errorf("%q is not a valid plugin source", s)
 	}
@@ -289,20 +292,26 @@ func TrustHash(source string, p *Plugin, grants []string) string {
 	}
 	put('s', source)
 	put('g', grants...)
+	put('P', p.Platforms...)
 	for _, b := range p.Build {
 		put('b', b.Command...)
+		put('P', b.Platforms...)
 	}
 	for _, s := range p.Startup {
 		put('u', s.Command...)
+		put('P', s.Platforms...)
 	}
 	for _, e := range p.Events {
 		put('e', append([]string{e.On}, e.Command...)...)
+		put('P', e.Platforms...)
 	}
 	for _, a := range p.Actions {
 		put('a', append([]string{a.ID}, a.Command...)...)
+		put('P', a.Platforms...)
 	}
 	for _, x := range p.Panes {
 		put('p', append([]string{x.ID, x.Placement}, x.Command...)...)
+		put('P', x.Platforms...)
 	}
 	for _, l := range p.LinkHandlers {
 		put('l', l.ID, l.Pattern, l.Action)

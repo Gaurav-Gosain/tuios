@@ -5,10 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // tuios plugins install, offline: a bare repository under the test's temp
@@ -63,7 +66,10 @@ func probeRepo(t *testing.T) (string, string, string) {
 		}
 		testutil.Git(t, work, "add", "herdr-plugin.toml")
 	}
-	write("mkdir -p dist && echo built-by-install > dist/out")
+	// With the file slow in place the build stops in a sleep, so a test can
+	// kill the install during the build. sleep writes its pid first.
+	slow := filepath.Join(outside, "slow")
+	write("test -e " + slow + " && echo $$ > " + slow + ".pid && exec sleep 30; mkdir -p dist && pwd > dist/where && echo built-by-install > dist/out")
 	testutil.Git(t, work, "commit", "-q", "-m", "probe")
 	main := testutil.Git(t, work, "rev-parse", "HEAD")
 	testutil.Git(t, work, "checkout", "-q", "-b", "broken")
@@ -113,8 +119,8 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	if data, err := os.ReadFile(lockPath); err == nil && strings.Contains(string(data), id) {
 		t.Fatalf("a failed build wrote a lock entry:\n%s", data)
 	}
-	if ents, _ := os.ReadDir(managed); len(ents) != 0 {
-		t.Fatalf("a failed build left %d folders in %s", len(ents), managed)
+	if n := len(foldersIn(managed)); n != 0 {
+		t.Fatalf("a failed build left %d folders in %s", n, managed)
 	}
 	if cfg, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")); strings.Contains(string(cfg), id) {
 		t.Fatalf("a failed build enabled the plugin:\n%s", cfg)
@@ -140,16 +146,47 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(outside, "ran")); err == nil {
 			t.Fatalf("install of %s ran a build outside the repository", c.name)
 		}
-		if ents, _ := os.ReadDir(managed); len(ents) != 0 {
-			t.Fatalf("install of %s left %d folders in %s", c.name, len(ents), managed)
+		if n := len(foldersIn(managed)); n != 0 {
+			t.Fatalf("install of %s left %d folders in %s", c.name, n, managed)
 		}
+	}
+
+	// A kill at the prompt leaves its staging folder. A kill during the
+	// build leaves a half-built checkout. Neither may block the next
+	// install, and the next install clears the staging folder of the dead
+	// process.
+	killInstallAt(t, base, "Continue?", url+"@main")
+	leftover := foldersIn(filepath.Dir(managed))
+	if len(leftover) != 2 || !strings.HasPrefix(leftover[0], ".staging-") {
+		t.Fatalf("a kill at the prompt left %v in %s, want one staging folder beside %s", leftover, filepath.Dir(managed), id)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "slow"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	killInstallAt(t, base, "Running in", url+"@main", "--yes")
+	_ = os.Remove(filepath.Join(outside, "slow"))
+	if pid, err := os.ReadFile(filepath.Join(outside, "slow.pid")); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(string(pid))); err == nil {
+			if p, err := os.FindProcess(n); err == nil {
+				_ = p.Kill()
+			}
+		}
+	}
+	if data, err := os.ReadFile(lockPath); err == nil && strings.Contains(string(data), id) {
+		t.Fatalf("a killed install wrote a lock entry:\n%s", data)
 	}
 
 	// main without a build: the checkout is there and the lock entry says
 	// it is not built. Install from the lock file has no terminal to ask in
 	// and must leave the checkout it did not fetch.
 	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes", "--no-build", "--no-enable"); err != nil {
-		t.Fatalf("install of main without a build: %v\n%s", err, out)
+		t.Fatalf("install of main without a build, after the kills: %v\n%s", err, out)
+	}
+	if got := foldersIn(filepath.Dir(managed)); len(got) != 1 || got[0] != id {
+		t.Errorf("after the kills and an install, %s holds %v, want only %s", filepath.Dir(managed), got, id)
+	}
+	if got := foldersIn(managed); len(got) != 1 || got[0] != mainCommit[:12] {
+		t.Errorf("after the kills and an install, %s holds %v, want only %s", managed, got, mainCommit[:12])
 	}
 	checkout := filepath.Join(managed, mainCommit[:12])
 	if out, err := tuiosCLI(t, base, "plugins", "install"); err == nil || !strings.Contains(out, "no terminal") {
@@ -159,12 +196,17 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		t.Fatalf("install from the lock file removed the checkout it did not fetch: %v", err)
 	}
 
-	// main: built beside that checkout, swapped in, pinned and enabled.
+	// main again: the unbuilt checkout moves aside, the new one is built in
+	// the folder it keeps, and it is pinned and enabled.
 	out, err = tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes")
 	if err != nil {
 		t.Fatalf("install of main: %v\n%s", err, out)
 	}
 	_ = os.WriteFile(filepath.Join(art, "install.txt"), []byte(out), 0o644)
+	where, _ := os.ReadFile(filepath.Join(checkout, "dist", "where"))
+	if want, _ := filepath.EvalSymlinks(checkout); strings.TrimSpace(string(where)) != want {
+		t.Errorf("the build ran in %q, want the folder the plugin keeps, %s", strings.TrimSpace(string(where)), want)
+	}
 	for _, want := range []string{"Install e2e.probe 1.0.0", "mkdir -p dist", "actions  ping", "tuios enables the plugin", "Installed e2e.probe at " + mainCommit[:12], "is enabled"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the install output lacks %q:\n%s", want, out)
@@ -225,4 +267,42 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	if err != nil || !strings.Contains(out, "built-by-install") || !strings.Contains(out, "pong") {
 		t.Fatalf("plugins run ping: %v\n%s", err, out)
 	}
+}
+
+// foldersIn lists the folders in dir, sorted.
+func foldersIn(dir string) []string {
+	ents, _ := os.ReadDir(dir)
+	var out []string
+	for _, e := range ents {
+		if e.IsDir() {
+			out = append(out, e.Name())
+		}
+	}
+	return out
+}
+
+// killInstallAt runs tuios plugins install with args in a terminal, waits
+// until want is on the screen, and kills the process.
+func killInstallAt(t *testing.T, base, want string, args ...string) {
+	t.Helper()
+	env := make([]string, 0, len(xdgKeys))
+	for _, key := range xdgKeys {
+		env = append(env, key+"="+xdgDir(base, key))
+	}
+	term, err := tuitest.Start(append([]string{tuiosBin, "plugins", "install"}, args...), tuitest.WithInheritEnv(), tuitest.WithEnv(env...))
+	if err != nil {
+		t.Fatalf("start tuios plugins install: %v", err)
+	}
+	defer term.Close()
+	if err := term.WaitForText(want, 30*time.Second); err != nil {
+		t.Fatalf("tuios plugins install never showed %q: %v\n%s", want, err, term.Snapshot())
+	}
+	p, err := os.FindProcess(term.Pid())
+	if err == nil {
+		err = p.Kill()
+	}
+	if err != nil {
+		t.Fatalf("kill tuios plugins install: %v", err)
+	}
+	time.Sleep(200 * time.Millisecond)
 }

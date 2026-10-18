@@ -7711,8 +7711,11 @@ The test carries its positive half in the same fixture: the broken, escape
 and linkdir branches leave no lock entry, no checkout, no enable and no
 marker, and `main` gets all of them. `main` is installed once without a
 build. Install from the lock file without a terminal must then leave that
-checkout. The next install of `main` builds beside it and swaps it in. The
-artifacts are `install.txt`, `plugins.lock` and `list.json` in the test's
+checkout. The next install of `main` moves it aside and builds in the folder
+the plugin keeps, and the build writes its folder to `dist/where`. Before
+that, the test kills one install at the prompt and one during the build. The
+next install must work, and it must remove the staging folder of the dead
+process. The artifacts are `install.txt`, `plugins.lock` and `list.json` in the test's
 artifact folder.
 
 `TestManifestRefusesTerminalControls` in `internal/herdrplugin` is a
@@ -7721,7 +7724,7 @@ bidi and DEL characters in argv, versions, events and placements, and that
 it takes a clean manifest with a tab in an argument.
 
 Each control cut one line in the branch, built the binary, and ran the one
-test. Run on 2026-10-18, after the review of #877.
+test. Run on 2026-10-18, after the reviews of #877.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
@@ -7731,6 +7734,8 @@ test. Run on 2026-10-18, after the review of #877.
 | A manifest that links out of the checkout is refused (review finding 2) | the `Inside` check in `loadInside` | `TestPluginsInstallFromGit` ("install of escape: <nil>, want \"outside the repository\"") | **caught** |
 | A subdir that is a link is not a folder (review finding 2) | the `cat-file -t` check in `fetchInto` | `TestPluginsInstallFromGit` ("install of linkdir: exit status 1, want \"has no folder plug\""). The `Inside` check still refuses the install, so the cut changes only the message | **caught** |
 | Install from the lock file keeps a checkout it did not fetch (review finding 3) | the `j.fetched` condition in `fail` becomes true | `TestPluginsInstallFromGit` ("install from the lock file removed the checkout it did not fetch") | **caught** |
+| A killed install does not block the next one (second review, finding 1) | the kernel lock `HoldLock` becomes the round-one guard: a file made with `O_EXCL` and removed on return | `TestPluginsInstallFromGit` ("install of main without a build, after the kills: exit status 1", after the 10 second wait for the guard) | **caught** |
+| The build runs in the folder the plugin keeps (second review, finding 2) | the move of the new checkout into its folder runs after the build, not before | `TestPluginsInstallFromGit` ("the build ran in \".../plugins/.staging-N-M\", want the folder the plugin keeps") | **caught** |
 | A manifest argv with a terminal control is refused (review finding 1) | the `hasControl` check in `argvOf` | `TestManifestRefusesTerminalControls` ("Parse took \"\\u001b[2J\" in %ARG%" and five more) | **caught** |
 
 The fixed build passes `TestPluginsInstallFromGit` 3 of 3, and every

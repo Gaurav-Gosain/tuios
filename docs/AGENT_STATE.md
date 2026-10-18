@@ -887,6 +887,8 @@ config folder. It does not enable a plugin. `[plugins] enabled` does that.
 With `--yes`, you trust the person who wrote `plugins.lock`: tuios builds
 each plugin without a question. tuios asks again, also with `--yes`, when a
 manifest is different from the approved one in `plugins.lock`.
+The hash check keeps the question honest about the manifest. It is not a
+sandbox: the build and the plugin run with your rights.
 
 The daemon never fetches and never builds. It only reads `plugins.lock` and
 the checkouts.
