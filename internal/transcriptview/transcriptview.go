@@ -1,6 +1,13 @@
 // Package transcriptview decodes an agent's transcript into a conversation a
 // person can read: prompts, answers, thinking, tool calls with their results,
-// diffs of edits, plans and todo lists.
+// diffs of edits, plans, todo lists and errors.
+//
+// Each harness keeps its own format, and each format has a decoder of its own
+// (claude.go, codex.go, gemini.go, qwen.go). They all
+// decode into the same Entry, so the thread draws every agent the same way.
+// A format is one JSON record per line, or, for a harness that rewrites one
+// JSON document whole (format.doc), a document this package turns into one
+// record per line in memory before it reads it the same way.
 //
 // It is the opposite of internal/transcript, and it is kept apart from it on
 // purpose. That package reads a transcript to learn one of three turn states
@@ -103,6 +110,9 @@ const (
 	KindToolResult = "tool_result"
 	KindPlan       = "plan"
 	KindTodos      = "todos"
+	// KindError is an error the harness wrote into the conversation: a
+	// failed request, a refused model, a turn cut short. Its Text says what.
+	KindError = "error"
 )
 
 // Tool call statuses.
@@ -135,6 +145,9 @@ type Entry struct {
 	// never sent.
 	line int64
 	sub  int
+	// key is the message the record wrote, for a format that writes a
+	// message again when it changes (decoded.key). It is never sent.
+	key string
 
 	// raw is what the record said, before Clean and before any diff is
 	// worked out. finish turns it into the fields above, only for an entry
@@ -241,6 +254,9 @@ type Options struct {
 	// CleanLines masks, in place, what spans lines of a diff hunk once
 	// Clean has run on each line, such as a private key. Nil does nothing.
 	CleanLines func([]string) bool
+	// Format names the transcript's format, the reader its harness's
+	// manifest names. Empty is FormatClaude.
+	Format string
 }
 
 // Page is one read.
@@ -263,7 +279,14 @@ type Page struct {
 // ErrNoFile reports the transcript is gone.
 var ErrNoFile = errors.New("transcriptview: file does not exist")
 
-// Read reads one page of the transcript at path, as Claude Code writes it.
+// ErrFormat reports a format this build has no decoder for.
+var ErrFormat = errors.New("transcriptview: unknown transcript format")
+
+// ErrTooLarge reports a document format whose file is larger than one call
+// may read.
+var ErrTooLarge = errors.New("transcriptview: transcript too large to read whole")
+
+// Read reads one page of the transcript at path, in the format opts names.
 func Read(path string, opts Options) (Page, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = DefaultLimit
@@ -271,6 +294,10 @@ func Read(path string, opts Options) (Page, error) {
 	opts.Limit = min(opts.Limit, MaxLimit)
 	if opts.MaxBytes <= 0 {
 		opts.MaxBytes = DefaultMaxBytes
+	}
+	fm, ok := lookupFormat(opts.Format)
+	if !ok {
+		return Page{}, ErrFormat
 	}
 	f, err := transcript.OpenRegular(path)
 	if err != nil {
@@ -285,12 +312,26 @@ func Read(path string, opts Options) (Page, error) {
 		return Page{}, err
 	}
 	size := info.Size()
-	id, err := fileID(f, path, size)
+	r := &reader{src: f, size: size, opts: opts, fm: fm, lcsLeft: LCSCellsPerCall}
+	defer r.zero()
+	if fm.doc != nil && fm.isDoc(path) {
+		// The harness rewrites the file whole. It is read whole, turned
+		// into one record per line, and that is what the page is read from.
+		if size > scanMax {
+			return Page{}, ErrTooLarge
+		}
+		data, err := r.readAt(0, size)
+		if err != nil {
+			return Page{}, err
+		}
+		lines := fm.doc(data)
+		r.bufs = append(r.bufs, lines)
+		r.src, r.size = bytes.NewReader(lines), int64(len(lines))
+	}
+	id, err := fileID(r.src, path, r.size)
 	if err != nil {
 		return Page{}, err
 	}
-	r := &reader{f: f, size: size, opts: opts, lcsLeft: LCSCellsPerCall}
-	defer r.zero()
 
 	if opts.After != "" {
 		if at, ok := parseCursor(opts.After, id); ok && at.off <= size && r.atBoundary(at.off) {
@@ -313,9 +354,11 @@ func Read(path string, opts Options) (Page, error) {
 
 // reader is one call's read. Its buffers are zeroed when the call ends.
 type reader struct {
-	f       *os.File
+	// src is the file, or for a document format the records made from it.
+	src     io.ReaderAt
 	size    int64
 	opts    Options
+	fm      format
 	bufs    [][]byte
 	skipped int
 	// lexed counts the bytes of code the lexer read for this call, against
@@ -323,6 +366,10 @@ type reader struct {
 	lexed int
 	// lcsLeft is what is left of LCSCellsPerCall.
 	lcsLeft int
+	// trimmed says decode dropped older entries for keepLast, so the page
+	// does not start at the file's first entry even when a record that
+	// replaces or takes back messages left fewer than keepLast.
+	trimmed bool
 }
 
 func (r *reader) zero() {
@@ -335,7 +382,7 @@ func (r *reader) zero() {
 func (r *reader) readAt(from, to int64) ([]byte, error) {
 	buf := make([]byte, to-from)
 	r.bufs = append(r.bufs, buf)
-	n, err := r.f.ReadAt(buf, from)
+	n, err := r.src.ReadAt(buf, from)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
@@ -348,7 +395,7 @@ func (r *reader) atBoundary(off int64) bool {
 		return true
 	}
 	var b [1]byte
-	if _, err := r.f.ReadAt(b[:], off-1); err != nil {
+	if _, err := r.src.ReadAt(b[:], off-1); err != nil {
 		return false
 	}
 	return b[0] == '\n'
@@ -403,6 +450,7 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 		if !atEnd {
 			before = &to
 		}
+		r.trimmed = false
 		entries := r.decode(lines, base, decodeBounds{before: before, keepLast: r.opts.Limit + 1})
 		if len(entries) >= r.opts.Limit || start == 0 || window >= scanMax {
 			// Only the newest Limit can be on the page. Their calls fold in
@@ -431,7 +479,7 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 			}
 			switch {
 			case keep < len(entries):
-				if base > 0 || keep > 0 {
+				if base > 0 || keep > 0 || r.trimmed {
 					page.Older = makeCursor(id, entries[keep].pos())
 				}
 			case base > 0:
@@ -516,7 +564,7 @@ func (r *reader) skipLongLine(from int64) int64 {
 	chunk := make([]byte, 64<<10)
 	defer clear(chunk)
 	for off := from; off < r.size; {
-		n, err := r.f.ReadAt(chunk, off)
+		n, err := r.src.ReadAt(chunk, off)
 		if i := bytes.IndexByte(chunk[:n], '\n'); i >= 0 {
 			return off + int64(i) + 1
 		}
@@ -565,13 +613,20 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			r.skipped++
 			continue
 		}
-		var rec ccRecord
-		if err := unmarshalRecord(line, &rec); err != nil {
+		dec, ok := r.fm.line(r, line, start)
+		if !ok {
 			r.skipped++
 			continue
 		}
-		for i, e := range r.recordEntries(&rec, start) {
-			e.line, e.sub = start, i
+		if b.before == nil || start < b.before.off || start == b.before.off && b.before.sub > 0 {
+			// A record that replaces a message (dec.key) or takes the
+			// conversation back to one (dec.rewind) drops what the window
+			// holds of it. A record past the page's end changes nothing on
+			// the page.
+			out = dropKeyed(out, dec.key, dec.rewind)
+		}
+		for i, e := range dec.entries {
+			e.line, e.sub, e.key = start, i, dec.key
 			if b.from != nil && e.before(*b.from) {
 				continue
 			}
@@ -582,6 +637,7 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 		}
 		if b.keepLast > 0 && len(out) >= 2*b.keepLast {
 			n := copy(out, out[len(out)-b.keepLast:])
+			r.trimmed = true
 			clear(out[n:])
 			out = out[:n]
 		}
@@ -612,7 +668,7 @@ func (r *reader) finish(e *Entry) {
 	}
 	e.raw = nil
 	switch e.Kind {
-	case KindText, KindThinking:
+	case KindText, KindThinking, KindError:
 		var cut bool
 		e.Text, cut = r.clean(raw.text, TextMax)
 		e.Truncated = raw.textCut || cut
@@ -725,7 +781,7 @@ func unfoldPast(entries []Entry) {
 // record. A file replaced at the same path has another first record. A first
 // record not yet finished gives the empty head, and the cursor it makes is at
 // offset 0, so the change when it finishes costs nothing.
-func fileID(f *os.File, path string, size int64) (string, error) {
+func fileID(f io.ReaderAt, path string, size int64) (string, error) {
 	head := make([]byte, min(size, headMax))
 	defer clear(head)
 	n, err := f.ReadAt(head, 0)

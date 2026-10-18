@@ -1,0 +1,6 @@
+{"id":"0199aa00-0000-7000-8000-000000000002","timestamp":"2026-10-18T09:00:00.000Z","instructions":null}
+{"record_type":"state"}
+{"type":"message","role":"user","content":[{"type":"input_text","text":"List the files."}]}
+{"type":"function_call","name":"shell","arguments":"{\"command\": [\"ls\"]}","call_id":"c1"}
+{"type":"function_call_output","call_id":"c1","output":"{\"output\": \"a\\nb\\n\", \"metadata\": {\"exit_code\": 0}}"}
+{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Two files."}]}

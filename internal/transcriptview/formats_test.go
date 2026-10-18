@@ -1,0 +1,352 @@
+package transcriptview
+
+// The decoders read files another program wrote, which hold whatever its
+// model, its tools and the person put there. That makes them a security
+// boundary: every string that leaves must go through Clean and be bounded, a
+// record that does not decode must cost only itself, and no input may panic
+// or grow without bound. Each format has a scrubbed fixture in testdata,
+// written from that harness's real files or published source, and the same
+// hostile records.
+//
+// Ways a decoder can fail, which the cases below cover:
+//   - drop or misplace a part of the conversation (fixture tables);
+//   - show a message twice that its harness wrote twice (Gemini), or keep
+//     one the person took back ($rewindTo);
+//   - show the harness's own injected context as the person's words (Codex);
+//   - give a tool call the wrong status, or none while it runs;
+//   - lose a diff, or pass a string out without Clean (hostile: escapes);
+//   - panic or fail the page on a malformed or mistyped record (hostile);
+//   - read a document past the bound, or a line past lineMax (hostile).
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// summary is an entry in one line: role, kind, tool, target, status, and the
+// diff's file and counts.
+func summary(e Entry) string {
+	s := e.Role + " " + e.Kind
+	if e.Tool != "" {
+		s += " " + e.Tool
+	}
+	if e.Target != "" {
+		s += " [" + e.Target + "]"
+	}
+	if e.Status != "" {
+		s += " " + e.Status
+	}
+	if e.Diff != nil {
+		s += fmt.Sprintf(" diff %s +%d -%d", e.Diff.File, e.Diff.Added, e.Diff.Removed)
+	}
+	if len(e.Todos) > 0 {
+		s += fmt.Sprintf(" todos %d", len(e.Todos))
+	}
+	if e.Kind == KindText || e.Kind == KindError || e.Kind == KindThinking {
+		s += ": " + strings.ReplaceAll(e.Text, "\n", " ")
+	}
+	return s
+}
+
+func TestFormatFixtures(t *testing.T) {
+	cases := []struct {
+		file, format string
+		want         []string
+	}{
+		{"codex-rollout.jsonl", FormatCodex, []string{
+			"user text: Make run take two and add notes.",
+			"assistant thinking: Looking at the entry point",
+			"assistant todos update_plan ok todos 2",
+			"tool tool_result ok",
+			"assistant tool_call shell [grep -n run src/app.go] ok",
+			"tool tool_result ok",
+			"assistant tool_call apply_patch [src/app.go] ok diff src/app.go +2 -1",
+			"assistant tool_call apply_patch [docs/notes.md] ok diff docs/notes.md +2 -0",
+			"tool tool_result ok",
+			"assistant tool_call exec_command [go test ./...] error",
+			"tool tool_result error",
+			"assistant tool_call web_search [go test flags] ok",
+			"assistant text: Run now takes two. One test fails.",
+			"assistant error: The turn stopped: interrupted",
+			"assistant tool_call shell [sleep 100] running",
+		}},
+		{"codex-legacy.jsonl", FormatCodex, []string{
+			"user text: List the files.",
+			"assistant tool_call shell [ls] ok",
+			"tool tool_result ok",
+			"assistant text: Two files.",
+		}},
+		{"gemini-chat.jsonl", FormatGemini, []string{
+			"user text: Change b to three.",
+			"assistant thinking: Finding the line b is set in app.ts",
+			"assistant tool_call replace [/work/project/app.ts] ok diff /work/project/app.ts +1 -1",
+			"tool tool_result ok diff /work/project/app.ts +1 -1",
+			"assistant tool_call run_shell_command [npm test] error",
+			"tool tool_result error",
+			"assistant todos write_todos ok todos 2",
+			"tool tool_result ok",
+			"assistant text: b is three now. The tests fail.",
+			"assistant error: [API Error: quota reached]",
+			"user text: Thanks!",
+		}},
+		{"gemini-legacy.json", FormatGemini, []string{
+			"user text: Create the readme.",
+			"assistant thinking: Plan One file.",
+			"assistant text: Writing it.",
+			"assistant tool_call write_file [/work/project/README.md] ok diff /work/project/README.md +2 -0",
+			"tool tool_result ok",
+			"assistant tool_call read_file [README.md] ok",
+			"tool tool_result ok",
+			"assistant text: Done.",
+		}},
+		{"qwen-chat.jsonl", FormatQwen, []string{
+			"user text: Set b to three.",
+			"assistant thinking: Checking app.ts",
+			"assistant text: I will edit it.",
+			"assistant tool_call edit [/work/project/app.ts] ok diff /work/project/app.ts +1 -1",
+			"assistant todos todo_write ok todos 1",
+			"tool tool_result ok diff app.ts +1 -1",
+			"tool tool_result ok",
+			"assistant tool_call run_shell_command [npm test] error",
+			"tool tool_result error",
+			"assistant text: b is three.",
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.file, func(t *testing.T) {
+			page, err := Read(filepath.Join("testdata", c.file), Options{Format: c.format})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if page.Skipped != 0 {
+				t.Errorf("skipped %d records of a well-formed file", page.Skipped)
+			}
+			var got []string
+			for _, e := range page.Entries {
+				got = append(got, summary(e))
+			}
+			if strings.Join(got, "\n") != strings.Join(c.want, "\n") {
+				t.Errorf("entries:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+			}
+			seen := map[string]bool{}
+			for _, e := range page.Entries {
+				if e.ID == "" || seen[e.ID] {
+					t.Errorf("entry id %q is empty or repeated", e.ID)
+				}
+				seen[e.ID] = true
+			}
+		})
+	}
+}
+
+// TestFormatPaging reads each fixture three entries at a time, from the
+// newest back and then forward from the start, and gets the same entries as
+// one read.
+func TestFormatPaging(t *testing.T) {
+	for _, c := range []struct{ file, format string }{
+		{"codex-rollout.jsonl", FormatCodex}, {"gemini-chat.jsonl", FormatGemini},
+		{"gemini-legacy.json", FormatGemini}, {"qwen-chat.jsonl", FormatQwen},
+	} {
+		t.Run(c.file, func(t *testing.T) {
+			path := filepath.Join("testdata", c.file)
+			whole, err := Read(path, Options{Format: c.format})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids := func(es []Entry) (out []string) {
+				for _, e := range es {
+					out = append(out, e.ID)
+				}
+				return out
+			}
+			var back []string
+			page, err := Read(path, Options{Format: c.format, Limit: 3})
+			for err == nil {
+				back = append(ids(page.Entries), back...)
+				if page.Older == "" {
+					break
+				}
+				page, err = Read(path, Options{Format: c.format, Limit: 3, Before: page.Older})
+				if page.Reset {
+					t.Fatal("a cursor of this file reset")
+				}
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fmt.Sprint(back) != fmt.Sprint(ids(whole.Entries)) {
+				t.Errorf("paged back:\n%v\nwhole:\n%v", back, ids(whole.Entries))
+			}
+		})
+	}
+}
+
+// hostile is what every format is fed besides its fixture: records that are
+// not JSON, that have the wrong types, and strings with escapes in every
+// field a page carries.
+func hostile(format string) []string {
+	esc := "\x1b[31mred\x1b[0m ‮hidden"
+	s := func(v string) string { b, _ := json.Marshal(v); return string(b) }
+	common := []string{
+		`{"type": "user", "message": {`,
+		`not json at all`,
+		`[1, 2, 3]`,
+		`"a string"`,
+		`{"type": 7, "payload": "x", "message": 3, "content": {"x": [1]}, "data": []}`,
+	}
+	switch format {
+	case FormatCodex:
+		return append(common,
+			`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":`+s(esc)+`}]}}`,
+			`{"type":"response_item","payload":{"type":"function_call","name":`+s(esc)+`,"arguments":`+s(`{"command":["bash","-lc",`+s(esc)+`]}`)+`,"call_id":"c1"}}`,
+			`{"type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":`+s(esc)+`}}`,
+			`{"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","call_id":"c2","input":`+s("*** Begin Patch\n*** Update File: "+esc+"\n@@\n-"+esc+"\n+"+esc+"\n*** End Patch")+`}}`,
+			`{"type":"response_item","payload":{"type":"function_call","name":"update_plan","arguments":"{\"plan\": 5}","call_id":"c3"}}`,
+			`{"type":"response_item","payload":{"type":"function_call","name":"shell","arguments":12,"call_id":{"x":1}}}`,
+		)
+	case FormatGemini:
+		deep := strings.Repeat("[", 5000) + strings.Repeat("]", 5000)
+		return append(common,
+			`{"id":"h1","type":"user","content":`+s(esc)+`}`,
+			`{"id":"h2","type":"gemini","content":[{"text":`+s(esc)+`,"thought":true}],"thoughts":[{"subject":`+s(esc)+`}],"toolCalls":[{"id":"t1","name":"replace","args":{"file_path":`+s(esc)+`,"old_string":`+s(esc)+`,"new_string":"x"},"status":"success","result":[{"functionResponse":{"response":{"output":`+s(esc)+`}}}],"resultDisplay":{"fileDiff":`+s("@@ -1,1 +1,1 @@\n-"+esc+"\n+x\n")+`}}]}`,
+			`{"id":"h3","type":"gemini","content":`+deep+`}`,
+			`{"id":"h4","type":"gemini","toolCalls":"not a list"}`,
+			`{"$rewindTo": 5}`,
+		)
+	case FormatQwen:
+		return append(common,
+			`{"type":"user","message":{"parts":[{"text":`+s(esc)+`}]}}`,
+			`{"type":"assistant","message":{"parts":[{"functionCall":{"id":"c1","name":`+s(esc)+`,"args":{"command":`+s(esc)+`}}}]}}`,
+			`{"type":"tool_result","message":{"parts":[{"functionResponse":{"id":"c1","response":{"output":`+s(esc)+`}}}]},"toolCallResult":{"status":"error","resultDisplay":{"fileDiff":"@@ -99999999999 +1 @@\n"}}}`,
+			`{"type":"assistant","message":{"parts":"text"}}`,
+		)
+	}
+	return common
+}
+
+func TestFormatHostile(t *testing.T) {
+	clean := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if r == 0x1b || r == 0x202e {
+				return -1
+			}
+			return r
+		}, s)
+	}
+	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen} {
+		t.Run(format, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "hostile.jsonl")
+			if err := os.WriteFile(path, []byte(strings.Join(hostile(format), "\n")+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			page, err := Read(path, Options{Format: format, Clean: clean})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Entries) == 0 {
+				t.Fatal("the hostile records with escapes gave no entries")
+			}
+			out, err := json.Marshal(page.Entries)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Contains(out, []byte(`\u001b`)) || bytes.Contains(out, []byte("‮")) || bytes.Contains(out, []byte(`‮`)) {
+				t.Errorf("a string left without Clean: %s", out)
+			}
+		})
+	}
+}
+
+// TestFormatBounds checks the bounds a hostile file meets: a line past
+// lineMax, a document past scanMax, and a patch past DiffLinesMax.
+func TestFormatBounds(t *testing.T) {
+	dir := t.TempDir()
+	t.Run("long line", func(t *testing.T) {
+		path := filepath.Join(dir, "long.jsonl")
+		long := `{"type":"user","message":{"parts":[{"text":"` + strings.Repeat("a", lineMax) + `"}]}}`
+		short := `{"type":"user","message":{"parts":[{"text":"after"}]}}`
+		if err := os.WriteFile(path, []byte(long+"\n"+short+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		page, err := Read(path, Options{Format: FormatQwen})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Entries) != 1 || page.Entries[0].Text != "after" {
+			t.Errorf("entries %v, want only the record after the long one", page.Entries)
+		}
+	})
+	t.Run("large document", func(t *testing.T) {
+		path := filepath.Join(dir, "large.json")
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A sparse file: the size is past the bound and no disk is used.
+		if err := f.Truncate(scanMax + 1); err != nil {
+			t.Fatal(err)
+		}
+		_ = f.Close()
+		if _, err := Read(path, Options{Format: FormatGemini}); err != ErrTooLarge {
+			t.Errorf("err %v, want ErrTooLarge", err)
+		}
+	})
+	t.Run("large patch", func(t *testing.T) {
+		var b strings.Builder
+		b.WriteString("*** Begin Patch\n*** Add File: big.txt\n")
+		for i := range 5000 {
+			fmt.Fprintf(&b, "+line %d\n", i)
+		}
+		b.WriteString("*** End Patch\n")
+		rec, _ := json.Marshal(map[string]any{"type": "response_item", "payload": map[string]any{
+			"type": "custom_tool_call", "name": "apply_patch", "call_id": "c", "input": b.String()}})
+		path := filepath.Join(dir, "patch.jsonl")
+		if err := os.WriteFile(path, append(rec, '\n'), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		page, err := Read(path, Options{Format: FormatCodex})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Entries) != 1 || page.Entries[0].Diff == nil {
+			t.Fatalf("entries %v, want one call with a diff", page.Entries)
+		}
+		d := page.Entries[0].Diff
+		lines := 0
+		for _, h := range d.Hunks {
+			lines += len(h.Lines)
+		}
+		if lines > DiffLinesMax || !d.Truncated {
+			t.Errorf("diff shows %d lines, truncated %v; want at most %d and truncated", lines, d.Truncated, DiffLinesMax)
+		}
+	})
+	t.Run("unknown format", func(t *testing.T) {
+		if _, err := Read(filepath.Join("testdata", "codex-rollout.jsonl"), Options{Format: "no-such"}); err != ErrFormat {
+			t.Errorf("err %v, want ErrFormat", err)
+		}
+	})
+}
+
+// TestFormatMatch checks the search's identity test against each fixture.
+func TestFormatMatch(t *testing.T) {
+	for _, c := range []struct {
+		file, format, cwd string
+		want              bool
+	}{
+		{"codex-rollout.jsonl", FormatCodex, "/work/project", true},
+		{"codex-rollout.jsonl", FormatCodex, "/work/other", false},
+		{"gemini-chat.jsonl", FormatGemini, "/work/project", true},
+		{"gemini-chat.jsonl", FormatGemini, "/work/other", false},
+		{"gemini-legacy.json", FormatGemini, "/work/project", true},
+		{"qwen-chat.jsonl", FormatQwen, "/work/project", true},
+	} {
+		if got := Matches(c.format, filepath.Join("testdata", c.file), c.cwd); got != c.want {
+			t.Errorf("Matches(%s, %s, %s) = %v, want %v", c.format, c.file, c.cwd, got, c.want)
+		}
+	}
+}
