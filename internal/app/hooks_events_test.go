@@ -216,6 +216,9 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		// Daemon only. Fire site: the session event sink, proved with its
 		// payload by TestRunReturnsExitCodeAndOutput in internal/session.
 		hooks.AfterCommandFinished: true,
+		// Fire site: noteThemeChange in theme_hook.go, proved with its payload
+		// by TestAfterThemeChangeHookFiresOncePerPick in e2e/tui.
+		hooks.AfterThemeChange: true,
 	}
 	for _, e := range hooks.AllEvents() {
 		if !covered[e] {

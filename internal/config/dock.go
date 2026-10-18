@@ -349,7 +349,7 @@ var dockEventTypes = []string{
 	"after-focus-change", "after-layout-change", "after-new-window",
 	"after-resize", "after-theme-change", "after-workspace-switch",
 	"agent-state", "attached", "detached", "layout-changed", "resized",
-	"window-closed", "window-created", "window-focused", "workspace-switched",
+	"theme-changed", "window-closed", "window-created", "window-focused", "workspace-switched",
 }
 
 // DockEventTypes returns the event names a refresh contract may watch, sorted.

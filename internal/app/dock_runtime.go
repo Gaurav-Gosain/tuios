@@ -279,6 +279,9 @@ var dockEventAliases = map[string]string{
 	string(hooks.AfterAttach):          "attached",
 	string(hooks.AfterDetach):          "detached",
 	string(hooks.AfterResize):          "resized",
+	// The daemon's hub has no theme event, since the theme is the client's.
+	// The client fires both spellings, so either name works in a contract.
+	string(hooks.AfterThemeChange): "theme-changed",
 }
 
 func dockEventAlias(eventType string) string { return dockEventAliases[eventType] }
