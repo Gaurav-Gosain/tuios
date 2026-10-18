@@ -2017,8 +2017,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// The PTY resize, the SIGWINCH it carries and the whole-screen redraw
 		// every guest answers with land in ViewportResizeSettledMsg instead.
-		// An open image view needs its picture at the new size.
-		if cmd := m.CockpitImagePicture(); cmd != nil {
+		// An open image view needs its picture at the new size, and a side
+		// column the new width hides lets its live pane go.
+		if cmd := tea.Batch(m.CockpitImagePicture(), m.cockpitLiveFollow()); cmd != nil {
 			return m, tea.Batch(settle, cmd)
 		}
 		return m, settle

@@ -124,17 +124,37 @@ func (m *OS) cockpitLiveFollow() tea.Cmd {
 		return nil
 	}
 	ck.livePrime++
-	msg := ckLivePrimeMsg{id: id, gen: ck.livePrime}
-	return tea.Tick(ckLivePrimeAfter, func(time.Time) tea.Msg { return msg })
+	ck.primeID = id
+	p := m.frameRate.program
+	if p == nil {
+		// A model no program runs, as in a test: a command of its own.
+		msg := ckLivePrimeMsg{id: id, gen: ck.livePrime}
+		return tea.Tick(ckLivePrimeAfter, func(time.Time) tea.Msg { return msg })
+	}
+	// One timer, moved on every step of the cursor: holding j arms nothing
+	// new, and only the agent it rests on is primed.
+	if ck.primeTimer == nil {
+		ck.primeTimer = time.AfterFunc(ckLivePrimeAfter, func() { p.Send(ckLivePrimeMsg{}) })
+	} else {
+		ck.primeTimer.Reset(ckLivePrimeAfter)
+	}
+	return nil
 }
 
 // applyLivePrime primes the live pane the cursor rested on.
 func (m *OS) applyLivePrime(msg ckLivePrimeMsg) {
 	ck := &m.Inbox.ck
-	if msg.gen != ck.livePrime || msg.id != ck.liveID || !m.ShowInbox {
+	id := msg.id
+	if msg.gen == 0 {
+		// The timer's: the pane the cursor last rested on.
+		id = ck.primeID
+	} else if msg.gen != ck.livePrime {
 		return
 	}
-	w := m.windowByID(msg.id)
+	if id == "" || id != ck.liveID || !m.ShowInbox {
+		return
+	}
+	w := m.windowByID(id)
 	if w == nil || w.PTYID == "" || m.SubscribedPTYs[w.PTYID] {
 		return
 	}
@@ -365,6 +385,12 @@ func (m *OS) drawCheckpoints(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w
 	drawSideSection(c, l, x, y, w, "Checkpoints", count)
 	y++
 	switch {
+	case e.Host != "":
+		for _, s := range wrapPlain("The checkpoints of an agent on "+printableTitle(e.Host)+" are kept there. Attach to it to see them.", w) {
+			c.text(x, y, x+w, ckSeg{t: s, fg: pal.FgMute})
+			y++
+		}
+		return y
 	case cp == nil || (cp.loading && cp.list == nil):
 		c.text(x, y, x+w, ckSeg{t: "Reading...", fg: pal.FgMute})
 		return y + 1

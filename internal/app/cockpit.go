@@ -150,7 +150,11 @@ type cockpitState struct {
 	// says the view subscribed the live pane, and livePrime counts the
 	// primes asked for, so one the cursor left is dropped.
 	liveGen, liveTick, livePrime uint64
-	liveShown, liveOwned         bool
+	// primeID is the pane the prime timer is for, and primeTimer the one
+	// timer, moved on every step of the cursor.
+	primeID              string
+	primeTimer           *time.Timer
+	liveShown, liveOwned bool
 	// cpWant says a frame drew checkpoints read for an older state.
 	cpWant bool
 	// cps are the agents' checkpoints, by agent.
