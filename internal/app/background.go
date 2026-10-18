@@ -406,7 +406,7 @@ func desktopBlank(g ground) uv.Cell {
 // those paths having to remember; a window already told is a string
 // comparison, and with nothing to report the strings are empty.
 func (m *OS) syncReportColors() {
-	r := m.paneReportNow()
+	r := m.reportedToPanes()
 	for _, w := range m.Windows {
 		if w != nil {
 			w.SetReportColors(r.fg, r.bg, r.pal, r.key)
@@ -418,8 +418,30 @@ func (m *OS) syncReportColors() {
 // #rrggbb, empty for a colour there is no answer for, and the sixteen as the
 // comma list SessionState.PaneReportPalette describes.
 func (m *OS) paneReportHex() (bg, fg, pal string) {
-	r := m.paneReportNow()
+	r := m.reportedToPanes()
 	return r.bgHex, r.fgHex, r.palHex
+}
+
+// themePreviewing reports whether the theme in force is only a preview: the
+// theme picker or the theme editor is open.
+func (m *OS) themePreviewing() bool {
+	return m.ShowThemePicker || m.themeEditor.open
+}
+
+// reportedToPanes is the answer panes are given. While a theme is only
+// previewed it is the answer they had before, so a program in a pane is not
+// sent a mode 2031 notice for each theme the picker shows on the way to a
+// pick. The panes are still drawn in the preview: that goes through
+// SetThemeColors, which sends no notice. When the picker or the editor
+// closes, the theme in force is reported once, and a cancelled pick reports
+// nothing new.
+func (m *OS) reportedToPanes() *paneReport {
+	if m.themePreviewing() && m.paneReportSentSet {
+		return &m.paneReportSent
+	}
+	r := m.paneReportNow()
+	m.paneReportSent, m.paneReportSentSet = *r, true
+	return r
 }
 
 // colorHex spells a colour as #rrggbb, and nil as empty.

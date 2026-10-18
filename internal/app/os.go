@@ -570,6 +570,10 @@ type OS struct {
 	// paneReport the answer panes are given from it. See host_colors.go.
 	host       hostColors
 	paneReport paneReportMemo
+	// paneReportSent is the answer panes were last given, held while a theme
+	// is only previewed. See reportedToPanes in background.go.
+	paneReportSent    paneReport
+	paneReportSentSet bool
 	// hostPixel is the state of SGR-pixel mouse reports from this client's
 	// terminal. See host_pixel_mouse.go.
 	hostPixel hostPixelMouse
