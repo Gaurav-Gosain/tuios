@@ -259,8 +259,17 @@ func (f *FrameHookFile) WriteOutside(p []byte) { f.hw.WriteOutside(p) }
 // ConnectFrameWriter makes w the way this session's images reach the
 // terminal: after each frame through the hook, and whenever a background
 // encode finishes through WriteOutside.
+//
+// The hook also keeps a parked host cursor hidden. See cursor_park.go.
 func (m *OS) ConnectFrameWriter(w FrameWriter) {
-	w.SetFrameHook(m.GraphicsFrameBytes)
+	park := m.connectCursorPark(w)
+	w.SetFrameHook(func(frame []byte) []byte {
+		after := m.GraphicsFrameBytes(frame)
+		if seq := park.afterFrame(frame); len(seq) > 0 {
+			after = append(after[:len(after):len(after)], seq...)
+		}
+		return after
+	})
 	if m.SixelPassthrough != nil {
 		m.SixelPassthrough.mu.Lock()
 		m.SixelPassthrough.direct = w.WriteOutside

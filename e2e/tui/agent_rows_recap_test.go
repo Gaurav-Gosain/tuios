@@ -32,7 +32,9 @@ import (
 //   - after the person was away from the pane (agents.recap away = 1s) and a
 //     turn finished, coming back to it puts the recap line in the dock.
 //
-// Negative control: with the reply keys answering "not handled", r on the row
+// Negative control: with imeCaret skipping the open draft (cursor_park.go),
+// the host cursor wait in the reply editor times out. With the reply keys
+// answering "not handled", r on the row
 // renames the pane and the wait for the editor times out; without the return
 // hook in markFocusedAgentSeen, the wait for the recap line times out;
 // with the reply paste flattened onto one line again (handler.go), the paste
@@ -92,6 +94,14 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the typed reply", "echo r9c1e")
+	// The editor draws its own caret, so the host cursor is hidden. It is
+	// parked on that caret, the cell after the typed space, because an input
+	// method opens its candidate window at the host cursor (#649).
+	if col, row, ok := textCell(term.Screen(), "echo r9c1e"); !ok {
+		t.Fatalf("the typed reply is not on the screen\n%s", term.Snapshot())
+	} else {
+		waitHostCursor(t, term, col+len("echo r9c1e "), row, false, "in the reply editor")
+	}
 	if err := term.Paste(replyPaste); err != nil {
 		t.Fatal(err)
 	}

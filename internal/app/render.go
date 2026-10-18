@@ -1221,6 +1221,9 @@ func (m *OS) View() tea.View {
 		}
 		view.Cursor = m.getRealCursor()
 	}
+	// With no cursor shown, park the host's hidden cursor at the caret, so
+	// an input method opens its window there. See cursor_park.go.
+	view.Cursor = m.parkHostCursor(view.Cursor)
 	// The title of the terminal tuios runs in, when a tool set one through
 	// herdr's client.window_title.set. Empty leaves the title alone.
 	view.WindowTitle = m.ClientTitle

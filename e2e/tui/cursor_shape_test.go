@@ -335,3 +335,93 @@ func TestCursorColourFollowsFocusedPane(t *testing.T) {
 
 	alive(t, term, "after the cursor colour checks")
 }
+
+// textCell is the screen cell where text starts, found on the grid the host
+// terminal shows. Columns are cells, so a border drawn with box glyphs or a
+// wide rune before the text does not move the answer.
+func textCell(s tuitest.Screen, text string) (col, row int, ok bool) {
+	cols, rows := s.Size()
+	for r := range rows {
+		var line strings.Builder
+		at := make([]int, 0, cols)
+		for c := range cols {
+			content := s.Cell(c, r).Content
+			if content == "" {
+				continue
+			}
+			for range len(content) {
+				at = append(at, c)
+			}
+			line.WriteString(content)
+		}
+		if i := strings.Index(line.String(), text); i >= 0 {
+			return at[i], r, true
+		}
+	}
+	return 0, 0, false
+}
+
+// waitHostCursor blocks until the host terminal's own cursor, as the PTY
+// stream left it, is at (col, row) with the given visibility. An input
+// method opens its candidate window at that cursor, hidden or not, so this is
+// where a Chinese or Japanese IME would put it.
+func waitHostCursor(t *testing.T, term *tuitest.Terminal, col, row int, visible bool, what string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	var gotCol, gotRow int
+	var gotVisible bool
+	for time.Now().Before(deadline) {
+		if gotCol, gotRow, gotVisible = term.Screen().Cursor(); gotCol == col && gotRow == row && gotVisible == visible {
+			return
+		}
+		time.Sleep(80 * time.Millisecond)
+	}
+	t.Fatalf("%s: the host cursor is at (%d,%d) visible=%v, want (%d,%d) visible=%v\n%s",
+		what, gotCol, gotRow, gotVisible, col, row, visible, term.Snapshot())
+}
+
+// TestHiddenCursorParksAtGuestCursor is #649. Claude Code hides the cursor
+// and draws its own, but moves the hidden cursor to its prompt, because an
+// input method opens its candidate window at the terminal's real cursor.
+// tuios hid the host cursor too and then left it wherever the frame's last
+// write ended, so the candidate window opened in the bottom-right corner.
+//
+// The guest here does the same: it hides its cursor, writes a word and puts
+// the cursor on an empty cell away from it. The host cursor has to be on that cell, hidden. Then the
+// guest shows the cursor without drawing anything, which changes no cell, and
+// the host cursor has to come back on in the same place.
+//
+// The second pane makes the offsets real: the pane under test is the right
+// half of a tiled screen, so its cells are not at the screen's.
+//
+// Negative control: with parkHostCursor parking nothing (cursor_park.go), the
+// host cursor stays where the frame ended and the first wait times out.
+func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+	waitWindowCount(t, term, 2, "two tiled panes")
+	enterTerminalMode(t, term)
+
+	runInShell(t, term,
+		`clear; printf '\033[?25l\033[6;12H'IME""CARET'\033[10;30H'; sleep 3; printf '\033[?25h'; sleep 60`,
+		"IMECARET", shellTimeout)
+	word, top, ok := textCell(term.Screen(), "IMECARET")
+	if !ok {
+		t.Fatalf("the word is not on the screen\n%s", term.Snapshot())
+	}
+	if word < 60 {
+		t.Fatalf("the word is at column %d, want it in the right pane\n%s", word, term.Snapshot())
+	}
+	// The guest cursor is on an empty cell 4 rows down and 18 columns right
+	// of the word, a cell no frame writes to, so the host cursor cannot be
+	// there by chance.
+	col, row := word+18, top+4
+	waitHostCursor(t, term, col, row, false, "with the guest cursor hidden")
+	saveFrame(t, term, "ime-cursor-hidden")
+	waitHostCursor(t, term, col, row, true, "after the guest showed its cursor again")
+
+	alive(t, term, "after the hidden cursor checks")
+}

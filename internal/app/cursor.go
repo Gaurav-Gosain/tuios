@@ -19,15 +19,27 @@ import (
 // remember to re-emit anything, and an unfocused pane cannot reach the host
 // cursor at all.
 func (m *OS) getRealCursor() *tea.Cursor {
+	cur, hidden := m.paneCursor()
+	if hidden {
+		return nil
+	}
+	return cur
+}
+
+// paneCursor is the focused pane's cursor on screen, nil when there is none
+// to point at. hidden says the guest hid it: the cursor still says where the
+// guest left it, which is where an input method should open (see
+// cursor_park.go).
+func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 	// A docked session is a separate daemon pane; it can own the keyboard
 	// without changing the center session's mode or focused window.
 	sidebarWindow := m.SidebarSessionWindow()
 	if sidebarWindow == nil && (m.Mode != TerminalMode || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows)) {
-		return nil
+		return nil, false
 	}
 
 	if m.ShowScrollbackBrowser || m.review.open || m.hints != nil || m.paneLabels != nil {
-		return nil
+		return nil, false
 	}
 
 	// An overlay covers the pane, so the pane's cursor has nothing to point at.
@@ -36,7 +48,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// blinking hardware cursor in the pane behind the panel, next to the caret
 	// the panel had already drawn.
 	if m.AnyOverlayOpen() {
-		return nil
+		return nil, false
 	}
 
 	// A resize gesture draws no cursor: the pane it is over is showing the size
@@ -45,7 +57,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// the mode check above already catches; this says it directly so the
 	// property holds for any resize, however the mode got where it is.
 	if m.Resizing {
-		return nil
+		return nil, false
 	}
 
 	window := sidebarWindow
@@ -53,7 +65,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		window = m.Windows[m.FocusedWindow]
 	}
 	if window == nil || window.Terminal == nil {
-		return nil
+		return nil, false
 	}
 
 	// Hide during copy mode, scrollback, or when VT hides cursor.
@@ -64,7 +76,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// drag-selection over live output) is not a reason to hide the shell's
 	// cursor; being scrolled back still is, and that is the second condition.
 	if window.CopyModeVisible() || window.ScrollbackOffset > 0 {
-		return nil
+		return nil, false
 	}
 
 	// GuestCursor takes the lock only if it is free. A pane in an output
@@ -75,19 +87,16 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// content.
 	pos, hidden, ok := window.GuestCursor()
 	if !ok {
-		return nil
+		return nil, false
 	}
 	style, steady, col := window.CachedCursorStyle, window.CachedCursorSteady, window.CachedCursorColor
 
-	if hidden {
-		return nil
-	}
 	contentWidth := window.ContentWidth()
 	contentHeight := window.ContentHeight()
 
 	// Bounds check: the cursor must be within the visible content area.
 	if pos.X < 0 || pos.X >= contentWidth || pos.Y < 0 || pos.Y >= contentHeight {
-		return nil
+		return nil, false
 	}
 
 	// Transform to screen coordinates (+1 for border, +0 for tiled)
@@ -102,7 +111,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	if v := m.sessionView; v.on && sidebarWindow == nil {
 		screenX, screenY = v.toScreen(screenX, screenY)
 		if !image.Pt(screenX, screenY).In(v.clip) {
-			return nil
+			return nil, false
 		}
 	}
 
@@ -113,7 +122,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// when it goes back to nil, so the host's own cursor colour returns when
 	// the guest resets or the focus moves to a pane that set none.
 	cursor.Color = col
-	return cursor
+	return cursor, hidden
 }
 
 // mapCursorStyle converts vt.CursorStyle to tea.CursorShape.

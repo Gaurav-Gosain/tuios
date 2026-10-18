@@ -1097,6 +1097,10 @@ type OS struct {
 	SixelPassthrough *SixelPassthrough
 	TextSizingState  *TextSizingState
 	PostRenderWriter *PostRenderWriter
+	// cursorPark keeps the host cursor hidden where tuios parks it for
+	// input methods, nil when the writer has no frame hook. See
+	// cursor_park.go.
+	cursorPark *cursorPark
 	// Hooks manager for shell-command hooks
 	HookManager *hooks.Manager
 	// PendingClipboardSet receives clipboard content from guest apps via OSC 52.

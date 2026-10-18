@@ -62,6 +62,15 @@ func (m *Model) Render(width int, st Styles, surface color.Color) []string {
 	return m.frame
 }
 
+// Caret is a place in a frame: the line, counted from the frame's first, and
+// the column, counted from its left edge.
+type Caret struct{ Row, Col int }
+
+// Caret is where the last frame drew the cursor cell. A host puts the
+// terminal's own cursor there, hidden, so an input method opens its window
+// next to the text being typed. ok is false when the frame drew no cursor.
+func (m *Model) Caret() (c Caret, ok bool) { return m.caret, m.caretOK }
+
 // Drawn counts the frames Render drew rather than took from its cache. A host
 // that wraps the lines keeps its own copy until this changes.
 func (m *Model) Drawn() uint64 { return m.drawn }
@@ -70,6 +79,7 @@ func (m *Model) Drawn() uint64 { return m.drawn }
 func (m *Model) render(width int, st Styles, surface color.Color) []string {
 	in := newInks(st, surface)
 	m.places = m.places[:0]
+	m.caretOK = false
 	if m.pager != nil && m.pager.block.img != nil {
 		return m.renderImageView(width, in)
 	}
@@ -85,6 +95,11 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 	m.top = min(max(m.top, 0), len(rows)-shown)
 
 	out := m.renderStrip(width, in)
+	m.caret = Caret{Row: len(out) + cr - m.top, Col: gutter}
+	if len(m.cells) > 0 {
+		m.caret.Col += m.colOf(rows[cr], m.cur, textW)
+	}
+	m.caretOK = true
 	sel := m.selectedBlock()
 	in.blank = on(in.field).Render("  ")
 	for r := m.top; r < m.top+shown; r++ {

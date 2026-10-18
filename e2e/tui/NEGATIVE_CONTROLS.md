@@ -7108,3 +7108,28 @@ Run on 2026-10-18.
 |---|---|---|---|---|
 | The live box does not follow the pane's output | n/a, injected | `cockpitNoteOutput` never marks the live pane | `TestCockpitSideColumn` ("the live box did not follow the pane's output") | **caught** |
 | The checkpoints are not shown | n/a, injected | `applyCheckpoints` drops the list | `TestCockpitSideColumn` ("the side column lacks the live pane, the last turn or the checkpoints") | **caught** |
+
+## #649: the host cursor sits where typing goes
+
+An input method opens its candidate window at the host terminal's cursor,
+hidden or not. `TestHiddenCursorParksAtGuestCursor` has a guest in the right
+of two tiled panes hide its cursor and put it on an empty cell away from the
+text it wrote. The host cursor has to be on that cell, hidden. Then the guest
+shows its cursor without drawing, and the host cursor has to be on the same
+cell, visible: the positive half, and the path where no frame is written.
+`TestRichRowReplyAndRecap` checks that the host cursor is on the Inbox reply
+editor's caret, hidden, after the person types. Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The hidden cursor is left where the frame ended | `parkHostCursor` in cursor_park.go | Parks nothing when no cursor is shown | `TestHiddenCursorParksAtGuestCursor` ("with the guest cursor hidden": never at (90,10) hidden, then visible there once the guest shows it), `TestRichRowReplyAndRecap` ("in the reply editor: the host cursor is at (80,39)") | **caught** |
+| A draft's caret does not take the cursor | The open draft branch of `imeCaret` | Branch skipped | `TestRichRowReplyAndRecap` ("in the reply editor: the host cursor is at (80,39) visible=false, want (17,35)") | **caught** |
+
+The fixed build passes both, and every test matching `Cursor`, `PiP`,
+`Inbox`, `Reply`, `Cockpit`, `Sixel`, `Kitty`, `Composer`, `Draft`, `Mail`,
+`Spotlight` and `Zoom`.
+
+A first version of the pane test put the hidden cursor on the first cell of
+the word the guest wrote. A build without the fix passed that wait: the frame
+had ended on that cell by chance. The cursor now goes to a cell no frame
+writes to.

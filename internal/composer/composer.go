@@ -128,6 +128,11 @@ type Model struct {
 	// where the last frame put them.
 	preview Previewer
 	places  []Placement
+	// caret is the line and column the last frame drew the cursor cell at,
+	// counted from the frame's first line. caretOK is false when the frame
+	// drew no cursor: the pager or the image view was open.
+	caret   Caret
+	caretOK bool
 
 	// completer gives the @ list's entries, nil for no @ completion.
 	// mention is the open list, nil when it is closed, and dismissedAt the
