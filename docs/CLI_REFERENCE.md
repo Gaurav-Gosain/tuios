@@ -1154,6 +1154,16 @@ These sessions came back: work, notes.
   is given. `--json` needs `--yes`. Nothing is changed when it refuses.
 - When the daemon is not running, the command starts it.
 
+The app runs this command from the command palette ("Restart the daemon"),
+from the version notice, from the Daemon tab of the settings and from the
+rail's menu for this machine. It then starts again in the same session. See
+[KEYBINDINGS.md](KEYBINDINGS.md#restart-the-daemon).
+
+`--expect DIGEST` refuses the restart unless the plan has that digest. The
+app passes the digest of the plan the person agreed to, so a program that
+started since makes the restart refuse: "What a restart stops changed after
+you agreed to it." Nothing is changed.
+
 `--json` writes one JSON object per line: `plan`, then `stopping`,
 `starting` and `done`. The `plan` object holds `binary`, `version`, `daemon`
 (with each session's `busy` panes and its `resume` agents) and

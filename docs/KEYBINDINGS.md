@@ -820,6 +820,42 @@ workspace that is not on screen leaves the view where it is.
 `tuios close-workspace` does the same from a shell. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-close-workspace).
 
+## Restart the daemon
+
+The `restart_daemon` action stops the daemon and starts it again with the
+newest tuios installed. Use it after an update. The action has no default key.
+The command palette has the entry "Restart the daemon". These open it too:
+
+- The notice that says the daemon and this window run different versions,
+  for example "The daemon runs 0.10.0. ctrl+b j restarts it." Click it, or
+  press the key it names. Press `esc` to put it off until the next start.
+- The row "Restart the daemon" at the top of the Daemon tab in the settings.
+- The rail's menu for this machine.
+
+A dialog shows the daemon's version now and after the restart, and this
+window's version when it moves too. It lists the programs that stop, by pane
+and session, and what comes back, with the agents that can resume. The text
+is the text `tuios restart-server` prints. Press `r` to restart, or `esc` to cancel. A click on a row
+does the same. The dialog then shows each step: stop the daemon, start the new
+one, attach again. tuios then starts again on the new build, in the same
+session, and says "The daemon restarted on 0.10.2. Your session is back."
+
+When a step fails, the dialog says what happened and what to do next. When
+a program started or stopped after you agreed, the restart does not run, and
+the dialog asks you to read the new list. When your session did not come
+back, tuios does not attach to it: the dialog says so and points to
+`tuios resurrect`. When
+the daemon did not start, the row is "Quit tuios", and tuios prints the same
+words when it quits. To bind the action:
+
+```toml
+[keybindings.prefix_mode]
+restart_daemon = ["alt+r"]
+```
+
+`tuios restart-server` does the same from a shell. See
+[CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-restart-server).
+
 ## Cycle through workspaces
 
 The `next_workspace` and `prev_workspace` actions go to the next or the

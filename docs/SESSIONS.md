@@ -116,6 +116,11 @@ stops the daemon, starts the new one, and says which sessions came back. Each
 session comes back with its layout, its pane history and new shells. See
 [`tuios restart-server`](CLI_REFERENCE.md#tuios-restart-server).
 
+In the app, the notice that says the daemon runs another version does the
+same: click it, check the list and press `r`. The command palette has "Restart
+the daemon" too. tuios then starts again in the same session, on the new
+build. See [KEYBINDINGS.md](KEYBINDINGS.md#restart-the-daemon).
+
 More than one client can be attached to the same session at once. All of them
 see the same windows and output. `window_size` in `[daemon]` sets the size of
 the session. See [Session size with more than one client](#session-size-with-more-than-one-client).
