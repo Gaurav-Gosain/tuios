@@ -25,6 +25,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
+	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -88,18 +89,15 @@ const (
 	daemonUnknown = "unknown"
 )
 
-// syncSession is one session on a daemon, with the panes that run a program.
-type syncSession struct {
-	Name  string     `json:"name"`
-	Panes int        `json:"panes"`
-	Busy  []syncPane `json:"busy,omitempty"`
-}
+// syncSession is one session on a daemon, with the panes that run a program
+// and the agents that can resume. restart-server reports the same shape.
+type syncSession = restartplan.Session
 
 // syncPane is a pane that runs a program a restart ends.
-type syncPane struct {
-	Window  string `json:"window"`
-	Program string `json:"program"`
-}
+type syncPane = restartplan.Pane
+
+// syncAgent is an agent pane whose conversation can resume after a restart.
+type syncAgent = restartplan.Agent
 
 // syncDaemon is the daemon on a host.
 type syncDaemon struct {
@@ -864,7 +862,13 @@ func writeRestartCost(w io.Writer, t *syncTarget) {
 		fmt.Fprintln(w, "  The sessions could not be read.")
 		return
 	}
-	for _, s := range d.Sessions {
+	writeSessionCost(w, d.Sessions)
+}
+
+// writeSessionCost writes one line per session: its panes, and the programs
+// a restart ends.
+func writeSessionCost(w io.Writer, sessions []syncSession) {
+	for _, s := range sessions {
 		if len(s.Busy) == 0 {
 			fmt.Fprintf(w, "  session %s: %s, %s at a shell prompt\n", s.Name, plural.Count(s.Panes, "pane"), plural.Word(s.Panes, "it", "each"))
 			continue

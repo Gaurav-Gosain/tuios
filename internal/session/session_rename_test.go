@@ -305,8 +305,8 @@ func TestRenameRefusesASavedSessionsName(t *testing.T) {
 // for rename-session, and the person is told to restart it.
 func TestStaleDaemonErrorNamesTheRestart(t *testing.T) {
 	err := StaleDaemonError("rename-session", &VerbCallError{Code: ErrVerbUnknownVerb, Message: "unknown verb"})
-	if err == nil || !strings.Contains(err.Error(), "tuios kill-server") {
-		t.Errorf("StaleDaemonError = %v, want the kill-server restart", err)
+	if err == nil || !strings.Contains(err.Error(), "tuios restart-server") {
+		t.Errorf("StaleDaemonError = %v, want the restart-server restart", err)
 	}
 	if StaleDaemonError("no-such-verb", &VerbCallError{Code: ErrVerbUnknownVerb}) != nil {
 		t.Error("a verb this tuios does not know either was blamed on the daemon")

@@ -187,7 +187,8 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
-	data := buildWindowListData(sess.GetState())
+	state := sess.GetState()
+	data := buildWindowListData(state)
 	data["type"] = "window_list"
 	// The shell a new pane runs, by base name, so a reader can say what a
 	// pane at its prompt is running: foreground_cmd is omitted there.
@@ -196,7 +197,20 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	}
 	addShellFacts(sess, data)
 	addPaneMeta(sess, data)
+	addResumable(d, state, data)
 	return data, nil
+}
+
+// addResumable marks each pane whose agent conversation a restart would offer
+// back, with the harness it belongs to. restart-server lists them before it
+// asks.
+func addResumable(d *Daemon, state *SessionState, data map[string]any) {
+	windows, _ := data["windows"].([]map[string]any)
+	for i := range min(len(windows), len(state.Windows)) {
+		if o, ok := d.resumeOfferFor(state.Name, state.Windows[i]); ok {
+			windows[i]["agent_resumable"] = o.harness
+		}
+	}
 }
 
 // verbGetWindow describes one window. It is what tuios get-window calls, so

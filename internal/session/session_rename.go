@@ -127,5 +127,5 @@ func StaleDaemonError(verb string, err error) error {
 	if !verbKnown(verb) {
 		return nil
 	}
-	return fmt.Errorf("the running tuios daemon is older than this tuios and does not know %s. Run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells", verb)
+	return fmt.Errorf("the running tuios daemon is older than this tuios and does not know %s. Run 'tuios restart-server'. Saved sessions come back with new shells", verb)
 }

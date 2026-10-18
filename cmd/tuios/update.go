@@ -455,6 +455,6 @@ func explainLookupError(err error, prerelease bool) error {
 // instruction has to be here and not left to be discovered.
 func reportDaemonAfterUpdate(out io.Writer) {
 	fmt.Fprintln(out, "The daemon is still running the old build. Sessions you have open keep working.")
-	fmt.Fprintln(out, "To move them to the new one, detach, then run `tuios kill-server` and start tuios again.")
-	fmt.Fprintln(out, "Panes are restored, but programs running in them are not.")
+	fmt.Fprintln(out, "To move them to the new build, run `tuios restart-server`, or use \"Restart the daemon\" in the command palette.")
+	fmt.Fprintln(out, "The panes come back, but the programs in them stop.")
 }

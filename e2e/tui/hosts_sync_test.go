@@ -413,3 +413,134 @@ func TestHostsSyncRestartWithYes(t *testing.T) {
 		t.Errorf("ASSERTION: after the restart, old still plans %q (restart needed %v)\n%s", now["old"].Action, now["old"].RestartNeeded, out)
 	}
 }
+
+// TestRestartServerMovesTheDaemonToTheNewBuild is `tuios restart-server` on
+// this machine: a daemon of the old build holds a session with a pane that
+// runs a program, and the new build restarts it.
+//
+// The plan has to name the program and both versions before anything stops.
+// The restart has to leave a daemon of the new build that holds the session,
+// restored, and the command has to say so.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md:
+//   - With writeSessionCost not called, the plan does not name sleep.
+//   - With the version after the restart taken from the old daemon instead
+//     of the new daemon's hello, the done line names the old build.
+//   - With the session list after the restart not read, the done line names
+//     no session.
+func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
+	const name = "e2e-restart"
+	next := syncNextBinary(t)
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", name, "sleep 300\n"); err != nil {
+		t.Fatalf("start a program in the pane: %v\n%s", err, out)
+	}
+	var plan string
+	withBinary("", func() {
+		tuiosBin = next
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			out, err := tuiosCLI(t, base, "restart-server", "--dry-run")
+			plan = out
+			if err == nil && strings.Contains(out, `sleep in "`) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: the plan does not name the program the restart stops: %v\n%s", err, out)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	})
+	saveSyncArtifact(t, "restart-plan", plan)
+	for _, want := range []string{
+		"Daemon now      dev",
+		"After restart   " + syncNextVersion + "   (from ",
+		"These stop:\n  sleep in \"",
+		"(session " + name + ")",
+		"These come back:\n  Each session, with its layout, its pane history and new shells.",
+	} {
+		if !strings.Contains(plan, want) {
+			t.Errorf("ASSERTION: the plan does not say %q:\n%s", want, plan)
+		}
+	}
+
+	var done string
+	withBinary("", func() {
+		tuiosBin = next
+		out, err := tuiosCLI(t, base, "restart-server", "--yes")
+		if err != nil {
+			t.Fatalf("restart-server --yes: %v\n%s", err, out)
+		}
+		done = out
+	})
+	saveSyncArtifact(t, "restart-done", done)
+	for _, want := range []string{
+		"Stopping the daemon...",
+		"Starting the daemon " + syncNextVersion + "...",
+		"The daemon restarted on " + syncNextVersion + ".",
+		"This session came back: " + name + ".",
+	} {
+		if !strings.Contains(done, want) {
+			t.Errorf("ASSERTION: the restart does not say %q:\n%s", want, done)
+		}
+	}
+	if info := waitForSessionInfo(t, base, name); !info.Restored {
+		t.Errorf("ASSERTION: the session is not marked restored, so no new daemon holds it")
+	}
+}
+
+// TestRestartServerFromAPaneLeavesADaemon runs `tuios restart-server --yes`
+// in a pane of the daemon it restarts, the way an agent does. The stop closes
+// that pane's terminal, and the command on it gets SIGHUP. The restart has to
+// finish anyway: a daemon must hold the session again, restored, and the
+// restart log must say so.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the steps run in
+// the command itself instead of the detached worker, the command dies after
+// the stop and no daemon comes back.
+func TestRestartServerFromAPaneLeavesADaemon(t *testing.T) {
+	const name = "e2e-restart-pane"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", name, tuiosBin+" restart-server --yes\n"); err != nil {
+		t.Fatalf("run restart-server in the pane: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(2 * bootTimeout)
+	var last string
+	for {
+		out, _ := tuiosCLI(t, base, "ls", "--json")
+		last = out
+		var sessions []struct {
+			Name     string `json:"name"`
+			Saved    bool   `json:"saved"`
+			Restored bool   `json:"restored"`
+		}
+		if json.Unmarshal([]byte(out), &sessions) == nil && slices.ContainsFunc(sessions, func(s struct {
+			Name     string `json:"name"`
+			Saved    bool   `json:"saved"`
+			Restored bool   `json:"restored"`
+		}) bool {
+			return s.Name == name && !s.Saved && s.Restored
+		}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			log, _ := tuiosCLI(t, base, "restart-server", "--last")
+			t.Fatalf("ASSERTION: no daemon holds the session after restart-server ran in its pane:\n%s\nrestart log:\n%s", last, log)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	log, err := tuiosCLI(t, base, "restart-server", "--last")
+	saveSyncArtifact(t, "restart-from-pane", log)
+	if err != nil || !strings.Contains(log, "The daemon restarted on ") || !strings.Contains(log, "This session came back: "+name+".") {
+		t.Errorf("ASSERTION: the restart log does not say the restart finished: %v\n%s", err, log)
+	}
+}

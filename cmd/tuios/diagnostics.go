@@ -304,7 +304,7 @@ func explainVerbError(verb string, err error) error {
 		return &diagnosticError{
 			What:  fmt.Sprintf("The running daemon does not know %s.", verb),
 			Cause: "the daemon is older than this tuios.",
-			Fix:   "run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells.",
+			Fix:   "run 'tuios restart-server'. Saved sessions come back with new shells.",
 			Err:   err,
 		}
 	}

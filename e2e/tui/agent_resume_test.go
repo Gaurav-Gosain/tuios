@@ -19,9 +19,13 @@ import (
 // The harness is a user manifest whose resume command is an echo, so the test
 // sees the command run in a real shell without a real agent.
 //
+// The restart is restart-server, which has to name the agent in its plan
+// before it stops anything.
+//
 // Negative control: with the restore's conversation ids not put back after
 // its state push (daemon_resurrect.go), the Inbox still lists the offer but
 // resume-agent finds no conversation on the pane, and the dry run fails.
+// With addResumable not called by list-windows, the plan names no agent.
 func TestRestartOffersToResumeTheConversation(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -52,11 +56,19 @@ argv = ["echo", "resumed-{session_id}"]
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-resume", "working", "--harness", "echoer", "--agent-session-id", "5f1c-9a3d"); err != nil {
 		t.Fatalf("record the conversation: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
-		t.Fatalf("kill-server: %v\n%s", err, out)
+	// restart-server names the agent before it asks, from the daemon's own
+	// reading of the pane.
+	plan, err := tuiosCLI(t, base, "restart-server", "--dry-run")
+	if err != nil || !strings.Contains(plan, `echoer in "`) || !strings.Contains(plan, `(session e2e-resume) can resume.`) ||
+		!strings.Contains(plan, "This restart starts the same version.") ||
+		!strings.Contains(plan, "The Inbox offers to resume each one.") {
+		t.Fatalf("ASSERTION: restart-server --dry-run does not list the agent that can resume: %v\n%s", err, plan)
+	}
+	// The restart starts the daemon, and the new daemon restores on start.
+	if out, err := tuiosCLI(t, base, "restart-server", "--yes"); err != nil {
+		t.Fatalf("restart-server: %v\n%s", err, out)
 	}
 
-	// Any command that starts a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "e2e-other", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v\n%s", err, out)
 	}

@@ -156,7 +156,7 @@ func explainHostConnectError(host string, err error) error {
 		case session.ErrVerbUnknownHost:
 			fix = "run 'tuios hosts' for the configured names, or 'tuios hosts add " + host + " user@machine'"
 		case session.ErrVerbProtocolMismatch, session.ErrVerbUnknownVerb:
-			fix = "run 'tuios kill-server' and attach again, or 'tuios attach --host " + host + " NAME --ssh' to use ssh directly"
+			fix = "run 'tuios restart-server' and attach again, or 'tuios attach --host " + host + " NAME --ssh' to use ssh directly"
 		case session.ErrVerbHostRefused:
 			fix = "close a session on " + host + " and try again"
 		}

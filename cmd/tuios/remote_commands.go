@@ -364,7 +364,7 @@ func runNewWindow(o newWindowOptions) error {
 // know, and its own wording ("fix the name") points at the caller instead of
 // at the daemon. An older one ignores the parameter and answers without the
 // fields that say it was used.
-var errStaleNewWindow = errors.New("the running daemon is older than this tuios and does not know --keep-open or --wait. Run 'tuios kill-server' and start tuios again to update it")
+var errStaleNewWindow = errors.New("the running daemon is older than this tuios and does not know --keep-open or --wait. Run 'tuios restart-server' to update it")
 
 // staleNewWindowParam reports whether err is that refusal.
 func staleNewWindowParam(err error) bool {
@@ -424,7 +424,7 @@ func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutpu
 			return reportVerbError(&diagnosticError{
 				What:  fmt.Sprintf("The running daemon cannot split toward %s.", direction),
 				Cause: "the daemon is older than this tuios. It knows only horizontal and vertical.",
-				Fix:   "run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells.",
+				Fix:   "run 'tuios restart-server'. Saved sessions come back with new shells.",
 				Err:   err,
 			}, jsonOutput)
 		}
@@ -845,7 +845,7 @@ func runCapturePane(o captureOptions) error {
 // unwrap or trim. Since v0.8.0 a daemon refuses a parameter it does not know,
 // and its own wording ("fix the name") points at the caller instead of at the
 // daemon.
-var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios kill-server' and start tuios again to update it")
+var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios restart-server' to update it")
 
 // printCapture writes a capture-pane result. A capture from this machine is
 // the content as it is. A capture from host is fenced with

@@ -509,14 +509,22 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 					PID         int    `json:"pid"`
 					AtPrompt    *bool  `json:"at_prompt"`
 					Running     string `json:"running_cmdline"`
+					AgentState  string `json:"agent_state"`
+					Resumable   string `json:"agent_resumable"`
 				} `json:"windows"`
 			}
 			if json.Unmarshal(raw, &wl) == nil {
 				ss.Panes = len(wl.Windows)
+				live := map[string]string{}
 				for _, w := range wl.Windows {
 					name := plainLine(w.DisplayName)
 					if name == "" {
 						name = shortWindowID(w.WindowID)
+					}
+					if w.Resumable != "" {
+						ss.Resume = append(ss.Resume, syncAgent{Window: name, Harness: plainLine(w.Resumable)})
+					} else if w.AgentState != "" && w.AgentState != "none" {
+						live[w.WindowID] = name
 					}
 					f := paneFacts{pid: w.PID, running: plainLine(w.Running)}
 					if w.AtPrompt != nil {
@@ -526,6 +534,11 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 					if w.PID > 0 {
 						pids = append(pids, strconv.Itoa(w.PID))
 					}
+				}
+				// A daemon of another build may not mark the panes, so the
+				// saved files answer for it.
+				if t.local && t.res.Daemon.Version != version {
+					ss.Resume = append(ss.Resume, resumableAgents(s.Name, live)...)
 				}
 			}
 		}
