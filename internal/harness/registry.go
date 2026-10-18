@@ -196,7 +196,11 @@ func (r *Registry) Lookup(id string) *Manifest {
 
 // SharedServer reports whether the harness with id runs every conversation's
 // hooks from one shared server process. See Manifest.SharedServer.
+// A nil registry knows no harness.
 func (r *Registry) SharedServer(id string) bool {
+	if r == nil {
+		return false
+	}
 	m := r.Lookup(id)
 	return m != nil && m.SharedServer
 }

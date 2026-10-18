@@ -697,7 +697,8 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		// process was read for the agent check either way. Counted apart from
 		// the agent states: a pane starting or leaving a command has to reach
 		// the clients, but it is not a state change.
-		if cmd := ClampDisplayText(foregroundCommand(info, running, shell)); cmd != w.ForegroundCmd {
+		fg := foregroundCommand(info, running, shell)
+		if cmd := ClampDisplayText(fg); cmd != w.ForegroundCmd {
 			if write {
 				w.ForegroundCmd = cmd
 			}
@@ -720,7 +721,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		// shared-server guard forgets its conversations. The stored
 		// AgentSessionID stays, for a later resume. A guard armed after the
 		// reading was taken is newer than what the reading says, so it stays.
-		if g, ok := s.agentSharedGuards[w.ID]; ok && g.armedAt < r.at && !detected && running && info.atShell() && foregroundCommand(info, running, shell) == "" {
+		if g, ok := s.agentSharedGuards[w.ID]; ok && g.armedAt < r.at && !detected && running && info.atShell() && fg == "" {
 			out.bookkeeping = true
 			if write {
 				delete(s.agentSharedGuards, w.ID)

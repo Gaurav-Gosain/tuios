@@ -270,14 +270,13 @@ func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 		// A SessionStart or a reclaim: r's conversation becomes the owner,
 		// leaves history, and the owner it displaces goes to the front. A
 		// fresh slice: the map holds a copy of g that shares the old array.
-		next := make([]string, 0, sharedGuardHistory+1)
-		next = append(next, g.owner)
+		next := []string{g.owner}
 		for _, id := range g.history {
-			if id != r.SessionID {
+			if id != r.SessionID && len(next) < sharedGuardHistory {
 				next = append(next, id)
 			}
 		}
-		g.owner, g.history = r.SessionID, next[:min(len(next), sharedGuardHistory)]
+		g.owner, g.history = r.SessionID, next
 	}
 	if s.agentSharedGuards == nil {
 		s.agentSharedGuards = make(map[string]sharedGuard)

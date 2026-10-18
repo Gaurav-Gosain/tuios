@@ -1452,7 +1452,7 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		IfState:    ifState,
 
 		SessionStart: p.SessionStart,
-		SharedServer: p.Harness != "" && d.agentMatcher.registry != nil && d.agentMatcher.registry.SharedServer(p.Harness),
+		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
 	}
 	// The identity guard is read before the report applies, because it is
 	// about the pane as the report found it, and applyAgentReport checks
@@ -1498,8 +1498,7 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		d.noteReportedAgentDir(sess, target, p.AgentSessionID, p.AgentCwd)
 	}
 	if reason == agentRefusedForeignSession || reason == agentRefusedForeignHarness {
-		debugLog("[DEBUG] set-agent-state: refused %s report from %s session %q (pid %d) for window %s: %s",
-			state.Name(), p.Harness, p.AgentSessionID, p.HarnessPID, target, reason)
+		debugLog("[DEBUG] set-agent-state: %s refused session %q of %s", reason, p.AgentSessionID, p.Harness)
 	}
 	transcriptRefused := ""
 	if applied && p.TranscriptPath != "" {
@@ -1603,7 +1602,7 @@ func (d *Daemon) verbReportAgentActivity(cs *connState, params json.RawMessage) 
 		Harness:      p.Harness,
 		SessionID:    p.AgentSessionID,
 		HarnessPID:   p.HarnessPID,
-		SharedServer: p.Harness != "" && d.agentMatcher.registry != nil && d.agentMatcher.registry.SharedServer(p.Harness),
+		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)

@@ -3752,7 +3752,8 @@ the one that owns the pane. These filters keep those events off the pane:
   case after a daemon restart or when you install the hooks mid-conversation.
 - To point a Codex pane at its conversation, run `/new` in it, or run
   `tuios set-agent-session --harness codex -w PANE <id>`. `set-agent-session`
-  is outside this guard on purpose, and replaces the conversation it holds.
+  is outside this guard on purpose. It clears the guard, and the next
+  `SessionStart` sets it again.
 - The legacy `notify` command sends its turn-end report without the
   conversation id, so the guard never refuses it.
 - The guard reads `shared_server` from the manifest. A codex.toml in your

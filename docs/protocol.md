@@ -4650,7 +4650,7 @@ exception: the next report from one of them takes the window back, and the
 owner it displaces joins the list. `report-agent-activity` from one of them is
 not refused either. The daemon forgets both when the pane is back at
 its shell. Until a `session_start` arrives, the window is open to any report.
-`set-agent-session` is not guarded this way, and it replaces the owner.
+`set-agent-session` is not guarded this way, and it clears the guard.
 
 `reason`, `activity_recorded` and the hook fields are additive. A client that
 sends none of the fields is handled exactly as before. A daemon older than them does not
