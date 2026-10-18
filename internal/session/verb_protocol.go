@@ -487,6 +487,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "cwd", Type: "string", Description: "Directory the session's windows start in: the first window, and any later one with no directory to inherit. Omit to use the daemon's."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
 				{Name: "space", Type: "string", Description: "Space to file the session under, as set-session-space does: trimmed, then held to the session name rules and 64 bytes. Omit for none."},
+				{Name: "env", Type: "object", Description: "Environment variables for the window's process, name to value, on top of the daemon's. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env. Not for a window on another machine. Not saved: a restored pane starts without it."},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session. Use it as the session parameter of every later call."},
@@ -1044,6 +1045,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "timeout", Type: "int", Description: "With wait: milliseconds to wait before failing with the timeout code. 0 waits with no limit.", Default: "0"},
 				{Name: "kind", Type: "string", Description: "What draws the window: terminal, or view, web or app for a window a native renderer (tuios-gpui) draws itself. Such a window runs a placeholder that shows its uri in a terminal client.", Default: "terminal", Accepted: WindowKinds},
 				{Name: "uri", Type: "string", Description: "What a view, web or app window shows, such as tuios://review/<pane> or a page. Needed for those kinds."},
+				{Name: "env", Type: "object", Description: "Environment variables for the window's process, name to value, on top of the daemon's. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env. Not for a window on another machine. Not saved: a restored pane starts without it."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},

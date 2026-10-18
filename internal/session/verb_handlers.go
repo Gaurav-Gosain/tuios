@@ -261,6 +261,9 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Command   []string `json:"command"`
 		Host      string   `json:"host"`
 		Grants    []string `json:"grants"`
+		// Env is set in the new pane's process, checked as start-agent
+		// checks its env.
+		Env map[string]string `json:"env"`
 		// CloseOnExit closes the window when its process exits, also with no
 		// client attached. An attached client closes a command window on
 		// exit already. A detached session keeps it until something closes
@@ -298,6 +301,13 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
 		return nil, verr
+	}
+	env, _, verr := callerEnv(cs, p.Env)
+	if verr != nil {
+		return nil, verr
+	}
+	if len(env) > 0 && p.Host != "" && p.Host != "local" {
+		return nil, invalidParam("env", "env names variables of this machine, so it cannot go to a window on another machine")
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -365,6 +375,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Name:      p.Name,
 		Host:      p.Host,
 		Grants:    grants,
+		Env:       env,
 		Kind:      p.Kind,
 		URI:       p.URI,
 	}, onExit)

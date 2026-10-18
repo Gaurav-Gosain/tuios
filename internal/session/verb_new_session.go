@@ -34,6 +34,8 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		Cwd        string   `json:"cwd"`
 		Command    []string `json:"command"`
 		Space      string   `json:"space"`
+		// Env is set in the first window's process.
+		Env map[string]string `json:"env"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -67,6 +69,10 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	// caller that mistyped a path does not get a session it then has to clean
 	// up. new-window refuses the same two mistakes for the same reason.
 	if verr := checkWindowCwd(p.Cwd); verr != nil {
+		return nil, verr
+	}
+	env, _, verr := callerEnv(cs, p.Env)
+	if verr != nil {
 		return nil, verr
 	}
 	if makeWindow {
@@ -138,6 +144,7 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		Cwd:       p.Cwd,
 		Focus:     true,
 		Command:   p.Command,
+		Env:       env,
 		Workspace: 0,
 	}, onExit)
 	if bverr != nil {
