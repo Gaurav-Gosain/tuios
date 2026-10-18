@@ -844,22 +844,53 @@ because tuios does not serve that protocol.
 tuios runs herdr plugins: a folder with a `herdr-plugin.toml` manifest, in
 herdr 0.9.3's format. You do not change the plugin.
 
-**Where tuios finds plugins.** tuios looks in four places, in this order:
+**Install a plugin.** `tuios plugins install` gets a plugin with git, builds
+it and enables it:
+
+```bash
+tuios plugins install alexarthurs/herdr-sidebar          # github.com, default branch
+tuios plugins install alexarthurs/herdr-sidebar@v0.3     # a tag, a branch or a full commit
+tuios plugins install https://gitlab.com/a/b.git@main    # any git URL: https, ssh, git@ or file
+tuios plugins install ./my-plugin                        # a folder on this machine, used in place
+```
+
+Before it changes anything, tuios shows the commit, the folder, the build
+commands and what the plugin runs, and asks. Add `--yes` to skip the
+question. Add `--no-enable` to leave the plugin off, and `--no-build` to
+skip the build. You need `git` on your `PATH`.
+
+tuios writes the exact commit to `plugins.lock` beside `config.toml`. The
+checkout goes in `$XDG_DATA_HOME/tuios/plugins/<id>/<commit>/`. The build
+output also goes to `build.log` in the plugin's state folder. When a build
+fails, tuios removes the checkout and writes nothing to `plugins.lock`.
+
+`tuios plugins install` with no source installs each plugin in
+`plugins.lock` at its pinned commit. Use it on a new machine that has your
+config folder. It does not enable a plugin. `[plugins] enabled` does that.
+
+The daemon never fetches and never builds. It only reads `plugins.lock` and
+the checkouts.
+
+**Where tuios finds plugins.** tuios looks in five places, in this order:
 
 1. The folders and manifests that `[plugins] dirs` in `config.toml` names.
    `tuios plugins link DIR` adds one.
 2. The tuios plugins folder: `$XDG_CONFIG_HOME/tuios/plugins/<folder>/`.
-3. herdr's registry: `$XDG_CONFIG_HOME/herdr/plugins.json`, else
+3. The plugins in `plugins.lock`, which `tuios plugins install` writes.
+   `tuios plugins list` shows them as `managed`, with the source and the
+   commit.
+4. herdr's registry: `$XDG_CONFIG_HOME/herdr/plugins.json`, else
    `~/.config/herdr/plugins.json`.
-4. herdr's managed checkouts: `~/.config/herdr/plugins/github/*`.
+5. herdr's managed checkouts: `~/.config/herdr/plugins/github/*`.
 
 tuios only reads herdr's files. It does not write to them. When two places
 have the same plugin id, the first one wins. `tuios plugins list` shows the
 other one with the error `plugin_id_shadowed`.
 
 **Nothing runs until you enable it.** To find and list a plugin runs none of
-its code. A plugin runs only when its id is in `[plugins] enabled`. herdr's
-own `enabled` flag has no effect in tuios.
+its code. A plugin runs only when its id is in `[plugins] enabled`.
+`tuios plugins install` adds the id after you say yes. herdr's own `enabled`
+flag has no effect in tuios. A plugin that herdr installed stays off.
 
 ```bash
 tuios plugins list
@@ -868,7 +899,7 @@ tuios plugins enable example.notes
 tuios plugins disable example.notes
 ```
 
-You must enable and disable a plugin from a terminal outside tuios. The
+You must install, enable and disable a plugin from a terminal outside tuios. The
 daemon refuses `plugin.enable`, `plugin.disable`, `plugin.link` and
 `plugin.unlink` from a pane, from a process that a plugin started, and from
 another machine. A change to `config.toml` that removes a plugin from
@@ -888,7 +919,7 @@ started by its caller holds.
 
 | Entry | When it runs |
 | --- | --- |
-| `[[build]]` | Only when you run `tuios plugins build ID`. tuios shows each command before it runs it. |
+| `[[build]]` | Only when you run `tuios plugins install` or `tuios plugins build ID`. tuios shows each command before it runs it. |
 | `[[startup]]` | Once, when the daemon starts, and when you enable the plugin while the daemon runs. Disable the plugin or stop the daemon to stop it. |
 | `[[actions]]` | From the command palette, `tuios plugins run ID ACTION`, `herdr plugin action invoke` or `plugin.action.invoke`. |
 | `[[events]]` | When the herdr event stream sends the event that the entry names. See [Events](#events). |
@@ -955,8 +986,8 @@ tuios reads all 113 manifests of the 115 most starred herdr plugins. These
 parts of a plugin do not run yet:
 
 - `[[link_handlers]]`.
-- `herdr plugin install` and `uninstall`: link a cloned folder with
-  `tuios plugins link DIR`.
+- `herdr plugin install` and `uninstall`: use `tuios plugins install`.
+  `tuios plugins update` and `uninstall` are not there yet.
 - A client of herdr's terminal protocol (`terminal.attach`, `herdr agent
   attach`), such as the phone and web clients.
 - The methods in [What tuios does not answer](#what-tuios-does-not-answer).

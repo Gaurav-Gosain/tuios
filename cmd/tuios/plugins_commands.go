@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -33,12 +32,13 @@ func newPluginsCommand() *cobra.Command {
 		Short:   "List, enable and run herdr plugins",
 		Long: `List, enable and run herdr plugins (herdr-plugin.toml).
 
-tuios finds plugins in four places: the folders [plugins] dirs names, the tuios plugins folder, herdr's plugins.json and herdr's managed checkouts. Finding a plugin runs nothing. A plugin runs only after you enable it.
+tuios finds plugins in five places: the folders [plugins] dirs names, the tuios plugins folder, plugins.lock, herdr's plugins.json and herdr's managed checkouts. Finding a plugin runs nothing. A plugin runs only after you enable it. tuios plugins install enables the plugin it installs.
 
-An enabled plugin runs its commands with your rights, outside every pane, as it does in herdr. Enable only plugins you trust. You must run enable, disable, link, unlink and build from a terminal outside tuios.`,
+An enabled plugin runs its commands with your rights, outside every pane, as it does in herdr. Enable only plugins you trust. You must run install, enable, disable, link, unlink and build from a terminal outside tuios.`,
 	}
 	cmd.AddCommand(newPluginsListCommand(), newPluginsInfoCommand(),
 		newPluginsEnableCommand(true), newPluginsEnableCommand(false),
+		newPluginsInstallCommand(),
 		newPluginsLinkCommand(), newPluginsUnlinkCommand(), newPluginsBuildCommand(),
 		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand())
 	return cmd
@@ -140,12 +140,19 @@ func newPluginsListCommand() *cobra.Command {
 				return printJSONValue(out, entries)
 			}
 			if len(entries) == 0 {
-				fmt.Fprintln(out, "No plugins found. Put a plugin folder in the tuios plugins folder, or run tuios plugins link DIR.")
+				fmt.Fprintln(out, "No plugins found. Run tuios plugins install SOURCE, or tuios plugins link DIR.")
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-			fmt.Fprintln(tw, "ID\tSTATE\tFROM\tVERSION\tNAME")
+			fmt.Fprintln(tw, "ID\tSTATE\tFROM\tVERSION\tSOURCE\tNAME")
 			for _, e := range entries {
+				source := ""
+				if e.Lock != nil {
+					source = shownSource(e.Lock.Source)
+					if e.Lock.Commit != "" {
+						source += "@" + e.Lock.Commit[:min(12, len(e.Lock.Commit))]
+					}
+				}
 				name, ver := "", ""
 				if e.Plugin != nil {
 					name, ver = e.Plugin.Name, e.Plugin.Version
@@ -153,7 +160,7 @@ func newPluginsListCommand() *cobra.Command {
 				if e.Err != nil {
 					name = e.Err.Msg
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.ID, entryState(e), e.Origin, ver, name)
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", e.ID, entryState(e), e.Origin, ver, source, name)
 			}
 			return tw.Flush()
 		},
@@ -409,32 +416,11 @@ func newPluginsBuildCommand() *cobra.Command {
 			if e == nil || e.Plugin == nil {
 				return fmt.Errorf("no plugin with the id %s can be read. Run tuios plugins list to see the ids", args[0])
 			}
-			out := cmd.OutOrStdout()
-			ran := 0
-			for _, b := range e.Plugin.Build {
-				if e.Plugin.Supported(b.Platforms, "build") != nil {
-					continue
-				}
-				fmt.Fprintf(out, "Running in %s: %s\n", e.Plugin.PluginRoot, strings.Join(b.Command, " "))
-				prog, perr := herdrplugin.ResolveProgram(b.Command[0], e.Plugin.PluginRoot)
-				if perr != nil {
-					return errors.New(perr.Msg)
-				}
-				c := exec.Command(prog, b.Command[1:]...) //nolint:gosec // the person asked to build this plugin
-				c.Dir = e.Plugin.PluginRoot
-				c.Stdout, c.Stderr = out, cmd.ErrOrStderr()
-				c.Env = buildEnv(os.Environ())
-				if err := c.Run(); err != nil {
-					return fmt.Errorf("the build command failed: %v", err)
-				}
-				ran++
+			path, err := pluginsConfigPath()
+			if err != nil {
+				return err
 			}
-			if ran == 0 {
-				fmt.Fprintf(out, "The plugin %s has no build commands for this platform.\n", e.ID)
-				return nil
-			}
-			fmt.Fprintf(out, "The plugin %s is built.\n", e.ID)
-			return nil
+			return runPluginBuild(cmd, e.Plugin, herdrplugin.DefaultDirs(path, nil))
 		},
 	}
 }

@@ -6892,3 +6892,26 @@ Run on 2026-10-17.
 
 The fixed build passes both, `TestKittyImageSurvivesCaptureMode`, every
 `TestLauncher*`, every `TestScreenshot*` and `TestRichRowReplyAndRecap`.
+
+## tuios plugins install
+
+`TestPluginsInstallFromGit` installs a probe plugin from a bare repository
+under the test's temp folder, over `file://`, with a daemon running. The
+`broken` branch has a build command that exits 3. The `main` branch builds
+`dist/out`, and its one action prints that file.
+
+The test carries its positive half in the same fixture: the broken branch
+leaves no lock entry, no checkout and no enable, and `main` gets all three.
+The artifacts are `install.txt`, `plugins.lock` and `list.json` in the
+test's artifact folder.
+
+Each control cut one line in the branch, built the binary, and ran the one
+test. Run on 2026-10-18.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A failed build stops the install | the `runPluginBuild` check in `installPlugin` never sees the error | `TestPluginsInstallFromGit` ("install of the broken branch: <nil>") | **caught** |
+| A failed build removes its checkout | the `os.RemoveAll(checkoutDir)` call after the failed build | `TestPluginsInstallFromGit` ("a failed build left 1 folders in .../plugins/e2e.probe") | **caught** |
+| The daemon finds an installed plugin | the `add(OriginManaged, ...)` call in `Discover` | `TestPluginsInstallFromGit` ("install of main: exit status 1", with `plugin not found (plugin_not_found)` from `plugin.enable`) | **caught** |
+
+The fixed build passes the test 3 of 3, and every `TestHerdrPlugin*` 3 of 3.
