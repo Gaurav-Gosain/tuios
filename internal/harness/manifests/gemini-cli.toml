@@ -97,13 +97,16 @@ regex    = ['^\s*◇\s+Ready\b']
 # record per line since 0.3x (session-<time>-<id>.jsonl), one JSON document
 # before (session-<time>-<id>.json). The hook reports its path. Without the
 # hook the daemon takes the chat whose projectHash is the hash of the pane's
-# directory and that was written since Gemini CLI started. The file is read
+# directory and whose startTime is the start of the pane's Gemini CLI. The file is read
 # only to show the conversation in the agent thread.
 [transcript]
 reader = "gemini-chat"
 dir    = "{home}/.gemini/tmp"
-glob   = "*/chats/session-*.json*"
-verify = ["cwd"]
+glob    = "*/chats/session-*.json*"
+# Only .json and .jsonl: not the .jsonl.tmp-<pid> of a rewrite, nor the
+# .json.unreadable-<time> backup of a file Gemini CLI could not read.
+exclude = ["*.json[^l]*", "*.jsonl?*"]
+verify  = ["cwd"]
 
 [input]
 submit          = "cr"

@@ -29,7 +29,11 @@ type Transcript struct {
 	// Glob matches the session files inside Dir. It may span folders
 	// ("*/chats/session-*.jsonl"), and then Dir names no placeholder but
 	// {home}, since a path a hook reports is matched against it from Dir.
+	// A glob that does not span folders matches only files directly in Dir.
 	Glob string `toml:"glob"`
+	// Exclude lists file name patterns Glob matches that are not sessions:
+	// a harness's ledgers, backups and temporary files.
+	Exclude []string `toml:"exclude"`
 	// Verify names the record fields that must match the pane before a file
 	// found by search is believed. It is what stops a wrong join, which is worse
 	// than no join: attributing one agent's state to another pane is a confident
@@ -112,26 +116,57 @@ func checkTranscript(file, id string, t *Transcript) error {
 	if _, err := filepath.Match(t.Glob, "probe"); err != nil {
 		return fmt.Errorf("%s: manifest %q transcript glob %q: %w", file, id, t.Glob, err)
 	}
+	for _, ex := range t.Exclude {
+		if _, err := filepath.Match(ex, "probe"); err != nil || strings.ContainsRune(ex, '/') {
+			return fmt.Errorf("%s: manifest %q transcript exclude %q must be a file name pattern", file, id, ex)
+		}
+	}
 	if strings.ContainsRune(t.Glob, '/') && strings.Contains(strings.ReplaceAll(t.Dir, "{home}", ""), "{") {
 		return fmt.Errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
 	}
 	return nil
 }
 
-// MatchesGlob reports whether path, under Root, is a file Glob names. A glob
-// that spans folders is matched against the path from Root, and any other
-// against the file name.
+// MatchesGlob reports whether path, under root (Root, resolved), is a file
+// Glob names and Exclude does not. A glob that spans folders is matched
+// against the path from root. Any other is matched against the file name,
+// and the file must sit directly in Dir: a file in a folder below it is not a
+// session file, whatever its name.
 func (t Transcript) MatchesGlob(root, path string) bool {
-	if !strings.ContainsRune(t.Glob, '/') {
-		ok, _ := filepath.Match(t.Glob, filepath.Base(path))
-		return ok
+	base := filepath.Base(path)
+	for _, ex := range t.Exclude {
+		if ok, _ := filepath.Match(ex, base); ok {
+			return false
+		}
 	}
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
 		return false
 	}
-	ok, _ := filepath.Match(t.Glob, filepath.ToSlash(rel))
+	rel = filepath.ToSlash(rel)
+	if strings.ContainsRune(t.Glob, '/') {
+		ok, _ := filepath.Match(t.Glob, rel)
+		return ok
+	}
+	if strings.Count(rel, "/") != t.dirDepth() {
+		return false
+	}
+	ok, _ := filepath.Match(t.Glob, base)
 	return ok
+}
+
+// dirDepth is how many folders Dir is below Root: 0 for a Dir with no
+// placeholder but {home}, 1 for Claude Code's {home}/.claude/projects/
+// {cwd:dashes}, whose placeholder is one folder.
+func (t Transcript) dirDepth() int {
+	dir := filepath.ToSlash(t.Dir)
+	i := strings.IndexByte(strings.ReplaceAll(dir, "{home}", ""), '{')
+	if i < 0 {
+		return 0
+	}
+	dir = strings.ReplaceAll(dir, "{home}", "")
+	rest := dir[strings.LastIndexByte(dir[:i], '/')+1:]
+	return strings.Count(strings.Trim(rest, "/"), "/") + 1
 }
 
 // ExpandDir resolves the placeholders in Dir against a pane's working directory,

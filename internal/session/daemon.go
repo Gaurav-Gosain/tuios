@@ -2350,6 +2350,12 @@ func (d *Daemon) agentDetectScan() bool {
 			pending = true
 		}
 	}
+	// The view-only transcripts are searched across sessions, since two
+	// agents in one folder may sit in two of them. A search on its backoff
+	// keeps the tick running until it is done.
+	if d.searchViewTranscripts(reg) {
+		pending = true
+	}
 	return pending
 }
 

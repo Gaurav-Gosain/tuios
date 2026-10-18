@@ -160,7 +160,12 @@ func (s *Session) transcriptJoinOf(windowID string) (path, harnessID, format str
 // since the last one. The event carries the cursor a read to the end would
 // return now, and nothing of the file.
 func (s *Session) noteTranscriptGrowth(windowID string, j *transcriptJoin) {
-	off := j.reader.Offset()
+	s.announceTranscript(windowID, j, j.reader.Offset())
+}
+
+// announceTranscript raises the transcript event for a join whose last whole
+// record ends at off, when off moved since the last event.
+func (s *Session) announceTranscript(windowID string, j *transcriptJoin, off int64) {
 	s.transcripts.mu.Lock()
 	grew := off > 0 && off != j.announced
 	if grew {

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -55,7 +56,11 @@ type transcriptJoin struct {
 	doc     bool
 	docSize int64
 	docMod  time.Time
-	reader  *transcript.Reader
+	// docEventAt is when the last event of a document was raised, and
+	// docTimer the event waiting for docEventGap to pass.
+	docEventAt time.Time
+	docTimer   *time.Timer
+	reader     *transcript.Reader
 	// exact records that this join came from the harness telling us its own
 	// transcript path, rather than from searching. A searched join is given up
 	// the moment an exact one arrives for the same window.
@@ -87,6 +92,9 @@ type agentTranscriptState struct {
 	joins map[string]*transcriptJoin
 	// nextTry throttles the hookless search per window.
 	nextTry map[string]time.Time
+	// viewTry is the backoff of the search for the view-only formats
+	// (transcript_search.go).
+	viewTry map[string]*viewSearch
 	watcher transcriptWatch
 }
 
@@ -183,6 +191,10 @@ func (s *Session) releaseJoinLocked(j *transcriptJoin) {
 		j.debounce.Stop()
 		j.debounce = nil
 	}
+	if j.docTimer != nil {
+		j.docTimer.Stop()
+		j.docTimer = nil
+	}
 	if j.watched && s.transcripts.watcher != nil {
 		s.transcripts.watcher.Unwatch(j.reader.Path(), s.transcriptWatchKey(j.windowID))
 	}
@@ -269,51 +281,111 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 }
 
 // readViewTranscript reads a join whose format gives no turn state: it
-// notes growth for the transcript event, and nothing else. A JSONL format
-// grows by appends, and its reader's offset says how far, as for Claude
-// Code. A document is rewritten whole, so its size and time say it changed,
-// and its event carries no cursor: an offset into it means nothing.
+// notes growth for the transcript event, and nothing else. It decodes
+// nothing. A JSONL format grows by appends, and the end of its last whole
+// line (viewTailOffset) is the cursor of the event, as for Claude Code. A
+// document is rewritten whole, so its size and time say it changed, its
+// event carries no cursor, and it raises at most one event a second
+// (docEventGap).
 func (s *Session) readViewTranscript(windowID string, j *transcriptJoin) bool {
-	var gone bool
-	if j.doc {
-		info, err := os.Stat(j.reader.Path())
-		switch {
-		case err != nil:
-			gone = os.IsNotExist(err)
-		case !info.Mode().IsRegular():
-			gone = true
-		default:
+	path := j.reader.Path()
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		if err == nil || os.IsNotExist(err) {
 			s.transcripts.mu.Lock()
-			j.missing = 0
-			changed := info.Size() != j.docSize || !info.ModTime().Equal(j.docMod)
-			j.docSize, j.docMod = info.Size(), info.ModTime()
+			j.missing++
+			drop := j.missing >= transcriptMissingLimit
 			s.transcripts.mu.Unlock()
-			if changed {
-				s.emit(SessionEvent{Type: EventTranscript, Window: windowID})
+			if drop {
+				s.DropAgentTranscript(windowID)
 			}
-			return false
 		}
-	} else {
-		_, _, err := j.reader.Read()
+		return false
+	}
+	s.transcripts.mu.Lock()
+	j.missing = 0
+	changed := info.Size() != j.docSize || !info.ModTime().Equal(j.docMod)
+	j.docSize, j.docMod = info.Size(), info.ModTime()
+	s.transcripts.mu.Unlock()
+	if !changed {
+		return false
+	}
+	if !j.doc {
+		off, err := viewTailOffset(path)
 		if err == nil {
-			s.transcripts.mu.Lock()
-			j.missing = 0
-			s.transcripts.mu.Unlock()
-			s.noteTranscriptGrowth(windowID, j)
-			return false
+			s.announceTranscript(windowID, j, off)
 		}
-		gone = errors.Is(err, transcript.ErrNoFile) || errors.Is(err, transcript.ErrNotRegular)
+		return false
 	}
-	if gone {
-		s.transcripts.mu.Lock()
-		j.missing++
-		drop := j.missing >= transcriptMissingLimit
-		s.transcripts.mu.Unlock()
-		if drop {
-			s.DropAgentTranscript(windowID)
-		}
-	}
+	s.docEvent(windowID, j)
 	return false
+}
+
+// docEventGap is the least time between two transcript events of a
+// document. A harness that rewrites a thread as it streams writes it many
+// times a second, and each event sends the reader to read it.
+const docEventGap = time.Second
+
+// docEvent raises a document's transcript event now, or once the gap since
+// the last one has passed.
+func (s *Session) docEvent(windowID string, j *transcriptJoin) {
+	s.transcripts.mu.Lock()
+	wait := docEventGap - time.Since(j.docEventAt)
+	if wait > 0 {
+		if j.docTimer == nil {
+			j.docTimer = time.AfterFunc(wait, func() {
+				s.transcripts.mu.Lock()
+				cur, ok := s.transcripts.joins[windowID]
+				if ok && cur == j {
+					j.docTimer = nil
+					j.docEventAt = time.Now()
+				}
+				s.transcripts.mu.Unlock()
+				if ok && cur == j {
+					s.emit(SessionEvent{Type: EventTranscript, Window: windowID})
+				}
+			})
+		}
+		s.transcripts.mu.Unlock()
+		return
+	}
+	j.docEventAt = time.Now()
+	s.transcripts.mu.Unlock()
+	s.emit(SessionEvent{Type: EventTranscript, Window: windowID})
+}
+
+// viewTailMax bounds how far back viewTailOffset looks for a newline. A last
+// line longer than this is not finished as far as the event is concerned.
+const viewTailMax = 16 << 20
+
+// viewTailOffset is the offset after the last newline of the file at path:
+// the end of its last whole line. It reads back from the end, a chunk at a
+// time, and reads none of the lines before the last.
+func viewTailOffset(path string) (int64, error) {
+	f, err := transcript.OpenRegular(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	buf := make([]byte, 64<<10)
+	defer clear(buf)
+	end := info.Size()
+	for stop := max(0, end-viewTailMax); end > stop; {
+		start := max(stop, end-int64(len(buf)))
+		n, err := f.ReadAt(buf[:end-start], start)
+		if err != nil && n < int(end-start) {
+			return 0, err
+		}
+		if i := bytes.LastIndexByte(buf[:n], '\n'); i >= 0 {
+			return start + int64(i) + 1, nil
+		}
+		end = start
+	}
+	return 0, nil
 }
 
 // applyTranscriptTurn publishes a turn as an agent state.
@@ -430,6 +502,11 @@ func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(pty
 			delete(s.transcripts.nextTry, id)
 		}
 	}
+	for id := range s.transcripts.viewTry {
+		if _, ok := live[id]; !ok {
+			delete(s.transcripts.viewTry, id)
+		}
+	}
 	s.transcripts.mu.Unlock()
 	for _, id := range stale {
 		s.DropAgentTranscript(id)
@@ -440,7 +517,9 @@ func (s *Session) maintainAgentTranscripts(reg *harness.Registry, cwdOf func(pty
 			continue
 		}
 		tr := reg.TranscriptFor(p.harnessID)
-		if tr == nil {
+		if tr == nil || tr.Reader != harness.ReaderJSONL {
+			// The view-only formats are searched across sessions, by
+			// Daemon.searchViewTranscripts.
 			continue
 		}
 		if !s.joinSearchDue(p.windowID) {
@@ -489,60 +568,9 @@ type agentIdentity struct {
 // This fails for two agents in one directory on one version. The hook is the
 // answer to that, and this is what runs until someone installs it.
 //
-// Another format (searchViewTranscript) gives no state, only the
-// conversation to read, and keeps every session of a project in one folder,
-// so it takes the newest file of the pane's directory, when it is the only
-// one written since the agent started.
+// The other formats are searched for by Daemon.searchViewTranscripts.
 func searchTranscript(tr *harness.Transcript, id agentIdentity) (string, bool) {
-	if tr.Reader != harness.ReaderJSONL {
-		return searchViewTranscript(tr.ExpandDir(id.cwd), tr, id)
-	}
 	return searchTranscriptIn(tr.ExpandDir(id.cwd), tr, id.cwd, id.version)
-}
-
-// searchViewTranscript finds the transcript of a format other than Claude
-// Code's: the files the format says ran in the pane's directory, of which it
-// takes the one written since the agent started. Two such files, or a start
-// time it cannot read with more than one file, is a refusal.
-func searchViewTranscript(dir string, tr *harness.Transcript, id agentIdentity) (string, bool) {
-	if dir == "" || !tr.Verifies("cwd") {
-		return "", false
-	}
-	files, err := filepath.Glob(filepath.Join(dir, tr.Glob))
-	if err != nil || len(files) == 0 {
-		return "", false
-	}
-	var found string
-	var fresh []string
-	for _, f := range files {
-		info, err := os.Lstat(f)
-		if err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		if !transcriptview.Matches(tr.Reader, f, id.cwd) {
-			continue
-		}
-		if found == "" {
-			found = f
-		} else {
-			found = "-"
-		}
-		// A file a session wrote since the agent started. A second of slack
-		// covers a clock that stamps the start late.
-		if !id.started.IsZero() && !info.ModTime().Before(id.started.Add(-time.Second)) {
-			fresh = append(fresh, f)
-		}
-	}
-	if !id.started.IsZero() {
-		// An older file is a session that ended before this agent began.
-		// Joining it would show that conversation, and keep the pane from
-		// joining its own when it appears.
-		if len(fresh) == 1 {
-			return fresh[0], true
-		}
-		return "", false
-	}
-	return found, found != "" && found != "-"
 }
 
 // searchTranscriptIn is searchTranscript with the directory already resolved, so

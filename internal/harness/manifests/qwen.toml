@@ -136,14 +136,15 @@ regex    = ['^\x{25D0}\x{FE0E}? ']
 # Not measured here.
 # Qwen Code writes each chat to ~/.qwen/projects/<cwd with "/" as "-">/chats/
 # <session id>.jsonl, one record per line. The hook reports its path. Without
-# the hook the daemon takes the chat whose records name the pane's directory
-# and that was written since Qwen Code started. The file is read only to show
+# the hook the daemon takes the chat whose first record names the pane's
+# directory and the start of the pane's Qwen Code. The file is read only to show
 # the conversation in the agent thread.
 [transcript]
 reader = "qwen-chat"
 dir    = "{home}/.qwen/projects/{cwd:dashes}/chats"
-glob   = "*.jsonl"
-verify = ["cwd"]
+glob    = "*.jsonl"
+exclude = ["*.ledger.jsonl"]
+verify  = ["cwd"]
 
 [input]
 submit          = "cr"
