@@ -50,20 +50,23 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 // process its pane runs. The pid is 0 for a pane on another machine, one whose
 // process has exited, and a target that names no window.
 func (s *Session) paneProcess(target string) (string, int) {
-	st := s.GetState()
-	idx, err := findWindowStateIndex(st.Windows, target)
+	s.stateMu.RLock()
+	idx, err := findWindowStateIndex(s.state.Windows, target)
 	if err != nil {
+		s.stateMu.RUnlock()
 		return "", 0
 	}
-	w := &st.Windows[idx]
-	if w.Host != "" || w.PTYID == "" {
-		return w.ID, 0
+	w := &s.state.Windows[idx]
+	id, host, ptyID := w.ID, w.Host, w.PTYID
+	s.stateMu.RUnlock()
+	if host != "" || ptyID == "" {
+		return id, 0
 	}
-	pty := s.GetPTY(w.PTYID)
+	pty := s.GetPTY(ptyID)
 	if pty == nil || pty.IsExited() {
-		return w.ID, 0
+		return id, 0
 	}
-	return w.ID, pty.ShellPID()
+	return id, pty.ShellPID()
 }
 
 // processInPane says whether process pid runs in the pane whose process is
