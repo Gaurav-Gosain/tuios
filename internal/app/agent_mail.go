@@ -551,6 +551,8 @@ func (m *OS) CloseAgentMail() {
 	st.Error = ""
 	st.Picking = false
 	st.ComposeTo = ""
+	// The copy of an image the draft's view opened goes with it.
+	m.replyPreviewClosed()
 }
 
 // resetAgentMail forgets the mirror, on a session switch: the ring is per
@@ -920,7 +922,7 @@ const agentMailMaxDraft = 1 << 20
 // history. An empty windowID, a sender on another machine, keeps no history.
 func (m *OS) newMailDraft(windowID string) *composer.Model {
 	comp := composer.New(composer.Options{MaxRows: agentMailDraftRows, MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true})
-	m.AgentMail.wires = m.wireDraft(comp, "", windowID, windowID != "")
+	m.AgentMail.wires = m.wireDraft(comp, m.sidebarCurrentSessionID(), windowID, windowID != "")
 	return comp
 }
 

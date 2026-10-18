@@ -146,13 +146,14 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// pasted on the user's behalf, or an IME such as fcitx5 wrapped a commit in
 		// paste markers. Forward it to the focused window's PTY without touching the
 		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
-		// The reply editor takes it first: an empty paste or a path can
-		// attach an image, which is read off the update loop.
-		if o.InboxReplyOpen() {
-			return o, o.InboxReplyPaste(msg.Content)
-		}
+		// A draft takes it first, the mailbox's before the Inbox reply's as
+		// for keys: an empty paste or a path can attach an image, which is
+		// read off the update loop.
 		if o.ShowAgentMail && o.AgentMail.Composing {
 			return o, o.AgentMailPaste(msg.Content)
+		}
+		if o.InboxReplyOpen() {
+			return o, o.InboxReplyPaste(msg.Content)
 		}
 		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil
@@ -195,17 +196,17 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Only handle paste in terminal mode. The reply editor's ctrl+v
 		// answer may be the path of an image file, read off the loop; an
 		// empty answer is nothing, since the clipboard was asked already.
-		if o.InboxReplyOpen() {
-			if msg.Content == "" {
-				return o, nil
-			}
-			return o, o.InboxReplyPaste(msg.Content)
-		}
 		if o.ShowAgentMail && o.AgentMail.Composing {
 			if msg.Content == "" {
 				return o, nil
 			}
 			return o, o.AgentMailPaste(msg.Content)
+		}
+		if o.InboxReplyOpen() {
+			if msg.Content == "" {
+				return o, nil
+			}
+			return o, o.InboxReplyPaste(msg.Content)
 		}
 		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil

@@ -54,15 +54,16 @@ type openDraft struct {
 	kind string
 }
 
-// openDraft is the draft open now: the Inbox reply's, which takes keys
-// before the mailbox does, or the mail editor's.
+// openDraft is the draft that takes keys now. The mailbox takes the keyboard
+// while it is up (see input/keyboard_wm.go), so its draft comes before the
+// Inbox reply's: mail can open over a reply that is still open.
 func (m *OS) openDraft() (openDraft, bool) {
-	if ed := m.Inbox.reply.editor; ed != nil && m.ShowInbox {
-		return openDraft{comp: ed.comp, wires: &ed.draftWires, kind: "inbox"}, true
-	}
 	st := &m.AgentMail
 	if m.ShowAgentMail && st.Composing && st.Comp != nil {
 		return openDraft{comp: st.Comp, wires: &st.wires, kind: "agentmail"}, true
+	}
+	if ed := m.Inbox.reply.editor; ed != nil && m.ShowInbox {
+		return openDraft{comp: ed.comp, wires: &ed.draftWires, kind: "inbox"}, true
 	}
 	return openDraft{}, false
 }
