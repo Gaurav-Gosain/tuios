@@ -149,6 +149,7 @@ var tuiosBin string
 func TestMain(m *testing.M) {
 	runRelayClientIfAsked()
 	runThrottleIfAsked()
+	runStandInIfAsked()
 	os.Exit(runE2E(m))
 }
 

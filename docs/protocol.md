@@ -4953,10 +4953,14 @@ Response:
 `if_state` (the condition did not hold), `foreign_pane`, `foreign_session` or
 `foreign_harness`. `foreign_pane` refuses a report whose `harness_pid` is a
 local process that inherited the pane in `TUIOS_PANE_ID` but runs outside it:
-not the pane's process, not on its terminal and not descended from it. A
-report without `harness_pid`, from a link, for a pane on another machine, or
-from a harness that cannot be read (it exited, or the platform has no process
-reader) is not checked. The last two refuse a report carrying `agent_session_id`
+not the pane's process, not on its terminal, not descended from it, and with
+no multiplexer server (tmux, screen, zellij, dtach or abduco, by the name of
+its executable) among its ancestors. A harness in tmux inside the pane is
+taken for the pane that shows the tmux client. A `harness_pid` that is not
+the caller or one of its ancestors is not believed, and the caller is checked
+in its place. A report without `harness_pid`, from a link, for a pane on
+another machine, or from a harness that cannot be read (it exited, or the
+platform has no process reader) is not checked. The last two refuse a report carrying `agent_session_id`
 while the window's own harness is `working` or `needs_input` by its own report
 and the report names a different session, or comes from a different harness:
 a nested run, such as a `claude -p` a tool call started inside the pane. At rest

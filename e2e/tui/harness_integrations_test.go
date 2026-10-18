@@ -3,11 +3,13 @@ package tuie2e
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"github.com/charmbracelet/x/xpty"
 )
 
 // The harness integrations, end to end: the real tuios agent-hook, the real
@@ -1490,5 +1493,411 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				t.Fatalf("a person's note on the pane was cleared as if the harness had said it:\n%s\n%s", listing(), term.Snapshot())
 			}
 		})
+	}
+}
+
+// The stand-ins for a harness that runs a hook, played by this test binary.
+// standInEnv names the part it plays:
+//
+//   - harness: runs its arguments as a child, with its own stdin, stdout,
+//     stderr and environment, and exits with the child's status. It is not a
+//     shell, so tuios agent-hook takes it for the harness of its hooks and
+//     reports its pid as harness_pid, the way it takes Claude Code.
+//   - detach: the program a person or a harness starts, which leaves at once
+//     and leaves a server running in a session of its own, under init, the
+//     way tmux starts its server and Claude Code starts its daemon. The
+//     server runs a harness on a terminal of its own, with the environment it
+//     was started with, and that harness runs the arguments. The harness's
+//     stdin is the file standInInEnv names, and its stderr and stdout go to
+//     the file standInOutEnv names and that name plus ".stdout", which appear
+//     once it has exited. What the server is, to the daemon, is the name of
+//     the file it runs from: a copy named tmux is a tmux server.
+const (
+	standInEnv    = "TUIOS_E2E_STANDIN"
+	standInBinEnv = "TUIOS_E2E_STANDIN_HARNESS"
+	standInInEnv  = "TUIOS_E2E_STANDIN_IN"
+	standInOutEnv = "TUIOS_E2E_STANDIN_OUT"
+	// standInLauncherEnv is the pid of the program that started the server.
+	standInLauncherEnv = "TUIOS_E2E_STANDIN_LAUNCHER"
+)
+
+// runStandInIfAsked plays the part standInEnv names, and exits, or returns
+// when it names none.
+func runStandInIfAsked() {
+	switch os.Getenv(standInEnv) {
+	case "":
+		return
+	case "harness":
+		os.Exit(runStandInChild(exec.Command(os.Args[1], os.Args[2:]...), os.Stdin, os.Stdout, os.Stderr))
+	case "detach":
+		self, err := os.Executable()
+		if err != nil {
+			os.Exit(2)
+		}
+		server := exec.Command(self, os.Args[1:]...)
+		server.Env = append(os.Environ(), standInEnv+"=server", standInLauncherEnv+"="+strconv.Itoa(os.Getpid()))
+		server.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if err := server.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "server":
+		runStandInServer()
+	}
+	os.Exit(2)
+}
+
+// runStandInServer is the detach part's server. It waits for the program that
+// started it to leave, so that it runs under init, then runs the harness on a
+// terminal of its own and moves its output into place.
+func runStandInServer() {
+	out := os.Getenv(standInOutEnv)
+	fail := func(err error) {
+		_ = os.WriteFile(out, []byte("stand-in server: "+err.Error()+"\n"), 0o644)
+		os.Exit(1)
+	}
+	launcher, _ := strconv.Atoi(os.Getenv(standInLauncherEnv))
+	for deadline := time.Now().Add(10 * time.Second); os.Getppid() == launcher; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			fail(fmt.Errorf("the launcher %d never left", launcher))
+		}
+	}
+	p, err := xpty.NewPty(80, 24)
+	if err != nil {
+		fail(err)
+	}
+	up, ok := p.(*xpty.UnixPty)
+	if !ok {
+		fail(fmt.Errorf("no unix pty"))
+	}
+	in, err := os.Open(os.Getenv(standInInEnv))
+	if err != nil {
+		fail(err)
+	}
+	stderr, err := os.Create(out + ".part")
+	if err != nil {
+		fail(err)
+	}
+	stdout, err := os.Create(out + ".stdout.part")
+	if err != nil {
+		fail(err)
+	}
+	harness := exec.Command(os.Getenv(standInBinEnv), os.Args[1:]...)
+	harness.Env = append(os.Environ(), standInEnv+"=harness")
+	harness.ExtraFiles = []*os.File{up.Slave()}
+	harness.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 3}
+	runStandInChild(harness, in, stdout, stderr)
+	_ = stdout.Close()
+	_ = stderr.Close()
+	_ = os.Rename(out+".stdout.part", out+".stdout")
+	_ = os.Rename(out+".part", out)
+	os.Exit(0)
+}
+
+// runStandInChild runs cmd with the given stdio and returns its exit status.
+func runStandInChild(cmd *exec.Cmd, stdin io.Reader, stdout, stderr io.Writer) int {
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
+	if err := cmd.Run(); err != nil {
+		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+			return exit.ExitCode()
+		}
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
+}
+
+// standInAs copies this test binary to a file called name, so that a process
+// started from the copy has that name to the daemon. A link would not do: the
+// daemon reads the file a process executes, which a symbolic link resolves to.
+func standInAs(t *testing.T, name string) string {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// detachedEnv is the environment a detach stand-in needs beyond its caller's:
+// the harness to run, its stdin's file and its output's file.
+func detachedEnv(t *testing.T, in, out string) []string {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []string{standInEnv + "=detach", standInBinEnv + "=" + self, standInInEnv + "=" + in, standInOutEnv + "=" + out}
+}
+
+// waitStandIn waits for a detach stand-in's harness to exit and returns what
+// it wrote to stderr and to stdout.
+func waitStandIn(t *testing.T, out string) (stderr, stdout string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if data, err := os.ReadFile(out); err == nil {
+			more, _ := os.ReadFile(out + ".stdout")
+			return string(data), string(more)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the detached harness never finished (%s)", out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// hookExplained is the part of agent-hook --explain's line the pane check
+// reads.
+type hookExplained struct {
+	Window     string `json:"window"`
+	PaneBy     string `json:"pane_by"`
+	HarnessPID int    `json:"harness_pid"`
+	Applied    *bool  `json:"applied"`
+	State      string `json:"state"`
+	Reason     string `json:"reason"`
+	Error      string `json:"error"`
+}
+
+func parseExplained(t *testing.T, line string) hookExplained {
+	t.Helper()
+	var got hookExplained
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &got); err != nil {
+		t.Fatalf("the hook's --explain line is not JSON: %v\n%s", err, line)
+	}
+	return got
+}
+
+// appliedText prints an --explain line's applied field.
+func appliedText(applied *bool) string {
+	if applied == nil {
+		return "absent"
+	}
+	return fmt.Sprint(*applied)
+}
+
+// TestAgentReportOnlyFromTheHarnessInThePane runs the real Claude Code hook
+// under a stand-in harness against a real daemon, with the pane's environment
+// every time, from four places.
+//
+// Outside the pane: the harness runs on a terminal of its own under a server
+// that left the program that started it, carrying the pane's TUIOS_PANE_ID
+// and TUIOS_SESSION, the way Claude Code's daemon runs a background session
+// with the environment of the pane that asked for it. Its prompt, its
+// subagent and its conversation id are each refused with foreign_pane, the
+// pane stays none and list-agents does not list it. So is a set-agent-state
+// from there that claims the pane's own shell as its harness_pid: the
+// caller's pid, which the kernel gives, is not below that shell.
+//
+// Inside the pane: the same harness and hook run from the pane's shell, and
+// the prompt takes the pane to working, which list-agents lists.
+//
+// In tmux in the pane: the server is started from the pane's shell and is a
+// copy of the stand-in named tmux, so the harness has left the pane's process
+// tree and terminal exactly as the outside one has, and its ancestry reaches
+// a multiplexer server. Its prompt is taken, as tmux's client shows in the
+// pane.
+//
+// The artifact is agent-report-own-pane.log in the test's artifact directory:
+// each hook's --explain line and the pane's state after it.
+//
+// Negative controls: with the harnessOutsidePane call taken out of
+// verbSetAgentState, the outside prompt is applied. With the multiplexer
+// exception taken out, the prompt from tmux is refused with foreign_pane.
+// With the claimed harness_pid believed over the caller's pid, the
+// set-agent-state that claims the pane's shell is applied.
+func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-pane"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmux := standInAs(t, "tmux")
+	artifact := &strings.Builder{}
+	defer func() {
+		path := filepath.Join(artifactDir(t), "agent-report-own-pane.log")
+		if err := os.WriteFile(path, []byte(artifact.String()), 0o644); err != nil {
+			t.Errorf("save the artifact: %v", err)
+		}
+		t.Logf("artifact: %s", path)
+	}()
+	note := func(format string, args ...any) {
+		artifact.WriteString(strings.TrimRight(fmt.Sprintf(format, args...), "\n") + "\n")
+	}
+
+	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "printf 'PANE=%s=%s=%s\\n' \"$TUIOS_PANE_ID\" \"$$\" DONE\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	m := regexp.MustCompile(`PANE=([0-9a-f-]{8,})=([0-9]+)=DONE`).FindStringSubmatch(waitCapture(t, base, session, "0", "=DONE"))
+	if m == nil {
+		t.Fatalf("the pane did not print its TUIOS_PANE_ID and shell pid:\n%s", capture(t, base, session, "0"))
+	}
+	win, shellPID := m[1], m[2]
+	note("pane %s of session %s, shell %s", win, session, shellPID)
+
+	runs := 0
+	// files makes a detached run's stdin file, holding payload, and names its
+	// output file.
+	files := func(payload string) (in, out string) {
+		runs++
+		in = filepath.Join(base, fmt.Sprintf("standin-%d.in", runs))
+		out = filepath.Join(base, fmt.Sprintf("standin-%d.out", runs))
+		if err := os.WriteFile(in, []byte(payload), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return in, out
+	}
+	// outsideRun runs argv under a harness on a terminal of its own, under a
+	// server that left the test, with paneID as the TUIOS_PANE_ID the
+	// harness carries. It returns what argv wrote to stderr and stdout.
+	outsideRun := func(paneID, payload string, argv ...string) (string, string) {
+		t.Helper()
+		in, out := files(payload)
+		cmd := exec.Command(self, argv...)
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh", "TUIOS_PANE_ID="+paneID, "TUIOS_SESSION="+session)
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Env = append(cmd.Env, detachedEnv(t, in, out)...)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("start the detached harness: %v\n%s", err, output)
+		}
+		return waitStandIn(t, out)
+	}
+	// outside runs the hook that way. args are agent-hook's flags beyond the
+	// ones every run takes.
+	outside := func(paneID, harnessID, payload string, args ...string) hookExplained {
+		t.Helper()
+		stderr, _ := outsideRun(paneID, payload, append([]string{tuiosBin, "agent-hook", harnessID, "--timeout", "10s", "--explain"}, args...)...)
+		note("outside %-10s %s", harnessID, strings.TrimSpace(stderr))
+		return parseExplained(t, stderr)
+	}
+	checkUntouched := func(step string) {
+		t.Helper()
+		st := readAgentState(t, base, session, win)
+		note("  pane after %s: state=%s harness=%s agent_session_id=%s", step, st.State, st.Harness, st.AgentSession)
+		if st.State != "none" || st.AgentSession != "" {
+			t.Errorf("%s: the pane took the report of a harness outside it: %+v", step, st)
+		}
+		if _, listed := paneHarness(t, base, session)[win]; listed {
+			t.Errorf("%s: list-agents lists the pane for a harness outside it", step)
+		}
+	}
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+	got := outside(win, "claude-code", `{"hook_event_name":"UserPromptSubmit","session_id":"phantom-1","prompt":"forked conversation"}`)
+	if got.PaneBy != "env" || got.Window != win || got.HarnessPID <= 1 {
+		t.Fatalf("the hook did not report for the pane by its environment, with a harness pid: %+v", got)
+	}
+	if got.Applied == nil || *got.Applied || got.Reason != "foreign_pane" {
+		t.Errorf("a prompt from a harness outside the pane: applied=%s reason=%q, want refused with foreign_pane", appliedText(got.Applied), got.Reason)
+	}
+	checkUntouched("the outside prompt")
+
+	got = outside(win, "claude-code", `{"hook_event_name":"SubagentStart","session_id":"phantom-1","agent_id":"a1b2c3","agent_type":"Explore"}`)
+	if got.Reason != "foreign_pane" {
+		t.Errorf("a subagent from a harness outside the pane: reason=%q, want foreign_pane", got.Reason)
+	}
+	checkUntouched("the outside subagent")
+
+	got = outside(win, "droid", `{"hook_event_name":"SessionStart","session_id":"phantom-droid","source":"startup"}`)
+	if got.Applied == nil || *got.Applied || got.Reason != "foreign_pane" {
+		t.Errorf("a conversation id from a harness outside the pane: applied=%s reason=%q, want refused with foreign_pane", appliedText(got.Applied), got.Reason)
+	}
+	checkUntouched("the outside conversation id")
+
+	// A caller outside the pane that names the pane's own shell as its
+	// harness. The shell is in the pane, so the claim alone would pass.
+	params := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"claude-code","agent_session_id":"liar-1","harness_pid":%s}`, session, win, shellPID)
+	_, stdout := outsideRun(win, "", tuiosBin, "call", "set-agent-state", params)
+	note("outside %-10s %s", "call", strings.TrimSpace(stdout))
+	var called struct {
+		Applied *bool  `json:"applied"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &called); err != nil {
+		t.Fatalf("set-agent-state's reply is not JSON: %v\n%s", err, stdout)
+	}
+	if called.Applied == nil || *called.Applied || called.Reason != "foreign_pane" {
+		t.Errorf("a report from outside the pane claiming the pane's shell as its harness: applied=%s reason=%q, want refused with foreign_pane", appliedText(called.Applied), called.Reason)
+	}
+	checkUntouched("the claim of the pane's shell")
+
+	// The positive half: the same harness and hook, run from the pane's shell.
+	explain := filepath.Join(base, "inside-explain.json")
+	line := "printf '%s' '" + `{"hook_event_name":"UserPromptSubmit","session_id":"own-1","prompt":"in the pane"}` + "' | " +
+		standInEnv + "=harness " + quote(self) + " " + quote(tuiosBin) + " agent-hook claude-code --timeout 10s --explain 2>" + quote(explain) + "; printf '%s-%s\\n' INSIDE DONE\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", session, line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitCapture(t, base, session, "0", "INSIDE-DONE")
+	data, err := os.ReadFile(explain)
+	if err != nil {
+		t.Fatalf("read the inside hook's --explain: %v", err)
+	}
+	note("inside  %-10s %s", "claude-code", strings.TrimSpace(string(data)))
+	got = parseExplained(t, string(data))
+	if got.PaneBy != "env" || got.Window != win || got.HarnessPID <= 1 {
+		t.Fatalf("the inside hook did not report for the pane by its environment, with a harness pid: %+v", got)
+	}
+	if got.Applied == nil || !*got.Applied || got.Reason != "" {
+		t.Errorf("a prompt from the harness in the pane: applied=%s reason=%q, want applied", appliedText(got.Applied), got.Reason)
+	}
+	st := readAgentState(t, base, session, win)
+	note("  pane after the inside prompt: state=%s harness=%s agent_session_id=%s", st.State, st.Harness, st.AgentSession)
+	if st.State != "working" || st.AgentSession != "own-1" {
+		t.Errorf("the harness in the pane did not set its state: %+v", st)
+	}
+	if _, listed := paneHarness(t, base, session)[win]; !listed {
+		t.Error("list-agents does not list the pane its own harness reported")
+	}
+
+	// A pane chosen with --window by a harness whose environment names no pane
+	// is the caller's choice, as the suite's other hook tests make it, and is
+	// taken although the harness runs outside the pane.
+	got = outside("", "claude-code", `{"hook_event_name":"Stop","session_id":"own-1"}`, "--session", session, "--window", win)
+	if got.PaneBy != "flag" || got.Applied == nil || !*got.Applied || got.State != "done" {
+		t.Errorf("a report for a pane chosen with --window: pane_by=%q applied=%s state=%q reason=%q, want applied, done", got.PaneBy, appliedText(got.Applied), got.State, got.Reason)
+	}
+
+	// tmux in the pane: its server leaves the pane, and the harness in it
+	// carries the pane's environment, as the outside one does.
+	in, out := files(`{"hook_event_name":"UserPromptSubmit","session_id":"mux-1","prompt":"in tmux"}`)
+	words := []string{"env"}
+	for _, kv := range detachedEnv(t, in, out) {
+		words = append(words, quote(kv))
+	}
+	words = append(words, quote(tmux), quote(tuiosBin), "agent-hook", "claude-code", "--timeout", "10s", "--explain")
+	if out, err := tuiosCLI(t, base, "send-text", "-s", session, strings.Join(words, " ")+"\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	stderr, _ := waitStandIn(t, out)
+	note("tmux    %-10s %s", "claude-code", strings.TrimSpace(stderr))
+	got = parseExplained(t, stderr)
+	if got.PaneBy != "env" || got.Window != win || got.HarnessPID <= 1 {
+		t.Fatalf("the hook in tmux did not report for the pane by its environment, with a harness pid: %+v", got)
+	}
+	if got.Applied == nil || !*got.Applied || got.Reason != "" {
+		t.Errorf("a prompt from a harness in tmux in the pane: applied=%s reason=%q, want applied", appliedText(got.Applied), got.Reason)
+	}
+	st = readAgentState(t, base, session, win)
+	note("  pane after the prompt in tmux: state=%s harness=%s agent_session_id=%s", st.State, st.Harness, st.AgentSession)
+	if st.State != "working" || st.AgentSession != "mux-1" {
+		t.Errorf("the harness in tmux in the pane did not set its state: %+v", st)
 	}
 }

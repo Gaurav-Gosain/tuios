@@ -1,6 +1,18 @@
 package session
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+	"slices"
+)
+
+// multiplexerServers are the executable names of the terminal multiplexers
+// whose server leaves the pane it was started from: it runs in a session of its
+// own, on terminals of its own, under init, while the programs in its panes
+// keep the environment of the pane that started it, TUIOS_PANE_ID included. A
+// harness whose ancestry reaches one of them is taken as running in the pane
+// that shows the multiplexer's client. See harnessOutsidePane.
+var multiplexerServers = []string{"tmux", "screen", "zellij", "dtach", "abduco"}
 
 // harnessOutsidePane says whether a hook report about window target of sess
 // comes from a harness that does not run in that pane, and so must not be
@@ -24,6 +36,15 @@ import "os"
 //     pane is a choice, and it keeps working.
 //   - the harness is not the pane's process, does not share its terminal and
 //     does not descend from it.
+//   - no ancestor of the harness is a multiplexer server (multiplexerServers).
+//     A harness in tmux inside the pane has left the pane's process tree the
+//     same way a background session has, and its reports belong on the pane
+//     that shows the tmux client.
+//
+// The caller's pid, which the kernel gives, checks the harness_pid it claims:
+// a hook runs under its harness, so the harness is the caller or one of its
+// ancestors. A claim that is neither is not believed, and the caller is tested
+// in its place.
 //
 // What cannot be read leaves the report alone: a harness that has exited, as
 // one may by the time its SessionEnd arrives, a platform with no process
@@ -39,11 +60,17 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 	if root <= 1 {
 		return false
 	}
+	if cs != nil && cs.peerPID > 1 && !selfOrAncestor(harnessPID, cs.peerPID) {
+		harnessPID = cs.peerPID
+	}
 	if id, ok := readEnvVarOf(harnessPID, "TUIOS_PANE_ID"); !ok || id != windowID {
 		return false
 	}
-	in, known := processInPane(harnessPID, root)
-	return known && !in
+	if in, known := processInPane(harnessPID, root); !known || in {
+		return false
+	}
+	reached, known := ancestryReachesMultiplexer(harnessPID)
+	return known && !reached
 }
 
 // paneProcess returns the id of the window target names and the pid of the
@@ -67,6 +94,54 @@ func (s *Session) paneProcess(target string) (string, int) {
 		return id, 0
 	}
 	return id, pty.ShellPID()
+}
+
+// selfOrAncestor says whether pid is child or one of child's ancestors. A
+// process record on the way that cannot be read answers true: the claim
+// stands when it cannot be checked.
+func selfOrAncestor(pid, child int) bool {
+	for depth := 0; depth <= paneOriginMaxDepth && child > 1; depth++ {
+		if child == pid {
+			return true
+		}
+		next, _, ok := readProcLineage(child)
+		if !ok {
+			return true
+		}
+		child = next
+	}
+	return false
+}
+
+// ancestryReachesMultiplexer says whether an ancestor of pid is a
+// multiplexer server, by the name of its executable. known is false when a
+// process record on the way cannot be read.
+func ancestryReachesMultiplexer(pid int) (reached, known bool) {
+	ppid, _, ok := readProcLineage(pid)
+	if !ok {
+		return false, false
+	}
+	for depth := 0; depth < paneOriginMaxDepth && ppid > 1; depth++ {
+		if slices.Contains(multiplexerServers, executableName(ppid)) {
+			return true, true
+		}
+		next, _, ok := readProcLineage(ppid)
+		if !ok {
+			return false, false
+		}
+		ppid = next
+	}
+	return false, true
+}
+
+// executableName is the base name of the file process pid executes, or of its
+// process name when the executable cannot be read.
+func executableName(pid int) string {
+	info := readProcessInfo(pid)
+	if info.exe != "" {
+		return filepath.Base(info.exe)
+	}
+	return info.comm
 }
 
 // processInPane says whether process pid runs in the pane whose process is
