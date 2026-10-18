@@ -57,7 +57,9 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		{"printer status", "\x1b[?15n", ""},
 		{"UDK status", "\x1b[?25n", ""},
 		{"keyboard status", "\x1b[?26n", ""},
-		{"colour scheme", "\x1b[?996n", ""},
+		// Answered on both backends as the mode 2031 notice. See
+		// TestConform_ColorSchemeDSR.
+		{"colour scheme", "\x1b[?996n", "\x1b[?997;1n"},
 		// No sixel (4) until the host is known to show it. See
 		// TestSixelAdvertisedFollowsHost.
 		{"DA1", "\x1b[c", "\x1b[?62;22c"},

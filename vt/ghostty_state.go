@@ -262,29 +262,26 @@ func (t *GhosttyTerminal) SetThemeColors(fg, bg, cur color.Color, ansiPalette [1
 	t.markAllDirtyLocked()
 }
 
-// SetReportColors mirrors the pure emulator: the colours an OSC 10 and OSC 11
-// query is answered with while the guest has not set its own. Nothing drawn
-// depends on them, so no cache is dropped.
-func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color) {
+// SetReportColors mirrors the pure emulator: the colours an OSC 10, OSC 11
+// and OSC 4 query is answered with while the guest has not set its own, and
+// one colour scheme notice for a change to a guest that turned on mode 2031.
+// Nothing drawn depends on them, so no cache is dropped.
+func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color, pal [16]color.Color) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	before := firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
-	t.reportFg, t.reportBg = fg, bg
-	after := firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
-	if report := colorSchemeChange(before, after); report != "" {
-		if on, _ := t.term.Mode(gh.ModeColorSchemeReport); on {
-			_, _ = io.WriteString(t.pipe, report)
-		}
+	changed := !sameReport(t.reportFg, t.reportBg, t.reportPal, fg, bg, pal)
+	t.reportFg, t.reportBg, t.reportPal = fg, bg, pal
+	if !changed {
+		return
+	}
+	if on, _ := t.term.Mode(gh.ModeColorSchemeReport); on {
+		_, _ = io.WriteString(t.pipe, colorSchemeNotice(t.reportedBackgroundLocked()))
 	}
 }
 
-// SetReportPalette mirrors the pure emulator: what an OSC 4 query for one of
-// the sixteen ANSI slots is answered with while neither the guest nor a theme
-// has set the slot.
-func (t *GhosttyTerminal) SetReportPalette(pal [16]color.Color) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.reportPal = pal
+// reportedBackgroundLocked is the answer to an OSC 11 query. t.mu is held.
+func (t *GhosttyTerminal) reportedBackgroundLocked() color.Color {
+	return firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
 }
 
 func (t *GhosttyTerminal) refreshPaletteClaimsLocked() {
@@ -413,7 +410,7 @@ func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
 		case 10:
 			c = firstColor(t.guestFg, t.reportFg, t.defaultFg, color.White)
 		case 11:
-			c = firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
+			c = t.reportedBackgroundLocked()
 		case 12:
 			c = firstColor(t.guestCur, t.defaultCur, color.White)
 		}

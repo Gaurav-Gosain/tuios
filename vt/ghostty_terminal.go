@@ -82,7 +82,7 @@ type GhosttyTerminal struct {
 	// not set its own colour. See SetReportColors.
 	reportFg, reportBg color.Color
 	// reportPal answers an OSC 4 query for a slot nothing else has set. See
-	// SetReportPalette.
+	// SetReportColors.
 	reportPal      [16]color.Color
 	themePal       [16]color.Color
 	paletteClaimed bool

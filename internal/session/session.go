@@ -2504,12 +2504,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	}
 
 	// Before the goroutines start, so the emulator needs no lock yet.
-	if s.reportBg != nil || s.reportFg != nil {
-		terminal.SetReportColors(s.reportFg, s.reportBg)
-	}
-	if s.reportPalHex != "" {
-		terminal.SetReportPalette(s.reportPal)
-	}
+	terminal.SetReportColors(s.reportFg, s.reportBg, s.reportPal)
 	s.ptys[id] = pty
 	if sp.host == "" {
 		s.places.Store(id, pty)

@@ -520,8 +520,11 @@ func query(spec string) int {
 }
 
 // schemeReports turns on mode 2031 in the terminal it runs in, waits for the
-// first light or dark report, prints it as HOSTTERM-SCHEME=light or =dark,
-// and exits. It gives up after 30 seconds with HOSTTERM-SCHEME=none.
+// first colour scheme notice, and prints it as HOSTTERM-SCHEME=light or
+// =dark. It keeps reading for a second after the first notice and prints how
+// many arrived in all as HOSTTERM-SCHEME-NOTICES=N, so a test can tell one
+// notice per theme change from several. It gives up after 30 seconds with
+// HOSTTERM-SCHEME=none.
 func schemeReports() int {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
@@ -537,20 +540,27 @@ func schemeReports() int {
 	_, _ = tty.WriteString("\x1b[?2031h")
 	fmt.Fprint(tty, "HOSTTERM-SCHEME-WAITING\r\n")
 	got := make(chan string, 1)
+	var mu sync.Mutex
+	var seen []byte
 	go func() {
-		var seen []byte
 		buf := make([]byte, 256)
+		sent := false
 		for {
 			n, err := tty.Read(buf)
+			mu.Lock()
 			seen = append(seen, buf[:n]...)
+			all := seen
+			mu.Unlock()
 			switch {
-			case bytes.Contains(seen, []byte("\x1b[?997;1n")):
+			case sent:
+			case bytes.Contains(all, []byte("\x1b[?997;1n")):
 				got <- "dark"
-				return
-			case bytes.Contains(seen, []byte("\x1b[?997;2n")):
+				sent = true
+			case bytes.Contains(all, []byte("\x1b[?997;2n")):
 				got <- "light"
-				return
-			case err != nil:
+				sent = true
+			}
+			if err != nil {
 				return
 			}
 		}
@@ -558,10 +568,14 @@ func schemeReports() int {
 	answer := "none"
 	select {
 	case answer = <-got:
+		time.Sleep(time.Second)
 	case <-time.After(30 * time.Second):
 	}
+	mu.Lock()
+	notices := bytes.Count(seen, []byte("\x1b[?997;"))
+	mu.Unlock()
 	_, _ = tty.WriteString("\x1b[?2031l")
 	_ = term.Restore(tty.Fd(), old)
-	fmt.Printf("HOSTTERM-SCHEME=%s\n", answer)
+	fmt.Printf("HOSTTERM-SCHEME=%s\nHOSTTERM-SCHEME-NOTICES=%d\n", answer, notices)
 	return 0
 }

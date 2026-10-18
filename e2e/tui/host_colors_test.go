@@ -660,26 +660,32 @@ func omarchySwitch(t *testing.T, base, id string) {
 
 // TestOmarchyThemeSwitchIsFollowed runs a daemon session on a machine with
 // Omarchy and no tuios theme set, so tuios follows the Omarchy theme. It
-// starts on Tokyo Night, then Omarchy switches to Catppuccin Latte while the
-// client runs.
+// starts on Tokyo Night, then Omarchy switches to Gruvbox, another dark
+// theme, and then to Catppuccin Latte, while the client runs.
 //
-// After the switch, with no restart and no key pressed:
-//   - a pane's OSC 11 is answered with Latte's background, through the
-//     daemon's emulator, so the colours went from the client to the daemon;
-//   - a program that turned on mode 2031 gets the light report;
+// After each switch, with no restart and no key pressed:
+//   - a program that turned on mode 2031 gets one CSI ? 997 n notice: dark
+//     for Gruvbox, although the background stayed dark, and light for Latte.
+//     For Gruvbox it gets exactly one, although the background, the text
+//     colour and the palette all changed;
+//   - a pane's OSC 11 is answered with the new background, and after Gruvbox
+//     OSC 4 slot 4 with Gruvbox's blue, through the daemon's emulator, so the
+//     colours went from the client to the daemon;
 //   - the pane frame is drawn in a new colour.
 //
 // Each state is kept as a frame drawn on the theme's ground, which is what
 // the Omarchy terminal around tuios shows.
 //
 // How this could pass wrongly: the answer could be the first theme read
-// again, but Tokyo Night and Latte differ in every colour checked; the
-// report could come from somewhere else, but the program asks nothing and
-// tuios sends a report only when the background changes kind.
+// again, but the three themes differ in every colour checked; the notice
+// could come from somewhere else, but the program asks nothing, and before
+// the change to every palette change tuios sent nothing for a dark to dark
+// switch.
 //
-// Negative control: with the watcher hub not started (startOmarchyFollow
-// returning nil), the pane keeps answering Tokyo Night's background, no
-// report arrives, and the test fails on all three.
+// Negative controls: with the watcher hub not started (startOmarchyFollow
+// returning nil), the pane keeps answering Tokyo Night's background and no
+// notice arrives. With the notice sent only on a dark and light flip, the
+// Gruvbox step gets no notice.
 func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -718,10 +724,7 @@ func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
 	saveArtifact(t, term, artifacts, "tokyo-night")
 	renderScreenPNG(t, term.Screen(), hostGroundPalette("#a9b1d6", "#1a1b26"), filepath.Join(artifacts, "tokyo-night.png"))
 
-	// A program that asks to be told about light and dark, waiting.
-	if out, err := tuiosCLI(t, base, "send-keys", "-s", "e2e-omarchy", "-l", "clear; "+host+" scheme\r"); err != nil {
-		t.Fatalf("start the scheme listener: %v\n%s", err, out)
-	}
+	// A program that asks to be told when the colours change, waiting.
 	waitPane := func(want string) string {
 		t.Helper()
 		var pane string
@@ -735,13 +738,40 @@ func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
 		}
 		return pane
 	}
-	if pane := waitPane("HOSTTERM-SCHEME-WAITING"); !strings.Contains(pane, "HOSTTERM-SCHEME-WAITING") {
-		t.Fatalf("the scheme listener never started:\n%s", pane)
+	listen := func() {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "send-keys", "-s", "e2e-omarchy", "-l", "clear; "+host+" scheme\r"); err != nil {
+			t.Fatalf("start the scheme listener: %v\n%s", err, out)
+		}
+		if pane := waitPane("HOSTTERM-SCHEME-WAITING"); !strings.Contains(pane, "HOSTTERM-SCHEME-WAITING") {
+			t.Fatalf("the scheme listener never started:\n%s", pane)
+		}
 	}
+	listen()
+
+	// Dark to dark: the background stays dark, and the program is still
+	// told, so it can ask for the new colours.
+	omarchySwitch(t, base, "gruvbox")
+	const gruvboxBg, gruvboxBlue = "rgb:2828/2828/2828", "rgb:7d7d/aeae/a3a3"
+	if pane := waitPane("HOSTTERM-SCHEME-NOTICES="); !strings.Contains(pane, "HOSTTERM-SCHEME=dark") {
+		t.Fatalf("after the switch to Gruvbox the program that turned on mode 2031 was not told dark:\n%s", pane)
+	} else if m := regexp.MustCompile(`HOSTTERM-SCHEME-NOTICES=(\d+)`).FindStringSubmatch(pane); m == nil || m[1] != "1" {
+		t.Errorf("the switch to Gruvbox did not send the program exactly one notice:\n%s", pane)
+	}
+	want := map[string]string{"11": gruvboxBg, "4;4": gruvboxBlue}
+	got := askPane(t, base, "e2e-omarchy", host, want)
+	for spec, w := range want {
+		if got[spec] != w {
+			t.Errorf("after the switch to Gruvbox a pane's OSC %s was answered %q, want Gruvbox's %q", spec, got[spec], w)
+		}
+	}
+	saveArtifact(t, term, artifacts, "gruvbox")
+	renderScreenPNG(t, term.Screen(), hostGroundPalette("#d4be98", "#282828"), filepath.Join(artifacts, "gruvbox.png"))
+	listen()
 
 	omarchySwitch(t, base, "catppuccin-latte")
 
-	if pane := waitPane("HOSTTERM-SCHEME="); !strings.Contains(pane, "HOSTTERM-SCHEME=light") {
+	if pane := waitPane("HOSTTERM-SCHEME-NOTICES="); !strings.Contains(pane, "HOSTTERM-SCHEME=light") {
 		t.Errorf("after the switch to Catppuccin Latte the program that turned on mode 2031 was not told light:\n%s", pane)
 	}
 	if got := askPane(t, base, "e2e-omarchy", host, map[string]string{"11": latteBg}); got["11"] != latteBg {

@@ -953,6 +953,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
 			line, col := e.reportedCursorPosition()
 			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(line, col, 0)) // We don't support page numbers //nolint:errcheck
+		case 996: // Colour scheme: answered as the mode 2031 notice is sent.
+			_, _ = io.WriteString(e.pipe, colorSchemeNotice(e.reportedBackground()))
 		default:
 			return false
 		}

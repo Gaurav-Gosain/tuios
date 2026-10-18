@@ -38,8 +38,7 @@ func (w *Window) SetReportColors(fg, bg color.Color, pal *[16]color.Color, key s
 	}
 	w.ioMu.Lock()
 	if w.Terminal != nil {
-		w.Terminal.SetReportColors(fg, bg)
-		w.Terminal.SetReportPalette(slots)
+		w.Terminal.SetReportColors(fg, bg, slots)
 	}
 	w.ioMu.Unlock()
 }

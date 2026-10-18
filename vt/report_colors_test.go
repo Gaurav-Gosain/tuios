@@ -57,7 +57,7 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
 		term.SetThemeColors(themeFg, themeBg, nil, [16]color.Color{})
-		term.SetReportColors(ink, painted)
+		term.SetReportColors(ink, painted, [16]color.Color{})
 		if got := oscAnswer(t, term, queryBg); got != "rgb:1212/3434/5656" {
 			t.Errorf("OSC 11 answered %q, want the painted ground rgb:1212/3434/5656", got)
 		}
@@ -70,7 +70,7 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
 		term.SetThemeColors(themeFg, themeBg, nil, [16]color.Color{})
-		term.SetReportColors(nil, nil)
+		term.SetReportColors(nil, nil, [16]color.Color{})
 		if got := oscAnswer(t, term, queryBg); got != "rgb:1e1e/1e1e/2e2e" {
 			t.Errorf("OSC 11 answered %q, want the theme's rgb:1e1e/1e1e/2e2e", got)
 		}
@@ -85,7 +85,7 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
 		before := oscAnswer(t, term, queryFg)
-		term.SetReportColors(nil, painted)
+		term.SetReportColors(nil, painted, [16]color.Color{})
 		if got := oscAnswer(t, term, queryBg); got != "rgb:1212/3434/5656" {
 			t.Errorf("OSC 11 answered %q, want rgb:1212/3434/5656", got)
 		}
@@ -97,7 +97,7 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 	t.Run("the guest's own colour wins, and a reset gives the painted one back", func(t *testing.T) {
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
-		term.SetReportColors(ink, painted)
+		term.SetReportColors(ink, painted, [16]color.Color{})
 		// The program sets its own background, then asks.
 		if got := oscAnswer(t, term, "\x1b]11;rgb:ff/00/00\x1b\\"+queryBg); got != "rgb:ffff/0000/0000" {
 			t.Errorf("after OSC 11 set, the query answered %q, want the guest's rgb:ffff/0000/0000", got)
@@ -111,8 +111,8 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
 		before := oscAnswer(t, term, queryBg)
-		term.SetReportColors(ink, painted)
-		term.SetReportColors(nil, nil)
+		term.SetReportColors(ink, painted, [16]color.Color{})
+		term.SetReportColors(nil, nil, [16]color.Color{})
 		if got := oscAnswer(t, term, queryBg); got != before {
 			t.Errorf("OSC 11 answered %q after the paint was switched off, want the original %q", got, before)
 		}
@@ -121,7 +121,7 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 }
 
 // An OSC 4 query for one of the sixteen is answered with the host terminal's
-// own colour for the slot when tuios knows it (SetReportPalette), on either
+// own colour for the slot when tuios knows it (the palette SetReportColors takes), on either
 // backend. The E2E test of host colours runs the pure emulator in the daemon
 // only, so the libghostty-vt backend is held to it here.
 //
@@ -167,7 +167,7 @@ func TestReportPaletteAnswersOSC4(t *testing.T) {
 
 	t.Run("the host's slot answers", func(t *testing.T) {
 		term := fresh(t)
-		term.SetReportPalette(pal)
+		term.SetReportColors(nil, nil, pal)
 		if got := answer(t, term, "\x1b]4;1;?\x1b\\"); got != "rgb:c4c4/1a1a/1616" {
 			t.Errorf("OSC 4;1 answered %q, want the host's rgb:c4c4/1a1a/1616", got)
 		}
@@ -175,14 +175,14 @@ func TestReportPaletteAnswersOSC4(t *testing.T) {
 	t.Run("a nil slot keeps the default", func(t *testing.T) {
 		term := fresh(t)
 		before := answer(t, term, "\x1b]4;2;?\x1b\\")
-		term.SetReportPalette(pal)
+		term.SetReportColors(nil, nil, pal)
 		if got := answer(t, term, "\x1b]4;2;?\x1b\\"); got != before || got == "" {
 			t.Errorf("OSC 4;2 answered %q, want the unchanged %q", got, before)
 		}
 	})
 	t.Run("the guest's own slot wins and a reset gives the host's back", func(t *testing.T) {
 		term := fresh(t)
-		term.SetReportPalette(pal)
+		term.SetReportColors(nil, nil, pal)
 		if got := answer(t, term, "\x1b]4;1;rgb:00/ff/00\x1b\\\x1b]4;1;?\x1b\\"); got != "rgb:0000/ffff/0000" {
 			t.Errorf("after OSC 4 set, the query answered %q, want the guest's rgb:0000/ffff/0000", got)
 		}
@@ -195,7 +195,7 @@ func TestReportPaletteAnswersOSC4(t *testing.T) {
 		var theme [16]color.Color
 		theme[1] = themeRed
 		term.SetThemeColors(color.White, color.Black, nil, theme)
-		term.SetReportPalette(pal)
+		term.SetReportColors(nil, nil, pal)
 		if got := answer(t, term, "\x1b]4;1;?\x1b\\"); got != "rgb:f3f3/8b8b/a8a8" {
 			t.Errorf("OSC 4;1 answered %q, want the theme's rgb:f3f3/8b8b/a8a8", got)
 		}
@@ -203,7 +203,7 @@ func TestReportPaletteAnswersOSC4(t *testing.T) {
 	t.Run("a slot past fifteen is untouched", func(t *testing.T) {
 		term := fresh(t)
 		before := answer(t, term, "\x1b]4;17;?\x1b\\")
-		term.SetReportPalette(pal)
+		term.SetReportColors(nil, nil, pal)
 		if got := answer(t, term, "\x1b]4;17;?\x1b\\"); got != before {
 			t.Errorf("OSC 4;17 answered %q, want the unchanged %q", got, before)
 		}
@@ -212,61 +212,3 @@ func TestReportPaletteAnswersOSC4(t *testing.T) {
 }
 
 var osc4RGB = regexp.MustCompile(`\x1b\]4;\d+;(rgb:[0-9a-fA-F/]+)`)
-
-// A program that turned on mode 2031 is told when the background it is drawn
-// on goes from dark to light or back: the Omarchy theme switching from Tokyo
-// Night to Catppuccin Latte, or the host terminal switching its scheme. A
-// change that stays dark sends nothing, and neither does any change to a
-// program that never asked.
-func TestReportColorsSendColorSchemeReport(t *testing.T) {
-	dark := color.RGBA{R: 0x1a, G: 0x1b, B: 0x26, A: 0xff}
-	otherDark := color.RGBA{R: 0x28, G: 0x28, B: 0x28, A: 0xff}
-	light := color.RGBA{R: 0xef, G: 0xf1, B: 0xf5, A: 0xff}
-
-	// replies collects what the emulator writes back within a moment.
-	replies := func(term vt.Terminal) <-chan string {
-		out := make(chan string, 1)
-		go func() {
-			var all []byte
-			buf := make([]byte, 256)
-			for {
-				n, err := term.Read(buf)
-				all = append(all, buf[:n]...)
-				if err != nil {
-					break
-				}
-			}
-			out <- string(all)
-		}()
-		return out
-	}
-
-	for _, tc := range []struct {
-		name     string
-		mode     bool
-		from, to color.Color
-		want     string
-	}{
-		{"dark to light", true, dark, light, "\x1b[?997;2n"},
-		{"light to dark", true, light, dark, "\x1b[?997;1n"},
-		{"dark to dark", true, dark, otherDark, ""},
-		{"no mode 2031", false, dark, light, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			term := vt.New(20, 4)
-			term.SetReportColors(nil, tc.from)
-			if tc.mode {
-				if _, err := term.Write([]byte("\x1b[?2031h")); err != nil {
-					t.Fatal(err)
-				}
-			}
-			got := replies(term)
-			term.SetReportColors(nil, tc.to)
-			time.Sleep(100 * time.Millisecond)
-			_ = term.Close()
-			if s := <-got; s != tc.want {
-				t.Errorf("the emulator wrote %q, want %q", s, tc.want)
-			}
-		})
-	}
-}

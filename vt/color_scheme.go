@@ -2,28 +2,25 @@ package vt
 
 import "image/color"
 
-// Mode 2031: a program that turns it on asks to be told when the terminal
-// goes from a dark background to a light one or back. The terminal sends
-// CSI ? 997 ; 1 n for dark and CSI ? 997 ; 2 n for light.
+// Mode 2031: a program that turns it on asks to be told when the terminal's
+// colours change. The terminal sends CSI ? 997 ; 1 n when the background is
+// dark and CSI ? 997 ; 2 n when it is light. The contour spec that defines the
+// mode sends the notice on any palette change, not only on a switch between
+// dark and light, and programs act on that: Neovim asks for the background
+// again, and opencode asks for the whole palette again. A program that reads
+// the notice only as dark or light sees the same value twice.
 //
-// In tuios the background a pane is drawn on is the one SetReportColors
-// gives it: the theme's, the painted one, or the host's own. So the report is
-// sent when that colour changes between dark and light, which is when the
-// theme switches to one of the other kind (the Omarchy theme among them) or
-// the host terminal switches its scheme.
+// In tuios the colours a pane reports are the ones SetReportColors gives it:
+// the theme's, the painted ground, or the host's own. So the notice is sent
+// when one of those changes, once per call, which is once per theme the client
+// pushes. CSI ? 996 n asks for the same report at any time.
+//
+// Spec: https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
 
-// colorSchemeChange is the report to send when the background goes from
-// before to after, and empty when both are dark or both light, or one is not
-// known.
-func colorSchemeChange(before, after color.Color) string {
-	if before == nil || after == nil {
-		return ""
-	}
-	light := isLightBackground(after)
-	if isLightBackground(before) == light {
-		return ""
-	}
-	if light {
+// colorSchemeNotice is the mode 2031 notice, and the answer to DSR 996, for a
+// pane on background bg.
+func colorSchemeNotice(bg color.Color) string {
+	if bg != nil && isLightBackground(bg) {
 		return "\x1b[?997;2n"
 	}
 	return "\x1b[?997;1n"
@@ -34,4 +31,29 @@ func colorSchemeChange(before, after color.Color) string {
 func isLightBackground(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
 	return 299*r+587*g+114*b > 1000*0xffff/2
+}
+
+// sameReport reports whether two sets of report colours give the same
+// answers.
+func sameReport(fg0, bg0 color.Color, pal0 [16]color.Color, fg1, bg1 color.Color, pal1 [16]color.Color) bool {
+	if !sameColor(fg0, fg1) || !sameColor(bg0, bg1) {
+		return false
+	}
+	for i := range pal0 {
+		if !sameColor(pal0[i], pal1[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameColor compares two colours by value. Both nil is the same; one nil is
+// not.
+func sameColor(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }

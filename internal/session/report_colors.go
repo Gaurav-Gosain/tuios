@@ -49,8 +49,7 @@ func (p *PTY) setReportColors(fg, bg color.Color, pal [16]color.Color) {
 	p.terminalMu.Lock()
 	defer p.terminalMu.Unlock()
 	if p.terminal != nil {
-		p.terminal.SetReportColors(fg, bg)
-		p.terminal.SetReportPalette(pal)
+		p.terminal.SetReportColors(fg, bg, pal)
 	}
 }
 

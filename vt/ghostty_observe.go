@@ -277,7 +277,8 @@ func (t *GhosttyTerminal) observeModifyOtherKeys(final byte, params []byte) {
 }
 
 // answerDecStatusReport answers the DEC private DSR queries that libghostty
-// drops: CSI ? 5 n (operating status) and CSI ? 6 n (DECXCPR). The pure
+// drops: CSI ? 5 n (operating status), CSI ? 6 n (DECXCPR) and CSI ? 996 n
+// (the colour scheme, which libghostty leaves to its host). The pure
 // emulator answers both, and xterm does too, so a guest that probes with the
 // private form would otherwise wait out its timeout on this backend only.
 // libghostty still answers the ANSI forms CSI 5 n and CSI 6 n itself.
@@ -309,6 +310,9 @@ func (t *GhosttyTerminal) answerDecStatusReport(params []byte) {
 		}
 		// No page number, as xterm at the VT220 level this pane claims in DA1.
 		_, _ = t.pipe.Write([]byte(ansi.ExtendedCursorPositionReport(line+1, col+1, 0)))
+	case 996:
+		t.scanner.flushOut()
+		_, _ = t.pipe.Write([]byte(colorSchemeNotice(t.reportedBackgroundLocked())))
 	}
 }
 
