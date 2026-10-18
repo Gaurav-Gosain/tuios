@@ -126,15 +126,12 @@ func (t *Template) Exprs() []*Expr {
 
 // Eval evaluates the template. A template that is one binding and nothing
 // else gives the binding's value with its type. Any other template gives a
-// string. Strings are passed through Sanitize, so state cannot carry an
-// escape sequence to the screen.
+// string, at most 64 KiB. Every string and key passes through Sanitize, so
+// state cannot carry an escape sequence to the screen.
 func (t *Template) Eval(env *Env) (any, error) {
+	env = withBudget(env)
 	if len(t.parts) == 1 && t.parts[0].expr != nil {
-		v, err := t.parts[0].expr.Eval(env)
-		if s, ok := v.(string); ok {
-			v = Sanitize(s)
-		}
-		return v, err
+		return t.parts[0].expr.Eval(env)
 	}
 	var b strings.Builder
 	for _, p := range t.parts {
@@ -146,12 +143,17 @@ func (t *Template) Eval(env *Env) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		b.WriteString(Stringify(v))
+		if err := writeText(&b, v, env.Budget); err != nil {
+			if err == errTooLong {
+				break
+			}
+			return nil, err
+		}
 		if b.Len() > maxString {
 			break
 		}
 	}
-	return Sanitize(b.String()), nil
+	return Sanitize(cutRunes(b.String(), maxString)), nil
 }
 
 // Render evaluates the template to text. A binding that runs out of budget
@@ -164,8 +166,14 @@ func (t *Template) Render(env *Env) string {
 	return Stringify(v)
 }
 
-// exprOrBinding parses an attribute that holds an expression: a bare
-// expression such as form.canary, or one binding such as {state.cpu > 90}.
+// ParseBinding parses an attribute that holds one expression, such as if,
+// show or a column format: a bare expression such as form.canary, or one
+// binding such as {state.cpu > 90}.
+func ParseBinding(s string) (*Expr, error) {
+	e, _, err := exprOrBinding(s)
+	return e, err
+}
+
 func exprOrBinding(s string) (*Expr, int, error) {
 	trim := strings.TrimSpace(s)
 	lead := strings.Index(s, trim)

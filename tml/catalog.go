@@ -2,7 +2,7 @@ package tml
 
 import (
 	"slices"
-	"sort"
+	"strconv"
 )
 
 // AttrType is the type an attribute value must have.
@@ -43,10 +43,16 @@ var attrTypeNames = [...]string{
 	TObject: "object",
 }
 
-func (t AttrType) String() string { return attrTypeNames[t] }
+func (t AttrType) String() string {
+	if int(t) < len(attrTypeNames) {
+		return attrTypeNames[t]
+	}
+	return "AttrType(" + strconv.Itoa(int(t)) + ")"
+}
 
 // AttrSpec describes one attribute of a component.
 type AttrSpec struct {
+	Name     string
 	Type     AttrType
 	Enum     []string // TEnum: the accepted values
 	Required bool
@@ -55,7 +61,10 @@ type AttrSpec struct {
 	// Min and Max bound a TInt or TNumber when HasRange is set.
 	Min, Max float64
 	HasRange bool
-	Doc      string
+	// Multiline marks a text attribute that may hold line breaks. The
+	// parsers turn a tab or newline in any other text attribute into a space.
+	Multiline bool
+	Doc       string
 }
 
 // Content is what a component may hold.
@@ -70,12 +79,13 @@ const (
 	ContentOnly                  // only the components Children names
 )
 
-// Component is one entry of the catalog.
+// Component is one entry of the catalog. Lookup and Components return
+// copies, so a caller cannot change the catalog.
 type Component struct {
 	Name     string
 	Group    string
 	Doc      string
-	Attrs    map[string]AttrSpec
+	Attrs    []AttrSpec // sorted by name; the global attributes are separate
 	Content  Content
 	Children []string // ContentOnly: the accepted child types
 	// MinChildren and MaxChildren bound the number of child components.
@@ -88,9 +98,7 @@ type Component struct {
 	Block bool
 }
 
-// Roles are the theme roles a role attribute accepts. A host resolves each to
-// a colour at the client's colour depth.
-var Roles = []string{
+var roles = [...]string{
 	"fg", "dim", "mute", "accent", "accent-bright",
 	"success", "warning", "error", "info", "attention", "busy", "edge",
 	"canvas", "panel", "surface", "card",
@@ -98,125 +106,222 @@ var Roles = []string{
 	"series1", "series2", "series3", "series4", "series5", "series6",
 }
 
-// Slots are the ANSI colours the root's accent may name as slot:NAME.
-var Slots = []string{
+var slots = [...]string{
 	"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
 	"bright-black", "bright-red", "bright-green", "bright-yellow",
 	"bright-blue", "bright-magenta", "bright-cyan", "bright-white",
 }
 
-// roleAliases maps colour words an author reaches for to the role that means
+// Roles returns the theme roles a role attribute accepts. A host resolves
+// each to a colour at the client's colour depth.
+func Roles() []string { return slices.Clone(roles[:]) }
+
+// Slots returns the ANSI colours the root's accent may name as slot:NAME.
+func Slots() []string { return slices.Clone(slots[:]) }
+
+// roleAlias maps a colour word an author reaches for to the role that means
 // the same thing.
-var roleAliases = map[string]string{
-	"red": "error", "danger": "error", "green": "success", "ok": "success",
-	"yellow": "warning", "orange": "warning", "warn": "warning", "blue": "info",
-	"gray": "dim", "grey": "dim", "muted": "mute", "primary": "accent",
-	"secondary": "dim", "white": "fg", "text": "fg", "border": "edge",
-	"background": "canvas", "bg": "canvas",
+func roleAlias(s string) string {
+	switch s {
+	case "red", "danger":
+		return "error"
+	case "green", "ok":
+		return "success"
+	case "yellow", "orange", "warn":
+		return "warning"
+	case "blue":
+		return "info"
+	case "gray", "grey", "secondary":
+		return "dim"
+	case "muted":
+		return "mute"
+	case "primary":
+		return "accent"
+	case "white", "text":
+		return "fg"
+	case "border":
+		return "edge"
+	case "background", "bg":
+		return "canvas"
+	}
+	return ""
 }
 
-// componentAliases maps tag names from HTML and other toolkits to the TML
+// componentAlias maps a tag name from HTML or another toolkit to the TML
 // component an author most likely meant.
-var componentAliases = map[string]string{
-	"div": "col", "span": "text", "p": "text", "h1": "heading", "h2": "heading",
-	"h3": "heading", "img": "image", "ul": "list", "ol": "list", "li": "text",
-	"pre": "code", "hr": "spacer", "strong": "b", "em": "i", "vbox": "col",
-	"hbox": "row", "progressbar": "progress", "meter": "gauge", "chart": "bar",
-	"barchart": "bar", "linechart": "line", "piechart": "pie", "label": "text",
-	"tag": "badge", "pill": "badge", "dialog": "modal", "panel": "card",
-	"tr": "column", "th": "column", "td": "column", "option": "select",
-	"switch": "toggle", "range": "slider", "dropdown": "select", "link": "a",
-	"notification": "toast", "kpi": "stat", "metric": "stat",
-}
-
-// Global attributes apply to every component.
-var globalAttrs = map[string]AttrSpec{
-	"id":    {Type: TIdent, Doc: "Names the node for patches, focus and events."},
-	"key":   {Type: TString, Bind: true, Doc: "Keeps identity in repeated children."},
-	"each":  {Type: TData, Doc: "Repeats the node once per array element."},
-	"as":    {Type: TIdent, Doc: "The name of the element inside each. Default item."},
-	"if":    {Type: TExpr, Doc: "Drops the node when false."},
-	"show":  {Type: TExpr, Doc: "Hides the node when false and keeps its space."},
-	"w":     {Type: TSize, Bind: true, Doc: "Width: cells, 50%, fill or fill:2."},
-	"h":     {Type: TSize, Bind: true, Doc: "Height: cells, 50%, fill or fill:2."},
-	"min-w": {Type: TSize, Doc: "Smallest width."},
-	"max-w": {Type: TSize, Doc: "Largest width."},
-	"min-h": {Type: TSize, Doc: "Smallest height."},
-	"max-h": {Type: TSize, Doc: "Largest height."},
-	"pad":   {Type: TPad, Doc: "Padding in cells: all, vertical horizontal, or top right bottom left."},
-	"grow":  {Type: TInt, HasRange: true, Min: 0, Max: 100, Doc: "Share of free space."},
-}
-
-var catalog = map[string]*Component{}
-
-func init() {
-	for _, c := range components() {
-		catalog[c.Name] = c
+func componentAlias(s string) string {
+	switch s {
+	case "div", "vbox":
+		return "col"
+	case "hbox":
+		return "row"
+	case "span", "p", "li", "label":
+		return "text"
+	case "h1", "h2", "h3":
+		return "heading"
+	case "img":
+		return "image"
+	case "ul", "ol":
+		return "list"
+	case "pre":
+		return "code"
+	case "hr":
+		return "spacer"
+	case "strong":
+		return "b"
+	case "em":
+		return "i"
+	case "progressbar":
+		return "progress"
+	case "meter":
+		return "gauge"
+	case "chart", "barchart":
+		return "bar"
+	case "linechart":
+		return "line"
+	case "piechart":
+		return "pie"
+	case "tag", "pill":
+		return "badge"
+	case "dialog":
+		return "modal"
+	case "panel":
+		return "card"
+	case "tr", "th", "td":
+		return "column"
+	case "option", "dropdown":
+		return "select"
+	case "switch":
+		return "toggle"
+	case "range":
+		return "slider"
+	case "link":
+		return "a"
+	case "notification":
+		return "toast"
+	case "kpi", "metric":
+		return "stat"
 	}
+	return ""
 }
 
-// Lookup returns the catalog entry for a component type.
-func Lookup(name string) (*Component, bool) {
-	c, ok := catalog[name]
-	return c, ok
-}
-
-// Components returns the catalog sorted by group, then by name.
-func Components() []*Component {
-	out := make([]*Component, 0, len(catalog))
-	for _, c := range catalog {
-		out = append(out, c)
-	}
-	order := map[string]int{}
-	for i, g := range groupOrder {
-		order[g] = i
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Group != out[j].Group {
-			return order[out[i].Group] < order[out[j].Group]
+// lookup returns the catalog entry itself. Code in this package must not
+// change it.
+func lookup(name string) *Component {
+	for i := range table {
+		if table[i].Name == name {
+			return &table[i]
 		}
-		return out[i].Name < out[j].Name
-	})
+	}
+	return nil
+}
+
+// Lookup returns a copy of the catalog entry for a component type.
+func Lookup(name string) (Component, bool) {
+	c := lookup(name)
+	if c == nil {
+		return Component{}, false
+	}
+	return c.clone(), true
+}
+
+// Components returns a copy of the catalog, sorted by group, then by name.
+func Components() []Component {
+	out := make([]Component, len(table))
+	for i := range table {
+		out[i] = table[i].clone()
+	}
 	return out
 }
 
-var groupOrder = []string{"document", "layout", "text", "inline", "data", "chart", "media", "status", "input", "container"}
+func (c *Component) clone() Component {
+	out := *c
+	out.Attrs = make([]AttrSpec, len(c.Attrs))
+	for i, a := range c.Attrs {
+		a.Enum = slices.Clone(a.Enum)
+		out.Attrs[i] = a
+	}
+	out.Children = slices.Clone(c.Children)
+	return out
+}
+
+// GlobalAttrs returns the attributes every component takes.
+func GlobalAttrs() []AttrSpec {
+	out := make([]AttrSpec, len(globals))
+	for i, a := range globals {
+		a.Enum = slices.Clone(a.Enum)
+		out[i] = a
+	}
+	return out
+}
 
 // AttrNames returns the attributes a component accepts, its own first, then
 // the global ones, each sorted.
-func (c *Component) AttrNames() []string {
-	own := make([]string, 0, len(c.Attrs))
-	for n := range c.Attrs {
-		own = append(own, n)
+func (c Component) AttrNames() []string {
+	out := make([]string, 0, len(c.Attrs)+len(globals))
+	for _, a := range c.Attrs {
+		out = append(out, a.Name)
 	}
-	sort.Strings(own)
-	global := make([]string, 0, len(globalAttrs))
-	for n := range globalAttrs {
-		if _, dup := c.Attrs[n]; !dup {
-			global = append(global, n)
+	for _, g := range globals {
+		if !c.hasOwn(g.Name) {
+			out = append(out, g.Name)
 		}
 	}
-	sort.Strings(global)
-	return append(own, global...)
+	return out
+}
+
+func (c Component) hasOwn(name string) bool {
+	for _, a := range c.Attrs {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Spec returns the spec of the named attribute, own or global.
-func (c *Component) Spec(name string) (AttrSpec, bool) {
-	if s, ok := c.Attrs[name]; ok {
-		return s, true
+func (c Component) Spec(name string) (AttrSpec, bool) {
+	for _, a := range c.Attrs {
+		if a.Name == name {
+			return a, true
+		}
 	}
-	s, ok := globalAttrs[name]
-	return s, ok
+	for _, g := range globals {
+		if g.Name == name {
+			return g, true
+		}
+	}
+	return AttrSpec{}, false
+}
+
+// AttrTypeOf returns the type of an attribute of a component type, without
+// copying the catalog entry.
+func AttrTypeOf(component, attr string) (AttrType, bool) {
+	c := lookup(component)
+	if c == nil {
+		return 0, false
+	}
+	s, ok := c.Spec(attr)
+	return s.Type, ok
+}
+
+// ContentOf returns the content model of a component type. An unknown type
+// holds blocks.
+func ContentOf(component string) Content {
+	if c := lookup(component); c != nil {
+		return c.Content
+	}
+	return ContentBlocks
 }
 
 // Accepts reports whether the component may hold a child of type child.
-func (c *Component) Accepts(child string) bool {
-	cc, known := catalog[child]
+func (c Component) Accepts(child string) bool {
+	cc := lookup(child)
 	switch c.Content {
 	case ContentBlocks:
-		return known && cc.Block
+		return cc != nil && cc.Block
 	case ContentInline:
-		return known && cc.Inline
+		return cc != nil && cc.Inline
 	case ContentOnly:
 		return slices.Contains(c.Children, child)
 	}
@@ -224,252 +329,335 @@ func (c *Component) Accepts(child string) bool {
 }
 
 // accepted lists the child types c accepts, sorted.
-func (c *Component) accepted() []string {
+func (c Component) accepted() []string {
 	var out []string
 	switch c.Content {
 	case ContentOnly:
 		out = append(out, c.Children...)
 	case ContentBlocks, ContentInline:
-		for _, cc := range catalog {
-			if c.Accepts(cc.Name) {
-				out = append(out, cc.Name)
+		for i := range table {
+			if c.Accepts(table[i].Name) {
+				out = append(out, table[i].Name)
 			}
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
-// attrMap is the attribute table of one component.
-type attrMap = map[string]AttrSpec
-
-func str(doc string) AttrSpec { return AttrSpec{Type: TString, Bind: true, Doc: doc} }
-func reqStr(doc string) AttrSpec {
-	return AttrSpec{Type: TString, Bind: true, Required: true, Doc: doc}
-}
-func num(doc string) AttrSpec { return AttrSpec{Type: TNumber, Bind: true, Doc: doc} }
-func intRange(lo, hi float64, doc string) AttrSpec {
-	return AttrSpec{Type: TInt, Bind: true, HasRange: true, Min: lo, Max: hi, Doc: doc}
-}
-func boolean(doc string) AttrSpec { return AttrSpec{Type: TBool, Bind: true, Doc: doc} }
-func enum(doc string, values ...string) AttrSpec {
-	return AttrSpec{Type: TEnum, Enum: values, Doc: doc}
-}
-func role() AttrSpec {
-	return AttrSpec{Type: TRole, Bind: true, Doc: "A theme role colour."}
-}
-func data(doc string) AttrSpec     { return AttrSpec{Type: TData, Required: true, Doc: doc} }
-func field(doc string) AttrSpec    { return AttrSpec{Type: TField, Doc: doc} }
-func action(doc string) AttrSpec   { return AttrSpec{Type: TAction, Doc: doc} }
-func ident(doc string) AttrSpec    { return AttrSpec{Type: TIdent, Doc: doc} }
-func reqIdent(doc string) AttrSpec { return AttrSpec{Type: TIdent, Required: true, Doc: doc} }
-
-var graphicsAttr = enum("How to draw: auto picks kitty graphics, then cells, then ASCII.", "auto", "kitty", "cells", "ascii")
-
-func chart(name, doc string, extra attrMap) *Component {
-	a := attrMap{"title": str("A caption above the chart."), "graphics": graphicsAttr, "role": role()}
-	for k, v := range extra {
-		a[k] = v
-	}
-	return &Component{Name: name, Group: "chart", Doc: doc, Attrs: a, Block: true}
+// globals are the attributes every component takes.
+var globals = [...]AttrSpec{
+	{Name: "as", Type: TIdent, Doc: "The name of the element inside each. Default item."},
+	{Name: "each", Type: TData, Doc: "Repeats the node once per array element."},
+	{Name: "grow", Type: TInt, HasRange: true, Min: 0, Max: 100, Doc: "Share of free space."},
+	{Name: "h", Type: TSize, Bind: true, Doc: "Height: cells, 50%, fill or fill:2."},
+	{Name: "id", Type: TIdent, Doc: "Names the node for patches, focus and events."},
+	{Name: "if", Type: TExpr, Doc: "Drops the node when false."},
+	{Name: "key", Type: TString, Bind: true, Doc: "Keeps identity in repeated children."},
+	{Name: "max-h", Type: TSize, Doc: "Largest height."},
+	{Name: "max-w", Type: TSize, Doc: "Largest width."},
+	{Name: "min-h", Type: TSize, Doc: "Smallest height."},
+	{Name: "min-w", Type: TSize, Doc: "Smallest width."},
+	{Name: "pad", Type: TPad, Doc: "Padding in cells: all, vertical horizontal, or top right bottom left."},
+	{Name: "show", Type: TExpr, Doc: "Hides the node when false and keeps its space."},
+	{Name: "w", Type: TSize, Bind: true, Doc: "Width: cells, 50%, fill or fill:2."},
 }
 
-// The input field attributes every field shares.
-func fieldAttrs(extra attrMap) attrMap {
-	a := attrMap{
-		"name":      reqIdent("The key of the value in the submitted form."),
-		"label":     str("The label shown before the field."),
-		"bind":      {Type: TPath, Doc: "A state path the field reads and writes."},
-		"required":  boolean("The form does not submit while the field is empty."),
-		"on-change": action("Runs when the value changes."),
-		"disabled":  boolean("The field does not take input."),
-	}
-	for k, v := range extra {
-		a[k] = v
-	}
-	return a
-}
-
-func components() []*Component {
-	blocksOf := func(name, group, doc string, a attrMap) *Component {
-		if a == nil {
-			a = attrMap{}
-		}
-		return &Component{Name: name, Group: group, Doc: doc, Attrs: a, Content: ContentBlocks, Block: true}
-	}
-	inlineHolder := func(name, group, doc string, a attrMap) *Component {
-		if a == nil {
-			a = attrMap{}
-		}
-		return &Component{Name: name, Group: group, Doc: doc, Attrs: a, Content: ContentInline, Block: true}
-	}
-	inline := func(name, doc string, a attrMap) *Component {
-		if a == nil {
-			a = attrMap{}
-		}
-		return &Component{Name: name, Group: "inline", Doc: doc, Attrs: a, Content: ContentInline, Inline: true}
-	}
-	void := func(name, group, doc string, a attrMap) *Component {
-		return &Component{Name: name, Group: group, Doc: doc, Attrs: a, Block: true}
-	}
-	raw := func(name, group, doc string, a attrMap) *Component {
-		if a == nil {
-			a = attrMap{}
-		}
-		return &Component{Name: name, Group: group, Doc: doc, Attrs: a, Content: ContentRaw, Block: true}
-	}
-	align := enum("Cross-axis alignment.", "start", "center", "end", "stretch")
-	justify := enum("Main-axis distribution.", "start", "center", "end", "between", "around")
-	press := action("Runs on enter or a click.")
-	gap := intRange(0, 100, "Cells between children.")
-
-	tml := blocksOf("tml", "document", "The document root.", attrMap{
-		"version": {Type: TInt, Required: true, HasRange: true, Min: 1, Max: 1, Doc: "The TML version. Always 1."},
-		"title":   {Type: TString, Doc: "The title on the frame."},
-		"accent":  {Type: TAccent, Doc: "The accent: a role, or an ANSI slot such as slot:magenta."},
-		"state":   {Type: TObject, Doc: "The JSON state store. In TML text, a <state> element."},
-		"on-key":  action("Runs on a key press no node took. event.key names the key."),
-	})
-	tml.Block = false // the root only
-
-	code := raw("code", "text", "Code, highlighted by lang. Also inline inside text.", attrMap{
-		"lang":  {Type: TString, Doc: "The language for highlighting."},
-		"lines": {Type: TBool, Doc: "Shows line numbers."},
-		"from":  {Type: TInt, HasRange: true, Min: 1, Max: 1e9, Doc: "The first line number."},
-	})
-	code.Inline = true
-
-	return []*Component{
-		tml,
-		// Layout
-		blocksOf("row", "layout", "Lays children out left to right.", attrMap{"gap": gap, "align": align, "justify": justify, "on-press": press}),
-		blocksOf("col", "layout", "Lays children out top to bottom.", attrMap{"gap": gap, "align": align, "justify": justify, "on-press": press}),
-		blocksOf("grid", "layout", "Wraps children into equal columns.", attrMap{
-			"cols": {Type: TInt, Required: true, HasRange: true, Min: 1, Max: 24, Doc: "The number of columns."}, "gap": gap}),
-		blocksOf("stack", "layout", "Layers children on top of each other.", nil),
-		void("spacer", "layout", "Takes the free space.", attrMap{}),
-		blocksOf("scroll", "layout", "Scrolls its children.", attrMap{"follow": enum("Keeps the view at this end as content grows.", "start", "end")}),
-		func() *Component {
-			c := blocksOf("split", "layout", "Two children with a divider that a person can drag.", attrMap{
-				"dir":   enum("h puts the children side by side, v stacks them.", "h", "v"),
-				"ratio": {Type: TNumber, HasRange: true, Min: 0, Max: 1, Doc: "The share of the first child."},
-			})
-			c.MinChildren, c.MaxChildren = 2, 2
-			return c
-		}(),
-		// Text
-		inlineHolder("heading", "text", "A heading.", attrMap{"level": intRange(1, 3, "1 is the largest."), "role": role()}),
-		inlineHolder("text", "text", "A paragraph of text with inline styling.", attrMap{
-			"wrap":     enum("How long lines break.", "word", "char", "none"),
-			"align":    enum("Horizontal alignment.", "left", "center", "right"),
-			"role":     role(),
-			"on-press": press,
-		}),
-		code,
-		raw("markdown", "text", "Markdown text.", nil),
-		raw("diff", "text", "A unified diff.", attrMap{
-			"lang": {Type: TString, Doc: "The language for highlighting."}, "layout": enum("unified or split.", "unified", "split")}),
-		// Inline
-		inline("b", "Bold.", nil),
-		inline("i", "Italic.", nil),
-		inline("u", "Underline.", nil),
-		inline("s", "Strikethrough.", nil),
-		inline("c", "Colours its text with a role.", attrMap{"role": {Type: TRole, Bind: true, Required: true, Doc: "A theme role colour."}}),
-		{Name: "kbd", Group: "inline", Doc: "A key name.", Attrs: attrMap{}, Content: ContentRaw, Inline: true},
-		inline("a", "A link. It opens after the person confirms.", attrMap{"href": {Type: THref, Required: true, Doc: "A file: or https: link."}}),
-		// Data
-		{Name: "table", Group: "data", Doc: "Rows of a state array, sorted, filtered and scrolled locally.", Block: true,
-			Content: ContentOnly, Children: []string{"column"}, MinChildren: 1, Attrs: attrMap{
-				"rows":      data("The state array of rows."),
-				"key":       field("The field that keeps a row's identity."),
-				"select":    enum("How many rows a person can select.", "none", "single", "multi"),
-				"sort":      {Type: TSort, Doc: "The first sort: field, field:asc or field:desc."},
-				"filter":    {Type: TExpr, Doc: "A text that rows must contain."},
-				"on-select": action("Runs when a row is selected. event.row is the row."),
-				"on-key":    action("Runs on a key press. event.key names the key."),
-			}},
-		void("column", "data", "A column of a table.", attrMap{
-			"field":  {Type: TField, Required: true, Doc: "The row field the column shows."},
-			"title":  str("The header."),
-			"align":  enum("Horizontal alignment.", "left", "center", "right"),
-			"format": {Type: TExpr, Doc: "An expression of value and row that formats the cell."},
-			"sort":   {Type: TBool, Doc: "A person can sort by this column."},
-		}),
-		{Name: "list", Group: "data", Doc: "Repeats its children once per element of a state array.", Block: true,
-			Content: ContentBlocks, Attrs: attrMap{
-				"items":     data("The state array."),
-				"as":        ident("The name of the element inside the list. Default item."),
-				"select":    enum("How many items a person can select.", "none", "single", "multi"),
-				"on-select": action("Runs when an item is selected. event.item is the item."),
-				"on-key":    action("Runs on a key press. event.key names the key."),
-			}},
-		void("tree", "data", "A tree of nested state objects.", attrMap{
-			"items":     data("The state array of top nodes."),
-			"label":     field("The field to show. Default name."),
-			"children":  field("The field that holds the child array. Default children."),
-			"open":      intRange(0, 32, "How many levels start open."),
-			"select":    enum("How many nodes a person can select.", "none", "single", "multi"),
-			"on-select": action("Runs when a node is selected. event.item is the node."),
-		}),
-		{Name: "kv", Group: "data", Doc: "Key and value pairs in two aligned columns.", Block: true,
-			Content: ContentOnly, Children: []string{"item"}, MinChildren: 1, Attrs: attrMap{}},
-		void("item", "data", "One pair of a kv.", attrMap{"k": reqStr("The key."), "v": str("The value."), "role": role()}),
-		void("stat", "data", "A labelled number, the KPI tile.", attrMap{
-			"label": reqStr("The label under the number."), "value": reqStr("The number."),
-			"role": role(), "delta": str("A change to show beside the number, such as +12."), "on-press": press}),
-		// Charts
-		chart("bar", "A bar chart.", attrMap{"data": data("A state array of numbers or rows."), "x": field("The label field."), "y": field("The value field."),
-			"dir": enum("v draws columns, h draws bars.", "v", "h")}),
-		chart("line", "A line chart.", attrMap{"data": data("A state array of rows."), "x": field("The x field."), "y": field("The y field, or a comma list for several series."),
-			"axis": boolean("Draws the axes.")}),
-		chart("area", "An area chart.", attrMap{"data": data("A state array of rows or numbers."), "x": field("The x field."), "y": field("The y field.")}),
-		chart("sparkline", "A one-row trend.", attrMap{"values": data("A state array of numbers.")}),
-		chart("gauge", "A value against a maximum.", attrMap{"value": {Type: TNumber, Bind: true, Required: true, Doc: "The value."},
-			"max": num("The maximum. Default 100."), "label": str("The label.")}),
-		chart("heatmap", "A grid of values as shades.", attrMap{"data": data("A state array of rows."), "x": field("The column field."), "y": field("The row field."), "v": field("The value field.")}),
-		chart("histogram", "Counts of values in bins.", attrMap{"values": data("A state array of numbers."), "bins": intRange(1, 200, "The number of bins.")}),
-		chart("pie", "Shares of a whole.", attrMap{"data": data("A state array of rows."), "label": field("The label field."), "v": field("The value field."),
-			"style": enum("pie or donut.", "pie", "donut")}),
-		// Media
-		void("image", "media", "An image. Without graphics it falls back to block art, then to alt.", attrMap{
-			"src": {Type: TSrc, Required: true, Doc: "A file: path or a data:image URI."}, "alt": reqStr("The text shown when the image cannot be."),
-			"graphics": graphicsAttr, "on-press": press}),
-		raw("mermaid", "media", "A Mermaid diagram. Until the renderer lands, it shows the source.", nil),
-		// Status
-		void("progress", "status", "A progress bar.", attrMap{"value": {Type: TNumber, Bind: true, Required: true, Doc: "From 0 to 1."},
-			"label": str("The label."), "role": role()}),
-		void("spinner", "status", "A busy mark.", attrMap{"label": str("The label.")}),
-		inlineHolder("badge", "status", "A short coloured tag.", attrMap{"role": role(), "on-press": press}),
-		void("status", "status", "The tuios agent state glyph and word.", attrMap{
-			"state": {Type: TEnum, Enum: []string{"working", "needs_input", "idle", "done", "errored", "unknown"}, Required: true, Bind: true, Doc: "The agent state."},
-			"label": str("The label.")}),
-		// Input
-		blocksOf("form", "input", "Collects its fields into one value for submit.", attrMap{"on-submit": action("Runs on submit. form is the value."), "on-key": action("Runs on a key press. event.key names the key.")}),
-		void("input", "input", "A one-line text field.", fieldAttrs(attrMap{
-			"value": str("The first value."), "placeholder": str("Text shown while the field is empty."),
-			"pattern": {Type: TPattern, Doc: "An RE2 regular expression the value must match."},
-			"numeric": boolean("Takes a number only."),
-			"min":     num("The smallest number, for type number."), "max": num("The largest number, for type number."),
-		})),
-		void("textarea", "input", "A multiline text field.", fieldAttrs(attrMap{
-			"value": str("The first value."), "placeholder": str("Text shown while the field is empty."), "rows": intRange(1, 100, "The visible lines.")})),
-		void("checkbox", "input", "A checkbox.", fieldAttrs(attrMap{"value": boolean("The first value.")})),
-		void("select", "input", "Picks one value from a list.", fieldAttrs(attrMap{"options": data("A state array, or a literal array, of the choices."), "value": str("The first value.")})),
-		void("toggle", "input", "An on and off switch.", fieldAttrs(attrMap{"value": boolean("The first value.")})),
-		void("slider", "input", "A number on a track.", fieldAttrs(attrMap{"min": num("The smallest value."), "max": num("The largest value."),
-			"step": num("The step."), "value": num("The first value.")})),
-		inlineHolder("button", "input", "A button.", attrMap{
-			"submit": {Type: TBool, Doc: "Submits the form it is in."}, "key": {Type: TKey, Doc: "The key that presses the button, such as enter or r."},
-			"kind": enum("How much the button stands out.", "default", "primary", "danger"), "on-press": press, "disabled": boolean("The button does not take input.")}),
-		// Containers
-		{Name: "tabs", Group: "container", Doc: "Shows one tab at a time.", Block: true, Content: ContentOnly, Children: []string{"tab"}, MinChildren: 1, Attrs: attrMap{
-			"value": {Type: TPath, Doc: "A state path that holds the open tab's id."}, "on-change": action("Runs when the open tab changes. event.value is its id.")}},
-		blocksOf("tab", "container", "One tab of tabs.", attrMap{"id": reqIdent("The tab's id."), "title": reqStr("The tab's title.")}),
-		blocksOf("card", "container", "A titled box, in the cockpit card style.", attrMap{
-			"title": str("The title."), "meta": str("Text at the right of the title."), "fold": boolean("Starts folded."),
-			"role": role(), "on-press": press}),
-		blocksOf("modal", "container", "A box over the surface that holds focus while open.", attrMap{
-			"title": str("The title."), "open": {Type: TBool, Bind: true, Required: true, Doc: "Shows the modal when true."}}),
-		inlineHolder("toast", "container", "A short notice that goes away.", attrMap{"role": role(), "ttl": {Type: TDuration, Doc: "How long it shows, such as 5s."}}),
-	}
+// table is the catalog, sorted by group, then by name. It is static data:
+// the linker lays it out, so it costs no start-up code.
+var table = [...]Component{
+	{Name: "tml", Group: "document", Doc: "The document root.", Content: ContentBlocks, Attrs: []AttrSpec{
+		{Name: "accent", Type: TAccent, Doc: "The accent: a role, or an ANSI slot such as slot:magenta."},
+		{Name: "on-key", Type: TAction, Doc: "Runs on a key press no node took. event.key names the key."},
+		{Name: "state", Type: TObject, Doc: "The JSON state store. In TML text, a <state> element."},
+		{Name: "title", Type: TString, Doc: "The title on the frame."},
+		{Name: "version", Type: TInt, Required: true, HasRange: true, Min: 1, Max: 1, Doc: "The TML version. Always 1."},
+	}},
+	{Name: "col", Group: "layout", Doc: "Lays children out top to bottom.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "align", Type: TEnum, Enum: []string{"start", "center", "end", "stretch"}, Doc: "Cross-axis alignment."},
+		{Name: "gap", Type: TInt, Bind: true, HasRange: true, Min: 0, Max: 100, Doc: "Cells between children."},
+		{Name: "justify", Type: TEnum, Enum: []string{"start", "center", "end", "between", "around"}, Doc: "Main-axis distribution."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+	}},
+	{Name: "grid", Group: "layout", Doc: "Wraps children into equal columns.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "cols", Type: TInt, Required: true, HasRange: true, Min: 1, Max: 24, Doc: "The number of columns."},
+		{Name: "gap", Type: TInt, Bind: true, HasRange: true, Min: 0, Max: 100, Doc: "Cells between children."},
+	}},
+	{Name: "row", Group: "layout", Doc: "Lays children out left to right.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "align", Type: TEnum, Enum: []string{"start", "center", "end", "stretch"}, Doc: "Cross-axis alignment."},
+		{Name: "gap", Type: TInt, Bind: true, HasRange: true, Min: 0, Max: 100, Doc: "Cells between children."},
+		{Name: "justify", Type: TEnum, Enum: []string{"start", "center", "end", "between", "around"}, Doc: "Main-axis distribution."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+	}},
+	{Name: "scroll", Group: "layout", Doc: "Scrolls its children.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "follow", Type: TEnum, Enum: []string{"start", "end"}, Doc: "Keeps the view at this end as content grows."},
+	}},
+	{Name: "spacer", Group: "layout", Doc: "Takes the free space.", Content: ContentNone, Block: true},
+	{Name: "split", Group: "layout", Doc: "Two children with a divider that a person can drag.", Content: ContentBlocks, MinChildren: 2, MaxChildren: 2, Block: true, Attrs: []AttrSpec{
+		{Name: "dir", Type: TEnum, Enum: []string{"h", "v"}, Doc: "h puts the children side by side, v stacks them."},
+		{Name: "ratio", Type: TNumber, HasRange: true, Min: 0, Max: 1, Doc: "The share of the first child."},
+	}},
+	{Name: "stack", Group: "layout", Doc: "Layers children on top of each other.", Content: ContentBlocks, Block: true},
+	{Name: "code", Group: "text", Doc: "Code, highlighted by lang. Also inline inside text.", Content: ContentRaw, Inline: true, Block: true, Attrs: []AttrSpec{
+		{Name: "from", Type: TInt, HasRange: true, Min: 1, Max: 1e+09, Doc: "The first line number."},
+		{Name: "lang", Type: TString, Doc: "The language for highlighting."},
+		{Name: "lines", Type: TBool, Doc: "Shows line numbers."},
+	}},
+	{Name: "diff", Group: "text", Doc: "A unified diff.", Content: ContentRaw, Block: true, Attrs: []AttrSpec{
+		{Name: "lang", Type: TString, Doc: "The language for highlighting."},
+		{Name: "layout", Type: TEnum, Enum: []string{"unified", "split"}, Doc: "unified or split."},
+	}},
+	{Name: "heading", Group: "text", Doc: "A heading.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
+		{Name: "level", Type: TInt, Bind: true, HasRange: true, Min: 1, Max: 3, Doc: "1 is the largest."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+	}},
+	{Name: "markdown", Group: "text", Doc: "Markdown text.", Content: ContentRaw, Block: true},
+	{Name: "text", Group: "text", Doc: "A paragraph of text with inline styling.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
+		{Name: "align", Type: TEnum, Enum: []string{"left", "center", "right"}, Doc: "Horizontal alignment."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "wrap", Type: TEnum, Enum: []string{"word", "char", "none"}, Doc: "How long lines break."},
+	}},
+	{Name: "a", Group: "inline", Doc: "A link. It opens after the person confirms.", Content: ContentInline, Inline: true, Attrs: []AttrSpec{
+		{Name: "href", Type: THref, Required: true, Doc: "A file: or https: link."},
+	}},
+	{Name: "b", Group: "inline", Doc: "Bold.", Content: ContentInline, Inline: true},
+	{Name: "c", Group: "inline", Doc: "Colours its text with a role.", Content: ContentInline, Inline: true, Attrs: []AttrSpec{
+		{Name: "role", Type: TRole, Required: true, Bind: true, Doc: "A theme role colour."},
+	}},
+	{Name: "i", Group: "inline", Doc: "Italic.", Content: ContentInline, Inline: true},
+	{Name: "kbd", Group: "inline", Doc: "A key name.", Content: ContentRaw, Inline: true},
+	{Name: "s", Group: "inline", Doc: "Strikethrough.", Content: ContentInline, Inline: true},
+	{Name: "u", Group: "inline", Doc: "Underline.", Content: ContentInline, Inline: true},
+	{Name: "column", Group: "data", Doc: "A column of a table.", Content: ContentNone, Attrs: []AttrSpec{
+		{Name: "align", Type: TEnum, Enum: []string{"left", "center", "right"}, Doc: "Horizontal alignment."},
+		{Name: "field", Type: TField, Required: true, Doc: "The row field the column shows."},
+		{Name: "format", Type: TExpr, Doc: "An expression of value and row that formats the cell."},
+		{Name: "sort", Type: TBool, Doc: "A person can sort by this column."},
+		{Name: "title", Type: TString, Bind: true, Doc: "The header."},
+	}},
+	{Name: "item", Group: "data", Doc: "One pair of a kv.", Content: ContentNone, Attrs: []AttrSpec{
+		{Name: "k", Type: TString, Required: true, Bind: true, Doc: "The key."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "v", Type: TString, Bind: true, Doc: "The value."},
+	}},
+	{Name: "kv", Group: "data", Doc: "Key and value pairs in two aligned columns.", Content: ContentOnly, Children: []string{"item"}, MinChildren: 1, Block: true},
+	{Name: "list", Group: "data", Doc: "Repeats its children once per element of a state array.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "as", Type: TIdent, Doc: "The name of the element inside the list. Default item."},
+		{Name: "items", Type: TData, Required: true, Doc: "The state array."},
+		{Name: "on-key", Type: TAction, Doc: "Runs on a key press. event.key names the key."},
+		{Name: "on-select", Type: TAction, Doc: "Runs when an item is selected. event.item is the item."},
+		{Name: "select", Type: TEnum, Enum: []string{"none", "single", "multi"}, Doc: "How many items a person can select."},
+	}},
+	{Name: "stat", Group: "data", Doc: "A labelled number, the KPI tile.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "delta", Type: TString, Bind: true, Doc: "A change to show beside the number, such as +12."},
+		{Name: "label", Type: TString, Required: true, Bind: true, Doc: "The label under the number."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "value", Type: TString, Required: true, Bind: true, Doc: "The number."},
+	}},
+	{Name: "table", Group: "data", Doc: "Rows of a state array, sorted, filtered and scrolled locally.", Content: ContentOnly, Children: []string{"column"}, MinChildren: 1, Block: true, Attrs: []AttrSpec{
+		{Name: "filter", Type: TExpr, Doc: "A text that rows must contain."},
+		{Name: "key", Type: TField, Doc: "The field that keeps a row's identity."},
+		{Name: "on-key", Type: TAction, Doc: "Runs on a key press. event.key names the key."},
+		{Name: "on-select", Type: TAction, Doc: "Runs when a row is selected. event.row is the row."},
+		{Name: "rows", Type: TData, Required: true, Doc: "The state array of rows."},
+		{Name: "select", Type: TEnum, Enum: []string{"none", "single", "multi"}, Doc: "How many rows a person can select."},
+		{Name: "sort", Type: TSort, Doc: "The first sort: field, field:asc or field:desc."},
+	}},
+	{Name: "tree", Group: "data", Doc: "A tree of nested state objects.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "children", Type: TField, Doc: "The field that holds the child array. Default children."},
+		{Name: "items", Type: TData, Required: true, Doc: "The state array of top nodes."},
+		{Name: "label", Type: TField, Doc: "The field to show. Default name."},
+		{Name: "on-select", Type: TAction, Doc: "Runs when a node is selected. event.item is the node."},
+		{Name: "open", Type: TInt, Bind: true, HasRange: true, Min: 0, Max: 32, Doc: "How many levels start open."},
+		{Name: "select", Type: TEnum, Enum: []string{"none", "single", "multi"}, Doc: "How many nodes a person can select."},
+	}},
+	{Name: "area", Group: "chart", Doc: "An area chart.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows or numbers."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "x", Type: TField, Doc: "The x field."},
+		{Name: "y", Type: TField, Doc: "The y field."},
+	}},
+	{Name: "bar", Group: "chart", Doc: "A bar chart.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "data", Type: TData, Required: true, Doc: "A state array of numbers or rows."},
+		{Name: "dir", Type: TEnum, Enum: []string{"v", "h"}, Doc: "v draws columns, h draws bars."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "x", Type: TField, Doc: "The label field."},
+		{Name: "y", Type: TField, Doc: "The value field."},
+	}},
+	{Name: "gauge", Group: "chart", Doc: "A value against a maximum.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label."},
+		{Name: "max", Type: TNumber, Bind: true, Doc: "The maximum. Default 100."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "value", Type: TNumber, Required: true, Bind: true, Doc: "The value."},
+	}},
+	{Name: "heatmap", Group: "chart", Doc: "A grid of values as shades.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "v", Type: TField, Doc: "The value field."},
+		{Name: "x", Type: TField, Doc: "The column field."},
+		{Name: "y", Type: TField, Doc: "The row field."},
+	}},
+	{Name: "histogram", Group: "chart", Doc: "Counts of values in bins.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bins", Type: TInt, Bind: true, HasRange: true, Min: 1, Max: 200, Doc: "The number of bins."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "values", Type: TData, Required: true, Doc: "A state array of numbers."},
+	}},
+	{Name: "line", Group: "chart", Doc: "A line chart.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "axis", Type: TBool, Bind: true, Doc: "Draws the axes."},
+		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "x", Type: TField, Doc: "The x field."},
+		{Name: "y", Type: TField, Doc: "The y field, or a comma list for several series."},
+	}},
+	{Name: "pie", Group: "chart", Doc: "Shares of a whole.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "data", Type: TData, Required: true, Doc: "A state array of rows."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "label", Type: TField, Doc: "The label field."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "style", Type: TEnum, Enum: []string{"pie", "donut"}, Doc: "pie or donut."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "v", Type: TField, Doc: "The value field."},
+	}},
+	{Name: "sparkline", Group: "chart", Doc: "A one-row trend.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "A caption above the chart."},
+		{Name: "values", Type: TData, Required: true, Doc: "A state array of numbers."},
+	}},
+	{Name: "image", Group: "media", Doc: "An image. Without graphics it falls back to block art, then to alt.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "alt", Type: TString, Required: true, Bind: true, Doc: "The text shown when the image cannot be."},
+		{Name: "graphics", Type: TEnum, Enum: []string{"auto", "kitty", "cells", "ascii"}, Doc: "How to draw: auto picks kitty graphics, then cells, then ASCII."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "src", Type: TSrc, Required: true, Doc: "A file: path or a data:image URI."},
+	}},
+	{Name: "mermaid", Group: "media", Doc: "A Mermaid diagram. Until the renderer lands, it shows the source.", Content: ContentRaw, Block: true},
+	{Name: "badge", Group: "status", Doc: "A short coloured tag.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+	}},
+	{Name: "progress", Group: "status", Doc: "A progress bar.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "label", Type: TString, Bind: true, Doc: "The label."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "value", Type: TNumber, Required: true, Bind: true, Doc: "From 0 to 1."},
+	}},
+	{Name: "spinner", Group: "status", Doc: "A busy mark.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "label", Type: TString, Bind: true, Doc: "The label."},
+	}},
+	{Name: "status", Group: "status", Doc: "The tuios agent state glyph and word.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "label", Type: TString, Bind: true, Doc: "The label."},
+		{Name: "state", Type: TEnum, Enum: []string{"working", "needs_input", "idle", "done", "errored", "unknown"}, Required: true, Bind: true, Doc: "The agent state."},
+	}},
+	{Name: "button", Group: "input", Doc: "A button.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The button does not take input."},
+		{Name: "key", Type: TKey, Doc: "The key that presses the button, such as enter or r."},
+		{Name: "kind", Type: TEnum, Enum: []string{"default", "primary", "danger"}, Doc: "How much the button stands out."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "submit", Type: TBool, Doc: "Submits the form it is in."},
+	}},
+	{Name: "checkbox", Group: "input", Doc: "A checkbox.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bind", Type: TPath, Doc: "A state path the field reads and writes."},
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The field does not take input."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label shown before the field."},
+		{Name: "name", Type: TIdent, Required: true, Doc: "The key of the value in the submitted form."},
+		{Name: "on-change", Type: TAction, Doc: "Runs when the value changes."},
+		{Name: "required", Type: TBool, Bind: true, Doc: "The form does not submit while the field is empty."},
+		{Name: "value", Type: TBool, Bind: true, Doc: "The first value."},
+	}},
+	{Name: "form", Group: "input", Doc: "Collects its fields into one value for submit.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "on-key", Type: TAction, Doc: "Runs on a key press. event.key names the key."},
+		{Name: "on-submit", Type: TAction, Doc: "Runs on submit. form is the value."},
+	}},
+	{Name: "input", Group: "input", Doc: "A one-line text field.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bind", Type: TPath, Doc: "A state path the field reads and writes."},
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The field does not take input."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label shown before the field."},
+		{Name: "max", Type: TNumber, Bind: true, Doc: "The largest number, for type number."},
+		{Name: "min", Type: TNumber, Bind: true, Doc: "The smallest number, for type number."},
+		{Name: "name", Type: TIdent, Required: true, Doc: "The key of the value in the submitted form."},
+		{Name: "numeric", Type: TBool, Bind: true, Doc: "Takes a number only."},
+		{Name: "on-change", Type: TAction, Doc: "Runs when the value changes."},
+		{Name: "pattern", Type: TPattern, Doc: "An RE2 regular expression the value must match."},
+		{Name: "placeholder", Type: TString, Bind: true, Doc: "Text shown while the field is empty."},
+		{Name: "required", Type: TBool, Bind: true, Doc: "The form does not submit while the field is empty."},
+		{Name: "value", Type: TString, Bind: true, Doc: "The first value."},
+	}},
+	{Name: "select", Group: "input", Doc: "Picks one value from a list.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bind", Type: TPath, Doc: "A state path the field reads and writes."},
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The field does not take input."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label shown before the field."},
+		{Name: "name", Type: TIdent, Required: true, Doc: "The key of the value in the submitted form."},
+		{Name: "on-change", Type: TAction, Doc: "Runs when the value changes."},
+		{Name: "options", Type: TData, Required: true, Doc: "A state array, or a literal array, of the choices."},
+		{Name: "required", Type: TBool, Bind: true, Doc: "The form does not submit while the field is empty."},
+		{Name: "value", Type: TString, Bind: true, Doc: "The first value."},
+	}},
+	{Name: "slider", Group: "input", Doc: "A number on a track.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bind", Type: TPath, Doc: "A state path the field reads and writes."},
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The field does not take input."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label shown before the field."},
+		{Name: "max", Type: TNumber, Bind: true, Doc: "The largest value."},
+		{Name: "min", Type: TNumber, Bind: true, Doc: "The smallest value."},
+		{Name: "name", Type: TIdent, Required: true, Doc: "The key of the value in the submitted form."},
+		{Name: "on-change", Type: TAction, Doc: "Runs when the value changes."},
+		{Name: "required", Type: TBool, Bind: true, Doc: "The form does not submit while the field is empty."},
+		{Name: "step", Type: TNumber, Bind: true, Doc: "The step."},
+		{Name: "value", Type: TNumber, Bind: true, Doc: "The first value."},
+	}},
+	{Name: "textarea", Group: "input", Doc: "A multiline text field.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bind", Type: TPath, Doc: "A state path the field reads and writes."},
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The field does not take input."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label shown before the field."},
+		{Name: "name", Type: TIdent, Required: true, Doc: "The key of the value in the submitted form."},
+		{Name: "on-change", Type: TAction, Doc: "Runs when the value changes."},
+		{Name: "placeholder", Type: TString, Bind: true, Multiline: true, Doc: "Text shown while the field is empty."},
+		{Name: "required", Type: TBool, Bind: true, Doc: "The form does not submit while the field is empty."},
+		{Name: "rows", Type: TInt, Bind: true, HasRange: true, Min: 1, Max: 100, Doc: "The visible lines."},
+		{Name: "value", Type: TString, Bind: true, Multiline: true, Doc: "The first value."},
+	}},
+	{Name: "toggle", Group: "input", Doc: "An on and off switch.", Content: ContentNone, Block: true, Attrs: []AttrSpec{
+		{Name: "bind", Type: TPath, Doc: "A state path the field reads and writes."},
+		{Name: "disabled", Type: TBool, Bind: true, Doc: "The field does not take input."},
+		{Name: "label", Type: TString, Bind: true, Doc: "The label shown before the field."},
+		{Name: "name", Type: TIdent, Required: true, Doc: "The key of the value in the submitted form."},
+		{Name: "on-change", Type: TAction, Doc: "Runs when the value changes."},
+		{Name: "required", Type: TBool, Bind: true, Doc: "The form does not submit while the field is empty."},
+		{Name: "value", Type: TBool, Bind: true, Doc: "The first value."},
+	}},
+	{Name: "card", Group: "container", Doc: "A titled box, in the cockpit card style.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "fold", Type: TBool, Bind: true, Doc: "Starts folded."},
+		{Name: "meta", Type: TString, Bind: true, Doc: "Text at the right of the title."},
+		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "title", Type: TString, Bind: true, Doc: "The title."},
+	}},
+	{Name: "modal", Group: "container", Doc: "A box over the surface that holds focus while open.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
+		{Name: "open", Type: TBool, Required: true, Bind: true, Doc: "Shows the modal when true."},
+		{Name: "title", Type: TString, Bind: true, Doc: "The title."},
+	}},
+	{Name: "tab", Group: "container", Doc: "One tab of tabs.", Content: ContentBlocks, Attrs: []AttrSpec{
+		{Name: "id", Type: TIdent, Required: true, Doc: "The tab's id."},
+		{Name: "title", Type: TString, Required: true, Bind: true, Doc: "The tab's title."},
+	}},
+	{Name: "tabs", Group: "container", Doc: "Shows one tab at a time.", Content: ContentOnly, Children: []string{"tab"}, MinChildren: 1, Block: true, Attrs: []AttrSpec{
+		{Name: "on-change", Type: TAction, Doc: "Runs when the open tab changes. event.value is its id."},
+		{Name: "value", Type: TPath, Doc: "A state path that holds the open tab's id."},
+	}},
+	{Name: "toast", Group: "container", Doc: "A short notice that goes away.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
+		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
+		{Name: "ttl", Type: TDuration, Doc: "How long it shows, such as 5s."},
+	}},
 }

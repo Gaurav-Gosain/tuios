@@ -15,12 +15,13 @@
 //	</tml>
 //
 // The package parses and prints both encodings (ParseXML, ParseJSON,
-// FormatXML, FormatJSON), validates a tree against the catalog with errors
-// that name the fix (Validate, Check), generates the JSON Schema of the JSON
-// encoding (Schema), evaluates bindings with a step budget (ParseTemplate,
-// ParseExpr), runs the local actions (RunActions), applies RFC 6902 JSON
-// Patch to the state (Store, ApplyPatch), and records which nodes read which
-// state paths (BuildDeps), so a renderer redraws only what a patch touches.
+// FormatXML, FormatJSON, Format), validates a tree against the catalog with
+// errors that name the fix (Validate, Check), generates the JSON Schema of
+// the JSON encoding (Schema), evaluates bindings with a step budget
+// (ParseTemplate, ParseExpr), parses actions (ParseActions), and applies
+// RFC 6902 JSON Patch to the state (Store, DecodePatch). Each expression
+// records the state paths it reads (Expr.Deps), so a renderer can redraw
+// only what a patch touches.
 //
 // It draws nothing, and it imports only the standard library. No code from a
 // document runs: expressions compute values and cannot loop, assign or call

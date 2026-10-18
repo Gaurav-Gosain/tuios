@@ -90,94 +90,143 @@ func escapePointer(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
 }
 
-// ApplyPatch applies ops to doc and returns the new document. It is atomic:
-// on an error, doc is unchanged and the result is nil. doc must hold JSON
-// values as encoding/json decodes them into any.
-func ApplyPatch(doc any, ops []Op) (any, error) {
+// applyPatch applies ops to doc and returns the new document and its size
+// as compact JSON. It is atomic: on an error, doc is unchanged and the
+// result is nil. size is doc's size. The running size is checked after every
+// operation, so a patch of copies cannot grow the state past
+// lim.StateBytes before the check runs.
+func applyPatch(doc any, size int, ops []Op, lim Limits) (any, int, error) {
 	cur := deepCopy(doc)
 	for i, op := range ops {
-		next, err := applyOp(cur, op)
+		next, nsize, err := applyOp(cur, size, op, lim)
 		if err != nil {
 			var pe *PatchError
 			if errors.As(err, &pe) {
 				pe.Index = i
-				return nil, pe
+				return nil, 0, pe
 			}
-			return nil, &PatchError{i, CodeBadValue, err.Error()}
+			return nil, 0, &PatchError{i, CodeBadValue, err.Error()}
 		}
-		cur = next
+		cur, size = next, nsize
 	}
-	return cur, nil
+	return cur, size, nil
 }
 
-func applyOp(doc any, op Op) (any, error) {
+func overLimit(size int, lim Limits) error {
+	if size > lim.StateBytes {
+		return &PatchError{Code: CodeLimit, Msg: fmt.Sprintf("the state would pass %d bytes, the limit", lim.StateBytes)}
+	}
+	return nil
+}
+
+// entrySize is the size a value adds at path, with its key or comma.
+func entrySize(path []string, v any, limit int) int {
+	n := cappedSize(v, limit) + 1
+	if len(path) > 0 {
+		n += len(path[len(path)-1]) + 3
+	}
+	return n
+}
+
+func applyOp(doc any, size int, op Op, lim Limits) (any, int, error) {
 	if err := checkOp(op); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	path, _ := splitPointer(op.Path)
 	switch op.Op {
-	case "add":
+	case "add", "replace":
 		v, err := decodeValue(op.Value)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return add(doc, path, v)
-	case "remove":
-		d, _, err := remove(doc, path)
-		return d, err
-	case "replace":
-		v, err := decodeValue(op.Value)
-		if err != nil {
-			return nil, err
+		old, getErr := get(doc, path)
+		switch {
+		case len(path) == 0:
+			size = cappedSize(v, lim.StateBytes)
+		case op.Op == "replace":
+			if getErr != nil {
+				return nil, 0, getErr
+			}
+			size += entrySize(path, v, lim.StateBytes) - entrySize(path, old, lim.StateBytes)
+		case getErr == nil && isObjectMember(doc, path):
+			size += entrySize(path, v, lim.StateBytes) - entrySize(path, old, lim.StateBytes)
+		default: // a new member, or an insert into an array
+			size += entrySize(path, v, lim.StateBytes)
 		}
-		if _, err := get(doc, path); err != nil {
-			return nil, err
+		if err := overLimit(size, lim); err != nil {
+			return nil, 0, err
 		}
 		if len(path) == 0 {
-			return v, nil
+			return v, size, nil
 		}
-		d, _, err := remove(doc, path)
+		if op.Op == "replace" {
+			if doc, _, err = remove(doc, path); err != nil {
+				return nil, 0, err
+			}
+		}
+		d, err := add(doc, path, v)
+		return d, size, err
+	case "remove":
+		d, v, err := remove(doc, path)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return add(d, path, v)
+		return d, size - entrySize(path, v, lim.StateBytes), nil
 	case "move":
 		from, _ := splitPointer(op.From)
 		if isPrefix(from, path) && len(from) < len(path) {
-			return nil, &PatchError{Code: CodeBadValue, Msg: "cannot move a value into itself"}
+			return nil, 0, &PatchError{Code: CodeBadValue, Msg: "cannot move a value into itself"}
 		}
 		d, v, err := remove(doc, from)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return add(d, path, v)
+		d, err = add(d, path, v)
+		return d, size, err
 	case "copy":
 		from, _ := splitPointer(op.From)
 		v, err := get(doc, from)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return add(doc, path, deepCopy(v))
+		// Measure before copying: a copy of the root doubles the state.
+		size += entrySize(path, v, lim.StateBytes)
+		if err := overLimit(size, lim); err != nil {
+			return nil, 0, err
+		}
+		d, err := add(doc, path, deepCopy(v))
+		return d, size, err
 	case "test":
 		v, err := decodeValue(op.Value)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		got, err := get(doc, path)
 		if err != nil || !equal(got, v) {
-			return nil, &PatchError{Code: "test_failed", Msg: fmt.Sprintf("test at %s failed; read the state again", op.Path)}
+			return nil, 0, &PatchError{Code: CodeTestFailed, Msg: fmt.Sprintf("test at %s failed; read the state again", op.Path)}
 		}
-		return doc, nil
+		return doc, size, nil
 	}
-	return nil, &PatchError{Code: CodeSyntax, Msg: "unknown op"}
+	return nil, 0, &PatchError{Code: CodeSyntax, Msg: "unknown op"}
 }
 
+func isObjectMember(doc any, path []string) bool {
+	if len(path) == 0 {
+		return true
+	}
+	parent, err := get(doc, path[:len(path)-1])
+	_, isObj := parent.(map[string]any)
+	return err == nil && isObj
+}
+
+// decodeValue decodes a patch value, with every string and key passed
+// through Sanitize.
 func decodeValue(raw json.RawMessage) (any, error) {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return nil, &PatchError{Code: CodeSyntax, Msg: "the value is not JSON: " + err.Error()}
 	}
-	return v, nil
+	return SanitizeValue(v), nil
 }
 
 func isPrefix(a, b []string) bool {
@@ -193,18 +242,25 @@ func isPrefix(a, b []string) bool {
 }
 
 func notFound(path []string) error {
-	return &PatchError{Code: "path_missing", Msg: "the state has no /" + strings.Join(path, "/")}
+	return &PatchError{Code: CodePathMissing, Msg: "the state has no /" + strings.Join(path, "/")}
 }
 
+// arrayIndex reads an RFC 6901 array index: 0, or digits with no leading
+// zero. A sign is not allowed.
 func arrayIndex(tok string, n int, allowEnd bool) (int, bool) {
 	if allowEnd && tok == "-" {
 		return n, true
 	}
-	if tok == "" || (len(tok) > 1 && tok[0] == '0') {
+	if tok == "" || len(tok) > 9 || (len(tok) > 1 && tok[0] == '0') {
 		return 0, false
 	}
+	for i := 0; i < len(tok); i++ {
+		if tok[i] < '0' || tok[i] > '9' {
+			return 0, false
+		}
+	}
 	i, err := strconv.Atoi(tok)
-	if err != nil || i < 0 {
+	if err != nil {
 		return 0, false
 	}
 	if allowEnd {

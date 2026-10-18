@@ -24,7 +24,7 @@ func contentOf(n *Node) Content {
 	if n.Type == "state" {
 		return ContentRaw
 	}
-	if c, ok := catalog[n.Type]; ok {
+	if c := lookup(n.Type); c != nil {
 		if c.Content == ContentInline || c.Content == ContentRaw {
 			return c.Content
 		}
@@ -33,8 +33,8 @@ func contentOf(n *Node) Content {
 }
 
 func isInlineElem(n *Node) bool {
-	c, ok := catalog[n.Type]
-	return ok && c.Inline && !c.Block
+	c := lookup(n.Type)
+	return c != nil && c.Inline && !c.Block
 }
 
 func printXML(b *bytes.Buffer, n *Node, indent int, block bool) {
@@ -257,4 +257,27 @@ func writeJSONString(b *bytes.Buffer, s string) {
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(s)
 	b.Truncate(b.Len() - 1) // Encode adds a newline
+}
+
+// Encoding names a TML encoding for Format.
+type Encoding uint8
+
+// The encodings Format can print.
+const (
+	SameEncoding Encoding = iota // the encoding of the input
+	TextEncoding                 // TML text
+	JSONEncoding                 // TML JSON, indented
+)
+
+// Format parses a document in either encoding and prints it in canonical
+// form. It does not validate the document.
+func Format(src []byte, to Encoding, opts *ParseOptions) ([]byte, error) {
+	doc, err := Parse(src, opts)
+	if err != nil {
+		return nil, err
+	}
+	if to == JSONEncoding || to == SameEncoding && IsJSON(src) {
+		return FormatJSON(doc, true), nil
+	}
+	return FormatXML(doc), nil
 }

@@ -54,6 +54,10 @@ const (
 	CodePasswordRefused  = "password_refused"  // v1 has no password input
 	CodeLimit            = "limit"             // over a size, depth or count limit
 	CodeBadRoot          = "bad_root"          // the root is not a block component
+
+	// Patch error codes.
+	CodeTestFailed  = "test_failed"  // a test operation did not match: read the state again
+	CodePathMissing = "path_missing" // a patch names a path the state does not have
 )
 
 // Error is the error a parser or the validator returns. It marshals to the
@@ -149,6 +153,9 @@ func suggest(s string, candidates []string) string {
 		}
 	}
 	limit := max(2, len(ls)/3)
+	if len(ls) <= 4 {
+		limit = 1 // body is not a typo of code
+	}
 	if bestD <= limit && bestD < len(ls) {
 		return best
 	}

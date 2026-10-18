@@ -1,11 +1,13 @@
-// Command tml checks, formats and describes TML documents.
+// Package cli runs validate, fmt and schema over the tml library, the way
+// the tml command will. The command itself lives in tuios.dev/loom/cmd/tml.
+// The tests use this package to keep the three commands working until then.
 //
-//	tml validate [--json] [--person] [FILE...]
-//	tml fmt [--json | --xml] [-w] [FILE]
-//	tml schema [-o FILE]
+//	validate [--json] [--person] [FILE...]
+//	fmt [--json | --xml] [-w] [FILE]
+//	schema [-o FILE]
 //
 // FILE - or no FILE reads standard input.
-package main
+package cli
 
 import (
 	"encoding/json"
@@ -29,11 +31,9 @@ Usage:
 FILE - or no FILE reads standard input.
 `
 
-func main() {
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
-}
-
-func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+// Run runs one command and returns its exit status: 0 for success, 1 for
+// a problem in a document, 2 for a usage error.
+func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -168,7 +168,14 @@ func format(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	lim := tml.PersonLimits()
-	doc, err := tml.Parse(src, &tml.ParseOptions{Limits: &lim})
+	to := tml.SameEncoding
+	if *toJSON {
+		to = tml.JSONEncoding
+	}
+	if *toXML {
+		to = tml.TextEncoding
+	}
+	out, err := tml.Format(src, to, &tml.ParseOptions{Limits: &lim})
 	if err != nil {
 		var te *tml.Error
 		if errors.As(err, &te) {
@@ -179,19 +186,6 @@ func format(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "tml: %v\n", err)
 		}
 		return 1
-	}
-	asJSON := tml.IsJSON(src)
-	if *toJSON {
-		asJSON = true
-	}
-	if *toXML {
-		asJSON = false
-	}
-	var out []byte
-	if asJSON {
-		out = tml.FormatJSON(doc, true)
-	} else {
-		out = tml.FormatXML(doc)
 	}
 	if *write {
 		mode := os.FileMode(0o600)

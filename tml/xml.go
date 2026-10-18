@@ -77,9 +77,9 @@ type xmlParser struct {
 
 // rawChild is a child before the content model of its parent applies.
 type rawChild struct {
-	node *Node
-	text string // raw source text, entities not yet decoded
-	pos  Pos
+	node  *Node
+	parts []string // raw source text, entities not yet decoded, joined once
+	pos   Pos
 }
 
 func (p *xmlParser) posAt(off int) Pos {
@@ -177,6 +177,7 @@ func (p *xmlParser) document() (*Node, error) {
 	if root.Type == "state" {
 		return nil, p.fail(0, CodeMisplacedState, "<state> must be the first child of the <tml> root, and appear once.")
 	}
+	stateLast(root)
 	if err := p.misc(); err != nil {
 		return nil, err
 	}
@@ -349,10 +350,12 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 			}
 			text := string(p.src[p.pos : p.pos+end])
 			p.pos += end
+			// Text split by comments is one run. The pieces are joined once
+			// in finish, so many comments cost linear time.
 			if len(kids) > 0 && kids[len(kids)-1].node == nil {
-				kids[len(kids)-1].text += text
+				kids[len(kids)-1].parts = append(kids[len(kids)-1].parts, text)
 			} else {
-				kids = append(kids, rawChild{text: text, pos: p.posAt(toff)})
+				kids = append(kids, rawChild{parts: []string{text}, pos: p.posAt(toff)})
 			}
 		}
 	}
@@ -360,42 +363,28 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 
 // finish applies the content model of n to its raw children.
 func (p *xmlParser) finish(n *Node, kids []rawChild, depth int) error {
-	comp, known := catalog[n.Type]
+	comp := lookup(n.Type)
 	content := ContentBlocks
 	inlineElem := false
-	if known {
+	if comp != nil {
 		content, inlineElem = comp.Content, comp.Inline && !comp.Block
 	}
 	if n.Type == "state" {
 		content = ContentRaw
 	}
-	if _, has := n.Attr("children"); has && len(kids) > 0 {
-		for _, k := range kids {
-			if k.node != nil || strings.Trim(k.text, " \t\r\n") != "" {
-				return p.fail(n.Pos.Offset, CodeSyntax, "<%s> has a children attribute and child nodes. Keep one.", n.Type)
-			}
-		}
-	}
-	// Adjacent text pieces split by comments join into one.
-	var merged []rawChild
-	for _, k := range kids {
-		if k.node == nil && len(merged) > 0 && merged[len(merged)-1].node == nil {
-			merged[len(merged)-1].text += k.text
-			continue
-		}
-		merged = append(merged, k)
-	}
+	merged := kids
 	for i, k := range merged {
 		if k.node != nil {
 			n.Children = append(n.Children, k.node)
 			continue
 		}
+		raw := strings.Join(k.parts, "")
 		var text string
 		switch content {
 		case ContentRaw:
-			text = k.text
+			text = raw
 		case ContentInline:
-			text = collapse(k.text)
+			text = collapse(raw)
 			if !inlineElem {
 				if i == 0 {
 					text = strings.TrimLeft(text, " ")
@@ -405,7 +394,7 @@ func (p *xmlParser) finish(n *Node, kids []rawChild, depth int) error {
 				}
 			}
 		default:
-			text = strings.Trim(collapse(k.text), " ")
+			text = strings.Trim(collapse(raw), " ")
 		}
 		if text == "" {
 			continue
@@ -423,6 +412,11 @@ func (p *xmlParser) finish(n *Node, kids []rawChild, depth int) error {
 			return p.fail(k.pos.Offset, CodeLimit, "The document has more than %d nodes.", p.lim.Nodes)
 		}
 		n.Children = append(n.Children, &Node{Text: dec, Pos: k.pos})
+	}
+	// The JSON form has one children key, so a node cannot hold both a
+	// children attribute (tree's field name) and child nodes.
+	if _, has := n.Attr("children"); has && len(n.Children) > 0 {
+		return p.fail(n.Pos.Offset, CodeSyntax, "<%s> has a children attribute and child nodes. Keep one.", n.Type)
 	}
 	if n.Type == "tml" && depth == 1 {
 		if err := p.absorbState(n); err != nil {
@@ -498,7 +492,21 @@ func collapse(s string) string {
 	return b.String()
 }
 
-var entities = map[string]string{"lt": "<", "gt": ">", "amp": "&", "quot": "\"", "apos": "'"}
+func entity(name string) (string, bool) {
+	switch name {
+	case "lt":
+		return "<", true
+	case "gt":
+		return ">", true
+	case "amp":
+		return "&", true
+	case "quot":
+		return "\"", true
+	case "apos":
+		return "'", true
+	}
+	return "", false
+}
 
 // decode replaces entity and character references.
 func (p *xmlParser) decode(raw []byte, off int) (string, error) {
@@ -528,7 +536,7 @@ func (p *xmlParser) decode(raw []byte, off int) (string, error) {
 				return "", p.fail(off+i, CodeSyntax, "&%s; is not a valid character reference.", ref)
 			}
 			b.WriteRune(rune(r))
-		} else if e, ok := entities[ref]; ok {
+		} else if e, ok := entity(ref); ok {
 			b.WriteString(e)
 		} else {
 			return "", p.fail(off+i, CodeUnsupportedXML, "&%s; is not allowed. Use &lt; &gt; &amp; &quot; &apos; or a numeric reference such as &#10;.", ref)
@@ -542,8 +550,8 @@ func (p *xmlParser) decode(raw []byte, off int) (string, error) {
 // type the catalog gives it. Both parsers use it, so the two encodings of
 // one tree are equal.
 func typedValue(typ, name, text string) Value {
-	comp, ok := catalog[typ]
-	if !ok {
+	comp := lookup(typ)
+	if comp == nil {
 		return StringValue(text)
 	}
 	spec, ok := comp.Spec(name)
@@ -551,6 +559,10 @@ func typedValue(typ, name, text string) Value {
 		return StringValue(text)
 	}
 	switch spec.Type {
+	case TString:
+		if !spec.Multiline {
+			return StringValue(oneLine(text))
+		}
 	case TInt, TNumber:
 		if isJSONNumber(text) {
 			return Value{Kind: Number, Str: text}
@@ -625,4 +637,33 @@ func isJSONNumber(s string) bool {
 		}
 	}
 	return i == len(s)
+}
+
+// oneLine turns the tabs and line breaks of a one-line text attribute into
+// spaces.
+func oneLine(s string) string {
+	if !strings.ContainsAny(s, "\n\t") {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+// stateLast moves the root's state attribute to the end of its attributes.
+// TML text writes state as an element after the tag, so this is its one
+// canonical place, and both encodings agree on the order.
+func stateLast(root *Node) {
+	if root.Type != "tml" {
+		return
+	}
+	for i, a := range root.Attrs {
+		if a.Name == "state" && i != len(root.Attrs)-1 {
+			root.Attrs = append(append(root.Attrs[:i:i], root.Attrs[i+1:]...), a)
+			return
+		}
+	}
 }

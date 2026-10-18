@@ -89,6 +89,11 @@ type Node struct {
 	Children []*Node
 	Text     string
 	Pos      Pos
+
+	// src is one more than the node's index in the JSON children list it
+	// came from, or 0. Empty strings and adjacent strings are merged, so the
+	// tree index can differ from the source index.
+	src int
 }
 
 // IsText reports whether n is a text run.
@@ -204,7 +209,9 @@ func (n *Node) Clone() *Node {
 }
 
 // State returns the decoded state store of a document: the state attribute of
-// the root. A document without one has an empty object.
+// the root. A document without one has an empty object. Every string and key
+// passes through Sanitize, so a JSON escape such as \u001b cannot reach a
+// renderer.
 func (n *Node) State() (map[string]any, error) {
 	v, ok := n.Attr("state")
 	if !ok || v.Kind != Object {
@@ -217,5 +224,5 @@ func (n *Node) State() (map[string]any, error) {
 	if m == nil {
 		m = map[string]any{}
 	}
-	return m, nil
+	return SanitizeValue(m).(map[string]any), nil
 }

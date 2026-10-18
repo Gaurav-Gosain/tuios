@@ -3,13 +3,15 @@ package tml
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
 
 // Store is the JSON state store of one surface. Every change goes through a
-// JSON Patch, from the owner or from a local action, so a renderer learns
-// which paths changed and redraws only what depends on them.
+// JSON Patch, from the owner or from a local action, and returns the paths
+// it changed, so a renderer can redraw only what depends on them. Every
+// string and key that enters the store passes through Sanitize.
 //
 // A Store is not safe for use by several goroutines.
 type Store struct {
@@ -19,16 +21,47 @@ type Store struct {
 	lim     Limits
 }
 
-// NewStore returns a store holding state. state may be nil.
+// NewStore returns a store holding state. state may be nil. The store keeps
+// a sanitized copy when state holds an unsafe character.
 func NewStore(state map[string]any, lim Limits) (*Store, error) {
 	if state == nil {
 		state = map[string]any{}
 	}
-	s := &Store{root: state, lim: lim, size: jsonSize(state)}
+	clean, ok := SanitizeValue(state).(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("the state must be a JSON object")
+	}
+	if err := checkFinite(clean); err != nil {
+		return nil, err
+	}
+	s := &Store{root: clean, lim: lim, size: cappedSize(clean, lim.StateBytes)}
 	if s.size > lim.StateBytes {
-		return nil, fmt.Errorf("the state is %d bytes; the limit is %d bytes", s.size, lim.StateBytes)
+		return nil, fmt.Errorf("the state is over %d bytes, the limit", lim.StateBytes)
 	}
 	return s, nil
+}
+
+// checkFinite refuses a number that JSON cannot hold.
+func checkFinite(v any) error {
+	switch x := v.(type) {
+	case float64:
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return fmt.Errorf("the state holds a number that is not finite")
+		}
+	case []any:
+		for _, e := range x {
+			if err := checkFinite(e); err != nil {
+				return err
+			}
+		}
+	case map[string]any:
+		for _, e := range x {
+			if err := checkFinite(e); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // StoreFor returns the store of a document's state.
@@ -63,10 +96,10 @@ func (s *Store) Get(pointer string) any {
 }
 
 // Apply applies a JSON Patch. It is atomic: on an error the state is
-// unchanged. It returns the JSON Pointers the patch changed, for
-// Deps.Affected.
+// unchanged. The size limit is checked after every operation. It returns the
+// JSON Pointers the patch changed.
 func (s *Store) Apply(ops []Op) ([]string, error) {
-	next, err := ApplyPatch(s.root, ops)
+	next, _, err := applyPatch(s.root, s.size, ops, s.lim)
 	if err != nil {
 		return nil, err
 	}
@@ -74,9 +107,9 @@ func (s *Store) Apply(ops []Op) ([]string, error) {
 	if !ok {
 		return nil, &PatchError{0, CodeBadValue, "the state must stay a JSON object"}
 	}
-	size := jsonSize(m)
+	size := cappedSize(m, s.lim.StateBytes)
 	if size > s.lim.StateBytes {
-		return nil, &PatchError{-1, CodeLimit, fmt.Sprintf("the state would be %d bytes; the limit is %d bytes", size, s.lim.StateBytes)}
+		return nil, &PatchError{-1, CodeLimit, fmt.Sprintf("the state would pass %d bytes, the limit", s.lim.StateBytes)}
 	}
 	s.root, s.size = m, size
 	s.version++
@@ -94,7 +127,8 @@ func (s *Store) Apply(ops []Op) ([]string, error) {
 }
 
 // Set writes value at a state path such as state.form.title or form.title,
-// creating missing objects on the way. It is the set action.
+// creating missing objects on the way. It is the set action. The value is
+// sanitized, and a number that is not finite is refused.
 func (s *Store) Set(path string, value any) ([]string, error) {
 	ptr, err := PathPointer(path)
 	if err != nil {
@@ -106,21 +140,17 @@ func (s *Store) Set(path string, value any) ([]string, error) {
 	for i := 0; i < len(toks)-1; i++ {
 		next, err := get(cur, toks[i:i+1])
 		if err != nil {
-			raw, _ := json.Marshal(map[string]any{})
-			ops = append(ops, Op{Op: "add", Path: "/" + joinPointer(toks[:i+1]), Value: raw})
+			ops = append(ops, Op{Op: "add", Path: "/" + joinPointer(toks[:i+1]), Value: json.RawMessage("{}")})
 			cur = map[string]any{}
 			continue
 		}
 		cur = next
 	}
-	raw, err := json.Marshal(value)
+	raw, err := json.Marshal(SanitizeValue(value))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set %s: %v", path, err)
 	}
 	ops = append(ops, Op{Op: "add", Path: ptr, Value: raw})
-	if len(toks) == 0 {
-		return nil, fmt.Errorf("set needs a path below state")
-	}
 	return s.Apply(ops)
 }
 
@@ -132,16 +162,27 @@ func joinPointer(toks []string) string {
 	return strings.Join(out, "/")
 }
 
+// SplitPath reads a path of names and constant indexes, such as
+// state.items[0].name or item.x, into its root name and a JSON Pointer below
+// it.
+func SplitPath(path string) (root, pointer string, err error) {
+	e, err := ParseExpr(path)
+	if err != nil {
+		return "", "", fmt.Errorf("%q is not a path: %v", path, err)
+	}
+	root, ptr, dyn, ok := staticPath(e.root)
+	if !ok || dyn {
+		return "", "", fmt.Errorf("%q is not a path of names and constant indexes", path)
+	}
+	return root, ptr, nil
+}
+
 // PathPointer turns a state path into a JSON Pointer: state.a.b[0] and a.b[0]
 // both become /a/b/0. Only names and constant indexes are allowed.
 func PathPointer(path string) (string, error) {
-	e, err := ParseExpr(path)
+	root, ptr, err := SplitPath(path)
 	if err != nil {
-		return "", fmt.Errorf("%q is not a path: %v", path, err)
-	}
-	root, ptr, ok := staticPath(e.root)
-	if !ok || len(e.deps) != 1 || hasDynamicIndex(e.root) {
-		return "", fmt.Errorf("%q is not a path of names and constant indexes", path)
+		return "", err
 	}
 	if root != "state" {
 		ptr = "/" + escapePointer(root) + ptr
@@ -152,58 +193,39 @@ func PathPointer(path string) (string, error) {
 	return ptr, nil
 }
 
-func hasDynamicIndex(n exprNode) bool {
-	switch x := n.(type) {
-	case *memberNode:
-		return hasDynamicIndex(x.x)
-	case *indexNode:
-		if _, ok := x.idx.(*litNode); !ok {
-			return true
+// cappedSize returns the length of v as compact JSON, or a number past
+// limit as soon as the walk passes it.
+func cappedSize(v any, limit int) int {
+	n := 0
+	var walk func(v any)
+	walk = func(v any) {
+		if n > limit {
+			return
 		}
-		return hasDynamicIndex(x.x)
-	case *pathNode:
-		return false
-	}
-	return true
-}
-
-// jsonSize returns the length of v as compact JSON.
-func jsonSize(v any) int {
-	switch x := v.(type) {
-	case nil:
-		return 4
-	case bool:
-		if x {
-			return 4
-		}
-		return 5
-	case float64:
-		return len(strconv.FormatFloat(x, 'g', -1, 64))
-	case string:
-		b, _ := json.Marshal(x)
-		return len(b)
-	case []any:
-		n := 2
-		for i, e := range x {
-			if i > 0 {
-				n++
+		switch x := v.(type) {
+		case nil:
+			n += 4
+		case bool:
+			n += 5
+		case float64:
+			n += len(strconv.FormatFloat(x, 'g', -1, 64))
+		case string:
+			n += len(x) + 2 + strings.Count(x, `"`) + strings.Count(x, `\`)
+		case []any:
+			n += 1 + len(x)
+			for _, e := range x {
+				walk(e)
 			}
-			n += jsonSize(e)
-		}
-		return n
-	case map[string]any:
-		n := 2
-		i := 0
-		for k, e := range x {
-			if i > 0 {
-				n++
+		case map[string]any:
+			n += 1 + len(x)
+			for k, e := range x {
+				n += len(k) + 3
+				walk(e)
 			}
-			b, _ := json.Marshal(k)
-			n += len(b) + 1 + jsonSize(e)
-			i++
+		default:
+			n += 4
 		}
-		return n
 	}
-	b, _ := json.Marshal(v)
-	return len(b)
+	walk(v)
+	return n
 }

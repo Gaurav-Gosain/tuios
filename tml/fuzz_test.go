@@ -63,8 +63,8 @@ func checkTree(t *testing.T, doc *Node) {
 }
 
 // roundTrip asserts that a parsed tree prints and reads back to itself in
-// both encodings, and that the validator and the dependency index accept
-// any tree without a panic.
+// both encodings, through either one, and that the validator accepts any
+// tree without a panic.
 func roundTrip(t *testing.T, doc *Node) {
 	checkTree(t, doc)
 	x1 := FormatXML(doc)
@@ -86,8 +86,11 @@ func roundTrip(t *testing.T, doc *Node) {
 	if x3 := FormatXML(fromJSON); !bytes.Equal(x1, x3) {
 		t.Fatalf("JSON to TML text differs:\n%s\n%s", x1, x3)
 	}
+	// JSON to TML text and back gives the same JSON, whatever the source.
+	if j3 := FormatJSON(fromXML, false); !bytes.Equal(j1, j3) {
+		t.Fatalf("TML text to JSON differs:\n%s\n%s", j1, j3)
+	}
 	_, _ = Validate(doc, nil)
-	BuildDeps(doc)
 }
 
 func FuzzParseXML(f *testing.F) {

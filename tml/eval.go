@@ -1,10 +1,9 @@
 package tml
 
 import (
-	"encoding/json"
 	"errors"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +14,17 @@ import (
 // shows the binding as "!".
 var ErrBudget = errors.New("tml: expression step budget exhausted")
 
+// errTooLong stops a string an expression builds at maxString.
+var errTooLong = errors.New("tml: string too long")
+
 // maxString bounds a string an expression builds.
 const maxString = 64 << 10
 
 // Budget is the step allowance of one surface for one frame. Every node an
-// evaluation visits costs a step, and a function costs a step per element it
-// reads. Share one Budget across every binding of a frame.
+// evaluation visits costs a step. Work that grows with its input costs more:
+// a function pays a step per element it reads, and text pays a step per 32
+// bytes it reads or writes. Share one Budget across every binding of a
+// frame.
 type Budget struct {
 	Steps int
 }
@@ -29,15 +33,15 @@ type Budget struct {
 func NewBudget() *Budget { return &Budget{Steps: ExprSteps} }
 
 func (b *Budget) spend(n int) error {
-	if b == nil {
-		return nil
-	}
 	b.Steps -= n
 	if b.Steps < 0 {
 		return ErrBudget
 	}
 	return nil
 }
+
+// spendBytes charges for n bytes of text.
+func (b *Budget) spendBytes(n int) error { return b.spend(1 + n/32) }
 
 // Env is what an expression can read. Vars maps each root name (state, item,
 // form, event, view, value, row) to its value. Values are JSON values as
@@ -46,17 +50,67 @@ func (b *Budget) spend(n int) error {
 type Env struct {
 	Vars   map[string]any
 	Now    func() time.Time // for ago(); time.Now when nil
-	Budget *Budget          // nil means no limit
+	Budget *Budget          // nil means a fresh NewBudget for each call
 }
 
 // Eval evaluates an expression. Evaluation is total: a type mismatch, a
-// missing path or a division by zero gives null. The only error is
-// ErrBudget.
+// missing path, a division by zero or a result that is not finite gives
+// null. The only error is ErrBudget. Every string and key in the result
+// passes through Sanitize.
 func (e *Expr) Eval(env *Env) (any, error) {
-	if env == nil {
-		env = &Env{}
+	env = withBudget(env)
+	v, err := eval(e.root, env)
+	if err != nil {
+		return nil, err
 	}
-	return eval(e.root, env)
+	return sanitizeCharged(v, env.Budget)
+}
+
+func withBudget(env *Env) *Env {
+	if env == nil {
+		return &Env{Budget: NewBudget()}
+	}
+	if env.Budget == nil {
+		e := *env
+		e.Budget = NewBudget()
+		return &e
+	}
+	return env
+}
+
+// sanitizeCharged sanitizes a result and charges a step per eight values it
+// visits.
+func sanitizeCharged(v any, b *Budget) (any, error) {
+	n := 0
+	var count func(any)
+	count = func(v any) {
+		n++
+		switch x := v.(type) {
+		case []any:
+			for _, e := range x {
+				count(e)
+			}
+		case map[string]any:
+			for _, e := range x {
+				count(e)
+			}
+		}
+	}
+	if _, scalar := v.(string); !scalar {
+		count(v)
+		if err := b.spend(n / 8); err != nil {
+			return nil, err
+		}
+	}
+	return SanitizeValue(v), nil
+}
+
+// finite turns a number that is not finite into null.
+func finite(v any) any {
+	if f, ok := v.(float64); ok && (math.IsNaN(f) || math.IsInf(f, 0)) {
+		return nil
+	}
+	return v
 }
 
 func eval(n exprNode, env *Env) (any, error) {
@@ -67,14 +121,14 @@ func eval(n exprNode, env *Env) (any, error) {
 	case *litNode:
 		return x.v, nil
 	case *pathNode:
-		return normalize(env.Vars[x.name]), nil
+		return finite(normalize(env.Vars[x.name])), nil
 	case *memberNode:
 		v, err := eval(x.x, env)
 		if err != nil {
 			return nil, err
 		}
 		if m, ok := v.(map[string]any); ok {
-			return normalize(m[x.name]), nil
+			return finite(normalize(m[x.name])), nil
 		}
 		return nil, nil
 	case *indexNode:
@@ -86,7 +140,7 @@ func eval(n exprNode, env *Env) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return index(v, idx), nil
+		return finite(index(v, idx)), nil
 	case *unaryNode:
 		v, err := eval(x.x, env)
 		if err != nil {
@@ -96,11 +150,12 @@ func eval(n exprNode, env *Env) (any, error) {
 			return !Truthy(v), nil
 		}
 		if f, ok := toNum(v); ok {
-			return -f, nil
+			return finite(-f), nil
 		}
 		return nil, nil
 	case *binaryNode:
-		return evalBinary(x, env)
+		v, err := evalBinary(x, env)
+		return finite(v), err
 	case *condNode:
 		c, err := eval(x.c, env)
 		if err != nil {
@@ -139,11 +194,8 @@ func eval(n exprNode, env *Env) (any, error) {
 			}
 			args[i] = v
 		}
-		f, ok := funcs[x.name]
-		if !ok {
-			return nil, nil
-		}
-		return f(args, env)
+		v, err := call(x.name, args, env)
+		return finite(v), err
 	}
 	return nil, nil
 }
@@ -170,13 +222,8 @@ func evalBinary(x *binaryNode, env *Env) (any, error) {
 		return nil, err
 	}
 	switch x.op {
-	case "&&":
-		if !Truthy(l) {
-			return l, nil
-		}
-		return eval(x.r, env)
-	case "||":
-		if Truthy(l) {
+	case "&&", "||":
+		if Truthy(l) == (x.op == "||") {
 			return l, nil
 		}
 		return eval(x.r, env)
@@ -191,24 +238,28 @@ func evalBinary(x *binaryNode, env *Env) (any, error) {
 		return nil, err
 	}
 	switch x.op {
-	case "==":
-		return equal(l, r), nil
-	case "!=":
-		return !equal(l, r), nil
+	case "==", "!=":
+		eq, err := equalB(l, r, env.Budget)
+		return eq == (x.op == "=="), err
 	case "+":
 		ls, lstr := l.(string)
 		rs, rstr := r.(string)
 		if lstr || rstr {
+			var ok bool
 			if !lstr {
-				ls = Stringify(l)
+				if ls, ok, err = str(l, env.Budget); err != nil || !ok {
+					return nil, err
+				}
 			}
 			if !rstr {
-				rs = Stringify(r)
+				if rs, ok, err = str(r, env.Budget); err != nil || !ok {
+					return nil, err
+				}
 			}
 			if len(ls)+len(rs) > maxString {
 				return nil, nil
 			}
-			if err := env.Budget.spend((len(ls) + len(rs)) / 256); err != nil {
+			if err := env.Budget.spendBytes(len(ls) + len(rs)); err != nil {
 				return nil, err
 			}
 			return ls + rs, nil
@@ -222,9 +273,9 @@ func evalBinary(x *binaryNode, env *Env) (any, error) {
 			}
 		}
 	case "<", "<=", ">", ">=":
-		c, ok := compare(l, r)
-		if !ok {
-			return false, nil
+		c, ok, err := compareB(l, r, env.Budget)
+		if err != nil || !ok {
+			return false, err
 		}
 		switch x.op {
 		case "<":
@@ -242,29 +293,25 @@ func evalBinary(x *binaryNode, env *Env) (any, error) {
 	if !aok || !bok {
 		return nil, nil
 	}
-	var v float64
 	switch x.op {
 	case "+":
-		v = a + b
+		return a + b, nil
 	case "-":
-		v = a - b
+		return a - b, nil
 	case "*":
-		v = a * b
+		return a * b, nil
 	case "/":
 		if b == 0 {
 			return nil, nil
 		}
-		v = a / b
+		return a / b, nil
 	case "%":
 		if b == 0 {
 			return nil, nil
 		}
-		v = math.Mod(a, b)
+		return math.Mod(a, b), nil
 	}
-	if math.IsNaN(v) || math.IsInf(v, 0) {
-		return nil, nil
-	}
-	return v, nil
+	return nil, nil
 }
 
 // Truthy reports whether a value counts as true: not null, false, 0, "", an
@@ -297,12 +344,6 @@ func normalize(v any) any {
 		return float64(x)
 	case float32:
 		return float64(x)
-	case json.Number:
-		f, err := x.Float64()
-		if err != nil {
-			return nil
-		}
-		return f
 	}
 	return v
 }
@@ -310,93 +351,266 @@ func normalize(v any) any {
 func toNum(v any) (float64, bool) {
 	switch x := normalize(v).(type) {
 	case float64:
-		return x, true
+		return x, !math.IsNaN(x) && !math.IsInf(x, 0)
 	case bool:
 		if x {
 			return 1, true
 		}
 		return 0, true
 	case string:
+		if len(x) > 64 {
+			return 0, false
+		}
 		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
 		return f, err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
 	}
 	return 0, false
 }
 
+// equal compares two JSON values with no budget. The patch test operation
+// uses it; the state limit bounds its work.
 func equal(a, b any) bool {
+	eq, _ := equalB(a, b, nil)
+	return eq
+}
+
+// equalB compares two JSON values, charging a step per value and per 32
+// bytes of string it compares.
+func equalB(a, b any, bud *Budget) (bool, error) {
+	if bud != nil {
+		if err := bud.spend(1); err != nil {
+			return false, err
+		}
+	}
 	a, b = normalize(a), normalize(b)
 	switch x := a.(type) {
 	case nil:
-		return b == nil
-	case bool, float64, string:
-		return a == b
+		return b == nil, nil
+	case bool, float64:
+		return a == b, nil
+	case string:
+		y, ok := b.(string)
+		if !ok {
+			return false, nil
+		}
+		if bud != nil {
+			if err := bud.spendBytes(min(len(x), len(y))); err != nil {
+				return false, err
+			}
+		}
+		return x == y, nil
 	case []any:
 		y, ok := b.([]any)
 		if !ok || len(x) != len(y) {
-			return false
+			return false, nil
 		}
 		for i := range x {
-			if !equal(x[i], y[i]) {
-				return false
+			if eq, err := equalB(x[i], y[i], bud); err != nil || !eq {
+				return false, err
 			}
 		}
-		return true
+		return true, nil
 	case map[string]any:
 		y, ok := b.(map[string]any)
 		if !ok || len(x) != len(y) {
-			return false
+			return false, nil
 		}
 		for k, v := range x {
 			w, ok := y[k]
-			if !ok || !equal(v, w) {
-				return false
+			if !ok {
+				return false, nil
+			}
+			if eq, err := equalB(v, w, bud); err != nil || !eq {
+				return false, err
 			}
 		}
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
-func compare(a, b any) (int, bool) {
+func compareB(a, b any, bud *Budget) (int, bool, error) {
 	a, b = normalize(a), normalize(b)
 	if x, ok := a.(float64); ok {
 		if y, ok := b.(float64); ok {
 			switch {
 			case x < y:
-				return -1, true
+				return -1, true, nil
 			case x > y:
-				return 1, true
+				return 1, true, nil
 			}
-			return 0, true
+			return 0, true, nil
 		}
 	}
 	if x, ok := a.(string); ok {
 		if y, ok := b.(string); ok {
-			return strings.Compare(x, y), true
+			if err := bud.spendBytes(min(len(x), len(y))); err != nil {
+				return 0, false, err
+			}
+			return strings.Compare(x, y), true, nil
 		}
 	}
-	return 0, false
+	return 0, false, nil
 }
 
 // Stringify formats a value as text: null is empty, a whole number has no
-// decimals, and an array or object is JSON.
+// decimals, and an array or object is JSON with sorted keys. The result
+// stops at 64 KiB.
 func Stringify(v any) string {
+	var b strings.Builder
+	_ = writeText(&b, v, nil)
+	return cutRunes(b.String(), maxString)
+}
+
+// str formats a value as Stringify does, charging the budget for each value
+// and each 32 bytes. ok is false when the text would pass maxString.
+func str(v any, bud *Budget) (string, bool, error) {
+	var b strings.Builder
+	switch err := writeText(&b, v, bud); err {
+	case nil:
+		return b.String(), true, nil
+	case errTooLong:
+		return "", false, nil
+	default:
+		return "", false, err
+	}
+}
+
+func writeText(b *strings.Builder, v any, bud *Budget) error {
 	switch x := normalize(v).(type) {
 	case nil:
-		return ""
+		return nil
 	case string:
-		return x
-	case bool:
-		return strconv.FormatBool(x)
-	case float64:
-		return formatNum(x)
-	default:
-		b, err := json.Marshal(x)
-		if err != nil {
-			return ""
+		if len(x) > maxString {
+			b.WriteString(cutRunes(x, maxString))
+			return errTooLong
 		}
-		return string(b)
+		if bud != nil {
+			if err := bud.spendBytes(len(x)); err != nil {
+				return err
+			}
+		}
+		b.WriteString(x)
+		return nil
+	case bool:
+		b.WriteString(strconv.FormatBool(x))
+		return nil
+	case float64:
+		b.WriteString(formatNum(x))
+		return nil
 	}
+	return writeJSON(b, v, bud)
+}
+
+// writeJSON writes v as compact JSON with sorted keys, as encoding/json
+// does, and stops at maxString.
+func writeJSON(b *strings.Builder, v any, bud *Budget) error {
+	if bud != nil {
+		if err := bud.spend(1); err != nil {
+			return err
+		}
+	}
+	if b.Len() > maxString {
+		return errTooLong
+	}
+	switch x := normalize(v).(type) {
+	case nil:
+		b.WriteString("null")
+	case bool:
+		b.WriteString(strconv.FormatBool(x))
+	case float64:
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			b.WriteString("null")
+		} else {
+			b.WriteString(formatNum(x))
+		}
+	case string:
+		if len(x) > maxString {
+			return errTooLong
+		}
+		if bud != nil {
+			if err := bud.spendBytes(len(x)); err != nil {
+				return err
+			}
+		}
+		writeQuoted(b, x)
+	case []any:
+		b.WriteByte('[')
+		for i, e := range x {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			if err := writeJSON(b, e, bud); err != nil {
+				return err
+			}
+		}
+		b.WriteByte(']')
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		if bud != nil {
+			if err := bud.spend(len(keys)); err != nil {
+				return err
+			}
+		}
+		slices.Sort(keys)
+		b.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			writeQuoted(b, k)
+			b.WriteByte(':')
+			if err := writeJSON(b, x[k], bud); err != nil {
+				return err
+			}
+		}
+		b.WriteByte('}')
+	default:
+		b.WriteString("null")
+	}
+	if b.Len() > maxString {
+		return errTooLong
+	}
+	return nil
+}
+
+const hexDigits = "0123456789abcdef"
+
+func writeQuoted(b *strings.Builder, s string) {
+	b.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '"' || c == '\\':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		case c == '\n':
+			b.WriteString(`\n`)
+		case c == '\t':
+			b.WriteString(`\t`)
+		case c < 0x20:
+			b.WriteString(`\u00`)
+			b.WriteByte(hexDigits[c>>4])
+			b.WriteByte(hexDigits[c&15])
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('"')
+}
+
+// cutRunes cuts s to at most n bytes at a rune boundary.
+func cutRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func formatNum(f float64) string {
@@ -406,195 +620,16 @@ func formatNum(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
+var funcNames = [...]string{
+	"abs", "ago", "avg", "bytes", "contains", "count", "dur", "fmt", "format",
+	"join", "len", "lower", "max", "min", "pct", "pick", "round", "starts",
+	"sum", "trim", "upper",
+}
+
 // Funcs lists the functions an expression may call, sorted.
-func Funcs() []string {
-	out := make([]string, 0, len(funcs))
-	for k := range funcs {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
+func Funcs() []string { return slices.Clone(funcNames[:]) }
 
-type fn func(args []any, env *Env) (any, error)
-
-var funcs map[string]fn
-
-func init() {
-	funcs = map[string]fn{
-		"len": func(a []any, _ *Env) (any, error) {
-			switch x := arg(a, 0).(type) {
-			case string:
-				return float64(utf8.RuneCountInString(x)), nil
-			case []any:
-				return float64(len(x)), nil
-			case map[string]any:
-				return float64(len(x)), nil
-			}
-			return 0.0, nil
-		},
-		"sum": func(a []any, env *Env) (any, error) {
-			nums, err := numbers(a, env)
-			var s float64
-			for _, n := range nums {
-				s += n
-			}
-			return s, err
-		},
-		"avg": func(a []any, env *Env) (any, error) {
-			nums, err := numbers(a, env)
-			if err != nil || len(nums) == 0 {
-				return nil, err
-			}
-			var s float64
-			for _, n := range nums {
-				s += n
-			}
-			return s / float64(len(nums)), nil
-		},
-		"min": func(a []any, env *Env) (any, error) { return extreme(a, env, -1) },
-		"max": func(a []any, env *Env) (any, error) { return extreme(a, env, 1) },
-		"round": func(a []any, _ *Env) (any, error) {
-			f, ok := toNum(arg(a, 0))
-			if !ok {
-				return nil, nil
-			}
-			d, _ := toNum(arg(a, 1))
-			d = math.Max(0, math.Min(d, 10))
-			p := math.Pow(10, math.Trunc(d))
-			return math.Round(f*p) / p, nil
-		},
-		"abs": func(a []any, _ *Env) (any, error) {
-			f, ok := toNum(arg(a, 0))
-			if !ok {
-				return nil, nil
-			}
-			return math.Abs(f), nil
-		},
-		"pct": func(a []any, _ *Env) (any, error) {
-			f, ok := toNum(arg(a, 0))
-			if !ok {
-				return nil, nil
-			}
-			if len(a) < 2 {
-				return f * 100, nil
-			}
-			t, ok := toNum(a[1])
-			if !ok || t == 0 {
-				return 0.0, nil
-			}
-			return f / t * 100, nil
-		},
-		"fmt":    fnFmt,
-		"format": fnFmt,
-		"dur": func(a []any, _ *Env) (any, error) {
-			f, ok := toNum(arg(a, 0))
-			if !ok {
-				return nil, nil
-			}
-			unit, _ := arg(a, 1).(string)
-			return formatDur(f, unit), nil
-		},
-		"bytes": func(a []any, _ *Env) (any, error) {
-			f, ok := toNum(arg(a, 0))
-			if !ok {
-				return nil, nil
-			}
-			return formatBytes(f), nil
-		},
-		"ago": func(a []any, env *Env) (any, error) {
-			t, ok := toTime(arg(a, 0))
-			if !ok {
-				return nil, nil
-			}
-			now := time.Now()
-			if env.Now != nil {
-				now = env.Now()
-			}
-			return formatAgo(now.Sub(t)), nil
-		},
-		"upper": strFn(strings.ToUpper),
-		"lower": strFn(strings.ToLower),
-		"trim":  strFn(strings.TrimSpace),
-		"join": func(a []any, env *Env) (any, error) {
-			arr, _ := arg(a, 0).([]any)
-			sep := ", "
-			if s, ok := arg(a, 1).(string); ok {
-				sep = s
-			}
-			if err := env.Budget.spend(len(arr)); err != nil {
-				return nil, err
-			}
-			parts := make([]string, len(arr))
-			n := 0
-			for i, v := range arr {
-				parts[i] = Stringify(v)
-				n += len(parts[i]) + len(sep)
-				if n > maxString {
-					return nil, nil
-				}
-			}
-			return strings.Join(parts, sep), nil
-		},
-		"contains": func(a []any, env *Env) (any, error) {
-			switch x := arg(a, 0).(type) {
-			case string:
-				s, ok := arg(a, 1).(string)
-				return ok && strings.Contains(x, s), nil
-			case []any:
-				if err := env.Budget.spend(len(x)); err != nil {
-					return nil, err
-				}
-				for _, v := range x {
-					if equal(v, arg(a, 1)) {
-						return true, nil
-					}
-				}
-			}
-			return false, nil
-		},
-		"starts": func(a []any, _ *Env) (any, error) {
-			s, ok1 := arg(a, 0).(string)
-			p, ok2 := arg(a, 1).(string)
-			return ok1 && ok2 && strings.HasPrefix(s, p), nil
-		},
-		"pick": func(a []any, env *Env) (any, error) {
-			arr, _ := arg(a, 0).([]any)
-			f, _ := arg(a, 1).(string)
-			if err := env.Budget.spend(len(arr)); err != nil {
-				return nil, err
-			}
-			out := make([]any, len(arr))
-			for i, v := range arr {
-				if m, ok := v.(map[string]any); ok {
-					out[i] = normalize(m[f])
-				}
-			}
-			return out, nil
-		},
-		"count": func(a []any, env *Env) (any, error) {
-			arr, _ := arg(a, 0).([]any)
-			if err := env.Budget.spend(len(arr)); err != nil {
-				return nil, err
-			}
-			if len(a) < 2 {
-				return float64(len(arr)), nil
-			}
-			f, _ := a[1].(string)
-			n := 0
-			for _, v := range arr {
-				m, ok := v.(map[string]any)
-				if !ok {
-					continue
-				}
-				if len(a) < 3 && Truthy(m[f]) || len(a) >= 3 && equal(m[f], a[2]) {
-					n++
-				}
-			}
-			return float64(n), nil
-		},
-	}
-}
+func isFunc(name string) bool { return slices.Contains(funcNames[:], name) }
 
 func arg(a []any, i int) any {
 	if i < len(a) {
@@ -603,22 +638,218 @@ func arg(a []any, i int) any {
 	return nil
 }
 
-func strFn(f func(string) string) fn {
-	return func(a []any, _ *Env) (any, error) {
-		s, ok := arg(a, 0).(string)
+// call runs one function. An unknown function gives null.
+func call(name string, a []any, env *Env) (any, error) {
+	bud := env.Budget
+	switch name {
+	case "len":
+		switch x := arg(a, 0).(type) {
+		case string:
+			if err := bud.spendBytes(len(x)); err != nil {
+				return nil, err
+			}
+			return float64(utf8.RuneCountInString(x)), nil
+		case []any:
+			return float64(len(x)), nil
+		case map[string]any:
+			return float64(len(x)), nil
+		}
+		return 0.0, nil
+	case "sum", "avg":
+		nums, err := numbers(a, bud)
+		if err != nil {
+			return nil, err
+		}
+		if name == "avg" && len(nums) == 0 {
+			return nil, nil
+		}
+		var s float64
+		for _, n := range nums {
+			s += n
+		}
+		if name == "avg" {
+			s /= float64(len(nums))
+		}
+		return s, nil
+	case "min", "max":
+		nums, err := numbers(a, bud)
+		if err != nil || len(nums) == 0 {
+			return nil, err
+		}
+		if name == "min" {
+			return slices.Min(nums), nil
+		}
+		return slices.Max(nums), nil
+	case "round":
+		f, ok := toNum(arg(a, 0))
 		if !ok {
 			return nil, nil
 		}
-		return f(s), nil
+		d, _ := toNum(arg(a, 1))
+		p := math.Pow(10, math.Trunc(math.Max(0, math.Min(d, 10))))
+		return math.Round(f*p) / p, nil
+	case "abs":
+		if f, ok := toNum(arg(a, 0)); ok {
+			return math.Abs(f), nil
+		}
+		return nil, nil
+	case "pct":
+		f, ok := toNum(arg(a, 0))
+		if !ok {
+			return nil, nil
+		}
+		if len(a) < 2 {
+			return f * 100, nil
+		}
+		t, ok := toNum(a[1])
+		if !ok || t == 0 {
+			return 0.0, nil
+		}
+		return f / t * 100, nil
+	case "fmt", "format":
+		return fnFmt(a, bud)
+	case "dur":
+		f, ok := toNum(arg(a, 0))
+		if !ok {
+			return nil, nil
+		}
+		unit, _ := arg(a, 1).(string)
+		return formatDur(f, unit), nil
+	case "bytes":
+		if f, ok := toNum(arg(a, 0)); ok {
+			return formatBytes(f), nil
+		}
+		return nil, nil
+	case "ago":
+		t, ok := toTime(arg(a, 0))
+		if !ok {
+			return nil, nil
+		}
+		now := time.Now()
+		if env.Now != nil {
+			now = env.Now()
+		}
+		return formatAgo(now.Sub(t)), nil
+	case "upper", "lower", "trim":
+		s, ok := arg(a, 0).(string)
+		if !ok || len(s) > maxString {
+			return nil, nil
+		}
+		if err := bud.spendBytes(len(s)); err != nil {
+			return nil, err
+		}
+		switch name {
+		case "upper":
+			return strings.ToUpper(s), nil
+		case "lower":
+			return strings.ToLower(s), nil
+		}
+		return strings.TrimSpace(s), nil
+	case "join":
+		arr, _ := arg(a, 0).([]any)
+		sep := ", "
+		if s, ok := arg(a, 1).(string); ok && len(s) <= 256 {
+			sep = s
+		}
+		var b strings.Builder
+		for i, v := range arr {
+			if i > 0 {
+				b.WriteString(sep)
+			}
+			if err := writeText(&b, v, bud); err != nil {
+				if err == errTooLong {
+					return nil, nil
+				}
+				return nil, err
+			}
+			if b.Len() > maxString {
+				return nil, nil
+			}
+		}
+		return b.String(), nil
+	case "contains":
+		switch x := arg(a, 0).(type) {
+		case string:
+			s, ok := arg(a, 1).(string)
+			if !ok {
+				return false, nil
+			}
+			if err := bud.spendBytes(len(x)); err != nil {
+				return nil, err
+			}
+			return strings.Contains(x, s), nil
+		case []any:
+			for _, v := range x {
+				eq, err := equalB(v, arg(a, 1), bud)
+				if err != nil || eq {
+					return eq, err
+				}
+			}
+		}
+		return false, nil
+	case "starts":
+		s, ok1 := arg(a, 0).(string)
+		p, ok2 := arg(a, 1).(string)
+		if !ok1 || !ok2 {
+			return false, nil
+		}
+		if err := bud.spendBytes(len(p)); err != nil {
+			return nil, err
+		}
+		return strings.HasPrefix(s, p), nil
+	case "pick":
+		arr, _ := arg(a, 0).([]any)
+		f, _ := arg(a, 1).(string)
+		if err := bud.spend(len(arr)); err != nil {
+			return nil, err
+		}
+		out := make([]any, len(arr))
+		for i, v := range arr {
+			if m, ok := v.(map[string]any); ok {
+				out[i] = normalize(m[f])
+			}
+		}
+		return out, nil
+	case "count":
+		arr, _ := arg(a, 0).([]any)
+		if err := bud.spend(len(arr)); err != nil {
+			return nil, err
+		}
+		if len(a) < 2 {
+			return float64(len(arr)), nil
+		}
+		f, _ := a[1].(string)
+		n := 0
+		for _, v := range arr {
+			m, ok := v.(map[string]any)
+			if !ok {
+				continue
+			}
+			if len(a) < 3 {
+				if Truthy(m[f]) {
+					n++
+				}
+				continue
+			}
+			eq, err := equalB(m[f], a[2], bud)
+			if err != nil {
+				return nil, err
+			}
+			if eq {
+				n++
+			}
+		}
+		return float64(n), nil
 	}
+	return nil, nil
 }
 
 // numbers reads the numbers of a call: one array, optionally with a field
 // name for an array of rows, or several numbers.
-func numbers(a []any, env *Env) ([]float64, error) {
+func numbers(a []any, bud *Budget) ([]float64, error) {
 	var out []float64
 	if arr, ok := arg(a, 0).([]any); ok {
-		if err := env.Budget.spend(len(arr)); err != nil {
+		if err := bud.spend(len(arr)); err != nil {
 			return nil, err
 		}
 		field, _ := arg(a, 1).(string)
@@ -641,28 +872,18 @@ func numbers(a []any, env *Env) ([]float64, error) {
 	return out, nil
 }
 
-func extreme(a []any, env *Env, sign float64) (any, error) {
-	nums, err := numbers(a, env)
-	if err != nil || len(nums) == 0 {
-		return nil, err
-	}
-	best := nums[0]
-	for _, n := range nums[1:] {
-		if (n-best)*sign > 0 {
-			best = n
-		}
-	}
-	return best, nil
-}
-
 // fnFmt formats a number with thousands separators and a fixed number of
-// decimals: fmt(1234.5) is 1,234.5 and fmt(1234.5, 0) is 1,235. A string is
-// returned as it is.
-func fnFmt(a []any, _ *Env) (any, error) {
+// decimals: fmt(1234.5) is 1,234.5 and fmt(1234.5, 0) is 1,235. Any other
+// value is formatted as Stringify does.
+func fnFmt(a []any, bud *Budget) (any, error) {
 	v := arg(a, 0)
 	f, ok := v.(float64)
 	if !ok {
-		return Stringify(v), nil
+		s, ok, err := str(v, bud)
+		if err != nil || !ok {
+			return nil, err
+		}
+		return s, nil
 	}
 	digits := -1
 	if d, ok := toNum(arg(a, 1)); ok {
@@ -670,10 +891,13 @@ func fnFmt(a []any, _ *Env) (any, error) {
 		p := math.Pow(10, float64(digits))
 		f = math.Round(f*p) / p // half away from zero, as people round
 	}
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return nil, nil
+	}
 	s := strconv.FormatFloat(math.Abs(f), 'f', digits, 64)
 	intPart, frac, _ := strings.Cut(s, ".")
 	var b strings.Builder
-	if f < 0 && s != strings.Repeat("0", len(s)) {
+	if f < 0 && strings.Trim(s, "0.") != "" {
 		b.WriteByte('-')
 	}
 	for i, c := range intPart {
@@ -689,16 +913,30 @@ func fnFmt(a []any, _ *Env) (any, error) {
 	return b.String(), nil
 }
 
-var durUnits = map[string]float64{"ns": 1e-9, "us": 1e-6, "µs": 1e-6, "ms": 1e-3, "s": 1, "m": 60, "h": 3600}
+func durScale(unit string) float64 {
+	switch unit {
+	case "ns":
+		return 1e-9
+	case "us", "µs":
+		return 1e-6
+	case "s":
+		return 1
+	case "m":
+		return 60
+	case "h":
+		return 3600
+	}
+	return 1e-3
+}
 
 // formatDur formats an amount of unit (default ms) as a short duration:
-// 120µs, 840ms, 2.21s, 4m 5s, 1h 4m.
-func formatDur(v float64, unit string) string {
-	scale, ok := durUnits[unit]
-	if !ok {
-		scale = 1e-3
+// 120µs, 840ms, 2.21s, 4m 5s, 1h 4m. A duration too large to count gives
+// null.
+func formatDur(v float64, unit string) any {
+	s := v * durScale(unit)
+	if math.IsNaN(s) || math.IsInf(s, 0) || math.Abs(s) > 1e15 {
+		return nil
 	}
-	s := v * scale
 	sign := ""
 	if s < 0 {
 		sign, s = "-", -s
@@ -731,7 +969,7 @@ func trimZeros(s string) string {
 
 // formatBytes formats a byte count with binary units: 512B, 1.5K, 3.1G.
 func formatBytes(v float64) string {
-	units := []string{"B", "K", "M", "G", "T", "P"}
+	const units = "BKMGTPE"
 	sign := ""
 	if v < 0 {
 		sign, v = "-", -v
@@ -742,9 +980,9 @@ func formatBytes(v float64) string {
 		i++
 	}
 	if i == 0 || v >= 10 {
-		return sign + strconv.FormatFloat(math.Round(v), 'f', 0, 64) + units[i]
+		return sign + strconv.FormatFloat(math.Round(v), 'f', 0, 64) + units[i:i+1]
 	}
-	return sign + trimZeros(strconv.FormatFloat(v, 'f', 1, 64)) + units[i]
+	return sign + trimZeros(strconv.FormatFloat(v, 'f', 1, 64)) + units[i:i+1]
 }
 
 func toTime(v any) (time.Time, bool) {
@@ -756,6 +994,9 @@ func toTime(v any) (time.Time, bool) {
 		sec, frac := math.Modf(x)
 		return time.Unix(int64(sec), int64(frac*1e9)), true
 	case string:
+		if len(x) > 64 {
+			return time.Time{}, false
+		}
 		t, err := time.Parse(time.RFC3339, x)
 		return t, err == nil
 	}

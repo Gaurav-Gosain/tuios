@@ -11,19 +11,20 @@ with a state patch.
 The package is the language only. It draws nothing. It has:
 
 - The tree: a node type for each component of a fixed catalog.
-- Two encodings with a lossless mapping: TML text, a strict XML subset, and
-  TML JSON. A parser and a printer for each.
+- Two encodings: TML text, a strict XML subset, and TML JSON. A parser and a
+  printer for each. Both parsers give the same canonical tree, and a
+  canonical tree prints and reads back unchanged in either encoding.
 - The validator. It checks the full catalog schema, and its errors name the
   fix.
 - The JSON Schema of TML JSON, generated from the catalog. Agents and MCP
   tools use it.
 - The state store, `{state.path}` bindings, and a small expression language
-  with a step budget.
-- The local actions `set`, `toggle`, `tab`, `sort`, `filter`, `fold` and
-  `focus`.
-- RFC 6902 JSON Patch, applied to the state.
-- Dependency tracking: which nodes read which state paths, so a renderer
-  redraws only those.
+  with a step budget. Each expression records the state paths it reads.
+- The action parser, which checks the action attributes.
+- RFC 6902 JSON Patch, applied to the state, with the size limit checked
+  after every operation.
+
+The renderer, view state and dirty tracking come later, in tuios.dev/loom.
 
 The package uses only the standard library. No code from a document runs:
 expressions compute values, and cannot loop, assign or call out.
@@ -58,33 +59,72 @@ The same document in TML JSON:
    {"type": "progress", "value": "{state.pct / 100}"}]}]}
 ```
 
-Check a document, then apply a patch from its owner:
+Check a document:
 
 ```go
-doc, problems, err := tml.Check(src, nil)
+_, problems, err := tml.Check(src, nil)
 if err != nil {
 	for _, p := range problems {
-		// 3:3: <chart-bar> is not a TML component. (unknown_component at /children/0) Did you mean "bar"?
 		fmt.Println(p)
 	}
-	return
+}
+```
+
+It prints:
+
+```
+3:3: <chart-bar> is not a TML component. (unknown_component at /children/0) Did you mean "bar"?
+```
+
+Apply a patch from the owner, then evaluate a binding:
+
+```go
+doc, _, err := tml.Check(src, nil)
+if err != nil {
+	panic(err)
+}
+store, err := tml.StoreFor(doc, tml.DefaultLimits())
+if err != nil {
+	panic(err)
 }
 
-store, _ := tml.StoreFor(doc, tml.DefaultLimits())
-deps := tml.BuildDeps(doc)
-
-ops, _ := tml.DecodePatch([]byte(`[{"op":"replace","path":"/pct","value":80}]`), tml.DefaultLimits())
-changed, _ := store.Apply(ops)
-for _, node := range deps.Affected(changed) {
-	// Redraw only this node: /children/0/children/1, the progress bar.
+// The owner sends a patch. Apply returns the state paths it changed.
+ops, err := tml.DecodePatch([]byte(`[{"op":"replace","path":"/pct","value":80}]`), tml.DefaultLimits())
+if err != nil {
+	panic(err)
 }
+changed, err := store.Apply(ops)
+if err != nil {
+	panic(err)
+}
+fmt.Println(changed)
 
+// A renderer evaluates the progress bar's binding with a budget.
 bar := doc.At("/children/0/children/1")
 v, _ := bar.Attr("value")
-tmpl, _ := tml.ParseTemplate(v.Text())
-value, _ := tmpl.Eval(&tml.Env{Vars: map[string]any{"state": store.State()}, Budget: tml.NewBudget()})
-// value is 0.8
+tmpl, err := tml.ParseTemplate(v.Text())
+if err != nil {
+	panic(err)
+}
+value, err := tmpl.Eval(&tml.Env{Vars: map[string]any{"state": store.State()}, Budget: tml.NewBudget()})
+fmt.Println(value, err)
 ```
+
+It prints `[/pct]`, then `0.8 <nil>`. The code is the body of `Example` in
+`example_test.go`, and a test keeps the two the same.
+
+## Notes for a host
+
+- **Share one `Budget` per frame.** Set `Env.Budget` to one `NewBudget()` for
+  all the bindings of a surface's frame. A nil `Budget` gets a fresh budget
+  for each call, which bounds one binding but not a frame.
+- **The store sanitizes state.** `Node.State`, `NewStore`, patch values and
+  `Store.Set` pass every string and key through `Sanitize`. `Expr.Eval` and
+  `Template.Eval` sanitize what they return. A renderer that reads the store
+  directly, such as for table rows, gets clean strings.
+- **Spend an `Expansion` while you expand.** The validator counts `each` and
+  `list` against the state a document arrives with. A patch can grow an
+  array later, so take nodes from `NewExpansion(limits)` as you render.
 
 ## Syntax
 
@@ -130,9 +170,18 @@ that it reads back to the same tree.
 - Raw content keeps its text as written: `code`, `markdown`, `diff`,
   `mermaid`, `kbd` and `state`. Bindings do not apply in raw content.
 
-The parsers remove what must never reach a terminal: C0 and C1 control
-characters other than tab and newline, and the bidirectional override and
-isolate characters. A binding's result goes through the same filter.
+`Sanitize` removes what must never reach a terminal:
+
+- C0 and C1 control characters other than tab and newline, and DEL.
+- The bidirectional marks, embeddings, overrides and isolates.
+- The line and paragraph separators U+2028 and U+2029.
+- Invisible characters: U+200B, U+2060 to U+2064, U+180E, U+FEFF and the
+  tag characters.
+
+It keeps the zero-width joiner and non-joiner, which emoji and several
+scripts need. The parsers apply it to every text run and attribute. A one-line
+text attribute, such as `title`, also has its tabs and line breaks turned
+into spaces.
 
 ## Components
 
@@ -322,8 +371,8 @@ calls separated by `;`.
 | `open('file:path')` | Host | Opens a file under the owner's files folder. |
 | `pane('verb', {...})` | Host | Runs `focus`, `new-window` or `send-text` under the owner's grants. |
 
-`RunActions` applies the local actions to a `Store` and a `View`, in order,
-and returns the rest as effects for the host.
+`ParseActions` parses and checks an action attribute. The renderer runs the
+local actions and sends the rest to the owner or the host.
 
 ## Errors that name the fix
 
@@ -356,24 +405,22 @@ and `bad_root`.
 | Nodes that `each` and `list` expand to | 2,000 |
 | Table rows | 50,000 |
 | Patch | 64 KiB, 100 a second per surface |
-| Images | 4 per document, 4 MiB each |
+| Images | 4 per document after `each` expands, 4 MiB each |
 | Problems in one report | 20 |
 
-Over a limit is a problem with the code `limit`. `Limiter` is the token
-bucket a host uses for the patch and toast rates.
+Over a limit is a problem with the code `limit`. The report keeps its last
+slot for an error, so warnings cannot hide one.
 
-## The tml command
+## Validate, format and describe
 
-```sh
-go install tuios.dev/tml/cmd/tml@latest
+The standalone `tml` command will live in `tuios.dev/loom/cmd/tml`. Until
+then, these functions do its work:
 
-tml validate report.tml           # problems, one per line; exit 1 on an error
-tml validate --json report.tml    # the problems as JSON
-tml fmt report.tml                # canonical TML text
-tml fmt --json report.tml         # the same tree as TML JSON
-tml fmt --xml -w report.json      # convert in place
-tml schema -o tml.schema.json     # the JSON Schema of TML JSON
-```
+| Function | Does |
+| --- | --- |
+| `Check(src, opts)` | Parses and validates a document in either encoding. |
+| `Format(src, to, opts)` | Prints a document in canonical TML text or TML JSON. |
+| `Schema()` | Returns the JSON Schema of TML JSON. |
 
 The JSON Schema is also in this folder as
 [tml.schema.json](tml.schema.json). `go generate` writes it again after a
@@ -388,8 +435,11 @@ catalog change, and a test fails while the two differ.
   problems.
 - `FuzzParseXML`, `FuzzParseJSON`, `FuzzExpr` and `FuzzPatch` run their seeds
   in the ordinary suite. The parser targets assert the limits, the character
-  filter, and that every parsed tree prints and reads back to itself in both
-  encodings.
+  filter, and that every parsed tree prints and reads back to itself through
+  either encoding.
+- `review_test.go` holds the inputs of the wave 1 security review: patch
+  growth, escapes in state, the problem cap, nested `each`, step charging,
+  quadratic parsing, and the medium findings.
 
 ```sh
 go test ./...

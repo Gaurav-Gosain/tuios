@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-//go:generate go run ./cmd/tml schema -o tml.schema.json
+//go:generate go test -run TestSchemaGolden -update .
 
 // SchemaID is the $id of the generated JSON Schema.
 const SchemaID = "https://tuios.dev/tml/tml.schema.json"
@@ -21,11 +21,12 @@ func Schema() []byte {
 			"type": "string", "pattern": `\{.*\}`,
 			"description": "A binding: an expression in braces, such as {state.count}.",
 		},
-		"role": map[string]any{"enum": Roles, "description": "A theme role. Never a hex colour."},
+		"role": map[string]any{"enum": roles, "description": "A theme role. Never a hex colour."},
 	}
 	var blocks, inlines []any
 	inlines = append(inlines, map[string]any{"type": "string", "description": "A text run. It may hold {bindings}."})
-	for _, c := range Components() {
+	for i := range table {
+		c := &table[i]
 		defs[c.Name] = componentSchema(c)
 		ref := map[string]any{"$ref": "#/$defs/" + c.Name}
 		if c.Block {
@@ -131,7 +132,7 @@ func attrSchema(spec AttrSpec) map[string]any {
 	case TAccent:
 		return withBinding(map[string]any{"anyOf": []any{
 			map[string]any{"$ref": "#/$defs/role"},
-			str("^slot:(" + strings.Join(Slots, "|") + ")$"),
+			str("^slot:(" + strings.Join(slots[:], "|") + ")$"),
 		}}, spec)
 	case TSize:
 		return withBinding(map[string]any{"anyOf": []any{

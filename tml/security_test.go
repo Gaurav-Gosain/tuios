@@ -3,7 +3,6 @@ package tml
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 // TestNoEscapes checks the security boundary: no control character, C1
@@ -86,27 +85,6 @@ func TestValidateLimits(t *testing.T) {
 	_, problems, _ := Check([]byte(sb.String()), nil)
 	if len(problems) != DefaultLimits().Problems {
 		t.Errorf("reported %d problems, want the cap of %d", len(problems), DefaultLimits().Problems)
-	}
-}
-
-func TestLimiter(t *testing.T) {
-	l := NewLimiter(PatchesPerSecond, PatchesPerSecond)
-	now := time.Unix(0, 0)
-	n := 0
-	for range 150 {
-		if l.Allow(now) {
-			n++
-		}
-	}
-	if n != PatchesPerSecond {
-		t.Errorf("allowed %d patches at once, want %d", n, PatchesPerSecond)
-	}
-	if !l.Allow(now.Add(20 * time.Millisecond)) {
-		t.Error("no patch allowed after the bucket refilled")
-	}
-	toast := NewLimiter(1/ToastInterval.Seconds(), 1)
-	if !toast.Allow(now) || toast.Allow(now.Add(time.Second)) || !toast.Allow(now.Add(2*time.Second)) {
-		t.Error("the toast limit is not one per two seconds")
 	}
 }
 

@@ -1019,12 +1019,6 @@
           "$ref": "#/$defs/text"
         },
         {
-          "$ref": "#/$defs/column"
-        },
-        {
-          "$ref": "#/$defs/item"
-        },
-        {
           "$ref": "#/$defs/kv"
         },
         {
@@ -1110,9 +1104,6 @@
         },
         {
           "$ref": "#/$defs/modal"
-        },
-        {
-          "$ref": "#/$defs/tab"
         },
         {
           "$ref": "#/$defs/tabs"

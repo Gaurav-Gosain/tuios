@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // ParseJSON parses the JSON encoding of a document. A node is an object with
@@ -33,6 +34,7 @@ func ParseJSON(src []byte, opts *ParseOptions) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	stateLast(root)
 	if _, err := p.dec.Token(); err != io.EOF {
 		return nil, p.fail(int(p.dec.InputOffset()), CodeSyntax, "Text after the root object. A document has one root object.")
 	}
@@ -172,7 +174,24 @@ func (p *jsonParser) children(n *Node, depth int) error {
 	if _, err := p.dec.Token(); err != nil { // [
 		return p.syntax(err)
 	}
-	for p.dec.More() {
+	// Adjacent strings are one text run. They are collected and joined once,
+	// so many strings cost linear time. A node keeps its index in the source
+	// list, so a problem's pointer matches what the author wrote.
+	var pending []string
+	pendingIdx, pendingPos := 0, Pos{}
+	flush := func() error {
+		if len(pending) == 0 {
+			return nil
+		}
+		p.nodes++
+		if p.nodes > p.lim.Nodes {
+			return p.fail(pendingPos.Offset, CodeLimit, "The document has more than %d nodes.", p.lim.Nodes)
+		}
+		n.Children = append(n.Children, &Node{Text: strings.Join(pending, ""), Pos: pendingPos, src: pendingIdx + 1})
+		pending = pending[:0]
+		return nil
+	}
+	for idx := 0; p.dec.More(); idx++ {
 		off := p.tokenStart(int(p.dec.InputOffset()))
 		tok, err := p.dec.Token()
 		if err != nil {
@@ -183,28 +202,30 @@ func (p *jsonParser) children(n *Node, depth int) error {
 			if t != '{' {
 				return p.fail(off, CodeSyntax, "A child must be a node object or a string.")
 			}
+			if err := flush(); err != nil {
+				return err
+			}
 			c, err := p.object(depth+1, off)
 			if err != nil {
 				return err
 			}
+			c.src = idx + 1
 			n.Children = append(n.Children, c)
 		case string:
 			s := Sanitize(t)
 			if s == "" {
 				continue
 			}
-			if k := len(n.Children); k > 0 && n.Children[k-1].IsText() {
-				n.Children[k-1].Text += s
-				continue
+			if len(pending) == 0 {
+				pendingIdx, pendingPos = idx, p.posAt(off)
 			}
-			p.nodes++
-			if p.nodes > p.lim.Nodes {
-				return p.fail(off, CodeLimit, "The document has more than %d nodes.", p.lim.Nodes)
-			}
-			n.Children = append(n.Children, &Node{Text: s, Pos: p.posAt(off)})
+			pending = append(pending, s)
 		default:
 			return p.fail(off, CodeSyntax, "A child must be a node object or a string, not %v.", t)
 		}
+	}
+	if err := flush(); err != nil {
+		return err
 	}
 	if _, err := p.dec.Token(); err != nil { // ]
 		return p.syntax(err)

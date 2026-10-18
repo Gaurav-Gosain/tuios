@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,11 +75,17 @@ type tabRef struct {
 	pos Pos
 }
 
-// scope is what names an expression may start with at a node.
+// scope is what names an expression may start with at a node. elems holds,
+// for each element name of an enclosing each or list, the elements it ranges
+// over, so a nested each through item.kids can be counted.
 type scope struct {
 	roots  map[string]bool
+	elems  map[string][]any
 	inForm bool
 }
+
+// maxMult caps the product of nested each counts.
+const maxMult = 1 << 30
 
 func newValidator(doc *Node, opts *ValidateOptions) *validator {
 	v := &validator{doc: doc, lim: DefaultLimits(), ids: map[string]string{}}
@@ -88,21 +95,35 @@ func newValidator(doc *Node, opts *ValidateOptions) *validator {
 			v.lim = *opts.Limits
 		}
 	}
+	v.lim.Problems = max(v.lim.Problems, 1)
 	return v
+}
+
+// room reports whether a problem of severity sev would be kept. Every error
+// is counted, kept or not. The last slot is kept for an error, so warnings
+// cannot push every error out of the report.
+func (v *validator) room(sev Severity) bool {
+	if sev == SevWarning {
+		return len(v.problems) < v.lim.Problems-1
+	}
+	return len(v.problems) < v.lim.Problems
 }
 
 func (v *validator) add(p Problem, pos Pos) {
 	if p.Severity == "" {
 		p.Severity = SevError
 	}
+	if p.Severity == SevError {
+		v.errors++
+	}
+	if !v.room(p.Severity) {
+		return
+	}
 	if p.Line == 0 && pos.Line > 0 {
 		p.Line, p.Col = pos.Line, pos.Col
 	}
-	if len(v.problems) >= v.lim.Problems {
-		return
-	}
-	if p.Severity == SevError {
-		v.errors++
+	if len(p.Message) > 400 {
+		p.Message = cutRunes(p.Message, 400) + "..."
 	}
 	v.problems = append(v.problems, p)
 }
@@ -113,24 +134,24 @@ func (v *validator) run() {
 		v.add(Problem{Code: CodeBadRoot, Message: "The document is empty. Start with a tml root: {\"type\": \"tml\", \"version\": 1}."}, Pos{})
 		return
 	}
-	if comp, ok := catalog[root.Type]; ok && root.Type != "tml" && !comp.Block {
+	if comp := lookup(root.Type); comp != nil && root.Type != "tml" && !comp.Block {
 		v.add(Problem{Code: CodeBadRoot, Message: fmt.Sprintf("<%s> cannot be the root. Use tml, or a block component such as row.", root.Type)}, root.Pos)
 	}
 	if sv, ok := root.Attr("state"); ok && root.Type == "tml" {
 		if sv.Kind != Object {
 			v.add(Problem{At: "/state", Code: CodeBadValue, Message: "state must be a JSON object, such as {\"count\": 0}."}, root.Pos)
+		} else if st, err := root.State(); err != nil {
+			// The store loads the state the same way, so a state the store
+			// refuses fails here too.
+			v.add(Problem{At: "/state", Code: CodeBadValue, Message: fmt.Sprintf("The state does not load: %v.", err)}, root.Pos)
+		} else if _, err := NewStore(st, v.lim); err != nil {
+			v.add(Problem{At: "/state", Code: CodeLimit, Message: sentence(strings.ToUpper(err.Error()[:1]) + err.Error()[1:])}, root.Pos)
 		} else {
-			if len(sv.Raw) > v.lim.StateBytes {
-				v.add(Problem{At: "/state", Code: CodeLimit, Message: fmt.Sprintf("The state is %d bytes. The limit is %d bytes.", len(sv.Raw), v.lim.StateBytes)}, root.Pos)
-			}
-			st, err := root.State()
-			if err == nil {
-				v.state = st
-			}
+			v.state = st
 		}
 	}
 	sc := scope{roots: map[string]bool{"state": true, "view": true}}
-	v.node(root, "", nil, sc, 1)
+	v.node(root, "", nil, sc, 1, 1)
 	for _, r := range v.tabRefs {
 		ptr, ok := v.ids[r.id]
 		if !ok || v.doc.At(ptr) == nil || v.doc.At(ptr).Type != "tab" {
@@ -138,7 +159,7 @@ func (v *validator) run() {
 		}
 	}
 	if v.images > v.lim.Images {
-		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("The document has %d images. The limit is %d.", v.images, v.lim.Images)}, Pos{})
+		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("The document has %d images after each expands. The limit is %d.", v.images, v.lim.Images)}, Pos{})
 	}
 	if v.expanded > v.lim.Each {
 		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("each and list expand to %d nodes with this state. The limit is %d.", v.expanded, v.lim.Each)}, Pos{})
@@ -157,7 +178,42 @@ func (v *validator) tabIDs() []string {
 	return out
 }
 
-func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth int) {
+// childPointer is the pointer of child i of the node at ptr. A node parsed
+// from JSON keeps its index in the source list, so the pointer matches what
+// the author wrote even where empty strings were dropped.
+func childPointer(ptr string, c *Node, i int) string {
+	if c.src > 0 {
+		i = c.src - 1
+	}
+	return ptr + "/children/" + strconv.Itoa(i)
+}
+
+// candidates are the component types legal where a child of parent sits.
+func candidates(parent *Component) []string {
+	if parent != nil {
+		return parent.accepted()
+	}
+	out := []string{"tml"}
+	for i := range table {
+		if table[i].Block {
+			out = append(out, table[i].Name)
+		}
+	}
+	return out
+}
+
+// mult multiplies two counts, capped.
+func mult(a, b int) int {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	if a > maxMult/b {
+		return maxMult
+	}
+	return a * b
+}
+
+func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth, times int) {
 	v.nodes++
 	if v.nodes == v.lim.Nodes+1 {
 		v.add(Problem{At: ptr, Code: CodeLimit, Message: fmt.Sprintf("The document has more than %d nodes.", v.lim.Nodes)}, n.Pos)
@@ -177,23 +233,23 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		v.add(Problem{At: ptr, Code: CodeMisplacedState, Message: "state belongs on the tml root only."}, n.Pos)
 		return
 	}
-	comp, known := catalog[n.Type]
-	if !known {
+	comp := lookup(n.Type)
+	if comp == nil && v.room(SevError) {
 		p := Problem{At: ptr, Code: CodeUnknownComponent, Message: fmt.Sprintf("<%s> is not a TML component.", n.Type)}
-		if s, ok := componentAliases[strings.ToLower(n.Type)]; ok {
-			p.DidYouMean = s
+		legal := candidates(parent)
+		if a := componentAlias(strings.ToLower(n.Type)); a != "" && slices.Contains(legal, a) {
+			p.DidYouMean = a
 		} else {
-			p.DidYouMean = suggest(n.Type, componentNames())
+			p.DidYouMean = suggest(n.Type, legal)
 		}
 		if parent != nil {
-			p.Accepted = parent.accepted()
+			p.Accepted = legal
 		}
 		v.add(p, n.Pos)
+	} else if comp == nil {
+		v.errors++
 	}
 
-	if n.Type == "image" {
-		v.images++
-	}
 	if id := n.ID(); id != "" {
 		if prev, dup := v.ids[id]; dup {
 			v.add(Problem{At: ptr + "/id", Code: CodeDuplicateID, Message: fmt.Sprintf("The id %q is also used at %s. Each id names one node.", id, pointerOrRoot(prev))}, n.Pos)
@@ -202,64 +258,72 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		}
 	}
 
-	// each binds its alias for the node itself.
+	// each repeats the node itself, and binds its element name for it.
 	nodeScope := sc
 	if each, ok := n.Attr("each"); ok {
-		nodeScope = sc.with(aliasOf(n))
-		v.countExpansion(n, each)
+		count, elems := v.elements(each, sc)
+		times = mult(times, count)
+		nodeScope = sc.with(aliasOf(n), elems)
+	}
+	if times > 1 {
+		v.expanded = min(v.expanded+times, maxMult)
+	}
+	if n.Type == "image" {
+		v.images = min(v.images+times, maxMult)
 	}
 	if n.Type == "form" {
 		nodeScope = nodeScope.form()
 	}
-	if known {
+	if comp != nil {
 		v.attrs(n, comp, ptr, nodeScope)
 	}
 
 	// Children.
-	childScope := nodeScope
+	childScope, childTimes := nodeScope, times
 	if n.Type == "list" {
 		alias := n.AttrString("as")
 		if alias == "" {
 			alias = "item"
 		}
-		childScope = nodeScope.with(alias)
+		var elems []any
 		if items, ok := n.Attr("items"); ok {
-			v.countExpansion(n, items)
+			var count int
+			count, elems = v.elements(items, nodeScope)
+			childTimes = mult(times, count)
 		}
+		childScope = nodeScope.with(alias, elems)
 	}
 	if n.Type == "table" {
 		v.tableRows(n, ptr)
 	}
 	content := ContentBlocks
-	if known {
+	if comp != nil {
 		content = comp.Content
 	}
 	count := 0
 	for i, c := range n.Children {
-		cptr := ptr + "/children/" + strconv.Itoa(i)
+		cptr := childPointer(ptr, c, i)
 		if c.IsText() {
-			if known && content != ContentInline && content != ContentRaw {
+			if comp != nil && content != ContentInline && content != ContentRaw {
 				v.add(Problem{At: cptr, Code: CodeTextNotAllowed, Message: fmt.Sprintf("<%s> holds components, not text. Put the text in <text>.", n.Type), DidYouMean: "text"}, c.Pos)
 			}
 		} else {
 			count++
-			if known {
-				if _, childKnown := catalog[c.Type]; childKnown && !comp.Accepts(c.Type) {
-					msg := fmt.Sprintf("<%s> cannot hold <%s>.", n.Type, c.Type)
-					if content == ContentNone || content == ContentRaw {
-						msg = fmt.Sprintf("<%s> holds no components.", n.Type)
-					}
-					v.add(Problem{At: cptr, Code: CodeBadChild, Message: msg, Accepted: comp.accepted()}, c.Pos)
+			if comp != nil && lookup(c.Type) != nil && !comp.Accepts(c.Type) {
+				msg := fmt.Sprintf("<%s> cannot hold <%s>.", n.Type, c.Type)
+				if content == ContentNone || content == ContentRaw {
+					msg = fmt.Sprintf("<%s> holds no components.", n.Type)
 				}
+				v.add(Problem{At: cptr, Code: CodeBadChild, Message: msg, Accepted: comp.accepted()}, c.Pos)
 			}
 		}
 		next := childScope
 		if n.Type == "table" && c.Type == "column" {
-			next = childScope.with("value").with("row")
+			next = childScope.with("value", nil).with("row", nil)
 		}
-		v.node(c, cptr, comp, next, depth+1)
+		v.node(c, cptr, comp, next, depth+1, childTimes)
 	}
-	if known {
+	if comp != nil {
 		if comp.MinChildren > 0 && count < comp.MinChildren {
 			v.add(Problem{At: ptr, Code: CodeChildCount, Message: fmt.Sprintf("<%s> needs at least %d %s.", n.Type, comp.MinChildren, childWord(comp)), Accepted: comp.accepted()}, n.Pos)
 		}
@@ -269,6 +333,57 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 	}
 }
 
+// elements returns how many times a data attribute repeats a node, and the
+// elements, when they are known. A literal array counts its elements. A
+// path into the state counts the array there. A path through an element
+// name (item.kids) counts the longest such array across the elements. A
+// count that cannot be known before the state arrives is 1.
+func (v *validator) elements(data Value, sc scope) (int, []any) {
+	if data.Kind == Array {
+		var arr []any
+		if json.Unmarshal(data.Raw, &arr) != nil {
+			return 1, nil
+		}
+		return len(arr), arr
+	}
+	if data.Kind != String {
+		return 1, nil
+	}
+	root, ptr, err := SplitPath(data.Str)
+	if err != nil {
+		return 1, nil
+	}
+	toks, _ := splitPointer(ptr)
+	if root == "state" {
+		if v.state == nil {
+			return 1, nil
+		}
+		if arr, err := get(v.state, toks); err == nil {
+			if a, ok := arr.([]any); ok {
+				return len(a), a
+			}
+		}
+		return 1, nil
+	}
+	parents, ok := sc.elems[root]
+	if !ok || parents == nil {
+		return 1, nil
+	}
+	longest := 0
+	var all []any
+	for _, p := range parents {
+		if arr, err := get(p, toks); err == nil {
+			if a, ok := arr.([]any); ok {
+				longest = max(longest, len(a))
+				if len(all) < maxMult {
+					all = append(all, a...)
+				}
+			}
+		}
+	}
+	return max(longest, 1), all
+}
+
 func childWord(c *Component) string {
 	if c.Content == ContentOnly && len(c.Children) == 1 {
 		return "<" + c.Children[0] + "> children"
@@ -276,26 +391,29 @@ func childWord(c *Component) string {
 	return "children"
 }
 
-func componentNames() []string {
-	out := make([]string, 0, len(catalog))
-	for k := range catalog {
-		out = append(out, k)
+func aliasOf(n *Node) string {
+	if a := n.AttrString("as"); a != "" {
+		return a
 	}
-	sort.Strings(out)
-	return out
+	return "item"
 }
 
-func (s scope) with(name string) scope {
+func (s scope) with(name string, elems []any) scope {
 	roots := make(map[string]bool, len(s.roots)+1)
 	for k := range s.roots {
 		roots[k] = true
 	}
 	roots[name] = true
-	return scope{roots: roots, inForm: s.inForm}
+	es := make(map[string][]any, len(s.elems)+1)
+	for k, e := range s.elems {
+		es[k] = e
+	}
+	es[name] = elems
+	return scope{roots: roots, elems: es, inForm: s.inForm}
 }
 
 func (s scope) form() scope {
-	out := s.with("form")
+	out := s.with("form", nil)
 	out.inForm = true
 	return out
 }
@@ -354,13 +472,13 @@ func (v *validator) expr(e *Expr, at string, pos Pos, sc scope) {
 		}
 	}
 	calls(e.root, func(c *callNode) {
-		if _, ok := funcs[c.name]; ok {
+		if isFunc(c.name) {
 			return
 		}
 		p := Problem{At: at, Code: CodeUnknownFunction, Message: fmt.Sprintf("%s is not a function.", c.name), Accepted: Funcs()}
-		if _, isAction := actionSpecs[c.name]; isAction {
+		if _, isAction := findAction(c.name); isAction {
 			p.Message = fmt.Sprintf("%s is an action. Use it in an on-* attribute, such as on-press.", c.name)
-		} else if alias, ok := funcAliases[strings.ToLower(c.name)]; ok {
+		} else if alias := funcAlias(strings.ToLower(c.name)); alias != "" {
 			p.DidYouMean = alias
 		} else {
 			p.DidYouMean = suggest(c.name, Funcs())
@@ -448,26 +566,6 @@ func pointerToPath(ptr string) string {
 	return b.String()
 }
 
-func (v *validator) countExpansion(n *Node, data Value) {
-	if v.state == nil || data.Kind != String {
-		return
-	}
-	ptr, ok := dataPointer(data.Str, nil)
-	if !ok {
-		return
-	}
-	toks, _ := splitPointer(ptr)
-	arr, err := get(v.state, toks)
-	if err != nil {
-		return
-	}
-	if a, ok := arr.([]any); ok {
-		size := 0
-		n.Walk(func(*Node, string) bool { size++; return true })
-		v.expanded += len(a) * size
-	}
-}
-
 func (v *validator) tableRows(n *Node, ptr string) {
 	rows, ok := n.Attr("rows")
 	count := 0
@@ -479,8 +577,8 @@ func (v *validator) tableRows(n *Node, ptr string) {
 		_ = json.Unmarshal(rows.Raw, &arr)
 		count = len(arr)
 	case v.state != nil:
-		p, ok := dataPointer(rows.Str, nil)
-		if !ok {
+		root, p, err := SplitPath(rows.Str)
+		if err != nil || root != "state" {
 			return
 		}
 		toks, _ := splitPointer(p)
@@ -495,30 +593,150 @@ func (v *validator) tableRows(n *Node, ptr string) {
 	}
 }
 
-// funcAliases maps function names from other languages to the TML one.
-var funcAliases = map[string]string{
-	"percent": "pct", "percentage": "pct", "length": "len", "size": "len",
-	"average": "avg", "mean": "avg", "floor": "round", "ceil": "round",
-	"uppercase": "upper", "lowercase": "lower", "includes": "contains",
-	"has": "contains", "startswith": "starts", "duration": "dur",
-	"since": "ago", "timeago": "ago", "concat": "join", "pluck": "pick",
-	"map": "pick", "sprintf": "fmt", "printf": "fmt", "str": "fmt",
-	"string": "fmt", "tostring": "fmt", "filesize": "bytes",
+// funcAlias maps a function name from another language to the TML one.
+func funcAlias(s string) string {
+	switch s {
+	case "percent", "percentage":
+		return "pct"
+	case "length", "size":
+		return "len"
+	case "average", "mean":
+		return "avg"
+	case "floor", "ceil":
+		return "round"
+	case "uppercase":
+		return "upper"
+	case "lowercase":
+		return "lower"
+	case "includes", "has":
+		return "contains"
+	case "startswith":
+		return "starts"
+	case "duration":
+		return "dur"
+	case "since", "timeago":
+		return "ago"
+	case "concat":
+		return "join"
+	case "pluck", "map":
+		return "pick"
+	case "sprintf", "printf", "str", "string", "tostring":
+		return "fmt"
+	case "filesize":
+		return "bytes"
+	}
+	return ""
 }
 
-var (
-	hexColor   = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
-	durationRe = regexp.MustCompile(`^[0-9]+(ms|s|m|h)$`)
-	keyRe      = regexp.MustCompile(`^([a-z]+\+)*([a-z0-9]+|[!-~])$`)
-	fieldRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*(,\s*[A-Za-z_][A-Za-z0-9_.-]*)*$`)
-	identRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
-	dataURIRe  = regexp.MustCompile(`^data:image/(png|jpeg|gif|webp);base64,`)
-	sizeRe     = regexp.MustCompile(`^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$`)
-)
+// Byte checks for the small value grammars. Each is what a regular
+// expression would say, written out, so nothing is compiled at start-up.
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+func isLetter(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
+}
+func isHex(c byte) bool { return isDigit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' }
+
+func allBytes(s string, ok func(byte) bool) bool {
+	for i := 0; i < len(s); i++ {
+		if !ok(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isHexColor matches #rgb up to #rrggbbaa.
+func isHexColor(s string) bool {
+	return len(s) >= 4 && len(s) <= 9 && s[0] == '#' && allBytes(s[1:], isHex)
+}
+
+// isDuration matches 300ms, 5s, 2m and 1h.
+func isDuration(s string) bool {
+	i := 0
+	for i < len(s) && isDigit(s[i]) {
+		i++
+	}
+	if i == 0 {
+		return false
+	}
+	switch s[i:] {
+	case "ms", "s", "m", "h":
+		return true
+	}
+	return false
+}
+
+// isIdent matches a name: a letter or _, then letters, digits, - and _.
+func isIdent(s string) bool {
+	return s != "" && len(s) <= 64 && isLetter(s[0]) &&
+		allBytes(s, func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' })
+}
+
+// isField matches a field name, or a comma list of them.
+func isField(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimLeft(part, " \t")
+		if part == "" || !isLetter(part[0]) ||
+			!allBytes(part, func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' || c == '.' }) {
+			return false
+		}
+	}
+	return true
+}
+
+// isKey matches a key name: modifiers joined by +, then a key such as enter,
+// r or ?.
+func isKey(s string) bool {
+	parts := strings.Split(s, "+")
+	for i, p := range parts {
+		if p == "" {
+			return false
+		}
+		if i < len(parts)-1 {
+			if !allBytes(p, func(c byte) bool { return c >= 'a' && c <= 'z' }) {
+				return false
+			}
+			continue
+		}
+		if len(p) == 1 {
+			return p[0] >= '!' && p[0] <= '~'
+		}
+		return allBytes(p, func(c byte) bool { return c >= 'a' && c <= 'z' || isDigit(c) })
+	}
+	return false
+}
+
+// isSize matches cells (12), a percentage (50%), fill and fill:2.
+func isSize(s string) bool {
+	switch {
+	case s == "fill":
+		return true
+	case strings.HasPrefix(s, "fill:"):
+		return len(s) > 5 && allBytes(s[5:], isDigit)
+	case strings.HasSuffix(s, "%"):
+		return len(s) > 1 && allBytes(s[:len(s)-1], isDigit)
+	}
+	return s != "" && allBytes(s, isDigit)
+}
+
+// dataImagePrefix returns the data:image prefix of s, or "".
+func dataImagePrefix(s string) string {
+	for _, t := range [...]string{"png", "jpeg", "gif", "webp"} {
+		p := "data:image/" + t + ";base64,"
+		if strings.HasPrefix(s, p) {
+			return p
+		}
+	}
+	return ""
+}
 
 func looksLikeColor(s string) bool {
 	l := strings.ToLower(strings.TrimSpace(s))
-	return hexColor.MatchString(l) || strings.HasPrefix(l, "rgb(") || strings.HasPrefix(l, "rgba(") || strings.HasPrefix(l, "hsl(")
+	return isHexColor(l) || strings.HasPrefix(l, "rgb(") || strings.HasPrefix(l, "rgba(") || strings.HasPrefix(l, "hsl(")
 }
 
 func (v *validator) attrs(n *Node, comp *Component, ptr string, sc scope) {
@@ -548,6 +766,10 @@ func (v *validator) attrs(n *Node, comp *Component, ptr string, sc scope) {
 }
 
 func (v *validator) unknownAttr(n *Node, comp *Component, a Attr, at string) {
+	if !v.room(SevError) {
+		v.errors++
+		return
+	}
 	lname := strings.ToLower(a.Name)
 	if n.Type == "input" && (lname == "password" || lname == "secret" || a.Value.Text() == "password") {
 		v.add(Problem{At: at, Code: CodePasswordRefused, Message: "TML has no password input in version 1. Ask for secrets outside the document."}, a.Pos)
@@ -628,7 +850,7 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 			}
 			return
 		}
-		if !sizeRe.MatchString(text) {
+		if !isSize(text) {
 			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be cells (12), a percentage (50%%), fill or fill:2, not %q.", a.Name, text)}, a.Pos)
 			return
 		}
@@ -658,13 +880,13 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 		}
 		esc := sc
 		if n.Type == "column" && a.Name == "format" {
-			esc = sc.with("value").with("row")
+			esc = sc.with("value", nil).with("row", nil)
 		}
 		v.expr(e, at, a.Pos, esc)
 	case TAction:
 		v.actions(a, at, sc)
 	case TDuration:
-		if !durationRe.MatchString(text) {
+		if !isDuration(text) {
 			v.bad(a, at, "%s must be a duration such as 300ms, 5s or 2m, not %q.", a.Name, text)
 		}
 	case THref:
@@ -680,19 +902,19 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 	case TSrc:
 		v.src(a, at, text)
 	case TIdent:
-		if !identRe.MatchString(text) || len(text) > 64 {
+		if !isIdent(text) {
 			v.bad(a, at, "%s must be a name of letters, digits, - and _, not %q.", a.Name, text)
 		}
 	case TField:
-		if !fieldRe.MatchString(text) {
+		if !isField(text) {
 			v.bad(a, at, "%s must be a field name, or a comma list of them, not %q.", a.Name, text)
 		}
 	case TSort:
-		if _, ok := ParseSort(text); !ok {
+		if !parseSort(text) {
 			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("sort must be field, field:asc or field:desc, not %q.", text)}, a.Pos)
 		}
 	case TKey:
-		if !keyRe.MatchString(text) {
+		if !isKey(text) {
 			v.bad(a, at, "%s must be a key name such as enter, esc, r or ctrl+s, not %q.", a.Name, text)
 		}
 	case TPattern:
@@ -716,26 +938,30 @@ func exprMsg(err error) string {
 }
 
 func (v *validator) role(a Attr, at, text string, accent bool) {
-	if contains(Roles, text) {
+	if slices.Contains(roles[:], text) {
 		return
 	}
 	if accent && strings.HasPrefix(text, "slot:") {
 		slot := strings.TrimPrefix(text, "slot:")
-		if !contains(Slots, slot) {
-			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%q is not an ANSI slot.", slot), DidYouMean: "slot:" + suggest(slot, Slots), Accepted: Slots}, a.Pos)
+		if !slices.Contains(slots[:], slot) {
+			p := Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%q is not an ANSI slot.", cutRunes(slot, 64)), Accepted: Slots()}
+			if s := suggest(slot, slots[:]); s != "" {
+				p.DidYouMean = "slot:" + s
+			}
+			v.add(p, a.Pos)
 		}
 		return
 	}
 	if looksLikeColor(text) {
 		v.add(Problem{At: at, Code: CodeHexColor, Message: fmt.Sprintf("%s takes a theme role, never a colour value such as %q. tuios picks the colour from the theme.", a.Name, text),
-			Accepted: Roles}, a.Pos)
+			Accepted: Roles()}, a.Pos)
 		return
 	}
-	p := Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%q is not a theme role.", text), Accepted: Roles}
-	if r, ok := roleAliases[strings.ToLower(text)]; ok {
+	p := Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%q is not a theme role.", cutRunes(text, 64)), Accepted: Roles()}
+	if r := roleAlias(strings.ToLower(text)); r != "" {
 		p.DidYouMean = r
 	} else {
-		p.DidYouMean = suggest(text, Roles)
+		p.DidYouMean = suggest(text, roles[:])
 	}
 	v.add(p, a.Pos)
 }
@@ -759,8 +985,8 @@ func (v *validator) dataAttr(a Attr, spec AttrSpec, at string, sc scope) {
 		v.add(Problem{At: at, Code: CodeBadExpression, Message: fmt.Sprintf("%s must be a path such as state.items: %s", a.Name, sentence(exprMsg(err)))}, a.Pos)
 		return
 	}
-	root, _, ok := staticPath(e.root)
-	if !ok || hasDynamicIndex(e.root) {
+	root, _, dyn, ok := staticPath(e.root)
+	if !ok || dyn {
 		v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be a path of names, such as state.items, not %q.", a.Name, text)}, a.Pos)
 		return
 	}
@@ -781,13 +1007,13 @@ func (v *validator) actions(a Attr, at string, sc scope) {
 		v.add(p, a.Pos)
 		return
 	}
-	asc := sc.with("event")
+	asc := sc.with("event", nil)
 	for _, act := range acts {
 		if act.Name == "tab" {
 			v.tabRefs = append(v.tabRefs, tabRef{act.Literal(0), at, a.Pos})
 		}
 		for i, arg := range act.Args {
-			if i < actionSpecs[act.Name].literal {
+			if spec, _ := findAction(act.Name); i < spec.literal {
 				continue
 			}
 			v.expr(arg, at, a.Pos, asc)
@@ -802,7 +1028,7 @@ func (v *validator) src(a Attr, at, text string) {
 			v.bad(a, at, "%s", sentence(err.Error()))
 		}
 	case strings.HasPrefix(text, "data:"):
-		m := dataURIRe.FindString(text)
+		m := dataImagePrefix(text)
 		if m == "" {
 			v.add(Problem{At: at, Code: CodeBadValue, Message: "A data: image must be data:image/png, jpeg, gif or webp with ;base64,.", Accepted: []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/gif;base64,", "data:image/webp;base64,"}}, a.Pos)
 			return

@@ -470,35 +470,37 @@ func (p *exprParser) primary() (exprNode, error) {
 }
 
 // staticPath returns the root and pointer a chain of member and constant
-// index nodes reads, and whether the chain ends at a root name. dynamic
-// reports that an index computed at run time cut the pointer short.
-func staticPath(n exprNode) (root, ptr string, ok bool) {
+// index nodes reads, and whether the chain ends at a root name. dyn reports
+// that an index computed at run time ended the pointer: nothing after it is
+// added, so the dependency covers the whole array.
+func staticPath(n exprNode) (root, ptr string, dyn, ok bool) {
 	switch x := n.(type) {
 	case *pathNode:
-		return x.name, "", true
+		return x.name, "", false, true
 	case *memberNode:
-		r, p, ok := staticPath(x.x)
-		if !ok {
-			return "", "", false
+		r, p, dyn, ok := staticPath(x.x)
+		if !ok || dyn {
+			return r, p, dyn, ok
 		}
-		return r, p + "/" + escapePointer(x.name), true
+		return r, p + "/" + escapePointer(x.name), false, true
 	case *indexNode:
-		r, p, ok := staticPath(x.x)
-		if !ok {
-			return "", "", false
+		r, p, dyn, ok := staticPath(x.x)
+		if !ok || dyn {
+			return r, p, dyn, ok
 		}
-		switch lit := x.idx.(type) {
-		case *litNode:
+		if lit, isLit := x.idx.(*litNode); isLit {
 			switch v := lit.v.(type) {
 			case float64:
-				return r, p + "/" + strconv.FormatFloat(v, 'f', -1, 64), true
+				if v >= 0 && v == float64(int64(v)) {
+					return r, p + "/" + strconv.FormatInt(int64(v), 10), false, true
+				}
 			case string:
-				return r, p + "/" + escapePointer(v), true
+				return r, p + "/" + escapePointer(v), false, true
 			}
 		}
-		return r, p, true
+		return r, p, true, true
 	}
-	return "", "", false
+	return "", "", false, false
 }
 
 func collectDeps(n exprNode, out *[]Dep) {
@@ -511,21 +513,19 @@ func collectDeps(n exprNode, out *[]Dep) {
 		*out = append(*out, d)
 	}
 	switch x := n.(type) {
-	case *pathNode, *memberNode:
-		if r, p, ok := staticPath(x); ok {
+	case *pathNode, *memberNode, *indexNode:
+		if r, p, _, ok := staticPath(x); ok {
 			add(Dep{r, p})
+			indexDeps(x, out)
 			return
 		}
-		if m, ok := x.(*memberNode); ok {
-			collectDeps(m.x, out)
+		switch y := x.(type) {
+		case *memberNode:
+			collectDeps(y.x, out)
+		case *indexNode:
+			collectDeps(y.x, out)
+			collectDeps(y.idx, out)
 		}
-	case *indexNode:
-		if r, p, ok := staticPath(x); ok {
-			add(Dep{r, p})
-		} else {
-			collectDeps(x.x, out)
-		}
-		collectDeps(x.idx, out)
 	case *unaryNode:
 		collectDeps(x.x, out)
 	case *binaryNode:
@@ -546,6 +546,20 @@ func collectDeps(n exprNode, out *[]Dep) {
 	case *objectNode:
 		for _, v := range x.vals {
 			collectDeps(v, out)
+		}
+	}
+}
+
+// indexDeps collects the dependencies of the computed indexes in a chain of
+// member and index nodes: state.i in state.items[state.i].name.
+func indexDeps(n exprNode, out *[]Dep) {
+	switch x := n.(type) {
+	case *memberNode:
+		indexDeps(x.x, out)
+	case *indexNode:
+		indexDeps(x.x, out)
+		if _, lit := x.idx.(*litNode); !lit {
+			collectDeps(x.idx, out)
 		}
 	}
 }

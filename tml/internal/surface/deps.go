@@ -1,9 +1,12 @@
-package tml
+package surface
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+
+	"tuios.dev/tml"
 )
 
 // Deps records which nodes read which state paths, so a renderer recomputes
@@ -24,31 +27,30 @@ type nodeDeps struct {
 // bindings, its data attributes, if and show. Inside each, list and a table,
 // a path through the element name (item.x) counts as the whole array, since
 // a change to any element can move the others.
-func BuildDeps(doc *Node) *Deps {
+func BuildDeps(doc *tml.Node) *Deps {
 	d := &Deps{}
 	d.walk(doc, "", map[string]string{})
 	return d
 }
 
-func (d *Deps) walk(n *Node, ptr string, scope map[string]string) {
+func (d *Deps) walk(n *tml.Node, ptr string, scope map[string]string) {
 	if n.IsText() {
 		return
 	}
-	comp, known := catalog[n.Type]
 	var paths []string
 	clock := false
-	addExpr := func(e *Expr) {
+	addExpr := func(e *tml.Expr) {
 		for _, dep := range e.Deps() {
 			if p, ok := resolveDep(dep, scope); ok {
 				paths = appendUnique(paths, p)
 			}
 		}
-		if contains(e.Funcs(), "ago") {
+		if slices.Contains(e.Funcs(), "ago") {
 			clock = true
 		}
 	}
 	addTemplate := func(s string) {
-		if t, err := ParseTemplate(s); err == nil {
+		if t, err := tml.ParseTemplate(s); err == nil {
 			for _, e := range t.Exprs() {
 				addExpr(e)
 			}
@@ -57,7 +59,7 @@ func (d *Deps) walk(n *Node, ptr string, scope map[string]string) {
 
 	// each binds its alias for the node itself, and list for its children.
 	inner := scope
-	if each, ok := n.Attr("each"); ok && each.Kind == String {
+	if each, ok := n.Attr("each"); ok && each.Kind == tml.String {
 		if base, ok := dataPointer(each.Str, scope); ok {
 			paths = appendUnique(paths, base)
 			inner = withAlias(scope, aliasOf(n), base)
@@ -67,24 +69,21 @@ func (d *Deps) walk(n *Node, ptr string, scope map[string]string) {
 		if a.Name == "each" || a.Name == "state" {
 			continue
 		}
-		var spec AttrSpec
-		if known {
-			spec, _ = comp.Spec(a.Name)
-		}
-		switch spec.Type {
-		case TAction, TIdent, TEnum, TKey, TPattern, TField, TSort, THref, TSrc, TDuration, TObject:
-		case TExpr:
-			if e, _, err := exprOrBinding(a.Value.Text()); err == nil {
+		typ, _ := tml.AttrTypeOf(n.Type, a.Name)
+		switch typ {
+		case tml.TAction, tml.TIdent, tml.TEnum, tml.TKey, tml.TPattern, tml.TField, tml.TSort, tml.THref, tml.TSrc, tml.TDuration, tml.TObject:
+		case tml.TExpr:
+			if e, err := tml.ParseBinding(a.Value.Text()); err == nil {
 				addExpr(e)
 			}
-		case TData, TPath:
-			if a.Value.Kind == String {
+		case tml.TData, tml.TPath:
+			if a.Value.Kind == tml.String {
 				if p, ok := dataPointer(a.Value.Str, inner); ok {
 					paths = appendUnique(paths, p)
 				}
 			}
 		default:
-			if a.Value.Kind == String {
+			if a.Value.Kind == tml.String {
 				addTemplate(a.Value.Str)
 			}
 		}
@@ -92,20 +91,20 @@ func (d *Deps) walk(n *Node, ptr string, scope map[string]string) {
 	childScope := inner
 	switch n.Type {
 	case "list":
-		if items, ok := n.Attr("items"); ok && items.Kind == String {
+		if items, ok := n.Attr("items"); ok && items.Kind == tml.String {
 			if base, ok := dataPointer(items.Str, inner); ok {
 				childScope = withAlias(inner, n.AttrString("as"), base)
 			}
 		}
 	case "table":
-		if rows, ok := n.Attr("rows"); ok && rows.Kind == String {
+		if rows, ok := n.Attr("rows"); ok && rows.Kind == tml.String {
 			if base, ok := dataPointer(rows.Str, inner); ok {
 				childScope = withAlias(withAlias(inner, "row", base), "value", base)
 			}
 		}
 	}
 	for _, c := range n.Children {
-		if c.IsText() && contentOf(n) != ContentRaw {
+		if c.IsText() && tml.ContentOf(n.Type) != tml.ContentRaw {
 			addTemplate(c.Text)
 		}
 	}
@@ -121,7 +120,7 @@ func (d *Deps) walk(n *Node, ptr string, scope map[string]string) {
 	}
 }
 
-func aliasOf(n *Node) string {
+func aliasOf(n *tml.Node) string {
 	if a := n.AttrString("as"); a != "" {
 		return a
 	}
@@ -142,18 +141,14 @@ func withAlias(scope map[string]string, alias, base string) map[string]string {
 
 // dataPointer resolves a data attribute's path to a state pointer.
 func dataPointer(s string, scope map[string]string) (string, bool) {
-	e, err := ParseExpr(s)
+	root, ptr, err := tml.SplitPath(s)
 	if err != nil {
 		return "", false
 	}
-	root, ptr, ok := staticPath(e.root)
-	if !ok {
-		return "", false
-	}
-	return resolveDep(Dep{root, ptr}, scope)
+	return resolveDep(tml.Dep{Root: root, Path: ptr}, scope)
 }
 
-func resolveDep(dep Dep, scope map[string]string) (string, bool) {
+func resolveDep(dep tml.Dep, scope map[string]string) (string, bool) {
 	if dep.Root == "state" {
 		return dep.Path, true
 	}

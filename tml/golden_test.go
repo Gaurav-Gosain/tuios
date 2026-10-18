@@ -237,3 +237,28 @@ func TestReadme(t *testing.T) {
 		}
 	}
 }
+
+// TestReadmeCode keeps each Go block of the README equal to code in
+// example_test.go, which compiles and runs, so the README code compiles too.
+func TestReadmeCode(t *testing.T) {
+	readme := string(readFile(t, "README.md"))
+	examples := string(readFile(t, "example_test.go"))
+	blocks := 0
+	for _, part := range strings.Split(readme, "```go\n")[1:] {
+		code, _, _ := strings.Cut(part, "```")
+		blocks++
+		var indented strings.Builder
+		for _, line := range strings.SplitAfter(code, "\n") {
+			if strings.TrimSpace(line) != "" {
+				indented.WriteString("\t")
+			}
+			indented.WriteString(line)
+		}
+		if !strings.Contains(examples, indented.String()) {
+			t.Errorf("this README block is not in example_test.go:\n%s", code)
+		}
+	}
+	if blocks < 2 {
+		t.Errorf("found %d Go blocks in the README", blocks)
+	}
+}
