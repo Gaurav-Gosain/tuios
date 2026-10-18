@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"io"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
 // Format names. Each is the reader a harness manifest names in its
@@ -55,11 +54,12 @@ type format struct {
 	// harness wrote a document once and writes lines now. Empty applies doc
 	// to every file.
 	docExt string
-	// match reports whether the head of a file, its first headScan bytes,
-	// says the agent ran in cwd. It is how a file found by search is
-	// believed. Nil means a file of the format cannot be matched, and only a
-	// path the harness reports is joined.
-	match func(head []byte, cwd string) bool
+	// identity reads the session's identity from the start of a file
+	// (identity.go): the folder the agent ran in and when the session
+	// started. It is how a file found by search is given to a pane. Nil means
+	// the format writes no identity near its start, and only a path the
+	// harness reports is joined.
+	identity func(r io.Reader, name string) Identity
 }
 
 // isDoc reports whether the file at path is read as a document.
@@ -69,9 +69,9 @@ func (f format) isDoc(path string) bool {
 
 var formats = map[string]format{
 	FormatClaude: {line: claudeLine},
-	FormatCodex:  {line: codexLine, match: codexMatch},
-	FormatGemini: {line: geminiLine, doc: geminiDoc, docExt: ".json", match: geminiMatch},
-	FormatQwen:   {line: qwenLine, match: qwenMatch},
+	FormatCodex:  {line: codexLine, identity: codexIdentity},
+	FormatGemini: {line: geminiLine, doc: geminiDoc, docExt: ".json", identity: geminiIdentity},
+	FormatQwen:   {line: qwenLine, identity: qwenIdentity},
 }
 
 // lookupFormat returns the format a name names, FormatClaude for "".
@@ -98,77 +98,39 @@ func IsDocument(name, path string) bool {
 	return ok && f.isDoc(path)
 }
 
-// headScan is how much of a file Matches reads.
-const headScan = 64 << 10
-
-// Matches reports whether the file at path, in the named format, says the
-// agent that wrote it ran in cwd, from the file's first headScan bytes. It
-// is false for a format that cannot tell, and for a file it cannot read.
-// It returns nothing of the file.
-func Matches(name, path, cwd string) bool {
-	f, ok := lookupFormat(name)
-	if !ok || f.match == nil || cwd == "" {
-		return false
-	}
-	file, err := transcript.OpenRegular(path)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = file.Close() }()
-	head := make([]byte, headScan)
-	defer clear(head)
-	n, _ := file.ReadAt(head, 0)
-	return f.match(head[:n], cwd)
-}
-
-// firstLine is the first complete line of head, or nil when none ends in it.
-func firstLine(head []byte) []byte {
-	i := bytes.IndexByte(head, '\n')
-	if i < 0 {
-		return nil
-	}
-	return head[:i]
-}
-
-// completeLines calls fn with each complete line of head until it returns
-// true, and reports whether one did.
-func completeLines(head []byte, fn func([]byte) bool) bool {
-	for {
-		i := bytes.IndexByte(head, '\n')
-		if i < 0 {
-			return false
-		}
-		if fn(head[:i]) {
-			return true
-		}
-		head = head[i+1:]
-	}
-}
-
-// dropKeyed removes from out the entries of message key, and those of
-// message rewind and every entry after the first of them.
-func dropKeyed(out []Entry, key, rewind string) []Entry {
-	if rewind != "" {
-		for i := range out {
-			if out[i].key == rewind {
-				clear(out[i:])
-				out = out[:i]
-				break
-			}
+// dropRewound removes the entries of message rewind and every entry after
+// the first of them.
+func dropRewound(out []Entry, rewind string) []Entry {
+	for i := range out {
+		if out[i].key == rewind {
+			clear(out[i:])
+			return out[:i]
 		}
 	}
+	return out
+}
+
+// dropKey removes the entries of message key. It returns where the first of
+// them was, in out and as a place, or len(out) and an offset of -1 when out
+// held none.
+func dropKey(out []Entry, key string) ([]Entry, int, cursorPos) {
+	at, place := len(out), cursorPos{off: -1}
 	if key == "" {
-		return out
+		return out, at, place
 	}
 	n := 0
 	for i := range out {
-		if out[i].key != key {
-			out[n] = out[i]
-			n++
+		if out[i].key == key {
+			if place.off < 0 {
+				at, place = n, out[i].pos()
+			}
+			continue
 		}
+		out[n] = out[i]
+		n++
 	}
 	clear(out[n:])
-	return out[:n]
+	return out[:n], at, place
 }
 
 // offID is the id of the i-th entry of the record at offset off.

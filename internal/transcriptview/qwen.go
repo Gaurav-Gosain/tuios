@@ -94,12 +94,3 @@ func hasValue(raw json.RawMessage) bool {
 	raw = bytes.TrimSpace(raw)
 	return len(raw) > 0 && !bytes.Equal(raw, []byte("null"))
 }
-
-// qwenMatch reports whether a chat's first record ran in cwd.
-func qwenMatch(head []byte, cwd string) bool {
-	var rec struct {
-		CWD string `json:"cwd"`
-	}
-	line := firstLine(head)
-	return line != nil && json.Unmarshal(line, &rec) == nil && rec.CWD == cwd
-}

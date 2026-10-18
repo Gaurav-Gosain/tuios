@@ -2,8 +2,6 @@ package transcriptview
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"strings"
 )
@@ -323,19 +321,4 @@ func docLines(msgs []json.RawMessage) []byte {
 		b.WriteByte('\n')
 	}
 	return b.Bytes()
-}
-
-// geminiMatch reports whether a chat's projectHash is the hash of cwd, the
-// one Gemini CLI writes.
-func geminiMatch(head []byte, cwd string) bool {
-	sum := sha256.Sum256([]byte(cwd))
-	want := hex.EncodeToString(sum[:])
-	var meta struct {
-		ProjectHash string `json:"projectHash"`
-	}
-	if line := firstLine(head); line != nil && json.Unmarshal(line, &meta) == nil && meta.ProjectHash != "" {
-		return meta.ProjectHash == want
-	}
-	// An older document: the field is near its start, on a line of its own.
-	return bytes.Contains(head[:min(len(head), 1024)], []byte(`"projectHash": "`+want+`"`))
 }

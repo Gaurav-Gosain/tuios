@@ -19,7 +19,10 @@
 //   - It is reachable from one place, the agent-transcript verb, which runs
 //     only for a caller that holds the person's live human_nonce. Nothing
 //     reads a transcript here in the background, and nothing here keeps what
-//     it read: every call opens the file, decodes, and returns. CursorAt, for
+//     it read, with one bounded exception: the records made from a document
+//     format are kept a short time (docCache), so a person reading a large
+//     document page by page does not have it parsed for each page. Every
+//     other call opens the file, decodes, and returns. CursorAt, for
 //     the daemon's transcript event, hashes the start of the first record to
 //     name the file and returns nothing of it.
 //   - Every string that leaves goes through the caller's Clean function, which
@@ -39,6 +42,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -148,6 +152,10 @@ type Entry struct {
 	// key is the message the record wrote, for a format that writes a
 	// message again when it changes (decoded.key). It is never sent.
 	key string
+	// rec is where the record that gave the entry is. It differs from line
+	// and sub for a message written again, which keeps its first place. A
+	// read after a cursor takes the entries whose record is after it.
+	rec cursorPos
 
 	// raw is what the record said, before Clean and before any diff is
 	// worked out. finish turns it into the fields above, only for an entry
@@ -177,6 +185,11 @@ type diffSrc struct {
 	// result about another file name. The call shows it under its own name.
 	shared *diffSrc
 	built  *Diff
+}
+
+// before reports whether p comes before position at.
+func (p cursorPos) before(at cursorPos) bool {
+	return p.off < at.off || p.off == at.off && p.sub < at.sub
 }
 
 // pos is the place of an entry, as a cursor names it.
@@ -320,12 +333,23 @@ func Read(path string, opts Options) (Page, error) {
 		if size > scanMax {
 			return Page{}, ErrTooLarge
 		}
-		data, err := r.readAt(0, size)
-		if err != nil {
-			return Page{}, err
+		key := docKey{path: path, size: size, mod: info.ModTime()}
+		var lines []byte
+		if e, ok := docs.get(key); ok {
+			defer docs.release(e)
+			lines = e.lines
+		} else {
+			data, err := r.readAt(0, size)
+			if err != nil {
+				return Page{}, err
+			}
+			lines = fm.doc(data)
+			if e := docs.put(key, lines); e != nil {
+				defer docs.release(e)
+			} else {
+				r.bufs = append(r.bufs, lines)
+			}
 		}
-		lines := fm.doc(data)
-		r.bufs = append(r.bufs, lines)
 		r.src, r.size = bytes.NewReader(lines), int64(len(lines))
 	}
 	id, err := fileID(r.src, path, r.size)
@@ -366,6 +390,10 @@ type reader struct {
 	lexed int
 	// lcsLeft is what is left of LCSCellsPerCall.
 	lcsLeft int
+	// rewound says decode met a record that took the conversation back. A
+	// read after a cursor then returns the newest page with Reset, since
+	// the reader's copy holds messages that are gone.
+	rewound bool
 	// trimmed says decode dropped older entries for keepLast, so the page
 	// does not start at the file's first entry even when a record that
 	// replaces or takes back messages left fewer than keepLast.
@@ -468,6 +496,14 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 				}
 				total += n
 			}
+			// A message written again keeps its first place, and the record
+			// that wrote it last may be past this window's older pages. So
+			// the page holds such a message whole, and the older page ends
+			// before its first record.
+			for keep > 0 && keep < len(entries) && entries[keep].key != "" && entries[keep-1].key == entries[keep].key {
+				keep--
+				r.finish(&entries[keep])
+			}
 			page := Page{
 				Entries: entries[keep:],
 				Skipped: r.skipped,
@@ -480,7 +516,11 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 			switch {
 			case keep < len(entries):
 				if base > 0 || keep > 0 || r.trimmed {
-					page.Older = makeCursor(id, entries[keep].pos())
+					older := entries[keep].pos()
+					if entries[keep].key != "" {
+						older.sub = 0
+					}
+					page.Older = makeCursor(id, older)
 				}
 			case base > 0:
 				// The window held no entry. The next page starts where it did.
@@ -515,6 +555,12 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 	// Decoding stops once it has one entry past the page, which is where
 	// the next page starts.
 	entries := r.decode(buf[:end], at.off, decodeBounds{from: &at, maxCount: r.opts.Limit + 1})
+	if r.rewound {
+		r.rewound = false
+		page, err := r.newest(id)
+		page.Reset = true
+		return page, err
+	}
 	next := cursorPos{off: at.off + int64(end)}
 	if len(entries) > r.opts.Limit {
 		e := entries[r.opts.Limit]
@@ -618,25 +664,43 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			r.skipped++
 			continue
 		}
+		// A record that replaces a message (dec.key) or takes the
+		// conversation back to one (dec.rewind) changes what the window
+		// holds of it. A record past the page's end changes nothing on the
+		// page.
+		at, place := len(out), cursorPos{off: -1}
 		if b.before == nil || start < b.before.off || start == b.before.off && b.before.sub > 0 {
-			// A record that replaces a message (dec.key) or takes the
-			// conversation back to one (dec.rewind) drops what the window
-			// holds of it. A record past the page's end changes nothing on
-			// the page.
-			out = dropKeyed(out, dec.key, dec.rewind)
+			if dec.rewind != "" {
+				out = dropRewound(out, dec.rewind)
+				r.rewound = true
+			}
+			out, at, place = dropKey(out, dec.key)
 		}
+		var add []Entry
 		for i, e := range dec.entries {
 			e.line, e.sub, e.key = start, i, dec.key
-			if b.from != nil && e.before(*b.from) {
+			e.rec = cursorPos{off: start, sub: i}
+			if place.off >= 0 {
+				// The message keeps the place it was first written at, so
+				// a tool call that finishes does not move its card.
+				e.line, e.sub = place.off, place.sub+i
+			}
+			if b.from != nil && e.rec.before(*b.from) {
 				continue
 			}
 			if b.before != nil && !e.before(*b.before) {
 				continue
 			}
-			out = append(out, e)
+			add = append(add, e)
 		}
+		out = slices.Insert(out, at, add...)
 		if b.keepLast > 0 && len(out) >= 2*b.keepLast {
-			n := copy(out, out[len(out)-b.keepLast:])
+			// A message written again is kept whole (see back).
+			cut := len(out) - b.keepLast
+			for cut > 0 && out[cut].key != "" && out[cut-1].key == out[cut].key {
+				cut--
+			}
+			n := copy(out, out[cut:])
 			r.trimmed = true
 			clear(out[n:])
 			out = out[:n]

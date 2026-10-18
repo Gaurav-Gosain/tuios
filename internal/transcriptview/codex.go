@@ -254,15 +254,3 @@ func codexInjected(s string) bool {
 	name, _, _ := strings.Cut(tag, " ")
 	return strings.HasSuffix(s, "</"+name+">")
 }
-
-// codexMatch reports whether a rollout's session_meta names cwd.
-func codexMatch(head []byte, cwd string) bool {
-	var rec struct {
-		Type    string `json:"type"`
-		Payload struct {
-			CWD string `json:"cwd"`
-		} `json:"payload"`
-	}
-	line := firstLine(head)
-	return line != nil && json.Unmarshal(line, &rec) == nil && rec.Type == "session_meta" && rec.Payload.CWD == cwd
-}

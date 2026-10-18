@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // summary is an entry in one line: role, kind, tool, target, status, and the
@@ -332,21 +333,97 @@ func TestFormatBounds(t *testing.T) {
 	})
 }
 
-// TestFormatMatch checks the search's identity test against each fixture.
-func TestFormatMatch(t *testing.T) {
+// TestFormatIdentity checks the identity the hookless search reads: the
+// folder and the session's start, from the start of the first record. The
+// Codex session_meta of codex-long-meta.jsonl is 200 KiB, with the long
+// instructions before cwd, as Codex writes them.
+func TestFormatIdentity(t *testing.T) {
+	start := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
 	for _, c := range []struct {
-		file, format, cwd string
-		want              bool
+		file, format string
+		start        time.Time
 	}{
-		{"codex-rollout.jsonl", FormatCodex, "/work/project", true},
-		{"codex-rollout.jsonl", FormatCodex, "/work/other", false},
-		{"gemini-chat.jsonl", FormatGemini, "/work/project", true},
-		{"gemini-chat.jsonl", FormatGemini, "/work/other", false},
-		{"gemini-legacy.json", FormatGemini, "/work/project", true},
-		{"qwen-chat.jsonl", FormatQwen, "/work/project", true},
+		{"codex-rollout.jsonl", FormatCodex, start},
+		{"codex-long-meta.jsonl", FormatCodex, start},
+		{"gemini-chat.jsonl", FormatGemini, start},
+		{"gemini-legacy.json", FormatGemini, start},
+		{"qwen-chat.jsonl", FormatQwen, start},
 	} {
-		if got := Matches(c.format, filepath.Join("testdata", c.file), c.cwd); got != c.want {
-			t.Errorf("Matches(%s, %s, %s) = %v, want %v", c.format, c.file, c.cwd, got, c.want)
+		id, ok := Identify(c.format, filepath.Join("testdata", c.file))
+		if !ok {
+			t.Errorf("%s: no identity", c.file)
+			continue
 		}
+		if !id.Start.Equal(c.start) {
+			t.Errorf("%s: start %v, want %v", c.file, id.Start, c.start)
+		}
+		if !id.In("/work/project") || id.In("/work/other") || id.In("") {
+			t.Errorf("%s: identity %+v does not place the session in /work/project alone", c.file, id)
+		}
+	}
+	if _, ok := Identify(FormatCodex, filepath.Join("testdata", "codex-legacy.jsonl")); ok {
+		t.Error("a rollout with no session_meta gave an identity")
+	}
+}
+
+// TestGeminiRewrites checks the two ways Gemini CLI changes what it wrote: a
+// message written again keeps its first place, and a read after a cursor
+// that meets $rewindTo returns the newest page with Reset, since the reader
+// holds messages that are gone.
+func TestGeminiRewrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session-x.jsonl")
+	lines := []string{
+		`{"sessionId":"s","projectHash":"h","startTime":"2026-10-18T09:00:00Z"}`,
+		`{"id":"u1","type":"user","content":"first"}`,
+		`{"id":"g1","type":"gemini","content":"working","toolCalls":[{"id":"c1","name":"run_shell_command","args":{"command":"make"},"status":"executing"}]}`,
+		`{"id":"u2","type":"user","content":"second"}`,
+		`{"id":"g1","type":"gemini","content":"working","toolCalls":[{"id":"c1","name":"run_shell_command","args":{"command":"make"},"status":"success","result":[{"functionResponse":{"response":{"output":"done"}}}]}]}`,
+	}
+	write := func() {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+	page, err := Read(path, Options{Format: FormatGemini})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range page.Entries {
+		got = append(got, summary(e))
+	}
+	want := []string{
+		"user text: first",
+		"assistant text: working",
+		"assistant tool_call run_shell_command [make] ok",
+		"tool tool_result ok",
+		"user text: second",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("entries:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// A read after the cursor with nothing new gives nothing and no reset.
+	after, err := Read(path, Options{Format: FormatGemini, After: page.Cursor})
+	if err != nil || after.Reset || len(after.Entries) != 0 {
+		t.Fatalf("read after the cursor: %d entries, reset %v, err %v", len(after.Entries), after.Reset, err)
+	}
+	lines = append(lines, `{"$rewindTo":"u2"}`, `{"id":"u3","type":"user","content":"again"}`)
+	write()
+	after, err = Read(path, Options{Format: FormatGemini, After: page.Cursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.Reset {
+		t.Fatal("a rewind after the cursor did not reset the page")
+	}
+	got = got[:0]
+	for _, e := range after.Entries {
+		got = append(got, summary(e))
+	}
+	if strings.Contains(strings.Join(got, "\n"), "second") || !strings.Contains(strings.Join(got, "\n"), "again") {
+		t.Errorf("after the rewind:\n%s\nwant the message taken back gone and the new one there", strings.Join(got, "\n"))
 	}
 }
