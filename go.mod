@@ -84,5 +84,5 @@ require (
 	tuios.dev/progstatus v0.1.0
 	tuios.dev/shot v0.2.0
 	tuios.dev/swatch v0.1.0
-	tuios.dev/vt v0.2.0
+	tuios.dev/vt v0.2.1-0.20261018044350-32364a9c3081
 )
