@@ -10,25 +10,31 @@ import "image/color"
 // again, and opencode asks for the whole palette again. A program that reads
 // the notice only as dark or light sees the same value twice.
 //
-// In tuios the colours a pane reports are the ones SetReportColors gives it:
-// the theme's, the painted ground, or the host's own. So the notice is sent
-// when one of those changes, once per call, which is once per theme the client
-// pushes. CSI ? 996 n asks for the same report at any time.
+// The notice follows the reported colours: the ones SetReportColors gives,
+// which are what OSC 10, OSC 11 and OSC 4 answer when the guest has set no
+// colour of its own. A SetReportColors call that changes any of them sends one
+// notice, so one theme change is one notice. SetThemeColors sends none. It sets
+// the colours the screen is drawn in, and a host may call it for a preview
+// that it never reports, as tuios does while its theme picker is open. A host
+// that changes the theme calls SetReportColors with the new colours to notify
+// the guest. CSI ? 996 n asks for the report at any time.
 //
 // Spec: https://github.com/contour-terminal/contour/blob/master/docs/vt-extensions/color-palette-update-notifications.md
 
 // colorSchemeNotice is the mode 2031 notice, and the answer to DSR 996, for a
 // pane on background bg.
 func colorSchemeNotice(bg color.Color) string {
-	if bg != nil && isLightBackground(bg) {
+	if bg != nil && IsLightBackground(bg) {
 		return "\x1b[?997;2n"
 	}
 	return "\x1b[?997;1n"
 }
 
-// isLightBackground reports whether a background reads as light: its
-// perceived brightness is over half.
-func isLightBackground(c color.Color) bool {
+// IsLightBackground reports whether a background reads as light: its
+// perceived brightness (ITU-R BT.601 luma) is over half. It is the rule the
+// mode 2031 notice and the DSR 996 answer use, so a host that tells other
+// programs about light and dark can agree with what its panes are told.
+func IsLightBackground(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
 	return 299*r+587*g+114*b > 1000*0xffff/2
 }

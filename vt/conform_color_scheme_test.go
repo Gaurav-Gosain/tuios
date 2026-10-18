@@ -16,7 +16,9 @@ package vt_test
 //   - a push that changes nothing sends a notice;
 //   - a program that never set ?2031, or reset it, gets a notice;
 //   - Ps reads a colour other than the one OSC 11 answers with;
-//   - DSR 996 goes unanswered, or is answered only with ?2031 set.
+//   - DSR 996 goes unanswered, or is answered only with ?2031 set;
+//   - SetThemeColors sends a notice, which would tell the guest about a
+//     theme a host only previews.
 //
 // These run under the pure Go emulator by default and under libghostty-vt
 // with -tags ghostty.
@@ -118,6 +120,22 @@ func TestConform_ColorSchemeNotice(t *testing.T) {
 				t.Errorf("the emulator wrote %q, want %q", got, tc.want)
 			}
 		})
+	}
+	t.Logf("ran on the %s backend", vt.Backend)
+}
+
+// SetThemeColors changes what the screen is drawn in and sends no notice,
+// even for a switch between dark and light. Only SetReportColors notifies.
+func TestConform_ColorSchemeThemeColorsAreSilent(t *testing.T) {
+	term := vt.New(20, 4)
+	term.SetThemeColors(tokyoNight.fg, tokyoNight.bg, nil, tokyoNight.pal)
+	if _, err := term.Write([]byte("\x1b[?2031h")); err != nil {
+		t.Fatal(err)
+	}
+	done := guestReplies(term)
+	term.SetThemeColors(latte.fg, latte.bg, nil, latte.pal)
+	if got := done(); got != "" {
+		t.Errorf("SetThemeColors wrote %q, want nothing", got)
 	}
 	t.Logf("ran on the %s backend", vt.Backend)
 }
