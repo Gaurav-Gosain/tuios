@@ -137,6 +137,50 @@ func setSessionSpace(t *testing.T, base, session, space string) {
 	}
 }
 
+// TestSpaceRailSessionCycleFollowsSpaceOrder keeps next/previous session in
+// the rail's space order, not the interleaved daemon creation order. Four
+// sessions catch both directions and wraparound; a two-session round trip
+// cannot distinguish next from previous. Frames and daemon client listings
+// make each claimed destination independently observable.
+func TestSpaceRailSessionCycleFollowsSpaceOrder(t *testing.T) {
+	base := t.TempDir()
+	dir := artifactDir(t)
+	writeConfig(t, base, spaceRailConfig+`
+[keybindings.global]
+next_session = ["ctrl+alt+l"]
+prev_session = ["ctrl+alt+h"]
+`)
+	spaceRailFixture(t, base,
+		[2]string{"e2e-a1", "alpha"}, [2]string{"e2e-b1", "beta"},
+		[2]string{"e2e-a2", "alpha"}, [2]string{"e2e-loose", ""})
+	term := attachSpaceRail(t, base, "e2e-a1")
+	order := []string{"e2e-a1", "e2e-a2", "e2e-b1", "e2e-loose"}
+	waitSpaceRail(t, term, "sessions in space order", func(s tuitest.Screen) bool {
+		return railRowsIncreasing(spaceRailRows(s, order...))
+	})
+	saveArtifact(t, term, dir, "space-cycle-before")
+	windowManagementMode(t, term)
+	enterTerminalMode(t, term)
+
+	for _, step := range []struct {
+		key, want string
+	}{
+		{"l", "e2e-a2"}, {"l", "e2e-b1"}, {"l", "e2e-loose"}, {"l", "e2e-a1"},
+		{"h", "e2e-loose"}, {"h", "e2e-b1"}, {"h", "e2e-a2"}, {"h", "e2e-a1"},
+	} {
+		key := "\x1b[108;7u"
+		if step.key == "h" {
+			key = "\x1b[104;7u"
+		}
+		if err := term.SendKeys(key); err != nil {
+			t.Fatalf("send ctrl+alt+%s: %v", step.key, err)
+		}
+		clientShows(t, base, step.want)
+		saveArtifact(t, term, dir, "space-cycle-"+step.key+"-"+step.want)
+		time.Sleep(insertGuard + 150*time.Millisecond)
+	}
+}
+
 // TestSpaceRailHeadings: the rail draws one heading per space, in name order,
 // each right above its own sessions, which step two columns in under it, and
 // the session in no space after every space, at the headings' column, with no

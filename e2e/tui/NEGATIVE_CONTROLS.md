@@ -7,6 +7,21 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Session cycling follows space order
+
+`TestSpaceRailSessionCycleFollowsSpaceOrder` creates `e2e-a1` in alpha,
+`e2e-b1` in beta, `e2e-a2` in alpha, then an unfiled session. The real rail
+must draw a1, a2, b1, unfiled, and Ctrl+Alt+l/h must walk that order in both
+directions, including wraparound. Frames are saved under `TUIOS_E2E_FRAMES`;
+the daemon's client listing independently confirms every destination.
+
+The negative control ran against unmodified v0.10.1 (`f8b7820`): the first
+Ctrl+Alt+l reached `e2e-b1`, and the wait for `e2e-a2` failed. Applying the
+rail's space/repository ordering to the navigation list passed all eight
+switches. The existing space-heading and numbered-session tests also passed.
+Run with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
+'^TestSpaceRailSessionCycleFollowsSpaceOrder$' .` from `e2e/tui`.
+
 ## PR #626: a rail must not resize a shared session
 
 `TestSidebarSessionDoesNotShrinkAnotherViewer` attaches a 120x40 ordinary

@@ -827,7 +827,7 @@ func (m *OS) createRemoteSession(host string) {
 // no number on this machine reaches them.
 func localSessionIndexes(nodes []sessiontree.Node) map[string]int {
 	indexes := make(map[string]int, len(nodes))
-	for i, s := range localSessionNodes(nodes) {
+	for i, s := range railSessionNodes(nodes) {
 		indexes[s.ID] = i + 1
 	}
 	return indexes

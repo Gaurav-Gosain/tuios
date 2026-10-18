@@ -239,15 +239,33 @@ func clearAgentMarks(nodes []sessiontree.Node) {
 	}
 }
 
+// railSessionNodes puts the attached machine's sessions in the rail's space
+// and repository order, retaining the user's order inside each group. Headers
+// are not destinations. Folded groups keep their sessions eligible, as before.
+func railSessionNodes(nodes []sessiontree.Node) []sessiontree.Node {
+	local := localSessionNodes(nodes)
+	rows := sessiontree.GroupBySpace(local, sessiontree.GroupByRepo)
+	if len(nodes) > len(local) {
+		// With machine headings, the rail lifts global sessions above them.
+		var global []sessiontree.Node
+		rows, global = stripGlobalRows(rows)
+		rows = append(global, rows...)
+	}
+	sessions := make([]sessiontree.Node, 0, len(local))
+	for _, row := range rows {
+		if row.Kind == sessiontree.KindSession {
+			sessions = append(sessions, row)
+		}
+	}
+	return sessions
+}
+
 // railNeighbourSession returns the session delta places from the current one in
 // the rail's own order, wrapping at both ends, or "" when there is nowhere to go.
-// Reading the order from BuildSessionTree rather than the raw daemon listing is
-// what makes "next" mean the row below the current one even after the user has
-// dragged the rail into a different order. Only the attached machine's
-// sessions are cycled: a row on another machine is a different connection,
-// which a cycle key must not open by surprise.
+// Only the attached machine's sessions are cycled: a row on another machine is
+// a different connection, which a cycle key must not open by surprise.
 func (m *OS) railNeighbourSession(delta int) string {
-	sessions := localSessionNodes(m.BuildSessionTree().Sessions)
+	sessions := railSessionNodes(m.BuildSessionTree().Sessions)
 	current := slices.IndexFunc(sessions, func(s sessiontree.Node) bool { return s.IsCurrent })
 	if len(sessions) < 2 || current < 0 {
 		return ""
@@ -274,7 +292,7 @@ func (m *OS) CycleSession(delta int) {
 // local-only scope CycleSession cycles. Pressing a number past the sessions
 // there are says so instead of failing inside the switch.
 func (m *OS) SwitchToSessionByIndex(n int) {
-	sessions := localSessionNodes(m.BuildSessionTree().Sessions)
+	sessions := railSessionNodes(m.BuildSessionTree().Sessions)
 	if n < 0 || n >= len(sessions) {
 		m.ShowNotification(fmt.Sprintf("No session %d", n+1), "info", m.Settings.NotificationDuration)
 		return
