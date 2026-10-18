@@ -36,10 +36,10 @@ const ckFailShown = 6
 
 // threadDiff is a diff as agent-transcript sends it.
 type threadDiff struct {
-	File      string `json:"file"`
-	Added     int    `json:"added"`
-	Removed   int    `json:"removed"`
-	Truncated bool   `json:"truncated"`
+	File      string       `json:"file"`
+	Added     int          `json:"added"`
+	Removed   int          `json:"removed"`
+	Truncated bool         `json:"truncated"`
 	Hunks     []threadHunk `json:"hunks"`
 }
 
