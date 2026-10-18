@@ -1153,3 +1153,213 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 	saveFrame(t, term, "goose-manifest")
 	alive(t, term, "after the goose panes")
 }
+
+// TestHookClaimLapsesWithTheHarness runs a stand-in claude in a pane through
+// the real Claude Code hook, under a client with the rail open and the pane
+// focused. The stand-in is a program named claude (testdata/fakeclaude), so
+// the pane's foreground is called claude as a real one's is, and the hook's
+// harness_pid names a process that exits with it: a script would be named
+// after its interpreter on macOS, and the hook would name a process that
+// outlives it. It works a turn with tool calls and finishes it, then leaves
+// the way /exit does, and the pane stays open with its shell running.
+//
+// The agents section lists every pane running an agent, so once the agent has
+// left, the row must go. The cases:
+//
+//   - session-end: SessionEnd reports none, then the process ends.
+//   - session-end-typed: the same, typed through the client, so every key is
+//     also a state push racing the hook's.
+//   - session-end-other-session: the client is attached to another session
+//     and reads the pane from its listing.
+//   - crash: the process ends with no SessionEnd, as a crashed or killed
+//     Claude Code does, or one whose SessionEnd hook did not land. The
+//     daemon kept the last report for the life of the pane, the row with it.
+//   - note-after-exit: once the agent has gone, a person leaves a state on
+//     the pane with set-agent-state, and it has to stay: only the harness's
+//     own claim lapses with the harness.
+//   - unreadable-pid: an agent outside the pane's pid namespace, one in a
+//     container with the socket passed in say, reports for the pane while
+//     the pane sits at its shell. Its harness_pid names no process here, so
+//     it is never taken for exited, and the row stays rather than going at
+//     every detection pass.
+//
+// The daemon's listing is printed on failure, so a failure says which side
+// kept or dropped the row.
+//
+// Negative controls: NEGATIVE_CONTROLS.md, "Agent row after exit".
+func TestHookClaimLapsesWithTheHarness(t *testing.T) {
+	const cols, rows, width = 120, 36, 28
+	const railCol = cols - width
+	// No pid namespace reaches this pid (Linux caps pid_max at 2^22, macOS
+	// at 99999), so it stands for a process this machine cannot read.
+	const foreignPID = 2_000_000_000
+	sessionEnd := cc("", `"hook_event_name":"SessionEnd","reason":"prompt_input_exit"`)
+	fakeClaudeBin := filepath.Join(t.TempDir(), "claude")
+	if out, err := exec.Command("go", "build", "-o", fakeClaudeBin, "./testdata/fakeclaude").CombinedOutput(); err != nil {
+		t.Fatalf("build fakeclaude: %v\n%s", err, out)
+	}
+	for _, tc := range []struct {
+		name string
+		end  string
+		// home is the session the client attaches to, "" for the agent's own.
+		home string
+		// typed types into the pane through the client, as the person does,
+		// so every keystroke is also a state push from the client.
+		typed bool
+		// note has a person leave a state on the pane once the agent has
+		// gone, which has to stay: only the harness's own claim lapses.
+		note bool
+		// foreign reports from outside the pane with a harness_pid this
+		// machine cannot read, and runs no stand-in.
+		foreign bool
+	}{
+		{name: "session-end", end: sessionEnd},
+		{name: "session-end-typed", end: sessionEnd, typed: true},
+		{name: "session-end-other-session", end: sessionEnd, home: "e2e-home"},
+		{name: "crash"},
+		{name: "note-after-exit", end: sessionEnd, note: true},
+		{name: "unreadable-pid", foreign: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			useShippedLooks(base)
+			// claude on PATH and run by that name, so the foreground-process
+			// detector takes it for Claude Code as it does the real one.
+			bin := filepath.Join(base, "bin")
+			if err := os.MkdirAll(bin, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", strings.Join([]string{bin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
+			writeConfig(t, base, fmt.Sprintf("[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = %d\n", width))
+			killDaemon(t, base)
+			const session = "e2e-exit"
+			if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+				t.Fatalf("create %s: %v\n%s", session, err, out)
+			}
+			if out, err := tuiosCLI(t, base, "set-window", "-s", session, "-w", "0", "--name", "pilot"); err != nil {
+				t.Fatalf("name the pane: %v\n%s", err, out)
+			}
+			if err := os.Symlink(fakeClaudeBin, filepath.Join(bin, "claude")); err != nil {
+				t.Fatal(err)
+			}
+			script := filepath.Join(base, "fake-claude.sh")
+			if err := os.WriteFile(script, []byte(strings.ReplaceAll(fakeClaudeScript, "__TUIOS__", tuiosBin)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			lines := []string{
+				cc("", `"hook_event_name":"SessionStart","source":"startup"`),
+				cc("", `"hook_event_name":"UserPromptSubmit","prompt":"Run the tests and read the rail."`),
+				cc("", `"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"go test ./...","description":"Run the tests"},"tool_use_id":"toolu_01x1"`),
+				cc("", `"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"go test ./...","description":"Run the tests"},"tool_response":{"stdout":"ok","stderr":"","interrupted":false},"tool_use_id":"toolu_01x1","duration_ms":40`),
+				cc("", `"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"internal/app/render_sidebar.go"},"tool_use_id":"toolu_01x2"`),
+				cc("", `"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"internal/app/render_sidebar.go"},"tool_response":{"type":"text"},"tool_use_id":"toolu_01x2","duration_ms":3`),
+				cc("", `"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"Hello.","background_tasks":[],"session_crons":[]`),
+				"wait rest",
+			}
+			if tc.end != "" {
+				lines = append(lines, tc.end)
+			}
+			scenario := filepath.Join(base, "scenario.txt")
+			if err := os.WriteFile(scenario, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			hookLog := filepath.Join(base, "hooks.log")
+			defer func() {
+				if b, err := os.ReadFile(hookLog); err == nil && t.Failed() {
+					t.Logf("hook log:\n%s", b)
+				}
+			}()
+
+			attach := session
+			if tc.home != "" {
+				attach = tc.home
+				if out, err := tuiosCLI(t, base, "new", tc.home, "--detach"); err != nil {
+					t.Fatalf("create %s: %v\n%s", tc.home, err, out)
+				}
+			}
+			term := attachIn(t, base, attach, startOpts{cols: cols, rows: rows})
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+				t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+			}
+			shown := func(s tuitest.Screen) bool { return railHasAgent(s, railCol, "pilot") }
+			listing := func() string {
+				out, _ := tuiosCLI(t, base, "list-agents", "-s", session, "--all", "--json")
+				return out
+			}
+			// Three detection ticks at the default interval, with the pane at
+			// its shell.
+			const ticks = 6 * time.Second
+
+			if tc.foreign {
+				win := windowID(t, base, session, "pilot")
+				params := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"claude-code","agent_session_id":%q,"harness_pid":%d}`, session, win, ccSession, foreignPID)
+				if out, err := tuiosCLI(t, base, "call", "set-agent-state", params); err != nil {
+					t.Fatalf("report from outside the pane: %v\n%s", err, out)
+				}
+				if err := term.WaitFor(shown, uiTimeout); err != nil {
+					t.Fatalf("the agents section never listed the agent: %v\n%s", err, term.Snapshot())
+				}
+				time.Sleep(ticks)
+				saveFrame(t, term, "agent-exit-"+tc.name)
+				if st := readAgentState(t, base, session, win); st.State != "working" || st.Harness != "claude-code" || !shown(term.Screen()) {
+					t.Fatalf("a harness pid this machine cannot read was taken for exited: the pane is %+v\nagents section: %q\ndaemon listing:\n%s\n%s",
+						st, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
+				}
+				return
+			}
+
+			typeLine := func(line string) {
+				t.Helper()
+				if tc.typed {
+					if err := term.Type(line + "\r"); err != nil {
+						t.Fatalf("type %q: %v", line, err)
+					}
+					return
+				}
+				if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "0", line+"\n"); err != nil {
+					t.Fatalf("send %q: %v\n%s", line, err, out)
+				}
+			}
+			if tc.typed {
+				enterTerminalMode(t, term)
+			}
+			typeLine("claude " + script + " " + scenario + " " + hookLog)
+			waitCapture(t, base, session, "0", "FAKE-AT rest")
+
+			// The finished turn, looked at: the row is in the section, at rest.
+			if err := term.WaitFor(shown, uiTimeout); err != nil {
+				t.Fatalf("the agents section never listed the agent: %v\n%s", err, term.Snapshot())
+			}
+			saveFrame(t, term, "agent-exit-"+tc.name+"-before")
+
+			// Leave the way /exit does: SessionEnd (when there is one), then the
+			// process ends and the shell has the pane again.
+			typeLine("/exit")
+			if tc.end != "" {
+				waitCapture(t, base, session, "0", "FAKE-DONE")
+			}
+			typeLine("echo SHELL-BACK")
+			waitCapture(t, base, session, "0", "SHELL-BACK")
+
+			err := term.WaitFor(func(s tuitest.Screen) bool { return !shown(s) }, uiTimeout)
+			saveFrame(t, term, "agent-exit-"+tc.name+"-after")
+			if err != nil {
+				t.Fatalf("the agents section still lists the pane after its agent left it, with the shell running: %v\nagents section: %q\ndaemon listing:\n%s\n%s",
+					err, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
+			}
+			if !tc.note {
+				return
+			}
+			if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", session, "-w", "pilot", "-m", "back after lunch"); err != nil {
+				t.Fatalf("leave a note: %v\n%s", err, out)
+			}
+			if err := term.WaitFor(shown, uiTimeout); err != nil {
+				t.Fatalf("the note never showed: %v\n%s", err, term.Snapshot())
+			}
+			time.Sleep(ticks)
+			if !shown(term.Screen()) {
+				t.Fatalf("a person's note on the pane was cleared as if the harness had said it:\n%s\n%s", listing(), term.Snapshot())
+			}
+		})
+	}
+}
