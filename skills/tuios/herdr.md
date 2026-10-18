@@ -68,8 +68,8 @@ These plugins run unchanged once the person enables them: terminal-browser,
 terminal-code, vim-herdr-navigation, herdr-splits.nvim, herdr-nvim-nav,
 herdr-nvim, herdr-file-viewer, herdr-sidebar, herdr-plus and
 herdr-auto-title. A plugin's `[[link_handlers]]` do not run.
-`plugin install` fails: the person clones the plugin and runs
-`tuios plugins link DIR`.
+`plugin install` fails: the person runs `tuios plugins install SOURCE` from a
+terminal outside tuios.
 
 ## What it may do
 

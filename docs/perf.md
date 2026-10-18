@@ -2859,6 +2859,18 @@ The budgets went down to 37,652,000 (linux/amd64) and 35,405,000
 (darwin/arm64) after the cut. Each keeps the room it had before it,
 21,886 and 13,462 bytes.
 
+The budgets went to 37,742,000 (linux/amd64) and 35,476,000 (darwin/arm64)
+for the plugin manager: `tuios plugins install`, `plugins.lock` and the
+managed origin of the plugin list. It uses the plugin-system allowance the
+maintainer approved. Main measured 37,630,114 and 35,391,538 bytes
+(Go 1.26.9), 21,886 and 13,462 bytes under the budgets. The feature brings it
+to 37,716,130 and 35,458,210, 86,016 and 66,672 bytes more: the source
+parser, the git fetch and ref lookup, the install plan, the build loop with
+its log, the install from the lock file, and the lock file read, write and
+checks. It uses no package tuios did not link already. Each budget rises by
+the cost plus about 4 KB, so the new budgets leave 25,870 and 17,790 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say

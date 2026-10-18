@@ -1906,9 +1906,13 @@ enabled = ["example.notes"]          # the ids of the plugins that run
 dirs = ["~/src/my-herdr-plugin"]     # more plugin folders, or manifests
 ```
 
-tuios also finds plugins in `$XDG_CONFIG_HOME/tuios/plugins/<folder>/` and in
-herdr's own `plugins.json` and managed checkouts. To find a plugin runs
-nothing. A plugin runs only when its id is in `enabled`.
+tuios also finds plugins in `$XDG_CONFIG_HOME/tuios/plugins/<folder>/`, in
+`plugins.lock`, and in herdr's own `plugins.json` and managed checkouts. To
+find a plugin runs nothing. A plugin runs only when its id is in `enabled`.
+
+`tuios plugins install SOURCE` writes `plugins.lock` beside `config.toml`.
+It pins each installed plugin to one commit. Keep the file with your config,
+and run `tuios plugins install` on a new machine to get the same commits.
 
 An enabled plugin runs its commands with your rights, outside every pane.
 Enable only plugins that you trust.
@@ -1920,6 +1924,7 @@ Use the commands to change the table. They change only the `enabled` or
 tuios plugins enable example.notes
 tuios plugins disable example.notes
 tuios plugins link ~/src/my-herdr-plugin
+tuios plugins install owner/repo        # also adds the id to enabled
 ```
 
 You must run them from a terminal outside tuios. A change to the file that
