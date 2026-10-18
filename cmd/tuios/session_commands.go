@@ -1223,8 +1223,15 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	return daemon.Run()
 }
 
-func runKillDaemon() error {
+func runKillDaemon(restart bool) error {
 	diag := session.DiagnoseDaemon()
+	// The clients reattach after a restart and quit after a stop. The daemon
+	// reads the mark on its way out. See internal/session/daemon_goodbye.go.
+	if restart && diag.State == session.DaemonRunning {
+		if err := session.MarkRestart(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: the clients will not wait for the new daemon: %v\n", err)
+		}
+	}
 	printServerLine(diag.SocketPath)
 
 	switch diag.State {

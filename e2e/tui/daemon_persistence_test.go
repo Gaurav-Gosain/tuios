@@ -335,7 +335,8 @@ func copyExecutable(t *testing.T, src, dst string) {
 // on the notice opens the dialog, which has to name the program that stops.
 // r restarts. The client has to come back, by itself, attached to the same
 // session on a daemon of the third build, with both panes, their names and
-// the first pane's history.
+// the first pane's history. A second client, attached beside it, has to
+// reattach by itself in the same process and say so.
 //
 // The ways it could pass without testing that:
 //   - The client could be a new process attached by the test. The client is
@@ -388,6 +389,10 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		term = startIn(t, base, startOpts{cols: 100, rows: 40, args: []string{"--debug", "new", name}, out: wire})
 	})
 	pid := term.Pid()
+	// A second client, of the daemon's own build, attached beside it. It has
+	// to come back by itself.
+	other := attachIn(t, base, name, startOpts{cols: 100, rows: 40})
+	otherPid := other.Pid()
 
 	// The whole notice fits the dock of a 100-column terminal.
 	notice := "The daemon runs dev. ctrl+b j restarts it."
@@ -428,6 +433,9 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	// longer than a 100-column dock, so the terminal widens.
 	if err := term.Resize(130, 40); err != nil {
 		t.Fatalf("resize: %v", err)
+	}
+	if err := other.Resize(130, 40); err != nil {
+		t.Fatalf("resize the second client: %v", err)
 	}
 	if err := term.SendKeys("r"); err != nil {
 		t.Fatalf("answer the dialog: %v", err)
@@ -483,6 +491,37 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		t.Errorf("ASSERTION: the client started again without its flags: %v %q", err, argv)
 	}
 
+	// The second client reattached by itself, in the same process.
+	if err := other.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "The daemon restarted on "+syncNextVersion+". tuios reattached.") &&
+			countWindows(s) == 2 && strings.Contains(text, fmt.Sprintf("RHIST-%d-END", last)) &&
+			strings.Contains(text, "restored from")
+	}, bootTimeout); err != nil {
+		t.Errorf("ASSERTION: the second client did not reattach with the panes: %v\n%s", err, other.Snapshot())
+	}
+	if frames != "" {
+		savePNG(t, other.Screen(), shot.XTermPalette(), frames, "restart-other-client")
+	}
+	if code, exited := other.ExitCode(); exited {
+		t.Errorf("ASSERTION: the second client quit (code %d) instead of reattaching", code)
+	}
+	withBinary("", func() {
+		tuiosBin = next
+		out, err := tuiosCLI(t, base, "list-clients", "--json")
+		if err != nil || json.Unmarshal([]byte(out), &clients) != nil {
+			t.Fatalf("list-clients: %v\n%s", err, out)
+		}
+	})
+	found = false
+	for _, c := range clients {
+		found = found || (c.PID == otherPid && c.Session == name)
+	}
+	if !found {
+		t.Errorf("ASSERTION: the second client (pid %d) is not attached to %q after the restart: %+v", otherPid, name, clients)
+	}
+	alive(t, other, "after it reattached")
+
 	// The layout and the history.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
@@ -508,4 +547,40 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		t.Errorf("ASSERTION: the panes after the restart are %v, want history and sleeper", names)
 	}
 	alive(t, term, "after the restart")
+}
+
+// TestPlainKillServerEndsClientsAtOnce is the other half of the reattach: a
+// daemon stopped with a plain kill-server says "stop", and its clients quit at
+// once, as they always did. A new daemon is started right after, with the
+// session restored, so a client that waited for one would find it and stay.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the client deaf to
+// the goodbye, it waits, attaches to the new daemon and does not quit.
+func TestPlainKillServerEndsClientsAtOnce(t *testing.T) {
+	const name = "e2e-plain-stop"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	term := attachIn(t, base, name, startOpts{})
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	stopped := time.Now()
+	if out, err := tuiosCLI(t, base, "start-server"); err != nil {
+		t.Fatalf("start a new daemon: %v\n%s", err, out)
+	}
+	for {
+		if _, exited := term.ExitCode(); exited {
+			break
+		}
+		if time.Since(stopped) > time.Second {
+			t.Fatalf("ASSERTION: the client did not quit within 1 s of a plain kill-server\n%s", term.Snapshot())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if strings.Contains(term.Snapshot(), "tuios reattached") {
+		t.Errorf("ASSERTION: the client reattached after a plain kill-server\n%s", term.Snapshot())
+	}
 }

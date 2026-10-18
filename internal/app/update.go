@@ -2509,10 +2509,24 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ExitReason = ExitHostLost
 			return m, tea.Quit
 		}
+		// The daemon on this machine may be restarting: wait a moment for
+		// the new one, and attach to the session it restored.
+		if cmd := m.beginDaemonReconnect(); cmd != nil {
+			return m, tea.Batch(cmd, ListenForDaemonExit(m.daemonExitChan()))
+		}
+		if m.ReconnectingToDaemon() {
+			return m, ListenForDaemonExit(m.daemonExitChan())
+		}
 		if !m.QuitRequested {
 			m.ExitReason = ExitDaemonLost
 		}
 		return m, tea.Quit
+
+	case daemonReconnectTickMsg:
+		return m, m.handleDaemonReconnectTick(msg)
+
+	case daemonReconnectResultMsg:
+		return m, m.handleDaemonReconnectResult(msg)
 
 	case restartPlanMsg, restartStepMsg, restartEndMsg, restartQuitMsg:
 		return m, m.handleRestartMsg(msg)

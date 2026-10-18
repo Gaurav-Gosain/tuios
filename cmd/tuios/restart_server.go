@@ -279,7 +279,13 @@ func runRestart(plan *restartReport, step func(string)) *restartReport {
 	}
 	if plan.Daemon != nil && plan.Daemon.State != daemonStopped {
 		step(restartplan.StepStopping)
-		if out, err := runTuios(plan.Binary, "kill-server"); err != nil {
+		// --restart tells the attached clients to wait for the new daemon. A
+		// binary older than the flag stops the daemon without it.
+		out, err := runTuios(plan.Binary, "kill-server", "--restart")
+		if err != nil && strings.Contains(out, "unknown flag") {
+			out, err = runTuios(plan.Binary, "kill-server")
+		}
+		if err != nil {
 			rep.Error = fmt.Sprintf("The daemon did not stop. It still runs version %s.", cmp.Or(plan.Daemon.Version, "unknown"))
 			rep.Fix = "run 'tuios kill-server' to see why." + outputTail(out)
 			return rep

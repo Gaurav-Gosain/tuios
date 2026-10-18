@@ -426,6 +426,9 @@ func hostReconnectReason(host string, err error) string {
 func (m *OS) hostLinkNote() string {
 	r := m.hostReconnect
 	if r == nil {
+		if m.daemonReconnect != nil {
+			return " " + daemonWaitNote + " "
+		}
 		return m.hostOpenNote()
 	}
 	name := r.host

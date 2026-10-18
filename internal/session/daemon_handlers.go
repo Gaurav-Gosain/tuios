@@ -19,6 +19,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.mu.Lock()
 	cs.listingPush = payload.ListingPush
 	cs.paneMarks = payload.PaneMarks
+	cs.goodbye = payload.Goodbye
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
 	cs.scratchWS = payload.ScratchWorkspaces

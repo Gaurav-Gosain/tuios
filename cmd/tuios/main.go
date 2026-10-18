@@ -696,6 +696,7 @@ Debug log levels:
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "", "Debug log level: off, errors, basic, messages, verbose, trace")
 	daemonCmd.Flags().BoolVar(&daemonNoRestore, "no-restore", false, "Do not auto-restore saved sessions on start (use 'tuios resurrect' to restore on demand)")
 
+	var killRestart bool
 	killDaemonCmd := &cobra.Command{
 		Use:   "kill-server",
 		Short: "Stop the TUIOS daemon",
@@ -708,9 +709,10 @@ session's state and removed its socket, so a new daemon can be started as soon
 as it returns. It fails if the daemon has not finished within 10 seconds.`,
 		Example: `  tuios kill-server`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runKillDaemon()
+			return runKillDaemon(killRestart)
 		},
 	}
+	killDaemonCmd.Flags().BoolVar(&killRestart, "restart", false, "Tell the attached clients that a new daemon follows, so they attach to it again")
 
 	// Remote control commands
 	var sendKeysSession string

@@ -1972,6 +1972,11 @@ func (m *OS) wireDaemonPTY(window *terminal.Window, subscribe func()) {
 	ptyID := window.PTYID
 
 	window.DaemonWriteFunc = func(data []byte) error {
+		// Keys typed while the client waits for a new daemon are dropped,
+		// and the wait note says so. See daemon_reconnect.go.
+		if m.daemonWaiting.Load() {
+			return nil
+		}
 		return m.DaemonClient.WritePTY(ptyID, data)
 	}
 	window.DaemonResizeFunc = func(width, height int) error {

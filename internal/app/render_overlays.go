@@ -361,6 +361,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// screen, and its marquee has to be visible on top of whatever is open.
 	layers = append(layers, m.renderCaptureMode()...)
 
+	// The wait for a new daemon is said in the dock. With the dock hidden it
+	// is said in the middle of the screen. See daemon_reconnect.go.
+	if m.daemonReconnect != nil && m.Settings.DockbarPosition == "hidden" {
+		pal := theme.UI()
+		box := overlay.Style(pal.Surface).Foreground(pal.Fg).Render("  " + daemonWaitNote + "  ")
+		layers = append(layers, m.centeredBoxLayer(box, config.ZIndexOverlayBase, "daemon-wait"))
+	}
+
 	if m.ShowQuitMenu {
 		content, geo, rows := m.renderQuitMenu()
 		layers = m.placeOverlayPanel(layers, "quit", content, geo, rows)

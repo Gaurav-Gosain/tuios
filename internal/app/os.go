@@ -239,6 +239,14 @@ type OS struct {
 	// DaemonExitChan carries the two daemon events that end this client: the
 	// session was destroyed, or the connection dropped. See daemon_exit.go.
 	DaemonExitChan chan tea.Msg
+	// daemonReconnect is the wait for a new daemon after the connection to
+	// this machine's daemon was lost. See daemon_reconnect.go.
+	daemonReconnect    *daemonReconnect
+	daemonReconnectGen int
+	// daemonWaiting is daemonReconnect != nil, for the panes' write funcs,
+	// which run off the Update goroutine too: input typed while the client
+	// waits is not sent to a connection that is gone.
+	daemonWaiting atomic.Bool
 	// restart is the restart dialog. See daemon_restart.go.
 	restart daemonRestart
 	// RestartExec is set with ExitRestarted: what the entry point runs to

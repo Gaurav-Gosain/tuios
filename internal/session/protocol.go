@@ -174,6 +174,10 @@ const (
 	// it. The daemon sends it only to a client whose hello set PaneMarks.
 	// See pane_marks.go.
 	MsgPaneMark
+	// MsgGoodbye is the daemon's last message to a client before it stops:
+	// why it stops. The daemon sends it only to a client whose hello set
+	// Goodbye. See daemon_goodbye.go.
+	MsgGoodbye
 )
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
@@ -300,6 +304,8 @@ type HelloPayload struct {
 	// PaneMarks says the client reads MsgPaneMark. The daemon sends it to no
 	// other client. See pane_marks.go.
 	PaneMarks bool `json:"pane_marks,omitzero"`
+	// Goodbye says the client reads MsgGoodbye. See daemon_goodbye.go.
+	Goodbye bool `json:"goodbye,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

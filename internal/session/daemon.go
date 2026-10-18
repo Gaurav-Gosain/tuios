@@ -521,6 +521,9 @@ type connState struct {
 	// paneMarks says the client's hello set PaneMarks: it reads MsgPaneMark.
 	// Guarded by mu. See pane_marks.go.
 	paneMarks bool
+	// goodbye says the client's hello set Goodbye: it reads MsgGoodbye.
+	// Guarded by mu. See daemon_goodbye.go.
+	goodbye bool
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
@@ -1553,6 +1556,8 @@ func (cs *connState) drop() {
 func (d *Daemon) shutdown() error {
 	d.shutdownOnce.Do(func() {
 		log.Println("Shutting down daemon...")
+		// The clients hear why before anything closes under them.
+		d.sayGoodbye()
 
 		// The Inbox is saved first and not again. Everything below closes
 		// panes, and a pane closing on shutdown is not the person dealing
