@@ -7350,3 +7350,24 @@ and a `javascript:` link, and asserts on the raw output. Run on 2026-10-19.
 | A table may have thousands of columns | The column cap in `parseBlocks` and `delimiterRow` | Removed | `FuzzParse/seed#8` ("a table of 65 columns and 1 rows is past the bounds") | **caught** |
 | A message written again keeps its old card | `sum` in `ckCardKey` | Left out of the key | `TestCockpitThreadOtherHarnesses/gemini` ("kept the old text of a message written again") | **caught** |
 | A `javascript:` link is sent as OSC 8 | The scheme check in `ckLinkTarget` | Never taken | `TestCockpitThreadCards` ("an escape sequence or a javascript: link in the message reached the host terminal") | **caught** |
+## tuios restart-server
+
+`TestRestartServerMovesTheDaemonToTheNewBuild` starts a daemon of this build
+with a pane that runs `sleep`, and restarts it with a second build stamped
+`e2e-sync-next`. The plan must name the program and both versions, and the
+restart must say the new version and the session that came back.
+`TestRestartOffersToResumeTheConversation` now restarts through
+`restart-server`, whose plan must name the agent that can resume.
+`TestRestartServerFromAPaneLeavesADaemon` runs `restart-server --yes` in a
+pane of the daemon it restarts: the pane's terminal closes under it, and a
+daemon must hold the session again, restored.
+
+The controls were run on 2026-10-18 on branch `feat/restart-server`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The plan lists no program | `restartplan.Lines`: the line for each busy pane cut | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the plan does not name the program the restart stops") | **caught** |
+| The steps run in the command itself | `runRestartServer`: `runRestart` instead of `runDetachedRestart` | `TestRestartServerFromAPaneLeavesADaemon` ("no daemon holds the session after restart-server ran in its pane") | **caught** |
+| The version after the restart is the old daemon's | `runRestart`: `rep.After` from the plan's daemon, not the new daemon's hello | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the restart does not say \"The daemon restarted on e2e-sync-next.\"") | **caught** |
+| The sessions after the restart are not read | `runRestart`: `rep.Back = nil` | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the restart does not say \"This session came back: e2e-restart.\"") | **caught** |
+| list-windows marks no agent | `verbListWindows`: the `addResumable` call cut | `TestRestartOffersToResumeTheConversation` ("restart-server --dry-run does not list the agent that can resume") | **caught** |
