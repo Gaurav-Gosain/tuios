@@ -129,15 +129,18 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			}
 			return content, geo, nil
 		}
-		// The one key offered in the middle is the mailbox, the place to
-		// look when nothing is waiting; without a daemon there is nothing
-		// to open, and it offers the way out.
+		// The one key offered in the middle is the agents view, where a
+		// reply to any agent starts when nothing is waiting, then the
+		// mailbox. Without a daemon there is nothing to open, and it offers
+		// the way out.
 		next := overlay.Hint{Key: "esc", Label: "close"}
-		if mb := m.keyHints(config.ActionInboxMailbox, "mailbox"); len(mb) > 0 && m.IsDaemonSession && !st.Unsupported {
-			next = mb[0]
+		if m.IsDaemonSession && !st.Unsupported {
+			if ways := m.keyHints(config.ActionInboxAgents, "agents", config.ActionInboxMailbox, "mailbox"); len(ways) > 0 {
+				next = ways[0]
+			}
 		}
 		return m.emptyPanel(title, inboxWidth, inboxEmptyRows, lines[0], lines[1:], next, m.keyHints(
-			config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
+			config.ActionInboxAgents, "agents", config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select",
 			config.ActionInboxMailbox, "mailbox", config.ActionInboxClose, "close"))
 	}
 	now := time.Now()
