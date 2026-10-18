@@ -4601,6 +4601,9 @@ The five hook fields:
 - `harness_pid`: the pid of the harness process that ran the hook. Read only
   with `agent_session_id`, and held in daemon memory. It lets a new session
   from the same harness process pass the nested-session guard below.
+- `session_start`: true on the report a conversation's `SessionStart` sends.
+  It matters only for a harness whose manifest sets `shared_server`. See the
+  guard below.
 - `activity`: the hook event itself, for the pane's activity ring: `event`
   (`prompt`, `tool`, `tool_done`, `tool_failed` or `turn_end`), `tool`,
   `target`, `text`, `files`, `ok` and `model`, all optional but `event`. It is
@@ -4635,6 +4638,14 @@ different session is also accepted when its `harness_pid` is the one the
 window's current session was reported with: that is a new conversation in the
 same process, such as `/clear` after an interrupted turn that never reported
 `Stop`.
+
+A harness whose manifest sets `shared_server = true` (Codex) runs the hooks of
+every conversation from one server process. A conversation in another
+terminal can share that process, its pid and the pane's `TUIOS_PANE_ID`. For
+such a harness, a report for a different conversation of the same harness is
+accepted only with `session_start`. Any other report is refused with
+`foreign_session`, at rest and mid-turn. A window with no stored session id is
+open to any report.
 
 `reason`, `activity_recorded` and the hook fields are additive. A client that
 sends none of the fields is handled exactly as before. A daemon older than them does not

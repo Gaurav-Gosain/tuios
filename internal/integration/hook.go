@@ -136,10 +136,15 @@ type Report struct {
 	// State is empty, without SessionOnly, for a report that is its Activity
 	// alone, a report-agent-activity call: a subagent starting or stopping,
 	// which says nothing about what the pane's own agent is doing.
-	State          string `json:"state,omitempty"`
-	Kind           string `json:"kind,omitempty"`
-	Message        string `json:"message,omitempty"`
-	SessionID      string `json:"agent_session_id,omitempty"`
+	State     string `json:"state,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Message   string `json:"message,omitempty"`
+	SessionID string `json:"agent_session_id,omitempty"`
+	// SessionStart marks the report of a conversation starting or resuming.
+	// For a harness that runs every conversation from one server process,
+	// it is the only report that lets a different conversation take a pane
+	// over. See Manifest.SharedServer in internal/harness.
+	SessionStart   bool   `json:"session_start,omitempty"`
 	TranscriptPath string `json:"transcript_path,omitempty"`
 	// Cwd is the folder the harness names in the hook payload. The daemon
 	// keeps the first one of a session as the agent's start folder.

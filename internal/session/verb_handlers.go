@@ -1366,6 +1366,9 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		TranscriptPath string `json:"transcript_path"`
 		IfState        string `json:"if_state"`
 		HarnessPID     int    `json:"harness_pid"`
+		// SessionStart marks a conversation's SessionStart. See
+		// AgentReport.SessionStart.
+		SessionStart bool `json:"session_start"`
 		// AgentCwd is the folder the harness reported for its session. The
 		// first one for a session is kept as the agent's start folder. See
 		// noteReportedAgentDir.
@@ -1447,6 +1450,9 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		SessionID:  p.AgentSessionID,
 		HarnessPID: p.HarnessPID,
 		IfState:    ifState,
+
+		SessionStart: p.SessionStart,
+		SharedServer: p.Harness != "" && d.agentMatcher.registry != nil && d.agentMatcher.registry.SharedServer(p.Harness),
 	}
 	// The identity guard is read before the report applies, because it is
 	// about the pane as the report found it, and applyAgentReport checks
@@ -1490,6 +1496,10 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 	if p.AgentCwd != "" && p.AgentSessionID != "" &&
 		reason != agentRefusedForeignSession && reason != agentRefusedForeignHarness {
 		d.noteReportedAgentDir(sess, target, p.AgentSessionID, p.AgentCwd)
+	}
+	if reason == agentRefusedForeignSession || reason == agentRefusedForeignHarness {
+		debugLog("[DEBUG] set-agent-state: refused %s report from %s session %s (pid %d) for window %s: %s",
+			state.Name(), p.Harness, p.AgentSessionID, p.HarnessPID, target, reason)
 	}
 	transcriptRefused := ""
 	if applied && p.TranscriptPath != "" {

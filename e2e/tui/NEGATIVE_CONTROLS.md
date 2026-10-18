@@ -6908,6 +6908,16 @@ strip must show a thumbnail box labelled `#1`, not a line of words. The host
 stream must hold a kitty placement at that box: the label's column, three rows
 above the label. Then it types ` @`, and the list must show
 `e2e-ctrlp/WORKER`. It empties the draft and goes on as before.
+## Another Codex conversation stays off the pane (#852)
+
+`TestCodexSharedServerKeepsAnotherConversationOffThePane` runs two Codex
+conversations through the real `tuios agent-hook codex` from one process, so
+both carry the same harness pid, as they do under one Codex app-server. The
+pane's conversation starts a turn. The other conversation's approval and
+prompt must leave the pane's state and conversation alone, mid-turn and at
+rest, with nothing in `list-attention` and no approval in the dock. The
+positive half: the other conversation's `SessionStart` takes the pane over,
+and its next approval shows in the dock.
 
 Run on 2026-10-18.
 
@@ -6921,3 +6931,11 @@ The fixed build passes it, every other `TestMail*` and `TestAgentMail*`,
 `TestARoutedKeyReplyIsAClaim`, `TestRichRowReplyAndRecap`, every
 `TestReplyWith*`, `TestReplyToAnAgentOnAHost`,
 `TestReplyPreviewInScreenCapture` and every `TestInbox*`.
+| Another conversation's approval took the pane over | yes | `shared_server = false` in the codex manifest | `TestCodexSharedServerKeepsAnotherConversationOffThePane` ("other PermissionRequest mid-turn: the pane is {State:needs_input ... AgentSession:cx-quick}, want state working in conversation cx-pane") | **caught** |
+| The daemon never read the manifest flag | yes | `verbSetAgentState` sets `SharedServer: false` | same test, same message | **caught** |
+| A `SessionStart` from another conversation could not take the pane over | yes | `reportHook` does not send `session_start` | same test ("other SessionStart: the pane is {State:done ... AgentSession:cx-pane}, want state idle") | **caught** |
+
+The fixed build passes it and `TestHookIntegrationsReportTheTurn`. The
+Claude Code `/clear` and `/resume` rules keep their tests in
+`internal/session` (`TestSetAgentStateNewSessionInTheSameHarnessTakesOver`,
+`TestSetAgentStateRefusesANestedSession`), which pass unchanged.

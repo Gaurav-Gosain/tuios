@@ -141,6 +141,14 @@ type AgentReport struct {
 	// harness process take the pane over, since that is a new conversation in
 	// the same program (/clear, /resume) and not a nested run.
 	HarnessPID int
+	// SessionStart marks the report of a conversation starting or resuming,
+	// as the hook's SessionStart sends it. It only matters with SharedServer.
+	SessionStart bool
+	// SharedServer is set by the daemon, from the manifest of the harness the
+	// report names, for a harness that runs every conversation's hooks from
+	// one server process (harness.Manifest.SharedServer). sessionGuard then
+	// lets a different conversation take the pane over only on SessionStart.
+	SharedServer bool
 	// IfState, when not empty, applies the report only if the window's state
 	// is one of these right now. It is how a hook says "clear the block once
 	// the tool ran" without also turning a finished pane back to working.
@@ -233,8 +241,25 @@ func (e errAgentReportRefused) Error() string { return "agent report refused: " 
 // pane in working until the harness exits. ownerPID is the harness pid the
 // pane's current session id was reported with, and 0 when unknown; a nested
 // run is a different process, so it is still refused.
+//
+// A shared-server harness (Codex) breaks both rules above. It runs the hooks
+// of every conversation from one server process, and a Codex in another
+// terminal can use the server a pane's codex started, so its hooks carry the
+// pane's TUIOS_PANE_ID and the same harness pid (#852). For such a harness a
+// report about a different conversation of the same harness takes the pane
+// over only when it is the conversation's SessionStart, at rest or mid-turn;
+// every other event is refused with foreign_session. A pane with no stored
+// conversation, or one stored for another harness, falls through to the
+// rules above. A SessionStart mid-turn still passes the pid rule.
 func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, r AgentReport) string {
-	if r.SessionID == "" || !held || claim.source != AgentSourceReport {
+	if r.SessionID == "" {
+		return ""
+	}
+	if r.SharedServer && !r.SessionStart && w.AgentSessionID != "" && w.AgentSessionID != r.SessionID &&
+		(w.AgentSessionHarness == "" || w.AgentSessionHarness == r.Harness) {
+		return agentRefusedForeignSession
+	}
+	if !held || claim.source != AgentSourceReport {
 		return ""
 	}
 	if w.AgentState != AgentStateWorking && w.AgentState != AgentStateNeedsInput {

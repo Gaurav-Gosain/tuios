@@ -210,6 +210,81 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 	alive(t, term, "after three harnesses' turns")
 }
 
+// TestCodexSharedServerKeepsAnotherConversationOffThePane is #852. Codex runs
+// the hooks of every conversation from one app-server, and a Codex in another
+// terminal (Ghostty's Quick Terminal) can use the server a pane's codex
+// started. Its hooks then carry the pane's TUIOS_PANE_ID and the same harness
+// pid, and its approval showed under the pane, in the Inbox and as a
+// notification. Here both conversations run through the real hook from one
+// process, so they share a harness pid the way they do under one app-server.
+// The other conversation's prompt and approval are refused, mid-turn and at
+// rest, and its SessionStart still takes the pane over, as /new or /resume in
+// the pane does.
+//
+// Negative control: with shared_server removed from the codex manifest, the
+// other conversation's approval lands on the pane mid-turn and the first
+// refusal check fails.
+func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
+	term, base := agentSessions(t)
+	log := &stateLog{name: "codex-shared-server"}
+	if out, err := tuiosCLI(t, base, "new-window", "codex", "-s", "e2e-agent", "--no-focus"); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	win := windowID(t, base, "e2e-agent", "codex")
+	hook := func(payload string) { runHook(t, base, "codex", "e2e-agent", win, payload) }
+	const foreignApproval = `{"hook_event_name":"PermissionRequest","session_id":"cx-quick","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`
+	// refused checks a report from the other conversation changed nothing:
+	// the pane keeps its state and its conversation, and nothing reaches the
+	// Inbox or the dock.
+	refused := func(step, state string) {
+		t.Helper()
+		st := readAgentState(t, base, "e2e-agent", win)
+		log.add("%-44s state=%s session=%s", step, st.State, st.AgentSession)
+		if st.State != state || st.AgentSession != "cx-pane" {
+			log.save(t)
+			t.Fatalf("%s: the pane is %+v, want state %s in conversation cx-pane", step, st, state)
+		}
+		if out, _ := tuiosCLI(t, base, "list-attention"); strings.Contains(out, "rm -rf build") {
+			log.save(t)
+			t.Fatalf("%s: the Inbox lists the other conversation's approval:\n%s", step, out)
+		}
+		if text := term.Snapshot(); strings.Contains(text, "needs approval") {
+			log.save(t)
+			t.Fatalf("%s: the dock announces an approval:\n%s", step, text)
+		}
+	}
+
+	hook(`{"hook_event_name":"SessionStart","session_id":"cx-pane","source":"startup"}`)
+	waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, "pane SessionStart")
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"cx-pane","prompt":"fix the build"}`)
+	waitAgentState(t, base, "e2e-agent", win, "working", "codex", log, "pane UserPromptSubmit")
+
+	hook(foreignApproval)
+	refused("other PermissionRequest mid-turn", "working")
+
+	hook(`{"hook_event_name":"Stop","session_id":"cx-pane","last_assistant_message":"The build passes."}`)
+	waitAgentState(t, base, "e2e-agent", win, "done", "codex", log, "pane Stop")
+
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"cx-quick","prompt":"clean up"}`)
+	refused("other UserPromptSubmit at rest", "done")
+	hook(foreignApproval)
+	refused("other PermissionRequest at rest", "done")
+	saveFrame(t, term, "codex-shared-server-refused")
+
+	// A SessionStart is a new conversation in the pane, and takes it over.
+	hook(`{"hook_event_name":"SessionStart","session_id":"cx-quick","source":"resume"}`)
+	if st := waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, "other SessionStart"); st.AgentSession != "cx-quick" {
+		t.Fatalf("the SessionStart did not take the pane over: %+v", st)
+	}
+	hook(foreignApproval)
+	waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, "PermissionRequest after the takeover")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "needs approval") }, uiTimeout); err != nil {
+		t.Fatalf("the dock never announced the approval after the takeover: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "codex-shared-server-taken-over")
+	log.save(t)
+}
+
 // TestQwenApprovalFromTheInbox is the approval round trip for Qwen Code: with
 // [agents.approvals] naming qwen, its PermissionRequest for a shell command is
 // held, the Inbox offers allow and deny (and not always, which Qwen Code does

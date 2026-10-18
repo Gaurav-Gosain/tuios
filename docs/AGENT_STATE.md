@@ -3731,6 +3731,14 @@ the one that owns the pane. These filters keep those events off the pane:
   is not a shell or `env`. A nested run is a process of its own, so it is still
   refused. A hook that cannot read its ancestors (Windows, or a sandbox with its
   own pid namespace) sends no pid and gets the plain rule.
+- Codex is different. Its manifest sets `shared_server = true`, because one
+  Codex app-server runs the hooks of every conversation. A Codex in another
+  terminal can use the app-server a pane's codex started. Its hooks then carry
+  the pane's `TUIOS_PANE_ID` and the same pid. So for Codex a different
+  conversation takes the pane over only with its `SessionStart`. Every other
+  event from it is refused with `foreign_session`, at rest and mid-turn, and
+  makes no Inbox item and no notification. A `/new` or `/resume` in the pane
+  sends a `SessionStart`, so it still takes the pane over.
 
 ### Session identity
 

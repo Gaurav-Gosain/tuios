@@ -57,7 +57,7 @@ func translateCodex(in Input, p fields) Decision {
 	}
 	switch event {
 	case "SessionStart":
-		return send(Codex, event, identity(Report{State: "idle"}, p))
+		return send(Codex, event, identity(Report{State: "idle", SessionStart: true}, p))
 	case "UserPromptSubmit":
 		r := identity(Report{State: "working"}, p)
 		if text := activityText(p.str("prompt")); text != "" {

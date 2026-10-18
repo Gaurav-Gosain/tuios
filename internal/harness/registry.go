@@ -194,6 +194,13 @@ func (r *Registry) Lookup(id string) *Manifest {
 	return nil
 }
 
+// SharedServer reports whether the harness with id runs every conversation's
+// hooks from one shared server process. See Manifest.SharedServer.
+func (r *Registry) SharedServer(id string) bool {
+	m := r.Lookup(id)
+	return m != nil && m.SharedServer
+}
+
 // CanProveIdle reports whether the harness has an enabled screen or title rule
 // that reports idle, which is what lets a pane of it show positive evidence that
 // the agent waits at its prompt. A harness without one can never reach idle

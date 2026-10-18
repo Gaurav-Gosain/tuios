@@ -2,6 +2,11 @@ schema_version = 1
 id             = "codex"
 display_name   = "Codex"
 priority       = 50
+# Codex runs the hooks of every conversation from one app-server process. A
+# Codex in another terminal can attach to the server a pane's codex started,
+# so its hooks carry the pane's TUIOS_PANE_ID and the same harness pid. With
+# this set, another conversation takes the pane over only on its SessionStart.
+shared_server  = true
 
 [detect]
 comm      = ["codex"]

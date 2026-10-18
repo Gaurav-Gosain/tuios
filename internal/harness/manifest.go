@@ -32,10 +32,18 @@ type Manifest struct {
 	DisplayName   string `toml:"display_name"`
 	// Priority breaks a tie when two manifests match the same process. Higher
 	// wins; equal priorities fall back to the id so the answer is stable.
-	Priority int    `toml:"priority"`
-	Detect   Detect `toml:"detect"`
-	Screen   Screen `toml:"screen"`
-	Title    Title  `toml:"title"`
+	Priority int `toml:"priority"`
+	// SharedServer marks a harness whose hooks run in one server process for
+	// every conversation the user has open, wherever the conversation is shown.
+	// Codex does this: a codex started in a pane starts an app-server there,
+	// and a Codex in another terminal can attach to the same server, so its
+	// hooks inherit the pane's environment and carry the same harness pid. For
+	// such a harness the daemon lets a different conversation take a pane over
+	// only on its SessionStart. See sessionGuard in internal/session.
+	SharedServer bool   `toml:"shared_server"`
+	Detect       Detect `toml:"detect"`
+	Screen       Screen `toml:"screen"`
+	Title        Title  `toml:"title"`
 	// Notify is the rules matched against a desktop notification the program
 	// sent with OSC 9, OSC 777 or OSC 99. It has the shape of Title.
 	Notify     Title      `toml:"notify"`
