@@ -216,7 +216,7 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		}
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "\n%d waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.\n", waiting)
+	fmt.Fprintf(w, "\n%d waiting. Open the agents view with the prefix key then i, or jump to the oldest with the prefix key then o.\n", waiting)
 	return nil
 }
 

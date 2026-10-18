@@ -334,6 +334,8 @@ type KeybindReport struct {
 	// Yielded are new default bindings tuios left off because the key was
 	// already bound to another action in the same table.
 	Yielded []YieldedDefault `json:"yielded_defaults,omitempty"`
+	// Retired are bindings to actions tuios no longer has.
+	Retired []RetiredKeybind `json:"retired,omitempty"`
 }
 
 // AmbiguousBinding is a binding whose key is half of a pair the terminal cannot
@@ -362,6 +364,7 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 		},
 		Pane:         facts,
 		Yielded:      r.config.YieldedDefaults,
+		Retired:      r.config.RetiredKeybinds,
 		Observations: facts.Observations(),
 		Bindings:     r.Bindings(),
 		Collisions:   r.Collisions(),

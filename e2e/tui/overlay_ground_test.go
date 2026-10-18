@@ -361,7 +361,7 @@ func groundSteps() []groundStep {
 	}
 	return []groundStep{
 		{name: "inbox-approval", fresh: true, titled: true, keys: []any{tuitest.Ctrl('b'), "i"},
-			want: []string{"needs you", "Allow Bash", "risky", "a allow"}, check: noKeysRow},
+			want: []string{"3 needs you", "Allow Bash", "risky", "a allow"}, check: noKeysRow},
 		{name: "inbox-plan", titled: true, keys: []any{"j"}, want: []string{"Add a MaxAttempts field", "keep planning"}},
 		{name: "inbox-errored", titled: true, keys: []any{"j"}, want: []string{"go test ./... failed", "snooze"}},
 		{name: "inbox-snooze-picker", titled: true, keys: []any{"z"}, want: []string{"15m", "until it changes"},

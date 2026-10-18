@@ -174,7 +174,7 @@ func TestAskHumanAnswerReachesAKilledCaller(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "1 needs you", "Tag the release?")
+		return screenHas(s, "1 needs you", "Asks", "Tag the release?")
 	}, uiTimeout); err != nil {
 		_ = cmd.Process.Kill()
 		t.Fatalf("the Inbox never listed the question: %v\n%s", err, term.Snapshot())
@@ -269,7 +269,7 @@ func TestAskHumanWaitsInTheInboxWhenNobodyIsThere(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "1 needs you", "Merge the branch?")
+		return screenHas(s, "1 needs you", "Asks", "Merge the branch?")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the question from the detached session: %v\n%s", err, term.Snapshot())
 	}

@@ -19,7 +19,7 @@ package config
 // kept apart from ActionDescriptions because no key handler in internal/input
 // runs them, and every name there must be one that a terminal key can run.
 var GUIActionDescriptions = map[string]string{
-	"gui_inbox":            "Open the Inbox",
+	"gui_inbox":            "Open the agents view",
 	"gui_switcher":         "Switch to a recent pane. A quick tap goes to the last pane",
 	"gui_switcher_back":    "Move back in the recent pane list",
 	"gui_split_root_right": "Add a pane at the right of the whole stage",

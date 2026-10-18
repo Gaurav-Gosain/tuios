@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -38,11 +37,30 @@ type ckLook struct {
 	nerd, ascii            bool
 }
 
-// cockpitLook builds the look for the depth in force. At 256 colours every
-// derived ground is moved off the grey it sits on; at 16 there are no
-// grounds, and the cursor and the pointer are attributes (see ckRowStyle).
+// ckLookKey is what a look was built from.
+type ckLookKey struct {
+	theme        uint64
+	depth        overlay.Depth
+	ascii, plain bool
+}
+
+// cockpitLook is the look for the depth in force, built again only when the
+// theme, the depth or the glyph set changed: the blends cost more than a
+// cached frame.
 func (m *OS) cockpitLook() ckLook {
+	ck := &m.Inbox.ck
 	pal := theme.UI()
+	key := ckLookKey{theme: theme.Generation(), depth: pal.Depth, ascii: overlay.UseASCII(), plain: m.Settings.NoNerdFont}
+	if ck.lookAt != key || ck.look.pal.Canvas == nil {
+		ck.look, ck.lookAt = m.buildCockpitLook(pal), key
+	}
+	return ck.look
+}
+
+// buildCockpitLook builds the look. At 256 colours every derived ground is
+// moved off the grey it sits on; at 16 there are no grounds, and the cursor
+// and the pointer are attributes (see ckCanvas.mark).
+func (m *OS) buildCockpitLook(pal overlay.Palette) ckLook {
 	l := ckLook{pal: pal, canvas: pal.Canvas, panel: pal.Panel, cursor: pal.Surface}
 	l.ascii = overlay.UseASCII()
 	l.nerd = !l.ascii && !m.Settings.NoNerdFont
@@ -66,22 +84,48 @@ func (m *OS) cockpitLook() ckLook {
 		l.add, l.del = pal.Success, pal.Warn
 		l.edge, l.edgePanel = pal.Edge, pal.Edge
 	}
+	p := &l.pal
+	for _, c := range []*color.Color{&l.canvas, &l.panel, &l.cursor, &l.hover, &l.edge, &l.edgePanel, &l.add, &l.del,
+		&l.attnTint, &l.busyTint, &l.okTint, &l.warnTint, &p.Canvas, &p.Panel, &p.Surface, &p.Card, &p.Fg, &p.FgDim,
+		&p.FgMute, &p.Accent, &p.AccentBright, &p.PillFg, &p.Warn, &p.Success, &p.Warning, &p.Attention, &p.Busy, &p.Edge} {
+		*c = ckFlat(*c)
+	}
 	return l
 }
 
-// ckGlyph is a state's mark: Nerd Font, Unicode and ASCII forms.
+// ckFlat turns a truecolor value into a color.RGBA. A theme colour is a type
+// whose RGBA looks itself up, and the line renderer compares every cell's
+// colours by RGBA: flat values took most of a frame's cost away. An indexed,
+// basic or absent colour keeps its type, which is what makes it draw at 256
+// and 16 colours.
+func ckFlat(c color.Color) color.Color {
+	switch c.(type) {
+	case nil, ansi.BasicColor, ansi.IndexedColor, color.RGBA:
+		return c
+	}
+	if noColor(c) {
+		return c
+	}
+	r, g, b, a := c.RGBA()
+	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}
+}
+
+// ckGlyph is a state's mark: Nerd Font, Unicode and ASCII forms. The
+// Unicode forms are the ones a monospace font without Nerd Font glyphs has,
+// GeistMono Mono included: no ◐, ✓, ✗, ▸ or ▾, which it draws as a box.
 type ckGlyph struct{ nerd, uni, ascii string }
 
 var (
 	ckGlyphNeeds   = ckGlyph{"●", "●", "!"}
-	ckGlyphWorking = ckGlyph{"", "◐", "~"}
-	ckGlyphReview  = ckGlyph{"", "✓", "v"}
-	ckGlyphFailed  = ckGlyph{"", "✗", "x"}
+	ckGlyphWorking = ckGlyph{"", "»", "~"}
+	ckGlyphReview  = ckGlyph{"", "√", "v"}
+	ckGlyphFailed  = ckGlyph{"", "×", "x"}
 	ckGlyphIdle    = ckGlyph{"○", "○", "o"}
 	ckGlyphHost    = ckGlyph{"\U000f048b", "@", "@"}
 	ckGlyphBranch  = ckGlyph{"", "", "br"}
-	ckGlyphFold    = ckGlyph{"", "▸", ">"}
-	ckGlyphOpen    = ckGlyph{"", "▾", "v"}
+	ckGlyphFold    = ckGlyph{"", "›", ">"}
+	ckGlyphMarked  = ckGlyph{"\uf14a", "•", "*"}
+	ckGlyphResume  = ckGlyph{"\uf01e", "»", ">"}
 )
 
 // g picks the form the terminal can draw.
@@ -121,7 +165,9 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 		return l.g(ckGlyphFailed), l.pal.Warn
 	case session.AttentionFinished:
 		return l.g(ckGlyphReview), l.pal.Success
-	case session.AttentionResume, session.AttentionOutbox:
+	case session.AttentionResume:
+		return l.g(ckGlyphResume), l.pal.AccentBright
+	case session.AttentionOutbox:
 		return inboxKindGlyph(it.Kind), l.pal.AccentBright
 	}
 	return l.g(ckGlyphNeeds), l.pal.Attention
@@ -131,6 +177,8 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 type ckFrameKey struct {
 	w, h, top, bottom    int
 	gen, inbox, mail     uint64
+	marks                uint64
+	selectErr            string
 	list                 agentsListKey
 	minute               int64
 	theme                uint64
@@ -156,7 +204,13 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	l := m.cockpitLook()
 	now := time.Now()
 	m.cockpitRows()
+	// The agents list cannot change while the frame is drawn, so every read
+	// of it from here on takes the list as built, without hashing the rail's
+	// signature again.
+	st.agents.inFrame = true
+	defer func() { st.agents.inFrame = false }()
 	key := ckFrameKey{
+		marks: st.agents.marksGen, selectErr: st.selectErr,
 		w: w, h: h, top: top, bottom: res.Bottom, gen: ck.gen, inbox: st.Gen, mail: m.AgentMail.Gen,
 		list: st.agents.listAt, minute: now.Unix() / 60, theme: theme.Generation(), live: st.Live,
 		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry, hosts: m.federationGen,
@@ -168,18 +222,23 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 		}
 	}
 	if ed := st.reply.editor; ed != nil {
-		ed.lines(40)
+		// At the width the last frame drew it, so the composer's own cache
+		// answers, and Drawn moves only when the draft or the cursor did.
+		ed.lines(max(ck.edW, 20))
 		key.editor = ed.comp.Drawn() + 1
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
+	// The reply editor is not one: what it draws is in the key.
 	transient := st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
-		st.approvals.reason != nil || st.approvals.armed.key != "" || st.reply.editor != nil
+		st.approvals.reason != nil || st.approvals.armed.key != ""
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
 	}
 	m.tickStats.Cockpit++
-	c := newCkCanvas(w, h, l.canvas)
+	ck.canvas = ck.canvas.reset(w, h, l.canvas)
+	c := ck.canvas
 	ck.hits = ck.hits[:0]
+	ck.fleetW = 0
 	m.drawCockpit(c, l, top, now)
 	ck.frame, ck.frameAt = c.render(), key
 	return ck.frame, top, w, h
@@ -300,11 +359,14 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		}
 	}
 	if ck.needsOnly || st.Filter != "" {
-		what := "needs you only"
+		what := "items only"
 		if st.Filter != "" {
 			what = strings.ToLower(inboxGroupTitle(st.Filter)) + " only"
 		}
 		x = c.text(x, y, 0, ckSeg{t: what, fg: pal.FgDim}) + 3
+	}
+	if n := len(m.markedAgents()); n > 0 {
+		x = c.text(x, y, 0, ckSeg{t: strconv.Itoa(n) + " marked", fg: pal.AccentBright, attrs: ckBold}) + 3
 	}
 	if !st.Live {
 		x = c.text(x, y, 0, ckSeg{t: "not connected", fg: pal.Warning}) + 3
@@ -315,9 +377,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		btn = " + New agent "
 	}
 	bx := c.textR(right, y, ckSeg{t: btn, fg: pal.PillFg, bg: pal.Accent, attrs: ckBold})
-	if pal.Depth == overlay.Depth16 {
-		c.restyle(bx, y, right-bx, 1, func(cell *uv.Cell) { cell.Style.Attrs |= uv.AttrReverse })
-	}
+	c.mark(pal, bx, y, right-bx, 1, ckOn)
 	ck.hits = append(ck.hits, ckHit{x0: bx, y0: top + y, x1: right, y1: top + y + 1, kind: ckHitAction, action: "new"})
 	sw := min(38, bx-x-2)
 	if sw < 12 {
@@ -326,13 +386,16 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	sx := bx - 2 - sw
 	c.fill(sx, y, sw, 1, l.panel)
 	switch {
+	case st.selectErr != "":
+		// The line was not applied: say why where the line is.
+		c.text(sx+1, y, sx+sw, ckSeg{t: ckTrunc(printableTitle(st.selectErr), sw-2), fg: pal.Warning})
 	case st.selectEditing:
 		c.draw(sx+1, y, sw-1, m.selectLine(sw-1))
 	case st.Select != "" || st.agents.query != "":
 		q := strings.TrimSpace(st.Select + " " + st.agents.query)
 		c.text(sx+1, y, sx+sw, ckSeg{t: "/  ", fg: pal.FgMute}, ckSeg{t: ckTrunc(q, sw-5), fg: pal.Fg})
 	default:
-		words := "Search agents, sessions, hosts"
+		words := "Search agents, sessions, machines"
 		if sw < 36 {
 			words = "Search"
 		}
@@ -347,12 +410,8 @@ func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 	ck := &st.ck
 	pal := l.pal
 	c.fill(0, y0, w, y1-y0, l.panel)
-	machines := m.cockpitMachines()
-	mh := 0
-	if len(machines) > 0 {
-		mh = len(machines) + 2
-	}
-	listTop, listBot := y0+1, y1-mh
+	ck.fleetW = w
+	listTop, listBot := y0+1, y1
 	colH := max(listBot-listTop, 1)
 	oneLine := w < 48
 	if !oneLine {
@@ -402,9 +461,6 @@ func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 		}
 		line += r.lines
 		m.drawFleetRow(c, l, r, r.key == sel.key && r.selectable(), r.key == ck.hover, 0, y, w, top)
-	}
-	if mh > 0 {
-		m.drawMachines(c, l, machines, 0, listBot+1, w)
 	}
 	// At 16 colours the columns have no grounds, so a hairline parts them.
 	if pal.Depth == overlay.Depth16 && w < c.w {
@@ -477,35 +533,39 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		ground = l.hover
 	}
 	c.fill(x, y, w, r.lines, ground)
-	if pal.Depth == overlay.Depth16 && (cursor || hover) {
-		// At 16 colours the cursor is reverse video and the pointer an
-		// underline, applied once the row is drawn.
-		defer func() {
-			fn := reverseCellAttr
-			if !cursor {
-				fn = underlineCellAttr
-			}
-			c.restyle(x+1, y, w-1, r.lines, fn)
-		}()
-	}
+	// At 16 colours the cursor is reverse video and the pointer an
+	// underline, applied once the row is drawn.
+	defer c.mark(pal, x+1, y, w-1, r.lines, overlay.RowState{Cursor: cursor, Focused: cursor, Hover: hover})
 	if cursor {
 		for i := range r.lines {
 			c.text(x, y+i, 0, ckSeg{t: "▌", fg: pal.Accent})
 		}
 	}
-	ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + r.lines, kind: ckHitRow, key: r.key})
 	var e sidebarAgentEntry
 	if r.agent >= 0 {
 		e = ck.agents[r.agent]
+		// A marked agent shows its mark beside the cursor bar, and a click
+		// there marks or unmarks it.
+		if m.Inbox.agents.marks[agentKey(e)] {
+			c.text(x+1, y, 0, ckSeg{t: l.g(ckGlyphMarked), fg: pal.AccentBright, attrs: ckBold})
+		}
+		ck.hits = append(ck.hits, ckHit{x0: x + 1, y0: top + y, x1: x + 2, y1: top + y + 1, kind: ckHitMark, key: r.key})
 	}
+	ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + r.lines, kind: ckHitRow, key: r.key})
 	name, harness, place, wait := m.ckRowFacts(r, e)
 	g, gInk := l.ckMark(e.State, e.DoneSeen)
 	if r.hasItem && (r.agent < 0 || r.group == ckNeeds || r.group == ckSnoozed) {
 		g, gInk = l.ckItemMark(r.item)
 	}
 	nameInk := pal.Fg
-	if r.group == ckIdle || r.group == ckEarlier || r.group == ckSnoozed || r.item.Stale {
+	down := e.Host != "" && m.ckLinkDown(e.Host)
+	if r.group == ckIdle || r.group == ckEarlier || r.group == ckSnoozed || r.item.Stale || down {
 		nameInk = pal.FgDim
+	}
+	if down {
+		// The machine's link is down: the row is its last known state.
+		place += sepWord() + "link down"
+		wait = ""
 	}
 	ink := func(c color.Color) color.Color { return overlay.Readable(c, ground) }
 	nameW := 15
@@ -546,16 +606,17 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	}
 }
 
-// reverseCellAttr and underlineCellAttr are the 16-colour cursor and pointer.
-func reverseCellAttr(cell *uv.Cell) {
-	cell.Style.Fg, cell.Style.Bg = nil, nil
-	cell.Style.Attrs |= uv.AttrReverse
-}
+// ckOn is the state of a button and a pill: at 16 colours, reverse video.
+var ckOn = overlay.RowState{Cursor: true, Focused: true}
 
-func underlineCellAttr(cell *uv.Cell) {
-	if strings.TrimSpace(cell.Content) != "" {
-		cell.Style.Underline = uv.UnderlineSingle
+// ckLinkDown reports whether the link to a machine is down.
+func (m *OS) ckLinkDown(host string) bool {
+	for _, h := range m.FederationHosts {
+		if h.Name == host {
+			return h.Status != "up"
+		}
 	}
+	return false
 }
 
 // ckRowFacts are a row's name, harness, place and age.
@@ -578,16 +639,17 @@ func (m *OS) ckRowFacts(r ckRow, e sidebarAgentEntry) (name, harness, place, wai
 			name, harness = inboxWho(it), ckHarness(it.Harness)
 			place = m.inboxWhere(it)
 		}
-		if it.Kind == session.AttentionMail && it.Seen > 0 {
-			// The agent it was for has read it.
-			name += " seen"
-		}
 		wait = inboxWait(it.Since, now)
 		switch {
 		case it.Stale:
 			wait = inboxSeen(it.SeenAt, now)
 		case it.SnoozedUntil != 0:
 			wait = inboxSnoozedWhen(it.SnoozedUntil, now)
+		}
+		if it.Kind == session.AttentionMail && it.Seen > 0 {
+			// The agent it was for has read it. It is said beside the age,
+			// which a long name never cuts.
+			wait = "seen " + wait
 		}
 	}
 	return name, harness, place, wait
@@ -599,24 +661,14 @@ func ckHarness(h string) string {
 	return printableTitle(h)
 }
 
-// ckPlace is where an agent runs, as its row says it: the machine when the
-// fleet spans more than one, the session otherwise.
+// ckPlace is where an agent runs, as its row says it: the session, with the
+// machine in front for an agent on another one ("build:api").
 func (m *OS) ckPlace(e sidebarAgentEntry) string {
-	host := e.Host
-	if host == "" && m.cockpitRemote() {
-		host = m.attachedMachine()
+	s := printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
+	if e.Host != "" {
+		return m.cockpitLook().g(ckGlyphHost) + " " + printableTitle(e.Host) + ":" + s
 	}
-	if host != "" {
-		mark := ckGlyphHost.nerd
-		switch {
-		case overlay.UseASCII():
-			mark = ckGlyphHost.ascii
-		case m.Settings.NoNerdFont:
-			mark = ckGlyphHost.uni
-		}
-		return mark + " " + printableTitle(host)
-	}
-	return printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
+	return s
 }
 
 // ckMeta is the value of a meta key the agent reported, empty when none.
@@ -768,75 +820,6 @@ func (m *OS) ckHasLine2(r ckRow, e sidebarAgentEntry) bool {
 	return m.ckBranch(e) != "" || e.PR != "" || e.Message != "" || (r.hasItem && r.item.Summary != "")
 }
 
-// ckMachine is one machine in the fleet's foot.
-type ckMachine struct {
-	name, link string
-	agents     int
-	down       bool
-}
-
-// cockpitMachines are the machines the fleet spans, this one first. Empty
-// when there is only this one.
-func (m *OS) cockpitMachines() []ckMachine {
-	if !m.cockpitRemote() {
-		return nil
-	}
-	count := map[string]int{}
-	for _, e := range m.Inbox.ck.agents {
-		count[e.Host]++
-	}
-	out := []ckMachine{{name: m.attachedMachine(), link: "this machine", agents: count[""]}}
-	for _, h := range m.FederationHosts {
-		if len(out) == 5 {
-			break
-		}
-		if h.Name == out[0].name {
-			continue
-		}
-		link := h.Status
-		if link == "up" {
-			link = "linked"
-		}
-		out = append(out, ckMachine{name: h.Name, link: link, agents: count[h.Name], down: h.Status != "up"})
-	}
-	return out
-}
-
-// cockpitRemote reports whether the fleet spans another machine.
-func (m *OS) cockpitRemote() bool {
-	for _, h := range m.FederationHosts {
-		if h.Name != m.attachedMachine() {
-			return true
-		}
-	}
-	return false
-}
-
-// drawMachines draws the machines at the foot of the fleet.
-func (m *OS) drawMachines(c *ckCanvas, l ckLook, ms []ckMachine, x, y, w int) {
-	pal := l.pal
-	right := x + w - 2
-	end := c.text(x+2, y, right, ckSeg{t: "Machines", fg: pal.FgDim, attrs: ckBold}, ckSeg{t: "  " + strconv.Itoa(len(ms)), fg: pal.FgMute})
-	c.hline(end+2, y, right-end-2, hzGlyph(), l.edgePanel)
-	for i, mc := range ms {
-		yy := y + 1 + i
-		ink := pal.Fg
-		if mc.down {
-			ink = pal.FgMute
-		}
-		n := strconv.Itoa(mc.agents) + " agent"
-		if mc.agents != 1 {
-			n += "s"
-		}
-		c.text(x+2, yy, right, ckSeg{t: l.g(ckGlyphHost), fg: pal.FgMute}, ckSeg{t: "  " + ckPad(printableTitle(mc.name), 10), fg: ink}, ckSeg{t: n, fg: pal.FgDim})
-		linkInk := pal.FgMute
-		if mc.down {
-			linkInk = pal.Warning
-		}
-		c.textR(right, yy, ckSeg{t: printableTitle(mc.link), fg: linkInk})
-	}
-}
-
 // drawCockpitStrip draws the one or two agents as name tabs over the focus,
 // in place of the fleet column. It returns the row under it.
 func (m *OS) drawCockpitStrip(c *ckCanvas, l ckLook, y, top int) int {
@@ -863,9 +846,7 @@ func (m *OS) drawCockpitStrip(c *ckCanvas, l ckLook, y, top int) int {
 		}
 		x0 := x
 		x = c.text(x, y, 0, ckSeg{t: " " + g + " ", fg: gInk, bg: bg}, ckSeg{t: name + " ", fg: overlay.Readable(nameInk, bg), bg: bg, attrs: ckBold})
-		if pal.Depth == overlay.Depth16 && r.key == sel.key {
-			c.restyle(x0, y, x-x0, 1, reverseCellAttr)
-		}
+		c.mark(pal, x0, y, x-x0, 1, overlay.RowState{Cursor: r.key == sel.key, Focused: true})
 		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitRow, key: r.key})
 		x += 2
 	}
@@ -883,7 +864,7 @@ func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 	}
 	switch {
 	case st.Unsupported:
-		return []string{"This daemon has no Inbox.", "Restart it with a newer tuios: tuios kill-server"}
+		return []string{"This daemon is too old for the agents view.", "Restart it with a newer tuios: tuios kill-server"}
 	case !m.IsDaemonSession:
 		return []string{"The agents view needs the daemon.", "Start a daemon session with: tuios new"}
 	case st.Filter == session.AttentionMail:
@@ -937,9 +918,7 @@ func (m *OS) drawCockpitEmpty(c *ckCanvas, l ckLook, y0, y1, top int, lines []st
 			bx = c.text(bx, y, 0, ckSeg{t: " " + b.key + " ", fg: pal.PillFg, bg: pal.Accent, attrs: ckBold})
 		}
 		bx = c.text(bx, y, 0, ckSeg{t: " " + b.label + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card})
-		if pal.Depth == overlay.Depth16 {
-			c.restyle(x0, y, bx-x0, 1, reverseCellAttr)
-		}
+		c.mark(pal, x0, y, bx-x0, 1, ckOn)
 		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: bx, y1: top + y + 1, kind: ckHitAction, action: b.action})
 		bx += 3
 	}
@@ -956,8 +935,12 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 		if n != 1 {
 			right += "s"
 		}
-		if ms := m.cockpitMachines(); len(ms) > 1 {
-			right += " on " + strconv.Itoa(len(ms)) + " machines"
+		hosts := map[string]bool{}
+		for _, e := range m.Inbox.ck.agents {
+			hosts[e.Host] = true
+		}
+		if len(hosts) > 1 {
+			right += " on " + strconv.Itoa(len(hosts)) + " machines"
 		}
 	}
 	room := c.w - 4
@@ -1011,7 +994,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	var hints []overlay.Hint
 	r, ok := m.cockpitSelected()
 	if ok {
-		if it, held := m.cockpitHeldItem(); held {
+		if it, held := m.cockpitHeldItem(); held && !m.inboxCut(it) {
 			words := [4]string{"allow", "always", "reject", "say why"}
 			if it.Kind == session.AttentionPlan {
 				words = [4]string{"approve", "accept edits", "keep planning", "say why"}
@@ -1029,6 +1012,11 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 				hints = append(hints, m.keyHints(config.ActionInboxDenyReason, words[3])...)
 			}
 		}
+		// Dismiss comes before going to the pane: a narrow footer gives
+		// up the pane, which enter offers anyway, first.
+		if r.hasItem {
+			hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss")...)
+		}
 		if r.hasItem && r.item.Kind == session.AttentionAsk && r.item.RequestID != "" {
 			hints = append(hints, overlay.Hint{Key: inboxAskKeys(r.item), Label: "answer"})
 		}
@@ -1041,7 +1029,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			hints = append(hints, m.keyHints(config.ActionInboxPeek, "peek")...)
 		}
 		blocked := r.agent >= 0 && m.Inbox.ck.agents[r.agent].State == "needs_input"
-		if _, held := m.cockpitHeldItem(); !held && (!blocked || r.item.Kind == session.AttentionMail) {
+		if _, held := m.cockpitHeldItem(); !held && (!blocked || r.item.Kind == session.AttentionMail) && m.inboxReplySupported() {
 			hints = append(hints, m.keyHints(config.ActionInboxReply, "reply")...)
 		}
 		if r.hasItem {
@@ -1058,7 +1046,6 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			case inboxSnoozeRefusal(r.item) == "":
 				hints = append(hints, m.keyHints(config.ActionInboxSnooze, "snooze")...)
 			}
-			hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss")...)
 		}
 		if r.hasItem && r.item.Kind == session.AttentionMail {
 			hints = append(hints, m.keyHints(config.ActionInboxMailbox, "mailbox")...)
@@ -1127,6 +1114,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	// The foot: the reply editor when it is open, else the line that opens it.
 	foot := y1
 	if ed := st.reply.editor; ed != nil {
+		st.ck.edW = w
 		lines := ed.lines(w)
 		foot = max(y1-len(lines), bodyTop)
 		for i, s := range lines {
@@ -1146,6 +1134,10 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + foot + 1, x1: right, y1: top + foot + 2, kind: ckHitAction, action: "reply"})
 	}
 	bodyBot := foot - 1
+	if foot == y1 {
+		// No reply line: the body runs to the foot.
+		bodyBot = foot
+	}
 
 	switch {
 	case st.Peek != nil:
@@ -1191,9 +1183,6 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, width int, now time.Time)
 		text = tool + "  " + text
 	}
 	inset = wrapPlain(printableTitle(text), max(width-6, 8))
-	if len(inset) > 4 {
-		inset = append(inset[:3], overlay.Ellipsis())
-	}
 	detail = append(detail, "  in "+m.inboxWhere(it))
 	if slices.Contains(it.Options, session.ApprovalAlways) && len(it.AlwaysScope) > 0 {
 		detail = append(detail, "  Always also allows from now on:")
@@ -1239,9 +1228,7 @@ func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, 
 		return
 	}
 	x := c.textR(right, y, ckSeg{t: " " + g + " " + words + " ", fg: overlay.Readable(ink, bg), bg: bg, attrs: ckBold})
-	if pal.Depth == overlay.Depth16 {
-		c.restyle(x, y, right-x, 1, func(cell *uv.Cell) { cell.Style.Attrs |= uv.AttrReverse })
-	}
+	c.mark(pal, x, y, right-x, 1, ckOn)
 }
 
 // drawItemCard draws the card of what the row's item asks, at the bottom of
@@ -1253,14 +1240,26 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	it := r.item
 	held := inboxHeld(it) || (it.Kind == session.AttentionAsk && it.RequestID != "")
 	inner := w - 6
+	// Under 30 rows the card gives its gaps around the title to the detail.
+	base := 3
+	if c.h < 30 {
+		base = 1
+	}
 	// The room the card's detail has: the body less the card's title, its
 	// gaps and its buttons.
-	st.ck.cardRoom = max(y1-y0-5, 0)
+	st.ck.cardRoom = max(y1-y0-base-2, 0)
 	var detail, inset []string
 	plain := it.Kind == session.AttentionApproval && st.approvals.reason == nil && inboxShowsWhole(it)
+	// cut is whether any of what the card asks about is left off. A held
+	// approval or question shown cut is never counted as read.
+	cut := false
 	if plain {
 		inset, detail = m.ckApprovalLines(it, inner, now)
-	} else if fn, _, ok := m.inboxDetailExtras(it); ok {
+		cut = len(inset) > 4
+		if cut {
+			inset = append(inset[:3], overlay.Ellipsis())
+		}
+	} else if fn, ok := m.inboxDetailExtra(it); ok {
 		detail = fn(inner + 2)
 	} else if it.Kind == session.AttentionAsk && it.RequestID != "" {
 		detail = inboxAskDetail(it, inner+2)
@@ -1273,8 +1272,6 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			detail = append(detail, "  "+l)
 		}
 	}
-	m.noteInboxShown(it, held && inboxShowsWhole(it), now)
-
 	type btn struct{ key, label, action string }
 	var btns []btn
 	switch {
@@ -1302,13 +1299,17 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			btns = append(btns, btn{m.inboxKeyOr(config.ActionInboxDenyReason, "R"), labels[3], "R"})
 		}
 	}
-	h := 3 + len(detail)
-	if len(inset) > 0 {
-		h += len(inset) + 1
+	size := func() int {
+		h := base + len(detail)
+		if len(inset) > 0 {
+			h += len(inset) + 1
+		}
+		if len(btns) > 0 {
+			h += 2
+		}
+		return h
 	}
-	if len(btns) > 0 {
-		h += 2
-	}
+	h := size()
 	// A card taller than the body keeps the end of its detail, which is
 	// where a cut plan says so.
 	if over := h - (y1 - y0); over > 0 && len(detail) > 0 {
@@ -1317,9 +1318,35 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			btns, h, over = nil, h-2, over-2
 		}
 		keep := max(len(detail)-max(over, 0), 1)
+		cut = cut || keep < len(detail)
 		h -= len(detail) - keep
 		detail = detail[len(detail)-keep:]
 	}
+	cut = cut || h > y1-y0
+	answerable := held
+	if cut && answerable {
+		// What the card asks is not all on screen, so it is not answered
+		// here: the pane shows it whole.
+		inset, btns = nil, nil
+		key := m.inboxKeyOr(config.ActionInboxGo, "enter")
+		if key == overlay.EnterGlyph {
+			key = "enter"
+		}
+		words := "Too long to show here. Press " + key + " to answer in the pane."
+		if it.Kind == session.AttentionPlan {
+			words = "The screen is too short to show the whole plan. Enter answers it in the pane."
+		}
+		detail = wrapPlain(words, max(inner, 8))
+		for i := range detail {
+			detail[i] = "  " + detail[i]
+		}
+		h = size()
+	}
+	st.ck.cutKey = ""
+	if cut && answerable {
+		st.ck.cutKey = inboxShownKey(it)
+	}
+	m.noteInboxShown(it, held && inboxShowsWhole(it) && !(cut && answerable), now)
 	cy := max(y1-h, y0)
 	c.fill(x, cy, w, y1-cy, l.panel)
 	barInk := pal.Attention
@@ -1338,7 +1365,13 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		title += "?"
 	}
 	g, gInk := l.ckItemMark(it)
-	tx := c.text(x+3, cy+1, x+w-2, ckSeg{t: g + " ", fg: gInk}, ckSeg{t: title, fg: pal.Fg, attrs: ckBold})
+	// On a body too short for the card's gaps, the title takes the top row
+	// and the detail the rows under it.
+	ty, by := cy+1, cy+3
+	if base == 1 || y1-cy < h {
+		ty, by = cy, cy+1
+	}
+	tx := c.text(x+3, ty, x+w-2, ckSeg{t: g + " ", fg: gInk}, ckSeg{t: title, fg: pal.Fg, attrs: ckBold})
 	when := " waits " + inboxWait(it.Since, now)
 	if !held {
 		when = sepWord() + inboxWait(it.Since, now)
@@ -1349,12 +1382,15 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	case it.SnoozedUntil != 0:
 		when = ", snoozed " + inboxSnoozedWhen(it.SnoozedUntil, now)
 	}
-	c.text(tx, cy+1, x+w-14, ckSeg{t: "   " + inboxWho(it) + when, fg: pal.FgMute})
+	c.text(tx, ty, x+w-14, ckSeg{t: "   " + inboxWho(it) + when, fg: pal.FgMute})
 	if inboxRisky(it) {
-		c.textR(x+w-2, cy+1, ckSeg{t: " risky ", fg: overlay.Readable(pal.Warn, l.warnTint), bg: l.warnTint, attrs: ckBold})
+		c.textR(x+w-2, ty, ckSeg{t: " risky ", fg: overlay.Readable(pal.Warn, l.warnTint), bg: l.warnTint, attrs: ckBold})
 	}
-	yy := cy + 3
+	yy := by
 	for i, s := range inset {
+		if yy >= y1 {
+			break
+		}
 		c.fill(x+3, yy, w-6, 1, l.canvas)
 		lead := "  "
 		if i == 0 {
@@ -1401,9 +1437,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			}
 			bx = c.text(bx, yy+1, 0, ckSeg{t: " " + b.key + " ", fg: overlay.Readable(keyInk, keyBg), bg: keyBg, attrs: ckBold},
 				ckSeg{t: " " + b.label + " ", fg: overlay.Readable(labelInk, labelBg), bg: labelBg})
-			if pal.Depth == overlay.Depth16 {
-				c.restyle(x0, yy+1, bx-x0, 1, reverseCellAttr)
-			}
+			c.mark(pal, x0, yy+1, bx-x0, 1, ckOn)
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + yy + 1, x1: bx, y1: top + yy + 2, kind: ckHitAction, action: b.action})
 			bx += 2
 		}

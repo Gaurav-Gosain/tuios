@@ -94,7 +94,7 @@ gigabytes together.
 - A window with too many cells keeps its columns and loses rows. A window that
   is 1200 columns wide gets 208 rows.
 
-## Open the Inbox from a notification
+## Open the agents view from a notification
 
 A push notification from the `[notify]` table links to the Inbox item when
 `notify.web_url` is the address of tuios-web. See

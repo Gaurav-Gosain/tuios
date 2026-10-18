@@ -39,13 +39,6 @@ import (
 // threadsKept is how many threads the client keeps.
 const threadsKept = 3
 
-// threadWideMin is the narrowest screen that shows the thread beside the
-// list.
-const threadWideMin = 110
-
-// threadListWidth is the list's width beside the thread.
-const threadListWidth = 48
-
 // threadReadTimeout bounds one transcript or recap read.
 const threadReadTimeout = 5 * time.Second
 
@@ -179,7 +172,7 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 		m.stopThreadWatch()
 		return nil
 	}
-	e, ok := m.inboxAgentSelected()
+	e, ok := m.cockpitAgent()
 	if !ok || e.Host != "" {
 		m.stopThreadWatch()
 		return nil
@@ -566,7 +559,7 @@ func threadToolMark() string {
 	if overlay.UseASCII() {
 		return ">"
 	}
-	return "▸"
+	return "›"
 }
 
 // threadAgentLine is one line of the agent's: the gutter mark in the edge
@@ -615,7 +608,7 @@ func threadWrap(text string, width int) []string {
 // to come back. The Inbox opens again on the agents view with the same agent
 // selected, at the same scroll, and every draft is kept.
 func (m *OS) InboxAgentsViewPane() tea.Cmd {
-	e, ok := m.inboxAgentSelected()
+	e, ok := m.cockpitAgent()
 	if !ok {
 		return nil
 	}
@@ -623,7 +616,11 @@ func (m *OS) InboxAgentsViewPane() tea.Cmd {
 		m.ShowNotification(printableTitle(e.Title)+" runs on "+printableTitle(e.Host)+". Attach there to see its pane", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	ck := &m.Inbox.ck
+	back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
 	m.CloseInbox()
+	// The view opens again on this agent, as far down the fleet as it was.
+	ck.back = &back
 	m.inboxJump(session.AttentionItem{Session: e.SessionID, Window: e.WindowID})
 	if w := m.GetFocusedWindow(); w != nil && w.ID == e.WindowID && !w.Zoomed {
 		m.ToggleZoom()

@@ -2095,7 +2095,7 @@ Approvals
 Finished
     3h  #9     work/review  all tests pass
 
-2 waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.
+2 waiting. Open the agents view with the prefix key then i, or jump to the oldest with the prefix key then o.
 ```
 
 ### `tuios peek-prompt`

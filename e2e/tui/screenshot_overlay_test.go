@@ -107,7 +107,7 @@ func TestScreenshotOverTheInbox(t *testing.T) {
 	// the Inbox. f cycles its filter, which retitles it.
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "needs you only")
+		return strings.Contains(s.Text(), "items only")
 	}, uiTimeout); err != nil {
 		t.Fatalf("f after the leader never reached the Inbox: %v\n%s", err, term.Snapshot())
 	}

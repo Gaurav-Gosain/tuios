@@ -92,8 +92,9 @@ type inboxPlanView struct {
 	loading   bool
 	err       string
 	text      string
-	// scroll is the first line shown.
-	scroll int
+	// scroll is the first line shown, and window how many the card showed
+	// last, 0 before it was drawn.
+	scroll, window int
 	// seenEnd holds the plans, by request id and digest, whose last line has
 	// been on screen. 1 and 2 approve only such a plan.
 	seenEnd map[string]bool
@@ -209,11 +210,11 @@ func (m *OS) InboxDenyReason() (tea.Cmd, bool) {
 		return nil, false
 	}
 	if !it.DenyMessage {
-		m.ShowNotification("This agent takes no reason with a deny. 3 denies it", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("This agent takes no reason with a reject. 3 rejects it", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	m.Inbox.approvals.armed = inboxArmed{}
-	ed := newLineEditor(inboxReasonMax, "Type the reason, or press enter to deny without one.")
+	ed := newLineEditor(inboxReasonMax, "Type the reason, or press enter to reject without one.")
 	if m.ProcessingRemoteKeys {
 		ed.MarkAutomated()
 	}
@@ -392,10 +393,9 @@ func (m *OS) inboxPlanWindow() int {
 		return 8
 	}
 	n := min(max(rh/3, 3), 16)
-	if room := m.Inbox.ck.cardRoom; room > 0 {
-		// The cockpit's card holds the head, the window and the line
-		// under it.
-		n = max(min(n, room-3), 1)
+	if w := m.Inbox.approvals.plan.window; w > 0 {
+		// What the card showed: the scroll keys move by its window.
+		n = w
 	}
 	return n
 }
@@ -437,6 +437,8 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 			lines = append(lines, indent+l)
 		}
 	}
+	// The plan's title and length first: the card's title only asks.
+	add("  ", inboxPlanRowText(it))
 	switch {
 	case pv.requestID != it.RequestID || pv.loading:
 		add("  ", head+", "+strconv.Itoa(it.PlanLines)+" lines. Reading the plan...")
@@ -450,7 +452,17 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 		bar = "| "
 	}
 	body := inboxPlanLines(pv.text, max(width-4, 8))
-	window := m.inboxPlanWindow()
+	window := min(max(m.GetRenderHeight()/3, 3), 16)
+	if room := m.Inbox.ck.cardRoom; room > 0 {
+		// The card holds the title, the head, the window, what always
+		// sets and the line under it, which can wrap once.
+		fixed := len(lines) + 1 + 2
+		if slices.Contains(it.Options, session.ApprovalAlways) {
+			fixed += len(it.AlwaysScope)
+		}
+		window = max(min(window, room-fixed), 1)
+	}
+	pv.window = window
 	pv.scroll = clampInt(pv.scroll, 0, max(len(body)-window, 0))
 	end := min(pv.scroll+window, len(body))
 	if len(body) <= window {
@@ -541,26 +553,13 @@ func inboxPlanRowText(it session.AttentionItem) string {
 	return title
 }
 
-// inboxPlanAnswers are a plan's keys and what each does. The order is the
-// Inbox's: the safest approval, which still asks before each edit, is 1.
-var inboxPlanAnswers = []struct{ key, decision, label string }{
-	{"1", session.ApprovalOnce, "approve"},
-	{"2", session.ApprovalAlways, "approve, accept edits"},
-	{"3", session.ApprovalDeny, "keep planning"},
-}
-
-// inboxDetailExtras is the detail under the list and the key hints for an
-// item the safer approvals draw: a plan, a risky approval, an approval that
-// takes a reason, and the reason line itself. ok is false for every other
-// item, whose detail and hints stay the Inbox's own.
-func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int) []string, hints []overlay.Hint, ok bool) {
+// inboxDetailExtra is the card's detail for an item the safer approvals
+// draw: a plan, a risky approval, an approval that takes a reason, and the
+// reason line itself. ok is false for every other item.
+func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) []string, ok bool) {
 	if m.InboxReasonOpen() {
 		r := m.Inbox.approvals.reason
-		verb := "deny"
-		if it.Kind == session.AttentionPlan {
-			verb = "keep planning"
-		}
-		detail = func(width int) []string {
+		return func(width int) []string {
 			pal := theme.UI()
 			bg := pal.Surface
 			st := overlay.Style(bg)
@@ -573,32 +572,15 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 				lines = append(lines, st.Render("  ")+l)
 			}
 			return lines
-		}
-		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: verb}, {Key: "esc", Label: "cancel"}}
-		return detail, hints, true
+		}, true
 	}
 	held := inboxHeld(it)
 	switch {
 	case it.Kind == session.AttentionPlan && held:
-		detail = func(width int) []string { return m.inboxPlanDetail(it, width) }
-		for _, a := range inboxPlanAnswers {
-			if slices.Contains(it.Options, a.decision) {
-				hints = append(hints, overlay.Hint{Key: a.key, Label: a.label})
-			}
-		}
-		if it.DenyMessage {
-			hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxDenyReason, "keep planning with a reason"))...)
-		}
-		if pv := &m.Inbox.approvals.plan; pv.requestID == it.RequestID && len(inboxPlanLines(pv.text, max(m.panelWidth(inboxWidth)-6, 8))) > m.inboxPlanWindow() {
-			// Offered only when there is more than one screen of it.
-			hints = append(hints, overlay.Hint{Key: m.inboxKeyOr(config.ActionInboxDetailDown, "J") + "/" + m.inboxKeyOr(config.ActionInboxDetailUp, "K"), Label: "scroll"})
-		}
-		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "answer in pane"))...)
-		hints = append(hints, m.keyHints(config.ActionInboxClose, "close")...)
-		return detail, hints, true
+		return func(width int) []string { return m.inboxPlanDetail(it, width) }, true
 	case it.Kind == session.AttentionApproval && held && (inboxRisky(it) || it.DenyMessage):
 		now := time.Now()
-		detail = func(width int) []string {
+		return func(width int) []string {
 			lines := inboxApprovalDetail(it, width)
 			if !inboxShowsWhole(it) {
 				return lines
@@ -614,31 +596,16 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 				}
 			}
 			return lines
-		}
-		hints = m.inboxApprovalHints(it)
-		if it.DenyMessage {
-			// n goes after the answers, before going to the pane.
-			var answers, rest []overlay.Hint
-			for _, h := range hints {
-				if len(h.Key) == 1 && h.Key[0] >= '1' && h.Key[0] <= '9' {
-					answers = append(answers, h)
-				} else {
-					rest = append(rest, h)
-				}
-			}
-			hints = append(append(answers, overlay.Optional(m.keyHints(config.ActionInboxDenyReason, "deny with reason"))...), rest...)
-		}
-		return detail, hints, true
+		}, true
 	case it.Kind == session.AttentionApproval && inboxRisky(it):
 		// An approval nobody holds: the rules say what the peek's second
 		// press is about.
-		detail = func(width int) []string {
+		return func(width int) []string {
 			lines := wrapPlain("  "+printableTitle(it.Summary), max(width-2, 8))
 			return append(lines, inboxRiskLines(it, max(width-2, 8))...)
-		}
-		return detail, m.inboxRowHints(it, true), true
+		}, true
 	}
-	return nil, nil, false
+	return nil, false
 }
 
 // inboxRiskTarget is what an allow of a risky item allows, as its line says

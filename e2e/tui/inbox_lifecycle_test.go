@@ -28,7 +28,7 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	waitText(t, term, "the errored item in the Inbox", "1 needs you", "build failed on main", "z snooze")
+	waitText(t, term, "the errored item in the Inbox", "1 needs you", "Error", "build failed on main", "z snooze")
 
 	// z opens the picker; its footer says the four lengths.
 	if err := term.SendKeys("z"); err != nil {
@@ -59,13 +59,13 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	// after 23:00 wakes tomorrow, so that reads "until Fri 00:29" instead
 	// of "until 00:29", and the longer label cuts the message short. Match
 	// the part of the message that shows at either width.
-	waitText(t, term, "the snoozed group", "build failed on", "until ", "z wake")
+	waitText(t, term, "the snoozed group", "snoozed until", "build failed on", "z wake")
 	saveFrame(t, term, "inbox-snoozed-shown")
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the woken item", "1 needs you", "build failed on main")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "z wake") }, uiTimeout); err != nil {
+	waitText(t, term, "the woken item", "1 needs you", "Error", "build failed on main")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "snoozed until") }, uiTimeout); err != nil {
 		t.Fatalf("the woken item is still under Snoozed: %v\n%s", err, term.Snapshot())
 	}
 
@@ -74,13 +74,13 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the dismiss and its undo offer", "u undoes")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "1 needs you") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "0 needs you") }, uiTimeout); err != nil {
 		t.Fatalf("the dismissed item stayed under Needs you: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("u"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the restored item", "1 needs you", "build failed on main")
+	waitText(t, term, "the restored item", "1 needs you", "Error", "build failed on main")
 	saveFrame(t, term, "inbox-restored")
 	alive(t, term, "after snooze, wake, dismiss and undo")
 }

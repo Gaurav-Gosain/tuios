@@ -55,7 +55,7 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "1 needs you")
+		return strings.Contains(s.Text(), "1 needs you") && strings.Contains(s.Text(), "Allow")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the approval: %v\n%s", err, term.Snapshot())
 	}

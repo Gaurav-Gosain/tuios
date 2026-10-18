@@ -92,8 +92,8 @@ func TestOlderDaemonHidesTheLifecycleKeys(t *testing.T) {
 		NoMark: true,
 	})
 	m.OpenInbox("")
-	it, _ := m.inboxSelected()
-	for _, h := range m.inboxRowHints(it, true) {
+	m.inboxSelected()
+	for _, h := range m.cockpitHints(time.Now()) {
 		if h.Label == "snooze" || h.Label == "wake" {
 			t.Errorf("the footer offers %q on a daemon without mark-attention", h.Label)
 		}

@@ -37,7 +37,7 @@ func benchAgents200OS(b *testing.B) *OS {
 // entries, the most a thread keeps, so a frame draws a full conversation.
 func benchThread(m *OS) {
 	m.renderInbox()
-	e, ok := m.inboxAgentSelected()
+	e, ok := m.cockpitAgent()
 	if !ok {
 		return
 	}
@@ -97,5 +97,21 @@ func BenchmarkInboxAgents200OneChange(b *testing.B) {
 		m.Inbox.Gen++
 		m.renderInbox()
 		i++
+	}
+}
+
+// BenchmarkInboxAgents200Move is a frame after the cursor moved one row: the
+// rows stay, and only the frame is drawn again.
+func BenchmarkInboxAgents200Move(b *testing.B) {
+	m := benchAgents200OS(b)
+	m.renderInbox()
+	b.ReportAllocs()
+	d := 1
+	for i := 0; b.Loop(); i++ {
+		if i%50 == 0 {
+			d = -d
+		}
+		m.CockpitMove(d)
+		m.renderInbox()
 	}
 }

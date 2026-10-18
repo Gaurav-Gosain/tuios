@@ -68,6 +68,9 @@ type UserConfig struct {
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
 	YieldedDefaults []YieldedDefault `toml:"-"`
+	// RetiredKeybinds are the user's bindings to actions tuios no longer
+	// has, dropped on load. See migrateInboxKeys.
+	RetiredKeybinds []RetiredKeybind `toml:"-"`
 	// LoadWarnings say what the load of a config split over several files
 	// skipped: an included file that is not there, or an include cycle. It is
 	// worked out on load and never written. See include.go.
@@ -1568,22 +1571,33 @@ const (
 	ActionInboxSelect   = "inbox_select"
 	ActionInboxMailbox  = "inbox_mailbox"
 	ActionInboxClose    = "inbox_close"
-	// The agents view: tab switches to it and back, and s steps its sort.
-	ActionInboxAgents = "inbox_agents"
-	ActionInboxSort   = "inbox_sort"
+	// ActionInboxWrite opens the reply editor for the selected agent: tab,
+	// where the next words go. It took tab from inbox_agents, which
+	// switched the Inbox to the agents view before the Inbox became it.
+	ActionInboxWrite = "inbox_write"
+	ActionInboxSort  = "inbox_sort"
 	// ActionInboxViewPane zooms the selected agent's pane, out of the
 	// agents view, and ctrl+b i comes back.
 	ActionInboxViewPane = "inbox_view_pane"
 
 	// The Inbox's review, triage and approval keys.
-	ActionInboxReview       = "inbox_review"
-	ActionInboxSnooze       = "inbox_snooze"
-	ActionInboxUndo         = "inbox_undo"
-	ActionInboxShowSnoozed  = "inbox_show_snoozed"
-	ActionInboxDenyReason   = "inbox_deny_reason"
-	ActionInboxNewAgent     = "inbox_new_agent"
-	ActionInboxDetailDown   = "inbox_detail_down"
-	ActionInboxDetailUp     = "inbox_detail_up"
+	ActionInboxReview      = "inbox_review"
+	ActionInboxSnooze      = "inbox_snooze"
+	ActionInboxUndo        = "inbox_undo"
+	ActionInboxShowSnoozed = "inbox_show_snoozed"
+	ActionInboxDenyReason  = "inbox_deny_reason"
+	ActionInboxNewAgent    = "inbox_new_agent"
+	ActionInboxDetailDown  = "inbox_detail_down"
+	ActionInboxDetailUp    = "inbox_detail_up"
+	// The approval card's keys, the keys that open and close the focus on a
+	// narrow screen, help, and the bulk marks.
+	ActionInboxAllow        = "inbox_allow"
+	ActionInboxAllowAlways  = "inbox_allow_always"
+	ActionInboxOpen         = "inbox_open"
+	ActionInboxBack         = "inbox_back"
+	ActionInboxHelp         = "inbox_help"
+	ActionInboxMark         = "inbox_mark"
+	ActionInboxMarkAll      = "inbox_mark_all"
 	ActionAgentUnread       = "agent_unread"
 	ActionAgentSnooze       = "agent_snooze"
 	ActionAgentReply        = "agent_reply"
@@ -1630,21 +1644,22 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxGo:       {"enter"},
 		ActionInboxPeek:     {"space"},
 		ActionInboxDismiss:  {"d", "delete"},
-		ActionInboxReply:    {"r"},
+		ActionInboxReply:    {"r", "i"},
 		ActionInboxResume:   {"y"},
 		ActionInboxPassOn:   {"p"},
 		ActionInboxFilter:   {"f"},
 		ActionInboxSelect:   {"/"},
 		ActionInboxMailbox:  {"m"},
 		ActionInboxClose:    {"esc", "q"},
-		ActionInboxAgents:   {"tab"},
+		ActionInboxWrite:    {"tab"},
 		ActionInboxSort:     {"s"},
 		ActionInboxViewPane: {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
 		// snoozed; R rejects with a reason, after the a A r R of the
-		// approval card, where 3 stays the plain deny; n starts a new agent;
-		// J and K scroll a long detail such as a plan.
+		// approval card, where 3 stays the plain reject; n starts a new
+		// agent; J and K scroll a long detail such as a plan. On a held
+		// approval r rejects: inbox_reply answers it.
 		ActionInboxReview:      {"v"},
 		ActionInboxSnooze:      {"z"},
 		ActionInboxUndo:        {"u"},
@@ -1653,6 +1668,13 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxNewAgent:    {"n"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},
+		ActionInboxAllow:       {"a"},
+		ActionInboxAllowAlways: {"A"},
+		ActionInboxOpen:        {"l", "right"},
+		ActionInboxBack:        {"h", "left"},
+		ActionInboxHelp:        {"?"},
+		ActionInboxMark:        {"x"},
+		ActionInboxMarkAll:     {"*"},
 	}
 }
 
@@ -3211,6 +3233,41 @@ func migrateCornerSnapDigits(cfg *UserConfig) {
 	}
 }
 
+// migrateInboxKeys takes the Inbox keys the agents cockpit moved off a config
+// an older tuios wrote. inbox_agents switched the Inbox to the agents view,
+// which the Inbox now always is: it is dropped, and a key the user gave it
+// other than the old tab is listed in RetiredKeybinds for keybinds doctor.
+// inbox_deny_reason on the old n, exactly, is the stale default, so it is
+// dropped too and takes R with the fill, and n starts a new agent. Like
+// migrateCornerSnapDigits it runs before the fill.
+func migrateInboxKeys(cfg *UserConfig) {
+	t := cfg.Keybindings.Inbox
+	if t == nil {
+		return
+	}
+	if keys, ok := t["inbox_agents"]; ok {
+		delete(t, "inbox_agents")
+		if len(keys) > 0 && !slices.Equal(keys, []string{"tab"}) {
+			cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, RetiredKeybind{
+				Section: "inbox", Action: "inbox_agents", Keys: keys, Use: ActionInboxWrite,
+			})
+		}
+	}
+	if slices.Equal(t[ActionInboxDenyReason], []string{"n"}) {
+		delete(t, ActionInboxDenyReason)
+	}
+}
+
+// RetiredKeybind is a binding to an action tuios no longer has, dropped on
+// load.
+type RetiredKeybind struct {
+	Section string   `json:"section"`
+	Action  string   `json:"action"`
+	Keys    []string `json:"keys"`
+	// Use is the action that does its work now, empty when none does.
+	Use string `json:"use,omitempty"`
+}
+
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// A preset is applied to the defaults first, so everything below fills
@@ -3344,6 +3401,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
 	migrateCornerSnapDigits(cfg)
+	migrateInboxKeys(cfg)
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
@@ -3411,7 +3469,13 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// The Inbox, its peek and the mailbox had their keys written into the
 	// input path before these sections existed, so every config written
 	// before them has none and has to get the keys it always had.
+	// The cockpit's new Inbox keys yield to a key the user already holds.
+	inboxYield := yieldTakenDefaults("inbox", cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
 	fillMapDefaults(cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
+	for _, y := range inboxYield {
+		delete(cfg.Keybindings.Inbox, y.Action)
+	}
+	cfg.YieldedDefaults = append(cfg.YieldedDefaults, inboxYield...)
 	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)
 	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
 	// The Copies panel's section is newer than every config written before it.
@@ -3455,6 +3519,18 @@ var yieldingDefaults = map[string]bool{
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,
+	// The Inbox keys new with the agents cockpit, after v0.10.1. R and n
+	// changed hands: R was free and n was inbox_deny_reason's.
+	"inbox_new_agent":    true,
+	"inbox_deny_reason":  true,
+	"inbox_write":        true,
+	"inbox_allow":        true,
+	"inbox_allow_always": true,
+	"inbox_open":         true,
+	"inbox_back":         true,
+	"inbox_help":         true,
+	"inbox_mark":         true,
+	"inbox_mark_all":     true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables

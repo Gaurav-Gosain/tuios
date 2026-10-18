@@ -241,7 +241,11 @@ func TestMailSeenInboxRow(t *testing.T) {
 		t.Fatalf("the Inbox never listed the thread: %v\n%s", err, term.Snapshot())
 	}
 	mailSeenPersonPeek(t, log)
-	if err := term.WaitForText("REVIEWER seen", uiTimeout); err != nil {
+	// The seen mark is on the thread's own row in the list.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := fleetRowWith(s, "REVIEWER")
+		return r >= 0 && strings.Contains(s.Line(r), "seen")
+	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox row never said seen: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "mail-seen-inbox")

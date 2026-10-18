@@ -303,7 +303,7 @@ func sendPushover(ctx context.Context, c *Client, p config.PushoverConfig, m Mes
 	form.Set("message", msg)
 	if m.Link != "" {
 		form.Set("url", m.Link)
-		form.Set("url_title", "Open the Inbox")
+		form.Set("url_title", "Open the agents view")
 	}
 	if m.Urgent {
 		form.Set("priority", "1")

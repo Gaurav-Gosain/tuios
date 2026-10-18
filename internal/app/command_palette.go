@@ -1035,7 +1035,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		{
 			// The Inbox: everything waiting for the person, in every session.
-			Name:     "Agents: Inbox, what is waiting for you",
+			Name:     "Agents: what needs you",
 			Shortcut: "prefix+i",
 			Bind:     "prefix_inbox",
 			Category: paletteCategoryAgents,
@@ -1077,7 +1077,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		{
 			// prefix+M had no palette row; "open mailbox" above opens a
 			// different view, every thread rather than mail for you.
-			Name:     "Agents: Inbox, mail for you",
+			Name:     "Agents: mail for you",
 			Shortcut: "prefix+M",
 			Bind:     "prefix_mail",
 			Category: paletteCategoryAgents,

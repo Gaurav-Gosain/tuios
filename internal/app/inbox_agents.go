@@ -33,16 +33,6 @@ import (
 // on screen are drawn, each kept until it changes. See
 // BenchmarkInboxAgents200.
 
-// Quick filters, f in the view. Each is a group of rows by what they want.
-const (
-	agentsFilterAll = iota
-	agentsFilterNeedsYou
-	agentsFilterWorking
-	agentsFilterDone
-	agentsFilterError
-	agentsFilterCount
-)
-
 // Sorts, s in the view.
 const (
 	agentsSortNeedsYou = iota
@@ -59,13 +49,7 @@ const inboxAgentsTick = time.Minute
 type inboxAgentsState struct {
 	// on says the Inbox shows the agents and not the attention list. It
 	// stays when the Inbox closes, so it opens again on the same view.
-	on bool
-	// key is the selected agent, by session, window and host, so the cursor
-	// follows the agent and not a row when the list re-sorts.
-	key     string
-	sel     int
-	scroll  int
-	filter  int
+	on      bool
 	sort    int
 	query   string
 	tickGen uint64
@@ -82,10 +66,6 @@ type inboxAgentsState struct {
 	// during one, so a frame reads it from list instead of hashing the
 	// rail's signature again for every caller.
 	inFrame bool
-	// counts are the header's counts over every agent, filter or not.
-	counts agentsCounts
-	// mail is each agent's unread mail, by window, from the mailbox mirror.
-	mail map[string]int
 	// marks are the marked agents, by key, and marksGen changes with them.
 	// See inbox_bulk.go.
 	marks    map[string]bool
@@ -99,14 +79,9 @@ type inboxAgentsState struct {
 // agentsListKey is what the list was built from.
 type agentsListKey struct {
 	sig            uint64
-	filter, sort   int
+	sort           int
 	query, select_ string
 	built          bool
-}
-
-// agentsCounts are the header's counts.
-type agentsCounts struct {
-	needsYou, working, done, total int
 }
 
 // inboxAgentsTickMsg moves the time labels on. gen is the tick it belongs to:
@@ -178,70 +153,26 @@ func (m *OS) inboxAgentsList() []sidebarAgentEntry {
 		return a.list
 	}
 	key := agentsListKey{
-		sig: m.sidebarSignature(), filter: a.filter, sort: a.sort,
+		sig: m.sidebarSignature(), sort: a.sort,
 		query: a.query, select_: m.Inbox.Select, built: true,
 	}
 	if a.listAt == key {
 		return a.list
 	}
 	all := m.agentEntries(m.BuildSessionTree().Sessions)
-	a.counts = agentsCounts{total: len(all)}
-	a.mail = m.agentsMail()
 	kept := all[:0]
 	for _, e := range all {
-		switch sidebarAgentGroup(e.State, e.DoneSeen) {
-		case sidebarGroupNeedsYou:
-			a.counts.needsYou++
-		case sidebarGroupWorking:
-			a.counts.working++
-		}
-		if e.State == "done" {
-			a.counts.done++
-		}
 		if m.agentsKeep(e) {
 			kept = append(kept, e)
 		}
 	}
 	a.list, a.listAt = m.agentsSort(kept), key
-	m.agentsClamp()
-	return kept
+	return a.list
 }
 
-// agentsMail counts the unread mail in each agent's inbox, in one pass over
-// the mirror.
-func (m *OS) agentsMail() map[string]int {
-	out := make(map[string]int)
-	for i := range m.AgentMail.Messages {
-		mm := &m.AgentMail.Messages[i]
-		if mm.Kind == "message" && mm.ReadAt == 0 && mm.To != session.AgentInboxHuman {
-			out[mm.To]++
-		}
-	}
-	return out
-}
-
-// agentsKeep reports whether a row passes the quick filter, the selector and
-// the search.
+// agentsKeep reports whether a row passes the selector and the search.
 func (m *OS) agentsKeep(e sidebarAgentEntry) bool {
 	a := &m.Inbox.agents
-	switch a.filter {
-	case agentsFilterNeedsYou:
-		if sidebarAgentGroup(e.State, e.DoneSeen) != sidebarGroupNeedsYou {
-			return false
-		}
-	case agentsFilterWorking:
-		if e.State != "working" {
-			return false
-		}
-	case agentsFilterDone:
-		if e.State != "done" {
-			return false
-		}
-	case agentsFilterError:
-		if e.State != "errored" {
-			return false
-		}
-	}
 	if sel := m.Inbox.selector; sel != nil {
 		t := session.SelectorTarget{
 			Host: e.Host, Session: e.SessionID, Name: e.Title, State: e.State,
@@ -304,56 +235,16 @@ func agentSessionWords(e sidebarAgentEntry) string {
 	return s
 }
 
-// agentsClamp keeps the cursor on the selected agent, or in the list when it
-// is gone.
-func (m *OS) agentsClamp() {
-	a := &m.Inbox.agents
-	if a.key != "" {
-		for i, e := range a.list {
-			if agentKey(e) == a.key {
-				a.sel = i
-				return
-			}
-		}
-	}
-	a.sel = min(max(a.sel, 0), max(len(a.list)-1, 0))
-	if len(a.list) > 0 {
-		a.key = agentKey(a.list[a.sel])
-	}
-}
-
-// inboxAgentsMove moves the cursor by delta rows.
-func (m *OS) inboxAgentsMove(delta int) {
-	a := &m.Inbox.agents
-	list := m.inboxAgentsList()
-	if len(list) == 0 {
-		return
-	}
-	a.sel = min(max(a.sel+delta, 0), len(list)-1)
-	a.key = agentKey(list[a.sel])
-}
-
-// inboxAgentSelected is the agent under the cursor.
-func (m *OS) inboxAgentSelected() (sidebarAgentEntry, bool) {
-	a := &m.Inbox.agents
-	list := m.inboxAgentsList()
-	if a.sel < 0 || a.sel >= len(list) {
-		return sidebarAgentEntry{}, false
-	}
-	return list[a.sel], true
-}
-
 // InboxAgentsCycleSort steps the sort: needs you, name, recent, session.
 func (m *OS) InboxAgentsCycleSort() {
 	a := &m.Inbox.agents
 	a.sort = (a.sort + 1) % agentsSortCount
-	a.scroll = 0
 }
 
 // InboxAgentsGo goes to the selected agent's pane and closes the Inbox, as
 // enter on an Inbox item does.
 func (m *OS) InboxAgentsGo() tea.Cmd {
-	e, ok := m.inboxAgentSelected()
+	e, ok := m.cockpitAgent()
 	if !ok {
 		return nil
 	}
@@ -364,7 +255,7 @@ func (m *OS) InboxAgentsGo() tea.Cmd {
 
 // InboxAgentsReply opens the reply editor for the selected agent.
 func (m *OS) InboxAgentsReply() tea.Cmd {
-	e, ok := m.inboxAgentSelected()
+	e, ok := m.cockpitAgent()
 	if !ok || !m.inboxReplySupported() {
 		return nil
 	}
@@ -402,9 +293,6 @@ func (m *OS) inboxAgentsSearch(text string) (selector string, query string) {
 	}
 	return strings.Join(sel, " "), strings.Join(words, " ")
 }
-
-// agentsRows is how many list rows the view shows.
-const agentsRows = 16
 
 // noColor reports whether c is no colour at all: nil or overlay.NoColor.
 func noColor(c color.Color) bool {
@@ -452,6 +340,6 @@ func (m *OS) inboxAgentsSelectApply() {
 	st.selectEd = nil
 	st.selectEditing = false
 	st.selectErr = ""
-	st.agents.sel, st.agents.scroll = 0, 0
-	st.agents.key = ""
+	st.ck.scroll, st.ck.follow = 0, true
+	m.cockpitTouch()
 }

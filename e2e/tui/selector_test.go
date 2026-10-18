@@ -43,7 +43,7 @@ func TestSelectorNarrowsTheInboxAndGuardsABroadcast(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "harness:codex") && strings.Contains(text, "1 needs you") &&
+		return strings.Contains(text, "harness:codex") && strings.Contains(text, "1 needs you") && strings.Contains(text, "Allow") &&
 			strings.Contains(text, "e2e-sel-codex") && !strings.Contains(text, "e2e-sel-claude")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the selector did not narrow the Inbox to the codex agent: %v\n%s", err, term.Snapshot())

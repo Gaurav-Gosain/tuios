@@ -20,19 +20,6 @@ import (
 // name, a summary, the session and the wait.
 const inboxWidth = 72
 
-// inboxEmptyLines is the empty state: what the Inbox holds, so an empty one
-// says what would appear here.
-var inboxEmptyLines = []string{
-	"Nothing is waiting for you.",
-	"Agents that block on an approval or a question, write to you, error, " +
-		"finish a turn you have not looked at, or can resume after a restart " +
-		"show up here, from every session.",
-}
-
-// inboxEmptyRows is the height of the empty Inbox's body, so it opens at
-// about the size it will be once something arrives.
-const inboxEmptyRows = 9
-
 // defaultInboxKeys is the shipped bindings, for a client built without a
 // registry.
 var defaultInboxKeys = sync.OnceValue(func() *config.KeybindRegistry {
@@ -100,71 +87,6 @@ func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 	}
 	return hints
 }
-
-// inboxRowHints is the Inbox footer for the row under the cursor: the key
-// that answers it first, then going to it and dismissing it, then the keys
-// that work on the list whatever is selected. A key shows only on a row it
-// works on: space does nothing on an error, a finished turn or mail, and
-// reply is for mail. A held approval and an ask-human question draw their own
-// hints (inboxApprovalHints, inboxAskHints).
-func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
-	var hints []overlay.Hint
-	if ok {
-		switch {
-		case it.HeldID != 0:
-			hints = m.keyHints(config.ActionInboxPassOn, "pass on")
-		case it.Kind == session.AttentionMail:
-			hints = m.keyHints(config.ActionInboxReply, "reply")
-		case it.Kind == session.AttentionResume:
-			hints = m.keyHints(config.ActionInboxResume, "resume")
-		case inboxPeekable(it) && it.RequestID == "" && it.Host == "" && m.AttachedHost == "":
-			// The one way to answer a prompt without leaving the Inbox: read it
-			// here and press its answer.
-			hints = m.keyHints(config.ActionInboxPeek, "answer")
-		}
-		goLabel := "go"
-		if it.Kind == session.AttentionMail {
-			goLabel = "open"
-		}
-		hints = append(hints, m.keyHints(config.ActionInboxGo, goLabel)...)
-		// A finished or errored turn takes a reply, queued for when the
-		// agent is at rest. See inbox_reply.go.
-		if inboxReplyKind(it) && it.Host == "" && !it.Stale && m.inboxReplySupported() {
-			hints = append(hints, m.keyHints(config.ActionInboxReply, "reply")...)
-		}
-		// Snooze is offered where it works, and a snoozed item offers to
-		// wake on the same key.
-		switch {
-		case !m.inboxMarkSupported():
-			// A daemon without mark-attention cannot snooze or wake.
-		case it.SnoozedUntil != 0:
-			hints = append(hints, m.keyHints(config.ActionInboxSnooze, "wake")...)
-		case inboxSnoozeRefusal(it) == "":
-			hints = append(hints, m.keyHints(config.ActionInboxSnooze, "snooze")...)
-		}
-		hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss")...)
-	}
-	rowHints := len(hints)
-	hints = append(hints, m.keyHints(config.ActionInboxFilter, "filter", config.ActionInboxSelect, "select")...)
-	// The whole mailbox is one key from anywhere in the Inbox; it is offered
-	// where it is the next thing a person looks for, on a mail row.
-	if ok && it.Kind == session.AttentionMail {
-		hints = append(hints, m.keyHints(config.ActionInboxMailbox, "mailbox")...)
-		return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
-	}
-	hints = append(hints, m.keyHints(config.ActionInboxClose, "close")...)
-	// The keys for the row come first and the footer keeps to one line: the
-	// keys that work on the whole list give way, the selector first, then the
-	// filter. Both are in help, and the empty Inbox offers them.
-	for len(hints)-1 > rowHints && !overlay.HintsFit(hints, inboxWidth) {
-		hints = slices.Delete(hints, len(hints)-2, len(hints)-1)
-	}
-	return hints
-}
-
-// inboxMinWho is the width an Inbox row keeps for its name when the name and
-// the summary do not both fit.
-const inboxMinWho = 16
 
 // inboxPeekMaxLines is how many prompt lines the peek shows at most. A prompt
 // longer than the screen allows keeps its bottom, where the question and the
@@ -334,7 +256,7 @@ func (m *OS) inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 			hints = append(hints, m.keyHints(config.ActionPeekApproveAlways, "always")...)
 		}
 		if pk.Offers(harness.ActionDeny) {
-			hints = append(hints, m.keyHints(config.ActionPeekDeny, "deny")...)
+			hints = append(hints, m.keyHints(config.ActionPeekDeny, "reject")...)
 		}
 	}
 	if pk.Offers(harness.ActionText) {
@@ -348,7 +270,7 @@ func (m *OS) inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 var inboxAnswerOrder = []struct{ key, decision, label string }{
 	{"1", session.ApprovalOnce, "allow"},
 	{"2", session.ApprovalAlways, "always"},
-	{"3", session.ApprovalDeny, "deny"},
+	{"3", session.ApprovalDeny, "reject"},
 }
 
 // inboxAnswerKeys is the keys that answer a held approval, such as "1/2/3",
@@ -410,23 +332,6 @@ func inboxShowsWhole(it session.AttentionItem) bool {
 		}
 	}
 	return true
-}
-
-// inboxApprovalHints are the hints for a held approval under the cursor: its
-// answers first, then going to the pane, which hands the prompt back there.
-func (m *OS) inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
-	var hints []overlay.Hint
-	for _, a := range inboxAnswerOrder {
-		if slices.Contains(it.Options, a.decision) {
-			hints = append(hints, overlay.Hint{Key: a.key, Label: a.label})
-		}
-	}
-	// Answering in the pane is a second way to do what the answers do, so a
-	// narrow footer gives it up before the answers and dismiss.
-	hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxGo, "answer in pane"))...)
-	return append(hints, m.keyHints(
-		config.ActionInboxDismiss, "dismiss",
-		config.ActionInboxClose, "close")...)
 }
 
 // inboxAskKeys is the digit keys that answer a question, such as "1-3".

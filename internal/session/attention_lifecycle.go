@@ -63,7 +63,7 @@ func attentionSnoozable(it *AttentionItem) (bool, string) {
 		return true, ""
 	case AttentionApproval:
 		if it.RequestID != "" {
-			return false, "the Inbox is holding this approval for an answer: answer it or dismiss it"
+			return false, "tuios holds this approval for an answer: answer it or dismiss it"
 		}
 		return true, ""
 	case AttentionPlan:

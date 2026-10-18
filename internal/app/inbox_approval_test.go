@@ -38,7 +38,7 @@ func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 	if cmd := m.InboxReplyApproval(session.ApprovalOnce); cmd != nil {
 		t.Fatal("an errored item was answered")
 	}
-	if !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "answer an approval the Inbox is holding") {
+	if !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "answer a held approval") {
 		t.Errorf("notifications %+v", m.Notifications)
 	}
 
@@ -62,7 +62,7 @@ func TestInboxSaysWhenAnotherClientAnswered(t *testing.T) {
 	if len(m.Inbox.Items) != 0 {
 		t.Fatal("the answered item is still listed")
 	}
-	if n := len(m.Notifications); n != 1 || !strings.Contains(m.Notifications[0].Message, "answered from another client: denied") {
+	if n := len(m.Notifications); n != 1 || !strings.Contains(m.Notifications[0].Message, "answered from another client: rejected") {
 		t.Fatalf("notifications %+v", m.Notifications)
 	}
 

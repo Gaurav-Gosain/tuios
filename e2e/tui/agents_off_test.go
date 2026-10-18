@@ -189,7 +189,7 @@ func TestAgentsOffShowsNoAgentRow(t *testing.T) {
 					t.Fatalf("the Inbox key opened nothing with the features on: %v\n%s", err, term.Snapshot())
 				}
 				alive(t, term, "after the Inbox opened")
-				if !helpFinds(t, term, "Inbox on its", "Open the Inbox on its mail") {
+				if !helpFinds(t, term, "mail for you", "Open the agents view on the mail for you") {
 					t.Fatalf("the help does not list the Inbox key with the features on\n%s", term.Snapshot())
 				}
 				return
@@ -236,7 +236,7 @@ func TestAgentsOffShowsNoAgentRow(t *testing.T) {
 				t.Errorf("ASSERTION: the Inbox opened with the features off\n%s", term.Snapshot())
 			}
 			alive(t, term, "after the Inbox key with the features off")
-			if helpFinds(t, term, "Inbox on its", "Open the Inbox on its mail") {
+			if helpFinds(t, term, "mail for you", "Open the agents view on the mail for you") {
 				t.Errorf("ASSERTION: the help lists the Inbox key with the features off\n%s", term.Snapshot())
 			}
 		})

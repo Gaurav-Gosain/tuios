@@ -9,17 +9,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// handleInboxInput handles keyboard input while the Inbox, drawn as the
-// cockpit, is open. Every action has a key: j and k move, space reads the
-// prompt of an approval or a question, enter goes to the agent's pane (or
-// opens its mail thread), a A r R and 1 2 3 answer an approval the Inbox is
-// holding (allow once, always allow, reject; R rejects with a reason), 1 to 9
-// pick the answer to a question ask-human put to the person, r or i replies
-// to an agent or to mail, n starts a new agent, d dismisses, y resumes a
-// conversation a restart left, p passes on held mail, f shows only what needs
-// you, / searches, m opens the whole mailbox, z snoozes (then 1 to 4 for how
-// long) or wakes a snoozed item, u undoes the last dismiss or snooze, S shows
-// the snoozed items, x marks an agent for a bulk answer, and esc or q closes.
+// handleInboxInput handles keyboard input while the agents view is open.
+// Every action is a binding in [keybindings.inbox], and these are the
+// defaults: j and k move, space reads the prompt of an approval or a
+// question, enter goes to the agent's pane (or opens its mail thread), a A r
+// R and 1 2 3 answer a held approval (allow once, always allow, reject; R
+// rejects and says why), 1 to 9 pick the answer to a question ask-human put
+// to the person, r or i replies to an agent or to mail, tab writes a reply,
+// n starts a new agent, d dismisses, y resumes a conversation a restart
+// left, p passes on held mail, f steps the filter, / searches, m opens the
+// whole mailbox, z snoozes (then 1 to 4 for how long) or wakes a snoozed
+// item, u undoes the last dismiss or snooze, S shows the snoozed items, x
+// marks an agent for a bulk answer, ? opens help, and esc or q closes. The
+// digits are the numbers the prompt shows, so they are not bindings.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A question that opened the Inbox by itself a moment ago: the key was
 	// most likely typed for the pane, so it does nothing here.
@@ -54,14 +56,13 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	marks := o.InboxAgentsMarks() > 0
 	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
-	// x marks an agent for a bulk answer and * marks them all, unless the
-	// person bound the key to something else.
-	switch {
-	case key == "x" && action == "":
-		o.CockpitSync()
+	switch action {
+	case config.ActionInboxMark:
+		o.NoteAction(action)
 		o.InboxAgentsToggleMark()
 		return o, nil
-	case key == "*" && action == "":
+	case config.ActionInboxMarkAll:
+		o.NoteAction(action)
 		o.InboxAgentsMarkAll()
 		return o, nil
 	}
@@ -81,14 +82,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CockpitSync()
 		return o, o.InboxNumber(int(key[0] - '0'))
 	}
-	if marks && (action == config.ActionInboxReply || key == "i") {
+	if marks && action == config.ActionInboxReply {
 		return o, o.InboxAgentsBulkReply()
 	}
-	if key == "i" {
-		action = config.ActionInboxReply
-	}
-	// The cockpit's own keys: a A r R on an approval, n, tab, the moves.
-	if cmd, handled := o.CockpitKey(key, action); handled {
+	// The cockpit's own actions: a A r on an approval, n, tab, the moves.
+	if cmd, handled := o.CockpitKey(action); handled {
 		o.NoteAction(action)
 		return o, cmd
 	}

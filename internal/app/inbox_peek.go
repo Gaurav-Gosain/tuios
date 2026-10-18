@@ -155,7 +155,7 @@ func (m *OS) InboxPeek() tea.Cmd {
 		// A hook holds this approval off the screen until the Inbox answers
 		// it, so the pane shows no prompt for the peek to read or press
 		// keys into. The Inbox answers it with reply-approval instead.
-		m.ShowNotification("The Inbox is holding this approval: answer it with "+inboxAnswerKeys(it)+", or enter to answer in the pane", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("tuios holds this approval: answer it with "+inboxAnswerKeys(it)+", or enter to answer in the pane", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if it.Host != "" || m.AttachedHost != "" {

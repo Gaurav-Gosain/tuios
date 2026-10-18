@@ -92,14 +92,14 @@ func TestNotificationLinkOpensTheInboxOnItsItem(t *testing.T) {
 	}
 
 	withLink := dialWebRun(t, d, port, "linkweb", http.Header{"Cookie": {cookie.String()}})
-	if !waitForText(withLink, "open from the phone", 15*time.Second) || !waitForText(withLink, "Approvals 1", time.Second) {
+	if !waitForText(withLink, "open from the phone", 15*time.Second) || !waitForText(withLink, "Allow Bash", time.Second) {
 		t.Fatalf("the browser with the link's cookie never showed the Inbox on the item:\n%s", printable(withLink.text()))
 	}
 	saveWebArtifact(t, "inbox-link-with-cookie.txt", withLink.text())
 
 	plain := dialWebRun(t, d, port, "linkweb", nil)
 	time.Sleep(time.Second)
-	if strings.Contains(printable(plain.text()), "Approvals 1") {
+	if strings.Contains(printable(plain.text()), "Allow Bash") {
 		t.Fatalf("a browser with no cookie opened the Inbox:\n%s", printable(plain.text()))
 	}
 }

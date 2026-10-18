@@ -227,7 +227,7 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("close the Inbox: %v", err)
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "1 needs you") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "New agent") }, uiTimeout); err != nil {
 		t.Logf("the Inbox did not close: %v", err)
 	}
 

@@ -889,7 +889,7 @@ switch, and against this branch with one call site cut at a time.
 | Typing into a pane the caller opened | `typingRefusal`: the `offTypingAllowed` term cut | `TestAgentsOffTmuxShimTypesIntoItsOwnPane` (the shim's send-keys is refused) | **caught** |
 | The switch is the person's | `verbSetOption`: the pane check made `if false` | `TestAgentsSwitchIsThePersons` (the pane's set-config exits 0) | **caught** |
 | This machine's switch on a call to another | `VerbClient.CallWithTimeout`: the `HostCallGuard` check made `if false` | `TestAgentsOffHereRefusesACallToAnotherMachine` (list-agents on build:far succeeds) | **caught** |
-| Agent keys in the help | `HelpCategories`: the `withoutAgentHelp` call cut | `TestAgentsOffShowsNoAgentRow/off` (the help search finds "Open the Inbox on its mail") | **caught** |
+| Agent keys in the help | `HelpCategories`: the `withoutAgentHelp` call cut | `TestAgentsOffShowsNoAgentRow/off` (the help search finds "Open the agents view on the mail for you") | **caught** |
 | Another machine's agent marks | `withHostGroups`: the `clearAgentMarks` call cut | `TestAgentsOffHidesAnotherMachinesAgentMarks` (the mark stays on build's row) | **caught** |
 | get-config reads the switch | `verbGetOption`: the `agents.enabled` branch cut | `TestAgentsOffGetConfigSaysOff` (prints `true` with source `default` while every agent verb is refused) | **caught** |
 
@@ -7035,9 +7035,24 @@ Run on 2026-10-18.
 |---|---|---|---|---|
 | The groups come in another order than what each needs from you | n/a, injected | `buildCockpitRows` walks the groups as Working, Needs you, Ready for review, Idle | `TestCockpitGroupsTheFleet` ("\"Working\" is on row 6, not below the group before it (row 24)") | **caught** |
 | A click on a row goes to the pane, the agents view's old rule | n/a, injected | `CockpitClick` treats every click as the second of a double-click | `TestCockpitGroupsTheFleet` ("a click did not put bench-idle in the focus") | **caught** |
-| `a` does not answer the held approval | n/a, injected | `CockpitKey` without `a` among the approval letters | `TestCockpitGroupsTheFleet` ("a never answered the held approval") | **caught** |
+| `a` does not answer the held approval | n/a, injected | `CockpitKey` without `inbox_allow` among the approval actions | `TestCockpitGroupsTheFleet` ("a never answered the held approval") | **caught** |
 | The open view wakes the client while nothing changes | n/a, injected | `inboxAgentsTick` at one second | `TestAgentsViewOpenAddsNoIdleCost` ("10 ticks of the view") | **caught** |
 
 The fixed build passes them, every `TestInbox*`, `TestAskHuman*`,
 `TestChromeLooksAndFooters`, `TestEveryOverlayOwnsItsGround` and the other
 tests that open the Inbox (137 tests).
+
+### Marks and cut approvals
+
+`TestCockpitBulkActsOnlyOnSeenMarks` marks the agent that holds the approval,
+checks the mark on its row and the count in the title, folds its group with a
+click on the heading, and presses `3`. `TestCockpitCutApprovalIsNotAnswered`
+holds an approval on a 100x12 screen, where its card cannot show the command
+and where it runs. It checks the card says so inside the body, and that `a`
+and `1` leave the approval held. Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A mark is invisible | The mark column in `drawFleetRow` | The mark drawn only when `false` | `TestCockpitBulkActsOnlyOnSeenMarks` ("the mark is not on api-auth's row, or the title does not count it") | **caught** |
+| A bulk key acts on a mark the list does not show | `markedAgents` over `cockpitShownAgents` | `markedAgents` reads the whole agents list | `TestCockpitBulkActsOnlyOnSeenMarks` ("3 did not say no marked agent it can see waits": it rejected the folded agent's approval) | **caught** |
+| A cut command counts as read | The `cut` rule in `drawItemCard` | `noteInboxShown` told the card showed the approval whole, and no cut recorded | `TestCockpitCutApprovalIsNotAnswered` ("a answered an approval whose command was cut: 0 held") | **caught** |

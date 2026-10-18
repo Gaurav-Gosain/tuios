@@ -160,7 +160,7 @@ func TestReplyOnAnOlderDaemon(t *testing.T) {
 	if _, handled := m.SidebarAgentReply("here", "w-2"); handled {
 		t.Error("the rail's r did not fall through to rename")
 	}
-	for _, h := range m.inboxRowHints(done, true) {
+	for _, h := range m.cockpitHints(time.Now()) {
 		if h.Label == "reply" {
 			t.Error("the footer offers reply on a daemon with no queue")
 		}

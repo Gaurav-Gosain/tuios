@@ -1730,7 +1730,7 @@ token_env = "TUIOS_HOOK_TOKEN"              # optional, sent as a bearer token
 | Key | Default | What it does |
 | --- | --- | --- |
 | `enabled` | `true` | Turns every notification off when `false`. Nothing is sent without a provider. |
-| `web_url` | empty | The address of tuios-web. Each notification links to `web_url/inbox?item=ID`, which opens the Inbox on the item. See [WEB.md](WEB.md#open-the-inbox-from-a-notification). |
+| `web_url` | empty | The address of tuios-web. Each notification links to `web_url/inbox?item=ID`, which opens the agents view on the item. See [WEB.md](WEB.md#open-the-agents-view-from-a-notification). |
 | `content` | `summary` | `summary` sends the kind, the pane name and the one line the Inbox shows. `title` sends only the kind and the session. |
 | `quiet_active_seconds` | `120` | Holds a notification while you typed into a pane at an attached client in this many seconds. When you stay away that long and the item is still open, tuios sends it. `0` sends at once. |
 | `cooldown_seconds` | `60` | The shortest time between two notifications for the same pane and kind. |

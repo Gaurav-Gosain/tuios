@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
 // The cockpit is the Inbox drawn as one full-screen surface on ctrl+b i: a
@@ -55,6 +56,11 @@ const ckChildMax = 3
 // ckDoubleClick is how long after a click on a row a second click on it still
 // reads as a double-click.
 const ckDoubleClick = 400 * time.Millisecond
+
+// ckHold is how long an agent's new group must last before its row moves
+// there, so a hook that flips working, needs you, working in a moment does
+// not move the row twice.
+const ckHold = 400 * time.Millisecond
 
 type ckRowKind uint8
 
@@ -134,17 +140,55 @@ type cockpitState struct {
 	// cardRoom is how many detail lines the item card showed whole in the
 	// last frame. A plan is read to its end only when its last line fit.
 	cardRoom int
-	// gen counts changes of the state above, for the frame key.
-	gen uint64
+	// gen counts changes of the state above, for the frame key. rowsGen
+	// counts the changes that move rows: folds, filters, a held group let
+	// go. A cursor move or a hover changes gen alone.
+	gen, rowsGen uint64
+	// pending is the item to put the cursor on once the rows hold it: an
+	// item a notification link or a question's pop opened the view on.
+	pending string
+	// fleetW is the fleet column's width in the last frame, 0 when the
+	// fleet was not drawn.
+	fleetW int
+	// placed is the group each agent's row is drawn in, and the group it
+	// is moving to. holdUntil is when the next held move is due.
+	placed    map[string]ckPlaced
+	holdUntil time.Time
+	// back is where the cursor was when ctrl+] left for a pane, for the
+	// view to open on again. Nil once used.
+	back *ckBack
+	// look is the palette the frames are drawn with, and lookAt what it
+	// was built from. canvas is the grid kept from frame to frame.
+	look   ckLook
+	lookAt ckLookKey
+	canvas *ckCanvas
+	// edW is the width the reply editor was last drawn at.
+	edW int
+	// cutKey is the held approval or question the card could not show
+	// whole, by inboxShownKey. Its keys are refused with a word.
+	cutKey string
+}
+
+// ckBack is the cursor and the scroll to open the view on again.
+type ckBack struct {
+	key, akey string
+	scroll    int
+}
+
+// ckPlaced is the group an agent's row is in, and the group its state asks
+// for since when.
+type ckPlaced struct {
+	shown, want int
+	since       time.Time
 }
 
 // ckRowsKey is what the fleet's rows were built from.
 type ckRowsKey struct {
-	list                agentsListKey
-	inbox, gen          uint64
-	colH                int
-	oneLine, narrowRows bool
-	minute              int64
+	list       agentsListKey
+	inbox, gen uint64
+	colH       int
+	oneLine    bool
+	minute     int64
 }
 
 // ckHit is a click target: a fleet row, a group heading, a button.
@@ -164,10 +208,17 @@ const (
 	ckHitMore
 	ckHitAction
 	ckHitTab
+	ckHitMark
 )
 
 // cockpitTouch marks the cockpit's own state changed.
 func (m *OS) cockpitTouch() { m.Inbox.ck.gen++ }
+
+// cockpitTouchRows marks a change that moves the fleet's rows.
+func (m *OS) cockpitTouchRows() {
+	m.Inbox.ck.gen++
+	m.Inbox.ck.rowsGen++
+}
 
 // CockpitTouch is cockpitTouch for the input path.
 func (m *OS) CockpitTouch() { m.cockpitTouch() }
@@ -186,9 +237,15 @@ func (m *OS) cockpitList() []sidebarAgentEntry {
 func (m *OS) cockpitRows() []ckRow {
 	ck := &m.Inbox.ck
 	list := m.cockpitList()
+	now := time.Now()
+	if !ck.holdUntil.IsZero() && !now.Before(ck.holdUntil) {
+		// A held move is due: build again, and draw the frame again.
+		ck.holdUntil = time.Time{}
+		m.cockpitTouchRows()
+	}
 	key := ckRowsKey{
-		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.gen, colH: ck.colH,
-		oneLine: ck.oneLine, minute: time.Now().Unix() / 60,
+		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH,
+		oneLine: ck.oneLine, minute: now.Unix() / 60,
 	}
 	if ck.rows != nil && ck.rowsAt == key {
 		return ck.rows
@@ -197,7 +254,7 @@ func (m *OS) cockpitRows() []ckRow {
 	if sig := m.Inbox.agents.listAt.sig; ck.branches == nil || ck.branchesAt != sig {
 		ck.branches, ck.branchesAt = m.ckBranches(), sig
 	}
-	ck.rows, ck.rowsAt = m.buildCockpitRows(list, time.Now()), key
+	ck.rows, ck.rowsAt = m.buildCockpitRows(list, now), key
 	m.cockpitClamp()
 	return ck.rows
 }
@@ -218,6 +275,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			used[i] = true
 		}
 	}
+	searching := st.agents.query != "" || st.Select != ""
 	for _, r := range m.inboxRows() {
 		if r.item == nil {
 			if r.note != "" && len(groups[ckNeeds]) > 0 {
@@ -240,9 +298,24 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 				used[i] = true
 			}
 		}
+		// A search narrows the items with the agents: an item stays when
+		// its agent matched, or when its own words do.
+		if searching && idx < 0 && !m.ckItemMatches(it) {
+			continue
+		}
+		if g == ckReview && idx >= 0 {
+			// A finished turn the agent has moved on from: the row goes
+			// where the agent's state says, without the stale item.
+			switch list[idx].State {
+			case "working", "needs_input":
+				used[idx] = false
+				continue
+			}
+		}
 		kind := ckRowItem
 		if idx >= 0 {
 			kind = ckRowAgent
+			g = m.ckHoldGroup(agentKey(list[idx]), g, now)
 		}
 		groups[g] = append(groups[g], ckRow{kind: kind, group: g, agent: idx, item: it, hasItem: true, key: "i:" + it.ID})
 	}
@@ -271,6 +344,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 				g = ckEarlier
 			}
 		}
+		g = m.ckHoldGroup(agentKey(e), g, now)
 		groups[g] = append(groups[g], ckRow{kind: ckRowAgent, group: g, agent: i, key: "a:" + agentKey(e)})
 	}
 
@@ -278,14 +352,18 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	ck.tall = 0
 	for g := range ckGroups {
 		items := groups[g]
-		if len(items) == 0 || (ck.needsOnly || kindFilter) && g != ckNeeds && g != ckSnoozed {
+		itemsOnly := ck.needsOnly || kindFilter
+		if len(items) == 0 || itemsOnly && g != ckNeeds && g != ckSnoozed && g != ckReview {
 			continue
 		}
 		n := 0
 		for _, r := range items {
-			if r.selectable() {
+			if r.selectable() && (r.hasItem || !itemsOnly) {
 				n++
 			}
+		}
+		if n == 0 {
+			continue
 		}
 		if len(rows) > 0 {
 			rows = append(rows, ckRow{kind: ckRowGap, group: g, lines: 1, key: "g:" + strconv.Itoa(g)})
@@ -296,6 +374,9 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		}
 		shown := 0
 		for _, r := range items {
+			if itemsOnly && !r.hasItem && r.kind != ckRowNote {
+				continue
+			}
 			if r.selectable() && g != ckNeeds && ck.oneLine && !ck.opened[g] && shown >= ckFoldAt {
 				continue
 			}
@@ -329,6 +410,42 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	return rows
 }
 
+// ckHoldGroup is the group an agent's row is drawn in: the group its state
+// asks for, once it has asked for it for ckHold. A row new to the fleet goes
+// straight to its group.
+func (m *OS) ckHoldGroup(key string, want int, now time.Time) int {
+	ck := &m.Inbox.ck
+	if ck.placed == nil {
+		ck.placed = make(map[string]ckPlaced)
+	}
+	p, ok := ck.placed[key]
+	switch {
+	case !ok:
+		p = ckPlaced{shown: want, want: want, since: now}
+	case p.want != want:
+		p.want, p.since = want, now
+	}
+	if p.shown != p.want {
+		if due := p.since.Add(ckHold); now.Before(due) {
+			if ck.holdUntil.IsZero() || due.Before(ck.holdUntil) {
+				ck.holdUntil = due
+			}
+		} else {
+			p.shown = p.want
+		}
+	}
+	ck.placed[key] = p
+	return p.shown
+}
+
+// ckItemMatches reports whether the search's words match an item's own: who
+// it is from, where, and what it says. The selector has narrowed the items
+// already (inboxRows).
+func (m *OS) ckItemMatches(it session.AttentionItem) bool {
+	q := m.Inbox.agents.query
+	return q == "" || fuzzy.Match(q, inboxWho(it)+" "+m.inboxWhere(it)+" "+it.Summary)
+}
+
 // ckChildRows are an agent's subagents, one line each under its row.
 func ckChildRows(e sidebarAgentEntry, g int) []ckRow {
 	var rows []ckRow
@@ -359,9 +476,10 @@ func (m *OS) cockpitClamp() {
 		return -1
 	}
 	i := -1
-	if id := m.Inbox.pendingItem; id != "" {
+	if id := ck.pending; id != "" {
 		if i = find(func(r ckRow) bool { return r.key == "i:"+id }); i >= 0 {
-			m.Inbox.pendingItem = ""
+			ck.pending = ""
+			ck.follow = true
 		}
 	}
 	if i < 0 && ck.key != "" {
@@ -423,28 +541,16 @@ func (m *OS) cockpitAgent() (sidebarAgentEntry, bool) {
 	return m.Inbox.ck.agents[r.agent], true
 }
 
-// cockpitSync points the Inbox's item cursor and the agents cursor at the
-// row under the cockpit's cursor, and at nothing when the row has no item or
-// no agent. Every key and click calls it first, so the functions the old
+// cockpitSync points the Inbox's item cursor at the row under the cockpit's
+// cursor, and at nothing when the row has no item. The agent functions read
+// the row's agent from cockpitAgent. Every key and click calls it first, so the functions the old
 // panel used act on the row the person sees.
 func (m *OS) cockpitSync() (ckRow, bool) {
 	st := &m.Inbox
 	r, ok := m.cockpitSelected()
 	st.Selected, st.SelectedID = -1, ""
-	a := &st.agents
-	a.sel, a.key = -1, ""
 	if !ok {
 		return r, false
-	}
-	if r.agent >= 0 {
-		list := m.inboxAgentsList()
-		e := st.ck.agents[r.agent]
-		for i := range list {
-			if agentKey(list[i]) == agentKey(e) {
-				a.sel, a.key = i, agentKey(e)
-				break
-			}
-		}
 	}
 	if r.hasItem {
 		for i, row := range m.inboxRows() {
@@ -483,7 +589,7 @@ func (m *OS) CockpitMove(delta int) {
 		at = min(max(at+delta, 0), len(sel)-1)
 	}
 	m.cockpitSetCursor(sel[at])
-	m.Inbox.pendingItem = ""
+	m.Inbox.ck.pending = ""
 	m.cockpitTouch()
 	// The detail reads that follow a key ask the Inbox's cursors.
 	m.cockpitSync()
@@ -514,21 +620,36 @@ func (m *OS) CockpitToggleGroup(g int, more bool) {
 	} else {
 		ck.folded[g] = !ck.folded[g]
 	}
-	m.cockpitTouch()
+	m.cockpitTouchRows()
 }
 
-// CockpitCycleFilter is f: the whole fleet, then the Needs you group alone.
-// A kind filter, such as the mail one ctrl+b M opens on, is cleared first.
+// CockpitCycleFilter is f: the whole fleet, then every item alone (the old
+// flat Inbox), then each kind of item there is, then the whole fleet again.
 func (m *OS) CockpitCycleFilter() {
 	st := &m.Inbox
-	if st.Filter != "" {
-		st.Filter = ""
-		st.ck.needsOnly = false
-	} else {
-		st.ck.needsOnly = !st.ck.needsOnly
+	var kinds []string
+	for _, it := range st.Items {
+		if k := inboxGroupKey(it.Kind); !slices.Contains(kinds, k) {
+			kinds = append(kinds, k)
+		}
 	}
-	st.ck.scroll = 0
-	m.cockpitTouch()
+	switch {
+	case !st.ck.needsOnly && st.Filter == "":
+		st.ck.needsOnly = true
+	case st.Filter == "":
+		st.ck.needsOnly = false
+		if len(kinds) > 1 {
+			st.Filter = kinds[0]
+		}
+	default:
+		i := slices.Index(kinds, st.Filter)
+		st.Filter = ""
+		if i >= 0 && i+1 < len(kinds) {
+			st.Filter = kinds[i+1]
+		}
+	}
+	st.ck.scroll, st.ck.follow = 0, true
+	m.cockpitTouchRows()
 }
 
 // CockpitNeedsOnly reports whether the f filter shows only Needs you.
@@ -552,8 +673,7 @@ func (m *OS) cockpitHeldItem() (session.AttentionItem, bool) {
 // letter: a allows once, A always, r rejects. handled is false when no
 // approval waits, and the key then does what it does on any row.
 func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
-	it, ok := m.cockpitHeldItem()
-	if !ok {
+	if _, ok := m.cockpitHeldItem(); !ok {
 		return nil, false
 	}
 	m.cockpitSync()
@@ -564,9 +684,7 @@ func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 	case "A":
 		decision = session.ApprovalAlways
 	}
-	if !slices.Contains(it.Options, decision) {
-		return nil, true
-	}
+	// A decision the prompt does not offer is refused with a word.
 	return m.InboxReplyApproval(decision), true
 }
 
@@ -638,6 +756,10 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			return m.InboxThreadFetch(), true
 		case ckHitAction:
 			return m.cockpitAction(h.action), true
+		case ckHitMark:
+			m.cockpitSelectKey(h.key)
+			m.InboxAgentsToggleMark()
+			return nil, true
 		}
 		return nil, true
 	}
@@ -706,11 +828,11 @@ func (m *OS) CockpitHover(x, y int) {
 	}
 }
 
-// CockpitWheel scrolls the fleet, or moves the cursor when the pointer is
-// over the focus area.
+// CockpitWheel scrolls the fleet when the pointer is over it, and the card's
+// detail when it is over the focus area.
 func (m *OS) CockpitWheel(x int, up bool) {
 	ck := &m.Inbox.ck
-	if x < ck.fleetRight() {
+	if x < ck.fleetW {
 		if up {
 			ck.scroll = max(ck.scroll-3, 0)
 		} else {
@@ -720,7 +842,10 @@ func (m *OS) CockpitWheel(x int, up bool) {
 		m.cockpitTouch()
 		return
 	}
-	m.CockpitMove(wheelDelta(up))
+	m.cockpitSync()
+	if _, ok := m.InboxDetailScroll(3 * wheelDelta(up)); ok {
+		m.cockpitTouch()
+	}
 }
 
 // cockpitGroupHides reports whether a group shows only its first rows.
@@ -733,25 +858,27 @@ func (m *OS) cockpitGroupHides(g int) bool {
 	return false
 }
 
-// fleetRight is the column past the fleet in the last frame.
-func (ck *cockpitState) fleetRight() int {
-	for _, h := range ck.hits {
-		if h.kind == ckHitRow || h.kind == ckHitHead {
-			return h.x1
+// CockpitKey handles the cockpit's own actions ahead of the Inbox's: the
+// approval answers, the focus on a narrow screen, help, n, and tab. handled
+// is false for any other action.
+func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
+	switch action {
+	case config.ActionInboxAllow, config.ActionInboxAllowAlways, config.ActionInboxReply:
+		letter := "r"
+		switch action {
+		case config.ActionInboxAllow:
+			letter = "a"
+		case config.ActionInboxAllowAlways:
+			letter = "A"
 		}
-	}
-	return 0
-}
-
-// CockpitKey handles the cockpit's own keys ahead of the Inbox bindings: the
-// approval letters, n, and tab. handled is false for any other key.
-func (m *OS) CockpitKey(key, action string) (tea.Cmd, bool) {
-	switch key {
-	case "a", "A", "r":
-		if cmd, ok := m.CockpitAnswerLetter(key); ok {
+		if cmd, ok := m.CockpitAnswerLetter(letter); ok {
 			return cmd, true
 		}
-	case "right", "l":
+		if action == config.ActionInboxReply {
+			return m.cockpitReply(), true
+		}
+		return nil, true
+	case config.ActionInboxOpen:
 		if !m.cockpitWideFocus() && !m.Inbox.threads.open {
 			return m.CockpitOpenFocus(true), true
 		}
@@ -759,27 +886,22 @@ func (m *OS) CockpitKey(key, action string) (tea.Cmd, bool) {
 			m.CockpitToggleGroup(r.group, true)
 		}
 		return nil, true
-	case "left", "h":
+	case config.ActionInboxBack:
 		if m.Inbox.threads.open {
 			return m.CockpitOpenFocus(false), true
 		}
 		return nil, true
-	case "?":
+	case config.ActionInboxHelp:
 		m.CloseInbox()
-		m.OpenHelpAtCategory("Inbox")
+		m.OpenHelpAtCategory(HelpCategoryAgents)
 		return nil, true
-	}
-	switch action {
 	case config.ActionInboxNewAgent:
 		return m.CockpitNewAgent(), true
-	case config.ActionInboxAgents:
-		// tab: the reply editor, where the next words go.
+	case config.ActionInboxWrite:
 		return m.cockpitReply(), true
 	case config.ActionInboxFilter:
 		m.CockpitCycleFilter()
 		return nil, true
-	case config.ActionInboxReply:
-		return m.cockpitReply(), true
 	case config.ActionInboxGo:
 		if !m.cockpitWideFocus() && !m.Inbox.threads.open {
 			return m.CockpitOpenFocus(true), true

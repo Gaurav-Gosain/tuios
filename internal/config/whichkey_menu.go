@@ -219,9 +219,9 @@ var leaderToolRows = []menuRow{
 
 // leaderAgentRows is the leader menu's Agents section.
 var leaderAgentRows = []menuRow{
-	{parts: []menuPart{{"prefix_inbox", "Inbox"}}, desc: "Inbox"},
+	{parts: []menuPart{{"prefix_inbox", "Agents view"}}, desc: "Agents view"},
 	{parts: []menuPart{{"prefix_next_attention", "Oldest waiting"}}, desc: "Oldest waiting"},
-	{parts: []menuPart{{"prefix_mail", "Inbox: mail"}}, desc: "Inbox: mail"},
+	{parts: []menuPart{{"prefix_mail", "Mail for you"}}, desc: "Mail for you"},
 	{parts: []menuPart{{"prefix_next_finished", "Newest finished"}}, desc: "Newest finished"},
 	{parts: []menuPart{{"prefix_review", "Review changes"}}, desc: "Review changes"},
 	{parts: []menuPart{{"prefix_agents_settings", "Agents settings"}}, desc: "Agents settings"},

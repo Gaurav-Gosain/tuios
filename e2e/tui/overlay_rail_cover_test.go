@@ -190,7 +190,7 @@ func TestAPanelWiderThanThePanesCoversTheWholeRail(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	waitText(t, term, "the Inbox with the error", "1 needs you", "esc close")
+	waitText(t, term, "the Inbox with the error", "1 needs you", "Error", "esc close")
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}

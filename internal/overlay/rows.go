@@ -68,17 +68,26 @@ func (p Palette) Row(content string, width int, st RowState, base color.Color) s
 // cursor and an underline for a quiet one. At other depths the span is
 // returned as it is, since its ground already carries the state.
 func (p Palette) Mark(span string, st RowState) string {
-	if p.Depth != Depth16 || span == "" {
+	fn := p.MarkCell(st)
+	if fn == nil || span == "" {
 		return span
 	}
-	w := ansi.StringWidth(span)
+	return restyleRow(span, ansi.StringWidth(span), fn)
+}
+
+// MarkCell is Mark for a caller that draws cells: the function that gives one
+// cell the 16-colour attribute of st. It is nil at other depths, and for a
+// state with no cursor and no hover.
+func (p Palette) MarkCell(st RowState) func(*uv.Cell) {
 	switch {
+	case p.Depth != Depth16:
+		return nil
 	case st.Cursor && st.Focused:
-		return restyleRow(span, w, reverseCell)
+		return reverseCell
 	case st.Cursor, st.Hover:
-		return restyleRow(span, w, underlineCell)
+		return underlineCell
 	}
-	return span
+	return nil
 }
 
 // reverseCell makes a cell part of a reverse-video bar. Its colours are

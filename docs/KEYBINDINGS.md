@@ -51,7 +51,7 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 - A tmux window is a workspace here. A tmux pane is a window here. So `c`,
   `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.
 - A preset changes the leader, the keys after the leader and the
-  terminal-mode keys. Window mode, the sidebar, copy mode and the Inbox keep
+  terminal-mode keys. Window mode, the sidebar, copy mode and the agents view keep
   the tuios keys.
 - A tuios feature whose key the preset uses moves to the tuios menu. Press the
   leader, then `ctrl+t`, then the key it had. For example, `ctrl+b ctrl+t m`
@@ -81,7 +81,7 @@ not. `tuios keybinds preset show tmux` prints the preset file.
 
 `tuios keybinds list` shows every action and the keys that run it, as your
 `config.toml` sets them. It has one table for each scope: global, window mode,
-terminal mode, the sidebar and its files and agent rows, the Inbox, its prompt,
+terminal mode, the sidebar and its files and agent rows, the agents view, its prompt,
 the mailbox, the Copies panel, copy mode, the prefix and each prefix menu, and tape playback. A key in a
 prefix menu shows with its chord, such as `ctrl+b L 5`. The command keys have a
 table of their own.
@@ -320,7 +320,7 @@ TUIOS itself.
 ## Lists and panels
 
 Every list in the TUI moves the same way: the command palette, the launcher,
-the settings page, the Inbox, the mailbox, the keybind manager, the theme,
+the settings page, the agents view, the mailbox, the keybind manager, the theme,
 glyph and effect pickers, the session, workspace, layout and machine pickers,
 the window picker, the quit and context menus, the dock and rail editors and
 the tape manager.
@@ -1129,7 +1129,7 @@ as they are. A paste into a pane on this machine is not changed.
 
 ## Screenshots over a panel
 
-`Ctrl+B C` opens capture mode over any panel or overlay too: the Inbox, the
+`Ctrl+B C` opens capture mode over any panel or overlay too: the agents view, the
 review, the palette, settings, a menu or a dialog. The panel stays open and is
 part of the capture. The panes are under it, so capture mode does not offer
 one: `enter`, `f` or a click takes the whole screen, and a drag takes a region
@@ -1172,15 +1172,15 @@ runs the same search from a shell.
 
 Everything waiting for you, and every agent tuios knows of, is one full-screen
 view on `ctrl+b i`. It was the Inbox panel. The agents are grouped by what
-each needs from you: Needs you, Ready for review, Working, Idle, Earlier. The
-Inbox's items are the Needs you group. See
+each needs from you: Needs you, Ready for review, Working, Idle, Earlier. What
+the Inbox held is the Needs you group. See
 [AGENT_STATE.md](AGENT_STATE.md#the-agents-view) for what goes in it.
 
 | Keys | What it does |
 |---|---|
 | `ctrl+b i` | Open the agents view |
 | `ctrl+b o` | Go to the oldest item that needs you; `o` again, inside the repeat window, goes to the next |
-| `ctrl+b M` | Open the agents view on its mail (`m` there opens the whole mailbox) |
+| `ctrl+b M` | Open the agents view on the mail for you (`m` there opens the whole mailbox) |
 
 Inside it:
 
@@ -1192,20 +1192,29 @@ Inside it:
 | `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
 | `space` | Read an approval's or a question's prompt and answer it here |
 | `n` | Start a new agent. For now this opens the launcher |
-| `f` | Show only what needs you, then every agent |
+| `f` | Show only what needs you, then each kind of item, then every agent |
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
 | `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
 | `y` `p` `v` `m` | Resume, pass held mail on, review the changes, open the mailbox |
-| `x` `*` | Mark an agent, or all of them, for a bulk answer |
-| `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back |
+| `x` `*` | Mark an agent, or every agent shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
+| `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
+| `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
+| `l` `h`, `right` `left` | On a narrow screen, open the focus and go back to the list |
 | `?` | All keys |
 | `esc` `q` | Close. On a narrow screen, go back from the focus to the list first |
+
+A bulk key acts only on the marked agents the list shows. An agent in a
+folded group, or one a search hides, is left out, and closing the view clears
+the marks. An approval whose command does not fit on the card is not answered
+here: the card says so, and `enter` answers it in the pane.
 
 The mouse works too. A click on a row selects it, and a double-click goes to
 its pane. A click on a group heading folds the group. The buttons on an
 approval card answer it. `+ New agent` starts one, and the search box opens
-the search. The wheel scrolls the list.
+the search. The wheel scrolls the list, and over the focus it scrolls the
+card. A search narrows the items with the agents. A selector the search line
+cannot read shows its error in the search box.
 
 The layout follows the width of the screen. At 120 columns and wider the list
 has two lines per agent beside the focus. From 80 columns the rows are one
@@ -1221,13 +1230,13 @@ one with `enter`, type the message, and press `enter` to send it. In an open
 thread, `r` replies, `o` goes to the pane that last wrote, and `esc` goes back
 to the list.
 
-The message editor works as the Inbox reply does: `ctrl+j` adds a line, a
+The message editor works as the reply does: `ctrl+j` adds a line, a
 long paste shows as one block, and `ctrl+v` attaches the clipboard's image. A
 message that does not fit in 8 KB, or that holds an image, goes with each
 block and image as a file the message attaches.
 
 In the prompt `space` opens: a digit chooses that option, `a` approves, `A`
-approves and does not ask again, `d` denies, `tab` types an answer, `r` reads
+approves and does not ask again, `d` rejects, `tab` types an answer, `r` reads
 the prompt again, `enter` goes to the pane, `esc` goes back to the list. A
 prompt with numbered options offers its digits in the footer and not `a`, `A`
 and `d`, which still work. See
@@ -1238,7 +1247,9 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_page_up`, `inbox_first`, `inbox_last`, `inbox_go`, `inbox_peek`,
 `inbox_dismiss`, `inbox_reply`, `inbox_resume`, `inbox_pass_on`,
 `inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`,
-`inbox_agents`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`),
+`inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
+`inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
+`inbox_help`, `inbox_mark`, `inbox_mark_all`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
@@ -1247,7 +1258,7 @@ These keys are in three sections of their own, rebindable like any other:
 The footers name whatever key the config binds. The digits `1` to `9` are not
 bindings: they pick an answer by the number the prompt shows. The selector
 line and the reply, message and answer lines take text, so every key there is
-typed. The selector line, the deny reason and the answer to a prompt are
+typed. The selector line, the reason for a reject and the answer to a prompt are
 edited as the reply is: the arrows and the word keys move the cursor, `ctrl+z`
 undoes, and a paste keeps to one line.
 
@@ -1256,32 +1267,40 @@ undoes, and a paste keeps to one line.
 inbox_dismiss = ["x"]
 ```
 
+The keys new with the agents view yield to your own: when your
+`[keybindings.inbox]` already gives `n`, `R`, `a`, `x` or another new key to an
+action, that action keeps it, and the new action has no key. `tuios keybinds
+doctor` lists each one. `inbox_agents`, the old `tab` that switched the Inbox
+to the agents view, is gone: `inbox_write` has `tab` now, and doctor lists a
+config that still binds `inbox_agents`. A config that kept the old default
+`inbox_deny_reason = ["n"]` moves it to `R`, so `n` starts a new agent.
+
 The help overlay (`ctrl+b ?`) has an Agents section with all of these, the
 prefix chords, the rail's agent keys and the palette's `@` filter, read from
 your config. In the command palette the agent actions are named "Agents: ...",
-so typing `agent` lists them: the Inbox, the Inbox on its mail, the oldest
+so typing `agent` lists them: what needs you, the mail for you, the oldest
 waiting item, and the mailbox.
 
-On an approval the Inbox is holding (`[agents.approvals]`, see
+On an approval tuios holds (`[agents.approvals]`, see
 [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox)), `1` allows it
-once, `2` always allows it and `3` denies it; `enter` gives the prompt back to
-the pane. The keys act on the item under the cursor, whose whole prompt, and
-the rules `2` adds, are shown under the list, and only once it has been on
+once, `2` always allows it and `3` rejects it; `enter` gives the prompt back to
+the pane. The keys act on the row under the cursor, whose whole prompt, and
+the rules `2` adds, are shown on its card, and only once it has been on
 screen as it is for 0.4 seconds. `space` does not open a held approval: the
-hook keeps its prompt off the pane until the Inbox answers, so there is
-nothing on the screen to read.
+hook keeps its prompt off the pane until you answer, so there is nothing on
+the screen to read.
 
 ### Review, triage and replies
 
 These keys are bound for the agent review, triage, reply and approval work.
-The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the Inbox, and `u` and
+The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the agents view, and `u` and
 `z` on a rail agent row (see
 [Snoozing, undo and unread](AGENT_STATE.md#snoozing-undo-and-unread)), and so
-do the approval keys: `R`, `J`, `K`, `ctrl+d` and `ctrl+u` in the Inbox (see
-[Deny with a reason](AGENT_STATE.md#deny-with-a-reason)), and the reply keys:
-`r` in the Inbox on a finished or errored item, and `r` and `x` on a rail
+do the approval keys: `R`, `J`, `K`, `ctrl+d` and `ctrl+u` in the agents view (see
+[Reject with a reason](AGENT_STATE.md#reject-with-a-reason)), and the reply keys:
+`r` in the agents view on a finished or errored item, and `r` and `x` on a rail
 agent row (see [Replying to an agent](AGENT_STATE.md#replying-to-an-agent)),
-and the review keys: `ctrl+b v`, and `v` in the Inbox and on a rail agent row
+and the review keys: `ctrl+b v`, and `v` in the agents view and on a rail agent row
 (see [The review overlay](#the-review-overlay) below). `ctrl+b v` works
 whether or not an agent has been seen, since calling it is an explicit act;
 on a pane with no git repository under it, the dock says so and nothing
@@ -1290,7 +1309,7 @@ after `ctrl+b` in terminal mode, the key is typed into the focused pane, so a
 person who runs no agents keeps typing `O` into the pane. The prefix menu and
 the help overlay list them only once an agent has been seen, like the rest of
 the Agents section. Attached to a daemon without `mark-attention` (an older
-one, found by asking its `list-verbs` once per attach), the Inbox's `z`, `u`
+one, found by asking its `list-verbs` once per attach), the agents view's `z`, `u`
 and `S` and the rail's `z` are not offered and do what an unbound key does,
 and the rail's `u` clears only this client's seen marks. Attached to a daemon
 without `review-diff`, found the same way, `ctrl+b v` and the two `v` keys are
@@ -1302,18 +1321,18 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `ctrl+b v` | anywhere | Review the focused pane's changes |
 | `ctrl+b O` | anywhere | Go to the newest finished turn nobody has seen; `O` again, inside the repeat window, goes to the next older one, and a turn that finishes meanwhile starts over |
 | `ctrl+b A` | anywhere | Open the Agents tab of the settings page, where you install, update and uninstall each harness's integration |
-| `v` | Inbox | Review the changes in the item's pane |
-| `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
-| `u` | Inbox | Undo the last dismiss or snooze, within 10 seconds |
-| `S` | Inbox | Show or hide snoozed items |
-| `R` | Inbox | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
-| `n` | Inbox | Start a new agent |
-| `J`, `K`, `ctrl+d`, `ctrl+u` | Inbox | Scroll the detail under the list, such as a long plan |
+| `v` | agents view | Review the changes in the item's pane |
+| `z`, then `1` to `4` | agents view | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
+| `u` | agents view | Undo the last dismiss or snooze, within 10 seconds |
+| `S` | agents view | Show or hide snoozed items |
+| `R` | agents view | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
+| `n` | agents view | Start a new agent |
+| `J`, `K`, `ctrl+d`, `ctrl+u` | agents view | Scroll the card, such as a long plan |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
-| `z` | rail agent row | Snooze the pane's Inbox item: the Inbox opens on it with the four lengths |
+| `z` | rail agent row | Snooze what needs you in the pane: the agents view opens on it with the four lengths |
 | `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, until the rail lets go of the keyboard (after a click with the rail not focused, until a click outside the rail or a pane is focused) |
-| `r` | Inbox, on a finished or errored item | Reply to the agent: a line under the list, queued with `enter` and typed when the agent is at rest |
-| `r` | rail agent row | Reply to the agent, the same line in the Inbox; refused while the pane waits on a prompt |
+| `r` | agents view, on a finished or errored item | Reply to the agent: the editor under the thread, queued with `enter` and typed when the agent is at rest |
+| `r` | rail agent row | Reply to the agent, the same line in the agents view; refused while the pane waits on a prompt |
 | `v` | rail agent row | Review the pane's changes |
 | `x` | rail agent row with messages queued | Drop the newest queued message still waiting; `u` on the row within 10 seconds queues it again. On a row with nothing queued, `x` opens the rail's menu as before. From `send-keys` or a tape, neither `x` nor the undo touches the queue, since both act as the person |
 
@@ -1325,7 +1344,7 @@ On a plan, `1` approves, `2` approves and accepts edits for the session, and
 `3` keeps it planning; `1` and `2` work once the plan's last line has been
 shown. The digits are not bindings.
 
-The Inbox's keys are `inbox_review`, `inbox_snooze`, `inbox_undo`,
+The agents view's keys are `inbox_review`, `inbox_snooze`, `inbox_undo`,
 `inbox_show_snoozed`, `inbox_deny_reason`, `inbox_detail_down` and
 `inbox_detail_up` in `[keybindings.inbox]`, and the prefix chords are
 `prefix_review`, `prefix_next_finished` and `prefix_agents_settings` in
@@ -1351,11 +1370,11 @@ searches them, and `ctrl+g` opens the draft in `$EDITOR`.
 desktop's image viewer. The editing keys are in docs/AGENT_STATE.md, "Replying to an agent".
 They are not bindings yet. Attached to a daemon without `queue-prompt` (an older one), the
 first reply says to restart it, and after that `r` does what it did before:
-it says `r` replies to mail in the Inbox, and renames on the rail.
+it says `r` replies to mail in the agents view, and renames on the rail.
 
 ### The review overlay
 
-`ctrl+b v` (or `v` in the Inbox or on a rail agent row) opens the diff of
+`ctrl+b v` (or `v` in the agents view or on a rail agent row) opens the diff of
 the pane's changes over the whole screen, once the daemon has read it: the
 file list on the left, the file under it on the right, and your notes under
 the lines they are on. The code is coloured by its file type in the
@@ -1412,7 +1431,7 @@ confirmation refuse it. See
 Bindings work with layouts for non-Latin scripts, such as Cyrillic, Greek,
 Hebrew or Arabic. When no binding matches the character a key types, tuios uses
 the key at the same position on a US layout. With a Ukrainian layout, the key
-that types `ш` is the US `i` key, so `ctrl+b` then that key opens the Inbox. A
+that types `ш` is the US `i` key, so `ctrl+b` then that key opens the agents view. A
 binding on the typed character wins, so you can still bind `ш` yourself. Text
 that you type into a pane, a rename or a search stays the character that you
 typed.

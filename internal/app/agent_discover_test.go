@@ -20,7 +20,7 @@ func TestPaletteFindsAgentActionsByWord(t *testing.T) {
 		}
 	}
 	// The overlays' own words still find them.
-	for _, q := range []string{"inbox", "mailbox"} {
+	for _, q := range []string{"needs you", "mailbox"} {
 		if res := FilterCommandPalette(GetCommandPaletteItems(&config.Global), q); len(res) == 0 || !strings.HasPrefix(res[0].Name, "Agents: ") {
 			t.Errorf("%q no longer finds its agent entry first: %v", q, res)
 		}

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -18,14 +19,17 @@ import (
 
 // Acting on many agents at once, in the agents view.
 //
-// space marks the selected agent and * marks every agent shown (or clears the
-// marks when all of them are marked). With marks:
+// x marks the selected agent and * marks every agent shown (or clears the
+// marks when all of them are marked). A marked row shows its mark, and a bulk
+// key acts only on the marked agents the fleet shows: a row in a folded group
+// or past a search is left out. Closing the view clears the marks. With
+// marks:
 //
 //   - r opens one reply editor for all of them, and enter queues the same
 //     message to each, at most bulkMax, as send-agent-message --select does.
 //     An agent waiting on a prompt, or on another machine, is left out, and
 //     the dock says so.
-//   - 3 denies every held approval of the marked agents.
+//   - 3 rejects every held approval of the marked agents.
 //   - 1 opens a sheet that lists each approval it would allow, whole. enter
 //     allows them, once the sheet has been on screen for the settle time,
 //     and only those that are as the sheet showed them. An approval the
@@ -71,9 +75,10 @@ type bulkAllow struct {
 // InboxAgentsMarks is how many agents are marked.
 func (m *OS) InboxAgentsMarks() int { return len(m.Inbox.agents.marks) }
 
-// InboxAgentsToggleMark marks or unmarks the selected agent.
+// InboxAgentsToggleMark marks or unmarks the selected agent, and moves the
+// cursor on.
 func (m *OS) InboxAgentsToggleMark() {
-	e, ok := m.inboxAgentSelected()
+	e, ok := m.cockpitAgent()
 	if !ok {
 		return
 	}
@@ -88,7 +93,7 @@ func (m *OS) InboxAgentsToggleMark() {
 		}
 		a.marks[k] = true
 	}
-	m.inboxAgentsMove(1)
+	m.CockpitMove(1)
 }
 
 // InboxAgentsMarkAll marks every agent shown, or clears every mark when they
@@ -96,7 +101,8 @@ func (m *OS) InboxAgentsToggleMark() {
 func (m *OS) InboxAgentsMarkAll() {
 	a := &m.Inbox.agents
 	a.marksGen++
-	list := m.inboxAgentsList()
+	m.cockpitTouch()
+	list := m.cockpitShownAgents()
 	all := len(list) > 0
 	for _, e := range list {
 		if !a.marks[agentKey(e)] {
@@ -116,13 +122,28 @@ func (m *OS) InboxAgentsMarkAll() {
 	}
 }
 
-// markedAgents are the marked agents still listed, in list order.
+// markedAgents are the marked agents the fleet shows, in fleet order.
 func (m *OS) markedAgents() []sidebarAgentEntry {
 	a := &m.Inbox.agents
 	var out []sidebarAgentEntry
-	for _, e := range m.inboxAgentsList() {
+	for _, e := range m.cockpitShownAgents() {
 		if a.marks[agentKey(e)] {
 			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// cockpitShownAgents are the agents with a row in the fleet, in fleet order:
+// not those in a folded group or past the rows a long group shows.
+func (m *OS) cockpitShownAgents() []sidebarAgentEntry {
+	ck := &m.Inbox.ck
+	var out []sidebarAgentEntry
+	seen := map[int]bool{}
+	for _, r := range m.cockpitRows() {
+		if r.selectable() && r.agent >= 0 && !seen[r.agent] {
+			seen[r.agent] = true
+			out = append(out, ck.agents[r.agent])
 		}
 	}
 	return out
@@ -214,7 +235,7 @@ func (m *OS) bulkHeld() []session.AttentionItem {
 	return out
 }
 
-// InboxAgentsBulkDeny denies every held approval of the marked agents.
+// InboxAgentsBulkDeny rejects every held approval of the marked agents.
 func (m *OS) InboxAgentsBulkDeny() tea.Cmd {
 	if m.refuseBulkRemote() {
 		return nil
@@ -398,7 +419,7 @@ func (m *OS) InboxAgentsBulkDismiss() tea.Cmd {
 		}
 	}
 	if len(cmds) == 0 {
-		m.ShowNotification("The marked agents have nothing in the Inbox", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The marked agents have nothing that needs you", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.Inbox.agents.marks = nil
@@ -433,7 +454,7 @@ func (m *OS) InboxAgentsBulkSnooze() {
 		}
 	}
 	if len(a.snooze) == 0 {
-		m.ShowNotification("The marked agents have nothing in the Inbox to snooze", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The marked agents have nothing to snooze", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.Inbox.life.pickFor = bulkSnoozeID
@@ -460,11 +481,12 @@ func (m *OS) bulkSnoozeCmd(params func() map[string]any, words string) tea.Cmd {
 
 // bulkHints are the agents view's keys while agents are marked.
 func (m *OS) bulkHints() []overlay.Hint {
-	hints := m.keyHints("inbox_reply", "reply to each")
+	hints := m.keyHints(config.ActionInboxReply, "reply to each")
 	hints = append(hints,
 		overlay.Hint{Key: "1", Label: "allow"},
-		overlay.Hint{Key: "3", Label: "deny"},
+		overlay.Hint{Key: "3", Label: "reject"},
 	)
-	hints = append(hints, m.keyHints("inbox_dismiss", "dismiss", "inbox_snooze", "snooze")...)
-	return append(hints, overlay.Hint{Key: "space", Label: "mark"}, overlay.Hint{Key: "*", Label: "all or none"}, overlay.Hint{Key: "esc", Label: "close"})
+	hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss", config.ActionInboxSnooze, "snooze",
+		config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
+	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 }

@@ -91,7 +91,7 @@ argv = ["echo", "resumed-{session_id}"]
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "1 needs you") && strings.Contains(text, "echo resumed-5f1c-9a3d") &&
+		return strings.Contains(text, "1 needs you") && strings.Contains(text, "Resume") && strings.Contains(text, "echo resumed-5f1c-9a3d") &&
 			strings.Contains(text, "resume")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the offer: %v\n%s", err, term.Snapshot())
@@ -103,7 +103,7 @@ argv = ["echo", "resumed-{session_id}"]
 		t.Fatalf("answer the offer: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "1 needs you")
+		return !strings.Contains(s.Text(), "New agent")
 	}, uiTimeout); err != nil {
 		t.Fatalf("y did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}

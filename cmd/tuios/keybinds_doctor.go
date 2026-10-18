@@ -188,6 +188,18 @@ func printKeybindReport(rep config.KeybindReport) {
 		}
 	}
 
+	if len(rep.Retired) > 0 {
+		fmt.Printf("\nRETIRED ACTIONS (%s)\n", config.EvidenceCertain)
+		fmt.Println("  tuios no longer has these actions and ignores their keys.")
+		for _, r := range rep.Retired {
+			use := ""
+			if r.Use != "" {
+				use = fmt.Sprintf(" To keep the keys, bind them to %s.", r.Use)
+			}
+			fmt.Printf("  %-22s %s in [keybindings.%s].%s\n", r.Action, strings.Join(r.Keys, ", "), r.Section, use)
+		}
+	}
+
 	if len(rep.Ambiguous) > 0 {
 		fmt.Printf("\nKEYS A TERMINAL MAY NOT DISTINGUISH (%s)\n", config.EvidenceCertain)
 		for _, a := range rep.Ambiguous {

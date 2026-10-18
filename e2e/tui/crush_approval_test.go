@@ -43,7 +43,7 @@ func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, f
 	// name is.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "1 needs you") && strings.Contains(text, "Allow bash")
+		return strings.Contains(text, "1 needs you") && strings.Contains(text, "Allow") && strings.Contains(text, "Allow bash")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the Crush approval with its summary: %v\n%s", err, term.Snapshot())
 	}

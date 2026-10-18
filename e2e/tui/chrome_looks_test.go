@@ -184,7 +184,7 @@ func chromeClient(t *testing.T, r chromeRun) (*tuitest.Terminal, string) {
 //     colour, the frame's sides at 16 colours.
 //   - A footer that shed every hint but esc would pass the label rule. The
 //     Inbox, the one that lost its labels, is also required to keep its
-//     answers ("allow", "deny") and "dismiss" at both sizes.
+//     answers ("allow", "reject") and "dismiss" at both sizes.
 //   - A cell in the default colour cannot be measured. The light runs name
 //     their theme, so the chrome writes explicit colours; a default ground in
 //     a colour run fails as "not light" rather than passing.
@@ -412,7 +412,7 @@ func checkFooter(t *testing.T, term *tuitest.Terminal, name string, s tuitest.Sc
 		t.Errorf("%s: the footer has no labelled way out: %q\n%s", name, line, term.Snapshot())
 	}
 	if name == "inbox" {
-		for _, want := range []string{"a allow", "r reject", "esc close"} {
+		for _, want := range []string{"a allow", "r reject", "d dismiss", "esc close"} {
 			if !strings.Contains(line, want) {
 				t.Errorf("inbox: the footer lost %q: %q\n%s", want, line, term.Snapshot())
 			}

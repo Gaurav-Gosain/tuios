@@ -76,7 +76,7 @@ var paletteActions = map[string]string{
 	"Theme picker":                               "gui_themes",
 	"Toggle sidebar":                             "gui_toggle_sidebar",
 	"Switch session":                             "gui_sessions",
-	"Agents: Inbox, what is waiting for you":     "gui_inbox",
+	"Agents: what needs you":                     "gui_inbox",
 	"Agents: go to the oldest waiting":           "prefix_next_attention",
 	"Show help":                                  "gui_keys",
 	"Hints: label text on the pane to copy it":   "gui_hints",

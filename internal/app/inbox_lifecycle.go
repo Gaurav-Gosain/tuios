@@ -320,7 +320,7 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 		var callErr *session.VerbCallError
 		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
 			m.Inbox.life.noMark = true
-			m.ShowNotification("This daemon cannot snooze or mark Inbox items. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
+			m.ShowNotification("This daemon cannot snooze or mark items. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
 			return
 		}
 		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
@@ -332,9 +332,9 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	switch msg.Action {
 	case "snooze":
 		m.rememberInboxUndo(msg.ID, msg.Who)
-		m.ShowNotification("Snoozed "+msg.Who+" "+msg.Words+". "+m.inboxKeyOr(config.ActionInboxUndo, "u")+" in the Inbox undoes.", "info", inboxUndoNotice)
+		m.ShowNotification("Snoozed "+msg.Who+" "+msg.Words+". "+m.inboxKeyOr(config.ActionInboxUndo, "u")+" in the agents view undoes.", "info", inboxUndoNotice)
 	case "wake":
-		m.ShowNotification(capitalize(msg.Who)+" is back in the Inbox", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(capitalize(msg.Who)+" needs you again", "info", m.Settings.NotificationDuration)
 	case "restore":
 		m.ShowNotification("Restored "+msg.Who, "success", m.Settings.NotificationDuration)
 	case "unread":
@@ -355,7 +355,7 @@ func inboxMarkFailWords(action string) string {
 	case "unread":
 		return "The pane was not marked unread"
 	}
-	return "The Inbox did not change"
+	return "Nothing changed"
 }
 
 // markedID is the id a mark-attention answer names.
@@ -427,7 +427,7 @@ func (m *OS) InboxSnooze() (tea.Cmd, bool) {
 func inboxSnoozeRefusal(it session.AttentionItem) string {
 	switch {
 	case it.Kind == session.AttentionApproval && it.RequestID != "":
-		return "The Inbox is holding this approval for your answer, so it is not snoozed. Answer it or dismiss it."
+		return "tuios holds this approval for your answer, so it is not snoozed. Answer it or dismiss it."
 	case it.Kind == session.AttentionPlan:
 		return "A plan waits for your answer, so it is not snoozed. Answer it or dismiss it."
 	case it.Kind == session.AttentionAsk:
@@ -464,7 +464,7 @@ func (m *OS) InboxSnoozeKey(key string) tea.Cmd {
 		}
 		it, ok := m.inboxItem(id)
 		if !ok {
-			m.ShowNotification("That item is gone from the Inbox", "info", m.Settings.NotificationDuration)
+			m.ShowNotification("That item is gone", "info", m.Settings.NotificationDuration)
 			return nil
 		}
 		if closeAfter {
@@ -603,7 +603,7 @@ func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
 	if len(done) == 0 {
 		msg := "No finished turns you have not seen"
 		if !st.Live {
-			msg = "The Inbox is not connected to the daemon"
+			msg = "The agents view is not connected to the daemon"
 		}
 		m.ShowNotification(msg, "info", m.Settings.NotificationDuration)
 		return nil, true
@@ -719,7 +719,7 @@ func (m *OS) SidebarAgentSnooze(sessionID, windowID string) (tea.Cmd, bool) {
 		}
 	}
 	if found == nil {
-		m.ShowNotification("Nothing in the Inbox for this pane to snooze", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Nothing needs you in this pane, so there is nothing to snooze", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if why := inboxSnoozeRefusal(*found); why != "" {

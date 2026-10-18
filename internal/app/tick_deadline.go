@@ -116,6 +116,11 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 			at(now.Add(wait))
 		}
 	}
+	// An agent row held in its group a moment, so a quick flip of state does
+	// not move it twice, moves when the hold ends.
+	if m.ShowInbox && !m.Inbox.ck.holdUntil.IsZero() {
+		at(m.Inbox.ck.holdUntil)
+	}
 	// A pointer move held back by the frame budget goes out on the next frame.
 	if m.spotlightMotionPending {
 		at(now.Add(m.framePeriod()))

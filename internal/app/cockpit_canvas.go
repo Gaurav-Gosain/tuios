@@ -17,6 +17,9 @@ import (
 type ckCanvas struct {
 	w, h int
 	buf  uv.ScreenBuffer
+	// tmp is the one-line buffer draw lays a styled string on, kept from
+	// call to call.
+	tmp uv.ScreenBuffer
 }
 
 // ckSeg is one styled run of text. A nil ground keeps the cell's.
@@ -33,11 +36,24 @@ const (
 	ckStrike = uv.AttrStrikethrough
 )
 
-func newCkCanvas(w, h int, bg color.Color) *ckCanvas {
-	c := &ckCanvas{w: w, h: h, buf: uv.NewScreenBuffer(w, h)}
+// reset makes c a blank w by h canvas on bg, keeping its buffers when the
+// size is the same, so a frame drawn again allocates no grid.
+func (c *ckCanvas) reset(w, h int, bg color.Color) *ckCanvas {
+	if c == nil || c.w != w || c.h != h {
+		c = &ckCanvas{w: w, h: h, buf: uv.NewScreenBuffer(w, h), tmp: uv.NewScreenBuffer(w, 1)}
+	}
 	c.fill(0, 0, w, h, bg)
 	return c
 }
+
+// ckASCII is each printable ASCII character as a string, so drawing ASCII
+// text allocates nothing.
+var ckASCII = func() (t [128]string) {
+	for i := 32; i < 127; i++ {
+		t[i] = string(rune(i))
+	}
+	return t
+}()
 
 // ckColor drops a colour that is no colour at all, which a cell would write
 // as black.
@@ -73,8 +89,19 @@ func (c *ckCanvas) text(x, y, limit int, segs ...ckSeg) int {
 	for _, s := range segs {
 		fg, bg := ckColor(s.fg), ckColor(s.bg)
 		for _, r := range s.t {
-			cl := string(r)
-			w := ansi.StringWidth(cl)
+			var cl string
+			w := 1
+			switch {
+			case r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0:
+				// A control character never reaches the terminal: ESC
+				// would start a sequence there.
+				continue
+			case r < 0x80:
+				cl = ckASCII[r]
+			default:
+				cl = string(r)
+				w = ansi.StringWidth(cl)
+			}
 			if w == 0 {
 				// A combining mark joins the cell before it.
 				if prev := c.buf.CellAt(x-1, y); prev != nil && x > 0 && x <= limit {
@@ -118,8 +145,11 @@ func (c *ckCanvas) draw(x, y, w int, s string) {
 	if y < 0 || y >= c.h || w <= 0 {
 		return
 	}
-	tmp := uv.NewScreenBuffer(w, 1)
-	uv.NewStyledString(s).Draw(tmp, tmp.Bounds())
+	w = min(w, c.w)
+	tmp := c.tmp
+	area := uv.Rect(0, 0, w, 1)
+	tmp.ClearArea(area)
+	uv.NewStyledString(s).Draw(tmp, area)
 	for i := 0; i < w && x+i < c.w; i++ {
 		src := tmp.CellAt(i, 0)
 		if src == nil || x+i < 0 {
@@ -147,8 +177,15 @@ func (c *ckCanvas) hline(x, y, w int, glyph string, fg color.Color) {
 	}
 }
 
-// restyle applies fn to every cell of the rectangle, for the 16-colour
-// attributes that stand in for a ground.
+// mark applies the 16-colour attribute that stands in for st's ground to
+// the rectangle: the cell form of pal.Mark. It does nothing at other depths.
+func (c *ckCanvas) mark(pal overlay.Palette, x, y, w, h int, st overlay.RowState) {
+	if fn := pal.MarkCell(st); fn != nil {
+		c.restyle(x, y, w, h, fn)
+	}
+}
+
+// restyle applies fn to every cell of the rectangle.
 func (c *ckCanvas) restyle(x, y, w, h int, fn func(*uv.Cell)) {
 	for j := max(y, 0); j < min(y+h, c.h); j++ {
 		for i := max(x, 0); i < min(x+w, c.w); i++ {

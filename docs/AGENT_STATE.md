@@ -156,7 +156,7 @@ Those scripts send herdr's protocol to `HERDR_SOCKET_PATH`.
 | Understand the states and who decides them | [States](#states), [Sources and precedence](#sources-and-precedence) |
 | Let any program or script report its state | [PROGRAM_STATUS.md](PROGRAM_STATUS.md) |
 | Make a harness report, or see why a pane is or is not an agent | [Harness integrations](#harness-integrations), [Recognising a harness](#recognising-a-harness), [Screen rules](#screen-rules) |
-| Use the Inbox and answer prompts | [The Inbox](#the-inbox), [Answering a prompt without attaching](#answering-a-prompt-without-attaching), [Approvals from the Inbox](#approvals-from-the-inbox), [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox) |
+| Use the agents view and answer prompts | [The Inbox](#the-inbox), [Answering a prompt without attaching](#answering-a-prompt-without-attaching), [Approvals from the Inbox](#approvals-from-the-inbox), [KEYBINDINGS.md](KEYBINDINGS.md#the-agents-view) |
 | Let agents ask you something | [Questions an agent asks you](#questions-an-agent-asks-you) |
 | Let agents talk to each other | [Agents talking to agents](#agents-talking-to-agents) |
 | Run a fleet of agents | [Fleets](#fleets), [Selectors](#selectors), [Headless agents over a protocol](#headless-agents-over-a-protocol) |
@@ -2262,8 +2262,8 @@ mail is read, or a client focuses the pane that finished.
 
 `ctrl+b i` opens the agents view: one full-screen view of every agent tuios
 knows of, in this session, the other sessions and linked machines, and of
-everything that waits for you. It replaces the Inbox panel. The Inbox's items
-are its Needs you group, so the queue and the agents are one list.
+everything that waits for you. It replaces the Inbox panel. The Inbox is now
+its Needs you group, so the queue and the agents are one list.
 
 ```
 Agents  ● 1 needs you   ◐ 6 working   ✓ 3 to review   ○ 2 idle      + New agent
@@ -2282,35 +2282,45 @@ The list has five groups, in this order: Needs you (approvals, questions,
 plans, mail for you, errors and resume rows), Ready for review (a finished
 turn you have not looked at), Working, Idle, and Earlier (at rest for more
 than an hour). Inside a group the oldest wait comes first. A snoozed item
-shows under Snoozed when `S` shows them.
+shows under Snoozed when `S` shows them. A row moves to a new group only once
+the agent has been in the new state for 0.4 seconds, so a hook that flips
+working, needs you, working in a moment does not move it twice. A finished
+turn the agent has already moved on from goes with the agent's state, not
+under Ready for review.
 
 Each row is two lines on a wide screen. The first has the state mark, the
-name, the harness, the session (or the machine, when the fleet spans more than
-one), the size of the diff when the agent reports it as the `diff` meta key,
+name, the harness, the session (or the machine, for an agent on another one),
+the size of the diff when the agent reports it as the `diff` meta key,
 and how long it has been in its state. The second says the one thing worth
 reading: what a Needs you row asks, in the attention colour ("Allow Bash" and
 the command); what a working agent does now and how full its context is; the
 branch and pull request of one ready for review. Subagents hang under their
 agent, one line each. The rows come from the rail's agents section, so the two
-always agree.
+always agree. When the link to a machine is down, its rows are dim, say
+`link down`, and show the last state tuios knew.
 
 The focus area beside the list shows the selected agent: its name, harness,
 model and state, its branch, session, diff, context and cost, then its thread,
 and at the bottom the card of what it asks. A held approval's card shows the
 command whole, where it runs, and the buttons that answer it: `a` allows once,
 `A` always, `r` rejects and `R` rejects with a reason. `1`, `2` and `3` still
-work. The rules are the Inbox's: a key does nothing until the card has been
-on screen for a moment, a risky allow needs a second press, and a plan is
-approved only once its last line was on screen.
+work. A key does nothing until the card has been on screen for a moment, a
+risky allow needs a second press, and a plan is approved only once its last
+line was on screen. A command too long for the card is never answered there:
+the card says `Too long to show here. Press enter to answer in the pane.`, and
+the keys refuse.
 
 A click on a row selects it and leaves the view open. A double-click, or
 `enter`, goes to the agent's pane and closes the view. `n` and the
 `+ New agent` button start a new agent: for now they open the launcher, where
-any agent's program starts in a new pane. `f` shows only what needs you, the
-old flat Inbox, and `f` again shows every agent. `s` steps the order inside the
+any agent's program starts in a new pane. `f` shows only the items, the old
+flat Inbox with Needs you and Ready for review; `f` again shows one kind of
+item at a time, and after the last kind every agent again. `s` steps the order inside the
 groups: needs you first and then the longest wait, name, most recent change,
 session. `/` searches: a `key:value` term is a selector, and other words match
-the name, the session and the agent's last message.
+the name, the session and the agent's last message. The search narrows the
+Needs you items too: an item stays when its agent matches, or when its own
+words do. A selector tuios cannot read shows its error in the search box.
 
 The layout follows the screen. From 120 columns the list is 48 columns wide
 (56 from 170) and its rows have two lines. From 80 columns the list is 38
@@ -2331,14 +2341,16 @@ between them and other agents.
 #### Many agents at once
 
 `x` marks the selected agent, and `*` marks every agent shown, or clears
-the marks when all of them are marked. The title says how many are marked.
-With marks:
+the marks when all of them are marked. A marked row shows a mark beside the
+cursor bar, and the title says how many are marked. A bulk key acts only on
+the marked agents the list shows: one in a folded group, or one the search
+hides, is left out. Closing the view clears the marks. With marks:
 
 - `r` opens one reply editor, and `enter` queues the same message to each
   marked agent, at most 32. An agent that waits on a prompt, or runs on
   another machine, is left out, and the dock says which. `esc` and `ctrl+]`
   keep the draft, and the next `r` with marks opens it again.
-- `3` denies every approval the marked agents wait on.
+- `3` rejects every approval the marked agents wait on.
 - `1` lists each approval it would allow, whole, and `enter` allows them once
   the list has been on screen for a moment. A risky approval, a plan, and one
   the terminal cannot show whole are never in the list: the list says
@@ -2346,18 +2358,18 @@ With marks:
   after the list showed it is not allowed. The list holds only the approvals
   the screen has room to show whole. It says how many more wait, and `enter`
   leaves them out. Press `1` again to see them. `esc`, any other key, a click
-  and closing the Inbox close the list. `2`, always, is never given to many
+  and closing the view close the list. `2`, always, is never given to many
   agents at once.
-- `d` dismisses the marked agents' Inbox items, and `z` snoozes them for the
+- `d` dismisses what the marked agents have in Needs you, and `z` snoozes it for the
   length you pick next. An item that cannot be snoozed, such as a held
   approval, is left out.
 
 A key that `send-keys` typed does none of these.
 
-`ctrl+]` shows the agent's own screen: the Inbox closes, the agent's pane
+`ctrl+]` shows the agent's own screen: the view closes, the agent's pane
 gets the focus and is zoomed, and the dock says `Press ctrl+b i to go back to
-the agents.` The Inbox opens again on the agents view, with the same agent
-selected, at the same scroll, and with every draft kept. The key works with
+the agents.` The view opens again with the same agent selected, at the same
+scroll, and with every draft kept. The key works with
 the reply editor open too, and keeps its draft.
 
 Nothing polls. The list changes when an agent's state changes, and the times
@@ -2388,25 +2400,25 @@ Keys, after the prefix (`ctrl+b` by default):
 
 | Key | What it does |
 | --- | --- |
-| `i` | Open the Inbox. |
-| `o` | Go to the oldest item that needs you (approval, ask, question, mail, errored, resume), switching session and workspace. A question an agent asked you opens the Inbox on it instead, since that is where it is answered. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox and to `O`. |
+| `i` | Open the agents view. |
+| `o` | Go to the oldest item that needs you (approval, ask, question, mail, errored, resume), switching session and workspace. A question an agent asked you opens the agents view on it instead, since that is where it is answered. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox and to `O`. |
 | `O` | Go to the newest finished turn you have not seen. `O` again within 5 seconds goes to the next older one; a turn that finishes meanwhile starts the walk over at it. It waits until an agent has been seen: before that the key after the prefix reaches the pane as it always did. |
-| `M` | Open the Inbox on its mail. It used to open the mailbox; `m` in the Inbox does that now. |
+| `M` | Open the agents view on the mail for you. It used to open the mailbox; `m` in the agents view does that now. |
 
-Inside the Inbox:
+Inside the agents view:
 
 | Key | What it does |
 | --- | --- |
 | `j` / `k`, arrows | Move. Group headings are skipped. |
 | `g` / `G` | First and last item. |
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
-| `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
-| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. On a risky approval, `1` and `2` need a second press of the same key within 3 seconds. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
+| `space` | On an approval or a question, read the prompt without leaving the agents view, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
+| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, reject. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. On a risky approval, `1` and `2` need a second press of the same key within 3 seconds. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
 | `a` / `A` / `r` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
-| `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Deny with a reason](#deny-with-a-reason). |
+| `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Reject with a reason](#reject-with-a-reason). |
 | `n` | Start a new agent. For now this opens the launcher. |
-| `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan shown under the list. |
-| `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown under the list, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
+| `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card. The wheel over the card does the same. |
+| `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |
 | `y` | On a resume row: go to the pane and type the conversation's resume command there. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
@@ -2414,14 +2426,18 @@ Inside the Inbox:
 | `z` | Snooze the item, then `1` 15 minutes, `2` an hour, `3` until 9:00 tomorrow, `4` until it changes. The footer shows the four while it waits for the digit; any other key cancels. On a snoozed item, wake it. See [Snoozing, undo and unread](#snoozing-undo-and-unread). |
 | `u` | Undo the last dismiss or snooze made in the last 10 seconds. Again, the one before. |
 | `S` | Show or hide the snoozed items, muted, under a Snoozed heading at the bottom. |
-| `f` | Show one kind, then the next, then all of them. |
+| `f` | Show only the items, then one kind of item at a time, then every agent again. |
+| `x` / `*` | Mark the agent, or every agent shown, for a bulk answer. See [Many agents at once](#many-agents-at-once). |
+| `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent. |
+| `l` / `h`, `right` / `left` | On a narrow screen, open the focus and go back to the list. |
+| `?` | Open help on its Agents section. |
 | `/` | Type a selector that narrows the list, such as `harness:codex needs:you` or `session:api-fan-*`: the syntax of [Selectors](#selectors). `enter` applies it and an empty line clears it; `esc` closes the line and keeps what was in force. While the line is open every key is text. The selector stays until you change it, and the title says it in words, `[select harness:codex]`, so a narrowed Inbox never reads as an empty one. It works with `f`. |
 | `m` | Open the mailbox, with every thread including the ones between agents. |
 | `esc` / `q` | Close. |
 
 These are the default keys. Every one but the digits can be rebound under
 `[keybindings.inbox]`, `[keybindings.inbox_peek]` and `[keybindings.mail]`
-(see [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox)), and the footers name the key
+(see [KEYBINDINGS.md](KEYBINDINGS.md#the-agents-view)), and the footers name the key
 the config binds. The footer lists only the keys that act on the selected row,
 the one that answers it first.
 
@@ -3174,7 +3190,7 @@ allow for such a tool only with `updatedInput` (checked against the hooks
 reference and the 2.1.281 build). `2` adds one permission update,
 `{"type": "setMode", "mode": "acceptEdits", "destination": "session"}`.
 
-### Deny with a reason
+### Reject with a reason
 
 `R` on a held approval or plan opens a `Reason:` line in its card. It was `n`,
 which now starts a new agent. `enter` denies
@@ -3215,7 +3231,7 @@ built now:
   The risk rules are a speed bump, not a sandbox: an obfuscated command can
   avoid a pattern, and the harness's permission system stays the boundary.
   This one is built: see [Risk rules](#risk-rules), [Plans](#plans) and
-  [Deny with a reason](#deny-with-a-reason).
+  [Reject with a reason](#reject-with-a-reason).
 
 The activity ring behind `agent-activity` has landed: see
 [What the agent has been doing](#what-the-agent-has-been-doing).
