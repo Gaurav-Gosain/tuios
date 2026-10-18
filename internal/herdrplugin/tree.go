@@ -11,8 +11,10 @@ import (
 
 // RunTree runs cmd and waits for it. When ctx ends, it kills the command
 // and every process it started: the process group on unix, the job object
-// on Windows. On Linux the command also dies with tuios. tuios plugins
-// install runs build commands with it.
+// on Windows. On Linux the command also dies with tuios (Pdeathsig). When
+// tuios itself gets SIGKILL, the processes the command started can live on:
+// the kernel kills only the direct child, and no code of tuios runs to kill
+// the group. tuios plugins install runs build commands with it.
 func RunTree(ctx context.Context, cmd *exec.Cmd) error {
 	detach(cmd)
 	deathSignal(cmd)

@@ -3,8 +3,10 @@ package tuie2e
 import (
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -36,10 +38,19 @@ min_herdr_version = "0.9.3"
 [[build]]
 command = ["sh", "-c", "%BUILD%"]
 
+[[startup]]
+command = ['sh', '-c', 'pwd >> "$HERDR_PLUGIN_STATE_DIR/startup.log"; exec sleep 600']
+
 [[actions]]
 id = "ping"
 title = "Ping"
 command = ["sh", "-c", "cat dist/out && echo pong"]
+
+[[panes]]
+id = "hold"
+title = "Hold"
+placement = "tab"
+command = ["sh", "-c", "exec sleep 600"]
 `
 
 // probeRepo makes the bare repository and returns its file:// URL, the
@@ -123,20 +134,50 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		b, _ := os.ReadFile(lockPath)
 		return string(b)
 	}
-	// field reads one key of the lock file off its own line, so the test
-	// needs no TOML parser of its own.
-	field := func(key string) string {
-		m := regexp.MustCompile(`(?m)^` + key + ` = ['"]?([^'"\n]*)['"]?$`).FindStringSubmatch(readLock())
-		if m == nil {
-			return ""
-		}
-		return m[1]
+	readState := func() string {
+		b, _ := os.ReadFile(filepath.Join(data, "tuios", "plugins", "%state.toml"))
+		return string(b)
 	}
 	ping := func(when string) {
 		t.Helper()
 		out, err := tuiosCLI(t, base, "plugins", "run", id, "ping", "--wait")
 		if err != nil || !strings.Contains(out, "built-by-install") || !strings.Contains(out, "pong") {
 			t.Fatalf("plugins run ping %s: %v\n%s", when, err, out)
+		}
+	}
+	// checkFolders checks that the build folders of the plugin are the
+	// ones named, the first being the live one, whose build ran in it.
+	checkFolders := func(live string, also ...string) {
+		t.Helper()
+		folder := filepath.Join(data, "tuios", filepath.FromSlash(live))
+		where, _ := os.ReadFile(filepath.Join(folder, "dist", "where"))
+		if want, _ := filepath.EvalSymlinks(folder); strings.TrimSpace(string(where)) != want {
+			t.Errorf("the build ran in %q, want the folder the state file names, %s", strings.TrimSpace(string(where)), want)
+		}
+		want := []string{path.Base(live)}
+		for _, d := range also {
+			want = append(want, path.Base(d))
+		}
+		slices.Sort(want)
+		if got := foldersIn(managed); !slices.Equal(got, want) {
+			t.Errorf("%s holds %v, want %v", managed, got, want)
+		}
+	}
+	// checkStartup waits until the plugin's startup last ran from the
+	// folder the state file names.
+	checkStartup := func(live string) {
+		t.Helper()
+		want, _ := filepath.EvalSymlinks(filepath.Join(data, "tuios", filepath.FromSlash(live)))
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			lines := strings.Fields(readPluginFile(base, id, "startup.log"))
+			if len(lines) > 0 && lines[len(lines)-1] == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the startup did not run from %s. startup.log:\n%s", want, strings.Join(lines, "\n"))
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
@@ -166,7 +207,7 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	// install must still work.
 	killInstallAt(t, base, "Continue?", url+"@main")
 
-	// main: built in the folder the lock entry names, pinned and enabled.
+	// main: built in the folder the state file names, pinned and enabled.
 	out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes")
 	if err != nil {
 		t.Fatalf("install of main after a kill at the prompt: %v\n%s", err, out)
@@ -180,42 +221,26 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	if n := strings.Count(readLock(), "[[plugin]]"); n != 1 {
 		t.Fatalf("plugins.lock has %d entries, want 1:\n%s", n, readLock())
 	}
-	if field("version") != "1" || field("id") != id || field("format") != "herdr" || field("source") != url || field("ref") != "main" ||
-		field("commit") != mainCommit || len(field("tree")) != 40 || !strings.HasPrefix(field("approved"), "sha256:") || field("built") != "true" ||
-		!strings.HasPrefix(field("dir"), "plugins/"+id+"/"+mainCommit[:12]+"-") {
-		t.Fatalf("plugins.lock does not pin main at %s:\n%s", mainCommit, readLock())
+	lock := field(readLock)
+	if lock("version") != "1" || lock("id") != id || lock("format") != "herdr" || lock("source") != url || lock("ref") != "main" ||
+		lock("commit") != mainCommit || len(lock("tree")) != 40 || !strings.HasPrefix(lock("approved"), "sha256:") ||
+		lock("dir") != "" || lock("built") != "" {
+		t.Fatalf("plugins.lock does not pin main at %s, or holds what is local to this machine:\n%s", mainCommit, readLock())
 	}
-	mainDir := field("dir")
-	checkWhere := func(dir string) {
-		t.Helper()
-		folder := filepath.Join(data, "tuios", filepath.FromSlash(dir))
-		where, _ := os.ReadFile(filepath.Join(folder, "dist", "where"))
-		if want, _ := filepath.EvalSymlinks(folder); strings.TrimSpace(string(where)) != want {
-			t.Errorf("the build ran in %q, want the folder the lock entry names, %s", strings.TrimSpace(string(where)), want)
-		}
-		if got := foldersIn(managed); len(got) != 1 || got[0] != filepath.Base(folder) {
-			t.Errorf("%s holds %v, want only the folder the lock entry names, %s", managed, got, filepath.Base(folder))
-		}
+	state := field(readState)
+	if state("commit") != mainCommit || state("built") != "true" || !strings.HasPrefix(state("dir"), "plugins/"+id+"/"+mainCommit[:12]+"-") {
+		t.Fatalf("the state file does not name the build of main:\n%s", readState())
 	}
-	checkWhere(mainDir)
+	mainDir := state("dir")
+	checkFolders(mainDir)
+	checkStartup(mainDir)
 
 	out, err = tuiosCLI(t, base, "plugins", "list", "--json")
 	if err != nil {
 		t.Fatalf("plugins list: %v\n%s", err, out)
 	}
 	_ = os.WriteFile(filepath.Join(art, "list.json"), []byte(out), 0o644)
-	var entries []struct {
-		ID      string          `json:"plugin_id"`
-		Origin  string          `json:"origin"`
-		Enabled bool            `json:"enabled"`
-		Err     json.RawMessage `json:"error"`
-		Lock    *struct {
-			Commit string `json:"commit"`
-		} `json:"lock"`
-	}
-	if err := json.Unmarshal([]byte(out), &entries); err != nil {
-		t.Fatalf("plugins list --json: %v\n%s", err, out)
-	}
+	entries := listEntries(out)
 	if len(entries) != 1 || entries[0].ID != id || entries[0].Origin != "managed" || !entries[0].Enabled ||
 		entries[0].Err != nil || entries[0].Lock == nil || entries[0].Lock.Commit != mainCommit {
 		t.Fatalf("plugins list does not show the probe managed and on:\n%s", out)
@@ -224,25 +249,30 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		t.Errorf("the plugins list table lacks the source and the pin:\n%s", table)
 	}
 	ping("after the install of main")
+	// A plugin pane opened from the build of main. Its folder stays while
+	// the pane is open.
+	if out, err := tuiosCLI(t, base, "plugins", "open", id, "hold", "--placement", "tab"); err != nil {
+		t.Fatalf("plugins open hold: %v\n%s", err, out)
+	}
 
-	// A failed build: the lock entry and the running plugin stay as they
-	// were, and the failed build folder is gone.
-	before := readLock()
+	// A failed build: the lock file, the state file and the running plugin
+	// stay as they were, and the failed build folder is gone.
+	lockBefore, stateBefore := readLock(), readState()
 	out, err = tuiosCLI(t, base, "plugins", "install", url+"@broken", "--yes")
 	if err == nil || !strings.Contains(out, "the build command failed") || !strings.Contains(out, "The plugin is not installed") {
 		t.Fatalf("install of the broken branch: %v\n%s", err, out)
 	}
-	if readLock() != before {
-		t.Fatalf("a failed build changed plugins.lock:\n%s", readLock())
+	if readLock() != lockBefore || readState() != stateBefore {
+		t.Fatalf("a failed build changed plugins.lock or the state file:\n%s\n%s", readLock(), readState())
 	}
 	if log, _ := os.ReadFile(filepath.Join(pluginState(base, id), "build.log")); !strings.Contains(string(log), "the build breaks") {
 		t.Errorf("build.log does not hold the failed build's output:\n%s", log)
 	}
-	checkWhere(mainDir)
+	checkFolders(mainDir)
 	ping("after a failed build")
 
-	// A kill during the build of next: the lock entry and the running
-	// plugin stay as they were.
+	// A kill during the build of next: the lock file, the state file and
+	// the running plugin stay as they were.
 	if err := os.WriteFile(filepath.Join(outside, "slow"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -255,22 +285,86 @@ func TestPluginsInstallFromGit(t *testing.T) {
 			}
 		}
 	}
-	if readLock() != before {
-		t.Fatalf("a killed install changed plugins.lock:\n%s", readLock())
+	if readLock() != lockBefore || readState() != stateBefore {
+		t.Fatalf("a killed install changed plugins.lock or the state file:\n%s\n%s", readLock(), readState())
 	}
 	ping("after a kill during the build")
 
-	// next: a new folder, and the folders of main and of the killed build
-	// are gone once the daemon runs next.
+	// next: a new folder. The plugin restarts from it, config.toml keeps it
+	// enabled, and the build of main stays as the previous one. The folder
+	// of the killed build goes.
 	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@next", "--yes"); err != nil {
 		t.Fatalf("install of next after a kill during the build: %v\n%s", err, out)
 	}
-	if field("commit") != nextCommit || field("dir") == mainDir {
-		t.Fatalf("plugins.lock does not pin next at %s in a new folder:\n%s", nextCommit, readLock())
+	nextDir := state("dir")
+	if lock("commit") != nextCommit || state("commit") != nextCommit || nextDir == mainDir ||
+		state("prev_dir") != mainDir || state("prev_commit") != mainCommit {
+		t.Fatalf("plugins.lock and the state file do not name next, with main before it:\n%s\n%s", readLock(), readState())
 	}
-	checkWhere(field("dir"))
+	checkFolders(nextDir, mainDir)
+	checkStartup(nextDir)
+	if cfg, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")); !strings.Contains(string(cfg), id) {
+		t.Errorf("config.toml lost the plugin after the restart:\n%s", cfg)
+	}
 	ping("after the install of next")
+
+	// An install killed between the state write and the lock write leaves
+	// the state a commit ahead of plugins.lock. The plugin then runs from
+	// the previous folder, the one plugins.lock names.
+	nextLock := readLock()
+	if err := os.WriteFile(lockPath, []byte(strings.ReplaceAll(nextLock, nextCommit, mainCommit)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = tuiosCLI(t, base, "plugins", "list", "--json")
+	if got := listEntries(out); len(got) != 1 || got[0].Plugin == nil || got[0].Plugin.Root != filepath.Join(data, "tuios", filepath.FromSlash(mainDir)) {
+		t.Fatalf("with the state ahead of plugins.lock, the plugin does not run from the folder of main:\n%s", out)
+	}
+	if err := os.WriteFile(lockPath, []byte(nextLock), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// main again, at a new folder: the live one and the one before it stay,
+	// and the first build of main stays too, because the plugin pane runs
+	// from it.
+	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes"); err != nil {
+		t.Fatalf("install of main again: %v\n%s", err, out)
+	}
+	checkFolders(state("dir"), nextDir, mainDir)
+	checkStartup(state("dir"))
 	_ = os.WriteFile(filepath.Join(art, "plugins.lock"), []byte(readLock()), 0o644)
+	_ = os.WriteFile(filepath.Join(art, "state.toml"), []byte(readState()), 0o644)
+}
+
+// listEntry is one plugin of plugins list --json.
+type listEntry struct {
+	ID      string          `json:"plugin_id"`
+	Origin  string          `json:"origin"`
+	Enabled bool            `json:"enabled"`
+	Err     json.RawMessage `json:"error"`
+	Lock    *struct {
+		Commit string `json:"commit"`
+	} `json:"lock"`
+	Plugin *struct {
+		Root string `json:"plugin_root"`
+	} `json:"plugin"`
+}
+
+func listEntries(out string) []listEntry {
+	var entries []listEntry
+	_ = json.Unmarshal([]byte(out), &entries)
+	return entries
+}
+
+// field reads one key of a TOML file off its own line, so the test needs no
+// TOML parser of its own. read gives the file.
+func field(read func() string) func(string) string {
+	return func(key string) string {
+		m := regexp.MustCompile(`(?m)^` + key + ` = ['"]?([^'"\n]*)['"]?$`).FindStringSubmatch(read())
+		if m == nil {
+			return ""
+		}
+		return m[1]
+	}
 }
 
 // foldersIn lists the folders in dir, sorted.

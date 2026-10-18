@@ -7701,23 +7701,39 @@ Not covered end to end: the keys typed while the pointer is held past the edge. 
 
 `TestPluginsInstallFromGit` installs a probe plugin from a bare repository
 under the test's temp folder, over `file://`, with a daemon running. Each
-install builds into a new folder, and the `dir` key of the lock entry names
-the folder that runs. The `main` branch writes its folder to `dist/where`
-and `built-by-install` to `dist/out`, and its one action prints `dist/out`.
-`next` is `main` with one more commit. The `broken` branch has a build
-command that exits 3. On `escape`, `herdr-plugin.toml` is a link to a
+install builds into a new folder. The machine-local state file
+`%state.toml` names the folder that runs, and the folder before it.
+`plugins.lock` holds only the source, the ref, the commit, the tree and the
+approved hash. The `main` branch writes its folder to `dist/where` and
+`built-by-install` to `dist/out`. Its startup writes its folder to
+`startup.log` and sleeps, its action prints `dist/out`, and its pane
+sleeps. `next` is `main` with one more commit. The `broken` branch has a
+build command that exits 3. On `escape`, `herdr-plugin.toml` is a link to a
 manifest outside the repository. On `linkdir`, the folder `plug` is a link
 to a folder outside it. The outside manifest's build writes a marker file.
 While the file `slow` exists, the build sleeps.
 
-The test runs, in order: the two links (refused, no folder, no marker, no
-lock entry); a kill at the prompt while the install lock is held; `main`
-(pinned, built in the folder the lock entry names, listed, running); a
-failed build of `broken` (the lock file and the running plugin unchanged,
-the failed folder gone); a kill during the build of `next` (the lock file
-and the running plugin unchanged); and `next` (a new folder, and only that
-folder left). Each failing half has its positive half in the same fixture.
-The artifacts are `install.txt`, `plugins.lock` and `list.json` in the
+The test runs, in order:
+
+1. The two links: refused, with no folder, no marker and no lock entry.
+2. A kill at the prompt while the install lock is held.
+3. `main`: pinned, built in the folder the state file names, listed and
+   running, with its startup run from that folder. A plugin pane opens from
+   it.
+4. A failed build of `broken`: the lock file, the state file and the
+   running plugin are unchanged, and the failed folder is gone.
+5. A kill during the build of `next`: the lock file, the state file and the
+   running plugin are unchanged.
+6. `next`: a new folder, the startup restarted from it, `config.toml` still
+   enabled, `main` kept as the previous folder, and the killed folder gone.
+7. The lock file is set back to `main`'s commit, as after a kill between
+   the state write and the lock write: the plugin runs from `main`'s
+   folder.
+8. `main` again, in a third folder: the live folder and the one before it
+   stay, and the first folder stays because the plugin pane runs from it.
+
+Each failing half has its positive half in the same fixture. The artifacts
+are `install.txt`, `plugins.lock`, `state.toml` and `list.json` in the
 test's artifact folder.
 
 `TestManifestRefusesTerminalControls` in `internal/herdrplugin` is a
@@ -7726,22 +7742,30 @@ bidi and DEL characters in argv, versions, events and placements, and that
 it takes a clean manifest with a tab in an argument.
 
 Each control cut the wiring in the branch, built the binary, and ran the
-one test. Run on 2026-10-18, after the third review of #877, which
-replaced the in-place reinstall with build folders and one pointer.
+one test. Run on 2026-10-18, after the fourth review of #877.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A failed build stops the install | the `runPluginBuild` check in `installer.finish` never sees the error | `TestPluginsInstallFromGit` ("install of the broken branch: <nil>") | **caught** |
-| A failed build removes its new folder | the build failure returns without `fail` | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [two folders], want only the folder the lock entry names") | **caught** |
-| The daemon finds an installed plugin | the `add(OriginManaged, ...)` call in `Discover` | `TestPluginsInstallFromGit` ("plugins list does not show the probe managed and on") | **caught** |
+| A failed build removes its new folder | the build failure returns without `fail` | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [two folders], want [the live one]") | **caught** |
+| The daemon finds an installed plugin | the `add(OriginManaged, ...)` call in `Discover` | `TestPluginsInstallFromGit` ("the install output lacks \"is enabled\"": the daemon answers `plugin_not_found`) | **caught** |
 | A manifest that links out of the checkout is refused | the `Inside` check in `loadInside` | `TestPluginsInstallFromGit` ("install of escape: <nil>, want \"outside the repository\"") | **caught** |
 | A subdir that is a link is not a folder | the `cat-file -t` check in `fetchInto` | `TestPluginsInstallFromGit` ("install of linkdir: exit status 1, want \"has no folder plug\""). The `Inside` check still refuses the install, so the cut changes only the message | **caught** |
 | A manifest argv with a terminal control is refused | the `hasControl` check in `argvOf` | `TestManifestRefusesTerminalControls` ("Parse took \"\\u001b[2J\" in %ARG%" and five more) | **caught** |
 | A kill at the prompt does not block the next install | the kernel lock `HoldLock` in `newInstaller` becomes a guard file made with `O_EXCL` and removed on return | `TestPluginsInstallFromGit` ("install of main after a kill at the prompt: exit status 1") | **caught** |
-| The build runs in the folder the lock entry names | the build runs in the fetch folder, which moves into place after it | `TestPluginsInstallFromGit` ("the build ran in \".../plugins/.fetch-N\", want the folder the lock entry names") | **caught** |
-| Writing the lock entry is the one commit point | the lock entry is written before the build | `TestPluginsInstallFromGit` ("plugins.lock does not pin main": the entry says `built = false`, written before the build ran) | **caught** |
-| The old build folders go after the switch | the `collect` call after `switchPlugin` | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [three folders], want only the folder the lock entry names") | **caught** |
-| A failed or killed reinstall leaves the old plugin running | the plugin is stopped before the build, as the replaced mechanism did | `TestPluginsInstallFromGit` ("plugins run ping after a failed build: exit status 1") | **caught** |
+| The build runs in the folder the state file names | the build runs in the fetch folder, which moves into place after it | `TestPluginsInstallFromGit` ("the build ran in \".../plugins/%fetch-N\", want the folder the state file names") | **caught** |
+| The state write comes after the build | the state file is written before the build | `TestPluginsInstallFromGit` ("the state file does not name the build of main": it says `built = false`) | **caught** |
+| Old build folders go after the switch | the `collect` call in `restart` | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [three folders], want [two]") | **caught** |
+| A failed or killed reinstall leaves the old plugin running | the plugin is stopped before the build | `TestPluginsInstallFromGit` ("plugins run ping after a failed build: exit status 1") | **caught** |
+| Discover uses the state's folder only for the lock's commit | `State.Live` takes the state's folder whatever its commit | `TestPluginsInstallFromGit` ("with the state ahead of plugins.lock, the plugin does not run from the folder of main") | **caught** |
+| `plugin.restart` restarts the plugin | the daemon's restart reports no restart and stops nothing | `TestPluginsInstallFromGit` ("the startup did not run from .../<next folder>") | **caught** |
+| The previous folder stays | `collect` keeps only the live folder | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [two folders], want [three]" after the second install of `main`) | **caught** |
+| A folder a plugin pane runs from stays | `collect` ignores the pane folders from `plugin.restart` | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [two folders], want [three]": the first folder of `main` is gone) | **caught** |
+
+That a restart leaves `config.toml` alone is checked only on the success
+path ("config.toml lost the plugin after the restart"). The old disable and
+enable pair ended with the plugin enabled too, so no cut makes that check
+fail without a kill in the middle of a restart.
 
 The fixed build passes `TestPluginsInstallFromGit` 3 of 3, and every
 `TestHerdrPlugin*` 3 of 3.

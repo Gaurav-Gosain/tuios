@@ -175,7 +175,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 	byID := map[string]bool{}
 	// add lists one plugin. pre is an error found before the manifest is
 	// read. lock is the lock file entry of a managed plugin.
-	add := func(origin, path string, src *Source, lock *LockEntry, pre *Error) {
+	add := func(origin, path string, src *Source, lock *LockEntry, dir string, pre *Error) {
 		e := Entry{Origin: origin, Path: path, Lock: lock, Err: pre}
 		var p *Plugin
 		if pre == nil {
@@ -188,7 +188,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 			}
 			seen[e.Path] = true
 			if e.Err == nil && lock != nil {
-				e.Err = checkManaged(d, *lock, p)
+				e.Err = checkManaged(d, *lock, dir, p)
 			}
 		}
 		switch {
@@ -215,32 +215,38 @@ func Discover(d Dirs, enabled []string) []Entry {
 		out = append(out, e)
 	}
 	for _, p := range d.Extra {
-		add(OriginConfig, expandHome(p), nil, nil, nil)
+		add(OriginConfig, expandHome(p), nil, nil, "", nil)
 	}
 	for _, dir := range subdirs(d.PluginsDir()) {
 		if fileExists(filepath.Join(dir, ManifestName)) {
-			add(OriginTuios, dir, nil, nil, nil)
+			add(OriginTuios, dir, nil, nil, "", nil)
 		}
 	}
 	if d.TuiosConfig != "" {
 		lock, err := ReadLock(d.LockPath())
 		if err != nil {
-			add(OriginManaged, d.LockPath(), nil, &LockEntry{ID: LockName}, errf("plugin_lock_invalid", "%v", err))
+			add(OriginManaged, d.LockPath(), nil, &LockEntry{ID: LockName}, "", errf("plugin_lock_invalid", "%v", err))
 			lock = &Lock{}
+		}
+		state, err := ReadState(d.StatePath())
+		if err != nil {
+			add(OriginManaged, d.StatePath(), nil, &LockEntry{ID: StateName}, "", errf("plugin_state_invalid", "%v", err))
+			state = &State{}
 		}
 		for i := range lock.Plugins {
 			le := lock.Plugins[i]
 			var pre *Error
+			dir, _, live := state.Live(le)
 			if err := CheckLockEntry(le); err != nil {
 				pre = errf("plugin_lock_invalid", "%v", err)
-			} else if !le.Local() && !dirExists(d.CheckoutDir(le)) {
-				pre = errf("plugin_not_installed", "the lock file pins %s at %.12s, and its folder is missing. Run tuios plugins install", le.ID, le.Commit)
+			} else if !le.Local() && (!live || !dirExists(d.BuildDir(dir))) {
+				pre = errf("plugin_not_installed", "the lock file pins %s at %.12s, and it is not built on this machine. Run tuios plugins install", le.ID, le.Commit)
 			}
 			src := &Source{Kind: "local", RequestedRef: le.Ref, ResolvedCommit: le.Commit, Subdir: le.Subdir}
 			if !le.Local() {
-				src.Kind, src.ManagedPath = "git", d.CheckoutDir(le)
+				src.Kind, src.ManagedPath = "git", d.BuildDir(dir)
 			}
-			add(OriginManaged, d.PluginRoot(le), src, &le, pre)
+			add(OriginManaged, d.PluginRoot(le, dir), src, &le, dir, pre)
 		}
 	}
 	if d.HerdrConfig != "" {
@@ -253,11 +259,11 @@ func Discover(d Dirs, enabled []string) []Entry {
 				continue
 			}
 			src := r.Source
-			add(OriginHerdr, r.ManifestPath, &src, nil, nil)
+			add(OriginHerdr, r.ManifestPath, &src, nil, "", nil)
 		}
 		for _, dir := range subdirs(filepath.Join(d.HerdrConfig, "plugins", "github")) {
 			if fileExists(filepath.Join(dir, ManifestName)) {
-				add(OriginHerdrManaged, dir, &Source{Kind: "github", ManagedPath: dir}, nil, nil)
+				add(OriginHerdrManaged, dir, &Source{Kind: "github", ManagedPath: dir}, nil, "", nil)
 			}
 		}
 	}

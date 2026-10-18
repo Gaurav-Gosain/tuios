@@ -43,7 +43,7 @@ func TestLockPathsStayInside(t *testing.T) {
 	}
 
 	commit := strings.Repeat("ab", 20)
-	ok := LockEntry{ID: "e2e.probe", Source: "https://example.com/r.git", Commit: commit, Subdir: "p", Dir: "plugins/e2e.probe/ababababab-x1"}
+	ok := LockEntry{ID: "e2e.probe", Source: "https://example.com/r.git", Commit: commit, Subdir: "p"}
 	if err := CheckLockEntry(ok); err != nil {
 		t.Fatalf("a valid entry: %v", err)
 	}
@@ -56,11 +56,8 @@ func TestLockPathsStayInside(t *testing.T) {
 		"option ref":     func(e *LockEntry) { e.Ref = "--upload-pack=sh" },
 		"option source":  func(e *LockEntry) { e.Source = "--upload-pack=sh" },
 		"relative local": func(e *LockEntry) { e.Source = LocalPrefix + "x" },
-		"no dir":         func(e *LockEntry) { e.Dir = "" },
-		"dir of another": func(e *LockEntry) { e.Dir = "plugins/other/x" },
-		"dir up":         func(e *LockEntry) { e.Dir = "plugins/e2e.probe/.." },
-		"dir deeper":     func(e *LockEntry) { e.Dir = "plugins/e2e.probe/a/../../../x" },
-		"dir absolute":   func(e *LockEntry) { e.Dir = "/etc" },
+		"dot id":         func(e *LockEntry) { e.ID = ".hidden" },
+		"dotdot id":      func(e *LockEntry) { e.ID = ".." },
 		"plain http":     func(e *LockEntry) { e.Source = "http://example.com/r.git" },
 	} {
 		e := ok
@@ -70,16 +67,22 @@ func TestLockPathsStayInside(t *testing.T) {
 		}
 	}
 
+	// A state dir must be one folder in plugins/<id>/.
+	for _, bad := range []string{"", "plugins/other/x", "plugins/e2e.probe/..", "plugins/e2e.probe/a/../../../x", "/etc", "plugins/e2e.probe/", "plugins/e2e.probe/a\\b"} {
+		if CheckDir(ok.ID, bad) == nil {
+			t.Errorf("CheckDir(%q) passed", bad)
+		}
+	}
 	// herdr's id rules allow "." and "..". PathComponent keeps them inside.
 	d := Dirs{TuiosData: t.TempDir()}
 	for _, id := range []string{ok.ID, "..", ".", "a..b"} {
 		e := ok
 		e.ID = id
-		e.Dir = NewDir(e)
-		if err := CheckLockEntry(e); err != nil && id != ".." && id != "." {
+		dir := NewDir(e)
+		if err := CheckDir(id, dir); err != nil {
 			t.Errorf("NewDir for %q: %v", id, err)
 		}
-		root := d.PluginRoot(e)
+		root := d.PluginRoot(e, dir)
 		if rel, err := filepath.Rel(d.ManagedDir(), root); err != nil || rel == ".." || strings.HasPrefix(rel, "../") || !strings.HasPrefix(rel, PathComponent(id)+string(filepath.Separator)) {
 			t.Errorf("PluginRoot of %q is %s, outside its folder in %s", id, root, d.ManagedDir())
 		}

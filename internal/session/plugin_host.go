@@ -70,6 +70,9 @@ type pluginHost struct {
 	dirs []string
 	// startedUp are the plugins whose startup commands ran.
 	startedUp map[string]bool
+	// roots are the folders the startup of each plugin ran from, for
+	// plugin.restart.
+	roots map[string]string
 	// panes are the plugin panes plugin.pane.open made, by window id.
 	panes map[string]pluginPane
 	// burst counts each plugin's event hook runs in the current window.
@@ -87,13 +90,15 @@ type pluginHost struct {
 // pluginPane is a pane a plugin opened.
 type pluginPane struct {
 	pluginID, entrypoint string
+	// root is the plugin folder the pane was opened from.
+	root string
 }
 
 func newPluginHost(d *Daemon, cfg config.PluginsConfig) *pluginHost {
 	return &pluginHost{
 		d: d, runner: herdrplugin.NewRunner(),
 		enabled: slices.Clone(cfg.Enabled), dirs: slices.Clone(cfg.Dirs),
-		startedUp: map[string]bool{}, panes: map[string]pluginPane{}, burst: map[string]int{},
+		startedUp: map[string]bool{}, roots: map[string]string{}, panes: map[string]pluginPane{}, burst: map[string]int{},
 	}
 }
 
@@ -231,14 +236,17 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 // startup has not run yet, in plugin id order, as herdr does.
 func (h *pluginHost) runStartups() {
 	for _, e := range h.entries(true) {
-		if !e.Runnable() || len(e.Plugin.Startup) == 0 {
+		if !e.Runnable() {
 			continue
 		}
 		h.mu.Lock()
 		done := h.startedUp[e.ID]
 		h.startedUp[e.ID] = true
+		if !done {
+			h.roots[e.ID] = e.Plugin.PluginRoot
+		}
 		h.mu.Unlock()
-		if done {
+		if done || len(e.Plugin.Startup) == 0 {
 			continue
 		}
 		ctx := h.d.pluginContextCurrent("plugin.startup")

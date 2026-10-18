@@ -52,17 +52,11 @@ type LockEntry struct {
 	Commit string `toml:"commit,omitempty" json:"commit,omitempty"`
 	// Tree is git's id of the plugin folder at Commit.
 	Tree string `toml:"tree,omitempty" json:"tree,omitempty"`
-	// Dir is the build folder that runs, relative to the tuios data
-	// folder: plugins/<id>/<commit12>-<nonce>. Each install builds into a
-	// new folder, and writing this entry is what switches to it.
-	Dir string `toml:"dir,omitempty" json:"dir,omitempty"`
 	// Approved is TrustHash of the manifest the person said yes to.
 	Approved string `toml:"approved" json:"approved"`
 	// Grants are the pane grants a native plugin asked for. A herdr plugin
 	// gets the default grants and leaves this empty.
-	Grants    []string  `toml:"grants,omitempty" json:"grants,omitempty"`
-	Installed time.Time `toml:"installed" json:"installed"`
-	Built     bool      `toml:"built" json:"built"`
+	Grants []string `toml:"grants,omitempty" json:"grants,omitempty"`
 }
 
 // Local reports whether the entry is a folder the person owns, installed in
@@ -91,11 +85,11 @@ func (d Dirs) LockPath() string { return filepath.Join(d.TuiosConfig, LockName) 
 // ManagedDir is the folder that holds the checkouts of installed plugins.
 func (d Dirs) ManagedDir() string { return filepath.Join(d.TuiosData, "plugins") }
 
-// CheckoutDir is the folder of e's checkout, the repository root: Dir in
-// the data folder. A build folder never moves once it is built, so a path a
-// build writes into what it makes stays valid.
-func (d Dirs) CheckoutDir(e LockEntry) string {
-	return filepath.Join(d.TuiosData, filepath.FromSlash(e.Dir))
+// BuildDir is a build folder, given as a state file dir, relative to the
+// tuios data folder. A build folder never moves once it is built, so a path
+// a build writes into what it makes stays valid.
+func (d Dirs) BuildDir(rel string) string {
+	return filepath.Join(d.TuiosData, filepath.FromSlash(rel))
 }
 
 // PluginDir is the folder that holds every build folder of the plugin id.
@@ -103,17 +97,19 @@ func (d Dirs) PluginDir(id string) string {
 	return filepath.Join(d.ManagedDir(), PathComponent(id))
 }
 
-// NewDir is a Dir for a new build folder of e.
+// NewDir is a state file dir for a new build folder of e:
+// plugins/<id>/<commit12>-<nonce>.
 func NewDir(e LockEntry) string {
 	return path.Join("plugins", PathComponent(e.ID), fmt.Sprintf("%.12s-%s", e.Commit, strconv.FormatInt(time.Now().UnixNano(), 36)))
 }
 
-// PluginRoot is the folder that holds e's manifest.
-func (d Dirs) PluginRoot(e LockEntry) string {
+// PluginRoot is the folder that holds e's manifest: the local folder, or
+// the plugin folder in the build folder dir.
+func (d Dirs) PluginRoot(e LockEntry, dir string) string {
 	if e.Local() {
 		return strings.TrimPrefix(e.Source, LocalPrefix)
 	}
-	return filepath.Join(d.CheckoutDir(e), filepath.FromSlash(e.Subdir))
+	return filepath.Join(d.BuildDir(dir), filepath.FromSlash(e.Subdir))
 }
 
 // dataDir is tuios's data folder, the parent of worktrees/ and repos/.
@@ -133,13 +129,13 @@ func Inside(file, dir string) bool {
 // id, that the manifest is in the checkout, and that the manifest is the
 // one the person approved. A local folder is the person's, so only the id
 // is checked.
-func checkManaged(d Dirs, le LockEntry, p *Plugin) *Error {
+func checkManaged(d Dirs, le LockEntry, dir string, p *Plugin) *Error {
 	switch {
 	case p.PluginID != le.ID:
 		return errf("plugin_lock_mismatch", "the lock file installs %s, and the manifest in %s names %s. Install the plugin again", le.ID, p.PluginRoot, p.PluginID)
 	case le.Local():
 		return nil
-	case !Inside(p.ManifestPath, d.CheckoutDir(le)):
+	case !Inside(p.ManifestPath, d.BuildDir(dir)):
 		return errf("plugin_outside_checkout", "the manifest of %s is outside its checkout. Install the plugin again", le.ID)
 	case TrustHash(le.Source, p, le.Grants) != le.Approved:
 		return errf("plugin_changed", "the manifest of %s is different from the approved one in plugins.lock. Install the plugin again", le.ID)
@@ -170,9 +166,8 @@ func ReadLock(p string) (*Lock, error) {
 const lockWait = 10 * time.Second
 
 // UpdateLock reads the lock file at p, lets change edit it, and writes it
-// back through a new temporary file and a rename, so a reader sees the old
-// file or the new one. The caller holds the install lock (HoldLock), so no
-// other command writes the file at the same time.
+// back with WriteAtomic. The caller holds the install lock (HoldLock), so
+// no other command writes the file at the same time.
 func UpdateLock(p string, change func(*Lock)) error {
 	l, err := ReadLock(p)
 	if err != nil {
@@ -184,31 +179,16 @@ func UpdateLock(p string, change func(*Lock)) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(p), LockName+".*.tmp")
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Rename(f.Name(), p)
-	}
-	if err != nil {
-		_ = os.Remove(f.Name())
-	}
-	return err
+	return WriteAtomic(p, data)
 }
 
 // CheckLockEntry checks the fields of e that name a path or reach git: a
 // lock file can come from a dotfiles repository the person did not write.
 func CheckLockEntry(e LockEntry) error {
-	if n, ok := NormalizeID(e.ID); !ok || n != e.ID {
-		return fmt.Errorf("the lock file has an invalid plugin id %q", e.ID)
+	// An id that starts with . or % could name a file tuios keeps beside
+	// the build folders, such as %install.lock.
+	if n, ok := NormalizeID(e.ID); !ok || n != e.ID || e.ID[0] == '.' || e.ID[0] == '%' {
+		return fmt.Errorf("the plugin id %q is not valid here", e.ID)
 	}
 	if e.Local() {
 		if !filepath.IsAbs(strings.TrimPrefix(e.Source, LocalPrefix)) {
@@ -218,12 +198,6 @@ func CheckLockEntry(e LockEntry) error {
 	}
 	if !IsCommit(e.Commit) {
 		return fmt.Errorf("the lock file entry %s has no full commit", e.ID)
-	}
-	// Dir must name one folder in plugins/<id>/, so a lock file cannot
-	// point a plugin at a folder elsewhere.
-	rest, ok := strings.CutPrefix(e.Dir, "plugins/"+PathComponent(e.ID)+"/")
-	if !ok || rest == "" || rest == "." || rest == ".." || strings.ContainsAny(rest, `/\:`) || hasControl(rest) {
-		return fmt.Errorf("the lock file entry %s has an invalid dir %q", e.ID, e.Dir)
 	}
 	if err := CheckSource(e.Source); err != nil {
 		return err

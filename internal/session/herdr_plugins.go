@@ -47,6 +47,7 @@ func buildHerdrPluginMethods() map[string]herdrPluginMethod {
 		"plugin.disable": func(d *Daemon, cs *connState, p json.RawMessage) (any, *herdrError) {
 			return d.herdrPluginSetEnabled(cs, p, false)
 		},
+		"plugin.restart":       (*Daemon).herdrPluginRestart,
 		"plugin.action.list":   (*Daemon).herdrPluginActionList,
 		"plugin.action.invoke": (*Daemon).herdrPluginActionInvoke,
 		"plugin.log.list":      (*Daemon).herdrPluginLogList,
@@ -695,7 +696,7 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 	}
 	d.notePaneCreator(cs, win.ID)
 	d.plugins.mu.Lock()
-	d.plugins.panes[win.ID] = pluginPane{pluginID: e.ID, entrypoint: pane.ID}
+	d.plugins.panes[win.ID] = pluginPane{pluginID: e.ID, entrypoint: pane.ID, root: e.Plugin.PluginRoot}
 	d.plugins.mu.Unlock()
 	if win.Unplaced && d.findTUIClient(sess.ID) != nil {
 		d.awaitPlacement(sess, win.ID, win.PTYID, newWindowPlaceWait)

@@ -873,20 +873,23 @@ folder, the build commands and what the plugin runs, and asks. Add `--yes`
 to skip the question. Add `--no-enable` to leave the plugin off, and `--no-build` to
 skip the build. You need `git` on your `PATH`.
 
-tuios writes the exact commit to `plugins.lock` beside `config.toml`. Each
-install builds into a new folder,
+tuios writes the source, the ref and the exact commit to `plugins.lock`
+beside `config.toml`. Each install builds into a new folder,
 `$XDG_DATA_HOME/tuios/plugins/<id>/<commit12>-<nonce>/`, where `<commit12>`
 is the first 12 characters of the commit. The folder does not move after
-the build. The `dir` key of the plugin in `plugins.lock` names the folder
-that runs. The build output also goes to `build.log` in the plugin's state
-folder. tuios refuses a manifest or a plugin folder that is a link to a
-place outside the repository.
+the build. The state file `$XDG_DATA_HOME/tuios/plugins/%state.toml` names
+the folder that runs on this machine. It stays out of `plugins.lock`, so
+you can share `plugins.lock` between machines. The build output also goes
+to `build.log` in the plugin's state folder. tuios refuses a manifest or a
+plugin folder that is a link to a place outside the repository.
 
-tuios changes `plugins.lock` only after the build works. Then it restarts
-the plugin from the new folder and removes the plugin's other folders. When
-a build fails or you stop it, the plugin keeps its entry in `plugins.lock`
-and runs from its old folder. When tuios cannot restart the plugin, it
-keeps the old folders and tells you to restart the daemon.
+tuios writes the state file and `plugins.lock` only after the build works.
+Then the daemon restarts the plugin from the new folder. The restart does
+not change `config.toml`. tuios keeps the new folder and the one before
+it, and the folders that open plugin panes run from. It removes the other
+folders of the plugin. When a build fails or you stop it, the plugin runs
+from its old folder. When tuios cannot restart the plugin, it keeps the old
+folders and tells you to restart the daemon.
 
 `tuios plugins install` with no source installs each plugin in
 `plugins.lock` at its pinned commit. Use it on a new machine that has your
