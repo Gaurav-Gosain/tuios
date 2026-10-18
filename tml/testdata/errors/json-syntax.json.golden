@@ -4,7 +4,7 @@
     "line": 1,
     "col": 80,
     "code": "syntax",
-    "message": "The JSON does not parse: invalid character ',' looking for beginning of value.",
+    "message": "Expected a JSON value here, found ']'.",
     "severity": "error"
   }
 ]

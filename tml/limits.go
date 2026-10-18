@@ -3,6 +3,7 @@ package tml
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -250,13 +251,17 @@ func sanitizeValue(v any, strict bool) (any, bool, error) {
 // it. Clean text keeps its key order and number spelling. Text that held an
 // unsafe character is encoded again, with sorted keys.
 func canonicalJSON(text []byte) (json.RawMessage, error) {
+	if serr := scanJSON(text); serr != nil {
+		return nil, serr
+	}
 	var buf bytes.Buffer
 	if err := json.Compact(&buf, text); err != nil {
-		return nil, err
+		return nil, errors.New("the JSON does not parse")
 	}
 	var v any
 	if err := json.Unmarshal(buf.Bytes(), &v); err != nil {
-		return nil, err
+		// The syntax is valid, so this is a number too large for a float64.
+		return nil, errors.New("a number is too large")
 	}
 	clean, changed, err := sanitizeValue(v, true)
 	if err != nil {

@@ -22,6 +22,11 @@ func ParseJSON(src []byte, opts *ParseOptions) (*Node, error) {
 	}
 	src = bytes.TrimPrefix(src, []byte("\xef\xbb\xbf"))
 	p := &jsonParser{src: src, lim: lim, dec: json.NewDecoder(bytes.NewReader(src))}
+	// Syntax is checked first by tml's own scanner, so a problem's text and
+	// position do not depend on the Go release.
+	if serr := scanJSON(src); serr != nil {
+		return nil, p.fail(serr.off, CodeSyntax, "%s", serr.msg)
+	}
 	p.dec.UseNumber()
 	tok, err := p.dec.Token()
 	if err != nil {
@@ -70,7 +75,7 @@ func (p *jsonParser) syntax(err error) *Error {
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return p.fail(len(p.src), CodeSyntax, "The JSON ends too early. Check for a missing } or ].")
 	}
-	return p.fail(off, CodeSyntax, "The JSON does not parse: %v.", err)
+	return p.fail(off, CodeSyntax, "The JSON does not parse here.")
 }
 
 // tokenStart returns the offset of the next token after off, past white

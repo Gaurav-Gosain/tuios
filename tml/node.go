@@ -220,7 +220,8 @@ func (n *Node) State() (map[string]any, error) {
 	}
 	var m map[string]any
 	if err := json.Unmarshal(v.Raw, &m); err != nil {
-		return nil, err
+		// encoding/json words its errors differently by Go release.
+		return nil, fmt.Errorf("the state is not a JSON object of values a float64 can hold")
 	}
 	if m == nil {
 		m = map[string]any{}

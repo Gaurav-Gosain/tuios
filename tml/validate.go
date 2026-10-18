@@ -788,7 +788,9 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 		if len(text) > 256 {
 			v.bad(a, at, "pattern is longer than 256 characters.")
 		} else if _, err := regexp.Compile(text); err != nil {
-			v.bad(a, at, "pattern is not a valid RE2 regular expression: %v.", err)
+			// The regexp package's own text varies by Go release, so it
+			// stays out of the message.
+			v.bad(a, at, "pattern is not a valid RE2 regular expression. Check its brackets, parentheses and escapes.")
 		}
 	case TObject:
 		if val.Kind != KindObject {

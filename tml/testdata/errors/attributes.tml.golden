@@ -191,7 +191,7 @@
     "line": 12,
     "col": 23,
     "code": "bad_value",
-    "message": "pattern is not a valid RE2 regular expression: error parsing regexp: missing closing ): `([a-z]`.",
+    "message": "pattern is not a valid RE2 regular expression. Check its brackets, parentheses and escapes.",
     "severity": "error"
   }
 ]

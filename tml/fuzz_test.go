@@ -111,6 +111,10 @@ func FuzzParseXML(f *testing.F) {
 func FuzzParseJSON(f *testing.F) {
 	addFiles(f, "testdata/examples/*.json", "testdata/errors/*.json", "testdata/golden/*.json")
 	f.Fuzz(func(t *testing.T, src []byte) {
+		// tml's scanner and encoding/json agree on what is JSON.
+		if ok := scanJSON(src) == nil; ok != json.Valid(src) {
+			t.Fatalf("scanJSON says %v and json.Valid says %v for %q", ok, !ok, src)
+		}
 		doc, err := ParseJSON(src, nil)
 		if err != nil {
 			var e *Error
