@@ -173,27 +173,31 @@ func Discover(d Dirs, enabled []string) []Entry {
 	var out []Entry
 	seen := map[string]bool{}
 	byID := map[string]bool{}
-	add := func(origin, path string, src *Source, lock *LockEntry) {
-		e := Entry{Origin: origin, Path: path, Lock: lock}
-		p, perr := Load(path)
-		if p != nil {
-			e.Path = p.ManifestPath
+	// add lists one plugin. pre is an error found before the manifest is
+	// read. lock is the lock file entry of a managed plugin.
+	add := func(origin, path string, src *Source, lock *LockEntry, pre *Error) {
+		e := Entry{Origin: origin, Path: path, Lock: lock, Err: pre}
+		var p *Plugin
+		if pre == nil {
+			p, e.Err = Load(path)
+			if p != nil {
+				e.Path = p.ManifestPath
+			}
+			if seen[e.Path] {
+				return
+			}
+			seen[e.Path] = true
+			if e.Err == nil && lock != nil {
+				e.Err = checkManaged(d, *lock, p)
+			}
 		}
-		key := e.Path
-		if seen[key] {
-			return
-		}
-		seen[key] = true
 		switch {
-		case perr != nil:
-			e.Err = perr
+		case e.Err != nil:
 			e.ID = guessID(path)
 			if lock != nil {
 				e.ID = lock.ID
+				byID[e.ID] = true
 			}
-		case lock != nil && p.PluginID != lock.ID:
-			e.ID, e.Plugin = lock.ID, p
-			e.Err = errf("plugin_lock_mismatch", "the lock file installs %s, and the manifest in %s names %s. Install the plugin again", lock.ID, p.PluginRoot, p.PluginID)
 		default:
 			if src != nil && src.Kind != "" {
 				p.Source = *src
@@ -211,33 +215,32 @@ func Discover(d Dirs, enabled []string) []Entry {
 		out = append(out, e)
 	}
 	for _, p := range d.Extra {
-		add(OriginConfig, expandHome(p), nil, nil)
+		add(OriginConfig, expandHome(p), nil, nil, nil)
 	}
 	for _, dir := range subdirs(d.PluginsDir()) {
 		if fileExists(filepath.Join(dir, ManifestName)) {
-			add(OriginTuios, dir, nil, nil)
+			add(OriginTuios, dir, nil, nil, nil)
 		}
 	}
 	if d.TuiosConfig != "" {
-		if lock, err := ReadLock(d.LockPath()); err == nil {
-			for i := range lock.Plugins {
-				le := lock.Plugins[i]
-				if err := CheckLockEntry(le); err != nil {
-					out = append(out, Entry{ID: le.ID, Origin: OriginManaged, Path: d.LockPath(), Lock: &le, Err: errf("plugin_lock_invalid", "%v", err)})
-					byID[le.ID] = true
-					continue
-				}
-				if _, err := os.Stat(d.CheckoutDir(le)); err != nil && !le.Local() {
-					out = append(out, Entry{ID: le.ID, Origin: OriginManaged, Path: d.CheckoutDir(le), Lock: &le, Err: errf("plugin_not_installed", "the lock file pins %s at %.12s, and its folder is missing. Run tuios plugins install", le.ID, le.Commit)})
-					byID[le.ID] = true
-					continue
-				}
-				src := &Source{Kind: "local", RequestedRef: le.Ref, ResolvedCommit: le.Commit, Subdir: le.Subdir}
-				if !le.Local() {
-					src.Kind, src.ManagedPath = "git", d.CheckoutDir(le)
-				}
-				add(OriginManaged, d.PluginRoot(le), src, &le)
+		lock, err := ReadLock(d.LockPath())
+		if err != nil {
+			add(OriginManaged, d.LockPath(), nil, &LockEntry{ID: LockName}, errf("plugin_lock_invalid", "%v", err))
+			lock = &Lock{}
+		}
+		for i := range lock.Plugins {
+			le := lock.Plugins[i]
+			var pre *Error
+			if err := CheckLockEntry(le); err != nil {
+				pre = errf("plugin_lock_invalid", "%v", err)
+			} else if !le.Local() && !dirExists(d.CheckoutDir(le)) {
+				pre = errf("plugin_not_installed", "the lock file pins %s at %.12s, and its folder is missing. Run tuios plugins install", le.ID, le.Commit)
 			}
+			src := &Source{Kind: "local", RequestedRef: le.Ref, ResolvedCommit: le.Commit, Subdir: le.Subdir}
+			if !le.Local() {
+				src.Kind, src.ManagedPath = "git", d.CheckoutDir(le)
+			}
+			add(OriginManaged, d.PluginRoot(le), src, &le, pre)
 		}
 	}
 	if d.HerdrConfig != "" {
@@ -250,11 +253,11 @@ func Discover(d Dirs, enabled []string) []Entry {
 				continue
 			}
 			src := r.Source
-			add(OriginHerdr, r.ManifestPath, &src, nil)
+			add(OriginHerdr, r.ManifestPath, &src, nil, nil)
 		}
 		for _, dir := range subdirs(filepath.Join(d.HerdrConfig, "plugins", "github")) {
 			if fileExists(filepath.Join(dir, ManifestName)) {
-				add(OriginHerdrManaged, dir, &Source{Kind: "github", ManagedPath: dir}, nil)
+				add(OriginHerdrManaged, dir, &Source{Kind: "github", ManagedPath: dir}, nil, nil)
 			}
 		}
 	}
@@ -328,7 +331,7 @@ func fileExists(p string) bool {
 }
 
 func expandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") {
+	if p == "~" || strings.HasPrefix(p, "~/") || filepath.Separator == '\\' && strings.HasPrefix(p, `~\`) {
 		if home, err := os.UserHomeDir(); err == nil {
 			return filepath.Join(home, strings.TrimPrefix(p, "~"))
 		}

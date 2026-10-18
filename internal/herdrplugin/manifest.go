@@ -356,6 +356,11 @@ func Parse(data []byte) (*Plugin, *Error) {
 	if p.Version, perr = nonEmpty(*raw.Version, "invalid_plugin_version", "plugin version is required"); perr != nil {
 		return nil, perr
 	}
+	// tuios shows the version, the argv, the events and the placements in
+	// the install prompt, so none of them may hold a terminal control.
+	if hasControl(p.Version) {
+		return nil, errf("invalid_plugin_version", "plugin version must not contain control characters")
+	}
 	if p.MinHerdrVersion, perr = checkMinVersion(raw.MinHerdrVersion); perr != nil {
 		return nil, perr
 	}
@@ -546,6 +551,9 @@ func event(e rawEvent) (EventHook, *Error) {
 	if perr != nil {
 		return EventHook{}, perr
 	}
+	if hasControl(on) {
+		return EventHook{}, errf("invalid_plugin_event", "event name must not contain control characters")
+	}
 	pl, perr := platforms(e.Platforms)
 	if perr != nil {
 		return EventHook{}, perr
@@ -577,6 +585,9 @@ func paneOf(r rawPane) (Pane, *Error) {
 	p := Pane{ID: id, Title: title, Description: trimmed(r.Description), Platforms: pl, Placement: PlacementOverlay, Command: argv}
 	if r.Placement != nil {
 		p.Placement = *r.Placement
+	}
+	if hasControl(p.Placement) {
+		return Pane{}, errf("invalid_plugin_pane_placement", "pane placement must not contain control characters")
 	}
 	if r.Width != nil {
 		s, _ := sizeOf(r.Width)
@@ -677,6 +688,9 @@ func platforms(raw *[]string) ([]string, *Error) {
 func argvOf(argv []string) ([]string, *Error) {
 	if len(argv) == 0 || slices.Contains(argv, "") {
 		return nil, errf("invalid_plugin_command", "command must contain non-empty argv strings")
+	}
+	if slices.ContainsFunc(argv, hasControl) {
+		return nil, errf("invalid_plugin_command", "command must not contain control characters")
 	}
 	return slices.Clone(argv), nil
 }

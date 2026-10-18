@@ -7701,21 +7701,37 @@ Not covered end to end: the keys typed while the pointer is held past the edge. 
 
 `TestPluginsInstallFromGit` installs a probe plugin from a bare repository
 under the test's temp folder, over `file://`, with a daemon running. The
-`broken` branch has a build command that exits 3. The `main` branch builds
-`dist/out`, and its one action prints that file.
+`main` branch builds `dist/out`, and its one action prints that file. The
+`broken` branch has a build command that exits 3. On `escape`,
+`herdr-plugin.toml` is a link to a manifest outside the repository. On
+`linkdir`, the folder `plug` is a link to a folder outside it. The outside
+manifest's build writes a marker file.
 
-The test carries its positive half in the same fixture: the broken branch
-leaves no lock entry, no checkout and no enable, and `main` gets all three.
-The artifacts are `install.txt`, `plugins.lock` and `list.json` in the
-test's artifact folder.
+The test carries its positive half in the same fixture: the broken, escape
+and linkdir branches leave no lock entry, no checkout, no enable and no
+marker, and `main` gets all of them. `main` is installed once without a
+build. Install from the lock file without a terminal must then leave that
+checkout. The next install of `main` builds beside it and swaps it in. The
+artifacts are `install.txt`, `plugins.lock` and `list.json` in the test's
+artifact folder.
+
+`TestManifestRefusesTerminalControls` in `internal/herdrplugin` is a
+security boundary test. It checks that `Parse` refuses ESC, OSC, CR, C1,
+bidi and DEL characters in argv, versions, events and placements, and that
+it takes a clean manifest with a tab in an argument.
 
 Each control cut one line in the branch, built the binary, and ran the one
-test. Run on 2026-10-18.
+test. Run on 2026-10-18, after the review of #877.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| A failed build stops the install | the `runPluginBuild` check in `installPlugin` never sees the error | `TestPluginsInstallFromGit` ("install of the broken branch: <nil>") | **caught** |
-| A failed build removes its checkout | the `os.RemoveAll(checkoutDir)` call after the failed build | `TestPluginsInstallFromGit` ("a failed build left 1 folders in .../plugins/e2e.probe") | **caught** |
-| The daemon finds an installed plugin | the `add(OriginManaged, ...)` call in `Discover` | `TestPluginsInstallFromGit` ("install of main: exit status 1", with `plugin not found (plugin_not_found)` from `plugin.enable`) | **caught** |
+| A failed build stops the install | the `runPluginBuild` check in `installJob.finish` never sees the error | `TestPluginsInstallFromGit` ("install of the broken branch: <nil>") | **caught** |
+| A failed build removes the new checkout | the build failure returns without `fail`, which removes the checkout this run fetched | `TestPluginsInstallFromGit` ("a failed build left 1 folders in .../plugins/e2e.probe") | **caught** |
+| The daemon finds an installed plugin | the `add(OriginManaged, ...)` call in `Discover` | `TestPluginsInstallFromGit` ("plugins list does not show the probe managed and on") | **caught** |
+| A manifest that links out of the checkout is refused (review finding 2) | the `Inside` check in `loadInside` | `TestPluginsInstallFromGit` ("install of escape: <nil>, want \"outside the repository\"") | **caught** |
+| A subdir that is a link is not a folder (review finding 2) | the `cat-file -t` check in `fetchInto` | `TestPluginsInstallFromGit` ("install of linkdir: exit status 1, want \"has no folder plug\""). The `Inside` check still refuses the install, so the cut changes only the message | **caught** |
+| Install from the lock file keeps a checkout it did not fetch (review finding 3) | the `j.fetched` condition in `fail` becomes true | `TestPluginsInstallFromGit` ("install from the lock file removed the checkout it did not fetch") | **caught** |
+| A manifest argv with a terminal control is refused (review finding 1) | the `hasControl` check in `argvOf` | `TestManifestRefusesTerminalControls` ("Parse took \"\\u001b[2J\" in %ARG%" and five more) | **caught** |
 
-The fixed build passes the test 3 of 3, and every `TestHerdrPlugin*` 3 of 3.
+The fixed build passes `TestPluginsInstallFromGit` 3 of 3, and every
+`TestHerdrPlugin*` 3 of 3.

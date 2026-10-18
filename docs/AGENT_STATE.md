@@ -868,19 +868,25 @@ tuios plugins install https://gitlab.com/a/b.git@main    # any git URL: https, s
 tuios plugins install ./my-plugin                        # a folder on this machine, used in place
 ```
 
-Before it changes anything, tuios shows the commit, the folder, the build
-commands and what the plugin runs, and asks. Add `--yes` to skip the
-question. Add `--no-enable` to leave the plugin off, and `--no-build` to
+tuios gets the source into a temporary folder. Then it shows the commit, the
+folder, the build commands and what the plugin runs, and asks. Add `--yes`
+to skip the question. Add `--no-enable` to leave the plugin off, and `--no-build` to
 skip the build. You need `git` on your `PATH`.
 
 tuios writes the exact commit to `plugins.lock` beside `config.toml`. The
-checkout goes in `$XDG_DATA_HOME/tuios/plugins/<id>/<commit>/`. The build
-output also goes to `build.log` in the plugin's state folder. When a build
-fails, tuios removes the checkout and writes nothing to `plugins.lock`.
+checkout goes in `$XDG_DATA_HOME/tuios/plugins/<id>/<commit12>/`, where
+`<commit12>` is the first 12 characters of the commit. The build output also
+goes to `build.log` in the plugin's state folder. When a build fails, tuios
+removes the new checkout and writes nothing to `plugins.lock`. tuios refuses
+a manifest or a plugin folder that is a link to a place outside the
+repository.
 
 `tuios plugins install` with no source installs each plugin in
 `plugins.lock` at its pinned commit. Use it on a new machine that has your
 config folder. It does not enable a plugin. `[plugins] enabled` does that.
+With `--yes`, you trust the person who wrote `plugins.lock`: tuios builds
+each plugin without a question. tuios asks again, also with `--yes`, when a
+manifest is different from the approved one in `plugins.lock`.
 
 The daemon never fetches and never builds. It only reads `plugins.lock` and
 the checkouts.
