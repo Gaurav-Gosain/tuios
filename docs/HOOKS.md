@@ -2,7 +2,7 @@
 
 The docs site has the same reference: https://tuios.dev/docs/hooks
 
-Ten events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
+Eleven events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
 
 ## Which side runs a hook
 
@@ -20,10 +20,11 @@ A hook runs on the side that owns the fact it reports.
 | `after-detach` | client | no |
 | `after-resize` | client | no |
 | `after-layout-change` | client | no |
+| `after-theme-change` | client | no |
 
 The window set, the focused window, the current workspace and a pane's agent state belong to the session, so the daemon runs those commands. They fire on a detached session, and they fire once however many clients are attached.
 
-A client's terminal size, its attach and its detach belong to that one client, and the layout is computed by the attached renderer. Those stay in the client. Three clients attaching is three attaches.
+A client's terminal size, its attach, its detach and its theme belong to that one client, and the layout is computed by the attached renderer. Those stay in the client. Three clients attaching is three attaches.
 
 A tuios with no daemon runs every hook itself.
 
@@ -51,6 +52,7 @@ is empty, or 0 for a number, so a script can read all of them:
 | `TUIOS_AGENT_STATE`, `TUIOS_AGENT_PREV_STATE` | For `after-agent-state`: the state the pane moved to and from |
 | `TUIOS_AGENT_HARNESS`, `TUIOS_AGENT_MESSAGE` | For `after-agent-state`: the harness and the message that came with the state |
 | `TUIOS_COMMAND`, `TUIOS_EXIT_CODE`, `TUIOS_DURATION_MS` | For `after-command-finished`, below |
+| `TUIOS_THEME`, `TUIOS_THEME_BG`, `TUIOS_THEME_LIGHT` | For `after-theme-change`, below |
 
 `after-agent-state` fires only for the transitions `[notifications.agent]`
 alerts on (`needs_input`, `errored` and `done` by default), after its
@@ -71,6 +73,30 @@ fires it. It gets `TUIOS_COMMAND` (the command line, cut to 512 bytes with
 likely secrets masked), `TUIOS_EXIT_CODE` (empty when the shell sent no status)
 and `TUIOS_DURATION_MS`. Every other event gets those three empty. A tuios with
 no daemon does not fire it, since only the daemon follows the marks.
+
+`after-theme-change` fires when other theme colours come into force in the
+client. This occurs when you pick a theme, when the Omarchy theme changes, when
+tuios follows `theme_light`, and with no theme when the terminal's background
+changes. It fires once for each change:
+
+- While the theme picker or the theme editor is open, it does not fire. When
+  the picker closes on a theme, it fires once. When you cancel the picker, it
+  does not fire.
+- It does not fire when tuios starts.
+
+It gets these variables:
+
+- `TUIOS_THEME`: the theme id, or `none` when no theme is in force.
+- `TUIOS_THEME_BG`: the background the panes get, as `#rrggbb`. It is empty
+  when tuios does not know the background.
+- `TUIOS_THEME_LIGHT`: `1` for a light background, `0` for a dark background.
+
+Use it for a tool that does not follow the theme by itself:
+
+```toml
+[hooks]
+after-theme-change = "~/.config/tuios/hooks/theme.sh"
+```
 
 The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios kill-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
 

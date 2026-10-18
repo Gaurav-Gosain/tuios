@@ -446,7 +446,9 @@ A hook runs a shell command on an event, with `TUIOS_*` variables carrying the
 facts. The daemon runs `after-new-window`, `after-close-window`,
 `after-focus-change`, `after-workspace-switch`, `after-agent-state` and
 `after-command-finished`, so they fire with nobody attached. `after-attach`,
-`after-detach`, `after-resize` and `after-layout-change` run in the client.
+`after-detach`, `after-resize`, `after-layout-change` and `after-theme-change`
+run in the client. `after-theme-change` gets `TUIOS_THEME`, `TUIOS_THEME_BG`
+and `TUIOS_THEME_LIGHT`.
 
 ```toml
 [hooks]

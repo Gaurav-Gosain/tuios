@@ -221,6 +221,10 @@ again and draws with the new colours.
 A program that uses only the sixteen ANSI colours changes colour with the theme
 and needs no notice.
 
+For a program that reads its colours from a file, use the `after-theme-change`
+hook. The hook gets the theme id, the background and a light flag. See
+[HOOKS.md](HOOKS.md).
+
 ## Custom Themes
 
 Custom themes are `.json` files in the themes directory:
