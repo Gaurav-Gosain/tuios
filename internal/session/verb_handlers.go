@@ -306,9 +306,6 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	if verr != nil {
 		return nil, verr
 	}
-	if len(env) > 0 && p.Host != "" && p.Host != "local" {
-		return nil, invalidParam("env", "env names variables of this machine, so it cannot go to a window on another machine")
-	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
@@ -322,6 +319,11 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	// later. "local" is accepted and means this machine, which is the default.
 	if verr := checkWindowHost(d, &p.Host); verr != nil {
 		return nil, verr
+	}
+	// After checkWindowHost, so "local" and this machine's own name are
+	// this machine.
+	if len(env) > 0 && p.Host != "" {
+		return nil, invalidParam("env", "env names variables of this machine, so it cannot go to a window on another machine")
 	}
 	// A directory that cannot be entered is refused rather than quietly ignored.
 	// A window on another machine is the exception: the path is that machine's

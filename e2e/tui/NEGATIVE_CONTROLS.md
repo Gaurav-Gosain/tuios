@@ -1336,6 +1336,9 @@ person enables it.
 | A command key of type `plugin_action` | `RunCommandBinding`: the `runPluginActionKey` call cut | `TestHerdrPluginPalette` (run-1.env never holds the key's run) | **caught** |
 | A manifest that starts with a UTF-8 byte order mark | `Parse`: the `bytes.TrimPrefix` call cut | `TestHerdrPluginTrustAndHooks` (actions listed as `plugin_manifest_parse_failed`) | **caught** |
 | `env` on `tab.create` and `pane.split` | `verbNewWindow`: `Env: env` cut from the window options | `TestHerdrSocketAPI` (the new pane never shows env-from-tab) | **caught** |
+| `env` on `workspace.create` | `verbNewSession`: `Env: env` cut from the window options | `TestHerdrSocketAPI` (the new pane never shows env-from-workspace) | **caught** |
+| The warning for a `plugin_action` key that no plugin has | `validateCommands`: the `validatePluginActionKeys` call cut | `TestHerdrPluginPalette` (never shows "1 config problem") | **caught** |
+| A bare action id prefers the enabled plugin | `FindAction`: the enabled-only return cut | `TestHerdrPluginPalette` (run-1.env never holds the key's run: the id is ambiguous) | **caught** |
 
 ## send-keys in the pane's keyboard mode
 

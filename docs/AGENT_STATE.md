@@ -902,8 +902,10 @@ started by its caller holds.
 | `[[link_handlers]]` | Not yet. `tuios plugins info` lists them. |
 
 To bind an action to a key, add a command key of type `plugin_action`. The
-`command` is the action id. Write it as `PLUGIN_ID.ACTION_ID` when two plugins
-have an action with the same id. This is herdr's `[[keys.command]]` entry
+`command` is the action id. When an enabled and a disabled plugin have an
+action with the same id, the bare id runs the enabled plugin's action. Write
+it as `PLUGIN_ID.ACTION_ID` when two enabled plugins have the same id. When no
+plugin has the action, tuios starts and shows a config problem. This is herdr's `[[keys.command]]` entry
 under a different table name. tuios does not read herdr's config file, so copy
 the entry into `config.toml`:
 

@@ -417,25 +417,17 @@ func (d *Daemon) findPluginAction(pluginID, actionID string) (*herdrplugin.Entry
 		return e, a, nil
 	}
 	actionID = strings.TrimSpace(actionID)
-	var found []*herdrplugin.Entry
-	var acts []herdrplugin.Action
-	entries := d.plugins.entries(true)
-	for i := range entries {
-		e := &entries[i]
-		if e.Plugin == nil || e.Err != nil {
-			continue
-		}
-		for _, a := range e.Plugin.Actions {
-			if a.ID == actionID || e.ID+"."+a.ID == actionID {
-				found, acts = append(found, e), append(acts, a)
-			}
-		}
-	}
+	// An enabled plugin wins over a disabled one with the same action id.
+	found := herdrplugin.FindAction(d.plugins.entries(true), actionID)
 	switch len(found) {
 	case 0:
 		return nil, herdrplugin.Action{}, herdrErr("plugin_action_not_found", "plugin action not found")
 	case 1:
-		return found[0], acts[0], nil
+		for _, a := range found[0].Plugin.Actions {
+			if a.ID == actionID || found[0].ID+"."+a.ID == actionID {
+				return found[0], a, nil
+			}
+		}
 	}
 	return nil, herdrplugin.Action{}, herdrErr("ambiguous_plugin_action", "plugin action id matches more than one action; include plugin_id")
 }

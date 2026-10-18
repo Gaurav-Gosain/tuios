@@ -2368,7 +2368,7 @@ another machine), `timeout` (with `wait`, milliseconds before the
 `timeout` error; 0 waits with no limit), and `env` (an object of variables
 to set in the process; checked as `start-agent` checks its `env`; not for a
 window on another machine, and refused from another machine). `new-session`
-takes the same `env` for its first window.
+takes the same `env` for its first window, and refuses it with `window` false.
 
 A daemon that does not know `keep_open` and `wait` refuses them with
 `invalid_params`, as it refuses any parameter it does not know. A daemon from

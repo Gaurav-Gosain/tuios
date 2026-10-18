@@ -457,7 +457,8 @@ func TestHerdrPluginPanes(t *testing.T) {
 // from the command palette, as the person does. A plugin that is not enabled
 // has no row: its action is not offered, and nothing of it runs. A command
 // key of type plugin_action runs the same action, as herdr's
-// [[keys.command]] does. The actions fixture's manifest starts with a UTF-8
+// [[keys.command]] does, and a key that names an action no plugin has is a
+// config warning. The actions fixture's manifest starts with a UTF-8
 // byte order mark and asks for herdr 0.9.5, so every test that runs it also
 // shows that both load.
 //
@@ -466,9 +467,16 @@ func TestHerdrPluginPanes(t *testing.T) {
 // lists "Say hello"; with the Runnable check cut from pluginPaletteItems,
 // the palette offers the hidden plugin's action.
 func TestHerdrPluginPalette(t *testing.T) {
-	keys := "\n[[keybindings.command]]\nkey = \"alt+y\"\ntype = \"plugin_action\"\ncommand = \"e2e.actions.hello\"\ndescription = \"Hello key\"\n"
+	keys := "\n[[keybindings.command]]\nkey = \"alt+y\"\ntype = \"plugin_action\"\ncommand = \"hello\"\ndescription = \"Hello key\"\n" +
+		"\n[[keybindings.command]]\nkey = \"alt+u\"\ntype = \"plugin_action\"\ncommand = \"e2e.nope\"\n"
 	term, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions", "e2e.panes"}, "actions", "panes", "hidden")+keys)
 	const id = "e2e.actions"
+
+	// A plugin_action key that no plugin has is a config problem, not an
+	// error: tuios starts and says so.
+	if err := term.WaitForText("1 config problem", uiTimeout); err != nil {
+		t.Fatalf("the key for an action no plugin has was not reported: %v\n%s", err, term.Snapshot())
+	}
 
 	openPaletteQuery := func(query string) {
 		t.Helper()
@@ -510,7 +518,9 @@ func TestHerdrPluginPalette(t *testing.T) {
 	}
 	savePluginArtifact(t, base, id, "run-0.env")
 
-	// The command key runs the action, with keybinding as its source.
+	// The command key runs the action, with keybinding as its source. Its
+	// bare id hello is also an action of the hidden plugin, which is off, so
+	// the enabled plugin's action runs.
 	if err := term.SendKeys(tuitest.Alt('y')); err != nil {
 		t.Fatalf("press the plugin action key: %v", err)
 	}

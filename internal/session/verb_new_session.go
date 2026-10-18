@@ -75,6 +75,9 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	if len(env) > 0 && !makeWindow {
+		return nil, invalidParam("env", "env is set in the first window's process, and window is false. Leave env out, or create the window")
+	}
 	if makeWindow {
 		if len(p.Command) > 0 && p.Command[0] == "" {
 			return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")

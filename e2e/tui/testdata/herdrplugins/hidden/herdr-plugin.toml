@@ -7,3 +7,8 @@ min_herdr_version = "0.9.3"
 id = "never"
 title = "Never offered"
 command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/ran\""]
+
+[[actions]]
+id = "hello"
+title = "Hidden hello"
+command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/ran\""]

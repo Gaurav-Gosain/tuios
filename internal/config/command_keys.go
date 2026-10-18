@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
 // Command keybindings: [[keybindings.command]] entries that bind a key to a
@@ -332,6 +334,35 @@ func validateCommands(cfg *UserConfig, result *ValidationResult) {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field: fmt.Sprintf("keybindings.command[%d]", p.Entry), Key: p.Key, Message: p.Problem,
 		})
+	}
+	validatePluginActionKeys(cfg, result)
+}
+
+// validatePluginActionKeys warns about a plugin_action entry whose action no
+// plugin on this machine has. It is a warning, since the plugin can be
+// installed later. The manifests are read only when such an entry exists.
+func validatePluginActionKeys(cfg *UserConfig, result *ValidationResult) {
+	var entries []herdrplugin.Entry
+	loaded := false
+	for i, c := range cfg.Keybindings.Command {
+		id := strings.TrimSpace(c.Command)
+		if c.ResolvedType() != CommandTypePluginAction || id == "" {
+			continue
+		}
+		if !loaded {
+			path, err := GetConfigPath()
+			if err != nil {
+				return
+			}
+			entries = herdrplugin.Discover(herdrplugin.DefaultDirs(path, cfg.Plugins.Dirs), cfg.Plugins.Enabled)
+			loaded = true
+		}
+		if len(herdrplugin.FindAction(entries, id)) == 0 {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: fmt.Sprintf("keybindings.command[%d]", i+1), Key: c.Key,
+				Message: fmt.Sprintf("No plugin has the action %q. The key does nothing until you install a plugin with this action. Run tuios plugins list to see the plugins.", id),
+			})
+		}
 	}
 }
 

@@ -619,7 +619,8 @@ height = "80%"
     the command fails, the dock shows a message.
   - `plugin_action`: the command is the id of a herdr plugin action, for
     example `example.layout.apply`. The daemon runs the action. The plugin
-    must be enabled. This works only in a daemon session on this machine. See
+    must be enabled. When no plugin has the action, tuios shows a config
+    problem. This works only in a daemon session on this machine. See
     [herdr plugins](AGENT_STATE.md#herdr-plugins).
 - `command` runs with `sh -c`, so you can write pipes and quotes. It starts in
   the folder of the focused pane.

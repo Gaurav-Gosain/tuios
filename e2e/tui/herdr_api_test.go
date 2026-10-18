@@ -75,7 +75,8 @@ func buildHerdrClient(t *testing.T) string {
 //     needs_input reads as herdr's blocked; text and keys typed with
 //     pane.send_text and pane.send_keys reach the pane; tab.create makes a
 //     workspace with the label; the event stream reports a new pane; env
-//     on tab.create and pane.split is set in the new pane's shell.
+//     on workspace.create, tab.create and pane.split is set in the new
+//     pane's shell.
 //   - From inside a pane, with herdr's environment only: pane.current is the
 //     caller's own pane, by the id in HERDR_PANE_ID; typing into a pane that
 //     waits on a prompt is refused, since the pane has no respond grant.
@@ -166,7 +167,10 @@ func TestHerdrSocketAPI(t *testing.T) {
 		t.Errorf("tab_created does not carry the label:\n%s", seen)
 	}
 
-	// env on tab.create and pane.split reaches the new pane's shell.
+	// env on workspace.create, tab.create and pane.split reaches the new
+	// pane's shell.
+	wsEnv := herdrCall(t, base, "workspace.create", map[string]any{"label": "herdr-env-ws", "env": map[string]string{"HERDR_E2E_ENV": "from-workspace"}})
+	herdrEcho(t, base, wsEnv["root_pane"].(map[string]any)["pane_id"].(string), "env-from-workspace")
 	tabEnv := herdrCall(t, base, "tab.create", map[string]any{"workspace_id": target["workspace_id"], "focus": false, "env": map[string]string{"HERDR_E2E_ENV": "from-tab"}})
 	herdrEcho(t, base, tabEnv["root_pane"].(map[string]any)["pane_id"].(string), "env-from-tab")
 	split := herdrCall(t, base, "pane.split", map[string]any{"target_pane_id": targetID, "direction": "right", "focus": false, "env": map[string]string{"HERDR_E2E_ENV": "from-split"}})

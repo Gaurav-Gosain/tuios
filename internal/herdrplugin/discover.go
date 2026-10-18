@@ -225,6 +225,33 @@ func Discover(d Dirs, enabled []string) []Entry {
 	return out
 }
 
+// FindAction lists the loaded entries that have the action actionID names,
+// bare or qualified as PLUGIN_ID.ACTION_ID. When an enabled entry is among
+// them, only the enabled ones are listed, so a bare id that a disabled
+// plugin shares still names the one that runs.
+func FindAction(entries []Entry, actionID string) []*Entry {
+	var found, enabled []*Entry
+	for i := range entries {
+		e := &entries[i]
+		if e.Plugin == nil || e.Err != nil {
+			continue
+		}
+		for _, a := range e.Plugin.Actions {
+			if a.ID == actionID || e.ID+"."+a.ID == actionID {
+				found = append(found, e)
+				if e.Enabled {
+					enabled = append(enabled, e)
+				}
+				break
+			}
+		}
+	}
+	if len(enabled) > 0 {
+		return enabled
+	}
+	return found
+}
+
 // Find is the entry for id that runs, the first found, or nil.
 func Find(entries []Entry, id string) *Entry {
 	for i := range entries {

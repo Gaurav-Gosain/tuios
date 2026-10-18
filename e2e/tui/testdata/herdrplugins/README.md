@@ -8,3 +8,5 @@ writes what it saw into its HERDR_PLUGIN_STATE_DIR, which the test reads.
 - panes: a popup pane and a split pane that print a marker and wait.
 - broken: a manifest herdr refuses, to show the error in tuios plugins list.
 - hidden: an action of a plugin that stays off, which the palette must not offer.
+  Its hello action has the id of the actions plugin's, so a key with the bare
+  id hello must run the enabled plugin's action.
