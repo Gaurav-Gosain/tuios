@@ -6957,3 +6957,21 @@ The fixed build passes it, `TestHookIntegrationsReportTheTurn` and
 rules keep their tests in `internal/session`
 (`TestSetAgentStateNewSessionInTheSameHarnessTakesOver`,
 `TestSetAgentStateRefusesANestedSession`), which pass unchanged.
+
+## The mode 2031 notice on every theme change
+
+`TestOmarchyThemeSwitchIsFollowed` now switches Omarchy from Tokyo Night to
+Gruvbox, another dark theme, before Catppuccin Latte. The scheme listener in
+the pane turns on mode 2031 and counts the notices for a second after the
+first. After Gruvbox it must get exactly one `CSI ? 997 ; 1 n`, and OSC 11 and
+OSC 4 slot 4 must answer Gruvbox's colours. The fixed build passes it,
+`TestThemedDaemonPaneReportsTheTheme`, `TestHostColorsReachPanesAndChrome` and
+`TestHostColorsSilentTerminal`.
+
+The controls were run on 2026-10-18 on branch `feat/theme-change-997`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The notice only on a dark and light flip, which is `main` before the change | `Emulator.SetReportColors`: `changed` is a change of `isLightBackground` | `TestOmarchyThemeSwitchIsFollowed` ("after the switch to Gruvbox the program that turned on mode 2031 was not told dark") | **caught** |
+| Two notices for one theme push, one for the pair and one for the sixteen | `Emulator.SetReportColors`: a write for a changed pair and another for a changed palette | `TestOmarchyThemeSwitchIsFollowed` ("the switch to Gruvbox did not send the program exactly one notice"), `TestConform_ColorSchemeNotice` | **caught** |
+| DSR 996 unanswered | the `case 996` in the private DSR handler cut | `TestConform_ColorSchemeDSR` (every case), `TestStatusReportFormPerBackend` (unit tests in `vt/`, not e2e) | **caught** |
