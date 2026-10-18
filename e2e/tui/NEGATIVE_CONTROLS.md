@@ -7697,3 +7697,25 @@ Run on 2026-10-20 on Linux. The control is the build of `origin/main` at e5334a8
 | The rejoin removed: `FilterMouseMotion` without its `rejoinSplitMouse` call (`origin/main`) | `standalone`, `daemon` ("the pane never landed on the left half at full height") | **caught** |
 
 Not covered end to end: the keys typed while the pointer is held past the edge. A drag ignores them in this fixture, and a check that the screen held still passed on both builds, so it was removed. The release is what this fixture catches. Not covered either: negative y, the wheel, a report split between two reads, and a report too long for the hold. A throwaway probe checked them: each is rejoined or dropped whole, and keys held for a report that never ends are typed in order.
+## tuios plugins install
+
+`TestPluginsInstallFromGit` installs a probe plugin from a bare repository
+under the test's temp folder, over `file://`, with a daemon running. The
+`broken` branch has a build command that exits 3. The `main` branch builds
+`dist/out`, and its one action prints that file.
+
+The test carries its positive half in the same fixture: the broken branch
+leaves no lock entry, no checkout and no enable, and `main` gets all three.
+The artifacts are `install.txt`, `plugins.lock` and `list.json` in the
+test's artifact folder.
+
+Each control cut one line in the branch, built the binary, and ran the one
+test. Run on 2026-10-18.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A failed build stops the install | the `runPluginBuild` check in `installPlugin` never sees the error | `TestPluginsInstallFromGit` ("install of the broken branch: <nil>") | **caught** |
+| A failed build removes its checkout | the `os.RemoveAll(checkoutDir)` call after the failed build | `TestPluginsInstallFromGit` ("a failed build left 1 folders in .../plugins/e2e.probe") | **caught** |
+| The daemon finds an installed plugin | the `add(OriginManaged, ...)` call in `Discover` | `TestPluginsInstallFromGit` ("install of main: exit status 1", with `plugin not found (plugin_not_found)` from `plugin.enable`) | **caught** |
+
+The fixed build passes the test 3 of 3, and every `TestHerdrPlugin*` 3 of 3.
