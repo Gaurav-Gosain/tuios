@@ -20,7 +20,7 @@ A hook runs on the side that owns the fact it reports.
 | `after-detach` | client | no |
 | `after-resize` | client | no |
 | `after-layout-change` | client | no |
-| `after-theme-change` | client | no |
+| `after-theme-change` | local client | no |
 
 The window set, the focused window, the current workspace and a pane's agent state belong to the session, so the daemon runs those commands. They fire on a detached session, and they fire once however many clients are attached.
 
@@ -90,6 +90,14 @@ It gets these variables:
 - `TUIOS_THEME_BG`: the background the panes get, as `#rrggbb`. It is empty
   when tuios does not know the background.
 - `TUIOS_THEME_LIGHT`: `1` for a light background, `0` for a dark background.
+  It uses the same rule as the mode 2031 notice that the panes get.
+
+Put `"$TUIOS_THEME"` in double quotes in a hook. A theme file can set an id
+with spaces or other characters that the shell reads.
+
+Only a local client runs this hook. A client of `tuios ssh` or `tuios-web`
+does not run it. When two local clients are attached, each client runs it for
+its own theme.
 
 Use it for a tool that does not follow the theme by itself:
 

@@ -7005,3 +7005,15 @@ The controls were run on 2026-10-18 on branch `feat/after-theme-change-hook`.
 | The hook fires while the picker shows themes | `noteThemeChange`: the theme picker and editor check cut | `TestAfterThemeChangeHookFiresOncePerPick` ("after one pick the hook ran 2 times, want 1") | **caught** |
 | The hook fires at startup | `noteThemeChange`: the first frame no longer only records | `TestAfterThemeChangeHookFiresOncePerPick` ("the hook fired at startup") | **caught** |
 | Nothing checks for a theme change | `composeFrameOnce`: the `noteThemeChange` call cut | `TestAfterThemeChangeHookFiresOncePerPick` ("after one pick the hook ran 0 times, want 1") | **caught** |
+
+After review, the hook runs only in a local client and takes its light flag
+from `vt.IsLightBackground`, the rule of the mode 2031 notice. The served half
+is a boundary, so it is held by the unit test
+`TestServedClientsDoNotRunTheThemeHook` in `internal/app`: an ssh and a web
+client run no hook for a theme change, and a local client runs it once with
+light `1` for Latte. Run on 2026-10-18.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A served client runs the operator's hook | `noteThemeChange`: the `m.Client != ClientLocal` check cut | `TestServedClientsDoNotRunTheThemeHook` ssh and web rows ("the hook ran 1 times for a theme change in a ssh client, want 0") | **caught** |
+| The light flag uses another rule | `noteThemeChange`: the `vt.IsLightBackground` result inverted | `TestServedClientsDoNotRunTheThemeHook` local row (light "0" for Latte) | **caught** |
