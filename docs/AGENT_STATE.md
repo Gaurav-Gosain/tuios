@@ -1241,7 +1241,9 @@ editor or a pager the agent opened, is counted, and the claim clears after six
 consecutive ticks of it (twelve seconds at the default interval). One missed
 read is not an exit.
 
-A state a hook reported is cleared the same way once the harness has gone. The hook names the harness process it ran under (`harness_pid`), so when that process has exited and the pane is back at its shell, the pane goes to `none` and its row leaves the agents section. This is what clears a Claude Code that quit without its `SessionEnd` hook landing, crashed, or was killed. A state set with `tuios set-agent-state` names no harness process and stays until it is changed, so a note left on a pane at its prompt is kept. `none` forgets the harness process, so a note left after an agent's `SessionEnd` is kept as well.
+A state a hook reported is cleared the same way once the harness has gone. The hook names the harness process it ran under (`harness_pid`), and the daemon records that pid with the process's start time. When the start time no longer reads, or reads different because another process was given the pid, and the pane is back at its shell, the pane goes to `none` and its row leaves the agents section. This is what clears a Claude Code that quit without its `SessionEnd` hook landing, crashed, or was killed. A pid whose start time cannot be read when it is recorded, one in another pid namespace such as an agent in a container, or on a platform that reads no processes, is never taken for exited, so its pane keeps its state until it is changed.
+
+A state set with `tuios set-agent-state` names no harness process. It does not forget one either: a note set while a hook's harness is still recorded, over a running agent say, clears once that harness has exited and the pane is at its shell. `none` forgets the harness process, as does the detector clearing the pane, so a note left on a pane at its prompt after that stays until it is changed.
 
 ### argv is read only for an interpreter, and only one token of it
 

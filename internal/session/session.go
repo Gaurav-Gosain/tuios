@@ -1426,11 +1426,12 @@ type Session struct {
 	// sessionGuard reads it to tell a new conversation in the same harness
 	// process (/clear or /resume after an interrupted turn) from a nested run
 	// in another process, and applyAgentSession reads it for the same reason.
-	// It is kept apart from agentClaims because other sources replace the
+	// The detector reads its start time to tell that the harness has exited
+	// (harnessProc). It is kept apart from agentClaims because other sources replace the
 	// claim, and the pid must outlive that. The detector forgets it when it sees
 	// the agent leave the pane. Daemon memory only, and read and written under
 	// stateMu.
-	agentHarnessPIDs map[string]int
+	agentHarnessPIDs map[string]harnessProc
 
 	// agentSharedGuards records, by window ID, the conversations the guard of
 	// a shared-server harness (Codex) protects on that window: the owner and

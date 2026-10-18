@@ -375,7 +375,7 @@ func (s *Session) guardReport(target string, r AgentReport, strict bool) (string
 	}
 	w := &s.state.Windows[idx]
 	claim, held := s.agentClaims[w.ID]
-	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], s.agentSharedGuards[w.ID], r)
+	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID].pid, s.agentSharedGuards[w.ID], r)
 	switch {
 	case reason != "" || !strict:
 	case r.SessionID != "" && w.AgentSessionID != "" && r.SessionID != w.AgentSessionID && !sharedAccepts(s.agentSharedGuards[w.ID], r):
@@ -429,7 +429,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			effective = prev
 			return errAgentReportRefused(agentRefusedIfState)
 		}
-		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], s.agentSharedGuards[w.ID], r); reason != "" {
+		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID].pid, s.agentSharedGuards[w.ID], r); reason != "" {
 			effective = prev
 			return errAgentReportRefused(reason)
 		}
@@ -491,14 +491,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			if w.AgentSessionHarness == "" {
 				w.AgentSessionHarness = next.harness
 			}
-			if s.agentHarnessPIDs == nil {
-				s.agentHarnessPIDs = make(map[string]int)
-			}
-			if r.HarnessPID > 1 {
-				s.agentHarnessPIDs[w.ID] = r.HarnessPID
-			} else {
-				delete(s.agentHarnessPIDs, w.ID)
-			}
+			s.setAgentHarnessPID(w.ID, r.HarnessPID)
 		}
 		// A pane cleared to none has no agent to describe, and metadata left
 		// behind would be drawn for whatever agent starts in it next. Nor a

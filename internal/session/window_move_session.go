@@ -81,14 +81,14 @@ type paneTransfer struct {
 	win WindowState
 	pty *PTY
 
-	claim      *agentClaim
-	harnessPID int
-	subagents  *paneSubagents
-	turn       *agentTurn
-	seen       *uint64
-	hold       *agentHold
-	startDir   any
-	agentDirs  map[string]string
+	claim     *agentClaim
+	harness   harnessProc
+	subagents *paneSubagents
+	turn      *agentTurn
+	seen      *uint64
+	hold      *agentHold
+	startDir  any
+	agentDirs map[string]string
 
 	// transcript is the join the window had, made again in the destination.
 	transcript *transcriptRejoin
@@ -185,8 +185,8 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 			t.claim = &c
 			delete(s.agentClaims, id)
 		}
-		if pid, ok := s.agentHarnessPIDs[id]; ok {
-			t.harnessPID = pid
+		if h, ok := s.agentHarnessPIDs[id]; ok {
+			t.harness = h
 			delete(s.agentHarnessPIDs, id)
 		}
 		// The shared-server guard stays behind and is dropped: the window
@@ -308,11 +308,11 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 			}
 			s.agentClaims[id] = *t.claim
 		}
-		if t.harnessPID != 0 {
+		if t.harness.pid != 0 {
 			if s.agentHarnessPIDs == nil {
-				s.agentHarnessPIDs = make(map[string]int)
+				s.agentHarnessPIDs = make(map[string]harnessProc)
 			}
-			s.agentHarnessPIDs[id] = t.harnessPID
+			s.agentHarnessPIDs[id] = t.harness
 		}
 
 		if t.subagents != nil {

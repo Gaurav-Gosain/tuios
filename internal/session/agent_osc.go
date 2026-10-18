@@ -87,7 +87,7 @@ func (s *Session) progressTarget(windowID string) (current AgentState, exists, a
 			continue
 		}
 		_, claimed := s.agentClaims[w.ID]
-		agentPane = w.AgentState != AgentStateNone || w.AgentHarness != "" || claimed || s.agentHarnessPIDs[w.ID] != 0
+		agentPane = w.AgentState != AgentStateNone || w.AgentHarness != "" || claimed || s.agentHarnessPIDs[w.ID].pid != 0
 		return w.AgentState, true, agentPane
 	}
 	return AgentStateNone, false, false

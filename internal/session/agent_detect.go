@@ -2,7 +2,6 @@ package session
 
 import (
 	"log"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -515,18 +514,34 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	return info, true
 }
 
-// harnessExited reports whether the harness process a hook named is gone. A
-// pid of 0 or 1 names no harness, and a platform that cannot read processes at
-// all cannot say that one has exited.
-func harnessExited(pid int) bool {
-	if pid <= 1 {
+// harnessProc is the harness process a hook named (harness_pid): its pid, and
+// its start time when the pid could be read on this machine as it was
+// recorded. The pid alone is what sessionGuard compares. The start time is
+// what says the process has exited: a pid in another pid namespace, an agent
+// in a container say, or on a platform that reads no processes, has none, and
+// is never taken for gone.
+type harnessProc struct {
+	pid   int
+	start uint64
+	timed bool
+}
+
+// readHarnessProc records pid with its start time, if it can be read.
+func readHarnessProc(pid int) harnessProc {
+	h := harnessProc{pid: pid}
+	h.start, h.timed = procinfo.StartTime(pid)
+	return h
+}
+
+// exited reports whether the recorded harness process is gone: its start time
+// no longer reads, or reads different, which is another process that was given
+// the pid.
+func (h harnessProc) exited() bool {
+	if !h.timed {
 		return false
 	}
-	if _, ok := procinfo.StartTime(pid); ok {
-		return false
-	}
-	_, readable := procinfo.StartTime(os.Getpid())
-	return readable
+	start, ok := procinfo.StartTime(h.pid)
+	return !ok || start != h.start
 }
 
 // agentDetectMissLimit is how many consecutive detection ticks may find no agent
@@ -625,7 +640,7 @@ func (s *Session) scanAgentDetection(
 			continue
 		}
 		_, claimed := s.agentClaims[w.ID]
-		holdsAgent := w.AgentState != AgentStateNone || claimed || s.agentHarnessPIDs[w.ID] != 0
+		holdsAgent := w.AgentState != AgentStateNone || claimed || s.agentHarnessPIDs[w.ID].pid != 0
 		targets = append(targets, target{w.ID, w.PTYID, holdsAgent})
 	}
 	s.stateMu.RUnlock()
@@ -831,8 +846,8 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			//
 			// A hook's report is the exception: it names the harness process
 			// it ran under (harness_pid), so it is the harness speaking, and
-			// once that process has exited nothing is left to retract what it
-			// said. Claude Code does not always get its SessionEnd hook out
+			// once that process has exited (harnessProc.exited) nothing is
+			// left to retract what it said. Claude Code does not always get its SessionEnd hook out
 			// on /exit, and a crashed or killed one sends none, so without
 			// this the pane kept its last state, and its row, until it closed.
 			//
@@ -855,7 +870,8 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			if reportHeld && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
 				lapsed = true
 			}
-			if reportHeld && harnessExited(s.agentHarnessPIDs[w.ID]) {
+			// The shell check goes first: a busy pane costs no process read.
+			if !lapsed && reportHeld && running && info.atShell() && s.agentHarnessPIDs[w.ID].exited() {
 				lapsed = true
 			}
 			if running && info.atShell() && lapsed {

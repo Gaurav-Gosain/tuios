@@ -67,7 +67,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 			reason = agentRefusedForeignHarness
 			return errAgentReportRefused(reason)
 		}
-		owner := s.agentHarnessPIDs[w.ID]
+		owner := s.agentHarnessPIDs[w.ID].pid
 		if w.AgentSessionID == r.SessionID && w.AgentSessionHarness == r.Harness {
 			if r.HarnessPID > 1 && owner != r.HarnessPID {
 				s.setAgentHarnessPID(w.ID, r.HarnessPID)
@@ -101,14 +101,15 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 }
 
 // setAgentHarnessPID records the harness pid a window's session id came from,
-// forgetting it when the pid is unknown. Called with stateMu held.
+// with its start time when it reads (harnessProc), forgetting it when the pid
+// is unknown. Called with stateMu held.
 func (s *Session) setAgentHarnessPID(windowID string, pid int) {
 	if pid <= 1 {
 		delete(s.agentHarnessPIDs, windowID)
 		return
 	}
 	if s.agentHarnessPIDs == nil {
-		s.agentHarnessPIDs = make(map[string]int)
+		s.agentHarnessPIDs = make(map[string]harnessProc)
 	}
-	s.agentHarnessPIDs[windowID] = pid
+	s.agentHarnessPIDs[windowID] = readHarnessProc(pid)
 }
