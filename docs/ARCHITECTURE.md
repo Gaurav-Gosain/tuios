@@ -346,10 +346,13 @@ its own and no pane background is painted, and it never becomes a cell's
 background. With no theme the emulator's defaults are black and white, which
 is not what the host terminal really is, so a client asks its terminal for its
 own colours (OSC 10, 11 and 4, through the startup probe or Bubble Tea) and
-hands them to `SetReportColors` and `SetReportPalette`; see
+hands them, with the sixteen, to `SetReportColors`; see
 `internal/app/host_colors.go`. The answers are held per client, since one
 server process serves clients on different terminals, and a local client
 follows the terminal's light and dark switch through mode 2031 and DSR 997.
+In the other direction, a `SetReportColors` call that changes any of the
+answers sends a guest that turned on mode 2031 one `CSI ? 997 ; Ps n`
+notice, and the emulator answers `CSI ? 996 n` with the same report.
 
 **Design Rationale:**
 

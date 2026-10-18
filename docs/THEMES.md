@@ -11,6 +11,7 @@ overlays, the dockbar) from them.
 - [Edit a Theme](#edit-a-theme)
 - [A Light and a Dark Theme](#a-light-and-a-dark-theme)
 - [Match Your Terminal](#match-your-terminal)
+- [Programs That Follow the Theme](#programs-that-follow-the-theme)
 - [Custom Themes](#custom-themes)
 - [Theme File Format](#theme-file-format)
 - [Start from Another Theme](#start-from-another-theme)
@@ -191,6 +192,29 @@ An empty `theme` keeps the terminal's colours for the panes too, but the
 dialogs keep tuios's constant ramp on a dark terminal. In a client of
 `tuios ssh` or `tuios-web`, the dialogs keep the constant ramp, because one
 server serves many terminals.
+
+## Programs That Follow the Theme
+
+A program in a pane can ask tuios for the theme colours. OSC 10 gives the
+text colour, OSC 11 gives the background and OSC 4 gives one of the sixteen
+colours. The answers are the colours that the pane shows.
+
+A program can also ask tuios to tell it when the colours change:
+
+- A program that turns on mode 2031 (`CSI ? 2031 h`) gets `CSI ? 997 ; 1 n`
+  on a dark background or `CSI ? 997 ; 2 n` on a light background.
+- tuios sends this notice each time the theme colours change. This includes a
+  change from one dark theme to another dark theme.
+- tuios sends one notice for each theme change, also when the background, the
+  text colour and the sixteen colours all change.
+- `CSI ? 996 n` asks for the same report at any time.
+
+Neovim 0.11 and later asks for the background again when the notice comes, and
+sets `'background'`. opencode with the `system` theme asks for all the colours
+again and draws with the new colours.
+
+A program that uses only the sixteen ANSI colours changes colour with the theme
+and needs no notice.
 
 ## Custom Themes
 

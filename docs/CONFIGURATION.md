@@ -587,8 +587,9 @@ colours too.
 
 When you switch the Omarchy theme, tuios changes its colours at the same
 moment as your terminal. You do not restart tuios and you do not press a key.
-A program in a pane that turned on mode 2031 gets a light or dark report when
-the theme changes between light and dark. tuios sends no SIGWINCH.
+A program in a pane that turned on mode 2031 gets a light or dark report each
+time the theme changes. tuios sends no SIGWINCH. See
+[Programs That Follow the Theme](THEMES.md#programs-that-follow-the-theme).
 On a machine without Omarchy, tuios watches nothing.
 
 | `appearance.theme` | On a machine with Omarchy | On a machine without Omarchy |
