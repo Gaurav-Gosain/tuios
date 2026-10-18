@@ -49,8 +49,8 @@ func TestInboxBringsAnotherSessionsAgentToYou(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "Inbox") && strings.Contains(text, "Approvals 1") &&
-			strings.Contains(text, "approve Bash: go test") && strings.Contains(text, "e2e-fan")
+		return strings.Contains(text, "Agents") && strings.Contains(text, "1 needs you") &&
+			strings.Contains(text, "$ go test") && strings.Contains(text, "e2e-fan")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the approval: %v\n%s", err, term.Snapshot())
 	}
@@ -61,7 +61,7 @@ func TestInboxBringsAnotherSessionsAgentToYou(t *testing.T) {
 		t.Fatalf("go to the item: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Approvals 1")
+		return !strings.Contains(s.Text(), "1 needs you")
 	}, uiTimeout); err != nil {
 		t.Fatalf("enter did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}

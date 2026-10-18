@@ -54,35 +54,24 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "Approvals 1") && strings.Contains(text, "approve Bash: go test")
+		return strings.Contains(text, "1 needs you") && strings.Contains(text, "$ go test")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the approval: %v\n%s", err, term.Snapshot())
 	}
 	s := term.Screen()
-	row := rowWith(s, "approve Bash: go test")
-	if row < 0 || !strings.Contains(s.Line(row), "e2e-fan") {
-		t.Fatalf("the approval's row does not name its session on 80 columns\n%s", term.Snapshot())
+	if !strings.Contains(s.Text(), "e2e-fan") {
+		t.Fatalf("the approval does not name its session on 80 columns\n%s", term.Snapshot())
 	}
 	saveFrame(t, term, "inbox-shipped-looks")
 
-	// A cell of the row inside the rail's band.
+	// A cell of the New agent button inside the rail's band: the click
+	// reaches the agents view, which covers the rail, and opens the
+	// launcher.
+	row := rowWith(term.Screen(), "New agent")
 	col := cols - narrowRailWidth + 4
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Approvals 1")
-	}, uiTimeout); err != nil {
-		t.Fatalf("a click on the row at (%d,%d) did not act on the Inbox: %v\n%s", col, row, err, term.Snapshot())
-	}
-	switched := func(rows []lsRow) bool {
-		for _, r := range rows {
-			if r.Name == "e2e-fan" && r.Attached {
-				return true
-			}
-		}
-		return false
-	}
-	if listed := waitForRows(t, base, switched); !switched(listed) {
-		t.Fatalf("the click did not take the client to the item's session: %+v\n%s", listed, term.Snapshot())
+	if err := term.WaitForText(launcherTitle, uiTimeout); err != nil {
+		t.Fatalf("a click on the button at (%d,%d) did not act on the agents view: %v\n%s", col, row, err, term.Snapshot())
 	}
 	alive(t, term, "after a click in the Inbox over the rail")
 }

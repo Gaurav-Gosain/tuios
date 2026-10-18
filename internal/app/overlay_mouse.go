@@ -67,6 +67,16 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 	// Clicking a panel brings it to the front.
 	m.raiseOverlay(h.Kind)
 
+	// The cockpit fills the screen and is not dragged: a click selects, a
+	// second one goes. See cockpit.go.
+	if h.Kind == "inbox" {
+		if right {
+			return true, nil
+		}
+		cmd, _ := m.CockpitClick(x, y)
+		return true, cmd
+	}
+
 	lx, ly := x-h.OriginX, y-h.OriginY
 
 	// Right-click anywhere on the panel grabs it for dragging.
@@ -145,6 +155,10 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 	h, ok := m.overlayHitAt(x, y)
 	if !ok {
 		return false
+	}
+	if h.Kind == "inbox" {
+		m.CockpitHover(x, y)
+		return true
 	}
 	lx, ly := x-h.OriginX, y-h.OriginY
 	if h.Kind == "accent" {
@@ -283,7 +297,7 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "agentmail":
 		m.AgentMailMove(wheelDelta(up))
 	case "inbox":
-		m.InboxMove(wheelDelta(up))
+		m.CockpitWheel(x, up)
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
 		m.WorkspaceSwitcherMove(wheelDelta(up), n)

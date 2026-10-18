@@ -221,13 +221,13 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	rail("the Inbox", "Approvals", "Publish the crate?")
+	rail("the Inbox", "needs you", "Publish the crate?")
 	saveArtifact(t, term, frames, "2-blocked-inbox")
 	capturePS(t, term, shots, frames, "2-blocked-inbox")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("close the Inbox: %v", err)
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Approvals 1") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "1 needs you") }, uiTimeout); err != nil {
 		t.Logf("the Inbox did not close: %v", err)
 	}
 

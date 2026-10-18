@@ -93,27 +93,27 @@ func TestScreenshotOverTheInbox(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
-	waitScreen(t, term, "the Inbox never opened", "Inbox", "Nothing is waiting for you.")
+	waitScreen(t, term, "the Inbox never opened", "New agent", "No agents yet.")
 
 	body := captureFullScreenOver(t, term, stream, dir, "inbox", tuitest.Enter)
-	for _, want := range []string{"Inbox", "Nothing is waiting for you.", "ROW1-"} {
+	for _, want := range []string{"New agent", "No agents yet."} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the capture over the Inbox does not hold %q:\n%s", want, body)
 		}
 	}
-	waitScreen(t, term, "the Inbox closed when the capture was taken", "Nothing is waiting for you.")
+	waitScreen(t, term, "the Inbox closed when the capture was taken", "No agents yet.")
 
 	// The positive half: a leader followed by an ordinary key still reaches
 	// the Inbox. f cycles its filter, which retitles it.
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "Inbox: ")
+		return strings.Contains(s.Text(), "needs you only")
 	}, uiTimeout); err != nil {
 		t.Fatalf("f after the leader never reached the Inbox: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Inbox")
+		return !strings.Contains(s.Text(), "New agent")
 	}, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the Inbox after the captures: %v\n%s", err, term.Snapshot())
 	}

@@ -149,6 +149,7 @@ func (m *OS) InboxRecapFetch() tea.Cmd {
 
 // applyInboxRecap takes an agent-activity reply for the Inbox's detail.
 func (m *OS) applyInboxRecap(msg InboxRecapMsg) {
+	m.cockpitTouch()
 	v := &m.Inbox.recap
 	if v.key != msg.Key {
 		return

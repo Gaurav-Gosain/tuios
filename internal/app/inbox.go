@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -147,6 +148,8 @@ type InboxState struct {
 	agents inboxAgentsState
 	// threads are the agents' threads the view shows. See inbox_thread.go.
 	threads threadsState
+	// ck is the cockpit's own state. See cockpit.go.
+	ck cockpitState
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -1114,6 +1117,10 @@ func (m *OS) OpenInbox(filter string) {
 	}
 	st := &m.Inbox
 	m.ShowInbox = true
+	// The cockpit is the agents view: the selector line searches the
+	// agents as well as narrowing the items.
+	st.agents.on = true
+	st.ck.needsOnly = false
 	st.Filter = filter
 	st.Selected, st.SelectedID = 0, ""
 	st.Scroll = 0
@@ -1122,6 +1129,14 @@ func (m *OS) OpenInbox(filter string) {
 	st.shown = inboxShown{}
 	st.poppedAt = time.Time{}
 	m.clampInboxSelection()
+	// The cockpit opens on its first row, which is the oldest wait in
+	// Needs you.
+	st.ck.key, st.ck.akey, st.ck.idx, st.ck.scroll, st.ck.follow = "", "", 0, 0, true
+	st.threads.open = false
+	m.cockpitTouch()
+	m.cockpitRows()
+	m.cockpitClamp()
+	m.cockpitSync()
 }
 
 // OpenInboxOn shows the Inbox with the cursor on the item with this id, as
@@ -1150,34 +1165,20 @@ func (m *OS) CloseInbox() {
 	m.Inbox.agents.sheet = nil
 }
 
-// InboxMove moves the cursor by delta items, stepping over group headings.
+// InboxMove moves the cockpit's cursor by delta rows, and points the Inbox's
+// own cursors at the row it lands on.
 func (m *OS) InboxMove(delta int) {
-	if m.Inbox.agents.on {
-		m.inboxAgentsMove(delta)
-		return
-	}
-	rows := m.inboxRows()
-	st := &m.Inbox
-	if len(rows) == 0 || delta == 0 {
-		return
-	}
-	st.Selected = m.listStepSkip(st.Selected, delta, len(rows),
-		func(i int) bool { return rows[i].item != nil })
-	st.pendingItem = ""
-	m.syncInboxSelectedID()
+	m.CockpitMove(delta)
+	m.cockpitSync()
 }
 
-// InboxSelect puts the cursor on row idx, when it is an item.
+// InboxSelect puts the cursor on the item of row idx of the Inbox's rows.
 func (m *OS) InboxSelect(idx int) {
-	if m.Inbox.agents.on {
-		m.inboxAgentsSelect(idx)
-		return
-	}
 	rows := m.inboxRows()
 	if idx >= 0 && idx < len(rows) && rows[idx].item != nil {
-		m.Inbox.Selected = idx
+		m.cockpitSelectKey("i:" + rows[idx].item.ID)
 		m.Inbox.pendingItem = ""
-		m.syncInboxSelectedID()
+		m.cockpitSync()
 	}
 }
 
@@ -1189,28 +1190,6 @@ func (m *OS) inboxSelected() (session.AttentionItem, bool) {
 		return session.AttentionItem{}, false
 	}
 	return *rows[i].item, true
-}
-
-// InboxCycleFilter steps the filter through every kind and back to none.
-func (m *OS) InboxCycleFilter() {
-	st := &m.Inbox
-	next := ""
-	if st.Filter == "" {
-		next = session.AttentionKindNames[0]
-	} else if i := session.AttentionKindRank(st.Filter); i+1 < len(session.AttentionKindNames) {
-		next = session.AttentionKindNames[i+1]
-	}
-	// A question put with ask-human is shown under Questions, so the filter
-	// steps over it and Questions shows both.
-	if next == session.AttentionAsk {
-		if i := session.AttentionKindRank(next); i+1 < len(session.AttentionKindNames) {
-			next = session.AttentionKindNames[i+1]
-		}
-	}
-	st.Filter = next
-	st.Selected, st.SelectedID = 0, ""
-	st.Scroll = 0
-	m.clampInboxSelection()
 }
 
 // InboxActivate jumps to the selected item's pane, switching session and

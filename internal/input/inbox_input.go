@@ -9,17 +9,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// handleInboxInput handles keyboard input while the Inbox is open. Every
-// action has a key: j and k move, space reads the prompt of an approval or a
-// question, enter goes to the item's pane (or opens its mail thread), 1, 2
-// and 3 answer an approval the Inbox is holding (allow once, always allow,
-// deny, the order of the harness's own menu), 1 to 9 pick the answer to a
-// question ask-human put to the person, d dismisses, r replies to mail,
-// y resumes a conversation a restart left, p passes on mail another machine
-// sent an agent here that the link policy held, f steps the kind filter, /
-// types a selector that narrows the list, m opens the whole mailbox, z
-// snoozes (then 1 to 4 for how long) or wakes a snoozed item, u undoes the
-// last dismiss or snooze, S shows the snoozed items, and esc or q closes.
+// handleInboxInput handles keyboard input while the Inbox, drawn as the
+// cockpit, is open. Every action has a key: j and k move, space reads the
+// prompt of an approval or a question, enter goes to the agent's pane (or
+// opens its mail thread), a A r R and 1 2 3 answer an approval the Inbox is
+// holding (allow once, always allow, reject; R rejects with a reason), 1 to 9
+// pick the answer to a question ask-human put to the person, r or i replies
+// to an agent or to mail, n starts a new agent, d dismisses, y resumes a
+// conversation a restart left, p passes on held mail, f shows only what needs
+// you, / searches, m opens the whole mailbox, z snoozes (then 1 to 4 for how
+// long) or wakes a snoozed item, u undoes the last dismiss or snooze, S shows
+// the snoozed items, x marks an agent for a bulk answer, and esc or q closes.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A question that opened the Inbox by itself a moment ago: the key was
 	// most likely typed for the pane, so it does nothing here.
@@ -46,16 +46,58 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxSnoozePicking() {
 		return o, o.InboxSnoozeKey(msg.String())
 	}
-	if o.InboxAgentsOn() {
-		return handleInboxAgentsInput(msg, o)
+	// The bulk allow's sheet takes the next key: enter allows, anything
+	// else closes it.
+	if o.InboxAgentsSheetOpen() {
+		return o, o.InboxAgentsSheetKey(msg.String())
+	}
+	key := msg.String()
+	marks := o.InboxAgentsMarks() > 0
+	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
+	// x marks an agent for a bulk answer and * marks them all, unless the
+	// person bound the key to something else.
+	switch {
+	case key == "x" && action == "":
+		o.CockpitSync()
+		o.InboxAgentsToggleMark()
+		return o, nil
+	case key == "*" && action == "":
+		o.InboxAgentsMarkAll()
+		return o, nil
 	}
 	// A digit answers by its number, which is the number the prompt shows, so
-	// it is not a binding.
-	if key := msg.String(); len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+	// it is not a binding. With marks, 1 opens the bulk allow's sheet and 3
+	// denies every marked approval.
+	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+		if marks {
+			switch key {
+			case "1":
+				o.InboxAgentsBulkAllow()
+			case "3":
+				return o, o.InboxAgentsBulkDeny()
+			}
+			return o, nil
+		}
+		o.CockpitSync()
 		return o, o.InboxNumber(int(key[0] - '0'))
 	}
-	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
+	if marks && (action == config.ActionInboxReply || key == "i") {
+		return o, o.InboxAgentsBulkReply()
+	}
+	if key == "i" {
+		action = config.ActionInboxReply
+	}
+	// The cockpit's own keys: a A r R on an approval, n, tab, the moves.
+	if cmd, handled := o.CockpitKey(key, action); handled {
+		o.NoteAction(action)
+		return o, cmd
+	}
 	if action == "" {
+		return o, nil
+	}
+	o.CockpitSync()
+	if marks && action == config.ActionInboxSnooze {
+		o.InboxAgentsBulkSnooze()
 		return o, nil
 	}
 	// The review, triage and approval keys say whether they did anything,
@@ -70,40 +112,28 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	o.NoteAction(action)
 	switch action {
-	case config.ActionInboxAgents:
-		return o, o.InboxToggleAgents()
 	case config.ActionInboxSelect:
 		o.InboxStartSelect()
 	case config.ActionInboxClose:
 		o.CloseInbox()
 	case config.ActionInboxPeek:
 		return o, o.InboxPeek()
-	case config.ActionInboxGo:
-		return o, o.InboxActivate()
 	case config.ActionInboxDismiss:
+		if marks {
+			return o, o.InboxAgentsBulkDismiss()
+		}
 		return o, o.InboxDismiss()
-	case config.ActionInboxReply:
-		return o, o.InboxReply()
 	case config.ActionInboxResume:
 		return o, o.InboxResume()
 	case config.ActionInboxPassOn:
 		return o, o.InboxRelease()
-	case config.ActionInboxFilter:
-		o.InboxCycleFilter()
 	case config.ActionInboxMailbox:
 		return o, o.InboxOpenMailbox()
-	case config.ActionInboxUp:
-		o.InboxMove(-1)
-	case config.ActionInboxDown:
-		o.InboxMove(1)
-	case config.ActionInboxPageUp:
-		o.InboxMove(-10)
-	case config.ActionInboxPageDown:
-		o.InboxMove(10)
-	case config.ActionInboxFirst:
-		o.InboxMove(-1 << 20)
-	case config.ActionInboxLast:
-		o.InboxMove(1 << 20)
+	case config.ActionInboxSort:
+		o.InboxAgentsCycleSort()
+		o.CockpitTouch()
+	case config.ActionInboxViewPane:
+		return o, o.InboxAgentsViewPane()
 	}
 	return o, nil
 }
@@ -188,100 +218,6 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InboxPeekStartText()
 	case config.ActionPeekReadAgain:
 		return o, o.InboxPeekRefresh()
-	}
-	return o, nil
-}
-
-// handleInboxAgentsInput handles a key in the Inbox's agents view: the moves,
-// enter to go to the agent's pane, r to reply, f to step the group shown, s
-// to step the sort, / to search, tab back to the attention list, m for the
-// mailbox, and esc or q to close.
-func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// The bulk allow's sheet takes the next key: enter allows, anything
-	// else closes it.
-	if o.InboxAgentsSheetOpen() {
-		return o, o.InboxAgentsSheetKey(msg.String())
-	}
-	marks := o.InboxAgentsMarks() > 0
-	switch key := msg.String(); key {
-	case "space":
-		o.InboxAgentsToggleMark()
-		return o, nil
-	case "*":
-		o.InboxAgentsMarkAll()
-		return o, nil
-	case "1", "2", "3":
-		// With marks, 1 opens the bulk allow's sheet and 3 denies every
-		// marked approval; 2 (always) is never given in bulk. Without, the
-		// digits answer the selected agent's approval, with the attention
-		// list's rules. They are not bindings.
-		if marks {
-			switch key {
-			case "1":
-				o.InboxAgentsBulkAllow()
-			case "3":
-				return o, o.InboxAgentsBulkDeny()
-			}
-			return o, nil
-		}
-		return o, o.InboxAgentsNumber(int(key[0] - '0'))
-	}
-	// i opens the reply editor too, as in an editor.
-	if msg.String() == "i" {
-		if marks {
-			return o, o.InboxAgentsBulkReply()
-		}
-		return o, o.InboxAgentsReply()
-	}
-	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
-	if action == "" {
-		return o, nil
-	}
-	o.NoteAction(action)
-	switch action {
-	case config.ActionInboxAgents:
-		return o, o.InboxToggleAgents()
-	case config.ActionInboxClose:
-		if !o.InboxAgentsBack() {
-			o.CloseInbox()
-		}
-	case config.ActionInboxGo:
-		return o, o.InboxAgentsEnter()
-	case config.ActionInboxDismiss:
-		if marks {
-			return o, o.InboxAgentsBulkDismiss()
-		}
-	case config.ActionInboxSnooze:
-		if marks {
-			o.InboxAgentsBulkSnooze()
-		}
-	case config.ActionInboxReply:
-		if marks {
-			return o, o.InboxAgentsBulkReply()
-		}
-		return o, o.InboxAgentsReply()
-	case config.ActionInboxFilter:
-		o.InboxAgentsCycleFilter()
-	case config.ActionInboxSort:
-		o.InboxAgentsCycleSort()
-	case config.ActionInboxViewPane:
-		return o, o.InboxAgentsViewPane()
-	case config.ActionInboxSelect:
-		o.InboxStartSelect()
-	case config.ActionInboxMailbox:
-		return o, o.InboxOpenMailbox()
-	case config.ActionInboxUp:
-		o.InboxMove(-1)
-	case config.ActionInboxDown:
-		o.InboxMove(1)
-	case config.ActionInboxPageUp:
-		o.InboxMove(-10)
-	case config.ActionInboxPageDown:
-		o.InboxMove(10)
-	case config.ActionInboxFirst:
-		o.InboxMove(-1 << 20)
-	case config.ActionInboxLast:
-		o.InboxMove(1 << 20)
 	}
 	return o, nil
 }

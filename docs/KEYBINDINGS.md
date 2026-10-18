@@ -1168,44 +1168,52 @@ where it was; a second `esc` closes it. The command palette reaches the same
 rows by name (`settings: pane background`), and `tuios list-options --search`
 runs the same search from a shell.
 
-## The Inbox
+## The agents view
 
-Everything waiting for you in every session is one list, the Inbox. See
-[AGENT_STATE.md](AGENT_STATE.md#the-inbox) for what goes in it.
+Everything waiting for you, and every agent tuios knows of, is one full-screen
+view on `ctrl+b i`. It was the Inbox panel. The agents are grouped by what
+each needs from you: Needs you, Ready for review, Working, Idle, Earlier. The
+Inbox's items are the Needs you group. See
+[AGENT_STATE.md](AGENT_STATE.md#the-agents-view) for what goes in it.
 
 | Keys | What it does |
 |---|---|
-| `ctrl+b i` | Open the Inbox |
+| `ctrl+b i` | Open the agents view |
 | `ctrl+b o` | Go to the oldest item that needs you; `o` again, inside the repeat window, goes to the next |
-| `ctrl+b M` | Open the Inbox on its mail (`m` there opens the whole mailbox) |
+| `ctrl+b M` | Open the agents view on its mail (`m` there opens the whole mailbox) |
 
-Inside it: `j` and `k` move, `enter` goes to the pane, `space` reads an
-approval's or a question's prompt so you can answer it there, `r` replies to
-mail, or to the agent of a finished or errored item, `y` resumes a conversation a restart left, `p` passes held mail on, `d`
-dismisses, `f` steps through the kinds, `/` types a selector that narrows the
-list (such as `harness:codex needs:you`; `enter` applies it, an empty line
-clears it), `m` opens the mailbox, `tab` shows the agents view, `esc` closes.
-`ctrl+b o` is `o` because `ctrl+b a` is the launcher's.
+Inside it:
 
-In the agents view: `j` and `k` move, `enter` goes to the agent's pane, `r`
-replies to it, `f` steps the group shown (all, needs you, working, done,
-error), `s` steps the sort (needs you, name, recent, session), `/` searches,
-`tab` goes back to the attention list, `esc` closes. With the thread showing,
-`1`, `2` and `3` answer the approval the agent waits on, and `i` opens the
-reply editor too. `ctrl+]` closes the Inbox, goes to the agent's pane and
-zooms it, and `ctrl+b i` comes back to the same agent. `space` marks an agent
-and `*` marks all of them. With marks, `r` replies to each, `1` lists the
-approvals to allow and `enter` allows them, `3` denies them, `d` dismisses
-and `z` snoozes. On a screen narrower than 110 columns, `enter` opens the
-thread, `enter` there goes to the pane, and `esc` goes back to the list.
-On the search line a
-`key:value` term is a selector, such as `harness:codex`, and other words
-search the name, the session and the agent's last message.
+| Keys | What it does |
+|---|---|
+| `j` `k`, arrows | Move between agents. The focus area shows the selected one |
+| `enter` | Go to the agent's pane and close the view. On mail, open the thread |
+| `a` `A` `r` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
+| `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
+| `space` | Read an approval's or a question's prompt and answer it here |
+| `n` | Start a new agent. For now this opens the launcher |
+| `f` | Show only what needs you, then every agent |
+| `s` | Step the order inside each group |
+| `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
+| `d` `z` `u` `S` | Dismiss, snooze, undo, show the snoozed items |
+| `y` `p` `v` `m` | Resume, pass held mail on, review the changes, open the mailbox |
+| `x` `*` | Mark an agent, or all of them, for a bulk answer |
+| `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back |
+| `?` | All keys |
+| `esc` `q` | Close. On a narrow screen, go back from the focus to the list first |
 
-The footer offers the keys that act on the row under the cursor, the one that
-answers it first: `space answer` on an approval or a question, `r reply` on
-mail and on a finished or errored item, `y resume` on a resume row. It offers `m mailbox` on a mail row, though
-`m` works on every row.
+The mouse works too. A click on a row selects it, and a double-click goes to
+its pane. A click on a group heading folds the group. The buttons on an
+approval card answer it. `+ New agent` starts one, and the search box opens
+the search. The wheel scrolls the list.
+
+The layout follows the width of the screen. At 120 columns and wider the list
+has two lines per agent beside the focus. From 80 columns the rows are one
+line. Under 80 columns the list fills the screen, and `enter`, `right` or a
+click opens the focus in its place. With one or two agents the list folds into
+a strip of names over the focus. When the list is taller than the screen, its
+rows are one line and a long group shows its first 8 rows; `right` or a click
+on `+N more` shows the rest.
 
 In the mailbox: `j` and `k` move, `enter` opens a thread, `n` writes a new
 message, `esc` closes. `n` opens a list of the agents in this session. Choose
@@ -1230,7 +1238,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_page_up`, `inbox_first`, `inbox_last`, `inbox_go`, `inbox_peek`,
 `inbox_dismiss`, `inbox_reply`, `inbox_resume`, `inbox_pass_on`,
 `inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`,
-`inbox_agents`, `inbox_sort`, `inbox_view_pane`),
+`inbox_agents`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
@@ -1269,7 +1277,7 @@ These keys are bound for the agent review, triage, reply and approval work.
 The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the Inbox, and `u` and
 `z` on a rail agent row (see
 [Snoozing, undo and unread](AGENT_STATE.md#snoozing-undo-and-unread)), and so
-do the approval keys: `n`, `J`, `K`, `ctrl+d` and `ctrl+u` in the Inbox (see
+do the approval keys: `R`, `J`, `K`, `ctrl+d` and `ctrl+u` in the Inbox (see
 [Deny with a reason](AGENT_STATE.md#deny-with-a-reason)), and the reply keys:
 `r` in the Inbox on a finished or errored item, and `r` and `x` on a rail
 agent row (see [Replying to an agent](AGENT_STATE.md#replying-to-an-agent)),
@@ -1298,7 +1306,8 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
 | `u` | Inbox | Undo the last dismiss or snooze, within 10 seconds |
 | `S` | Inbox | Show or hide snoozed items |
-| `n` | Inbox | Deny a held approval, or keep a plan planning, with a reason you type (`3` stays the plain deny) |
+| `R` | Inbox | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
+| `n` | Inbox | Start a new agent |
 | `J`, `K`, `ctrl+d`, `ctrl+u` | Inbox | Scroll the detail under the list, such as a long plan |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze the pane's Inbox item: the Inbox opens on it with the four lengths |

@@ -2260,55 +2260,77 @@ mail is read, or a client focuses the pane that finished.
 
 ### The agents view
 
-`tab` in the Inbox shows every agent tuios knows of, in one list: the agents
-of this session, of the other sessions, and of linked machines. `tab` again
-goes back to the attention list. The view stays when the Inbox closes, so the
-Inbox opens on it again.
+`ctrl+b i` opens the agents view: one full-screen view of every agent tuios
+knows of, in this session, the other sessions and linked machines, and of
+everything that waits for you. It replaces the Inbox panel. The Inbox's items
+are its Needs you group, so the queue and the agents are one list.
 
 ```
-Agents · 2 need you · 2 working · 1 done
-  ▲ api          work        needs you    3m
-  ● review       work        working     12m  1 queued
-  ■ docs         web         done         1h
-  × build        web         error       20m
+Agents  ● 1 needs you   ◐ 6 working   ✓ 3 to review   ○ 2 idle      + New agent
+
+Needs you  1 ───────────────────────────    api-auth   claude · opus-4.5   ● needs you
+▌ ●  api-auth      claude  api    4m        api   +214 −37   ctx 62%
+     Allow Bash  go test ./internal/auth/   ─────────────────────────────────────────
+Ready for review  3 ─────────────────────   ▌ ● Allow Bash?   api-auth waits 4m
+  ✓  docs-cli      codex   docs   2m        ▌   $ go test ./internal/auth/...
+Working  6 ──────────────────────────────   ▌   a  Allow once   r  Reject
+  ◐  bench-idle    claude  cache  6m
+     Bash  go test -bench Idle    ctx 31%
 ```
 
-Each row has the agent's state mark, its name, its session (with the machine
-in front for another machine), what it is doing, how long it has done it,
-and what waits for it: queued replies, unread mail in its inbox, and
-subagents. The rows come from the rail's agents section, so the two always
-agree. The title counts every agent, and says what narrows or orders the
-list when it is not the default.
+The list has five groups, in this order: Needs you (approvals, questions,
+plans, mail for you, errors and resume rows), Ready for review (a finished
+turn you have not looked at), Working, Idle, and Earlier (at rest for more
+than an hour). Inside a group the oldest wait comes first. A snoozed item
+shows under Snoozed when `S` shows them.
 
-`f` steps the group shown: all, needs you, working, done, error. `s` steps the
-order: needs you first and then the longest wait, name, most recent change,
-session. `/` searches: a `key:value` term is a selector, as in the attention
-list, and other words match the name, the session and the agent's last
-message. `enter` goes to the agent's pane, and `r` opens the reply editor for
-it.
+Each row is two lines on a wide screen. The first has the state mark, the
+name, the harness, the session (or the machine, when the fleet spans more than
+one), the size of the diff when the agent reports it as the `diff` meta key,
+and how long it has been in its state. The second says the one thing worth
+reading: what a Needs you row asks, in the attention colour ("Allow Bash" and
+the command); what a working agent does now and how full its context is; the
+branch and pull request of one ready for review. Subagents hang under their
+agent, one line each. The rows come from the rail's agents section, so the two
+always agree.
 
-On a screen 110 columns wide or more, the selected agent's thread sits beside
-the list. On a narrower one, `enter` opens it in place of the list, `enter`
-there goes to the pane, and `esc` goes back.
+The focus area beside the list shows the selected agent: its name, harness,
+model and state, its branch, session, diff, context and cost, then its thread,
+and at the bottom the card of what it asks. A held approval's card shows the
+command whole, where it runs, and the buttons that answer it: `a` allows once,
+`A` always, `r` rejects and `R` rejects with a reason. `1`, `2` and `3` still
+work. The rules are the Inbox's: a key does nothing until the card has been
+on screen for a moment, a risky allow needs a second press, and a plan is
+approved only once its last line was on screen.
+
+A click on a row selects it and leaves the view open. A double-click, or
+`enter`, goes to the agent's pane and closes the view. `n` and the
+`+ New agent` button start a new agent: for now they open the launcher, where
+any agent's program starts in a new pane. `f` shows only what needs you, the
+old flat Inbox, and `f` again shows every agent. `s` steps the order inside the
+groups: needs you first and then the longest wait, name, most recent change,
+session. `/` searches: a `key:value` term is a selector, and other words match
+the name, the session and the agent's last message.
+
+The layout follows the screen. From 120 columns the list is 48 columns wide
+(56 from 170) and its rows have two lines. From 80 columns the list is 38
+columns and its rows are one line. Under 80 columns the list fills the screen,
+and `enter`, `right` or a click opens the focus in its place; `left` or `esc`
+goes back. With one or two agents the list folds into a strip of names over
+the focus. When the list is taller than the screen, rows are one line and a
+group longer than 8 rows shows its first 8 and `+N more`, which a click or
+`right` opens. Needs you never folds.
 
 The thread shows what the agent said and did. For Claude Code it is the
 conversation, read from its transcript: your prompts, its answers, its tool
 calls with their status, plans and todo lists. tuios follows the transcript of
 the selected agent only, and the thread grows as the agent works. For other
 agents it is the recap of their turns, their last message, and the last mail
-between them and other agents. Everything an agent wrote is drawn behind a
-quiet mark in the gutter, and nothing in it is a link or a key.
-
-When the agent waits on an approval the Inbox holds, the approval is at the
-bottom of the thread, whole. `1` allows it once, `2` always, `3` denies, with
-the same rules as in the attention list: a key does nothing until the
-approval has been on screen for a moment, and a risky allow needs a second
-press. `r` or `i` opens the reply editor under the thread, and `esc` closes it
-and keeps the draft.
+between them and other agents.
 
 #### Many agents at once
 
-`space` marks the selected agent, and `*` marks every agent shown, or clears
+`x` marks the selected agent, and `*` marks every agent shown, or clears
 the marks when all of them are marked. The title says how many are marked.
 With marks:
 
@@ -2380,10 +2402,12 @@ Inside the Inbox:
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
 | `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. On a risky approval, `1` and `2` need a second press of the same key within 3 seconds. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
-| `n` | On a held approval or plan whose harness takes a reason: deny, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Deny with a reason](#deny-with-a-reason). |
+| `a` / `A` / `r` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
+| `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Deny with a reason](#deny-with-a-reason). |
+| `n` | Start a new agent. For now this opens the launcher. |
 | `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan shown under the list. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown under the list, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
-| `r` | Reply to mail: the thread opens with its reply line. |
+| `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |
 | `y` | On a resume row: go to the pane and type the conversation's resume command there. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. The dock says `u` undoes it, and for 10 seconds it does. |
@@ -3125,12 +3149,13 @@ the cursor on it the plan is shown whole under the list, scrolled with `J` and
 | `1` | Approve. Claude Code leaves plan mode and still asks before each edit. |
 | `2` | Approve and accept edits for this session. Offered only when Claude Code suggests exactly that mode change, and the line under the plan says so. `bypassPermissions` and `auto` are never offered. |
 | `3` | Keep planning. |
-| `n` | Keep planning, with a reason you type, which Claude reads. |
+| `R` | Keep planning, with a reason you type, which Claude reads. |
 
 `1` and `2` work only once the plan's last line has been on screen, and 0.4
-seconds after that. On a screen too short to hold the whole Inbox panel, whose
-bottom is then cut off, the last line does not count as shown: the detail says
-so, and Enter answers the plan in the pane. The answer names the digest of the plan that was shown
+seconds after that. The plan's card shows as many lines as the screen has room
+for, and `J` scrolls it. On a screen too short to hold the card whole, the last
+line does not count as shown, and Enter answers the plan in the pane. The
+letters `a`, `A` and `r` on the card do what `1`, `2` and `3` do. The answer names the digest of the plan that was shown
 (`plan_sha`), and the daemon refuses an approve for any other plan. Note the
 order: `1` is the safest approval, which differs from Claude Code's own menu on
 purpose. Turn plans off, and keep approvals, with `hold_plans = false` under
@@ -3151,7 +3176,8 @@ reference and the 2.1.281 build). `2` adds one permission update,
 
 ### Deny with a reason
 
-`n` on a held approval or plan opens a `Reason:` line under it. `enter` denies
+`R` on a held approval or plan opens a `Reason:` line in its card. It was `n`,
+which now starts a new agent. `enter` denies
 with what you typed, which the hook hands to the model as the deny's message;
 an empty line sends the default ("The user denied this from the tuios Inbox.").
 It is offered where the harness passes a reason on: Claude Code, opencode and

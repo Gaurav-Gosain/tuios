@@ -1581,6 +1581,7 @@ const (
 	ActionInboxUndo         = "inbox_undo"
 	ActionInboxShowSnoozed  = "inbox_show_snoozed"
 	ActionInboxDenyReason   = "inbox_deny_reason"
+	ActionInboxNewAgent     = "inbox_new_agent"
 	ActionInboxDetailDown   = "inbox_detail_down"
 	ActionInboxDetailUp     = "inbox_detail_up"
 	ActionAgentUnread       = "agent_unread"
@@ -1641,13 +1642,15 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxViewPane: {"ctrl+]"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
-		// snoozed; n denies with a reason, where 3 stays the plain deny; J
-		// and K scroll a long detail such as a plan.
+		// snoozed; R rejects with a reason, after the a A r R of the
+		// approval card, where 3 stays the plain deny; n starts a new agent;
+		// J and K scroll a long detail such as a plan.
 		ActionInboxReview:      {"v"},
 		ActionInboxSnooze:      {"z"},
 		ActionInboxUndo:        {"u"},
 		ActionInboxShowSnoozed: {"S"},
-		ActionInboxDenyReason:  {"n"},
+		ActionInboxDenyReason:  {"R"},
+		ActionInboxNewAgent:    {"n"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},
 	}

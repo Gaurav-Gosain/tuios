@@ -63,11 +63,11 @@ func TestInboxKeysAreRebindable(t *testing.T) {
 	o.OpenInbox("")
 
 	o, _ = HandleKeyPress(press("f"), o)
-	if o.Inbox.Filter != "" {
-		t.Errorf("f still steps the filter after it was rebound: %q", o.Inbox.Filter)
+	if o.CockpitNeedsOnly() {
+		t.Error("f still steps the filter after it was rebound")
 	}
 	o, _ = HandleKeyPress(press("x"), o)
-	if o.Inbox.Filter == "" {
+	if !o.CockpitNeedsOnly() {
 		t.Error("x, the rebound filter key, did nothing")
 	}
 	if got := o.KeybindRegistry.GetInboxKeys(config.ActionMailFocusPane); len(got) != 1 || got[0] != "p" {

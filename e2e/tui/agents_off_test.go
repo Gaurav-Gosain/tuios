@@ -185,7 +185,7 @@ func TestAgentsOffShowsNoAgentRow(t *testing.T) {
 				if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 					t.Fatal(err)
 				}
-				if err := term.WaitForText("Inbox", uiTimeout); err != nil {
+				if err := term.WaitForText("Agents", uiTimeout); err != nil {
 					t.Fatalf("the Inbox key opened nothing with the features on: %v\n%s", err, term.Snapshot())
 				}
 				alive(t, term, "after the Inbox opened")

@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -512,4 +513,10 @@ func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
 		PendingResizes:   map[string][2]int{},
 	}
 	return m, wins
+}
+
+// renderInbox draws the Inbox, which is the cockpit, as the overlay pass does.
+func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
+	s, _, w, h := m.renderCockpit()
+	return s, overlay.Geometry{Width: w, Height: h}, nil
 }

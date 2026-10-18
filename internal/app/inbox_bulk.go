@@ -468,14 +468,3 @@ func (m *OS) bulkHints() []overlay.Hint {
 	hints = append(hints, m.keyHints("inbox_dismiss", "dismiss", "inbox_snooze", "snooze")...)
 	return append(hints, overlay.Hint{Key: "space", Label: "mark"}, overlay.Hint{Key: "*", Label: "all or none"}, overlay.Hint{Key: "esc", Label: "close"})
 }
-
-// bulkSheetRows is the room the sheet has under the list on a narrow screen:
-// the screen less the panel's frame, its footer, the shortest list and the
-// lines between them.
-func (m *OS) bulkSheetRows() int {
-	rh := m.panelRoomHeight()
-	if rh <= 0 {
-		return m.threadBodyRows()
-	}
-	return max(rh-panelChromeRows-minPanelRows-6, 1)
-}

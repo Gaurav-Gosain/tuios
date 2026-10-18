@@ -10,7 +10,7 @@ import (
 )
 
 // benchAgents200OS is a client watching two hundred agents in the attached
-// session, in every state, with the Inbox open on the agents view.
+// session, in every state, with the cockpit open on them.
 func benchAgents200OS(b *testing.B) *OS {
 	b.Helper()
 	config.Global.SidebarEnabled = true
@@ -57,7 +57,7 @@ func benchThread(m *OS) {
 	t.gen++
 }
 
-// BenchmarkInboxAgents200 is a frame of the agents view over two hundred
+// BenchmarkInboxAgents200 is a frame of the cockpit over two hundred
 // agents with nothing changed since the last one: the steady state while it
 // is on screen. The design's budget is 1 ms and 200 allocations.
 func BenchmarkInboxAgents200(b *testing.B) {
@@ -70,8 +70,8 @@ func BenchmarkInboxAgents200(b *testing.B) {
 }
 
 // BenchmarkInboxAgents200Rebuild is a frame after an agent changed state: the
-// list built again from the session tree, filtered and sorted, and the rows
-// on screen drawn again.
+// list and the fleet built again from the session tree, and the frame drawn
+// again.
 func BenchmarkInboxAgents200Rebuild(b *testing.B) {
 	m := benchAgents200OS(b)
 	b.ReportAllocs()
@@ -80,15 +80,13 @@ func BenchmarkInboxAgents200Rebuild(b *testing.B) {
 		w := m.Windows[i%len(m.Windows)]
 		w.AgentStateAt++
 		m.Inbox.Gen++
-		m.Inbox.agents.rows = nil
 		m.renderInbox()
 		i++
 	}
 }
 
 // BenchmarkInboxAgents200OneChange is the frame after one agent changed state,
-// the common case: the list is built again, and only that agent's row is
-// drawn again.
+// the common case: the list and the frame are built again.
 func BenchmarkInboxAgents200OneChange(b *testing.B) {
 	m := benchAgents200OS(b)
 	m.renderInbox()

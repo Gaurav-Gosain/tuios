@@ -107,7 +107,7 @@ func chromeSteps() []chromeStep {
 		{name: "which-key", open: []any{tuitest.Ctrl('b')}, want: []string{"prefix", "Focus pane"}, close: esc},
 		{name: "help", open: []any{tuitest.Ctrl('b'), "?"}, want: []string{"Keybindings", "search"}, close: esc, footer: true},
 		{name: "settings", open: []any{","}, want: []string{"Settings"}, close: esc, footer: true},
-		{name: "inbox", open: []any{tuitest.Ctrl('b'), "i"}, want: []string{"Inbox", "risky: approve Bash", "allow"}, close: esc, footer: true},
+		{name: "inbox", open: []any{tuitest.Ctrl('b'), "i"}, want: []string{"needs you", "Allow Bash", "risky", "allow"}, close: esc, footer: true},
 		{name: "launcher", open: []any{altSpace}, want: []string{launcherTitle}, close: esc, footer: true},
 		{name: "sessions", open: []any{tuitest.Ctrl('b'), "S"}, want: []string{"Sessions", "e2e-agent"}, close: esc, footer: true},
 		{name: "workspaces", open: []any{tuitest.Ctrl('b'), "W"}, want: []string{"Workspaces"}, close: esc, footer: true},
@@ -412,7 +412,7 @@ func checkFooter(t *testing.T, term *tuitest.Terminal, name string, s tuitest.Sc
 		t.Errorf("%s: the footer has no labelled way out: %q\n%s", name, line, term.Snapshot())
 	}
 	if name == "inbox" {
-		for _, want := range []string{"1 allow", "3 deny", "d dismiss", "esc close"} {
+		for _, want := range []string{"a allow", "r reject", "esc close"} {
 			if !strings.Contains(line, want) {
 				t.Errorf("inbox: the footer lost %q: %q\n%s", want, line, term.Snapshot())
 			}

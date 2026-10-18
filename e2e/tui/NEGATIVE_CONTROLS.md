@@ -432,7 +432,7 @@ a working negative control look like a broken one for half an hour.
 | The rail learned about another session's agent from the 3 second listing poll while the dock said it at once | n/a, injected | `foreignAgentRefreshCmd` in `internal/app/inbox.go` returns nil | `TestRailMarksAForeignAgentWhenTheDockDoes` ("the rail did not mark e2e-ask-a within 1.2s of its agent asking"), 3 of 3 runs | **caught** |
 | A straight box-drawing line in a capture was two arms meeting mid-cell, so every row of a border had a notch | n/a, the build before the fix | `drawArms` in `shot/boxdraw.go` without the one-rect case for two equal arms on one axis | `TestScreenshotDrawsAStraightBorderWithoutNotches` ("the stroke at x=8 loses ink at y=16: 417 against 556") | **caught** |
 | On a light theme the rail and the dock wrote the dark ramp's near-white inks on the theme's near-white ground | n/a, injected | `GroundUI` in `internal/theme/ui.go` returns `UI()` unchanged | `TestLightThemeRailAndDockAreReadable` (session names and the dock notice at 1.09:1 against a 4.5:1 floor) | **caught** |
-| An Inbox that opened empty and then filled kept the empty state's top, so the full list sat on the bottom edge | n/a, injected | `overlayAnchorY` in `internal/app/overlay_hit.go` returns the held top whenever the screen height is unchanged | `TestInboxThatFillsAfterOpeningIsCentred` ("13 rows above it and 1 below") | **caught** |
+| An Inbox that opened empty and then filled kept the empty state's top, so the full list sat on the bottom edge | n/a, injected | `overlayAnchorY` in `internal/app/overlay_hit.go` returns the held top whenever the screen height is unchanged | `TestInboxThatFillsAfterOpeningIsCentred` ("13 rows above it and 1 below") | **caught**. Retired with the panel: the agents view fills the screen and has no anchor |
 | The review footer kept a margin on its left only, so a key strip that fitted to the cell ran into the frame | n/a, injected | `reviewHints` in `internal/app/render_review.go` fits against `width-1` | `TestReviewFooterKeepsItsRightMargin` (footer ends "esc close│") | **caught** |
 | The review's "too narrow for two columns" line stayed over the unified view it had recommended | n/a, injected | the `statusID` reset in `ReviewToggleSplit` disabled | `TestReviewNarrowSplitNoticeGoesWithTheSplit` (still on screen 2s after the second s) | **caught** |
 | A panel wider than the panes' columns covered all of the rail but a column or two, leaving fragments of its rows down the panel's edge | n/a, injected | `panelCenterX` in `internal/app/overlay_hit.go` centres on the screen alone | `TestAPanelWiderThanThePanesCoversTheWholeRail` (row 2 ends in the rail's ground) | **caught** |
@@ -7017,3 +7017,27 @@ light `1` for Latte. Run on 2026-10-18.
 | --- | --- | --- | --- |
 | A served client runs the operator's hook | `noteThemeChange`: the `m.Client != ClientLocal` check cut | `TestServedClientsDoNotRunTheThemeHook` ssh and web rows ("the hook ran 1 times for a theme change in a ssh client, want 0") | **caught** |
 | The light flag uses another rule | `noteThemeChange`: the `vt.IsLightBackground` result inverted | `TestServedClientsDoNotRunTheThemeHook` local row (light "0" for Latte) | **caught** |
+
+## The agents cockpit: grouped fleet and rich rows
+
+`TestCockpitGroupsTheFleet` builds twelve fake agents in four sessions, one
+of them on an approval the hook holds. It opens `ctrl+b i` at 200x55 and
+checks the group order, the approval row's verb and command, that a click
+selects a row and leaves the view open, that `a` answers the approval from
+its card, and that a double-click goes to the pane.
+`TestAgentsViewOpenAddsNoIdleCost` holds two 10 s idle windows over three
+agents at rest, the view closed and then open, and counts the view's own
+ticks and fresh frames.
+
+Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The groups come in another order than what each needs from you | n/a, injected | `buildCockpitRows` walks the groups as Working, Needs you, Ready for review, Idle | `TestCockpitGroupsTheFleet` ("\"Working\" is on row 6, not below the group before it (row 24)") | **caught** |
+| A click on a row goes to the pane, the agents view's old rule | n/a, injected | `CockpitClick` treats every click as the second of a double-click | `TestCockpitGroupsTheFleet` ("a click did not put bench-idle in the focus") | **caught** |
+| `a` does not answer the held approval | n/a, injected | `CockpitKey` without `a` among the approval letters | `TestCockpitGroupsTheFleet` ("a never answered the held approval") | **caught** |
+| The open view wakes the client while nothing changes | n/a, injected | `inboxAgentsTick` at one second | `TestAgentsViewOpenAddsNoIdleCost` ("10 ticks of the view") | **caught** |
+
+The fixed build passes them, every `TestInbox*`, `TestAskHuman*`,
+`TestChromeLooksAndFooters`, `TestEveryOverlayOwnsItsGround` and the other
+tests that open the Inbox (137 tests).

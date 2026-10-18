@@ -97,7 +97,7 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "REVIEWER") && strings.Contains(text, "which retry policy?") && strings.Contains(text, "Mail 1")
+		return strings.Contains(text, "REVIEWER") && strings.Contains(text, "which retry policy?") && strings.Contains(text, "Mail  1")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the thread: %v\n%s", err, term.Snapshot())
 	}

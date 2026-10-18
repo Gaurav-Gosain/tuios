@@ -60,9 +60,10 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   or when your report changes it. A new message or state wakes it, so report
   something new when there is something new; repeating the same report does
   not. `tuios list-attention --snoozed` shows what is snoozed.
-- The person also sees every agent in one list, the Inbox's agents view,
-  with your state, how long you have been in it, and what is queued for you.
-  Report your state as it changes; that list is drawn from it.
+- The person sees every agent in one full-screen agents view (ctrl+b i),
+  grouped by what each needs: Needs you, Ready for review, Working, Idle.
+  Your row shows your state, how long you have been in it, and what you do
+  now. Report your state as it changes; that view is drawn from it.
 - Your finished turn's row shows a recap of what you did (turns, files,
   commands, the last test run, your last words), and the person can reply to
   it with `r`. The reply is queued and typed when you are next at rest, so

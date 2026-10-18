@@ -28,7 +28,7 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	waitText(t, term, "the errored item in the Inbox", "Errored 1", "build failed on main", "z snooze")
+	waitText(t, term, "the errored item in the Inbox", "1 needs you", "build failed on main", "z snooze")
 
 	// z opens the picker; its footer says the four lengths.
 	if err := term.SendKeys("z"); err != nil {
@@ -39,7 +39,7 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	if err := term.SendKeys("2"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the snoozed item gone from the list", "Nothing is waiting for you.", "1 snoozed. S shows it.")
+	waitText(t, term, "the snoozed item gone from the list", "Nothing needs you now.", "1 snoozed. S shows it.")
 	saveFrame(t, term, "inbox-snoozed")
 
 	out, err := tuiosCLI(t, base, "list-attention")
@@ -59,13 +59,13 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	// after 23:00 wakes tomorrow, so that reads "until Fri 00:29" instead
 	// of "until 00:29", and the longer label cuts the message short. Match
 	// the part of the message that shows at either width.
-	waitText(t, term, "the snoozed group", "Snoozed 1", "build failed on", "until ", "z wake")
+	waitText(t, term, "the snoozed group", "build failed on", "until ", "z wake")
 	saveFrame(t, term, "inbox-snoozed-shown")
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the woken item", "Errored 1", "build failed on main")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Snoozed 1") }, uiTimeout); err != nil {
+	waitText(t, term, "the woken item", "1 needs you", "build failed on main")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "z wake") }, uiTimeout); err != nil {
 		t.Fatalf("the woken item is still under Snoozed: %v\n%s", err, term.Snapshot())
 	}
 
@@ -73,11 +73,14 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	if err := term.SendKeys("d"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the dismiss and its undo offer", "u undoes", "Nothing is waiting for you.")
+	waitText(t, term, "the dismiss and its undo offer", "u undoes")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "1 needs you") }, uiTimeout); err != nil {
+		t.Fatalf("the dismissed item stayed under Needs you: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys("u"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the restored item", "Errored 1", "build failed on main")
+	waitText(t, term, "the restored item", "1 needs you", "build failed on main")
 	saveFrame(t, term, "inbox-restored")
 	alive(t, term, "after snooze, wake, dismiss and undo")
 }
@@ -155,15 +158,17 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the finished turn in the Inbox", "Done 1", "wrote the docs")
+	waitText(t, term, "the finished turn in the Inbox", "1 to review", "wrote the docs")
 	if err := term.SendKeys("d"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the dismiss", "Nothing is waiting for you.")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "1 to review") }, uiTimeout); err != nil {
+		t.Fatalf("the dismissed turn stayed ready for review: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Nothing is waiting for you.") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "New agent") }, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}
 	// A lone esc followed at once by another key reads as alt and that key.

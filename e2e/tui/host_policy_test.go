@@ -198,7 +198,7 @@ func TestMailWaitsForAMachineWhoseLinkIsDown(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "Waiting to send", "for build", "1 message waits for the link to build")
+		return containsAll(s.Text(), "To send", "1 message waits for the link to build")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the Inbox does not say mail waits for build: %v\n%s", err, term.Snapshot())
 	}

@@ -2,12 +2,13 @@ package app
 
 import (
 	"encoding/json"
-	"github.com/Gaurav-Gosain/tuios/internal/composer"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -306,6 +307,7 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 // InboxDetailScroll scrolls the detail under the list, such as a long plan,
 // by delta lines.
 func (m *OS) InboxDetailScroll(delta int) (tea.Cmd, bool) {
+	m.cockpitTouch()
 	it, ok := m.inboxSelected()
 	if !ok || it.Kind != session.AttentionPlan || it.RequestID == "" {
 		return nil, false
@@ -356,6 +358,7 @@ func (m *OS) InboxApprovalFetch() tea.Cmd {
 // plan whose digest is not the one on the item is not shown: the item will be
 // updated, and read again then.
 func (m *OS) applyInboxApprovalDetail(msg InboxApprovalDetailMsg) {
+	m.cockpitTouch()
 	pv := &m.Inbox.approvals.plan
 	if pv.requestID != msg.RequestID {
 		return
@@ -388,7 +391,13 @@ func (m *OS) inboxPlanWindow() int {
 	if rh <= 0 {
 		return 8
 	}
-	return min(max(rh/3, 3), 16)
+	n := min(max(rh/3, 3), 16)
+	if room := m.Inbox.ck.cardRoom; room > 0 {
+		// The cockpit's card holds the head, the window and the line
+		// under it.
+		n = max(min(n, room-3), 1)
+	}
+	return n
 }
 
 // inboxPlanLines is the plan's text wrapped to width, each line as drawn.
@@ -482,6 +491,10 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 // The key hints are not counted, since the panel drops them before anything
 // else. An unknown screen size is read as not fitting.
 func (m *OS) inboxDetailFits(n int) bool {
+	if m.ShowInbox {
+		// The cockpit's card says how many detail lines it shows whole.
+		return n <= m.Inbox.ck.cardRoom
+	}
 	rh := m.GetRenderHeight()
 	return rh > 0 && panelChromeRows+1+n+1+minPanelRows <= rh
 }
@@ -514,15 +527,6 @@ func inboxDecisionKey(decision string) string {
 		}
 	}
 	return decision
-}
-
-// inboxRowExtras is what an item's row says before its summary on top of what
-// the Inbox always says: "risky: " for an approval a risk rule matched.
-func (m *OS) inboxRowExtras(it session.AttentionItem) string {
-	if inboxRisky(it) {
-		return "risky: "
-	}
-	return ""
 }
 
 // inboxPlanRowText is a plan's row: its title and how long it is.

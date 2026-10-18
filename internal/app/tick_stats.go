@@ -24,6 +24,10 @@ type tickStats struct {
 	// idle. See noteFrame and idleFrameTicker.
 	TickerWakes  uint64
 	TickerSleeps uint64
+	// AgentsTicks is every minute tick of the open agents view, and Cockpit
+	// every frame of it drawn afresh, which an unchanged view never is.
+	AgentsTicks uint64
+	Cockpit     uint64
 }
 
 // TickStats returns the maintenance-tick counters (ticks, work, renders). The
@@ -43,8 +47,8 @@ func (m *OS) DumpTickStats() {
 		return
 	}
 	st := m.tickStats
-	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d\n",
-		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps)), 0o600)
+	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d agentsTicks=%d cockpit=%d\n",
+		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps, st.AgentsTicks, st.Cockpit)), 0o600)
 }
 
 // tickStatsDumpMsg asks Update to write the tick counters now. See

@@ -31,7 +31,7 @@ func TestInboxAnswersAQuestionWithItsDigits(t *testing.T) {
 	}
 	out, _, _ := m.renderInbox()
 	plain := ansi.Strip(out)
-	for _, want := range []string{"Questions", "[1-3] Deploy to staging?", "2  no", "3  later", "answer"} {
+	for _, want := range []string{"Asks", "Deploy to staging?", "2  no", "3  later", "answer"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("the question does not show %q:\n%s", want, plain)
 		}

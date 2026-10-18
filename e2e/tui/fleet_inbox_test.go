@@ -72,7 +72,7 @@ func TestAnAgentOnAnotherMachineReachesThisInbox(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "Errored 1") && strings.Contains(text, "build:far")
+		return strings.Contains(text, "1 needs you") && strings.Contains(text, "rate limited by the api")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the Inbox does not list the agent on build: %v\n%s", err, term.Snapshot())
 	}

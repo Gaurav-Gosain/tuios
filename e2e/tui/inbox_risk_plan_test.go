@@ -97,7 +97,7 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "risky: approve Bash: rm -r", "Risky: recursive delete", "n deny with reason")
+		return screenHas(s, "1 needs you", "Allow Bash", "rm -r", "risky", "Risky: recursive delete", "R say why")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never marked the approval risky: %v\n%s", err, term.Snapshot())
 	}
@@ -149,22 +149,22 @@ func TestInboxKeepsAPlanPlanningWithAReason(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Plans 1", "Refactor the retry loop (3 lines)", "Move backoff into api/retry.go.", "3 keep planning")
+		return screenHas(s, "1 needs you", "Approve the plan?", "Move backoff into api/retry.go.", "r keep planning")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never showed the plan: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "inbox-plan-held")
 	time.Sleep(answerSettle)
 
-	if err := term.SendKeys("n"); err != nil {
-		t.Fatalf("n: %v", err)
+	if err := term.SendKeys("R"); err != nil {
+		t.Fatalf("R: %v", err)
 	}
 	// The reason is a one-line composer under a "Reason:" label, with a
 	// placeholder until the first key.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "Reason:", "Type the reason, or press enter to deny without one.")
 	}, uiTimeout); err != nil {
-		t.Fatalf("n did not open the reason line: %v\n%s", err, term.Snapshot())
+		t.Fatalf("R did not open the reason line: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("split step 2"); err != nil {
 		t.Fatalf("type the reason: %v", err)

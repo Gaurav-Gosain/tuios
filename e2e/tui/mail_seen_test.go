@@ -237,11 +237,11 @@ func TestMailSeenInboxRow(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
 		t.Fatalf("open the Inbox on mail: %v", err)
 	}
-	if err := term.WaitForText("@ REVIEWER  which retry policy?", uiTimeout); err != nil {
+	if err := term.WaitForText("Mail  which retry policy?", uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the thread: %v\n%s", err, term.Snapshot())
 	}
 	mailSeenPersonPeek(t, log)
-	if err := term.WaitForText("@ REVIEWER seen  which retry policy?", uiTimeout); err != nil {
+	if err := term.WaitForText("REVIEWER seen", uiTimeout); err != nil {
 		t.Fatalf("the Inbox row never said seen: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "mail-seen-inbox")

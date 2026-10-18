@@ -224,9 +224,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "agentmail", content, geo, rows)
 	}
 
+	// The Inbox is the cockpit: the whole screen between the dock's rows,
+	// with its own click targets. See render_cockpit.go.
 	if m.ShowInbox {
-		content, geo, rows := m.renderInbox()
-		layers = m.placeOverlayPanel(layers, "inbox", content, geo, rows)
+		if content, y, w, h := m.renderCockpit(); content != "" {
+			z := m.overlayZ("inbox")
+			m.OverlayHits = append(m.OverlayHits, overlayPanelHit{Kind: "inbox", OriginY: y, Z: z, Geo: overlay.Geometry{Width: w, Height: h}})
+			layers = append(layers, lipgloss.NewLayer(content).X(0).Y(y).Z(z).ID("inbox"))
+		}
 	}
 
 	if m.ShowWorkspaceSwitcher {

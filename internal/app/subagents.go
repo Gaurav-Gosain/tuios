@@ -215,28 +215,6 @@ func (m *OS) paneSubagentList(sessionID, windowID string) []sessiontree.Subagent
 	return nil
 }
 
-// paneSubagentCount is how many subagents a pane of this machine is running,
-// as this client holds it: the count, which an older daemon sends without
-// the list.
-func (m *OS) paneSubagentCount(sessionID, windowID string) int {
-	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
-		for _, w := range m.Windows {
-			if w != nil && w.ID == windowID {
-				return w.AgentSubagents
-			}
-		}
-	}
-	if m.DaemonClient == nil || m.AttachedHost != "" {
-		return 0
-	}
-	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
-		if w.ID == windowID {
-			return w.Subagents
-		}
-	}
-	return 0
-}
-
 // subagentDetailLines are the Inbox's lines about a pane's subagents: one
 // per subagent, the same text as its rail row, under a line that says how
 // many run.

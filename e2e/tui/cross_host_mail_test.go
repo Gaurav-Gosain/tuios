@@ -88,7 +88,7 @@ func TestMailCrossesTheLink(t *testing.T) {
 	if err := farTerm.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
 		t.Fatalf("open the Inbox on build: %v", err)
 	}
-	if err := farTerm.WaitForText("Inbox", uiTimeout); err != nil {
+	if err := farTerm.WaitForText("Agents", uiTimeout); err != nil {
 		t.Fatalf("the Inbox never opened on build: %v\n%s", err, farTerm.Snapshot())
 	}
 	if err := farTerm.SendKeys("m"); err != nil {
@@ -490,7 +490,7 @@ func TestMailboxFollowsTheSessionAcrossTheLink(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	if err := term.WaitForText("Inbox", uiTimeout); err != nil {
+	if err := term.WaitForText("Agents", uiTimeout); err != nil {
 		t.Fatalf("the Inbox never opened: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("m"); err != nil {

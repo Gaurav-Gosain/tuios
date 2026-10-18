@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"image/color"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +11,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -110,27 +108,6 @@ type threadsState struct {
 	events   chan tea.Msg
 	// open is the thread shown in place of the list on a narrow screen.
 	open bool
-	// panel is the last view drawn with the thread, and panelAt what it was
-	// drawn from.
-	panel   agentsPanel
-	panelAt threadPanelKey
-}
-
-// threadPanelKey is what the view with the thread depends on.
-type threadPanelKey struct {
-	list                agentsListKey
-	sel, scroll         int
-	width, height       int
-	minute              int64
-	theme               uint64
-	thread              string
-	threadGen           uint64
-	inboxGen, mailGen   uint64
-	editor              uint64
-	open, live, replied bool
-	keys                *config.KeybindRegistry
-	title               string
-	marks               uint64
 }
 
 // threadPageMsg is an agent-transcript reply.
@@ -186,8 +163,7 @@ func (m *OS) thread(e sidebarAgentEntry) *agentThread {
 
 // threadShown reports whether a thread is on screen now.
 func (m *OS) threadShown() bool {
-	a := &m.Inbox.agents
-	return m.ShowInbox && a.on && m.Inbox.Peek == nil && (m.GetRenderWidth() >= threadWideMin || m.Inbox.threads.open)
+	return m.ShowInbox && m.Inbox.Peek == nil && (m.cockpitWideFocus() || m.Inbox.threads.open)
 }
 
 // InboxThreadFetch reads what the selected agent's thread needs and moves the
@@ -196,6 +172,9 @@ func (m *OS) threadShown() bool {
 // there is nothing to read.
 func (m *OS) InboxThreadFetch() tea.Cmd {
 	ts := &m.Inbox.threads
+	if m.ShowInbox {
+		m.cockpitSync()
+	}
 	if !m.threadShown() || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		m.stopThreadWatch()
 		return nil
@@ -426,114 +405,6 @@ func (m *OS) applyThreadWatchEnded(msg threadWatchEnded) {
 	}
 }
 
-// threadApproval is the held approval the Inbox has for an agent, if any.
-func (m *OS) threadApproval(e sidebarAgentEntry) (session.AttentionItem, bool) {
-	if e.Host != "" {
-		return session.AttentionItem{}, false
-	}
-	for _, it := range m.Inbox.Items {
-		if it.Window == e.WindowID && it.Session == e.SessionID && it.Host == "" && it.RequestID != "" &&
-			(it.Kind == session.AttentionApproval || it.Kind == session.AttentionPlan) {
-			return it, true
-		}
-	}
-	return session.AttentionItem{}, false
-}
-
-// InboxAgentsNumber answers the selected agent's held approval with a digit,
-// as the attention list does: the item becomes the Inbox's selection, so the
-// same settle time, risky second press and plan rules apply.
-func (m *OS) InboxAgentsNumber(n int) tea.Cmd {
-	e, ok := m.inboxAgentSelected()
-	if !ok {
-		return nil
-	}
-	it, ok := m.threadApproval(e)
-	if !ok {
-		return nil
-	}
-	st := &m.Inbox
-	for i, r := range m.inboxRows() {
-		if r.item != nil && r.item.ID == it.ID {
-			st.Selected, st.SelectedID = i, it.ID
-			return m.InboxNumber(n)
-		}
-	}
-	return nil
-}
-
-// threadLines draws the thread for an agent in width cells and rows lines,
-// the newest at the bottom. edRow is the line the reply editor starts on, -1
-// when it is not open.
-func (m *OS) threadLines(e sidebarAgentEntry, width, rows int, now time.Time) (lines []string, edRow int) {
-	pal := theme.UI()
-	bg := pal.Surface
-	st := overlay.Style(bg)
-	dim := overlay.Readable(pal.FgDim, bg)
-	fg := overlay.Readable(pal.Fg, bg)
-	name := printableTitle(e.Title)
-	if name == "" {
-		name = shortWindowLabel(e.WindowID)
-	}
-	head := st.Foreground(fg).Bold(true).Render(name)
-	facts := []string{}
-	if e.Harness != "" {
-		facts = append(facts, e.Harness)
-	}
-	facts = append(facts, agentSessionWords(e), agentRowStateWords(e))
-	if e.StateAt > 0 {
-		facts[len(facts)-1] += " " + inboxWait(e.StateAt, now)
-	}
-	head += st.Foreground(dim).Render(" · " + strings.Join(facts, " · "))
-	top := []string{overlay.Fill(ansi.Truncate(head, width, "…"), width, bg)}
-	blank := overlay.Fill("", width, bg)
-
-	// The bottom: the approval it waits on, then the reply editor.
-	var bottom []string
-	if it, ok := m.threadApproval(e); ok {
-		m.noteInboxShown(it, inboxShowsWhole(it), now)
-		bottom = append(bottom, blank)
-		for _, l := range inboxApprovalDetail(it, width) {
-			bottom = append(bottom, overlay.Fill(st.Foreground(fg).Render(ansi.Truncate(l, width, "…")), width, bg))
-		}
-		// Only the answers this prompt takes: a plan or a prompt with no
-		// always has no 2.
-		var keys []string
-		for _, k := range []struct{ decision, words string }{
-			{session.ApprovalOnce, "1 allow"}, {session.ApprovalAlways, "2 always"}, {session.ApprovalDeny, "3 deny"},
-		} {
-			if slices.Contains(it.Options, k.decision) {
-				keys = append(keys, k.words)
-			}
-		}
-		if len(keys) > 0 {
-			bottom = append(bottom, overlay.Fill(st.Foreground(overlay.Readable(pal.Warning, bg)).Render("  "+strings.Join(keys, " · ")), width, bg))
-		}
-	}
-	edRow = -1
-	if ed := m.Inbox.reply.editor; ed != nil && ed.window == e.WindowID && ed.session == e.SessionID {
-		edRow = len(bottom)
-		bottom = append(bottom, ed.lines(width)...)
-	}
-
-	room := rows - len(top) - len(bottom)
-	body := m.threadBody(e, width, max(room, 0), now)
-	if len(body) > room {
-		body = body[len(body)-max(room, 0):]
-	}
-	out := make([]string, 0, rows)
-	out = append(out, top...)
-	out = append(out, body...)
-	for len(out) < rows-len(bottom) {
-		out = append(out, blank)
-	}
-	if edRow >= 0 {
-		edRow += len(out)
-	}
-	out = append(out, bottom...)
-	return out, edRow
-}
-
 // threadBody is the thread's text, oldest first: the conversation for a
 // transcript agent, the recap and the mail for the rest. It holds at least
 // the last room lines, and is kept on the thread until what it shows changes.
@@ -559,7 +430,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 // two hundred entries wrapped and styled on every change cost milliseconds.
 func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time) []string {
 	pal := theme.UI()
-	bg := pal.Surface
+	bg := pal.Canvas
 	st := overlay.Style(bg)
 	var out []string
 	note := func(s string) {
@@ -710,185 +581,12 @@ func threadAgentLine(text string, width int, bg color.Color, pal overlay.Palette
 		st.Foreground(overlay.Readable(pal.FgDim, bg)).Render(text), width, bg)
 }
 
-// threadBodyRows is how many body rows the view takes on this screen.
-func (m *OS) threadBodyRows() int {
-	return min(max(m.GetRenderHeight()-10, 10), 34)
-}
-
-// renderAgentsWithThread draws the agents view with the thread: the list and
-// the thread side by side on a wide screen, the thread alone when it is open
-// on a narrow one.
-func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
-	bg := pal.Surface
-	a := &m.Inbox.agents
-	ts := &m.Inbox.threads
-	now := time.Now()
-	rows := m.threadBodyRows()
-	width := m.panelWidth(150)
-	wide := m.GetRenderWidth() >= threadWideMin
-	listW := 0
-	if wide {
-		listW = min(threadListWidth, width/2)
-	}
-	threadW := width - listW
-	sep := ""
-	if wide {
-		threadW -= 3
-		sep = overlay.Style(bg).Foreground(overlay.Readable(pal.Edge, bg)).Render(" │ ")
-	}
-	e, _ := m.inboxAgentSelected()
-	replying := m.Inbox.reply.editor != nil
-	if a.sheet != nil {
-		ts.panelAt = threadPanelKey{}
-	}
-	key := threadPanelKey{
-		list: a.listAt, sel: a.sel, scroll: a.scroll, width: m.GetRenderWidth(), height: m.GetRenderHeight(),
-		minute: now.Unix() / 60, theme: theme.Generation(), thread: agentKey(e),
-		inboxGen: m.Inbox.Gen, mailGen: m.AgentMail.Gen, open: ts.open, live: m.Inbox.Live,
-		keys: m.KeybindRegistry, title: title, marks: a.marksGen,
-	}
-	if t := ts.byKey[key.thread]; t != nil {
-		key.threadGen = t.gen
-	}
-	if ed := m.Inbox.reply.editor; ed != nil {
-		// Drawn first, from its own cache, so its frame counter says
-		// whether a key changed it; one more so a fresh editor differs
-		// from none.
-		ed.lines(threadW)
-		key.editor, key.replied = ed.comp.Drawn()+1, true
-	}
-	if ts.panelAt == key && ts.panel.content != "" {
-		return ts.panel.content, ts.panel.geo, ts.panel.rows
-	}
-	right, edRow := m.threadLines(e, threadW, rows, now)
-	if a.sheet != nil {
-		right, edRow = fitLines(m.bulkSheetLines(threadW, rows), threadW, rows), -1
-	}
-
-	var left []string
-	blank := ""
-	if wide {
-		a.scroll = min(max(a.scroll, a.sel-rows+1), a.sel)
-		a.scroll = max(min(a.scroll, len(list)-rows), 0)
-		minute, gen := now.Unix()/60, theme.Generation()
-		for i := range rows {
-			idx := a.scroll + i
-			if idx >= len(list) {
-				if blank == "" {
-					blank = overlay.Fill("", listW, bg)
-				}
-				left = append(left, blank)
-				continue
-			}
-			left = append(left, m.agentsRowWrapped(list[idx], idx == a.sel, !replying, pal, listW, minute, gen, now))
-		}
-	}
-	body := make([]string, rows)
-	for i := range rows {
-		var b strings.Builder
-		if wide {
-			b.WriteString(left[i])
-			b.WriteString(sep)
-		}
-		b.WriteString(right[i])
-		body[i] = b.String()
-	}
-	content, geo := overlay.Panel{Title: title, Width: width, Body: strings.Join(body, "\n"), Hints: hints}.Render(pal)
-	if ed := m.Inbox.reply.editor; ed != nil && edRow >= 0 {
-		x := geo.BodyX
-		if wide {
-			x += listW + 3
-		}
-		ed.at.x, ed.at.y, ed.at.ok = x+2, geo.BodyY+edRow+ed.head, true
-	}
-	var hits []overlayRowHit
-	if wide {
-		for i := range rows {
-			if a.scroll+i >= len(list) {
-				break
-			}
-			y := geo.BodyY + i
-			hits = append(hits, overlayRowHit{Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.BodyX + listW, Y1: y + 1}, Idx: a.scroll + i})
-		}
-	}
-	if a.sheet == nil {
-		ts.panel, ts.panelAt = agentsPanel{content: content, geo: geo, rows: hits}, key
-	}
-	return content, geo, hits
-}
-
 // firstNonEmptyStr is a when it is not empty, b otherwise.
 func firstNonEmptyStr(a, b string) string {
 	if a != "" {
 		return a
 	}
 	return b
-}
-
-// inboxThreadHints are the keys of the agents view with the thread showing.
-func (m *OS) inboxThreadHints() []overlay.Hint {
-	var hints []overlay.Hint
-	e, ok := m.inboxAgentSelected()
-	if ok {
-		if _, held := m.threadApproval(e); held {
-			hints = append(hints, overlay.Hint{Key: "1 2 3", Label: "answer"})
-		}
-	}
-	if m.Inbox.threads.open && m.GetRenderWidth() < threadWideMin {
-		hints = append(hints, m.keyHints(config.ActionInboxGo, "go", config.ActionInboxReply, "reply")...)
-		return append(hints, overlay.Hint{Key: "esc", Label: "back"})
-	}
-	hints = append(hints, m.keyHints(config.ActionInboxGo, "go", config.ActionInboxReply, "reply", config.ActionInboxViewPane, "view pane")...)
-	return append(hints, m.keyHints(config.ActionInboxFilter, "show", config.ActionInboxSort, "sort",
-		config.ActionInboxSelect, "search", config.ActionInboxAgents, "Inbox", config.ActionInboxClose, "close")...)
-}
-
-// InboxAgentsEnter is enter in the agents view: on a narrow screen it opens
-// the selected agent's thread, and in an open thread, or beside the list on a
-// wide screen, it goes to the agent's pane.
-func (m *OS) InboxAgentsEnter() tea.Cmd {
-	ts := &m.Inbox.threads
-	if m.GetRenderWidth() < threadWideMin && !ts.open {
-		if _, ok := m.inboxAgentSelected(); ok {
-			ts.open = true
-			return m.InboxThreadFetch()
-		}
-		return nil
-	}
-	ts.open = false
-	return m.InboxAgentsGo()
-}
-
-// InboxAgentsBack is esc in the agents view: it closes a thread open on a
-// narrow screen, and reports false when there is none, so esc closes the
-// Inbox.
-func (m *OS) InboxAgentsBack() bool {
-	if ts := &m.Inbox.threads; ts.open {
-		ts.open = false
-		return true
-	}
-	return false
-}
-
-// agentsRowWrapped is an agent's row with its ground, as the list beside the
-// thread draws it, kept with the rows until what it shows changes.
-func (m *OS) agentsRowWrapped(e sidebarAgentEntry, selected, focused bool, pal overlay.Palette, width int, minute int64, gen uint64, now time.Time) string {
-	a := &m.Inbox.agents
-	k := agentsRowKey{
-		session: e.SessionID, window: e.WindowID, host: e.Host, title: e.Title,
-		state: e.State, kind: e.AgentKind, doneSeen: e.DoneSeen, minute: minute,
-		queued: e.Queued, subagents: e.Subagents, mail: a.mail[e.WindowID],
-		width: width, selected: selected, focused: focused, theme: gen,
-		sessionLabel: e.SessionLabel, marked: a.marks[agentKey(e)], wrapped: true,
-	}
-	if s, ok := a.rows[k]; ok {
-		return s
-	}
-	rs := overlay.RowState{Cursor: selected, Focused: focused}
-	s := pal.Row(m.agentsRow(e, selected, focused, pal.Ground(rs, pal.Surface), pal, width, minute, gen, now), width, rs, pal.Surface)
-	a.rows[k] = s
-	return s
 }
 
 // threadWrap breaks an entry's text onto lines of at most width cells: at its
@@ -933,16 +631,4 @@ func (m *OS) InboxAgentsViewPane() tea.Cmd {
 	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
 	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
 	return nil
-}
-
-// fitLines pads or cuts lines to exactly rows lines of width cells.
-func fitLines(lines []string, width, rows int) []string {
-	bg := theme.UI().Surface
-	if len(lines) > rows {
-		lines = lines[:rows]
-	}
-	for len(lines) < rows {
-		lines = append(lines, overlay.Fill("", width, bg))
-	}
-	return lines
 }

@@ -5,18 +5,13 @@ import (
 	"image/color"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -48,9 +43,6 @@ const (
 	agentsFilterCount
 )
 
-// agentsFilterWords names each quick filter, as the header says it.
-var agentsFilterWords = [agentsFilterCount]string{"all", "needs you", "working", "done", "error"}
-
 // Sorts, s in the view.
 const (
 	agentsSortNeedsYou = iota
@@ -59,9 +51,6 @@ const (
 	agentsSortSession
 	agentsSortCount
 )
-
-// agentsSortWords names each sort, as the header says it.
-var agentsSortWords = [agentsSortCount]string{"needs you", "name", "recent", "session"}
 
 // inboxAgentsTick is how often the time labels move on.
 const inboxAgentsTick = time.Minute
@@ -97,8 +86,6 @@ type inboxAgentsState struct {
 	counts agentsCounts
 	// mail is each agent's unread mail, by window, from the mailbox mirror.
 	mail map[string]int
-	// rows keeps each drawn row until what it shows changes.
-	rows map[agentsRowKey]string
 	// marks are the marked agents, by key, and marksGen changes with them.
 	// See inbox_bulk.go.
 	marks    map[string]bool
@@ -107,30 +94,6 @@ type inboxAgentsState struct {
 	sheet *bulkSheet
 	// snooze are the items the snooze picker picks a length for.
 	snooze []string
-	// panel is the last panel drawn, and panelAt what it was drawn from, so
-	// a frame drawn for another reason costs the key and nothing more.
-	panel   agentsPanel
-	panelAt agentsPanelKey
-}
-
-// agentsPanel is a drawn panel.
-type agentsPanel struct {
-	content string
-	geo     overlay.Geometry
-	rows    []overlayRowHit
-}
-
-// agentsPanelKey is what the panel depends on beyond the list.
-type agentsPanelKey struct {
-	list          agentsListKey
-	sel, scroll   int
-	width, height int
-	minute        int64
-	theme         uint64
-	live          bool
-	keys          *config.KeybindRegistry
-	marks         uint64
-	sheet         bool
 }
 
 // agentsListKey is what the list was built from.
@@ -146,23 +109,6 @@ type agentsCounts struct {
 	needsYou, working, done, total int
 }
 
-// agentsRowKey is what one drawn row depends on.
-type agentsRowKey struct {
-	session, window, host   string
-	title, state, kind      string
-	doneSeen                bool
-	minute                  int64
-	queued, subagents, mail int
-	width                   int
-	selected, focused       bool
-	theme                   uint64
-	sessionLabel            string
-	marked                  bool
-	// wrapped marks a row kept with its ground, as the list beside the
-	// thread draws it (agentsRowWrapped).
-	wrapped bool
-}
-
 // inboxAgentsTickMsg moves the time labels on. gen is the tick it belongs to:
 // a tick from before the view closed and opened again is dropped.
 type inboxAgentsTickMsg struct{ gen uint64 }
@@ -170,25 +116,12 @@ type inboxAgentsTickMsg struct{ gen uint64 }
 // InboxAgentsOn reports whether the Inbox shows the agents view.
 func (m *OS) InboxAgentsOn() bool { return m.Inbox.agents.on }
 
-// InboxToggleAgents switches between the attention list and the agents view.
-func (m *OS) InboxToggleAgents() tea.Cmd {
-	a := &m.Inbox.agents
-	m.stopInboxAgentsTick()
-	a.on = !a.on
-	m.Inbox.reply.editor = nil
-	m.Inbox.threads.open = false
-	if !a.on {
-		m.stopThreadWatch()
-	}
-	return tea.Batch(m.InboxAgentsTick(), m.InboxThreadFetch())
-}
-
 // InboxAgentsTick arms the minute tick while the view is on screen and none
 // is armed. The input path calls it after every key while the Inbox is open,
 // which is how a view opened again gets its tick back; it is nil otherwise.
 func (m *OS) InboxAgentsTick() tea.Cmd {
 	a := &m.Inbox.agents
-	if !m.ShowInbox || !a.on || a.tickStop != nil {
+	if !m.ShowInbox || a.tickStop != nil {
 		return nil
 	}
 	a.tickGen++
@@ -227,6 +160,7 @@ func (m *OS) applyInboxAgentsTick(msg inboxAgentsTickMsg) tea.Cmd {
 	if msg.gen != a.tickGen {
 		return nil
 	}
+	m.tickStats.AgentsTicks++
 	a.tickStop = nil
 	return m.InboxAgentsTick()
 }
@@ -399,16 +333,6 @@ func (m *OS) inboxAgentsMove(delta int) {
 	a.key = agentKey(list[a.sel])
 }
 
-// inboxAgentsSelect puts the cursor on row idx.
-func (m *OS) inboxAgentsSelect(idx int) {
-	a := &m.Inbox.agents
-	list := m.inboxAgentsList()
-	if idx < 0 || idx >= len(list) {
-		return
-	}
-	a.sel, a.key = idx, agentKey(list[idx])
-}
-
 // inboxAgentSelected is the agent under the cursor.
 func (m *OS) inboxAgentSelected() (sidebarAgentEntry, bool) {
 	a := &m.Inbox.agents
@@ -417,14 +341,6 @@ func (m *OS) inboxAgentSelected() (sidebarAgentEntry, bool) {
 		return sidebarAgentEntry{}, false
 	}
 	return list[a.sel], true
-}
-
-// InboxAgentsCycleFilter steps the quick filter: all, needs you, working,
-// done, error.
-func (m *OS) InboxAgentsCycleFilter() {
-	a := &m.Inbox.agents
-	a.filter = (a.filter + 1) % agentsFilterCount
-	a.sel, a.scroll = 0, 0
 }
 
 // InboxAgentsCycleSort steps the sort: needs you, name, recent, session.
@@ -490,244 +406,6 @@ func (m *OS) inboxAgentsSearch(text string) (selector string, query string) {
 // agentsRows is how many list rows the view shows.
 const agentsRows = 16
 
-// renderInboxAgents draws the agents view.
-func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
-	st := &m.Inbox
-	a := &st.agents
-	list := m.inboxAgentsList()
-	a.inFrame = true
-	defer func() { a.inFrame = false }()
-	title := m.agentsTitle()
-	hints := m.inboxAgentsHints()
-	if len(a.marks) > 0 {
-		hints = m.bulkHints()
-	}
-	if a.sheet != nil {
-		hints = m.bulkSheetHints()
-	}
-	if len(list) == 0 {
-		lines := []string{"No agents are running.", "Start one with tuios start-agent."}
-		if a.counts.total > 0 {
-			lines = []string{"No agent matches " + m.agentsNarrowWords() + ".", "f shows the next group, and / changes the search."}
-		}
-		return m.emptyPanel(title, inboxWidth, inboxEmptyRows, lines[0], lines[1:], overlay.Hint{Key: "tab", Label: "Inbox"}, hints)
-	}
-	replyDetail, replyHints, replying := m.inboxReplyDetail()
-	if replying {
-		hints = replyHints
-	}
-	// The thread beside the list on a wide screen, or in its place when it
-	// is open on a narrow one. See inbox_thread.go.
-	if m.GetRenderWidth() >= threadWideMin || st.threads.open {
-		if !replying && a.sheet == nil && len(a.marks) == 0 {
-			hints = m.inboxThreadHints()
-		}
-		return m.renderAgentsWithThread(list, title, hints)
-	}
-	now := time.Now()
-	minute := now.Unix() / 60
-	gen := theme.Generation()
-	key := agentsPanelKey{
-		list: a.listAt, sel: a.sel, scroll: a.scroll, width: m.GetRenderWidth(), height: m.GetRenderHeight(),
-		minute: minute, theme: gen, live: st.Live, keys: m.KeybindRegistry,
-		marks: a.marksGen, sheet: a.sheet != nil,
-	}
-	if !replying && a.sheet == nil && a.panelAt == key && a.panel.content != "" {
-		return a.panel.content, a.panel.geo, a.panel.rows
-	}
-	content, geo, rows := m.renderListOverlay(listOverlay{
-		Title:      title,
-		Width:      inboxWidth,
-		MaxVisible: agentsRows,
-		Count:      len(list),
-		Selected:   a.sel,
-		Scroll:     &a.scroll,
-		Hints:      hints,
-		DetailFor: func(width int) []string {
-			if a.sheet != nil {
-				return m.bulkSheetLines(width, m.bulkSheetRows())
-			}
-			if replying {
-				return replyDetail(width)
-			}
-			return nil
-		},
-		DetailStyled: replying || a.sheet != nil,
-		DetailAt:     m.inboxReplyDetailAt(replying),
-		Unfocused:    replying,
-		Position: func() (int, int) {
-			return a.sel + 1, len(list)
-		},
-		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
-			e := list[i]
-			return m.agentsRow(e, selected, !replying, rowBg, pal, width, minute, gen, now)
-		},
-	})
-	if replying {
-		a.panel, a.panelAt = agentsPanel{}, agentsPanelKey{}
-	} else {
-		a.panel, a.panelAt = agentsPanel{content: content, geo: geo, rows: rows}, key
-	}
-	return content, geo, rows
-}
-
-// agentsNarrowWords says what narrows the list, for the empty message.
-func (m *OS) agentsNarrowWords() string {
-	a := &m.Inbox.agents
-	var parts []string
-	if a.filter != agentsFilterAll {
-		parts = append(parts, agentsFilterWords[a.filter])
-	}
-	if m.Inbox.Select != "" {
-		parts = append(parts, m.Inbox.Select)
-	}
-	if a.query != "" {
-		parts = append(parts, strconv.Quote(a.query))
-	}
-	if len(parts) == 0 {
-		return "the list"
-	}
-	return strings.Join(parts, " and ")
-}
-
-// agentsTitle is the view's title: the counts over every agent, then what
-// narrows or orders the list when it is not the default, in words, so a
-// narrowed list never reads as a short one.
-func (m *OS) agentsTitle() string {
-	st := &m.Inbox
-	a := &st.agents
-	c := a.counts
-	parts := []string{"Agents"}
-	if c.needsYou > 0 {
-		parts = append(parts, strconv.Itoa(c.needsYou)+" "+agentNeedsYou(c.needsYou))
-	}
-	parts = append(parts, strconv.Itoa(c.working)+" working", strconv.Itoa(c.done)+" done")
-	if a.filter != agentsFilterAll {
-		parts = append(parts, "show "+agentsFilterWords[a.filter])
-	}
-	if a.sort != agentsSortNeedsYou {
-		parts = append(parts, "sort "+agentsSortWords[a.sort])
-	}
-	if a.query != "" {
-		parts = append(parts, "search "+a.query)
-	}
-	if n := len(a.marks); n > 0 {
-		parts = append(parts, strconv.Itoa(n)+" marked")
-	}
-	title := strings.Join(parts, " · ")
-	if st.Select != "" {
-		title += " [select " + st.Select + "]"
-	}
-	if !st.Live {
-		title += " (not connected)"
-	}
-	return title
-}
-
-// agentsRow draws one agent: its mark, name, session, state, time in state,
-// and what waits for it, kept until any of those change.
-func (m *OS) agentsRow(e sidebarAgentEntry, selected, focused bool, bg color.Color, pal overlay.Palette, width int, minute int64, gen uint64, now time.Time) string {
-	a := &m.Inbox.agents
-	k := agentsRowKey{
-		session: e.SessionID, window: e.WindowID, host: e.Host, title: e.Title,
-		state: e.State, kind: e.AgentKind, doneSeen: e.DoneSeen, minute: minute,
-		queued: e.Queued, subagents: e.Subagents, mail: a.mail[e.WindowID],
-		width: width, selected: selected, focused: focused, theme: gen,
-		sessionLabel: e.SessionLabel, marked: a.marks[agentKey(e)],
-	}
-	if s, ok := a.rows[k]; ok {
-		return s
-	}
-	s := agentsRowText(e, k.mail, k.marked, bg, pal, width, now)
-	if a.rows == nil || len(a.rows) > 1024 {
-		a.rows = make(map[agentsRowKey]string)
-	}
-	a.rows[k] = s
-	return s
-}
-
-// agentsRowText draws an agent's row on bg at width cells.
-func agentsRowText(e sidebarAgentEntry, mail int, marked bool, bg color.Color, pal overlay.Palette, width int, now time.Time) string {
-	stateInk := overlay.Readable(sidebarStateColor(e.State, e.DoneSeen, pal), bg)
-	mark := agentStateIndicator(e.State)
-	if mark == "" {
-		mark = " "
-	}
-	words := agentRowStateWords(e)
-	wait := ""
-	if e.StateAt > 0 {
-		wait = inboxWait(e.StateAt, now)
-	}
-	var extras []string
-	if e.Queued > 0 {
-		extras = append(extras, strconv.Itoa(e.Queued)+" queued")
-	}
-	if mail > 0 {
-		extras = append(extras, strconv.Itoa(mail)+" mail")
-	}
-	if e.Subagents > 0 {
-		extras = append(extras, strconv.Itoa(e.Subagents)+" sub")
-	}
-	extra := strings.Join(extras, " · ")
-
-	// The columns, from the right: what waits, the time, the state, the
-	// session. The name takes what is left. Every column has the same width
-	// on every row, so the list reads down as a table.
-	const markW, stateW, waitW = 2, 10, 4
-	sessW := min(16, max(width/5, 6))
-	extraW := 0
-	if width >= 72 {
-		extraW = min(20, width/5)
-	}
-	nameW := width - 2 - markW - sessW - 1 - stateW - 1 - waitW - extraW
-	name := printableTitle(e.Title)
-	if name == "" {
-		name = shortWindowLabel(e.WindowID)
-	}
-	// Each column is one SGR span on the row's ground, written with
-	// ansi.Style directly: lipgloss's Render measured and split every span
-	// again, and a list of two hundred agents drawn again at once spent most
-	// of its frame there.
-	var b strings.Builder
-	b.Grow(width + 160)
-	// At 16 colours the grounds and some inks are overlay.NoColor, which
-	// lipgloss left out and ansi.Style would write as black: such a colour
-	// is not written at all.
-	var ground ansi.Style
-	if !noColor(bg) {
-		ground = ground.BackgroundColor(ansi.Color(bg))
-	}
-	span := func(ink color.Color, bold bool, text string) {
-		s := ground
-		if !noColor(ink) {
-			s = s.ForegroundColor(ansi.Color(ink))
-		}
-		if bold {
-			s = s.Bold()
-		}
-		b.WriteString(s.Styled(text))
-	}
-	if marked {
-		tick := "✓ "
-		if overlay.UseASCII() {
-			tick = "* "
-		}
-		span(overlay.Readable(pal.AccentBright, bg), true, tick)
-	} else {
-		b.WriteString(ground.Styled("  "))
-	}
-	span(stateInk, false, padTo(mark, markW))
-	span(overlay.Readable(pal.Fg, bg), sidebarAttention(e.State), padTo(ansi.Truncate(name, max(nameW, 1), "…"), max(nameW, 1)))
-	dim := overlay.Readable(pal.FgDim, bg)
-	span(dim, false, padTo(ansi.Truncate(agentSessionWords(e), sessW, "…"), sessW)+" ")
-	span(stateInk, false, padTo(ansi.Truncate(words, stateW, "…"), stateW)+" ")
-	span(overlay.Readable(pal.FgMute, bg), false, padLeft(wait, waitW))
-	if extraW > 0 && extra != "" {
-		span(dim, false, "  "+ansi.Truncate(extra, extraW-2, "…"))
-	}
-	return b.String()
-}
-
 // noColor reports whether c is no colour at all: nil or overlay.NoColor.
 func noColor(c color.Color) bool {
 	if c == nil {
@@ -751,22 +429,6 @@ func agentRowStateWords(e sidebarAgentEntry) string {
 		return "error"
 	}
 	return sidebarStateWords(e.State)
-}
-
-// padTo pads s with spaces to w cells.
-func padTo(s string, w int) string {
-	if n := ansi.StringWidth(s); n < w {
-		return s + strings.Repeat(" ", w-n)
-	}
-	return s
-}
-
-// inboxAgentsHints are the view's keys.
-func (m *OS) inboxAgentsHints() []overlay.Hint {
-	hints := m.keyHints(config.ActionInboxGo, "go", config.ActionInboxReply, "reply")
-	hints = append(hints, m.keyHints(config.ActionInboxFilter, "show", config.ActionInboxSort, "sort",
-		config.ActionInboxSelect, "search", config.ActionInboxAgents, "Inbox", config.ActionInboxClose, "close")...)
-	return hints
 }
 
 // inboxAgentsSelectApply puts what the selector line holds in force in the

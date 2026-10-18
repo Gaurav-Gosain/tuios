@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -439,4 +440,102 @@ func readTickStats(t *testing.T, path string) (ticks, work, render uint64) {
 	}
 	st := parseTickStats(string(data))
 	return st["ticks"], st["work"], st["render"]
+}
+
+// TestAgentsViewOpenAddsNoIdleCost holds the agents view to its idle budget:
+// open over agents at rest, it costs what the same client costs with it
+// closed. One client, three shells marked as agents, and two idle windows
+// of 10s: closed, then open. The open view arms the minute tick that moves
+// the ages on, which does not fire inside a window, and draws nothing while
+// nothing changes.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the minute tick
+// at one second the open window counts ten ticks of the view, and the check
+// fails.
+func TestAgentsViewOpenAddsNoIdleCost(t *testing.T) {
+	base := t.TempDir()
+	wire := &wireRecorder{}
+	statsPath := filepath.Join(base, "tickstats")
+	term := startIn(t, base, startOpts{daemonDefault: true, out: wire, env: []string{"TUIOS_STATS_FILE=" + statsPath}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 3, "opening three idle shells")
+	out, err := tuiosCLI(t, base, "list-windows", "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v: %s", err, out)
+	}
+	var reply struct {
+		Windows []struct {
+			ID string `json:"window_id"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &reply); err != nil || len(reply.Windows) < 3 {
+		t.Fatalf("list-windows json: %v: %s", err, out)
+	}
+	for i, state := range []string{"idle", "done", "idle"} {
+		if out, err := tuiosCLI(t, base, "set-agent-state", state, "-w", reply.Windows[i].ID, "--harness", "claude-code"); err != nil {
+			t.Fatalf("report agent %d: %v\n%s", i, err, out)
+		}
+	}
+	var openAgents, openFrames uint64
+	window := func(name string) idleBudget {
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatalf("%s: screen never settled: %v", name, err)
+		}
+		time.Sleep(time.Second)
+		pid := term.Pid()
+		start := sampleIdle(t, pid, statsPath)
+		before := wire.n.Load()
+		time.Sleep(idleWindow)
+		end := sampleIdle(t, pid, statsPath)
+		got := idleBudget{
+			wire:        wire.n.Load() - before,
+			ticks:       end.stats["ticks"] - start.stats["ticks"],
+			work:        end.stats["work"] - start.stats["work"],
+			tickerWakes: end.stats["tickerWakes"] - start.stats["tickerWakes"],
+			ctxsw:       end.ctxsw - start.ctxsw,
+		}
+		openAgents = end.stats["agentsTicks"] - start.stats["agentsTicks"]
+		openFrames = end.stats["cockpit"] - start.stats["cockpit"]
+		t.Logf("%s, idle window %v: wire=%dB ticks=%d work=%d tickerWakes=%d ctxsw=%d view ticks=%d view frames=%d",
+			name, idleWindow, got.wire, got.ticks, got.work, got.tickerWakes, got.ctxsw, openAgents, openFrames)
+		return got
+	}
+	closed := window("agents view closed")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the agents view: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Ready for review", "Idle")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the agents view never showed the agents: %v\n%s", err, term.Snapshot())
+	}
+	open := window("agents view open")
+	var over []string
+	if open.wire > closed.wire+idleWireBudget/4 {
+		over = append(over, fmt.Sprintf("wrote %d bytes, %d with it closed", open.wire, closed.wire))
+	}
+	if open.ticks > closed.ticks+2 || open.work > closed.work+2 {
+		over = append(over, fmt.Sprintf("ran %d ticks (%d full), %d (%d) with it closed", open.ticks, open.work, closed.ticks, closed.work))
+	}
+	if open.tickerWakes > closed.tickerWakes+1 {
+		over = append(over, fmt.Sprintf("woke the frame ticker %d times, %d with it closed", open.tickerWakes, closed.tickerWakes))
+	}
+	if closed.ctxsw >= 0 && open.ctxsw > closed.ctxsw*3/2+200 {
+		over = append(over, fmt.Sprintf("made %d context switches, %d with it closed", open.ctxsw, closed.ctxsw))
+	}
+	// Open, it holds the idle budget on its own: no maintenance tick, no
+	// frame, no tick of its own inside the window, and no frame of it drawn
+	// afresh.
+	if open.ticks > 2 || open.tickerWakes > 1 || open.wire > idleWireBudget {
+		over = append(over, fmt.Sprintf("open: %d ticks, %d ticker wakes, %d bytes", open.ticks, open.tickerWakes, open.wire))
+	}
+	if openAgents > 0 || openFrames > 0 {
+		over = append(over, fmt.Sprintf("open: %d ticks of the view and %d frames of it drawn afresh", openAgents, openFrames))
+	}
+	if len(over) > 0 {
+		t.Fatalf("the open agents view costs more at idle than the closed one:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
+	}
 }

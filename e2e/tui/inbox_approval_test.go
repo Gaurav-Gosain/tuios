@@ -86,7 +86,7 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	// priority hint and gives way first when the footer is short; enter
 	// still answers in the pane.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "approve Bash: go test", "allow", "deny")
+		return screenHas(s, "1 needs you", "Allow Bash", "$ go test", "allow", "reject")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never offered to answer the held approval: %v\n%s", err, term.Snapshot())
 	}
@@ -116,7 +116,7 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 		t.Fatalf("the hook printed %q, want Claude Code's allow decision", out)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Approvals 1")
+		return !strings.Contains(s.Text(), "1 needs you")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the answered approval stayed in the Inbox: %v\n%s", err, term.Snapshot())
 	}
@@ -147,7 +147,7 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 		t.Fatalf("the Write hook took %s and printed %q, want no hold and no output", took, written.String())
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "approve Write: notes.md")
+		return screenHas(s, "1 needs you", "Allow Write", "notes.md")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Write approval never showed: %v\n%s", err, term.Snapshot())
 	}

@@ -91,10 +91,10 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	if err := term.WaitForText("Approvals 1", uiTimeout); err != nil {
+	if err := term.WaitForText("1 needs you", uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the approval: %v\n%s", err, term.Snapshot())
 	}
-	for _, key := range []string{"z", "u", "S", "v", "n", "J", "K"} {
+	for _, key := range []string{"z", "u", "S", "v", "R", "J", "K"} {
 		if err := term.SendKeys(key); err != nil {
 			t.Fatalf("press %s: %v", key, err)
 		}
@@ -103,7 +103,7 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the Inbox never settled: %v\n%s", err, term.Snapshot())
 	}
-	if text := term.Screen().Text(); !strings.Contains(text, "Approvals 1") || !strings.Contains(text, "approve Bash: go test") {
+	if text := term.Screen().Text(); !strings.Contains(text, "1 needs you") || !strings.Contains(text, "$ go test") {
 		t.Fatalf("a key bound ahead of its work changed the Inbox\n%s", term.Snapshot())
 	}
 	saveFrame(t, term, "agent-work-inbox-unchanged")

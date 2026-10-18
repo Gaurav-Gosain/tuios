@@ -941,19 +941,6 @@ func (ed *inboxReplyEditor) lines(width int) []string {
 	return ed.frame
 }
 
-// inboxReplyDetailAt is the callback that records where the editor was drawn,
-// nil when no editor is open.
-func (m *OS) inboxReplyDetailAt(replying bool) func(x, y int) {
-	ed := m.Inbox.reply.editor
-	if !replying || ed == nil {
-		return nil
-	}
-	return func(x, y int) {
-		// The draft's lines are padded by two cells.
-		ed.at.x, ed.at.y, ed.at.ok = x+2, y+ed.head, true
-	}
-}
-
 // inboxReplyFrame is what the editor's lines were drawn from.
 type inboxReplyFrame struct {
 	width int

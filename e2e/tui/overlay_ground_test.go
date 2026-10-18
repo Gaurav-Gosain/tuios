@@ -361,7 +361,7 @@ func groundSteps() []groundStep {
 	}
 	return []groundStep{
 		{name: "inbox-approval", fresh: true, titled: true, keys: []any{tuitest.Ctrl('b'), "i"},
-			want: []string{"Approvals 1", "risky: approve Bash", "Plans 1", "1 allow"}, check: noKeysRow},
+			want: []string{"needs you", "Allow Bash", "risky", "a allow"}, check: noKeysRow},
 		{name: "inbox-plan", titled: true, keys: []any{"j"}, want: []string{"Add a MaxAttempts field", "keep planning"}},
 		{name: "inbox-errored", titled: true, keys: []any{"j"}, want: []string{"go test ./... failed", "snooze"}},
 		{name: "inbox-snooze-picker", titled: true, keys: []any{"z"}, want: []string{"15m", "until it changes"},
@@ -406,7 +406,6 @@ func TestEveryOverlayOwnsItsGround(t *testing.T) {
 					term := groundClient(t, size[0], size[1], theme, bg, out)
 					dir := artifactDir(t)
 					var closed groundCells
-					inboxTop := -1
 					for _, st := range groundSteps() {
 						if st.fresh {
 							if err := term.WaitStable(uiTimeout); err != nil {
@@ -442,19 +441,6 @@ func TestEveryOverlayOwnsItsGround(t *testing.T) {
 							if h := holes(after, r, ground, title); len(h) > 0 {
 								t.Errorf("%s at %dx%d: %d cells of the ground inside the overlay at (%d,%d)-(%d,%d), first %v\n%s",
 									st.name, cols, rows, len(h), r.x0, r.y0, r.x1, r.y1, h[:min(len(h), 6)], term.Snapshot())
-							}
-						}
-						// The Inbox keeps its top row while its height follows
-						// the item under the cursor, and it fits beside the rail
-						// at 120 columns, so it is drawn there.
-						if strings.HasPrefix(st.name, "inbox-") && r.cells >= 20 {
-							if inboxTop < 0 {
-								inboxTop = r.y0
-							} else if r.y0 != inboxTop {
-								t.Errorf("%s: the Inbox moved from row %d to row %d", st.name, inboxTop, r.y0)
-							}
-							if rail := railHeaderColumn(s); cols >= 120 && rail > 0 && r.x1 >= rail-1 {
-								t.Errorf("%s: the Inbox runs to column %d, over the rail at %d\n%s", st.name, r.x1, rail, term.Snapshot())
 							}
 						}
 						if st.check != nil {

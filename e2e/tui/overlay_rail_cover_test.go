@@ -190,7 +190,7 @@ func TestAPanelWiderThanThePanesCoversTheWholeRail(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	waitText(t, term, "the Inbox with the error", "Errored 1", "esc close")
+	waitText(t, term, "the Inbox with the error", "1 needs you", "esc close")
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestAPanelWiderThanThePanesCoversTheWholeRail(t *testing.T) {
 	title, footer := -1, -1
 	for r := range rows {
 		line := s.Line(r)
-		if title < 0 && strings.Contains(line, " Inbox") {
+		if title < 0 && strings.Contains(line, " Agents ") {
 			title = r
 		}
 		if strings.Contains(line, "esc close") {
@@ -211,7 +211,7 @@ func TestAPanelWiderThanThePanesCoversTheWholeRail(t *testing.T) {
 		t.Fatalf("could not find the Inbox's title (%d) and footer (%d)\n%s", title, footer, term.Snapshot())
 	}
 	titleLine := s.Line(title)
-	titleCol := len([]rune(titleLine[:strings.Index(titleLine, "Inbox")]))
+	titleCol := len([]rune(titleLine[:strings.Index(titleLine, "Agents")]))
 	if titleCol >= railX {
 		t.Fatalf("the Inbox starts at column %d, inside the rail at %d: it fits beside the rail and this tests nothing\n%s",
 			titleCol, railX, term.Snapshot())

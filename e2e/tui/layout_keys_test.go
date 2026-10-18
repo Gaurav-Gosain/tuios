@@ -48,7 +48,7 @@ func TestBaseLayoutKeyOpensInbox(t *testing.T) {
 	}
 	// A standalone client has no daemon, so the Inbox opens on its own title and
 	// says it is not connected.
-	if err := term.WaitForText("Inbox (not connected)", uiTimeout); err != nil {
+	if err := term.WaitForText("The agents view needs the daemon.", uiTimeout); err != nil {
 		t.Fatalf("leader then ш on the I key did not open the Inbox: %v\n%s", err, term.Snapshot())
 	}
 	if strings.Contains(term.Screen().Text(), "ш") {

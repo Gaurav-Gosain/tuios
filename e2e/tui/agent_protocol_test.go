@@ -121,7 +121,7 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Approvals 1", "approve execute: go test", "allow", "deny")
+		return screenHas(s, "1 needs you", "Allow execute", "go test", "allow", "reject")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never offered to answer the protocol pane's permission: %v\n%s", err, term.Snapshot())
 	}
@@ -132,7 +132,7 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 	}
 	waitCapture(t, base, "e2e-agent", "helper", "answered: Allow (from the Inbox", "PERMISSION: allow", "[done] execute: go test ./...")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Approvals 1")
+		return !strings.Contains(s.Text(), "1 needs you")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the answered approval stayed in the Inbox: %v\n%s", err, term.Snapshot())
 	}
