@@ -2890,7 +2890,12 @@ the image view measured 37,826,722 and 35,560,962; they delete the reply
 editor's old frame, which the area replaces. The side column measured
 37,867,682 and 35,594,930. Its live pane is read again only after the pane
 prints, at most every third pass as the picture-in-picture view is, and
-only while the box is on screen; nothing in it runs on a timer.
+only while the box is on screen; nothing in it runs on a timer. Parking the
+hidden host cursor at the caret for input methods (#649) measured 37,879,970
+and 35,595,330: 400 bytes on darwin/arm64, and three more pages on
+linux/amd64, so only the linux/amd64 budget moved. It scans each frame for
+the cursor visibility sequences, copies a parked frame only when it takes
+one out, and runs no timer.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
