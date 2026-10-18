@@ -1504,11 +1504,13 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 	switch {
 	case applied && p.TranscriptPath != "":
 		transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, p.TranscriptPath)
-	case p.TranscriptPath == "" && p.AgentSessionID != "" &&
-		reason != agentRefusedForeignSession && reason != agentRefusedForeignHarness:
+	case applied && cs != nil && p.TranscriptPath == "" && p.AgentSessionID != "":
 		// A harness whose hook names its session and not its file (Amp):
 		// the manifest's session_file names the file, and it is held to the
-		// same rules as a path a hook reports.
+		// same rules as a path a hook reports, joinReportedTranscript's pane
+		// checks among them. A report with no connection (herdr's socket,
+		// which any client may write to) names no file, the same as it can
+		// name no transcript_path.
 		if path := d.sessionTranscriptPath(p.Harness, p.AgentSessionID); path != "" {
 			transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, path)
 		}
@@ -1764,7 +1766,17 @@ func (d *Daemon) sessionTranscriptPath(harnessID, sessionID string) string {
 	if tr == nil {
 		return ""
 	}
-	return tr.SessionPath(strings.TrimSpace(sessionID))
+	path := tr.SessionPath(strings.TrimSpace(sessionID))
+	if path == "" {
+		return ""
+	}
+	// The file must be there already. A hook path may name a file not yet
+	// written, since the harness writes it next. A session id names a file
+	// only when the harness has made one for it.
+	if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return path
 }
 
 // paneInSession reports whether the pane pa is in sess, by ID when pa has

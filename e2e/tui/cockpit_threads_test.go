@@ -54,13 +54,13 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			once: "const b = 3;",
 		},
 		{
-			name: "copilot", harness: "copilot", fixture: "cockpit-copilot.jsonl", sessionID: "s-copilot",
+			name: "copilot", harness: "copilot", fixture: "copilot-events.jsonl", sessionID: "s-copilot",
 			file: filepath.Join(".copilot", "session-state", "s-copilot", "events.jsonl"),
 			want: []string{"b is three. One test fails.", "Command failed with exit code 1", "edit", "const b = 3;", "Rate limit reached."},
 			once: "Set b to three.",
 		},
 		{
-			name: "amp", harness: "amp", fixture: "cockpit-amp.json", sessionID: "T-00000000-0000-7000-8000-000000000001",
+			name: "amp", harness: "amp", fixture: "amp-thread.json", sessionID: "T-00000000-0000-7000-8000-000000000001",
 			file:    filepath.Join(".local", "share", "amp", "threads", "T-00000000-0000-7000-8000-000000000001.json"),
 			want:    []string{"b is three. One test fails.", "1 failing", "edit_file", "const b = 3;", "Bash"},
 			once:    "Set b to three.",

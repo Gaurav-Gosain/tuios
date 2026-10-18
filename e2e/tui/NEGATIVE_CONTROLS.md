@@ -7195,3 +7195,14 @@ names it. Run on 2026-10-18.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A hook that names only its session joins no file | The `session_file` join in `verbSetAgentState` (verb_handlers.go) | Condition never true | `TestCockpitThreadOtherHarnesses/amp` ("never showed the answer and the failed command") | **caught** |
+
+`TestSessionFileJoin` (internal/session) checks the rules of the session-id
+join after review: a report with no connection (herdr's socket) names no
+file, a session id names a file only when the file exists, and a refused
+report joins nothing. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A herdr client joins any thread by its id | `cs != nil` in the session-id join | Condition dropped | `TestSessionFileJoin` ("a report with no connection joined ...") | **caught** |
+| A session id joins a file that is not there | The `os.Lstat` in `sessionTranscriptPath` | Removed | `TestSessionFileJoin` ("session id \"T-missing\" joined ...") | **caught** |
+| A refused report joins a file | `applied` in the session-id join | Condition dropped | `TestSessionFileJoin` ("a refused report joined ...") | **caught** |

@@ -63,7 +63,7 @@ any      = ["esc to cancel", "esc cancel", "esc again to cancel", "esc interrupt
 # Copilot CLI writes each session's events to ~/.copilot/session-state/
 # <session id>/events.jsonl, one event per line. The hook reports its path.
 # Without the hook the daemon takes the session whose session.start names the
-# pane's directory and that was written since Copilot started. The file is
+# pane's directory and the start of the pane's Copilot. The file is
 # read only to show the conversation in the agent thread.
 [transcript]
 reader = "copilot-events"
