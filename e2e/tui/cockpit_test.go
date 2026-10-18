@@ -363,6 +363,12 @@ func TestCockpitThreadCards(t *testing.T) {
 		if s.Cell(word, row).Bg == s.Cell(ret, row).Bg {
 			t.Fatalf("ASSERTION: the changed words of the diff are not lit\n%s", term.Snapshot())
 		}
+		// The light starts at the word, not before it: Go's diff lines start
+		// with a tab, and an offset taken after the tab became four spaces
+		// lit three cells early.
+		if s.Cell(word-1, row).Bg != s.Cell(ret, row).Bg {
+			t.Fatalf("ASSERTION: the cell before the changed words is lit too\n%s", term.Snapshot())
+		}
 		saveCockpitFrames(t, term, "thread-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]))
 		// Further up, the three reads and the search are one line.
 		if err := term.SendKeys("K", "K"); err != nil {

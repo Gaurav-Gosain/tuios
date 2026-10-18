@@ -11,7 +11,7 @@ import (
 
 // benchAgents200OS is a client watching two hundred agents in the attached
 // session, in every state, with the cockpit open on them.
-func benchAgents200OS(b *testing.B) *OS {
+func benchAgents200OS(b testing.TB) *OS {
 	b.Helper()
 	config.Global.SidebarEnabled = true
 	b.Cleanup(func() { config.Global.SidebarEnabled = false })
@@ -113,5 +113,52 @@ func BenchmarkInboxAgents200Move(b *testing.B) {
 		}
 		m.CockpitMove(d)
 		m.renderInbox()
+	}
+}
+
+// benchDiffThread gives the selected agent a transcript of edits, each with
+// a diff of four hundred lines, the most the daemon sends, and one more
+// entry per loop: the thread an agent streams into while the view is open.
+func benchDiffThread(b *testing.B) (*OS, *agentThread) { return benchDiffThreadT(b) }
+
+func benchDiffThreadT(b testing.TB) (*OS, *agentThread) {
+	m := benchAgents200OS(b)
+	// The cursor on an agent with no item, so the focus is its thread.
+	for _, r := range m.cockpitRows() {
+		if r.kind == ckRowAgent && !r.hasItem {
+			m.cockpitSelectKey(r.key)
+			break
+		}
+	}
+	e, _ := m.cockpitAgent()
+	t := m.thread(e)
+	t.read = true
+	t.entries = t.entries[:0]
+	for i := range 40 {
+		d := &threadDiff{File: "internal/app/file" + strconv.Itoa(i) + ".go", Added: 400}
+		h := threadHunk{OldStart: 1, NewStart: 1}
+		for j := range 400 {
+			h.Lines = append(h.Lines, threadDiffLine{Op: "+", Text: "\tif err := do(ctx, " + strconv.Itoa(j) + "); err != nil { return err }"})
+		}
+		d.Hunks = []threadHunk{h}
+		t.entries = append(t.entries, threadEntry{ID: "e" + strconv.Itoa(i), Role: "assistant", Kind: "tool_call", Tool: "Edit", Target: d.File, Diff: d})
+	}
+	t.gen++
+	m.Inbox.agents.on = true
+	return m, t
+}
+
+// BenchmarkCockpitThreadGrows is a frame after the thread of edits grew by
+// one entry: the cards built again, the frame drawn again.
+func BenchmarkCockpitThreadGrows(b *testing.B) {
+	m, t := benchDiffThread(b)
+	m.renderInbox()
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		t.entries = append(t.entries, threadEntry{ID: "n" + strconv.Itoa(i), Role: "assistant", Kind: "text", Text: "Next step."})
+		t.gen++
+		m.renderInbox()
+		i++
 	}
 }

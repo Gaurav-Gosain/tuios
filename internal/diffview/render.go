@@ -20,6 +20,13 @@ const reset = "\x1b[m"
 //
 // text has to be printable already: the view draws it as it is.
 func (t *Theme) Code(text string, spans []Span, changed Range, kind Kind, cursor bool, xOff, width int) string {
+	one := [1]Range{changed}
+	return t.CodeRanges(text, spans, one[:], kind, cursor, xOff, width)
+}
+
+// CodeRanges is Code with more than one changed part, in order and apart:
+// each is lit, and the text between them is not.
+func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind, cursor bool, xOff, width int) string {
 	if width <= 0 {
 		return ""
 	}
@@ -27,7 +34,7 @@ func (t *Theme) Code(text string, spans []Span, changed Range, kind Kind, cursor
 	codes := &t.code[kind][c]
 	var b strings.Builder
 	b.Grow(len(text) + 32*(len(spans)+2))
-	si := 0
+	si, ri := 0, 0
 	for i := 0; i < len(text); {
 		for si < len(spans) && spans[si].End <= i {
 			si++
@@ -41,13 +48,15 @@ func (t *Theme) Code(text string, spans []Span, changed Range, kind Kind, cursor
 			}
 		}
 		word := false
-		if !changed.Empty() {
-			switch {
-			case i < changed.Start:
-				next = min(next, changed.Start)
-			case i < changed.End:
+		for ri < len(changed) && (changed[ri].End <= i || changed[ri].Empty()) {
+			ri++
+		}
+		if ri < len(changed) {
+			if i < changed[ri].Start {
+				next = min(next, changed[ri].Start)
+			} else {
 				word = true
-				next = min(next, changed.End)
+				next = min(next, changed[ri].End)
 			}
 		}
 		next = max(min(next, len(text)), i+1)

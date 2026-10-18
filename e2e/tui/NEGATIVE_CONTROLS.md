@@ -7072,3 +7072,4 @@ Run on 2026-10-18.
 | The newest todo list folds to its count like the older ones | n/a, injected | `ckPlanCard` called with `whole` false | `TestCockpitThreadCards` ("the thread has no plan card or diff card") | **caught** |
 | A click on a card's header does nothing | n/a, injected | the diff card's header line has no `fold:` hit | `TestCockpitThreadCards` ("a click on the header did not fold the diff") | **caught** |
 | A tool result between two reads breaks the run | n/a, injected | the run stops at a `tool_result` entry | `TestCockpitThreadCards` ("the reads did not fold to one line") | **caught** |
+| The changed words are lit three cells early per tab | `ckCodeOffset`: the word offsets mapped on the raw text | the offsets taken on the text after the tab became four spaces | `TestCockpitThreadCards` ("the cell before the changed words is lit too") | **caught** |

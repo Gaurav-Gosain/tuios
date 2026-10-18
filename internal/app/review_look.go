@@ -38,6 +38,26 @@ type reviewLook struct {
 }
 
 // reviewLook is the overlay's colours for this frame.
+// diffTheme is the diff theme for a chrome palette on ground, its syntax in
+// the theme's own colours when one is set. It is built for the depth: tints
+// in truecolor, fixed palette entries at 256 colours, and at 16, where the
+// ground and ink are the terminal's own, no grounds at all (see
+// diffview.Theme). The review and the cockpit's diff cards share it.
+func diffTheme(pal overlay.Palette, ground color.Color) *diffview.Theme {
+	syntax := diffview.DefaultSyntax()
+	if t := theme.Current(); t != nil {
+		var slots [16]color.Color
+		for i, c := range theme.ANSIOrder(t) {
+			if c != nil {
+				slots[i] = c
+			}
+		}
+		syntax = diffview.SyntaxFromANSI(slots)
+	}
+	return diffview.NewTheme(diffview.Palette{Depth: pal.Depth, Ground: ground, Fg: pal.Fg, Accent: pal.Accent,
+		Add: pal.Success, Delete: pal.Warn, Syntax: syntax})
+}
+
 func (m *OS) reviewLook() *reviewLook {
 	g := m.paneGround()
 	key := strconv.FormatUint(theme.Generation(), 10) + "\x00" + g.key + "\x00" + theme.Depth().String()
@@ -81,29 +101,8 @@ func newReviewLook(g ground) *reviewLook {
 	case ground != solidColor(pal.Surface):
 		pal = reviewPaletteOn(pal, ground, solidColor(fg))
 	}
-	syntax := diffview.DefaultSyntax()
-	if t != nil {
-		var slots [16]color.Color
-		for i, c := range theme.ANSIOrder(t) {
-			if c != nil {
-				slots[i] = c
-			}
-		}
-		syntax = diffview.SyntaxFromANSI(slots)
-	}
 	l := &reviewLook{pal: pal}
-	// The diff theme is built for the depth: tints in truecolor, fixed palette
-	// entries at 256 colours, and at 16, where the ground and ink are the
-	// terminal's own, no grounds at all (see diffview.Theme).
-	l.dv = diffview.NewTheme(diffview.Palette{
-		Depth:  pal.Depth,
-		Ground: ground,
-		Fg:     pal.Fg,
-		Accent: pal.Accent,
-		Add:    pal.Success,
-		Delete: pal.Warn,
-		Syntax: syntax,
-	})
+	l.dv = diffTheme(pal, ground)
 	l.hunkBg, l.noteBg = pal.Surface, pal.Surface
 	if pal.Depth != overlay.Depth16 {
 		l.hunkBg = overlay.Shown(overlay.MixColors(ground, pal.Info, 0.12))

@@ -3,9 +3,11 @@ package app
 import (
 	"image/color"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -100,9 +102,9 @@ func ckReadTool(tool string) string {
 }
 
 // threadCardLines draws the thread of a transcript agent as cards, the newest
-// at the bottom, at least need lines of it. With changes it draws the edits
+// at the bottom. With changes it draws the edits
 // of the last turn alone, each whole.
-func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width, need int, changes bool) ([]string, []string) {
+func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, changes bool) ([]string, []string) {
 	pal := theme.UI()
 	l := m.cockpitLook()
 	who := ckHarness(e.Harness)
@@ -126,8 +128,40 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width, need in
 			results[en.ToolID] = en
 		}
 	}
-	var items [][]ckLine
-	add := func(ls ...ckLine) { items = ckAddItem(items, ls) }
+	// Each item carries its lines drawn: a line is drawn once, when its
+	// card is built, and a rebuild only joins them.
+	var items []ckItem
+	var c *ckCanvas
+	draw := func(ls []ckLine) []string {
+		out := make([]string, len(ls))
+		for i, ln := range ls {
+			c = c.reset(width, 1, l.canvas)
+			out[i] = ckRender(c, width, ln)
+		}
+		return out
+	}
+	c = c.reset(width, 1, l.canvas)
+	blank := c.render()
+	add := func(ls ...ckLine) { items = ckAddItem(items, ckItem{lines: ls, out: draw(ls)}, blank) }
+	// cached draws an entry's card once per width, fold and theme: a diff's
+	// highlighting and a long text's wrapping are the costly part, and a
+	// thread that grows by one entry draws only that one.
+	gen := theme.Generation()
+	cached := func(en threadEntry, variant int, build func() []ckLine) {
+		key := ckCardKey{width: width, theme: gen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth,
+			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status}
+		if card, ok := t.cards[en.ID]; ok && card.key == key {
+			items = ckAddItem(items, card.item, blank)
+			return
+		}
+		ls := build()
+		if t.cards == nil {
+			t.cards = make(map[string]ckCard)
+		}
+		it := ckItem{lines: ls, out: draw(ls)}
+		t.cards[en.ID] = ckCard{key: key, item: it}
+		items = ckAddItem(items, it, blank)
+	}
 	prevText := false
 	for i := 0; i < len(entries); i++ {
 		en := entries[i]
@@ -138,25 +172,32 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width, need in
 		switch {
 		case en.Kind == "text" && en.Role == "user":
 			turn++
-			label := []ckSeg{{t: "You", fg: pal.AccentBright, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}
-			if turn > 1 {
-				label = append(label, ckSeg{t: sepWord() + "turn " + strconv.Itoa(turn), fg: pal.FgMute})
-			}
-			ls := []ckLine{{segs: label, label: true}, {bg: l.panel, bar: "▎", barInk: pal.AccentBright}}
-			for _, s := range threadWrap(en.Text, max(width-6, 8)) {
-				ls = append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright, indent: 3, segs: []ckSeg{{t: s, fg: pal.Fg}}})
-			}
-			add(append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright}, ckLine{})...)
-			prevText = false
+			cached(en, turn, func() []ckLine {
+				label := []ckSeg{{t: "You", fg: pal.AccentBright, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}
+				if turn > 1 {
+					label = append(label, ckSeg{t: sepWord() + "turn " + strconv.Itoa(turn), fg: pal.FgMute})
+				}
+				ls := []ckLine{{segs: label, label: true}, {bg: l.panel, bar: "▎", barInk: pal.AccentBright}}
+				for _, s := range threadWrap(en.Text, max(width-6, 8)) {
+					ls = append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright, indent: 3, segs: []ckSeg{{t: s, fg: pal.Fg}}})
+				}
+				return append(ls, ckLine{bg: l.panel, bar: "▎", barInk: pal.AccentBright}, ckLine{})
+			})
 		case en.Kind == "text":
-			var ls []ckLine
-			if !prevText {
-				ls = append(ls, ckLine{label: true, segs: []ckSeg{{t: who, fg: pal.FgDim, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}})
+			variant := 0
+			if prevText {
+				variant = 1
 			}
-			for _, s := range threadWrap(en.Text, max(width-2, 8)) {
-				ls = append(ls, ckLine{segs: []ckSeg{{t: s, fg: pal.Fg}}})
-			}
-			add(append(ls, ckLine{})...)
+			cached(en, variant, func() []ckLine {
+				var ls []ckLine
+				if variant == 0 {
+					ls = append(ls, ckLine{label: true, segs: []ckSeg{{t: who, fg: pal.FgDim, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}})
+				}
+				for _, s := range threadWrap(en.Text, max(width-2, 8)) {
+					ls = append(ls, ckLine{segs: []ckSeg{{t: s, fg: pal.Fg}}})
+				}
+				return append(ls, ckLine{})
+			})
 			prevText = true
 			continue
 		case en.Kind == "thinking":
@@ -164,11 +205,16 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width, need in
 			add(ckLine{segs: []ckSeg{{t: l.g(ckGlyphFold) + " ", fg: pal.FgMute}, {t: "Thought", fg: pal.FgDim, attrs: ckItalic},
 				{t: "  " + ckTrunc(printableTitle(first), width-14), fg: pal.FgMute, attrs: ckItalic}}})
 		case en.Kind == "todos":
-			add(m.ckPlanCard(l, en, width, i == m.ckLastTodos(entries))...)
+			last := i == m.ckLastTodos(entries)
+			variant := 0
+			if last {
+				variant = 1
+			}
+			cached(en, variant, func() []ckLine { return m.ckPlanCard(l, en, width, last) })
 		case en.Kind == "plan":
-			add(m.ckPlanText(l, t, en, width)...)
+			cached(en, 0, func() []ckLine { return m.ckPlanText(l, t, en, width) })
 		case isEdit:
-			add(m.ckDiffCard(l, t, en, width, changes)...)
+			cached(en, 0, func() []ckLine { return m.ckDiffCard(l, t, en, width, changes) })
 		case en.Kind == "tool_call" && ckReadTool(en.Tool) != "":
 			// A run of reads and searches is one line.
 			j := i
@@ -214,23 +260,44 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width, need in
 		prevText = false
 	}
 	if changes && len(items) == 0 {
-		return []string{ckRender(l, width, ckLine{indent: 2, segs: []ckSeg{{t: "No edits in the last turn.", fg: pal.FgDim}}})}, []string{""}
+		c := (*ckCanvas)(nil).reset(width, 1, l.canvas)
+		return []string{ckRender(c, width, ckLine{indent: 2, segs: []ckSeg{{t: "No edits in the last turn.", fg: pal.FgDim}}})}, []string{""}
 	}
-	// The newest items, enough for need lines, drawn oldest first.
-	var picked [][]ckLine
-	n := 0
-	for i := len(items) - 1; i >= 0 && n < need; i-- {
-		picked = append(picked, items[i])
-		n += len(items[i])
-	}
+	// Every item, oldest first. The thread keeps the lines until it, the
+	// width or a fold changes; scrolling picks from them.
 	var out, hits []string
-	for i := len(picked) - 1; i >= 0; i-- {
-		for _, ln := range picked[i] {
-			out = append(out, ckRender(l, width, ln))
+	for _, it := range items {
+		out = append(out, it.out...)
+		for _, ln := range it.lines {
 			hits = append(hits, ln.hit)
 		}
 	}
 	return out, hits
+}
+
+// ckItem is a card's lines and the lines drawn.
+type ckItem struct {
+	lines []ckLine
+	out   []string
+}
+
+// ckCard is an entry's card as last built, and what it was built from.
+type ckCard struct {
+	key  ckCardKey
+	item ckItem
+}
+
+// ckCardKey is what a card's lines depend on beside the entry itself, which
+// a transcript never changes once written.
+type ckCardKey struct {
+	width                   int
+	theme                   uint64
+	depth                   overlay.Depth
+	ascii, nerd             bool
+	folded, expand, changes bool
+	variant                 int
+	// status is a tool call's, which its result can change.
+	status string
 }
 
 // ckAddItem appends a card's lines. A card or a new speaker starts after a
@@ -238,13 +305,14 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width, need in
 // calls it from every case, and inlined it was most of the thread's code.
 //
 //go:noinline
-func ckAddItem(items [][]ckLine, ls []ckLine) [][]ckLine {
-	if n := len(items); n > 0 && len(ls) > 0 && (ls[0].bg != nil || ls[0].label) {
-		if prev := items[n-1]; len(prev) > 0 && !prev[len(prev)-1].blank() {
-			items[n-1] = append(prev, ckLine{})
+func ckAddItem(items []ckItem, it ckItem, blank string) []ckItem {
+	if n := len(items); n > 0 && len(it.lines) > 0 && (it.lines[0].bg != nil || it.lines[0].label) {
+		if prev := items[n-1]; len(prev.lines) > 0 && !prev.lines[len(prev.lines)-1].blank() {
+			// Clipped, so a card the thread keeps is never written into.
+			items[n-1] = ckItem{lines: append(slices.Clip(prev.lines), ckLine{}), out: append(slices.Clip(prev.out), blank)}
 		}
 	}
-	return append(items, ls)
+	return append(items, it)
 }
 
 // ckLastTodos is the index of the newest todo list, which is the one drawn
@@ -260,8 +328,16 @@ func (m *OS) ckLastTodos(entries []threadEntry) int {
 
 // ckWorse is the worse of two tool statuses: an error, then a run, then ok.
 func ckWorse(a, b string) string {
-	rank := map[string]int{"ok": 0, "": 0, "running": 1, "error": 2}
-	if rank[b] > rank[a] {
+	rank := func(s string) int {
+		switch s {
+		case "error":
+			return 2
+		case "running":
+			return 1
+		}
+		return 0
+	}
+	if rank(b) > rank(a) {
 		return b
 	}
 	return a
@@ -412,14 +488,21 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 	gw := 5
 	codeW := max(width-gw-diffview.SignWidth-1, 8)
 	for hi, h := range d.Hunks {
-		texts := make([]string, len(h.Lines))
-		for i, ln := range h.Lines {
-			texts[i] = printableRunes(strings.ReplaceAll(ln.Text, "\t", "    "))
+		if shown >= limit {
+			// Nothing past the limit is drawn, so nothing past it is
+			// highlighted: a 400-line diff costs what its first lines do.
+			break
 		}
-		spans := ckSideSpans(d.File, h.Lines, texts)
+		// Only the lines the card shows are made and highlighted.
+		take := min(len(h.Lines), limit-shown)
+		texts := make([]string, take)
+		for i, ln := range h.Lines[:take] {
+			texts[i] = ckCodeText(ln.Text, l.ascii)
+		}
+		spans := ckSideSpans(d.File, h.Lines[:take], texts)
 		oldN, newN := h.OldStart, h.NewStart
-		if hi > 0 && shown < limit {
-			ls = append(ls, ckLine{bg: l.panel, indent: gw + 1, segs: []ckSeg{{t: "⋯", fg: pal.FgMute}}})
+		if hi > 0 {
+			ls = append(ls, ckLine{bg: l.panel, indent: gw + 1, segs: []ckSeg{{t: overlay.Ellipsis(), fg: pal.FgMute}}})
 		}
 		for i, ln := range h.Lines {
 			kind, n := diffview.Context, newN
@@ -435,14 +518,20 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 				newN++
 			}
 			if shown >= limit {
-				continue
+				break
 			}
 			shown++
-			var changed diffview.Range
-			if len(ln.Words) > 0 {
-				changed = diffview.Range{Start: ckUTF16Byte(texts[i], ln.Words[0].S), End: ckUTF16Byte(texts[i], ln.Words[len(ln.Words)-1].E)}
+			// The changed words are in UTF-16 units of the raw text: each
+			// goes to bytes of the raw text, then through the tab
+			// expansion and the runes the card drops.
+			var changed []diffview.Range
+			for _, w := range ln.Words {
+				changed = append(changed, diffview.Range{
+					Start: ckCodeOffset(ln.Text, ckUTF16Byte(ln.Text, w.S), l.ascii),
+					End:   ckCodeOffset(ln.Text, ckUTF16Byte(ln.Text, w.E), l.ascii),
+				})
 			}
-			raw := dv.Gutter(n, gw, kind, false) + dv.Sign(kind, false, false) + dv.Code(texts[i], spans[i], changed, kind, false, 0, codeW)
+			raw := dv.Gutter(n, gw, kind, false) + dv.Sign(kind, false, false) + dv.CodeRanges(texts[i], spans[i], changed, kind, false, 0, codeW)
 			ls = append(ls, ckLine{bg: l.panel, raw: raw, indent: 0})
 		}
 	}
@@ -493,6 +582,39 @@ func ckSideSpans(file string, lines []threadDiffLine, texts []string) [][]diffvi
 	return out
 }
 
+// ckCodeText is a diff line as the card draws it: tabs as four spaces, and
+// only the runes the terminal can show.
+func ckCodeText(raw string, ascii bool) string {
+	var b strings.Builder
+	b.Grow(len(raw))
+	for _, r := range raw {
+		switch {
+		case r == '\t':
+			b.WriteString("    ")
+		case printableRune(r, ascii):
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// ckCodeOffset is where byte off of raw lands in ckCodeText(raw).
+func ckCodeOffset(raw string, off int, ascii bool) int {
+	n := 0
+	for i, r := range raw {
+		if i >= off {
+			break
+		}
+		switch {
+		case r == '\t':
+			n += 4
+		case printableRune(r, ascii):
+			n += utf8.RuneLen(r)
+		}
+	}
+	return n
+}
+
 // ckUTF16Byte turns an offset in UTF-16 code units into one in bytes of s.
 func ckUTF16Byte(s string, u int) int {
 	n := 0
@@ -516,29 +638,17 @@ func (m *OS) ckDiffTheme(l ckLook) *diffview.Theme {
 	if ck.dv != nil && ck.dvKey == key {
 		return ck.dv
 	}
-	syntax := diffview.DefaultSyntax()
-	if t := theme.Current(); t != nil {
-		var slots [16]color.Color
-		for i, c := range theme.ANSIOrder(t) {
-			if c != nil {
-				slots[i] = c
-			}
-		}
-		syntax = diffview.SyntaxFromANSI(slots)
-	}
 	ground := l.panel
 	if l.pal.Depth == overlay.Depth16 {
 		ground = l.pal.Surface
 	}
-	ck.dv = diffview.NewTheme(diffview.Palette{Depth: l.pal.Depth, Ground: ground, Fg: l.pal.Fg, Accent: l.pal.Accent,
-		Add: l.pal.Success, Delete: l.pal.Warn, Syntax: syntax})
+	ck.dv = diffTheme(l.pal, ground)
 	ck.dvKey = key
 	return ck.dv
 }
 
-// ckRender draws one card line at width.
-func ckRender(l ckLook, width int, ln ckLine) string {
-	c := newCkCanvas(width, 1, l.canvas)
+// ckRender draws one card line at width on c, a blank canvas one line high.
+func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	if ln.bg != nil {
 		c.fill(0, 0, width, 1, ln.bg)
 	}
@@ -556,6 +666,3 @@ func ckRender(l ckLook, width int, ln ckLine) string {
 	}
 	return c.render()
 }
-
-// newCkCanvas is a blank w by h canvas on bg.
-func newCkCanvas(w, h int, bg color.Color) *ckCanvas { return (*ckCanvas)(nil).reset(w, h, bg) }

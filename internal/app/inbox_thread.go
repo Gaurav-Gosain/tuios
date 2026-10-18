@@ -92,13 +92,15 @@ type agentThread struct {
 	folded    map[string]bool
 	expandAll bool
 	scroll    int
+	// cards are the entries' cards as last built, by entry id.
+	cards map[string]ckCard
 }
 
 // threadBodyKey is what a thread's drawn lines depend on.
 type threadBodyKey struct {
 	gen, mailGen, theme uint64
 	look                uint64
-	width, room         int
+	width               int
 	minute              int64
 	ascii               bool
 	title, message      string
@@ -422,7 +424,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 	}
 	key := threadBodyKey{
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
-		width: width, room: room, minute: now.Unix() / 60, ascii: overlay.UseASCII(),
+		width: width, minute: now.Unix() / 60, ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
 		expand: t.expandAll, changes: m.Inbox.ck.tab == 1,
 	}
@@ -460,7 +462,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			note(t.err)
 			return out
 		}
-		out, t.hits = m.threadCardLines(e, t, width, room, m.Inbox.ck.tab == 1)
+		out, t.hits = m.threadCardLines(e, t, width, m.Inbox.ck.tab == 1)
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}
