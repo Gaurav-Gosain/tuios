@@ -609,6 +609,39 @@ func TestThemedDaemonPaneReportsTheTheme(t *testing.T) {
 		}
 	}
 	saveArtifact(t, term, artifacts, "themed-daemon-pane")
+
+	// A second client on another theme attaches. The person last gave input
+	// at the first one, so the second client's pushes leave the panes'
+	// colours alone: two clients on two themes must not take turns, which
+	// would send a pane with mode 2031 on a notice for every push.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("give the first client input: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	second := startIn(t, base, startOpts{
+		args:         []string{"attach", "--theme", "catppuccin_latte", "e2e-themed"},
+		shippedLooks: true,
+		env:          []string{"COLORTERM=truecolor"},
+		wrap:         []string{host, "run", "-bg", "#fdf6e3", "-fg", "#2a2a2a", "-ansi", hostANSISpec(), "--"},
+	})
+	if err := second.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("the second client never attached: %v\n%s", err, second.Snapshot())
+	}
+	time.Sleep(time.Second)
+	if got := askPane(t, base, "e2e-themed", host, map[string]string{"11": xrgb(bg)}); got["11"] != xrgb(bg) {
+		t.Errorf("after a second client on Latte attached, a pane's OSC 11 was answered %q, want the first client's Dracula %q", got["11"], xrgb(bg))
+	}
+	// The positive half: once the person gives input at the second client
+	// and its theme changes, its colours are the panes'.
+	_, _, nordBg, _, ok := theme.Colors("nord")
+	if !ok {
+		t.Fatal("theme nord is not built in")
+	}
+	pickTheme(t, second, "nord")
+	if got := askPane(t, base, "e2e-themed", host, map[string]string{"11": xrgb(nordBg)}); got["11"] != xrgb(nordBg) {
+		t.Errorf("after the second client picked Nord, a pane's OSC 11 was answered %q, want Nord's %q", got["11"], xrgb(nordBg))
+	}
+	saveArtifact(t, second, artifacts, "second-client-nord")
 }
 
 // omarchySwitch applies an Omarchy theme under the test's HOME the way
@@ -672,6 +705,10 @@ func omarchySwitch(t *testing.T, base, id string) {
 //     OSC 4 slot 4 with Gruvbox's blue, through the daemon's emulator, so the
 //     colours went from the client to the daemon;
 //   - the pane frame is drawn in a new colour.
+//
+// Then the theme picker passes several dark themes on the way to Dracula.
+// The program gets no notice while the picker shows them, and one dark notice
+// for the pick.
 //
 // Each state is kept as a frame drawn on the theme's ground, which is what
 // the Omarchy terminal around tuios shows.
@@ -785,6 +822,22 @@ func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
 	}
 	saveArtifact(t, term, artifacts, "catppuccin-latte")
 	renderScreenPNG(t, term.Screen(), hostGroundPalette("#4c4f69", "#eff1f5"), filepath.Join(artifacts, "catppuccin-latte.png"))
+
+	// The theme picker shows each theme it passes, and a pane is not told
+	// about a theme that is only shown. Typing "dracula" passes dark themes,
+	// any of which would send a dark notice from Latte. Only the pick does.
+	listen()
+	name := filterThemePicker(t, term, "dracula")
+	time.Sleep(1500 * time.Millisecond)
+	if pane, _ := tuiosCLI(t, base, "capture-pane", "-s", "e2e-omarchy"); strings.Contains(pane, "HOSTTERM-SCHEME=") {
+		t.Errorf("moving through the theme picker sent the program a notice:\n%s", pane)
+	}
+	closeThemePicker(t, term, name, tuitest.Enter)
+	if pane := waitPane("HOSTTERM-SCHEME-NOTICES="); !strings.Contains(pane, "HOSTTERM-SCHEME=dark") {
+		t.Errorf("picking Dracula did not tell the program dark:\n%s", pane)
+	} else if m := regexp.MustCompile(`HOSTTERM-SCHEME-NOTICES=(\d+)`).FindStringSubmatch(pane); m == nil || m[1] != "1" {
+		t.Errorf("picking Dracula did not send the program exactly one notice:\n%s", pane)
+	}
 }
 
 // TestThemeNoneMatchesTheTerminal: with theme = "none", the dialogs are drawn

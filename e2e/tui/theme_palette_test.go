@@ -42,6 +42,13 @@ func probeInk(t *testing.T, term *tuitest.Terminal, marker string) tuitest.Color
 // pickTheme drives the theme picker to a name and waits for it to close.
 func pickTheme(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
+	closeThemePicker(t, term, filterThemePicker(t, term, name), tuitest.Enter)
+}
+
+// filterThemePicker opens the theme picker and types name, so the picker
+// shows the themes on the way. It returns name for closeThemePicker.
+func filterThemePicker(t *testing.T, term *tuitest.Terminal, name string) string {
+	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
 		t.Fatalf("open palette: %v", err)
 	}
@@ -66,8 +73,15 @@ func pickTheme(t *testing.T, term *tuitest.Terminal, name string) {
 	if err := term.WaitForText(name, uiTimeout); err != nil {
 		t.Fatalf("the picker never filtered to %q: %v\n%s", name, err, term.Snapshot())
 	}
-	if err := term.SendKeys(tuitest.Enter); err != nil {
-		t.Fatalf("apply the theme: %v", err)
+	return name
+}
+
+// closeThemePicker presses key (Enter to apply, Esc to cancel) and waits for
+// the picker to close.
+func closeThemePicker(t *testing.T, term *tuitest.Terminal, name string, key tuitest.Key) {
+	t.Helper()
+	if err := term.SendKeys(key); err != nil {
+		t.Fatalf("close the theme picker on %q: %v", name, err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "themes")
