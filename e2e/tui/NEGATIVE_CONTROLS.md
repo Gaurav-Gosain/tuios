@@ -7127,7 +7127,9 @@ editor's caret, hidden, after the person types. Run on 2026-10-18.
 
 The fixed build passes both, and every test matching `Cursor`, `PiP`,
 `Inbox`, `Reply`, `Cockpit`, `Sixel`, `Kitty`, `Composer`, `Draft`, `Mail`,
-`Spotlight` and `Zoom`.
+`Spotlight` and `Zoom` (142 tests). `TestKittyVirtualPlacementLeavesThePaneToTheGuest`
+was left out: under a 6 GB address cap its host recorder runs out of memory,
+on main's build as well.
 
 A first version of the pane test put the hidden cursor on the first cell of
 the word the guest wrote. A build without the fix passed that wait: the frame
