@@ -124,3 +124,69 @@ func TestCockpitCutApprovalIsNotAnswered(t *testing.T) {
 	}
 	alive(t, term, "after keys on a cut approval")
 }
+
+// TestCockpitApprovalCardOnEveryTab holds an approval on a screen narrower
+// than the side column, where checkpoints and the live pane are focus tabs.
+// On the Checkpoints tab and on the Live tab the approval's card is still
+// drawn with its buttons, and a answers it from there.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with the tabs drawn
+// in place of the card, the card is gone on the Checkpoints tab.
+func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	writeConfig(t, base, "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n")
+	for _, s := range []string{"home", "api"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	startHookIn(t, base, "api", "0", `{"hook_event_name":"PermissionRequest","session_id":"e2e-tabs","tool_name":"Bash","tool_input":{"command":"go test ./internal/auth/... -run Token"}}`)
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 100, rows: 30, shippedLooks: true})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the agents view: %v", err)
+	}
+	waitText(t, term, "the approval on the Thread tab", "Allow Bash?", "Allow once", "Checkpoints", "Live")
+	// ] steps the tabs: Thread, Changes, Checkpoints, Live. Each tab's own
+	// body says it is drawn, and the card is under it.
+	for _, tab := range []struct{ name, body string }{
+		{"Checkpoints", "Checkpoints need the pane in a git work tree."},
+		{"Live", "╭"},
+	} {
+		found := false
+		for range 4 {
+			if err := term.SendKeys("]"); err != nil {
+				t.Fatal(err)
+			}
+			if term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), tab.body) }, 2*time.Second) == nil {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("the %s tab never drew\n%s", tab.name, term.Snapshot())
+		}
+		if s := term.Screen(); !screenHas(s, "Allow Bash?", "Allow once", "$ go test") {
+			t.Fatalf("ASSERTION: the %s tab hides the approval's card\n%s", tab.name, term.Snapshot())
+		}
+	}
+	saveCockpitFrames(t, term, "approval-on-live-tab")
+	time.Sleep(answerSettle)
+	if err := term.SendKeys("a"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for heldApprovals(t, base, "api") != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: a on the Live tab did not answer the approval its card shows\n%s", term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	alive(t, term, "after answering from the Live tab")
+}

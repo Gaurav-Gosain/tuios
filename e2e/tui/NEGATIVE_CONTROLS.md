@@ -7050,13 +7050,16 @@ checks the mark on its row and the count in the title, folds its group with a
 click on the heading, and presses `3`. `TestCockpitCutApprovalIsNotAnswered`
 holds an approval on a 100x12 screen, where its card cannot show the command
 and where it runs. It checks the card says so inside the body, and that `a`
-and `1` leave the approval held. Run on 2026-10-18.
+and `1` leave the approval held. `TestCockpitApprovalCardOnEveryTab` holds
+an approval at 100x30, steps to the Checkpoints and Live tabs, checks the
+card on each, and answers it with `a` from the Live tab. Run on 2026-10-18.
 
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A mark is invisible | The mark column in `drawFleetRow` | The mark drawn only when `false` | `TestCockpitBulkActsOnlyOnSeenMarks` ("the mark is not on api-auth's row, or the title does not count it") | **caught** |
 | A bulk key acts on a mark the list does not show | `markedAgents` over `cockpitShownAgents` | `markedAgents` reads the whole agents list | `TestCockpitBulkActsOnlyOnSeenMarks` ("3 did not say no marked agent it can see waits": it rejected the folded agent's approval) | **caught** |
 | A cut command counts as read | The `cut` rule in `drawItemCard` | `noteInboxShown` told the card showed the approval whole, and no cut recorded | `TestCockpitCutApprovalIsNotAnswered` ("a answered an approval whose command was cut: 0 held") | **caught** |
+| The Checkpoints or Live tab hides a held approval's card | The card drawn before the tab's body in `drawFocus` | The card drawn on Thread and Changes only | `TestCockpitApprovalCardOnEveryTab` ("the Checkpoints tab hides the approval's card") | **caught** |
 ## The agents cockpit: thread cards
 
 `TestCockpitThreadCards` joins a pane to a Claude Code transcript fixture

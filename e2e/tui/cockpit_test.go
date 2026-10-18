@@ -683,7 +683,7 @@ func TestCockpitSideTabs(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Pane")
+	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Live")
 	if err := term.SendKeys("]"); err != nil {
 		t.Fatal(err)
 	}

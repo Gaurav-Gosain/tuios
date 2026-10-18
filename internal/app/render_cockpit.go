@@ -190,6 +190,7 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 type ckFrameKey struct {
 	w, h, top, bottom    int
 	gen, inbox, mail     uint64
+	liveGen              uint64
 	marks, look          uint64
 	selectErr            string
 	list                 agentsListKey
@@ -225,7 +226,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	key := ckFrameKey{
 		marks: st.agents.marksGen, selectErr: st.selectErr, look: ck.lookGen,
 		w: w, h: h, top: top, bottom: res.Bottom, gen: ck.gen, inbox: st.Gen, mail: m.AgentMail.Gen,
-		list: st.agents.listAt, minute: now.Unix() / 60, theme: theme.Generation(), live: st.Live,
+		list: st.agents.listAt, minute: now.Unix() / 60, theme: theme.Generation(), live: st.Live, liveGen: ck.liveGen,
 		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry, hosts: m.federationGen,
 		depth: l.pal.Depth, ascii: l.ascii, nerd: l.nerd, snoozes: st.life.ShowSnoozed,
 	}
@@ -252,6 +253,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	c := ck.canvas
 	ck.hits = ck.hits[:0]
 	ck.fleetW = 0
+	ck.liveShown = false
 	m.drawCockpit(c, l, top, now)
 	ck.frame, ck.frameAt = c.render(), key
 	return ck.frame, top, w, h
@@ -1135,13 +1137,13 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		ty, tx := rule-1, x
 		for i, tab := range tabs {
 			x0 := tx
-			if active := min(st.ck.tab, len(tabs)-1); i == active {
+			if i == m.cockpitTabIndex() {
 				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.Fg, attrs: ckBold})
 			} else {
 				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.FgMute})
 			}
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + ty, x1: tx, y1: top + ty + 1, kind: ckHitTab, group: i})
-			if i == min(st.ck.tab, len(tabs)-1) {
+			if i == m.cockpitTabIndex() {
 				defer c.hline(x0, rule, tx-x0, "━", pal.Accent)
 			}
 			tx += 4
@@ -1182,18 +1184,25 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		}
 		return
 	}
-	// The side column's pieces as focus tabs, narrower than it.
-	switch m.cockpitTab() {
-	case "Checkpoints":
-		m.drawCheckpoints(c, l, e, x, bodyTop, w, max((bodyBot-bodyTop)/2, 1))
-		return
-	case "Pane":
-		m.drawLiveBox(c, l, e, x, bodyTop, w, max(bodyBot-bodyTop, 4))
-		return
-	}
+	// The card of what the row asks is drawn on every tab: a tab never hides
+	// an approval the keys still answer.
 	cardTop := bodyBot
 	if r.hasItem {
 		cardTop = m.drawItemCard(c, l, r, x, w, bodyTop, bodyBot, top, now)
+	}
+	// The side column's pieces as focus tabs, narrower than it, above the
+	// card.
+	switch m.cockpitTab() {
+	case "Checkpoints":
+		if room := cardTop - 1 - bodyTop; room >= 2 {
+			m.drawCheckpoints(c, l, e, x, bodyTop, w, max((room-1)/2, 1))
+		}
+		return
+	case "Live":
+		if room := cardTop - 1 - bodyTop; room >= 3 {
+			m.drawLiveBox(c, l, e, x, bodyTop, w, room)
+		}
+		return
 	}
 	if r.agent >= 0 && cardTop-bodyTop > 1 {
 		room := cardTop - bodyTop - 1
@@ -1233,7 +1242,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 	// Narrower than the side column, its pieces are tabs.
 	var side []string
 	if m.GetRenderWidth() < ckWide {
-		side = []string{"Checkpoints", "Pane"}
+		side = []string{"Checkpoints", "Live"}
 	}
 	if !threadTranscriptHarness(e.Harness) {
 		if side == nil {

@@ -145,12 +145,22 @@ type cockpitState struct {
 	live               string
 	liveCols, liveRows int
 	liveDirty          bool
+	// liveGen counts the live box's new reads, for the frame key; liveTick
+	// paces them. liveShown says the last frame drew the box. liveOwned
+	// says the view subscribed the live pane, and livePrime counts the
+	// primes asked for, so one the cursor left is dropped.
+	liveGen, liveTick, livePrime uint64
+	liveShown, liveOwned         bool
+	// cpWant says a frame drew checkpoints read for an older state.
+	cpWant bool
 	// cps are the agents' checkpoints, by agent.
 	cps map[string]*ckCheckpoints
 	// img is the image view, nil when it is not up.
 	img *ckImageView
-	// tab is the focus tab: 0 the thread, 1 the last turn's changes.
-	tab int
+	// tab is the focus tab by name, so it stays put when the tabs change
+	// with the screen's width or the agent: Thread, Changes, Checkpoints,
+	// Pane. A name the row has not is its first tab.
+	tab string
 	// dv is the diff theme the thread's cards draw with, for dvKey.
 	dv    *diffview.Theme
 	dvKey string
@@ -866,7 +876,7 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 			m.InboxAgentsToggleMark()
 			return nil, true
 		case ckHitTab:
-			m.CockpitTab(h.group - m.Inbox.ck.tab)
+			m.CockpitTab(h.group - m.cockpitTabIndex())
 		}
 		return nil, true
 	}
@@ -1008,21 +1018,33 @@ func (m *OS) cockpitTab() string {
 	if len(tabs) == 0 {
 		return "Thread"
 	}
-	i := min(max(m.Inbox.ck.tab, 0), len(tabs)-1)
-	name, _, _ := strings.Cut(tabs[i], " ")
+	name, _, _ := strings.Cut(tabs[m.cockpitTabIndex()], " ")
 	return name
 }
 
-// CockpitTab steps the focus tab by delta: the thread, then the last turn's
-// changes.
+// cockpitTabIndex is the place of the tab in force among the row's tabs.
+func (m *OS) cockpitTabIndex() int {
+	e, _ := m.cockpitAgent()
+	r, _ := m.cockpitSelected()
+	for i, t := range m.cockpitTabs(e, r) {
+		if name, _, _ := strings.Cut(t, " "); name == m.Inbox.ck.tab {
+			return i
+		}
+	}
+	return 0
+}
+
+// CockpitTab steps the focus tab by delta.
 func (m *OS) CockpitTab(delta int) {
 	e, _ := m.cockpitAgent()
 	r, _ := m.cockpitSelected()
-	n := len(m.cockpitTabs(e, r))
+	tabs := m.cockpitTabs(e, r)
+	n := len(tabs)
 	if n == 0 {
 		return
 	}
-	m.Inbox.ck.tab = ((m.Inbox.ck.tab+delta)%n + n) % n
+	i := ((m.cockpitTabIndex()+delta)%n + n) % n
+	m.Inbox.ck.tab, _, _ = strings.Cut(tabs[i], " ")
 	if t := m.cockpitThread(); t != nil {
 		t.scroll = 0
 	}

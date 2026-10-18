@@ -967,6 +967,11 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A reply editor the rows moved the cursor away from closes, keeping
 	// its draft.
 	m.CockpitReplyCheck()
+	// Checkpoints a frame of the agents view drew for an older state: a
+	// turn that ended with no input is read now. A flag check when not.
+	if side := m.CockpitSideWanted(); side != nil {
+		agents = tea.Batch(agents, side)
+	}
 	// The maintenance tick last, after every sync above has said what it asked
 	// for: it is armed for the earliest job that is due, and not at all when
 	// none is. See nextWake.
@@ -1124,6 +1129,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ckCheckpointsMsg:
 		m.applyCheckpoints(msg)
+		return m, nil
+	case ckLivePrimeMsg:
+		m.applyLivePrime(msg)
 		return m, nil
 
 	case PasteTimeoutMsg:

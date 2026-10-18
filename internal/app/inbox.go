@@ -1172,6 +1172,7 @@ func (m *OS) CloseInbox() {
 	m.ShowInbox = false
 	// The live pane goes back to being streamed as its workspace has it.
 	m.cockpitLiveFollow()
+	m.cockpitLiveRelease()
 	m.stopInboxAgentsTick()
 	m.stopThreadWatch()
 	m.Inbox.threads.open = false
