@@ -39,7 +39,7 @@ Tables are not scalar options and are edited in config.toml:
 and value rules; `now`, `context`, `subagents` and `prompt` read what the hooks
 and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.sidebar.custom]`, `[hooks]`, `[hosts]`, `[notify]`, `[agents.approvals]`, `[agents.checkpoints]`,
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
-daemon runs needs `tuios kill-server` to take effect.
+daemon runs needs `tuios restart-server` to take effect.
 
 The config can be more than one file. config.toml can name more files in a
 top-level `include = [...]` list, and the `*.toml` files in `config.d` next to

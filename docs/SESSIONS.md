@@ -100,11 +100,21 @@ also run it explicitly:
 tuios daemon                 # run in the foreground (useful for debugging)
 tuios daemon --log-level=messages
 tuios kill-server            # stop the daemon and all its sessions
+tuios restart-server         # stop it and start the newest tuios installed
 ```
 
 `tuios kill-server` is synchronous. It returns only after every session's state
 has been written and the daemon's socket has been removed, so a new daemon can
 be started as soon as it returns.
+
+### Restart the daemon after an update
+
+The daemon runs the build it started with until it stops. After an update,
+`tuios restart-server` moves it to the new build. It lists the panes that run
+a program in each session, and the agents that can resume, and asks. Then it
+stops the daemon, starts the new one, and says which sessions came back. Each
+session comes back with its layout, its pane history and new shells. See
+[`tuios restart-server`](CLI_REFERENCE.md#tuios-restart-server).
 
 More than one client can be attached to the same session at once. All of them
 see the same windows and output. `window_size` in `[daemon]` sets the size of

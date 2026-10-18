@@ -1094,6 +1094,80 @@ save and loses any state written since the last periodic save.
 When no daemon is running, the command reports that and removes a stale socket
 if one is present. It exits 0 in that case.
 
+### `tuios restart-server`
+
+Stop the daemon and start it again with the newest tuios installed. Use it
+after an update: the daemon runs the build it started with until it stops.
+
+**Usage:**
+```bash
+tuios restart-server             # show what stops, ask, then restart
+tuios restart-server --dry-run   # show what stops, and change nothing
+tuios restart-server --yes       # restart without a question
+tuios restart-server --last      # show the steps of the last restart
+```
+
+The command first says what a restart does:
+
+```
+Daemon now      0.10.0
+After restart   0.10.2   (from ~/.local/bin/tuios)
+
+These stop:
+  nvim in "edit" (session work)
+  claude in "agent" (session work)
+Only shells in notes.
+
+These come back:
+  Each session, with its layout, its pane history and new shells.
+  claude-code in "agent" (session work) can resume.
+The Inbox offers to resume each one.
+Restart the daemon? [y/N]
+```
+
+Then it stops the daemon, starts the new one and waits until it answers:
+
+```
+Stopping the daemon...
+Starting the daemon 0.10.2...
+The daemon restarted on 0.10.2.
+These sessions came back: work, notes.
+```
+
+- The new daemon runs the newer of two binaries: the tuios at the path of
+  this command, which an update replaces, and the `tuios` on PATH, which an
+  install in the Nix store, mise, asdf or Linuxbrew moves. `--version`
+  decides. When the version after the restart is the daemon's own, the plan
+  says "This restart starts the same version."
+- The stop is `kill-server`, so every session is saved first. The new daemon
+  restores every saved session before it answers.
+- The stop and the start run in a process of their own, in a session of its
+  own and deaf to SIGHUP. So a restart run in a pane of the daemon it stops
+  finishes. Each step goes to `restart.log` beside the daemon log, and
+  `--last` shows it.
+- One restart runs at a time. A second one refuses while the first runs.
+- `daemon.resume_agents` says what the new daemon does with the agent
+  conversations: `ask` puts a Resume item in the Inbox, `auto` resumes them,
+  and `off` leaves them to `tuios resume-agent`.
+- The command asks in every state but a stopped daemon, a daemon that did
+  not answer included. With no terminal to ask on, it refuses unless `--yes`
+  is given. `--json` needs `--yes`. Nothing is changed when it refuses.
+- When the daemon is not running, the command starts it.
+
+`--json` writes one JSON object per line: `plan`, then `stopping`,
+`starting` and `done`. The `plan` object holds `binary`, `version`, `daemon`
+(with each session's `busy` panes and its `resume` agents) and
+`resume_mode`. The `done` object holds `restarted`, `after`, `back` and
+`missing`. A failed step sets `error` and `fix`, and the command exits 1.
+
+| Error | Next step |
+| --- | --- |
+| "The daemon did not stop. It still runs version X." | Run `tuios kill-server` to see why. |
+| "The daemon did not start." | Run `tuios start-server` to see why. The sessions come back when the daemon starts. |
+| "The daemon started and did not answer." | Run `tuios ls` to check it, or `tuios logs`. |
+| "Another restart of the daemon is running." | Wait for it to end. `tuios restart-server --last` shows its steps. |
+| "The restart stopped before it finished." | Run `tuios restart-server --last`, then `tuios ls`. |
+
 ### `tuios daemon`
 
 Run the daemon in the foreground (for debugging).
@@ -2707,7 +2781,7 @@ tuios commands from them still reach the session. Attach and kill-session by
 the old name fail and name the new one. The rename also clears a label set
 with `tuios set-session-name`. The name of a running or saved session is
 refused. A daemon older than this command answers that it does not know it.
-Run `tuios kill-server` and start tuios again.
+Run `tuios restart-server`.
 
 With one argument, the session is the one given by `-s`, or else the session
 of the pane you run it in.
@@ -3267,8 +3341,11 @@ the command says so and points at `tuios new-window`.
 `custom_name` is present only on a window that was given a name, `cwd` only
 when the shell has reported its directory, and `host` only when the window's
 process runs on another machine. `agent_message` and `agent_state_at` appear
-once a pane has reported an agent state. The daemon answers this from its own
-state, so the shape is the same whether or not a client is attached.
+once a pane has reported an agent state. `agent_resumable` names the harness
+of a pane whose agent conversation a daemon restart would offer back, and is
+absent on every other pane. `tuios restart-server` reads it. The daemon answers
+this from its own state, so the shape is the same whether or not a client is
+attached.
 
 ### `tuios get-window`
 
@@ -3487,7 +3564,7 @@ tuios capture-pane [flags]
 - `--trim`: Drop the blank lines at the end of the capture.
 
 A daemon older than this tuios refuses `--unwrap` and `--trim`. The command
-then says to run `tuios kill-server` and start tuios again.
+then says to run `tuios restart-server`.
 
 A `--ansi` capture without `--resolved` keeps the guest's SGR indices (e.g.
 `\x1b[31m`); the consumer resolves them against its own palette. `--resolved`
@@ -5291,9 +5368,8 @@ A file that does not match is discarded, nothing is installed, and the old
 binary is untouched.
 
 **The running daemon** keeps the old build. Sessions you have open go on
-working. To move them to the new build, detach, run `tuios kill-server`, then
-start tuios again. Panes are restored; the programs that were running in them
-are not.
+working. To move them to the new build, run `tuios restart-server`. Panes
+are restored; the programs that were running in them are not.
 
 Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
 never required and no token is created for you.
@@ -5823,7 +5899,7 @@ Most likely cause: TUIOS was upgraded while the daemon kept running, so the old 
 Fix: run 'tuios kill-server', then run this command again.
 ```
 
-Run `tuios kill-server`. This ends every program running in your panes. Each
+Run `tuios restart-server`. It lists what stops and asks first. A restart ends every program running in your panes. Each
 session's layout, window names and working directories are saved before the
 daemon exits and come back when it next starts, each pane with a new shell;
 `tuios resurrect` lists what is restorable.

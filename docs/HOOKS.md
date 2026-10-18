@@ -106,7 +106,7 @@ Use it for a tool that does not follow the theme by itself:
 after-theme-change = "~/.config/tuios/hooks/theme.sh"
 ```
 
-The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios kill-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
+The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios restart-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
 
 A hook the daemon runs gets the daemon's environment, not your shell's. A daemon started by `tuios new` keeps the environment of that first shell. Put full paths in the command when in doubt.
 
