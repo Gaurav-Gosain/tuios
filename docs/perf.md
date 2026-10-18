@@ -2878,6 +2878,7 @@ linux/amd64 then darwin/arm64:
 | the agents cockpit: grouped fleet and rich rows | 53,248 | 50,992 | 37,721,000 and 35,464,000 |
 | thread cards from transcripts | 77,824 | 67,840 | 37,798,000 and 35,532,000 |
 | the reply area and the image view | 32,768 | 33,248 | 37,831,000 and 35,565,000 |
+| the side column: live pane, last turn, checkpoints | 40,960 | 33,968 | 37,872,000 and 35,599,000 |
 
 The fleet pull request measured 37,662,882 and 35,408,882 bytes before it and
 37,716,130 and 35,459,874 after (Go 1.26.9). It deletes the Inbox panel's list,
@@ -2886,7 +2887,10 @@ the agents view and the thread panel it replaces. linux/amd64 grows by whole 4 K
 `//go:noinline`: inlined at each card it cost 8 KB more on both targets, and
 the thread is drawn once per change, never per frame. The reply area and
 the image view measured 37,826,722 and 35,560,962; they delete the reply
-editor's old frame, which the area replaces.
+editor's old frame, which the area replaces. The side column measured
+37,867,682 and 35,594,930. Its live pane is read again only after the pane
+prints, at most every third pass as the picture-in-picture view is, and
+only while the box is on screen; nothing in it runs on a timer.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
