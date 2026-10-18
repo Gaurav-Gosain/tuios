@@ -17,4 +17,4 @@ replace tuios.dev/swatch v0.1.0 => ./swatch
 
 replace tuios.dev/shot v0.2.0 => ./shot
 
-replace tuios.dev/vt v0.2.1-0.20261018044350-32364a9c3081 => ./vt
+replace tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb => ./vt
