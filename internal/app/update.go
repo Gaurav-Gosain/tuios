@@ -964,6 +964,9 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// the settings page opening and a pane starting an agent are both things
 	// any handler can do. See settings_agents.go.
 	agents := m.agentsSyncCmd()
+	// A reply editor the rows moved the cursor away from closes, keeping
+	// its draft.
+	m.CockpitReplyCheck()
 	// The maintenance tick last, after every sync above has said what it asked
 	// for: it is armed for the earliest job that is due, and not at all when
 	// none is. See nextWake.

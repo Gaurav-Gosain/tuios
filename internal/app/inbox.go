@@ -1164,6 +1164,7 @@ func (m *OS) inboxLandOn(id string) {
 	m.cockpitTouchRows()
 	m.cockpitRows()
 	m.cockpitSync()
+	m.cockpitReplyFollow()
 }
 
 // CloseInbox hides the Inbox, and the peek with it.

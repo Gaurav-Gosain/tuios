@@ -32,7 +32,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	send := ckSeg{t: " " + overlay.EnterGlyph + " Send ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
 
 	ed := st.reply.editor
-	if ed == nil {
+	if ed == nil || m.cockpitReplyMismatch() {
 		y := y1 - 3
 		c.hline(x, y-1, w, hzGlyph(), l.edge)
 		c.fill(x, y, w, 3, l.panel)

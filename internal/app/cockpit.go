@@ -175,6 +175,9 @@ type cockpitState struct {
 	// one.
 	lookGen uint64
 	canvas  *ckCanvas
+	// replyCheck says the rows moved the cursor, so the reply editor is
+	// checked against the row after the message.
+	replyCheck bool
 	// edW is the width the reply editor was last drawn at.
 	edW int
 	// cutKey is the held approval or question the card could not show
@@ -536,7 +539,13 @@ func (m *OS) cockpitClamp() {
 	if i < 0 {
 		i = ckNearest(rows, ck.idx)
 	}
+	was := ck.key
 	m.cockpitSetCursor(i)
+	if ck.key != was {
+		// The rows moved the cursor to another agent: the reply editor is
+		// checked against it after this message (CockpitReplyCheck).
+		ck.replyCheck = true
+	}
 }
 
 // ckNearest is the selectable row nearest idx, -1 when there is none.
@@ -645,18 +654,37 @@ func (m *OS) CockpitMove(delta int) {
 // cursor left the agent it writes to: the area under another agent's thread
 // must not send to the one before.
 func (m *OS) cockpitReplyFollow() {
+	if m.cockpitReplyMismatch() {
+		m.InboxReplyCancel()
+	}
+}
+
+// cockpitReplyMismatch reports whether the reply editor writes to another
+// agent than the one under the cursor. Until it closes, the area draws the
+// row's own closed area, never the other agent's draft.
+func (m *OS) cockpitReplyMismatch() bool {
 	ed := m.Inbox.reply.editor
 	if ed == nil || len(ed.targets) > 0 {
-		return
+		return false
 	}
 	r, ok := m.cockpitSelected()
 	if ok && r.hasItem && r.item.Session == ed.session && r.item.Window == ed.window {
-		return
+		return false
 	}
 	if e, ok := m.cockpitAgent(); ok && e.SessionID == ed.session && e.WindowID == ed.window {
-		return
+		return false
 	}
-	m.InboxReplyCancel()
+	return true
+}
+
+// CockpitReplyCheck closes the reply editor, keeping its draft, when the
+// rows moved the cursor off its agent. Update asks it after every message:
+// one flag when nothing moved.
+func (m *OS) CockpitReplyCheck() {
+	if m.Inbox.ck.replyCheck {
+		m.Inbox.ck.replyCheck = false
+		m.cockpitReplyFollow()
+	}
 }
 
 // cockpitSelectKey puts the cursor on the row with key.
