@@ -7371,3 +7371,26 @@ The controls were run on 2026-10-18 on branch `feat/restart-server`.
 | The version after the restart is the old daemon's | `runRestart`: `rep.After` from the plan's daemon, not the new daemon's hello | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the restart does not say \"The daemon restarted on e2e-sync-next.\"") | **caught** |
 | The sessions after the restart are not read | `runRestart`: `rep.Back = nil` | `TestRestartServerMovesTheDaemonToTheNewBuild` ("the restart does not say \"This session came back: e2e-restart.\"") | **caught** |
 | list-windows marks no agent | `verbListWindows`: the `addResumable` call cut | `TestRestartOffersToResumeTheConversation` ("restart-server --dry-run does not list the agent that can resume") | **caught** |
+
+## The restart from the app
+
+`TestRestartTheDaemonFromTheVersionNotice` (in `daemon_persistence_test.go`)
+starts a daemon of this build with a pane that printed history and a pane
+that runs `sleep`. A client of a second build attaches from a path of its own,
+and a third build is renamed onto that path, as an update does. A click on the
+version notice must open the dialog with the program that stops and the three
+versions. The client starts with `--debug new`, and must start again with
+`--debug`. `r` must bring the same client process back, attached to the same
+session, on a daemon of the third build, with both panes, their names and the
+restored history.
+
+The controls were run on 2026-10-18 on branch `feat/restart-daemon-in-app`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The restart runs the client's old file | `release.NewestInstalled`: `/proc/self/exe` instead of `os.Executable` | `TestRestartTheDaemonFromTheVersionNotice` ("the dialog does not say \"After restart   e2e-sync-next   (from \"") | **caught** |
+| A click on the notice does nothing | `jumpToNotifTarget`: the `DaemonRestart` case cut | `TestRestartTheDaemonFromTheVersionNotice` ("a click on the notice did not open the dialog") | **caught** |
+| The lost connection ends the client | the `DaemonDisconnectedMsg` case: the `noteRestartDisconnect` check cut | `TestRestartTheDaemonFromTheVersionNotice` ("child exited (code 1) before" the success line) | **caught** |
+| The client does not start again | `runDaemonSessionOn`: the `reattachAfterRestart` call cut | `TestRestartTheDaemonFromTheVersionNotice` ("child exited (code 0) before" the success line) | **caught** |
+| The root's flags are not carried | `carriedFlags`: the root's persistent flags not read | `TestRestartTheDaemonFromTheVersionNotice` ("the client started again without its flags", no `--debug=true`) | **caught** |
+| The plan is not checked | `runRestartServer`: the `--expect` check cut | `TestRestartServerMovesTheDaemonToTheNewBuild` ("a restart with another plan's digest was not refused", "the refused restart restarted the daemon anyway") | **caught** |
