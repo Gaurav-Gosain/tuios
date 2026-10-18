@@ -6,16 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 )
 
 // RunTree runs cmd and waits for it. When ctx ends, it kills the command
 // and every process it started: the process group on unix, the job object
-// on Windows. tuios plugins install runs build commands with it.
+// on Windows. On Linux the command also dies with tuios. tuios plugins
+// install runs build commands with it.
 func RunTree(ctx context.Context, cmd *exec.Cmd) error {
 	detach(cmd)
+	deathSignal(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -63,20 +63,8 @@ func HoldLock(p string) (release func(), err error) {
 		}
 		if time.Now().After(deadline) {
 			_ = f.Close()
-			return nil, fmt.Errorf("another tuios plugins command installs this plugin now. Wait for it to finish (%s)", p)
+			return nil, fmt.Errorf("another tuios plugins command runs now. Wait for it to finish (%s)", p)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-}
-
-// Abandoned reports whether name, a folder named NAME-PID or NAME-PID-RANDOM
-// by an install, belongs to a process that no longer runs.
-func Abandoned(name string, prefix string) bool {
-	rest, ok := strings.CutPrefix(name, prefix)
-	if !ok {
-		return false
-	}
-	pidText, _, _ := strings.Cut(rest, "-")
-	pid, err := strconv.Atoi(pidText)
-	return err == nil && pid > 0 && pid != os.Getpid() && !processAlive(pid)
 }

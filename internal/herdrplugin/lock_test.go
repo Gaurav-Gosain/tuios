@@ -43,7 +43,7 @@ func TestLockPathsStayInside(t *testing.T) {
 	}
 
 	commit := strings.Repeat("ab", 20)
-	ok := LockEntry{ID: "e2e.probe", Source: "https://example.com/r.git", Commit: commit, Subdir: "p"}
+	ok := LockEntry{ID: "e2e.probe", Source: "https://example.com/r.git", Commit: commit, Subdir: "p", Dir: "plugins/e2e.probe/ababababab-x1"}
 	if err := CheckLockEntry(ok); err != nil {
 		t.Fatalf("a valid entry: %v", err)
 	}
@@ -56,6 +56,12 @@ func TestLockPathsStayInside(t *testing.T) {
 		"option ref":     func(e *LockEntry) { e.Ref = "--upload-pack=sh" },
 		"option source":  func(e *LockEntry) { e.Source = "--upload-pack=sh" },
 		"relative local": func(e *LockEntry) { e.Source = LocalPrefix + "x" },
+		"no dir":         func(e *LockEntry) { e.Dir = "" },
+		"dir of another": func(e *LockEntry) { e.Dir = "plugins/other/x" },
+		"dir up":         func(e *LockEntry) { e.Dir = "plugins/e2e.probe/.." },
+		"dir deeper":     func(e *LockEntry) { e.Dir = "plugins/e2e.probe/a/../../../x" },
+		"dir absolute":   func(e *LockEntry) { e.Dir = "/etc" },
+		"plain http":     func(e *LockEntry) { e.Source = "http://example.com/r.git" },
 	} {
 		e := ok
 		change(&e)
@@ -69,6 +75,10 @@ func TestLockPathsStayInside(t *testing.T) {
 	for _, id := range []string{ok.ID, "..", ".", "a..b"} {
 		e := ok
 		e.ID = id
+		e.Dir = NewDir(e)
+		if err := CheckLockEntry(e); err != nil && id != ".." && id != "." {
+			t.Errorf("NewDir for %q: %v", id, err)
+		}
 		root := d.PluginRoot(e)
 		if rel, err := filepath.Rel(d.ManagedDir(), root); err != nil || rel == ".." || strings.HasPrefix(rel, "../") || !strings.HasPrefix(rel, PathComponent(id)+string(filepath.Separator)) {
 			t.Errorf("PluginRoot of %q is %s, outside its folder in %s", id, root, d.ManagedDir())

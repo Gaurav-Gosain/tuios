@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +52,10 @@ type LockEntry struct {
 	Commit string `toml:"commit,omitempty" json:"commit,omitempty"`
 	// Tree is git's id of the plugin folder at Commit.
 	Tree string `toml:"tree,omitempty" json:"tree,omitempty"`
+	// Dir is the build folder that runs, relative to the tuios data
+	// folder: plugins/<id>/<commit12>-<nonce>. Each install builds into a
+	// new folder, and writing this entry is what switches to it.
+	Dir string `toml:"dir,omitempty" json:"dir,omitempty"`
 	// Approved is TrustHash of the manifest the person said yes to.
 	Approved string `toml:"approved" json:"approved"`
 	// Grants are the pane grants a native plugin asked for. A herdr plugin
@@ -86,12 +91,21 @@ func (d Dirs) LockPath() string { return filepath.Join(d.TuiosConfig, LockName) 
 // ManagedDir is the folder that holds the checkouts of installed plugins.
 func (d Dirs) ManagedDir() string { return filepath.Join(d.TuiosData, "plugins") }
 
-// CheckoutDir is the folder of e's checkout, the repository root. It is
-// named by the plugin id and the first 12 digits of the commit, so two
-// plugins from one repository never share a folder and an update can build
-// the next commit beside the one that runs.
+// CheckoutDir is the folder of e's checkout, the repository root: Dir in
+// the data folder. A build folder never moves once it is built, so a path a
+// build writes into what it makes stays valid.
 func (d Dirs) CheckoutDir(e LockEntry) string {
-	return filepath.Join(d.ManagedDir(), PathComponent(e.ID), e.Commit[:min(12, len(e.Commit))])
+	return filepath.Join(d.TuiosData, filepath.FromSlash(e.Dir))
+}
+
+// PluginDir is the folder that holds every build folder of the plugin id.
+func (d Dirs) PluginDir(id string) string {
+	return filepath.Join(d.ManagedDir(), PathComponent(id))
+}
+
+// NewDir is a Dir for a new build folder of e.
+func NewDir(e LockEntry) string {
+	return path.Join("plugins", PathComponent(e.ID), fmt.Sprintf("%.12s-%s", e.Commit, strconv.FormatInt(time.Now().UnixNano(), 36)))
 }
 
 // PluginRoot is the folder that holds e's manifest.
@@ -152,54 +166,40 @@ func ReadLock(p string) (*Lock, error) {
 	return &l, nil
 }
 
-// lockWait is how long Exclusive waits for another command to finish.
+// lockWait is how long HoldLock waits for another tuios plugins command.
 const lockWait = 10 * time.Second
 
-// Exclusive creates p with O_EXCL as a guard, waiting up to 10 seconds for
-// another tuios plugins command to remove it. The file is open for writing.
-func Exclusive(p string) (*os.File, error) {
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return nil, err
-	}
-	deadline := time.Now().Add(lockWait)
-	for {
-		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a guard file tuios names
-		if !errors.Is(err, os.ErrExist) {
-			return f, err
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("another tuios plugins command holds %s. Wait for it to finish. If none runs, remove the file", p)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
 // UpdateLock reads the lock file at p, lets change edit it, and writes it
-// back. The temporary file is also the guard: a second install waits for
-// the first one to rename it into place.
+// back through a new temporary file and a rename, so a reader sees the old
+// file or the new one. The caller holds the install lock (HoldLock), so no
+// other command writes the file at the same time.
 func UpdateLock(p string, change func(*Lock)) error {
-	tmp := p + ".tmp"
-	f, err := Exclusive(tmp)
+	l, err := ReadLock(p)
 	if err != nil {
 		return err
 	}
-	l, err := ReadLock(p)
-	if err == nil {
-		change(l)
-		l.Version = lockVersion
-		var data []byte
-		if data, err = toml.Marshal(l); err == nil {
-			_, err = f.Write(data)
-		}
+	change(l)
+	l.Version = lockVersion
+	data, err := toml.Marshal(l)
+	if err != nil {
+		return err
 	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(p), LockName+".*.tmp")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Rename(tmp, p)
+		err = os.Rename(f.Name(), p)
 	}
 	if err != nil {
-		_ = os.Remove(tmp)
+		_ = os.Remove(f.Name())
 	}
 	return err
 }
@@ -218,6 +218,12 @@ func CheckLockEntry(e LockEntry) error {
 	}
 	if !IsCommit(e.Commit) {
 		return fmt.Errorf("the lock file entry %s has no full commit", e.ID)
+	}
+	// Dir must name one folder in plugins/<id>/, so a lock file cannot
+	// point a plugin at a folder elsewhere.
+	rest, ok := strings.CutPrefix(e.Dir, "plugins/"+PathComponent(e.ID)+"/")
+	if !ok || rest == "" || rest == "." || rest == ".." || strings.ContainsAny(rest, `/\:`) || hasControl(rest) {
+		return fmt.Errorf("the lock file entry %s has an invalid dir %q", e.ID, e.Dir)
 	}
 	if err := CheckSource(e.Source); err != nil {
 		return err

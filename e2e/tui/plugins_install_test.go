@@ -15,22 +15,18 @@ import (
 )
 
 // tuios plugins install, offline: a bare repository under the test's temp
-// folder, reached over file://, holds a probe plugin on four branches. On
-// "main" its build writes dist/out and its one action prints that file. On
-// "broken" its build command fails. On "escape" herdr-plugin.toml is a link
-// to a manifest outside the repository, and on "linkdir" the folder plug is
-// a link to a folder outside it. The outside manifest's build writes a
-// marker file, so a build that ran outside the checkout shows.
+// folder, reached over file://, holds a probe plugin on five branches. On
+// "main" its build writes its folder to dist/where and "built-by-install" to
+// dist/out, and its one action prints dist/out. "next" is main with one
+// more commit. On "broken" the build fails. On "escape" herdr-plugin.toml is
+// a link to a manifest outside the repository, and on "linkdir" the folder
+// plug is a link to a folder outside it. The outside manifest's build
+// writes a marker file, so a build that ran outside the checkout shows.
+// While the file slow exists, the build sleeps, so the test can kill an
+// install during the build.
 //
-// Negative controls (NEGATIVE_CONTROLS.md, "tuios plugins install"): with
-// the build error ignored, the broken branch gets a lock entry; with the
-// removal of the new checkout cut from the build failure, the broken branch
-// leaves its folder; with the managed origin cut from Discover, the
-// installed plugin is not listed and plugin.enable fails; with the Inside
-// check cut from loadInside, the escape branch builds outside the
-// repository; with the cat-file check cut, the linkdir branch fails on the
-// Inside check instead; with the fetched check cut from the failure path,
-// install from the lock file removes a checkout it did not fetch.
+// The negative controls are in NEGATIVE_CONTROLS.md, "tuios plugins
+// install".
 
 const probeManifest = `id = "e2e.probe"
 name = "Probe"
@@ -47,11 +43,11 @@ command = ["sh", "-c", "cat dist/out && echo pong"]
 `
 
 // probeRepo makes the bare repository and returns its file:// URL, the
-// commit of main, and the folder outside it.
-func probeRepo(t *testing.T) (string, string, string) {
+// commits of main and next, and the folder outside it.
+func probeRepo(t *testing.T) (url, main, next, outside string) {
 	t.Helper()
 	work := testutil.GitRepo(t)
-	outside := t.TempDir()
+	outside = t.TempDir()
 	if real, err := filepath.EvalSymlinks(outside); err == nil {
 		outside = real
 	}
@@ -71,7 +67,7 @@ func probeRepo(t *testing.T) (string, string, string) {
 	slow := filepath.Join(outside, "slow")
 	write("test -e " + slow + " && echo $$ > " + slow + ".pid && exec sleep 30; mkdir -p dist && pwd > dist/where && echo built-by-install > dist/out")
 	testutil.Git(t, work, "commit", "-q", "-m", "probe")
-	main := testutil.Git(t, work, "rev-parse", "HEAD")
+	main = testutil.Git(t, work, "rev-parse", "HEAD")
 	testutil.Git(t, work, "checkout", "-q", "-b", "broken")
 	write("echo the build breaks >&2; exit 3")
 	testutil.Git(t, work, "commit", "-q", "-m", "break the build")
@@ -87,19 +83,31 @@ func probeRepo(t *testing.T) (string, string, string) {
 	}
 	link("escape", "herdr-plugin.toml", filepath.Join(outside, "herdr-plugin.toml"))
 	link("linkdir", "plug", outside)
+	// next is main with one more commit that leaves the plugin alone: a
+	// reinstall at a new commit with the same build.
+	testutil.Git(t, work, "checkout", "-q", "main")
+	testutil.Git(t, work, "checkout", "-q", "-b", "next")
+	if err := os.WriteFile(filepath.Join(work, "NOTES"), []byte("next\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, work, "add", "NOTES")
+	testutil.Git(t, work, "commit", "-q", "-m", "next")
+	next = testutil.Git(t, work, "rev-parse", "HEAD")
 	bare := filepath.Join(t.TempDir(), "probe.git")
 	testutil.Git(t, work, "clone", "-q", "--bare", work, bare)
-	return "file://" + bare, main, outside
+	return "file://" + bare, main, next, outside
 }
 
 // TestPluginsInstallFromGit installs the probe from the bare repository with
-// a daemon running. The broken branch leaves no lock entry, no checkout and
-// no enable. main is fetched at the commit the branch names, built in its
-// checkout, pinned in plugins.lock, listed as managed and on, and its action
-// prints what the build wrote. The lock file and the list are kept as
-// artifacts.
+// a daemon running. Each install builds into a new folder, and the lock
+// entry names the folder that runs. Links out of the repository are
+// refused. A kill at the prompt does not block the next install. main
+// installs, builds in the folder the lock entry names, and runs. A failed
+// build and a kill during the build of next leave the lock entry and the
+// running plugin as they were. The next install of next works, and only its
+// folder is left. The lock file and the list are kept as artifacts.
 func TestPluginsInstallFromGit(t *testing.T) {
-	url, mainCommit, outside := probeRepo(t)
+	url, mainCommit, nextCommit, outside := probeRepo(t)
 	base := t.TempDir()
 	writeConfig(t, base, "")
 	killDaemon(t, base)
@@ -108,25 +116,28 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	}
 	const id = "e2e.probe"
 	lockPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "plugins.lock")
-	managed := filepath.Join(xdgDir(base, "XDG_DATA_HOME"), "tuios", "plugins", id)
+	data := xdgDir(base, "XDG_DATA_HOME")
+	managed := filepath.Join(data, "tuios", "plugins", id)
 	art := artifactDir(t)
-
-	// The broken build: refused, and nothing is left behind.
-	out, err := tuiosCLI(t, base, "plugins", "install", url+"@broken", "--yes")
-	if err == nil || !strings.Contains(out, "the build command failed") || !strings.Contains(out, "The plugin is not installed") {
-		t.Fatalf("install of the broken branch: %v\n%s", err, out)
+	readLock := func() string {
+		b, _ := os.ReadFile(lockPath)
+		return string(b)
 	}
-	if data, err := os.ReadFile(lockPath); err == nil && strings.Contains(string(data), id) {
-		t.Fatalf("a failed build wrote a lock entry:\n%s", data)
+	// field reads one key of the lock file off its own line, so the test
+	// needs no TOML parser of its own.
+	field := func(key string) string {
+		m := regexp.MustCompile(`(?m)^` + key + ` = ['"]?([^'"\n]*)['"]?$`).FindStringSubmatch(readLock())
+		if m == nil {
+			return ""
+		}
+		return m[1]
 	}
-	if n := len(foldersIn(managed)); n != 0 {
-		t.Fatalf("a failed build left %d folders in %s", n, managed)
-	}
-	if cfg, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")); strings.Contains(string(cfg), id) {
-		t.Fatalf("a failed build enabled the plugin:\n%s", cfg)
-	}
-	if log, _ := os.ReadFile(filepath.Join(pluginState(base, id), "build.log")); !strings.Contains(string(log), "the build breaks") {
-		t.Errorf("build.log does not hold the failed build's output:\n%s", log)
+	ping := func(when string) {
+		t.Helper()
+		out, err := tuiosCLI(t, base, "plugins", "run", id, "ping", "--wait")
+		if err != nil || !strings.Contains(out, "built-by-install") || !strings.Contains(out, "pong") {
+			t.Fatalf("plugins run ping %s: %v\n%s", when, err, out)
+		}
 	}
 
 	// A link out of the repository, as the manifest or as the plugin
@@ -146,97 +157,47 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(outside, "ran")); err == nil {
 			t.Fatalf("install of %s ran a build outside the repository", c.name)
 		}
-		if n := len(foldersIn(managed)); n != 0 {
-			t.Fatalf("install of %s left %d folders in %s", c.name, n, managed)
+		if n := len(foldersIn(managed)); n != 0 || strings.Contains(readLock(), id) {
+			t.Fatalf("install of %s left %d folders in %s, or a lock entry:\n%s", c.name, n, managed, readLock())
 		}
 	}
 
-	// A kill at the prompt leaves its staging folder. A kill during the
-	// build leaves a half-built checkout. Neither may block the next
-	// install, and the next install clears the staging folder of the dead
-	// process.
+	// A kill at the prompt, while the install lock is held: the next
+	// install must still work.
 	killInstallAt(t, base, "Continue?", url+"@main")
-	leftover := foldersIn(filepath.Dir(managed))
-	if len(leftover) != 2 || !strings.HasPrefix(leftover[0], ".staging-") {
-		t.Fatalf("a kill at the prompt left %v in %s, want one staging folder beside %s", leftover, filepath.Dir(managed), id)
-	}
-	if err := os.WriteFile(filepath.Join(outside, "slow"), nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	killInstallAt(t, base, "Running in", url+"@main", "--yes")
-	_ = os.Remove(filepath.Join(outside, "slow"))
-	if pid, err := os.ReadFile(filepath.Join(outside, "slow.pid")); err == nil {
-		if n, err := strconv.Atoi(strings.TrimSpace(string(pid))); err == nil {
-			if p, err := os.FindProcess(n); err == nil {
-				_ = p.Kill()
-			}
-		}
-	}
-	if data, err := os.ReadFile(lockPath); err == nil && strings.Contains(string(data), id) {
-		t.Fatalf("a killed install wrote a lock entry:\n%s", data)
-	}
 
-	// main without a build: the checkout is there and the lock entry says
-	// it is not built. Install from the lock file has no terminal to ask in
-	// and must leave the checkout it did not fetch.
-	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes", "--no-build", "--no-enable"); err != nil {
-		t.Fatalf("install of main without a build, after the kills: %v\n%s", err, out)
-	}
-	if got := foldersIn(filepath.Dir(managed)); len(got) != 1 || got[0] != id {
-		t.Errorf("after the kills and an install, %s holds %v, want only %s", filepath.Dir(managed), got, id)
-	}
-	if got := foldersIn(managed); len(got) != 1 || got[0] != mainCommit[:12] {
-		t.Errorf("after the kills and an install, %s holds %v, want only %s", managed, got, mainCommit[:12])
-	}
-	checkout := filepath.Join(managed, mainCommit[:12])
-	if out, err := tuiosCLI(t, base, "plugins", "install"); err == nil || !strings.Contains(out, "no terminal") {
-		t.Fatalf("install from the lock file without a terminal: %v\n%s", err, out)
-	}
-	if _, err := os.Stat(filepath.Join(checkout, "herdr-plugin.toml")); err != nil {
-		t.Fatalf("install from the lock file removed the checkout it did not fetch: %v", err)
-	}
-
-	// main again: the unbuilt checkout moves aside, the new one is built in
-	// the folder it keeps, and it is pinned and enabled.
-	out, err = tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes")
+	// main: built in the folder the lock entry names, pinned and enabled.
+	out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes")
 	if err != nil {
-		t.Fatalf("install of main: %v\n%s", err, out)
+		t.Fatalf("install of main after a kill at the prompt: %v\n%s", err, out)
 	}
 	_ = os.WriteFile(filepath.Join(art, "install.txt"), []byte(out), 0o644)
-	where, _ := os.ReadFile(filepath.Join(checkout, "dist", "where"))
-	if want, _ := filepath.EvalSymlinks(checkout); strings.TrimSpace(string(where)) != want {
-		t.Errorf("the build ran in %q, want the folder the plugin keeps, %s", strings.TrimSpace(string(where)), want)
-	}
 	for _, want := range []string{"Install e2e.probe 1.0.0", "mkdir -p dist", "actions  ping", "tuios enables the plugin", "Installed e2e.probe at " + mainCommit[:12], "is enabled"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the install output lacks %q:\n%s", want, out)
 		}
 	}
-	data, err := os.ReadFile(lockPath)
-	if err != nil {
-		t.Fatalf("no lock file: %v", err)
-	}
-	_ = os.WriteFile(filepath.Join(art, "plugins.lock"), data, 0o644)
-	// The lock file is TOML. Each key is read off its own line, so the test
-	// needs no TOML parser of its own.
-	field := func(key string) string {
-		m := regexp.MustCompile(`(?m)^` + key + ` = ['"]?([^'"\n]*)['"]?$`).FindStringSubmatch(string(data))
-		if m == nil {
-			return ""
-		}
-		return m[1]
-	}
-	if n := strings.Count(string(data), "[[plugin]]"); n != 1 {
-		t.Fatalf("plugins.lock has %d entries, want 1:\n%s", n, data)
+	if n := strings.Count(readLock(), "[[plugin]]"); n != 1 {
+		t.Fatalf("plugins.lock has %d entries, want 1:\n%s", n, readLock())
 	}
 	if field("version") != "1" || field("id") != id || field("format") != "herdr" || field("source") != url || field("ref") != "main" ||
-		field("commit") != mainCommit || len(field("tree")) != 40 || !strings.HasPrefix(field("approved"), "sha256:") || field("built") != "true" {
-		t.Fatalf("plugins.lock does not pin main at %s:\n%s", mainCommit, data)
+		field("commit") != mainCommit || len(field("tree")) != 40 || !strings.HasPrefix(field("approved"), "sha256:") || field("built") != "true" ||
+		!strings.HasPrefix(field("dir"), "plugins/"+id+"/"+mainCommit[:12]+"-") {
+		t.Fatalf("plugins.lock does not pin main at %s:\n%s", mainCommit, readLock())
 	}
-	built, err := os.ReadFile(filepath.Join(managed, mainCommit[:12], "dist", "out"))
-	if err != nil || strings.TrimSpace(string(built)) != "built-by-install" {
-		t.Fatalf("the build did not run in the checkout: %v %q", err, built)
+	mainDir := field("dir")
+	checkWhere := func(dir string) {
+		t.Helper()
+		folder := filepath.Join(data, "tuios", filepath.FromSlash(dir))
+		where, _ := os.ReadFile(filepath.Join(folder, "dist", "where"))
+		if want, _ := filepath.EvalSymlinks(folder); strings.TrimSpace(string(where)) != want {
+			t.Errorf("the build ran in %q, want the folder the lock entry names, %s", strings.TrimSpace(string(where)), want)
+		}
+		if got := foldersIn(managed); len(got) != 1 || got[0] != filepath.Base(folder) {
+			t.Errorf("%s holds %v, want only the folder the lock entry names, %s", managed, got, filepath.Base(folder))
+		}
 	}
+	checkWhere(mainDir)
 
 	out, err = tuiosCLI(t, base, "plugins", "list", "--json")
 	if err != nil {
@@ -262,11 +223,54 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	if table, _ := tuiosCLI(t, base, "plugins", "list"); !strings.Contains(table, "managed") || !strings.Contains(table, mainCommit[:12]) {
 		t.Errorf("the plugins list table lacks the source and the pin:\n%s", table)
 	}
+	ping("after the install of main")
 
-	out, err = tuiosCLI(t, base, "plugins", "run", id, "ping", "--wait")
-	if err != nil || !strings.Contains(out, "built-by-install") || !strings.Contains(out, "pong") {
-		t.Fatalf("plugins run ping: %v\n%s", err, out)
+	// A failed build: the lock entry and the running plugin stay as they
+	// were, and the failed build folder is gone.
+	before := readLock()
+	out, err = tuiosCLI(t, base, "plugins", "install", url+"@broken", "--yes")
+	if err == nil || !strings.Contains(out, "the build command failed") || !strings.Contains(out, "The plugin is not installed") {
+		t.Fatalf("install of the broken branch: %v\n%s", err, out)
 	}
+	if readLock() != before {
+		t.Fatalf("a failed build changed plugins.lock:\n%s", readLock())
+	}
+	if log, _ := os.ReadFile(filepath.Join(pluginState(base, id), "build.log")); !strings.Contains(string(log), "the build breaks") {
+		t.Errorf("build.log does not hold the failed build's output:\n%s", log)
+	}
+	checkWhere(mainDir)
+	ping("after a failed build")
+
+	// A kill during the build of next: the lock entry and the running
+	// plugin stay as they were.
+	if err := os.WriteFile(filepath.Join(outside, "slow"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	killInstallAt(t, base, "Running in", url+"@next", "--yes")
+	_ = os.Remove(filepath.Join(outside, "slow"))
+	if pid, err := os.ReadFile(filepath.Join(outside, "slow.pid")); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(string(pid))); err == nil {
+			if p, err := os.FindProcess(n); err == nil {
+				_ = p.Kill()
+			}
+		}
+	}
+	if readLock() != before {
+		t.Fatalf("a killed install changed plugins.lock:\n%s", readLock())
+	}
+	ping("after a kill during the build")
+
+	// next: a new folder, and the folders of main and of the killed build
+	// are gone once the daemon runs next.
+	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@next", "--yes"); err != nil {
+		t.Fatalf("install of next after a kill during the build: %v\n%s", err, out)
+	}
+	if field("commit") != nextCommit || field("dir") == mainDir {
+		t.Fatalf("plugins.lock does not pin next at %s in a new folder:\n%s", nextCommit, readLock())
+	}
+	checkWhere(field("dir"))
+	ping("after the install of next")
+	_ = os.WriteFile(filepath.Join(art, "plugins.lock"), []byte(readLock()), 0o644)
 }
 
 // foldersIn lists the folders in dir, sorted.

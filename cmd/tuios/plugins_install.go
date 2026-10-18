@@ -157,22 +157,6 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// newStaging makes an empty folder in the managed folder to fetch into. Its
-// name holds the process id. It first removes the staging folders of
-// installs that no longer run.
-func newStaging(dirs herdrplugin.Dirs) (string, error) {
-	if err := os.MkdirAll(dirs.ManagedDir(), 0o700); err != nil {
-		return "", err
-	}
-	old, _ := filepath.Glob(filepath.Join(dirs.ManagedDir(), ".staging-*"))
-	for _, d := range old {
-		if herdrplugin.Abandoned(filepath.Base(d), ".staging-") {
-			_ = os.RemoveAll(d)
-		}
-	}
-	return os.MkdirTemp(dirs.ManagedDir(), fmt.Sprintf(".staging-%d-", os.Getpid()))
-}
-
 // fetchInto fetches ref of url into dir, an empty folder, and checks out
 // the commit. "" is the remote's default branch. It returns the commit and
 // git's id of subdir at it, which must be a folder.
@@ -229,115 +213,126 @@ func loadInside(root, checkout string) (*herdrplugin.Plugin, error) {
 	return p, nil
 }
 
-// installJob is the part of an install that installPlugin and installPinned
-// share: approve, build, write the lock entry, enable.
-type installJob struct {
-	o   installOpts
-	sig *signals
-	// work is the checkout the build runs in. "" for a local folder.
-	work string
-	// fetched is true when this run made work, so a failure removes it.
-	fetched bool
-	// running is true when the plugin is enabled now.
-	running bool
-	// drop is the checkout of the commit this install replaces. It goes
-	// once the new one is enabled.
-	drop string
+// installer holds what one tuios plugins install command shares between
+// plugins: the folders, config.toml, the flags and the signal handler. It
+// exists while the install lock is held.
+type installer struct {
+	cmd        *cobra.Command
+	out        io.Writer
+	dirs       herdrplugin.Dirs
+	cfg        config.PluginsConfig
+	configPath string
+	o          installOpts
+	sig        *signals
 }
 
-// finish shows the plan, asks, builds, writes the lock entry and enables
-// the plugin. e.Approved, when set, is what the person approved before.
-func (j installJob) finish(cmd *cobra.Command, dirs herdrplugin.Dirs, configPath string, e herdrplugin.LockEntry, p *herdrplugin.Plugin) error {
-	out := cmd.OutOrStdout()
-	final := ""
-	if !e.Local() {
-		final = dirs.CheckoutDir(e)
+// newInstaller reads config.toml and takes the install lock: one tuios
+// plugins command at a time builds or switches a plugin. The kernel drops
+// the lock when the process ends, so a killed install never blocks the next
+// one. Fetch folders left by a killed install are removed here.
+func newInstaller(cmd *cobra.Command, o installOpts) (*installer, func(), error) {
+	configPath, err := pluginsConfigPath()
+	if err != nil {
+		return nil, nil, err
 	}
-	work, aside, stopped := j.work, "", false
-	params := map[string]any{"plugin_id": e.ID}
-	// fail undoes this run: it removes the checkout it fetched, puts back
-	// the one it moved aside, and starts the plugin it stopped.
-	fail := func(err error) error {
-		if j.fetched {
-			_ = os.RemoveAll(work)
-		}
-		if aside != "" {
-			_ = os.Rename(aside, final)
-		}
-		if stopped {
-			_, _, _ = pluginCall("plugin.enable", params, 10*time.Second)
-		}
-		return err
+	cfg, err := config.PluginsInFile(configPath)
+	if err != nil {
+		return nil, nil, err
 	}
+	in := &installer{cmd: cmd, out: cmd.OutOrStdout(), cfg: cfg, configPath: configPath, o: o, sig: trapSignals()}
+	in.dirs = herdrplugin.DefaultDirs(configPath, cfg.Dirs)
+	release, err := herdrplugin.HoldLock(filepath.Join(in.dirs.ManagedDir(), ".lock"))
+	if err != nil {
+		return nil, nil, err
+	}
+	old, _ := filepath.Glob(filepath.Join(in.dirs.ManagedDir(), ".fetch-*"))
+	for _, d := range old {
+		_ = os.RemoveAll(d)
+	}
+	return in, release, nil
+}
+
+// fetch gets ref of url into a new fetch folder and loads the manifest. The
+// caller removes the folder: finish moves it into place before the build,
+// so after a good install nothing is left to remove.
+func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEntry, *herdrplugin.Plugin, error) {
+	work, err := os.MkdirTemp(in.dirs.ManagedDir(), ".fetch-")
+	if err != nil {
+		return "", nil, nil, err
+	}
+	e := &herdrplugin.LockEntry{Format: "herdr", Source: url, Ref: ref, Subdir: subdir}
+	if e.Commit, e.Tree, err = fetchInto(work, url, ref, subdir); err != nil {
+		return work, nil, nil, err
+	}
+	p, err := loadInside(filepath.Join(work, filepath.FromSlash(subdir)), work)
+	return work, e, p, err
+}
+
+// finish shows the plan and asks. Then it builds into a new build folder,
+// writes the lock entry and makes the daemon run the new folder. Writing
+// the lock entry is the one point where the install takes effect: before
+// it, a failure or a kill leaves the old entry and the old folder running,
+// and the new folder is garbage that the next install removes. fetched is
+// the fetch folder, "" for a local folder. e.Approved, when set, is what the
+// person approved before. wasOn is whether the plugin runs now.
+func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetched string, wasOn bool) error {
+	out := in.out
 	hash := herdrplugin.TrustHash(e.Source, p, e.Grants)
 	changed := e.Approved != "" && e.Approved != hash
-	fmt.Fprint(out, installPlan(p, e, dirs.PluginRoot(e), j.o))
+	if fetched != "" {
+		e.Dir = herdrplugin.NewDir(e)
+		if err := herdrplugin.CheckLockEntry(e); err != nil {
+			return err
+		}
+	}
+	fmt.Fprint(out, installPlan(p, e, in.dirs.PluginRoot(e), in.o))
 	tty := term.IsTerminal(int(os.Stdin.Fd()))
 	if changed {
 		fmt.Fprintln(out, "\nThe plugin manifest is different from the approved one in plugins.lock. tuios asks again, also with --yes.")
 		if !tty {
-			return fail(errors.New("there is no terminal to ask in. Run the command in a terminal"))
+			return errors.New("there is no terminal to ask in. Run the command in a terminal")
 		}
 	}
-	ok, err := lookPrompt{yes: j.o.yes && !changed, tty: tty, in: os.Stdin}.confirm(out, "Continue?")
+	ok, err := lookPrompt{yes: in.o.yes && !changed, tty: tty, in: os.Stdin}.confirm(out, "Continue?")
 	if err != nil {
-		return fail(err)
+		return err
 	}
 	if !ok {
-		return fail(errors.New("the plugin is not installed. You did not approve it"))
+		return errors.New("the plugin is not installed. You did not approve it")
 	}
-	// From here a signal cancels the build, and fail undoes the install.
-	j.sig.start()
-	defer j.sig.done()
-	if final != "" {
-		// Two installs of one plugin at one commit take turns.
-		release, err := herdrplugin.HoldLock(final + ".lock")
-		if err != nil {
-			return fail(err)
+	// From here a signal cancels the build instead of ending tuios.
+	in.sig.busy(true)
+	defer in.sig.busy(false)
+	dir := ""
+	if fetched != "" {
+		// The fetch folder becomes the build folder before the build, and
+		// it never moves again.
+		dir = in.dirs.CheckoutDir(e)
+		if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+			return err
 		}
-		defer release()
-		old, _ := filepath.Glob(final + ".old-*")
-		for _, d := range old {
-			if herdrplugin.Abandoned(filepath.Base(d), filepath.Base(final)+".old-") {
-				_ = os.RemoveAll(d)
-			}
+		if err := os.Rename(fetched, dir); err != nil {
+			return err
 		}
 	}
-	if j.fetched {
-		// The build runs in the folder the plugin keeps, because a build
-		// can write its absolute path into what it makes. A checkout at the
-		// same commit moves aside until the build works. A plugin that runs
-		// stops first, because Windows cannot move a folder in use.
-		if dirExists(final) {
-			if j.running {
-				_, stopped, _ = pluginCall("plugin.disable", params, 10*time.Second)
-			}
-			next := fmt.Sprintf("%s.old-%d", final, os.Getpid())
-			if err := os.Rename(final, next); err != nil {
-				return fail(err)
-			}
-			aside = next
+	fail := func(err error) error {
+		if dir != "" {
+			_ = os.RemoveAll(dir)
 		}
-		if err := os.MkdirAll(filepath.Dir(final), 0o700); err != nil {
-			return fail(err)
-		}
-		if err := os.Rename(work, final); err != nil {
-			return fail(err)
-		}
-		work = final
+		return err
 	}
-	root := dirs.PluginRoot(e)
-	if p, err = loadInside(root, work); err != nil {
+	root := in.dirs.PluginRoot(e)
+	if p, err = loadInside(root, dir); err != nil {
 		return fail(err)
 	}
 	e.Built = !slices.ContainsFunc(p.Build, func(b herdrplugin.Command) bool { return p.Supported(b.Platforms, "build") == nil })
-	if !j.o.noBuild && !e.Built {
-		if err := runPluginBuild(j.sig.ctx, cmd, p, dirs); err != nil {
+	if !in.o.noBuild && !e.Built {
+		if err := runPluginBuild(in.sig.ctx, in.cmd, p, in.dirs); err != nil {
 			return fail(fmt.Errorf("%w. The plugin is not installed", err))
 		}
 		// A build step can write the manifest. What runs must be what the
 		// person approved.
-		if p, err = loadInside(root, work); err != nil {
+		if p, err = loadInside(root, dir); err != nil {
 			return fail(err)
 		}
 		if herdrplugin.TrustHash(e.Source, p, e.Grants) != hash {
@@ -346,7 +341,7 @@ func (j installJob) finish(cmd *cobra.Command, dirs herdrplugin.Dirs, configPath
 		e.Built = true
 	}
 	e.Approved = hash
-	if err := herdrplugin.UpdateLock(dirs.LockPath(), func(l *herdrplugin.Lock) {
+	if err := herdrplugin.UpdateLock(in.dirs.LockPath(), func(l *herdrplugin.Lock) {
 		if x := l.Find(e.ID); x != nil {
 			*x = e
 		} else {
@@ -355,34 +350,81 @@ func (j installJob) finish(cmd *cobra.Command, dirs herdrplugin.Dirs, configPath
 	}); err != nil {
 		return fail(err)
 	}
-	if aside != "" {
-		_ = os.RemoveAll(aside)
-	}
 	fmt.Fprintf(out, "Installed %s", e.ID)
 	if e.Commit != "" {
 		fmt.Fprintf(out, " at %.12s", e.Commit)
 	}
 	fmt.Fprintln(out, ". plugins.lock pins it.")
-	if j.o.noEnable && !stopped {
-		return nil
-	}
-	if err := enablePlugin(out, configPath, e.ID, j.running && !stopped); err != nil {
-		return err
-	}
-	if j.drop != "" && j.drop != final {
-		_ = os.RemoveAll(j.drop)
+	if in.switchPlugin(e.ID, !in.o.noEnable || wasOn, wasOn) && dir != "" {
+		in.collect(e.ID, filepath.Base(dir))
 	}
 	return nil
 }
 
-// signals handles SIGINT and SIGTERM during an install. Before the build
-// starts, a signal removes the staging folder and ends tuios. From the
-// build on, it cancels ctx: that kills the build, and the install undoes
-// its own changes.
+// collect removes each build folder of id but keep. It runs only after the
+// daemon runs keep, so no plugin process runs from what it removes. A folder
+// that cannot be removed, such as one with a file in use on Windows, stays
+// until the next install.
+func (in *installer) collect(id, keep string) {
+	ents, _ := os.ReadDir(in.dirs.PluginDir(id))
+	for _, d := range ents {
+		if d.IsDir() && d.Name() != keep {
+			_ = os.RemoveAll(filepath.Join(in.dirs.PluginDir(id), d.Name()))
+		}
+	}
+}
+
+// switchPlugin makes the daemon run id from the folder plugins.lock names
+// now. restart stops it first. It reports whether nothing can run an older
+// folder any more, which is when the old folders may go.
+func (in *installer) switchPlugin(id string, enable, restart bool) bool {
+	if !enable {
+		return true
+	}
+	params := map[string]any{"plugin_id": id}
+	could := func(err error) bool {
+		fmt.Fprintf(in.out, "tuios could not restart the plugin %s: %v. Restart the tuios daemon, or run this command in a terminal outside tuios.\n", id, err)
+		return false
+	}
+	if restart {
+		if _, running, err := pluginCall("plugin.disable", params, 10*time.Second); err != nil {
+			return could(err)
+		} else if !running {
+			fmt.Fprintf(in.out, "The plugin %s is enabled. It starts with the next tuios daemon.\n", id)
+			return true
+		}
+	}
+	_, running, err := pluginCall("plugin.enable", params, 10*time.Second)
+	if err != nil && (strings.Contains(err.Error(), "(plugin_not_found)") || strings.Contains(err.Error(), "(unsupported)")) {
+		// A daemon older than this tuios, or one that runs no plugins.
+		if _, err := config.SetPluginEnabledInFile(in.configPath, id, true); err != nil {
+			return could(err)
+		}
+		fmt.Fprintf(in.out, "The plugin %s is enabled. Restart the tuios daemon to start the plugin.\n", id)
+		return false
+	}
+	if err != nil {
+		return could(err)
+	}
+	if !running {
+		if _, err := config.SetPluginEnabledInFile(in.configPath, id, true); err != nil {
+			return could(err)
+		}
+		fmt.Fprintf(in.out, "The plugin %s is enabled. It starts with the next tuios daemon.\n", id)
+		return true
+	}
+	fmt.Fprintf(in.out, "The plugin %s is enabled. It runs with your rights.\n", id)
+	return true
+}
+
+// signals handles SIGINT, SIGTERM and SIGHUP during an install. While no
+// build runs, a signal ends tuios: the kernel drops the install lock, and
+// the next install removes what this one left. During the build and the
+// switch, it cancels ctx: that kills the build, and the install removes its
+// new build folder.
 type signals struct {
 	ctx     context.Context
 	mu      sync.Mutex
-	remove  string
 	working bool
 }
 
@@ -390,15 +432,12 @@ func trapSignals() *signals {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &signals{ctx: ctx}
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		<-ch
 		cancel()
 		s.mu.Lock()
 		if !s.working {
-			if s.remove != "" {
-				_ = os.RemoveAll(s.remove)
-			}
 			os.Exit(130)
 		}
 		s.mu.Unlock()
@@ -406,114 +445,51 @@ func trapSignals() *signals {
 	return s
 }
 
-// staging names the folder a signal before the build removes.
-func (s *signals) staging(dir string) { s.mu.Lock(); s.remove = dir; s.mu.Unlock() }
-
-func (s *signals) start() { s.mu.Lock(); s.working = true; s.mu.Unlock() }
-
-func (s *signals) done() { s.mu.Lock(); s.working, s.remove = false, ""; s.mu.Unlock() }
-
-// enablePlugin enables id through the daemon, else in config.toml. restart
-// stops it first, so a plugin that runs starts again from the new folder.
-func enablePlugin(out io.Writer, configPath, id string, restart bool) error {
-	params := map[string]any{"plugin_id": id}
-	if restart {
-		_, _, _ = pluginCall("plugin.disable", params, 10*time.Second)
-	}
-	_, running, err := pluginCall("plugin.enable", params, 10*time.Second)
-	old := err != nil && (strings.Contains(err.Error(), "(plugin_not_found)") || strings.Contains(err.Error(), "(unsupported)"))
-	switch {
-	case err != nil && !old:
-		return err
-	case running && !old:
-		fmt.Fprintf(out, "The plugin %s is enabled. It runs with your rights.\n", id)
-		return nil
-	}
-	// No daemon, or a daemon that does not find the plugin: an older one,
-	// or one that runs no plugins.
-	if _, err := config.SetPluginEnabledInFile(configPath, id, true); err != nil {
-		return err
-	}
-	if old {
-		fmt.Fprintf(out, "The plugin %s is enabled. Restart the tuios daemon to start the plugin.\n", id)
-	} else {
-		fmt.Fprintf(out, "The plugin %s is enabled. It starts with the next tuios daemon.\n", id)
-	}
-	return nil
-}
-
-// installEnv reads config.toml for the folders.
-func installEnv() (herdrplugin.Dirs, config.PluginsConfig, string, error) {
-	configPath, err := pluginsConfigPath()
-	if err != nil {
-		return herdrplugin.Dirs{}, config.PluginsConfig{}, "", err
-	}
-	cfg, err := config.PluginsInFile(configPath)
-	return herdrplugin.DefaultDirs(configPath, cfg.Dirs), cfg, configPath, err
-}
+func (s *signals) busy(on bool) { s.mu.Lock(); s.working = on; s.mu.Unlock() }
 
 // installPlugin is tuios plugins install SOURCE.
 func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
-	out := cmd.OutOrStdout()
 	src, err := parsePluginSource(arg, o)
 	if err != nil {
 		return err
 	}
-	dirs, cfg, configPath, err := installEnv()
+	in, release, err := newInstaller(cmd, o)
 	if err != nil {
 		return err
 	}
-	e := herdrplugin.LockEntry{Format: "herdr", Installed: time.Now().UTC().Truncate(time.Second)}
-	j := installJob{o: o, sig: trapSignals()}
+	defer release()
+	var e *herdrplugin.LockEntry
 	var p *herdrplugin.Plugin
+	fetched := ""
 	if src.local != "" {
 		if p, err = loadInside(src.local, ""); err != nil {
 			return err
 		}
-		e.Source = herdrplugin.LocalPrefix + p.PluginRoot
+		e = &herdrplugin.LockEntry{Format: "herdr", Source: herdrplugin.LocalPrefix + p.PluginRoot}
 	} else {
-		staging, err := newStaging(dirs)
+		fmt.Fprintf(in.out, "tuios gets %s.\n", shownSource(src.url))
+		fetched, e, p, err = in.fetch(src.url, src.ref, src.subdir)
+		defer os.RemoveAll(fetched)
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(staging)
-		j.sig.staging(staging)
-		fmt.Fprintf(out, "tuios gets %s.\n", shownSource(src.url))
-		if e.Commit, e.Tree, err = fetchInto(staging, src.url, src.ref, src.subdir); err != nil {
-			return err
-		}
-		if p, err = loadInside(filepath.Join(staging, filepath.FromSlash(src.subdir)), staging); err != nil {
-			return err
-		}
-		e.Source, e.Ref, e.Subdir = src.url, src.ref, src.subdir
-		j.work, j.fetched = staging, true
 	}
-	e.ID = p.PluginID
-	if err := herdrplugin.CheckLockEntry(e); err != nil {
-		return err
-	}
-	lock, err := herdrplugin.ReadLock(dirs.LockPath())
+	e.ID, e.Installed = p.PluginID, time.Now().UTC().Truncate(time.Second)
+	lock, err := herdrplugin.ReadLock(in.dirs.LockPath())
 	if err != nil {
 		return err
 	}
 	old := lock.Find(e.ID)
-	if err := checkInstallConflict(herdrplugin.Discover(dirs, cfg.Enabled), old, e, o.replace); err != nil {
+	if err := checkInstallConflict(herdrplugin.Discover(in.dirs, in.cfg.Enabled), old, *e, o.replace); err != nil {
 		return err
 	}
-	if old != nil {
-		if old.Source == e.Source && old.Commit == e.Commit && old.Subdir == e.Subdir && old.Built && !e.Local() && dirExists(dirs.PluginRoot(*old)) {
-			fmt.Fprintf(out, "The plugin %s is already installed at %.12s.\n", e.ID, e.Commit)
-			if o.noEnable {
-				return nil
-			}
-			return enablePlugin(out, configPath, e.ID, false)
-		}
-		j.running = slices.Contains(cfg.Enabled, e.ID)
-		if !old.Local() {
-			j.drop = dirs.CheckoutDir(*old)
-		}
+	on := slices.Contains(in.cfg.Enabled, e.ID)
+	if old != nil && old.Source == e.Source && old.Commit == e.Commit && old.Subdir == e.Subdir && old.Built && !e.Local() && dirExists(in.dirs.PluginRoot(*old)) {
+		fmt.Fprintf(in.out, "The plugin %s is already installed at %.12s.\n", e.ID, e.Commit)
+		in.switchPlugin(e.ID, !o.noEnable && !on, false)
+		return nil
 	}
-	return j.finish(cmd, dirs, configPath, e, p)
+	return in.finish(*e, p, fetched, old != nil && on)
 }
 
 // checkInstallConflict refuses an install that another plugin with the same
@@ -668,27 +644,26 @@ func runPluginBuild(ctx context.Context, cmd *cobra.Command, p *herdrplugin.Plug
 // installFromLock is tuios plugins install with no SOURCE: each plugin in
 // plugins.lock at its pinned commit. It enables nothing.
 func installFromLock(cmd *cobra.Command, o installOpts) error {
-	dirs, _, configPath, err := installEnv()
+	o.noEnable = true
+	in, release, err := newInstaller(cmd, o)
 	if err != nil {
 		return err
 	}
-	lock, err := herdrplugin.ReadLock(dirs.LockPath())
+	defer release()
+	lock, err := herdrplugin.ReadLock(in.dirs.LockPath())
 	if err != nil {
 		return err
 	}
 	if len(lock.Plugins) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s lists no plugins. Run tuios plugins install SOURCE to install one.\n", dirs.LockPath())
+		fmt.Fprintf(in.out, "%s lists no plugins. Run tuios plugins install SOURCE to install one.\n", in.dirs.LockPath())
 		return nil
 	}
-	o.noEnable = true
-	sig := trapSignals()
 	var failed []string
 	for _, e := range lock.Plugins {
-		if sig.ctx.Err() != nil {
-			failed = append(failed, e.ID)
-			continue
+		if in.sig.ctx.Err() == nil {
+			err = in.installPinned(e)
 		}
-		if err := installPinned(cmd, dirs, configPath, e, o, sig); err != nil {
+		if err != nil || in.sig.ctx.Err() != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: %v\n", e.ID, err)
 			failed = append(failed, e.ID)
 		}
@@ -699,41 +674,29 @@ func installFromLock(cmd *cobra.Command, o installOpts) error {
 	return nil
 }
 
-// installPinned puts one lock file entry on this machine. A checkout that
-// is there already is built in place and never removed.
-func installPinned(cmd *cobra.Command, dirs herdrplugin.Dirs, configPath string, e herdrplugin.LockEntry, o installOpts, sig *signals) error {
-	out := cmd.OutOrStdout()
+// installPinned puts one lock file entry on this machine, in a new build
+// folder.
+func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	if err := herdrplugin.CheckLockEntry(e); err != nil {
 		return err
 	}
 	if e.Local() {
-		fmt.Fprintf(out, "%s uses the folder %s. tuios does not get it.\n", e.ID, dirs.PluginRoot(e))
+		fmt.Fprintf(in.out, "%s uses the folder %s. tuios does not get it.\n", e.ID, in.dirs.PluginRoot(e))
 		return nil
 	}
-	if e.Built && dirExists(dirs.PluginRoot(e)) {
-		fmt.Fprintf(out, "%s is installed at %.12s.\n", e.ID, e.Commit)
+	if e.Built && dirExists(in.dirs.PluginRoot(e)) {
+		fmt.Fprintf(in.out, "%s is installed at %.12s.\n", e.ID, e.Commit)
 		return nil
 	}
-	j := installJob{o: o, sig: sig, work: dirs.CheckoutDir(e)}
-	if !dirExists(j.work) {
-		staging, err := newStaging(dirs)
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(staging)
-		sig.staging(staging)
-		fmt.Fprintf(out, "tuios gets %s at %.12s.\n", shownSource(e.Source), e.Commit)
-		if _, _, err := fetchInto(staging, e.Source, e.Commit, e.Subdir); err != nil {
-			return fmt.Errorf("%w. If the pinned commit is gone, install the plugin again from its source", err)
-		}
-		j.work, j.fetched = staging, true
-	}
-	p, err := loadInside(filepath.Join(j.work, filepath.FromSlash(e.Subdir)), j.work)
-	if err == nil && p.PluginID != e.ID {
-		err = fmt.Errorf("the commit names the plugin %s, not %s", p.PluginID, e.ID)
-	}
+	fmt.Fprintf(in.out, "tuios gets %s at %.12s.\n", shownSource(e.Source), e.Commit)
+	fetched, got, p, err := in.fetch(e.Source, e.Commit, e.Subdir)
+	defer os.RemoveAll(fetched)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w. If the pinned commit is gone, install the plugin again from its source", err)
 	}
-	return j.finish(cmd, dirs, configPath, e, p)
+	if p.PluginID != e.ID {
+		return fmt.Errorf("the commit names the plugin %s, not %s", p.PluginID, e.ID)
+	}
+	e.Tree = got.Tree
+	return in.finish(e, p, fetched, slices.Contains(in.cfg.Enabled, e.ID))
 }
