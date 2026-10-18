@@ -125,6 +125,9 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 	case config.CommandTypeShell:
 		label := c.Label()
 		return func() tea.Msg { return CommandRanMsg{Label: label, Err: commandShellRunner(argv, dir)} }
+
+	case config.CommandTypePluginAction:
+		return m.runPluginActionKey(c)
 	}
 	return nil
 }

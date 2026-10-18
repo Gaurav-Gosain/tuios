@@ -1,6 +1,7 @@
 package herdrplugin
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +22,7 @@ import (
 // HostVersion is the herdr release whose plugin format this package follows.
 // A manifest whose min_herdr_version is newer is refused, as herdr refuses
 // it.
-const HostVersion = "0.9.3"
+const HostVersion = "0.9.5"
 
 // ManifestName is the file name of a plugin manifest.
 const ManifestName = "herdr-plugin.toml"
@@ -323,6 +324,9 @@ func Load(path string) (*Plugin, *Error) {
 
 // Parse validates manifest bytes. The paths of the result are empty.
 func Parse(data []byte) (*Plugin, *Error) {
+	// herdr's toml crate skips a UTF-8 byte order mark. go-toml refuses one,
+	// and some manifests written on Windows start with it.
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var raw rawManifest
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, errf("plugin_manifest_parse_failed", "%v", err)

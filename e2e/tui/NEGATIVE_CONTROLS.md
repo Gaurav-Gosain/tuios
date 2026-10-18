@@ -1333,6 +1333,9 @@ person enables it.
 | The plugin rows in the palette | `rebuildPaletteItems`: the `pluginPaletteItems` call cut | `TestHerdrPluginPalette` ("the palette never listed the plugin action") | **caught** |
 | A plugin that is off has no palette row | `pluginPaletteItems`: `!e.Runnable()` made `e.Plugin == nil` | `TestHerdrPluginPalette` ("the palette offers an action of a plugin that is off") | **caught** |
 | The grant check on the plugin log | `herdrPluginLogList`: the admin check never refuses | `TestHerdrPluginActions` ("plugin log from a read-only pane: exit 0" with the action's output) | **caught** |
+| A command key of type `plugin_action` | `RunCommandBinding`: the `runPluginActionKey` call cut | `TestHerdrPluginPalette` (run-1.env never holds the key's run) | **caught** |
+| A manifest that starts with a UTF-8 byte order mark | `Parse`: the `bytes.TrimPrefix` call cut | `TestHerdrPluginTrustAndHooks` (actions listed as `plugin_manifest_parse_failed`) | **caught** |
+| `env` on `tab.create` and `pane.split` | `verbNewWindow`: `Env: env` cut from the window options | `TestHerdrSocketAPI` (the new pane never shows env-from-tab) | **caught** |
 
 ## send-keys in the pane's keyboard mode
 

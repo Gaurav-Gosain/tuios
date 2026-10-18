@@ -455,14 +455,19 @@ func TestHerdrPluginPanes(t *testing.T) {
 
 // TestHerdrPluginPalette runs an enabled plugin's action and opens its popup
 // from the command palette, as the person does. A plugin that is not enabled
-// has no row: its action is not offered, and nothing of it runs.
+// has no row: its action is not offered, and nothing of it runs. A command
+// key of type plugin_action runs the same action, as herdr's
+// [[keys.command]] does. The actions fixture's manifest starts with a UTF-8
+// byte order mark and asks for herdr 0.9.5, so every test that runs it also
+// shows that both load.
 //
 // Negative controls (NEGATIVE_CONTROLS.md, "herdr plugins"): with the
 // pluginPaletteItems call cut from rebuildPaletteItems, the palette never
 // lists "Say hello"; with the Runnable check cut from pluginPaletteItems,
 // the palette offers the hidden plugin's action.
 func TestHerdrPluginPalette(t *testing.T) {
-	term, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions", "e2e.panes"}, "actions", "panes", "hidden"))
+	keys := "\n[[keybindings.command]]\nkey = \"alt+y\"\ntype = \"plugin_action\"\ncommand = \"e2e.actions.hello\"\ndescription = \"Hello key\"\n"
+	term, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions", "e2e.panes"}, "actions", "panes", "hidden")+keys)
 	const id = "e2e.actions"
 
 	openPaletteQuery := func(query string) {
@@ -504,6 +509,17 @@ func TestHerdrPluginPalette(t *testing.T) {
 		t.Fatalf("the palette's action could not reach herdr's CLI:\n%s", run)
 	}
 	savePluginArtifact(t, base, id, "run-0.env")
+
+	// The command key runs the action, with keybinding as its source.
+	if err := term.SendKeys(tuitest.Alt('y')); err != nil {
+		t.Fatalf("press the plugin action key: %v", err)
+	}
+	run = waitPluginFile(t, base, id, "run-1.env", "herdr=")
+	ctx = nil
+	if err := json.Unmarshal([]byte(envValue(run, "context")), &ctx); err != nil || ctx["invocation_source"] != "keybinding" || envValue(run, "action") != "hello" {
+		t.Fatalf("the key's action saw context %q (%v), want invocation_source keybinding\n%s", envValue(run, "context"), err, run)
+	}
+	savePluginArtifact(t, base, id, "run-1.env")
 
 	// The enabled pane opens from the palette as a popup.
 	openPaletteQuery("E2E popup")

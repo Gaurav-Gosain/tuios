@@ -6,7 +6,7 @@
 // [[actions]] a person runs from a palette or the CLI, [[events]] commands
 // that run when a pane, tab or workspace changes, [[panes]] that open as a
 // popup or a pane, and [[link_handlers]] that run an action on a clicked
-// URL. The format followed is herdr 0.9.3's (src/app/api/plugins in herdr's
+// URL. The format followed is herdr 0.9.5's (src/app/api/plugins in herdr's
 // source).
 //
 // This package holds the parts that need no daemon:

@@ -1,7 +1,7 @@
-id = "e2e.actions"
+﻿id = "e2e.actions"
 name = "E2E actions"
 version = "1.0.0"
-min_herdr_version = "0.9.3"
+min_herdr_version = "0.9.5"
 
 [[actions]]
 id = "hello"

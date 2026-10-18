@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// herdr's pane commands, from src/cli/pane.rs at v0.9.3.
+// herdr's pane commands, from src/cli/pane.rs at v0.9.5.
 
 func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageError) {
 	switch sub {
