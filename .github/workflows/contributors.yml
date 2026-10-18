@@ -31,30 +31,9 @@ jobs:
         run: ./scripts/contributors.sh "${GITHUB_REPOSITORY}" README.md
 
       - name: Open or update the pull request
-        env:
-          # The commit is made by the Actions bot, under its documented
-          # noreply identity, and only in this CI job.
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          set -euo pipefail
           if git diff --quiet -- README.md; then
             echo "contributors unchanged"
             exit 0
           fi
-
-          git switch -C "$BRANCH"
-          git add README.md
-          git commit -m "docs(readme): update the contributors grid"
-          git push --force origin "$BRANCH"
-
-          # A pull request from the branch may already be open. The push above
-          # updates it, so only a missing one needs to be created.
-          open=$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')
-          if [ "$open" = "0" ]; then
-            gh pr create --base main --head "$BRANCH" \
-              --title "docs(readme): update the contributors grid" \
-              --body "This pull request updates the contributors grid in the README. The contributors workflow made it from the GitHub contributors list."
-          fi
+          ./scripts/contributors-pr.sh "$BRANCH"
