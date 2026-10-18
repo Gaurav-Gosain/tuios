@@ -37,13 +37,13 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		once string
 	}{
 		{
-			name: "codex", harness: "codex", fixture: "cockpit-codex.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
+			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
 			file: filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
 			want: []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted"},
 			once: "Make run take two and add notes.",
 		},
 		{
-			name: "gemini", harness: "gemini-cli", fixture: "cockpit-gemini.jsonl", sessionID: "11111111-2222-4333-8444-555555555555",
+			name: "gemini", harness: "gemini-cli", fixture: "gemini-chat.jsonl", sessionID: "11111111-2222-4333-8444-555555555555",
 			file: filepath.Join(".gemini", "tmp", "project", "chats", "session-2026-10-18T09-00-11111111.jsonl"),
 			want: []string{"b is three now. The tests fail.", "Command exited with code 1", "replace", "const b = 3;", "quota reached"},
 			once: "const b = 3;",
@@ -59,7 +59,8 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 					t.Fatalf("create session %s: %v\n%s", s, err, out)
 				}
 			}
-			fixture, err := os.ReadFile(filepath.Join("testdata", "transcript", c.fixture))
+			// The decoder test's fixtures, so the two tests read one file.
+			fixture, err := os.ReadFile(filepath.Join("..", "..", "internal", "transcriptview", "testdata", c.fixture))
 			if err != nil {
 				t.Fatal(err)
 			}

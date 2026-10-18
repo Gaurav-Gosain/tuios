@@ -313,19 +313,20 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	if !msg.after || msg.reset {
 		t.entries = nil
 	}
-	// An entry with an id the thread holds replaces it: a tool call's
-	// status changes once its result is in.
+	// An entry with an id the thread holds replaces it where it is: a tool
+	// call's status changes once its result is in, and Gemini CLI writes a
+	// message again, whole, when one of its calls finishes.
+	at := make(map[string]int, len(t.entries))
+	for i, e := range t.entries {
+		at[e.ID] = i
+	}
 	for _, e := range msg.entries {
-		replaced := false
-		for i := len(t.entries) - 1; i >= 0 && i >= len(t.entries)-64; i-- {
-			if t.entries[i].ID == e.ID {
-				t.entries[i], replaced = e, true
-				break
-			}
+		if i, ok := at[e.ID]; ok {
+			t.entries[i] = e
+			continue
 		}
-		if !replaced {
-			t.entries = append(t.entries, e)
-		}
+		at[e.ID] = len(t.entries)
+		t.entries = append(t.entries, e)
 	}
 	// The thread draws the newest; the page bound holds the rest.
 	if n := len(t.entries); n > 200 {

@@ -7165,3 +7165,26 @@ line, and the harness's error. Run on 2026-10-18.
 
 The hostile decoder test was checked the same way: with a tool call's target
 passed out without `Clean`, `TestFormatHostile` fails for every format.
+
+### After review
+
+The hookless search for these formats now gives a file to a pane by the
+session's start against the agent's process start (`viewCandidates`,
+transcript_search.go). `TestViewSearchSiblings` (internal/session) covers
+agents of one harness in one folder, with every file's modification time
+after every agent started. Gemini messages written again keep their first
+place, and a `$rewindTo` after a reader's cursor resets its page
+(`TestGeminiRewrites`, internal/transcriptview). Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A file near two agents' starts goes to one of them | The `n != 1` check in `viewCandidates` | `n == 0` | `TestViewSearchSiblings/two_agents_started_together` (B got b, want none) | **caught** |
+| A pane takes a sibling's file | The start window in `viewCandidates` | Every file is every pane's candidate | `TestViewSearchSiblings/each_agent_its_own_session`, `/the_second_agent_has_not_written_yet` | **caught** |
+| A finished tool call moves its message to the end | The first place kept in `decode` | Appended at the record's own place | `TestGeminiRewrites` | **caught** |
+| A rewind leaves gone messages in the reader's thread | The reset in `forward` | Not reset | `TestGeminiRewrites` ("a rewind after the cursor did not reset the page") | **caught** |
+| The cockpit reads Claude Code transcripts only (rerun on the fixed build) | `threadTranscriptHarness` | Only `claude-code` | `TestCockpitThreadOtherHarnesses/codex` and `/gemini` | **caught** |
+
+The e2e test also found a bug in the first version of the Gemini glob
+excludes: `[!l]` is not a negation in Go's `filepath.Match` (it is `[^l]`),
+so every `.jsonl` chat was refused. The hook's `transcript_refused` check in
+the test failed on it.
