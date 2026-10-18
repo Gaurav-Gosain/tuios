@@ -1244,7 +1244,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 	if m.GetRenderWidth() < ckWide {
 		side = []string{"Checkpoints", "Live"}
 	}
-	if !threadTranscriptHarness(e.Harness) {
+	if !m.threadReadsTranscript(e) {
 		if side == nil {
 			return nil
 		}

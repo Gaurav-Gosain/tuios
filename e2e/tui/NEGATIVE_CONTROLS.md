@@ -7150,3 +7150,18 @@ frame had ended by chance. The other waited past the moment the guest showed
 and hid its cursor again on the same cell, which left a build without the fix
 there too. The cursor now goes to a cell no frame writes to, and the first
 wait ends before the guest shows it.
+
+## Agent thread for every harness with a transcript reader
+
+`TestCockpitThreadOtherHarnesses` reads a Codex rollout and a Gemini CLI chat
+in the agent thread. The real hook of each harness names the file. Each thread
+must show the answer, a failed command's output, a diff card with its added
+line, and the harness's error. Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The cockpit reads Claude Code transcripts only | The harness set in `threadTranscriptHarness` (inbox_thread.go) | Only `claude-code` | `TestCockpitThreadOtherHarnesses/codex` and `/gemini` ("never showed the answer and the failed command") | **caught** |
+| A Gemini message written again shows twice | The key drop in `dropKeyed` (transcriptview/format.go) | Returns at once | `TestFormatFixtures/gemini-chat.jsonl` (unit). The e2e test passes: the client replaces an entry by its id, so the screen is right | **caught by the unit test only** |
+
+The hostile decoder test was checked the same way: with a tool call's target
+passed out without `Clean`, `TestFormatHostile` fails for every format.

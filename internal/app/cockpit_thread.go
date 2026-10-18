@@ -90,12 +90,16 @@ func (ln ckLine) blank() bool {
 // ckReadTool is the word a read or search folds under, "" for any other
 // tool. A run of them is one line.
 func ckReadTool(tool string) string {
+	// Claude Code's names, then those of the other harnesses whose
+	// transcripts tuios reads: Codex, Gemini CLI and Qwen Code.
 	switch strings.ToLower(tool) {
-	case "read", "ls", "notebookread":
+	case "read", "ls", "notebookread",
+		"read_file", "read_many_files", "list_directory", "view_image":
 		return "Read"
-	case "grep", "glob", "websearch":
+	case "grep", "glob", "websearch",
+		"grep_search", "search_file_content", "google_web_search", "web_search":
 		return "Search"
-	case "webfetch":
+	case "webfetch", "web_fetch":
 		return "Fetch"
 	}
 	return ""
@@ -240,6 +244,12 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				what = append(what, k+" "+strconv.Itoa(counts[k]))
 			}
 			add(m.ckToolLine(l, strings.Join(what, sepWord()), strings.Join(targets, ", "), worst, width))
+		case en.Kind == "error":
+			ls := []ckLine{m.ckToolLine(l, "Error", "", "error", width)}
+			for _, s := range threadWrap(en.Text, max(width-6, 8)) {
+				ls = append(ls, ckLine{indent: 4, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
+			}
+			add(ls...)
 		case en.Kind == "tool_call":
 			ls := []ckLine{m.ckToolLine(l, printableTitle(en.Tool), printableTitle(en.Target), en.Status, width)}
 			if en.Status == "error" {

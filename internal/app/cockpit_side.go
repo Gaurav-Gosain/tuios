@@ -331,15 +331,15 @@ func (m *OS) drawLastTurn(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, r
 	if len(files) != 1 {
 		n += "s"
 	}
-	if !threadTranscriptHarness(e.Harness) {
+	if !m.threadReadsTranscript(e) {
 		n = ""
 	}
 	drawSideSection(c, l, x, y, w, "Last turn", n)
 	y++
 	if len(files) == 0 {
 		words := "No edits in the last turn."
-		if !threadTranscriptHarness(e.Harness) {
-			words = "tuios reads the edits of Claude Code turns only."
+		if !m.threadReadsTranscript(e) {
+			words = "tuios cannot read the edits of this agent yet."
 		}
 		for _, s := range wrapPlain(words, w) {
 			c.text(x, y, x+w, ckSeg{t: s, fg: pal.FgMute})

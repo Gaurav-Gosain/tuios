@@ -19,14 +19,17 @@ import (
 // The agent thread: what the selected agent in the agents view said and did,
 // beside the list on a wide screen and in its place on a narrow one.
 //
-//   - For Claude Code, the conversation, read with agent-transcript (the
+//   - For an agent whose transcript the daemon reads (Claude Code, Codex,
+//     Gemini CLI, Qwen Code), the conversation, read with
+//     agent-transcript (the
 //     person's own verb, with the attach nonce: secrets masked, every string
 //     bounded, control characters gone). The client subscribes to the
 //     transcript event of the selected pane alone, and reads again from its
 //     cursor when the transcript grows. When the selection moves, the
 //     subscription moves with it.
-//   - For any other agent, the recap of its turns (agent-activity) and the
-//     mail between it and other agents.
+//   - For any other agent, and for one whose pane is not joined to its
+//     transcript yet, the recap of its turns (agent-activity) and the mail
+//     between it and other agents.
 //   - Under either, the approval the agent waits on, if the Inbox holds one:
 //     1, 2 and 3 answer it, with the same settle time and second press for a
 //     risky allow as in the attention list.
@@ -77,6 +80,12 @@ type agentThread struct {
 	err      string
 	recapKey string
 	recap    *session.AgentActivityRecap
+	// fallback says the daemon has no transcript for the pane: its harness
+	// has a reader, but the pane is not joined to a file yet, or the daemon
+	// is older. The thread shows the recap. fallbackAt is the agent's state
+	// time then, and a new state tries the transcript again.
+	fallback   bool
+	fallbackAt int64
 	// gen changes when what the thread shows changes, for the drawn lines.
 	gen uint64
 	// body is the conversation's lines as last drawn, and bodyAt what they
@@ -128,6 +137,8 @@ type threadPageMsg struct {
 	more    bool
 	after   bool
 	err     error
+	// stateAt is the agent's state time when the read went out.
+	stateAt int64
 }
 
 // threadRecapMsg is an agent-activity reply for a thread.
@@ -144,8 +155,26 @@ type threadGrewMsg struct{ key string }
 type threadWatchEnded struct{ key string }
 
 // threadTranscriptHarness reports whether the daemon reads a harness's
-// transcript. Only Claude Code has a [transcript] block.
-func threadTranscriptHarness(h string) bool { return h == "claude-code" }
+// transcript: the harnesses whose manifests have a [transcript] block with a
+// reader internal/transcriptview has.
+func threadTranscriptHarness(h string) bool {
+	switch h {
+	case "claude-code", "codex", "gemini-cli", "qwen":
+		return true
+	}
+	return false
+}
+
+// threadReadsTranscript reports whether an agent's thread shows its
+// transcript, and not the recap: its harness has a reader, and the daemon
+// did not say the pane has no transcript.
+func (m *OS) threadReadsTranscript(e sidebarAgentEntry) bool {
+	if !threadTranscriptHarness(e.Harness) {
+		return false
+	}
+	t := m.Inbox.threads.byKey[agentKey(e)]
+	return t == nil || !t.fallback
+}
 
 // thread is the kept thread of an agent, made when it is first shown.
 func (m *OS) thread(e sidebarAgentEntry) *agentThread {
@@ -195,7 +224,12 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	}
 	t := m.thread(e)
 	var cmds []tea.Cmd
-	if threadTranscriptHarness(e.Harness) {
+	if t.fallback && e.StateAt != t.fallbackAt && !t.loading {
+		// The agent moved on since the daemon had no transcript. The hook
+		// that joins the pane to its file may have run.
+		t.fallback, t.read = false, false
+	}
+	if m.threadReadsTranscript(e) {
 		if ts.watchKey != t.key {
 			m.stopThreadWatch()
 			cmds = append(cmds, m.startThreadWatch(t))
@@ -219,13 +253,17 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 	call, nonce := m.inboxCaller(), m.inboxNonce()
 	key, sess, window := t.key, t.session, t.window
+	var stateAt int64
+	if e, ok := m.cockpitAgent(); ok && agentKey(e) == key {
+		stateAt = e.StateAt
+	}
 	return func() tea.Msg {
 		params := map[string]any{"session": sess, "window": window, "human_nonce": nonce, "limit": 200}
 		if after != "" {
 			params["after"] = after
 		}
 		raw, err := call("agent-transcript", params, threadReadTimeout)
-		msg := threadPageMsg{key: key, after: after != "", err: err}
+		msg := threadPageMsg{key: key, after: after != "", err: err, stateAt: stateAt}
 		if err != nil {
 			return msg
 		}
@@ -262,6 +300,13 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	if msg.err != nil {
 		t.read = true
 		t.err = threadReadError(msg.err)
+		if threadNoTranscript(msg.err) && !msg.after {
+			// No file to read for this pane: show the recap, as for a
+			// harness with no reader, until the agent's state changes.
+			t.fallback, t.fallbackAt, t.err, t.recapKey = true, msg.stateAt, "", ""
+			m.stopThreadWatch()
+			return m.InboxThreadFetch()
+		}
 		return nil
 	}
 	t.read, t.err = true, ""
@@ -272,7 +317,7 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	// status changes once its result is in.
 	for _, e := range msg.entries {
 		replaced := false
-		for i := len(t.entries) - 1; i >= 0 && i >= len(t.entries)-16; i-- {
+		for i := len(t.entries) - 1; i >= 0 && i >= len(t.entries)-64; i-- {
 			if t.entries[i].ID == e.ID {
 				t.entries[i], replaced = e, true
 				break
@@ -307,6 +352,13 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		return m.threadPageCmd(t, t.cursor)
 	}
 	return nil
+}
+
+// threadNoTranscript reports an error that says the pane has no transcript
+// the daemon can read, so the thread shows the recap instead.
+func threadNoTranscript(err error) bool {
+	ce, ok := err.(*session.VerbCallError)
+	return ok && (ce.Code == session.ErrVerbNoTranscript || ce.Code == session.ErrVerbUnsupportedHarness)
 }
 
 // threadReadError is a failed read as the thread says it.
@@ -436,7 +488,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 	}
 	key := threadBodyKey{
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
-		width: width, minute: threadMinute(e, now), ascii: overlay.UseASCII(),
+		width: width, minute: m.threadMinute(e, now), ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
 		expand: t.expandAll, changes: m.cockpitTab() == "Changes",
 	}
@@ -451,8 +503,8 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 // threadMinute is the minute a thread's lines depend on: a recap says how
 // long ago a turn ended, and a transcript's cards carry clock times only, so
 // a minute passing builds them again for nothing.
-func threadMinute(e sidebarAgentEntry, now time.Time) int64 {
-	if threadTranscriptHarness(e.Harness) {
+func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
+	if m.threadReadsTranscript(e) {
 		return 0
 	}
 	return now.Unix() / 60
@@ -479,7 +531,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		note("Reading...")
 		return out
 	}
-	if threadTranscriptHarness(e.Harness) {
+	if m.threadReadsTranscript(e) {
 		if t.err != "" {
 			note(t.err)
 			return out
@@ -502,7 +554,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	}
 	out = append(out, m.threadMail(e, width, bg, pal)...)
 	if len(out) == 0 {
-		note("Nothing to show yet. Only Claude Code has a conversation tuios can read.")
+		note(threadNothingYet(e.Harness))
 	}
 	return out
 }
@@ -604,4 +656,12 @@ func (m *OS) InboxAgentsViewPane() tea.Cmd {
 	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
 	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
 	return nil
+}
+
+// threadNothingYet is what an empty recap thread says.
+func threadNothingYet(harness string) string {
+	if threadTranscriptHarness(harness) {
+		return "Nothing to show yet. The conversation shows when tuios finds the agent's transcript. Install the hooks to find it at once: tuios integration install " + harness
+	}
+	return "Nothing to show yet. tuios cannot read the conversation of this agent."
 }
