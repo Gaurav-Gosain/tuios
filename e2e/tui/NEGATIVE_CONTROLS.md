@@ -6923,6 +6923,8 @@ stand-in `codex` holds the pane's foreground. The test checks, in order:
 - The pane's own approval then takes the pane back and shows in
   `list-attention` and the dock.
 - The other conversation's approval is refused again.
+- After two `SessionStart`s from two other conversations in a row, the pane's
+  own approval still takes the pane back, and both others are refused.
 - After codex exits, a third conversation's prompt is taken.
 
 Run on 2026-10-18.
@@ -6940,7 +6942,8 @@ The fixed build passes it, every other `TestMail*` and `TestAgentMail*`,
 | Another conversation's approval took the pane over | yes | `shared_server = false` in the codex manifest | `TestCodexSharedServerKeepsAnotherConversationOffThePane` ("other PermissionRequest mid-turn: the pane is {State:needs_input ... AgentSession:cx-quick}, want state working in conversation cx-pane") | **caught** |
 | The daemon never read the manifest flag | yes | `verbSetAgentState` sets `SharedServer: false` | same test, same message | **caught** |
 | The hook never marked a `SessionStart` | yes | `reportHook` does not send `session_start`, so the guard never arms | same test, same message | **caught** |
-| A takeover hid the pane's own approval | yes | `sessionGuard` without the reclaim by the owner before | same test ("pane PermissionRequest reclaims: the pane is {State:idle ... AgentSession:cx-quick}, want state needs_input") | **caught** |
+| A takeover hid the pane's own approval | yes | `sessionGuard` without the reclaim from the guard's history | same test ("pane PermissionRequest reclaims: the pane is {State:idle ... AgentSession:cx-quick}, want state needs_input") | **caught** |
+| Two takeovers in a row hid the pane's own approval | yes | `sharedGuardHistory = 1` | same test ("pane PermissionRequest reclaims again: the pane is {State:idle ... AgentSession:cx-third}, want state needs_input") | **caught** |
 | The guard outlived codex | yes | the detector's shell sweep disabled | same test ("the guard still held the pane after codex exited") | **caught** |
 | A compaction counted as a new conversation | yes | `translateCodex` sets `SessionStart` for source `compact` | same test ("other SessionStart after a compaction: the pane is {State:idle ... AgentSession:cx-quick}, want state done") | **caught** |
 

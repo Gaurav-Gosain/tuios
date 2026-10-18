@@ -3741,9 +3741,10 @@ the one that owns the pane. These filters keep those events off the pane:
 - Another conversation's `SessionStart` takes the pane over, because it looks
   like `/new` or `/resume` in the pane. A `SessionStart` after a compaction
   (source `compact`) is the same conversation and takes nothing over.
-- The pane's own conversation is never locked out. The daemon keeps the owner
-  before the current one. Its next report takes the pane back, and the other
-  conversation is refused again until its next `SessionStart`.
+- The pane's own conversation is never locked out. The daemon keeps the last
+  four owners that a `SessionStart` displaced. One of them takes the pane back
+  with its next report. The conversations that took the pane after it are
+  refused again until their next `SessionStart`.
 - When codex exits and the pane is back at its shell, the daemon forgets both
   conversations. The pane's `agent_session_id` stays, for a resume.
 - Until a `SessionStart` arrives, the pane takes every report. This is the

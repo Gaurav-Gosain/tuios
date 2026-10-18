@@ -4645,8 +4645,8 @@ terminal can share that process, its pid and the pane's `TUIOS_PANE_ID`. For
 such a harness, a report with `session_start` sets the conversation that owns
 the window. A report for another conversation of the same harness is refused
 with `foreign_session`, at rest and mid-turn, unless it carries
-`session_start`. The owner before the current one is the exception: its next
-report takes the window back. The daemon forgets both when the pane is back at
+`session_start`. The last four owners that a `session_start` displaced are the
+exception: the next report from one of them takes the window back. The daemon forgets both when the pane is back at
 its shell. Until a `session_start` arrives, the window is open to any report.
 `set-agent-session` is not guarded this way, and it replaces the owner.
 

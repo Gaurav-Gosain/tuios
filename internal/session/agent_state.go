@@ -213,21 +213,29 @@ const (
 )
 
 // sharedGuard is what the guard of a shared-server harness knows about one
-// window: the harness, the conversation that owns the window, and the one that
-// owned it before. An empty owner means the guard is not armed and every report
-// passes it. Only a report with SessionStart arms it, so a pane whose hooks were
-// installed mid-conversation, or a daemon that restarted, fails open.
+// window: the harness, the conversation that owns the window, and the owners
+// a SessionStart displaced, most recent first. An empty owner means the guard
+// is not armed and every report passes it. Only a report with SessionStart arms
+// it, so a pane whose hooks were installed mid-conversation, or a daemon that
+// restarted, fails open.
 //
-// prev is what keeps the guard from locking a pane against its own
+// history is what keeps the guard from locking a pane against its own
 // conversation. A SessionStart from another terminal on the same server looks
-// exactly like /new or /resume in the pane, so it takes the window over. The
-// owner it displaced stays as prev, and its next report takes the window back:
-// that is the conversation whose TUI is in the pane. The takeover is then
-// undone and the other conversation is refused again until its next
-// SessionStart.
+// exactly like /new or /resume in the pane, so it takes the window over, and
+// the owner it displaced goes to the front of history. A conversation in
+// history takes the window back with its next report: the pane's own
+// conversation, whose TUI is in the pane, is in there however many
+// SessionStarts came from elsewhere since, up to sharedGuardHistory. The
+// reclaim drops it from history together with every entry in front of it,
+// which are the takeovers that came after it, so those conversations are
+// refused again until their next SessionStart.
 type sharedGuard struct {
-	harness, owner, prev string
+	harness, owner string
+	history        []string
 }
+
+// sharedGuardHistory bounds sharedGuard.history.
+const sharedGuardHistory = 4
 
 // noteSharedGuard moves the window's guard on for an applied report r. Called with
 // stateMu held.
@@ -248,10 +256,16 @@ func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 		g = sharedGuard{harness: r.Harness, owner: r.SessionID}
 	case r.SessionID == g.owner:
 		return
-	case r.SessionID == g.prev:
-		g.owner, g.prev = r.SessionID, ""
+	case slices.Contains(g.history, r.SessionID):
+		// A reclaim. Fresh slices throughout: the map holds a copy of g that
+		// shares the old backing array.
+		i := slices.Index(g.history, r.SessionID)
+		g.owner, g.history = r.SessionID, slices.Clone(g.history[i+1:])
 	default:
-		g.owner, g.prev = r.SessionID, g.owner
+		next := make([]string, 0, sharedGuardHistory)
+		next = append(next, g.owner)
+		next = append(next, g.history...)
+		g.owner, g.history = r.SessionID, next[:min(len(next), sharedGuardHistory)]
 	}
 	if s.agentSharedGuards == nil {
 		s.agentSharedGuards = make(map[string]sharedGuard)
@@ -294,8 +308,9 @@ func (e errAgentReportRefused) Error() string { return "agent report refused: " 
 // terminal can use the server a pane's codex started, so its hooks carry the
 // pane's TUIOS_PANE_ID and the same harness pid (#852). For such a harness,
 // once g is armed, a report about a conversation other than g's owner is
-// refused with foreign_session, at rest and mid-turn, unless it is the
-// owner before (which takes the pane back, see sharedGuard) or a SessionStart.
+// refused with foreign_session, at rest and mid-turn, unless it is in the
+// guard's history (which takes the pane back, see sharedGuard) or a
+// SessionStart.
 // A SessionStart then goes on to the rules above, so mid-turn it still has to
 // come from the owner's process.
 func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, g sharedGuard, r AgentReport) string {
@@ -303,7 +318,7 @@ func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, g s
 		return ""
 	}
 	if r.SharedServer && g.owner != "" && g.harness == r.Harness && r.SessionID != g.owner {
-		if r.SessionID == g.prev {
+		if slices.Contains(g.history, r.SessionID) {
 			return ""
 		}
 		if !r.SessionStart {

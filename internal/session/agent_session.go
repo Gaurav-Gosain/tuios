@@ -99,7 +99,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 }
 
 // pointSharedGuard makes r's conversation the owner of an armed shared-server
-// guard on the window, and forgets the owner before it. It is how a person
+// guard on the window, and forgets its history. It is how a person
 // points a Codex pane at its conversation (tuios set-agent-session) when the
 // guard holds the wrong one. Called with stateMu held.
 func (s *Session) pointSharedGuard(windowID string, r AgentSessionReport) {
