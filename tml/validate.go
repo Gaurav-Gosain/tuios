@@ -1,0 +1,837 @@
+package tml
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// ValidateOptions changes what Validate checks. The zero value uses
+// DefaultLimits and checks bindings against the document's state.
+type ValidateOptions struct {
+	Limits *Limits
+	// NoStateCheck skips the binding_missing warnings, for a document whose
+	// state arrives later in a patch.
+	NoStateCheck bool
+}
+
+// Validate checks a tree against the catalog: component types, attributes
+// and their types, required attributes, allowed children, theme roles,
+// bindings, actions and limits. It returns every problem it found, up to
+// Limits.Problems, errors and warnings both. The error is a *Error when at
+// least one problem is an error. A document with warnings alone renders.
+func Validate(doc *Node, opts *ValidateOptions) ([]Problem, error) {
+	v := newValidator(doc, opts)
+	v.run()
+	if v.errors > 0 {
+		return v.problems, &Error{Problems: v.problems}
+	}
+	return v.problems, nil
+}
+
+// Check parses and validates a document in either encoding. A parse error
+// comes back as the one problem.
+func Check(src []byte, opts *ValidateOptions) (*Node, []Problem, error) {
+	var lim *Limits
+	if opts != nil {
+		lim = opts.Limits
+	}
+	doc, err := Parse(src, &ParseOptions{Limits: lim})
+	if err != nil {
+		if e, ok := err.(*Error); ok {
+			for i := range e.Problems {
+				e.Problems[i].Severity = SevError
+			}
+			return nil, e.Problems, e
+		}
+		return nil, nil, err
+	}
+	problems, err := Validate(doc, opts)
+	return doc, problems, err
+}
+
+type validator struct {
+	doc      *Node
+	lim      Limits
+	opts     ValidateOptions
+	state    map[string]any
+	problems []Problem
+	errors   int
+	ids      map[string]string // id -> pointer
+	tabRefs  []tabRef
+	images   int
+	nodes    int
+	expanded int
+}
+
+type tabRef struct {
+	id  string
+	at  string
+	pos Pos
+}
+
+// scope is what names an expression may start with at a node.
+type scope struct {
+	roots  map[string]bool
+	inForm bool
+}
+
+func newValidator(doc *Node, opts *ValidateOptions) *validator {
+	v := &validator{doc: doc, lim: DefaultLimits(), ids: map[string]string{}}
+	if opts != nil {
+		v.opts = *opts
+		if opts.Limits != nil {
+			v.lim = *opts.Limits
+		}
+	}
+	return v
+}
+
+func (v *validator) add(p Problem, pos Pos) {
+	if p.Severity == "" {
+		p.Severity = SevError
+	}
+	if p.Line == 0 && pos.Line > 0 {
+		p.Line, p.Col = pos.Line, pos.Col
+	}
+	if len(v.problems) >= v.lim.Problems {
+		return
+	}
+	if p.Severity == SevError {
+		v.errors++
+	}
+	v.problems = append(v.problems, p)
+}
+
+func (v *validator) run() {
+	root := v.doc
+	if root == nil || root.IsText() {
+		v.add(Problem{Code: CodeBadRoot, Message: "The document is empty. Start with a tml root: {\"type\": \"tml\", \"version\": 1}."}, Pos{})
+		return
+	}
+	if comp, ok := catalog[root.Type]; ok && root.Type != "tml" && !comp.Block {
+		v.add(Problem{Code: CodeBadRoot, Message: fmt.Sprintf("<%s> cannot be the root. Use tml, or a block component such as row.", root.Type)}, root.Pos)
+	}
+	if sv, ok := root.Attr("state"); ok && root.Type == "tml" {
+		if sv.Kind != Object {
+			v.add(Problem{At: "/state", Code: CodeBadValue, Message: "state must be a JSON object, such as {\"count\": 0}."}, root.Pos)
+		} else {
+			if len(sv.Raw) > v.lim.StateBytes {
+				v.add(Problem{At: "/state", Code: CodeLimit, Message: fmt.Sprintf("The state is %d bytes. The limit is %d bytes.", len(sv.Raw), v.lim.StateBytes)}, root.Pos)
+			}
+			st, err := root.State()
+			if err == nil {
+				v.state = st
+			}
+		}
+	}
+	sc := scope{roots: map[string]bool{"state": true, "view": true}}
+	v.node(root, "", nil, sc, 1)
+	for _, r := range v.tabRefs {
+		ptr, ok := v.ids[r.id]
+		if !ok || v.doc.At(ptr) == nil || v.doc.At(ptr).Type != "tab" {
+			v.add(Problem{At: r.at, Code: CodeBadAction, Message: fmt.Sprintf("tab('%s') names no tab. Give a <tab> that id.", r.id), Accepted: v.tabIDs()}, r.pos)
+		}
+	}
+	if v.images > v.lim.Images {
+		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("The document has %d images. The limit is %d.", v.images, v.lim.Images)}, Pos{})
+	}
+	if v.expanded > v.lim.Each {
+		v.add(Problem{Code: CodeLimit, Message: fmt.Sprintf("each and list expand to %d nodes with this state. The limit is %d.", v.expanded, v.lim.Each)}, Pos{})
+	}
+}
+
+func (v *validator) tabIDs() []string {
+	var out []string
+	v.doc.Walk(func(n *Node, _ string) bool {
+		if n.Type == "tab" && n.ID() != "" {
+			out = append(out, n.ID())
+		}
+		return true
+	})
+	sort.Strings(out)
+	return out
+}
+
+func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth int) {
+	v.nodes++
+	if v.nodes == v.lim.Nodes+1 {
+		v.add(Problem{At: ptr, Code: CodeLimit, Message: fmt.Sprintf("The document has more than %d nodes.", v.lim.Nodes)}, n.Pos)
+	}
+	if depth == v.lim.Depth+1 {
+		v.add(Problem{At: ptr, Code: CodeLimit, Message: fmt.Sprintf("The document nests deeper than %d levels.", v.lim.Depth)}, n.Pos)
+		return
+	}
+	if n.IsText() {
+		// Raw content (code, markdown, diff, mermaid, kbd) is literal text.
+		if parent == nil || parent.Content != ContentRaw {
+			v.text(n, ptr, sc)
+		}
+		return
+	}
+	if n.Type == "state" {
+		v.add(Problem{At: ptr, Code: CodeMisplacedState, Message: "state belongs on the tml root only."}, n.Pos)
+		return
+	}
+	comp, known := catalog[n.Type]
+	if !known {
+		p := Problem{At: ptr, Code: CodeUnknownComponent, Message: fmt.Sprintf("<%s> is not a TML component.", n.Type)}
+		if s, ok := componentAliases[strings.ToLower(n.Type)]; ok {
+			p.DidYouMean = s
+		} else {
+			p.DidYouMean = suggest(n.Type, componentNames())
+		}
+		if parent != nil {
+			p.Accepted = parent.accepted()
+		}
+		v.add(p, n.Pos)
+	}
+
+	if n.Type == "image" {
+		v.images++
+	}
+	if id := n.ID(); id != "" {
+		if prev, dup := v.ids[id]; dup {
+			v.add(Problem{At: ptr + "/id", Code: CodeDuplicateID, Message: fmt.Sprintf("The id %q is also used at %s. Each id names one node.", id, pointerOrRoot(prev))}, n.Pos)
+		} else {
+			v.ids[id] = ptr
+		}
+	}
+
+	// each binds its alias for the node itself.
+	nodeScope := sc
+	if each, ok := n.Attr("each"); ok {
+		nodeScope = sc.with(aliasOf(n))
+		v.countExpansion(n, each)
+	}
+	if n.Type == "form" {
+		nodeScope = nodeScope.form()
+	}
+	if known {
+		v.attrs(n, comp, ptr, nodeScope)
+	}
+
+	// Children.
+	childScope := nodeScope
+	if n.Type == "list" {
+		alias := n.AttrString("as")
+		if alias == "" {
+			alias = "item"
+		}
+		childScope = nodeScope.with(alias)
+		if items, ok := n.Attr("items"); ok {
+			v.countExpansion(n, items)
+		}
+	}
+	if n.Type == "table" {
+		v.tableRows(n, ptr)
+	}
+	content := ContentBlocks
+	if known {
+		content = comp.Content
+	}
+	count := 0
+	for i, c := range n.Children {
+		cptr := ptr + "/children/" + strconv.Itoa(i)
+		if c.IsText() {
+			if known && content != ContentInline && content != ContentRaw {
+				v.add(Problem{At: cptr, Code: CodeTextNotAllowed, Message: fmt.Sprintf("<%s> holds components, not text. Put the text in <text>.", n.Type), DidYouMean: "text"}, c.Pos)
+			}
+		} else {
+			count++
+			if known {
+				if _, childKnown := catalog[c.Type]; childKnown && !comp.Accepts(c.Type) {
+					msg := fmt.Sprintf("<%s> cannot hold <%s>.", n.Type, c.Type)
+					if content == ContentNone || content == ContentRaw {
+						msg = fmt.Sprintf("<%s> holds no components.", n.Type)
+					}
+					v.add(Problem{At: cptr, Code: CodeBadChild, Message: msg, Accepted: comp.accepted()}, c.Pos)
+				}
+			}
+		}
+		next := childScope
+		if n.Type == "table" && c.Type == "column" {
+			next = childScope.with("value").with("row")
+		}
+		v.node(c, cptr, comp, next, depth+1)
+	}
+	if known {
+		if comp.MinChildren > 0 && count < comp.MinChildren {
+			v.add(Problem{At: ptr, Code: CodeChildCount, Message: fmt.Sprintf("<%s> needs at least %d %s.", n.Type, comp.MinChildren, childWord(comp)), Accepted: comp.accepted()}, n.Pos)
+		}
+		if comp.MaxChildren > 0 && count > comp.MaxChildren {
+			v.add(Problem{At: ptr, Code: CodeChildCount, Message: fmt.Sprintf("<%s> holds at most %d %s.", n.Type, comp.MaxChildren, childWord(comp))}, n.Pos)
+		}
+	}
+}
+
+func childWord(c *Component) string {
+	if c.Content == ContentOnly && len(c.Children) == 1 {
+		return "<" + c.Children[0] + "> children"
+	}
+	return "children"
+}
+
+func componentNames() []string {
+	out := make([]string, 0, len(catalog))
+	for k := range catalog {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (s scope) with(name string) scope {
+	roots := make(map[string]bool, len(s.roots)+1)
+	for k := range s.roots {
+		roots[k] = true
+	}
+	roots[name] = true
+	return scope{roots: roots, inForm: s.inForm}
+}
+
+func (s scope) form() scope {
+	out := s.with("form")
+	out.inForm = true
+	return out
+}
+
+func (s scope) names() []string {
+	out := make([]string, 0, len(s.roots))
+	for k := range s.roots {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (v *validator) text(n *Node, ptr string, sc scope) {
+	if !strings.Contains(n.Text, "{") && !strings.Contains(n.Text, "}") {
+		return
+	}
+	t, err := ParseTemplate(n.Text)
+	if err != nil {
+		te := err.(*TemplateError)
+		v.add(Problem{At: ptr, Code: CodeBadExpression, Message: fmt.Sprintf("The binding in this text does not parse: %s Write {{ for a literal {.", sentence(te.Msg))}, n.Pos)
+		return
+	}
+	for _, e := range t.Exprs() {
+		v.expr(e, ptr, n.Pos, sc)
+	}
+}
+
+func sentence(s string) string {
+	if s == "" {
+		return s
+	}
+	if !strings.HasSuffix(s, ".") && !strings.HasSuffix(s, "?") {
+		s += "."
+	}
+	return s
+}
+
+// expr checks the roots, functions and state paths of one expression.
+func (v *validator) expr(e *Expr, at string, pos Pos, sc scope) {
+	rs := map[string]int{}
+	roots(e.root, rs)
+	names := make([]string, 0, len(rs))
+	for name := range rs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if !sc.roots[name] {
+			p := Problem{At: at, Code: CodeUnknownRoot, Message: fmt.Sprintf("%s is not a name here. A path starts with one of: %s.", name, strings.Join(sc.names(), ", ")),
+				DidYouMean: suggest(name, sc.names()), Accepted: sc.names()}
+			if name == "form" {
+				p.Message = "form is only known inside a <form>."
+			}
+			v.add(p, pos)
+		}
+	}
+	calls(e.root, func(c *callNode) {
+		if _, ok := funcs[c.name]; ok {
+			return
+		}
+		p := Problem{At: at, Code: CodeUnknownFunction, Message: fmt.Sprintf("%s is not a function.", c.name), Accepted: Funcs()}
+		if _, isAction := actionSpecs[c.name]; isAction {
+			p.Message = fmt.Sprintf("%s is an action. Use it in an on-* attribute, such as on-press.", c.name)
+		} else if alias, ok := funcAliases[strings.ToLower(c.name)]; ok {
+			p.DidYouMean = alias
+		} else {
+			p.DidYouMean = suggest(c.name, Funcs())
+		}
+		v.add(p, pos)
+	})
+	if v.state == nil || v.opts.NoStateCheck {
+		return
+	}
+	for _, d := range e.Deps() {
+		if d.Root != "state" || d.Path == "" {
+			continue
+		}
+		toks, _ := splitPointer(d.Path)
+		if _, err := get(v.state, toks); err == nil {
+			continue
+		}
+		avail := v.available(toks)
+		want := pointerToPath(d.Path)
+		v.add(Problem{At: at, Code: CodeBindingMissing, Severity: SevWarning,
+			Message:    fmt.Sprintf("{%s} reads a path the state does not have.", want),
+			DidYouMean: suggestPath(want, avail), Available: avail}, pos)
+	}
+}
+
+// available lists the paths beside a missing one, at the deepest level that
+// exists.
+func (v *validator) available(toks []string) []string {
+	var cur any = v.state
+	prefix := "state"
+	for _, t := range toks[:len(toks)-1] {
+		next, err := get(cur, []string{t})
+		if err != nil {
+			break
+		}
+		cur = next
+		prefix += "." + t
+	}
+	m, ok := cur.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, prefix+"."+k)
+	}
+	sort.Strings(out)
+	if len(out) > 20 {
+		out = out[:20]
+	}
+	return out
+}
+
+// suggestPath picks the available path whose last name is closest to the
+// last name of want: state.cuont suggests state.count.
+func suggestPath(want string, avail []string) string {
+	last := func(p string) string { return p[strings.LastIndexAny(p, ".[")+1:] }
+	names := make([]string, len(avail))
+	for i, a := range avail {
+		names[i] = last(a)
+	}
+	s := suggest(last(want), names)
+	if s == "" {
+		return ""
+	}
+	for i, n := range names {
+		if n == s {
+			return avail[i]
+		}
+	}
+	return ""
+}
+
+func pointerToPath(ptr string) string {
+	toks, _ := splitPointer(ptr)
+	var b strings.Builder
+	b.WriteString("state")
+	for _, t := range toks {
+		if _, err := strconv.Atoi(t); err == nil {
+			b.WriteString("[" + t + "]")
+		} else {
+			b.WriteString("." + t)
+		}
+	}
+	return b.String()
+}
+
+func (v *validator) countExpansion(n *Node, data Value) {
+	if v.state == nil || data.Kind != String {
+		return
+	}
+	ptr, ok := dataPointer(data.Str, nil)
+	if !ok {
+		return
+	}
+	toks, _ := splitPointer(ptr)
+	arr, err := get(v.state, toks)
+	if err != nil {
+		return
+	}
+	if a, ok := arr.([]any); ok {
+		size := 0
+		n.Walk(func(*Node, string) bool { size++; return true })
+		v.expanded += len(a) * size
+	}
+}
+
+func (v *validator) tableRows(n *Node, ptr string) {
+	rows, ok := n.Attr("rows")
+	count := 0
+	switch {
+	case !ok:
+		return
+	case rows.Kind == Array:
+		var arr []any
+		_ = json.Unmarshal(rows.Raw, &arr)
+		count = len(arr)
+	case v.state != nil:
+		p, ok := dataPointer(rows.Str, nil)
+		if !ok {
+			return
+		}
+		toks, _ := splitPointer(p)
+		if arr, err := get(v.state, toks); err == nil {
+			if a, ok := arr.([]any); ok {
+				count = len(a)
+			}
+		}
+	}
+	if count > v.lim.TableRows {
+		v.add(Problem{At: ptr + "/rows", Code: CodeLimit, Message: fmt.Sprintf("The table has %d rows. The limit is %d.", count, v.lim.TableRows)}, n.Pos)
+	}
+}
+
+// funcAliases maps function names from other languages to the TML one.
+var funcAliases = map[string]string{
+	"percent": "pct", "percentage": "pct", "length": "len", "size": "len",
+	"average": "avg", "mean": "avg", "floor": "round", "ceil": "round",
+	"uppercase": "upper", "lowercase": "lower", "includes": "contains",
+	"has": "contains", "startswith": "starts", "duration": "dur",
+	"since": "ago", "timeago": "ago", "concat": "join", "pluck": "pick",
+	"map": "pick", "sprintf": "fmt", "printf": "fmt", "str": "fmt",
+	"string": "fmt", "tostring": "fmt", "filesize": "bytes",
+}
+
+var (
+	hexColor   = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
+	durationRe = regexp.MustCompile(`^[0-9]+(ms|s|m|h)$`)
+	keyRe      = regexp.MustCompile(`^([a-z]+\+)*([a-z0-9]+|[!-~])$`)
+	fieldRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*(,\s*[A-Za-z_][A-Za-z0-9_.-]*)*$`)
+	identRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+	dataURIRe  = regexp.MustCompile(`^data:image/(png|jpeg|gif|webp);base64,`)
+	sizeRe     = regexp.MustCompile(`^([0-9]+|[0-9]+%|fill|fill:[0-9]+)$`)
+)
+
+func looksLikeColor(s string) bool {
+	l := strings.ToLower(strings.TrimSpace(s))
+	return hexColor.MatchString(l) || strings.HasPrefix(l, "rgb(") || strings.HasPrefix(l, "rgba(") || strings.HasPrefix(l, "hsl(")
+}
+
+func (v *validator) attrs(n *Node, comp *Component, ptr string, sc scope) {
+	for _, a := range n.Attrs {
+		at := ptr + "/" + escapePointer(a.Name)
+		if a.Name == "state" && n.Type == "tml" {
+			continue
+		}
+		spec, ok := comp.Spec(a.Name)
+		if !ok {
+			v.unknownAttr(n, comp, a, at)
+			continue
+		}
+		v.value(n, a, spec, at, sc)
+	}
+	var missing []string
+	for _, name := range comp.AttrNames() {
+		spec, _ := comp.Spec(name)
+		if _, has := n.Attr(name); spec.Required && !has {
+			missing = append(missing, name)
+		}
+	}
+	for _, name := range missing {
+		spec, _ := comp.Spec(name)
+		v.add(Problem{At: ptr, Code: CodeMissingAttribute, Message: fmt.Sprintf("<%s> needs the %s attribute. %s", n.Type, name, spec.Doc), Accepted: []string{name}}, n.Pos)
+	}
+}
+
+func (v *validator) unknownAttr(n *Node, comp *Component, a Attr, at string) {
+	lname := strings.ToLower(a.Name)
+	if n.Type == "input" && (lname == "password" || lname == "secret" || a.Value.Text() == "password") {
+		v.add(Problem{At: at, Code: CodePasswordRefused, Message: "TML has no password input in version 1. Ask for secrets outside the document."}, a.Pos)
+		return
+	}
+	p := Problem{At: at, Code: CodeUnknownAttribute, Message: fmt.Sprintf("%s has no attribute '%s'.", n.Type, a.Name),
+		DidYouMean: suggest(a.Name, comp.AttrNames()), Accepted: comp.AttrNames()}
+	switch lname {
+	case "color", "colour", "fg", "bg", "background", "foreground", "style":
+		if _, hasRole := comp.Spec("role"); hasRole {
+			p.DidYouMean = "role"
+		}
+	case "onclick", "on-click", "onpress", "on_press":
+		if _, has := comp.Spec("on-press"); has {
+			p.DidYouMean = "on-press"
+		}
+	}
+	v.add(p, a.Pos)
+}
+
+func (v *validator) bad(a Attr, at, format string, args ...any) {
+	v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf(format, args...)}, a.Pos)
+}
+
+// value checks one attribute value against its spec.
+func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
+	val := a.Value
+	text := val.Text()
+	// A binding stands in for any value of a bindable attribute.
+	if spec.Bind && val.Kind == String && strings.ContainsAny(text, "{}") {
+		t, err := ParseTemplate(text)
+		if err != nil {
+			te := err.(*TemplateError)
+			v.add(Problem{At: at, Code: CodeBadExpression, Message: fmt.Sprintf("The binding in %s does not parse: %s Write {{ for a literal {.", a.Name, sentence(te.Msg))}, a.Pos)
+			return
+		}
+		for _, e := range t.Exprs() {
+			v.expr(e, at, a.Pos, sc)
+		}
+		if t.HasExpr() {
+			if spec.Type != TString && len(t.parts) != 1 {
+				v.bad(a, at, "%s takes a %s or one binding such as {state.x}, not text around a binding.", a.Name, spec.Type)
+			}
+			return
+		}
+	}
+	switch spec.Type {
+	case TString:
+	case TInt, TNumber:
+		f, ok := val.Float()
+		if !ok {
+			v.bad(a, at, "%s must be a number, not %q.", a.Name, text)
+			return
+		}
+		if spec.Type == TInt && f != float64(int64(f)) {
+			v.bad(a, at, "%s must be a whole number, not %s.", a.Name, text)
+			return
+		}
+		if spec.HasRange && (f < spec.Min || f > spec.Max) {
+			v.bad(a, at, "%s must be from %s to %s, not %s.", a.Name, formatNum(spec.Min), formatNum(spec.Max), text)
+		}
+	case TBool:
+		if val.Kind != Bool {
+			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be true or false, not %q.", a.Name, text), Accepted: []string{"false", "true"}}, a.Pos)
+		}
+	case TEnum:
+		if !contains(spec.Enum, text) {
+			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s cannot be %q.", a.Name, text), DidYouMean: suggest(text, spec.Enum), Accepted: spec.Enum}, a.Pos)
+		}
+	case TRole:
+		v.role(a, at, text, false)
+	case TAccent:
+		v.role(a, at, text, true)
+	case TSize:
+		if val.Kind == Number {
+			if f, _ := val.Float(); f < 0 || f != float64(int64(f)) {
+				v.bad(a, at, "%s must be a whole number of cells, not %s.", a.Name, text)
+			}
+			return
+		}
+		if !sizeRe.MatchString(text) {
+			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be cells (12), a percentage (50%%), fill or fill:2, not %q.", a.Name, text)}, a.Pos)
+			return
+		}
+		if strings.HasSuffix(text, "%") {
+			if p, _ := strconv.Atoi(strings.TrimSuffix(text, "%")); p > 100 {
+				v.bad(a, at, "%s cannot be more than 100%%.", a.Name)
+			}
+		}
+	case TPad:
+		parts := strings.Fields(text)
+		ok := len(parts) == 1 || len(parts) == 2 || len(parts) == 4
+		for _, p := range parts {
+			if n, err := strconv.Atoi(p); err != nil || n < 0 || n > 100 {
+				ok = false
+			}
+		}
+		if !ok {
+			v.bad(a, at, "pad must be 1, 2 or 4 cell counts, such as \"1\" or \"0 1\", not %q.", text)
+		}
+	case TData, TPath:
+		v.dataAttr(a, spec, at, sc)
+	case TExpr:
+		e, off, err := exprOrBinding(text)
+		if err != nil {
+			v.add(Problem{At: at, Code: CodeBadExpression, Message: fmt.Sprintf("%s does not parse at character %d: %s", a.Name, off+1, sentence(exprMsg(err)))}, a.Pos)
+			return
+		}
+		esc := sc
+		if n.Type == "column" && a.Name == "format" {
+			esc = sc.with("value").with("row")
+		}
+		v.expr(e, at, a.Pos, esc)
+	case TAction:
+		v.actions(a, at, sc)
+	case TDuration:
+		if !durationRe.MatchString(text) {
+			v.bad(a, at, "%s must be a duration such as 300ms, 5s or 2m, not %q.", a.Name, text)
+		}
+	case THref:
+		switch {
+		case strings.HasPrefix(text, "file:"):
+			if err := checkFilePath(strings.TrimPrefix(text, "file:")); err != nil {
+				v.bad(a, at, "%s", sentence(err.Error()))
+			}
+		case strings.HasPrefix(text, "https://"):
+		default:
+			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("href must start with file: or https://, not %q.", text), Accepted: []string{"file:", "https://"}}, a.Pos)
+		}
+	case TSrc:
+		v.src(a, at, text)
+	case TIdent:
+		if !identRe.MatchString(text) || len(text) > 64 {
+			v.bad(a, at, "%s must be a name of letters, digits, - and _, not %q.", a.Name, text)
+		}
+	case TField:
+		if !fieldRe.MatchString(text) {
+			v.bad(a, at, "%s must be a field name, or a comma list of them, not %q.", a.Name, text)
+		}
+	case TSort:
+		if _, ok := ParseSort(text); !ok {
+			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("sort must be field, field:asc or field:desc, not %q.", text)}, a.Pos)
+		}
+	case TKey:
+		if !keyRe.MatchString(text) {
+			v.bad(a, at, "%s must be a key name such as enter, esc, r or ctrl+s, not %q.", a.Name, text)
+		}
+	case TPattern:
+		if len(text) > 256 {
+			v.bad(a, at, "pattern is longer than 256 characters.")
+		} else if _, err := regexp.Compile(text); err != nil {
+			v.bad(a, at, "pattern is not a valid RE2 regular expression: %v.", err)
+		}
+	case TObject:
+		if val.Kind != Object {
+			v.bad(a, at, "%s must be a JSON object.", a.Name)
+		}
+	}
+}
+
+func exprMsg(err error) string {
+	if se, ok := err.(*SyntaxError); ok {
+		return se.Msg
+	}
+	return err.Error()
+}
+
+func (v *validator) role(a Attr, at, text string, accent bool) {
+	if contains(Roles, text) {
+		return
+	}
+	if accent && strings.HasPrefix(text, "slot:") {
+		slot := strings.TrimPrefix(text, "slot:")
+		if !contains(Slots, slot) {
+			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%q is not an ANSI slot.", slot), DidYouMean: "slot:" + suggest(slot, Slots), Accepted: Slots}, a.Pos)
+		}
+		return
+	}
+	if looksLikeColor(text) {
+		v.add(Problem{At: at, Code: CodeHexColor, Message: fmt.Sprintf("%s takes a theme role, never a colour value such as %q. tuios picks the colour from the theme.", a.Name, text),
+			Accepted: Roles}, a.Pos)
+		return
+	}
+	p := Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%q is not a theme role.", text), Accepted: Roles}
+	if r, ok := roleAliases[strings.ToLower(text)]; ok {
+		p.DidYouMean = r
+	} else {
+		p.DidYouMean = suggest(text, Roles)
+	}
+	v.add(p, a.Pos)
+}
+
+func (v *validator) dataAttr(a Attr, spec AttrSpec, at string, sc scope) {
+	val := a.Value
+	if val.Kind == Array {
+		if spec.Type == TPath {
+			v.bad(a, at, "%s takes a state path such as state.tab, not a literal.", a.Name)
+		}
+		return
+	}
+	text := val.Text()
+	if strings.HasPrefix(strings.TrimSpace(text), "{") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(text), "{"), "}")
+		v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s takes a path without braces.", a.Name), DidYouMean: inner}, a.Pos)
+		return
+	}
+	e, err := ParseExpr(text)
+	if err != nil {
+		v.add(Problem{At: at, Code: CodeBadExpression, Message: fmt.Sprintf("%s must be a path such as state.items: %s", a.Name, sentence(exprMsg(err)))}, a.Pos)
+		return
+	}
+	root, _, ok := staticPath(e.root)
+	if !ok || hasDynamicIndex(e.root) {
+		v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be a path of names, such as state.items, not %q.", a.Name, text)}, a.Pos)
+		return
+	}
+	if spec.Type == TPath && root != "state" {
+		v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be a path into the state, such as state.tab.", a.Name)}, a.Pos)
+		return
+	}
+	v.expr(e, at, a.Pos, sc)
+}
+
+func (v *validator) actions(a Attr, at string, sc scope) {
+	acts, err := ParseActions(a.Value.Text())
+	if err != nil {
+		p := Problem{At: at, Code: CodeBadAction, Message: fmt.Sprintf("%s does not parse: %s", a.Name, sentence(exprMsg(err))), Accepted: ActionNames()}
+		if se, ok := err.(*SyntaxError); ok {
+			p.DidYouMean = se.Suggest
+		}
+		v.add(p, a.Pos)
+		return
+	}
+	asc := sc.with("event")
+	for _, act := range acts {
+		if act.Name == "tab" {
+			v.tabRefs = append(v.tabRefs, tabRef{act.Literal(0), at, a.Pos})
+		}
+		for i, arg := range act.Args {
+			if i < actionSpecs[act.Name].literal {
+				continue
+			}
+			v.expr(arg, at, a.Pos, asc)
+		}
+	}
+}
+
+func (v *validator) src(a Attr, at, text string) {
+	switch {
+	case strings.HasPrefix(text, "file:"):
+		if err := checkFilePath(strings.TrimPrefix(text, "file:")); err != nil {
+			v.bad(a, at, "%s", sentence(err.Error()))
+		}
+	case strings.HasPrefix(text, "data:"):
+		m := dataURIRe.FindString(text)
+		if m == "" {
+			v.add(Problem{At: at, Code: CodeBadValue, Message: "A data: image must be data:image/png, jpeg, gif or webp with ;base64,.", Accepted: []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/gif;base64,", "data:image/webp;base64,"}}, a.Pos)
+			return
+		}
+		payload := text[len(m):]
+		if base64.StdEncoding.DecodedLen(len(payload)) > v.lim.ImageBytes {
+			v.add(Problem{At: at, Code: CodeLimit, Message: fmt.Sprintf("The image is over %d bytes.", v.lim.ImageBytes)}, a.Pos)
+			return
+		}
+		if _, err := base64.StdEncoding.DecodeString(payload); err != nil {
+			v.bad(a, at, "The image data is not valid base64.")
+		}
+	default:
+		v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("src must be a file: path or a data:image URI, not %q. TML fetches nothing from the network.", text), Accepted: []string{"file:", "data:image/"}}, a.Pos)
+	}
+}
+
+// checkFilePath refuses a path that leaves the owner's files folder.
+func checkFilePath(p string) error {
+	if p == "" {
+		return fmt.Errorf("the file: path is empty")
+	}
+	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~") || strings.Contains(p, "\\") || (len(p) > 1 && p[1] == ':') {
+		return fmt.Errorf("a file: path is relative to the owner's files folder; %q is not", p)
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == ".." {
+			return fmt.Errorf("a file: path cannot hold .. segments")
+		}
+	}
+	return nil
+}

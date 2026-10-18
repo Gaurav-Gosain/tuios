@@ -1,0 +1,137 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Layout",
+  "state": {
+    "log": [
+      "one",
+      "two"
+    ]
+  },
+  "children": [
+    {
+      "type": "col",
+      "gap": 1,
+      "children": [
+        {
+          "type": "row",
+          "gap": 1,
+          "align": "center",
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "left"
+              ]
+            },
+            {
+              "type": "spacer"
+            },
+            {
+              "type": "text",
+              "children": [
+                "right"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cols": 3,
+          "gap": 1,
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "a"
+              ]
+            },
+            {
+              "type": "text",
+              "children": [
+                "b"
+              ]
+            },
+            {
+              "type": "text",
+              "children": [
+                "c"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "stack",
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "under"
+              ]
+            },
+            {
+              "type": "text",
+              "children": [
+                "over"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "scroll",
+          "h": "12",
+          "follow": "end",
+          "children": [
+            {
+              "type": "text",
+              "each": "state.log",
+              "as": "line",
+              "children": [
+                "{line}"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "split",
+          "dir": "h",
+          "ratio": 0.4,
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "first"
+              ]
+            },
+            {
+              "type": "text",
+              "children": [
+                "second"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "w": "50%",
+          "h": "fill",
+          "min-w": "10",
+          "max-w": "80",
+          "min-h": "1",
+          "max-h": "20",
+          "pad": "0 1",
+          "grow": 1,
+          "children": [
+            {
+              "type": "text",
+              "w": "fill:2",
+              "children": [
+                "sized"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

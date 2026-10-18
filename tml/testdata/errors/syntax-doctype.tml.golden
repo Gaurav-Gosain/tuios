@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 1,
+    "code": "unsupported_xml",
+    "message": "TML text has no DTD or entity declarations.",
+    "severity": "error"
+  }
+]

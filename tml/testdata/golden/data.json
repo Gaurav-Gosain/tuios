@@ -1,0 +1,113 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Data",
+  "state": {
+    "failures": [
+      {
+        "pkg": "vt",
+        "test": "TestX",
+        "ms": 120
+      }
+    ],
+    "agents": [
+      {
+        "name": "claude"
+      }
+    ],
+    "files": [
+      {
+        "name": "cmd",
+        "kids": [
+          {
+            "name": "main.go"
+          }
+        ]
+      }
+    ],
+    "branch": "main",
+    "ahead": 2,
+    "passed": 412
+  },
+  "children": [
+    {
+      "type": "col",
+      "gap": 1,
+      "children": [
+        {
+          "type": "table",
+          "rows": "state.failures",
+          "key": "test",
+          "select": "single",
+          "sort": "ms:desc",
+          "h": "8",
+          "children": [
+            {
+              "type": "column",
+              "field": "pkg",
+              "title": "Package",
+              "w": "fill"
+            },
+            {
+              "type": "column",
+              "field": "test",
+              "title": "Test",
+              "w": "fill:2"
+            },
+            {
+              "type": "column",
+              "field": "ms",
+              "title": "Time",
+              "align": "right",
+              "format": "dur(value, 'ms')",
+              "sort": true
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "items": "state.agents",
+          "as": "a",
+          "select": "single",
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "{a.name}"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tree",
+          "items": "state.files",
+          "label": "name",
+          "children": "kids",
+          "open": 1
+        },
+        {
+          "type": "kv",
+          "children": [
+            {
+              "type": "item",
+              "k": "Branch",
+              "v": "{state.branch}"
+            },
+            {
+              "type": "item",
+              "k": "Ahead",
+              "v": "{state.ahead}"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "label": "Passed",
+          "value": "{state.passed}",
+          "role": "success",
+          "delta": "+12"
+        }
+      ]
+    }
+  ]
+}

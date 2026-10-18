@@ -1,0 +1,13 @@
+<tml version="1" title="Text">
+  <col>
+    <heading level="2">Release v0.11</heading>
+    <text wrap="word" role="dim">Plain text with <b>bold</b>, <i>italic</i>, <u>under</u>, <s>struck</s>, <code>inline</code>, <c role="success">a role colour</c>, <kbd>ctrl+b</kbd>, and <a href="file:docs/x.md">a link</a>.</text>
+    <markdown>## Notes
+- item one
+- `code`</markdown>
+    <code lang="go" lines="true" from="12">func main() {}</code>
+    <diff lang="go" layout="unified">--- a/x.go
++++ b/x.go
+@@ ...</diff>
+  </col>
+</tml>

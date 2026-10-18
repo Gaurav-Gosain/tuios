@@ -1,0 +1,45 @@
+<tml version="1" title="Data">
+  <state>{
+    "failures": [
+      {
+        "pkg": "vt",
+        "test": "TestX",
+        "ms": 120
+      }
+    ],
+    "agents": [
+      {
+        "name": "claude"
+      }
+    ],
+    "files": [
+      {
+        "name": "cmd",
+        "kids": [
+          {
+            "name": "main.go"
+          }
+        ]
+      }
+    ],
+    "branch": "main",
+    "ahead": 2,
+    "passed": 412
+  }</state>
+  <col gap="1">
+    <table rows="state.failures" key="test" select="single" sort="ms:desc" h="8">
+      <column field="pkg" title="Package" w="fill"/>
+      <column field="test" title="Test" w="fill:2"/>
+      <column field="ms" title="Time" align="right" format="dur(value, 'ms')" sort="true"/>
+    </table>
+    <list items="state.agents" as="a" select="single">
+      <text>{a.name}</text>
+    </list>
+    <tree items="state.files" label="name" children="kids" open="1"/>
+    <kv>
+      <item k="Branch" v="{state.branch}"/>
+      <item k="Ahead" v="{state.ahead}"/>
+    </kv>
+    <stat label="Passed" value="{state.passed}" role="success" delta="+12"/>
+  </col>
+</tml>

@@ -1,0 +1,128 @@
+[
+  {
+    "at": "/children/0/children/0/children/0",
+    "line": 4,
+    "col": 11,
+    "code": "bad_expression",
+    "message": "The binding in this text does not parse: the expression ends too early. Write {{ for a literal {.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/1/children/0",
+    "line": 5,
+    "col": 11,
+    "code": "unknown_function",
+    "message": "percent is not a function.",
+    "severity": "error",
+    "did_you_mean": "pct",
+    "accepted": [
+      "abs",
+      "ago",
+      "avg",
+      "bytes",
+      "contains",
+      "count",
+      "dur",
+      "fmt",
+      "format",
+      "join",
+      "len",
+      "lower",
+      "max",
+      "min",
+      "pct",
+      "pick",
+      "round",
+      "starts",
+      "sum",
+      "trim",
+      "upper"
+    ]
+  },
+  {
+    "at": "/children/0/children/2/children/0",
+    "line": 6,
+    "col": 11,
+    "code": "unknown_path_root",
+    "message": "stat is not a name here. A path starts with one of: state, view.",
+    "severity": "error",
+    "did_you_mean": "state",
+    "accepted": [
+      "state",
+      "view"
+    ]
+  },
+  {
+    "at": "/children/0/children/3/children/0",
+    "line": 7,
+    "col": 11,
+    "code": "unknown_path_root",
+    "message": "form is only known inside a \u003cform\u003e.",
+    "severity": "error",
+    "accepted": [
+      "state",
+      "view"
+    ]
+  },
+  {
+    "at": "/children/0/children/4/children/0",
+    "line": 8,
+    "col": 11,
+    "code": "binding_missing",
+    "message": "{state.cuont} reads a path the state does not have.",
+    "severity": "warning",
+    "did_you_mean": "state.count",
+    "available": [
+      "state.count",
+      "state.items"
+    ]
+  },
+  {
+    "at": "/children/0/children/5/if",
+    "line": 9,
+    "col": 11,
+    "code": "bad_expression",
+    "message": "if does not parse at character 13: assignment is not allowed; use == to compare.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/6/items",
+    "line": 10,
+    "col": 11,
+    "code": "bad_value",
+    "message": "items takes a path without braces.",
+    "severity": "error",
+    "did_you_mean": "state.items"
+  },
+  {
+    "at": "/children/0/children/7/children/0",
+    "line": 11,
+    "col": 11,
+    "code": "unknown_function",
+    "message": "emit is an action. Use it in an on-* attribute, such as on-press.",
+    "severity": "error",
+    "accepted": [
+      "abs",
+      "ago",
+      "avg",
+      "bytes",
+      "contains",
+      "count",
+      "dur",
+      "fmt",
+      "format",
+      "join",
+      "len",
+      "lower",
+      "max",
+      "min",
+      "pct",
+      "pick",
+      "round",
+      "starts",
+      "sum",
+      "trim",
+      "upper"
+    ]
+  }
+]

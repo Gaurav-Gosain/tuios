@@ -1,0 +1,223 @@
+package tml
+
+import (
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// Deps records which nodes read which state paths, so a renderer recomputes
+// only the nodes a patch touches. Build it once per tree with BuildDeps.
+// Nodes are named by their JSON Pointer in the tree. A text run counts
+// toward the component that holds it.
+type Deps struct {
+	nodes []nodeDeps
+	clock []string
+}
+
+type nodeDeps struct {
+	ptr   string
+	paths []string // JSON Pointers into the state
+}
+
+// BuildDeps walks a tree and records the state paths each node reads: its
+// bindings, its data attributes, if and show. Inside each, list and a table,
+// a path through the element name (item.x) counts as the whole array, since
+// a change to any element can move the others.
+func BuildDeps(doc *Node) *Deps {
+	d := &Deps{}
+	d.walk(doc, "", map[string]string{})
+	return d
+}
+
+func (d *Deps) walk(n *Node, ptr string, scope map[string]string) {
+	if n.IsText() {
+		return
+	}
+	comp, known := catalog[n.Type]
+	var paths []string
+	clock := false
+	addExpr := func(e *Expr) {
+		for _, dep := range e.Deps() {
+			if p, ok := resolveDep(dep, scope); ok {
+				paths = appendUnique(paths, p)
+			}
+		}
+		if contains(e.Funcs(), "ago") {
+			clock = true
+		}
+	}
+	addTemplate := func(s string) {
+		if t, err := ParseTemplate(s); err == nil {
+			for _, e := range t.Exprs() {
+				addExpr(e)
+			}
+		}
+	}
+
+	// each binds its alias for the node itself, and list for its children.
+	inner := scope
+	if each, ok := n.Attr("each"); ok && each.Kind == String {
+		if base, ok := dataPointer(each.Str, scope); ok {
+			paths = appendUnique(paths, base)
+			inner = withAlias(scope, aliasOf(n), base)
+		}
+	}
+	for _, a := range n.Attrs {
+		if a.Name == "each" || a.Name == "state" {
+			continue
+		}
+		var spec AttrSpec
+		if known {
+			spec, _ = comp.Spec(a.Name)
+		}
+		switch spec.Type {
+		case TAction, TIdent, TEnum, TKey, TPattern, TField, TSort, THref, TSrc, TDuration, TObject:
+		case TExpr:
+			if e, _, err := exprOrBinding(a.Value.Text()); err == nil {
+				addExpr(e)
+			}
+		case TData, TPath:
+			if a.Value.Kind == String {
+				if p, ok := dataPointer(a.Value.Str, inner); ok {
+					paths = appendUnique(paths, p)
+				}
+			}
+		default:
+			if a.Value.Kind == String {
+				addTemplate(a.Value.Str)
+			}
+		}
+	}
+	childScope := inner
+	switch n.Type {
+	case "list":
+		if items, ok := n.Attr("items"); ok && items.Kind == String {
+			if base, ok := dataPointer(items.Str, inner); ok {
+				childScope = withAlias(inner, n.AttrString("as"), base)
+			}
+		}
+	case "table":
+		if rows, ok := n.Attr("rows"); ok && rows.Kind == String {
+			if base, ok := dataPointer(rows.Str, inner); ok {
+				childScope = withAlias(withAlias(inner, "row", base), "value", base)
+			}
+		}
+	}
+	for _, c := range n.Children {
+		if c.IsText() && contentOf(n) != ContentRaw {
+			addTemplate(c.Text)
+		}
+	}
+	if len(paths) > 0 {
+		sort.Strings(paths)
+		d.nodes = append(d.nodes, nodeDeps{ptr, paths})
+	}
+	if clock {
+		d.clock = append(d.clock, ptr)
+	}
+	for i, c := range n.Children {
+		d.walk(c, ptr+"/children/"+strconv.Itoa(i), childScope)
+	}
+}
+
+func aliasOf(n *Node) string {
+	if a := n.AttrString("as"); a != "" {
+		return a
+	}
+	return "item"
+}
+
+func withAlias(scope map[string]string, alias, base string) map[string]string {
+	if alias == "" {
+		alias = "item"
+	}
+	out := make(map[string]string, len(scope)+1)
+	for k, v := range scope {
+		out[k] = v
+	}
+	out[alias] = base
+	return out
+}
+
+// dataPointer resolves a data attribute's path to a state pointer.
+func dataPointer(s string, scope map[string]string) (string, bool) {
+	e, err := ParseExpr(s)
+	if err != nil {
+		return "", false
+	}
+	root, ptr, ok := staticPath(e.root)
+	if !ok {
+		return "", false
+	}
+	return resolveDep(Dep{root, ptr}, scope)
+}
+
+func resolveDep(dep Dep, scope map[string]string) (string, bool) {
+	if dep.Root == "state" {
+		return dep.Path, true
+	}
+	if base, ok := scope[dep.Root]; ok {
+		return base, true
+	}
+	return "", false
+}
+
+func appendUnique(list []string, s string) []string {
+	for _, x := range list {
+		if x == s {
+			return list
+		}
+	}
+	return append(list, s)
+}
+
+// Of returns the state pointers the node at ptr reads.
+func (d *Deps) Of(ptr string) []string {
+	for _, n := range d.nodes {
+		if n.ptr == ptr {
+			return n.paths
+		}
+	}
+	return nil
+}
+
+// Nodes returns the pointer of every node that reads state.
+func (d *Deps) Nodes() []string {
+	out := make([]string, len(d.nodes))
+	for i, n := range d.nodes {
+		out[i] = n.ptr
+	}
+	return out
+}
+
+// Clock returns the nodes that call ago(), which need a minute tick while
+// visible. When it is empty, the surface needs no timer for its bindings.
+func (d *Deps) Clock() []string { return d.clock }
+
+// Affected returns the nodes that read any of the changed state pointers, in
+// tree order. A change affects a node when one path is the other or lies
+// below it: a change to /failures/0/ms affects a node that reads /failures,
+// and a change to /failures affects one that reads /failures/0/ms.
+func (d *Deps) Affected(changed []string) []string {
+	var out []string
+	for _, n := range d.nodes {
+	match:
+		for _, p := range n.paths {
+			for _, c := range changed {
+				if overlaps(p, c) {
+					out = append(out, n.ptr)
+					break match
+				}
+			}
+		}
+	}
+	return out
+}
+
+func overlaps(a, b string) bool {
+	if a == b || a == "" || b == "" {
+		return true
+	}
+	return strings.HasPrefix(b, a+"/") || strings.HasPrefix(a, b+"/")
+}

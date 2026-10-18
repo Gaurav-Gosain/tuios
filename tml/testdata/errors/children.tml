@@ -1,0 +1,13 @@
+<tml version="1">
+  <state>{"tab": "a"}</state>
+  <col>
+    Loose text in a column.
+    <tabs value="state.tab"><card title="Not a tab"/></tabs>
+    <kv/>
+    <split><text>one</text></split>
+    <progress value="1"><text>inside</text></progress>
+    <text>A <row/> in text</text>
+    <div><text>html</text></div>
+    <tml version="1"/>
+  </col>
+</tml>

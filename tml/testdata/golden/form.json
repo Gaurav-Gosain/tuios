@@ -1,0 +1,43 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Form",
+  "state": {
+    "title": ""
+  },
+  "children": [
+    {
+      "type": "form",
+      "id": "f",
+      "on-submit": "emit('save', form)",
+      "children": [
+        {
+          "type": "input",
+          "name": "title",
+          "label": "Title",
+          "bind": "state.title",
+          "required": true
+        },
+        {
+          "type": "textarea",
+          "name": "notes",
+          "label": "Notes",
+          "rows": 3
+        },
+        {
+          "type": "checkbox",
+          "name": "draft",
+          "label": "Draft"
+        },
+        {
+          "type": "button",
+          "submit": true,
+          "key": "enter",
+          "children": [
+            "Save"
+          ]
+        }
+      ]
+    }
+  ]
+}

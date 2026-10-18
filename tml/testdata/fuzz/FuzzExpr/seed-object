@@ -1,0 +1,2 @@
+go test fuzz v1
+string("{a: [1, 2, {b: 'c'}], 'd e': !state.ok, f: state.secs[0]}")

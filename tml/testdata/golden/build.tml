@@ -1,0 +1,7 @@
+<tml version="1" title="Build">
+  <state>{"pct":40,"step":"Compiling"}</state>
+  <card title="Build">
+    <text>Step: <b>{state.step}</b></text>
+    <progress value="{state.pct / 100}"/>
+  </card>
+</tml>

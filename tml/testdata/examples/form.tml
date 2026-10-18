@@ -1,0 +1,8 @@
+<tml version="1" title="Form">
+  <state>{"title": ""}</state>
+  <form id="f" on-submit="emit('save', form)">
+    <input name="title" label="Title" bind="state.title" required="true"/>
+    <textarea name="notes" label="Notes" rows="3"/>  <checkbox name="draft" label="Draft"/>
+    <button submit="true" key="enter">Save</button>
+  </form>
+</tml>

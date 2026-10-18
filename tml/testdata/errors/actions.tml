@@ -1,0 +1,12 @@
+<tml version="1">
+  <state>{"open": false}</state>
+  <col>
+    <button on-press="emitt('save')">Typo</button>
+    <button on-press="tab('missing')">No such tab</button>
+    <button on-press="set(state.open, true)">Path not quoted</button>
+    <button on-press="open('/etc/passwd')">Absolute</button>
+    <button on-press="pane('kill', {})">Bad verb</button>
+    <button on-press="emit('ok', event.value); toggle('state.open')">Fine</button>
+    <button on-press="state.open">Not a call</button>
+  </col>
+</tml>

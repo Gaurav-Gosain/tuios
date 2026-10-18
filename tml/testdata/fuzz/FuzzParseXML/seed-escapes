@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<tml version=\"1\"><text>\x1b[31m&#27;]0;x&#7;\xe2\x80\xaeabc\xc2\x85</text><card title=\"\x1b\"/></tml>")

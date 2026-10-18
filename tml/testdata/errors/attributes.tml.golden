@@ -1,0 +1,200 @@
+[
+  {
+    "at": "/children/0/gap",
+    "line": 2,
+    "col": 8,
+    "code": "bad_value",
+    "message": "gap must be a number, not \"lots\".",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/0",
+    "line": 3,
+    "col": 5,
+    "code": "missing_attribute",
+    "message": "\u003cstat\u003e needs the value attribute. The number.",
+    "severity": "error",
+    "accepted": [
+      "value"
+    ]
+  },
+  {
+    "at": "/children/0/children/1/wrap",
+    "line": 4,
+    "col": 11,
+    "code": "bad_value",
+    "message": "wrap cannot be \"words\".",
+    "severity": "error",
+    "did_you_mean": "word",
+    "accepted": [
+      "word",
+      "char",
+      "none"
+    ]
+  },
+  {
+    "at": "/children/0/children/1/onClick",
+    "line": 4,
+    "col": 24,
+    "code": "unknown_attribute",
+    "message": "text has no attribute 'onClick'.",
+    "severity": "error",
+    "did_you_mean": "on-press",
+    "accepted": [
+      "align",
+      "on-press",
+      "role",
+      "wrap",
+      "as",
+      "each",
+      "grow",
+      "h",
+      "id",
+      "if",
+      "key",
+      "max-h",
+      "max-w",
+      "min-h",
+      "min-w",
+      "pad",
+      "show",
+      "w"
+    ]
+  },
+  {
+    "at": "/children/0/children/2/cols",
+    "line": 5,
+    "col": 11,
+    "code": "bad_value",
+    "message": "cols must be from 1 to 24, not 0.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/3/value",
+    "line": 6,
+    "col": 15,
+    "code": "bad_expression",
+    "message": "The binding in value does not parse: the binding has no closing }. Write {{ for a literal {.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/3/w",
+    "line": 6,
+    "col": 34,
+    "code": "bad_value",
+    "message": "w cannot be more than 100%.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/4/h",
+    "line": 7,
+    "col": 13,
+    "code": "bad_value",
+    "message": "h must be cells (12), a percentage (50%), fill or fill:2, not \"1.5\".",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/5/ttl",
+    "line": 8,
+    "col": 12,
+    "code": "bad_value",
+    "message": "ttl must be a duration such as 300ms, 5s or 2m, not \"5 seconds\".",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/6",
+    "line": 9,
+    "col": 5,
+    "code": "bad_child",
+    "message": "\u003ccol\u003e cannot hold \u003ca\u003e.",
+    "severity": "error",
+    "accepted": [
+      "area",
+      "badge",
+      "bar",
+      "button",
+      "card",
+      "checkbox",
+      "code",
+      "col",
+      "column",
+      "diff",
+      "form",
+      "gauge",
+      "grid",
+      "heading",
+      "heatmap",
+      "histogram",
+      "image",
+      "input",
+      "item",
+      "kv",
+      "line",
+      "list",
+      "markdown",
+      "mermaid",
+      "modal",
+      "pie",
+      "progress",
+      "row",
+      "scroll",
+      "select",
+      "slider",
+      "spacer",
+      "sparkline",
+      "spinner",
+      "split",
+      "stack",
+      "stat",
+      "status",
+      "tab",
+      "table",
+      "tabs",
+      "text",
+      "textarea",
+      "toast",
+      "toggle",
+      "tree"
+    ]
+  },
+  {
+    "at": "/children/0/children/6/href",
+    "line": 9,
+    "col": 8,
+    "code": "bad_value",
+    "message": "href must start with file: or https://, not \"http://example.com\".",
+    "severity": "error",
+    "accepted": [
+      "file:",
+      "https://"
+    ]
+  },
+  {
+    "at": "/children/0/children/7/src",
+    "line": 10,
+    "col": 12,
+    "code": "bad_value",
+    "message": "src must be a file: path or a data:image URI, not \"https://example.com/a.png\". TML fetches nothing from the network.",
+    "severity": "error",
+    "accepted": [
+      "file:",
+      "data:image/"
+    ]
+  },
+  {
+    "at": "/children/0/children/8/src",
+    "line": 11,
+    "col": 12,
+    "code": "bad_value",
+    "message": "a file: path cannot hold .. segments.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/9/pattern",
+    "line": 12,
+    "col": 23,
+    "code": "bad_value",
+    "message": "pattern is not a valid RE2 regular expression: error parsing regexp: missing closing ): `([a-z]`.",
+    "severity": "error"
+  }
+]

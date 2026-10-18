@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 18,
+    "code": "bad_value",
+    "message": "\u003cstate\u003e must hold a JSON object, such as {\"count\": 0}.",
+    "severity": "error"
+  }
+]

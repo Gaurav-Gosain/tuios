@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 24,
+    "code": "unsupported_xml",
+    "message": "TML text has no CDATA sections. Escape \u003c as \u0026lt; and \u0026 as \u0026amp; instead.",
+    "severity": "error"
+  }
+]

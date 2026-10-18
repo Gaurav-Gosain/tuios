@@ -1,0 +1,14 @@
+<tml version="1" title="Attributes">
+  <col gap="lots">
+    <stat label="Passed"/>
+    <text wrap="words" onClick="emit('x')">Hello</text>
+    <grid cols="0"><text>a</text></grid>
+    <progress value="{state.pct" w="200%"/>
+    <scroll h="1.5"><text>x</text></scroll>
+    <toast ttl="5 seconds">Done</toast>
+    <a href="http://example.com">x</a>
+    <image src="https://example.com/a.png" alt="A"/>
+    <image src="file:../../etc/passwd" alt="B"/>
+    <input name="tag" pattern="([a-z]"/>
+  </col>
+</tml>

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("state.ok ? state.failed > 2 ? 'many' : 'few' : 'none'")

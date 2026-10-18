@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"type\":\"tml\",\"version\":1,\"children\":[{\"type\":\"tree\",\"items\":\"state.f\",\"children\":\"kids\"},{\"type\":\"code\",\"children\":[\"a\",\"b\",\"\"]}]}")

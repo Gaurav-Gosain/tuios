@@ -1,0 +1,56 @@
+<tml version="1" title="go test ./...">
+  <state>{
+    "passed": 412,
+    "failed": 3,
+    "skipped": 9,
+    "secs": [
+      41,
+      39,
+      44,
+      40,
+      52,
+      47,
+      38
+    ],
+    "failures": [
+      {
+        "pkg": "internal/session",
+        "test": "TestAttachRace",
+        "ms": 2210
+      },
+      {
+        "pkg": "internal/app",
+        "test": "TestDockClick",
+        "ms": 840
+      },
+      {
+        "pkg": "vt",
+        "test": "TestKittyPlaceholder",
+        "ms": 120
+      }
+    ]
+  }</state>
+  <col gap="1" pad="1">
+    <row gap="3">
+      <stat label="passed" value="{state.passed}" role="success"/>
+      <stat label="failed" value="{state.failed}" role="error"/>
+      <stat label="skipped" value="{state.skipped}" role="dim"/>
+      <spacer/>
+      <gauge value="{pct(state.passed, state.passed + state.failed)}" w="14"/>
+    </row>
+    <bar data="state.secs" h="4" title="Seconds per run, last 7"/>
+    <card title="Failures" meta="{len(state.failures)}" role="error">
+      <table rows="state.failures" key="test" sort="ms:desc" select="single" on-select="emit('open', event.row)">
+        <column field="pkg" title="Package" w="fill"/>
+        <column field="test" title="Test" w="fill:2"/>
+        <column field="ms" title="Time" align="right" format="dur(value, 'ms')"/>
+      </table>
+    </card>
+    <row gap="2">
+      <button key="r" on-press="emit('rerun', state.failures)">Rerun failed</button>
+      <button key="o" on-press="emit('log')">Open log</button>
+      <spacer/>
+      <text role="mute">esc close</text>
+    </row>
+  </col>
+</tml>

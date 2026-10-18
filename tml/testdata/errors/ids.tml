@@ -1,0 +1,6 @@
+<tml version="1">
+  <col id="main">
+    <text id="main">Twice</text>
+    <text id="9lives">Bad id</text>
+  </col>
+</tml>

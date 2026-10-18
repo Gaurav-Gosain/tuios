@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 44,
+    "code": "syntax",
+    "message": "The node has no type. Add \"type\", such as \"type\": \"text\".",
+    "severity": "error"
+  }
+]

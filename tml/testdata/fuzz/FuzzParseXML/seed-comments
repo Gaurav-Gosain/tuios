@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<!-- head --><tml version=\"1\"><!-- a --><state>{\"a\": [1, {\"b\": \"<x>\"}]}</state>text<!-- b -->more<col/></tml><!-- tail -->")

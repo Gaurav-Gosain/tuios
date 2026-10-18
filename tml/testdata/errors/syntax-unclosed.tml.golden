@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 4,
+    "col": 3,
+    "code": "syntax",
+    "message": "\u003c/col\u003e closes \u003ctext\u003e, which is still open. Close \u003ctext\u003e first.",
+    "severity": "error"
+  }
+]

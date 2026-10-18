@@ -1,0 +1,97 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Deploy",
+  "state": {
+    "envs": [
+      "staging",
+      "production"
+    ],
+    "tag": "v0.11.0",
+    "risky": 2
+  },
+  "children": [
+    {
+      "type": "form",
+      "id": "deploy",
+      "on-submit": "close(form)",
+      "pad": "1",
+      "children": [
+        {
+          "type": "kv",
+          "children": [
+            {
+              "type": "item",
+              "k": "Service",
+              "v": "api"
+            },
+            {
+              "type": "item",
+              "k": "Diff",
+              "v": "14 files, +320 -88"
+            },
+            {
+              "type": "item",
+              "k": "Risk",
+              "v": "{state.risky} risky changes",
+              "role": "warning"
+            }
+          ]
+        },
+        {
+          "type": "input",
+          "name": "tag",
+          "label": "Tag",
+          "value": "{state.tag}",
+          "required": true,
+          "pattern": "^v\\d+\\.\\d+\\.\\d+$"
+        },
+        {
+          "type": "select",
+          "name": "env",
+          "label": "Target",
+          "options": "state.envs",
+          "value": "staging"
+        },
+        {
+          "type": "toggle",
+          "name": "canary",
+          "label": "Canary first",
+          "value": true
+        },
+        {
+          "type": "slider",
+          "name": "pct",
+          "label": "Canary share",
+          "min": 1,
+          "max": 50,
+          "value": 10,
+          "if": "form.canary"
+        },
+        {
+          "type": "row",
+          "gap": 2,
+          "children": [
+            {
+              "type": "button",
+              "kind": "primary",
+              "submit": true,
+              "key": "enter",
+              "children": [
+                "Deploy"
+              ]
+            },
+            {
+              "type": "button",
+              "key": "esc",
+              "on-press": "close(null)",
+              "children": [
+                "Cancel"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

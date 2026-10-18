@@ -1,0 +1,121 @@
+[
+  {
+    "at": "/children/0/children/0/on-press",
+    "line": 4,
+    "col": 13,
+    "code": "bad_action",
+    "message": "on-press does not parse: emitt is not an action.",
+    "severity": "error",
+    "did_you_mean": "emit",
+    "accepted": [
+      "close",
+      "copy",
+      "emit",
+      "filter",
+      "focus",
+      "fold",
+      "open",
+      "pane",
+      "set",
+      "sort",
+      "tab",
+      "toggle"
+    ]
+  },
+  {
+    "at": "/children/0/children/2/on-press",
+    "line": 6,
+    "col": 13,
+    "code": "bad_action",
+    "message": "on-press does not parse: argument 1 of set must be a quoted string.",
+    "severity": "error",
+    "accepted": [
+      "close",
+      "copy",
+      "emit",
+      "filter",
+      "focus",
+      "fold",
+      "open",
+      "pane",
+      "set",
+      "sort",
+      "tab",
+      "toggle"
+    ]
+  },
+  {
+    "at": "/children/0/children/3/on-press",
+    "line": 7,
+    "col": 13,
+    "code": "bad_action",
+    "message": "on-press does not parse: open takes a file: path, such as open('file:notes.md').",
+    "severity": "error",
+    "accepted": [
+      "close",
+      "copy",
+      "emit",
+      "filter",
+      "focus",
+      "fold",
+      "open",
+      "pane",
+      "set",
+      "sort",
+      "tab",
+      "toggle"
+    ]
+  },
+  {
+    "at": "/children/0/children/4/on-press",
+    "line": 8,
+    "col": 13,
+    "code": "bad_action",
+    "message": "on-press does not parse: pane takes one of focus, new-window, send-text.",
+    "severity": "error",
+    "accepted": [
+      "close",
+      "copy",
+      "emit",
+      "filter",
+      "focus",
+      "fold",
+      "open",
+      "pane",
+      "set",
+      "sort",
+      "tab",
+      "toggle"
+    ]
+  },
+  {
+    "at": "/children/0/children/6/on-press",
+    "line": 10,
+    "col": 13,
+    "code": "bad_action",
+    "message": "on-press does not parse: \"state.open\" is not an action call; write one such as emit('name').",
+    "severity": "error",
+    "accepted": [
+      "close",
+      "copy",
+      "emit",
+      "filter",
+      "focus",
+      "fold",
+      "open",
+      "pane",
+      "set",
+      "sort",
+      "tab",
+      "toggle"
+    ]
+  },
+  {
+    "at": "/children/0/children/1/on-press",
+    "line": 5,
+    "col": 13,
+    "code": "bad_action",
+    "message": "tab('missing') names no tab. Give a \u003ctab\u003e that id.",
+    "severity": "error"
+  }
+]

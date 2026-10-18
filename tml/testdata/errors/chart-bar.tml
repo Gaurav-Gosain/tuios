@@ -1,0 +1,4 @@
+<tml version="1" title="Seconds">
+  <state>{"secs": [41, 39, 44]}</state>
+  <chart-bar data="state.secs" h="4"/>
+</tml>

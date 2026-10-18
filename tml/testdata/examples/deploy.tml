@@ -1,0 +1,15 @@
+<tml version="1" title="Deploy">
+  <state>{"envs": ["staging", "production"], "tag": "v0.11.0", "risky": 2}</state>
+  <form id="deploy" on-submit="close(form)" pad="1">
+    <kv><item k="Service" v="api"/><item k="Diff" v="14 files, +320 -88"/>
+        <item k="Risk" v="{state.risky} risky changes" role="warning"/></kv>
+    <input name="tag" label="Tag" value="{state.tag}" required="true" pattern="^v\d+\.\d+\.\d+$"/>
+    <select name="env" label="Target" options="state.envs" value="staging"/>
+    <toggle name="canary" label="Canary first" value="true"/>
+    <slider name="pct" label="Canary share" min="1" max="50" value="10" if="form.canary"/>
+    <row gap="2">
+      <button kind="primary" submit="true" key="enter">Deploy</button>
+      <button key="esc" on-press="close(null)">Cancel</button>
+    </row>
+  </form>
+</tml>

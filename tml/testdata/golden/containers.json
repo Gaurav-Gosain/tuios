@@ -1,0 +1,92 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Containers",
+  "state": {
+    "tab": "sum",
+    "confirm": false
+  },
+  "children": [
+    {
+      "type": "col",
+      "children": [
+        {
+          "type": "tabs",
+          "value": "state.tab",
+          "children": [
+            {
+              "type": "tab",
+              "id": "sum",
+              "title": "Summary",
+              "children": [
+                {
+                  "type": "text",
+                  "children": [
+                    "All green."
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tab",
+              "id": "log",
+              "title": "Log",
+              "children": [
+                {
+                  "type": "text",
+                  "children": [
+                    "No output."
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "title": "Failures",
+          "meta": "3",
+          "fold": false,
+          "role": "warning",
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "Three tests failed."
+              ]
+            }
+          ]
+        },
+        {
+          "type": "modal",
+          "title": "Confirm",
+          "open": "{state.confirm}",
+          "children": [
+            {
+              "type": "text",
+              "children": [
+                "Ship it?"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "toast",
+          "role": "success",
+          "ttl": "5s",
+          "children": [
+            "Deployed v0.11.0"
+          ]
+        },
+        {
+          "type": "button",
+          "key": "l",
+          "on-press": "tab('log')",
+          "children": [
+            "Show log"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"type\":\"row\",\"gap\":1,\"on-press\":\"emit('click')\",\"children\":[{\"type\":\"badge\",\"role\":\"success\",\"children\":[\"\xe2\x86\x912\"]}]}")

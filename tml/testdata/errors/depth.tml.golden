@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 173,
+    "code": "limit",
+    "message": "The document nests deeper than 32 levels.",
+    "severity": "error"
+  }
+]

@@ -1,0 +1,56 @@
+<tml version="1" title="Charts">
+  <state>{
+    "byPkg": [
+      {
+        "pkg": "vt",
+        "secs": 4
+      }
+    ],
+    "series": [
+      {
+        "t": 1,
+        "ms": 20,
+        "p95": 40
+      }
+    ],
+    "mem": [
+      {
+        "mb": 120
+      }
+    ],
+    "secs": [
+      41,
+      39,
+      44
+    ],
+    "cpu": 12,
+    "grid": [
+      {
+        "hour": 1,
+        "day": "mon",
+        "count": 3
+      }
+    ],
+    "latency": [
+      1,
+      2,
+      3
+    ],
+    "share": [
+      {
+        "lang": "go",
+        "lines": 900
+      }
+    ]
+  }</state>
+  <col gap="1">
+    <bar data="state.byPkg" x="pkg" y="secs" dir="h"/>
+    <line data="state.series" x="t" y="ms,p95" h="8" axis="true"/>
+    <area data="state.mem" y="mb" h="6"/>
+    <sparkline values="state.secs" w="20"/>
+    <gauge value="{state.cpu}" max="100" label="CPU"/>
+    <heatmap data="state.grid" x="hour" y="day" v="count"/>
+    <histogram values="state.latency" bins="20"/>
+    <pie data="state.share" label="lang" v="lines" style="donut"/>
+  </col>
+</tml>

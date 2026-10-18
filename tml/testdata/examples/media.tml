@@ -1,0 +1,10 @@
+<tml version="1" title="Media and status">
+  <col gap="1">
+    <image src="file:shots/before.png" alt="Before" w="40"/>     <!-- or src="data:image/png;base64,..." -->
+    <mermaid>graph LR; build --> test --> ship</mermaid>
+    <row gap="2">
+      <progress value="0.4" label="40%"/>  <spinner label="Deploying"/>  <badge role="warning">2 risky</badge>
+    </row>
+    <status state="working" label="tests"/>     <!-- the tuios agent state glyphs and words -->
+  </col>
+</tml>

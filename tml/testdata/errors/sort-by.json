@@ -1,0 +1,6 @@
+{"type": "tml", "version": 1, "state": {"failed": 3, "passed": 412},
+ "children": [{"type": "card", "title": "Failures", "children": [
+   {"type": "text", "children": ["Failures"]},
+   {"type": "spacer"},
+   {"type": "table", "rows": "state.failures", "sortBy": "ms", "children": [
+     {"type": "column", "field": "test"}]}]}]}

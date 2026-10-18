@@ -1,0 +1,13 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 1,
+    "code": "missing_attribute",
+    "message": "\u003ctml\u003e needs the version attribute. The TML version. Always 1.",
+    "severity": "error",
+    "accepted": [
+      "version"
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 2,
+    "col": 8,
+    "code": "misplaced_state",
+    "message": "\u003cstate\u003e must be the first child of the \u003ctml\u003e root, and appear once.",
+    "severity": "error"
+  }
+]

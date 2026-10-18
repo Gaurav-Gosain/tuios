@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 25,
+    "code": "unsupported_xml",
+    "message": "\u0026nbsp; is not allowed. Use \u0026lt; \u0026gt; \u0026amp; \u0026quot; \u0026apos; or a numeric reference such as \u0026#10;.",
+    "severity": "error"
+  }
+]

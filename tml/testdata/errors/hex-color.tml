@@ -1,0 +1,7 @@
+<tml version="1">
+  <col>
+    <text role="#ff5f87">Hot pink</text>
+    <badge role="red">failed</badge>
+    <card title="Box" color="accent"/>
+  </col>
+</tml>

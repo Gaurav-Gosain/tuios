@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 1,
+    "code": "bad_root",
+    "message": "\u003cb\u003e cannot be the root. Use tml, or a block component such as row.",
+    "severity": "error"
+  }
+]

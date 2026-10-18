@@ -1,0 +1,10 @@
+[
+  {
+    "at": "",
+    "line": 1,
+    "col": 22,
+    "code": "unsupported_xml",
+    "message": "TML text has no namespaces. Remove the prefix before ':'.",
+    "severity": "error"
+  }
+]

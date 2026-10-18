@@ -1,0 +1,45 @@
+[
+  {
+    "at": "/children/0/children/2/rows",
+    "line": 5,
+    "col": 22,
+    "code": "binding_missing",
+    "message": "{state.failures} reads a path the state does not have.",
+    "severity": "warning",
+    "available": [
+      "state.failed",
+      "state.passed"
+    ]
+  },
+  {
+    "at": "/children/0/children/2/sortBy",
+    "line": 5,
+    "col": 48,
+    "code": "unknown_attribute",
+    "message": "table has no attribute 'sortBy'.",
+    "severity": "error",
+    "did_you_mean": "sort",
+    "accepted": [
+      "filter",
+      "key",
+      "on-key",
+      "on-select",
+      "rows",
+      "select",
+      "sort",
+      "as",
+      "each",
+      "grow",
+      "h",
+      "id",
+      "if",
+      "max-h",
+      "max-w",
+      "min-h",
+      "min-w",
+      "pad",
+      "show",
+      "w"
+    ]
+  }
+]

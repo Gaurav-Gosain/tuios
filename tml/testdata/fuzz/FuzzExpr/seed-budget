@@ -1,0 +1,2 @@
+go test fuzz v1
+string("join(state.secs + state.secs + state.secs + state.secs, join(state.secs, join(state.secs)))")

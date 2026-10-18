@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("{\"a/b\":{\"m~n\":[1,2]}}")
+[]byte("[{\"op\":\"add\",\"path\":\"/a~1b/m~0n/-\",\"value\":3},{\"op\":\"test\",\"path\":\"/a~1b/m~0n/2\",\"value\":3}]")

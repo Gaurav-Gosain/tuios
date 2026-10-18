@@ -1,0 +1,13 @@
+<tml version="1">
+  <state>{"items": [], "count": 2}</state>
+  <col>
+    <text>{state.count +}</text>
+    <text>{percent(state.count, 4)}</text>
+    <text>{stat.count}</text>
+    <text>{form.title}</text>
+    <text>{state.cuont}</text>
+    <text if="state.count = 2">assign</text>
+    <list items="{state.items}"><text>{item}</text></list>
+    <text>{emit('x')}</text>
+  </col>
+</tml>

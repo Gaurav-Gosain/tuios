@@ -1,0 +1,2 @@
+go test fuzz v1
+string("fmt(sum(state.failures, 'ms') / 1000, 1) + ' ' + dur(avg(pick(state.failures, 'ms'))) + ' ' + ago('2023-11-14T22:13:20Z')")

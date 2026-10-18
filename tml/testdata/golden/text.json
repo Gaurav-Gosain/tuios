@@ -1,0 +1,108 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Text",
+  "children": [
+    {
+      "type": "col",
+      "children": [
+        {
+          "type": "heading",
+          "level": 2,
+          "children": [
+            "Release v0.11"
+          ]
+        },
+        {
+          "type": "text",
+          "wrap": "word",
+          "role": "dim",
+          "children": [
+            "Plain text with ",
+            {
+              "type": "b",
+              "children": [
+                "bold"
+              ]
+            },
+            ", ",
+            {
+              "type": "i",
+              "children": [
+                "italic"
+              ]
+            },
+            ", ",
+            {
+              "type": "u",
+              "children": [
+                "under"
+              ]
+            },
+            ", ",
+            {
+              "type": "s",
+              "children": [
+                "struck"
+              ]
+            },
+            ", ",
+            {
+              "type": "code",
+              "children": [
+                "inline"
+              ]
+            },
+            ", ",
+            {
+              "type": "c",
+              "role": "success",
+              "children": [
+                "a role colour"
+              ]
+            },
+            ", ",
+            {
+              "type": "kbd",
+              "children": [
+                "ctrl+b"
+              ]
+            },
+            ", and ",
+            {
+              "type": "a",
+              "href": "file:docs/x.md",
+              "children": [
+                "a link"
+              ]
+            },
+            "."
+          ]
+        },
+        {
+          "type": "markdown",
+          "children": [
+            "## Notes\n- item one\n- `code`"
+          ]
+        },
+        {
+          "type": "code",
+          "lang": "go",
+          "lines": true,
+          "from": 12,
+          "children": [
+            "func main() {}"
+          ]
+        },
+        {
+          "type": "diff",
+          "lang": "go",
+          "layout": "unified",
+          "children": [
+            "--- a/x.go\n+++ b/x.go\n@@ ..."
+          ]
+        }
+      ]
+    }
+  ]
+}

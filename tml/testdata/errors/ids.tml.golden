@@ -1,0 +1,18 @@
+[
+  {
+    "at": "/children/0/children/0/id",
+    "line": 3,
+    "col": 5,
+    "code": "duplicate_id",
+    "message": "The id \"main\" is also used at /children/0. Each id names one node.",
+    "severity": "error"
+  },
+  {
+    "at": "/children/0/children/1/id",
+    "line": 4,
+    "col": 11,
+    "code": "bad_value",
+    "message": "id must be a name of letters, digits, - and _, not \"9lives\".",
+    "severity": "error"
+  }
+]

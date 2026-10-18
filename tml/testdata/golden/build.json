@@ -1,0 +1,33 @@
+{
+  "type": "tml",
+  "version": 1,
+  "title": "Build",
+  "state": {
+    "pct": 40,
+    "step": "Compiling"
+  },
+  "children": [
+    {
+      "type": "card",
+      "title": "Build",
+      "children": [
+        {
+          "type": "text",
+          "children": [
+            "Step: ",
+            {
+              "type": "b",
+              "children": [
+                "{state.step}"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "progress",
+          "value": "{state.pct / 100}"
+        }
+      ]
+    }
+  ]
+}
