@@ -329,12 +329,13 @@ func TestTheAgentStateHookObeysTheAlertPolicy(t *testing.T) {
 }
 
 // TestTheClientOnlyEventsAreNotFiredByTheDaemon names the line. Attach, detach,
-// resize and layout describe one client's terminal, so the daemon must not
-// claim them; firing them here would mean three attaches for three clients and
+// resize, layout and theme describe one client's terminal, so the daemon must
+// not claim them; firing them here would mean three attaches for three clients and
 // a command running on the wrong machine.
 func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
 	clientOnly := []hooks.Event{
 		hooks.AfterAttach, hooks.AfterDetach, hooks.AfterResize, hooks.AfterLayoutChange,
+		hooks.AfterThemeChange,
 	}
 	sessionSide := SessionSideHookEvents()
 	for _, e := range clientOnly {
