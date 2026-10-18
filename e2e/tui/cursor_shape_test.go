@@ -367,7 +367,14 @@ func textCell(s tuitest.Screen, text string) (col, row int, ok bool) {
 // where a Chinese or Japanese IME would put it.
 func waitHostCursor(t *testing.T, term *tuitest.Terminal, col, row int, visible bool, what string) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
+	waitHostCursorWithin(t, term, col, row, visible, uiTimeout, what)
+}
+
+// waitHostCursorWithin is waitHostCursor with its own deadline, for a state
+// that only holds for a while.
+func waitHostCursorWithin(t *testing.T, term *tuitest.Terminal, col, row int, visible bool, within time.Duration, what string) {
+	t.Helper()
+	deadline := time.Now().Add(within)
 	var gotCol, gotRow int
 	var gotVisible bool
 	for time.Now().Before(deadline) {
@@ -389,13 +396,18 @@ func waitHostCursor(t *testing.T, term *tuitest.Terminal, col, row int, visible 
 // The guest here does the same: it hides its cursor, writes a word and puts
 // the cursor on an empty cell away from it. The host cursor has to be on that cell, hidden. Then the
 // guest shows the cursor without drawing anything, which changes no cell, and
-// the host cursor has to come back on in the same place.
+// the host cursor has to come back on in the same place. Then the guest hides
+// it again, still without drawing, and the host cursor has to go off there.
+// Neither change writes a frame.
 //
 // The second pane makes the offsets real: the pane under test is the right
 // half of a tiled screen, so its cells are not at the screen's.
 //
-// Negative control: with parkHostCursor parking nothing (cursor_park.go), the
-// host cursor stays where the frame ended and the first wait times out.
+// Negative controls (NEGATIVE_CONTROLS.md): with viewCursor parking nothing,
+// the host cursor stays where the frame ended and the first wait times out.
+// With cursorPark.frame passing frames through, the renderer shows the parked
+// cursor and the first wait times out. With the write in cursorPark.set
+// removed, the show and the hide without a frame never reach the host.
 func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
 	term, _ := start(t, startOpts{cols: 120, rows: 40})
 	waitBoot(t, term)
@@ -406,7 +418,7 @@ func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	runInShell(t, term,
-		`clear; printf '\033[?25l\033[6;12H'IME""CARET'\033[10;30H'; sleep 3; printf '\033[?25h'; sleep 60`,
+		`clear; printf '\033[?25l\033[6;12H'IME""CARET'\033[10;30H'; sleep 5; printf '\033[?25h'; sleep 5; printf '\033[?25l'; sleep 60`,
 		"IMECARET", shellTimeout)
 	word, top, ok := textCell(term.Screen(), "IMECARET")
 	if !ok {
@@ -419,9 +431,13 @@ func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
 	// of the word, a cell no frame writes to, so the host cursor cannot be
 	// there by chance.
 	col, row := word+18, top+4
-	waitHostCursor(t, term, col, row, false, "with the guest cursor hidden")
+	// Within the 5 seconds before the guest shows its cursor. Later, the
+	// guest hides it again on the same cell, and a build that parks nothing
+	// leaves the host cursor there by chance.
+	waitHostCursorWithin(t, term, col, row, false, 4*time.Second, "with the guest cursor hidden")
 	saveFrame(t, term, "ime-cursor-hidden")
 	waitHostCursor(t, term, col, row, true, "after the guest showed its cursor again")
+	waitHostCursor(t, term, col, row, false, "after the guest hid its cursor again without drawing")
 
 	alive(t, term, "after the hidden cursor checks")
 }
