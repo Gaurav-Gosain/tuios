@@ -56,6 +56,8 @@ type sectionMaps struct {
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
 	transfers, lists                                      map[string]string
+	// menus holds each declared menu (see MenuConfig), by name.
+	menus map[string]map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -124,6 +126,10 @@ func (r *KeybindRegistry) buildMappings() {
 		mail:            r.sectionKeyMap(kb.Mail),
 		transfers:       r.sectionKeyMap(kb.Transfers),
 		copyMode:        r.sectionKeyMap(kb.CopyMode),
+		menus:           make(map[string]map[string]string, len(kb.Menus)),
+	}
+	for _, name := range kb.MenuNames() {
+		r.sections.menus[name] = r.sectionKeyMap(kb.Menus[name].Keys)
 	}
 }
 
@@ -289,6 +295,12 @@ func (r *KeybindRegistry) GetScriptAction(key string) string {
 // menu (the leader, then prefix_tuios's key).
 func (r *KeybindRegistry) GetTuiosPrefixAction(key string) string {
 	return r.lookupKey(key, r.sections.tuiosPrefix)
+}
+
+// GetMenuAction returns the action name for a given key in the declared menu
+// with the given name (see MenuConfig).
+func (r *KeybindRegistry) GetMenuAction(name, key string) string {
+	return r.lookupKey(key, r.sections.menus[name])
 }
 
 // GetLayoutPrefixAction returns the action name for a given key in layout prefix

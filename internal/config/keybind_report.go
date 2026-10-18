@@ -502,7 +502,7 @@ func (r *KeybindRegistry) OptionKeys() []KeyReadAs {
 	if kb.LeaderKey != "" {
 		check("keybindings", "leader_key", kb.LeaderKey)
 	}
-	for _, name := range SectionNames() {
+	for _, name := range kb.SectionNamesFor() {
 		section := kb.section(name)
 		actions := make([]string, 0, len(section))
 		for action := range section {
@@ -549,7 +549,7 @@ func (r *KeybindRegistry) KeyProblems() []KeyProblem {
 	if kb.LeaderKey != "" {
 		check("keybindings", "leader_key", kb.LeaderKey)
 	}
-	for _, name := range SectionNames() {
+	for _, name := range kb.SectionNamesFor() {
 		section := kb.section(name)
 		actions := make([]string, 0, len(section))
 		for action := range section {

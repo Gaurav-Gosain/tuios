@@ -106,7 +106,7 @@ func (k *KeybindingsConfig) UnbindAction(section, action string) ([]Removal, boo
 func (k *KeybindingsConfig) FreeKey(key string) []Removal {
 	want := lookupForm(key)
 	var out []Removal
-	for _, name := range SectionNames() {
+	for _, name := range k.SectionNamesFor() {
 		table := k.section(name)
 		if table == nil {
 			continue

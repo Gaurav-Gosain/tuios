@@ -995,6 +995,54 @@ mark_pane = ["m"]
 join_marked_right = ["J"]
 ```
 
+## Menus nested under the leader
+
+A key in a prefix menu can open a menu of your own, so a keymap can nest as
+deep as a tmux which-key tree. You declare the menu, then bind the action
+`open_menu:NAME` to the key that opens it. tuios has no menus of this kind
+until you declare one, and it binds no new key for them.
+
+```toml
+[keybindings.window_prefix]
+"open_menu:split" = ["s"]
+
+[keybindings.menus.split]
+title = "Split"
+
+[keybindings.menus.split.keys]
+prefix_split_vertical = ["y"]
+prefix_split_horizontal = ["x"]
+"open_menu:resize" = ["R"]
+
+[keybindings.menus.resize]
+title = "Resize"
+sticky = true
+
+[keybindings.menus.resize.keys]
+resize_pane_left_5 = ["h"]
+resize_pane_down_5 = ["j"]
+resize_pane_up_5 = ["k"]
+resize_pane_right_5 = ["l"]
+```
+
+`Ctrl+B t s y` splits the pane. `Ctrl+B t s R h h h` narrows it by three steps.
+
+- `open_menu:NAME` goes in any section: after the leader, in another menu, or
+  in window mode or terminal mode for a menu that opens on one key.
+- A menu name has lowercase letters, digits, `-` and `_`.
+- `title` heads the which-key panel and defaults to the name. `sticky` keeps
+  the menu open after a key runs, as tmux `bind -r` does, until `esc` or a key
+  the menu does not bind. In terminal mode that key goes to the pane, so the
+  first letter you type after resizing is not lost. `esc` and `ctrl+c` close a
+  menu and are never sent to the pane.
+- A key that the menu does not bind closes it, and a menu that is not sticky
+  drops the key, as the other prefix menus do.
+- The which-key panel lists the keys the menu has. Menus come first, with a
+  `+`.
+- `tuios keybinds list`, `doctor`, `unbind` and `free` read the menus as they
+  read any other section. A config warning names a key that opens a menu that
+  is not declared, and a menu that no key opens.
+
 ## Split into the same ssh
 
 These actions open a pane on the machine that the focused pane is connected to

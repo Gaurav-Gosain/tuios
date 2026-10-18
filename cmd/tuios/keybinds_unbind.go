@@ -134,7 +134,7 @@ func loadConfigForEdit() (*config.UserConfig, error) {
 
 // keybindSectionOf is the config table an action lives in, or "".
 func keybindSectionOf(cfg *config.UserConfig, action string) string {
-	for _, name := range config.SectionNames() {
+	for _, name := range cfg.Keybindings.SectionNamesFor() {
 		if _, ok := cfg.Keybindings.SectionFor(name)[action]; ok {
 			return name
 		}
@@ -146,7 +146,7 @@ func keybindSectionOf(cfg *config.UserConfig, action string) string {
 // to print under the error.
 func nearestActionHint(cfg *config.UserConfig, action string) []string {
 	var names []string
-	for _, name := range config.SectionNames() {
+	for _, name := range cfg.Keybindings.SectionNamesFor() {
 		for a := range cfg.Keybindings.SectionFor(name) {
 			names = append(names, a)
 		}

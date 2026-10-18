@@ -397,6 +397,10 @@ var notTerminalSections = map[string]string{
 	// action NoteAction could record. TestListKeysFromConfigMoveTheCommandPalette
 	// presses them through the real entry point.
 	"lists": "every list overlay, through listKey",
+	// Declared by the user and absent from the default config, so there is no
+	// key to press from here. TestDeclaredMenusNest presses them through the
+	// real entry point.
+	"menus": "user-declared prefix menus, none ship",
 }
 
 // TestReachabilityTableCoversEveryBindingSection stops the table from going

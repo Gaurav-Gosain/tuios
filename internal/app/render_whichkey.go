@@ -445,6 +445,15 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 		return config.PrefixMenuGroups(m.KeybindRegistry, prefixType, config.MenuState{Daemon: m.IsDaemonSession, Minimized: -1})
 	}
 	switch {
+	case m.Menu != "":
+		var kb *config.KeybindingsConfig
+		if m.KeybindRegistry != nil && m.KeybindRegistry.GetConfig() != nil {
+			kb = &m.KeybindRegistry.GetConfig().Keybindings
+		}
+		if kb == nil {
+			return m.Menu, nil
+		}
+		return kb.MenuTitle(m.Menu), config.MenuKeybindingGroups(kb, m.Menu)
 	case m.WorkspacePrefixActive:
 		return "Workspace", menu("workspace")
 	case m.MinimizePrefixActive:

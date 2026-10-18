@@ -324,6 +324,10 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 	if !ok && strings.HasPrefix(action, config.CommandActionPrefix) {
 		handler, ok = handleCommandBinding(action), true
 	}
+	// open_menu:NAME opens a declared menu, named in the action the same way.
+	if !ok && strings.HasPrefix(action, config.OpenMenuPrefix) {
+		handler, ok = handleOpenMenu(action), true
+	}
 	if ok {
 		// Record the action if tape recording is active
 		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
@@ -354,7 +358,7 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 // HasAction checks if an action is registered
 func (d *ActionDispatcher) HasAction(action string) bool {
 	_, ok := d.handlers[action]
-	return ok || strings.HasPrefix(action, config.CommandActionPrefix)
+	return ok || strings.HasPrefix(action, config.CommandActionPrefix) || strings.HasPrefix(action, config.OpenMenuPrefix)
 }
 
 // handleCommandBinding runs the [[keybindings.command]] entry behind action.

@@ -106,6 +106,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	for _, section := range keySections(&cfg.Keybindings) {
 		validateSection(section.name, section.keys)
 	}
+	validateMenus(cfg, result)
 
 	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
 	validateAppearanceEnums(cfg, result)
@@ -758,7 +759,7 @@ type keySection struct {
 
 // keySections are the keybinding tables ValidateConfig checks key by key.
 func keySections(kb *KeybindingsConfig) []keySection {
-	return []keySection{
+	sections := []keySection{
 		{"window_management", kb.WindowManagement},
 		{"workspaces", kb.Workspaces},
 		{"layout", kb.Layout},
@@ -788,6 +789,10 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"lists", kb.Lists},
 		{"gui", kb.GUI},
 	}
+	for _, name := range kb.MenuNames() {
+		sections = append(sections, keySection{MenuSectionPrefix + name, kb.Menus[name].Keys})
+	}
+	return sections
 }
 
 // DroppedKey is one key DropUnreadableKeys took out of a config.

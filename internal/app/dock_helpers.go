@@ -689,7 +689,7 @@ type ModeInfo struct {
 func (m *OS) prefixArmed() bool {
 	return m.PrefixActive || m.WorkspacePrefixActive || m.MinimizePrefixActive ||
 		m.TilingPrefixActive || m.DebugPrefixActive || m.TapePrefixActive ||
-		m.LayoutPrefixActive || m.TuiosPrefixActive
+		m.LayoutPrefixActive || m.TuiosPrefixActive || m.Menu != ""
 }
 
 // prefixOnPill reports whether the dock's mode pill shows the armed leader.

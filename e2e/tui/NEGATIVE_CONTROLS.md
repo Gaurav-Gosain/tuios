@@ -8428,3 +8428,26 @@ All pass with the wiring restored.
 Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test
 -count=1 -run '^TestPopupDimsTheScreenBehind$' -v .`. `TUIOS_E2E_FRAMES` saves
 plain/styled text and PNGs for each option, override and focus step.
+## Menus declared in config.toml
+
+`TestDeclaredMenuSplitsFromTheLeader` (window mode and terminal mode) and
+`TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey` declare a split menu under
+the window prefix and a sticky resize menu inside it. They press `ctrl+b t s y`
+and `ctrl+b t s R h h z h` in the real TUI. The resize test also waits for the
+panel text of the menu's key. The unit tests in `internal/input/menus_test.go`
+and `internal/config/menus_test.go` cover nesting, a key read in its own menu
+only, the key a sticky menu hands to the pane, and the scope chord, the
+warnings and the panel rows.
+
+Run on 2026-10-18 on macOS.
+
+| Control | Tests that fail | Verdict |
+|---|---|---|
+| the sticky re-open (`m.Menu = name`) cut from `HandleMenuCommand` | `TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey` ("the second h, on the same chord: pane b is still 55 wide, want less than 55") | **caught** |
+| the `if o.Menu != ""` routing cut from `HandleTerminalModeKey` | `TestDeclaredMenuSplitsFromTheLeader/terminal_mode` ("daemon never reported 2 windows with settled geometry"). The window-mode case passes, which is why both exist | **caught** |
+| The positive half | none: the sticky test shrinks the pane twice before `z` closes the menu, and the split test reads one pane before any key | **guard** |
+
+Not covered: the `Menu` clauses in `KeysGoToBindings`
+(internal/app/keyboard_enhancements.go) and `viewerTakesKey`
+(internal/input/handler.go) have no test of their own, so no control was run
+on them.

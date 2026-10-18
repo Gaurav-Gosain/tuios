@@ -199,6 +199,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleTuiosPrefixCommand(msg, o)
 	}
 
+	// A declared menu (Ctrl+B, then the key that opens it, ...)
+	if o.Menu != "" {
+		return HandleMenuCommand(msg, o)
+	}
+
 	// Handle layout prefix commands (Ctrl+B, L, ...)
 	if o.LayoutPrefixActive {
 		return handleTerminalLayoutPrefix(msg, o)

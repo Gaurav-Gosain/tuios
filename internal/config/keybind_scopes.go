@@ -301,7 +301,7 @@ func ScopesFor(kb *KeybindingsConfig) []Scope {
 			}
 		}
 	}
-	return scopes
+	return append(scopes, menuScopes(kb, scopes)...)
 }
 
 // section returns the config table with the given name, or nil.
@@ -363,6 +363,9 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.CopyMode
 	case SectionGUI:
 		return k.GUI
+	}
+	if table, ok := k.menuSection(name); ok {
+		return table
 	}
 	return nil
 }
@@ -562,6 +565,9 @@ func lookupForm(key string) string {
 // describeAction is the human sentence for an action, falling back to the
 // action name with its underscores opened up.
 func describeAction(action string) string {
+	if name, ok := MenuNameOf(action); ok {
+		return "Open the " + name + " menu"
+	}
 	if desc := ActionDescriptions[action]; desc != "" {
 		return desc
 	}

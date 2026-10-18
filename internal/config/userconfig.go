@@ -952,8 +952,12 @@ type KeybindingsConfig struct {
 	// TuiosPrefix is the tuios menu, the leader then prefix_tuios's key. A
 	// preset puts the tuios features whose keys it takes here. Empty without
 	// a preset.
-	TuiosPrefix  map[string][]string `toml:"tuios_prefix,omitempty"`
-	TerminalMode map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
+	TuiosPrefix map[string][]string `toml:"tuios_prefix,omitempty"`
+	// Menus are prefix menus the user declares, each opened by binding the
+	// action open_menu:NAME in any section, so menus nest as deep as the
+	// config does. None ships: see menus.go.
+	Menus        map[string]MenuConfig `toml:"menus,omitempty"`
+	TerminalMode map[string][]string   `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
 	// Global binds are consulted in window mode and in terminal mode alike, so
 	// the palette and the launcher answer to one key wherever the user is. They
 	// are a section of their own rather than entries in terminal_mode because
