@@ -39,6 +39,11 @@ const (
 	// that a command finished. It needs the shell to send the marks; a shell
 	// that does not never fires it.
 	AfterCommandFinished Event = "after-command-finished"
+	// AfterThemeChange fires when a client puts other theme colours in force:
+	// a theme picked, the Omarchy theme switched, the light and dark pair
+	// followed, or the terminal's own colours changed with no theme. It fires
+	// once a pick is made, not for each theme the picker shows on the way.
+	AfterThemeChange Event = "after-theme-change"
 )
 
 // AllEvents returns all valid hook event names.
@@ -47,7 +52,7 @@ func AllEvents() []Event {
 		AfterNewWindow, AfterCloseWindow, AfterFocusChange,
 		AfterWorkspaceSwitch, AfterAttach, AfterDetach,
 		AfterLayoutChange, AfterResize, AfterAgentState,
-		AfterCommandFinished,
+		AfterCommandFinished, AfterThemeChange,
 	}
 }
 
@@ -92,6 +97,14 @@ type Context struct {
 	Command    string
 	ExitCode   string
 	DurationMS string
+	// Theme is the theme id in force after an after-theme-change, or none
+	// when no theme is. ThemeBg is the background panes are told they are on,
+	// as #rrggbb, and empty when tuios does not know it. ThemeLight is 1 when
+	// that background is light and 0 when it is dark. All empty for every
+	// other event.
+	Theme      string
+	ThemeBg    string
+	ThemeLight string
 }
 
 // Manager manages hook registrations and execution.
@@ -269,6 +282,9 @@ func executeHook(cmdStr string, ctx Context) hookResult {
 		fmt.Sprintf("TUIOS_COMMAND=%s", ctx.Command),
 		fmt.Sprintf("TUIOS_EXIT_CODE=%s", ctx.ExitCode),
 		fmt.Sprintf("TUIOS_DURATION_MS=%s", ctx.DurationMS),
+		fmt.Sprintf("TUIOS_THEME=%s", ctx.Theme),
+		fmt.Sprintf("TUIOS_THEME_BG=%s", ctx.ThemeBg),
+		fmt.Sprintf("TUIOS_THEME_LIGHT=%s", ctx.ThemeLight),
 	)
 
 	// Stdout stays discarded: a hook is run for its side effects and nothing

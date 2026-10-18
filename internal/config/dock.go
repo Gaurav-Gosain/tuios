@@ -347,7 +347,7 @@ func (k DockRefreshKind) String() string {
 var dockEventTypes = []string{
 	"after-agent-state", "after-attach", "after-close-window", "after-detach",
 	"after-focus-change", "after-layout-change", "after-new-window",
-	"after-resize", "after-workspace-switch",
+	"after-resize", "after-theme-change", "after-workspace-switch",
 	"agent-state", "attached", "detached", "layout-changed", "resized",
 	"window-closed", "window-created", "window-focused", "workspace-switched",
 }

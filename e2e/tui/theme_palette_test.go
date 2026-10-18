@@ -571,3 +571,82 @@ func TestThemeEditorQuickAndFix(t *testing.T) {
 		t.Fatalf("the fixed accent %s is not a lighter red", got.Chrome.Accent)
 	}
 }
+
+// TestAfterThemeChangeHookFiresOncePerPick runs a hook on after-theme-change
+// that appends the theme it was given to a file.
+//
+// The ways it could go wrong, written down before the code:
+//   - it fires at startup, which is not a change;
+//   - it fires for each theme the picker shows while the name is typed;
+//   - it fires for a pick that was cancelled, which puts the old theme back;
+//   - it gives the wrong theme, background or light flag;
+//   - it fires before the picker closes and misses the theme picked.
+//
+// So the log must stay empty after startup, hold one line for Dracula, stay
+// at one line after a cancelled Latte pick, and hold a second line for Latte.
+// The file is kept as the artifact.
+func TestAfterThemeChangeHookFiresOncePerPick(t *testing.T) {
+	base := t.TempDir()
+	out := filepath.Join(base, "theme-hook.log")
+	writeConfig(t, base, "[appearance]\ntheme = \"tokyonight\"\n\n[hooks]\n"+
+		"after-theme-change = 'echo \"$TUIOS_EVENT $TUIOS_THEME $TUIOS_THEME_BG $TUIOS_THEME_LIGHT\" >> "+out+"'\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	artifacts := artifactDir(t)
+
+	// waitLines waits until the log has n lines and returns them.
+	waitLines := func(n int) []string {
+		t.Helper()
+		var got []string
+		deadline := time.Now().Add(shellTimeout)
+		for time.Now().Before(deadline) {
+			data, _ := os.ReadFile(out)
+			got = strings.Split(strings.TrimSpace(string(data)), "\n")
+			if len(data) == 0 {
+				got = nil
+			}
+			if len(got) >= n {
+				return got
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return got
+	}
+	// Startup is not a change. Hooks run in their own goroutine, so give a
+	// firing time to land before saying there was none.
+	time.Sleep(time.Second)
+	if got := waitLines(0); len(got) != 0 {
+		t.Fatalf("the hook fired at startup:\n%s", strings.Join(got, "\n"))
+	}
+
+	pickTheme(t, term, "dracula")
+	got := waitLines(1)
+	if len(got) != 1 {
+		t.Fatalf("after one pick the hook ran %d times, want 1:\n%s", len(got), strings.Join(got, "\n"))
+	}
+	f := strings.Fields(got[0])
+	if len(f) != 4 || f[0] != "after-theme-change" || f[1] != "dracula" || len(f[2]) != 7 || f[2][0] != '#' || f[3] != "0" {
+		t.Errorf("the hook was given %q, want \"after-theme-change dracula #rrggbb 0\"", got[0])
+	}
+
+	// A cancelled pick puts Dracula back, which is no change.
+	closeThemePicker(t, term, filterThemePicker(t, term, "catppuccin_latte"), tuitest.Esc)
+	time.Sleep(time.Second)
+
+	pickTheme(t, term, "catppuccin_latte")
+	got = waitLines(2)
+	time.Sleep(500 * time.Millisecond)
+	got = waitLines(len(got))
+	if len(got) != 2 {
+		t.Fatalf("after a cancelled pick and a second pick the hook ran %d times, want 2:\n%s", len(got), strings.Join(got, "\n"))
+	}
+	f = strings.Fields(got[1])
+	if len(f) != 4 || f[1] != "catppuccin_latte" || f[2] == strings.Fields(got[0])[2] || f[3] != "1" {
+		t.Errorf("the hook was given %q after the Latte pick, want catppuccin_latte, a new background and 1", got[1])
+	}
+	data, _ := os.ReadFile(out)
+	if err := os.WriteFile(filepath.Join(artifacts, "theme-hook.log"), data, 0o644); err != nil {
+		t.Errorf("keep the hook log: %v", err)
+	}
+	saveArtifact(t, term, artifacts, "after-latte")
+}

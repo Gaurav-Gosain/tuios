@@ -754,6 +754,7 @@ func (m *OS) composeFrameOnce() string {
 	// it is drawn on. First, because every path below draws the panes. See
 	// background.go.
 	m.syncReportColors()
+	m.noteThemeChange()
 
 	// The screen saver is the frame, not a layer over one.
 	//

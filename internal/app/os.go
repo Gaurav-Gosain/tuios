@@ -1414,6 +1414,9 @@ type OS struct {
 	ThemePickerPair string
 	// schemeApplied is the theme followSchemeTheme last put in force.
 	schemeApplied string
+	// themeHook is what the after-theme-change hook last saw. See
+	// theme_hook.go.
+	themeHook themeHookState
 	// gradient is the focused border's gradient. See border_gradient.go.
 	gradient borderGradient
 	// themeEditor is the theme editor side sheet. See theme_editor.go.
