@@ -23,8 +23,37 @@ import (
 // So the client says, in the state it already pushes, and the daemon hands the
 // pair, and the host's sixteen for OSC 4, to every emulator in the session.
 // Empty is the client saying it has nothing to report, which puts back the
-// emulator's own answer. With several clients attached, the last one to push
-// decides, which is the one the person last typed in.
+// emulator's own answer.
+//
+// With several clients attached, the client the person last gave input at
+// decides (see ownsReportColors). Two clients on different themes would
+// otherwise take turns with every push, and each turn would send every pane
+// with mode 2031 on a colour scheme notice.
+
+// ownsReportColors reports whether a push from cs may set the session's
+// report colours: no other TUI client attached to the session has had input
+// from its person more recently, by MsgClientActivity, the signal the latest
+// window_size policy reads. A tie, such as two clients that have had no input
+// yet, lets the push through, as before.
+func (d *Daemon) ownsReportColors(cs *connState, sessionID string) bool {
+	cs.mu.Lock()
+	mine := cs.lastActivity
+	cs.mu.Unlock()
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+	for _, other := range d.clients {
+		if other == cs {
+			continue
+		}
+		other.mu.Lock()
+		newer := other.sessionID == sessionID && other.isTUIClient && other.lastActivity.After(mine)
+		other.mu.Unlock()
+		if newer {
+			return false
+		}
+	}
+	return true
+}
 
 // applyReportColors hands a pushed pair and palette to every pane in the
 // session, and to every pane made after it. What did not change costs a

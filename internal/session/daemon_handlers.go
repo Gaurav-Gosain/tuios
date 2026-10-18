@@ -954,7 +954,9 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// and OSC 10 with. See report_colors.go.
 	reportBg, reportFg, reportPal := state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette
 	accepted, behind, pushSeq := session.updateStateFrom(&state, d.mayActAsHuman(cs))
-	session.applyReportColors(reportBg, reportFg, reportPal)
+	if d.ownsReportColors(cs, session.ID) {
+		session.applyReportColors(reportBg, reportFg, reportPal)
+	}
 
 	// The merged state is a full copy of the session's, retitled from every
 	// live emulator. It is read only by the reconcile reply and the peer
