@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
 )
@@ -395,7 +396,7 @@ func TestCockpitThreadCards(t *testing.T) {
 		}
 
 		// A click on the edit's header folds its diff.
-		hr, hc := findText(t, term, "internal/auth/token.go")
+		hr, hc := findText(t, term, "Edit   internal/auth/token.go")
 		mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
 			return !strings.Contains(s.Text(), "Add(refreshSkew).Before")
@@ -546,4 +547,151 @@ func gradientPNG(t *testing.T, w, h int) []byte {
 		t.Fatal(err)
 	}
 	return b.Bytes()
+}
+
+// TestCockpitSideColumn shows the side column: the live copy of the agent's
+// pane, the files its last turn changed, and its checkpoints. The pane prints
+// a marker before the agents view opens and another while it is open, and
+// both reach the live box. At 100x30 the same pieces are the Checkpoints and
+// Pane tabs.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with the live pane not
+// marked on output the second marker never reaches the box; with the
+// checkpoints read from nowhere the count check fails.
+func TestCockpitSideColumn(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	repo := testutil.GitRepo(t)
+	if out, err := tuiosCLIIn(t, base, repo, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("new session in the repository: %v: %s", err, out)
+	}
+	gate := filepath.Join(t.TempDir(), "gate")
+	script := `printf 'LIVE-%s\n' first-7; while [ ! -e ` + gate + ` ]; do sleep 0.1; done; printf 'LIVE-%s\n' second-9; sleep 900`
+	if out, err := tuiosCLIIn(t, base, repo, "new-window", "api-auth", "-s", "agent", "--", "/bin/sh", "-c", script); err != nil {
+		t.Fatalf("open the agent's pane: %v\n%s", err, out)
+	}
+	fixture, err := os.ReadFile(filepath.Join("testdata", "transcript", "cockpit-auth.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(atProjects(base), "repo", "9a1f0c2e.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, fixture, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "agent", "--window", "api-auth")
+	hook.Dir = workDirIn(t, base)
+	hook.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
+	}
+	hook.Stdin = bytes.NewReader(hookPayload(path, "9a1f0c2e"))
+	if out, err := hook.CombinedOutput(); err != nil {
+		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
+	}
+	// Two turns, each changing a file, so two checkpoints.
+	notes := filepath.Join(repo, "notes.txt")
+	for n, label := range []string{"Read the auth package", "Expiry check with skew"} {
+		if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "agent", "-w", "api-auth", "--harness", "claude-code"); err != nil {
+			t.Fatalf("working: %v\n%s", err, out)
+		}
+		if err := os.WriteFile(notes, []byte(strings.Repeat("turn\n", n+1)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := tuiosCLI(t, base, "set-agent-state", "done", "-s", "agent", "-w", "api-auth", "--harness", "claude-code", "-m", label); err != nil {
+			t.Fatalf("done: %v\n%s", err, out)
+		}
+		deadline := time.Now().Add(20 * time.Second)
+		for {
+			out, _ := tuiosCLIIn(t, base, repo, "checkpoint", "list", "-s", "agent", "-w", "api-auth", "--json")
+			if strings.Count(out, `"kind": "turn"`)+strings.Count(out, `"kind":"turn"`) >= n+1 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("turn %d left no checkpoint:\n%s", n+1, out)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-meta", "-s", "agent", "-w", "api-auth", "model=opus-4.5", "context=62%", "diff=+214/-37"); err != nil {
+		t.Fatalf("meta: %v\n%s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "agent"}, cols: 200, rows: 55, shippedLooks: true,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "LIVE-first-7") }, bootTimeout); err != nil {
+		t.Fatalf("client never showed the pane: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	side := func(s tuitest.Screen, want string) bool {
+		_, rows := s.Size()
+		for r := range rows {
+			line := []rune(s.Line(r))
+			if len(line) > 154 && strings.Contains(string(line[154:]), want) {
+				return true
+			}
+		}
+		return false
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return side(s, "LIVE-first-7") && side(s, "Last turn") && side(s, "token.go") && side(s, "Expiry check with skew") && side(s, "Read the auth package")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the side column lacks the live pane, the last turn or the checkpoints: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+	if !strings.Contains(string([]rune(s.Line(rowWith(s, "Checkpoints")))[154:]), " 2") {
+		t.Fatalf("ASSERTION: the checkpoint count is not the two the CLI lists\n%s", term.Snapshot())
+	}
+	// The pane prints while the view is open: the box follows.
+	if err := os.WriteFile(gate, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return side(s, "LIVE-second-9") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the live box did not follow the pane's output: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "side-200x55")
+	alive(t, term, "after the side column")
+}
+
+// TestCockpitSideTabs is the side column's pieces as focus tabs on a screen
+// narrower than it: Checkpoints lists them, and Pane shows the live pane.
+func TestCockpitSideTabs(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if out, err := tuiosCLI(t, base, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("new session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "worker", "-s", "agent", "--", "/bin/sh", "-c", "printf 'TAB-%s\n' marker-3; sleep 900"); err != nil {
+		t.Fatalf("open the agent's pane: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "agent", "-w", "worker", "--harness", "codex", "-m", "Bash go test ./..."); err != nil {
+		t.Fatalf("report: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "agent"}, cols: 100, rows: 30, shippedLooks: true,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "TAB-marker-3") }, bootTimeout); err != nil {
+		t.Fatalf("client never showed the pane: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Pane")
+	if err := term.SendKeys("]"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the checkpoints tab", "Checkpoints need the pane in a git work tree.")
+	if err := term.SendKeys("]"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the pane tab", "TAB-marker-3")
+	saveCockpitFrames(t, term, "pane-tab-100x30")
+	alive(t, term, "after the side tabs")
 }

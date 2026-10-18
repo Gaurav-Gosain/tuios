@@ -139,6 +139,14 @@ type cockpitState struct {
 	// frame is the last frame drawn, and frameAt what it was drawn from.
 	frame   string
 	frameAt ckFrameKey
+	// liveID is the live pane, and live its last rows as last read, for
+	// liveCols by liveRows; liveDirty says the pane had output since.
+	liveID             string
+	live               string
+	liveCols, liveRows int
+	liveDirty          bool
+	// cps are the agents' checkpoints, by agent.
+	cps map[string]*ckCheckpoints
 	// img is the image view, nil when it is not up.
 	img *ckImageView
 	// tab is the focus tab: 0 the thread, 1 the last turn's changes.
@@ -989,6 +997,20 @@ func (m *OS) cockpitThread() *agentThread {
 		return nil
 	}
 	return m.Inbox.threads.byKey[agentKey(e)]
+}
+
+// cockpitTab is the name of the focus tab in force: Thread, Changes,
+// Checkpoints or Pane.
+func (m *OS) cockpitTab() string {
+	e, _ := m.cockpitAgent()
+	r, _ := m.cockpitSelected()
+	tabs := m.cockpitTabs(e, r)
+	if len(tabs) == 0 {
+		return "Thread"
+	}
+	i := min(max(m.Inbox.ck.tab, 0), len(tabs)-1)
+	name, _, _ := strings.Cut(tabs[i], " ")
+	return name
 }
 
 // CockpitTab steps the focus tab by delta: the thread, then the last turn's

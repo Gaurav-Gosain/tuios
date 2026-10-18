@@ -2331,6 +2331,24 @@ the focus. When the list is taller than the screen, rows are one line and a
 group longer than 8 rows shows its first 8 and `+N more`, which a click or
 `right` opens. Needs you never folds.
 
+At 170 columns and wider a side column sits beside the focus:
+
+- **Live**: the agent's pane, its last rows that hold text, in a frame. It
+  is the pane's own cells, read again each time the pane prints, so it never
+  disagrees with the pane for long. A pane of this session on another
+  workspace is kept streamed while it is shown. A pane of another session or
+  machine says so, and `ctrl+]` opens it.
+- **Last turn**: each file the last turn changed, with its added and removed
+  lines and a bar of their share.
+- **Checkpoints**: the turn checkpoints of the agent's work tree, newest
+  first, with the time and what the turn was. They are read when you select
+  the agent and when its state changes. `tuios checkpoint restore N` restores
+  one.
+
+On a narrower screen the same pieces are focus tabs after Thread and
+Changes: Checkpoints, and Pane, which shows the live pane at the focus's
+size.
+
 The reply area sits at the foot of the focus: who the reply is for, when it
 is typed (at once, or when a working agent rests), and a Send button. A click
 on it, `r`, `i` or `tab` opens the editor. An image you paste or drop in shows

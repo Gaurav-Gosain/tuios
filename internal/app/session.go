@@ -2140,7 +2140,7 @@ func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
 	// The pinned pane is drawn in the picture-in-picture view wherever it
 	// is, so its stream stays open. Unpinning it, or its closing, clears the
 	// pin first and lets this through. See pip.go.
-	if m.pipKeepsStream(window) {
+	if m.pipKeepsStream(window) || m.cockpitKeepsStream(window) {
 		return
 	}
 

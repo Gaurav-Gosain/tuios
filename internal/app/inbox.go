@@ -1170,6 +1170,8 @@ func (m *OS) inboxLandOn(id string) {
 // CloseInbox hides the Inbox, and the peek with it.
 func (m *OS) CloseInbox() {
 	m.ShowInbox = false
+	// The live pane goes back to being streamed as its workspace has it.
+	m.cockpitLiveFollow()
 	m.stopInboxAgentsTick()
 	m.stopThreadWatch()
 	m.Inbox.threads.open = false

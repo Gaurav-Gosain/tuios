@@ -1122,6 +1122,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyReplyPreview(msg)
 		return m, nil
 
+	case ckCheckpointsMsg:
+		m.applyCheckpoints(msg)
+		return m, nil
+
 	case PasteTimeoutMsg:
 		// The terminal never answered the clipboard query. Say so, because the
 		// alternative is a paste key that looks broken. See clipboard_paste.go.

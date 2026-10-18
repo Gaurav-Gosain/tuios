@@ -40,7 +40,8 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		c.textR(right-2, y, ckSeg{t: when, fg: pal.FgDim})
 		c.text(x+2, y+1, right-2, ckSeg{t: " ", bg: pal.FgMute}, ckSeg{t: " Write a reply.", fg: pal.FgMute})
 		c.text(x+2, y+2, right-14, hints...)
-		c.textR(right-2, y+2, send)
+		bx := c.textR(right-2, y+2, send)
+		c.mark(pal, bx, y+2, right-2-bx, 1, ckOn)
 		st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y1, kind: ckHitAction, action: "reply"})
 		return y - 1
 	}
@@ -95,6 +96,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	ed.at.x, ed.at.y, ed.at.ok = x+2, row-cut, cut == 0
 	c.text(x+2, fy, right-14, hints...)
 	sx := c.textR(right-2, fy, send)
+	c.mark(pal, sx, fy, right-2-sx, 1, ckOn)
 	st.ck.hits = append(st.ck.hits, ckHit{x0: sx, y0: top + fy, x1: right - 2, y1: top + fy + 1, kind: ckHitAction, action: "send"})
 	return y - 1
 }

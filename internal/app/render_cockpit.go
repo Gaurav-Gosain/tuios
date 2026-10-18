@@ -312,6 +312,13 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	if !strip && (c.w >= ckOneColumn || !st.threads.open) {
 		m.drawFleet(c, l, fleetW, colTop, colBot, top)
 	}
+	// At 170 columns and wider the side column sits beside the focus.
+	if focusW > 0 && c.w >= ckWide {
+		if e, ok := m.cockpitAgent(); ok {
+			focusW -= ckSideWidth + 1
+			m.drawSide(c, l, e, c.w-ckSideWidth, colTop, ckSideWidth, colBot)
+		}
+	}
 	if focusW > 0 {
 		fy := colTop + 1
 		if strip {
@@ -1128,13 +1135,13 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		ty, tx := rule-1, x
 		for i, tab := range tabs {
 			x0 := tx
-			if i == st.ck.tab {
+			if active := min(st.ck.tab, len(tabs)-1); i == active {
 				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.Fg, attrs: ckBold})
 			} else {
 				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.FgMute})
 			}
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + ty, x1: tx, y1: top + ty + 1, kind: ckHitTab, group: i})
-			if i == st.ck.tab {
+			if i == min(st.ck.tab, len(tabs)-1) {
 				defer c.hline(x0, rule, tx-x0, "━", pal.Accent)
 			}
 			tx += 4
@@ -1175,6 +1182,15 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		}
 		return
 	}
+	// The side column's pieces as focus tabs, narrower than it.
+	switch m.cockpitTab() {
+	case "Checkpoints":
+		m.drawCheckpoints(c, l, e, x, bodyTop, w, max((bodyBot-bodyTop)/2, 1))
+		return
+	case "Pane":
+		m.drawLiveBox(c, l, e, x, bodyTop, w, max(bodyBot-bodyTop, 4))
+		return
+	}
 	cardTop := bodyBot
 	if r.hasItem {
 		cardTop = m.drawItemCard(c, l, r, x, w, bodyTop, bodyBot, top, now)
@@ -1211,8 +1227,19 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 // cockpitTabs are the focus tabs for the selected row: the thread and the
 // last turn's changes, for an agent whose transcript tuios reads.
 func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
-	if r.agent < 0 || e.Host != "" || !threadTranscriptHarness(e.Harness) {
+	if r.agent < 0 || e.Host != "" {
 		return nil
+	}
+	// Narrower than the side column, its pieces are tabs.
+	var side []string
+	if m.GetRenderWidth() < ckWide {
+		side = []string{"Checkpoints", "Pane"}
+	}
+	if !threadTranscriptHarness(e.Harness) {
+		if side == nil {
+			return nil
+		}
+		return append([]string{"Thread"}, side...)
 	}
 	n := 0
 	if t := m.Inbox.threads.byKey[agentKey(e)]; t != nil {
@@ -1230,7 +1257,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 	if n > 0 {
 		changes += " " + strconv.Itoa(n)
 	}
-	return []string{"Thread", changes}
+	return append([]string{"Thread", changes}, side...)
 }
 
 // ckApprovalLines are a held approval's command, wrapped for the inset, and

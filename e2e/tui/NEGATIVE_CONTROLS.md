@@ -7089,3 +7089,19 @@ Run on 2026-10-18.
 | An image chip is not a click target | n/a, injected | the chip's `image:` hit left out of `drawReplyArea` | `TestCockpitReplyAreaAndImageView` ("a click on the chip did not open the image view") | **caught** |
 | A click outside the picture leaves the view up | n/a, injected | `cockpitImageClick` never closes | `TestCockpitReplyAreaAndImageView` ("a click outside the picture did not close the view") | **caught** |
 | The Send button does nothing | n/a, injected | `cockpitAction` has no `send` case | `TestCockpitReplyAreaAndImageView` ("waiting for the closed area after Send") | **caught** |
+
+## The agents cockpit: side column
+
+`TestCockpitSideColumn` puts an agent's pane in a git work tree, ends two
+turns (two checkpoints), joins it to the transcript fixture, and opens the
+agents view at 200x55. The side column must hold the pane's first marker,
+the last turn's file and both checkpoints, and then the marker the pane
+prints while the view is open. `TestCockpitSideTabs` reads the Checkpoints
+and Pane tabs at 100x30.
+
+Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The live box does not follow the pane's output | n/a, injected | `cockpitNoteOutput` never marks the live pane | `TestCockpitSideColumn` ("the live box did not follow the pane's output") | **caught** |
+| The checkpoints are not shown | n/a, injected | `applyCheckpoints` drops the list | `TestCockpitSideColumn` ("the side column lacks the live pane, the last turn or the checkpoints") | **caught** |

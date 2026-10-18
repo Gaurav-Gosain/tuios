@@ -438,7 +438,7 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []s
 		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(), look: m.cockpitLookGen(),
 		width: width, minute: threadMinute(e, now), ascii: overlay.UseASCII(),
 		title: e.Title + "\x00" + e.Host, message: e.Message,
-		expand: t.expandAll, changes: m.Inbox.ck.tab == 1,
+		expand: t.expandAll, changes: m.cockpitTab() == "Changes",
 	}
 	if t.body != nil && t.bodyAt == key {
 		return t.body
@@ -484,7 +484,7 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 			note(t.err)
 			return out
 		}
-		out, t.hits = m.threadCardLines(e, t, width, m.Inbox.ck.tab == 1)
+		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes")
 		if len(out) == 0 {
 			note("No conversation yet.")
 		}

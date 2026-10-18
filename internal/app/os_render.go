@@ -95,6 +95,9 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			if out && !window.Minimized && m.noteWorkspaceMark(window.Workspace, workspaceMarkActivity) {
 				hasChanges = true
 			}
+			if out && m.cockpitNoteOutput(window.ID) {
+				hasChanges = true
+			}
 			if out && window.ID == m.pip.windowID {
 				window.UpdateCounter++
 				if window.UpdateCounter%3 == 0 {
@@ -137,6 +140,7 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		if window.ID == m.pip.windowID {
 			m.pip.dirty = true
 		}
+		m.cockpitNoteOutput(window.ID)
 	}
 
 	for edge := range m.sidebarSessions {
