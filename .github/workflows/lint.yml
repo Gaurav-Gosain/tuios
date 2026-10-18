@@ -79,6 +79,26 @@ jobs:
           working-directory: tml
           args: --timeout 10m
 
+  bom:
+    name: no byte order mark in Go files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # Go refuses a U+FEFF anywhere but the first bytes of a file ("illegal
+      # byte order mark"). Some editors and agent tools turn a \uFEFF escape
+      # into the literal character, so this names the file before the build
+      # does. Write the escape "\xef\xbb\xbf" instead.
+      - name: Find a literal U+FEFF after the first bytes
+        run: |
+          bad=$(git ls-files -z '*.go' | xargs -0 perl -0777 -ne 'print "$ARGV\n" if /.\xef\xbb\xbf/s')
+          if [ -n "$bad" ]; then
+            echo "These Go files hold a literal byte order mark. Write \\xef\\xbb\\xbf instead:" >&2
+            echo "$bad" >&2
+            exit 1
+          fi
+
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
