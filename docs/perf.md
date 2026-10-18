@@ -2859,6 +2859,15 @@ The budgets went down to 37,652,000 (linux/amd64) and 35,405,000
 (darwin/arm64) after the cut. Each keeps the room it had before it,
 21,886 and 13,462 bytes.
 
+The budgets went to 37,664,000 (linux/amd64) and 35,426,000 (darwin/arm64)
+for the shared-harness session guard (#852). It keeps another Codex
+conversation on the same app-server off a pane: a manifest flag, the guard's
+recent owners per pane, and its checks in set-agent-state and
+report-agent-activity. Main at d6e6ffc8 measured 37,642,402 and 35,391,858
+bytes (Go 1.26.9). The change adds 16,384 and 16,848 bytes. On linux/amd64 it
+measured 8,192 at e77a6641; the rest is alignment against #879. No dependency
+was added. The new budgets leave 5,214 and 17,294 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
