@@ -223,6 +223,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// any input can do. It costs a comparison when nothing needs reading.
 	if o.ShowInbox {
 		cmd = tea.Batch(cmd, o.InboxApprovalFetch(), o.InboxRecapFetch(), o.InboxAgentsTick(), o.InboxThreadFetch(), o.ReplyHistoryFetch())
+	} else if o.ShowAgentMail {
+		// A mail draft reads its pane's history as the Inbox reply does.
+		cmd = tea.Batch(cmd, o.ReplyHistoryFetch())
 	}
 	// Focus landing on a pane that finished turns while the person was
 	// away has the dock say what it did. A nil check when it did not.

@@ -212,6 +212,7 @@ func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit
 		Hints: hints,
 	}
 	content, geo := panel.Render(pal)
+	m.agentMailDraftAt(geo, rows)
 	return content, geo, nil
 }
 
@@ -464,5 +465,16 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		Hints: hints,
 	}
 	content, geo := panel.Render(pal)
+	if st.Composing {
+		m.agentMailDraftAt(geo, rows)
+	}
 	return content, geo, nil
+}
+
+// agentMailDraftAt records where the draft's first line was drawn, relative
+// to the panel, for its pictures: under rows of body, the rule and the
+// prompt line.
+func (m *OS) agentMailDraftAt(geo overlay.Geometry, rows int) {
+	at := &m.AgentMail.wires.at
+	at.x, at.y, at.ok = geo.BodyX, geo.BodyY+rows+2, true
 }

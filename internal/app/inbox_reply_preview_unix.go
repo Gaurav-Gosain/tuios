@@ -17,20 +17,20 @@ func (m *OS) replyPixelsReady() bool {
 	return w > 0 && h > 0
 }
 
-// flushReplyPreviewForFrame draws the reply's pictures for the frame just
-// rendered. With no reply open, or one with no picture, and nothing on the
-// host, it returns at once.
+// flushReplyPreviewForFrame draws the open draft's pictures for the frame
+// just rendered, in the Inbox or the mailbox. With no draft open, or one with
+// no picture, and nothing on the host, it returns at once.
 func (m *OS) flushReplyPreviewForFrame() {
 	p := m.replyPreview
-	ed := m.Inbox.reply.editor
 	var want []previewPlacement
-	if ed != nil && m.ShowInbox && ed.at.ok && m.replyPixelsReady() {
-		if h, ok := m.overlayHitByKind("inbox"); ok && m.inboxOnTop() {
-			for _, pl := range ed.comp.Placements() {
+	if d, ok := m.openDraft(); ok && d.wires.at.ok && m.replyPixelsReady() {
+		if h, ok := m.overlayHitByKind(d.kind); ok && m.overlayOnTop(d.kind) {
+			at := d.wires.at
+			for _, pl := range d.comp.Placements() {
 				want = append(want, previewPlacement{
 					key:  pixelsKey(pl.Image, pl.Cols, pl.Rows),
-					x:    h.OriginX + ed.at.x + pl.Col,
-					y:    h.OriginY + ed.at.y + pl.Row,
+					x:    h.OriginX + at.x + pl.Col,
+					y:    h.OriginY + at.y + pl.Row,
 					cols: pl.Cols, rows: pl.Rows,
 				})
 			}

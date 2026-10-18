@@ -191,15 +191,15 @@ func mentionAddress(label, id, name string) string {
 // been read. It is nil, at the cost of a map lookup, when there is nothing to
 // read.
 func (m *OS) replyMentionCmd() tea.Cmd {
-	ed := m.Inbox.reply.editor
-	if ed == nil || ed.mentions == nil || ed.mentions.dir == "" {
+	d, ok := m.openDraft()
+	if !ok || d.wires.mentions == nil || d.wires.mentions.dir == "" {
 		return nil
 	}
-	query, open := ed.comp.MentionQuery()
+	query, open := d.comp.MentionQuery()
 	if !open {
 		return nil
 	}
-	c := ed.mentions
+	c := d.wires.mentions
 	rel := ""
 	if i := strings.LastIndexByte(query, '/'); i >= 0 {
 		rel = query[:i+1]

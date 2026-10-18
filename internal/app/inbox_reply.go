@@ -129,23 +129,15 @@ type inboxReplyEditor struct {
 	// targets are the agents a bulk reply goes to, nil for one agent. See
 	// inbox_bulk.go.
 	targets []replyTarget
-	// mentions is the @ list's completer. See inbox_reply_mention.go.
-	mentions *replyMentions
-	// historyAsked says the target's history was asked for. See
-	// inbox_reply_history.go.
-	historyAsked bool
+	// draftWires is the previewer's, the @ list's and the history's state.
+	// See draft_wiring.go.
+	draftWires
 	// frame is the editor's lines as last drawn, and frameAt what they were
 	// drawn from.
 	frame   []string
 	frameAt inboxReplyFrame
-	// head is how many lines the label takes above the draft, and at is
-	// where the draft's first line was drawn, relative to the Inbox panel,
-	// for its pictures.
+	// head is how many lines the label takes above the draft.
 	head int
-	at   struct {
-		x, y int
-		ok   bool
-	}
 }
 
 // inboxSentReply is a reply this client queued, kept so a drop of it can be
@@ -254,14 +246,8 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
 	}
-	if m.ProcessingRemoteKeys {
-		comp.MarkAutomated()
-	}
-	m.replyPreviewAttach(comp)
-	mentions := m.newReplyMentions(sessionID, windowID)
-	comp.SetCompleter(mentions)
 	m.Inbox.reply.editor = &inboxReplyEditor{
-		mentions:   mentions,
+		draftWires: m.wireDraft(comp, sessionID, windowID, true),
 		session:    sessionID,
 		window:     windowID,
 		who:        who,
@@ -288,20 +274,18 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
 	}
-	if m.ProcessingRemoteKeys {
-		comp.MarkAutomated()
-	}
-	m.replyPreviewAttach(comp)
-	mentions := m.newReplyMentions("", "")
-	comp.SetCompleter(mentions)
+	// The @ list offers no files of the far pane's folder. The history is
+	// kept under the far pane, as before.
+	wires := m.wireDraft(comp, "", "", false)
+	wires.histSession, wires.histWindow = sessionID, windowID
 	m.Inbox.reply.editor = &inboxReplyEditor{
-		mentions: mentions,
-		session:  sessionID,
-		window:   windowID,
-		host:     host,
-		who:      who + " on " + printableTitle(host),
-		context:  context,
-		comp:     comp,
+		draftWires: wires,
+		session:    sessionID,
+		window:     windowID,
+		host:       host,
+		who:        who + " on " + printableTitle(host),
+		context:    context,
+		comp:       comp,
 	}
 	return true
 }
@@ -968,21 +952,6 @@ func (m *OS) inboxReplyDetailAt(replying bool) func(x, y int) {
 		// The draft's lines are padded by two cells.
 		ed.at.x, ed.at.y, ed.at.ok = x+2, y+ed.head, true
 	}
-}
-
-// inboxOnTop reports whether no panel is drawn over the Inbox, so its
-// pictures may go on the host.
-func (m *OS) inboxOnTop() bool {
-	h, ok := m.overlayHitByKind("inbox")
-	if !ok {
-		return false
-	}
-	for _, o := range m.OverlayHits {
-		if o.Z > h.Z {
-			return false
-		}
-	}
-	return true
 }
 
 // inboxReplyFrame is what the editor's lines were drawn from.

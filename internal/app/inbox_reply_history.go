@@ -60,21 +60,21 @@ func (m *OS) replyHistoryTarget(sessionID, windowID string) string {
 	return "pane:" + sessionID + "/" + windowID
 }
 
-// replyHistoryFetch reads the history of the open reply editor's target, once
-// per editor. It is called after every input while the Inbox is up, and costs
-// a comparison when there is nothing to read.
+// replyHistoryFetch reads the history of the open draft's target, once per
+// editor. It is called after every input while the Inbox or the mailbox is
+// up, and costs a comparison when there is nothing to read.
 func (m *OS) replyHistoryFetch() tea.Cmd {
-	ed := m.Inbox.reply.editor
-	if ed == nil || ed.historyAsked || len(ed.targets) > 0 || (m.DaemonClient == nil && m.Inbox.call == nil) {
+	d, ok := m.openDraft()
+	if !ok || d.wires.historyAsked || d.wires.histWindow == "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
 	}
-	ed.historyAsked = true
+	d.wires.historyAsked = true
 	nonce := m.inboxNonce()
 	if nonce == "" {
 		return nil
 	}
-	call, comp := m.inboxCaller(), ed.comp
-	target := m.replyHistoryTarget(ed.session, ed.window)
+	call, comp := m.inboxCaller(), d.comp
+	target := m.replyHistoryTarget(d.wires.histSession, d.wires.histWindow)
 	return func() tea.Msg {
 		raw, err := call("reply-history", map[string]any{"target": target, "human_nonce": nonce}, replyHistoryTimeout)
 		if err != nil {

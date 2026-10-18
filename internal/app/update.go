@@ -2347,7 +2347,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case AgentMailSentMsg:
 		m.applyAgentMailSent(msg)
-		return m, nil
+		if msg.Err != nil || msg.histWindow == "" {
+			return m, nil
+		}
+		return m, m.replyHistoryAdd(msg.histSession, msg.histWindow, msg.histParts)
 
 	case AgentMailMarkedMsg:
 		if msg.Err != nil {

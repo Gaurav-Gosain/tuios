@@ -6892,3 +6892,25 @@ Run on 2026-10-17.
 
 The fixed build passes both, `TestKittyImageSurvivesCaptureMode`, every
 `TestLauncher*`, every `TestScreenshot*` and `TestRichRowReplyAndRecap`.
+
+## The mail editor has the image previews and the @ list
+
+`TestMailNewMessageFromThePersonReachesTheAgent` opens a new message to an
+agent. Before it types the message, it pastes the path of a 64x48 PNG. The
+strip must show a thumbnail box labelled `#1`, not a line of words. The host
+stream must hold a kitty placement at that box: the label's column, three rows
+above the label. Then it types ` @`, and the list must show
+`e2e-ctrlp/WORKER`. It empties the draft and goes on as before.
+
+Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The mail draft got no previewer and no @ list | yes | `newMailDraft` without `wireDraft` | `TestMailNewMessageFromThePersonReachesTheAgent` ("the mail draft placed no picture on the thumbnail box") | **caught** |
+| Pictures were placed for the Inbox reply only | yes | `flushReplyPreviewForFrame` with `d.kind == "inbox"` added to its condition | `TestMailNewMessageFromThePersonReachesTheAgent` ("the mail draft placed no picture on the thumbnail box") | **caught** |
+| The mail draft got no @ list | yes | `newMailDraft` with `comp.SetCompleter(nil)` after `wireDraft` | `TestMailNewMessageFromThePersonReachesTheAgent` ("waiting for the @ list of agents") | **caught** |
+
+The fixed build passes it, every other `TestMail*` and `TestAgentMail*`,
+`TestARoutedKeyReplyIsAClaim`, `TestRichRowReplyAndRecap`, every
+`TestReplyWith*`, `TestReplyToAnAgentOnAHost`,
+`TestReplyPreviewInScreenCapture` and every `TestInbox*`.

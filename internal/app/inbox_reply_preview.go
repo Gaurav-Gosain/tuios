@@ -205,11 +205,11 @@ func rgbaKey(c color.Color) [4]uint32 {
 // it is nil, at the cost of a loop over at most five boxes, when they are all
 // ready.
 func (m *OS) replyPreviewCmd() tea.Cmd {
-	ed := m.Inbox.reply.editor
-	if ed == nil {
+	d, ok := m.openDraft()
+	if !ok {
 		return nil
 	}
-	boxes := ed.comp.PreviewBoxes()
+	boxes := d.comp.PreviewBoxes()
 	if len(boxes) == 0 {
 		return nil
 	}
@@ -443,20 +443,15 @@ func (p *replyPreview) removeOpened() {
 	p.openDir = ""
 }
 
-// replyPreviewClosed is called when the reply editor or its image view
+// replyPreviewClosed is called when a draft editor or its image view
 // closes: the copy for the desktop viewer goes.
 func (m *OS) replyPreviewClosed() {
 	if m.replyPreview != nil {
-		ed := m.Inbox.reply.editor
-		if ed == nil || ed.comp.OpenedImage() == nil {
+		d, ok := m.openDraft()
+		if !ok || d.comp.OpenedImage() == nil {
 			m.replyPreview.removeOpened()
 		}
 	}
-}
-
-// replyPreviewAttach gives the open draft the previewer.
-func (m *OS) replyPreviewAttach(comp *composer.Model) {
-	comp.SetPreviewer(m.replyPreviewer())
 }
 
 // shotPieces is the previews the host shows now, for a screen capture. Each

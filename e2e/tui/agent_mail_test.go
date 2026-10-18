@@ -228,7 +228,8 @@ func checkFencedBody(t *testing.T, screen, who, body string) {
 // Negative control: with mail_new unbound, n does nothing and the picker never
 // opens; with reply_to always set, the daemon refuses the send.
 func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
-	term, base := attachClientBase(t)
+	host := &lockedBuffer{}
+	term, base := attachClientBaseOut(t, host)
 	renameWindow(t, term, "WORKER")
 	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e-ctrlp", "-w", "WORKER"); err != nil {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
@@ -264,6 +265,7 @@ func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
 	if err := term.WaitForText("New message to WORKER", uiTimeout); err != nil {
 		t.Fatalf("enter did not open the message line: %v\n%s", err, term.Snapshot())
 	}
+	mailDraftTakesImagesAndMentions(t, term, host)
 	if err := term.SendKeys("please rebase on main"); err != nil {
 		t.Fatalf("type the message: %v", err)
 	}
@@ -320,6 +322,65 @@ func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
 	}
 	alive(t, term, "after writing a new message")
 }
+
+// mailDraftTakesImagesAndMentions checks that the mail editor has what the
+// Inbox reply has: a pasted image shows as a picture, and @ lists the agents.
+// It leaves the draft empty. The harness's host has kitty graphics, so the
+// thumbnail is a kitty picture placed on the blank box the strip leaves. The
+// mail draft used to get neither: the strip named the image in words
+// ("Image #1 · 64×48 · ..."), nothing was placed, and @ listed nothing.
+func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host *lockedBuffer) {
+	t.Helper()
+	shot := filepath.Join(t.TempDir(), "screen.png")
+	if err := os.WriteFile(shot, tinyPNG(t, 64, 48), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.Paste(shot); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the image in the mail draft", "[Image #1 · 64×48 png]")
+	// The strip holds a thumbnail box labelled #1 under it, not a line of
+	// words, and the picture is placed on that box: the label's column, and
+	// the three rows above the label.
+	var label struct{ row, col int }
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		if strings.Contains(text, "Image #1 · 64×48 ·") {
+			return false
+		}
+		label.row = -1
+		for i, line := range strings.Split(text, "\n") {
+			if at := strings.Index(line, "#1"); at >= 0 && !strings.Contains(line, "[Image") {
+				label.row, label.col = i, len([]rune(line[:at]))
+			}
+		}
+		if label.row < 0 {
+			return false
+		}
+		want := fmt.Sprintf("\x1b[%d;%dH\x1b_Ga=p,i=", label.row-draftThumbRows+1, label.col+1)
+		return strings.Contains(host.String(), want)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the mail draft placed no picture on the thumbnail box (label at %+v): %v\n%s", label, err, term.Snapshot())
+	}
+	// The list opens on an @ that starts a word.
+	if err := term.SendKeys(" @"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the @ list of agents", "e2e-ctrlp/WORKER")
+	saveFrame(t, term, "mail-new-mention-image")
+	if err := term.SendKeys(tuitest.Backspace, tuitest.Backspace, tuitest.Backspace); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return !strings.Contains(text, "[Image #1") && !strings.Contains(text, "e2e-ctrlp/WORKER")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the draft did not empty: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// draftThumbRows is how many rows a draft's thumbnail is high (composer.ThumbRows).
+const draftThumbRows = 3
 
 // TestARoutedKeyReplyIsAClaim covers the reply an agent could type through the
 // person's own client. send-keys routes keys to the attached client, whose

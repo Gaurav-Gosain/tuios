@@ -174,17 +174,16 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type the reply to send to each.", Images: true})
 	}
-	m.replyPreviewAttach(comp)
-	mentions := m.newReplyMentions(targets[0].session, targets[0].window)
-	mentions.dir = "" // the targets have different folders
-	comp.SetCompleter(mentions)
+	// No history: the targets each keep their own.
+	wires := m.wireDraft(comp, targets[0].session, targets[0].window, false)
+	wires.mentions.dir = "" // the targets have different folders
 	m.Inbox.reply.editor = &inboxReplyEditor{
-		mentions: mentions,
-		session:  targets[0].session,
-		window:   targets[0].window,
-		who:      strconv.Itoa(len(targets)) + " agents",
-		comp:     comp,
-		targets:  targets,
+		draftWires: wires,
+		session:    targets[0].session,
+		window:     targets[0].window,
+		who:        strconv.Itoa(len(targets)) + " agents",
+		comp:       comp,
+		targets:    targets,
 	}
 	return nil
 }

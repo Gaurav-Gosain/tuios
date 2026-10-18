@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +77,13 @@ func attachClient(t *testing.T) *tuitest.Terminal {
 // that drive the same daemon over the CLI (e.g. `tuios tape exec`) can reach it.
 func attachClientBase(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
+	return attachClientBaseOut(t, nil)
+}
+
+// attachClientBaseOut is attachClientBase with a copy of what tuios writes to
+// the host going to out, when out is not nil.
+func attachClientBaseOut(t *testing.T, out io.Writer) (*tuitest.Terminal, string) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 
@@ -83,7 +91,7 @@ func attachClientBase(t *testing.T) (*tuitest.Terminal, string) {
 		t.Fatalf("create detached session: %v: %s", err, out)
 	}
 
-	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-ctrlp"}})
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-ctrlp"}, out: out})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return countWindows(s) == 1
 	}, bootTimeout); err != nil {
