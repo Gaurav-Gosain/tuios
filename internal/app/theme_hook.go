@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"tuios.dev/vt"
 )
 
 // The after-theme-change hook.
@@ -17,7 +18,10 @@ import (
 // 2031 on its colour scheme notice.
 //
 // The fact is the client's: each client has its own theme, and the command
-// runs on the machine the person sits at, as after-attach does.
+// runs on the machine the person sits at, as after-attach does. Only a local
+// client runs it. A tuios ssh or tuios-web process serves many people, and a
+// hook there would run on the server for a theme the server's user never
+// sees. Two local clients each run it for their own theme.
 //
 // The picker and the theme editor show each theme on the way to a pick. The
 // hook waits while either is open and fires once for the theme in force when
@@ -40,7 +44,7 @@ type themeHookState struct {
 // string comparisons when nothing changed: paneReportNow is memoised, and its
 // key is the same string from frame to frame.
 func (m *OS) noteThemeChange() {
-	if m.ShowThemePicker || m.themeEditor.open {
+	if m.Client != ClientLocal || m.themePreviewing() {
 		return
 	}
 	r := m.paneReportNow()
@@ -68,7 +72,9 @@ func (m *OS) noteThemeChange() {
 	light := ""
 	if r.bg != nil {
 		light = "0"
-		if theme.GroundIsLight(r.bg) {
+		// The rule the mode 2031 notice uses, so the hook and the panes
+		// agree on what is light.
+		if vt.IsLightBackground(r.bg) {
 			light = "1"
 		}
 	}
