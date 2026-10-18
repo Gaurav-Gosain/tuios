@@ -713,6 +713,15 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 		}
 		det := r.det
 		detected := running && r.isAgent
+		// A pane back at its shell has no harness left to protect, so the
+		// shared-server guard forgets its conversations. The stored
+		// AgentSessionID stays, for a later resume.
+		if _, ok := s.agentSharedGuards[w.ID]; ok && !detected && running && info.atShell() && foregroundCommand(info, running, shell) == "" {
+			out.bookkeeping = true
+			if write {
+				delete(s.agentSharedGuards, w.ID)
+			}
+		}
 		claim := s.agentClaims[w.ID]
 		owned := claim.auto
 		// Noted whoever owns the claim, and before the switch, because
@@ -770,6 +779,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			}
 			delete(s.agentClaims, w.ID)
 			delete(s.agentHarnessPIDs, w.ID)
+			delete(s.agentSharedGuards, w.ID)
 			w.AgentState = AgentStateNone
 			clearAgentNote(w)
 			w.AgentHarness = ""
@@ -824,6 +834,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 				}
 				delete(s.agentClaims, w.ID)
 				delete(s.agentHarnessPIDs, w.ID)
+				delete(s.agentSharedGuards, w.ID)
 				w.AgentState = AgentStateNone
 				clearAgentNote(w)
 				w.AgentHarness = ""
@@ -855,6 +866,15 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 				break
 			}
 			delete(s.agentHarnessPIDs, id)
+		}
+	}
+	for id := range s.agentSharedGuards {
+		if _, ok := live[id]; !ok {
+			out.bookkeeping = true
+			if !write {
+				break
+			}
+			delete(s.agentSharedGuards, id)
 		}
 	}
 	return out
@@ -941,6 +961,7 @@ func (s *Session) reconcileAgentOnOutput(
 			}
 			delete(s.agentClaims, w.ID)
 			delete(s.agentHarnessPIDs, w.ID)
+			delete(s.agentSharedGuards, w.ID)
 			w.AgentState = AgentStateNone
 			clearAgentNote(w)
 			w.AgentHarness = ""

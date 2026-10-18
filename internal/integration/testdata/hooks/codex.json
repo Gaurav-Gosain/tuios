@@ -5,6 +5,11 @@
     "want": {"agent_cwd": "/src", "state": "idle", "agent_session_id": "th-1", "session_start": true, "transcript_path": "/home/u/.codex/sessions/rollout.jsonl"}
   },
   {
+    "name": "SessionStart after a compaction",
+    "payload": {"session_id": "th-1", "transcript_path": "/home/u/.codex/sessions/rollout.jsonl", "cwd": "/src", "hook_event_name": "SessionStart", "model": "gpt-5", "permission_mode": "default", "source": "compact"},
+    "want": {"agent_cwd": "/src", "state": "idle", "agent_session_id": "th-1", "transcript_path": "/home/u/.codex/sessions/rollout.jsonl"}
+  },
+  {
     "name": "UserPromptSubmit",
     "payload": {"session_id": "th-1", "hook_event_name": "UserPromptSubmit", "turn_id": "t1", "prompt": "go"},
     "want": {"state": "working", "agent_session_id": "th-1", "activity": {"event": "prompt", "text": "go"}}
@@ -89,7 +94,7 @@
   {
     "name": "legacy notify payload",
     "payload": {"type": "agent-turn-complete", "thread-id": "th-1", "turn-id": "t1", "cwd": "/src", "input-messages": ["go"], "last-assistant-message": "done"},
-    "want": {"state": "done", "agent_session_id": "th-1"}
+    "want": {"state": "done"}
   },
   {
     "name": "broken payload",

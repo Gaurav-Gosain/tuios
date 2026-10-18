@@ -1498,7 +1498,7 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		d.noteReportedAgentDir(sess, target, p.AgentSessionID, p.AgentCwd)
 	}
 	if reason == agentRefusedForeignSession || reason == agentRefusedForeignHarness {
-		debugLog("[DEBUG] set-agent-state: refused %s report from %s session %s (pid %d) for window %s: %s",
+		debugLog("[DEBUG] set-agent-state: refused %s report from %s session %q (pid %d) for window %s: %s",
 			state.Name(), p.Harness, p.AgentSessionID, p.HarnessPID, target, reason)
 	}
 	transcriptRefused := ""

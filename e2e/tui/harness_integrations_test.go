@@ -216,26 +216,49 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 // started. Its hooks then carry the pane's TUIOS_PANE_ID and the same harness
 // pid, and its approval showed under the pane, in the Inbox and as a
 // notification. Here both conversations run through the real hook from one
-// process, so they share a harness pid the way they do under one app-server.
-// The other conversation's prompt and approval are refused, mid-turn and at
-// rest, and its SessionStart still takes the pane over, as /new or /resume in
-// the pane does.
+// process, so they share a harness pid the way they do under one app-server,
+// while a stand-in codex holds the pane's foreground.
 //
-// Negative control: with shared_server removed from the codex manifest, the
-// other conversation's approval lands on the pane mid-turn and the first
-// refusal check fails.
+// The other conversation's prompt and approval are refused, mid-turn and at
+// rest, and so is its SessionStart after a compaction. Its SessionStart
+// (a resume) takes the pane over, since it looks like /resume in the pane.
+// The pane's own next approval takes the pane back and reaches the Inbox,
+// and the other conversation is refused again. Once codex exits and the pane
+// is back at its shell, the guard forgets both conversations.
+//
+// Negative controls: with shared_server removed from the codex manifest, or
+// the daemon not reading it, the other conversation's approval lands on the
+// pane mid-turn. With the hook not sending session_start, the other
+// conversation's SessionStart cannot take the pane over. With the reclaim
+// removed, the pane's own approval stays hidden after the takeover.
 func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	term, base := agentSessions(t)
 	log := &stateLog{name: "codex-shared-server"}
+	codex := filepath.Join(t.TempDir(), "codex")
+	if err := os.WriteFile(codex, []byte("#!/bin/sh\necho CODEX-UP\nread line\necho CODEX-GONE\n"), 0o755); err != nil {
+		t.Fatalf("write the stand-in codex: %v", err)
+	}
 	if out, err := tuiosCLI(t, base, "new-window", "codex", "-s", "e2e-agent", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
 	win := windowID(t, base, "e2e-agent", "codex")
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", win, codex+"\n"); err != nil {
+		t.Fatalf("start the stand-in codex: %v\n%s", err, out)
+	}
+	waitCapture(t, base, "e2e-agent", win, "CODEX-UP")
+
 	hook := func(payload string) { runHook(t, base, "codex", "e2e-agent", win, payload) }
-	const foreignApproval = `{"hook_event_name":"PermissionRequest","session_id":"cx-quick","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`
+	const (
+		paneApproval    = `{"hook_event_name":"PermissionRequest","session_id":"cx-pane","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`
+		foreignApproval = `{"hook_event_name":"PermissionRequest","session_id":"cx-quick","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`
+	)
+	inbox := func() string {
+		out, _ := tuiosCLI(t, base, "list-attention")
+		return out
+	}
 	// refused checks a report from the other conversation changed nothing:
-	// the pane keeps its state and its conversation, and nothing reaches the
-	// Inbox or the dock.
+	// the pane keeps its state and its conversation, and the other
+	// conversation's approval reaches neither the Inbox nor the dock.
 	refused := func(step, state string) {
 		t.Helper()
 		st := readAgentState(t, base, "e2e-agent", win)
@@ -244,13 +267,13 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 			log.save(t)
 			t.Fatalf("%s: the pane is %+v, want state %s in conversation cx-pane", step, st, state)
 		}
-		if out, _ := tuiosCLI(t, base, "list-attention"); strings.Contains(out, "rm -rf build") {
+		if out := inbox(); strings.Contains(out, "rm -rf build") {
 			log.save(t)
 			t.Fatalf("%s: the Inbox lists the other conversation's approval:\n%s", step, out)
 		}
-		if text := term.Snapshot(); strings.Contains(text, "needs approval") {
+		if text := term.Snapshot(); strings.Contains(text, "rm -rf build") {
 			log.save(t)
-			t.Fatalf("%s: the dock announces an approval:\n%s", step, text)
+			t.Fatalf("%s: the dock announces the other conversation's approval:\n%s", step, text)
 		}
 	}
 
@@ -269,19 +292,56 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	refused("other UserPromptSubmit at rest", "done")
 	hook(foreignApproval)
 	refused("other PermissionRequest at rest", "done")
+	hook(`{"hook_event_name":"SessionStart","session_id":"cx-quick","source":"compact"}`)
+	refused("other SessionStart after a compaction", "done")
 	saveFrame(t, term, "codex-shared-server-refused")
 
-	// A SessionStart is a new conversation in the pane, and takes it over.
+	// A SessionStart looks like /resume in the pane, and takes it over once.
 	hook(`{"hook_event_name":"SessionStart","session_id":"cx-quick","source":"resume"}`)
 	if st := waitAgentState(t, base, "e2e-agent", win, "idle", "codex", log, "other SessionStart"); st.AgentSession != "cx-quick" {
 		t.Fatalf("the SessionStart did not take the pane over: %+v", st)
 	}
-	hook(foreignApproval)
-	waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, "PermissionRequest after the takeover")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "needs approval") }, uiTimeout); err != nil {
-		t.Fatalf("the dock never announced the approval after the takeover: %v\n%s", err, term.Snapshot())
+
+	// The pane's own approval takes the pane back and reaches the Inbox.
+	hook(paneApproval)
+	if st := waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, "pane PermissionRequest reclaims"); st.AgentSession != "cx-pane" {
+		t.Fatalf("the pane's own approval did not take the pane back: %+v", st)
 	}
-	saveFrame(t, term, "codex-shared-server-taken-over")
+	if out := inbox(); !strings.Contains(out, "go test ./...") {
+		t.Fatalf("the Inbox does not list the pane's own approval:\n%s", out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "needs approval") && strings.Contains(text, "go test ./...")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the dock never announced the pane's own approval: %v\n%s", err, term.Snapshot())
+	}
+
+	// And the other conversation is refused again.
+	hook(foreignApproval)
+	refused("other PermissionRequest after the reclaim", "needs_input")
+	saveFrame(t, term, "codex-shared-server-reclaimed")
+
+	// codex exits and the pane is back at its shell: the guard forgets both
+	// conversations, so a report for another one is taken again.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", win, "\n"); err != nil {
+		t.Fatalf("stop the stand-in codex: %v\n%s", err, out)
+	}
+	waitCapture(t, base, "e2e-agent", win, "CODEX-GONE")
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		hook(`{"hook_event_name":"UserPromptSubmit","session_id":"cx-next","prompt":"next"}`)
+		st := readAgentState(t, base, "e2e-agent", win)
+		if st.AgentSession == "cx-next" {
+			log.add("%-44s state=%s session=%s", "new conversation after codex exits", st.State, st.AgentSession)
+			break
+		}
+		if time.Now().After(deadline) {
+			log.save(t)
+			t.Fatalf("the guard still held the pane after codex exited: %+v", st)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
 	log.save(t)
 }
 

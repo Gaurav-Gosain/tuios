@@ -300,7 +300,9 @@ func TestAgentHookReadsTheCodexNotifyArgument(t *testing.T) {
 	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
 	h.run(t, agentHookOptions{}, "", "codex", `{"type":"agent-turn-complete","thread-id":"th-9"}`)
 	r := h.daemon.reports()
-	if len(r) != 1 || r[0]["state"] != "done" || r[0]["agent_session_id"] != "th-9" {
+	// No session id: the shared-server guard must never refuse the legacy
+	// notify, which fires for every conversation the app-server runs.
+	if len(r) != 1 || r[0]["state"] != "done" || r[0]["agent_session_id"] != nil {
 		t.Fatalf("reports = %v", r)
 	}
 }

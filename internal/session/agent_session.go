@@ -49,6 +49,10 @@ var errAgentSessionUnchanged = errors.New("agent session is unchanged")
 // When the detector sees the agent leave the pane it forgets the pid, so a
 // harness restarted in the same pane is not refused as a nested run of the one
 // that exited.
+//
+// The shared-server guard of sessionGuard is left out on purpose. This verb is
+// the recovery path for a Codex pane whose guard holds the wrong conversation,
+// and a person running it has to win: it replaces the guard's owner instead.
 func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string, bool, string, error) {
 	var stored string
 	var reason string
@@ -79,6 +83,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		w.AgentSessionHarness = r.Harness
 		stored = r.SessionID
 		s.setAgentHarnessPID(w.ID, r.HarnessPID)
+		s.pointSharedGuard(w.ID, r)
 		return nil
 	})
 	var refused errAgentReportRefused
@@ -91,6 +96,16 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		return "", false, "", err
 	}
 	return stored, true, "", nil
+}
+
+// pointSharedGuard makes r's conversation the owner of an armed shared-server
+// guard on the window, and forgets the owner before it. It is how a person
+// points a Codex pane at its conversation (tuios set-agent-session) when the
+// guard holds the wrong one. Called with stateMu held.
+func (s *Session) pointSharedGuard(windowID string, r AgentSessionReport) {
+	if g, ok := s.agentSharedGuards[windowID]; ok && g.harness == r.Harness {
+		s.agentSharedGuards[windowID] = sharedGuard{harness: r.Harness, owner: r.SessionID}
+	}
 }
 
 // setAgentHarnessPID records the harness pid a window's session id came from,

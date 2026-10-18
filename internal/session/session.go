@@ -1432,6 +1432,14 @@ type Session struct {
 	// stateMu.
 	agentHarnessPIDs map[string]int
 
+	// agentSharedGuards records, by window ID, the conversations the guard of
+	// a shared-server harness (Codex) protects on that window: the owner and
+	// the owner before it. See sharedGuard. It is kept apart from the stored
+	// AgentSessionID, which outlives the agent so a pane can resume its last
+	// conversation; the guard must not, so the detector forgets it when the
+	// pane goes back to its shell. Daemon memory only, under stateMu.
+	agentSharedGuards map[string]sharedGuard
+
 	// agentSubagents records, by window ID, the subagents the window's agent
 	// is running or ran a moment ago, and the launches whose subagent has not
 	// started, as its hooks reported them. The window's AgentSubagents and

@@ -3734,11 +3734,29 @@ the one that owns the pane. These filters keep those events off the pane:
 - Codex is different. Its manifest sets `shared_server = true`, because one
   Codex app-server runs the hooks of every conversation. A Codex in another
   terminal can use the app-server a pane's codex started. Its hooks then carry
-  the pane's `TUIOS_PANE_ID` and the same pid. So for Codex a different
-  conversation takes the pane over only with its `SessionStart`. Every other
-  event from it is refused with `foreign_session`, at rest and mid-turn, and
-  makes no Inbox item and no notification. A `/new` or `/resume` in the pane
-  sends a `SessionStart`, so it still takes the pane over.
+  the pane's `TUIOS_PANE_ID` and the same pid. So for Codex a `SessionStart`
+  sets the conversation that owns the pane. A report for another conversation
+  is refused with `foreign_session`, at rest and mid-turn. It makes no Inbox
+  item and no notification. The daemon logs the refusal at debug level.
+- Another conversation's `SessionStart` takes the pane over, because it looks
+  like `/new` or `/resume` in the pane. A `SessionStart` after a compaction
+  (source `compact`) is the same conversation and takes nothing over.
+- The pane's own conversation is never locked out. The daemon keeps the owner
+  before the current one. Its next report takes the pane back, and the other
+  conversation is refused again until its next `SessionStart`.
+- When codex exits and the pane is back at its shell, the daemon forgets both
+  conversations. The pane's `agent_session_id` stays, for a resume.
+- Until a `SessionStart` arrives, the pane takes every report. This is the
+  case after a daemon restart or when you install the hooks mid-conversation.
+- To point a Codex pane at its conversation, run `/new` in it, or run
+  `tuios set-agent-session --harness codex -w PANE <id>`. `set-agent-session`
+  is outside this guard on purpose, and replaces the conversation it holds.
+- The legacy `notify` command sends its turn-end report without the
+  conversation id, so the guard never refuses it.
+- The guard reads `shared_server` from the manifest. A codex.toml in your
+  harness folder replaces the bundled one. If you wrote it before this
+  change, it has no `shared_server`, and the guard is off. Add
+  `shared_server = true` to it.
 
 ### Session identity
 

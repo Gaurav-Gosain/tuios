@@ -6912,12 +6912,18 @@ above the label. Then it types ` @`, and the list must show
 
 `TestCodexSharedServerKeepsAnotherConversationOffThePane` runs two Codex
 conversations through the real `tuios agent-hook codex` from one process, so
-both carry the same harness pid, as they do under one Codex app-server. The
-pane's conversation starts a turn. The other conversation's approval and
-prompt must leave the pane's state and conversation alone, mid-turn and at
-rest, with nothing in `list-attention` and no approval in the dock. The
-positive half: the other conversation's `SessionStart` takes the pane over,
-and its next approval shows in the dock.
+both carry the same harness pid, as they do under one Codex app-server. A
+stand-in `codex` holds the pane's foreground. The test checks, in order:
+
+- The other conversation's approval and prompt leave the pane's state and
+  conversation alone, mid-turn and at rest. Nothing reaches `list-attention`
+  or the dock.
+- Its `SessionStart` after a compaction is refused too.
+- Its `SessionStart` with source `resume` takes the pane over.
+- The pane's own approval then takes the pane back and shows in
+  `list-attention` and the dock.
+- The other conversation's approval is refused again.
+- After codex exits, a third conversation's prompt is taken.
 
 Run on 2026-10-18.
 
@@ -6933,9 +6939,13 @@ The fixed build passes it, every other `TestMail*` and `TestAgentMail*`,
 `TestReplyPreviewInScreenCapture` and every `TestInbox*`.
 | Another conversation's approval took the pane over | yes | `shared_server = false` in the codex manifest | `TestCodexSharedServerKeepsAnotherConversationOffThePane` ("other PermissionRequest mid-turn: the pane is {State:needs_input ... AgentSession:cx-quick}, want state working in conversation cx-pane") | **caught** |
 | The daemon never read the manifest flag | yes | `verbSetAgentState` sets `SharedServer: false` | same test, same message | **caught** |
-| A `SessionStart` from another conversation could not take the pane over | yes | `reportHook` does not send `session_start` | same test ("other SessionStart: the pane is {State:done ... AgentSession:cx-pane}, want state idle") | **caught** |
+| The hook never marked a `SessionStart` | yes | `reportHook` does not send `session_start`, so the guard never arms | same test, same message | **caught** |
+| A takeover hid the pane's own approval | yes | `sessionGuard` without the reclaim by the owner before | same test ("pane PermissionRequest reclaims: the pane is {State:idle ... AgentSession:cx-quick}, want state needs_input") | **caught** |
+| The guard outlived codex | yes | the detector's shell sweep disabled | same test ("the guard still held the pane after codex exited") | **caught** |
+| A compaction counted as a new conversation | yes | `translateCodex` sets `SessionStart` for source `compact` | same test ("other SessionStart after a compaction: the pane is {State:idle ... AgentSession:cx-quick}, want state done") | **caught** |
 
-The fixed build passes it and `TestHookIntegrationsReportTheTurn`. The
-Claude Code `/clear` and `/resume` rules keep their tests in
-`internal/session` (`TestSetAgentStateNewSessionInTheSameHarnessTakesOver`,
+The fixed build passes it, `TestHookIntegrationsReportTheTurn` and
+`TestCodexPaneNotificationsArrive`. The Claude Code `/clear` and `/resume`
+rules keep their tests in `internal/session`
+(`TestSetAgentStateNewSessionInTheSameHarnessTakesOver`,
 `TestSetAgentStateRefusesANestedSession`), which pass unchanged.

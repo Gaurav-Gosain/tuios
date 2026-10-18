@@ -212,6 +212,53 @@ const (
 	agentRefusedForeignHarness = "foreign_harness"
 )
 
+// sharedGuard is what the guard of a shared-server harness knows about one
+// window: the harness, the conversation that owns the window, and the one that
+// owned it before. An empty owner means the guard is not armed and every report
+// passes it. Only a report with SessionStart arms it, so a pane whose hooks were
+// installed mid-conversation, or a daemon that restarted, fails open.
+//
+// prev is what keeps the guard from locking a pane against its own
+// conversation. A SessionStart from another terminal on the same server looks
+// exactly like /new or /resume in the pane, so it takes the window over. The
+// owner it displaced stays as prev, and its next report takes the window back:
+// that is the conversation whose TUI is in the pane. The takeover is then
+// undone and the other conversation is refused again until its next
+// SessionStart.
+type sharedGuard struct {
+	harness, owner, prev string
+}
+
+// noteSharedGuard moves the window's guard on for an applied report r. Called with
+// stateMu held.
+func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
+	if !r.SharedServer || r.SessionID == "" {
+		return
+	}
+	g, armed := s.agentSharedGuards[windowID]
+	switch {
+	case r.State == AgentStateNone:
+		// SessionEnd: the conversation is over and the pane is free.
+		delete(s.agentSharedGuards, windowID)
+		return
+	case !armed || g.owner == "" || g.harness != r.Harness:
+		if !r.SessionStart {
+			return
+		}
+		g = sharedGuard{harness: r.Harness, owner: r.SessionID}
+	case r.SessionID == g.owner:
+		return
+	case r.SessionID == g.prev:
+		g.owner, g.prev = r.SessionID, ""
+	default:
+		g.owner, g.prev = r.SessionID, g.owner
+	}
+	if s.agentSharedGuards == nil {
+		s.agentSharedGuards = make(map[string]sharedGuard)
+	}
+	s.agentSharedGuards[windowID] = g
+}
+
 // errAgentReportRefused carries a refusal reason out of mutateState.
 type errAgentReportRefused string
 
@@ -245,19 +292,23 @@ func (e errAgentReportRefused) Error() string { return "agent report refused: " 
 // A shared-server harness (Codex) breaks both rules above. It runs the hooks
 // of every conversation from one server process, and a Codex in another
 // terminal can use the server a pane's codex started, so its hooks carry the
-// pane's TUIOS_PANE_ID and the same harness pid (#852). For such a harness a
-// report about a different conversation of the same harness takes the pane
-// over only when it is the conversation's SessionStart, at rest or mid-turn;
-// every other event is refused with foreign_session. A pane with no stored
-// conversation, or one stored for another harness, falls through to the
-// rules above. A SessionStart mid-turn still passes the pid rule.
-func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, r AgentReport) string {
+// pane's TUIOS_PANE_ID and the same harness pid (#852). For such a harness,
+// once g is armed, a report about a conversation other than g's owner is
+// refused with foreign_session, at rest and mid-turn, unless it is the
+// owner before (which takes the pane back, see sharedGuard) or a SessionStart.
+// A SessionStart then goes on to the rules above, so mid-turn it still has to
+// come from the owner's process.
+func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, g sharedGuard, r AgentReport) string {
 	if r.SessionID == "" {
 		return ""
 	}
-	if r.SharedServer && !r.SessionStart && w.AgentSessionID != "" && w.AgentSessionID != r.SessionID &&
-		(w.AgentSessionHarness == "" || w.AgentSessionHarness == r.Harness) {
-		return agentRefusedForeignSession
+	if r.SharedServer && g.owner != "" && g.harness == r.Harness && r.SessionID != g.owner {
+		if r.SessionID == g.prev {
+			return ""
+		}
+		if !r.SessionStart {
+			return agentRefusedForeignSession
+		}
 	}
 	if !held || claim.source != AgentSourceReport {
 		return ""
@@ -298,7 +349,7 @@ func (s *Session) guardReport(target string, r AgentReport, strict bool) (string
 	}
 	w := &s.state.Windows[idx]
 	claim, held := s.agentClaims[w.ID]
-	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r)
+	reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], s.agentSharedGuards[w.ID], r)
 	switch {
 	case reason != "" || !strict:
 	case r.SessionID != "" && w.AgentSessionID != "" && r.SessionID != w.AgentSessionID:
@@ -344,7 +395,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			effective = prev
 			return errAgentReportRefused(agentRefusedIfState)
 		}
-		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r); reason != "" {
+		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], s.agentSharedGuards[w.ID], r); reason != "" {
 			effective = prev
 			return errAgentReportRefused(reason)
 		}
@@ -397,6 +448,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		w.AgentKind = agentKindOf(r)
 		w.AgentHarness = next.harness
 		w.AgentStateAt = time.Now().UnixNano()
+		s.noteSharedGuard(w.ID, r)
 		if r.SessionID != "" {
 			w.AgentSessionID = r.SessionID
 			// The harness the id belongs to: the one the report named, else

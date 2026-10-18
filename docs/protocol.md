@@ -4642,10 +4642,13 @@ same process, such as `/clear` after an interrupted turn that never reported
 A harness whose manifest sets `shared_server = true` (Codex) runs the hooks of
 every conversation from one server process. A conversation in another
 terminal can share that process, its pid and the pane's `TUIOS_PANE_ID`. For
-such a harness, a report for a different conversation of the same harness is
-accepted only with `session_start`. Any other report is refused with
-`foreign_session`, at rest and mid-turn. A window with no stored session id is
-open to any report.
+such a harness, a report with `session_start` sets the conversation that owns
+the window. A report for another conversation of the same harness is refused
+with `foreign_session`, at rest and mid-turn, unless it carries
+`session_start`. The owner before the current one is the exception: its next
+report takes the window back. The daemon forgets both when the pane is back at
+its shell. Until a `session_start` arrives, the window is open to any report.
+`set-agent-session` is not guarded this way, and it replaces the owner.
 
 `reason`, `activity_recorded` and the hook fields are additive. A client that
 sends none of the fields is handled exactly as before. A daemon older than them does not

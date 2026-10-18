@@ -11,7 +11,8 @@ import "strings"
 // SessionEnd, SubagentStart, Interrupt) and the common input fields, which are
 // Claude Code's: session_id, transcript_path, cwd, hook_event_name.
 //
-//	SessionStart          idle, and the session id and transcript path
+//	SessionStart          idle, and the session id and transcript path;
+//	                      session_start unless the source is compact
 //	UserPromptSubmit      working
 //	PreToolUse            working
 //	PermissionRequest     needs_input, kind approval
@@ -44,7 +45,10 @@ import "strings"
 func translateCodex(in Input, p fields) Decision {
 	event := eventName(in, p)
 	if event == "" && p.str("type") == "agent-turn-complete" {
-		return send(Codex, "agent-turn-complete", Report{State: "done", SessionID: p.str("thread-id")})
+		// No session id: the legacy notify fires for every conversation the
+		// app-server runs, and its report must not be refused by the
+		// shared-server guard, which only the hooks' SessionStart arms.
+		return send(Codex, "agent-turn-complete", Report{State: "done"})
 	}
 	// A Codex started by a tool call inside another Codex inherits the outer
 	// one's CODEX_THREAD_ID. herdr's asset drops the event when the two differ,
@@ -57,7 +61,12 @@ func translateCodex(in Input, p fields) Decision {
 	}
 	switch event {
 	case "SessionStart":
-		return send(Codex, event, identity(Report{State: "idle", SessionStart: true}, p))
+		// Codex sends SessionStart with source compact after every
+		// compaction (startup, resume, clear and fork are the others). That is
+		// the same conversation going on, not a new one, so it must not take
+		// the pane over from the shared-server guard.
+		start := p.str("source") != "compact"
+		return send(Codex, event, identity(Report{State: "idle", SessionStart: start}, p))
 	case "UserPromptSubmit":
 		r := identity(Report{State: "working"}, p)
 		if text := activityText(p.str("prompt")); text != "" {

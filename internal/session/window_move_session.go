@@ -83,6 +83,7 @@ type paneTransfer struct {
 
 	claim      *agentClaim
 	harnessPID int
+	guard      *sharedGuard
 	subagents  *paneSubagents
 	turn       *agentTurn
 	seen       *uint64
@@ -188,6 +189,10 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 		if pid, ok := s.agentHarnessPIDs[id]; ok {
 			t.harnessPID = pid
 			delete(s.agentHarnessPIDs, id)
+		}
+		if g, ok := s.agentSharedGuards[id]; ok {
+			t.guard = &g
+			delete(s.agentSharedGuards, id)
 		}
 		if sa, ok := s.agentSubagents[id]; ok {
 			t.subagents = sa
@@ -310,6 +315,12 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 				s.agentHarnessPIDs = make(map[string]int)
 			}
 			s.agentHarnessPIDs[id] = t.harnessPID
+		}
+		if t.guard != nil {
+			if s.agentSharedGuards == nil {
+				s.agentSharedGuards = make(map[string]sharedGuard)
+			}
+			s.agentSharedGuards[id] = *t.guard
 		}
 		if t.subagents != nil {
 			if s.agentSubagents == nil {
