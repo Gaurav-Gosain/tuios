@@ -139,6 +139,8 @@ type cockpitState struct {
 	// frame is the last frame drawn, and frameAt what it was drawn from.
 	frame   string
 	frameAt ckFrameKey
+	// img is the image view, nil when it is not up.
+	img *ckImageView
 	// tab is the focus tab: 0 the thread, 1 the last turn's changes.
 	tab int
 	// dv is the diff theme the thread's cards draw with, for dvKey.
@@ -775,6 +777,10 @@ func (m *OS) cockpitWideFocus() bool { return m.GetRenderWidth() >= ckOneColumn 
 // handled is false for a click outside it.
 func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
+	if ck.img != nil {
+		m.cockpitImageClick(x, y)
+		return nil, true
+	}
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
 			continue
@@ -835,11 +841,17 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		m.OpenSettingsAt("Agents")
 	case "back":
 		return m.CockpitOpenFocus(false)
+	case "send":
+		return m.InboxReplySend()
 	case "review":
 		m.cockpitSync()
 		cmd, _ := m.InboxReview()
 		return cmd
 	default:
+		if i, ok := strings.CutPrefix(action, "image:"); ok {
+			n, _ := strconv.Atoi(i)
+			return m.cockpitOpenImage(n)
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {

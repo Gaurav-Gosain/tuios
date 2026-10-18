@@ -138,6 +138,7 @@ var (
 	ckGlyphFold    = ckGlyph{"", "›", ">"}
 	ckGlyphMarked  = ckGlyph{"\uf14a", "•", "*"}
 	ckGlyphResume  = ckGlyph{"\uf01e", "»", ">"}
+	ckGlyphImage   = ckGlyph{"\U000f02e9", "[img]", "[img]"}
 )
 
 // g picks the form the terminal can draw.
@@ -236,12 +237,12 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	if ed := st.reply.editor; ed != nil {
 		// At the width the last frame drew it, so the composer's own cache
 		// answers, and Drawn moves only when the draft or the cursor did.
-		ed.lines(max(ck.edW, 20))
+		ed.comp.Render(max(ck.edW-4, 8), composerStyles(l.pal), l.panel)
 		key.editor = ed.comp.Drawn() + 1
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
-	transient := st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
+	transient := st.ck.img != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
 		st.approvals.reason != nil || st.approvals.armed.key != ""
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
@@ -268,6 +269,10 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	colTop, colBot, hintsY := hdrY+2, c.h-2, c.h-1
 	if c.h < 16 {
 		colTop, colBot = hdrY+1, c.h-1
+	}
+	if st.ck.img != nil {
+		m.drawImageView(c, l, top)
+		return
 	}
 	rows := m.cockpitRows()
 	agents := 0
@@ -997,7 +1002,7 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	case st.Peek != nil:
 		return nil
 	}
-	if _, hints, ok := m.inboxReplyDetail(); ok {
+	if hints, ok := m.inboxReplyHints(); ok {
 		return hints
 	}
 	if m.InboxReasonOpen() {
@@ -1141,27 +1146,12 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		bodyTop = rule + 1
 	}
 
-	// The foot: the reply editor when it is open, else the line that opens it.
+	// The foot: the reply area, open or closed. A reply to an agent on a
+	// prompt is refused, so the area is not drawn for one: the card answers
+	// the prompt.
 	foot := y1
-	if ed := st.reply.editor; ed != nil {
-		st.ck.edW = w
-		lines := ed.lines(w)
-		foot = max(y1-len(lines), bodyTop)
-		for i, s := range lines {
-			c.draw(x, foot+i, w, s)
-		}
-		ed.at.x, ed.at.y, ed.at.ok = x+2, foot+top+ed.head, true
-	} else if (r.agent >= 0 && e.State != "needs_input") || (r.hasItem && r.item.Kind == session.AttentionMail) {
-		// A reply to an agent on a prompt is refused, so the line that
-		// opens one is not drawn: the card answers the prompt.
-		foot = y1 - 2
-		c.hline(x, foot, w, hzGlyph(), l.edge)
-		c.fill(x, foot+1, w, 1, l.panel)
-		to := "Reply to " + name
-		key := m.inboxKeyOr(config.ActionInboxReply, "r")
-		c.text(x+2, foot+1, right-2, ckSeg{t: to, fg: pal.FgMute})
-		c.textR(right-2, foot+1, ckSeg{t: key, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " reply", fg: pal.FgMute})
-		st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + foot + 1, x1: right, y1: top + foot + 2, kind: ckHitAction, action: "reply"})
+	if st.reply.editor != nil || (r.agent >= 0 && e.State != "needs_input") || (r.hasItem && r.item.Kind == session.AttentionMail) {
+		foot = m.drawReplyArea(c, l, e, name, x, w, y1, top)
 	}
 	bodyBot := foot - 1
 	if foot == y1 {

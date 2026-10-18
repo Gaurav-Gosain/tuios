@@ -23,7 +23,10 @@ func (m *OS) replyPixelsReady() bool {
 func (m *OS) flushReplyPreviewForFrame() {
 	p := m.replyPreview
 	var want []previewPlacement
-	if d, ok := m.openDraft(); ok && d.wires.at.ok && m.replyPixelsReady() {
+	if pl, ok := m.cockpitImagePlacement(); ok && m.replyPixelsReady() {
+		// The image view covers the draft: its picture is the one shown.
+		want = append(want, pl)
+	} else if d, ok := m.openDraft(); ok && d.wires.at.ok && m.replyPixelsReady() {
 		if h, ok := m.overlayHitByKind(d.kind); ok && m.overlayOnTop(d.kind) {
 			at := d.wires.at
 			for _, pl := range d.comp.Placements() {

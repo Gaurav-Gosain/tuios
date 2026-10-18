@@ -133,6 +133,7 @@ func (m *OS) composerPasteCmd(comp *composer.Model, window, text string) tea.Cmd
 		if err != nil {
 			return replyImageMsg{comp: comp, text: text}
 		}
+		img.Name = filepath.Base(path)
 		return replyImageMsg{comp: comp, img: img}
 	}
 }

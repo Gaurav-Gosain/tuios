@@ -1213,6 +1213,11 @@ folded group, or one a search hides, is left out, and closing the view clears
 the marks. An approval whose command does not fit on the card is not answered
 here: the card says so, and `enter` answers it in the pane.
 
+In the image view, which a click on an image chip in the reply opens: `o`
+opens the image in the desktop's viewer, `c` saves a copy and copies its
+path, `s` saves a copy, `left` and `right` step through the images, `+` and
+`-` zoom, and `esc` or a click outside the picture closes it.
+
 The mouse works too. A click on a row selects it, and a double-click goes to
 its pane. A click on a group heading folds the group. The buttons on an
 approval card answer it. `+ New agent` starts one, and the search box opens

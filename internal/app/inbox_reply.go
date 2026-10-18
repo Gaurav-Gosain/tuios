@@ -10,13 +10,11 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Replying to an agent: the composer under the Inbox list (internal/composer)
@@ -132,12 +130,6 @@ type inboxReplyEditor struct {
 	// draftWires is the previewer's, the @ list's and the history's state.
 	// See draft_wiring.go.
 	draftWires
-	// frame is the editor's lines as last drawn, and frameAt what they were
-	// drawn from.
-	frame   []string
-	frameAt inboxReplyFrame
-	// head is how many lines the label takes above the draft.
-	head int
 }
 
 // inboxSentReply is a reply this client queued, kept so a drop of it can be
@@ -913,64 +905,13 @@ func (m *OS) sidebarAgentKeyOr(action, fallback string) string {
 	return fallback
 }
 
-// inboxReplyDetail is the editor under the list and its hints, when it is
-// open. The lines carry their own colours.
-func (m *OS) inboxReplyDetail() (detail func(width int) []string, hints []overlay.Hint, ok bool) {
+// inboxReplyHints are the reply editor's key hints, when it is open.
+func (m *OS) inboxReplyHints() ([]overlay.Hint, bool) {
 	ed := m.Inbox.reply.editor
 	if ed == nil {
-		return nil, nil, false
+		return nil, false
 	}
-	return ed.lines, composerHints(ed.comp.Hints(overlay.UseASCII())), true
-}
-
-// lines is the editor as drawn at width. The lines are kept until the width,
-// the theme or the draft's frame changes, so a frame drawn for something else
-// on screen does not draw the editor again. The list asks twice a frame, once
-// to measure it.
-func (ed *inboxReplyEditor) lines(width int) []string {
-	pal := theme.UI()
-	inner := max(width-2, 8)
-	// The composer keeps its own last frame, so this call is cheap when
-	// nothing changed, and Drawn says whether it drew a new one.
-	body := ed.comp.Render(inner, composerStyles(pal), pal.Surface)
-	key := inboxReplyFrame{width: width, theme: theme.Generation(), drawn: ed.comp.Drawn()}
-	if ed.frame != nil && ed.frameAt == key {
-		return ed.frame
-	}
-	ed.frame, ed.frameAt = inboxReplyLines(ed, width, body), key
-	return ed.frame
-}
-
-// inboxReplyFrame is what the editor's lines were drawn from.
-type inboxReplyFrame struct {
-	width int
-	theme uint64
-	drawn uint64
-}
-
-// inboxReplyLines draws the editor: who it is for and where that agent is,
-// then the draft.
-func inboxReplyLines(ed *inboxReplyEditor, width int, body []string) []string {
-	pal := theme.UI()
-	bg := pal.Surface
-	inner := max(width-2, 8)
-	label := overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render("Reply to " + ed.who)
-	if ed.context != "" {
-		label += overlay.Style(bg).Foreground(pal.FgDim).Render(" (" + ed.context + ")")
-	}
-	pad := overlay.Style(bg).Render("  ")
-	out := []string{overlay.Fill(pad+ansi.Truncate(label, inner, "…"), width, bg)}
-	// A reply to an agent at work waits. The line says so before it is
-	// sent, not only after.
-	if strings.HasPrefix(ed.context, "working") {
-		wait := overlay.Style(bg).Foreground(pal.FgDim).Render("It is typed when " + ed.who + " is at rest.")
-		out = append(out, overlay.Fill(pad+ansi.Truncate(wait, inner, "…"), width, bg))
-	}
-	ed.head = len(out)
-	for _, l := range body {
-		out = append(out, pad+l)
-	}
-	return out
+	return composerHints(ed.comp.Hints(overlay.UseASCII())), true
 }
 
 // sidebarAgentQueuedFigure is what a rail agent row shows at its right edge

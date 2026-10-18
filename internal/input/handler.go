@@ -223,7 +223,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// The Inbox reads a plan's text when one comes under the cursor, which
 	// any input can do. It costs a comparison when nothing needs reading.
 	if o.ShowInbox {
-		cmd = tea.Batch(cmd, o.InboxApprovalFetch(), o.InboxRecapFetch(), o.InboxAgentsTick(), o.InboxThreadFetch(), o.ReplyHistoryFetch())
+		cmd = tea.Batch(cmd, o.InboxApprovalFetch(), o.InboxRecapFetch(), o.InboxAgentsTick(), o.InboxThreadFetch(), o.ReplyHistoryFetch(), o.CockpitImagePicture())
 	} else if o.ShowAgentMail {
 		// A mail draft reads its pane's history as the Inbox reply does.
 		cmd = tea.Batch(cmd, o.ReplyHistoryFetch())

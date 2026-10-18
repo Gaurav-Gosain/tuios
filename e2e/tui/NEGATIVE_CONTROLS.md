@@ -7073,3 +7073,19 @@ Run on 2026-10-18.
 | A click on a card's header does nothing | n/a, injected | the diff card's header line has no `fold:` hit | `TestCockpitThreadCards` ("a click on the header did not fold the diff") | **caught** |
 | A tool result between two reads breaks the run | n/a, injected | the run stops at a `tool_result` entry | `TestCockpitThreadCards` ("the reads did not fold to one line") | **caught** |
 | The changed words are lit three cells early per tab | `ckCodeOffset`: the word offsets mapped on the raw text | the offsets taken on the text after the tab became four spaces | `TestCockpitThreadCards` ("the cell before the changed words is lit too") | **caught** |
+
+## The agents cockpit: reply area and image view
+
+`TestCockpitReplyAreaAndImageView` opens the reply area by a click, types,
+drops a PNG's path in, opens the image view from the chip, closes it with esc
+and with a click outside the picture, and sends with the Send button. The
+picture is drawn as cells (`TUIOS_KITTY_GRAPHICS=0`), so the test reads it off
+the screen.
+
+Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| An image chip is not a click target | n/a, injected | the chip's `image:` hit left out of `drawReplyArea` | `TestCockpitReplyAreaAndImageView` ("a click on the chip did not open the image view") | **caught** |
+| A click outside the picture leaves the view up | n/a, injected | `cockpitImageClick` never closes | `TestCockpitReplyAreaAndImageView` ("a click outside the picture did not close the view") | **caught** |
+| The Send button does nothing | n/a, injected | `cockpitAction` has no `send` case | `TestCockpitReplyAreaAndImageView` ("waiting for the closed area after Send") | **caught** |

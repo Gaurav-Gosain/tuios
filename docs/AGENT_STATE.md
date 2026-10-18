@@ -2331,6 +2331,18 @@ the focus. When the list is taller than the screen, rows are one line and a
 group longer than 8 rows shows its first 8 and `+N more`, which a click or
 `right` opens. Needs you never folds.
 
+The reply area sits at the foot of the focus: who the reply is for, when it
+is typed (at once, or when a working agent rests), and a Send button. A click
+on it, `r`, `i` or `tab` opens the editor. An image you paste or drop in shows
+as a chip with its name and size. A click on the chip opens the image view:
+the picture at the largest size the screen holds, its name, size in pixels
+and bytes, and who it is for. `o` opens it in the desktop's viewer, `c` saves
+a copy to the screenshot folder and copies its path, `s` saves a copy, `left`
+and `right` step through the draft's images, `+` and `-` zoom, and `esc` or a
+click outside the picture closes the view. The picture is drawn with kitty
+graphics where the terminal has them, and with block glyphs where it does
+not.
+
 The thread shows what the agent said and did. For Claude Code it is the
 conversation, read from its transcript and drawn as cards:
 

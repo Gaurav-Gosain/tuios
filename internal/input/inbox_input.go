@@ -28,6 +28,10 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPopSettling() {
 		return o, nil
 	}
+	// The image view takes every key while it is up.
+	if o.CockpitImageOpen() {
+		return o, o.CockpitImageKey(msg.String())
+	}
 	// A risky allow's first press waits for the same key again; any other
 	// key resets it.
 	o.InboxKeyPressed(msg.String())

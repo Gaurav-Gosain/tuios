@@ -2,6 +2,8 @@ package tuie2e
 
 import (
 	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -341,16 +343,28 @@ func TestCockpitThreadCards(t *testing.T) {
 		}, uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: the thread never showed the failed command's output: %v\n%s", err, term.Snapshot())
 		}
-		// Scroll up to the plan and the edit.
-		for range 4 {
-			if err := term.SendKeys("K"); err != nil {
-				t.Fatal(err)
+		// scrollTo presses key, three lines a press, until want shows.
+		scrollTo := func(key, want string) {
+			t.Helper()
+			for range 12 {
+				if strings.Contains(term.Screen().Text(), want) {
+					return
+				}
+				if err := term.SendKeys(key); err != nil {
+					t.Fatal(err)
+				}
+				_ = term.WaitStable(uiTimeout)
 			}
 		}
+		scrollTo("K", "2 of 5 done")
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
-			return containsAll(s.Text(), "2 of 5 done", "Test the boundary at 30 s", "Add(refreshSkew).Before")
+			return containsAll(s.Text(), "2 of 5 done", "Test the boundary at 30 s")
 		}, uiTimeout); err != nil {
-			t.Fatalf("ASSERTION: the thread has no plan card or diff card: %v\n%s", err, term.Snapshot())
+			t.Fatalf("ASSERTION: the thread has no plan card: %v\n%s", err, term.Snapshot())
+		}
+		scrollTo("J", "Add(refreshSkew).Before")
+		if err := term.WaitForText("Add(refreshSkew).Before", uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the thread has no diff card: %v\n%s", err, term.Snapshot())
 		}
 		// The changed words are lit: their cells sit on another ground than
 		// the rest of the added line.
@@ -371,18 +385,11 @@ func TestCockpitThreadCards(t *testing.T) {
 		}
 		saveCockpitFrames(t, term, "thread-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]))
 		// Further up, the three reads and the search are one line.
-		if err := term.SendKeys("K", "K"); err != nil {
-			t.Fatal(err)
-		}
+		scrollTo("K", "Read 3 · Search 1")
 		if err := term.WaitForText("Read 3 · Search 1", uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: the reads did not fold to one line: %v\n%s", err, term.Snapshot())
 		}
-		if err := term.SendKeys("J", "J"); err != nil {
-			t.Fatal(err)
-		}
-		if err := term.WaitForText("Add(refreshSkew).Before", uiTimeout); err != nil {
-			t.Fatal(err)
-		}
+		scrollTo("J", "Add(refreshSkew).Before")
 		if err := term.WaitStable(uiTimeout); err != nil {
 			t.Fatal(err)
 		}
@@ -411,4 +418,132 @@ func TestCockpitThreadCards(t *testing.T) {
 		}
 		alive(t, term, "after the thread cards")
 	}
+}
+
+// TestCockpitReplyAreaAndImageView writes a reply in the agents view with an
+// image dropped in, opens the image from its chip, and closes the view by
+// esc and by a click outside the picture. The Send button queues the reply.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with the chip given no
+// click target the view never opens; with a click on the picture's backdrop
+// read as inside, the click outside does not close it.
+func TestCockpitReplyAreaAndImageView(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	for _, s := range []string{"home", "docs"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	for _, args := range [][]string{
+		{"set-window", "-s", "docs", "-w", "0", "--name", "docs-cli"},
+		{"set-agent-state", "idle", "-s", "docs", "-w", "docs-cli", "--harness", "claude-code"},
+		{"set-agent-meta", "-s", "docs", "-w", "docs-cli", "model=gpt-5", "diff=+88/-12"},
+	} {
+		if out, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	shot := filepath.Join(t.TempDir(), "login-error.png")
+	if err := os.WriteFile(shot, gradientPNG(t, 640, 360), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Without kitty graphics the picture is cells, which the screen holds
+	// and the frames show.
+	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 200, rows: 55, shippedLooks: true,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the closed reply area", "Reply to docs-cli", "Write a reply.", "Send")
+	saveCockpitFrames(t, term, "reply-closed-200x55")
+
+	// A click on the area opens the editor.
+	row, col := findText(t, term, "Write a reply.")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	waitText(t, term, "the open reply editor", "Type your reply.")
+	if err := term.SendKeys("Before you merge, look at the login error. "); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the typed words", "look at the login error.")
+	if err := term.Paste(shot); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the image chip", "login-error.png  640×360", "click to view")
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "reply-open-200x55")
+
+	// The chip opens the image view.
+	openView := func() {
+		t.Helper()
+		row, col := findText(t, term, "login-error.png  640×360")
+		mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return containsAll(s.Text(), "login-error.png", "640×360", "pasted by you for docs-cli", "1 of 1", "Click outside the picture to close it.")
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: a click on the chip did not open the image view: %v\n%s", err, term.Snapshot())
+		}
+	}
+	openView()
+	// The picture is drawn: the middle row of the screen holds its glyphs.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, rows := s.Size()
+		return strings.Trim(s.Line(rows/2), " ") != ""
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the image view drew no picture: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "image-200x55")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Click outside the picture") && strings.Contains(s.Text(), "click to view")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc did not close the image view back to the draft: %v\n%s", err, term.Snapshot())
+	}
+
+	// A click outside the picture closes it too.
+	openView()
+	row, col = findText(t, term, "Click outside the picture")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Click outside the picture") && strings.Contains(s.Text(), "click to view")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click outside the picture did not close the view: %v\n%s", err, term.Snapshot())
+	}
+
+	// Send queues the reply and closes the editor.
+	row, col = findText(t, term, "Send")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	waitText(t, term, "the closed area after Send", "Write a reply.")
+	alive(t, term, "after the reply area and the image view")
+}
+
+// gradientPNG is a w by h PNG of soft colour bands, a picture that reads as
+// one at a glance.
+func gradientPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			i := img.PixOffset(x, y)
+			img.Pix[i] = uint8(40 + 140*x/w)
+			img.Pix[i+1] = uint8(30 + 60*y/h)
+			img.Pix[i+2] = uint8(120 + 120*(w-x)/w)
+			img.Pix[i+3] = 255
+			if (x-w/2)*(x-w/2)+(y-h/2)*(y-h/2) < (h/4)*(h/4) {
+				img.Pix[i], img.Pix[i+1], img.Pix[i+2] = 250, 190, 90
+			}
+		}
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }

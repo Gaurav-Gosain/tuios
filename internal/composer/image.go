@@ -33,6 +33,9 @@ type Image struct {
 	Width, Height int
 	// Sum is the bytes' SHA-256, which tells the same image pasted twice.
 	Sum [sha256.Size]byte
+	// Name is the name of the file it was read from, empty for an image
+	// from the clipboard.
+	Name string
 }
 
 // Errors of NewImage.

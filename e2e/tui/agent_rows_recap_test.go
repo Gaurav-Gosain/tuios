@@ -87,7 +87,7 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the reply editor", "Reply to", "(working)", "Type your reply.", "new line")
+	waitText(t, term, "the reply editor", "Reply to", "typed when it rests", "Type your reply.", "new line")
 	if err := term.SendKeys("echo r9c1e "); err != nil {
 		t.Fatal(err)
 	}
