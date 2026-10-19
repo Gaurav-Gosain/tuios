@@ -97,8 +97,6 @@ type Live struct {
 type frame struct {
 	img   *image.RGBA
 	stat  FrameStat
-	cols  int
-	rows  int
 	area  Area
 	final bool
 }
