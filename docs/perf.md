@@ -2927,6 +2927,22 @@ builds it). The change measured 38,260,898 and 35,914,898, so it adds 57,344
 and 50,448 bytes. No dependency was added. The new budgets leave 4,202 and
 4,202 bytes of room.
 
+The budgets went to 38,318,350 (linux/amd64) and 35,986,050 (darwin/arm64)
+for the restart from the app: the restart dialog with its plan and steps, the
+version notice that opens it, the palette, settings and rail menu entries, the
+check of the agreed plan, and the client that starts again on the new build.
+The branch before it measured 38,260,898 and 35,914,898 bytes (Go 1.26.9, a
+clean clone, as CI builds it). The change measured 38,314,146 and 35,981,858,
+so it adds 53,248 and 66,960 bytes. A build in a git worktree carries no VCS
+stamp and measures one page less on each target. A first version added 77,824
+and 67,744. The cut: the plan's words and its JSON types are in
+internal/restartplan, which the CLI and the dialog share instead of each
+building the text; the dialog's answers use the close dialog's row; ansi's
+word wrap gave way to the wrapPlain the app has; and the carried flags are read
+from the commands instead of a second flag set. No dependency was added. The
+dialog costs nothing while it is closed: one comparison after each message.
+The new budgets leave 4,204 and 4,192 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
