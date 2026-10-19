@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -297,6 +298,62 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 		t.Fatalf("a right-drag opened a context menu; a drag is a resize\n%s", term.Snapshot())
 	}
 	alive(t, term, "after a right-drag resize")
+}
+
+// sgrRightPressReport matches a forwarded right-button press as the pane's tty
+// echoes it: button 2, a column, a row, and the press marker.
+var sgrRightPressReport = regexp.MustCompile(`(?:^|[^0-9;])2;\d+;\d+M`)
+
+// TestPlainRightClickOpensMenuOverAMouseApp covers a pane whose program tracks
+// the mouse, as agent harnesses and editors do. In terminal mode the right
+// button is that program's: the click reaches it and opens no menu. In
+// window-management mode no click reaches the program at all, so a plain
+// right-click there opens the pane menu as it does over a shell.
+//
+// How this could pass wrongly, written down first:
+//   - The terminal-mode click could open the menu and also reach the program.
+//     The menu must be absent while the report arrives.
+//   - The window-mode menu could come from the click reaching the program and
+//     something else opening a menu. The program must see no second report.
+func TestPlainRightClickOpensMenuOverAMouseApp(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "after first window")
+	enableTiling(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, `printf '\033[?1000h\033[?1006h'; echo MOUSE""ON`, "MOUSEON", shellTimeout)
+
+	// Terminal mode: the right button belongs to the program.
+	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
+	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return sgrRightPressReport.MatchString(s.Text())
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: in terminal mode the right-click did not reach the program tracking the mouse: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "Close pane") {
+		t.Fatalf("ASSERTION: in terminal mode a right-click over a program tracking the mouse opened the pane menu\n%s", term.Snapshot())
+	}
+	reports := len(sgrRightPressReport.FindAllString(term.Screen().Text(), -1))
+
+	// Window-management mode: the click is tuios's.
+	leaveTerminalMode(t, term)
+	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
+	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
+	if err := term.WaitForText("Close pane", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: in window-management mode a plain right-click over a program tracking the mouse opened no pane menu: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "window-mode-menu")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	waitMenuGone(t, term, "Close pane", "after esc on the window-mode menu")
+	// Counted once the menu is gone: open, it covers the echoed reports.
+	if got := len(sgrRightPressReport.FindAllString(term.Screen().Text(), -1)); got != reports {
+		t.Fatalf("ASSERTION: the window-mode right-click reached the program (%d reports, %d before)\n%s", got, reports, term.Snapshot())
+	}
+	alive(t, term, "after right-clicks over a program tracking the mouse")
 }
 
 // TestContextMenuOnDockEntry checks the dock's own entries get a menu about
