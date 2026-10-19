@@ -51,7 +51,7 @@ written as its source. When the output is not a terminal, the command writes
 SVG.
 
 The colours come from your tuios theme. tuios.dev/sketch draws the diagrams. It
-is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams and pie charts now.`,
+is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts and mindmaps now.`,
 		Example: `  # Draw a diagram here
   tuios mermaid flow.mmd
 

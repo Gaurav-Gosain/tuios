@@ -17,6 +17,7 @@ var done = map[string]bool{
 	"class":     true,
 	"er":        true,
 	"flowchart": true,
+	"mindmap":   true,
 	"pie":       true,
 	"sequence":  true,
 	"state":     true,

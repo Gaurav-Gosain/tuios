@@ -608,7 +608,7 @@ var shapes = map[string]*shapeDef{
 				if i%2 == 0 {
 					k = 1
 				}
-				pts = append(pts, math.Cos(angle)*(w/2)*k, math.Sin(angle)*(h/2)*k)
+				pts = append(pts, js.Cos(angle)*(w/2)*k, js.Sin(angle)*(h/2)*k)
 			}
 			return poly(pts, a)
 		},

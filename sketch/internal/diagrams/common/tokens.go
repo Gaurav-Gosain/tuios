@@ -250,8 +250,12 @@ func matchAccDescr(src string, p int) int {
 	if r := blanks(src, q); byteAt(src, r) == ':' {
 		return toCommentOrLineEnd(src, r+1)
 	}
-	for c := runeAt(src, q); c >= 0 && js.IsSpace(c); c = runeAt(src, q) {
-		q += utf8.RuneLen(c)
+	for q < len(src) {
+		c, size := utf8.DecodeRuneInString(src[q:])
+		if !js.IsSpace(c) {
+			break
+		}
+		q += size
 	}
 	if byteAt(src, q) != '{' {
 		return -1
@@ -303,7 +307,8 @@ func matchString(src string, p int) int {
 			if c < 0 || c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029 {
 				return -1
 			}
-			q += 1 + max(1, utf8.RuneLen(c))
+			_, size := utf8.DecodeRuneInString(src[q+1:])
+			q += 1 + size
 		default:
 			q++
 		}
