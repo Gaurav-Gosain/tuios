@@ -366,15 +366,17 @@ func runeWidth(c rune) int {
 }
 
 // safeRune maps the characters a terminal acts on to U+FFFD: C0 controls,
-// DEL, C1 controls, and the bidirectional overrides and isolates (U+202A to
-// U+202E, U+2066 to U+2069). Labels are entity-decoded, so "#27;" in a source
+// DEL, C1 controls, the bidirectional overrides and isolates (U+202A to
+// U+202E, U+2066 to U+2069), the bidi marks (U+200E, U+200F, U+061C) and the
+// line and paragraph separators (U+2028, U+2029). Labels are entity-decoded, so "#27;" in a source
 // is an ESC; without this, a label could set the window title or write the
 // clipboard on the terminal that shows the drawing. Each of these is one cell
 // wide in runeWidth, as U+FFFD is, so the layout does not move.
 func safeRune(r rune) rune {
 	switch {
 	case r < 0x20, r >= 0x7f && r <= 0x9f,
-		r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+		r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069,
+		r == 0x200e, r == 0x200f, r == 0x061c, r == 0x2028, r == 0x2029:
 		return '\uFFFD'
 	}
 	return r

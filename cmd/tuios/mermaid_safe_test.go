@@ -29,6 +29,7 @@ func TestMermaidWritesNoTerminalControls(t *testing.T) {
 		"broken.md":     "# x\n\n```mermaid\nflowchart LR\n  A[\x1b[31m\n```\n",
 		"invalid.mmd":   "flowchart LR\n  A[\"\xff\x1b\"] --> B\n",
 		"bidi-note.mmd": "sequenceDiagram\n  Note over A: abc\u2066def\n",
+		"marks.mmd":     "pie title a\u200eb\u2028c\u061c\n  \"a\" : 1\n",
 	}
 	dir := t.TempDir()
 	for name, src := range sources {
@@ -83,7 +84,8 @@ func TestMermaidReadsRegularFilesOnly(t *testing.T) {
 
 func firstUnsafe(s string) int {
 	for i, r := range []rune(s) {
-		if r != '\n' && r != '\t' && (r < 0x20 || (r >= 0x7f && r <= 0x9f) || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)) {
+		if r != '\n' && r != '\t' && (r < 0x20 || (r >= 0x7f && r <= 0x9f) || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069) ||
+			r == 0x200e || r == 0x200f || r == 0x061c || r == 0x2028 || r == 0x2029) {
 			return i
 		}
 	}

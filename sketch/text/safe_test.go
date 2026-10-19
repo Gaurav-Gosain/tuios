@@ -18,6 +18,8 @@ func TestNoTerminalControls(t *testing.T) {
 		"edge label C1":      "flowchart LR\n  A -->|\"#155;31m red\"| B",
 		"raw ESC":            "flowchart LR\n  A[\"x\x1b]52;c;aGk=\x07y\"] --> B",
 		"bidi override":      "flowchart LR\n  A[\"abc#8238;def\"] --> B",
+		"bidi marks":         "flowchart LR\n  A[\"a\u200eb\u200fc\u061cd\"] --> B",
+		"line separators":    "flowchart LR\n  A[\"a\u2028b\u2029c\"] --> B",
 		"sequence message":   "sequenceDiagram\n  A->>B: #27;[2J#127;gone",
 		"sequence note C1":   "sequenceDiagram\n  A->>B: hi\n  Note over A: #144;x#156;",
 		"sequence actor ESC": "sequenceDiagram\n  participant A as x#27;[31my\n  A->>A: self",
