@@ -93,7 +93,8 @@ type Palette struct {
 	// Depth is the colour depth the palette was built for.
 	Depth Depth
 	// Framed says a panel draws a hairline frame round itself, because its
-	// Surface is not a colour the terminal can tell from what is around it.
+	// Surface is not a colour the terminal can tell from what is around it, or
+	// because the host asked for framed panels (see SetFramePanels).
 	Framed bool
 }
 
@@ -115,6 +116,9 @@ func Derive(p Palette) Palette {
 	}
 	if p.Busy == nil {
 		p.Busy = p.Info
+	}
+	if FramePanels() {
+		p.Framed = true
 	}
 	if d == Depth16 {
 		return derive16(p)

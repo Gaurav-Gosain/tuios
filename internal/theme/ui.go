@@ -159,10 +159,12 @@ type uiKey struct {
 	colours [6]*tint.Color
 	chrome  *Chrome
 	host    *hostGround
+	// framed is overlay.FramePanels, which Derive reads into the palette.
+	framed bool
 }
 
 func currentUIKey() uiKey {
-	k := uiKey{depth: Depth()}
+	k := uiKey{depth: Depth(), framed: overlay.FramePanels()}
 	if t := Current(); t != nil {
 		k.tint = t
 		k.colours = [6]*tint.Color{t.BrightBlue, t.BrightCyan, t.BrightRed, t.BrightGreen, t.Yellow, t.Bg}

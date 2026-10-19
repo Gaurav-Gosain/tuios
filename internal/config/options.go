@@ -163,6 +163,11 @@ var optionSpecs = []Option{
 		Accepted:    BorderStyles, Default: "rounded",
 	},
 	{
+		Path: "appearance.frame_panels", Type: OptionBool, Section: "appearance",
+		Description: "Frame the larger overlay panels, such as the command palette, in the border style",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.zen_mode", Type: OptionString, Section: "appearance",
 		Description: "When window borders are hidden: never, always, or while the mouse is idle",
 		Accepted:    ZenModeModes, Default: ZenModeDisabled,

@@ -200,6 +200,12 @@
       ]
     },
     {
+      "path": "appearance.frame_panels",
+      "type": "bool",
+      "description": "Frame the larger overlay panels, such as the command palette, in the border style",
+      "default": "false"
+    },
+    {
       "path": "appearance.gap",
       "type": "int",
       "description": "Cells of empty ground kept between two neighbouring tiled panes",

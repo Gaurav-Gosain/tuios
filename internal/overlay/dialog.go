@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Dialog is a hairline micro-dialog: a rounded muted frame with its title set
+// Dialog is a hairline micro-dialog: a muted frame with its title set
 // into the top border, its key hints set into the bottom border, and an
 // interior on bare canvas.
 //
@@ -42,10 +42,14 @@ func DialogFitWidth(preferred, screenW int) int {
 	return max(min(preferred, screenW-2), 1)
 }
 
-// dialogFrame returns the corner, horizontal and vertical border glyphs.
+// dialogFrame returns the corner, horizontal and vertical border glyphs: the
+// pushed Frame (see SetFrame), or the rounded built-in when none is pushed.
 func dialogFrame() (tl, tr, bl, br, h, v string) {
 	if UseASCII() {
 		return "+", "+", "+", "+", "-", "|"
+	}
+	if f := frame.Load(); f != nil {
+		return f.TopLeft, f.TopRight, f.BottomLeft, f.BottomRight, f.Horizontal, f.Vertical
 	}
 	return "╭", "╮", "╰", "╯", "─", "│"
 }

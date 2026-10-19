@@ -46,6 +46,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_mode_icon_tiling":    "Tiling mode icon",
 	"appearance.dockbar_position":         "Dock position",
 	"appearance.glyphs":                   "Glyph set",
+	"appearance.frame_panels":             "Frame panels",
 	"appearance.theme_light":              "Light theme",
 	"appearance.sidebar.row_style":        "Current row",
 	"appearance.sidebar.header_style":     "Section headers",

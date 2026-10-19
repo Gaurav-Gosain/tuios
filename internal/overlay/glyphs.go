@@ -58,3 +58,37 @@ func IsASCII(s string) bool {
 	}
 	return true
 }
+
+// Frame is the glyphs a dialog's border is drawn with, and a panel's when it
+// is framed: four corners, the horizontal and the vertical. A host pushes the
+// set its border style resolves to, for the same reason it pushes Chrome.
+type Frame struct {
+	TopLeft, TopRight, BottomLeft, BottomRight string
+	Horizontal, Vertical                       string
+}
+
+// frame holds the pushed Frame; nil draws the rounded built-in.
+var frame atomic.Pointer[Frame]
+
+// SetFrame records the glyphs dialog and panel frames are drawn with. A host
+// calls it every frame, so an unchanged set is not stored again, and is not
+// copied to the heap either: only the stored copy escapes.
+func SetFrame(f Frame) {
+	if cur := frame.Load(); cur != nil && *cur == f {
+		return
+	}
+	stored := f
+	frame.Store(&stored)
+}
+
+// framePanels says a panel draws a frame round itself at every colour depth,
+// not only at 16 colours where its surface needs one.
+var framePanels atomic.Bool
+
+// SetFramePanels records whether every panel is framed. Derive reads it into
+// Palette.Framed.
+func SetFramePanels(on bool) { framePanels.Store(on) }
+
+// FramePanels reports what SetFramePanels last recorded, so a host that
+// memoises a palette can key it on the answer.
+func FramePanels() bool { return framePanels.Load() }

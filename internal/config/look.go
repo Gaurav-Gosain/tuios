@@ -103,6 +103,7 @@ var lookKeys = []string{
 	"appearance.session_colors",
 	// Borders and the window frame.
 	"appearance.border_style",
+	"appearance.frame_panels",
 	"appearance.border_focused_color",
 	"appearance.border_unfocused_color",
 	"appearance.border_focused_gradient",

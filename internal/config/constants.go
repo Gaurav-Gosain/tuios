@@ -1097,6 +1097,33 @@ func (s *Settings) GetBorderForStyle() lipgloss.Border {
 	}
 }
 
+// OverlayBorder is the border a dialog is drawn with, and a panel when it is
+// framed. It follows border_style, except that the block styles draw the
+// rounded border: a solid or half-block frame round a three-row dialog
+// outweighs what it holds. The hidden style draws spaces, so a dialog keeps
+// its size and every hit rectangle in it.
+func (s *Settings) OverlayBorder() lipgloss.Border {
+	if s.UseASCIIOnly {
+		return lipgloss.ASCIIBorder()
+	}
+	switch s.BorderStyle {
+	case "normal":
+		return lipgloss.NormalBorder()
+	case "thick":
+		return lipgloss.ThickBorder()
+	case "double":
+		return lipgloss.DoubleBorder()
+	case "ascii":
+		return lipgloss.ASCIIBorder()
+	case "hidden":
+		return lipgloss.HiddenBorder()
+	case BorderStyleGlyphs:
+		return s.glyphSetBorder()
+	default:
+		return lipgloss.RoundedBorder()
+	}
+}
+
 // glyphSetBorder is the border the active glyph set draws, with any rune it
 // leaves unnamed taken from the rounded border.
 //

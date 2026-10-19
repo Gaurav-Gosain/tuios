@@ -24,7 +24,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// already composed, so a client launched with ascii_only painted its first
 	// frame with unicode glyphs in the rail and only corrected itself on the
 	// next redraw.
-	syncOverlayASCII(&m.Settings)
+	syncOverlaySettings(&m.Settings)
 
 	// Reuse the canvas across frames. Allocating a fresh one each frame was the
 	// single largest source of allocations (a full-screen cell buffer per frame).

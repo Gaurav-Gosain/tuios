@@ -334,8 +334,18 @@ func (m *OS) centeredBoxLayer(box string, z int, id string) *lipgloss.Layer {
 	return lipgloss.NewLayer(box).X(x).Y(y).Z(z).ID(id)
 }
 
-// syncOverlayASCII mirrors the ASCII-only setting into the overlay package,
-// which has no dependency on tuios config.
-func syncOverlayASCII(s *config.Settings) {
+// syncOverlaySettings mirrors the settings the overlay family draws by into
+// that package, which has no dependency on tuios config: ASCII mode, the frame
+// glyphs border_style resolves to, and frame_panels. It runs every frame, so a
+// border style set by a flag, a tape or the settings page reaches the dialogs
+// as surely as one set in the config file.
+func syncOverlaySettings(s *config.Settings) {
 	overlay.SetASCII(s.UseASCIIOnly)
+	b := s.OverlayBorder()
+	overlay.SetFrame(overlay.Frame{
+		TopLeft: b.TopLeft, TopRight: b.TopRight,
+		BottomLeft: b.BottomLeft, BottomRight: b.BottomRight,
+		Horizontal: b.Top, Vertical: b.Left,
+	})
+	overlay.SetFramePanels(s.FramePanels)
 }
