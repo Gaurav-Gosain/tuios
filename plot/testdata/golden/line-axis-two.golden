@@ -1,0 +1,57 @@
+=== braille 34x8
+|60│                   ⣀⠤⠊⠑⠒⠤⢄⣀⣀⡠⠤⠔|
+|  │                ⣀⠔⠊            |
+|  │      ⣀⠤⠒⠒⠢⠤⢄⡠⠔⠉               |
+|  │⠒⠒⠒⠒⠒⠉                         |
+|  │                             ⡠⠔|
+|  │               ⢀⠤⠊⠑⠒⠒⠢⠤⠤⠤⣀⡠⠔⠉  |
+|20│⣀⣀⠤⠤⠤⠒⠒⠉⠉⠉⠑⠒⠤⠤⠊⠁               |
+|  └───────────────────────────────|
+--- roles
+|aab                   cccccccccccc|
+|  b                ccc            |
+|  b      cccccccccc               |
+|  bcccccc                         |
+|  b                             dd|
+|  b               dddddddddddddd  |
+|aabdddddddddddddddd               |
+|  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a=mute b=edge c=series2 d=series1 (upper case is bold)
+=== blocks 34x8
+|60│                   ▂▄▇▇▅▄▂▁▂▃▄▅|
+|  │                ▂▅▇            |
+|  │      ▁▃▅▆▅▄▃▂▅█               |
+|  │▅▅▅▅▆▇                         |
+|  │                             ▃▆|
+|  │               ▁▃▆▆▆▅▄▄▃▂▂▂▅█  |
+|20│▁▂▂▃▄▄▅▆▇▇▆▅▃▃▆                |
+|  └───────────────────────────────|
+--- roles
+|aab                   cccccccccccc|
+|  b                ccc            |
+|  b      cccccccccc               |
+|  bcccccc                         |
+|  b                             dd|
+|  b               dddddddddddddd  |
+|aabddddddddddddddd                |
+|  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a=mute b=edge c=series2 d=series1 (upper case is bold)
+=== ascii 34x8
+|60|                   ++++++++++++|
+|  |                +++            |
+|  |      ++++++++++               |
+|  |++++++                         |
+|  |                             **|
+|  |               **************  |
+|20|***************                |
+|  +-------------------------------|
+--- roles
+|aab                   cccccccccccc|
+|  b                ccc            |
+|  b      cccccccccc               |
+|  bcccccc                         |
+|  b                             dd|
+|  b               dddddddddddddd  |
+|aabddddddddddddddd                |
+|  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a=mute b=edge c=series2 d=series1 (upper case is bold)

@@ -1,0 +1,39 @@
+=== braille 20x5
+|    ███             |
+|    ███ ▇▇▇         |
+|▆▆▆ ███ ███         |
+|███ ███ ███ ▅▅▅     |
+|mon tue wed thu     |
+--- roles
+|    aaa             |
+|    aaa aaa         |
+|aaa aaa aaa         |
+|aaa aaa aaa aaa     |
+|bbb bbb bbb bbb     |
+a=series1 b=mute (upper case is bold)
+=== blocks 20x5
+|    ███             |
+|    ███ ▇▇▇         |
+|▆▆▆ ███ ███         |
+|███ ███ ███ ▅▅▅     |
+|mon tue wed thu     |
+--- roles
+|    aaa             |
+|    aaa aaa         |
+|aaa aaa aaa         |
+|aaa aaa aaa aaa     |
+|bbb bbb bbb bbb     |
+a=series1 b=mute (upper case is bold)
+=== ascii 20x5
+|    ###             |
+|    ### ###         |
+|### ### ###         |
+|### ### ### ###     |
+|mon tue wed thu     |
+--- roles
+|    aaa             |
+|    aaa aaa         |
+|aaa aaa aaa         |
+|aaa aaa aaa aaa     |
+|bbb bbb bbb bbb     |
+a=series1 b=mute (upper case is bold)

@@ -1,0 +1,33 @@
+=== braille 20x4
+|              ⢀⠜⢆   |
+|     ⢀   ⢀⢦  ⢀⠎  ⢣  |
+| ⡄⠠⡀⢠⠃⠱⡀⢠⠃ ⠱⣠⠃    ⠱⡀|
+|⠊  ⠑⠁  ⠑⠁   ⠁      ⠱|
+--- roles
+|              aaa   |
+|     a   aa  aa  a  |
+| aaaaaaaaa aaa    aa|
+|a  aa  aa   a      a|
+a=series1 (upper case is bold)
+=== blocks 20x4
+|               ▆▃   |
+|     ▁   ▁▄  ▁▇  ▄  |
+| ▃▃ ▂ ▅ ▂  ▅▂     ▅ |
+|▆  ▆   ▆           ▄|
+--- roles
+|               aa   |
+|     a   aa  aa  a  |
+| aa a a a  aa     a |
+|a  a   a           a|
+a=series1 (upper case is bold)
+=== ascii 20x4
+|               **   |
+|     *   **  **  *  |
+| ** * * *  **     * |
+|*  *   *           *|
+--- roles
+|               aa   |
+|     a   aa  aa  a  |
+| aa a a a  aa     a |
+|a  a   a           a|
+a=series1 (upper case is bold)

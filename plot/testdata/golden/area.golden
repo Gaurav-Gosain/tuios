@@ -1,0 +1,39 @@
+=== braille 24x5
+|           ⢀⣠⣤⣤⣤⣄⣀⣀⣠⣶⣿⣿⣿|
+| ⢀⣀⣠⣤⣴⣦⣤⣴⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+--- roles
+|           aaaaaaaaaaaaa|
+| aaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+a=series3 (upper case is bold)
+=== blocks 24x5
+|            ▃▄▄▃▃▂▁▄▇█▇▇|
+|  ▁▃▄▅▅▅▅▆▇█████████████|
+|▇███████████████████████|
+|████████████████████████|
+|████████████████████████|
+--- roles
+|            aaaaaaaaaaaa|
+|  aaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+a=series3 (upper case is bold)
+=== ascii 24x5
+|            ************|
+|  **********::::::::::::|
+|**::::::::::::::::::::::|
+|::::::::::::::::::::::::|
+|::::::::::::::::::::::::|
+--- roles
+|            aaaaaaaaaaaa|
+|  aaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaa|
+a=series3 (upper case is bold)

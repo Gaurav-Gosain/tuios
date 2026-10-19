@@ -1,0 +1,15 @@
+=== braille 20x1
+|━━━━━━━━━━━━━━ 98.8%|
+--- roles
+|aaaaaaaaaaaaaa BBBBB|
+a=success b=fg (upper case is bold)
+=== blocks 20x1
+|━━━━━━━━━━━━━━ 98.8%|
+--- roles
+|aaaaaaaaaaaaaa BBBBB|
+a=success b=fg (upper case is bold)
+=== ascii 20x1
+|[############] 98.8%|
+--- roles
+|abbbbbbbbbbbba CCCCC|
+a=edge b=success c=fg (upper case is bold)

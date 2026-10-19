@@ -1,0 +1,15 @@
+=== braille 20x1
+|▁▄▂▇▃█              |
+--- roles
+|aaaaaa              |
+a=dim (upper case is bold)
+=== blocks 20x1
+|▁▄▂▇▃█              |
+--- roles
+|aaaaaa              |
+a=dim (upper case is bold)
+=== ascii 20x1
+|_~.*-#              |
+--- roles
+|aaaaaa              |
+a=dim (upper case is bold)

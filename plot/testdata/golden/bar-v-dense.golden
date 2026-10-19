@@ -1,0 +1,27 @@
+=== braille 12x3
+|▄▃▃▄▃▄▃▃▅▄▄▂|
+|████████████|
+|████████████|
+--- roles
+|aaaaaaaaaaaa|
+|aaaaaaaaaaaa|
+|aaaaaaaaaaaa|
+a=series1 (upper case is bold)
+=== blocks 12x3
+|▄▃▃▄▃▄▃▃▅▄▄▂|
+|████████████|
+|████████████|
+--- roles
+|aaaaaaaaaaaa|
+|aaaaaaaaaaaa|
+|aaaaaaaaaaaa|
+a=series1 (upper case is bold)
+=== ascii 12x3
+|#  # #  ### |
+|############|
+|############|
+--- roles
+|a  a a  aaa |
+|aaaaaaaaaaaa|
+|aaaaaaaaaaaa|
+a=series1 (upper case is bold)

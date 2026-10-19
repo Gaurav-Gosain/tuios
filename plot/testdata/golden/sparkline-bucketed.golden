@@ -1,0 +1,15 @@
+=== braille 10x1
+|▆▅▅▆▅▆▅▅▅▄|
+--- roles
+|aaaaaaaaaa|
+a=series1 (upper case is bold)
+=== blocks 10x1
+|▆▅▅▆▅▆▅▅▅▄|
+--- roles
+|aaaaaaaaaa|
+a=series1 (upper case is bold)
+=== ascii 10x1
+|+==+=+===~|
+--- roles
+|aaaaaaaaaa|
+a=series1 (upper case is bold)

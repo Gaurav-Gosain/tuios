@@ -1,0 +1,15 @@
+=== braille 24x1
+|██████▉░░░░░░░░░ 43% CPU|
+--- roles
+|aaaaaaabbbbbbbbb CCCCCCC|
+a=series1 b=track c=fg (upper case is bold)
+=== blocks 24x1
+|██████▉░░░░░░░░░ 43% CPU|
+--- roles
+|aaaaaaabbbbbbbbb CCCCCCC|
+a=series1 b=track c=fg (upper case is bold)
+=== ascii 24x1
+|[######--------] 43% CPU|
+--- roles
+|abbbbbbcccccccca DDDDDDD|
+a=edge b=series1 c=track d=fg (upper case is bold)
