@@ -8589,8 +8589,12 @@ Each control is a build that cuts one line, run on 2026-10-17 on macOS arm64 (Da
 | `monitorExit` is a plain wait | drop the `peekExit` call and `p.reap.enter()`/`leave()` from `monitorExit` | `TestExitDuringQuiesceKeepsStatus`: "the pane that exited during the handoff reads -1, want 7" | **caught** |
 | Close-on-exec left on the masters | drop `r.fds = append(r.fds, rec.FD)` in `writeManifest` | `TestSelfExecAdoptsPanes`: "the daemon never answered from a new image within 20s: ... a stale socket is left over" (the new image found no master to adopt) | **caught** |
 | No `syscall.ForkLock` around the exposed span | drop `syscall.ForkLock.Lock()` and its unlock from `execHandoff` | `TestSelfExecAdoptsPanes/fork_in_the_exposed_window`: "start-server after kill-server failed, so something kept the start lock" | **caught** |
+| A cell size change does not wake the reply forwarder | drop `p.wakeResponses()` from `PTY.SetCellSize` | `TestPaneCellFollowsOneClient`, 2 runs of 2: "client a left: the guest's 2048 reports [[22 78 352 624] [17 58 272 464]] never came to a 12x24 cell" (the report waits in the emulator until the program next prints) | **caught** |
+| A colour change does not wake the reply forwarder | drop `defer p.wakeResponses()` from `setReportColors` | `TestOmarchyThemeSwitchIsFollowed`, 2 runs of 2: "after the switch to Catppuccin Latte the program that turned on mode 2031 was not told light" | **caught** |
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
-  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes)$' .
+  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes|TestPaneCellFollowsOneClient|TestOmarchyThemeSwitchIsFollowed)$' .
 ```
+
+The two reply-forwarder rows were run on 2026-10-19 on macOS arm64 against pr/live-handoff-1. Without either wake (the head before the fix) both tests fail on every run, 3 of 3 each, as they did in CI shards 5 and 8. With both, the two tests and `TestKittyUploadReply` passed 3 runs of 3.
