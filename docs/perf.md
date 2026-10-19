@@ -2910,7 +2910,12 @@ the check that the service's port is this user's, and the join to the
 session the plugin reports. It asks the service only
 when a person reads the thread. The Cursor Agent thread measured 38,105,250
 and 35,797,650: about 8 KB of decoder on the shared JSON walker, and one
-more 16 KB page on darwin/arm64.
+more 16 KB page on darwin/arm64. Markdown in the thread measured 38,199,458
+and 35,864,450: about 94 KB and 67 KB for internal/markdown, a reader of the
+part of Markdown agents write, and the layout that draws it as cards. Code
+blocks use the lexers internal/diffview already holds. goldmark with its GFM
+extensions measured about 480 KB before any renderer, and glamour, which links
+every chroma lexer, about 8.8 MB.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
