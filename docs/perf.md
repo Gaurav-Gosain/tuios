@@ -2964,6 +2964,17 @@ and 36,133,586, so it adds 163,840 and 134,384 bytes. It reads the manifests
 and git only when the sheet opens. The new budgets leave 4,198 and 4,204
 bytes of room.
 
+The budgets went to 38,514,952 (linux/amd64) and 36,154,622 (darwin/arm64)
+for the opencode thread on macOS and Windows: the check that the far end of
+the connection to opencode's service is this user's, read from the socket
+table of each system (the sysctl net.inet.tcp.pcblist_n on macOS), the
+parsers of those tables, and the reuse of an export while opencode's
+database is unchanged. Main at 6c5a295b measured 38,502,562 and 36,133,586
+bytes (Go 1.26.9, as CI builds it). The change measured 38,510,754 and
+36,150,418, so it adds 8,192 and 16,832 bytes. No dependency was added. The
+check runs only when a person reads an opencode thread. The new budgets
+leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
