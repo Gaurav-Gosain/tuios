@@ -252,7 +252,7 @@ func TestDifferential(t *testing.T) {
 				png.Encode(f, img)
 				f.Close()
 			}
-			save("-mmd.png", r.ours)
+			save("-sketch.png", r.ours)
 			save("-rsvg.png", r.theirs)
 			save("-diff.png", r.heatmap)
 		}
