@@ -129,24 +129,19 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// A plain right press on a pane arms a resize. Below the drag threshold it
 	// was a click: cancel the resize (restoring the few cells of jitter it may
-	// have applied) and open the pane menu at the press position. A pane whose
-	// app requested mouse tracking keeps the old contract, no menu without
-	// ctrl/shift, because the right button belongs to that app. At or past the
-	// threshold the resize completes below.
+	// have applied) and open the pane menu at the press position. At or past
+	// the threshold the resize completes below.
+	//
+	// That holds over a pane whose app tracks the mouse too. Its right button
+	// is the app's only in terminal mode, where the press is forwarded and
+	// never arms this. A press that got here reached no app, and leaving the
+	// menu shut made the click do nothing at all.
 	if o.RightClickPending {
 		o.RightClickPending = false
 		mouse := msg.Mouse()
 		if abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) < rightClickDragThreshold {
-			pressX, pressY := o.RightPressX, o.RightPressY
-			appOwnsMouse := false
-			if idx := findClickedWindow(pressX, pressY, o); idx != -1 {
-				win := o.Windows[idx]
-				appOwnsMouse = win.Terminal != nil && win.Terminal.HasMouseMode()
-			}
 			cancelRightClickResize(o)
-			if !appOwnsMouse {
-				o.OpenContextMenu(pressX, pressY)
-			}
+			o.OpenContextMenu(o.RightPressX, o.RightPressY)
 			return o, nil
 		}
 	}

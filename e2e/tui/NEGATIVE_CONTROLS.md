@@ -7271,3 +7271,12 @@ holds them. Run on 2026-10-19.
 |---|---|---|---|---|
 | A Cursor read or edit card names no file | `target_file` in `fileOf` | Removed | `TestFormatFixtures/cursor-agent.jsonl` | **caught** |
 | A Cursor edit shows an empty diff | The `code_edit` write in `cursorLine` | Never taken | `TestFormatFixtures/cursor-agent.jsonl` | **caught** |
+### A plain right-click in window mode over a program tracking the mouse
+
+`TestPlainRightClickOpensMenuOverAMouseApp` turns on mouse tracking in a pane, checks that a terminal-mode right-click reaches the program and opens no menu, then checks that a window-mode right-click opens the pane menu and reaches the program as no report. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A window-mode right-click over a program tracking the mouse opens nothing | The menu opening for every sub-threshold right-click in `handleMouseRelease` | The build before the fix, which skipped the menu when the pane's program tracked the mouse | `TestPlainRightClickOpensMenuOverAMouseApp` ("in window-management mode a plain right-click over a program tracking the mouse opened no pane menu") | **caught** |
+
+A first version counted the program's reports while the menu was open and failed on the fixed build: the menu covers the echoed reports. They are counted once the menu is closed.
