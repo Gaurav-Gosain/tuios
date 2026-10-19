@@ -15,6 +15,7 @@ import (
 // in the pull request that ports it.
 var done = map[string]bool{
 	"flowchart": true,
+	"sequence":  true,
 }
 
 // goldenNow is the time gold.mjs renders with, for gantt.

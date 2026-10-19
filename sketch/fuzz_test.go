@@ -13,7 +13,7 @@ import (
 // stay inert, and must finish in bounded time.
 func FuzzRender(f *testing.F) {
 	for _, c := range loadGoldens(f) {
-		if c.name == "flowchart" {
+		if done[c.name] {
 			f.Add(c.source)
 		}
 	}

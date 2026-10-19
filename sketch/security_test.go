@@ -349,7 +349,7 @@ func checkInert(t *testing.T, src string, opt RenderOptions) {
 
 func TestFlowchartOutputIsInert(t *testing.T) {
 	for _, c := range loadGoldens(t) {
-		if c.name == "flowchart" {
+		if done[c.name] {
 			checkInert(t, c.source, RenderOptions{})
 		}
 	}

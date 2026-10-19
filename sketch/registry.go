@@ -4,8 +4,11 @@
 
 package sketch
 
-import "tuios.dev/sketch/internal/diagrams/flowchart"
+import (
+	"tuios.dev/sketch/internal/diagrams/flowchart"
+	"tuios.dev/sketch/internal/diagrams/sequence"
+)
 
 func init() {
-	register(flowchart.Flowchart)
+	register(flowchart.Flowchart, sequence.Sequence)
 }
