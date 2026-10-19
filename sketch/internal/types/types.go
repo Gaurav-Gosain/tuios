@@ -30,7 +30,7 @@ type RenderOptions struct {
 	FontFamily     string
 	FontFamilyMono string
 	FontSize       *float64
-	IdPrefix       *string
+	IDPrefix       *string
 	Responsive     *bool
 	// The width the host has for the diagram, in pixels. A type that can draw itself narrower
 	// does, so that its text is not shrunk with it.

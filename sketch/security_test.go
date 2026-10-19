@@ -359,7 +359,7 @@ func TestFlowchartOutputIsInert(t *testing.T) {
 		}
 	}
 	for _, payload := range PAYLOADS {
-		checkInert(t, "flowchart TD\n  accTitle: t\n  A --> B", RenderOptions{IdPrefix: types.Ptr(payload), FontFamily: payload})
+		checkInert(t, "flowchart TD\n  accTitle: t\n  A --> B", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload})
 	}
 }
 

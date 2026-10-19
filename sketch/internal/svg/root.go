@@ -85,7 +85,7 @@ type Accessible struct {
 }
 
 func SvgDocument(typ string, width, height, fontSize float64, options types.RenderOptions, acc Accessible, content string) string {
-	prefix := Esc(types.Or(options.IdPrefix, "pele"))
+	prefix := Esc(types.Or(options.IDPrefix, "pele"))
 	head := ""
 	aria := ""
 	if acc.AccTitle != "" {

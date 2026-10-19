@@ -19,6 +19,9 @@ import (
 // Error is what Parse and Render return for text they cannot draw.
 type Error = types.PeleError
 
+// ErrorInfo is where in the source an Error is, and the diagram type.
+type ErrorInfo = types.ErrorInfo
+
 // ErrorCode says what kind of problem an Error is.
 type ErrorCode = types.PeleErrorCode
 
@@ -56,16 +59,16 @@ func registered(typ Type) bool {
 	return ok
 }
 
-// Mermaid's default maxTextSize.
-const DEFAULT_LIMIT = 50000
+// DefaultLimit is the longest source in characters: Mermaid's default maxTextSize.
+const DefaultLimit = 50000
 
-// Mermaid has no limit on its output. A source within the limit can still describe a drawing
+// DefaultOutputLimit is the longest SVG in characters. Mermaid has no limit on its output. A source within the limit can still describe a drawing
 // of many megabytes, which would stall the page it is put into.
-const DEFAULT_OUTPUT_LIMIT = 4_000_000
+const DefaultOutputLimit = 4_000_000
 
-// Mermaid stops at 500. Pele draws 5,000 edges in tens of milliseconds, and `A & B --> C & D`
+// DefaultMaxEdges is the most edges a flowchart can have. Mermaid stops at 500. Pele draws 5,000 edges in tens of milliseconds, and `A & B --> C & D`
 // multiplies: without a limit, a few kilobytes of source ask for millions of edges.
-const DEFAULT_MAX_EDGES = 5000
+const DefaultMaxEdges = 5000
 
 // guarded turns the PeleError a parser or renderer panics with into an error.
 // Any other panic is a bug in the port; it is reported as an error too, so that
@@ -90,10 +93,10 @@ type parsed struct {
 
 func parseSource(src string, limit, maxEdges int, extra Config) parsed {
 	if limit <= 0 {
-		limit = DEFAULT_LIMIT
+		limit = DefaultLimit
 	}
 	if maxEdges <= 0 {
-		maxEdges = DEFAULT_MAX_EDGES
+		maxEdges = DefaultMaxEdges
 	}
 	if js.Len(src) > limit {
 		types.Throw("Diagram source is longer than the limit of "+strconv.Itoa(limit)+" characters.", types.CodeLimit, types.ErrorInfo{})
@@ -212,7 +215,7 @@ func render(p parsed, options RenderOptions) SVG {
 	rendered := p.diagram.Render(p.model, p.config, options)
 	outputLimit := options.OutputLimit
 	if outputLimit <= 0 {
-		outputLimit = DEFAULT_OUTPUT_LIMIT
+		outputLimit = DefaultOutputLimit
 	}
 	// A UTF-16 length is never more than the UTF-8 one, so only a long SVG is counted.
 	if len(rendered.SVG) > outputLimit && js.Len(rendered.SVG) > outputLimit {

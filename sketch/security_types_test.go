@@ -211,7 +211,7 @@ func noLinks(t *testing.T, src string, opt RenderOptions) {
 func hostileOptions(t *testing.T, src string) {
 	t.Helper()
 	for _, payload := range PAYLOADS {
-		if !inertTry(t, src, RenderOptions{IdPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+		if !inertTry(t, src, RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
 			t.Fatalf("%q with a hostile id prefix and font: did not render", src)
 		}
 	}
@@ -270,7 +270,7 @@ func TestClassOutputIsInert(t *testing.T) {
 	}
 	hostile(t, classTemplates, 1500, RenderOptions{}, false, func(p string) string { return strings.ReplaceAll(p, `"`, "#quot;") })
 	for _, payload := range PAYLOADS {
-		if !inertTry(t, "classDiagram\n  accTitle: t\n  A \"1\" --> \"2\" B : x", RenderOptions{IdPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+		if !inertTry(t, "classDiagram\n  accTitle: t\n  A \"1\" --> \"2\" B : x", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
 			t.Fatal("hostile id prefix and font: did not render")
 		}
 		if !inertTry(t, "classDiagram\n  A --> B", RenderOptions{Config: Config{"class": map[string]any{"nodeSpacing": payload, "rankSpacing": payload}}}, false) {
@@ -330,7 +330,7 @@ func TestGanttOutputIsInert(t *testing.T) {
 	hostile(t, ganttTemplates, 500, opt, true)
 	for _, payload := range PAYLOADS {
 		o := opt
-		o.IdPrefix, o.FontFamily = types.Ptr(payload), payload
+		o.IDPrefix, o.FontFamily = types.Ptr(payload), payload
 		if !inertTry(t, ganttHead+"  accTitle: t\n"+ganttTasks, o, true) {
 			t.Fatal("hostile id prefix and font: did not render")
 		}
@@ -375,7 +375,7 @@ func TestMindmapOutputIsInert(t *testing.T) {
 	}
 	for _, payload := range PAYLOADS {
 		o := opt
-		o.IdPrefix, o.FontFamily = types.Ptr(payload), payload
+		o.IDPrefix, o.FontFamily = types.Ptr(payload), payload
 		if !inertTry(t, "mindmap\n  root\n    a\n    ::icon(x)", o, false) {
 			t.Fatal("hostile id prefix and font: did not render")
 		}
