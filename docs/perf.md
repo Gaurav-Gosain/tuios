@@ -2908,7 +2908,9 @@ session id. The opencode thread measured 38,097,058 and 35,780,722: about
 45 KB and 17 KB for the reader of opencode's service, its export fallback,
 the check that the service's port is this user's, and the join to the
 session the plugin reports. It asks the service only
-when a person reads the thread.
+when a person reads the thread. The Cursor Agent thread measured 38,105,250
+and 35,797,650: about 8 KB of decoder on the shared JSON walker, and one
+more 16 KB page on darwin/arm64.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
