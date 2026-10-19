@@ -255,7 +255,6 @@ func (ps *parser) classOrRelation() {
 	title1 := "none"
 	if t == T_STR {
 		title1 = ps.text()
-		t = ps.types[ps.i]
 	} else if END_TYPE[t] == 0 && t != T_LINE && t != T_DOTTED_LINE {
 		return
 	}

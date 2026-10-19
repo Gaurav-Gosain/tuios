@@ -4,10 +4,6 @@ package mindmap
 
 import "tuios.dev/sketch/internal/diagrams/common"
 
-func tokenize(src string) common.OutlineTokens {
-	return common.TokenizeOutline(src, false)
-}
-
 func parseMindmap(src string, db common.OutlineDb) {
 	common.ParseOutline(src, db, false)
 }

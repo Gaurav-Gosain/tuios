@@ -406,7 +406,7 @@ func (db *SeqDb) addDetails(actorID string, text *SeqText) {
 func (db *SeqDb) Apply(root SeqItem) {
 	var lists [][]SeqItem
 	var at []int
-	var item SeqItem = root
+	item := root
 	has := true
 	for {
 		if has {

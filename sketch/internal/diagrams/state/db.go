@@ -200,10 +200,6 @@ func (db *StateDb) addState(id string, typ string, doc *[]Stmt, descr *Descripti
 	}
 }
 
-func (db *StateDb) getState(id string) *StateStmt {
-	return db.States[id]
-}
-
 func (db *StateDb) addLink(stateId, url, tooltip string) {
 	db.Links[stateId] = StateLink{url, tooltip}
 }
@@ -253,15 +249,6 @@ func (db *StateDb) setCssClass(itemIds, cssClassName string) {
 	for _, state := range db.named(itemIds) {
 		state.Classes = append(state.Classes, cssClassName)
 	}
-}
-
-func (db *StateDb) getDirection() string {
-	for _, item := range db.RootDoc {
-		if d, ok := item.(*DirectionStmt); ok {
-			return d.Value
-		}
-	}
-	return "TB"
 }
 
 // The grammar calls this while it is still building the document, so the statement lands in the

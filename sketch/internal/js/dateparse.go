@@ -214,7 +214,6 @@ func (d *dayComposer) Write() (year, month, day int, ok bool) {
 		d.comp[d.index] = 1
 		d.index++
 	}
-	month, day = dpNone, dpNone
 	if d.namedMonth == dpNone {
 		if d.iso || (d.index == 3 && !isDay(d.comp[0])) {
 			year, month, day = d.comp[0], d.comp[1], d.comp[2]

@@ -172,7 +172,7 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 			_, err := stdout.Write(data)
 			return err
 		}
-		return os.WriteFile(numbered(o.out, i, n), data, 0o644)
+		return os.WriteFile(numbered(o.out, i, n), data, 0o644) //nolint:gosec // a picture the person asked for, readable like any file they save
 	}
 	switch format {
 	case "svg":

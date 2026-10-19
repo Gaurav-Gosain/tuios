@@ -2770,11 +2770,12 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 		if c > d {
 			c, d = d, c
 		}
+		// Only b and c are read below: the larger of a and c, the smaller of b and d.
 		if a > c {
-			a, c = c, a
+			c = a
 		}
 		if b > d {
-			b, d = d, b
+			b = d
 		}
 		if b > c {
 			b, c = c, b

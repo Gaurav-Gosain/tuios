@@ -54,11 +54,6 @@ func runeAt(s string, i int) (rune, int) {
 	return utf8.DecodeRuneInString(s[i:])
 }
 
-func isSpaceAt(s string, i int) bool {
-	r, _ := runeAt(s, i)
-	return r >= 0 && js.IsSpace(r)
-}
-
 type frontMatter struct {
 	indent string
 	body   string
@@ -176,11 +171,6 @@ func matchFrontMatter(text string) (frontMatter, bool) {
 		}
 	}
 	return frontMatter{}, false
-}
-
-func isRecord(value any) bool {
-	_, ok := value.(map[string]any)
-	return ok
 }
 
 func merge(target, source Config) Config {
