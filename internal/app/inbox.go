@@ -1181,6 +1181,9 @@ func (m *OS) CloseInbox() {
 	m.Inbox.reply.editor = nil
 	// The image view and its image bytes go with the editor.
 	m.Inbox.ck.img = nil
+	// The spawn sheet is kept as the draft the next n opens.
+	m.spawnClose()
+	m.Inbox.ck.spawnBg = nil
 	// A bulk allow's sheet is never there when the Inbox opens again: its
 	// settle time was spent on a screen the person may not have read.
 	m.Inbox.agents.sheet = nil

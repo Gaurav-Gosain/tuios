@@ -32,6 +32,10 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CockpitImageOpen() {
 		return o, o.CockpitImageKey(msg.String())
 	}
+	// The spawn sheet takes every key while it is up.
+	if o.CockpitSpawnOpen() {
+		return o, o.CockpitSpawnKey(msg)
+	}
 	// A risky allow's first press waits for the same key again; any other
 	// key resets it.
 	o.InboxKeyPressed(msg.String())

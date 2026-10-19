@@ -1561,6 +1561,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
+	case spawnInfoMsg:
+		m.applySpawnInfo(msg)
+		return m, nil
+	case spawnStartedMsg:
+		m.applySpawnStarted(msg)
+		return m, nil
 	case worktreeCreatedMsg:
 		// A worktree create that finished on its own goroutine, possibly after a
 		// clone's worth of minutes. The handler attaches to the session it made,

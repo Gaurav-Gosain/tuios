@@ -1236,7 +1236,7 @@ Inside it:
 | `a` `A` `r` `R` | On a held approval: allow once, always allow, reject, reject and say why. `1` `2` `3` still work |
 | `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
 | `space` | Read an approval's or a question's prompt and answer it here |
-| `n` | Start a new agent. For now this opens the launcher |
+| `n` | Open the New agent sheet. See below |
 | `f` | Show only what needs you, then each kind of item, then every agent |
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
@@ -1258,6 +1258,30 @@ folded group, or one a search hides, is left out, and closing the view clears
 the marks. An approval whose command does not fit on the card is not answered
 here: the card says so, and `enter` answers it in the pane.
 
+The New agent sheet starts an agent with a task. Write the task, then pick
+the agent, the model, where it works and the machine. `tab` and `shift+tab`
+move between the fields. `left` and `right` change the agent, where it works,
+the attempts and the button. `space` or `down` on the agent opens the list of
+every agent. `up` and `down` on the machines pick one. `v` on the attempts
+gives each attempt a different agent. `ctrl+j` adds a new line to the task.
+`enter` starts. `esc` closes the sheet and keeps what you wrote for the next
+`n`.
+
+| Field | What it does |
+|---|---|
+| Task | The first prompt. It is typed when the agent is ready |
+| Agent | The agents that run now come first, then the installed ones |
+| Model | Passed to the agent as `--model`. Empty uses the agent's default |
+| Where it works | A new worktree on its own branch, or this folder |
+| Branch, Base | The new branch, named after the task until you change it, and where it starts |
+| Machine | This machine and the linked hosts, the most free cores first |
+| Attempts | 1 to 8. Each attempt gets its own worktree and branch |
+
+A new worktree goes through the same path as `tuios fan`, and this folder
+through `tuios start-agent`. Uncommitted files stay in this folder. On a
+linked host the agent works in a new worktree of the host's checkout, which
+the host finds by the repository's origin.
+
 In the image view, which a click on an image chip in the reply opens: `o`
 opens the image in the desktop's viewer, `c` saves a copy and copies its
 path, `s` saves a copy, `left` and `right` step through the images, `+` and
@@ -1265,7 +1289,7 @@ path, `s` saves a copy, `left` and `right` step through the images, `+` and
 
 The mouse works too. A click on a row selects it, and a double-click goes to
 its pane. A click on a group heading folds the group. The buttons on an
-approval card answer it. `+ New agent` starts one, and the search box opens
+approval card answer it. `+ New agent` opens the New agent sheet, and the search box opens
 the search. The wheel scrolls the list, and over the focus it scrolls the
 card. A search narrows the items with the agents. A selector the search line
 cannot read shows its error in the search box.

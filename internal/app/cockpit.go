@@ -1,12 +1,14 @@
 package app
 
 import (
+	"image/color"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
@@ -205,6 +207,18 @@ type cockpitState struct {
 	// cutKey is the held approval or question the card could not show
 	// whole, by inboxShownKey. Its keys are refused with a word.
 	cutKey string
+	// spawn is the open spawn sheet, and spawnDraft a closed one kept for
+	// the next n. spawnGen counts openings, and spawnLast is the agent the
+	// last Start used. See cockpit_spawn.go.
+	spawn, spawnDraft *spawnSheet
+	spawnGen          uint64
+	spawnLast         string
+	// spawnBg is the dimmed cockpit under the sheet, and spawnBgAt the
+	// frame it was drawn from, so a key typed on the sheet does not draw
+	// the cockpit again. spawnFade holds the faded colours.
+	spawnBg   []uv.Line
+	spawnBgAt ckFrameKey
+	spawnFade map[color.Color]color.Color
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -802,16 +816,6 @@ func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 	return m.InboxReplyApproval(decision), true
 }
 
-// CockpitNewAgent is n and the New agent button. Until the spawn sheet
-// lands, it opens the launcher, where any agent's program starts in a new
-// pane and the cockpit finds it.
-func (m *OS) CockpitNewAgent() tea.Cmd {
-	m.CloseInbox()
-	cmd := m.OpenLauncher()
-	m.ShowNotification("Start an agent such as claude or codex. It shows in the agents view.", "info", m.Settings.NotificationDuration)
-	return cmd
-}
-
 // CockpitGo is enter: go to the row's pane and close the cockpit. Mail opens
 // its thread, as before.
 func (m *OS) CockpitGo() tea.Cmd {
@@ -849,6 +853,9 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	if ck.img != nil {
 		m.cockpitImageClick(x, y)
 		return nil, true
+	}
+	if ck.spawn != nil {
+		return m.spawnClick(x, y), true
 	}
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
@@ -957,6 +964,9 @@ func (m *OS) cockpitReply() tea.Cmd {
 // CockpitHover lights the row under the pointer. It selects nothing.
 func (m *OS) CockpitHover(x, y int) {
 	ck := &m.Inbox.ck
+	if ck.spawn != nil {
+		return
+	}
 	key := ""
 	for _, h := range ck.hits {
 		if h.kind == ckHitRow && x >= h.x0 && x < h.x1 && y >= h.y0 && y < h.y1 {
@@ -974,8 +984,9 @@ func (m *OS) CockpitHover(x, y int) {
 // detail when it is over the focus area.
 func (m *OS) CockpitWheel(x int, up bool) {
 	ck := &m.Inbox.ck
-	if ck.img != nil {
-		// The image view covers everything behind it.
+	if ck.img != nil || ck.spawn != nil {
+		// The image view and the spawn sheet cover everything behind
+		// them.
 		return
 	}
 	if x < ck.fleetW {

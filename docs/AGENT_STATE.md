@@ -2312,8 +2312,10 @@ the keys refuse.
 
 A click on a row selects it and leaves the view open. A double-click, or
 `enter`, goes to the agent's pane and closes the view. `n` and the
-`+ New agent` button start a new agent: for now they open the launcher, where
-any agent's program starts in a new pane. `f` shows only the items, the old
+`+ New agent` button open the New agent sheet: the task, the agent, the
+model, a new worktree or this folder, the machine and the attempts. `enter`
+starts the agent through `fan` (a new worktree) or `start-agent` (this
+folder), and the task is typed once the agent is ready. `f` shows only the items, the old
 flat Inbox with Needs you and Ready for review; `f` again shows one kind of
 item at a time, and after the last kind every agent again. `s` steps the order inside the
 groups: needs you first and then the longest wait, name, most recent change,
@@ -2466,7 +2468,7 @@ Inside the agents view:
 | `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, reject. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. On a risky approval, `1` and `2` need a second press of the same key within 3 seconds. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
 | `a` / `A` / `r` | Answer the held approval under the cursor, as its card's buttons do: allow once, always allow, reject. The same rules as `1`, `2` and `3`. |
 | `R` | On a held approval or plan whose harness takes a reason: reject, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Reject with a reason](#reject-with-a-reason). |
-| `n` | Start a new agent. For now this opens the launcher. |
+| `n` | Open the New agent sheet. |
 | `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan on the card. The wheel over the card does the same. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown on its card, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r`, `i`, `tab` | With no approval waiting: reply to the agent, or to mail, whose thread opens with its reply line. |

@@ -771,3 +771,142 @@ func TestCockpitSideTabs(t *testing.T) {
 	saveCockpitFrames(t, term, "pane-tab-100x30")
 	alive(t, term, "after the side tabs")
 }
+
+// TestCockpitSpawnSheet starts an agent from the New agent sheet, the way a
+// person does: n opens the sheet over the cockpit, the task is typed, the
+// branch follows it, and enter starts the agent. A pane appears in a new
+// worktree on that branch and the fake claude reads the task. Then the
+// mouse starts a second agent in this folder: a click on This folder and a
+// click on Start. Frames at 200x55, 100x30 and 16 colours are kept.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with n opening the
+// launcher again the sheet never shows; with the branch left out of the fan
+// call the worktree is not on agent/lru-cache-safe.
+func TestCockpitSpawnSheet(t *testing.T) {
+	base, repo := fanFixture(t)
+	// Only the fake claude: an agent installed on this machine must never
+	// start from a test.
+	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin")
+	useShippedLooks(base)
+	for _, s := range []string{"home", "frames"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach", "--cwd", repo); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	open := func(sess string, cols, rows int, env ...string) *tuitest.Terminal {
+		t.Helper()
+		term := startIn(t, base, startOpts{args: []string{"attach", sess}, cols: cols, rows: rows, shippedLooks: true, env: env})
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+			t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+		}
+		windowManagementMode(t, term)
+		if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+			t.Fatal(err)
+		}
+		waitText(t, term, "the cockpit", "Agents", "New agent")
+		if err := term.SendKeys("n"); err != nil {
+			t.Fatal(err)
+		}
+		waitText(t, term, "the spawn sheet", "Task", "Where it works", "Machine", "best fit first", "Attempts", "Start agent")
+		return term
+	}
+	term := open("home", 200, 55, "TERM=xterm-256color", "COLORTERM=truecolor")
+	// The folder is read: the title names the repository and its branch,
+	// and the base is that branch.
+	waitText(t, term, "the folder read", "from "+filepath.Base(repo)+" / ", "claude ready")
+	if err := term.SendKeys("Make the LRU cache safe for concurrent reads."); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the branch named after the task", "agent/lru-cache-safe", "named after the task")
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "spawn-sheet-200x55")
+
+	// enter starts the agent in a new worktree and closes the sheet.
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Where it works") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: enter did not close the sheet: %v\n%s", err, term.Snapshot())
+	}
+	deadline := time.Now().Add(40 * time.Second)
+	for {
+		rows := worktreeRows(t, base, "--group", "agent/lru-cache-safe")
+		if len(rows) == 1 && rows[0]["prompt_status"] == "sent" && rows[0]["branch"] == "agent/lru-cache-safe" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the sheet never made a worktree on agent/lru-cache-safe with the task sent: %v", rows)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	pane, err := tuiosCLI(t, base, "capture-pane", "-s", "repo-agent-lru-cache-safe")
+	if err != nil {
+		t.Fatalf("capture-pane: %v: %s", err, pane)
+	}
+	if !strings.Contains(pane, "GOT: Make the LRU cache safe for concurrent reads.") {
+		t.Fatalf("ASSERTION: the agent in the new worktree never read the task:\n%s", pane)
+	}
+
+	// The mouse: n again, a task, a click on This folder, a click on Start.
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the sheet again", "Where it works")
+	if err := term.SendKeys("Read the README."); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the second task", "Read the README.")
+	row, col := findText(t, term, "This folder")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	// This folder takes no branch: the branch field goes quiet and the
+	// sheet still shows the folder's radio picked.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "● This folder")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on This folder did not pick it: %v\n%s", err, term.Snapshot())
+	}
+	row, col = findText(t, term, "Start agent")
+	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Starting claude in this folder.") || strings.Contains(s.Text(), "Started claude in home.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on Start said nothing: %v\n%s", err, term.Snapshot())
+	}
+	deadline = time.Now().Add(40 * time.Second)
+	for {
+		found := false
+		for _, w := range []string{"0", "1", "2", "3"} {
+			if p, err := tuiosCLI(t, base, "capture-pane", "-s", "home", "-w", w); err == nil && strings.Contains(p, "GOT: Read the README.") {
+				found = true
+			}
+		}
+		if found {
+			break
+		}
+		if time.Now().After(deadline) {
+			out, _ := tuiosCLI(t, base, "list-windows", "-s", "home", "--json")
+			t.Fatalf("ASSERTION: the agent started in this folder never read the task:\n%s\n%s", out, term.Snapshot())
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	alive(t, term, "after two starts from the sheet")
+
+	// The narrow layout and the 16 colour one, for the frames.
+	for _, v := range []struct {
+		name       string
+		cols, rows int
+		env        []string
+	}{
+		{"spawn-sheet-100x30", 100, 30, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}},
+		{"spawn-sheet-16", 160, 45, []string{"TERM=xterm", "COLORTERM="}},
+	} {
+		small := open("frames", v.cols, v.rows, v.env...)
+		if err := small.SendKeys("Make the LRU cache safe for concurrent reads."); err != nil {
+			t.Fatal(err)
+		}
+		waitText(t, small, "the task on "+v.name, "concurrent")
+		_ = small.WaitStable(uiTimeout)
+		saveCockpitFrames(t, small, v.name)
+		alive(t, small, "on "+v.name)
+	}
+}

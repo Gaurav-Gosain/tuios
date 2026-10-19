@@ -243,7 +243,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
 	// The reply editor is not one: what it draws is in the key.
-	transient := st.ck.img != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
+	transient := st.ck.img != nil || ck.spawn != nil || st.Peek != nil || st.selectEditing || m.InboxSnoozePicking() || st.agents.sheet != nil ||
 		st.approvals.reason != nil || st.approvals.armed.key != ""
 	if !transient && ck.frame != "" && ck.frameAt == key {
 		return ck.frame, top, w, h
@@ -254,9 +254,39 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	ck.hits = ck.hits[:0]
 	ck.fleetW = 0
 	ck.liveShown = false
-	m.drawCockpit(c, l, top, now)
+	if ck.spawn != nil {
+		m.drawCockpitUnderSheet(c, l, top, now, key)
+	} else {
+		m.drawCockpit(c, l, top, now)
+	}
 	ck.frame, ck.frameAt = c.render(), key
 	return ck.frame, top, w, h
+}
+
+// drawCockpitUnderSheet draws the cockpit dimmed, then the spawn sheet over
+// it. The dimmed cockpit is kept while what it is drawn from holds, so a key
+// typed on the sheet draws the sheet alone. Nothing under the sheet takes a
+// click.
+func (m *OS) drawCockpitUnderSheet(c *ckCanvas, l ckLook, top int, now time.Time, key ckFrameKey) {
+	ck := &m.Inbox.ck
+	if ck.spawnBg == nil || ck.spawnBgAt != key || len(ck.spawnBg) != c.h {
+		m.drawCockpit(c, l, top, now)
+		if ck.spawnFade == nil || ck.spawnBgAt.look != key.look {
+			ck.spawnFade = map[color.Color]color.Color{}
+		}
+		c.dim(l, ck.spawnFade)
+		ck.spawnBg = ck.spawnBg[:0]
+		for y := range c.h {
+			ck.spawnBg = append(ck.spawnBg, slices.Clone(c.buf.Lines[y]))
+		}
+		ck.spawnBgAt = key
+	} else {
+		for y := range c.h {
+			copy(c.buf.Lines[y], ck.spawnBg[y])
+		}
+	}
+	ck.hits = ck.hits[:0]
+	m.drawSpawnSheet(c, l, top)
 }
 
 // drawCockpit lays the cockpit out on c. top is c's row on the screen, which
