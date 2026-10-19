@@ -7476,5 +7476,8 @@ A guest that scales a PNG into a cell box and places it past the pane's bottom r
 | A PNG sent by name has no known size | The header read in `mediumPixels` | Branch skipped | `/file`, `/file-zlib`, `/file-at`, `/temp` ("41x4 cells show the source rectangle x=0,y=0,w=410,h=80, want ... w=820,h=160") | **caught** |
 | The header is read at the start of the file, not at the medium's offset | `O=` and `S=` passed to `kittyMediumPNGSize` | Passed as 0 | `/file-at` | **caught** |
 | A PNG compressed again is read as it is | `o=z` passed to `kittyMediumPNGSize` | Passed as false | `/file-zlib` | **caught** |
+| A file transmit that only stores the picture leaves a placement, drawn unscaled beside the real one | The `!andPlace` return before `putPlacement` in `forwardFileTransmit` | Removed | `/file-later`, `/temp-later` ("118x20 cells show the source rectangle x=0,y=0,w=1180,h=400, want ... w=2360,h=800") | **caught** |
+
+The `-later` cases store the picture with a=t and place it with a=p, as snacks.nvim does. The check is on the last command for each placement id. The real placement still goes out unclipped for one command before the refresh pass clips it under the same id; that is older than this fix, happens inline too, and is not covered here.
 
 `/direct` passes on every build: an inline PNG's size was already read from its first chunk, and it is the case that shows the test's arithmetic is right.

@@ -946,6 +946,13 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		kittyPassthroughLog("forwardFileTransmit: refreshed placement hostID=%d in place", hostID)
 		return
 	}
+	// A transmit that does not place (a=t) stores the image and shows nothing,
+	// which is how the direct path passes it through. The a=p that follows
+	// makes its own placement, at the size it asks for. One made here as well
+	// is drawn by the refresh passes at the image's own size: a second copy.
+	if !andPlace {
+		return
+	}
 	kp.putPlacement(windowID, imageKey(hostID), &PassthroughPlacement{
 		GuestImageID:      cmd.ImageID,
 		GuestPlacementID:  cmd.PlacementID,
