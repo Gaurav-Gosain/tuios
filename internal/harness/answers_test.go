@@ -322,3 +322,67 @@ func TestAnswerKeyBytes(t *testing.T) {
 		}
 	}
 }
+
+// TestScreenAnswersFromSource holds the answers written from each harness's
+// source to the keys that source binds, on the panel it draws. A rule that
+// stops reading the panel answers nothing, and the test fails on it.
+func TestScreenAnswersFromSource(t *testing.T) {
+	reg := bundledRegistry(t)
+	for _, c := range []struct {
+		harness string
+		// tail is the panel as the source draws it.
+		tail []string
+		want map[string]string
+	}{
+		{
+			// kimi-cli 1.52.0, _approval_panel.py.
+			harness: "kimi",
+			tail: []string{
+				"agent is requesting approval to run command:",
+				"go test ./...",
+				"",
+				"→ [1] Approve once",
+				"  [2] Approve for this session",
+				"  [3] Reject",
+				"  [4] Reject, tell the model what to do instead",
+				"",
+				"  ▲/▼ select  1/2/3/4 choose  ↵ confirm",
+			},
+			want: map[string]string{ActionApprove: `"1"`, ActionApproveAlways: `"2"`, ActionDeny: `"\x1b"`},
+		},
+		{
+			// @google/gemini-cli 0.64.0, ToolConfirmationMessage.tsx.
+			harness: "gemini-cli",
+			tail: []string{
+				"╭──────────────────────────────────────╮",
+				"│ ?  Shell go test ./...                │",
+				"│ Allow execution of: 'go'?            │",
+				"│ ● Allow once                          │",
+				"│   Allow for this session              │",
+				"│   No, suggest changes (esc)           │",
+				"╰──────────────────────────────────────╯",
+			},
+			want: map[string]string{ActionDeny: `"\x1b"`},
+		},
+	} {
+		t.Run(c.harness, func(t *testing.T) {
+			p := screenPrompt(t, reg, c.harness, c.tail)
+			var got []string
+			for _, a := range p.Actions() {
+				if _, ok := c.want[a]; !ok {
+					t.Errorf("offers %s, which the source does not bind", a)
+				}
+				got = append(got, a)
+			}
+			for action, want := range c.want {
+				if !slices.Contains(got, action) {
+					t.Errorf("does not offer %s", action)
+					continue
+				}
+				if s := sent(t, p, action, ""); s != want {
+					t.Errorf("%s sends %s, want %s", action, s, want)
+				}
+			}
+		})
+	}
+}

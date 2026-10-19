@@ -37,6 +37,14 @@ any_of   = [
   { regex = ['(?i)^\s*❯.*(yes|allow)'] },
 ]
 
+# Gemini CLI draws its options without numbers (RadioButtonSelect with
+# showNumbers off, packages/cli/src/ui/components/messages/
+# ToolConfirmationMessage.tsx in @google/gemini-cli 0.64.0), so a digit picks
+# nothing and approve has no key that is safe to press. Every confirmation
+# ends with "No, suggest changes (esc)", and esc is that answer.
+[screen.rule.answers]
+deny = { keys = ["esc"] }
+
 # A turn in progress: the spinner line above the box carries the cancel hint.
 #
 #   ⠏ Thinking... (esc to cancel, 3s)

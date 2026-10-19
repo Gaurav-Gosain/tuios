@@ -66,6 +66,17 @@ all      = ["requesting approval", "reject"]
 any      = ["approve once", "approve for this session"]
 all_of   = [ { any = ["1/2/3/4 choose", "↵ confirm"] } ]
 
+# Kimi Code CLI's approval panel (kimi_cli/ui/shell/visualize/
+# _approval_panel.py in kimi-cli 1.52.0) lists "[1] Approve once", "[2]
+# Approve for this session", "[3] Reject" and "[4] Reject, tell the model
+# what to do instead", in that order. A digit submits its option at once, and
+# esc rejects. The bracketed numbers are not the "1." form an option label
+# is read from, so the answers press the keys the panel binds.
+[screen.rule.answers]
+approve        = { keys = ["1"] }
+approve_always = { keys = ["2"] }
+deny           = { keys = ["esc"] }
+
 # herdr rule: background_agent_status_working.
 #
 #   kimi-k2 thinking… [2 agents running]

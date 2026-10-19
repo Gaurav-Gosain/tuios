@@ -112,6 +112,10 @@ var screenSeeds = []string{
 	"╭──────────────╮\n│ > half a box",
 	"esc to interrupt",
 	"Allow this command? (y/n)",
+	// Kimi Code CLI's approval panel and Gemini CLI's confirmation, as their
+	// sources draw them (TestScreenAnswersFromSource).
+	"agent is requesting approval to run command:\n→ [1] Approve once\n  [2] Approve for this session\n  [3] Reject\n  ▲/▼ select  1/2/3/4 choose  ↵ confirm",
+	"│ Allow execution of: 'go'?            │\n│ ● Allow once                          │\n│   No, suggest changes (esc)           │",
 	"\xff\xfe\n\xed\xa0\x80",
 	strings.Repeat("é", 3000),
 	strings.Repeat("line\n", 300),
