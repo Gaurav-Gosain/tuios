@@ -172,20 +172,45 @@ func TestALinkTheHubDidNotVouchForCannotVerify(t *testing.T) {
 
 // TestReattachIssuesAFreshNonce: the nonce belongs to one attach, so a client
 // that attaches again gets a new one and the old one stops counting.
+//
+// The client moves to the other session with SwitchSession over its read loop,
+// the way the app does. It used to send a second attach and take the next frame
+// as the reply. A client stays attached to the first session until that reply,
+// so the daemon may send it a notice for that session first, and a MsgPaneMark
+// from the first pane's shell prompt often did. The test raises that notice on
+// purpose and waits until it is on the wire, so the order is certain.
 func TestReattachIssuesAFreshNonce(t *testing.T) {
 	d, sp := startTestDaemon(t)
-	makeSessionWithWindow(t, d, "one")
+	one := makeSessionWithWindow(t, d, "one")
 	makeSessionWithWindow(t, d, "two")
 
 	tui := attachTUI(t, sp, "one")
 	first := tui.HumanNonce()
-	if _, err := tui.AttachSession("two", false, 80, 24); err != nil {
-		t.Fatalf("attach: %v", err)
+
+	w := one.GetState().Windows[0]
+	d.sendPaneMark(one.ID, w.PTYID, w.ID, PaneMarkOutput)
+	awaitBufferedFrame(t, tui)
+
+	tui.StartReadLoop()
+	if _, err := tui.SwitchSession("two", 80, 24); err != nil {
+		t.Fatalf("switch: %v", err)
 	}
 	if second := tui.HumanNonce(); second == "" || second == first {
 		t.Fatalf("a second attach kept nonce %q (first %q)", second, first)
 	}
 	if d.verifyHumanNonce(first, d.manager.GetSession("one").ID, nil) {
 		t.Error("the first attach's nonce still verifies after the client moved on")
+	}
+}
+
+// awaitBufferedFrame waits until the daemon has sent c a frame it has not read.
+func awaitBufferedFrame(t *testing.T, c *TUIClient) {
+	t.Helper()
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
+	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	defer func() { _ = c.conn.SetReadDeadline(time.Time{}) }()
+	if _, err := c.reader().Peek(1); err != nil {
+		t.Fatalf("the daemon sent no notice: %v", err)
 	}
 }
