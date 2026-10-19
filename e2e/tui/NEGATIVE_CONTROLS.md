@@ -7188,3 +7188,10 @@ The e2e test also found a bug in the first version of the Gemini glob
 excludes: `[!l]` is not a negation in Go's `filepath.Match` (it is `[^l]`),
 so every `.jsonl` chat was refused. The hook's `transcript_refused` check in
 the test failed on it.
+The Copilot CLI and Amp cases were added in the next change. Amp's plugin
+reports the thread id and not the file, so the manifest's `session_file`
+names it. Run on 2026-10-18.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A hook that names only its session joins no file | The `session_file` join in `verbSetAgentState` (verb_handlers.go) | Condition never true | `TestCockpitThreadOtherHarnesses/amp` ("never showed the answer and the failed command") | **caught** |

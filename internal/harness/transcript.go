@@ -34,6 +34,11 @@ type Transcript struct {
 	// Exclude lists file name patterns Glob matches that are not sessions:
 	// a harness's ledgers, backups and temporary files.
 	Exclude []string `toml:"exclude"`
+	// SessionFile names the file of a session from the session id the
+	// harness's hook reports, under Dir: "{session_id}.json". It is for a
+	// harness whose hook names its session but not its file. Empty means the
+	// session id finds no file.
+	SessionFile string `toml:"session_file"`
 	// Verify names the record fields that must match the pane before a file
 	// found by search is believed. It is what stops a wrong join, which is worse
 	// than no join: attributing one agent's state to another pane is a confident
@@ -52,10 +57,12 @@ const ReaderJSONL = "claude-code-jsonl"
 // internal/transcriptview, which this package does not import, so the names
 // are kept in step by the session package's tests.
 var knownReaders = map[string]struct{}{
-	ReaderJSONL:     {},
-	"codex-rollout": {},
-	"gemini-chat":   {},
-	"qwen-chat":     {},
+	ReaderJSONL:      {},
+	"codex-rollout":  {},
+	"gemini-chat":    {},
+	"qwen-chat":      {},
+	"copilot-events": {},
+	"amp-thread":     {},
 }
 
 // KnownReaders returns the reader names a manifest may give.
@@ -94,7 +101,8 @@ func checkTranscript(file, id string, t *Transcript) error {
 	t.Reader = strings.TrimSpace(t.Reader)
 	t.Dir = strings.TrimSpace(t.Dir)
 	t.Glob = strings.TrimSpace(t.Glob)
-	if t.Reader == "" && t.Dir == "" && t.Glob == "" && len(t.Verify) == 0 {
+	t.SessionFile = strings.TrimSpace(t.SessionFile)
+	if t.Reader == "" && t.Dir == "" && t.Glob == "" && len(t.Verify) == 0 && t.SessionFile == "" {
 		return nil
 	}
 	if _, ok := knownReaders[t.Reader]; !ok {
@@ -124,7 +132,35 @@ func checkTranscript(file, id string, t *Transcript) error {
 	if strings.ContainsRune(t.Glob, '/') && strings.Contains(strings.ReplaceAll(t.Dir, "{home}", ""), "{") {
 		return fmt.Errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
 	}
+	if t.SessionFile != "" {
+		if strings.Count(t.SessionFile, "{session_id}") != 1 || strings.ContainsAny(strings.ReplaceAll(t.SessionFile, "{session_id}", ""), `/\{}`) {
+			return fmt.Errorf("%s: manifest %q transcript session_file %q must be a file name with {session_id} once", file, id, t.SessionFile)
+		}
+		if strings.Contains(strings.ReplaceAll(t.Dir, "{home}", ""), "{") {
+			return fmt.Errorf("%s: manifest %q transcript session_file needs a dir with no placeholder but {home}", file, id)
+		}
+	}
 	return nil
+}
+
+// SessionPath is the file of the session a hook names by its id, under
+// Root, or "" when the manifest has no session_file or the id could name
+// anything but one file in that folder. The id is the harness's own, so it
+// is held to the characters session ids are made of.
+func (t Transcript) SessionPath(sessionID string) string {
+	root := t.Root()
+	if t.SessionFile == "" || root == "" || sessionID == "" || len(sessionID) > 128 {
+		return ""
+	}
+	for _, r := range sessionID {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.') {
+			return ""
+		}
+	}
+	if strings.Trim(sessionID, ".") == "" {
+		return ""
+	}
+	return filepath.Join(root, strings.ReplaceAll(t.SessionFile, "{session_id}", sessionID))
 }
 
 // MatchesGlob reports whether path, under root (Root, resolved), is a file

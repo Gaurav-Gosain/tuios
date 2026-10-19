@@ -24,6 +24,12 @@ const (
 	// FormatQwen is a Qwen Code chat, ~/.qwen/projects/<cwd>/chats/<session>.
 	// jsonl (qwen.go).
 	FormatQwen = "qwen-chat"
+	// FormatCopilot is a GitHub Copilot CLI session's events.jsonl
+	// (copilot.go).
+	FormatCopilot = "copilot-events"
+	// FormatAmp is an Amp thread, one JSON document Amp rewrites whole
+	// (amp.go).
+	FormatAmp = "amp-thread"
 )
 
 // decoded is what one record gave.
@@ -66,10 +72,12 @@ func (f format) isDoc(path string) bool {
 }
 
 var formats = map[string]format{
-	FormatClaude: {line: claudeLine},
-	FormatCodex:  {line: codexLine, identity: codexIdentity},
-	FormatGemini: {line: geminiLine, doc: geminiDoc, docExt: ".json", identity: geminiIdentity},
-	FormatQwen:   {line: qwenLine, identity: qwenIdentity},
+	FormatClaude:  {line: claudeLine},
+	FormatCodex:   {line: codexLine, identity: codexIdentity},
+	FormatGemini:  {line: geminiLine, doc: geminiDoc, docExt: ".json", identity: geminiIdentity},
+	FormatQwen:    {line: qwenLine, identity: qwenIdentity},
+	FormatCopilot: {line: copilotLine, identity: copilotIdentity},
+	FormatAmp:     {line: ampLine, doc: ampDoc},
 }
 
 // lookupFormat returns the format a name names, FormatClaude for "".

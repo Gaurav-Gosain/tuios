@@ -140,7 +140,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 // daemon can read.
 func unsupportedHarnessError(harnessID string) *verbError {
 	return hintedVerbError(ErrVerbUnsupportedHarness, "the transcript of "+echoName(harnessID)+" cannot be read", &VerbHint{
-		Detail: "agent-transcript reads the transcripts of Claude Code, Codex, Gemini CLI and Qwen Code. Read the pane with capture-pane or stream-pane instead.",
+		Detail: "agent-transcript reads the transcripts of Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI and Amp. Read the pane with capture-pane or stream-pane instead.",
 	})
 }
 

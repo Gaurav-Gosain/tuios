@@ -3,7 +3,7 @@
 // diffs of edits, plans, todo lists and errors.
 //
 // Each harness keeps its own format, and each format has a decoder of its own
-// (claude.go, codex.go, gemini.go, qwen.go). They all
+// (claude.go, codex.go, gemini.go, qwen.go, copilot.go, amp.go). They all
 // decode into the same Entry, so the thread draws every agent the same way.
 // A format is one JSON record per line, or, for a harness that rewrites one
 // JSON document whole (format.doc), a document this package turns into one

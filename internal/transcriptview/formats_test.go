@@ -117,6 +117,32 @@ func TestFormatFixtures(t *testing.T) {
 			"tool tool_result error",
 			"assistant text: b is three.",
 		}},
+		{"copilot-events.jsonl", FormatCopilot, []string{
+			"user text: Set b to three.",
+			"assistant thinking: The value lives in app.ts.",
+			"assistant text: Editing app.ts.",
+			"assistant tool_call edit [/work/project/app.ts] ok diff /work/project/app.ts +1 -1",
+			"assistant tool_call bash [npm test] error",
+			"assistant todos update_todo ok todos 2",
+			"tool tool_result ok diff app.ts +1 -1",
+			"tool tool_result error",
+			"tool tool_result ok",
+			"assistant text: b is three. One test fails.",
+			"assistant error: Rate limit reached.",
+		}},
+		{"amp-thread.json", FormatAmp, []string{
+			"user text: Set b to three.",
+			"assistant thinking: Edit app.ts.",
+			"assistant text: Editing.",
+			"assistant tool_call edit_file [/work/project/app.ts] ok diff /work/project/app.ts +1 -1",
+			"assistant tool_call Bash [npm test] error",
+			"assistant todos todo_write ok todos 1",
+			"assistant tool_call Bash [sleep 100] running",
+			"tool tool_result ok diff /work/project/app.ts +1 -1",
+			"tool tool_result error",
+			"tool tool_result ok",
+			"assistant text: b is three. One test fails.",
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -152,6 +178,7 @@ func TestFormatPaging(t *testing.T) {
 	for _, c := range []struct{ file, format string }{
 		{"codex-rollout.jsonl", FormatCodex}, {"gemini-chat.jsonl", FormatGemini},
 		{"gemini-legacy.json", FormatGemini}, {"qwen-chat.jsonl", FormatQwen},
+		{"copilot-events.jsonl", FormatCopilot}, {"amp-thread.json", FormatAmp},
 	} {
 		t.Run(c.file, func(t *testing.T) {
 			path := filepath.Join("testdata", c.file)
@@ -226,6 +253,20 @@ func hostile(format string) []string {
 			`{"type":"tool_result","message":{"parts":[{"functionResponse":{"id":"c1","response":{"output":`+s(esc)+`}}}]},"toolCallResult":{"status":"error","resultDisplay":{"fileDiff":"@@ -99999999999 +1 @@\n"}}}`,
 			`{"type":"assistant","message":{"parts":"text"}}`,
 		)
+	case FormatCopilot:
+		return append(common,
+			`{"type":"user.message","data":{"content":`+s(esc)+`}}`,
+			`{"type":"assistant.message","data":{"content":`+s(esc)+`,"toolRequests":[{"toolCallId":"t1","name":`+s(esc)+`,"arguments":{"path":`+s(esc)+`}}]}}`,
+			`{"type":"tool.execution_complete","data":{"toolCallId":"t1","success":false,"error":{"message":`+s(esc)+`},"result":{"detailedContent":`+s("--- a/x\n+++ b/"+esc+"\n@@ -1 +1 @@\n-a\n+"+esc+"\n")+`}}}`,
+			`{"type":"update_todo","data":{"toolRequests":[{"name":"update_todo","arguments":{"todos":7}}]}}`,
+		)
+	case FormatAmp:
+		return []string{`{"messages": [` +
+			`{"role":"user","content":[{"type":"text","text":` + s(esc) + `}]},` +
+			`{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":` + s(esc) + `,"input":{"cmd":` + s(esc) + `}}]},` +
+			`{"role":"user","content":[{"type":"tool_result","toolUseID":"t1","run":{"status":"error","error":{"message":` + s(esc) + `}}}]},` +
+			`{"role":"assistant","content":"not blocks"},` +
+			`7, null, "x"]}`}
 	}
 	return common
 }
@@ -239,9 +280,13 @@ func TestFormatHostile(t *testing.T) {
 			return r
 		}, s)
 	}
-	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen} {
+	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen, FormatCopilot, FormatAmp} {
 		t.Run(format, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "hostile.jsonl")
+			name := "hostile.jsonl"
+			if format == FormatAmp {
+				name = "hostile.json"
+			}
+			path := filepath.Join(t.TempDir(), name)
 			if err := os.WriteFile(path, []byte(strings.Join(hostile(format), "\n")+"\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -269,12 +314,12 @@ func TestFormatBounds(t *testing.T) {
 	dir := t.TempDir()
 	t.Run("long line", func(t *testing.T) {
 		path := filepath.Join(dir, "long.jsonl")
-		long := `{"type":"user","message":{"parts":[{"text":"` + strings.Repeat("a", lineMax) + `"}]}}`
-		short := `{"type":"user","message":{"parts":[{"text":"after"}]}}`
+		long := `{"type":"user.message","data":{"content":"` + strings.Repeat("a", lineMax) + `"}}`
+		short := `{"type":"user.message","data":{"content":"after"}}`
 		if err := os.WriteFile(path, []byte(long+"\n"+short+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		page, err := Read(path, Options{Format: FormatQwen})
+		page, err := Read(path, Options{Format: FormatCopilot})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -293,7 +338,7 @@ func TestFormatBounds(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = f.Close()
-		if _, err := Read(path, Options{Format: FormatGemini}); err != ErrTooLarge {
+		if _, err := Read(path, Options{Format: FormatAmp}); err != ErrTooLarge {
 			t.Errorf("err %v, want ErrTooLarge", err)
 		}
 	})
@@ -348,6 +393,7 @@ func TestFormatIdentity(t *testing.T) {
 		{"gemini-chat.jsonl", FormatGemini, start},
 		{"gemini-legacy.json", FormatGemini, start},
 		{"qwen-chat.jsonl", FormatQwen, start},
+		{"copilot-events.jsonl", FormatCopilot, start},
 	} {
 		id, ok := Identify(c.format, filepath.Join("testdata", c.file))
 		if !ok {
@@ -363,6 +409,9 @@ func TestFormatIdentity(t *testing.T) {
 	}
 	if _, ok := Identify(FormatCodex, filepath.Join("testdata", "codex-legacy.jsonl")); ok {
 		t.Error("a rollout with no session_meta gave an identity")
+	}
+	if _, ok := Identify(FormatAmp, filepath.Join("testdata", "amp-thread.json")); ok {
+		t.Error("an Amp thread gave an identity: its folder is at the end of the document, and only its plugin's thread id joins it")
 	}
 }
 

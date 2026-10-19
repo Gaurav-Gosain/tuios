@@ -91,15 +91,16 @@ func (ln ckLine) blank() bool {
 // tool. A run of them is one line.
 func ckReadTool(tool string) string {
 	// Claude Code's names, then those of the other harnesses whose
-	// transcripts tuios reads: Codex, Gemini CLI and Qwen Code.
+	// transcripts tuios reads: Codex, Gemini CLI, Qwen Code, Copilot CLI and
+	// Amp.
 	switch strings.ToLower(tool) {
 	case "read", "ls", "notebookread",
-		"read_file", "read_many_files", "list_directory", "view_image":
+		"read_file", "read_many_files", "list_directory", "view", "view_image":
 		return "Read"
 	case "grep", "glob", "websearch",
 		"grep_search", "search_file_content", "google_web_search", "web_search":
 		return "Search"
-	case "webfetch", "web_fetch":
+	case "webfetch", "web_fetch", "read_web_page":
 		return "Fetch"
 	}
 	return ""

@@ -20,7 +20,7 @@ import (
 // beside the list on a wide screen and in its place on a narrow one.
 //
 //   - For an agent whose transcript the daemon reads (Claude Code, Codex,
-//     Gemini CLI, Qwen Code), the conversation, read with
+//     Gemini CLI, Qwen Code, Copilot CLI, Amp), the conversation, read with
 //     agent-transcript (the
 //     person's own verb, with the attach nonce: secrets masked, every string
 //     bounded, control characters gone). The client subscribes to the
@@ -159,7 +159,7 @@ type threadWatchEnded struct{ key string }
 // reader internal/transcriptview has.
 func threadTranscriptHarness(h string) bool {
 	switch h {
-	case "claude-code", "codex", "gemini-cli", "qwen":
+	case "claude-code", "codex", "gemini-cli", "qwen", "copilot", "amp":
 		return true
 	}
 	return false

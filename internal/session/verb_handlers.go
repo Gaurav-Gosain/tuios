@@ -1501,8 +1501,17 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		debugLog("[DEBUG] set-agent-state: %s refused session %q of %s", reason, p.AgentSessionID, p.Harness)
 	}
 	transcriptRefused := ""
-	if applied && p.TranscriptPath != "" {
+	switch {
+	case applied && p.TranscriptPath != "":
 		transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, p.TranscriptPath)
+	case p.TranscriptPath == "" && p.AgentSessionID != "" &&
+		reason != agentRefusedForeignSession && reason != agentRefusedForeignHarness:
+		// A harness whose hook names its session and not its file (Amp):
+		// the manifest's session_file names the file, and it is held to the
+		// same rules as a path a hook reports.
+		if path := d.sessionTranscriptPath(p.Harness, p.AgentSessionID); path != "" {
+			transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, path)
+		}
 	}
 	// state is the effective state, so a report a higher-ranked source outranked
 	// reports what the pane actually shows rather than what was asked for.
@@ -1742,6 +1751,20 @@ func (d *Daemon) joinReportedTranscript(cs *connState, sess *Session, target, ha
 	}
 	_ = sess.JoinAgentTranscriptAs(w.ID, harnessID, reg.TranscriptFor(harnessID).Reader, resolved, true)
 	return ""
+}
+
+// sessionTranscriptPath is the transcript a harness keeps for the session a
+// hook names, from the manifest's session_file, or "" when it has none.
+func (d *Daemon) sessionTranscriptPath(harnessID, sessionID string) string {
+	reg := d.agentMatcher.registry
+	if reg == nil || harnessID == "" {
+		return ""
+	}
+	tr := reg.TranscriptFor(harnessID)
+	if tr == nil {
+		return ""
+	}
+	return tr.SessionPath(strings.TrimSpace(sessionID))
 }
 
 // paneInSession reports whether the pane pa is in sess, by ID when pa has

@@ -1,0 +1,151 @@
+{
+  "v": 7,
+  "id": "T-00000000-0000-7000-8000-000000000001",
+  "created": 1760778000000,
+  "messages": [
+    {
+      "role": "user",
+      "messageId": 0,
+      "content": [
+        {
+          "type": "text",
+          "text": "Set b to three."
+        }
+      ],
+      "meta": {
+        "sentAt": 1760778001000
+      }
+    },
+    {
+      "role": "assistant",
+      "messageId": 1,
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "Edit app.ts.",
+          "signature": "sig",
+          "provider": "anthropic"
+        },
+        {
+          "type": "text",
+          "text": "Editing."
+        },
+        {
+          "type": "tool_use",
+          "complete": true,
+          "id": "toolu_edit",
+          "name": "edit_file",
+          "input": {
+            "path": "/work/project/app.ts",
+            "old_str": "const b = 2;",
+            "new_str": "const b = 3;"
+          }
+        },
+        {
+          "type": "tool_use",
+          "complete": true,
+          "id": "toolu_bash",
+          "name": "Bash",
+          "input": {
+            "cmd": "npm test",
+            "cwd": "/work/project"
+          }
+        },
+        {
+          "type": "tool_use",
+          "complete": true,
+          "id": "toolu_todo",
+          "name": "todo_write",
+          "input": {
+            "todos": [
+              {
+                "id": "1",
+                "content": "Edit app.ts",
+                "status": "completed"
+              }
+            ]
+          }
+        },
+        {
+          "type": "tool_use",
+          "complete": true,
+          "id": "toolu_run",
+          "name": "Bash",
+          "input": {
+            "cmd": "sleep 100"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "messageId": 2,
+      "content": [
+        {
+          "type": "tool_result",
+          "toolUseID": "toolu_edit",
+          "run": {
+            "status": "done",
+            "result": {
+              "diff": "```diff\nIndex: /work/project/app.ts\n===================================================================\n--- /work/project/app.ts\tCurrent\n+++ /work/project/app.ts\tProposed\n@@ -10,3 +10,3 @@\n const a = 1;\n-const b = 2;\n+const b = 3;\n const c = 4;\n```",
+              "lineRange": [
+                10,
+                12
+              ]
+            }
+          }
+        },
+        {
+          "type": "tool_result",
+          "toolUseID": "toolu_bash",
+          "run": {
+            "status": "done",
+            "result": {
+              "output": "1 failing",
+              "exitCode": 1
+            }
+          }
+        },
+        {
+          "type": "tool_result",
+          "toolUseID": "toolu_todo",
+          "run": {
+            "status": "done",
+            "result": "ok"
+          }
+        },
+        {
+          "type": "tool_result",
+          "toolUseID": "toolu_run",
+          "run": {
+            "status": "in-progress"
+          }
+        }
+      ],
+      "meta": {
+        "sentAt": 1760778005000
+      }
+    },
+    {
+      "role": "assistant",
+      "messageId": 3,
+      "content": [
+        {
+          "type": "text",
+          "text": "b is three. One test fails."
+        }
+      ]
+    }
+  ],
+  "env": {
+    "initial": {
+      "trees": [
+        {
+          "displayName": "project",
+          "uri": "file:///work/project"
+        }
+      ]
+    }
+  },
+  "title": "Set b"
+}

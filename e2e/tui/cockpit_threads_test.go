@@ -11,10 +11,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// TestCockpitThreadOtherHarnesses reads a Codex rollout and a Gemini CLI chat
-// in the agent thread, the way the Claude Code transcript is read in
-// TestCockpitThreadCards: the real hook of each harness names its file, and
-// the cockpit draws the conversation. Each thread has to show a tool card
+// TestCockpitThreadOtherHarnesses reads a Codex rollout, a Gemini CLI chat, a
+// Copilot CLI session and an Amp thread in the agent thread, the way the
+// Claude Code transcript is read in TestCockpitThreadCards: the real hook of
+// each harness names its file, and the cockpit draws the conversation. Amp's
+// plugin names only the thread id, and the manifest's session_file turns it
+// into the file. Each thread has to show a tool card
 // with a failed command's output, a diff card with its added line, and the
 // harness's error. Gemini writes a message again when a tool call finishes,
 // and the thread has to show that edit once.
@@ -35,6 +37,9 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		want []string
 		// once is a line the thread shows exactly once.
 		once string
+		// payload is the hook's input, the SessionStart of hookPayload when
+		// empty.
+		payload string
 	}{
 		{
 			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
@@ -47,6 +52,19 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			file: filepath.Join(".gemini", "tmp", "project", "chats", "session-2026-10-18T09-00-11111111.jsonl"),
 			want: []string{"b is three now. The tests fail.", "Command exited with code 1", "replace", "const b = 3;", "quota reached"},
 			once: "const b = 3;",
+		},
+		{
+			name: "copilot", harness: "copilot", fixture: "cockpit-copilot.jsonl", sessionID: "s-copilot",
+			file: filepath.Join(".copilot", "session-state", "s-copilot", "events.jsonl"),
+			want: []string{"b is three. One test fails.", "Command failed with exit code 1", "edit", "const b = 3;", "Rate limit reached."},
+			once: "Set b to three.",
+		},
+		{
+			name: "amp", harness: "amp", fixture: "cockpit-amp.json", sessionID: "T-00000000-0000-7000-8000-000000000001",
+			file:    filepath.Join(".local", "share", "amp", "threads", "T-00000000-0000-7000-8000-000000000001.json"),
+			want:    []string{"b is three. One test fails.", "1 failing", "edit_file", "const b = 3;", "Bash"},
+			once:    "Set b to three.",
+			payload: `{"hook_event_name":"agent.start","session_id":"T-00000000-0000-7000-8000-000000000001"}`,
 		},
 	}
 	for _, c := range cases {
@@ -80,7 +98,11 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			for _, key := range xdgKeys {
 				hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
 			}
-			hook.Stdin = bytes.NewReader(hookPayload(path, c.sessionID))
+			payload := hookPayload(path, c.sessionID)
+			if c.payload != "" {
+				payload = []byte(c.payload)
+			}
+			hook.Stdin = bytes.NewReader(payload)
 			out, err := hook.CombinedOutput()
 			if err != nil {
 				t.Fatalf("agent-hook %s SessionStart: %v\n%s", c.harness, err, out)

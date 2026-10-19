@@ -103,6 +103,18 @@ none_of  = [ { regex = ['^[\x{2800}-\x{28FF}] '] }, { all = ["plugin confirmatio
 # How a prompt is typed in. Not measured: Amp is not installed on the machine
 # these values were written on. Enter in a raw-mode terminal sends a carriage
 # return, and the paste is bracketed only when Amp turns DECSET 2004 on.
+# Amp keeps each thread as one JSON document, ~/.local/share/amp/threads/
+# <thread id>.json, which it rewrites whole. The plugin (tuios integration
+# install amp) reports the thread id, and session_file names the file from it.
+# A thread does not say its directory near its start, so without the plugin
+# no file is joined. The file is read only to show the conversation in the
+# agent thread.
+[transcript]
+reader       = "amp-thread"
+dir          = "{home}/.local/share/amp/threads"
+glob         = "T-*.json"
+session_file = "{session_id}.json"
+
 [input]
 submit          = "cr"
 bracketed_paste = true
