@@ -1,12 +1,10 @@
 package tuie2e
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -53,7 +51,7 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 			enterTerminalMode(t, term)
 
 			host.mark("launch")
-			typeLine(t, term, strings.TrimSpace(bin+" "+tc.medium+" "+tc.how))
+			typeLine(t, term, strings.TrimSpace("OVERFLOW_DIR="+t.TempDir()+" "+bin+" "+tc.medium+" "+tc.how))
 			if err := term.WaitForText("OVERFLOW-DONE", shellTimeout); err != nil {
 				t.Fatalf("the guest never finished: %v\n%s", err, term.Snapshot())
 			}
@@ -108,31 +106,14 @@ func saveText(t *testing.T, name, text string) {
 	}
 }
 
-// buildOverflow compiles the overflow stand-in once per test binary.
+// buildOverflow compiles the overflow stand-in into the test's temporary
+// directory, which is removed with the test.
 func buildOverflow(t *testing.T) string {
 	t.Helper()
-	overflowOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "overflow")
-		if err != nil {
-			overflowErr = err
-			return
-		}
-		bin := filepath.Join(dir, "overflow")
-		build := exec.Command("go", "build", "-o", bin, "./overflow")
-		if out, err := build.CombinedOutput(); err != nil {
-			overflowErr = fmt.Errorf("build overflow: %v\n%s", err, out)
-			return
-		}
-		overflowBin = bin
-	})
-	if overflowErr != nil {
-		t.Fatalf("%v", overflowErr)
+	bin := filepath.Join(t.TempDir(), "overflow")
+	build := exec.Command("go", "build", "-o", bin, "./overflow")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build overflow: %v\n%s", err, out)
 	}
-	return overflowBin
+	return bin
 }
-
-var (
-	overflowOnce sync.Once
-	overflowBin  string
-	overflowErr  error
-)

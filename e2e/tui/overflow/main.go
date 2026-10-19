@@ -5,7 +5,10 @@
 // so a crop measured in the host's cell instead of in the picture's own scale
 // is half the size it should be.
 //
-// Usage: overflow MEDIUM [later]
+// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later]
+//
+// A file medium is written under DIR, the test's own temporary directory, so
+// nothing is left behind in /tmp. Without it the system's is used.
 //
 // MEDIUM is how the picture travels:
 //
@@ -88,7 +91,7 @@ func writeMedium(medium string, data []byte) (string, error) {
 	if medium == "temp" {
 		pattern = "tty-graphics-protocol-*.png"
 	}
-	f, err := os.CreateTemp("", pattern)
+	f, err := os.CreateTemp(os.Getenv("OVERFLOW_DIR"), pattern)
 	if err != nil {
 		return "", err
 	}
