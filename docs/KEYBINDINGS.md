@@ -385,6 +385,19 @@ time. The way out, such as `esc`, stays. Only when the most important hints
 still do not fit do their labels go, from the last hint back. A hint is never
 cut in the middle of a word.
 
+### The rename dialog
+
+One dialog renames a window, a session and a workspace. It opens holding the current name. Its keys are fixed.
+
+| Keys | What it does |
+|---|---|
+| `enter` | Save the name |
+| `esc` | Cancel |
+| `ctrl+u` | Clear the field |
+| `ctrl+c` | Clear the field, or cancel when it is already empty |
+
+A click on the `clear` hint in the dialog's border clears the field too. In the help's search, `ctrl+u` clears the query.
+
 ### Mode keys in the dock
 
 Copy mode, multi copy mode and hints mode show their keys at the right end of
