@@ -276,40 +276,75 @@ func (kp *KittyPassthrough) keepFileMedium(cmd *vt.KittyCommand, windowID string
 // the whole path is resolved again, and the file must still be the pane's
 // own and outside the places kitty refuses.
 func readKittyMedium(path string, offset, size, limit int, recheck bool) ([]byte, error) {
-	if recheck {
-		if resolved, err := filepath.EvalSymlinks(path); err != nil || resolved != path || vt.KittySensitivePath(path) {
-			return nil, errors.New("the path changed")
-		}
-	}
-	f, err := os.OpenFile(path, os.O_RDONLY|openNonblock|openNoFollow, 0) // #nosec G304 - checked by kittyMediumPath
+	f, n, err := openKittyMedium(path, offset, size, recheck)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() || (recheck && !ownedByMe(info)) {
-		return nil, errors.New("not a regular file")
-	}
-	n := info.Size() - int64(max(offset, 0))
-	if size > 0 {
-		n = min(n, int64(size))
-	}
-	if n <= 0 || n > int64(limit) {
+	if n > int64(limit) {
 		return nil, fmt.Errorf("%d bytes is outside the limit", n)
-	}
-	if offset > 0 {
-		if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
-			return nil, err
-		}
 	}
 	data := make([]byte, n)
 	if _, err := io.ReadFull(f, data); err != nil {
 		return nil, err
 	}
 	return data, nil
+}
+
+// kittyMediumPNGSize reads the width and height of a PNG a file medium names
+// from its header, reading no more of the file than the header needs.
+func kittyMediumPNGSize(path string, offset, size int, zlibbed bool) (w, h int, ok bool) {
+	f, n, err := openKittyMedium(path, offset, size, false)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer func() { _ = f.Close() }()
+	// A PNG compressed again (o=z) needs more than the 24 bytes of its own
+	// header to inflate them; a deflate block of that much is far under 1 KiB.
+	head := make([]byte, min(n, 1024))
+	if _, err := io.ReadFull(f, head); err != nil {
+		return 0, 0, false
+	}
+	return pngSize(head, zlibbed)
+}
+
+// openKittyMedium opens the file a file medium names, positioned at offset,
+// and returns how many bytes the medium covers: size bytes, or the rest of the
+// file when size is 0. See readKittyMedium for the checks.
+func openKittyMedium(path string, offset, size int, recheck bool) (*os.File, int64, error) {
+	if recheck {
+		if resolved, err := filepath.EvalSymlinks(path); err != nil || resolved != path || vt.KittySensitivePath(path) {
+			return nil, 0, errors.New("the path changed")
+		}
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|openNonblock|openNoFollow, 0) // #nosec G304 - checked by kittyMediumPath
+	if err != nil {
+		return nil, 0, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, 0, err
+	}
+	if !info.Mode().IsRegular() || (recheck && !ownedByMe(info)) {
+		_ = f.Close()
+		return nil, 0, errors.New("not a regular file")
+	}
+	n := info.Size() - int64(max(offset, 0))
+	if size > 0 {
+		n = min(n, int64(size))
+	}
+	if n <= 0 {
+		_ = f.Close()
+		return nil, 0, fmt.Errorf("%d bytes is outside the file", n)
+	}
+	if offset > 0 {
+		if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
+			_ = f.Close()
+			return nil, 0, err
+		}
+	}
+	return f, n, nil
 }
 
 // errImageTooLarge says a picture would take more pixels than are left in a
