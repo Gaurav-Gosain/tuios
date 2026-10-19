@@ -69,6 +69,7 @@ var knownReaders = map[string]struct{}{
 	"copilot-events":   {},
 	"amp-thread":       {},
 	"opencode-service": {},
+	"cursor-jsonl":     {},
 }
 
 // KnownReaders returns the reader names a manifest may give.

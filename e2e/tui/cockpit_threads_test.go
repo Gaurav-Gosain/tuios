@@ -81,6 +81,12 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			once:    "Set b to three.",
 			payload: `{"hook_event_name":"chat.message","session_id":"ses_01Fixture"}`,
 		},
+		{
+			name: "cursor", harness: "cursor-agent", fixture: "cursor-agent.jsonl", sessionID: "c0ffee00-0000-4000-8000-000000000001",
+			file: filepath.Join(".cursor", "projects", "work-project", "agent-transcripts", "c0ffee00-0000-4000-8000-000000000001.jsonl"),
+			want: []string{"b is three. One test fails.", "1 failing", "edit_file", "const b = 3;", "run_terminal_cmd"},
+			once: "Set b to three.",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -120,6 +126,11 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			payload := hookPayload(path, c.sessionID)
 			if c.payload != "" {
 				payload = []byte(c.payload)
+			}
+			if c.harness == "cursor-agent" {
+				// Cursor names its events in camel case, and the transcript
+				// in every payload.
+				payload, _ = json.Marshal(map[string]any{"hook_event_name": "sessionStart", "session_id": c.sessionID, "transcript_path": path})
 			}
 			hook.Stdin = bytes.NewReader(payload)
 			out, err := hook.CombinedOutput()

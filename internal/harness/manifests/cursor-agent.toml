@@ -72,6 +72,17 @@ region   = "bottom_non_empty_lines(8)"
 regex    = ['^\s*(?:⬡|⬢|[\x{2800}-\x{28FF}]+)[ \t]+\pL+\w*ing\b']
 
 # How a prompt is typed in. Not measured.
+# Cursor Agent's hooks name the conversation's transcript in
+# transcript_path, a JSONL file under ~/.cursor/projects/<project>/
+# agent-transcripts. The hook (tuios integration install cursor-agent) reports
+# it, and only that join is made: the file does not say its folder near its
+# start, so there is no search. The file is read only to show the
+# conversation in the agent thread.
+[transcript]
+reader = "cursor-jsonl"
+dir    = "{home}/.cursor/projects"
+glob   = "*/agent-transcripts/*.jsonl"
+
 [input]
 submit          = "cr"
 bracketed_paste = true

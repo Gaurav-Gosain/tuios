@@ -143,6 +143,18 @@ func TestFormatFixtures(t *testing.T) {
 			"tool tool_result ok",
 			"assistant text: b is three. One test fails.",
 		}},
+		{"cursor-agent.jsonl", FormatCursor, []string{
+			"user text: Set b to three.",
+			"assistant thinking: The value is in app.ts.",
+			"assistant text: Editing app.ts.",
+			"assistant tool_call edit_file [/work/project/app.ts] ok diff /work/project/app.ts +1 -1",
+			"assistant tool_call run_terminal_cmd [npm test] error",
+			"assistant todos todo_write ok todos 1",
+			"tool tool_result ok",
+			"tool tool_result error",
+			"tool tool_result ok",
+			"assistant text: b is three. One test fails.",
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -179,6 +191,7 @@ func TestFormatPaging(t *testing.T) {
 		{"codex-rollout.jsonl", FormatCodex}, {"gemini-chat.jsonl", FormatGemini},
 		{"gemini-legacy.json", FormatGemini}, {"qwen-chat.jsonl", FormatQwen},
 		{"copilot-events.jsonl", FormatCopilot}, {"amp-thread.json", FormatAmp},
+		{"cursor-agent.jsonl", FormatCursor},
 	} {
 		t.Run(c.file, func(t *testing.T) {
 			path := filepath.Join("testdata", c.file)
@@ -260,6 +273,13 @@ func hostile(format string) []string {
 			`{"type":"tool.execution_complete","data":{"toolCallId":"t1","success":false,"error":{"message":`+s(esc)+`},"result":{"detailedContent":`+s("--- a/x\n+++ b/"+esc+"\n@@ -1 +1 @@\n-a\n+"+esc+"\n")+`}}}`,
 			`{"type":"update_todo","data":{"toolRequests":[{"name":"update_todo","arguments":{"todos":7}}]}}`,
 		)
+	case FormatCursor:
+		return append(common,
+			`{"role":"user","message":{"content":"<user_query>`+esc+`</user_query>"}}`,
+			`{"role":"assistant","message":{"content":[{"type":"text","text":`+s(esc)+`},{"type":"tool_use","id":"t1","name":`+s(esc)+`,"input":{"command":`+s(esc)+`}}]}}`,
+			`{"role":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":`+s(esc)+`,"is_error":true}]}}`,
+			`{"role":"assistant","message":{"content":7}}`,
+		)
 	case FormatAmp:
 		return []string{`{"messages": [` +
 			`{"role":"user","content":[{"type":"text","text":` + s(esc) + `}]},` +
@@ -280,7 +300,7 @@ func TestFormatHostile(t *testing.T) {
 			return r
 		}, s)
 	}
-	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen, FormatCopilot, FormatAmp} {
+	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen, FormatCopilot, FormatAmp, FormatCursor} {
 		t.Run(format, func(t *testing.T) {
 			name := "hostile.jsonl"
 			if format == FormatAmp {

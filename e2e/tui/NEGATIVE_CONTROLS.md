@@ -7252,3 +7252,12 @@ whose label is gone must not be offered. Run on 2026-10-19.
 |---|---|---|---|---|
 | Approve presses a number whatever option it is | The `option` binding in kimi.toml | `keys = ["1"]` and `keys = ["2"]` | `TestScreenAnswersFromSource/kimi#01`, `/kimi#02` | **caught** |
 | Kimi's `[N] label` options are not read | The bracket form in `optionLine` | Removed | `TestScreenAnswersFromSource/kimi`, `/kimi#01`, `/kimi#02` | **caught** |
+## Cursor Agent thread
+
+`TestCockpitThreadOtherHarnesses/cursor` writes a Cursor Agent transcript
+under the fake home and joins it through the real `tuios agent-hook
+cursor-agent` sessionStart with transcript_path. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The cockpit does not read Cursor Agent | `threadTranscriptHarness` | `cursor-agent` taken out | `TestCockpitThreadOtherHarnesses/cursor` | **caught** |
