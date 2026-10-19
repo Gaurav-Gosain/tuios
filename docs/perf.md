@@ -3033,6 +3033,15 @@ The change measured 40,480,930 and 37,871,474, so it adds 73,728 and 51,024
 bytes. No third-party dependency was added. The new budgets leave 4,198 and
 4,204 bytes of room.
 
+The budgets went to 40,534,280 (linux/amd64) and 37,925,918 (darwin/arm64) for
+mindmaps in tuios.dev/sketch: the outline lexer and parser that mindmaps share
+with kanban boards, and the mindmap renderer. Their code is 33 KB. The lexer's
+helpers stay out of line, which keeps the lexer at 3 KB instead of 15 KB. The
+build before it measured 40,480,930 and 37,871,474 bytes (Go 1.26.9, a clean
+clone, as CI builds it). The change measured 40,530,082 and 37,921,714, so it
+adds 49,152 and 50,240 bytes. No third-party dependency was added. The new
+budgets leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
