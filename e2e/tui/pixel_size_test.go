@@ -305,6 +305,50 @@ func TestDetachedPaneReportsAPixelSize(t *testing.T) {
 	}
 }
 
+// TestDetachedPaneTakesTheCellOfAClientElsewhere covers a pane made in a
+// session no client is attached to, while a client with an 8x16 cell is
+// attached to another one. That is how an agent opens a pane in a background
+// session. The daemon has measured a real cell, so the pane takes it rather
+// than the fallback, which no program could tell from a real one and would
+// size its images by.
+func TestDetachedPaneTakesTheCellOfAClientElsewhere(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	guest := writePixelGuest(t)
+	term := startIn(t, base, startOpts{
+		daemonDefault: true,
+		env:           []string{"TUIOS_CELL_SIZE=8x16"},
+	})
+	waitBoot(t, term)
+	if out, err := tuiosCLI(t, base, "new", "-d", "elsewhere"); err != nil {
+		t.Fatalf("create the detached session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "elsewhere", "--raw", "python3 "+guest+" once"); err != nil {
+		t.Fatalf("send-keys: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "elsewhere", "Enter"); err != nil {
+		t.Fatalf("send-keys Enter: %v\n%s", err, out)
+	}
+	var sizes paneSizes
+	var out string
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		out, _ = tuiosOut(base, "capture-pane", "-s", "elsewhere")
+		var ok bool
+		if sizes, ok = parsePaneSizes(out); ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the guest never printed its sizes:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Logf("sizes: %+v", sizes)
+	if bad := sizes.check(8, 16); bad != "" {
+		t.Fatalf("ASSERTION: a pane made while a client with an 8x16 cell is attached elsewhere: %s\n%s", bad, out)
+	}
+}
+
 // ibReports is every 2048 report the guest printed, as rows, cols, pixel
 // height and pixel width, read from the daemon's copy of the pane.
 func ibReports(base, session string) (string, [][4]int) {
