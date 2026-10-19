@@ -185,13 +185,18 @@ func Add(repoRoot, path, branch, base string) (created bool, err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // a folder in the user's own tree, with ordinary permissions
 		return false, err
 	}
+	// "--" ends the options, so a base or a path that starts with "-",
+	// such as --force, is never read as one.
 	if BranchExists(repoRoot, branch) {
-		if _, err := run(repoRoot, "worktree", "add", path, branch); err != nil {
+		if _, err := run(repoRoot, "worktree", "add", "--", path, branch); err != nil {
 			return false, err
 		}
 		return false, nil
 	}
-	args := []string{"worktree", "add", "-b", branch, path}
+	if strings.HasPrefix(base, "-") {
+		return false, fmt.Errorf("base %q starts with -, which git would read as an option", base)
+	}
+	args := []string{"worktree", "add", "-b", branch, "--", path}
 	if base != "" {
 		args = append(args, base)
 	}

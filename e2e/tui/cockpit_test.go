@@ -788,7 +788,7 @@ func TestCockpitSpawnSheet(t *testing.T) {
 	// start from a test.
 	t.Setenv("PATH", strings.SplitN(os.Getenv("PATH"), string(os.PathListSeparator), 2)[0]+string(os.PathListSeparator)+"/usr/bin:/bin")
 	useShippedLooks(base)
-	for _, s := range []string{"home", "frames"} {
+	for _, s := range []string{"home", "frames0", "frames1", "frames2"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach", "--cwd", repo); err != nil {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
 		}
@@ -817,9 +817,21 @@ func TestCockpitSpawnSheet(t *testing.T) {
 	if err := term.SendKeys("Make the LRU cache safe for concurrent reads."); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the branch named after the task", "agent/lru-cache-safe", "named after the task")
+	waitText(t, term, "the branch named after the task", "agent/lru-cache-safe", "from the task")
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "spawn-sheet-200x55")
+
+	// esc closes the sheet and keeps it: n opens it with the task.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Where it works") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc did not close the sheet: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the kept draft after esc", "Where it works", "Make the LRU cache safe for concurrent reads.", "agent/lru-cache-safe")
 
 	// enter starts the agent in a new worktree and closes the sheet.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
@@ -855,7 +867,29 @@ func TestCockpitSpawnSheet(t *testing.T) {
 	if err := term.SendKeys("Read the README."); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the second task", "Read the README.")
+	waitText(t, term, "the second task", "Read the README.", "agent/read-readme")
+	// A branch typed by the person stops following the task.
+	for range 4 {
+		if err := term.SendKeys(tuitest.Tab); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := term.SendKeys(tuitest.Ctrl('u'), "docs/readme"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the typed branch", "docs/readme")
+	for range 4 {
+		if err := term.SendKeys(tuitest.Key("\x1b[Z")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := term.SendKeys(" Twice."); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the longer task", "Read the README. Twice.")
+	if s := term.Screen().Text(); !strings.Contains(s, "docs/readme") || strings.Contains(s, "from the task") {
+		t.Fatalf("ASSERTION: the branch the person typed followed the task again:\n%s", term.Snapshot())
+	}
 	row, col := findText(t, term, "This folder")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	// This folder takes no branch: the branch field goes quiet and the
@@ -876,7 +910,7 @@ func TestCockpitSpawnSheet(t *testing.T) {
 	for {
 		found := false
 		for _, w := range []string{"0", "1", "2", "3"} {
-			if p, err := tuiosCLI(t, base, "capture-pane", "-s", "home", "-w", w); err == nil && strings.Contains(p, "GOT: Read the README.") {
+			if p, err := tuiosCLI(t, base, "capture-pane", "-s", "home", "-w", w); err == nil && strings.Contains(p, "GOT: Read the README. Twice.") {
 				found = true
 			}
 		}
@@ -891,20 +925,73 @@ func TestCockpitSpawnSheet(t *testing.T) {
 	}
 	alive(t, term, "after two starts from the sheet")
 
+	// A start the daemon refuses keeps the draft, and a base that starts
+	// with - is refused before anything is sent.
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the sheet for a refused start", "Where it works")
+	if err := term.SendKeys("Fail on purpose."); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the third task", "Fail on purpose.")
+	row, col = findText(t, term, "New worktree")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	// The click leaves the keys on Where it works: Base is two fields on.
+	for range 2 {
+		if err := term.SendKeys(tuitest.Tab); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := term.SendKeys(tuitest.Ctrl('u'), "--force", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the refused base", "A base cannot start with -.")
+	if err := term.SendKeys(tuitest.Ctrl('u'), "no-such-base", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the refused start", "The agent did not start")
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the draft kept after a refused start", "Where it works", "Fail on purpose.", "no-such-base")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+
 	// The narrow layout and the 16 colour one, for the frames.
-	for _, v := range []struct {
+	for i, v := range []struct {
 		name       string
 		cols, rows int
 		env        []string
+		fan        bool
 	}{
-		{"spawn-sheet-100x30", 100, 30, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}},
-		{"spawn-sheet-16", 160, 45, []string{"TERM=xterm", "COLORTERM="}},
+		{"spawn-sheet-fan-200x55", 200, 55, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, true},
+		{"spawn-sheet-100x30", 100, 30, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, false},
+		{"spawn-sheet-16", 160, 45, []string{"TERM=xterm", "COLORTERM="}, false},
 	} {
-		small := open("frames", v.cols, v.rows, v.env...)
-		if err := small.SendKeys("Make the LRU cache safe for concurrent reads."); err != nil {
+		small := open("frames"+strconv.Itoa(i), v.cols, v.rows, v.env...)
+		if err := small.SendKeys("Make the LRU cache safe for concurrent reads. Keep Get lock-free if you can."); err != nil {
 			t.Fatal(err)
 		}
-		waitText(t, small, "the task on "+v.name, "concurrent")
+		want := []string{"concurrent"}
+		if v.cols >= 120 {
+			// Only the wide layout says the agent is ready on the machine.
+			want = append(want, "claude ready")
+		}
+		waitText(t, small, "the task on "+v.name, want...)
+		if v.fan {
+			// Three attempts, each with its own agent.
+			for range 7 {
+				if err := small.SendKeys(tuitest.Tab); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := small.SendKeys("+", "+", "v"); err != nil {
+				t.Fatal(err)
+			}
+			waitText(t, small, "three attempts", "Start 3 agents", "+ vary")
+		}
 		_ = small.WaitStable(uiTimeout)
 		saveCockpitFrames(t, small, v.name)
 		alive(t, small, "on "+v.name)

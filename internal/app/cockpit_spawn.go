@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -88,9 +89,23 @@ type spawnSheet struct {
 	field                     spawnField
 	agents                    []spawnAgent
 	agent                     int
-	// list says the list of every agent is open, and listAt is its cursor.
-	list   bool
-	listAt int
+	// list says a list is open under the field listFor: every agent, the
+	// models the running agents use, or the branches. listAt is its cursor.
+	list    bool
+	listFor spawnField
+	listAt  int
+	// models are the models running agents report, by harness id, and
+	// branches the repository's local branches.
+	models   map[string][]string
+	branches []string
+	// starting is set from Start until the daemon answers, so one sheet
+	// never starts twice at once.
+	starting bool
+	// shown is how many machines the last frame drew. A pick stays among
+	// them. at is the row of each field's control in the last frame, and
+	// atX its column, where a field's list opens.
+	shown   int
+	at, atX [spFields]int
 	// worktree is where the agent works: a new worktree, or this folder.
 	worktree bool
 	// branchAuto is the branch the task last named. The branch field
@@ -121,6 +136,17 @@ type spawnInfoMsg struct {
 	agents             []spawnAgent
 	repo, head, origin string
 	dirty              int
+	branches           []string
+}
+
+// spawnPreset is what ctrl+s keeps for the next new sheet: every choice but
+// the task and the branch. It is saved with the rail's state.
+type spawnPreset struct {
+	Agent    string `json:"agent,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Folder   bool   `json:"this_folder,omitempty"`
+	Attempts int    `json:"attempts,omitempty"`
+	Host     string `json:"host,omitempty"`
 }
 
 // spawnStartedMsg is the daemon's answer to a Start.
@@ -140,7 +166,11 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	if ck.spawn != nil {
 		return nil
 	}
-	m.Inbox.reply.editor = nil
+	// A reply being written is kept as the pane's draft, as esc keeps it.
+	if ed := m.Inbox.reply.editor; ed != nil {
+		ed.closeAfter = false
+		m.InboxReplyCancel()
+	}
 	s := ck.spawnDraft
 	ck.spawnDraft = nil
 	if s == nil {
@@ -152,8 +182,19 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 			attempts: 1,
 			worktree: true,
 		}
+		if pr := ck.spawnPreset; pr != nil {
+			s.model.SetText(pr.Model)
+			s.worktree = !pr.Folder
+			s.attempts = min(max(pr.Attempts, 1), spawnMaxAttempts)
+			s.machines = []spawnMachine{{host: pr.Host}}
+			if pr.Agent != "" {
+				ck.spawnLast = pr.Agent
+			}
+		}
 	}
-	s.field, s.list, s.notice, s.read = spTask, false, "", false
+	// A kept draft keeps what was read for it, so its Start works at once;
+	// the command below reads it again.
+	s.field, s.list, s.notice = spTask, false, ""
 	ck.spawnGen++
 	s.gen = ck.spawnGen
 	s.folder = m.spawnFolder()
@@ -178,9 +219,14 @@ func (m *OS) spawnFolder() string {
 // keeping the one picked.
 func (m *OS) spawnSeen(s *spawnSheet) {
 	count := map[string]int{}
+	s.models = map[string][]string{}
 	for _, e := range m.agentEntries(m.BuildSessionTree().Sessions) {
-		if e.Harness != "" {
-			count[e.Harness]++
+		if e.Harness == "" {
+			continue
+		}
+		count[e.Harness]++
+		if mod := printableTitle(ckMeta(e, "model")); mod != "" && !slices.Contains(s.models[e.Harness], mod) {
+			s.models[e.Harness] = append(s.models[e.Harness], mod)
 		}
 	}
 	for i := range s.agents {
@@ -213,8 +259,10 @@ func (m *OS) spawnSortAgents(s *spawnSheet) {
 			return 0
 		case a.installed:
 			return 1
+		case slices.Contains(spawnCommon, a.id):
+			return 2
 		}
-		return 2
+		return 3
 	}
 	// Among agents that do not run, the common ones come first, in the
 	// order of frame d, then the rest by name.
@@ -328,9 +376,23 @@ func spawnInfoCmd(gen uint64, folder string) tea.Cmd {
 				msg.dirty = d.Staged + d.Modified + d.Untracked
 			}
 			msg.origin, _ = worktree.OriginURL(folder)
+			msg.branches = spawnBranches(st.Root)
 		}
 		return msg
 	}
+}
+
+// spawnBranches are the repository's local branches, the most recent first,
+// at most 30.
+func spawnBranches(root string) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", root, "for-each-ref", "--sort=-committerdate", "--count=30",
+		"--format=%(refname:short)", "refs/heads").Output()
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(out))
 }
 
 // applySpawnInfo takes what the opening command read.
@@ -356,7 +418,7 @@ func (m *OS) applySpawnInfo(msg spawnInfoMsg) {
 	s.agents = agents
 	m.spawnSortAgents(s)
 	s.read = true
-	s.repo, s.head, s.origin, s.dirty = msg.repo, msg.head, msg.origin, msg.dirty
+	s.repo, s.head, s.origin, s.dirty, s.branches = msg.repo, msg.head, msg.origin, msg.dirty, msg.branches
 	if s.repo == "" {
 		s.worktree = false
 		s.attempts, s.vary = 1, nil
@@ -450,14 +512,22 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "shift+tab":
 		s.step(-1)
 		return nil
-	case "ctrl+enter", "ctrl+s":
+	case "ctrl+enter":
 		return m.spawnStart()
+	case "ctrl+s":
+		m.spawnSavePreset(s)
+		return nil
 	case "esc":
 		m.spawnClose()
 		return nil
 	}
 	if ed := s.editor(); ed != nil {
 		if s.field != spTask && (key == "up" || key == "down") {
+			// down on the model or the base opens its list, when it has one.
+			if key == "down" && len(s.listItems(s.field)) > 0 {
+				s.openList(s.field)
+				return nil
+			}
 			d := 1
 			if key == "up" {
 				d = -1
@@ -471,9 +541,6 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 		case composer.EventClose:
 			m.spawnClose()
 		}
-		if s.field == spBranch {
-			s.branchAuto = ""
-		}
 		m.spawnFollowTask(s)
 		return nil
 	}
@@ -486,7 +553,7 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 		case right:
 			s.agent = (s.agent + 1) % max(len(s.agents), 1)
 		case key == "space" || key == "down" || key == "j":
-			s.list, s.listAt = len(s.agents) > 0, s.agent
+			s.openList(spAgent)
 		}
 	case spWhere:
 		if left || right || key == "space" {
@@ -543,19 +610,117 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// spawnListKey handles a key while the list of every agent is open.
+// spawnItem is one row of a field's list.
+type spawnItem struct {
+	label, note, value string
+	muted              bool
+}
+
+// listItems are the rows of field f's list: every agent, the models the
+// running agents of the picked agent report, or the local branches.
+func (s *spawnSheet) listItems(f spawnField) []spawnItem {
+	var out []spawnItem
+	switch f {
+	case spAgent:
+		for _, a := range s.agents {
+			it := spawnItem{label: a.cmd, note: "not found on this machine", muted: true}
+			switch {
+			case a.seen > 0:
+				it.note, it.muted = strconv.Itoa(a.seen)+" running", false
+			case a.installed:
+				it.note, it.muted = "installed", false
+			}
+			out = append(out, it)
+		}
+	case spModel:
+		if s.agent < len(s.agents) {
+			if models := s.models[s.agents[s.agent].id]; len(models) > 0 {
+				out = append(out, spawnItem{label: "The agent's default", note: "no --model"})
+				for _, mod := range models {
+					out = append(out, spawnItem{label: mod, value: mod, note: "from a running agent"})
+				}
+			}
+		}
+	case spBase:
+		for _, b := range s.branches {
+			it := spawnItem{label: b, value: b}
+			if b == s.head {
+				it.note = "this folder"
+			}
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// openList opens field f's list, with the cursor on what the field holds.
+func (s *spawnSheet) openList(f spawnField) {
+	items := s.listItems(f)
+	if len(items) == 0 {
+		return
+	}
+	s.field, s.list, s.listFor, s.listAt = f, true, f, 0
+	cur := ""
+	switch f {
+	case spAgent:
+		s.listAt = s.agent
+		return
+	case spModel:
+		cur = strings.TrimSpace(s.model.Text())
+	case spBase:
+		cur = strings.TrimSpace(s.base.Text())
+	}
+	for i, it := range items {
+		if it.value == cur {
+			s.listAt = i
+		}
+	}
+}
+
+// pickList takes row i of the open list.
+func (m *OS) pickList(s *spawnSheet, i int) {
+	items := s.listItems(s.listFor)
+	s.list = false
+	if i < 0 || i >= len(items) {
+		return
+	}
+	switch s.listFor {
+	case spAgent:
+		s.agent = i
+	case spModel:
+		s.model.SetText(items[i].value)
+	case spBase:
+		s.base.SetText(items[i].value)
+	}
+}
+
+// spawnListKey handles a key while a field's list is open.
 func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
+	n := len(s.listItems(s.listFor))
 	switch key {
 	case "up", "k":
 		s.listAt = max(s.listAt-1, 0)
 	case "down", "j":
-		s.listAt = min(s.listAt+1, len(s.agents)-1)
+		s.listAt = min(s.listAt+1, n-1)
 	case "enter", "space":
-		s.agent, s.list = s.listAt, false
+		m.pickList(s, s.listAt)
 	case "esc", "tab", "shift+tab":
 		s.list = false
 	}
 	return nil
+}
+
+// spawnSavePreset keeps the sheet's choices, but not the task or the
+// branch, for the next new sheet.
+func (m *OS) spawnSavePreset(s *spawnSheet) {
+	pr := &spawnPreset{Model: strings.TrimSpace(s.model.Text()), Folder: !s.worktree, Attempts: s.attempts, Host: s.host()}
+	if s.agent < len(s.agents) {
+		pr.Agent = s.agents[s.agent].id
+	}
+	m.Inbox.ck.spawnPreset = pr
+	m.saveSidebarState()
+	s.notice = ""
+	m.ShowNotification("Saved as the preset. A new sheet starts with these choices.", "info", m.Settings.NotificationDuration)
 }
 
 // spawnFollowTask names the branch after the task while the person has not
@@ -629,7 +794,7 @@ func spawnNoWorktree(s *spawnSheet) string {
 
 // spawnPickMachine picks machine i when it can take an agent.
 func (m *OS) spawnPickMachine(s *spawnSheet, i int) {
-	if i < 0 || i >= len(s.machines) || !s.machines[i].up {
+	if i < 0 || i >= len(s.machines) || !s.machines[i].up || (s.shown > 0 && i >= s.shown) {
 		return
 	}
 	s.machine, s.notice = i, ""
@@ -693,18 +858,51 @@ func (m *OS) spawnClose() {
 	}
 }
 
-// spawnSpec is the agent command of attempt i: the program, and the model
-// when one is named and the attempt runs the sheet's agent.
+// modelOf is the model attempt i runs: the sheet's model for an attempt
+// of the sheet's agent, none for an attempt of another agent.
+func (s *spawnSheet) modelOf(i int) string {
+	if s.attemptAgent(i) != s.agent {
+		return ""
+	}
+	return strings.TrimSpace(s.model.Text())
+}
+
+// spec is the agent command of attempt i as fan reads it: the program, and
+// the model as one shell word. fan splits the string the way a shell does
+// and expands nothing.
 func (s *spawnSheet) spec(i int) string {
-	a := s.agents[s.attemptAgent(i)]
-	model := strings.TrimSpace(s.model.Text())
-	if model == "" || s.attemptAgent(i) != s.agent {
-		return a.cmd
+	cmd := s.agents[s.attemptAgent(i)].cmd
+	if model := s.modelOf(i); model != "" {
+		return cmd + " --model " + spawnShellWord(model)
 	}
-	if strings.ContainsAny(model, " \t'\"\\") {
-		model = strconv.Quote(model)
+	return cmd
+}
+
+// spawnShellWord quotes s as one POSIX shell word: single quotes, with each
+// single quote inside closed, escaped and opened again.
+func spawnShellWord(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// spawnRefOK reports whether git would take name as a branch, by the rules
+// of git check-ref-format, checked here so the update loop never runs git.
+// The daemon checks again with git.
+func spawnRefOK(name string) bool {
+	if name == "" || name == "@" || strings.HasPrefix(name, "-") || strings.HasSuffix(name, "/") ||
+		strings.HasSuffix(name, ".") || strings.Contains(name, "..") || strings.Contains(name, "//") || strings.Contains(name, "@{") {
+		return false
 	}
-	return a.cmd + " --model " + model
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(" ~^:?*[\\", r) {
+			return false
+		}
+	}
+	for _, part := range strings.Split(name, "/") {
+		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return true
 }
 
 // spawnStart checks the sheet and starts the agents. The sheet closes at once
@@ -721,17 +919,31 @@ func (m *OS) spawnStart() tea.Cmd {
 		s.field, s.notice, s.list = f, why, false
 		return nil
 	}
+	base := strings.TrimSpace(s.base.Text())
+	model := strings.TrimSpace(s.model.Text())
 	switch {
+	case s.starting:
+		return fail(spStart, "This sheet is starting its agents. Wait for the result.")
+	case !s.read:
+		// Until the manifests are read, an agent is known only by its id,
+		// which is not always a program.
+		return fail(spStart, "Reading the folder and the agents. Try again in a moment.")
 	case task == "":
 		return fail(spTask, "Write the task first.")
 	case len(s.agents) == 0:
 		return fail(spAgent, "No agent is known on this machine.")
+	case s.host() == "" && !s.agents[s.agent].installed:
+		return fail(spAgent, s.agents[s.agent].cmd+" is not installed on this machine.")
+	case strings.HasPrefix(model, "-"):
+		return fail(spModel, "A model name cannot start with -.")
 	case s.worktree && !s.spawnCanWorktree():
 		return fail(spWhere, spawnNoWorktree(s))
 	case s.worktree && branch == "":
 		return fail(spBranch, "Write a branch name.")
-	case s.worktree && worktree.ValidBranch(branch) != nil:
+	case s.worktree && !spawnRefOK(branch):
 		return fail(spBranch, "Git does not accept this branch name.")
+	case s.worktree && strings.HasPrefix(base, "-"):
+		return fail(spBase, "A base cannot start with -.")
 	}
 	host := s.host()
 	params := map[string]any{"prompt": task}
@@ -744,7 +956,7 @@ func (m *OS) spawnStart() tea.Cmd {
 		verb = "fan"
 		params["count"] = s.attempts
 		params["name"] = branch
-		if base := strings.TrimSpace(s.base.Text()); base != "" {
+		if base != "" {
 			params["base"] = base
 		}
 		specs := make([]string, s.attempts)
@@ -763,7 +975,11 @@ func (m *OS) spawnStart() tea.Cmd {
 		}
 		what = branch
 	} else {
-		params["agent"] = s.spec(0)
+		// start-agent takes the model as an argv: no shell word to quote.
+		params["agent"] = s.agents[s.agent].cmd
+		if model != "" {
+			params["args"] = []string{"--model", model}
+		}
 		if s.folder != "" {
 			params["cwd"] = s.folder
 		}
@@ -772,6 +988,7 @@ func (m *OS) spawnStart() tea.Cmd {
 		}
 	}
 	m.Inbox.ck.spawnLast = s.agents[s.agent].id
+	s.starting, s.notice = true, ""
 	m.spawnClose()
 	where := ""
 	if host != "" {
@@ -844,12 +1061,24 @@ func spawnReposRoot(host string) string {
 // its draft; one that failed keeps it for the next n.
 func (m *OS) applySpawnStarted(msg spawnStartedMsg) {
 	ck := &m.Inbox.ck
+	msg.sheet.starting = false
 	if msg.err != nil {
-		m.ShowNotification("The agent did not start: "+msg.err.Error()+" Press n in the agents view to change the sheet.", "error", m.Settings.NotificationDuration*2)
+		why := strings.TrimSpace(msg.err.Error())
+		if !strings.HasSuffix(why, ".") {
+			why += "."
+		}
+		m.ShowNotification("The agent did not start: "+why+" Press n in the agents view to change the sheet.", "error", m.Settings.NotificationDuration*2)
 		return
 	}
 	if ck.spawnDraft == msg.sheet {
 		ck.spawnDraft = nil
+	}
+	if ck.spawn == msg.sheet {
+		// The sheet was open again: its task has started, so enter must
+		// not start it twice.
+		msg.sheet.task.Clear()
+		msg.sheet.branch.Clear()
+		msg.sheet.branchAuto = ""
 	}
 	m.ShowNotification(msg.text, "info", m.Settings.NotificationDuration)
 }
@@ -869,8 +1098,14 @@ func (m *OS) spawnClick(x, y int) tea.Cmd {
 			s.field, s.list = spawnField(n), false
 		case "agent":
 			s.field, s.agent, s.list = spAgent, n, false
-		case "more":
-			s.field, s.list, s.listAt = spAgent, !s.list, s.agent
+		case "item":
+			m.pickList(s, n)
+		case "list":
+			if s.list && s.listFor == spawnField(n) {
+				s.list = false
+			} else {
+				s.openList(spawnField(n))
+			}
 		case "where":
 			s.field = spWhere
 			m.spawnSetWorktree(s, n == 0)

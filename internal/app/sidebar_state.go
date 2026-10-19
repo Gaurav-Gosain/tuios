@@ -72,6 +72,9 @@ type sidebarStateFile struct {
 	// not yet, which is right for a file written before it existed: the next
 	// agent sets it.
 	AgentsSeen bool `json:"agents_seen,omitempty"`
+	// SpawnPreset is the New agent sheet's preset, saved with ctrl+s. Absent
+	// means none.
+	SpawnPreset *spawnPreset `json:"spawn_preset,omitempty"`
 	// AgentNoticesDismissed lists the integration notices the person
 	// dismissed, by harness, state and version. See agentNoticeKey.
 	AgentNoticesDismissed []string `json:"agent_notices_dismissed,omitempty"`
@@ -133,6 +136,7 @@ func (m *OS) loadSidebarState() {
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarAgentsSeen = st.AgentsSeen
+	m.Inbox.ck.spawnPreset = st.SpawnPreset
 	if len(st.AgentNoticesDismissed) > 0 {
 		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
 		for _, k := range st.AgentNoticesDismissed {
@@ -222,6 +226,7 @@ func (m *OS) saveSidebarState() {
 		AgentsFilter:          m.SidebarAgentFilter,
 		AgentsSort:            m.SidebarAgentSort,
 		AgentsSeen:            m.SidebarAgentsSeen,
+		SpawnPreset:           m.Inbox.ck.spawnPreset,
 		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
 		Collapsed:             m.SidebarCollapsed,
 		SectionSplit:          m.SidebarSectionSplit,

@@ -213,6 +213,7 @@ type cockpitState struct {
 	spawn, spawnDraft *spawnSheet
 	spawnGen          uint64
 	spawnLast         string
+	spawnPreset       *spawnPreset
 	// spawnBg is the dimmed cockpit under the sheet, and spawnBgAt the
 	// frame it was drawn from, so a key typed on the sheet does not draw
 	// the cockpit again. spawnFade holds the faded colours.

@@ -7419,3 +7419,13 @@ and a second fake claude must read its task in the session. Run on 2026-10-19.
 |---|---|---|---|---|
 | `n` and New agent do not open the sheet | `CockpitNewAgent` opens the sheet | Returns at once | `TestCockpitSpawnSheet` ("waiting for the spawn sheet") | **caught** |
 | The worktree is not on the branch the sheet shows | `name` in the fan call | Left out | `TestCockpitSpawnSheet` ("the sheet never made a worktree on agent/lru-cache-safe") | **caught** |
+
+After review: `TestCockpitSpawnSheet` also checks that esc keeps the draft,
+that a branch the person typed stops following the task, that a base which
+starts with `-` is refused, and that a start the daemon refuses keeps the
+draft. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| esc loses the draft | `spawnClose` keeps the sheet as the draft | The draft set to nil | `TestCockpitSpawnSheet` ("the kept draft after esc") | **caught** |
+| A typed branch follows the task again | The `cur != s.branchAuto` check in `spawnFollowTask` | Always false | `TestCockpitSpawnSheet` ("waiting for the typed branch") | **caught** |
