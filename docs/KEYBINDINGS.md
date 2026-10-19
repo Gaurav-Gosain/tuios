@@ -72,6 +72,9 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
   `send` sends it to the pane (the default) and `last_workspace` goes back to
   the last workspace. The screen preset sets `last_workspace`. `ctrl+c` still
   cancels the leader under every preset.
+- A `prefix_mode` binding on the leader key wins over `leader_twice`. With
+  `leader_key = "ctrl+j"` and `terminal_focus_down = ["ctrl+j"]`, the leader
+  pressed two times focuses the pane below.
 
 `tuios keybinds cheatsheet tmux` shows the keys in three groups: the keys that
 work as in tmux, the tuios keys that moved, and what tmux has that tuios does

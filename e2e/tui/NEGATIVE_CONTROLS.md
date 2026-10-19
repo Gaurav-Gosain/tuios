@@ -7292,3 +7292,13 @@ pane's screen into the preview first. Run on 2026-10-19.
 |---|---|---|---|---|
 | The cached row drops the seen bit | `DoneSeen` in `navigatorSessions` | The field cut from the row | `TestNavigatorKeepsADonePaneSeen` ("the logs row never showed ○ (seen) after the load") | **caught** |
 | The load puts the unread mark back | `keepAgentMarks` in `ApplyNavigatorLoaded` | The call cut | `TestNavigatorKeepsADonePaneSeen` ("the logs row never showed ○ (seen) after the load") | **caught** |
+### A prefix binding on the leader key (issue #866)
+
+`TestLeaderBoundInPrefixRunsItsAction` binds `prefix_new_window` to the
+leader, `ctrl+a`, and presses the leader two times in terminal mode.
+`TestLeaderTwiceSendsTheLeaderToThePane` keeps the default with no such
+binding. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The leader two times sends the leader over a prefix binding | `leaderBoundInPrefix` in `HandleTerminalModeKey` | The check cut | `TestLeaderBoundInPrefixRunsItsAction` ("the leader two times did not run prefix_new_window, bound to ctrl+a") | **caught** |

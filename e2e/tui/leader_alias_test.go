@@ -88,3 +88,40 @@ func TestLeaderTwiceSendsTheLeaderToThePane(t *testing.T) {
 		t.Fatalf("the pane did not get Ctrl+A (01) after the leader twice:\n%s", term.Snapshot())
 	}
 }
+
+// TestLeaderBoundInPrefixRunsItsAction is issue #866. A prefix_mode binding
+// on the leader key runs when the leader is pressed two times, in place of
+// sending the leader to the pane. TestLeaderTwiceSendsTheLeaderToThePane is
+// the same chord with no such binding, and keeps the default.
+//
+// How it could pass wrongly, written down first:
+//   - The new window could come from the first leader or from a key other
+//     than the second leader. The test waits for the prefix menu after the
+//     first one, and sends nothing else.
+//
+// Negative control: drop the leaderBoundInPrefix check in
+// HandleTerminalModeKey and the pane gets Ctrl+A, with one window on screen.
+func TestLeaderBoundInPrefixRunsItsAction(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[keybindings]\nleader_key = \"ctrl+a\"\n\n[keybindings.prefix_mode]\nprefix_new_window = [\"c\", \"ctrl+a\"]\n")
+
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo ready-$((4+5))", "ready-9", shellTimeout)
+
+	if err := term.SendKeys(tuitest.Ctrl('a')); err != nil {
+		t.Fatalf("send the first Ctrl+A: %v", err)
+	}
+	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
+		t.Fatalf("Ctrl+A did not start the prefix chord with leader_key = ctrl+a: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('a')); err != nil {
+		t.Fatalf("send the second Ctrl+A: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, uiTimeout); err != nil {
+		t.Fatalf("the leader two times did not run prefix_new_window, bound to ctrl+a: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "leader-bound-in-prefix")
+}

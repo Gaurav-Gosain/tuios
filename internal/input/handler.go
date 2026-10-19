@@ -681,8 +681,10 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleTerminalModeKey(msg, o)
 	}
 
-	// Check for prefix key activation in window management mode
-	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+	// Check for prefix key activation in window management mode. A leader
+	// the prefix_mode table binds, pressed after the leader, runs that
+	// binding through HandlePrefixCommand below.
+	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !leaderBoundInPrefix(msg, o) {
 		return handlePrefixKey(msg, o)
 	}
 
@@ -789,6 +791,18 @@ func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 		}
 	}
 	return false
+}
+
+// leaderBoundInPrefix reports whether the leader, pressed with the prefix
+// already active, has a binding of its own in the prefix_mode table. That
+// binding wins over what the leader pressed two times does by default
+// (leader_twice), so leader_key = "ctrl+j" with terminal_focus_down on
+// "ctrl+j" focuses down on ctrl+j ctrl+j (issue #866). No default and no
+// preset binds the leader there, so the binding is always the user's, and
+// without one the leader pressed two times keeps its leader_twice meaning.
+func leaderBoundInPrefix(msg tea.KeyPressMsg, o *app.OS) bool {
+	return o.PrefixActive && o.KeybindRegistry != nil &&
+		lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction) != ""
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation
