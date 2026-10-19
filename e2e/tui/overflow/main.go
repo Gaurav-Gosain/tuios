@@ -5,7 +5,7 @@
 // so a crop measured in the host's cell instead of in the picture's own scale
 // is half the size it should be.
 //
-// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later]
+// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend]
 //
 // A file medium is written under DIR, the test's own temporary directory, so
 // nothing is left behind in /tmp. Without it the system's is used.
@@ -22,7 +22,11 @@
 // right edge and 4 rows from the bottom, places the picture there with C=1,
 // prints OVERFLOW-DONE and holds, so the refresh passes have a placement to
 // re-place. With later it sends the picture with a=t, which stores it and
-// shows nothing, and then places it with a=p, as snacks.nvim does.
+// shows nothing, and then places it with a=p, as snacks.nvim does. With
+// natural it names no cell box, as kitty icat does, so the picture is drawn
+// at its own size: 200x20 of the 10x20 cells. With resend it places the
+// picture, then sends other pixels under the same id with a=t, which replaces
+// the stored image and places nothing.
 package main
 
 import (
@@ -50,8 +54,12 @@ func main() {
 	if len(os.Args) > 1 {
 		medium = os.Args[1]
 	}
-	later := len(os.Args) > 2 && os.Args[2] == "later"
-	data, err := picture()
+	how := ""
+	if len(os.Args) > 2 {
+		how = os.Args[2]
+	}
+	later := how == "later"
+	data, err := picture(0)
 	if err != nil {
 		fmt.Printf("OVERFLOW-ERR %v\n", err)
 		return
@@ -60,28 +68,48 @@ func main() {
 	// Bottom right, then back to 41 columns and 4 rows of the picture showing.
 	os.Stdout.WriteString("\x1b[?1049h\x1b[999;999H\x1b[3A\x1b[40D")
 	place := fmt.Sprintf("a=T,f=100,i=%d,c=%d,r=%d,C=1,q=2", imageID, cols, rows)
-	if later {
+	switch how {
+	case "later":
 		place = fmt.Sprintf("a=t,f=100,i=%d,q=2", imageID)
+	case "natural":
+		place = fmt.Sprintf("a=T,f=100,i=%d,C=1,q=2", imageID)
 	}
-	switch medium {
-	case "direct":
-		sendDirect(place, data)
-	case "file", "file-zlib", "file-at", "temp":
-		params, err := writeMedium(medium, data)
-		if err != nil {
-			fmt.Printf("\x1b[?1049lOVERFLOW-ERR %v\n", err)
-			return
-		}
-		fmt.Printf("\x1b_G%s%s\x1b\\", place, params)
-	default:
-		fmt.Printf("\x1b[?1049lOVERFLOW-ERR unknown medium %q\n", medium)
+	if err := send(medium, place, data); err != nil {
+		fmt.Printf("\x1b[?1049lOVERFLOW-ERR %v\n", err)
 		return
 	}
 	if later {
 		fmt.Printf("\x1b_Ga=p,i=%d,c=%d,r=%d,C=1,q=2\x1b\\", imageID, cols, rows)
 	}
+	if how == "resend" {
+		other, err := picture(0x40)
+		if err == nil {
+			err = send(medium, fmt.Sprintf("a=t,f=100,i=%d,q=2", imageID), other)
+		}
+		if err != nil {
+			fmt.Printf("\x1b[?1049lOVERFLOW-ERR %v\n", err)
+			return
+		}
+	}
 	os.Stdout.WriteString("\x1b[HOVERFLOW-DONE")
 	time.Sleep(60 * time.Second)
+}
+
+// send transmits the picture by medium with the given command keys.
+func send(medium, keys string, data []byte) error {
+	switch medium {
+	case "direct":
+		sendDirect(keys, data)
+	case "file", "file-zlib", "file-at", "temp":
+		params, err := writeMedium(medium, data)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("\x1b_G%s%s\x1b\\", keys, params)
+	default:
+		return fmt.Errorf("unknown medium %q", medium)
+	}
+	return nil
 }
 
 // writeMedium writes the picture where the medium says and returns the rest of
@@ -145,12 +173,13 @@ func sendDirect(place string, data []byte) {
 }
 
 // picture is a PNG of the stand-in's size with a gradient, so it is not a flat
-// colour a host could draw at any scale and look the same.
-func picture() ([]byte, error) {
+// colour a host could draw at any scale and look the same. tint changes every
+// pixel, for a second picture under the same id.
+func picture(tint uint8) ([]byte, error) {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for y := range height {
 		for x := range width {
-			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 0x80, A: 0xff})
+			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 0x80 + tint, A: 0xff})
 		}
 	}
 	var buf bytes.Buffer

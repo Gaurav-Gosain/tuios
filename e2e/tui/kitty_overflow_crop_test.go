@@ -29,12 +29,25 @@ import (
 //     at the picture's own size is a second, unscaled copy on the screen.
 //     So the check is on what the host is left showing: the last command for
 //     each placement id, not only the last placement of all.
+//   - A guest can name no cell box, as kitty icat does. The picture is then
+//     200x20 cells at its own size, and the crop is 10 of its pixels a column
+//     and 20 a row, which a guess at the host's cell would also give: these
+//     cases check the clip, not the scale.
+//   - A guest can send other pixels under the same id with a=t after the
+//     picture is placed. That replaces the stored image and places nothing,
+//     so the placement keeps the cell box and the crop it had.
 func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 	for _, tc := range []struct{ medium, how string }{
 		{"direct", ""}, {"file", ""}, {"file-zlib", ""}, {"file-at", ""}, {"temp", ""},
 		{"direct", "later"}, {"file", "later"}, {"temp", "later"},
+		{"direct", "natural"}, {"file", "natural"}, {"temp", "natural"},
+		{"file", "resend"}, {"temp", "resend"}, {"direct", "resend"},
 	} {
 		name := strings.TrimSuffix(tc.medium+"-"+tc.how, "-")
+		boxCols, boxRows, perCol, perRow := 100, 10, 20, 40
+		if tc.how == "natural" {
+			boxCols, boxRows, perCol, perRow = 200, 20, 10, 20
+		}
 		t.Run(name, func(t *testing.T) {
 			bin := buildOverflow(t)
 			host := newKittyHost()
@@ -58,9 +71,9 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 
 			placed, history := settledPlacement(t, host, "launch")
 			saveText(t, "placements-"+name, strings.Join(history, "\n")+"\n")
-			if placed.cols <= 0 || placed.cols >= 100 || placed.rows <= 0 || placed.rows >= 10 {
-				t.Fatalf("ASSERTION: the placement is %dx%d cells, want it clipped to fewer than 100x10:\n  %s",
-					placed.cols, placed.rows, strings.Join(history, "\n  "))
+			if placed.cols <= 0 || placed.cols >= boxCols || placed.rows <= 0 || placed.rows >= boxRows {
+				t.Fatalf("ASSERTION: the placement is %dx%d cells, want it clipped to fewer than %dx%d:\n  %s",
+					placed.cols, placed.rows, boxCols, boxRows, strings.Join(history, "\n  "))
 			}
 			shown := map[string]wireCmd{}
 			for _, c := range wireCmds(host.bytes()) {
@@ -77,10 +90,14 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 				}
 			}
 			for _, c := range shown {
-				wantW, wantH := c.cols*20, c.rows*40
+				if c.cols >= boxCols || c.rows >= boxRows {
+					t.Fatalf("ASSERTION: the host is left showing %dx%d cells, want them clipped to fewer than %dx%d:\n  %s",
+						c.cols, c.rows, boxCols, boxRows, strings.Join(history, "\n  "))
+				}
+				wantW, wantH := c.cols*perCol, c.rows*perRow
 				if c.srcX != 0 || c.srcY != 0 || c.srcW != wantW || c.srcH != wantH {
-					t.Fatalf("ASSERTION: %dx%d cells show the source rectangle x=%d,y=%d,w=%d,h=%d, want x=0,y=0,w=%d,h=%d, 20 pixels a column and 40 a row:\n  %s",
-						c.cols, c.rows, c.srcX, c.srcY, c.srcW, c.srcH, wantW, wantH, strings.Join(history, "\n  "))
+					t.Fatalf("ASSERTION: %dx%d cells show the source rectangle x=%d,y=%d,w=%d,h=%d, want x=0,y=0,w=%d,h=%d, %d pixels a column and %d a row:\n  %s",
+						c.cols, c.rows, c.srcX, c.srcY, c.srcW, c.srcH, wantW, wantH, perCol, perRow, strings.Join(history, "\n  "))
 				}
 			}
 		})
