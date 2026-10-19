@@ -60,7 +60,8 @@ reverse video. In ASCII loom also draws its own marks in ASCII.
 The surface keeps its tree between frames. A state patch marks only the
 boxes whose bindings read the changed paths. The next `Render` evaluates
 those boxes again and repaints only the area that changed. `Damage` returns
-those rectangles. A `Render` with nothing changed does no work.
+the rectangles repainted since its last call, including renders that input
+caused. A `Render` with nothing changed does no work.
 
 On a 200-row table at 200 by 55 cells, a full render takes about 0.6 ms. The
 redraw after a patch to one binding takes about 15 µs. The tests hold both
@@ -98,9 +99,13 @@ no timer.
 - It drops control characters at the cell.
 - The store comes from `tml.StoreFor`, so a patch cannot grow `each`,
   `list` or the rows past the document limits.
-- Each box has its own step budget of `tml.ExprSteps`, so a box shows the
-  same values in a full render and when it is built again alone. A table's
-  rows in view format on a budget of their own.
+- One frame has a budget of 1,000,000 expression steps. Each box gets an
+  equal share: 1,000,000 divided by the most boxes the document can build
+  (its components, plus its each limit when it repeats anything), and at
+  least 100 steps. The share depends only on the document, so a box shows the
+  same values in a full render and when it is built again alone, and the
+  bindings of a frame never spend more than the budget. A table's column
+  sampling and its rows in view each get one more share.
 
 The package imports `tuios.dev/tml`, `tuios.dev/plot`, ultraviolet and
 `charmbracelet/x/ansi`. It imports no tuios package.

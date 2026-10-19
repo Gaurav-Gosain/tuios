@@ -271,6 +271,7 @@ const listDoc = `<tml version="1"><state>{"more": true, "rows": [{"x": "a", "n":
     <text each="item.n" as="k">- {k}</text>
     <badge show="state.more">{item.x}</badge>
   </list>
+  <list items="state.rows"><text if="state.more">second {item.x}</text></list>
   <form id="f">
     <input name="x" label="X" bind="state.y"/>
     <text>typed: {form.x}</text>
@@ -316,6 +317,30 @@ func FuzzIncrementalList(f *testing.F) {
 				w, h = 20+r.pick(40), 8+r.pick(20)
 			}
 			sameAsFresh(t, s, w, h)
+			assertReachable(t, s)
 		}
 	})
+}
+
+// assertReachable checks that every box the pointer index holds is in the
+// tree: a rebuild must not leave orphans, which would hold a share of the
+// expansion budget and of memory.
+func assertReachable(t testing.TB, s *Surface) {
+	t.Helper()
+	in := map[*box]bool{}
+	var walk func(b *box)
+	walk = func(b *box) {
+		in[b] = true
+		for _, k := range b.kids {
+			walk(k)
+		}
+	}
+	walk(s.root)
+	for ptr, bs := range s.byPtr {
+		for _, b := range bs {
+			if !in[b] {
+				t.Fatalf("an orphan box of %s (%s) is in the index", ptr, b.kind)
+			}
+		}
+	}
 }

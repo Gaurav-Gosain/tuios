@@ -112,7 +112,9 @@ func (c *canvas) put(x, y int, g string, w int, st style) {
 				c.links[image.Point{x + k, y}] = st.link
 			}
 		} else {
-			delete(c.links, image.Point{x, y})
+			for k := 0; k < w; k++ {
+				delete(c.links, image.Point{x + k, y})
+			}
 		}
 	}
 	if st.link != "" && c.osc8 {

@@ -147,7 +147,7 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 	// Sampling the rows has its own budget, so a wide table cannot starve
 	// the rows on the screen.
 	frame := s.budget
-	s.budget = tml.NewBudget()
+	s.budget = &tml.Budget{Steps: s.boxSteps}
 	defer func() { s.budget = frame }()
 	n := len(w.cols)
 	avail := max(total-w.margin()-2*max(n-1, 0), 0)
@@ -211,7 +211,7 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	// The rows in view format on a budget of their own, the same at every
 	// paint.
 	frame := s.budget
-	s.budget = tml.NewBudget()
+	s.budget = &tml.Budget{Steps: s.boxSteps}
 	defer func() { s.budget = frame }()
 	g := s.g
 	for i, col := range w.cols {

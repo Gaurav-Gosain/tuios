@@ -89,6 +89,9 @@ func (s *Surface) focused() *box {
 				return b
 			}
 		}
+		// The focused node is gone: no node has the focus until the person
+		// gives it again, so enter cannot fire some other node.
+		return nil
 	}
 	return s.defaultFocus()
 }
@@ -111,7 +114,7 @@ func (s *Surface) Key(key string) (Result, error) {
 	}
 	s.flush()
 	for _, b := range s.focus {
-		if bw, ok := b.w.(*buttonWidget); ok && bw.key != "" && strings.EqualFold(bw.key, key) && !bw.disabled {
+		if bw, ok := b.w.(*buttonWidget); ok && bw.key != "" && strings.EqualFold(bw.key, key) && !bw.disabled && visible(b) {
 			return s.run(b, bw.press, nil)
 		}
 	}
@@ -133,6 +136,7 @@ func (s *Surface) Key(key string) (Result, error) {
 		}
 		next := s.focus[(i+step)%len(s.focus)]
 		s.setFocus(next)
+		s.focusMoved = true
 		return Result{View: true}, nil
 	}
 	if b := s.focused(); b != nil {

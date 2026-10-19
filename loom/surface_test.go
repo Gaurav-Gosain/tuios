@@ -66,7 +66,7 @@ func TestActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	store, _ := tml.StoreFor(doc, nil)
-	view := NewView()
+	view := newView()
 	run := func(src string, env *tml.Env) Result {
 		t.Helper()
 		acts, err := tml.ParseActions(src)

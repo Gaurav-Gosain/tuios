@@ -284,7 +284,10 @@ func (s *Surface) place(b *box, r Rect) {
 		// laid out, takes the focus, a key or a click.
 		return
 	}
-	if focusable(s, b) && visible(b) {
+	// Every box that takes keys is in the focus order, on the screen or
+	// not: tab reaches a button below the fold, and a scroll brings the
+	// focused box into view. Shortcuts and clicks need the box on screen.
+	if focusable(s, b) {
 		s.focus = append(s.focus, b)
 	}
 	in := b.inner()

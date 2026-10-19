@@ -3,9 +3,11 @@ package loom
 import (
 	"errors"
 	"image"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -72,11 +74,16 @@ type Surface struct {
 	viewDue []string               // view keys changed since the last Render
 	damage  []Rect
 
-	budget *tml.Budget
-	exp    *expansion
-	focus  []*box // focusable boxes in tree order, from the last layout
-	gen    uint64 // the layout pass, for the measure cache
-	drag   *box   // the split whose divider is being dragged
+	budget   *tml.Budget
+	exp      *expansion
+	focus    []*box // focusable boxes in tree order, from the last layout
+	gen      uint64 // the layout pass, for the measure cache
+	boxSteps int    // each box's share of the frame's step budget
+	drag     *box   // the split whose divider is being dragged
+	// focusMoved is set by tab and shift+tab: the next layout scrolls the
+	// focused box into view. A wheel scroll leaves it, so the person can
+	// look away from the focus.
+	focusMoved bool
 
 	// The work of the last Render, for the budgets the tests hold.
 	stats renderStats
@@ -85,6 +92,7 @@ type Surface struct {
 // renderStats counts the work of one Render.
 type renderStats struct {
 	built    int // boxes evaluated
+	steps    int // expression steps the boxes spent
 	cells    int // cells written
 	measures int // boxes measured (not counting cache hits)
 }
@@ -107,7 +115,7 @@ func New(doc *tml.Node, opts *Options) (*Surface, error) {
 	if doc == nil {
 		return nil, ErrNoDocument
 	}
-	s := &Surface{view: NewView(), full: true}
+	s := &Surface{view: newView(), full: true}
 	if opts != nil {
 		s.opts = *opts
 	}
@@ -128,6 +136,7 @@ func (s *Surface) setDoc(doc *tml.Node, store *tml.Store) error {
 	}
 	s.doc, s.store = doc, store
 	s.deps = buildDeps(doc)
+	s.boxSteps = shareFor(maxBoxes(doc, s.opts.Limits))
 	s.cache = map[*tml.Node]*compiled{}
 	s.full = true
 	return nil
@@ -152,8 +161,8 @@ func (s *Surface) SetPalette(p *Palette) {
 	s.full = true
 }
 
-// Document returns the tree.
-func (s *Surface) Document() *tml.Node { return s.doc }
+// Document returns a copy of the tree. Change the tree with Replace.
+func (s *Surface) Document() *tml.Node { return s.doc.Clone() }
 
 // State returns a copy of the state. Change the state through Patch or
 // Set, so the surface knows what to redraw.
@@ -183,8 +192,16 @@ func deepCopy(v any) any {
 	return v
 }
 
-// View returns the view state of this client.
-func (s *Surface) View() *View { return s.view }
+// View returns a copy of this client's view state: the open tabs, sorts,
+// filters, folds, focus, cursors, scroll offsets and split ratios. A host
+// may keep it, for example across a reconnect; the surface changes it
+// only through input.
+func (s *Surface) View() *View { return cloneView(s.view) }
+
+func cloneView(v *View) *View {
+	return &View{Tabs: maps.Clone(v.Tabs), Sort: maps.Clone(v.Sort), Filter: maps.Clone(v.Filter), Fold: maps.Clone(v.Fold),
+		Focus: v.Focus, Cursor: maps.Clone(v.Cursor), Scroll: maps.Clone(v.Scroll), Split: maps.Clone(v.Split)}
+}
 
 // Patch applies a JSON Patch from the owner to the state. Only the boxes
 // that read the changed paths are evaluated again at the next Render.
@@ -255,9 +272,32 @@ func (s *Surface) Tick() { s.clock = true }
 // Invalidate makes the next Render rebuild and repaint everything.
 func (s *Surface) Invalidate() { s.full = true }
 
-// Damage returns the rectangles the last Render repainted. A host that
-// diffs cells needs it only to skip work.
-func (s *Surface) Damage() []Rect { return s.damage }
+// Damage returns the rectangles repainted since the last call, and
+// forgets them. Renders that Key and Mouse run to apply pending changes
+// add to it too, so a host that copies only damaged cells misses nothing.
+// The slice is the caller's; no later Render reuses it.
+func (s *Surface) Damage() []Rect {
+	out := s.damage
+	s.damage = nil
+	return out
+}
+
+// addDamage records a repainted rectangle. Past 256 rectangles they
+// collapse into their union, so a host that never asks keeps no more.
+func (s *Surface) addDamage(r Rect) {
+	if r.Empty() {
+		return
+	}
+	if len(s.damage) >= 256 {
+		u := r
+		for _, d := range s.damage {
+			u = u.Union(d)
+		}
+		s.damage = append(s.damage[:0], u)
+		return
+	}
+	s.damage = append(s.damage, r)
+}
 
 // maxSide bounds the width and height of a surface, so a resize passed on
 // unchecked cannot allocate without bound.
@@ -268,7 +308,6 @@ const maxSide = 4096
 // nothing changed repaints nothing. A side past 4096 cells counts as 4096.
 func (s *Surface) Render(w, h int) *Buffer {
 	w, h = max(0, min(w, maxSide)), max(0, min(h, maxSide))
-	s.damage = s.damage[:0]
 	s.stats = renderStats{}
 	if s.buf == nil || w != s.w || h != s.h {
 		s.buf = uv.NewBuffer(w, h)
@@ -282,14 +321,16 @@ func (s *Surface) Render(w, h int) *Buffer {
 	} else if !s.rebuildDirty() {
 		return s.out
 	}
+
 	s.layoutRoot()
+	s.focusMoved = false
 	if s.links == nil || s.full {
 		s.links = map[image.Point]string{}
 	}
 	c := &canvas{buf: s.buf, clip: rect(0, 0, w, h), pal: s.pal, g: s.g, cells: &s.stats.cells, links: s.links, osc8: s.opts.Hyperlinks}
 	if s.full {
 		c.fill(c.clip, s.ground())
-		s.damage = append(s.damage, c.clip)
+		s.addDamage(c.clip)
 		s.paint(s.root, c, true)
 	} else {
 		s.paint(s.root, c, false)
@@ -374,15 +415,36 @@ func (s *Surface) rebuildDirty() bool {
 	if len(targets) == 0 {
 		return false
 	}
+	// A list item is its list's to build, so it counts as the list before
+	// the targets are deduplicated: an if inside a list template marks
+	// every item, and the list must build once, not once per item.
+	for i, b := range targets {
+		for b.kind == listItem && b.parent != nil {
+			b = b.parent
+		}
+		targets[i] = b
+	}
 	// A target inside another target is rebuilt with it.
 	s.exp = newExpansion(s.opts.Limits)
 	done := map[*box]bool{}
 	for _, b := range targets {
-		if done[b] || insideAny(b, done) {
+		if done[b] || insideAny(b, done) || !held(b) {
 			continue
 		}
 		s.rebuild(b)
 		done[b] = true
+	}
+	return true
+}
+
+// held reports whether b is still in the tree: each box up to the root is
+// among its parent's children. A rebuild replaces boxes, and a target that
+// was replaced must not be built again into an orphan.
+func held(b *box) bool {
+	for ; b.parent != nil; b = b.parent {
+		if !slices.Contains(b.parent.kids, b) {
+			return false
+		}
 	}
 	return true
 }
@@ -418,6 +480,9 @@ func (s *Surface) rebuild(b *box) {
 	if b == s.root {
 		s.rebuildAll()
 		s.full = true
+		return
+	}
+	if !held(b) {
 		return
 	}
 	s.forget(b)
@@ -629,6 +694,25 @@ func (s *Surface) data(n *tml.Node, attr string, vars map[string]any) []any {
 	if v.Kind != tml.KindString {
 		return nil
 	}
+	// A plain path (state.rows, item.kids) resolves straight from the
+	// store or the element in scope. It reads no more than its own names,
+	// so it costs no steps: a list of 1,000 rows must not need a budget of
+	// 1,000.
+	if root, ptr, err := tml.SplitPath(v.Str); err == nil {
+		var base any
+		switch {
+		case root == "state":
+			base = s.store.State()
+		default:
+			b, ok := vars[root]
+			if !ok {
+				return nil
+			}
+			base = b
+		}
+		arr, _ := walkPointer(base, ptr).([]any)
+		return arr
+	}
 	e := s.expr(n, "data:"+attr, v.Str)
 	if e == nil {
 		return nil
@@ -659,4 +743,27 @@ func (s *Surface) truthy(n *tml.Node, attr string, vars map[string]any) bool {
 		return false
 	}
 	return tml.Truthy(out)
+}
+
+// walkPointer follows a JSON Pointer through decoded JSON, or returns nil.
+func walkPointer(v any, ptr string) any {
+	if ptr == "" {
+		return v
+	}
+	for _, tok := range strings.Split(ptr[1:], "/") {
+		tok = strings.ReplaceAll(strings.ReplaceAll(tok, "~1", "/"), "~0", "~")
+		switch x := v.(type) {
+		case map[string]any:
+			v = x[tok]
+		case []any:
+			i, err := strconv.Atoi(tok)
+			if err != nil || i < 0 || i >= len(x) {
+				return nil
+			}
+			v = x[i]
+		default:
+			return nil
+		}
+	}
+	return v
 }

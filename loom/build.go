@@ -55,12 +55,15 @@ func (s *Surface) build(n *tml.Node, ptr string, sc *scope, parent *box) []*box 
 // buildOne builds the box of one node in a scope, or nil when its if is
 // false.
 func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box {
-	// Each box spends its own step budget, so it evaluates to the same
-	// result in a full render and when it is built again alone. The work
-	// of a frame is then at most the boxes times tml.ExprSteps.
+	// Each box spends its share of the frame's step budget (shareFor), so
+	// it evaluates to the same result in a full render and when it is
+	// built again alone.
 	frame := s.budget
-	s.budget = tml.NewBudget()
-	defer func() { s.budget = frame }()
+	s.budget = &tml.Budget{Steps: s.boxSteps}
+	defer func(b *tml.Budget) {
+		s.stats.steps += s.boxSteps - max(b.Steps, 0)
+		s.budget = frame
+	}(s.budget)
 	vars := s.vars(sc)
 	if !s.truthy(n, "if", vars) {
 		return nil
@@ -144,4 +147,43 @@ func (s *Surface) formValues(form *tml.Node, vars map[string]any) map[string]any
 		return true
 	})
 	return out
+}
+
+// The frame's step budget for bindings, shared by the boxes that evaluate.
+const (
+	frameSteps  = 1_000_000
+	minBoxSteps = 100
+)
+
+// shareFor is one box's share of the frame budget among at most n boxes:
+// frameSteps/n, and at least minBoxSteps.
+func shareFor(n int) int {
+	return max(minBoxSteps, frameSteps/max(n, 1))
+}
+
+// maxBoxes bounds the boxes a document can build: one per component, and,
+// when it repeats anything with each or list, the copies its Each limit
+// allows. tml.StoreFor refuses a patch that would pass that limit, so the
+// bound holds for every state the surface can reach, and the share stays
+// the same across patches: a full and an incremental render agree.
+func maxBoxes(doc *tml.Node, lim *tml.Limits) int {
+	n, repeats := 0, false
+	doc.Walk(func(x *tml.Node, _ string) bool {
+		if x.IsText() {
+			return true
+		}
+		n++
+		if _, ok := x.Attr("each"); ok || x.Type == "list" {
+			repeats = true
+		}
+		return true
+	})
+	if repeats {
+		each := tml.DefaultLimits().Each
+		if lim != nil && lim.Each > 0 {
+			each = lim.Each
+		}
+		n += each
+	}
+	return n
 }

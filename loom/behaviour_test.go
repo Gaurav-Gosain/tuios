@@ -2,7 +2,6 @@ package loom
 
 import (
 	"image"
-	"maps"
 	"os"
 	"runtime"
 	"strconv"
@@ -70,11 +69,6 @@ func rowWith(buf *Buffer, s string) int {
 	return -1
 }
 
-func cloneView(v *View) *View {
-	return &View{Tabs: maps.Clone(v.Tabs), Sort: maps.Clone(v.Sort), Filter: maps.Clone(v.Filter), Fold: maps.Clone(v.Fold),
-		Focus: v.Focus, Cursor: maps.Clone(v.Cursor), Scroll: maps.Clone(v.Scroll), Split: maps.Clone(v.Split)}
-}
-
 // sameAsFresh asserts that what s drew incrementally equals what a new
 // surface with the same state and view draws from scratch. This is the
 // contract of the retained tree: dirty tracking may skip work, never
@@ -114,19 +108,24 @@ func TestPatchRedrawsOnlyReaders(t *testing.T) {
 	const w, h = 64, 16
 	s.Render(w, h)
 	full := s.stats
+	s.Damage() // the first render's
 	if err := s.Patch([]tml.Op{{Op: "replace", Path: "/skipped", Value: []byte("10")}}); err != nil {
 		t.Fatal(err)
 	}
 	buf := s.Render(w, h)
 	screenHas(t, buf, "10 skipped")
-	t.Logf("full render: %d boxes, %d cells; patch: %d boxes, %d cells, damage %v", full.built, full.cells, s.stats.built, s.stats.cells, s.Damage())
+	damage := s.Damage()
+	t.Logf("full render: %d boxes, %d cells; patch: %d boxes, %d cells, damage %v", full.built, full.cells, s.stats.built, s.stats.cells, damage)
+	if len(damage) == 0 {
+		t.Error("the patch reported no damage")
+	}
 	if s.stats.built != 1 {
 		t.Errorf("a patch to /skipped evaluated %d boxes, want 1 (the stat that reads it)", s.stats.built)
 	}
 	if s.stats.cells*10 > full.cells {
 		t.Errorf("a patch to /skipped wrote %d cells, more than a tenth of the %d of a full render", s.stats.cells, full.cells)
 	}
-	for _, d := range s.Damage() {
+	for _, d := range damage {
 		if d.Dy() != 1 {
 			t.Errorf("damage %v is more than the stats row", d)
 		}
@@ -513,5 +512,126 @@ func TestLinkNeedsConfirm(t *testing.T) {
 	s2, _ := New(doc, &Options{Hyperlinks: true})
 	if c := s2.Render(30, 1).b.CellAt(5, 0); c.Link.URL != "https://tuios.dev" {
 		t.Fatalf("with Hyperlinks the cell has link %q", c.Link.URL)
+	}
+}
+
+// TestIfInListTemplates patches an if that two list templates read: list A
+// has 1000 items and list B 500. The rebuild built list A once per item, as
+// orphans that spent the shared expansion budget, so list B drew empty.
+// The incremental picture must equal a full one, with no orphan boxes.
+func TestIfInListTemplates(t *testing.T) {
+	var a, b []string
+	for i := range 1000 {
+		a = append(a, `{"x": "a`+strconv.Itoa(i)+`"}`)
+	}
+	for i := range 500 {
+		b = append(b, `{"x": "b`+strconv.Itoa(i)+`"}`)
+	}
+	s := mustSurface(t, `<tml version="1"><state>{"more": true, "a": [`+strings.Join(a, ",")+`], "b": [`+strings.Join(b, ",")+`]}</state>
+<row><list items="state.a"><text if="state.more">{item.x}</text></list><list items="state.b"><text if="state.more">{item.x}</text></list></row></tml>`)
+	s.Render(40, 10)
+	for _, v := range []string{"false", "true"} {
+		if err := s.Patch([]tml.Op{{Op: "replace", Path: "/more", Value: []byte(v)}}); err != nil {
+			t.Fatal(err)
+		}
+		sameAsFresh(t, s, 40, 10)
+		assertReachable(t, s)
+	}
+	if rowWith(s.Render(40, 10), "b0") < 0 {
+		t.Fatal("list B drew empty after the patch")
+	}
+}
+
+// TestFrameBudget: the bindings of one frame spend at most frameSteps in
+// all, however many boxes there are, because each box gets its share.
+// With few boxes the share is large, so a heavy binding still evaluates.
+func TestFrameBudget(t *testing.T) {
+	big := `"` + strings.Repeat("x", 20000) + `"`
+	var items []string
+	for range 1500 {
+		items = append(items, `0`)
+	}
+	s := mustSurface(t, `<tml version="1"><state>{"big": `+big+`, "rows": [`+strings.Join(items, ",")+`]}</state>
+<list items="state.rows"><text>{upper(state.big)}{lower(state.big)}</text></list></tml>`)
+	s.Render(40, 10)
+	t.Logf("1500 heavy boxes: share %d, %d steps", s.boxSteps, s.stats.steps)
+	if s.stats.steps > frameSteps {
+		t.Fatalf("one frame spent %d steps, the budget is %d", s.stats.steps, frameSteps)
+	}
+	one := mustSurface(t, `<tml version="1"><state>{"big": `+big+`}</state><text>{len(upper(state.big))}</text></tml>`)
+	if got := strings.TrimSpace(rows(one.Render(20, 1))[0]); got != "20000" {
+		t.Fatalf("a lone heavy binding gave %q, want 20000", got)
+	}
+}
+
+// TestFocusBelowTheFold: tab reaches a button that a scroll hides and
+// brings it into view; after a wheel scroll hides it again, enter still
+// presses it. Before, the hidden button left the focus order, so focus
+// fell back to the first table and enter ran its on-select.
+func TestFocusBelowTheFold(t *testing.T) {
+	var buttons []string
+	for i := range 6 {
+		buttons = append(buttons, `<button on-press="emit('b`+strconv.Itoa(i)+`')">button `+strconv.Itoa(i)+`</button>`)
+	}
+	s := mustSurface(t, `<tml version="1"><col>
+  <table rows='[{"a": "one"}, {"a": "two"}]' select="single" on-select="emit('sel')"><column field="a"/></table>
+  <scroll h="3">`+strings.Join(buttons, "")+`</scroll>
+</col></tml>`)
+	const w, h = 30, 6
+	buf := s.Render(w, h)
+	if rowWith(buf, "button 5") >= 0 {
+		t.Fatal("button 5 is on screen at the start")
+	}
+	for range 6 { // from the table, which has the focus first, to button 5
+		if _, err := s.Key("tab"); err != nil {
+			t.Fatal(err)
+		}
+		buf = s.Render(w, h)
+	}
+	if s.view.Focus == "" || rowWith(buf, "button 5") < 0 {
+		t.Fatalf("tab did not bring button 5 into view (focus %q):\n%s", s.view.Focus, strings.Join(rows(buf), "\n"))
+	}
+	sameAsFresh(t, s, w, h)
+	for range 3 {
+		_, _ = s.Mouse(Mouse{X: 2, Y: 4, Button: WheelUp})
+	}
+	buf = s.Render(w, h)
+	if rowWith(buf, "button 5") >= 0 {
+		t.Fatal("the wheel did not scroll button 5 away")
+	}
+	res, _ := s.Key("enter")
+	if len(res.Effects) != 1 || res.Effects[0].Name != "b5" {
+		t.Fatalf("enter with button 5 focused but scrolled away gave %+v", res.Effects)
+	}
+}
+
+// TestDamageAcrossInput: a patch, then a key, then the host's Render. The
+// key's own render applied the patch first; its damage must still reach
+// the host, or a host that copies only damaged cells shows stale text.
+func TestDamageAcrossInput(t *testing.T) {
+	s := fileSurface(t, "testdata/examples/dashboard.tml")
+	const w, h = 64, 16
+	s.Render(w, h)
+	s.Damage()
+	if err := s.Patch([]tml.Op{{Op: "replace", Path: "/skipped", Value: []byte("10")}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Key("down"); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(w, h)
+	stats := rowWith(s.out, "10 skipped")
+	hit := false
+	for _, d := range s.Damage() {
+		if stats >= d.Min.Y && stats < d.Max.Y {
+			hit = true
+		}
+	}
+	if !hit {
+		t.Fatalf("the stats row %d was repainted but is not in the damage", stats)
+	}
+	a := s.Damage()
+	if len(a) != 0 {
+		t.Fatalf("damage read twice: %v", a)
 	}
 }

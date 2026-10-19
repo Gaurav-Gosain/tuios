@@ -336,13 +336,55 @@ func (w *scrollWidget) place(s *Surface, b *box, in Rect) {
 		off = limit
 	}
 	off = clampInt(off, 0, limit)
+	mark := len(s.focus)
+	s.placeCol(b, rect(in.Min.X, in.Min.Y-off, width, ch))
+	// After tab, bring the focused box into view, and place again at that
+	// offset.
+	if f := focusedIn(s, b); f != nil {
+		want := off
+		switch {
+		case f.rect.Min.Y < in.Min.Y:
+			want = off - (in.Min.Y - f.rect.Min.Y)
+		case f.rect.Max.Y > in.Max.Y:
+			want = off + min(f.rect.Max.Y-in.Max.Y, f.rect.Min.Y-in.Min.Y)
+		}
+		want = clampInt(want, 0, limit)
+		if want != off {
+			off = want
+			s.focus = s.focus[:mark]
+			s.placeCol(b, rect(in.Min.X, in.Min.Y-off, width, ch))
+		}
+	}
 	if b.src.AttrString("follow") == "end" && ok && off >= limit {
 		// Keep following the end as content grows.
 		s.view.Scroll[b.key] = -1
 	} else {
 		s.view.Scroll[b.key] = off
 	}
-	s.placeCol(b, rect(in.Min.X, in.Min.Y-off, width, ch))
+}
+
+// focusedIn returns the focused box when tab just moved the focus to a box
+// inside b, or nil.
+func focusedIn(s *Surface, b *box) *box {
+	if s.view.Focus == "" || !s.focusMoved {
+		return nil
+	}
+	var found *box
+	var walk func(x *box)
+	walk = func(x *box) {
+		if found != nil {
+			return
+		}
+		if x != b && x.key == s.view.Focus {
+			found = x
+			return
+		}
+		for _, k := range x.kids {
+			walk(k)
+		}
+	}
+	walk(b)
+	return found
 }
 
 func (w *scrollWidget) offset(s *Surface, b *box) int {
@@ -441,7 +483,7 @@ func (s *Surface) paint(b *box, c *canvas, force bool) {
 	}
 	cc := c.withClip(b.rect)
 	if !force {
-		s.damage = append(s.damage, b.rect.Intersect(c.clip))
+		s.addDamage(b.rect.Intersect(c.clip))
 		ground := s.ground()
 		if b.parent != nil {
 			ground = b.parent.ground

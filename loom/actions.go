@@ -41,8 +41,8 @@ type View struct {
 	Split  map[string]float64
 }
 
-// NewView returns an empty view.
-func NewView() *View {
+// newView returns an empty view.
+func newView() *View {
 	return &View{Tabs: map[string]string{}, Sort: map[string]SortSpec{}, Filter: map[string]string{},
 		Fold: map[string]bool{}, Cursor: map[string]string{}, Scroll: map[string]int{}, Split: map[string]float64{}}
 }
