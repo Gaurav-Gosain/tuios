@@ -37,6 +37,9 @@ func (f overlayFrame) String() string {
 //   - hidden: the rename dialog draws no frame glyph, and its title and hints
 //     are still on screen where the frame would carry them.
 //   - block: the rename dialog falls back to the rounded ╭ ╮ ╰ ╯.
+//   - hidden at 16 colours: the dialog still draws no frame, but the palette,
+//     whose frame is its only edge on the terminal's own background, falls
+//     back to rounded rather than vanishing.
 //
 // How this could pass wrongly: the panes' own borders take the same style, so
 // a ╔ anywhere on screen proves nothing. Every glyph is read at a cell found
@@ -44,12 +47,13 @@ func (f overlayFrame) String() string {
 // left of its title, the panel's is three cells left of its title chip's
 // text, and the right edge is found from the dialog's hints, which end two
 // cells inside it. The terminal is truecolor, because at 16 colours a panel
-// frames itself and the unframed case would not be tested.
+// frames itself and the unframed case would not be tested, except in the
+// 16-colour case, which is about that self-frame.
 func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 	art := artifactDir(t)
 
 	t.Run("double", func(t *testing.T) {
-		term := startOverlayBorders(t, "border_style = \"double\"\n")
+		term := startOverlayBorders(t, "border_style = \"double\"\n", truecolor)
 		dialog := openRenameFrame(t, term)
 		saveArtifact(t, term, art, "double-rename")
 		wantFrame(t, term, "the rename dialog under double", dialog, overlayFrame{"╔", "╗", "╚", "╝", "═", "║"})
@@ -63,7 +67,7 @@ func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 	})
 
 	t.Run("double-frame-panels", func(t *testing.T) {
-		term := startOverlayBorders(t, "border_style = \"double\"\nframe_panels = true\n")
+		term := startOverlayBorders(t, "border_style = \"double\"\nframe_panels = true\n", truecolor)
 		panel := openPaletteFrame(t, term)
 		saveArtifact(t, term, art, "double-frame-panels-palette")
 		wantFrame(t, term, "the command palette with frame_panels", panel, overlayFrame{"╔", "╗", "╚", "╝", "═", "║"})
@@ -77,7 +81,7 @@ func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 	})
 
 	t.Run("hidden", func(t *testing.T) {
-		term := startOverlayBorders(t, "border_style = \"hidden\"\n")
+		term := startOverlayBorders(t, "border_style = \"hidden\"\n", truecolor)
 		dialog := openRenameFrame(t, term)
 		saveArtifact(t, term, art, "hidden-rename")
 		wantFrame(t, term, "the rename dialog under hidden", dialog, overlayFrame{" ", " ", " ", " ", " ", " "})
@@ -103,18 +107,39 @@ func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 	})
 
 	t.Run("block", func(t *testing.T) {
-		term := startOverlayBorders(t, "border_style = \"block\"\n")
+		term := startOverlayBorders(t, "border_style = \"block\"\n", truecolor)
 		dialog := openRenameFrame(t, term)
 		saveArtifact(t, term, art, "block-rename")
 		wantFrame(t, term, "the rename dialog under block", dialog, overlayFrame{"╭", "╮", "╰", "╯", "─", "│"})
 		closeRename(t, term)
 		alive(t, term, "under block")
 	})
+
+	t.Run("hidden-16", func(t *testing.T) {
+		term := startOverlayBorders(t, "border_style = \"hidden\"\n", sixteenColours)
+		dialog := openRenameFrame(t, term)
+		saveArtifact(t, term, art, "hidden-16-rename")
+		wantFrame(t, term, "the rename dialog under hidden at 16 colours", dialog, overlayFrame{" ", " ", " ", " ", " ", " "})
+		closeRename(t, term)
+
+		panel := openPaletteFrame16(t, term)
+		saveArtifact(t, term, art, "hidden-16-palette")
+		wantFrame(t, term, "the command palette under hidden at 16 colours", panel, overlayFrame{"╭", "╮", "╰", "╯", "─", "│"})
+		closePalette(t, term, "under hidden at 16 colours")
+		alive(t, term, "under hidden at 16 colours")
+	})
 }
 
-// startOverlayBorders attaches a truecolor client to a fresh daemon whose
-// config carries appearance, and settles it in window-management mode.
-func startOverlayBorders(t *testing.T, appearance string) *tuitest.Terminal {
+// The colour depths the subtests run at, as TERM and COLORTERM select them.
+var (
+	truecolor      = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+	sixteenColours = []string{"TERM=xterm", "COLORTERM="}
+)
+
+// startOverlayBorders attaches a client with env (its colour depth) to a fresh
+// daemon whose config carries appearance, and settles it in window-management
+// mode.
+func startOverlayBorders(t *testing.T, appearance string, env []string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -125,7 +150,7 @@ func startOverlayBorders(t *testing.T, appearance string) *tuitest.Terminal {
 	}
 	term := startIn(t, base, startOpts{
 		args: []string{"attach", session},
-		env:  []string{"TERM=xterm-256color", "COLORTERM=truecolor"},
+		env:  env,
 	})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
@@ -236,6 +261,41 @@ func openPaletteFrame(t *testing.T, term *tuitest.Terminal) overlayBox {
 			y1++
 		}
 		return overlayBox{x0: x0, x1: x1, y0: top, y1: y1}
+	}
+	t.Fatalf("the command palette's title is not on screen:\n%s", term.Snapshot())
+	return overlayBox{}
+}
+
+// openPaletteFrame16 is openPaletteFrame at 16 colours, where every ground is
+// the terminal's own and the panel's extent cannot be read off a fill. The
+// left edge is found the same way, and the right edge and the bottom are the
+// rounded corners the test expects there: a missing corner leaves the box at
+// the left edge alone, and wantFrame then reports what is drawn there.
+func openPaletteFrame16(t *testing.T, term *tuitest.Terminal) overlayBox {
+	t.Helper()
+	sendKeys(t, term, tuitest.Ctrl('p'))
+	waitPaletteOpen(t, term, "to read its frame")
+	s := term.Screen()
+	cols, rows := s.Size()
+	for y := 1; y < rows; y++ {
+		tx := rowCol(s, y, paletteTitle)
+		if tx < 0 {
+			continue
+		}
+		b := overlayBox{x0: tx - 3, x1: tx - 3, y0: y - 1, y1: y - 1}
+		for x := b.x0 + 1; x < cols; x++ {
+			if s.Cell(x, b.y0).Content == "╮" {
+				b.x1 = x
+				break
+			}
+		}
+		for yy := y; yy < rows; yy++ {
+			if s.Cell(b.x0, yy).Content == "╰" {
+				b.y1 = yy
+				break
+			}
+		}
+		return b
 	}
 	t.Fatalf("the command palette's title is not on screen:\n%s", term.Snapshot())
 	return overlayBox{}
