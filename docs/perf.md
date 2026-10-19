@@ -2990,6 +2990,14 @@ measured 39,518,370 and 37,024,530, so it adds 1,007,616 and 874,112 bytes. No
 third-party dependency was added. The new budgets leave 4,198 and 4,204 bytes
 of room.
 
+The budgets went to 39,854,344 (linux/amd64) and 37,316,414 (darwin/arm64) for
+sequence diagrams in tuios.dev/sketch and for sketch/text, which draws
+diagrams as box-drawing text where the terminal shows no pictures. The build
+before it measured 39,518,370 and 37,024,530 bytes (Go 1.26.9, a clean clone,
+as CI builds it). The change measured 39,850,146 and 37,312,210, so it adds
+331,776 and 287,680 bytes. No third-party dependency was added. The new
+budgets leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
