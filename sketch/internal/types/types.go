@@ -58,6 +58,9 @@ type RenderOptions struct {
 	// Theme sets the --pele-* tokens on the root element. It is not part of pele:
 	// nil gives pele's output, byte for byte.
 	Theme *Theme
+	// Geometry, when set, receives the layout the renderer worked out. It is not
+	// part of pele and does not change the SVG.
+	Geometry *Geometry
 }
 
 type LinkInfo struct {
@@ -71,6 +74,8 @@ type Rendered struct {
 	Width  float64
 	Height float64
 	Links  []LinkInfo
+	// Geometry is the layout, when RenderOptions.Geometry asked for it. Not part of pele.
+	Geometry *Geometry
 }
 
 // What a diagram type provides. `source` has been through preprocessing and entity encoding

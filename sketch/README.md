@@ -30,6 +30,21 @@ if err != nil {
 os.WriteFile("out.svg", []byte(svg.Data), 0o644)
 ```
 
+## Text
+
+`tuios.dev/sketch/text` draws flowcharts and sequence diagrams with box-drawing
+characters, for a terminal that shows no pictures. It takes the layout that
+sketch works out for the SVG and maps it to cells. The labels stay real text.
+
+```go
+d, _ := sketch.Parse(src, sketch.ParseOptions{})
+lines, err := text.Draw(d, text.Options{Cols: 100})
+```
+
+`text.ErrTooWide` says the drawing does not fit the columns. The package first
+asks pele for a narrower layout, which turns a flowchart that runs across to
+run down.
+
 ## Layout of the code
 
 Each Go file is the port of one pele file. The header of the file names it.

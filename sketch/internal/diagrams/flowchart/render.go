@@ -545,5 +545,26 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	content += `<g class="pele-nodes">` + nodesOut.String() + `</g>`
 	out := svg.SvgDocument(typ, width, height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, content)
 
-	return types.Rendered{SVG: out, Width: width, Height: height, Links: links}
+	rendered := types.Rendered{SVG: out, Width: width, Height: height, Links: links}
+	if options.Geometry != nil {
+		g := &types.Geometry{Width: width, Height: height}
+		for i, view := range views {
+			c := cnodes[i]
+			n := types.GeoNode{ID: view.node.ID, Shape: view.shape, X: c.X, Y: c.Y, W: view.w, H: view.h, Label: view.label.Plain(), Group: c.IsGroup, Parent: c.Parent}
+			if c.IsGroup {
+				n.W, n.H = c.W, c.H
+			}
+			g.Nodes = append(g.Nodes, n)
+		}
+		for i, ce := range cedges {
+			stroke := deref(drawn[i].Thickness)
+			if stroke == "" {
+				stroke = "normal"
+			}
+			g.Edges = append(g.Edges, types.GeoEdge{From: ce.Src, To: ce.Dst, Route: append([]float64{}, ce.Route...), Start: drawn[i].ArrowTypeStart, End: drawn[i].ArrowTypeEnd,
+				Stroke: stroke, Label: edgeLabels[i].Plain(), LabelX: ce.LabelX, LabelY: ce.LabelY})
+		}
+		rendered.Geometry = g
+	}
+	return rendered
 }

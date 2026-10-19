@@ -334,3 +334,14 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	}
 	return Label{Lines: lines, Widths: widths, Width: width, Height: float64(len(lines)) * lineHeight, Size: size, LineHeight: lineHeight}
 }
+
+// Plain gives the label as lines of plain text. Not part of pele.
+func (l Label) Plain() []string {
+	out := make([]string, len(l.Lines))
+	for i, line := range l.Lines {
+		for _, span := range line {
+			out[i] += span.Text
+		}
+	}
+	return out
+}

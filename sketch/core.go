@@ -217,8 +217,26 @@ func render(p parsed, options RenderOptions) SVG {
 	if js.Len(rendered.SVG) > outputLimit {
 		types.Throw("Diagram output is longer than the limit of "+strconv.Itoa(outputLimit)+" characters.", types.CodeLimit, types.ErrorInfo{Type: string(p.typ)})
 	}
+	if options.Geometry != nil && rendered.Geometry != nil {
+		*options.Geometry = *rendered.Geometry
+	}
 	for i := range rendered.Links {
 		rendered.Links[i].ID = text.DecodeEntities(rendered.Links[i].ID)
 	}
 	return SVG{Type: p.typ, Data: rendered.SVG, Width: rendered.Width, Height: rendered.Height, Links: rendered.Links}
+}
+
+// Layout is the geometry a renderer worked out for a diagram, in SVG units:
+// boxes, routes and label lines. It is not part of pele. sketch/text draws it with
+// box-drawing characters.
+type Layout = types.Geometry
+
+// Layout draws the diagram and returns its geometry. Types without geometry yet
+// give a Layout with nothing in it.
+func (d *Diagram) Layout(options RenderOptions) (l *Layout, err error) {
+	defer guarded(&err)
+	g := &types.Geometry{}
+	options.Geometry = g
+	render(d.p, options)
+	return g, nil
 }

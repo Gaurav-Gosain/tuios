@@ -769,6 +769,12 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			svg.Num(cx) + `" y="` + svg.Num(cy+tiny*0.35) + `" text-anchor="middle" font-size="` + js.Num(tiny) + `" fill="var(--_bg)" stroke="none">` + svg.Esc(js.Num(numbering.index[i])) + `</text></g>`
 	}
 
+	geo := options.Geometry != nil
+	var gMessages []types.GeoMessage
+	var gNotes []types.GeoBox
+	var gBlocks []types.GeoBlock
+	headOf := func(h int, at bool) bool { return at && h != Head_None }
+
 	y := headBottom + 6
 	var stack []*seqFrame
 	for i, m := range messages {
@@ -827,6 +833,13 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					backed(fr.title, fr.x0+fr.tabW+8+fr.title.Width/2, fr.top+math.Max(TAB_H, fr.title.Height)/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
 				framesOut.WriteString(`<g class="pele-frame pele-frame-` + fr.kind + `">` + inner + `</g>`)
 			}
+			if geo {
+				gb := types.GeoBlock{Kind: fr.kind, Title: fr.title.Plain(), X0: fr.x0, X1: fr.x1, Top: fr.top, Bottom: bottom, Dividers: append([]float64{}, fr.dividerY...)}
+				for _, l := range fr.dividerLabels {
+					gb.DividerLabels = append(gb.DividerLabels, l.Plain())
+				}
+				gBlocks = append(gBlocks, gb)
+			}
 			y = bottom
 		} else if typ == LINETYPE_ALT_ELSE || typ == LINETYPE_PAR_AND || typ == LINETYPE_CRITICAL_OPTION {
 			if len(stack) > 0 {
@@ -853,6 +866,9 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				`<rect x="` + svg.Num(x) + `" y="` + svg.Num(top) + `" width="` + svg.Num(v.w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"/>` +
 				svg.LabelSvg(v.label, x+v.w/2, top+h/2, ` class="pele-label" stroke="none" fill="var(--_fg)"`, icons) +
 				`</g>`)
+			if geo {
+				gNotes = append(gNotes, types.GeoBox{X: x, Y: top, W: v.w, H: h, Label: v.label.Plain()})
+			}
 			y = top + h
 		} else if v != nil {
 			st := STYLES[typ]
@@ -947,6 +963,10 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				if label.Width > 0 {
 					labelsOut.WriteString(`<g class="pele-edge-label" data-id="i` + svg.EscText(m.ID) + `">` + svg.LabelSvg(label, out+8+label.Width/2, (top+bottom)/2, "", icons) + `</g>`)
 				}
+				if geo {
+					gMessages = append(gMessages, types.GeoMessage{From: v.a, To: v.b, Y: top, Y2: bottom, X0: x0, X1: x1, Self: true, Dotted: st.dotted,
+						HeadStart: headOf(st.head, st.atStart), HeadEnd: headOf(st.head, st.atEnd), Label: label.Plain(), LabelX: out + 8 + label.Width/2, LabelY: (top + bottom) / 2})
+				}
 				lineY = bottom
 			} else {
 				dir := -1.0
@@ -1034,6 +1054,21 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					}
 					extend(cx-label.Width/2, cx+label.Width/2)
 					labelsOut.WriteString(`<g class="pele-edge-label" data-id="i` + svg.EscText(m.ID) + `">` + backed(label, cx, lineY-4-label.Height/2, "") + `</g>`)
+				}
+				if geo {
+					gm := types.GeoMessage{From: v.a, To: v.b, Y: lineY, X0: x0, X1: x1, Dotted: st.dotted,
+						HeadStart: headOf(st.head, st.atStart), HeadEnd: headOf(st.head, st.atEnd), Label: label.Plain()}
+					if label.Width > 0 {
+						l, r := math.Min(x0, x1), math.Max(x0, x1)
+						gm.LabelX = (l + r) / 2
+						if align < 0 {
+							gm.LabelX = l + msgPad + label.Width/2
+						} else if align > 0 {
+							gm.LabelX = r - msgPad - label.Width/2
+						}
+						gm.LabelY = lineY - 4 - label.Height/2
+					}
+					gMessages = append(gMessages, gm)
 				}
 				if creating {
 					y = lineY + b.size.H/2 - 6
@@ -1160,5 +1195,39 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 	content += `</g>`
 	out := svg.SvgDocument("sequence", width, height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, content)
-	return types.Rendered{SVG: out, Width: width, Height: height, Links: []types.LinkInfo{}}
+	rendered := types.Rendered{SVG: out, Width: width, Height: height, Links: []types.LinkInfo{}}
+	if geo {
+		ox, oy := pad-minX, pad-minY
+		g := &types.Geometry{Width: width, Height: height}
+		for _, col := range cols {
+			end := y
+			if col.lifeEnd >= 0 {
+				end = col.lifeEnd
+			}
+			foot := -1.0
+			if mirror && col.lifeEnd < 0 {
+				foot = y + oy
+			}
+			g.Actors = append(g.Actors, types.GeoActor{ID: col.id, Kind: col.kind, Label: col.label.Plain(), X: col.x + ox, Top: col.top + oy, W: col.size.W, H: col.size.H,
+				Foot: foot, LifeStart: col.lifeStart + oy, LifeEnd: end + oy})
+		}
+		for _, m := range gMessages {
+			m.X0, m.X1, m.LabelX = m.X0+ox, m.X1+ox, m.LabelX+ox
+			m.Y, m.Y2, m.LabelY = m.Y+oy, m.Y2+oy, m.LabelY+oy
+			g.Messages = append(g.Messages, m)
+		}
+		for _, n := range gNotes {
+			n.X, n.Y = n.X+ox, n.Y+oy
+			g.Notes = append(g.Notes, n)
+		}
+		for _, b := range gBlocks {
+			b.X0, b.X1, b.Top, b.Bottom = b.X0+ox, b.X1+ox, b.Top+oy, b.Bottom+oy
+			for k := range b.Dividers {
+				b.Dividers[k] += oy
+			}
+			g.Blocks = append(g.Blocks, b)
+		}
+		rendered.Geometry = g
+	}
+	return rendered
 }
