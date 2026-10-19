@@ -2,15 +2,16 @@ package mermaid
 
 import (
 	"bytes"
-	"errors"
 	"compress/zlib"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,6 +46,10 @@ type LiveOptions struct {
 	Color bool
 	// OnFrame, when set, hears about each frame sent.
 	OnFrame func(FrameStat)
+	// OnPanic, when set, is called with a panic in one of the view's own
+	// goroutines, so that the caller can give the terminal back before the
+	// process ends. It should not return. Without it the panic goes on.
+	OnPanic func(v any, stack []byte)
 }
 
 // FrameStat is what one frame cost.
@@ -79,9 +84,9 @@ type Live struct {
 	encode  chan frame
 	free    chan *image.RGBA
 	stopped chan struct{}
-	// send guards encode against Close: frames are sent under its read lock.
-	send   sync.RWMutex
-	closed bool
+	// done is closed by Close. Nothing waits on the encoder after that.
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type frame struct {
@@ -102,7 +107,7 @@ func NewLive(area Area, opt LiveOptions) *Live {
 		opt.MaxScale = 2
 	}
 	l := &Live{opt: opt, area: area, density: 1, id: uint32(0x5e700000 + os.Getpid()%0xffff),
-		encode: make(chan frame, 1), free: make(chan *image.RGBA, 2), stopped: make(chan struct{})}
+		encode: make(chan frame, 1), free: make(chan *image.RGBA, 2), stopped: make(chan struct{}), done: make(chan struct{})}
 	if opt.Kitty {
 		go l.encoder()
 	}
@@ -167,6 +172,7 @@ func (l *Live) Show(src string) {
 		if still {
 			// Nothing moves: one frame, and no loop.
 			go func() {
+				defer l.guard()
 				l.sendFinal()
 				l.mu.Lock()
 				l.running = false
@@ -208,23 +214,60 @@ func (l *Live) Area() Area {
 	return l.area
 }
 
-// Close removes the picture and stops the encoder.
-func (l *Live) Close() {
-	if l.opt.Kitty {
-		l.send.Lock()
-		l.closed = true
-		close(l.encode)
-		l.send.Unlock()
-		<-l.stopped
-		l.out.Lock()
-		fmt.Fprintf(l.opt.Out, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", l.id)
-		l.out.Unlock()
+// Close stops the view and removes the picture. It returns within wait even
+// when the terminal has stopped reading and a frame is stuck in a write.
+func (l *Live) Close(wait time.Duration) {
+	l.closeOnce.Do(func() { close(l.done) })
+	if !l.opt.Kitty {
+		return
+	}
+	deadline := time.Now().Add(wait)
+	select {
+	case <-l.stopped:
+	case <-time.After(wait / 2):
+	}
+	l.WriteWithin([]byte(l.DeleteImage()), time.Until(deadline))
+}
+
+// DeleteImage is the sequence that removes the view's picture, or "" without
+// kitty graphics.
+func (l *Live) DeleteImage() string {
+	if !l.opt.Kitty {
+		return ""
+	}
+	return fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", l.id)
+}
+
+// WriteWithin writes to the terminal between frames, waiting at most wait
+// for a frame that is being written to finish. It reports whether it wrote.
+// Bytes written in the middle of a frame would become part of the picture.
+func (l *Live) WriteWithin(p []byte, wait time.Duration) bool {
+	deadline := time.Now().Add(wait)
+	for !l.out.TryLock() {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	defer l.out.Unlock()
+	_, err := l.opt.Out.Write(p)
+	return err == nil
+}
+
+// guard hands a panic in one of the view's goroutines to OnPanic.
+func (l *Live) guard() {
+	if v := recover(); v != nil {
+		if l.opt.OnPanic == nil {
+			panic(v)
+		}
+		l.opt.OnPanic(v, debug.Stack())
 	}
 }
 
 // loop draws frames at up to 60 a second while a motion runs, then the last
 // frame at full density, and ends.
 func (l *Live) loop() {
+	defer l.guard()
 	tick := time.NewTicker(time.Second / 60)
 	defer tick.Stop()
 	for {
@@ -252,7 +295,11 @@ func (l *Live) loop() {
 		default:
 			// The encoder still holds both buffers: this frame is dropped.
 		}
-		<-tick.C
+		select {
+		case <-tick.C:
+		case <-l.done:
+			return
+		}
 	}
 }
 
@@ -285,10 +332,9 @@ func (l *Live) drawFrame(mo *raster.Motion, img *image.RGBA, area Area, p, densi
 	t := time.Now()
 	_ = mo.Draw(img, p, raster.FrameOptions{Theme: l.opt.Theme, MaxScale: l.opt.MaxScale * density, Readable: true})
 	stat := FrameStat{Draw: time.Since(t), Density: density, Final: final}
-	l.send.RLock()
-	defer l.send.RUnlock()
-	if !l.closed {
-		l.encode <- frame{img: img, stat: stat, area: area, final: final}
+	select {
+	case l.encode <- frame{img: img, stat: stat, area: area, final: final}:
+	case <-l.done:
 	}
 }
 
@@ -297,12 +343,19 @@ func (l *Live) drawFrame(mo *raster.Motion, img *image.RGBA, area Area, p, densi
 // swaps the picture in place.
 func (l *Live) encoder() {
 	defer close(l.stopped)
+	defer l.guard()
 	l.free <- nil
 	l.free <- nil
 	var rgb []byte
 	var z bytes.Buffer
 	zw, _ := zlib.NewWriterLevel(&z, zlib.BestSpeed)
-	for f := range l.encode {
+	for {
+		var f frame
+		select {
+		case f = <-l.encode:
+		case <-l.done:
+			return
+		}
 		t := time.Now()
 		b := f.img.Bounds()
 		n := b.Dx() * b.Dy() * 3

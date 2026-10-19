@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -31,6 +32,9 @@ type fakeTerm struct {
 	opts fakeTermOpts
 	done chan struct{}
 	err  error
+	// hold stops the reads while it is set, as a terminal that has stopped
+	// reading: the program's writes then block once the pty buffer is full.
+	hold atomic.Bool
 }
 
 type fakeTermOpts struct {
@@ -39,6 +43,12 @@ type fakeTermOpts struct {
 	kitty  bool
 	// silent answers nothing, as a terminal with no reports does.
 	silent bool
+	// env is added to the program's environment.
+	env []string
+	// onPty, when set, sees the pty before the program starts.
+	onPty func(xpty.Pty)
+	// bin, when set, runs this binary instead of the one under test.
+	bin string
 }
 
 var fakeTermQuery = regexp.MustCompile(`\x1b\](10|11|12|4;\d+);\?(?:\x07|\x1b\\)|\x1b\[c|\x1b\[>q|\x1b_Gi=31,[^\x1b]*a=q[^\x1b]*\x1b\\`)
@@ -50,11 +60,19 @@ func startFakeTerm(t *testing.T, base string, cols, rows int, opts fakeTermOpts,
 	if err != nil {
 		t.Fatalf("new pty: %v", err)
 	}
-	cmd := exec.Command(tuiosBin, args...)
+	bin := tuiosBin
+	if opts.bin != "" {
+		bin = opts.bin
+	}
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh", "TERM=xterm-256color")
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	cmd.Env = append(cmd.Env, opts.env...)
+	if opts.onPty != nil {
+		opts.onPty(p)
 	}
 	if err := p.Start(cmd); err != nil {
 		t.Fatalf("start pane-view: %v", err)
@@ -80,6 +98,9 @@ func startFakeTerm(t *testing.T, base string, cols, rows int, opts fakeTermOpts,
 func (ft *fakeTerm) read() {
 	buf := make([]byte, 32<<10)
 	for {
+		for ft.hold.Load() {
+			time.Sleep(10 * time.Millisecond)
+		}
 		n, err := ft.pty.Read(buf)
 		if n > 0 {
 			ft.mu.Lock()

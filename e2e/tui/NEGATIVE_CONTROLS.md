@@ -7449,3 +7449,13 @@ draft. Run on 2026-10-19.
 |---|---|---|---|---|
 | esc loses the draft | `spawnClose` keeps the sheet as the draft | The draft set to nil | `TestCockpitSpawnSheet` ("the kept draft after esc") | **caught** |
 | A typed branch follows the task again | The `cur != s.branchAuto` check in `spawnFollowTask` | Always false | `TestCockpitSpawnSheet` ("waiting for the typed branch") | **caught** |
+### tuios mermaid --watch and --demo give the terminal back
+
+`TestMermaidLiveGivesTheTerminalBack` runs `tuios mermaid --demo` on a fake terminal with kitty graphics and ends it with q, Ctrl+C, SIGTERM, SIGHUP, a panic in the frame encoder (a build with `-tags mermaidpanic`, which the case makes from source), and SIGTERM while the terminal has stopped reading. Each time termios must equal what it was before the program started, and after the last frame the picture must be deleted, the cursor shown and the alternate screen left. Its positive half is the first kitty frame, which every case waits for. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The terminal stays in raw mode after the view ends | `term.Restore` in the cleanup | Replaced with `_ = orig` | all six cases ("termios after exit is ...") | **caught** |
+| A signal other than SIGINT and SIGTERM leaves raw mode, and a stalled terminal keeps it raw until the blocked write returns | The cleanup that restores termios first, on every signal and panic | The build before the fix (3bdff3a2c) | `/SIGHUP` (exit 129, termios, no reset), `/SIGTERM_while_stalled` (termios while stalled) | **caught** |
+
+The build before the fix has no panic hook, so its `/panic` case times out instead of failing on termios. That case was checked with the `term.Restore` control above. The panic case builds its own binary with `-tags mermaidpanic` from the checkout and ignores `TUIOS_E2E_BIN`, so its control edits the source: with `term.Restore` removed it fails on termios (run again on 2026-10-19 after the hook moved from an environment variable to the build tag).

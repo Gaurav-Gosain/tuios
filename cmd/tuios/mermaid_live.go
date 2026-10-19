@@ -10,8 +10,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -261,7 +263,7 @@ func kittyFileMedium(out *os.File) bool {
 	if err != nil {
 		return false
 	}
-	defer func() { _ = term.Restore(int(in.Fd()), state) }()
+	defer guardRaw(int(in.Fd()), state)()
 	q := "\x1b_Gi=32,s=1,v=1,a=q,t=t,f=24;" + base64.StdEncoding.EncodeToString([]byte(f.Name())) + "\x1b\\\x1b[c"
 	if _, err := out.WriteString(q); err != nil {
 		return false
@@ -275,6 +277,83 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 	if !term.IsTerminal(int(stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return fmt.Errorf("--watch and --demo need a terminal")
 	}
+	// The terminal is given back on every way out: q, Ctrl+C, a signal, a
+	// panic in any goroutine, an error. termios is restored first, because it
+	// is one ioctl and cannot block. The picture and the screen are reset
+	// after it, within a time limit, as a terminal that has stopped reading
+	// would block those writes.
+	fd := int(os.Stdin.Fd())
+	orig, err := term.GetState(fd)
+	if err != nil {
+		return err
+	}
+	var s *liveScreen
+	var cleanOnce sync.Once
+	cleanup := func() {
+		cleanOnce.Do(func() {
+			_ = term.Restore(fd, orig)
+			done := make(chan struct{})
+			go func() {
+				const reset = "\x1b[0m\x1b[2J\x1b[0 q\x1b]112\x1b\\\x1b[?25h\x1b[?1049l"
+				if s != nil && s.live != nil {
+					// Through the view, so the reset does not land inside a
+					// frame that a stalled terminal left half written.
+					// The delete goes again with the reset, for a terminal that
+					// was too slow for the one Close sends.
+					s.live.Close(600 * time.Millisecond)
+					s.live.WriteWithin([]byte(s.live.DeleteImage()+reset), 1200*time.Millisecond)
+				} else {
+					_, _ = stdout.WriteString(reset)
+				}
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+			}
+		})
+	}
+	crash := func(v any, stack []byte) {
+		cleanup()
+		fmt.Fprintf(os.Stderr, "tuios mermaid: panic: %v\n%s", v, stack)
+		os.Exit(2)
+	}
+	defer func() {
+		if v := recover(); v != nil {
+			crash(v, debug.Stack())
+		}
+	}()
+	// safe runs f on another goroutine's behalf: a panic there ends the
+	// process the same way, with the terminal given back.
+	safe := func(f func()) func() {
+		return func() {
+			defer func() {
+				if v := recover(); v != nil {
+					crash(v, debug.Stack())
+				}
+			}()
+			f()
+		}
+	}
+	quit := make(chan struct{})
+	var once sync.Once
+	stop := func() { once.Do(func() { close(quit) }) }
+	// The first signal quits as q does. A second one, or one while the quit
+	// is stuck, ends the process at once.
+	sigs := make(chan os.Signal, 2)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	defer signal.Stop(sigs)
+	go func() {
+		n := 0
+		for range sigs {
+			if n++; n == 1 {
+				stop()
+				continue
+			}
+			cleanup()
+			os.Exit(130)
+		}
+	}()
 	kitty := o.format != "text" && kittyGraphics(stdout)
 	file := false
 	if kitty {
@@ -285,7 +364,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			file = kittyFileMedium(stdout)
 		}
 	}
-	s := &liveScreen{out: stdout, th: th, split: lo.split || lo.demo, kitty: kitty, caret: -1}
+	s = &liveScreen{out: stdout, th: th, split: lo.split || lo.demo, kitty: kitty, caret: -1}
 	s.name = filepath.Base(name)
 	if lo.demo && name == "" {
 		s.name = "demo.mmd"
@@ -297,9 +376,16 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 	if motion == 0 {
 		motion = 260 * time.Millisecond
 	}
+	frames := 0
 	s.live = mermaid.NewLive(da, mermaid.LiveOptions{
 		Out: stdout, Theme: th, Kitty: kitty, FileMedium: file, Motion: motion, Color: true,
+		OnPanic: crash,
 		OnFrame: func(f mermaid.FrameStat) {
+			// framePanicAt is zero in a release build, so the compiler drops
+			// this branch. See mermaid_panic.go.
+			if frames++; framePanicAt > 0 && frames == framePanicAt {
+				panic("mermaidpanic build: frame " + strconv.Itoa(frames))
+			}
 			if lo.stats {
 				s.statsMu.Lock()
 				s.stats = append(s.stats, f)
@@ -308,22 +394,14 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 		},
 	})
 
-	state, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
+	if _, err := term.MakeRaw(fd); err != nil {
 		return err
 	}
+	defer cleanup()
 	// The cursor is the caret: a bar in the theme's orange, as in pele's video.
 	_, _ = stdout.WriteString("\x1b[?1049h\x1b[?25l\x1b[6 q\x1b]12;" + hexOf(th.Series[1]) + "\x1b\\")
-	restore := func() {
-		s.live.Close()
-		_, _ = stdout.WriteString("\x1b[0m\x1b[2J\x1b[0 q\x1b]112\x1b\\\x1b[?25h\x1b[?1049l")
-		_ = term.Restore(int(os.Stdin.Fd()), state)
-	}
 	s.paint(true)
 
-	quit := make(chan struct{})
-	var once sync.Once
-	stop := func() { once.Do(func() { close(quit) }) }
 	keys := make(chan byte, 16)
 	go func() {
 		buf := make([]byte, 64)
@@ -349,9 +427,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
 	defer signal.Stop(winch)
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigs)
 
 	var demoStart func()
 	var runErr error
@@ -361,11 +436,11 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 		if name != "" {
 			data, err := os.ReadFile(name)
 			if err != nil {
-				restore()
+				cleanup()
 				return fmt.Errorf("cannot read %s: %w", name, err)
 			}
 			if steps = mermaid.Sources(name, data); len(steps) == 0 {
-				restore()
+				cleanup()
 				return fmt.Errorf("%s has no Mermaid diagram", name)
 			}
 			if !strings.HasSuffix(strings.ToLower(name), ".md") {
@@ -386,7 +461,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			if i >= len(strokes) {
 				if lo.loop {
 					tmu.Lock()
-					timer = time.AfterFunc(2*time.Second, func() { at(0) })
+					timer = time.AfterFunc(2*time.Second, safe(func() { at(0) }))
 					tmu.Unlock()
 				}
 				return
@@ -394,7 +469,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			k := strokes[i]
 			s.showTyped(mermaid.Balanced(k.Text), k.Caret, mermaid.Preview(k), !k.Commit)
 			tmu.Lock()
-			timer = time.AfterFunc(k.Hold, func() { at(i + 1) })
+			timer = time.AfterFunc(k.Hold, safe(func() { at(i + 1) }))
 			tmu.Unlock()
 		}
 		demoStart = func() {
@@ -403,7 +478,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 				timer.Stop()
 			}
 			tmu.Unlock()
-			go at(0)
+			go safe(func() { at(0) })()
 		}
 		demoStart()
 	default:
@@ -426,19 +501,19 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 		load()
 		w, err := fsnotify.NewWatcher()
 		if err != nil {
-			restore()
+			cleanup()
 			return err
 		}
 		defer func() { _ = w.Close() }()
 		abs, _ := filepath.Abs(name)
 		if err := w.Add(filepath.Dir(abs)); err != nil {
-			restore()
+			cleanup()
 			return err
 		}
 		// Editors save in bursts (write, rename, chmod): one load after the
 		// burst. The timer exists only while a burst is in flight.
 		var debounce *time.Timer
-		go func() {
+		go safe(func() {
 			for {
 				select {
 				case ev, ok := <-w.Events:
@@ -451,7 +526,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 					if debounce != nil {
 						debounce.Stop()
 					}
-					debounce = time.AfterFunc(30*time.Millisecond, load)
+					debounce = time.AfterFunc(30*time.Millisecond, safe(load))
 				case _, ok := <-w.Errors:
 					if !ok {
 						return
@@ -460,15 +535,13 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 					return
 				}
 			}
-		}()
+		})()
 	}
 
 loop:
 	for {
 		select {
 		case <-quit:
-			break loop
-		case <-sigs:
 			break loop
 		case <-winch:
 			s.resize()
@@ -486,7 +559,7 @@ loop:
 		}
 	}
 	stop()
-	restore()
+	cleanup()
 	if lo.stats {
 		printFrameStats(os.Stderr, s.stats)
 	}

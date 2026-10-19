@@ -7,10 +7,12 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
@@ -322,6 +324,28 @@ func terminalCells(f *os.File) (cols, rows, cellW, cellH int) {
 
 var errNoAnswer = errors.New("no answer")
 
+// guardRaw restores a terminal put in raw mode for a query if a signal comes
+// before the query ends, and exits. The returned function restores it and
+// ends the guard.
+func guardRaw(fd int, state *term.State) func() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-sigs:
+			_ = term.Restore(fd, state)
+			os.Exit(130)
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(sigs)
+		close(done)
+		_ = term.Restore(fd, state)
+	}
+}
+
 // kittyGraphics asks the terminal whether it shows kitty graphics: a query
 // image, then a primary device attributes request that every terminal answers.
 // The terminal supports kitty graphics when the image query answers first.
@@ -340,7 +364,7 @@ func kittyGraphics(out *os.File) bool {
 	if err != nil {
 		return false
 	}
-	defer func() { _ = term.Restore(int(in.Fd()), state) }()
+	defer guardRaw(int(in.Fd()), state)()
 	if _, err := out.WriteString("\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c"); err != nil {
 		return false
 	}
