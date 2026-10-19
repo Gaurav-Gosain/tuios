@@ -64,6 +64,16 @@ var cases = []chartCase{
 	{"sparkline-bucketed", 10, 1, func(w, h int, m Mode) *Grid {
 		return Sparkline{Values: runSecs, Min: 15, Max: 25}.Draw(w, h, m)
 	}},
+	{"sparkline-gaps", 12, 1, func(w, h int, m Mode) *Grid {
+		nan := math.NaN()
+		return Sparkline{Values: []float64{1, 2, nan, 4, math.Inf(1), 3, nan, 5, 1}}.Draw(w, h, m)
+	}},
+	{"text-edge", 7, 2, func(w, h int, m Mode) *Grid {
+		g := NewGrid(w, h)
+		g.Text(6, 0, "日本", Fg, false) // the first wide grapheme does not fit
+		g.Text(0, 1, "ab日本語", Dim, false)
+		return g
+	}},
 	{"gauge-line", 20, 1, func(w, h int, m Mode) *Grid {
 		return Gauge{Value: 412, Max: 417, Role: Success}.Draw(w, h, m)
 	}},
@@ -196,7 +206,9 @@ func checkGrid(t *testing.T, g *Grid, w, h int, m Mode) {
 			default:
 				t.Fatalf("row %d col %d: width %d", y, x, c.Width)
 			}
-			if m == ASCII {
+			// Labels and values are the caller's text; the marks plot draws
+			// itself have the other roles.
+			if m == ASCII && c.Role != Fg && c.Role != Dim && c.Role != Mute {
 				for _, r := range c.Text {
 					if r > 0x7e || r < 0x20 {
 						t.Fatalf("row %d col %d: %q is not ASCII", y, x, c.Text)

@@ -1,0 +1,21 @@
+=== braille 7x2
+|       |
+|ab日本 |
+--- roles
+|       |
+|aaaaaa |
+a=dim (upper case is bold)
+=== blocks 7x2
+|       |
+|ab日本 |
+--- roles
+|       |
+|aaaaaa |
+a=dim (upper case is bold)
+=== ascii 7x2
+|       |
+|ab日本 |
+--- roles
+|       |
+|aaaaaa |
+a=dim (upper case is bold)
