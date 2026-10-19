@@ -7467,3 +7467,14 @@ The build before the fix has no panic hook, so its `/panic` case times out inste
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The source pane writes the file's controls to the terminal | `mermaid.TermSafe` in `paneText` | Returned the line as it is | `/kitty` and `/text` (OSC 2, OSC 52, BEL), `/parse_error` (BEL) | **caught** |
+### A picture cropped past its pane edge keeps its own scale
+
+A guest that scales a PNG into a cell box and places it past the pane's bottom right corner is cropped to the cells that show. `TestKittyOverflowCropKeepsThePicturesScale` sends a 2000x400 picture into 100x10 cells, twice the pinned 10x20 cell on both axes, by every medium a PNG can travel in, and checks that the source rectangle is 20 of its pixels a column and 40 a row. Without its size the crop was measured in the host's cell: a slice of the picture at its own size. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A PNG sent by name has no known size | The header read in `mediumPixels` | Branch skipped | `/file`, `/file-zlib`, `/file-at`, `/temp` ("41x4 cells show the source rectangle x=0,y=0,w=410,h=80, want ... w=820,h=160") | **caught** |
+| The header is read at the start of the file, not at the medium's offset | `O=` and `S=` passed to `kittyMediumPNGSize` | Passed as 0 | `/file-at` | **caught** |
+| A PNG compressed again is read as it is | `o=z` passed to `kittyMediumPNGSize` | Passed as false | `/file-zlib` | **caught** |
+
+`/direct` passes on every build: an inline PNG's size was already read from its first chunk, and it is the case that shows the test's arithmetic is right.
