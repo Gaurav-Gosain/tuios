@@ -16,8 +16,8 @@ import (
 // click has to reach the agents view, not land on the rail behind it.
 //
 // Negative control: with the rail's click ahead of the overlay's in
-// handleMouseClick, the click selects a rail row, the launcher never opens
-// and the wait for it fails.
+// handleMouseClick, the click selects a rail row, the New agent sheet never
+// opens and the wait for it fails.
 func TestInboxOnTheShippedLooks(t *testing.T) {
 	const cols, rows = 80, 24
 	base := t.TempDir()
@@ -87,12 +87,12 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 	}
 
 	// A cell of the New agent button inside the rail's band: the click
-	// reaches the agents view, which covers the rail, and opens the
-	// launcher.
+	// reaches the agents view, which covers the rail, and opens the New
+	// agent sheet.
 	row := rowWith(term.Screen(), "New agent")
 	col := cols - narrowRailWidth + 4
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
-	if err := term.WaitForText(launcherTitle, uiTimeout); err != nil {
+	if err := term.WaitForText("Start agent", uiTimeout); err != nil {
 		t.Fatalf("a click on the button at (%d,%d) did not act on the agents view: %v\n%s", col, row, err, term.Snapshot())
 	}
 	alive(t, term, "after a click in the Inbox over the rail")
