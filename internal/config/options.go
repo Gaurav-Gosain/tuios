@@ -1391,6 +1391,13 @@ var optionSpecs = []Option{
 		Accepted:    PiPCorners, Default: PiPCornerBottomRight,
 	},
 
+	// [mermaid]. Read each time tuios mermaid runs.
+	{
+		Path: "mermaid.theme", Type: OptionString, Section: "mermaid",
+		Description: "Colours of tuios mermaid: tuios for the colours of your theme, or a named theme such as flexoki, nord or rose-pine",
+		Default:     "tuios",
+	},
+
 	// [hints]. Read each time hints mode opens. hints.patterns is a list and
 	// is set in the file only, like [keybindings].
 	{

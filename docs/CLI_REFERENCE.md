@@ -4614,7 +4614,7 @@ Draw the Mermaid diagrams of a file in the terminal, or save them as SVG or PNG.
 
 **Usage:**
 ```bash
-tuios mermaid FILE [--format svg|png|kitty|text] [-o FILE] [--diagram N]
+tuios mermaid FILE [--format svg|png|kitty|text] [-o FILE] [--diagram N] [--theme NAME]
 ```
 
 FILE is a Mermaid source (`.mmd`), a Markdown file, or `-` for standard input.
@@ -4633,8 +4633,41 @@ wide for the terminal, is written as its source.
 diagram, the files get `-2`, `-3` and so on. `--scale` sets the pixels per SVG
 unit of a PNG, 2 by default. `--cols` and `--rows` set the size in cells.
 
-The colours come from your tuios theme, held to a contrast floor against the
-terminal background. tuios.dev/sketch draws the diagrams. It is a Go port of pele
+The colours come from your tuios theme, held to contrast floors against the
+terminal background. `--theme NAME`, or `theme` in `[mermaid]`, picks another
+theme:
+
+| Theme | From |
+|-------|------|
+| `tuios` | Your tuios theme. This is the default |
+| `pele` | pele's own colours |
+| `flexoki`, `flexoki-dark` | The pele.run site, light and dark |
+| `nord`, `everforest`, `gruvbox`, `rose-pine` | pele's launch video |
+| `catppuccin-mocha`, `catppuccin-latte`, `tokyo-night`, `dracula`, `solarized-light`, `kanagawa` | Those terminal themes |
+
+Text in a theme colour that lands on a fill the diagram sets itself changes to
+the theme's text or background colour, where that reads better.
+
+**Live view:**
+```bash
+tuios mermaid FILE --watch [--split]
+tuios mermaid [FILE] --demo [--loop]
+```
+
+`--watch` fills the terminal with the diagram and draws it again each time the
+file is saved. In a terminal with kitty graphics the diagram moves to its new
+layout: boxes slide and grow, new parts fade in, removed parts fade out. In
+other terminals the text drawing is drawn again. `--split` shows the source
+beside the diagram, or above it on a tall terminal. `--motion` sets the length
+of a motion, 260ms by default.
+
+`--demo` types a diagram one character at a time, for a recording. With FILE it
+types that diagram line by line, or the diagrams of a Markdown file one after
+the other. Without FILE it types a built-in flowchart. `--loop` starts again
+two seconds after the end. Press `r` to start again and `q` to quit.
+
+The live view sends no frames and uses no CPU while nothing moves.
+tuios.dev/sketch draws the diagrams. It is a Go port of pele
 and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps and gantt charts now. A diagram of another type gives
 an error and its source. The command exits 1 when a diagram cannot be drawn.
 

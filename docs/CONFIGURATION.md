@@ -556,6 +556,18 @@ tuios does not draw kitty graphics images as block characters yet. On a
 terminal without graphics, a program that only uses kitty graphics uses its
 own text output.
 
+## Mermaid diagram colours
+
+`tuios mermaid` builds its colours from your tuios theme. `[mermaid] theme`
+picks one of the named diagram themes instead. The `--theme` flag wins over it.
+
+```toml
+[mermaid]
+theme = "flexoki"   # tuios (the default), pele, flexoki, flexoki-dark, nord,
+                    # everforest, gruvbox, rose-pine, catppuccin-mocha,
+                    # catppuccin-latte, tokyo-night, dracula, solarized-light, kanagawa
+```
+
 ## CharmTone themes
 
 tuios has two built-in themes made from

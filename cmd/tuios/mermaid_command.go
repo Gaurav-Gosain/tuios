@@ -20,6 +20,7 @@ import (
 	"tuios.dev/sketch/raster"
 	sketchtext "tuios.dev/sketch/text"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -32,10 +33,20 @@ type mermaidOptions struct {
 	cols    int
 	rows    int
 	diagram int
+	theme   string
+}
+
+// liveOptions are the flags of the live view: --watch, --split and --demo.
+type liveOptions struct {
+	watch, split, demo, loop bool
+	medium                   string
+	motion                   time.Duration
+	stats                    bool
 }
 
 func newMermaidCommand() *cobra.Command {
 	var o mermaidOptions
+	var lo liveOptions
 	cmd := &cobra.Command{
 		Use:   "mermaid FILE",
 		Short: "Draw Mermaid diagrams in the terminal or to a file",
@@ -50,7 +61,14 @@ diagram type with no text drawing yet, or one too wide for the terminal, is
 written as its source. When the output is not a terminal, the command writes
 SVG.
 
-The colours come from your tuios theme. tuios.dev/sketch draws the diagrams. It
+With --watch the diagram fills the terminal and is drawn again each time the
+file is saved. In a terminal with kitty graphics it moves to the new layout:
+boxes slide and grow, new parts fade in, removed parts fade out. --split shows
+the source beside it. --demo types a diagram a character at a time, for a
+recording: the diagram of FILE, or a built-in one. Press q to quit and r to
+start the demo again.
+
+The colours come from your tuios theme, or from --theme or [mermaid] theme. tuios.dev/sketch draws the diagrams. It
 is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps and gantt charts now.`,
 		Example: `  # Draw a diagram here
   tuios mermaid flow.mmd
@@ -62,18 +80,53 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
   tuios mermaid flow.mmd -o flow.png
 
   # Write SVG from standard input
-  echo 'flowchart LR; A-->B' | tuios mermaid - --format svg`,
-		Args: cobra.ExactArgs(1),
+  echo 'flowchart LR; A-->B' | tuios mermaid - --format svg
+
+  # Draw again on every save, with the source beside the diagram
+  tuios mermaid flow.mmd --watch --split
+
+  # Type a diagram for a recording, in pele's Flexoki colours
+  tuios mermaid --demo --theme flexoki`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runMermaid(args[0], o, os.Stdout)
+			name := ""
+			if len(args) == 1 {
+				name = args[0]
+			}
+			if lo.watch || lo.demo {
+				if lo.watch && (name == "" || name == "-") {
+					return fmt.Errorf("--watch needs a file")
+				}
+				th, err := mermaidTheme(o.theme)
+				if err != nil {
+					return err
+				}
+				return runMermaidLive(name, o, lo, th, os.Stdout)
+			}
+			if name == "" {
+				return fmt.Errorf("give a file, or - for standard input")
+			}
+			return runMermaid(name, o, os.Stdout)
 		},
 	}
+	cmd.Flags().BoolVarP(&lo.watch, "watch", "w", false, "Draw again each time the file changes, with motion between versions")
+	cmd.Flags().BoolVar(&lo.split, "split", false, "With --watch, show the source beside the diagram")
+	cmd.Flags().BoolVar(&lo.demo, "demo", false, "Type the diagram of FILE, or a built-in one, a character at a time")
+	cmd.Flags().BoolVar(&lo.loop, "loop", false, "With --demo, start again 2 s after the end")
+	cmd.Flags().DurationVar(&lo.motion, "motion", 0, "Length of the motion between versions, 0 for 260ms, -1ns for none")
+	cmd.Flags().StringVar(&lo.medium, "kitty-medium", "auto", "How frames reach the terminal: auto, file or direct")
+	cmd.Flags().BoolVar(&lo.stats, "stats", false, "With --watch or --demo, print frame times when you quit")
+	_ = cmd.Flags().MarkHidden("stats")
 	cmd.Flags().StringVarP(&o.format, "format", "f", "", "Output format: svg, png, kitty or text")
 	cmd.Flags().StringVarP(&o.out, "out", "o", "", "Write to this file instead of the terminal")
 	cmd.Flags().Float64Var(&o.scale, "scale", 2, "Pixels per SVG unit for png")
 	cmd.Flags().IntVar(&o.cols, "cols", 0, "Width in cells, 0 for the terminal width")
 	cmd.Flags().IntVar(&o.rows, "rows", 0, "Height in cells, 0 for the terminal height")
 	cmd.Flags().IntVar(&o.diagram, "diagram", 0, "Draw only diagram N of the file, from 1")
+	cmd.Flags().StringVar(&o.theme, "theme", "", "Colour theme: tuios, or a name such as flexoki, nord or rose-pine")
+	_ = cmd.RegisterFlagCompletionFunc("theme", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return mermaid.ThemeNames(), cobra.ShellCompDirectiveNoFileComp
+	})
 	_ = cmd.RegisterFlagCompletionFunc("format", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{"svg", "png", "kitty", "text"}, cobra.ShellCompDirectiveNoFileComp
 	})
@@ -103,7 +156,10 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		profile = colorprofile.TrueColor
 	}
 	theme.SetColorProfile(profile)
-	th := mermaid.Theme(theme.UI(), theme.GetANSIPalette(), theme.TerminalBg(), theme.TerminalFg())
+	th, err := mermaidTheme(o.theme)
+	if err != nil {
+		return err
+	}
 
 	format := strings.ToLower(o.format)
 	if format == "" && o.out != "" {
@@ -155,6 +211,21 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		return fmt.Errorf("%d of %d diagrams could not be drawn", failed, len(sources))
 	}
 	return nil
+}
+
+// mermaidTheme is the diagram theme: the flag, else [mermaid] theme, else the
+// one built from the tuios theme in [appearance] theme.
+func mermaidTheme(flag string) (*sketch.Theme, error) {
+	name := flag
+	if cfg, err := config.LoadUserConfig(); err == nil && cfg != nil {
+		if name == "" {
+			name = cfg.Mermaid.Theme
+		}
+		if cfg.Appearance.Theme != "" {
+			_ = theme.Initialize(cfg.Appearance.Theme)
+		}
+	}
+	return mermaid.ThemeFor(name, theme.UI(), theme.GetANSIPalette(), theme.TerminalBg(), theme.TerminalFg())
 }
 
 // numbered is the output file for diagram i of n: name, or name-2.ext and so on.
@@ -214,7 +285,7 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		// larger than twice the SVG size.
 		scale = math.Min(2, math.Min(float64(cols*cellW)/math.Max(1, out.Width), float64(max(rows-2, 4)*cellH)/math.Max(1, out.Height)))
 	}
-	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: true})
+	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: true, Readable: true})
 	if err != nil {
 		return fmt.Errorf("cannot draw diagram %d: %w", i+1, err)
 	}

@@ -53,6 +53,9 @@ type UserConfig struct {
 	// PiP is the [pip] table: the size and corner of the picture-in-picture
 	// view that toggle_pip pins. Client-local, like the spotlight. See pip.go.
 	PiP PiPConfig `toml:"pip"`
+
+	// Mermaid is the [mermaid] table: the colours of tuios mermaid. See mermaid.go.
+	Mermaid MermaidConfig `toml:"mermaid"`
 	// Launcher is the [launcher] table: how the app launcher starts a
 	// graphical program. See launcher.go.
 	Launcher LauncherConfig `toml:"launcher"`
@@ -1119,6 +1122,7 @@ func DefaultConfig() *UserConfig {
 		Hints:        defaultHintsConfig(),
 		Scratch:      defaultScratchConfig(),
 		PiP:          defaultPiPConfig(),
+		Mermaid:      MermaidConfig{Theme: "tuios"},
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Keybindings: KeybindingsConfig{
