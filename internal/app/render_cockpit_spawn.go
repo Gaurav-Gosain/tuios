@@ -268,20 +268,37 @@ func (m *OS) drawSpawnChips(c *ckCanvas, l ckLook, t spawnTone, s *spawnSheet, x
 	if s.machine < len(s.machines) {
 		host = s.machines[s.machine].name
 	}
-	cx := x
-	for i := range s.attempts {
-		name := s.agents[s.attemptAgent(i)].cmd
+	names := make([]string, s.attempts)
+	for i := range names {
+		names[i] = s.agents[s.attemptAgent(i)].cmd
 		if mod := s.modelOf(i); mod != "" {
-			name += " " + mod
+			names[i] += " " + mod
 		}
-		where := l.g(ckGlyphHost) + " " + host + " "
-		if cx+ckWidth(ckSeg{t: name + where})+8 > right-8 {
-			c.text(cx, y, right, ckSeg{t: "+" + strconv.Itoa(s.attempts-i), fg: pal.FgMute})
-			return
+	}
+	// The machine is named on each chip when every chip has room for it,
+	// and "+ vary" always keeps its place at the end.
+	where := l.g(ckGlyphHost) + " " + host + " "
+	room := right - 8 - x
+	need := 0
+	for _, n := range names {
+		need += ckWidth(ckSeg{t: " A  " + n + " " + where}) + 2
+	}
+	if need > room {
+		where = ""
+	}
+	cx := x
+	for i, name := range names {
+		if cx+ckWidth(ckSeg{t: " A  " + name + " " + where})+6 > right-8 {
+			cx = c.text(cx, y, right, ckSeg{t: "+" + strconv.Itoa(s.attempts-i), fg: pal.FgMute}) + 2
+			break
 		}
 		x0 := cx
-		cx = c.text(cx, y, 0, ckSeg{t: " " + string(rune('A'+i)) + " ", fg: pal.AccentBright, bg: pal.Card, attrs: ckBold},
-			ckSeg{t: " " + name + " ", fg: pal.Fg, bg: t.field}, ckSeg{t: where, fg: pal.FgMute, bg: t.field})
+		segs := []ckSeg{{t: " " + string(rune('A'+i)) + " ", fg: pal.AccentBright, bg: pal.Card, attrs: ckBold},
+			{t: " " + name + " ", fg: pal.Fg, bg: t.field}}
+		if where != "" {
+			segs = append(segs, ckSeg{t: where, fg: pal.FgMute, bg: t.field})
+		}
+		cx = c.text(cx, y, 0, segs...)
 		s.hits = append(s.hits, ckHit{x0: x0, y0: top + y, x1: cx, y1: top + y + 1, kind: ckHitAction, action: "chip:" + strconv.Itoa(i)})
 		cx += 2
 	}
