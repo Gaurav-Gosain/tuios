@@ -1622,7 +1622,7 @@ type SessionConfig struct {
 	DisplayEnv func(sessionID string) []string
 	// CellSize returns the cell, in pixels, a new pane of the session takes,
 	// ok false when no client has measured one. The manager stamps it. See
-	// Daemon.sessionCellSize.
+	// Daemon.newPaneCellSize.
 	CellSize func(sessionID string) (w, h int, ok bool)
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.

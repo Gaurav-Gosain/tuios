@@ -394,14 +394,9 @@ func (d *Daemon) broadcastStateSync(sessionID string, state *SessionState, trigg
 // latest client under window_size = latest, because the pane is laid out for
 // that client's screen. Under smallest and largest no single client owns the
 // size, and the client that attached first is used, so the cell holds still
-// while others come and go. A client that reported no cell is skipped.
-//
-// A session no such client is attached to takes the cell of the client that
-// attached first to any session. A pane an agent opens in a background
-// session is drawn for that screen when someone looks, and a cell measured on
-// it is nearer than the fallback, which no program can tell from a real one.
-// ok is false when no client anywhere reported a cell; the panes then keep
-// the cell they have, the fallback cell for one no client has measured.
+// while others come and go. A client that reported no cell is skipped. ok is
+// false when no attached client reported one; the panes then keep the cell
+// they have, the fallback cell for one no client has measured.
 func (d *Daemon) sessionCellSize(sessionID string) (w, h int, ok bool) {
 	owner := ""
 	if s := d.manager.GetSessionByID(sessionID); s != nil && s.WindowSizePolicy() == config.WindowSizeLatest {
@@ -414,21 +409,13 @@ func (d *Daemon) sessionCellSize(sessionID string) (w, h int, ok bool) {
 
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
-	var firstSeq, elsewhereSeq uint64
-	var elsewhereW, elsewhereH int
+	var firstSeq uint64
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		measured := cs.sessionID != "" && cs.isTUIClient && !cs.passive && cs.cellWidth > 0 && cs.cellHeight > 0
-		here := cs.sessionID == sessionID
+		match := cs.sessionID == sessionID && cs.isTUIClient && !cs.passive && cs.cellWidth > 0 && cs.cellHeight > 0
 		id, seq, cw, ch := cs.clientID, cs.attachSeq, cs.cellWidth, cs.cellHeight
 		cs.mu.Unlock()
-		if !measured {
-			continue
-		}
-		if !here {
-			if elsewhereW == 0 || seq < elsewhereSeq {
-				elsewhereW, elsewhereH, elsewhereSeq = cw, ch, seq
-			}
+		if !match {
 			continue
 		}
 		if owner != "" && id == owner {
@@ -438,14 +425,41 @@ func (d *Daemon) sessionCellSize(sessionID string) (w, h int, ok bool) {
 			w, h, firstSeq, ok = cw, ch, seq, true
 		}
 	}
-	if !ok && elsewhereW > 0 {
-		return elsewhereW, elsewhereH, true
+	return w, h, ok
+}
+
+// newPaneCellSize is the cell a pane takes when it is made: the session's
+// (see sessionCellSize), or, in a session no measuring client is attached to,
+// the cell of the client that attached first to any session. A pane an agent
+// opens in a background session is drawn for that screen when someone looks,
+// and a cell measured on it is nearer than the fallback, which no program can
+// tell from a real one.
+//
+// Only a new pane takes the cell from elsewhere. The panes already in a
+// session keep theirs when its last client leaves: switching them would send
+// every program there a 2048 report and a redraw nobody sees, and another
+// when a client comes back.
+func (d *Daemon) newPaneCellSize(sessionID string) (w, h int, ok bool) {
+	if w, h, ok = d.sessionCellSize(sessionID); ok {
+		return w, h, ok
+	}
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+	var firstSeq uint64
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		measured := cs.sessionID != "" && cs.isTUIClient && !cs.passive && cs.cellWidth > 0 && cs.cellHeight > 0
+		seq, cw, ch := cs.attachSeq, cs.cellWidth, cs.cellHeight
+		cs.mu.Unlock()
+		if measured && (!ok || seq < firstSeq) {
+			w, h, firstSeq, ok = cw, ch, seq, true
+		}
 	}
 	return w, h, ok
 }
 
 // cellSize is the cell a new pane of the session takes. See
-// Daemon.sessionCellSize.
+// Daemon.newPaneCellSize.
 func (m *Manager) cellSize(sessionID string) (w, h int, ok bool) {
 	if src := m.cellSource.Load(); src != nil {
 		return (*src)(sessionID)

@@ -56,7 +56,7 @@ type Manager struct {
 	displayFollow atomic.Bool
 	displaySource atomic.Pointer[func(sessionID string) []string]
 	// cellSource gives a new pane its session's cell in pixels. See
-	// Daemon.sessionCellSize.
+	// Daemon.newPaneCellSize.
 	cellSource atomic.Pointer[func(sessionID string) (w, h int, ok bool)]
 	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
 	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
