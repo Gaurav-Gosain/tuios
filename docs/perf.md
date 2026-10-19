@@ -3042,6 +3042,15 @@ clone, as CI builds it). The change measured 40,530,082 and 37,921,714, so it
 adds 49,152 and 50,240 bytes. No third-party dependency was added. The new
 budgets leave 4,198 and 4,204 bytes of room.
 
+The budgets went to 40,743,176 (linux/amd64) and 38,127,278 (darwin/arm64) for
+gantt charts in tuios.dev/sketch: the gantt lexer, parser and scheduler, the
+dayjs and d3 date formats, the time axis, and the JavaScript Date and
+Date.parse they rest on. Their code is 106 KB, and the renderer is 30 KB of
+it. The build before it measured 40,530,082 and 37,921,714 bytes (Go 1.26.9, a
+clean clone, as CI builds it). The change measured 40,738,978 and 38,123,074,
+so it adds 208,896 and 201,360 bytes. No third-party dependency was added. The
+new budgets leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
