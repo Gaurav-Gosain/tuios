@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/types"
 )
 
 // Private aliases set once on the root element, so each use is short and the public
@@ -25,12 +26,9 @@ const RADIUS = "var(--pele-radius,4px)"
 const CRITICAL = "var(--pele-critical,#e45756)"
 
 // A list of font names, quoted or not, and nothing that could end the declaration it is put in.
-const family = `(?:"[^"'\\\n<>{}();:@]*"|'[^"'\\\n<>{}();:@]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ .-]*)`
-
-var reFamilies = regexp.MustCompile(`^[` + js.S + `]*` + family + `(?:[` + js.S + `]*,[` + js.S + `]*` + family + `)*[` + js.S + `]*$`)
-
+// The check is types.SafeFamilies, which the theme uses too.
 func families(list string, generic string) string {
-	if list != "" && reFamilies.MatchString(list) {
+	if list != "" && types.SafeFamilies(list) {
 		return list
 	}
 	return generic

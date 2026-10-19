@@ -6,18 +6,37 @@ package types
 import (
 	"fmt"
 	"image/color"
+	"math"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"tuios.dev/sketch/internal/js"
 )
+
+// A list of font names, quoted or not, and nothing that could end the
+// declaration it is put in. It is the check of families() in pele's
+// src/svg/theme.ts; internal/svg uses it too.
+const family = `(?:"[^"'\\\n<>{}();:@]*"|'[^"'\\\n<>{}();:@]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ .-]*)`
+
+var reFamilies = regexp.MustCompile(`^[` + js.S + `]*` + family + `(?:[` + js.S + `]*,[` + js.S + `]*` + family + `)*[` + js.S + `]*$`)
+
+// SafeFamilies reports whether list is a font family list that cannot end
+// the declaration it is put in.
+func SafeFamilies(list string) bool {
+	return reFamilies.MatchString(list)
+}
 
 // Theme gives the colours, fonts and corner radius of a diagram. A nil colour
 // keeps pele's fallback.
 type Theme struct {
 	Bg, Fg, Muted, Line, Surface, SurfaceAlt, Border, Accent, Critical color.Color
 	Series                                                             [8]color.Color
-	// Font and FontMono are CSS font family lists. "" keeps the fallback.
+	// Font and FontMono are CSS font family lists. "" keeps the fallback, and
+	// so does a list that pele's font check refuses, such as one with ";".
 	Font, FontMono string
-	// Radius is the corner radius in pixels. 0 keeps the fallback of 4.
+	// Radius is the corner radius in pixels. 0, a negative value, NaN and
+	// infinity keep the fallback of 4.
 	Radius float64
 }
 
@@ -26,8 +45,9 @@ func hexColor(c color.Color) string {
 	if a == 0 {
 		return "transparent"
 	}
-	// Un-premultiply.
-	r, g, b = r*0xffff/a, g*0xffff/a, b*0xffff/a
+	// Un-premultiply. A colour with a channel above its alpha is not a valid
+	// premultiplied colour; its channels are held to the alpha.
+	r, g, b = min(r, a)*0xffff/a, min(g, a)*0xffff/a, min(b, a)*0xffff/a
 	if a == 0xffff {
 		return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 	}
@@ -57,13 +77,13 @@ func (t *Theme) Vars() [][2]string {
 	for i, c := range t.Series {
 		add("--pele-series-"+strconv.Itoa(i+1), c)
 	}
-	if t.Font != "" {
+	if t.Font != "" && SafeFamilies(t.Font) {
 		out = append(out, [2]string{"--pele-font", t.Font})
 	}
-	if t.FontMono != "" {
+	if t.FontMono != "" && SafeFamilies(t.FontMono) {
 		out = append(out, [2]string{"--pele-font-mono", t.FontMono})
 	}
-	if t.Radius > 0 {
+	if t.Radius > 0 && !math.IsInf(t.Radius, 1) {
 		out = append(out, [2]string{"--pele-radius", strconv.FormatFloat(t.Radius, 'f', -1, 64) + "px"})
 	}
 	return out
