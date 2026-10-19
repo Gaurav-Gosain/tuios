@@ -4635,7 +4635,7 @@ unit of a PNG, 2 by default. `--cols` and `--rows` set the size in cells.
 
 The colours come from your tuios theme, held to a contrast floor against the
 terminal background. tuios.dev/sketch draws the diagrams. It is a Go port of pele
-and draws flowcharts, sequence diagrams, state diagrams, class diagrams and ER diagrams now. A diagram of another type gives
+and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams and pie charts now. A diagram of another type gives
 an error and its source. The command exits 1 when a diagram cannot be drawn.
 
 ---
