@@ -1,10 +1,5 @@
 package transcriptview
 
-import (
-	"bytes"
-	"encoding/json"
-)
-
 // A Qwen Code chat, as its ChatRecordingService writes it (the
 // @qwen-code/qwen-code package, read at 0.25.2), at
 // ~/.qwen/projects/<cwd with "/" as "-">/chats/<session id>.jsonl. Qwen Code
@@ -15,82 +10,47 @@ import (
 // text, thoughts (thought: true) and functionCall. A tool_result's are
 // functionResponse, and its toolCallResult says the status and carries the
 // result display: a FileDiff for an edit.
-type qwRecord struct {
-	Type      string `json:"type"`
-	Timestamp string `json:"timestamp"`
-	CWD       string `json:"cwd"`
-	Message   struct {
-		Parts json.RawMessage `json:"parts"`
-	} `json:"message"`
-	ToolCallResult struct {
-		CallID        string          `json:"callId"`
-		Status        string          `json:"status"`
-		Error         json.RawMessage `json:"error"`
-		ResultDisplay json.RawMessage `json:"resultDisplay"`
-	} `json:"toolCallResult"`
-}
 
 // qwenLine decodes one chat record.
 func qwenLine(r *reader, line []byte, off int64) (decoded, bool) {
-	var rec qwRecord
-	if err := unmarshalLoose(line, &rec); err != nil {
+	rec, ok := parseObj(line)
+	if !ok {
 		return decoded{}, false
 	}
+	parts := rec.obj("message")["parts"]
 	var out []Entry
-	switch rec.Type {
+	switch rec.str("type") {
 	case "user":
-		out = genaiEntries(rec.Message.Parts, RoleUser)
+		out = genaiEntries(parts, RoleUser)
 	case "assistant":
-		out = genaiEntries(rec.Message.Parts, RoleAssistant)
-		for _, p := range genaiParts(rec.Message.Parts) {
-			if fc := p.FunctionCall; fc != nil {
-				out = append(out, callEntry(fc.Name, fc.ID, gmClass(fc.Name), decodeArgs(fc.Args))...)
+		out = genaiEntries(parts, RoleAssistant)
+		for _, p := range rec.obj("message").list("parts") {
+			if fc := asObj(p).obj("functionCall"); fc != nil {
+				name := fc.str("name")
+				out = append(out, callEntry(name, fc.str("id"), gmClass(name), args(fc["args"]))...)
 			}
 		}
 	case "tool_result":
-		res := rec.ToolCallResult
-		failed := res.Status == "error" || res.Status == "cancelled" || hasValue(res.Error)
-		for _, p := range genaiParts(rec.Message.Parts) {
-			fr := p.FunctionResponse
+		res := rec.obj("toolCallResult")
+		status := res.str("status")
+		failed := status == "error" || status == "cancelled" || res["error"] != nil
+		for _, p := range rec.obj("message").list("parts") {
+			fr := asObj(p).obj("functionResponse")
 			if fr == nil {
 				continue
 			}
-			id := fr.ID
+			id := fr.str("id")
 			if id == "" {
-				id = res.CallID
+				id = res.str("callId")
 			}
-			e := resultEntry(id, responseText(fr.Response), failed)
-			if f := fileDiffOf(res.ResultDisplay); f != nil {
-				e.raw.diff = f
-			}
+			e := resultEntry(id, responseText(fr.obj("response")), failed)
+			e.raw.diff = fileDiffOf(res["resultDisplay"])
 			out = append(out, e)
 		}
 	}
-	at := parseAt(rec.Timestamp)
+	at := parseAt(rec.str("timestamp"))
 	for i := range out {
 		out[i].ID, out[i].At = offID(off, i), at
 	}
 	return decoded{entries: out}, true
-}
-
-// genaiParts decodes a list of parts, skipping any that do not decode.
-func genaiParts(raw json.RawMessage) []gmPart {
-	var items []json.RawMessage
-	if json.Unmarshal(raw, &items) != nil {
-		return nil
-	}
-	out := make([]gmPart, 0, len(items))
-	for _, it := range items {
-		var p gmPart
-		if unmarshalLoose(it, &p) == nil {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// hasValue reports a JSON value other than null.
-func hasValue(raw json.RawMessage) bool {
-	raw = bytes.TrimSpace(raw)
-	return len(raw) > 0 && !bytes.Equal(raw, []byte("null"))
 }

@@ -137,6 +137,8 @@ func scanFields(r io.Reader, paths ...string) map[string]string {
 }
 
 // parseTime is an RFC 3339 time, zero when it is not one.
+//
+//go:noinline
 func parseTime(s string) time.Time {
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {

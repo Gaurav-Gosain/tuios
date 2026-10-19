@@ -1,9 +1,7 @@
 package transcriptview
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"hash/fnv"
 	"io"
 	"strconv"
@@ -134,6 +132,8 @@ func dropKey(out []Entry, key string) ([]Entry, int, cursorPos) {
 }
 
 // offID is the id of the i-th entry of the record at offset off.
+//
+//go:noinline
 func offID(off int64, i int) string {
 	return strconv.FormatInt(off, 36) + "-" + strconv.Itoa(i)
 }
@@ -141,6 +141,8 @@ func offID(off int64, i int) string {
 // keyID is the id of one part of a keyed message. A message written again
 // gives its parts the same ids, so the thread replaces them. The key and
 // the part come from the file, so they are hashed rather than sent.
+//
+//go:noinline
 func keyID(key, part string) string {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(key))
@@ -155,6 +157,8 @@ const toolIDMax = 96
 // cleanToolID is a tool call's id as the page carries it: as written when it
 // is short and plain, otherwise a hash of it. It only pairs a call with its
 // result, so its spelling does not matter.
+//
+//go:noinline
 func cleanToolID(s string) string {
 	if s == "" {
 		return ""
@@ -168,6 +172,8 @@ func cleanToolID(s string) string {
 }
 
 // parseAt is an RFC 3339 time in milliseconds, 0 when it is not one.
+//
+//go:noinline
 func parseAt(s string) int64 {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 		return t.UnixMilli()
@@ -175,19 +181,11 @@ func parseAt(s string) int64 {
 	return 0
 }
 
-// unmarshalLoose decodes line into v, keeping what decodes when a field has
-// an unexpected type.
-func unmarshalLoose(line []byte, v any) error {
-	err := json.Unmarshal(line, v)
-	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
-		return nil
-	}
-	return err
-}
-
 // --- Entries every format makes.
 
 // textEntry is a text, thinking or error entry. Empty text gives none.
+//
+//go:noinline
 func textEntry(role, kind, s string) (Entry, bool) {
 	if strings.TrimSpace(s) == "" {
 		return Entry{}, false
@@ -197,6 +195,8 @@ func textEntry(role, kind, s string) (Entry, bool) {
 
 // resultEntry is a tool result: its status and the head of its text, cut
 // before Clean as Claude's are.
+//
+//go:noinline
 func resultEntry(toolID, text string, failed bool) Entry {
 	e := Entry{Role: RoleTool, Kind: KindToolResult, ToolID: cleanToolID(toolID), Status: StatusOK}
 	if failed {
@@ -227,110 +227,137 @@ const (
 	classPatch
 )
 
-// toolArgs is every argument field a call's card shows, under the names the
-// harnesses give them.
-type toolArgs struct {
-	Command     json.RawMessage `json:"command"`
-	Cmd         json.RawMessage `json:"cmd"`
-	Description string          `json:"description"`
-	FilePath    string          `json:"file_path"`
-	AbsPath     string          `json:"absolute_path"`
-	Path        string          `json:"path"`
-	DirPath     string          `json:"dir_path"`
-	Pattern     string          `json:"pattern"`
-	URL         string          `json:"url"`
-	Query       string          `json:"query"`
-	Prompt      string          `json:"prompt"`
-	Objective   string          `json:"objective"`
-	Skill       string          `json:"skill"`
-	OldString   string          `json:"old_string"`
-	NewString   string          `json:"new_string"`
-	OldStr      string          `json:"old_str"`
-	NewStr      string          `json:"new_str"`
-	Content     string          `json:"content"`
-	FileText    string          `json:"file_text"`
-	Plan        json.RawMessage `json:"plan"`
-	Todos       json.RawMessage `json:"todos"`
-	Input       string          `json:"input"`
+// --- Records.
+//
+// The formats other than Claude Code's are read through jobj, one decoded
+// JSON object, rather than a struct type per record. A struct type costs the
+// binary its descriptor, its field names and tags, and its share of the
+// decoder's reflection code. These formats change often and each has many
+// record shapes, so one walker keeps them cheap.
+
+// jobj is a decoded JSON object.
+type jobj map[string]any
+
+// parseObj decodes a record. ok is false for a record that is not JSON at
+// all. A JSON value other than an object decodes to nil and ok.
+//
+//go:noinline
+func parseObj(b []byte) (jobj, bool) {
+	var v any
+	if json.Unmarshal(b, &v) != nil {
+		return nil, false
+	}
+	return asObj(v), true
 }
 
-// decodeArgs decodes a call's arguments: an object, or a string holding one,
-// as Codex writes them. What does not decode is left empty.
-func decodeArgs(raw []byte) toolArgs {
-	var a toolArgs
-	raw = bytes.TrimSpace(raw)
-	if len(raw) > 0 && raw[0] == '"' {
-		var s string
-		if json.Unmarshal(raw, &s) != nil {
-			return a
+// asObj is v as an object, nil when it is not one.
+//
+//go:noinline
+func asObj(v any) jobj {
+	m, _ := v.(map[string]any)
+	return m
+}
+
+// str is the first of keys that holds a string that is not empty.
+//
+//go:noinline
+func (o jobj) str(keys ...string) string {
+	for _, k := range keys {
+		if s, ok := o[k].(string); ok && s != "" {
+			return s
 		}
-		raw = []byte(s)
 	}
-	if len(raw) > 0 && raw[0] == '{' {
-		_ = unmarshalLoose(raw, &a)
+	return ""
+}
+
+// obj is the object at key, nil when there is none.
+//
+//go:noinline
+func (o jobj) obj(key string) jobj { return asObj(o[key]) }
+
+// list is the array at key, nil when there is none.
+//
+//go:noinline
+func (o jobj) list(key string) []any {
+	l, _ := o[key].([]any)
+	return l
+}
+
+// args is a call's arguments: an object, or a string holding one, as Codex
+// writes them.
+//
+//go:noinline
+func args(v any) jobj {
+	if s, ok := v.(string); ok {
+		o, _ := parseObj([]byte(s))
+		return o
 	}
-	return a
+	return asObj(v)
 }
 
 // command is the command a shell call runs: a string, or an argv joined.
 // Codex runs ["bash", "-lc", "script"], which shows as the script.
-func (a toolArgs) command() string {
-	for _, raw := range []json.RawMessage{a.Command, a.Cmd} {
-		raw = bytes.TrimSpace(raw)
-		if len(raw) == 0 {
-			continue
-		}
-		var s string
-		if json.Unmarshal(raw, &s) == nil {
-			return s
-		}
-		var argv []string
-		if json.Unmarshal(raw, &argv) == nil && len(argv) > 0 {
+//
+//go:noinline
+func command(a jobj) string {
+	for _, k := range []string{"command", "cmd"} {
+		switch v := a[k].(type) {
+		case string:
+			if v != "" {
+				return v
+			}
+		case []any:
+			argv := make([]string, 0, len(v))
+			for _, x := range v {
+				if s, ok := x.(string); ok {
+					argv = append(argv, s)
+				}
+			}
 			if len(argv) == 3 && (argv[1] == "-lc" || argv[1] == "-c") {
 				return argv[2]
 			}
-			return strings.Join(argv, " ")
+			if len(argv) > 0 {
+				return strings.Join(argv, " ")
+			}
 		}
 	}
 	return ""
 }
 
-// file is the file a call acts on.
-func (a toolArgs) file() string {
-	for _, s := range []string{a.FilePath, a.AbsPath, a.Path, a.DirPath} {
-		if s != "" {
-			return s
-		}
-	}
-	return ""
-}
+// fileOf is the file a call acts on.
+//
+//go:noinline
+func fileOf(a jobj) string { return a.str("file_path", "absolute_path", "path", "dir_path") }
 
-// target is the one line that says what a call acts on.
-func (a toolArgs) target() string {
-	for _, s := range []string{a.file(), a.command(), a.Pattern, a.URL, a.Query, a.Skill, a.Description, a.Objective, a.Prompt} {
-		if s != "" {
-			return s
-		}
+// targetOf is the one line that says what a call acts on.
+//
+//go:noinline
+func targetOf(a jobj) string {
+	if s := fileOf(a); s != "" {
+		return s
 	}
-	return ""
+	if s := command(a); s != "" {
+		return s
+	}
+	return a.str("pattern", "url", "query", "skill", "description", "objective", "prompt")
 }
 
 // callEntry is a tool call as decoded: a tool call with its target and, for
 // an edit, its diff; a todo list; or a plan.
-func callEntry(name, id string, class toolClass, a toolArgs) []Entry {
+func callEntry(name, id string, class toolClass, a jobj) []Entry {
 	raw := &rawEntry{}
 	raw.tool, _ = cutString(oneLine(name), 4*toolMax)
 	e := Entry{Role: RoleAssistant, Kind: KindToolCall, ToolID: cleanToolID(id), raw: raw}
 	switch class {
 	case classTodos:
 		e.Kind = KindTodos
-		raw.todos = todoItems(a.Todos)
+		raw.todos = todoItems(a["todos"])
 		if raw.todos == nil {
-			raw.todos = todoItems(a.Plan)
+			raw.todos = todoItems(a["plan"])
 		}
 		return []Entry{e}
 	case classPlan:
-		plan := planText(a.Plan)
+		plan := planText(a["plan"])
 		if plan == "" {
 			break
 		}
@@ -338,27 +365,20 @@ func callEntry(name, id string, class toolClass, a toolArgs) []Entry {
 		raw.plan, raw.textCut = cutString(plan, rawTextMax)
 		return []Entry{e}
 	case classEdit:
-		old, nw := a.OldString, a.NewString
-		if old == "" && nw == "" {
-			old, nw = a.OldStr, a.NewStr
-		}
-		raw.diff = &diffSrc{file: a.file(), pairs: [][2]string{{old, nw}}}
+		old, nw := a.str("old_string", "old_str"), a.str("new_string", "new_str")
+		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{old, nw}}}
 	case classWrite:
-		text := a.Content
-		if text == "" {
-			text = a.FileText
-		}
-		raw.diff = &diffSrc{file: a.file(), pairs: [][2]string{{"", text}}}
+		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{"", a.str("content", "file_text")}}}
 	case classPatch:
-		patch := a.Input
+		patch := a.str("input")
 		if patch == "" {
-			patch = a.command()
+			patch = command(a)
 		}
 		if out := patchEntries(name, e.ToolID, patch); len(out) > 0 {
 			return out
 		}
 	}
-	raw.target, _ = cutString(oneLine(a.target()), 4*targetMax)
+	raw.target, _ = cutString(oneLine(targetOf(a)), 4*targetMax)
 	return []Entry{e}
 }
 
@@ -380,17 +400,12 @@ func patchEntries(name, id, patch string) []Entry {
 }
 
 // planText is a plan as text: a string, or Codex's list of steps.
-func planText(raw json.RawMessage) string {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return ""
-	}
-	var s string
-	if json.Unmarshal(raw, &s) == nil {
+func planText(v any) string {
+	if s, ok := v.(string); ok {
 		return s
 	}
 	var b strings.Builder
-	for _, t := range todoItems(raw) {
+	for _, t := range todoItems(v) {
 		b.WriteString("- ")
 		b.WriteString(t.Text)
 		b.WriteByte('\n')
@@ -400,39 +415,16 @@ func planText(raw json.RawMessage) string {
 
 // todoItems decodes a todo list: objects with a text under any of the names
 // the harnesses use and a status, or a Markdown checklist in one string.
-func todoItems(raw json.RawMessage) []Todo {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return nil
-	}
-	if raw[0] == '"' {
-		var s string
-		if json.Unmarshal(raw, &s) != nil {
-			return nil
-		}
+func todoItems(v any) []Todo {
+	if s, ok := v.(string); ok {
 		return markdownTodos(s)
 	}
-	var items []struct {
-		Content     string `json:"content"`
-		Description string `json:"description"`
-		Step        string `json:"step"`
-		Title       string `json:"title"`
-		Text        string `json:"text"`
-		Status      string `json:"status"`
-	}
-	if unmarshalLoose(raw, &items) != nil {
-		return nil
-	}
+	items, _ := v.([]any)
 	var out []Todo
 	for _, it := range items[:min(len(items), todosMax)] {
-		text := it.Content
-		for _, s := range []string{it.Description, it.Step, it.Title, it.Text} {
-			if text == "" {
-				text = s
-			}
-		}
-		text, _ = cutString(oneLine(text), 4*targetMax)
-		status, _ := cutString(oneLine(it.Status), 4*toolMax)
+		o := asObj(it)
+		text, _ := cutString(oneLine(o.str("content", "description", "step", "title", "text")), 4*targetMax)
+		status, _ := cutString(oneLine(o.str("status")), 4*toolMax)
 		out = append(out, Todo{Text: text, Status: status})
 	}
 	return out
@@ -441,7 +433,9 @@ func todoItems(raw json.RawMessage) []Todo {
 // markdownTodos reads "- [ ] item", "- [x] item" and "- [~] item" lines.
 func markdownTodos(s string) []Todo {
 	var out []Todo
-	for line := range strings.SplitSeq(s, "\n") {
+	for rest := s; rest != ""; {
+		var line string
+		line, rest, _ = strings.Cut(rest, "\n")
 		line = strings.TrimSpace(line)
 		line = strings.TrimLeft(line, "-*0123456789. ")
 		if len(line) < 4 || line[0] != '[' || line[2] != ']' {
@@ -484,7 +478,9 @@ func parseUnified(s, fallback string) []filePatch {
 	var out []filePatch
 	var hunk *ccPatch
 	oldLeft, newLeft := 0, 0
-	for line := range strings.SplitSeq(s, "\n") {
+	for rest := s; rest != ""; {
+		var line string
+		line, rest, _ = strings.Cut(rest, "\n")
 		line = strings.TrimSuffix(line, "\r")
 		if hunk != nil && (oldLeft > 0 || newLeft > 0) {
 			op := byte(' ')
@@ -627,7 +623,9 @@ func parseApplyPatch(s string) []filePatch {
 		cur, adding = &out[len(out)-1], add
 		inChunk = add
 	}
-	for line := range strings.SplitSeq(s, "\n") {
+	for rest := s; rest != ""; {
+		var line string
+		line, rest, _ = strings.Cut(rest, "\n")
 		line = strings.TrimSuffix(line, "\r")
 		switch {
 		case strings.HasPrefix(line, "*** Update File: "):

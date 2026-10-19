@@ -42,7 +42,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -693,7 +692,14 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			}
 			add = append(add, e)
 		}
-		out = slices.Insert(out, at, add...)
+		// add goes in at the message's first place: a plain copy, since
+		// slices.Insert is generic code of its own per element type.
+		n := len(out)
+		out = append(out, add...)
+		if at < n {
+			copy(out[at+len(add):], out[at:n])
+			copy(out[at:], add)
+		}
 		if b.keepLast > 0 && len(out) >= 2*b.keepLast {
 			// A message written again is kept whole (see back).
 			cut := len(out) - b.keepLast
@@ -939,6 +945,8 @@ func (r *reader) clean(s string, limit int) (string, bool) {
 }
 
 // cutString cuts s to limit bytes on a rune boundary.
+//
+//go:noinline
 func cutString(s string, limit int) (string, bool) {
 	if len(s) <= limit {
 		return s, false
@@ -951,6 +959,8 @@ func cutString(s string, limit int) (string, bool) {
 }
 
 // oneLine is the first non-empty line of s.
+//
+//go:noinline
 func oneLine(s string) string {
 	for line := range strings.SplitSeq(s, "\n") {
 		if t := strings.TrimSpace(line); t != "" {
@@ -961,6 +971,8 @@ func oneLine(s string) string {
 }
 
 // headLines keeps the first n lines of s, reporting whether it dropped any.
+//
+//go:noinline
 func headLines(s string, n int) (string, bool) {
 	s = strings.TrimRight(s, "\n")
 	idx := 0

@@ -1,8 +1,6 @@
 package transcriptview
 
 import (
-	"bytes"
-	"encoding/json"
 	"strconv"
 	"strings"
 )
@@ -24,68 +22,29 @@ import (
 //
 // Rollouts written before the payload wrapper hold the response items bare,
 // one per line, and those decode too.
-type cxRecord struct {
-	Timestamp string          `json:"timestamp"`
-	Type      string          `json:"type"`
-	Payload   json.RawMessage `json:"payload"`
-}
-
-// cxItem is a response item or an event: every field the conversation uses.
-type cxItem struct {
-	Type    string `json:"type"`
-	Role    string `json:"role"`
-	Content []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	} `json:"content"`
-	Summary []struct {
-		Text string `json:"text"`
-	} `json:"summary"`
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-	Input     string          `json:"input"`
-	CallID    string          `json:"call_id"`
-	Status    string          `json:"status"`
-	Output    json.RawMessage `json:"output"`
-	Action    struct {
-		Command json.RawMessage `json:"command"`
-		Query   string          `json:"query"`
-	} `json:"action"`
-	// Events.
-	Message string `json:"message"`
-	Reason  string `json:"reason"`
-	CWD     string `json:"cwd"`
-}
 
 // codexLine decodes one rollout line.
 func codexLine(r *reader, line []byte, off int64) (decoded, bool) {
-	var rec cxRecord
-	if err := unmarshalLoose(line, &rec); err != nil {
+	rec, ok := parseObj(line)
+	if !ok {
 		return decoded{}, false
 	}
-	payload := rec.Payload
-	switch rec.Type {
+	it := rec.obj("payload")
+	switch typ := rec.str("type"); typ {
 	case "response_item", "event_msg":
 	case "session_meta", "turn_context", "compacted", "":
 		return decoded{}, true
 	default:
 		// A bare response item, as older rollouts write them.
-		payload = line
-	}
-	if len(payload) == 0 || payload[0] != '{' {
-		return decoded{}, true
-	}
-	var it cxItem
-	if err := unmarshalLoose(payload, &it); err != nil {
-		return decoded{}, true
+		it = rec
 	}
 	var out []Entry
-	if rec.Type == "event_msg" {
-		out = codexEvent(&it)
+	if rec.str("type") == "event_msg" {
+		out = codexEvent(it)
 	} else {
-		out = codexItem(&it)
+		out = codexItem(it)
 	}
-	at := parseAt(rec.Timestamp)
+	at := parseAt(rec.str("timestamp"))
 	for i := range out {
 		out[i].ID, out[i].At = offID(off, i), at
 	}
@@ -93,11 +52,11 @@ func codexLine(r *reader, line []byte, off int64) (decoded, bool) {
 }
 
 // codexItem turns one response item into entries.
-func codexItem(it *cxItem) []Entry {
-	switch it.Type {
+func codexItem(it jobj) []Entry {
+	switch it.str("type") {
 	case "message":
 		role := RoleUser
-		switch it.Role {
+		switch it.str("role") {
 		case "assistant":
 			role = RoleAssistant
 		case "user":
@@ -107,13 +66,15 @@ func codexItem(it *cxItem) []Entry {
 			return nil
 		}
 		var out []Entry
-		for _, c := range it.Content {
-			switch c.Type {
+		for _, c := range it.list("content") {
+			c := asObj(c)
+			switch c.str("type") {
 			case "input_text", "output_text", "text":
-				if role == RoleUser && codexInjected(c.Text) {
+				text := c.str("text")
+				if role == RoleUser && codexInjected(text) {
 					continue
 				}
-				if e, ok := textEntry(role, KindText, c.Text); ok {
+				if e, ok := textEntry(role, KindText, text); ok {
 					out = append(out, e)
 				}
 			case "input_image":
@@ -123,39 +84,41 @@ func codexItem(it *cxItem) []Entry {
 		return out
 	case "reasoning":
 		var parts []string
-		for _, s := range it.Summary {
-			parts = append(parts, s.Text)
+		for _, s := range it.list("summary") {
+			parts = append(parts, asObj(s).str("text"))
 		}
 		if e, ok := textEntry(RoleAssistant, KindThinking, strings.Join(parts, "\n\n")); ok {
 			return []Entry{e}
 		}
 	case "function_call":
-		return callEntry(it.Name, it.CallID, codexClass(it.Name), decodeArgs(it.Arguments))
+		name := it.str("name")
+		return callEntry(name, it.str("call_id"), codexClass(name), args(it["arguments"]))
 	case "custom_tool_call":
-		return callEntry(it.Name, it.CallID, codexClass(it.Name), toolArgs{Input: it.Input})
+		name := it.str("name")
+		return callEntry(name, it.str("call_id"), codexClass(name), jobj{"input": it.str("input")})
 	case "local_shell_call":
-		return callEntry("shell", it.CallID, classOther, toolArgs{Command: it.Action.Command})
+		return callEntry("shell", it.str("call_id"), classOther, it.obj("action"))
 	case "web_search_call":
-		e := callEntry("web_search", "", classOther, toolArgs{Query: it.Action.Query})
+		e := callEntry("web_search", "", classOther, it.obj("action"))
 		e[0].Status = StatusOK
 		return e
 	case "function_call_output", "custom_tool_call_output":
-		text, failed := codexOutput(it.Output)
-		return []Entry{resultEntry(it.CallID, text, failed)}
+		text, failed := codexOutput(it["output"])
+		return []Entry{resultEntry(it.str("call_id"), text, failed)}
 	}
 	return nil
 }
 
 // codexEvent turns the events that are not repeats of response items into
 // entries.
-func codexEvent(it *cxItem) []Entry {
-	switch it.Type {
+func codexEvent(it jobj) []Entry {
+	switch it.str("type") {
 	case "error", "stream_error":
-		if e, ok := textEntry(RoleAssistant, KindError, it.Message); ok {
+		if e, ok := textEntry(RoleAssistant, KindError, it.str("message")); ok {
 			return []Entry{e}
 		}
 	case "turn_aborted":
-		reason := it.Reason
+		reason := it.str("reason")
 		if reason == "" {
 			reason = "aborted"
 		}
@@ -180,46 +143,31 @@ func codexClass(name string) toolClass {
 // is a string or a list of content items. A shell call's string is either
 // {"output", "metadata": {"exit_code"}} as JSON, or text that starts with
 // "Exit code: N".
-func codexOutput(raw json.RawMessage) (string, bool) {
-	raw = bytes.TrimSpace(raw)
+func codexOutput(v any) (string, bool) {
 	var text string
-	switch {
-	case len(raw) == 0:
-		return "", false
-	case raw[0] == '"':
-		_ = json.Unmarshal(raw, &text)
-	case raw[0] == '[':
-		var items []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		}
-		_ = json.Unmarshal(raw, &items)
+	switch v := v.(type) {
+	case string:
+		text = v
+	case []any:
 		var parts []string
-		for _, it := range items {
-			if it.Type == "input_image" {
+		for _, it := range v {
+			it := asObj(it)
+			if it.str("type") == "input_image" {
 				parts = append(parts, "[image]")
 				continue
 			}
-			parts = append(parts, it.Text)
+			parts = append(parts, it.str("text"))
 		}
 		text = strings.Join(parts, "\n")
-	case raw[0] == '{':
-		var o struct {
-			Content string `json:"content"`
-			Success *bool  `json:"success"`
-		}
-		_ = json.Unmarshal(raw, &o)
-		return o.Content, o.Success != nil && !*o.Success
+	case map[string]any:
+		ok, isBool := v["success"].(bool)
+		return jobj(v).str("content"), isBool && !ok
 	}
 	if t := strings.TrimSpace(text); strings.HasPrefix(t, "{") {
-		var o struct {
-			Output   string `json:"output"`
-			Metadata struct {
-				ExitCode *int `json:"exit_code"`
-			} `json:"metadata"`
-		}
-		if json.Unmarshal([]byte(t), &o) == nil && o.Metadata.ExitCode != nil {
-			return o.Output, *o.Metadata.ExitCode != 0
+		if o, _ := parseObj([]byte(t)); o != nil {
+			if code, ok := o.obj("metadata")["exit_code"].(float64); ok {
+				return o.str("output"), code != 0
+			}
 		}
 	}
 	if rest, ok := strings.CutPrefix(text, "Exit code: "); ok {

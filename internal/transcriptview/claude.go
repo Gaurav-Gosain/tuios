@@ -240,6 +240,8 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 }
 
 // rawText is the raw of a text entry, cut to rawTextMax.
+//
+//go:noinline
 func rawText(s string) *rawEntry {
 	text, cut := cutString(s, rawTextMax)
 	return &rawEntry{text: text, textCut: cut}
