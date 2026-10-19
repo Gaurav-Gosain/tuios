@@ -1620,6 +1620,10 @@ type SessionConfig struct {
 	// session's newest local client while [daemon] display follows, nil
 	// otherwise. The manager stamps it. See display_follow.go.
 	DisplayEnv func(sessionID string) []string
+	// CellSize returns the cell, in pixels, a new pane of the session takes,
+	// ok false when no client has measured one. The manager stamps it. See
+	// Daemon.sessionCellSize.
+	CellSize func(sessionID string) (w, h int, ok bool)
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.

@@ -901,6 +901,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetSSHAgent(cfg.SSHAgent)
 	displaySource := d.displayVars
 	d.manager.displaySource.Store(&displaySource)
+	cellSource := d.sessionCellSize
+	d.manager.cellSource.Store(&cellSource)
 	d.SetDisplay(cfg.Display)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)

@@ -55,6 +55,9 @@ type Manager struct {
 	// display. See display_follow.go.
 	displayFollow atomic.Bool
 	displaySource atomic.Pointer[func(sessionID string) []string]
+	// cellSource gives a new pane its session's cell in pixels. See
+	// Daemon.sessionCellSize.
+	cellSource atomic.Pointer[func(sessionID string) (w, h int, ok bool)]
 	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
 	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
 	// spawn time through HerdrEnv. See herdr_compat.go.
@@ -310,6 +313,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.DisplayEnv == nil {
 		cfg.DisplayEnv = m.displayEnv
+	}
+	if cfg.CellSize == nil {
+		cfg.CellSize = m.cellSize
 	}
 	if cfg.history == nil {
 		cfg.history = m.history
