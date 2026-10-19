@@ -1,0 +1,12 @@
+<!-- 40x6 -->
+<tml version="1">
+  <state>{"cpu": 43, "done": 0.4}</state>
+  <col>
+    <gauge value="{state.cpu}" max="100" label="CPU"/>
+    <gauge value="98.8" role="success"/>
+    <gauge value="{state.missing}" w="20"/>
+    <progress value="{state.done}"/>
+    <progress value="0.75" label="3 of 4" role="success"/>
+    <progress value="1.5" w="12"/>
+  </col>
+</tml>

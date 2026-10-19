@@ -1,0 +1,52 @@
+=== truecolor 40x4
+|Branch  feat/tml-loom                   |
+|Ahead   2                               |
+|Risk    2 risky changes                 |
+|Diff    14 files, +320 -88              |
+--- styles
+|aaaaaabbcccccccccccccbbbbbbbbbbbbbbbbbbb|
+|aaaaabbbcbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaabbbbdbdddddbdddddddbbbbbbbbbbbbbbbbb|
+|aaaabbbbccbccccccbccccbcccbbbbbbbbbbbbbb|
+a: fg=dim bg=panel
+b: bg=panel
+c: fg=fg bg=panel
+d: fg=warning bg=panel
+=== 256 40x4
+|Branch  feat/tml-loom                   |
+|Ahead   2                               |
+|Risk    2 risky changes                 |
+|Diff    14 files, +320 -88              |
+--- styles
+|aaaaaabbcccccccccccccbbbbbbbbbbbbbbbbbbb|
+|aaaaabbbcbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaabbbbdbdddddbdddddddbbbbbbbbbbbbbbbbb|
+|aaaabbbbccbccccccbccccbcccbbbbbbbbbbbbbb|
+a: fg=dim bg=panel
+b: bg=panel
+c: fg=fg bg=panel
+d: fg=warning bg=panel
+=== 16 40x4
+|Branch  feat/tml-loom                   |
+|Ahead   2                               |
+|Risk    2 risky changes                 |
+|Diff    14 files, +320 -88              |
+--- styles
+|aaaaaa  bbbbbbbbbbbbb                   |
+|aaaaa   b                               |
+|aaaa    c ccccc ccccccc                 |
+|aaaa    bb bbbbbb bbbb bbb              |
+a: fg=dim
+b: fg=fg
+c: fg=warning
+=== ascii 40x4
+|Branch  feat/tml-loom                   |
+|Ahead   2                               |
+|Risk    2 risky changes                 |
+|Diff    14 files, +320 -88              |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+

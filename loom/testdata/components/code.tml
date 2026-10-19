@@ -1,0 +1,13 @@
+<!-- 36x9 -->
+<tml version="1">
+  <col gap="1">
+    <code lang="go" lines="true" from="9">func main() {
+	fmt.Println("a line long enough to be cut at the edge")
+}</code>
+    <diff>--- a/x.go
++++ b/x.go
+@@ -1 +1 @@
+-old
++new</diff>
+  </col>
+</tml>

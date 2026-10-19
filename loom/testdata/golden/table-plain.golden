@@ -1,0 +1,60 @@
+=== truecolor 40x5
+|KEY                            VALUE    |
+|alpha                              1    |
+|beta                              22    |
+|a very long key that is cut      333    |
+|                                        |
+--- styles
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaabbbb|
+|cccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdbbbb|
+|ccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbddbbbb|
+|cbccccbccccbcccbccccbccbcccbbbbbbdddbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=mute bg=panel
+b: bg=panel
+c: fg=dim bg=panel
+d: fg=fg bg=panel
+=== 256 40x5
+|KEY                            VALUE    |
+|alpha                              1    |
+|beta                              22    |
+|a very long key that is cut      333    |
+|                                        |
+--- styles
+|aaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaabbbb|
+|cccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdbbbb|
+|ccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbddbbbb|
+|cbccccbccccbcccbccccbccbcccbbbbbbdddbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=mute bg=panel
+b: bg=panel
+c: fg=dim bg=panel
+d: fg=fg bg=panel
+=== 16 40x5
+|KEY                            VALUE    |
+|alpha                              1    |
+|beta                              22    |
+|a very long key that is cut      333    |
+|                                        |
+--- styles
+|aaa                            aaaaa    |
+|bbbbb                              c    |
+|bbbb                              cc    |
+|b bbbb bbbb bbb bbbb bb bbb      ccc    |
+|                                        |
+a: fg=mute
+b: fg=dim
+c: fg=fg
+=== ascii 40x5
+|KEY                            VALUE    |
+|alpha                              1    |
+|beta                              22    |
+|a very long key that is cut      333    |
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+

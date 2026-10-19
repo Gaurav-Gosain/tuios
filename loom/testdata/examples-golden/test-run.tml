@@ -1,0 +1,82 @@
+<!-- 148x34 frame, 100x30 frame, 64x30 frame -->
+<tml version="1" title="Test run">
+  <state>{"tab": "sum", "passed": 412, "failed": 5, "skipped": 9, "wall": "18.4s", "ran": 421, "total": 426,
+    "trend": {"passed": [398, 399, 399, 401, 400, 402, 403, 401, 404, 405, 404, 406, 408, 407, 409, 410, 410, 409, 411, 412],
+              "failed": [1, 0, 2, 0, 0, 1, 0, 3, 0, 0, 1, 0, 0, 2, 0, 0, 1, 0, 2, 5],
+              "wall": [22.9, 21.4, 20.2, 19.8, 20.5, 24.1, 21.7, 20.9, 20.4, 19.6, 20.0, 21.3, 19.9, 20.7, 19.5, 20.2, 22.0, 20.6, 20.5, 18.4]},
+    "byPkg": [{"pkg": "internal/session", "secs": 6.2}, {"pkg": "internal/app", "secs": 4.8}, {"pkg": "vt", "secs": 3.1},
+              {"pkg": "internal/tape", "secs": 1.4}, {"pkg": "internal/config", "secs": 0.9}, {"pkg": "internal/terminal", "secs": 0.8},
+              {"pkg": "internal/federation", "secs": 0.6}, {"pkg": "progstatus", "secs": 0.3}],
+    "runs": [21.2, 20.8, 22.4, 19.9, 20.3, 23.8, 21.0, 20.6, 19.7, 20.1, 22.9, 21.4, 20.2, 19.8, 20.5, 24.1, 21.7, 20.9, 20.4, 19.6, 20.0, 21.3, 19.9, 20.7, 19.5, 20.2, 22.0, 20.6, 20.5, 18.4],
+    "flaky": [1, 1, 2, 1, 1, 3, 2, 1, 1, 1, 2, 2, 1, 1, 1, 4, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 3, 2, 2, 3],
+    "allocs": [41, 41, 42, 41, 41, 43, 42, 42, 41, 41, 42, 42, 41, 40, 40, 41, 40, 40, 39, 39, 39, 38, 38, 38, 37, 37, 37, 36, 36, 35],
+    "failures": [
+      {"pkg": "internal/session", "test": "TestAttachRace", "ms": 2210, "line": "reply hook ran after detach"},
+      {"pkg": "internal/session", "test": "TestAttachReplay", "ms": 1950, "line": "snapshot seq 41, want 42"},
+      {"pkg": "internal/app", "test": "TestDockClick", "ms": 840, "line": "click at col 61 hit git, want cpu"},
+      {"pkg": "internal/app", "test": "TestDockCustomWidth", "ms": 610, "line": "width 23, want 21"},
+      {"pkg": "vt", "test": "TestKittyPlaceholder", "ms": 120, "line": "row 3 lost its image id"}]}</state>
+  <col pad="1 0" gap="1">
+    <stack>
+      <tabs id="tabs" value="state.tab">
+        <tab id="sum" title="Summary">
+          <col gap="1">
+            <row gap="2" if="view.band == 'wide'">
+              <stack w="24"><stat h="3" label="passed" value="{state.passed}" delta="+12" role="success"/><sparkline values="state.trend.passed" role="success" pad="2 0 0 2"/></stack>
+              <stack w="24"><stat h="3" label="failed" value="{state.failed}" delta="+3" role="error"/><sparkline values="state.trend.failed" role="error" pad="2 0 0 2"/></stack>
+              <stack w="24"><stat h="3" label="skipped" value="{state.skipped}" role="dim"/></stack>
+              <stack w="24"><stat h="3" label="wall time" value="{state.wall}" delta="-2.1s"/><sparkline values="state.trend.wall" role="info" pad="2 0 0 2"/></stack>
+              <col w="fill">
+                <row><text role="dim">pass rate</text><spacer/><text role="mute">{state.ran} of {state.total} ran</text></row>
+                <gauge value="{pct(state.passed, state.passed + state.failed)}" role="success"/>
+                <text role="mute">target 99.5%</text>
+              </col>
+            </row>
+            <row gap="3" if="view.band != 'wide'">
+              <stat label="passed" value="{state.passed}" role="success"/>
+              <stat label="failed" value="{state.failed}" role="error"/>
+              <stat label="skipped" value="{state.skipped}" role="dim" if="view.band == 'medium'"/>
+              <stat label="" value="{state.wall}" if="view.band == 'medium'"/>
+              <spacer/>
+              <gauge value="{pct(state.passed, state.passed + state.failed)}" role="success" w="20"/>
+            </row>
+            <row gap="4">
+              <col w="fill:11">
+                <row gap="2"><heading level="2" w="fill">Time by package</heading><text role="mute">seconds</text></row>
+                <bar data="state.byPkg" x="pkg" y="secs" dir="h" role="error" h="{view.band == 'wide' ? 8 : 5}"/>
+              </col>
+              <col w="fill:9" if="view.band != 'narrow'">
+                <heading level="2">Suite time, last 30 runs</heading>
+                <line data="state.runs" role="info" h="6" axis="true" if="view.band == 'wide'"/>
+                <row gap="1"><text role="dim" w="6">wall</text><sparkline values="state.runs" role="info" w="fill"/><text w="6"><b>{state.wall}</b></text></row>
+                <row gap="1"><text role="dim" w="6">flaky</text><sparkline values="state.flaky" role="warning" w="fill"/><text w="6"><b>3</b></text></row>
+                <row gap="1"><text role="dim" w="6">alloc</text><sparkline values="state.allocs" role="series1" w="fill"/><text w="6"><b>35M</b></text></row>
+              </col>
+            </row>
+            <card title="Failures" meta="{state.failed}" role="error">
+              <table id="failures" rows="state.failures" key="test" sort="ms:desc" select="single" on-select="emit('open', event.row)">
+                <column field="pkg" title="Package" w="20"/>
+                <column field="test" title="Test" w="22"/>
+                <column field="ms" title="Time" align="right" w="7" format="dur(value, 'ms')" sort="true"/>
+                <column field="line" title="First error line" w="fill" if="view.band == 'wide'"/>
+              </table>
+            </card>
+            <text if="view.band != 'narrow'"><c role="info">attach_test.go:184</c>  reply hook ran after detach <c role="warning">(seen in 3 of the last 10 runs)</c></text>
+          </col>
+        </tab>
+        <tab id="fail" title="Failures {state.failed}"><text>The failures, one per row.</text></tab>
+        <tab id="log" title="Log"><code>ok  tuios.dev/vt  12.1s</code></tab>
+      </tabs>
+      <text align="right" role="mute" if="view.band != 'narrow'">go test ./... · 14:07 · fix/token-refresh</text>
+    </stack>
+    <spacer/>
+    <row gap="2">
+      <button key="r" kind="primary" on-press="emit('rerun', state.failures)">Rerun failed</button>
+      <button key="o" on-press="emit('log')">Open log</button>
+      <button key="e" on-press="emit('edit')" if="view.band != 'narrow'">Open in editor</button>
+      <button key="c" on-press="copy(state.failures)" if="view.band == 'wide'">Copy names</button>
+      <spacer/>
+      <text role="mute"><kbd>s</kbd> sort   <kbd>tab</kbd> next   <kbd>esc</kbd> close</text>
+    </row>
+  </col>
+</tml>

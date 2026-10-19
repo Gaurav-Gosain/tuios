@@ -1,0 +1,75 @@
+=== truecolor 30x5
+|▌ claude     » working        |
+|  codex      ○ idle           |
+|  gemini     ✓ done           |
+|                              |
+|                              |
+--- styles
+|abccccccbbbbbdbeeeeeeebbbbbbbb|
+|ffgggggffffffhfiiiifffffffffff|
+|ffggggggfffffjfiiiifffffffffff|
+|ffffffffffffffffffffffffffffff|
+|ffffffffffffffffffffffffffffff|
+a: fg=accent bg=surface
+b: bg=surface
+c: fg=fg bg=surface
+d: fg=info bg=surface
+e: fg=dim bg=surface
+f: bg=panel
+g: fg=fg bg=panel
+h: fg=mute bg=panel
+i: fg=dim bg=panel
+j: fg=success bg=panel
+=== 256 30x5
+|▌ claude     » working        |
+|  codex      ○ idle           |
+|  gemini     ✓ done           |
+|                              |
+|                              |
+--- styles
+|abccccccbbbbbdbeeeeeeebbbbbbbb|
+|ffgggggffffffhfiiiifffffffffff|
+|ffggggggfffffjfiiiifffffffffff|
+|ffffffffffffffffffffffffffffff|
+|ffffffffffffffffffffffffffffff|
+a: fg=accent bg=surface
+b: bg=surface
+c: fg=fg bg=surface
+d: fg=info bg=surface
+e: fg=dim bg=surface
+f: bg=panel
+g: fg=fg bg=panel
+h: fg=mute bg=panel
+i: fg=dim bg=panel
+j: fg=success bg=panel
+=== 16 30x5
+|▌ claude     » working        |
+|  codex      ○ idle           |
+|  gemini     ✓ done           |
+|                              |
+|                              |
+--- styles
+|a bbbbbb     c ddddddd        |
+|  bbbbb      e dddd           |
+|  bbbbbb     f dddd           |
+|                              |
+|                              |
+a: fg=accent
+b: fg=fg
+c: fg=info
+d: fg=dim
+e: fg=mute
+f: fg=success
+=== ascii 30x5
+|> claude     ~ working        |
+|  codex      o idle           |
+|  gemini     v done           |
+|                              |
+|                              |
+--- styles
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+

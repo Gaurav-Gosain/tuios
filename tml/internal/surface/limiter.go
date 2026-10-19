@@ -1,3 +1,7 @@
+// Package surface holds the rate limits a TML host applies. The renderer
+// parts (view state, the local actions and dirty tracking) moved to
+// tuios.dev/loom. The limits stay here until tuios, which owns that policy,
+// takes them over.
 package surface
 
 import (

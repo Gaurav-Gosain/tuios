@@ -1,0 +1,16 @@
+<!-- 48x34 -->
+<tml version="1">
+  <state>{"byPkg": [{"pkg": "vt", "secs": 4}, {"pkg": "internal/app", "secs": 2.5}, {"pkg": "tml", "secs": 1}],
+    "series": [{"t": 1, "ms": 20, "p95": 40}, {"t": 2, "ms": 24, "p95": 51}, {"t": 3, "ms": 22, "p95": 45}, {"t": 4, "ms": 30, "p95": 60}, {"t": 5, "ms": 26, "p95": 52}],
+    "mem": [{"mb": 120}, {"mb": 150}, {"mb": 140}, {"mb": 190}, {"mb": 210}, {"mb": 205}], "secs": [41, 39, 44, 40, 52, 47, 38],
+    "latency": [1, 2, 2, 3, 3, 3, 4, 4, 5, 9, 12, 2, 3, 3, 4]}</state>
+  <col gap="1">
+    <bar data="state.byPkg" x="pkg" y="secs" dir="h" title="Seconds by package"/>
+    <bar data="state.secs" h="4" role="info"/>
+    <line data="state.series" x="t" y="ms,p95" h="6" axis="true" title="Latency"/>
+    <area data="state.mem" y="mb" h="4" role="series3"/>
+    <row gap="1"><text>trend</text><sparkline values="state.secs" role="dim"/></row>
+    <histogram values="state.latency" bins="8" h="5"/>
+    <row gap="2"><heatmap data="[]"/><pie data="[]"/></row>
+  </col>
+</tml>

@@ -1,0 +1,4 @@
+{"type":"row","gap":1,"on-press":"emit('click')","children":[
+ {"type":"text","role":"accent","children":[" feat/tml"]},
+ {"type":"badge","role":"success","children":["↑2"]}, {"type":"badge","role":"warning","children":["●3"]},
+ {"type":"sparkline","values":[2,5,3,8,4,9],"w":6,"role":"dim"}]}

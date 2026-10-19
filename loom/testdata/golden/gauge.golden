@@ -1,0 +1,77 @@
+=== truecolor 40x6
+|CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%|
+|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%|
+|━━━━━━━━━━━━━━━━━━ -                    |
+|██████████████▍░░░░░░░░░░░░░░░░░░░░░ 40%|
+|████████████████████████▊░░░░░░░░ 3 of 4|
+|███████ 100%                            |
+--- styles
+|aaabccccccccccccccddddddddddddddddddbeee|
+|ffffffffffffffffffffffffffffffffffbeeeee|
+|ddddddddddddddddddbebbbbbbbbbbbbbbbbbbbb|
+|cccccccccccccccdddddddddddddddddddddbeee|
+|fffffffffffffffffffffffffddddddddbegeege|
+|cccccccbeeeebbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=dim bg=panel
+b: bg=panel
+c: fg=accent bg=panel
+d: fg=track bg=panel
+e: fg=fg bg=panel bold
+f: fg=success bg=panel
+g: bg=panel bold
+=== 256 40x6
+|CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%|
+|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%|
+|━━━━━━━━━━━━━━━━━━ -                    |
+|██████████████▍░░░░░░░░░░░░░░░░░░░░░ 40%|
+|████████████████████████▊░░░░░░░░ 3 of 4|
+|███████ 100%                            |
+--- styles
+|aaabccccccccccccccddddddddddddddddddbeee|
+|ffffffffffffffffffffffffffffffffffbeeeee|
+|ddddddddddddddddddbebbbbbbbbbbbbbbbbbbbb|
+|cccccccccccccccdddddddddddddddddddddbeee|
+|fffffffffffffffffffffffffddddddddbegeege|
+|cccccccbeeeebbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=dim bg=panel
+b: bg=panel
+c: fg=accent bg=panel
+d: fg=success-tint bg=panel
+e: fg=fg bg=panel bold
+f: fg=success bg=panel
+g: bg=panel bold
+=== 16 40x6
+|CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%|
+|━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%|
+|━━━━━━━━━━━━━━━━━━ -                    |
+|██████████████▍░░░░░░░░░░░░░░░░░░░░░ 40%|
+|████████████████████████▊░░░░░░░░ 3 of 4|
+|███████ 100%                            |
+--- styles
+|aaa bbbbbbbbbbbbbbcccccccccccccccccc ddd|
+|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee ddddd|
+|cccccccccccccccccc d                    |
+|bbbbbbbbbbbbbbbccccccccccccccccccccc ddd|
+|eeeeeeeeeeeeeeeeeeeeeeeeecccccccc dfddfd|
+|bbbbbbb dddd                            |
+a: fg=dim
+b: fg=accent
+c: fg=mute
+d: fg=fg bold
+e: fg=success
+f: bold
+=== ascii 40x6
+|CPU [#############-----------------] 43%|
+|[################################] 98.8%|
+|[----------------] -                    |
+|[##############--------------------] 40%|
+|[#######################--------] 3 of 4|
+|[#####] 100%                            |
+--- styles
+|                                     aaa|
+|                                   aaaaa|
+|                   a                    |
+|                                     aaa|
+|                                  aaaaaa|
+|        aaaa                            |
+a: bold

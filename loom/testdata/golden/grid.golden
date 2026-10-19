@@ -1,0 +1,59 @@
+=== truecolor 32x5
+| a          b          c        |
+|                                |
+| d         a long               |
+|           text that            |
+|           wraps                |
+--- styles
+|abaccccccccabaccccccccabaccccccc|
+|cccccccccccccccccccccccccccccccc|
+|abaccccccccdcddddccccccccccccccc|
+|cccccccccccddddcddddcccccccccccc|
+|cccccccccccdddddcccccccccccccccc|
+a: bg=accent-tint bold
+b: fg=accent bg=accent-tint bold
+c: bg=panel
+d: fg=fg bg=panel
+=== 256 32x5
+| a          b          c        |
+|                                |
+| d         a long               |
+|           text that            |
+|           wraps                |
+--- styles
+|abaccccccccabaccccccccabaccccccc|
+|cccccccccccccccccccccccccccccccc|
+|abaccccccccdcddddccccccccccccccc|
+|cccccccccccddddcddddcccccccccccc|
+|cccccccccccdddddcccccccccccccccc|
+a: bg=accent-tint bold
+b: fg=accent bg=accent-tint bold
+c: bg=panel
+d: fg=fg bg=panel
+=== 16 32x5
+|a          b          c         |
+|                                |
+|d          a long               |
+|           text that            |
+|           wraps                |
+--- styles
+|a          a          a         |
+|                                |
+|a          b bbbb               |
+|           bbbb bbbb            |
+|           bbbbb                |
+a: fg=accent bold
+b: fg=fg
+=== ascii 32x5
+|[a]        [b]        [c]       |
+|                                |
+|[d]        a long               |
+|           text that            |
+|           wraps                |
+--- styles
+|aaa        aaa        aaa       |
+|                                |
+|aaa                             |
+|                                |
+|                                |
+a: bold

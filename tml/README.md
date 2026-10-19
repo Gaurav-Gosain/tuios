@@ -24,7 +24,7 @@ The package is the language only. It draws nothing. It has:
 - RFC 6902 JSON Patch, applied to the state, with the size limit checked
   after every operation.
 
-The renderer, view state and dirty tracking come later, in tuios.dev/loom.
+The renderer, view state and dirty tracking are in tuios.dev/loom.
 
 The package uses only the standard library. No code from a document runs:
 expressions compute values, and cannot loop, assign or call out.

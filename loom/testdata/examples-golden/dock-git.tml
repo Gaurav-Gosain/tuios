@@ -1,0 +1,7 @@
+<!-- 40x1, 22x1 -->
+<row gap="1" on-press="emit('click')">
+  <text role="accent">&#32;feat/tml</text>
+  <badge role="success">↑2</badge>
+  <badge role="warning">●3</badge>
+  <sparkline values="[2,5,3,8,4,9]" w="6" role="dim"/>
+</row>

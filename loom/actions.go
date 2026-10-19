@@ -1,7 +1,4 @@
-// Package surface holds the parts of a TML host that a renderer owns: view
-// state, the local actions, dirty tracking and rate limits. It is internal
-// to the tml module until tuios.dev/loom takes it over.
-package surface
+package loom
 
 import (
 	"fmt"
@@ -26,21 +23,28 @@ func ParseSort(s string) (SortSpec, bool) {
 	return SortSpec{Field: f, Desc: dir == "desc"}, true
 }
 
-// View is the view state of one client: the open tabs, table sorts, filters,
-// folded cards and focus. Each client keeps its own, so a person and their
-// phone can look at different tabs of one surface. Keys are node ids, or
-// node JSON Pointers for nodes without one.
+// View is the view state of one client: the open tabs, table sorts,
+// filters, folded cards, focus, cursor rows, scroll offsets and split
+// ratios. Each client keeps its own, so a person and their phone can look at
+// different tabs of one surface. Keys are node ids, or node JSON Pointers
+// for nodes without one.
 type View struct {
 	Tabs   map[string]string
 	Sort   map[string]SortSpec
 	Filter map[string]string
 	Fold   map[string]bool
 	Focus  string
+	// Cursor holds the cursor row of a table or list: the row's key field,
+	// or its index when the node names no key.
+	Cursor map[string]string
+	Scroll map[string]int
+	Split  map[string]float64
 }
 
 // NewView returns an empty view.
 func NewView() *View {
-	return &View{Tabs: map[string]string{}, Sort: map[string]SortSpec{}, Filter: map[string]string{}, Fold: map[string]bool{}}
+	return &View{Tabs: map[string]string{}, Sort: map[string]SortSpec{}, Filter: map[string]string{},
+		Fold: map[string]bool{}, Cursor: map[string]string{}, Scroll: map[string]int{}, Split: map[string]float64{}}
 }
 
 // Effect is an action that leaves the document: the host carries it out.

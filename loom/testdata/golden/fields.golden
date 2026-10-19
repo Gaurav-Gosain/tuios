@@ -1,0 +1,86 @@
+=== truecolor 56x7
+|Tag           ▏v0.11.0                                 ▕|
+|Note          ▏Why this deploy                         ▕|
+|Target        ‹ staging ›                               |
+|Canary first  ●━━ on                                    |
+|Dry run       ──○ off                                   |
+|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10%|
+|Checked       [x]                                       |
+--- styles
+|aaabbbbbbbbbbbcdddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaabbbbbbbbbbceeebeeeebeeeeeebbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaaaabbbbbbbbebdddddddbebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbfggbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaabaaabbbbbbbeeebeeebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbddd|
+|aaaaaaabbbbbbbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=dim bg=panel
+b: bg=panel
+c: fg=edge bg=panel
+d: fg=fg bg=panel
+e: fg=mute bg=panel
+f: fg=accent-bright bg=panel
+g: fg=accent bg=panel
+h: fg=track bg=panel
+=== 256 56x7
+|Tag           ▏v0.11.0                                 ▕|
+|Note          ▏Why this deploy                         ▕|
+|Target        ‹ staging ›                               |
+|Canary first  ●━━ on                                    |
+|Dry run       ──○ off                                   |
+|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10%|
+|Checked       [x]                                       |
+--- styles
+|aaabbbbbbbbbbbcdddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaabbbbbbbbbbceeebeeeebeeeeeebbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaaaabbbbbbbbebdddddddbebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbfggbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaabaaabbbbbbbeeebeeebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbddd|
+|aaaaaaabbbbbbbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=dim bg=panel
+b: bg=panel
+c: fg=edge bg=panel
+d: fg=fg bg=panel
+e: fg=mute bg=panel
+f: fg=accent-bright bg=panel
+g: fg=accent bg=panel
+h: fg=success-tint bg=panel
+=== 16 56x7
+|Tag           ▏v0.11.0                                 ▕|
+|Note          ▏Why this deploy                         ▕|
+|Target        ‹ staging ›                               |
+|Canary first  ●━━ on                                    |
+|Dry run       ──○ off                                   |
+|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10%|
+|Checked       [x]                                       |
+--- styles
+|aaa           bccccccc                                 b|
+|aaaa          bbbb bbbb bbbbbb                         b|
+|aaaaaa        b ccccccc b                               |
+|aaaaaa aaaaa  dee cc                                    |
+|aaa aaa       bbb bbb                                   |
+|aaaaaa aaaaa  eeeeeedbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  ccc|
+|aaaaaaa       ddd                                       |
+a: fg=dim
+b: fg=mute
+c: fg=fg
+d: fg=accent-bright
+e: fg=accent
+=== ascii 56x7
+|Tag           [v0.11.0                                 ]|
+|Note          [Why this deploy                         ]|
+|Target        < staging >                               |
+|Canary first  O== on                                    |
+|Dry run       --( ) off                                 |
+|Canary share  ======O==============================  10%|
+|Checked       [x]                                       |
+--- styles
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+

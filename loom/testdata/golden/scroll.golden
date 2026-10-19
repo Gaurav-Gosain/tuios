@@ -1,0 +1,59 @@
+=== truecolor 24x5
+|four     │  one        ┃|
+|five     │  two        ┃|
+|six      ┃  three      ┃|
+|seven    ┃  four       │|
+|eight    ┃  five       │|
+--- styles
+|aaaabbbbbcbbaaabbbbbbbbd|
+|aaaabbbbbcbbaaabbbbbbbbd|
+|aaabbbbbbdbbaaaaabbbbbbd|
+|aaaaabbbbdbbaaaabbbbbbbc|
+|aaaaabbbbdbbaaaabbbbbbbc|
+a: fg=fg bg=panel
+b: bg=panel
+c: fg=edge bg=panel
+d: fg=mute bg=panel
+=== 256 24x5
+|four     │  one        ┃|
+|five     │  two        ┃|
+|six      ┃  three      ┃|
+|seven    ┃  four       │|
+|eight    ┃  five       │|
+--- styles
+|aaaabbbbbcbbaaabbbbbbbbd|
+|aaaabbbbbcbbaaabbbbbbbbd|
+|aaabbbbbbdbbaaaaabbbbbbd|
+|aaaaabbbbdbbaaaabbbbbbbc|
+|aaaaabbbbdbbaaaabbbbbbbc|
+a: fg=fg bg=panel
+b: bg=panel
+c: fg=edge bg=panel
+d: fg=mute bg=panel
+=== 16 24x5
+|four     │  one        ┃|
+|five     │  two        ┃|
+|six      ┃  three      ┃|
+|seven    ┃  four       │|
+|eight    ┃  five       │|
+--- styles
+|aaaa     b  aaa        b|
+|aaaa     b  aaa        b|
+|aaa      b  aaaaa      b|
+|aaaaa    b  aaaa       b|
+|aaaaa    b  aaaa       b|
+a: fg=fg
+b: fg=mute
+=== ascii 24x5
+|four     |  one        #|
+|five     |  two        #|
+|six      #  three      #|
+|seven    #  four       ||
+|eight    #  five       ||
+--- styles
+|                        |
+|                        |
+|                        |
+|                        |
+|                        |
+

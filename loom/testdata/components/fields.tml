@@ -1,0 +1,13 @@
+<!-- 56x7 -->
+<tml version="1">
+  <state>{"envs": ["staging", "production"], "tag": "v0.11.0"}</state>
+  <form id="f">
+    <input name="tag" label="Tag" value="{state.tag}"/>
+    <input name="note" label="Note" placeholder="Why this deploy"/>
+    <select name="env" label="Target" options="state.envs"/>
+    <toggle name="canary" label="Canary first" value="true"/>
+    <toggle name="dry" label="Dry run"/>
+    <slider name="pct" label="Canary share" min="1" max="50" value="10"/>
+    <checkbox name="ok" label="Checked" value="true"/>
+  </form>
+</tml>

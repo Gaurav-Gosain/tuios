@@ -1,0 +1,9 @@
+<!-- 21x6 -->
+<tml version="1">
+  <col>
+    <text wrap="word">日本語のテキストは二つのセルを使う</text>
+    <text wrap="none">表示幅を超えた日本語のテキスト</text>
+    <text wrap="none">emoji 👍🏽 and 🇯🇵 flags, cut</text>
+    <text>e&#769; combining and tab	stop</text>
+  </col>
+</tml>

@@ -1,0 +1,309 @@
+=== truecolor 48x34
+|Seconds by package                              |
+|vt           ███████████████████████████████   4|
+|internal/app ███████████████████▍··········· 2.5|
+|tml          ███████▊·······················   1|
+|                                                |
+|▁▁▁     ▃▃▃ ▁▁▁ ███ ▅▅▅                         |
+|███ ███ ███ ███ ███ ███ ▇▇▇                     |
+|███ ███ ███ ███ ███ ███ ███                     |
+|███ ███ ███ ███ ███ ███ ███                     |
+|                                                |
+|Latency                                         |
+|60│           ⣀              ⢀⣀⡠⠤⠔⠒⠊⠉⠉⠑⠒⠒⠒⠤⠤⠤⠤⣀⣀|
+|  │⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉ ⠉⠉⠉⠉⠉⠒⠒⠒⠒⠒⠔⠒⠊⠉⠁                  |
+|  │                                ⢀⣀⣀⡀         |
+|20│⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠉⠉⠉⠁  ⠈⠉⠉⠉⠉⠉⠉⠉⠒⠒|
+|  └─────────────────────────────────────────────|
+|                                                |
+|                       ⣀⣀⣀⣤⣤⣴⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣤⣤⣤⣤⣴⣶⣶⣶⣶⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|                                                |
+|trend ▃▂▄▂█▆▁                                   |
+|                                                |
+|▂▂▂ ███ ▂▂▂                                     |
+|███ ███ ███                                     |
+|███ ███ ███                                     |
+|███ ███ ███         ▆▆▆     ▆▆▆                 |
+|1                                             12|
+|                                                |
+|<heatmap>            <pie>                      |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaabaabaaaaaaacccccccccccccccccccccccccccccc|
+|ddccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecccf|
+|ddddddddddddceeeeeeeeeeeeeeeeeeeegggggggggggcfff|
+|dddcccccccccceeeeeeeegggggggggggggggggggggggcccf|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|hhhccccchhhchhhchhhchhhccccccccccccccccccccccccc|
+|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
+|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
+|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|aaaaaaaccccccccccccccccccccccccccccccccccccccccc|
+|iigccccccccccchcccccccccccccchhhhhhhhhhhhhhhhhhh|
+|ccghhhhhhhhhhhchhhhhhhhhhhhhhhcccccccccccccccccc|
+|ccgcccccccccccccccccccccccccccccccceeeeccccccccc|
+|iigeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecceeeeeeeeee|
+|ccgggggggggggggggggggggggggggggggggggggggggggggg|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccjjjjjjjjjjjjjjjjjjjjjjjjj|
+|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
+|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
+|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|fffffcdddddddccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccceeeccccceeeccccccccccccccccc|
+|icccccccccccccccccccccccccccccccccccccccccccccii|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|iiiiiiiiicccccccccccciiiiicccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=accent-bright bg=panel
+f: fg=fg bg=panel
+g: fg=edge bg=panel
+h: fg=info bg=panel
+i: fg=mute bg=panel
+j: fg=series3 bg=panel
+=== 256 48x34
+|Seconds by package                              |
+|vt           ███████████████████████████████   4|
+|internal/app ███████████████████▍··········· 2.5|
+|tml          ███████▊·······················   1|
+|                                                |
+|▁▁▁     ▃▃▃ ▁▁▁ ███ ▅▅▅                         |
+|███ ███ ███ ███ ███ ███ ▇▇▇                     |
+|███ ███ ███ ███ ███ ███ ███                     |
+|███ ███ ███ ███ ███ ███ ███                     |
+|                                                |
+|Latency                                         |
+|60│           ⣀              ⢀⣀⡠⠤⠔⠒⠊⠉⠉⠑⠒⠒⠒⠤⠤⠤⠤⣀⣀|
+|  │⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉ ⠉⠉⠉⠉⠉⠒⠒⠒⠒⠒⠔⠒⠊⠉⠁                  |
+|  │                                ⢀⣀⣀⡀         |
+|20│⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠉⠉⠉⠁  ⠈⠉⠉⠉⠉⠉⠉⠉⠒⠒|
+|  └─────────────────────────────────────────────|
+|                                                |
+|                       ⣀⣀⣀⣤⣤⣴⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣤⣤⣤⣤⣴⣶⣶⣶⣶⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|                                                |
+|trend ▃▂▄▂█▆▁                                   |
+|                                                |
+|▂▂▂ ███ ▂▂▂                                     |
+|███ ███ ███                                     |
+|███ ███ ███                                     |
+|███ ███ ███         ▆▆▆     ▆▆▆                 |
+|1                                             12|
+|                                                |
+|<heatmap>            <pie>                      |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaabaabaaaaaaacccccccccccccccccccccccccccccc|
+|ddccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecccf|
+|ddddddddddddceeeeeeeeeeeeeeeeeeeegggggggggggcfff|
+|dddcccccccccceeeeeeeegggggggggggggggggggggggcccf|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|hhhccccchhhchhhchhhchhhccccccccccccccccccccccccc|
+|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
+|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
+|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|aaaaaaaccccccccccccccccccccccccccccccccccccccccc|
+|iigccccccccccchcccccccccccccchhhhhhhhhhhhhhhhhhh|
+|ccghhhhhhhhhhhchhhhhhhhhhhhhhhcccccccccccccccccc|
+|ccgcccccccccccccccccccccccccccccccceeeeccccccccc|
+|iigeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecceeeeeeeeee|
+|ccgggggggggggggggggggggggggggggggggggggggggggggg|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccjjjjjjjjjjjjjjjjjjjjjjjjj|
+|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
+|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
+|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|fffffcdddddddccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
+|eeeceeeceeeccccccccceeeccccceeeccccccccccccccccc|
+|icccccccccccccccccccccccccccccccccccccccccccccii|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|iiiiiiiiicccccccccccciiiiicccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccccccccccccccc|
+a: fg=dim bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=dim bg=panel
+e: fg=accent-bright bg=panel
+f: fg=fg bg=panel
+g: fg=edge bg=panel
+h: fg=info bg=panel
+i: fg=mute bg=panel
+j: fg=series3 bg=panel
+=== 16 48x34
+|Seconds by package                              |
+|vt           ███████████████████████████████   4|
+|internal/app ███████████████████▍            2.5|
+|tml          ███████▊                          1|
+|                                                |
+|▁▁▁     ▃▃▃ ▁▁▁ ███ ▅▅▅                         |
+|███ ███ ███ ███ ███ ███ ▇▇▇                     |
+|███ ███ ███ ███ ███ ███ ███                     |
+|███ ███ ███ ███ ███ ███ ███                     |
+|                                                |
+|Latency                                         |
+|60│           ⣀              ⢀⣀⡠⠤⠔⠒⠊⠉⠉⠑⠒⠒⠒⠤⠤⠤⠤⣀⣀|
+|  │⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉ ⠉⠉⠉⠉⠉⠒⠒⠒⠒⠒⠔⠒⠊⠉⠁                  |
+|  │                                ⢀⣀⣀⡀         |
+|20│⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠉⠉⠉⠁  ⠈⠉⠉⠉⠉⠉⠉⠉⠒⠒|
+|  └─────────────────────────────────────────────|
+|                                                |
+|                       ⣀⣀⣀⣤⣤⣴⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣤⣤⣤⣤⣴⣶⣶⣶⣶⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|                                                |
+|trend ▃▂▄▂█▆▁                                   |
+|                                                |
+|▂▂▂ ███ ▂▂▂                                     |
+|███ ███ ███                                     |
+|███ ███ ███                                     |
+|███ ███ ███         ▆▆▆     ▆▆▆                 |
+|1                                             12|
+|                                                |
+|<heatmap>            <pie>                      |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaabaabaaaaaaa                              |
+|cc           ddddddddddddddddddddddddddddddd   e|
+|cccccccccccc dddddddddddddddddddd            eee|
+|ccc          dddddddd                          e|
+|                                                |
+|fff     fff fff fff fff                         |
+|fff fff fff fff fff fff fff                     |
+|fff fff fff fff fff fff fff                     |
+|fff fff fff fff fff fff fff                     |
+|                                                |
+|aaaaaaa                                         |
+|ggg           f              fffffffffffffffffff|
+|  gfffffffffff fffffffffffffff                  |
+|  g                                dddd         |
+|gggddddddddddddddddddddddddddddddddd  dddddddddd|
+|  gggggggggggggggggggggggggggggggggggggggggggggg|
+|                                                |
+|                       hhhhhhhhhhhhhhhhhhhhhhhhh|
+|hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh|
+|hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh|
+|hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh|
+|                                                |
+|eeeee ccccccc                                   |
+|                                                |
+|ddd ddd ddd                                     |
+|ddd ddd ddd                                     |
+|ddd ddd ddd                                     |
+|ddd ddd ddd         ddd     ddd                 |
+|g                                             gg|
+|                                                |
+|ggggggggg            ggggg                      |
+|                                                |
+|                                                |
+|                                                |
+a: fg=dim bold
+b: bold
+c: fg=dim
+d: fg=accent-bright
+e: fg=fg
+f: fg=info
+g: fg=mute
+h: fg=success
+=== ascii 48x34
+|Seconds by package                              |
+|vt           ###############################   4|
+|internal/app ####################            2.5|
+|tml          ########                          1|
+|                                                |
+|                ### ###                         |
+|### ### ### ### ### ### ###                     |
+|### ### ### ### ### ### ###                     |
+|### ### ### ### ### ### ###                     |
+|                                                |
+|Latency                                         |
+|60|           ++             +++++++++++++++++++|
+|  |+++++++++++  +++++++++++++                   |
+|  |                                 *           |
+|20|********************************* ***********|
+|  +---------------------------------------------|
+|                                                |
+|                       *************************|
+|***********************:::::::::::::::::::::::::|
+|::::::::::::::::::::::::::::::::::::::::::::::::|
+|::::::::::::::::::::::::::::::::::::::::::::::::|
+|                                                |
+|trend -.~.#+_                                   |
+|                                                |
+|    ###                                         |
+|### ### ###                                     |
+|### ### ###                                     |
+|### ### ###         ###     ###                 |
+|1                                             12|
+|                                                |
+|<heatmap>            <pie>                      |
+|                                                |
+|                                                |
+|                                                |
+--- styles
+|aaaaaaaaaaaaaaaaaa                              |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|aaaaaaa                                         |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+|                                                |
+a: bold

@@ -1,0 +1,11 @@
+<tml version="1" title="Layout">
+  <state>{"log": ["one", "two"]}</state>
+  <col gap="1">
+    <row gap="1" align="center"><text>left</text><spacer/><text>right</text></row>
+    <grid cols="3" gap="1"><text>a</text><text>b</text><text>c</text></grid>
+    <stack><text>under</text><text>over</text></stack>
+    <scroll h="12" follow="end"><text each="state.log" as="line">{line}</text></scroll>
+    <split dir="h" ratio="0.4"><text>first</text><text>second</text></split>
+    <row w="50%" h="fill" min-w="10" max-w="80" min-h="1" max-h="20" pad="0 1" grow="1"><text w="fill:2">sized</text></row>
+  </col>
+</tml>

@@ -1,0 +1,73 @@
+=== truecolor 40x6
+|Summary    Failures 3    Log            |
+|━━━━━━━─────────────────────────────────|
+|                                        |
+|All green.                              |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaabbbbccccccccbcbbbbcccbbbbbbbbbbbb|
+|dddddddeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|fffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel bold
+b: bg=panel
+c: fg=mute bg=panel
+d: fg=accent bg=panel
+e: fg=edge bg=panel
+f: fg=fg bg=panel
+=== 256 40x6
+|Summary    Failures 3    Log            |
+|━━━━━━━─────────────────────────────────|
+|                                        |
+|All green.                              |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaabbbbccccccccbcbbbbcccbbbbbbbbbbbb|
+|dddddddeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|fffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel bold
+b: bg=panel
+c: fg=mute bg=panel
+d: fg=accent bg=panel
+e: fg=edge bg=panel
+f: fg=fg bg=panel
+=== 16 40x6
+|Summary    Failures 3    Log            |
+|━━━━━━━─────────────────────────────────|
+|                                        |
+|All green.                              |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaa    bbbbbbbb b    bbb            |
+|cccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                                        |
+|ddd dddddd                              |
+|                                        |
+|                                        |
+a: fg=fg bold
+b: fg=mute
+c: fg=accent
+d: fg=fg
+=== ascii 40x6
+|Summary    Failures 3    Log            |
+|=======---------------------------------|
+|                                        |
+|All green.                              |
+|                                        |
+|                                        |
+--- styles
+|aaaaaaa                                 |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold

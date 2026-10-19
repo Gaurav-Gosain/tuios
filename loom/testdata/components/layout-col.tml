@@ -1,0 +1,7 @@
+<!-- 30x12 -->
+<tml version="1">
+  <row gap="2">
+    <col gap="1" w="12" pad="1"><text>top</text><spacer/><text>bottom</text></col>
+    <col align="end" w="fill"><badge>end</badge><badge>aligned</badge><text min-w="10" max-w="12" wrap="char">min and max width</text></col>
+  </row>
+</tml>

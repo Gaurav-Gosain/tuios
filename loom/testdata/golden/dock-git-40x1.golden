@@ -1,0 +1,34 @@
+=== truecolor 40x1
+| feat/tml  ↑2   ●3  ▁▄▂▇▃█              |
+--- styles
+|abbbbbbbbacddcaeffeaggggggaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: bg=warning-tint bold
+f: fg=warning bg=warning-tint bold
+g: fg=dim bg=panel
+=== 256 40x1
+| feat/tml  ↑2   ●3  ▁▄▂▇▃█              |
+--- styles
+|abbbbbbbbacddcaceecaffffffaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel
+c: bg=success-tint bold
+d: fg=success bg=success-tint bold
+e: fg=warning bg=success-tint bold
+f: fg=dim bg=panel
+=== 16 40x1
+| feat/tml ↑2 ●3 ▁▄▂▇▃█                  |
+--- styles
+| aaaaaaaa bb cc dddddd                  |
+a: fg=accent
+b: fg=success bold
+c: fg=warning bold
+d: fg=dim
+=== ascii 40x1
+| feat/tml [↑2] [●3] _~.*-#              |
+--- styles
+|          aaaa aaaa                     |
+a: bold

@@ -1,0 +1,7 @@
+<!-- 40x5 -->
+<tml version="1">
+  <table rows='[{"k": "alpha", "v": 1}, {"k": "beta", "v": 22}, {"k": "a very long key that is cut", "v": 333}]'>
+    <column field="k" title="Key"/>
+    <column field="v" title="Value" align="right"/>
+  </table>
+</tml>

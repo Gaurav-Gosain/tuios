@@ -1,0 +1,8 @@
+<!-- 24x5 -->
+<tml version="1">
+  <state>{"log": ["one", "two", "three", "four", "five", "six", "seven", "eight"]}</state>
+  <row gap="2">
+    <scroll h="5" w="10" follow="end"><text each="state.log" as="line">{line}</text></scroll>
+    <scroll h="5" w="fill"><text each="state.log" as="line">{line}</text></scroll>
+  </row>
+</tml>

@@ -1,0 +1,104 @@
+=== truecolor 50x8
+|  PACKAGE           TEST                    TIME ▼|
+|▌ internal/session  TestAttachRace           2.21s|
+|  internal/session  TestAttachReplay         1.95s|
+|  internal/app      TestDockClick            840ms|
+|  internal/app      TestDockCustomWidth      610ms|
+|  shot              TestRender               300ms|
+|  vt                TestKittyPlaceholder     120ms|
+|  tml               TestPatch                 30ms|
+--- styles
+|aabbbbbbbaaaaaaaaaaabbbbaaaaaaaaaaaaaaaaaaaaccccad|
+|efggggggggggggggggffhhhhhhhhhhhhhhfffffffffffhhhhh|
+|aaiiiiiiiiiiiiiiiiaajjjjjjjjjjjjjjjjaaaaaaaaajjjjj|
+|aaiiiiiiiiiiiiaaaaaajjjjjjjjjjjjjaaaaaaaaaaaajjjjj|
+|aaiiiiiiiiiiiiaaaaaajjjjjjjjjjjjjjjjjjjaaaaaajjjjj|
+|aaiiiiaaaaaaaaaaaaaajjjjjjjjjjaaaaaaaaaaaaaaajjjjj|
+|aaiiaaaaaaaaaaaaaaaajjjjjjjjjjjjjjjjjjjjaaaaajjjjj|
+|aaiiiaaaaaaaaaaaaaaajjjjjjjjjaaaaaaaaaaaaaaaaajjjj|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=mute bg=panel bold
+d: fg=accent-bright bg=panel
+e: fg=accent bg=surface
+f: bg=surface
+g: fg=dim bg=surface
+h: fg=fg bg=surface bold
+i: fg=dim bg=panel
+j: fg=fg bg=panel
+=== 256 50x8
+|  PACKAGE           TEST                    TIME ▼|
+|▌ internal/session  TestAttachRace           2.21s|
+|  internal/session  TestAttachReplay         1.95s|
+|  internal/app      TestDockClick            840ms|
+|  internal/app      TestDockCustomWidth      610ms|
+|  shot              TestRender               300ms|
+|  vt                TestKittyPlaceholder     120ms|
+|  tml               TestPatch                 30ms|
+--- styles
+|aabbbbbbbaaaaaaaaaaabbbbaaaaaaaaaaaaaaaaaaaaccccad|
+|efggggggggggggggggffhhhhhhhhhhhhhhfffffffffffhhhhh|
+|aaiiiiiiiiiiiiiiiiaajjjjjjjjjjjjjjjjaaaaaaaaajjjjj|
+|aaiiiiiiiiiiiiaaaaaajjjjjjjjjjjjjaaaaaaaaaaaajjjjj|
+|aaiiiiiiiiiiiiaaaaaajjjjjjjjjjjjjjjjjjjaaaaaajjjjj|
+|aaiiiiaaaaaaaaaaaaaajjjjjjjjjjaaaaaaaaaaaaaaajjjjj|
+|aaiiaaaaaaaaaaaaaaaajjjjjjjjjjjjjjjjjjjjaaaaajjjjj|
+|aaiiiaaaaaaaaaaaaaaajjjjjjjjjaaaaaaaaaaaaaaaaajjjj|
+a: bg=panel
+b: fg=mute bg=panel
+c: fg=mute bg=panel bold
+d: fg=accent-bright bg=panel
+e: fg=accent bg=surface
+f: bg=surface
+g: fg=dim bg=surface
+h: fg=fg bg=surface bold
+i: fg=dim bg=panel
+j: fg=fg bg=panel
+=== 16 50x8
+|  PACKAGE           TEST                    TIME ▼|
+|▌ internal/session  TestAttachRace           2.21s|
+|  internal/session  TestAttachReplay         1.95s|
+|  internal/app      TestDockClick            840ms|
+|  internal/app      TestDockCustomWidth      610ms|
+|  shot              TestRender               300ms|
+|  vt                TestKittyPlaceholder     120ms|
+|  tml               TestPatch                 30ms|
+--- styles
+|  aaaaaaa           aaaa                    bbbb c|
+|deffffffffffffffffeeggggggggggggggeeeeeeeeeeeggggg|
+|  hhhhhhhhhhhhhhhh  iiiiiiiiiiiiiiii         iiiii|
+|  hhhhhhhhhhhh      iiiiiiiiiiiii            iiiii|
+|  hhhhhhhhhhhh      iiiiiiiiiiiiiiiiiii      iiiii|
+|  hhhh              iiiiiiiiii               iiiii|
+|  hh                iiiiiiiiiiiiiiiiiiii     iiiii|
+|  hhh               iiiiiiiii                 iiii|
+a: fg=mute
+b: fg=mute bold
+c: fg=accent-bright
+d: fg=accent
+e: reverse
+f: fg=dim reverse
+g: fg=dim bold reverse
+h: fg=dim
+i: fg=fg
+=== ascii 50x8
+|  PACKAGE           TEST                    TIME v|
+|> internal/session  TestAttachRace           2.21s|
+|  internal/session  TestAttachReplay         1.95s|
+|  internal/app      TestDockClick            840ms|
+|  internal/app      TestDockCustomWidth      610ms|
+|  shot              TestRender               300ms|
+|  vt                TestKittyPlaceholder     120ms|
+|  tml               TestPatch                 30ms|
+--- styles
+|                                            aaaa  |
+| bbbbbbbbbbbbbbbbbbbccccccccccccccbbbbbbbbbbbccccc|
+|                                                  |
+|                                                  |
+|                                                  |
+|                                                  |
+|                                                  |
+|                                                  |
+a: bold
+b: reverse
+c: bold reverse

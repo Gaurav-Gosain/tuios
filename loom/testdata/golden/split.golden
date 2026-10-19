@@ -1,0 +1,51 @@
+=== truecolor 30x4
+|first       second            |
+|                              |
+| left           right         |
+|                              |
+--- styles
+|aaaaabbbbbbbaaaaaabbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cddddcbbbbbbbbbcdddddcbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel
+b: bg=panel
+c: bg=accent-tint bold
+d: fg=accent bg=accent-tint bold
+=== 256 30x4
+|first       second            |
+|                              |
+| left           right         |
+|                              |
+--- styles
+|aaaaabbbbbbbaaaaaabbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cddddcbbbbbbbbbcdddddcbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel
+b: bg=panel
+c: bg=accent-tint bold
+d: fg=accent bg=accent-tint bold
+=== 16 30x4
+|first       second            |
+|                              |
+|left           right          |
+|                              |
+--- styles
+|aaaaa       aaaaaa            |
+|                              |
+|bbbb           bbbbb          |
+|                              |
+a: fg=fg
+b: fg=accent bold
+=== ascii 30x4
+|first       second            |
+|                              |
+|[left]         [right]        |
+|                              |
+--- styles
+|                              |
+|                              |
+|aaaaaa         aaaaaaa        |
+|                              |
+a: bold

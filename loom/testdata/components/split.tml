@@ -1,0 +1,7 @@
+<!-- 30x4 -->
+<tml version="1">
+  <col gap="1">
+    <split dir="h" ratio="0.4"><text>first</text><text>second</text></split>
+    <split dir="h"><badge w="fill">left</badge><badge w="fill">right</badge></split>
+  </col>
+</tml>

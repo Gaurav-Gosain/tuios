@@ -1,0 +1,113 @@
+=== truecolor 40x10
+|▾ cmd                                   |
+|    main.go                             |
+|    util.go                             |
+|  go.mod                                |
+|[Before]                                |
+| ## Notes                               |
+|╭─ Confirm ────────────────────────────╮|
+|│ Ship it?                             │|
+|╰──────────────────────────────────────╯|
+|                                        |
+--- styles
+|abcccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbcccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbcccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ddddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|effefffffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|gghiiiiiiihggggggggggggggggggggggggggggg|
+|gbccccbcccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbg|
+|gggggggggggggggggggggggggggggggggggggggg|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=mute bg=panel
+b: bg=panel
+c: fg=fg bg=panel
+d: fg=mute bg=panel italic
+e: bg=canvas
+f: fg=fg bg=canvas
+g: fg=edge bg=panel
+h: bg=panel bold
+i: fg=fg bg=panel bold
+=== 256 40x10
+|▾ cmd                                   |
+|    main.go                             |
+|    util.go                             |
+|  go.mod                                |
+|[Before]                                |
+| ## Notes                               |
+|╭─ Confirm ────────────────────────────╮|
+|│ Ship it?                             │|
+|╰──────────────────────────────────────╯|
+|                                        |
+--- styles
+|abcccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbcccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbcccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ddddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|effefffffeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|gghiiiiiiihggggggggggggggggggggggggggggg|
+|gbccccbcccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbg|
+|gggggggggggggggggggggggggggggggggggggggg|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=mute bg=panel
+b: bg=panel
+c: fg=fg bg=panel
+d: fg=mute bg=panel italic
+e: bg=canvas
+f: fg=fg bg=canvas
+g: fg=edge bg=panel
+h: bg=panel bold
+i: fg=fg bg=panel bold
+=== 16 40x10
+|▾ cmd                                   |
+|    main.go                             |
+|    util.go                             |
+|  go.mod                                |
+|[Before]                                |
+| ## Notes                               |
+|╭─ Confirm ────────────────────────────╮|
+|│ Ship it?                             │|
+|╰──────────────────────────────────────╯|
+|                                        |
+--- styles
+|a bbb                                   |
+|    bbbbbbb                             |
+|    bbbbbbb                             |
+|  bbbbbb                                |
+|cccccccc                                |
+| bb bbbbb                               |
+|aadeeeeeeedaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|a bbbb bbb                             a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|                                        |
+a: fg=mute
+b: fg=fg
+c: fg=mute italic
+d: bold
+e: fg=fg bold
+=== ascii 40x10
+|v cmd                                   |
+|    main.go                             |
+|    util.go                             |
+|  go.mod                                |
+|[Before]                                |
+| ## Notes                               |
+|+- Confirm ----------------------------+|
+|| Ship it?                             ||
+|+--------------------------------------+|
+|                                        |
+--- styles
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|aaaaaaaa                                |
+|                                        |
+|  bbbbbbbbb                             |
+|                                        |
+|                                        |
+|                                        |
+a: italic
+b: bold

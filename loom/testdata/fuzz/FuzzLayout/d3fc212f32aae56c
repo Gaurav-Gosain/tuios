@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte("0)181101000")
+byte('(')
+byte('*')
+byte('\x00')

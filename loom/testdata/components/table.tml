@@ -1,0 +1,12 @@
+<!-- 50x8 -->
+<tml version="1">
+  <state>{"rows": [{"pkg": "internal/session", "test": "TestAttachRace", "ms": 2210}, {"pkg": "internal/app", "test": "TestDockClick", "ms": 840},
+    {"pkg": "vt", "test": "TestKittyPlaceholder", "ms": 120}, {"pkg": "internal/app", "test": "TestDockCustomWidth", "ms": 610},
+    {"pkg": "internal/session", "test": "TestAttachReplay", "ms": 1950}, {"pkg": "tml", "test": "TestPatch", "ms": 30},
+    {"pkg": "loom", "test": "TestGolden", "ms": 5}, {"pkg": "plot", "test": "TestFormat", "ms": 1}, {"pkg": "shot", "test": "TestRender", "ms": 300}]}</state>
+  <table rows="state.rows" key="test" sort="ms:desc" select="single">
+    <column field="pkg" title="Package" w="fill"/>
+    <column field="test" title="Test" w="fill:2"/>
+    <column field="ms" title="Time" align="right" format="dur(value, 'ms')" sort="true"/>
+  </table>
+</tml>

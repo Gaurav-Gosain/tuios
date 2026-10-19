@@ -1,0 +1,44 @@
+=== truecolor 24x3
+|▎ passed                |
+|▎ 412                   |
+|▎ ▁▃▂▅▄▇▅█              |
+--- styles
+|abccccccbbbbbbbbbbbbbbbb|
+|abdddbbbbbbbbbbbbbbbbbbb|
+|abaaaaaaaabbbbbbbbbbbbbb|
+a: fg=success bg=surface
+b: bg=surface
+c: fg=dim bg=surface
+d: fg=success bg=surface bold
+=== 256 24x3
+|▎ passed                |
+|▎ 412                   |
+|▎ ▁▃▂▅▄▇▅█              |
+--- styles
+|abccccccbbbbbbbbbbbbbbbb|
+|abdddbbbbbbbbbbbbbbbbbbb|
+|abaaaaaaaabbbbbbbbbbbbbb|
+a: fg=success bg=surface
+b: bg=surface
+c: fg=dim bg=surface
+d: fg=success bg=surface bold
+=== 16 24x3
+|▎ passed                |
+|▎ 412                   |
+|▎ ▁▃▂▅▄▇▅█              |
+--- styles
+|a bbbbbb                |
+|a ccc                   |
+|a aaaaaaaa              |
+a: fg=success
+b: fg=dim
+c: fg=success bold
+=== ascii 24x3
+|| passed                |
+|| 412                   |
+|| _-.=~*=#              |
+--- styles
+|                        |
+|  aaa                   |
+|                        |
+a: bold

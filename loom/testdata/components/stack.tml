@@ -1,0 +1,7 @@
+<!-- 24x3 -->
+<tml version="1">
+  <stack>
+    <stat h="3" label="passed" value="412" role="success"/>
+    <sparkline values="[1, 3, 2, 5, 4, 8, 6, 9]" role="success" pad="2 0 0 2"/>
+  </stack>
+</tml>

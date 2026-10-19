@@ -1,0 +1,62 @@
+=== truecolor 21x6
+|日本語のテキストは二 |
+|つのセルを使う       |
+|表示幅を超えた日本語…|
+|emoji 👍🏽 and 🇯🇵 flag…|
+|é combining and tab  |
+|stop                 |
+--- styles
+|aaaaaaaaaaaaaaaaaaaab|
+|aaaaaaaaaaaaaabbbbbbb|
+|aaaaaaaaaaaaaaaaaaaaa|
+|aaaaabaabaaabaabaaaaa|
+|abaaaaaaaaabaaabaaabb|
+|aaaabbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel
+b: bg=panel
+=== 256 21x6
+|日本語のテキストは二 |
+|つのセルを使う       |
+|表示幅を超えた日本語…|
+|emoji 👍🏽 and 🇯🇵 flag…|
+|é combining and tab  |
+|stop                 |
+--- styles
+|aaaaaaaaaaaaaaaaaaaab|
+|aaaaaaaaaaaaaabbbbbbb|
+|aaaaaaaaaaaaaaaaaaaaa|
+|aaaaabaabaaabaabaaaaa|
+|abaaaaaaaaabaaabaaabb|
+|aaaabbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel
+b: bg=panel
+=== 16 21x6
+|日本語のテキストは二 |
+|つのセルを使う       |
+|表示幅を超えた日本語…|
+|emoji 👍🏽 and 🇯🇵 flag…|
+|é combining and tab  |
+|stop                 |
+--- styles
+|aaaaaaaaaaaaaaaaaaaa |
+|aaaaaaaaaaaaaa       |
+|aaaaaaaaaaaaaaaaaaaaa|
+|aaaaa aa aaa aa aaaaa|
+|a aaaaaaaaa aaa aaa  |
+|aaaa                 |
+a: fg=fg
+=== ascii 21x6
+|日本語のテキストは二 |
+|つのセルを使う       |
+|表示幅を超えた日本語~|
+|emoji 👍🏽 and 🇯🇵 flag~|
+|é combining and tab  |
+|stop                 |
+--- styles
+|                     |
+|                     |
+|                     |
+|                     |
+|                     |
+|                     |
+

@@ -1,0 +1,115 @@
+=== truecolor 30x12
+|                          end |
+| top                  aligned |
+|                  min and max |
+|                  width       |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+| bottom                       |
+|                              |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaabcccb|
+|adddaaaaaaaaaaaaaaaaabcccccccb|
+|aaaaaaaaaaaaaaaaaadddadddaddda|
+|aaaaaaaaaaaaaaaaaadddddaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|addddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: bg=accent-tint bold
+c: fg=accent bg=accent-tint bold
+d: fg=fg bg=panel
+=== 256 30x12
+|                          end |
+| top                  aligned |
+|                  min and max |
+|                  width       |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+| bottom                       |
+|                              |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaaaaaabcccb|
+|adddaaaaaaaaaaaaaaaaabcccccccb|
+|aaaaaaaaaaaaaaaaaadddadddaddda|
+|aaaaaaaaaaaaaaaaaadddddaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|addddddaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: bg=accent-tint bold
+c: fg=accent bg=accent-tint bold
+d: fg=fg bg=panel
+=== 16 30x12
+|                           end|
+| top                   aligned|
+|                  min and max |
+|                  width       |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+| bottom                       |
+|                              |
+--- styles
+|                           aaa|
+| bbb                   aaaaaaa|
+|                  bbb bbb bbb |
+|                  bbbbb       |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+| bbbbbb                       |
+|                              |
+a: fg=accent bold
+b: fg=fg
+=== ascii 30x12
+|                         [end]|
+| top                 [aligned]|
+|                  min and max |
+|                  width       |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+| bottom                       |
+|                              |
+--- styles
+|                         aaaaa|
+|                     aaaaaaaaa|
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+a: bold

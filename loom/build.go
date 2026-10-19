@@ -1,0 +1,141 @@
+package loom
+
+import (
+	"strconv"
+
+	"tuios.dev/tml"
+)
+
+// buildChildren builds the component children of n.
+func (s *Surface) buildChildren(n *tml.Node, ptr string, sc *scope, parent *box) []*box {
+	var out []*box
+	for i, c := range n.Children {
+		if c.IsText() {
+			continue
+		}
+		out = append(out, s.build(c, ptr+"/children/"+strconv.Itoa(i), sc, parent)...)
+	}
+	return out
+}
+
+// build turns a node into boxes: none when if is false, one per element
+// with each, else one.
+func (s *Surface) build(n *tml.Node, ptr string, sc *scope, parent *box) []*box {
+	each, ok := n.Attr("each")
+	if !ok {
+		if b := s.buildOne(n, ptr, sc, parent); b != nil {
+			return []*box{b}
+		}
+		return nil
+	}
+	_ = each
+	elems := s.data(n, "each", s.vars(sc))
+	alias := n.AttrString("as")
+	if alias == "" {
+		alias = "item"
+	}
+	var out []*box
+	for i, el := range elems {
+		if !s.exp.Take(1) {
+			break
+		}
+		copyScope := sc.with(alias, el, i)
+		if n.Type != "table" {
+			if k := s.str(n, "key", s.vars(copyScope)); k != "" {
+				copyScope.ident = "k" + k
+			}
+		}
+		if b := s.buildOne(n, ptr, copyScope, parent); b != nil {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// buildOne builds the box of one node in a scope, or nil when its if is
+// false.
+func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box {
+	vars := s.vars(sc)
+	if !s.truthy(n, "if", vars) {
+		return nil
+	}
+	b := &box{kind: n.Type, src: n, ptr: ptr, scope: sc, parent: parent, dirty: true}
+	s.stats.built++
+	b.base = n.ID()
+	if b.base == "" {
+		b.base = ptr
+	}
+	b.key = b.base + sc.idents()
+	b.hidden = !s.truthy(n, "show", vars)
+	b.width = parseSize(s.str(n, "w", vars))
+	b.height = parseSize(s.str(n, "h", vars))
+	b.minW = parseSize(n.AttrString("min-w"))
+	b.maxW = parseSize(n.AttrString("max-w"))
+	b.minH = parseSize(n.AttrString("min-h"))
+	b.maxH = parseSize(n.AttrString("max-h"))
+	b.pad = parsePad(n.AttrString("pad"))
+	b.gap = clampInt(int(s.num(n, "gap", vars, 0)), 0, 100)
+	b.grow = clampInt(int(s.num(n, "grow", vars, 0)), 0, 100)
+	b.align = n.AttrString("align")
+	b.justify = n.AttrString("justify")
+
+	if n.Type == "form" {
+		// form.NAME reads a field's value. Editing comes with the input
+		// wave; until then a field holds its first value.
+		sc = sc.with("form", s.formValues(n, vars), 0)
+		sc.ident = ""
+		b.scope = sc
+	}
+	switch n.Type {
+	case "row", "col", "grid", "stack", "scroll", "split", "form", "tab":
+		b.kids = s.buildChildren(n, ptr, sc, b)
+		if n.Type == "scroll" {
+			b.w = &scrollWidget{}
+		}
+	case "list":
+		b.w = s.buildList(b, vars)
+	case "card":
+		b.w = s.buildCard(b, vars)
+	case "tabs":
+		b.w = s.buildTabs(b, vars)
+	case "modal":
+		// A closed modal takes no space. An open one draws in place; the
+		// host floats it in wave 3.
+		if !s.flag(n, "open", vars, false) {
+			return nil
+		}
+		b.w = s.buildCard(b, vars)
+	default:
+		b.w = s.buildLeaf(b, vars)
+	}
+	s.byPtr[ptr] = append(s.byPtr[ptr], b)
+	return b
+}
+
+func clampInt(v, lo, hi int) int { return max(lo, min(hi, v)) }
+
+// formValues returns the first value of each field of a form, by name.
+func (s *Surface) formValues(form *tml.Node, vars map[string]any) map[string]any {
+	out := map[string]any{}
+	form.Walk(func(n *tml.Node, _ string) bool {
+		name := n.AttrString("name")
+		if name == "" || n.IsText() {
+			return true
+		}
+		var v any
+		if p := n.AttrString("bind"); p != "" {
+			if ptr, err := tml.PathPointer(p); err == nil {
+				v = s.store.Get(ptr)
+			}
+		}
+		if v == nil {
+			v, _ = s.value(n, "value", vars)
+		}
+		if str, ok := v.(string); ok && (n.Type == "toggle" || n.Type == "checkbox") {
+			v = str == "true"
+		}
+		out[name] = v
+		return true
+	})
+	return out
+}

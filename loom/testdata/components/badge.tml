@@ -1,0 +1,7 @@
+<!-- 40x3 -->
+<tml version="1">
+  <col gap="1">
+    <row gap="1"><badge role="success">↑2</badge><badge role="warning">●3</badge><badge role="error">2 risky</badge><badge>v0.11</badge><badge role="info">info</badge></row>
+    <toast role="success">Deployed v0.11.0</toast>
+  </col>
+</tml>

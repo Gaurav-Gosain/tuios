@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte("0)121101001")
+byte('¾')
+byte('\f')
+byte('\u0085')

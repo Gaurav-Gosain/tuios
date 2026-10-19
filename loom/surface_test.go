@@ -1,10 +1,9 @@
-package surface
+package loom
 
 import (
 	"os"
 	"reflect"
 	"testing"
-	"time"
 
 	"tuios.dev/tml"
 )
@@ -21,7 +20,7 @@ func readFile(t *testing.T, path string) []byte {
 // TestDepsAffected checks that a patch reaches the nodes that read the
 // changed paths, and no others.
 func TestDepsAffected(t *testing.T) {
-	doc, err := tml.Parse(readFile(t, "../../testdata/examples/dashboard.tml"), nil)
+	doc, err := tml.Parse(readFile(t, "testdata/examples/dashboard.tml"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,27 +117,6 @@ func TestActions(t *testing.T) {
 	}
 	if got := FilterRows(rows, "A"); len(got) != 1 {
 		t.Errorf("filtered %v", got)
-	}
-}
-
-func TestLimiter(t *testing.T) {
-	l := NewLimiter(PatchesPerSecond, PatchesPerSecond)
-	now := time.Unix(0, 0)
-	n := 0
-	for range 150 {
-		if l.Allow(now) {
-			n++
-		}
-	}
-	if n != PatchesPerSecond {
-		t.Errorf("allowed %d patches at once, want %d", n, PatchesPerSecond)
-	}
-	if !l.Allow(now.Add(20 * time.Millisecond)) {
-		t.Error("no patch allowed after the bucket refilled")
-	}
-	toast := NewLimiter(1/ToastInterval.Seconds(), 1)
-	if !toast.Allow(now) || toast.Allow(now.Add(time.Second)) || !toast.Allow(now.Add(2*time.Second)) {
-		t.Error("the toast limit is not one per two seconds")
 	}
 }
 

@@ -1,0 +1,7 @@
+<!-- 30x5 -->
+<tml version="1">
+  <state>{"agents": [{"name": "claude", "state": "working"}, {"name": "codex", "state": "idle"}, {"name": "gemini", "state": "done"}]}</state>
+  <list items="state.agents" as="a" select="single">
+    <row gap="1"><text w="10">{a.name}</text><status state="{a.state}"/></row>
+  </list>
+</tml>

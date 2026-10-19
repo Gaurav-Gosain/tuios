@@ -1,0 +1,7 @@
+<!-- 40x7 -->
+<tml version="1">
+  <col gap="1">
+    <card title="Failures" meta="3" role="warning"><text>Three tests failed.</text><text role="dim">Rerun them with r.</text></card>
+    <card id="folded" title="Passed" meta="412" role="success" fold="true"><text>Hidden while folded.</text></card>
+  </col>
+</tml>

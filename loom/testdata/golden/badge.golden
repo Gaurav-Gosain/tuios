@@ -1,0 +1,61 @@
+=== truecolor 40x3
+| ↑2   ●3   2 risky   v0.11   info       |
+|                                        |
+| Deployed v0.11.0                       |
+--- styles
+|abbacdeedcfgfgggggfchiiiiihcjkkkkjcccccc|
+|cccccccccccccccccccccccccccccccccccccccc|
+|abbbbbbbbabbbbbbballllllllllllllllllllll|
+a: bg=success-tint bold
+b: fg=success bg=success-tint bold
+c: bg=panel
+d: bg=warning-tint bold
+e: fg=warning bg=warning-tint bold
+f: bg=error-tint bold
+g: fg=error bg=error-tint bold
+h: bg=accent-tint bold
+i: fg=accent bg=accent-tint bold
+j: bg=surface bold
+k: fg=info bg=surface bold
+l: bg=success-tint
+=== 256 40x3
+| ↑2   ●3   2 risky   v0.11   info       |
+|                                        |
+| Deployed v0.11.0                       |
+--- styles
+|abbacaddacaeaeeeeeacfgggggfchiiiihcccccc|
+|cccccccccccccccccccccccccccccccccccccccc|
+|abbbbbbbbabbbbbbbajjjjjjjjjjjjjjjjjjjjjj|
+a: bg=success-tint bold
+b: fg=success bg=success-tint bold
+c: bg=panel
+d: fg=warning bg=success-tint bold
+e: fg=error bg=success-tint bold
+f: bg=accent-tint bold
+g: fg=accent bg=accent-tint bold
+h: bg=surface bold
+i: fg=info bg=surface bold
+j: bg=success-tint
+=== 16 40x3
+|↑2 ●3 2 risky v0.11 info                |
+|                                        |
+|Deployed v0.11.0                        |
+--- styles
+|aa bb cdccccc eeeee ffff                |
+|                                        |
+|aaaaaaaadaaaaaaa                        |
+a: fg=success bold
+b: fg=warning bold
+c: fg=error bold
+d: bold
+e: fg=accent bold
+f: fg=info bold
+=== ascii 40x3
+|[↑2] [●3] [2 risky] [v0.11] [info]      |
+|                                        |
+|[Deployed v0.11.0]                      |
+--- styles
+|aaaa aaaa aaaaaaaaa aaaaaaa aaaaaa      |
+|                                        |
+|aaaaaaaaaaaaaaaaaa                      |
+a: bold

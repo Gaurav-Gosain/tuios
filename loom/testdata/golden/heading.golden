@@ -1,0 +1,66 @@
+=== truecolor 36x5
+|Release v0.11                       |
+|Time by package ────────────────────|
+|Notes                               |
+|Accent heading                      |
+|                                    |
+--- styles
+|aaaaaaabaaaaaccccccccccccccccccccccc|
+|aaaabaabaaaaaaacdddddddddddddddddddd|
+|eeeeeccccccccccccccccccccccccccccccc|
+|ffffffbfffffffcccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccc|
+a: fg=fg bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=edge bg=panel
+e: fg=dim bg=panel bold
+f: fg=accent-bright bg=panel bold
+=== 256 36x5
+|Release v0.11                       |
+|Time by package ────────────────────|
+|Notes                               |
+|Accent heading                      |
+|                                    |
+--- styles
+|aaaaaaabaaaaaccccccccccccccccccccccc|
+|aaaabaabaaaaaaacdddddddddddddddddddd|
+|eeeeeccccccccccccccccccccccccccccccc|
+|ffffffbfffffffcccccccccccccccccccccc|
+|cccccccccccccccccccccccccccccccccccc|
+a: fg=fg bg=panel bold
+b: bg=panel bold
+c: bg=panel
+d: fg=edge bg=panel
+e: fg=dim bg=panel bold
+f: fg=accent-bright bg=panel bold
+=== 16 36x5
+|Release v0.11                       |
+|Time by package ────────────────────|
+|Notes                               |
+|Accent heading                      |
+|                                    |
+--- styles
+|aaaaaaabaaaaa                       |
+|aaaabaabaaaaaaa cccccccccccccccccccc|
+|ddddd                               |
+|eeeeeebeeeeeee                      |
+|                                    |
+a: fg=fg bold
+b: bold
+c: fg=mute
+d: fg=dim bold
+e: fg=accent-bright bold
+=== ascii 36x5
+|Release v0.11                       |
+|Time by package --------------------|
+|Notes                               |
+|Accent heading                      |
+|                                    |
+--- styles
+|aaaaaaaaaaaaa                       |
+|aaaaaaaaaaaaaaa                     |
+|aaaaa                               |
+|aaaaaaaaaaaaaa                      |
+|                                    |
+a: bold

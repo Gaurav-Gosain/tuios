@@ -1,0 +1,5 @@
+<!-- 40x4 -->
+<tml version="1">
+  <state>{"branch": "feat/tml-loom", "ahead": 2, "risky": 2}</state>
+  <kv><item k="Branch" v="{state.branch}"/><item k="Ahead" v="{state.ahead}"/><item k="Risk" v="{state.risky} risky changes" role="warning"/><item k="Diff" v="14 files, +320 -88"/></kv>
+</tml>

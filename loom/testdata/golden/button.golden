@@ -1,0 +1,85 @@
+=== truecolor 60x3
+| r  Rerun failed    o  Open log    d  Delete    Off         |
+|                                                            |
+|» tests  ● needs input  ✓ done  ✕ errored  ⠹ Deploying      |
+--- styles
+|abacdddddcddddddceefgfhiiiihiiiheejkjlmmmmmmleehnnnheeeeeeee|
+|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|oepppppeeqepppppepppppeereppppeesepppppppeetepppppppppeeeeee|
+a: bg=accent bold
+b: fg=fg bg=accent bold
+c: bg=accent
+d: fg=fg bg=accent
+e: bg=panel
+f: bg=card bold
+g: fg=accent-bright bg=card bold
+h: bg=surface
+i: fg=fg bg=surface
+j: bg=error-tint bold
+k: fg=error bg=error-tint bold
+l: bg=error-tint
+m: fg=error bg=error-tint
+n: fg=mute bg=surface
+o: fg=info bg=panel
+p: fg=dim bg=panel
+q: fg=warning bg=panel
+r: fg=success bg=panel
+s: fg=error bg=panel
+t: fg=accent-bright bg=panel
+=== 256 60x3
+| r  Rerun failed    o  Open log    d  Delete    Off         |
+|                                                            |
+|» tests  ● needs input  ✓ done  ✕ errored  ⠹ Deploying      |
+--- styles
+|abacdddddcddddddceefgfhiiiihiiiheejkjlmmmmmmleehnnnheeeeeeee|
+|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|
+|oepppppeeqepppppepppppeereppppeesepppppppeetepppppppppeeeeee|
+a: bg=accent bold
+b: fg=fg bg=accent bold
+c: bg=accent
+d: fg=fg bg=accent
+e: bg=panel
+f: bg=edge bold
+g: fg=accent-bright bg=edge bold
+h: bg=surface
+i: fg=fg bg=surface
+j: bg=success-tint bold
+k: fg=error bg=success-tint bold
+l: bg=success-tint
+m: fg=error bg=success-tint
+n: fg=mute bg=surface
+o: fg=info bg=panel
+p: fg=dim bg=panel
+q: fg=warning bg=panel
+r: fg=success bg=panel
+s: fg=error bg=panel
+t: fg=accent-bright bg=panel
+=== 16 60x3
+| r  Rerun failed   [o Open log]  [d Delete]  [Off]          |
+|                                                            |
+|» tests  ● needs input  ✓ done  ✕ errored  ⠹ Deploying      |
+--- styles
+|abaabbbbbabbbbbba  cd eeee eeec  cd eeeeeec  ccccc          |
+|                                                            |
+|f ggggg  h ggggg ggggg  i gggg  j ggggggg  k ggggggggg      |
+a: bold reverse
+b: fg=accent bold reverse
+c: fg=mute
+d: fg=accent-bright bold
+e: fg=fg
+f: fg=info
+g: fg=dim
+h: fg=warning
+i: fg=success
+j: fg=error
+k: fg=accent-bright
+=== ascii 60x3
+| r  Rerun failed   [o Open log]  [d Delete]  [Off]          |
+|                                                            |
+|~ tests  ! needs input  v done  x errored  * Deploying      |
+--- styles
+|aaaaaaaaaaaaaaaaa   b             b                         |
+|                                                            |
+|                                                            |
+a: bold reverse
+b: bold

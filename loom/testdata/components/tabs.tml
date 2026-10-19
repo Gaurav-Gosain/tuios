@@ -1,0 +1,9 @@
+<!-- 40x6 -->
+<tml version="1">
+  <state>{"n": 3}</state>
+  <tabs id="t">
+    <tab id="sum" title="Summary"><text>All green.</text></tab>
+    <tab id="fail" title="Failures {state.n}"><text>Three failed.</text></tab>
+    <tab id="log" title="Log"><code>ok tuios.dev/vt 12.1s</code></tab>
+  </tabs>
+</tml>

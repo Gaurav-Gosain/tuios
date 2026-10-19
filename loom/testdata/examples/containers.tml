@@ -1,0 +1,10 @@
+<tml version="1" title="Containers">
+  <state>{"tab": "sum", "confirm": false}</state>
+  <col>
+    <tabs value="state.tab"><tab id="sum" title="Summary"><text>All green.</text></tab><tab id="log" title="Log"><text>No output.</text></tab></tabs>
+    <card title="Failures" meta="3" fold="false" role="warning"><text>Three tests failed.</text></card>
+    <modal title="Confirm" open="{state.confirm}"><text>Ship it?</text></modal>
+    <toast role="success" ttl="5s">Deployed v0.11.0</toast>
+    <button key="l" on-press="tab('log')">Show log</button>
+  </col>
+</tml>

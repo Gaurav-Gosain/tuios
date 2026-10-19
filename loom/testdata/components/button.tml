@@ -1,0 +1,7 @@
+<!-- 60x3 -->
+<tml version="1">
+  <col gap="1">
+    <row gap="2"><button key="r" kind="primary">Rerun failed</button><button key="o">Open log</button><button kind="danger" key="d">Delete</button><button disabled="true">Off</button></row>
+    <row gap="2"><status state="working" label="tests"/><status state="needs_input"/><status state="done"/><status state="errored"/><spinner label="Deploying"/></row>
+  </col>
+</tml>

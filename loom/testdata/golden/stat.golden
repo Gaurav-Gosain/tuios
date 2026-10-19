@@ -1,0 +1,90 @@
+=== truecolor 60x6
+|412 passed +12   3 failed   18.4s wall                      |
+|                                                            |
+|▎ passed              ▎ failed                              |
+|▎ 412 +12             ▎ 3                                   |
+|▎                     ▎                                     |
+|                                                            |
+--- styles
+|aaabccccccbdddbbbebccccccbbbfffffbccccbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ghiiiiiihhhhhhhhhhhhbbjhiiiiiihhhhhhhhhhhhbbbbbbbbbbbbbbbbbb|
+|ghkkkhlllhhhhhhhhhhhbbjhmhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbb|
+|ghhhhhhhhhhhhhhhhhhhbbjhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=success bg=panel bold
+b: bg=panel
+c: fg=dim bg=panel
+d: fg=mute bg=panel
+e: fg=error bg=panel bold
+f: fg=fg bg=panel bold
+g: fg=success bg=surface
+h: bg=surface
+i: fg=dim bg=surface
+j: fg=error bg=surface
+k: fg=success bg=surface bold
+l: fg=mute bg=surface
+m: fg=error bg=surface bold
+=== 256 60x6
+|412 passed +12   3 failed   18.4s wall                      |
+|                                                            |
+|▎ passed              ▎ failed                              |
+|▎ 412 +12             ▎ 3                                   |
+|▎                     ▎                                     |
+|                                                            |
+--- styles
+|aaabccccccbdddbbbebccccccbbbfffffbccccbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ghiiiiiihhhhhhhhhhhhbbjhiiiiiihhhhhhhhhhhhbbbbbbbbbbbbbbbbbb|
+|ghkkkhlllhhhhhhhhhhhbbjhmhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbb|
+|ghhhhhhhhhhhhhhhhhhhbbjhhhhhhhhhhhhhhhhhhhbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=success bg=panel bold
+b: bg=panel
+c: fg=dim bg=panel
+d: fg=mute bg=panel
+e: fg=error bg=panel bold
+f: fg=fg bg=panel bold
+g: fg=success bg=surface
+h: bg=surface
+i: fg=dim bg=surface
+j: fg=error bg=surface
+k: fg=success bg=surface bold
+l: fg=mute bg=surface
+m: fg=error bg=surface bold
+=== 16 60x6
+|412 passed +12   3 failed   18.4s wall                      |
+|                                                            |
+|▎ passed              ▎ failed                              |
+|▎ 412 +12             ▎ 3                                   |
+|▎                     ▎                                     |
+|                                                            |
+--- styles
+|aaa bbbbbb ccc   d bbbbbb   eeeee bbbb                      |
+|                                                            |
+|f bbbbbb              g bbbbbb                              |
+|f aaa ccc             g d                                   |
+|f                     g                                     |
+|                                                            |
+a: fg=success bold
+b: fg=dim
+c: fg=mute
+d: fg=error bold
+e: fg=fg bold
+f: fg=success
+g: fg=error
+=== ascii 60x6
+|412 passed +12   3 failed   18.4s wall                      |
+|                                                            |
+|| passed              | failed                              |
+|| 412 +12             | 3                                   |
+||                     |                                     |
+|                                                            |
+--- styles
+|aaa              a          aaaaa                           |
+|                                                            |
+|                                                            |
+|  aaa                   a                                   |
+|                                                            |
+|                                                            |
+a: bold

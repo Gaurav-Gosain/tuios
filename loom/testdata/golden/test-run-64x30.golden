@@ -1,0 +1,321 @@
+=== truecolor 64x30
+|╭─ Test run ───────────────────────── from claude in api-auth ─╮|
+|│                                                              │|
+|│ Summary    Failures 5    Log                                 │|
+|│ ━━━━━━━───────────────────────────────────────────────────── │|
+|│                                                              │|
+|│ 412 passed   5 failed                   ━━━━━━━━━━━━━━ 98.8% │|
+|│                                                              │|
+|│ Time by package ───────────────────────────────────  seconds │|
+|│ internal/session ███████████████████████████████████████ 6.2 │|
+|│ internal/app     ██████████████████████████████▎········ 4.8 │|
+|│ vt               ███████████████████▌··················· 3.1 │|
+|│ internal/tape    ████████▊······························ 1.4 │|
+|│ internal/config  █████▋································· 0.9 │|
+|│                                                              │|
+|│ ▾ Failures  5                                                │|
+|│   PACKAGE               TEST                     TIME ▼      │|
+|│ ▌ internal/session      TestAttachRace            2.21s      │|
+|│   internal/session      TestAttachReplay          1.95s      │|
+|│   internal/app          TestDockClick             840ms      │|
+|│   internal/app          TestDockCustomWidth       610ms      │|
+|│   vt                    TestKittyPlaceholder      120ms      │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│  r  Rerun faile…   o  Open log     s sort tab next esc close │|
+|│                                                              │|
+|╰──────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccbaaaaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adcccccccddddffffffffdfddddfffddddddddddddddddddddddddddddddddda|
+|adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adhhhdeeeeeedddideeeeeedddddddddddddddddddjjjjjjjjjjjjjjdcccccda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adccccbccbcccccccdgggggggggggggggggggggggggggggggggggddfffffffda|
+|adeeeeeeeeeeeeeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdlllda|
+|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggggdlllda|
+|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkgggggggggggggggggggdlllda|
+|adeeeeeeeeeeeeeddddkkkkkkkkkggggggggggggggggggggggggggggggdlllda|
+|adeeeeeeeeeeeeeeeddkkkkkkgggggggggggggggggggggggggggggggggdlllda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddmmmmdndddddda|
+|adopqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrpppppda|
+|adddeeeeeeeeeeeeeeeeddddddllllllllllllllllddddddddddllllldddddda|
+|adddeeeeeeeeeeeeddddddddddllllllllllllldddddddddddddllllldddddda|
+|adddeeeeeeeeeeeeddddddddddllllllllllllllllllldddddddllllldddddda|
+|adddeeddddddddddddddddddddllllllllllllllllllllddddddllllldddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adstsuvvvvvuvvvvvvddwxwpyyyypyyypddddzdffffdzzzdffffdzzzdfffffda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: fg=accent bg=panel
+b: bg=panel bold
+c: fg=fg bg=panel bold
+d: bg=panel
+e: fg=dim bg=panel
+f: fg=mute bg=panel
+g: fg=edge bg=panel
+h: fg=success bg=panel bold
+i: fg=error bg=panel bold
+j: fg=success bg=panel
+k: fg=error bg=panel
+l: fg=fg bg=panel
+m: fg=mute bg=panel bold
+n: fg=accent-bright bg=panel
+o: fg=accent bg=surface
+p: bg=surface
+q: fg=dim bg=surface
+r: fg=fg bg=surface bold
+s: bg=accent bold
+t: fg=fg bg=accent bold
+u: bg=accent
+v: fg=fg bg=accent
+w: bg=card bold
+x: fg=accent-bright bg=card bold
+y: fg=fg bg=surface
+z: fg=accent-bright bg=panel bold
+=== 256 64x30
+|╭─ Test run ───────────────────────── from claude in api-auth ─╮|
+|│                                                              │|
+|│ Summary    Failures 5    Log                                 │|
+|│ ━━━━━━━───────────────────────────────────────────────────── │|
+|│                                                              │|
+|│ 412 passed   5 failed                   ━━━━━━━━━━━━━━ 98.8% │|
+|│                                                              │|
+|│ Time by package ───────────────────────────────────  seconds │|
+|│ internal/session ███████████████████████████████████████ 6.2 │|
+|│ internal/app     ██████████████████████████████▎········ 4.8 │|
+|│ vt               ███████████████████▌··················· 3.1 │|
+|│ internal/tape    ████████▊······························ 1.4 │|
+|│ internal/config  █████▋································· 0.9 │|
+|│                                                              │|
+|│ ▾ Failures  5                                                │|
+|│   PACKAGE               TEST                     TIME ▼      │|
+|│ ▌ internal/session      TestAttachRace            2.21s      │|
+|│   internal/session      TestAttachReplay          1.95s      │|
+|│   internal/app          TestDockClick             840ms      │|
+|│   internal/app          TestDockCustomWidth       610ms      │|
+|│   vt                    TestKittyPlaceholder      120ms      │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│  r  Rerun faile…   o  Open log     s sort tab next esc close │|
+|│                                                              │|
+|╰──────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccbaaaaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adcccccccddddffffffffdfddddfffddddddddddddddddddddddddddddddddda|
+|adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adhhhdeeeeeedddideeeeeedddddddddddddddddddjjjjjjjjjjjjjjdcccccda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adccccbccbcccccccdgggggggggggggggggggggggggggggggggggddfffffffda|
+|adeeeeeeeeeeeeeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdlllda|
+|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggggdlllda|
+|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkgggggggggggggggggggdlllda|
+|adeeeeeeeeeeeeeddddkkkkkkkkkggggggggggggggggggggggggggggggdlllda|
+|adeeeeeeeeeeeeeeeddkkkkkkgggggggggggggggggggggggggggggggggdlllda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddmmmmdndddddda|
+|adopqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrpppppda|
+|adddeeeeeeeeeeeeeeeeddddddllllllllllllllllddddddddddllllldddddda|
+|adddeeeeeeeeeeeeddddddddddllllllllllllldddddddddddddllllldddddda|
+|adddeeeeeeeeeeeeddddddddddllllllllllllllllllldddddddllllldddddda|
+|adddeeddddddddddddddddddddllllllllllllllllllllddddddllllldddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adstsuvvvvvuvvvvvvddwxwpyyyypyyypddddzdffffdzzzdffffdzzzdfffffda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: fg=accent bg=panel
+b: bg=panel bold
+c: fg=fg bg=panel bold
+d: bg=panel
+e: fg=dim bg=panel
+f: fg=mute bg=panel
+g: fg=edge bg=panel
+h: fg=success bg=panel bold
+i: fg=error bg=panel bold
+j: fg=success bg=panel
+k: fg=error bg=panel
+l: fg=fg bg=panel
+m: fg=mute bg=panel bold
+n: fg=accent-bright bg=panel
+o: fg=accent bg=surface
+p: bg=surface
+q: fg=dim bg=surface
+r: fg=fg bg=surface bold
+s: bg=accent bold
+t: fg=fg bg=accent bold
+u: bg=accent
+v: fg=fg bg=accent
+w: bg=edge bold
+x: fg=accent-bright bg=edge bold
+y: fg=fg bg=surface
+z: fg=accent-bright bg=panel bold
+=== 16 64x30
+|╭─ Test run ───────────────────────── from claude in api-auth ─╮|
+|│                                                              │|
+|│ Summary    Failures 5    Log                                 │|
+|│ ━━━━━━━───────────────────────────────────────────────────── │|
+|│                                                              │|
+|│ 412 passed   5 failed                   ━━━━━━━━━━━━━━ 98.8% │|
+|│                                                              │|
+|│ Time by package ───────────────────────────────────  seconds │|
+|│ internal/session ███████████████████████████████████████ 6.2 │|
+|│ internal/app     ██████████████████████████████▎         4.8 │|
+|│ vt               ███████████████████▌                    3.1 │|
+|│ internal/tape    ████████▊                               1.4 │|
+|│ internal/config  █████▋                                  0.9 │|
+|│                                                              │|
+|│ ▾ Failures  5                                                │|
+|│   PACKAGE               TEST                     TIME ▼      │|
+|│ ▌ internal/session      TestAttachRace            2.21s      │|
+|│   internal/session      TestAttachReplay          1.95s      │|
+|│   internal/app          TestDockClick             840ms      │|
+|│   internal/app          TestDockCustomWidth       610ms      │|
+|│   vt                    TestKittyPlaceholder      120ms      │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│                                                              │|
+|│  r  Rerun failed   [o Open log]    s sort tab next esc close │|
+|│                                                              │|
+|╰──────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccbaaaaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
+|a                                                              a|
+|a ccccccc    eeeeeeee e    eee                                 a|
+|a aaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
+|a                                                              a|
+|a fff dddddd   g dddddd                   hhhhhhhhhhhhhh ccccc a|
+|a                                                              a|
+|a ccccbccbccccccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  eeeeeee a|
+|a dddddddddddddddd iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii jjj a|
+|a dddddddddddd     iiiiiiiiiiiiiiiiiiiiiiiiiiiiiii         jjj a|
+|a dd               iiiiiiiiiiiiiiiiiiii                    jjj a|
+|a ddddddddddddd    iiiiiiiii                               jjj a|
+|a ddddddddddddddd  iiiiii                                  jjj a|
+|a                                                              a|
+|a e ccccccccbbg                                                a|
+|a   eeeeeee               eeee                     kkkk l      a|
+|a amnnnnnnnnnnnnnnnnmmmmmmoooooooooooooommmmmmmmmmmmooooommmmm a|
+|a   dddddddddddddddd      jjjjjjjjjjjjjjjj          jjjjj      a|
+|a   dddddddddddd          jjjjjjjjjjjjj             jjjjj      a|
+|a   dddddddddddd          jjjjjjjjjjjjjjjjjjj       jjjjj      a|
+|a   dd                    jjjjjjjjjjjjjjjjjjjj      jjjjj      a|
+|a                                                              a|
+|a                                                              a|
+|a                                                              a|
+|a                                                              a|
+|a                                                              a|
+|a                                                              a|
+|a pqppqqqqqpqqqqqqp  er jjjj jjje    r eeee rrr eeee rrr eeeee a|
+|a                                                              a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: fg=accent
+b: bold
+c: fg=fg bold
+d: fg=dim
+e: fg=mute
+f: fg=success bold
+g: fg=error bold
+h: fg=success
+i: fg=error
+j: fg=fg
+k: fg=mute bold
+l: fg=accent-bright
+m: reverse
+n: fg=dim reverse
+o: fg=dim bold reverse
+p: bold reverse
+q: fg=accent bold reverse
+r: fg=accent-bright bold
+=== ascii 64x30
+|+- Test run ------------------------- from claude in api-auth -+|
+||                                                              ||
+|| Summary    Failures 5    Log                                 ||
+|| =======----------------------------------------------------- ||
+||                                                              ||
+|| 412 passed   5 failed                   [############] 98.8% ||
+||                                                              ||
+|| Time by package -----------------------------------  seconds ||
+|| internal/session ####################################### 6.2 ||
+|| internal/app     ###############################         4.8 ||
+|| vt               ####################                    3.1 ||
+|| internal/tape    #########                               1.4 ||
+|| internal/config  ######                                  0.9 ||
+||                                                              ||
+|| v Failures  5                                                ||
+||   PACKAGE               TEST                     TIME v      ||
+|| > internal/session      TestAttachRace            2.21s      ||
+||   internal/session      TestAttachReplay          1.95s      ||
+||   internal/app          TestDockClick             840ms      ||
+||   internal/app          TestDockCustomWidth       610ms      ||
+||   vt                    TestKittyPlaceholder      120ms      ||
+||                                                              ||
+||                                                              ||
+||                                                              ||
+||                                                              ||
+||                                                              ||
+||                                                              ||
+||  r  Rerun failed   [o Open log]    s sort tab next esc close ||
+||                                                              ||
+|+--------------------------------------------------------------+|
+--- styles
+|  aaaaaaaaaa                                                    |
+|                                                                |
+|  aaaaaaa                                                       |
+|                                                                |
+|                                                                |
+|  aaa          a                                         aaaaa  |
+|                                                                |
+|  aaaaaaaaaaaaaaa                                               |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|    aaaaaaaaaaa                                                 |
+|                                                   aaaa         |
+|   bbbbbbbbbbbbbbbbbbbbbbbccccccccccccccbbbbbbbbbbbbcccccbbbbb  |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|                                                                |
+|  ccccccccccccccccc   a              a      aaa      aaa        |
+|                                                                |
+|                                                                |
+a: bold
+b: reverse
+c: bold reverse

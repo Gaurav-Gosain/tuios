@@ -1,0 +1,10 @@
+<!-- 40x10 -->
+<tml version="1">
+  <state>{"files": [{"name": "cmd", "kids": [{"name": "main.go"}, {"name": "util.go"}]}, {"name": "go.mod"}], "confirm": true}</state>
+  <col>
+    <tree items="state.files" label="name" children="kids" open="1"/>
+    <image src="file:shot.png" alt="Before"/>
+    <markdown>## Notes</markdown>
+    <modal title="Confirm" open="{state.confirm}"><text>Ship it?</text></modal>
+  </col>
+</tml>

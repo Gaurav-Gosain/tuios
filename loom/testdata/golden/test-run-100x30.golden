@@ -1,0 +1,330 @@
+=== truecolor 100x30
+|╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
+|│                                                                                                  │|
+|│ Summary    Failures 5    Log                           go test ./... · 14:07 · fix/token-refresh │|
+|│ ━━━━━━━───────────────────────────────────────────────────────────────────────────────────────── │|
+|│                                                                                                  │|
+|│ 412 passed   5 failed   9 skipped   18.4s                                   ━━━━━━━━━━━━━━ 98.8% │|
+|│                                                                                                  │|
+|│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
+|│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
+|│ internal/app     ██████████████████████████▍······· 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               █████████████████················· 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ███████▋·························· 1.4                                          │|
+|│ internal/config  ████▉····························· 0.9                                          │|
+|│                                                                                                  │|
+|│ ▾ Failures  5                                                                                    │|
+|│   PACKAGE               TEST                     TIME ▼                                          │|
+|│ ▌ internal/session      TestAttachRace            2.21s                                          │|
+|│   internal/session      TestAttachReplay          1.95s                                          │|
+|│   internal/app          TestDockClick             840ms                                          │|
+|│   internal/app          TestDockCustomWidth       610ms                                          │|
+|│   vt                    TestKittyPlaceholder      120ms                                          │|
+|│                                                                                                  │|
+|│ attach_test.go:184 reply hook ran after detach (seen in 3 of the last 10 runs)                   │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│  r  Rerun failed    o  Open log    e  Open in editor                   s sort tab next esc close │|
+|│                                                                                                  │|
+|╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adcccccccddddffffffffdfddddfffdddddddddddddddddddddddddddffdffffdfffffdfdfffffdfdfffffffffffffffffda|
+|adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adhhhdeeeeeedddideeeeeedddjdeeeeeeedddcccccdddddddddddddddddddddddddddddddddddkkkkkkkkkkkkkkdcccccda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adccccbccbcccccccdggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggda|
+|adeeeeeeeeeeeeeeeedlllllllllllllllllllllllllllllllllldmmmddddeeeedddnnnnnnnnnnnnnnnnnnnnnnndcccccdda|
+|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgggggggdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
+|adeedddddddddddddddlllllllllllllllllgggggggggggggggggdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
+|adeeeeeeeeeeeeeddddllllllllggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeddlllllgggggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddqqqqdpdddddddddddddddddddddddddddddddddddddddddda|
+|adrsttttttttttttttttssssssuuuuuuuuuuuuuussssssssssssuuuuusssssssssssssssssssssssssssssssssssssssssda|
+|adddeeeeeeeeeeeeeeeeddddddmmmmmmmmmmmmmmmmddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmdddddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmmmmmmmdddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeddddddddddddddddddddmmmmmmmmmmmmmmmmmmmmddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adnnnnnnnnnnnnnnnnnndmmmmmdmmmmdmmmdmmmmmdmmmmmmdooooodoododoodooodoooodoodoooooddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|advwvxyyyyyxyyyyyyxddzAzsBBBBsBBBsddzAzsBBBBsBBsBBBBBBsddddddddddddddddddCdffffdCCCdffffdCCCdfffffda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+A: fg=accent-bright bg=card bold
+B: fg=fg bg=surface
+C: fg=accent-bright bg=panel bold
+a: fg=accent bg=panel
+b: bg=panel bold
+c: fg=fg bg=panel bold
+d: bg=panel
+e: fg=dim bg=panel
+f: fg=mute bg=panel
+g: fg=edge bg=panel
+h: fg=success bg=panel bold
+i: fg=error bg=panel bold
+j: fg=dim bg=panel bold
+k: fg=success bg=panel
+l: fg=error bg=panel
+m: fg=fg bg=panel
+n: fg=info bg=panel
+o: fg=warning bg=panel
+p: fg=accent-bright bg=panel
+q: fg=mute bg=panel bold
+r: fg=accent bg=surface
+s: bg=surface
+t: fg=dim bg=surface
+u: fg=fg bg=surface bold
+v: bg=accent bold
+w: fg=fg bg=accent bold
+x: bg=accent
+y: fg=fg bg=accent
+z: bg=card bold
+=== 256 100x30
+|╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
+|│                                                                                                  │|
+|│ Summary    Failures 5    Log                           go test ./... · 14:07 · fix/token-refresh │|
+|│ ━━━━━━━───────────────────────────────────────────────────────────────────────────────────────── │|
+|│                                                                                                  │|
+|│ 412 passed   5 failed   9 skipped   18.4s                                   ━━━━━━━━━━━━━━ 98.8% │|
+|│                                                                                                  │|
+|│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
+|│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
+|│ internal/app     ██████████████████████████▍······· 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               █████████████████················· 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ███████▋·························· 1.4                                          │|
+|│ internal/config  ████▉····························· 0.9                                          │|
+|│                                                                                                  │|
+|│ ▾ Failures  5                                                                                    │|
+|│   PACKAGE               TEST                     TIME ▼                                          │|
+|│ ▌ internal/session      TestAttachRace            2.21s                                          │|
+|│   internal/session      TestAttachReplay          1.95s                                          │|
+|│   internal/app          TestDockClick             840ms                                          │|
+|│   internal/app          TestDockCustomWidth       610ms                                          │|
+|│   vt                    TestKittyPlaceholder      120ms                                          │|
+|│                                                                                                  │|
+|│ attach_test.go:184 reply hook ran after detach (seen in 3 of the last 10 runs)                   │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│  r  Rerun failed    o  Open log    e  Open in editor                   s sort tab next esc close │|
+|│                                                                                                  │|
+|╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adcccccccddddffffffffdfddddfffdddddddddddddddddddddddddddffdffffdfffffdfdfffffdfdfffffffffffffffffda|
+|adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adhhhdeeeeeedddideeeeeedddjdeeeeeeedddcccccdddddddddddddddddddddddddddddddddddkkkkkkkkkkkkkkdcccccda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adccccbccbcccccccdggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggda|
+|adeeeeeeeeeeeeeeeedlllllllllllllllllllllllllllllllllldmmmddddeeeedddnnnnnnnnnnnnnnnnnnnnnnndcccccdda|
+|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgggggggdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
+|adeedddddddddddddddlllllllllllllllllgggggggggggggggggdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
+|adeeeeeeeeeeeeeddddllllllllggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeddlllllgggggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddqqqqdpdddddddddddddddddddddddddddddddddddddddddda|
+|adrsttttttttttttttttssssssuuuuuuuuuuuuuussssssssssssuuuuusssssssssssssssssssssssssssssssssssssssssda|
+|adddeeeeeeeeeeeeeeeeddddddmmmmmmmmmmmmmmmmddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmdddddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmmmmmmmdddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeddddddddddddddddddddmmmmmmmmmmmmmmmmmmmmddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adnnnnnnnnnnnnnnnnnndmmmmmdmmmmdmmmdmmmmmdmmmmmmdooooodoododoodooodoooodoodoooooddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|advwvxyyyyyxyyyyyyxddzAzsBBBBsBBBsddzAzsBBBBsBBsBBBBBBsddddddddddddddddddCdffffdCCCdffffdCCCdfffffda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+A: fg=accent-bright bg=edge bold
+B: fg=fg bg=surface
+C: fg=accent-bright bg=panel bold
+a: fg=accent bg=panel
+b: bg=panel bold
+c: fg=fg bg=panel bold
+d: bg=panel
+e: fg=dim bg=panel
+f: fg=mute bg=panel
+g: fg=edge bg=panel
+h: fg=success bg=panel bold
+i: fg=error bg=panel bold
+j: fg=dim bg=panel bold
+k: fg=success bg=panel
+l: fg=error bg=panel
+m: fg=fg bg=panel
+n: fg=info bg=panel
+o: fg=warning bg=panel
+p: fg=accent-bright bg=panel
+q: fg=mute bg=panel bold
+r: fg=accent bg=surface
+s: bg=surface
+t: fg=dim bg=surface
+u: fg=fg bg=surface bold
+v: bg=accent bold
+w: fg=fg bg=accent bold
+x: bg=accent
+y: fg=fg bg=accent
+z: bg=edge bold
+=== 16 100x30
+|╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
+|│                                                                                                  │|
+|│ Summary    Failures 5    Log                           go test ./... · 14:07 · fix/token-refresh │|
+|│ ━━━━━━━───────────────────────────────────────────────────────────────────────────────────────── │|
+|│                                                                                                  │|
+|│ 412 passed   5 failed   9 skipped   18.4s                                   ━━━━━━━━━━━━━━ 98.8% │|
+|│                                                                                                  │|
+|│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
+|│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
+|│ internal/app     ██████████████████████████▍        4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               █████████████████                  3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ███████▋                           1.4                                          │|
+|│ internal/config  ████▉                              0.9                                          │|
+|│                                                                                                  │|
+|│ ▾ Failures  5                                                                                    │|
+|│   PACKAGE               TEST                     TIME ▼                                          │|
+|│ ▌ internal/session      TestAttachRace            2.21s                                          │|
+|│   internal/session      TestAttachReplay          1.95s                                          │|
+|│   internal/app          TestDockClick             840ms                                          │|
+|│   internal/app          TestDockCustomWidth       610ms                                          │|
+|│   vt                    TestKittyPlaceholder      120ms                                          │|
+|│                                                                                                  │|
+|│ attach_test.go:184 reply hook ran after detach (seen in 3 of the last 10 runs)                   │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│                                                                                                  │|
+|│  r  Rerun failed   [o Open log]  [e Open in editor]                    s sort tab next esc close │|
+|│                                                                                                  │|
+|╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
+|a                                                                                                  a|
+|a ccccccc    eeeeeeee e    eee                           ee eeee eeeee e eeeee e eeeeeeeeeeeeeeeee a|
+|a aaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
+|a                                                                                                  a|
+|a fff dddddd   g dddddd   h ddddddd   ccccc                                   iiiiiiiiiiiiii ccccc a|
+|a                                                                                                  a|
+|a ccccbccbccccccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeee  eeeeeee    cccccbcccccbccccbccbcccc eeeeeeeeeeee a|
+|a dddddddddddddddd jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj kkk    dddd   lllllllllllllllllllllll ccccc  a|
+|a dddddddddddd     jjjjjjjjjjjjjjjjjjjjjjjjjjj        kkk    ddddd  mmmmmmmmmmmmmmmmmmmmmmm c      a|
+|a dd               jjjjjjjjjjjjjjjjj                  kkk    ddddd  nnnnnnnnnnnnnnnnnnnnnnn ccc    a|
+|a ddddddddddddd    jjjjjjjj                           kkk                                          a|
+|a ddddddddddddddd  jjjjj                              kkk                                          a|
+|a                                                                                                  a|
+|a e ccccccccbbg                                                                                    a|
+|a   eeeeeee               eeee                     oooo n                                          a|
+|a apqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrppppppppppppppppppppppppppppppppppppppppp a|
+|a   dddddddddddddddd      kkkkkkkkkkkkkkkk          kkkkk                                          a|
+|a   dddddddddddd          kkkkkkkkkkkkk             kkkkk                                          a|
+|a   dddddddddddd          kkkkkkkkkkkkkkkkkkk       kkkkk                                          a|
+|a   dd                    kkkkkkkkkkkkkkkkkkkk      kkkkk                                          a|
+|a                                                                                                  a|
+|a llllllllllllllllll kkkkk kkkk kkk kkkkk kkkkkk mmmmm mm m mm mmm mmmm mm mmmmm                   a|
+|a                                                                                                  a|
+|a                                                                                                  a|
+|a                                                                                                  a|
+|a                                                                                                  a|
+|a stsstttttstttttts  eu kkkk kkke  eu kkkk kk kkkkkke                    u eeee uuu eeee uuu eeeee a|
+|a                                                                                                  a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: fg=accent
+b: bold
+c: fg=fg bold
+d: fg=dim
+e: fg=mute
+f: fg=success bold
+g: fg=error bold
+h: fg=dim bold
+i: fg=success
+j: fg=error
+k: fg=fg
+l: fg=info
+m: fg=warning
+n: fg=accent-bright
+o: fg=mute bold
+p: reverse
+q: fg=dim reverse
+r: fg=dim bold reverse
+s: bold reverse
+t: fg=accent bold reverse
+u: fg=accent-bright bold
+=== ascii 100x30
+|+- Test run ------------------------------------------------------------- from claude in api-auth -+|
+||                                                                                                  ||
+|| Summary    Failures 5    Log                           go test ./... · 14:07 · fix/token-refresh ||
+|| =======----------------------------------------------------------------------------------------- ||
+||                                                                                                  ||
+|| 412 passed   5 failed   9 skipped   18.4s                                   [############] 98.8% ||
+||                                                                                                  ||
+|| Time by package ------------------------------  seconds    Suite time, last 30 runs ------------ ||
+|| internal/session ################################## 6.2    wall   ~-=.#-..+-.-#~._-.-.=-_ 18.4s  ||
+|| internal/app     ###########################        4.8    flaky  __-_+-__-.__#.__.___+-= 3      ||
+|| vt               #################                  3.1    alloc  ++*+#**+**==+=~~~--..__ 35M    ||
+|| internal/tape    ########                           1.4                                          ||
+|| internal/config  #####                              0.9                                          ||
+||                                                                                                  ||
+|| v Failures  5                                                                                    ||
+||   PACKAGE               TEST                     TIME v                                          ||
+|| > internal/session      TestAttachRace            2.21s                                          ||
+||   internal/session      TestAttachReplay          1.95s                                          ||
+||   internal/app          TestDockClick             840ms                                          ||
+||   internal/app          TestDockCustomWidth       610ms                                          ||
+||   vt                    TestKittyPlaceholder      120ms                                          ||
+||                                                                                                  ||
+|| attach_test.go:184 reply hook ran after detach (seen in 3 of the last 10 runs)                   ||
+||                                                                                                  ||
+||                                                                                                  ||
+||                                                                                                  ||
+||                                                                                                  ||
+||  r  Rerun failed   [o Open log]  [e Open in editor]                    s sort tab next esc close ||
+||                                                                                                  ||
+|+--------------------------------------------------------------------------------------------------+|
+--- styles
+|  aaaaaaaaaa                                                                                        |
+|                                                                                                    |
+|  aaaaaaa                                                                                           |
+|                                                                                                    |
+|                                                                                                    |
+|  aaa          a          a           aaaaa                                                  aaaaa  |
+|                                                                                                    |
+|  aaaaaaaaaaaaaaa                                            aaaaaaaaaaaaaaaaaaaaaaaa               |
+|                                                                                            aaaaa   |
+|                                                                                            a       |
+|                                                                                            aaa     |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|    aaaaaaaaaaa                                                                                     |
+|                                                   aaaa                                             |
+|   bbbbbbbbbbbbbbbbbbbbbbbccccccccccccccbbbbbbbbbbbbcccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|  ccccccccccccccccc   a             a                                    a      aaa      aaa        |
+|                                                                                                    |
+|                                                                                                    |
+a: bold
+b: reverse
+c: bold reverse

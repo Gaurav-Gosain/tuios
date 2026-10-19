@@ -1,0 +1,10 @@
+<!-- 40x12 -->
+<tml version="1">
+  <col gap="1">
+    <text wrap="word">Plain text with <b>bold</b>, <i>italic</i>, <u>under</u>, <s>struck</s>, <code>inline</code>, <c role="success">a role colour</c>, <kbd>ctrl+b</kbd> and <a href="https://tuios.dev">a link</a>.</text>
+    <text wrap="char" role="dim">abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnop</text>
+    <text wrap="none">This line is far too long to fit and ends in an ellipsis</text>
+    <text align="right" role="mute">right</text>
+    <text align="center">centre</text>
+  </col>
+</tml>

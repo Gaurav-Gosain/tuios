@@ -1,0 +1,92 @@
+=== truecolor 40x9
+|left                               right|
+|                                        |
+| fill       fill:2               8 cell…|
+|                                        |
+| 25%       75%                          |
+|                                        |
+|                 a   b                  |
+|                                        |
+| a                 b                 c  |
+--- styles
+|aaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cddddcbbbbbcddddddcbbbbbbbbbbbbbcdcddddd|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cdddcbbbbbcdddcbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbcdcbcdcbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cdcbbbbbbbbbbbbbbbcdcbbbbbbbbbbbbbbbcdcb|
+a: fg=fg bg=panel
+b: bg=panel
+c: bg=accent-tint bold
+d: fg=accent bg=accent-tint bold
+=== 256 40x9
+|left                               right|
+|                                        |
+| fill       fill:2               8 cell…|
+|                                        |
+| 25%       75%                          |
+|                                        |
+|                 a   b                  |
+|                                        |
+| a                 b                 c  |
+--- styles
+|aaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cddddcbbbbbcddddddcbbbbbbbbbbbbbcdcddddd|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cdddcbbbbbcdddcbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbcdcbcdcbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|cdcbbbbbbbbbbbbbbbcdcbbbbbbbbbbbbbbbcdcb|
+a: fg=fg bg=panel
+b: bg=panel
+c: bg=accent-tint bold
+d: fg=accent bg=accent-tint bold
+=== 16 40x9
+|left                               right|
+|                                        |
+|fill       fill:2               8 cells |
+|                                        |
+|25%       75%                           |
+|                                        |
+|                  a b                   |
+|                                        |
+|a                  b                  c |
+--- styles
+|aaaa                               aaaaa|
+|                                        |
+|bbbb       bbbbbb               bcbbbbb |
+|                                        |
+|bbb       bbb                           |
+|                                        |
+|                  b b                   |
+|                                        |
+|b                  b                  b |
+a: fg=fg
+b: fg=accent bold
+c: bold
+=== ascii 40x9
+|left                               right|
+|                                        |
+|[fill]     [fill:2]             [8 cell~|
+|                                        |
+|[25%]     [75%]                         |
+|                                        |
+|                [a] [b]                 |
+|                                        |
+|[a]               [b]               [c] |
+--- styles
+|                                        |
+|                                        |
+|aaaaaa     aaaaaaaa             aaaaaaaa|
+|                                        |
+|aaaaa     aaaaa                         |
+|                                        |
+|                aaa aaa                 |
+|                                        |
+|aaa               aaa               aaa |
+a: bold

@@ -1,0 +1,8 @@
+<!-- 60x6 -->
+<tml version="1">
+  <state>{"passed": 412, "failed": 3}</state>
+  <col gap="1">
+    <row gap="3"><stat label="passed" value="{state.passed}" role="success" delta="+12"/><stat label="failed" value="{state.failed}" role="error"/><stat label="wall" value="18.4s"/></row>
+    <row gap="2"><stat h="3" w="20" label="passed" value="{state.passed}" delta="+12" role="success"/><stat h="3" w="20" label="failed" value="{state.failed}" role="error"/></row>
+  </col>
+</tml>

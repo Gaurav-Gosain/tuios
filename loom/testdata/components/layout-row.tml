@@ -1,0 +1,10 @@
+<!-- 40x9 -->
+<tml version="1">
+  <col gap="1">
+    <row gap="1"><text>left</text><spacer/><text>right</text></row>
+    <row gap="1"><badge w="fill">fill</badge><badge w="fill:2">fill:2</badge><badge w="8">8 cells</badge></row>
+    <row gap="1"><badge w="25%">25%</badge><badge w="75%">75%</badge></row>
+    <row gap="1" justify="center"><badge>a</badge><badge>b</badge></row>
+    <row gap="1" justify="between"><badge>a</badge><badge>b</badge><badge>c</badge></row>
+  </col>
+</tml>

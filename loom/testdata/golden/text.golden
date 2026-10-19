@@ -1,0 +1,147 @@
+=== truecolor 40x12
+|Plain text with bold, italic, under,    |
+|struck, inline, a role colour, ctrl+b   |
+|and a link.                             |
+|                                        |
+|abcdefghijklmnopqrstuvwxyz0123456789abcd|
+|efghijklmnop                            |
+|                                        |
+|This line is far too long to fit and en…|
+|                                        |
+|                                   right|
+|                                        |
+|                 centre                 |
+--- styles
+|aaaaabaaaabaaaabccccabddddddabeeeeeabbbb|
+|ffffffabggggggabhbhhhhbhhhhhhabiiiiiibbb|
+|aaabjkjjjjabbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|llllllllllllllllllllllllllllllllllllllll|
+|llllllllllllbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaabaaaabaabaaabaaabaaaabaabaaabaaabaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbmmmmm|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbaaaaaabbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel
+b: bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel italic
+e: fg=fg bg=panel underline
+f: fg=fg bg=panel strike
+g: fg=info bg=panel
+h: fg=success bg=panel
+i: fg=accent-bright bg=panel bold
+j: fg=info bg=panel underline link
+k: bg=panel underline link
+l: fg=dim bg=panel
+m: fg=mute bg=panel
+=== 256 40x12
+|Plain text with bold, italic, under,    |
+|struck, inline, a role colour, ctrl+b   |
+|and a link.                             |
+|                                        |
+|abcdefghijklmnopqrstuvwxyz0123456789abcd|
+|efghijklmnop                            |
+|                                        |
+|This line is far too long to fit and en…|
+|                                        |
+|                                   right|
+|                                        |
+|                 centre                 |
+--- styles
+|aaaaabaaaabaaaabccccabddddddabeeeeeabbbb|
+|ffffffabggggggabhbhhhhbhhhhhhabiiiiiibbb|
+|aaabjkjjjjabbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|llllllllllllllllllllllllllllllllllllllll|
+|llllllllllllbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaabaaaabaabaaabaaabaaaabaabaaabaaabaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbmmmmm|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbaaaaaabbbbbbbbbbbbbbbbb|
+a: fg=fg bg=panel
+b: bg=panel
+c: fg=fg bg=panel bold
+d: fg=fg bg=panel italic
+e: fg=fg bg=panel underline
+f: fg=fg bg=panel strike
+g: fg=info bg=panel
+h: fg=success bg=panel
+i: fg=accent-bright bg=panel bold
+j: fg=info bg=panel underline link
+k: bg=panel underline link
+l: fg=dim bg=panel
+m: fg=mute bg=panel
+=== 16 40x12
+|Plain text with bold, italic, under,    |
+|struck, inline, a role colour, ctrl+b   |
+|and a link.                             |
+|                                        |
+|abcdefghijklmnopqrstuvwxyz0123456789abcd|
+|efghijklmnop                            |
+|                                        |
+|This line is far too long to fit and en…|
+|                                        |
+|                                   right|
+|                                        |
+|                 centre                 |
+--- styles
+|aaaaa aaaa aaaa bbbba cccccca ddddda    |
+|eeeeeea ffffffa g gggg gggggga hhhhhh   |
+|aaa ijiiiia                             |
+|                                        |
+|kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk|
+|kkkkkkkkkkkk                            |
+|                                        |
+|aaaa aaaa aa aaa aaa aaaa aa aaa aaa aaa|
+|                                        |
+|                                   lllll|
+|                                        |
+|                 aaaaaa                 |
+a: fg=fg
+b: fg=fg bold
+c: fg=fg italic
+d: fg=fg underline
+e: fg=fg strike
+f: fg=info
+g: fg=success
+h: fg=accent-bright bold
+i: fg=info underline link
+j: underline link
+k: fg=dim
+l: fg=mute
+=== ascii 40x12
+|Plain text with bold, italic, under,    |
+|struck, inline, a role colour, ctrl+b   |
+|and a link.                             |
+|                                        |
+|abcdefghijklmnopqrstuvwxyz0123456789abcd|
+|efghijklmnop                            |
+|                                        |
+|This line is far too long to fit and en~|
+|                                        |
+|                                   right|
+|                                        |
+|                 centre                 |
+--- styles
+|                aaaa  bbbbbb  ccccc     |
+|dddddd                         aaaaaa   |
+|    eeeeee                              |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+a: bold
+b: italic
+c: underline
+d: strike
+e: underline link
