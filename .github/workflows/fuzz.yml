@@ -105,7 +105,7 @@ jobs:
           - pkg: sketch/internal/layout
             targets: FuzzCompoundLayout
           - pkg: sketch/raster
-            targets: FuzzDraw
+            targets: FuzzDraw FuzzMotion
           - pkg: sketch/text
             targets: FuzzDraw
 

@@ -108,7 +108,7 @@ func (s *liveScreen) paint(full bool) {
 			fmt.Fprintf(&b, "\x1b[%d;%dH%s%s", sa.Top+r, sa.Left, bg, strings.Repeat(" ", sa.Cols))
 			i := first + r
 			if i < len(lines) {
-				fmt.Fprintf(&b, "\x1b[%d;%dH%s%s", sa.Top+r, sa.Left, bg, highlight(clip(lines[i], sa.Cols), s.th))
+				fmt.Fprintf(&b, "\x1b[%d;%dH%s%s", sa.Top+r, sa.Left, bg, highlight(clip(paneText(lines[i]), sa.Cols), s.th))
 			}
 		}
 		if caret >= 0 {
@@ -119,6 +119,8 @@ func (s *liveScreen) paint(full bool) {
 	if strings.HasPrefix(status, "!") {
 		text, status = s.th.Critical, status[1:]
 	}
+	// The status quotes file names and parse errors, which quote the source.
+	status = paneText(status)
 	fmt.Fprintf(&b, "\x1b[%d;1H%s%s %s", s.rows, bg, sgr(true, text), clip(status, s.cols-2))
 	fmt.Fprintf(&b, "\x1b[K%s%s", bg, strings.Repeat(" ", max(0, s.cols-2-len([]rune(status)))))
 	if cr > 0 {
@@ -126,6 +128,12 @@ func (s *liveScreen) paint(full bool) {
 	}
 	b.WriteString("\x1b[?2026l")
 	_, _ = s.live.Write([]byte(b.String()))
+}
+
+// paneText is a line of the file as the view may write it: nothing a terminal
+// would act on (mermaid.TermSafe), and tabs as spaces, which keep to the pane.
+func paneText(s string) string {
+	return strings.ReplaceAll(mermaid.TermSafe(s), "\t", "    ")
 }
 
 func clip(s string, n int) string {
@@ -434,7 +442,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 	case lo.demo:
 		steps := mermaid.DemoSteps
 		if name != "" {
-			data, err := os.ReadFile(name)
+			data, err := mermaid.ReadSource(name)
 			if err != nil {
 				cleanup()
 				return fmt.Errorf("cannot read %s: %w", name, err)
@@ -446,6 +454,14 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			if !strings.HasSuffix(strings.ToLower(name), ".md") {
 				// One diagram: type it from nothing, a line at a time.
 				steps = linesOf(steps[0])
+			}
+			// Each keystroke holds the text typed so far, so the memory grows
+			// with the square of a step's length.
+			for _, st := range steps {
+				if len(st) > mermaid.MaxDemoStep {
+					cleanup()
+					return fmt.Errorf("%s: --demo types at most %d characters a diagram", name, mermaid.MaxDemoStep)
+				}
 			}
 		}
 		strokes := mermaid.Type(steps)
@@ -483,7 +499,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 		demoStart()
 	default:
 		load := func() {
-			data, err := os.ReadFile(name)
+			data, err := mermaid.ReadSource(name)
 			if err != nil {
 				s.setStatus("!" + s.name + "  " + err.Error())
 				s.paint(false)
@@ -511,7 +527,26 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			return err
 		}
 		// Editors save in bursts (write, rename, chmod): one load after the
-		// burst. The timer exists only while a burst is in flight.
+		// burst. The timer exists only while a burst is in flight. Loads run
+		// one at a time on one goroutine, and a save during a load asks for
+		// one more, so the newest file is always the last one shown.
+		reload := make(chan struct{}, 1)
+		go safe(func() {
+			for {
+				select {
+				case <-reload:
+					load()
+				case <-quit:
+					return
+				}
+			}
+		})()
+		ask := func() {
+			select {
+			case reload <- struct{}{}:
+			default:
+			}
+		}
 		var debounce *time.Timer
 		go safe(func() {
 			for {
@@ -526,7 +561,7 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 					if debounce != nil {
 						debounce.Stop()
 					}
-					debounce = time.AfterFunc(30*time.Millisecond, safe(load))
+					debounce = time.AfterFunc(30*time.Millisecond, ask)
 				case _, ok := <-w.Errors:
 					if !ok {
 						return

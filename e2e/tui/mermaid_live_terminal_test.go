@@ -134,3 +134,52 @@ func buildTuiosWithTags(t *testing.T, tags string) string {
 	}
 	return bin
 }
+
+// TestMermaidLiveWritesNoTerminalControls watches a diagram whose labels,
+// source lines and parse error hold terminal controls, with the source pane
+// shown, in a kitty terminal and a text one. "#27;" in a label decodes to
+// ESC, and the file also holds raw ESC bytes, so a view that wrote either
+// as it is would set the window title and write the clipboard. The text of
+// each must still be on screen, with U+FFFD in place of the control.
+func TestMermaidLiveWritesNoTerminalControls(t *testing.T) {
+	src := "flowchart LR\n  A[\"#27;]2;pwned#7;\"] --> B\n  %% \x1b]52;c;aGk=\x07 clip\n  C[\"\x1b]2;title\x07\"] --> D\n"
+	broken := "flowchart LR\n  A[\x1b]2;broken\x07 -->\n"
+	for _, tc := range []struct {
+		name  string
+		kitty bool
+		src   string
+	}{
+		{"kitty", true, src},
+		{"text", false, src},
+		{"parse error", false, broken},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			opts := fakeTermOpts{bg: "rgb:0000/0000/0000", fg: "rgb:ffff/ffff/ffff", kitty: tc.kitty}
+			path := filepath.Join(t.TempDir(), "hostile.mmd")
+			if err := os.WriteFile(path, []byte(tc.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			ft := startFakeTerm(t, base, 140, 40, opts, "mermaid", path, "--watch", "--split", "--theme", "flexoki")
+			// The source pane colours the source, so a match is on a word of it.
+			shown := regexp.MustCompile(`aGk=|broken`)
+			if _, ok := ft.waitFor(shown, 20*time.Second); !ok {
+				t.Fatalf("the source pane never showed; output:\n%q", tailString(ft.output(), 600))
+			}
+			time.Sleep(300 * time.Millisecond)
+			_, _ = ft.pty.Write([]byte("q"))
+			if _, ok := ft.exitCode(15 * time.Second); !ok {
+				t.Fatal("tuios mermaid did not exit")
+			}
+			out := ft.output()
+			for _, bad := range []string{"\x1b]2;pwned", "\x1b]2;title", "\x1b]2;broken", "\x1b]52;", "\x07"} {
+				if strings.Contains(out, bad) {
+					t.Errorf("the view wrote %q to the terminal", bad)
+				}
+			}
+			if !strings.Contains(out, "\uFFFD") {
+				t.Errorf("no U+FFFD where the control was; output:\n%q", tailString(out, 600))
+			}
+		})
+	}
+}

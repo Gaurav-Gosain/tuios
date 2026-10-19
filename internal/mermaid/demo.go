@@ -30,6 +30,11 @@ var DemoSteps = []string{
 	"flowchart LR\n  subgraph Make\n  Idea --> Build\n  Build --> Review{Ready?}\n  Review -->|Not yet| Build\n  end\n  Review -->|Yes| Launch([Launch])\n  Launch --> Users[(Users)]\n  Users -.->|feedback| Idea\n  classDef go fill:#879a39,stroke:#66800b,color:#fffcf0\n  class Launch go",
 }
 
+// MaxDemoStep is the longest step Type is given: each keystroke holds the
+// text typed so far, so a step of n characters costs about n*n/2 bytes, here
+// at most 32 MB.
+const MaxDemoStep = 8000
+
 // Typing timings, from pele's video: a character every 24 ms, 300 ms on a
 // finished step, 400 ms on the first.
 const (

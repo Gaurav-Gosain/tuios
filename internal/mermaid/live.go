@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"tuios.dev/sketch"
@@ -71,6 +72,10 @@ type Live struct {
 	area  Area
 	scene *raster.Scene
 	diag  *sketch.Diagram
+	// tickets numbers the calls of Show, and shown is the newest one that
+	// reached the screen.
+	tickets atomic.Uint64
+	shown   uint64
 	// lastSVG is the drawing on screen, so an unchanged one is not sent again.
 	lastSVG string
 	mo      *raster.Motion
@@ -124,6 +129,11 @@ func (l *Live) Err() error {
 // Show draws src. A source that does not parse keeps the last diagram on
 // screen and is reported by Err.
 func (l *Live) Show(src string) {
+	// Two calls can overlap: a slow parse and a newer save, or a demo that
+	// restarts. Each takes a ticket first, and one that finishes after a newer
+	// one has been shown is dropped, so the screen never ends on an older
+	// source.
+	ticket := l.tickets.Add(1)
 	d, err := sketch.Parse(src, sketch.ParseOptions{})
 	var out sketch.SVG
 	if err == nil {
@@ -134,6 +144,11 @@ func (l *Live) Show(src string) {
 		sc, err = raster.ParseScene(out.Data)
 	}
 	l.mu.Lock()
+	if ticket < l.shown {
+		l.mu.Unlock()
+		return
+	}
+	l.shown = ticket
 	l.err = err
 	if err != nil {
 		l.mu.Unlock()
@@ -319,9 +334,25 @@ func (l *Live) sendFinal() {
 	l.drawFrame(mo, img, area, 1, 1, true)
 }
 
+// MaxFramePixels bounds the picture of one frame. The cell size comes from
+// the terminal, and one that reports 65535 pixels a cell would otherwise ask
+// for gigabytes a frame. A larger canvas is scaled down to fit, aspect kept.
+const MaxFramePixels = 16_000_000
+
 // canvas is the pixel size of the picture for an area at a density.
 func canvas(a Area, density float64) (int, int) {
-	return max(1, int(float64(a.Cols*a.CellW)*density)), max(1, int(float64(a.Rows*a.CellH)*density))
+	w := float64(a.Cols) * float64(a.CellW) * density
+	h := float64(a.Rows) * float64(a.CellH) * density
+	if w*h > MaxFramePixels {
+		k := math.Sqrt(MaxFramePixels / (w * h))
+		w, h = w*k, h*k
+	}
+	// A side under a pixel rounds up to one, so the other side is held to
+	// the bound on its own too.
+	w, h = math.Max(1, w), math.Max(1, h)
+	w = math.Min(w, MaxFramePixels/h)
+	h = math.Min(h, MaxFramePixels/w)
+	return max(1, int(w)), max(1, int(h))
 }
 
 func (l *Live) drawFrame(mo *raster.Motion, img *image.RGBA, area Area, p, density float64, final bool) {
@@ -474,7 +505,7 @@ func (l *Live) drawText() {
 		case errors.Is(derr, sketchtext.ErrUnsupported):
 			lines = []string{"", "  This diagram type has no text drawing. Use a terminal with kitty graphics."}
 		case derr != nil:
-			lines = []string{"", "  " + derr.Error()}
+			lines = []string{"", "  " + TermSafe(derr.Error())}
 		}
 	}
 	_ = err

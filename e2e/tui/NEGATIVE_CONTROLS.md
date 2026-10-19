@@ -7459,3 +7459,11 @@ draft. Run on 2026-10-19.
 | A signal other than SIGINT and SIGTERM leaves raw mode, and a stalled terminal keeps it raw until the blocked write returns | The cleanup that restores termios first, on every signal and panic | The build before the fix (3bdff3a2c) | `/SIGHUP` (exit 129, termios, no reset), `/SIGTERM_while_stalled` (termios while stalled) | **caught** |
 
 The build before the fix has no panic hook, so its `/panic` case times out instead of failing on termios. That case was checked with the `term.Restore` control above. The panic case builds its own binary with `-tags mermaidpanic` from the checkout and ignores `TUIOS_E2E_BIN`, so its control edits the source: with `term.Restore` removed it fails on termios (run again on 2026-10-19 after the hook moved from an environment variable to the build tag).
+
+### tuios mermaid --watch writes no terminal controls from the file
+
+`TestMermaidLiveWritesNoTerminalControls` watches a diagram with `--split` whose labels and source lines hold ESC (as `#27;` and as raw bytes), OSC 2, OSC 52 and BEL, in a kitty terminal and a text one, and a source with a parse error that quotes them. None of `ESC ]2;`, `ESC ]52;` or BEL may reach the terminal, and U+FFFD must show in their place. Its positive half is the source pane, which every case waits for. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The source pane writes the file's controls to the terminal | `mermaid.TermSafe` in `paneText` | Returned the line as it is | `/kitty` and `/text` (OSC 2, OSC 52, BEL), `/parse_error` (BEL) | **caught** |
