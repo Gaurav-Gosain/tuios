@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -81,13 +81,7 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 }
 
 func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
-	var data []byte
-	var err error
-	if name == "-" {
-		data, err = io.ReadAll(io.LimitReader(os.Stdin, 1<<22))
-	} else {
-		data, err = os.ReadFile(name)
-	}
+	data, err := mermaid.ReadSource(name)
 	if err != nil {
 		return fmt.Errorf("cannot read %s: %w", name, err)
 	}
@@ -146,9 +140,10 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		out, err := sketch.Render(src, sketch.RenderOptions{Theme: th})
 		if err != nil {
 			failed++
-			fmt.Fprintf(os.Stderr, "diagram %d: %v\n", i+1, err)
+			// The message quotes the source, so it is made safe as the source is.
+			fmt.Fprintf(os.Stderr, "diagram %d: %s\n", i+1, mermaid.TermSafe(err.Error()))
 			if format == "text" || format == "kitty" {
-				fmt.Fprintln(stdout, strings.TrimRight(src, "\n"))
+				fmt.Fprintln(stdout, mermaid.TermSafe(strings.TrimRight(src, "\n")))
 			}
 			continue
 		}
@@ -202,7 +197,7 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 			}
 		}
 		// No text drawing for this type, or none that fits: the source.
-		_, err := fmt.Fprintln(stdout, strings.TrimRight(src, "\n"))
+		_, err := fmt.Fprintln(stdout, mermaid.TermSafe(strings.TrimRight(src, "\n")))
 		return err
 	}
 
@@ -260,6 +255,12 @@ var errNoAnswer = errors.New("no answer")
 // image, then a primary device attributes request that every terminal answers.
 // The terminal supports kitty graphics when the image query answers first.
 func kittyGraphics(out *os.File) bool {
+	// The answer is read from the terminal, which readAnswer cannot do on
+	// Windows. A query there would leave the terminal's DA1 reply in the
+	// shell's input after tuios exits, so none is sent.
+	if runtime.GOOS == "windows" {
+		return false
+	}
 	in := os.Stdin
 	if !term.IsTerminal(int(in.Fd())) {
 		return false
