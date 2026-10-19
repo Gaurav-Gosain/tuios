@@ -4378,6 +4378,9 @@ func (p *PTY) SetCellSize(cellWidth, cellHeight int) {
 	defer p.terminalMu.Unlock()
 	if p.terminal != nil && cellWidth > 0 && cellHeight > 0 {
 		p.terminal.SetCellSize(cellWidth, cellHeight)
+		// A new cell under mode 2048 queues a size report here, outside any
+		// write of the program's output.
+		p.wakeResponses()
 	}
 }
 
@@ -5175,11 +5178,11 @@ func (p *PTY) noteExit(code int) {
 // (DA1, CPR and the rest) to the program. Client emulators drain theirs, so
 // the program gets one copy.
 //
-// The emulator queues a reply only while vtWriter writes to it, so vtWriter
-// wakes this loop after each write, and the replies are taken and written
-// under respMu. Taking them under the lock is what lets a quiesce flush
-// them: once it holds respMu, no reply is in this goroutine's hands. See
-// pty_quiesce.go.
+// The emulator queues a reply while vtWriter writes to it, and when the cell
+// size or the colours it reports change (SetCellSize, setReportColors). Each
+// of them wakes this loop, and the replies are taken and written under
+// respMu. Taking them under the lock is what lets a quiesce flush them: once
+// it holds respMu, no reply is in this goroutine's hands. See pty_quiesce.go.
 func (p *PTY) forwardTerminalResponses() {
 	if p.terminal == nil {
 		return
