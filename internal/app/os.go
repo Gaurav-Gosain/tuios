@@ -362,6 +362,7 @@ type OS struct {
 	RenameBuffer           string                        // Buffer for new window name
 	RenameTargetID         string                        // Window the rename in flight applies to
 	renameHit              overlay.Rect                  // Where the dialog was drawn, in screen cells
+	renameClearHit         overlay.Rect                  // Where its clear hint was drawn, in screen cells
 	PrefixActive           bool                          // True when prefix key was pressed (tmux-style)
 	WorkspacePrefixActive  bool                          // True when Ctrl+B, w was pressed (workspace sub-prefix)
 	MinimizePrefixActive   bool                          // True when Ctrl+B, m was pressed (minimize sub-prefix)

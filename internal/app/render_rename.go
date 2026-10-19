@@ -6,13 +6,19 @@ import (
 )
 
 // renameDialogWidth is the micro-dialog's preferred inner width: a name and a
-// cursor, and nothing that would make it a panel.
-const renameDialogWidth = 28
+// cursor, and nothing that would make it a panel. It is the least that keeps
+// all three hints in the border once their modifiers are shortened.
+const renameDialogWidth = 31
+
+// renameHintClear is the clear hint's index in renameHints, which is how its
+// drawn rect is found to make it pressable.
+const renameHintClear = 1
 
 // renameHints are built per render because the key glyph follows ASCII mode.
 func renameHints() []overlay.Hint {
 	return []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "save"},
+		{Key: "ctrl+u", Label: "clear"},
 		{Key: "esc", Label: "cancel"},
 	}
 }

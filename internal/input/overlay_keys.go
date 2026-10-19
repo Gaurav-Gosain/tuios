@@ -134,6 +134,11 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			return o, nil
 		}
+		if key == "ctrl+u" {
+			o.HelpSearchQuery = ""
+			o.HelpScrollOffset = 0
+			return o, nil
+		}
 
 		// Single printable characters extend the query.
 		if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {

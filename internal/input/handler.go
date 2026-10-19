@@ -768,6 +768,17 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "backspace":
 		o.RenameBackspace()
 		return o, nil
+	case "ctrl+u":
+		o.RenameClear()
+		return o, nil
+	case "ctrl+c":
+		// Shell-like: ctrl+c drops the line, and on an empty line it leaves.
+		if o.RenameBuffer == "" {
+			o.EndRename()
+		} else {
+			o.RenameClear()
+		}
+		return o, nil
 	case "space":
 		// A space arrives under its key name, never as a one-character string,
 		// which is why names could not hold one.

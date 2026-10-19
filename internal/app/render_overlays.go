@@ -327,6 +327,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// rather than through the overlay panel stack. It is centred like the rest.
 	if content, geo, x, y, ok := m.renderRenameDialog(); ok {
 		m.renameHit = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
+		m.renameClearHit = overlay.Rect{}
+		if renameHintClear < len(geo.Hints) && !geo.Hints[renameHintClear].Empty() {
+			r := geo.Hints[renameHintClear]
+			m.renameClearHit = overlay.Rect{X0: x + r.X0, Y0: y + r.Y0, X1: x + r.X1, Y1: y + r.Y1}
+		}
 		layers = append(layers, lipgloss.NewLayer(content).
 			X(x).Y(y).Z(config.ZIndexOverlayBase).ID("rename"))
 	}
