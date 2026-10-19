@@ -1,57 +1,57 @@
 === braille 40x8
-|    ▄▄▟█▐█▙▄▄                           |
-| ▗▟██▙█▜▐█████▙▖   ■ Go 65%             |
-|▗▙▄▜▛▘     ▝▜███▖  ■ TypeScript 19%     |
+|    ▄▄█████▄▄                           |
+|  ▄██▀████████▄    ■ Go 65%             |
+|▄▀▀▀█▀     ▀████▄  ■ TypeScript 19%     |
 |████         ████  ■ Zig 10%            |
 |████         ████  ■ Shell 4%           |
-|▝███▙▖     ▗▟███▘  ■ Nix 2%             |
-| ▝▜███████████▛▘                        |
-|    ▀▀▜███▛▀▀                           |
+|▀███▀▄     ▄████▀  ■ Nix 2%             |
+|  ▀███████████▀                         |
+|    ▀▀█████▀▀                           |
 --- roles
 |    abbcddddd                           |
-| aaaaabcdddddddd   d eeeeee             |
-|fffaaa     dddddd  f eeeeeeeeeeeeee     |
+|  aaabbcddddddd    d eeeeee             |
+|faaaaa     dddddd  f eeeeeeeeeeeeee     |
 |ffff         dddd  a eeeeeee            |
 |ffff         dddd  b eeeeeeee           |
-|ffffdd     dddddd  c eeeeee             |
-| fdddddddddddddd                        |
+|fffffd     dddddd  c eeeeee             |
+|  ddddddddddddd                         |
 |    ddddddddd                           |
 a=series3 b=series4 c=series5 d=series1 e=dim f=series2 (upper case is bold)
 === blocks 40x8
-|    ▄▄▟█▐█▙▄▄                           |
-| ▗▟██▙█▜▐█████▙▖   ■ Go 65%             |
-|▗▙▄▜▛▘     ▝▜███▖  ■ TypeScript 19%     |
+|    ▄▄█████▄▄                           |
+|  ▄██▀████████▄    ■ Go 65%             |
+|▄▀▀▀█▀     ▀████▄  ■ TypeScript 19%     |
 |████         ████  ■ Zig 10%            |
 |████         ████  ■ Shell 4%           |
-|▝███▙▖     ▗▟███▘  ■ Nix 2%             |
-| ▝▜███████████▛▘                        |
-|    ▀▀▜███▛▀▀                           |
+|▀███▀▄     ▄████▀  ■ Nix 2%             |
+|  ▀███████████▀                         |
+|    ▀▀█████▀▀                           |
 --- roles
 |    abbcddddd                           |
-| aaaaabcdddddddd   d eeeeee             |
-|fffaaa     dddddd  f eeeeeeeeeeeeee     |
+|  aaabbcddddddd    d eeeeee             |
+|faaaaa     dddddd  f eeeeeeeeeeeeee     |
 |ffff         dddd  a eeeeeee            |
 |ffff         dddd  b eeeeeeee           |
-|ffffdd     dddddd  c eeeeee             |
-| fdddddddddddddd                        |
+|fffffd     dddddd  c eeeeee             |
+|  ddddddddddddd                         |
 |    ddddddddd                           |
 a=series3 b=series4 c=series5 d=series1 e=dim f=series2 (upper case is bold)
 === ascii 40x8
 |    oxx%*****                           |
-| ooooox%********   * Go 65%             |
-|+++ooo     ******  + TypeScript 19%     |
+|  oooxx%*******    * Go 65%             |
+|+ooooo     ******  + TypeScript 19%     |
 |++++         ****  o Zig 10%            |
 |++++         ****  x Shell 4%           |
-|++++**     ******  % Nix 2%             |
-| +**************                        |
+|+++++*     ******  % Nix 2%             |
+|  *************                         |
 |    *********                           |
 --- roles
 |    abbcddddd                           |
-| aaaaabcdddddddd   d eeeeee             |
-|fffaaa     dddddd  f eeeeeeeeeeeeee     |
+|  aaabbcddddddd    d eeeeee             |
+|faaaaa     dddddd  f eeeeeeeeeeeeee     |
 |ffff         dddd  a eeeeeee            |
 |ffff         dddd  b eeeeeeee           |
-|ffffdd     dddddd  c eeeeee             |
-| fdddddddddddddd                        |
+|fffffd     dddddd  c eeeeee             |
+|  ddddddddddddd                         |
 |    ddddddddd                           |
 a=series3 b=series4 c=series5 d=series1 e=dim f=series2 (upper case is bold)

@@ -7,8 +7,9 @@ import (
 
 // Pie shows shares of a whole as a ring of cells (a donut), or a full
 // disc, with a legend at the right: each slice's mark, label and share.
-// The disc is drawn in quadrant blocks, four pixels to a cell, starting at
-// twelve o'clock and going clockwise.
+// The disc is drawn in half blocks, two square pixels to a cell, each
+// coloured by the slice that covers most of it, starting at twelve o'clock
+// and going clockwise.
 type Pie struct {
 	Values []float64 // negative and missing values count as 0
 	Labels []string
@@ -92,10 +93,6 @@ func arcs(shares []float64) []float64 {
 	return ends
 }
 
-// quadrant glyphs by mask: upper left 1, upper right 2, lower left 4,
-// lower right 8.
-var quadrants = [16]string{"", "▘", "▝", "▀", "▖", "▌", "▞", "▛", "▗", "▚", "▐", "▜", "▄", "▙", "▟", "█"}
-
 // Draw draws the pie into a w by h grid: the disc at the left, the legend
 // at the right when there is room.
 func (p Pie) Draw(w, h int, m Mode) *Grid {
@@ -132,9 +129,13 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 	if nc < 1 || nr < 1 {
 		return g
 	}
-	// Units: one cell is 1 wide and aspect tall.
-	cx, cy := float64(nc)/2, float64(nr)*aspect/2
-	r := math.Min(cx, cy)
+	// Units: one cell is 1 wide and aspect tall. Each cell holds two
+	// pixels, its upper and lower half, so a pixel is 1 wide and aspect/2
+	// tall: square at the common 1:2 cell. The disc is centred on the
+	// pixel grid.
+	ph := aspect / 2
+	cx, cy := float64(nc)/2, float64(2*nr)*ph/2
+	r := math.Min(cx, cy) - 0.02
 	hole := 0.0
 	if p.Donut {
 		hole = 0.56
@@ -158,43 +159,60 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		}
 		return len(shares) - 1
 	}
+	// pixel returns the slice that covers most of a pixel, from a 4 by 4
+	// sample grid inside it, or -1 when less than half of it is on the
+	// ring.
+	const ss = 4
+	count := make([]int, len(shares))
+	pixel := func(px, py int) int {
+		for i := range count {
+			count[i] = 0
+		}
+		on := 0
+		for sy := 0; sy < ss; sy++ {
+			for sx := 0; sx < ss; sx++ {
+				x := float64(px) + (float64(sx)+0.5)/ss
+				y := (float64(py) + (float64(sy)+0.5)/ss) * ph
+				if k := slice(x, y); k >= 0 {
+					count[k]++
+					on++
+				}
+			}
+		}
+		if on*2 < ss*ss {
+			return -1
+		}
+		best := -1
+		for k, c := range count {
+			if best < 0 || c > count[best] {
+				best = k
+			}
+		}
+		return best
+	}
 	y0 := (g.H - nr) / 2
 	for y := 0; y < nr; y++ {
 		for x := 0; x < nc; x++ {
-			// The four quadrant pixels, sampled at their centres.
-			var q [4]int
-			for k := range 4 {
-				px := float64(x) + 0.25 + 0.5*float64(k%2)
-				py := (float64(y) + 0.25 + 0.5*float64(k/2)) * aspect
-				q[k] = slice(px, py)
-			}
+			up, down := pixel(x, 2*y), pixel(x, 2*y+1)
 			if m == ASCII {
-				best := majority(q, -1)
-				if best >= 0 {
-					g.set(x, y0+y, asciiMarks[best%len(asciiMarks)], p.role(best))
+				k := up
+				if k < 0 {
+					k = down
+				}
+				if k >= 0 {
+					g.set(x, y0+y, asciiMarks[k%len(asciiMarks)], p.role(k))
 				}
 				continue
 			}
-			fg := majority(q, -1)
-			if fg < 0 {
-				continue
-			}
-			empty := q[0] < 0 || q[1] < 0 || q[2] < 0 || q[3] < 0
-			bg := -1
-			if !empty {
-				bg = majority(q, fg)
-			}
-			mask := 0
-			for k := range 4 {
-				// Without an empty pixel, a third slice shows as the fg.
-				if q[k] == fg || q[k] >= 0 && q[k] != bg {
-					mask |= 1 << k
-				}
-			}
-			if bg >= 0 && mask != 15 {
-				g.setBg(x, y0+y, quadrants[mask], p.role(fg), p.role(bg))
-			} else {
-				g.set(x, y0+y, quadrants[mask], p.role(fg))
+			switch {
+			case up >= 0 && up == down:
+				g.set(x, y0+y, "█", p.role(up))
+			case up >= 0 && down >= 0:
+				g.setBg(x, y0+y, "▀", p.role(up), p.role(down))
+			case up >= 0:
+				g.set(x, y0+y, "▀", p.role(up))
+			case down >= 0:
+				g.set(x, y0+y, "▄", p.role(down))
 			}
 		}
 	}
@@ -212,26 +230,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		g.Text(lx+2, ly+i, Truncate(it.Label, g.W-lx-2, ellipsis(m)), Dim, false)
 	}
 	return g
-}
-
-// majority returns the slice most of q show, other than skip, or -1.
-func majority(q [4]int, skip int) int {
-	best, bestN := -1, 0
-	for _, a := range q {
-		if a < 0 || a == skip {
-			continue
-		}
-		n := 0
-		for _, b := range q {
-			if b == a {
-				n++
-			}
-		}
-		if n > bestN || n == bestN && a < best {
-			best, bestN = a, n
-		}
-	}
-	return best
 }
 
 // legend is each slice's label and share, such as "go 62%".

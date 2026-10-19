@@ -114,6 +114,10 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 			for c := 0; c < cols; c++ {
 				v := at(y, c)
 				if !finite(v) {
+					// No data: a faint dot, distinct from the lowest value.
+					for k := 0; k < cellW; k++ {
+						g.set(x0+c*cellW+k, y, block(m, "·", " "), Edge)
+					}
 					continue
 				}
 				lv := hm.level(v, lo, hi)
