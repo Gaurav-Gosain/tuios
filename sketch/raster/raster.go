@@ -358,19 +358,27 @@ func (r *renderer) shape(p path, st state, fillable bool) {
 		}
 	}
 	if c, ok := st.paintColor(st.stroke, st.strokeOpacity); ok && st.strokeWidth > 0 {
-		ss := strokeStyle{width: st.strokeWidth * scale, cap: st.cap, join: st.join, miterLimit: st.miterLimit, dashOffset: st.dashOffset * scale}
+		// A stroke wider than the image covers all of it, so widths and dash
+		// lengths are held to four diagonals. Without the bound a width such
+		// as 1e20 puts the stroke's vertices ~1e19 pixels away.
+		b := r.dst.Bounds()
+		bound := 4 * math.Hypot(float64(b.Dx()), float64(b.Dy()))
+		clamp := func(v float64) float64 { return math.Max(-bound, math.Min(bound, v)) }
+		ss := strokeStyle{width: clamp(st.strokeWidth * scale), cap: st.cap, join: st.join, miterLimit: st.miterLimit, dashOffset: clamp(st.dashOffset * scale)}
 		if len(st.dashes) > 0 {
 			ss.dashes = make([]float64, len(st.dashes))
 			for i, d := range st.dashes {
-				ss.dashes[i] = d * scale
+				ss.dashes[i] = clamp(d * scale)
 			}
 		}
 		r.fill(stroke(lines, ss), c)
 	}
 }
 
-// clipX keeps the part of a polygon between x0 and x1.
-func clipX(p polygon, x0, x1 float64) polygon {
+// clipRect keeps the part of a polygon between x0 and x1 and between y0 and
+// y1. Clipping each polygon to a convex window keeps its winding inside the
+// window, so the nonzero union is the same there.
+func clipRect(p polygon, x0, x1, y0, y1 float64) polygon {
 	clip := func(in polygon, keep func(pt) bool, cross func(a, b pt) pt) polygon {
 		if len(in) == 0 {
 			return in
@@ -396,8 +404,16 @@ func clipX(p polygon, x0, x1 float64) polygon {
 			return pt{x, a.y + (b.y-a.y)*t}
 		}
 	}
+	atY := func(y float64) func(a, b pt) pt {
+		return func(a, b pt) pt {
+			t := (y - a.y) / (b.y - a.y)
+			return pt{a.x + (b.x-a.x)*t, y}
+		}
+	}
 	p = clip(p, func(q pt) bool { return q.x >= x0 }, at(x0))
-	return clip(p, func(q pt) bool { return q.x <= x1 }, at(x1))
+	p = clip(p, func(q pt) bool { return q.x <= x1 }, at(x1))
+	p = clip(p, func(q pt) bool { return q.y >= y0 }, atY(y0))
+	return clip(p, func(q pt) bool { return q.y <= y1 }, atY(y1))
 }
 
 // fill paints the union of polygons, nonzero, in one colour.
@@ -420,7 +436,10 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		if bad {
 			continue
 		}
-		q := clipX(p, 0, W)
+		// y is clipped a pixel outside the image, so every coordinate that
+		// reaches the rasterizer is in range and the rows at the edges keep
+		// their coverage.
+		q := clipRect(p, 0, W, -1, H+1)
 		if len(q) < 3 {
 			continue
 		}
@@ -439,16 +458,20 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		return
 	}
 	w, h := x1-x0, y1-y0
-	cost := w * h
+	// The cost is summed in float64 and checked before any conversion, so no
+	// value can wrap around an int.
+	cost := float64(w) * float64(h)
 	for _, p := range clipped {
 		for i := range p {
 			j := (i + 1) % len(p)
-			cost += int(math.Abs(p[j].y-p[i].y)) + 1
+			cost += math.Abs(p[j].y-p[i].y) + 1
 		}
 	}
-	if r.budget -= cost; r.budget < 0 {
+	if cost > float64(r.budget) {
+		r.budget = -1
 		return
 	}
+	r.budget -= int(cost)
 	r.z.Reset(w, h)
 	r.z.DrawOp = draw.Src
 	ox, oy := float32(x0), float32(y0)
