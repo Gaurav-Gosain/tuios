@@ -1310,6 +1310,9 @@ func DefaultConfig() *UserConfig {
 				"prefix_toggle_spotlight":   {"B"},
 				"prefix_session_switcher":   {"S"},
 				"prefix_workspace_switcher": {"W"},
+				// G for go to, one shift from the g that shows the scratch
+				// terminal.
+				"goto_picker": {"G"},
 				// /, which searches everywhere else too. tmux puts its tree on
 				// s, which is the scrollback browser here.
 				"choose_tree":       {"/"},
@@ -3538,6 +3541,8 @@ var yieldingDefaults = map[string]bool{
 	"open_keybind_presets": true,
 	// / after the prefix, new in the release after v0.8.5.
 	"choose_tree": true,
+	// G after the prefix, new with the go-to picker.
+	"goto_picker": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
 	// V after the prefix, new in the release after v0.8.2.

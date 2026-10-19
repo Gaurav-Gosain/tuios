@@ -798,16 +798,16 @@ func (m *OS) foreignSessionReplanCmd() tea.Cmd {
 
 // foreignSessionRefreshPlan decides whether the next poll should hit the daemon
 // and how long to wait before re-arming. A consumer is on screen when the
-// sidebar reserves columns or the session switcher is open; poll fast then, even
-// for a lone session, because the listing is where the rail reads the titles of
-// windows this client has unsubscribed from. Off screen, fall back to a slow
+// sidebar reserves columns or the session switcher or the go-to picker is open;
+// poll fast then, even for a lone session, because the listing is where the
+// rail reads the titles of windows this client has unsubscribed from. Off screen, fall back to a slow
 // cache-warming poll while foreign sessions exist, and do nothing at all for a
 // lone session, which is what keeps a hidden sidebar free at idle.
 func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
 	if m.DaemonClient == nil {
 		return foreignSessionRefreshIdle, false
 	}
-	if m.SidebarActive() || m.ShowSessionSwitcher {
+	if m.SidebarActive() || m.ShowSessionSwitcher || m.gotoPicker.open {
 		return foreignSessionRefreshActive, true
 	}
 	if m.DaemonClient.SessionCount() <= 1 {
@@ -931,6 +931,7 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Focus reports for every path that moved the focus without FocusWindow.
 	m.reportFocusChange()
 	m.reconcilePrevFocus()
+	m.noteGotoPlace()
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler
 	// itself is one of the things that lengthens a pane's history: a workspace

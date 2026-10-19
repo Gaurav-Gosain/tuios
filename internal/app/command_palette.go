@@ -1148,6 +1148,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Go to: an agent, session, workspace or pane",
+			Shortcut: "prefix+G",
+			Bind:     "goto_picker",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenGotoPicker()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Hints: label text on the pane to copy it",
 			Shortcut: "prefix+F",
 			Bind:     "hints",

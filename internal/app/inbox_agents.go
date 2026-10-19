@@ -319,10 +319,10 @@ func (m *OS) InboxAgentsReply() tea.Cmd {
 	return nil
 }
 
-// inboxAgentsSearch applies what the selector line holds in the agents view:
-// key:value terms are the selector, the rest is a search over the name, the
-// session and the last message.
-func (m *OS) inboxAgentsSearch(text string) (selector string, query string) {
+// splitSelectorSearch splits a search line the way the agents view and the
+// go-to picker read it: key:value terms are the selector, the other words are
+// a search.
+func splitSelectorSearch(text string) (selector string, query string) {
 	var sel, words []string
 	for f := range strings.FieldsSeq(text) {
 		if k, _, ok := strings.Cut(f, ":"); ok && k != "" {
@@ -364,7 +364,7 @@ func agentRowStateWords(e sidebarAgentEntry) string {
 // and its words as the search.
 func (m *OS) inboxAgentsSelectApply() {
 	st := &m.Inbox
-	sel, query := m.inboxAgentsSearch(st.selectDraft())
+	sel, query := splitSelectorSearch(st.selectDraft())
 	if sel == "" {
 		st.Select, st.selector = "", nil
 	} else {

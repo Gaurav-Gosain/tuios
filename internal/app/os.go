@@ -1333,6 +1333,9 @@ type OS struct {
 	// navigator is the pane navigator (choose_tree) while it is up. See
 	// navigator.go.
 	navigator navigatorState
+	// gotoPicker is the go-to picker (goto_picker), and the places the
+	// client has been. See goto_picker.go.
+	gotoPicker gotoPickerState
 	// navLayoutPick is the navigator layout the v key last chose, kept for
 	// the next time the navigator opens. Empty is the configured one.
 	navLayoutPick string

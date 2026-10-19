@@ -71,6 +71,7 @@ var modalOverlays = [...]modalOverlay{
 	{id: "palette", open: func(m *OS) bool { return m.ShowCommandPalette }, scrim: true},
 	{id: "launcher", open: func(m *OS) bool { return m.ShowLauncher }, scrim: true},
 	{id: "session", open: func(m *OS) bool { return m.ShowSessionSwitcher }, scrim: true},
+	{id: "goto", open: func(m *OS) bool { return m.gotoPicker.open }, scrim: true},
 	{id: "agentmail", open: func(m *OS) bool { return m.ShowAgentMail }, scrim: true},
 	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }, scrim: true},
 	{id: "workspace", open: func(m *OS) bool { return m.ShowWorkspaceSwitcher }, scrim: true},

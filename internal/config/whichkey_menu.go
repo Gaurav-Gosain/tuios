@@ -185,6 +185,7 @@ var leaderSessionRows = []menuRow{
 	{parts: []menuPart{{"prefix_session_switcher", "Sessions"}}, desc: "Sessions"},
 	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}}, desc: "Workspaces"},
 	{parts: []menuPart{{"choose_tree", "Find a pane"}}, desc: "Find a pane"},
+	{parts: []menuPart{{"goto_picker", "Go to anything"}}, desc: "Go to anything"},
 	{parts: []menuPart{{"prefix_close_session", "Close session"}}, desc: "Close session"},
 	{parts: []menuPart{{"toggle_scratch", "Scratch session"}}, desc: "Scratch session"},
 	{parts: []menuPart{{"last_session", "Last session"}}, desc: "Last session"},

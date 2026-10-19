@@ -87,6 +87,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleNavigatorInput(msg, o)
 	}
 
+	// The go-to picker, the same way.
+	if o.GotoPickerOpen() {
+		return handleGotoPickerInput(msg, o)
+	}
+
 	// Handle workspace switcher overlay
 	if o.ShowWorkspaceSwitcher {
 		return handleWorkspaceSwitcherInput(msg, o)

@@ -219,6 +219,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.InboxSelect(idx)
 	case "workspace":
 		m.WorkspaceSwitcherSelected = idx
+	case "goto":
+		m.GotoPickerSelect(idx)
 	case overlayKindBuffers:
 		m.BufferChooserSelect(idx)
 	case overlayKindTransfers:
@@ -307,6 +309,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
 		m.WorkspaceSwitcherMove(wheelDelta(up), n)
+	case "goto":
+		m.GotoPickerMove(wheelDelta(up))
 	case overlayKindBuffers:
 		m.BufferChooserMove(wheelDelta(up))
 	case overlayKindTransfers:
@@ -492,6 +496,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "workspace":
 		m.WorkspaceSwitcherSelected = row.Idx
 		m.WorkspaceSwitcherActivate(row.Idx)
+	case "goto":
+		m.GotoPickerSelect(row.Idx)
+		m.GotoPickerActivate()
 	case overlayKindBuffers:
 		return m.BufferChooserActivate(row.Idx)
 	case overlayKindTransfers:
@@ -633,6 +640,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseInbox()
 	case "workspace":
 		m.CloseWorkspaceSwitcher()
+	case "goto":
+		m.CloseGotoPicker()
 	case overlayKindBuffers:
 		m.CloseBufferChooser()
 	case overlayKindTransfers:

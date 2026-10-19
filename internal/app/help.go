@@ -780,7 +780,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
 		"prefix_equalize_splits", "prefix_layout",
 		"prefix_scrollback", "prefix_screenshot", "prefix_command_palette", "prefix_session_switcher",
-		"prefix_workspace_switcher", "choose_tree",
+		"prefix_workspace_switcher", "choose_tree", "goto_picker",
 		"prefix_toggle_sidebar", "prefix_toggle_spotlight", "prefix_explore",
 		"prefix_jump_notif", "prefix_last_message", "prefix_mail", "prefix_inbox", "prefix_next_attention",
 		"toggle_scratch", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",

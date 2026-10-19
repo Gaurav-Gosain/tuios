@@ -950,6 +950,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_session_switcher":   "Open the session switcher",
 	"prefix_workspace_switcher": "Open the workspace switcher",
 	"choose_tree":               "Find a pane in every session and go to it",
+	"goto_picker":               "Go to an agent, session, workspace or pane",
 	"prefix_layout":             "Enter layout prefix",
 
 	// Tape Prefix

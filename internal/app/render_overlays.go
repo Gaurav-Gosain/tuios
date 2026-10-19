@@ -234,6 +234,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
+	if m.gotoPicker.open {
+		content, geo, rows := m.renderGotoPicker()
+		layers = m.placeOverlayPanel(layers, "goto", content, geo, rows)
+	}
+
 	if m.ShowWorkspaceSwitcher {
 		content, geo, rows := m.renderWorkspaceSwitcher()
 		layers = m.placeOverlayPanel(layers, "workspace", content, geo, rows)
