@@ -351,6 +351,36 @@ func TestScreenAnswersFromSource(t *testing.T) {
 			want: map[string]string{ActionApprove: `"1"`, ActionApproveAlways: `"2"`, ActionDeny: `"\x1b"`},
 		},
 		{
+			// The same panel with the session option left out: approve_always
+			// must not be offered, and approve is still option 1.
+			harness: "kimi",
+			tail: []string{
+				"agent is requesting approval to run command:",
+				"go test ./...",
+				"",
+				"→ [1] Approve once",
+				"  [2] Reject",
+				"",
+				"  ▲/▼ select  1/2/3/4 choose  ↵ confirm",
+			},
+			want: map[string]string{ActionApprove: `"1"`, ActionDeny: `"\x1b"`},
+		},
+		{
+			// Reordered: each approve presses the digit its label has.
+			harness: "kimi",
+			tail: []string{
+				"agent is requesting approval to run command:",
+				"go test ./...",
+				"",
+				"→ [1] Reject",
+				"  [2] Approve for this session",
+				"  [3] Approve once",
+				"",
+				"  ▲/▼ select  1/2/3/4 choose  ↵ confirm",
+			},
+			want: map[string]string{ActionApprove: `"3"`, ActionApproveAlways: `"2"`, ActionDeny: `"\x1b"`},
+		},
+		{
 			// @google/gemini-cli 0.64.0, ToolConfirmationMessage.tsx.
 			harness: "gemini-cli",
 			tail: []string{
@@ -367,7 +397,7 @@ func TestScreenAnswersFromSource(t *testing.T) {
 	} {
 		t.Run(c.harness, func(t *testing.T) {
 			p := screenPrompt(t, reg, c.harness, c.tail)
-			var got []string
+			got := []string{}
 			for _, a := range p.Actions() {
 				if _, ok := c.want[a]; !ok {
 					t.Errorf("offers %s, which the source does not bind", a)

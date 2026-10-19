@@ -7240,3 +7240,15 @@ on 2026-10-19.
 | A slow or failing service starts an opencode process | The `errNoService` gate in `openCodeFetch` | Export on any error | `TestOpenCodeServiceRules/a_service_that_is_there_but_fails` | **caught** |
 | Each event of a streaming session starts a fetch | `openCodeShared` | No sharing | `TestOpenCodeServiceRules/reads_of_one_session_share_a_fetch` | **caught** |
 | A timed-out export leaves its processes running | `killTreeOnCancel` | Not called | `TestOpenCodeServiceRules/an_export_that_runs_too_long` (the read took 30 s) | **caught** |
+
+## Answer keys bound to their labels (Kimi Code CLI)
+
+`TestScreenAnswersFromSource` (internal/harness) draws Kimi's approval panel
+as kimi-cli 1.52.0 does, then with the session option left out, then
+reordered. Each approve must press the number its label has, and an approve
+whose label is gone must not be offered. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| Approve presses a number whatever option it is | The `option` binding in kimi.toml | `keys = ["1"]` and `keys = ["2"]` | `TestScreenAnswersFromSource/kimi#01`, `/kimi#02` | **caught** |
+| Kimi's `[N] label` options are not read | The bracket form in `optionLine` | Removed | `TestScreenAnswersFromSource/kimi`, `/kimi#01`, `/kimi#02` | **caught** |
