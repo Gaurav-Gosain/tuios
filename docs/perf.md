@@ -3007,6 +3007,15 @@ measured 40,059,042 and 37,497,922, so it adds 204,800 and 185,680 bytes. No
 third-party dependency was added. The new budgets leave 4,198 and 4,204 bytes
 of room.
 
+The budgets went to 40,259,848 (linux/amd64) and 37,689,054 (darwin/arm64) for
+class diagrams in tuios.dev/sketch: the class lexer, parser, graph and
+renderer. The lexer is a struct with methods, so its helpers stay out of line
+and its code is 10 KB. The build before it measured 40,059,042 and 37,497,922
+bytes (Go 1.26.9, a clean clone, as CI builds it). The change measured
+40,255,650 and 37,684,850, so it adds 196,608 and 186,928 bytes. No third-
+party dependency was added. The new budgets leave 4,198 and 4,204 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
