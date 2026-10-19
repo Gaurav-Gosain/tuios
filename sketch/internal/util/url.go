@@ -6,6 +6,7 @@
 package util
 
 import (
+	"math"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -121,8 +122,15 @@ func SanitizeUrl(u string) string {
 			// String.fromCharCode(dec): the number mod 2^16, or 0 for one that is not a number.
 			n := js.Number(sub[1])
 			code := 0
-			if n == n && n < 1e300 && n > -1e300 {
-				code = int(int64(n)) & 0xffff
+			if !math.IsNaN(n) && !math.IsInf(n, 0) {
+				// ToUint16: the truncated number mod 2^16, done in float64 so a
+				// number past the int64 range does not hit an
+				// implementation-defined conversion.
+				m := math.Mod(math.Trunc(n), 65536)
+				if m < 0 {
+					m += 65536
+				}
+				code = int(m)
 			}
 			return string(rune(code))
 		})

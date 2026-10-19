@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/types"
 )
@@ -406,4 +407,31 @@ func TestPieOutputIsInert(t *testing.T) {
 		t.Fatalf("%d hostile pie sources rendered, want more than 60", rendered)
 	}
 	mutate(t, corpusOf(t, "pie"), []string{"\"", ":", "\n", "title ", "showData"}, 5, 2000, RenderOptions{}, false)
+}
+
+// TestInvalidUTF8 renders sources with bytes that are not UTF-8 and wants
+// valid UTF-8 out, which a browser can read.
+func TestInvalidUTF8(t *testing.T) {
+	for _, src := range []string{
+		"flowchart LR\n  A[\"a\xffb\"] --> B",
+		"sequenceDiagram\n  A->>B: \xc3\x28",
+		"pie title \xed\xa0\x80\n \"a\" : 1",
+	} {
+		out, err := Render(src, RenderOptions{})
+		if err != nil {
+			t.Fatalf("%q: %v", src, err)
+		}
+		if !utf8.ValidString(out.Data) {
+			t.Fatalf("%q: the SVG is not valid UTF-8", src)
+		}
+	}
+}
+
+// TestHugeCharCodes decodes numeric character references past the int64
+// range in a link, as String.fromCharCode does, and keeps the link inert.
+func TestHugeCharCodes(t *testing.T) {
+	for _, ref := range []string{"&#1e20;", "&#18446744073709551722;", "&#-1;", "&#1e400;", "&#106.5;", "&#65642;"} {
+		inertTry(t, "flowchart LR\n  A --> B\n  click A \""+ref+"avascript:alert(1)\"", RenderOptions{}, false)
+		inertTry(t, "flowchart LR\n  A --> B\n  click A \""+ref+"\"", RenderOptions{}, false)
+	}
 }

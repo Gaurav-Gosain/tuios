@@ -10,6 +10,7 @@ package sketch
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/text"
@@ -92,6 +93,9 @@ type parsed struct {
 }
 
 func parseSource(src string, limit, maxEdges int, extra Config) parsed {
+	// JavaScript strings cannot hold invalid UTF-8, and a browser refuses an
+	// SVG that does. Each invalid byte becomes U+FFFD, as TextDecoder does.
+	src = strings.ToValidUTF8(src, "\uFFFD")
 	if limit <= 0 {
 		limit = DefaultLimit
 	}

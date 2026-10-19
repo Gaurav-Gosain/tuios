@@ -63,7 +63,9 @@ type renderer struct {
 	budget int
 }
 
-// Draw rasterises an SVG that sketch wrote.
+// Draw rasterises an SVG that sketch wrote. Its budgets bound the work a
+// diagram's styles can ask for, but it is not a general SVG renderer: do not
+// give it SVG from other sources.
 func Draw(svg string, opt Options) (*image.RGBA, error) {
 	if err := loadFaces(); err != nil {
 		return nil, err
