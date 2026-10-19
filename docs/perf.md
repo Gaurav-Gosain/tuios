@@ -3016,6 +3016,14 @@ bytes (Go 1.26.9, a clean clone, as CI builds it). The change measured
 party dependency was added. The new budgets leave 4,198 and 4,204 bytes of
 room.
 
+The budgets went to 40,411,400 (linux/amd64) and 37,824,654 (darwin/arm64) for
+ER diagrams in tuios.dev/sketch: the ER lexer, parser, graph and renderer.
+Their code is 85 KB, and the renderer's draw function is 31 KB of it. The
+build before it measured 40,255,650 and 37,684,850 bytes (Go 1.26.9, a clean
+clone, as CI builds it). The change measured 40,407,202 and 37,820,450, so it
+adds 151,552 and 135,600 bytes. No third-party dependency was added. The new
+budgets leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
