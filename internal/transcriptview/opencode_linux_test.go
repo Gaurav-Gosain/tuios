@@ -1,10 +1,8 @@
 package transcriptview
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -12,7 +10,7 @@ import (
 )
 
 // TestOpenCodeServiceRules holds the read to its limits after review: the
-// password goes to no port this user cannot be shown to hold, the export
+// password goes to no connection this user cannot be shown to hold, the export
 // runs only when no service is there, one fetch serves the reads of a
 // session for a moment, and an export that runs too long is killed with the
 // processes it started.
@@ -43,14 +41,7 @@ func TestOpenCodeServiceRules(t *testing.T) {
 
 	t.Run("a port another user holds", func(t *testing.T) {
 		f := newFakeOpenCode(t, page)
-		port := f.srv.URL[strings.LastIndexByte(f.srv.URL, ':')+1:]
-		n, _ := strconv.Atoi(port)
-		table := filepath.Join(t.TempDir(), "tcp")
-		row := fmt.Sprintf("   0: 0100007F:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000  %d        0 1 1 0000000000000000 100 0 0 10 0\n", n, os.Getuid()+1)
-		_ = os.WriteFile(table, []byte("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"+row), 0o600)
-		old := procNetTCP
-		procNetTCP = table
-		t.Cleanup(func() { procNetTCP = old })
+		asOtherUser(t)
 		runs := countingExport(t, "")
 		p, err := read(writeService(t, f.srv.URL, f.pid, 0o600))
 		if err != nil {
@@ -135,5 +126,52 @@ func TestOpenCodeServiceRules(t *testing.T) {
 			t.Fatal(err)
 		}
 		checkOpenCodePage(t, p)
+	})
+	t.Run("an export is used again while the database is unchanged", func(t *testing.T) {
+		data := t.TempDir()
+		t.Setenv("XDG_DATA_HOME", data)
+		t.Setenv("OPENCODE_DB", "")
+		db := filepath.Join(data, "opencode", "opencode.db")
+		if err := os.MkdirAll(filepath.Dir(db), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.WriteFile(db, []byte("db"), 0o600)
+		runs := countingExport(t, "")
+		path := filepath.Join(t.TempDir(), "service.json")
+		// Each read past the shared fetch, as a read more than openCodeShare
+		// after the last one.
+		readAfterShare := func() {
+			t.Helper()
+			openCodeFlights.Lock()
+			clear(openCodeFlights.m)
+			openCodeFlights.Unlock()
+			if _, err := read(path); err != nil {
+				t.Fatal(err)
+			}
+		}
+		readAfterShare()
+		readAfterShare()
+		if n := runCount(runs); n != 1 {
+			t.Fatalf("two reads of a quiet session ran the export %d times, want once", n)
+		}
+		// opencode writes to its write-ahead log.
+		_ = os.WriteFile(db+"-wal", []byte("frame"), 0o600)
+		readAfterShare()
+		if n := runCount(runs); n != 2 {
+			t.Fatalf("a read after a write ran the export %d times in all, want twice", n)
+		}
+		// A database of another channel counts too.
+		_ = os.WriteFile(filepath.Join(data, "opencode", "opencode-beta.db"), []byte("db"), 0o600)
+		readAfterShare()
+		if n := runCount(runs); n != 3 {
+			t.Fatalf("a read after a write to another channel's database ran the export %d times in all, want 3", n)
+		}
+		// With no database to watch, every read exports.
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		readAfterShare()
+		readAfterShare()
+		if n := runCount(runs); n != 5 {
+			t.Fatalf("reads with no database ran the export %d times in all, want 5", n)
+		}
 	})
 }

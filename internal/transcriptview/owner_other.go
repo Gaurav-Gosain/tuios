@@ -1,9 +1,9 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package transcriptview
 
 import "os"
 
-// fileOwner is the current user where the system keeps no uid. os.Getuid
-// is -1 there, and the mode check is all that holds.
-func fileOwner(os.FileInfo) int { return os.Getuid() }
+// serviceFileSafe cannot tell who owns a file here, so the service is never
+// asked.
+func serviceFileSafe(*os.File, os.FileInfo) bool { return false }

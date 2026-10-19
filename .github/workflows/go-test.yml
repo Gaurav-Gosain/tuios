@@ -123,9 +123,9 @@ jobs:
     runs-on: windows-latest
     # The packages whose Windows code runs only on Windows: the herdr link
     # (hardlink, copy and a running link), the PATHEXT lookup and the job
-    # object for plugin processes, the stop event kill-server sets, and the
-    # herdr command line the link runs. The whole suite has never run on
-    # Windows and does not run here.
+    # object for plugin processes, the stop event kill-server sets, the
+    # herdr command line the link runs, and the opencode socket owner check.
+    # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
     steps:
@@ -140,6 +140,33 @@ jobs:
 
       - name: Test
         run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/
+
+      - name: Test the opencode socket owner check
+        # The rest of internal/transcriptview runs shell scripts, so only the
+        # owner check and its table parsers run here.
+        run: go test -count=1 -timeout 5m -run "TestOpenCodeConnOwner|TestTCPTableOwner|TestPcblistOwner|TestProcNetOwner" ./internal/transcriptview/
+
+  macos:
+    name: go test (macos)
+    if: github.event_name != 'schedule'
+    runs-on: macos-latest
+    # The opencode reader proves that a socket belongs to this user from the
+    # sysctl net.inet.tcp.pcblist_n, which only a real macOS kernel fills.
+    # The package's suite runs here, the real table included.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/go-test.yml
+
+      - name: Test
+        run: go test -count=1 -timeout 10m ./internal/transcriptview/
 
   race:
     name: go test -race ./...

@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -66,15 +68,22 @@ type openCodeService struct {
 // service.json gives its address and password. The file must belong to this
 // user and be writable by no one else, since whoever can write it chooses
 // where the password goes, and the address must be 127.0.0.1. Before the
-// password goes out, the port must be shown to be this user's: a service
-// that exited leaves its file, and another user may hold its port now
-// (portOwnedByMe). A request goes to that address alone, with no proxy.
+// password goes out, the server side of the connection must be shown to be
+// this user's: a service that exited leaves its file, and another user may
+// hold its port now. The check reads the kernel's socket table for the
+// connection itself, after the connect (connOwnedByMe): on Linux the uid in
+// /proc/net/tcp, on macOS the so_uid in the sysctl net.inet.tcp.pcblist_n,
+// and on Windows the owning pid in GetExtendedTcpTable, which must be the pid
+// in service.json and run as this user. A request goes to that address
+// alone, with no proxy.
 //
-// When no service is there (no service.json, the port not this user's or
-// not listening), it runs `opencode session export --standalone <id>`,
-// which reads the same database through a private server and starts no
-// service. A service that is there but slow or failing is an error, never a
-// reason to start the export: the export is a whole opencode process.
+// When no service is there (no service.json, a server side not this user's,
+// or nothing listening), it runs `opencode session export --standalone
+// <id>`, which reads the same database through a private server and starts
+// no service. A service that is there but slow or failing is an error, never
+// a reason to start the export: the export is a whole opencode process. An
+// export is used again while opencode's database files are unchanged
+// (openCodeExportCached).
 //
 // The whole read stays under openCodeReadBudget, inside the client's own
 // limit, so a read the client gave up on is not still running. Reads of one
@@ -132,9 +141,37 @@ func openCodeFetch(path, session string) ([]any, error) {
 	defer svcCancel()
 	msgs, err := openCodeFromService(svcCtx, path, session)
 	if errors.Is(err, errNoService) {
-		return openCodeFromExport(ctx, session)
+		return openCodeExportCached(ctx, session)
 	}
 	return msgs, err
+}
+
+// connOwnedByMe reports whether the server side of conn, a loopback
+// connection, belongs to this user. It reads the kernel's socket table after
+// the connect, so the socket it checks is the one the request goes to. The
+// server side can reach the table a moment after the connect returns, so an
+// absent row is read again a few times.
+func connOwnedByMe(ctx context.Context, conn net.Conn, svcPID int) bool {
+	local, ok1 := conn.LocalAddr().(*net.TCPAddr)
+	remote, ok2 := conn.RemoteAddr().(*net.TCPAddr)
+	if !ok1 || !ok2 || !local.IP.Equal(net.IPv4(127, 0, 0, 1)) || !remote.IP.Equal(net.IPv4(127, 0, 0, 1)) {
+		return false
+	}
+	c := serverSide{port: remote.Port, peer: local.Port}
+	for range 20 {
+		switch serverOwner(c, svcPID) {
+		case ownerMine:
+			return true
+		case ownerOther:
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	return false
 }
 
 // openCodeFlight is one fetch of a session, shared by the reads that come
@@ -173,11 +210,21 @@ func openCodeShared(key string, fetch func() ([]any, error)) ([]any, error) {
 	}
 	fl.m[key] = f
 	fl.Unlock()
+	// The entry is finished in a defer, so a fetch that panics into a
+	// recover above still lets the reads that wait on it go, and lets the
+	// entry be evicted.
+	finished := false
+	defer func() {
+		if !finished {
+			f.msgs, f.err = nil, ErrService
+		}
+		fl.Lock()
+		f.at = time.Now()
+		fl.Unlock()
+		close(f.done)
+	}()
 	f.msgs, f.err = fetch()
-	fl.Lock()
-	f.at = time.Now()
-	fl.Unlock()
-	close(f.done)
+	finished = true
 	return f.msgs, f.err
 }
 
@@ -212,7 +259,7 @@ func readServiceFile(path string) (openCodeService, *url.URL, error) {
 	if err != nil {
 		return svc, nil, err
 	}
-	if info.Mode().Perm()&0o022 != 0 || !ownedByMe(info) || info.Size() > openCodeFileMax {
+	if !serviceFileSafe(f, info) || info.Size() > openCodeFileMax {
 		return svc, nil, ErrService
 	}
 	data, err := io.ReadAll(io.LimitReader(f, openCodeFileMax))
@@ -231,8 +278,10 @@ func readServiceFile(path string) (openCodeService, *url.URL, error) {
 }
 
 // openCodeClient talks to 127.0.0.1 only: no proxy, no redirect, and a dial
-// that refuses any other address whatever the URL says.
-func openCodeClient() *http.Client {
+// that refuses any other address whatever the URL says. The dial gives a
+// connection only when its server side belongs to this user (connOwnedByMe),
+// so a request, and the password in it, goes out on no other.
+func openCodeClient(svcPID int) *http.Client {
 	dialer := &net.Dialer{}
 	return &http.Client{
 		Transport: &http.Transport{
@@ -242,7 +291,15 @@ func openCodeClient() *http.Client {
 				if err != nil || host != "127.0.0.1" {
 					return nil, ErrService
 				}
-				return dialer.DialContext(ctx, "tcp4", addr)
+				conn, err := dialer.DialContext(ctx, "tcp4", addr)
+				if err != nil {
+					return nil, err
+				}
+				if !connOwnedByMe(ctx, conn, svcPID) {
+					_ = conn.Close()
+					return nil, errNoService
+				}
+				return conn, nil
 			},
 			DisableKeepAlives: true,
 		},
@@ -252,19 +309,15 @@ func openCodeClient() *http.Client {
 
 // openCodeFromService asks the service for the newest messages, oldest
 // first. It returns errNoService when no service of this user is there: no
-// file, a port it cannot show to be this user's, or nothing listening.
+// file, a connection it cannot show to be this user's, or nothing
+// listening.
 func openCodeFromService(ctx context.Context, path, session string) ([]any, error) {
 	svc, base, err := readServiceFile(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { svc.Password = "" }()
-	port, err := strconv.Atoi(base.Port())
-	if err != nil || !portOwnedByMe(port) {
-		// The password goes to no port this user cannot be shown to hold.
-		return nil, errNoService
-	}
-	client := openCodeClient()
+	client := openCodeClient(svc.PID)
 	get := func(path string, query url.Values) (jobj, error) {
 		u := *base
 		u.Path, u.RawPath, u.RawQuery, u.Fragment = "", "", query.Encode(), ""
@@ -276,7 +329,7 @@ func openCodeFromService(ctx context.Context, path, session string) ([]any, erro
 		req.SetBasicAuth("opencode", svc.Password)
 		resp, err := client.Do(req)
 		if err != nil {
-			if errors.Is(err, syscall.ECONNREFUSED) {
+			if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, errNoService) {
 				return nil, errNoService
 			}
 			return nil, ErrService
@@ -313,6 +366,126 @@ func openCodeFromService(ctx context.Context, path, session string) ([]any, erro
 	msgs := page.list("data")
 	slices.Reverse(msgs)
 	return msgs, nil
+}
+
+// Bounds on reusing an export.
+const (
+	// openCodeExportKeep is the longest an export is used again. It bounds
+	// how stale a page can be when a change leaves the database files
+	// looking the same, such as a write inside one tick of the file clock.
+	openCodeExportKeep = 30 * time.Second
+	// openCodeExportsMax bounds the sessions whose export is kept.
+	openCodeExportsMax = 16
+)
+
+type openCodeExported struct {
+	sig  string
+	msgs []any
+	at   time.Time
+}
+
+var openCodeExports struct {
+	sync.Mutex
+	m map[string]openCodeExported
+}
+
+// openCodeExportCached runs the export only when opencode's database may
+// have changed since the last export of the session. The database files'
+// sizes and times are read first, and an export taken while they matched is
+// given again. A session that streams changes them and is exported again; a
+// thread that is open on a quiet session starts no process.
+//
+// The signature is read before the export runs, so a write during the
+// export makes the next read export again. The export itself leaves the
+// files as they were after its first run.
+func openCodeExportCached(ctx context.Context, session string) ([]any, error) {
+	sig := openCodeDBSig()
+	now := time.Now()
+	ex := &openCodeExports
+	ex.Lock()
+	for k, e := range ex.m {
+		if now.Sub(e.at) > openCodeExportKeep {
+			delete(ex.m, k)
+		}
+	}
+	if e, ok := ex.m[session]; ok && sig != "" && e.sig == sig {
+		ex.Unlock()
+		return e.msgs, nil
+	}
+	ex.Unlock()
+	msgs, err := openCodeFromExport(ctx, session)
+	if err != nil || sig == "" {
+		return msgs, err
+	}
+	ex.Lock()
+	if ex.m == nil {
+		ex.m = make(map[string]openCodeExported)
+	}
+	if _, ok := ex.m[session]; !ok && len(ex.m) >= openCodeExportsMax {
+		oldest := ""
+		for k, e := range ex.m {
+			if oldest == "" || e.at.Before(ex.m[oldest].at) {
+				oldest = k
+			}
+		}
+		delete(ex.m, oldest)
+	}
+	ex.m[session] = openCodeExported{sig: sig, msgs: msgs, at: now}
+	ex.Unlock()
+	return msgs, nil
+}
+
+// openCodeDBSig is the size and time of each database file of opencode, or
+// "" when none is found. opencode keeps its database in its data folder,
+// $XDG_DATA_HOME/opencode or ~/.local/share/opencode on every system, as
+// opencode.db, or opencode-<channel>.db for a build of another channel, or
+// the name in OPENCODE_DB. SQLite writes to the -wal file next to it, and
+// to the database when it checkpoints.
+func openCodeDBSig() string {
+	data := os.Getenv("XDG_DATA_HOME")
+	if !filepath.IsAbs(data) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		data = filepath.Join(home, ".local", "share")
+	}
+	dir := filepath.Join(data, "opencode")
+	var names []string
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			n := e.Name()
+			if strings.HasPrefix(n, "opencode") && strings.HasSuffix(n, ".db") {
+				names = append(names, filepath.Join(dir, n))
+			}
+		}
+	}
+	if db := os.Getenv("OPENCODE_DB"); db == ":memory:" {
+		return ""
+	} else if db != "" {
+		if !filepath.IsAbs(db) {
+			db = filepath.Join(dir, db)
+		}
+		if !slices.Contains(names, db) {
+			names = append(names, db)
+		}
+	}
+	var b strings.Builder
+	found := false
+	for _, db := range names {
+		for _, p := range []string{db, db + "-wal"} {
+			info, err := os.Stat(p)
+			if err != nil {
+				continue
+			}
+			found = found || p == db
+			fmt.Fprintf(&b, "%s\x00%d\x00%d\n", p, info.Size(), info.ModTime().UnixNano())
+		}
+	}
+	if !found {
+		return ""
+	}
+	return b.String()
 }
 
 // openCodeFromExport runs the export command, oldest message first. The
@@ -452,6 +625,3 @@ func openCodeClass(name string) toolClass {
 	}
 	return classOther
 }
-
-// ownedByMe reports whether info is a file of the user this process runs as.
-func ownedByMe(info os.FileInfo) bool { return fileOwner(info) == os.Getuid() }

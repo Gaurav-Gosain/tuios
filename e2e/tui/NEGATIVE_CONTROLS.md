@@ -7244,7 +7244,7 @@ one, and the password must stay out of every error and page. Run on
 | The cockpit does not read opencode | `threadTranscriptHarness` | `opencode` taken out | `TestCockpitThreadOtherHarnesses/opencode` | **caught** |
 | A service.json others can write sends the password where they choose | The mode and owner check in `readServiceFile` | Removed | `TestOpenCodeService/a_file_others_can_write` | **caught** |
 | The password goes to an address other than 127.0.0.1 | The host check in `readServiceFile` and the dial guard | Both removed | `TestOpenCodeService/an_address_other_than_127.0.0.1` | **caught** |
-| A service of this user that is not the file's process is trusted | The pid check against `/api/info` | Never true | `TestOpenCodeService/another_process_on_the_port` | **caught** (the check runs after the password is sent, so it stops only a process of this user; the port owner check below is what keeps the password from another user) |
+| A service of this user that is not the file's process is trusted | The pid check against `/api/info` | Never true | `TestOpenCodeService/another_process_on_the_port` | **caught** (the check runs after the password is sent, so it stops only a process of this user; the connection owner check below is what keeps the password from another user) |
 | A reported session id goes into a URL or an argument unchecked | `validOpenCodeSession` | Any id but "" | `TestOpenCodeService/a_session_id_that_is_not_one` | **caught** |
 
 After review (F1, F2): the password goes out only to a port this user is
@@ -7261,6 +7261,26 @@ on 2026-10-19.
 | A slow or failing service starts an opencode process | The `errNoService` gate in `openCodeFetch` | Export on any error | `TestOpenCodeServiceRules/a_service_that_is_there_but_fails` | **caught** |
 | Each event of a streaming session starts a fetch | `openCodeShared` | No sharing | `TestOpenCodeServiceRules/reads_of_one_session_share_a_fetch` | **caught** |
 | A timed-out export leaves its processes running | `killTreeOnCancel` | Not called | `TestOpenCodeServiceRules/an_export_that_runs_too_long` (the read took 30 s) | **caught** |
+
+After re-review (R1 to R4): the owner check moved into the dial. It reads
+the socket table for the server side of the connection itself, after the
+connect and before the first byte, so no gap is left between the check and
+the request (R1). It now runs on macOS (the so_uid of the socket in the
+sysctl net.inet.tcp.pcblist_n) and on Windows (the owning pid in
+GetExtendedTcpTable, which must be the pid in service.json and run as this
+user), where the export ran on every read before (R3). An export is used
+again while opencode's database files are unchanged. A shared fetch is
+finished in a defer (R2). `TestOpenCodeConnOwner` runs against the real
+kernel table of each system: the go-test workflow runs it on Linux, macOS
+and Windows. The parser fixtures under `testdata/pcblist_n` are written by
+`gen.c` from the XNU structs. Run on Linux on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The password goes on a connection whose server side is another user's | `connOwnedByMe` in the dial | Never refuses | `TestOpenCodeConnOwner/no_request_to_a_service_of_another_user` (`err <nil>`), `TestOpenCodeServiceRules/a_port_another_user_holds` (2 requests) | **caught** |
+| The macOS parser reads the uid at the wrong offset | `xsoUID` | 64 changed to 60 | `TestPcblistOwner` (mine.bin and old.bin) | **caught** |
+| A fetch that panics blocks every later read of the session | The defer in `openCodeShared` | Finished after `fetch` returns only | `TestOpenCodeSharedPanic` (blocked) | **caught** |
+| Each read with no service starts an export | `openCodeExportCached` | `openCodeFromExport` called directly | `TestOpenCodeServiceRules/an_export_is_used_again_while_the_database_is_unchanged` (2 exports) | **caught** |
 
 ## Answer keys bound to their labels (Kimi Code CLI)
 

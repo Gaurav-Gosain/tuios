@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const ocSession = "ses_01Fixture"
@@ -40,7 +41,9 @@ type fakeOpenCode struct {
 
 func newFakeOpenCode(t *testing.T, page []byte) *fakeOpenCode {
 	t.Helper()
-	f := &fakeOpenCode{pid: 4242}
+	// The pid is this process's, which owns the listener, as opencode's
+	// service owns its own.
+	f := &fakeOpenCode{pid: os.Getpid()}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.hits.Add(1)
 		user, pass, ok := r.BasicAuth()
@@ -220,4 +223,26 @@ func fakeExport(t *testing.T, dir, body string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
+}
+
+// TestOpenCodeSharedPanic: a fetch that panics into a recover above it must
+// still let later reads of the session through, not block them for good.
+func TestOpenCodeSharedPanic(t *testing.T) {
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = openCodeShared("panic", func() ([]any, error) { panic("fetch") })
+	}()
+	done := make(chan error, 1)
+	go func() {
+		_, err := openCodeShared("panic", func() ([]any, error) { return nil, nil })
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != ErrService {
+			t.Fatalf("err %v, want the failed fetch's ErrService", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a read after a fetch that panicked blocked")
+	}
 }
