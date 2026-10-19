@@ -2901,7 +2901,10 @@ three transcript decoders, the hookless search that gives a file to the
 agent that started it, and the client's fallback to the recap. Before the
 cuts it measured 168 KB and 154 KB over main: one JSON walker replaced the
 struct type per record, and the small helpers stay out of line. Nothing in it
-runs unless a person reads a thread or an agent pane has no join yet.
+runs unless a person reads a thread or an agent pane has no join yet. The
+Copilot CLI and Amp threads (#901) measured 38,052,002 and 35,763,698: about
+29 KB and 33 KB for two more decoders on the same walker and the join by a
+session id.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
