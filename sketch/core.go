@@ -36,6 +36,9 @@ type RenderOptions = types.RenderOptions
 // advances, which gives the same output as pele.
 type TextMeasurer = text.TextMeasurer
 
+// Theme sets the colours, fonts and radius of a diagram through pele's --pele-* tokens.
+type Theme = types.Theme
+
 // LinkInfo is a link the diagram draws.
 type LinkInfo = types.LinkInfo
 

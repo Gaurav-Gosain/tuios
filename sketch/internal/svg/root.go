@@ -78,7 +78,7 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 		}
 	}
 	return `<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-` + typ + `" viewBox="0 0 ` + js.Num(width) + ` ` + js.Num(height) +
-		`" width="` + js.Num(width) + `" height="` + js.Num(height) + `" style="` + fit + ROOT_STYLE + w +
+		`" width="` + js.Num(width) + `" height="` + js.Num(height) + `" style="` + fit + Esc(options.Theme.Style()) + ROOT_STYLE + w +
 		Esc(FontStyle(fontSize, options.FontFamily, options.FontFamilyMono)) +
 		`" fill="var(--_fg)" role="graphics-document document" aria-roledescription="` + typ + `"` + aria + `>` +
 		head + content + `</svg>`

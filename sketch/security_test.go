@@ -297,7 +297,9 @@ var flowchartTemplates = []func(p string) string{
 	},
 	func(p string) string { return "flowchart TD\n  A --> B\n  linkStyle 0 stroke:" + p },
 	func(p string) string { return "flowchart TD\n  A --> B\n  click A \"" + p + "\"" },
-	func(p string) string { return "flowchart TD\n  A --> B\n  click A href \"" + p + "\" \"" + p + "\" _blank" },
+	func(p string) string {
+		return "flowchart TD\n  A --> B\n  click A href \"" + p + "\" \"" + p + "\" _blank"
+	},
 	func(p string) string { return "flowchart TD\n  A --> B\n  click A \"x\" \"" + p + "\"" },
 	func(p string) string { return "flowchart TD\n  A --> B\n  click A call " + p + "()" },
 	func(p string) string { return "flowchart TD\n  A --> B\n  click A \"https://example.com\" " + p },
@@ -314,7 +316,9 @@ var flowchartTemplates = []func(p string) string{
 		return "flowchart TD\n  A@{ img: \"" + p + "\", label: \"x\", w: \"" + p + "\", h: \"" + p + "\", constraint: \"" + p + "\" } --> B"
 	},
 	func(p string) string { return "flowchart TD\n  A@{ " + p + ": 1 } --> B" },
-	func(p string) string { return "flowchart TD\n  A e1@--> B\n  e1@{ animate: \"" + p + "\", curve: \"" + p + "\" }" },
+	func(p string) string {
+		return "flowchart TD\n  A e1@--> B\n  e1@{ animate: \"" + p + "\", curve: \"" + p + "\" }"
+	},
 	func(p string) string { return "flowchart TD\n  A[fa:fa-" + p + " x] --> B" },
 	func(p string) string {
 		return "---\ntitle: \"" + p + "\"\nconfig:\n  flowchart:\n    curve: \"" + p + "\"\n---\nflowchart TD\n  A --> B"
