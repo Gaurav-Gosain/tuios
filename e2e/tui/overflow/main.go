@@ -5,7 +5,7 @@
 // so a crop measured in the host's cell instead of in the picture's own scale
 // is half the size it should be.
 //
-// Usage: overflow MEDIUM
+// Usage: overflow MEDIUM [later]
 //
 // MEDIUM is how the picture travels:
 //
@@ -18,7 +18,8 @@
 // It switches to the alternate screen, puts the cursor 41 columns from the
 // right edge and 4 rows from the bottom, places the picture there with C=1,
 // prints OVERFLOW-DONE and holds, so the refresh passes have a placement to
-// re-place.
+// re-place. With later it sends the picture with a=t, which stores it and
+// shows nothing, and then places it with a=p, as snacks.nvim does.
 package main
 
 import (
@@ -46,6 +47,7 @@ func main() {
 	if len(os.Args) > 1 {
 		medium = os.Args[1]
 	}
+	later := len(os.Args) > 2 && os.Args[2] == "later"
 	data, err := picture()
 	if err != nil {
 		fmt.Printf("OVERFLOW-ERR %v\n", err)
@@ -55,6 +57,9 @@ func main() {
 	// Bottom right, then back to 41 columns and 4 rows of the picture showing.
 	os.Stdout.WriteString("\x1b[?1049h\x1b[999;999H\x1b[3A\x1b[40D")
 	place := fmt.Sprintf("a=T,f=100,i=%d,c=%d,r=%d,C=1,q=2", imageID, cols, rows)
+	if later {
+		place = fmt.Sprintf("a=t,f=100,i=%d,q=2", imageID)
+	}
 	switch medium {
 	case "direct":
 		sendDirect(place, data)
@@ -68,6 +73,9 @@ func main() {
 	default:
 		fmt.Printf("\x1b[?1049lOVERFLOW-ERR unknown medium %q\n", medium)
 		return
+	}
+	if later {
+		fmt.Printf("\x1b_Ga=p,i=%d,c=%d,r=%d,C=1,q=2\x1b\\", imageID, cols, rows)
 	}
 	os.Stdout.WriteString("\x1b[HOVERFLOW-DONE")
 	time.Sleep(60 * time.Second)

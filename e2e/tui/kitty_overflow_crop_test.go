@@ -26,9 +26,18 @@ import (
 //     file with the PNG after other bytes, and a temporary file.
 //   - The placement could escape the crop by not being clipped at all. It must
 //     be fewer cells than the 100x10 asked for, on both axes.
+//   - A guest can store the picture first (a=t) and place it after (a=p), as
+//     snacks.nvim does. Storing shows nothing, so a placement made for the a=t
+//     at the picture's own size is a second, unscaled copy on the screen.
+//     So the check is on what the host is left showing: the last command for
+//     each placement id, not only the last placement of all.
 func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
-	for _, medium := range []string{"direct", "file", "file-zlib", "file-at", "temp"} {
-		t.Run(medium, func(t *testing.T) {
+	for _, tc := range []struct{ medium, how string }{
+		{"direct", ""}, {"file", ""}, {"file-zlib", ""}, {"file-at", ""}, {"temp", ""},
+		{"direct", "later"}, {"file", "later"}, {"temp", "later"},
+	} {
+		name := strings.TrimSuffix(tc.medium+"-"+tc.how, "-")
+		t.Run(name, func(t *testing.T) {
 			bin := buildOverflow(t)
 			host := newKittyHost()
 			term, _ := start(t, startOpts{
@@ -44,24 +53,50 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 			enterTerminalMode(t, term)
 
 			host.mark("launch")
-			typeLine(t, term, bin+" "+medium)
+			typeLine(t, term, strings.TrimSpace(bin+" "+tc.medium+" "+tc.how))
 			if err := term.WaitForText("OVERFLOW-DONE", shellTimeout); err != nil {
 				t.Fatalf("the guest never finished: %v\n%s", err, term.Snapshot())
 			}
 
 			placed, history := settledPlacement(t, host, "launch")
-			saveText(t, "placements-"+medium, strings.Join(history, "\n")+"\n")
+			saveText(t, "placements-"+name, strings.Join(history, "\n")+"\n")
 			if placed.cols <= 0 || placed.cols >= 100 || placed.rows <= 0 || placed.rows >= 10 {
 				t.Fatalf("ASSERTION: the placement is %dx%d cells, want it clipped to fewer than 100x10:\n  %s",
 					placed.cols, placed.rows, strings.Join(history, "\n  "))
 			}
-			wantW, wantH := placed.cols*20, placed.rows*40
-			if placed.srcX != 0 || placed.srcY != 0 || placed.srcW != wantW || placed.srcH != wantH {
-				t.Fatalf("ASSERTION: %dx%d cells show the source rectangle x=%d,y=%d,w=%d,h=%d, want x=0,y=0,w=%d,h=%d, 20 pixels a column and 40 a row:\n  %s",
-					placed.cols, placed.rows, placed.srcX, placed.srcY, placed.srcW, placed.srcH, wantW, wantH, strings.Join(history, "\n  "))
+			shown := map[string]wireCmd{}
+			for _, c := range wireCmds(host.bytes()) {
+				if c.phase != "launch" {
+					continue
+				}
+				switch id := placementIDOf(c.params); {
+				case c.action == "p":
+					shown[id] = c
+				case c.action == "d" && id != "":
+					delete(shown, id)
+				case c.action == "d":
+					clear(shown)
+				}
+			}
+			for _, c := range shown {
+				wantW, wantH := c.cols*20, c.rows*40
+				if c.srcX != 0 || c.srcY != 0 || c.srcW != wantW || c.srcH != wantH {
+					t.Fatalf("ASSERTION: %dx%d cells show the source rectangle x=%d,y=%d,w=%d,h=%d, want x=0,y=0,w=%d,h=%d, 20 pixels a column and 40 a row:\n  %s",
+						c.cols, c.rows, c.srcX, c.srcY, c.srcW, c.srcH, wantW, wantH, strings.Join(history, "\n  "))
+				}
 			}
 		})
 	}
+}
+
+// placementIDOf is the p= key of a kitty command's parameters, "" for none.
+func placementIDOf(params string) string {
+	for _, kv := range strings.Split(params, ",") {
+		if v, ok := strings.CutPrefix(kv, "p="); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // saveText writes text to the test's artifact directory.
