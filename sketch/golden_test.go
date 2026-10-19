@@ -15,6 +15,7 @@ import (
 // in the pull request that ports it.
 var done = map[string]bool{
 	"class":     true,
+	"er":        true,
 	"flowchart": true,
 	"sequence":  true,
 	"state":     true,
