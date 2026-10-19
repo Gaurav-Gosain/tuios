@@ -96,6 +96,8 @@ jobs:
             targets: FuzzParse
           - pkg: tml
             targets: FuzzParseXML FuzzParseJSON FuzzExpr FuzzPatch
+          - pkg: plot
+            targets: FuzzCharts
 
     steps:
       - uses: actions/checkout@v7

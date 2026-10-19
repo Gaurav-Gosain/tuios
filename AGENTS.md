@@ -113,7 +113,8 @@ Some parts of tuios are Go modules of their own, published under
 `tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
 that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
-(`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`) and `tml/` (`tuios.dev/tml`).
+(`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`)
+and `plot/` (`tuios.dev/plot`).
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -212,6 +213,7 @@ tuios/
 │   └── ui/                 # Animation system
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil)
+├── plot/                   # tuios.dev/plot, a Go module of its own: bar, line, area, sparkline, gauge and histogram charts as cells with theme roles
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells
 ├── swatch/                 # tuios.dev/swatch, a Go module of its own: desktop theme palettes (Omarchy), followed live

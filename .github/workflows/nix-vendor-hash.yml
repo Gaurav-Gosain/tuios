@@ -20,6 +20,8 @@ on:
       - shot/go.mod
       - shot/go.sum
       - tml/go.mod
+      - plot/go.mod
+      - plot/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock
@@ -38,6 +40,8 @@ on:
       - shot/go.mod
       - shot/go.sum
       - tml/go.mod
+      - plot/go.mod
+      - plot/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock

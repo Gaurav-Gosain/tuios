@@ -20,6 +20,7 @@ on:
       - "swatch/**"
       - "shot/**"
       - "tml/**"
+      - "plot/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"

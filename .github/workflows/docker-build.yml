@@ -30,6 +30,7 @@ on:
       - swatch/**
       - shot/**
       - tml/**
+      - plot/**
       - cmd/**
       - .github/workflows/docker-build.yml
   pull_request:
@@ -45,6 +46,7 @@ on:
       - swatch/**
       - shot/**
       - tml/**
+      - plot/**
       - cmd/**
       - .github/workflows/docker-build.yml
   workflow_dispatch:

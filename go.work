@@ -5,6 +5,7 @@ toolchain go1.26.9
 use (
 	.
 	./e2e/tui
+	./plot
 	./progstatus
 	./shot
 	./swatch
