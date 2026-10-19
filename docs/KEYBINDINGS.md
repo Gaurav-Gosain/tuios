@@ -291,6 +291,40 @@ click on a session or a workspace opens or closes it.
 `tuios list-windows --all --text 40 --json` prints the same rows for a script.
 See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-list-windows).
 
+### Go to anything
+
+`Ctrl+B G` opens the go-to picker. It lists every place you can go in one list: agents, sessions, the workspaces of each session, and panes. The action is `goto_picker`. The command palette has it as "Go to: an agent, session, workspace or pane".
+
+Each row starts with its kind, then says where the place is:
+
+```
+agent    claude · payments › 1 › api      needs you: approve Bash ●
+session  payments [space: surge]                            3 panes
+ws       payments › 2 · api-tests                            1 pane
+pane     payments › 1 › nvim
+```
+
+With nothing typed, the list starts with the agents that need you, the one waiting longest first. Then come the places you were on most recently, the last one first, so `Ctrl+B G` and `enter` take you back to where you were. Then come every agent, session and workspace. Panes are listed once you type something. A session has many panes, and the ones you were just on are already in the recent places.
+
+Typed words are a fuzzy search over the names a row shows: the session, the workspace, the pane, and for an agent its harness and its last message. A `key:value` term narrows the rows instead, and every term has to match. The terms are the selector the agents view takes (`harness:`, `state:`, `needs:you`, `session:`, `group:`, `host:`, `name:`), and three more:
+
+| Term | Keeps |
+|---|---|
+| `kind:agent`, `kind:session`, `kind:ws`, `kind:pane` | Rows of that kind |
+| `space:NAME` | Rows of the sessions filed under that space |
+| `ws:N` | Agents, workspaces and panes on that workspace, by number or name |
+
+A value is a glob, and commas between values mean any of them, as in `kind:session,ws`. A term that does not fit a row leaves it out: `harness:` keeps only agents, and `ws:` leaves out the sessions. `@`, `#` or `!` at the start of the query is `kind:agent`, `kind:session` or `kind:ws`. For example, `#space:surge` lists the sessions in the surge space, and `@needs:you` lists the agents that need you.
+
+| Key | What it does |
+|---|---|
+| The list keys | Move. See [Lists and panels](#lists-and-panels) |
+| `enter` | Go there: the session, then the workspace, then the pane |
+| `ctrl+u` | Clear the query |
+| `esc` | Close the picker |
+
+Workspaces and panes are listed for the sessions on the machine you are attached to. A session on another machine is listed, and its agents are, and `enter` on it attaches that machine as the rail does. A workspace of a session you are not attached to shows its number, because its name is not sent to your client.
+
 ## Neovim pane navigation
 
 The optional [tuios-nvim-navigator](https://github.com/Tim4c/tuios-nvim-navigator)
@@ -325,7 +359,7 @@ TUIOS itself.
 Every list in the TUI moves the same way: the command palette, the launcher,
 the settings page, the agents view, the mailbox, the keybind manager, the theme,
 glyph and effect pickers, the session, workspace, layout and machine pickers,
-the window picker, the quit and context menus, the dock and rail editors and
+the go-to picker, the window picker, the quit and context menus, the dock and rail editors and
 the tape manager.
 
 | Keys | What it does |
