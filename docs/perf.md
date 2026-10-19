@@ -2895,7 +2895,13 @@ hidden host cursor at the caret for input methods (#649) measured 37,879,970
 and 35,595,330: 400 bytes on darwin/arm64, and three more pages on
 linux/amd64, so only the linux/amd64 budget moved. It scans each frame for
 the cursor visibility sequences, copies a parked frame only when it takes
-one out, and runs no timer.
+one out, and runs no timer. The agent thread for Codex, Gemini CLI and Qwen
+Code (#900) measured 38,023,330 and 35,730,642: about 143 KB and 135 KB for
+three transcript decoders, the hookless search that gives a file to the
+agent that started it, and the client's fallback to the recap. Before the
+cuts it measured 168 KB and 154 KB over main: one JSON walker replaced the
+struct type per record, and the small helpers stay out of line. Nothing in it
+runs unless a person reads a thread or an agent pane has no join yet.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
