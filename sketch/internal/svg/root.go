@@ -3,7 +3,6 @@
 package svg
 
 import (
-	"regexp"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
@@ -15,28 +14,62 @@ import (
 // first there, for a radius the diagram's author set to come after it and win.
 const rootRounded = ` rx="` + RADIUS + `"`
 
-var reRounded = regexp.MustCompile(`<rect\b[^>]*>`)
-
+// rounded moves the corner radius of each <rect> with rx="var(--pele-radius,4px)"
+// into its style. pele does it with /<rect\b[^>]*>/g; a scan does the same
+// without a regexp pass over the whole drawing.
 func rounded(content string) string {
 	if !strings.Contains(content, rootRounded) {
 		return content
 	}
-	return reRounded.ReplaceAllStringFunc(content, func(tag string) string {
-		at := strings.Index(tag, rootRounded)
+	var b strings.Builder
+	b.Grow(len(content) + 64)
+	last := 0
+	for i := 0; ; {
+		at := strings.Index(content[i:], "<rect")
 		if at < 0 {
-			return tag
+			break
 		}
-		rest := tag[:at] + tag[at+len(rootRounded):]
-		style := strings.Index(rest, ` style="`)
-		if style >= 0 {
-			return rest[:style+8] + "rx:var(--_r);" + rest[style+8:]
+		at += i
+		next := at + len("<rect")
+		// \b: the tag name ends there.
+		if next < len(content) && isWordByte(content[next]) {
+			i = next
+			continue
 		}
-		end := len(rest) - 1
-		if strings.HasSuffix(rest, "/>") {
-			end = len(rest) - 2
+		end := strings.IndexByte(content[next:], '>')
+		if end < 0 {
+			break
 		}
-		return rest[:end] + ` style="rx:var(--_r)"` + rest[end:]
-	})
+		end += next + 1
+		tag := content[at:end]
+		b.WriteString(content[last:at])
+		b.WriteString(roundTag(tag))
+		last = end
+		i = end
+	}
+	b.WriteString(content[last:])
+	return b.String()
+}
+
+func isWordByte(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
+}
+
+func roundTag(tag string) string {
+	at := strings.Index(tag, rootRounded)
+	if at < 0 {
+		return tag
+	}
+	rest := tag[:at] + tag[at+len(rootRounded):]
+	style := strings.Index(rest, ` style="`)
+	if style >= 0 {
+		return rest[:style+8] + "rx:var(--_r);" + rest[style+8:]
+	}
+	end := len(rest) - 1
+	if strings.HasSuffix(rest, "/>") {
+		end = len(rest) - 2
+	}
+	return rest[:end] + ` style="rx:var(--_r)"` + rest[end:]
 }
 
 // The weights of bold text, each set only in a diagram that has such text.

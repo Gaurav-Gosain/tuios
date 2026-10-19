@@ -4,6 +4,7 @@ package sketch
 
 import (
 	"regexp"
+	"strings"
 
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
@@ -55,9 +56,39 @@ var detectors = []struct {
 	{"usecase", regexp.MustCompile(`^` + sp + `usecase-beta(?:[` + js.S + `]|$)`)},
 }
 
+// detectPrefix bounds the text a detector is run on. Every detector but C4's
+// reads only the keyword after the leading whitespace, and Go's backtracker
+// costs as much as the text it is given.
+const detectPrefix = 64
+
+var c4Anywhere = []string{"C4Container", "C4Component", "C4Dynamic", "C4Deployment"}
+
 func detect(cleaned string) (Type, bool) {
+	start := len(cleaned)
+	for i, r := range cleaned {
+		if !js.IsSpace(r) {
+			start = i
+			break
+		}
+	}
+	head := cleaned[start:]
+	if len(head) > detectPrefix {
+		head = head[:detectPrefix]
+	}
 	for _, d := range detectors {
-		if d.re.MatchString(cleaned) {
+		if d.typ == "c4" {
+			// /^\s*C4Context|C4Container|.../ matches the last four anywhere.
+			if d.re.MatchString(head) {
+				return d.typ, true
+			}
+			for _, w := range c4Anywhere {
+				if strings.Contains(cleaned, w) {
+					return d.typ, true
+				}
+			}
+			continue
+		}
+		if d.re.MatchString(head) {
 			return d.typ, true
 		}
 	}

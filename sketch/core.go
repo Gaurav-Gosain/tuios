@@ -214,7 +214,8 @@ func render(p parsed, options RenderOptions) SVG {
 	if outputLimit <= 0 {
 		outputLimit = DEFAULT_OUTPUT_LIMIT
 	}
-	if js.Len(rendered.SVG) > outputLimit {
+	// A UTF-16 length is never more than the UTF-8 one, so only a long SVG is counted.
+	if len(rendered.SVG) > outputLimit && js.Len(rendered.SVG) > outputLimit {
 		types.Throw("Diagram output is longer than the limit of "+strconv.Itoa(outputLimit)+" characters.", types.CodeLimit, types.ErrorInfo{Type: string(p.typ)})
 	}
 	if options.Geometry != nil && rendered.Geometry != nil {
