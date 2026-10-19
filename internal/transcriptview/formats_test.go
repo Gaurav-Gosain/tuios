@@ -191,7 +191,7 @@ func TestFormatPaging(t *testing.T) {
 // not JSON, that have the wrong types, and strings with escapes in every
 // field a page carries.
 func hostile(format string) []string {
-	esc := "\x1b[31mred\x1b[0m ‮hidden"
+	esc := "\x1b[31mred\x1b[0m \u202ehidden"
 	s := func(v string) string { b, _ := json.Marshal(v); return string(b) }
 	common := []string{
 		`{"type": "user", "message": {`,
@@ -256,7 +256,7 @@ func TestFormatHostile(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if bytes.Contains(out, []byte(`\u001b`)) || bytes.Contains(out, []byte("‮")) || bytes.Contains(out, []byte(`‮`)) {
+			if bytes.Contains(out, []byte(`\u001b`)) || bytes.Contains(out, []byte("\u202e")) || bytes.Contains(out, []byte(`\u202e`)) {
 				t.Errorf("a string left without Clean: %s", out)
 			}
 		})
