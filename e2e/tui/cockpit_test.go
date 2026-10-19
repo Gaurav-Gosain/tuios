@@ -257,9 +257,14 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string) {
 		}
 	}
 	var f *shot.Frame
-	if fonts := os.Getenv("TUIOS_E2E_FONT_DIR"); fonts != "" {
-		regular, err1 := os.ReadFile(filepath.Join(fonts, "GeistMonoNerdFontMono-Regular.otf"))
-		bold, err2 := os.ReadFile(filepath.Join(fonts, "GeistMonoNerdFontMono-Bold.otf"))
+	regularPath, boldPath := os.Getenv("TUIOS_E2E_FONT_REGULAR"), os.Getenv("TUIOS_E2E_FONT_BOLD")
+	if fonts := os.Getenv("TUIOS_E2E_FONT_DIR"); fonts != "" && regularPath == "" {
+		regularPath = filepath.Join(fonts, "GeistMonoNerdFontMono-Regular.otf")
+		boldPath = filepath.Join(fonts, "GeistMonoNerdFontMono-Bold.otf")
+	}
+	if regularPath != "" {
+		regular, err1 := os.ReadFile(regularPath)
+		bold, err2 := os.ReadFile(boldPath)
 		if err1 == nil && err2 == nil {
 			f = shot.BuildFrame(shot.FrameSpec{Frame: "window", Title: "tuios", Padding: 28, Radius: 10, Shadow: true, Controls: "macos",
 				Font: shot.Font{Data: regular}, BoldFont: shot.Font{Data: bold}}, shot.FrameInputs{Palette: p})

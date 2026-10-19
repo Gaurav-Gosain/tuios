@@ -39,6 +39,11 @@ type Transcript struct {
 	// harness whose hook names its session but not its file. Empty means the
 	// session id finds no file.
 	SessionFile string `toml:"session_file"`
+	// BySession says the file is the harness's whole store, Dir/Glob with no
+	// wildcard, and the session id its hook or plugin reports names the
+	// session in it. opencode's service.json is one: the reader asks the
+	// service the file names for the session.
+	BySession bool `toml:"by_session"`
 	// Verify names the record fields that must match the pane before a file
 	// found by search is believed. It is what stops a wrong join, which is worse
 	// than no join: attributing one agent's state to another pane is a confident
@@ -57,12 +62,13 @@ const ReaderJSONL = "claude-code-jsonl"
 // internal/transcriptview, which this package does not import, so the names
 // are kept in step by the session package's tests.
 var knownReaders = map[string]struct{}{
-	ReaderJSONL:      {},
-	"codex-rollout":  {},
-	"gemini-chat":    {},
-	"qwen-chat":      {},
-	"copilot-events": {},
-	"amp-thread":     {},
+	ReaderJSONL:        {},
+	"codex-rollout":    {},
+	"gemini-chat":      {},
+	"qwen-chat":        {},
+	"copilot-events":   {},
+	"amp-thread":       {},
+	"opencode-service": {},
 }
 
 // KnownReaders returns the reader names a manifest may give.
@@ -129,14 +135,14 @@ func checkTranscript(file, id string, t *Transcript) error {
 			return fmt.Errorf("%s: manifest %q transcript exclude %q must be a file name pattern", file, id, ex)
 		}
 	}
-	if strings.ContainsRune(t.Glob, '/') && strings.Contains(strings.ReplaceAll(t.Dir, "{home}", ""), "{") {
+	if strings.ContainsRune(t.Glob, '/') && strings.Contains(baseless(t.Dir), "{") {
 		return fmt.Errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
 	}
 	if t.SessionFile != "" {
 		if strings.Count(t.SessionFile, "{session_id}") != 1 || strings.ContainsAny(strings.ReplaceAll(t.SessionFile, "{session_id}", ""), `/\{}`) {
 			return fmt.Errorf("%s: manifest %q transcript session_file %q must be a file name with {session_id} once", file, id, t.SessionFile)
 		}
-		if strings.Contains(strings.ReplaceAll(t.Dir, "{home}", ""), "{") {
+		if strings.Contains(baseless(t.Dir), "{") {
 			return fmt.Errorf("%s: manifest %q transcript session_file needs a dir with no placeholder but {home}", file, id)
 		}
 	}
@@ -196,11 +202,11 @@ func (t Transcript) MatchesGlob(root, path string) bool {
 // {cwd:dashes}, whose placeholder is one folder.
 func (t Transcript) dirDepth() int {
 	dir := filepath.ToSlash(t.Dir)
-	i := strings.IndexByte(strings.ReplaceAll(dir, "{home}", ""), '{')
+	i := strings.IndexByte(baseless(dir), '{')
 	if i < 0 {
 		return 0
 	}
-	dir = strings.ReplaceAll(dir, "{home}", "")
+	dir = baseless(dir)
 	rest := dir[strings.LastIndexByte(dir[:i], '/')+1:]
 	return strings.Count(strings.Trim(rest, "/"), "/") + 1
 }
@@ -229,7 +235,7 @@ func (t Transcript) ExpandDir(cwd string) string {
 	if err != nil {
 		return ""
 	}
-	out := strings.ReplaceAll(t.Dir, "{home}", home)
+	out := expandBase(t.Dir, home)
 	out = strings.ReplaceAll(out, "{cwd:dashes}", DashPath(cwd))
 	return filepath.Clean(out)
 }
@@ -247,7 +253,7 @@ func (t Transcript) Root() string {
 	if err != nil || home == "" {
 		return ""
 	}
-	dir := strings.ReplaceAll(t.Dir, "{home}", home)
+	dir := expandBase(t.Dir, home)
 	if i := strings.IndexByte(dir, '{'); i >= 0 {
 		dir = dir[:i]
 		j := strings.LastIndexAny(dir, `/\`)
@@ -269,7 +275,26 @@ func (t Transcript) Root() string {
 func DashPath(cwd string) string { return strings.ReplaceAll(cwd, "/", "-") }
 
 // knownPlaceholders is what ExpandDir understands.
-var knownPlaceholders = map[string]struct{}{"{home}": {}, "{cwd:dashes}": {}}
+var knownPlaceholders = map[string]struct{}{"{home}": {}, "{state}": {}, "{cwd:dashes}": {}}
+
+// expandBase resolves the two placeholders that name a fixed folder: {home},
+// and {state}, the XDG state folder ($XDG_STATE_HOME, or ~/.local/state).
+func expandBase(dir, home string) string {
+	if strings.Contains(dir, "{state}") {
+		state := os.Getenv("XDG_STATE_HOME")
+		if !filepath.IsAbs(state) {
+			state = filepath.Join(home, ".local", "state")
+		}
+		dir = strings.ReplaceAll(dir, "{state}", state)
+	}
+	return strings.ReplaceAll(dir, "{home}", home)
+}
+
+// baseless is dir without its fixed-folder placeholders, for the checks of
+// which placeholders a dir names.
+func baseless(dir string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(dir, "{home}", ""), "{state}", "")
+}
 
 // placeholders returns the placeholders a template uses, erroring on one this
 // build does not know. Left unchecked, a typo would leave the literal braces in
@@ -305,4 +330,14 @@ func (r *Registry) TranscriptFor(id string) *Transcript {
 		return nil
 	}
 	return &m.Transcript
+}
+
+// StorePath is the one file of a by_session harness, "" for any other or
+// when the home is unknown.
+func (t Transcript) StorePath() string {
+	root := t.Root()
+	if !t.BySession || root == "" || strings.ContainsAny(t.Glob, "*?[/") {
+		return ""
+	}
+	return filepath.Join(root, t.Glob)
 }

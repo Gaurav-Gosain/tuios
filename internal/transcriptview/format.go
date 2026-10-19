@@ -92,7 +92,7 @@ func lookupFormat(name string) (format, bool) {
 // Known reports whether this build decodes the format a manifest names.
 func Known(name string) bool {
 	_, ok := formats[name]
-	return ok
+	return ok || name == FormatOpenCode
 }
 
 // IsDocument reports whether the file at path, in the named format, is one
@@ -335,7 +335,9 @@ func command(a jobj) string {
 // fileOf is the file a call acts on.
 //
 //go:noinline
-func fileOf(a jobj) string { return a.str("file_path", "absolute_path", "path", "dir_path") }
+func fileOf(a jobj) string {
+	return a.str("file_path", "absolute_path", "filePath", "path", "dir_path")
+}
 
 // targetOf is the one line that says what a call acts on.
 //
@@ -373,7 +375,7 @@ func callEntry(name, id string, class toolClass, a jobj) []Entry {
 		raw.plan, raw.textCut = cutString(plan, rawTextMax)
 		return []Entry{e}
 	case classEdit:
-		old, nw := a.str("old_string", "old_str"), a.str("new_string", "new_str")
+		old, nw := a.str("old_string", "old_str", "oldString"), a.str("new_string", "new_str", "newString")
 		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{old, nw}}}
 	case classWrite:
 		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{"", a.str("content", "file_text")}}}

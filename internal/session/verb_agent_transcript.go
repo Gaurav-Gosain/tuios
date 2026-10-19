@@ -80,7 +80,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	}
 	w := st.Windows[idx]
 	reg := d.agentMatcher.registry
-	path, harnessID, format, joined := sess.transcriptJoinOf(w.ID)
+	path, harnessID, format, session, joined := sess.transcriptJoinOf(w.ID)
 	if !joined {
 		if w.AgentHarness != "" && (reg == nil || reg.TranscriptFor(w.AgentHarness) == nil) {
 			return nil, unsupportedHarnessError(w.AgentHarness)
@@ -102,6 +102,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		Clean:      transcriptText,
 		CleanLines: maskSecretLines,
 		Format:     format,
+		Session:    session,
 	})
 	if err != nil {
 		if errors.Is(err, transcriptview.ErrNoFile) {
@@ -109,6 +110,9 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		}
 		if errors.Is(err, transcript.ErrNotRegular) {
 			return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(p.Window)+" is not a regular file, so it was not read")
+		}
+		if errors.Is(err, transcriptview.ErrService) {
+			return nil, newVerbError(ErrVerbNoTranscript, "opencode did not give the session of window "+echoName(p.Window))
 		}
 		if errors.Is(err, transcriptview.ErrTooLarge) {
 			return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(p.Window)+" is too large to read")
@@ -146,14 +150,14 @@ func unsupportedHarnessError(harnessID string) *verbError {
 
 // transcriptJoinOf returns the file a window is joined to, its harness and
 // its format.
-func (s *Session) transcriptJoinOf(windowID string) (path, harnessID, format string, ok bool) {
+func (s *Session) transcriptJoinOf(windowID string) (path, harnessID, format, session string, ok bool) {
 	s.transcripts.mu.Lock()
 	defer s.transcripts.mu.Unlock()
 	j, ok := s.transcripts.joins[windowID]
 	if !ok {
-		return "", "", "", false
+		return "", "", "", "", false
 	}
-	return j.reader.Path(), j.harness, j.format, true
+	return j.reader.Path(), j.harness, j.format, j.session, true
 }
 
 // noteTranscriptGrowth raises a transcript event when the joined file grew

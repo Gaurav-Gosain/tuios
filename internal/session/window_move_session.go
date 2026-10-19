@@ -154,8 +154,8 @@ func sessionLabel(s *Session) string {
 
 // transcriptRejoin is a transcript join to make again.
 type transcriptRejoin struct {
-	harness, format, path string
-	exact                 bool
+	harness, format, path, session string
+	exact                          bool
 }
 
 // releaseWindow takes a window out of the session for a move: its row, its
@@ -236,7 +236,7 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 
 	s.transcripts.mu.Lock()
 	if j, ok := s.transcripts.joins[id]; ok {
-		t.transcript = &transcriptRejoin{harness: j.harness, format: j.format, path: j.reader.Path(), exact: j.exact}
+		t.transcript = &transcriptRejoin{harness: j.harness, format: j.format, path: j.reader.Path(), session: j.session, exact: j.exact}
 		delete(s.transcripts.joins, id)
 		s.releaseJoinLocked(j)
 	}
@@ -377,7 +377,11 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 		}
 	}
 	if t.transcript != nil {
-		_ = s.JoinAgentTranscriptAs(id, t.transcript.harness, t.transcript.format, t.transcript.path, t.transcript.exact)
+		if t.transcript.session != "" {
+			s.JoinAgentSession(id, t.transcript.harness, t.transcript.format, t.transcript.path, t.transcript.session)
+		} else {
+			_ = s.JoinAgentTranscriptAs(id, t.transcript.harness, t.transcript.format, t.transcript.path, t.transcript.exact)
+		}
 	}
 	s.stateDirty.Set()
 	return win, nil

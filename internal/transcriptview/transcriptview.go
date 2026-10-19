@@ -269,6 +269,9 @@ type Options struct {
 	// Format names the transcript's format, the reader its harness's
 	// manifest names. Empty is FormatClaude.
 	Format string
+	// Session names the session in a format whose store holds many
+	// (FormatOpenCode), as the harness's plugin reported it.
+	Session string
 }
 
 // Page is one read.
@@ -306,6 +309,9 @@ func Read(path string, opts Options) (Page, error) {
 	opts.Limit = min(opts.Limit, MaxLimit)
 	if opts.MaxBytes <= 0 {
 		opts.MaxBytes = DefaultMaxBytes
+	}
+	if opts.Format == FormatOpenCode {
+		return opencodeRead(path, opts)
 	}
 	fm, ok := lookupFormat(opts.Format)
 	if !ok {

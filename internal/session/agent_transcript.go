@@ -47,6 +47,9 @@ type transcriptWatch interface {
 type transcriptJoin struct {
 	windowID string
 	harness  string
+	// session is the session the join reads in a store that holds many
+	// (harness.Transcript.BySession), "" for a file of one session.
+	session string
 	// format is the reader the harness's manifest names. Only Claude Code's
 	// (harness.ReaderJSONL) gives a turn state. Every other format is joined
 	// for the person to read, and its growth raises the transcript event.
@@ -168,6 +171,34 @@ func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string
 	return nil
 }
 
+// JoinAgentSession binds a window to one session of a harness's store (the
+// file at path, such as opencode's service.json) and raises the transcript
+// event. A report that names another session of the same store moves the
+// join to it. The store is not watched: it does not grow as a file, and the
+// harness's own reports, which come as the session changes, raise the event.
+func (s *Session) JoinAgentSession(windowID, harnessID, format, path, session string) {
+	if windowID == "" || path == "" || session == "" {
+		return
+	}
+	s.transcripts.mu.Lock()
+	j, ok := s.transcripts.joins[windowID]
+	if ok && (j.reader.Path() != path || j.session == "") {
+		delete(s.transcripts.joins, windowID)
+		s.releaseJoinLocked(j)
+		ok = false
+	}
+	if !ok {
+		j = &transcriptJoin{windowID: windowID, harness: harnessID, format: format, reader: transcript.NewReader(path), exact: true, doc: true}
+		if s.transcripts.joins == nil {
+			s.transcripts.joins = make(map[string]*transcriptJoin)
+		}
+		s.transcripts.joins[windowID] = j
+	}
+	j.session = session
+	s.transcripts.mu.Unlock()
+	s.docEvent(windowID, j)
+}
+
 // DropAgentTranscript ends a window's join and gives back the claim it held, so
 // whatever tier was handling the pane before takes over again.
 func (s *Session) DropAgentTranscript(windowID string) {
@@ -240,6 +271,10 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 		return false
 	}
 
+	if j.session != "" {
+		// A store's session: the harness's reports raise its event.
+		return false
+	}
 	if j.format != harness.ReaderJSONL {
 		return s.readViewTranscript(windowID, j)
 	}

@@ -2,9 +2,14 @@ package tuie2e
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -66,6 +71,16 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			once:    "Set b to three.",
 			payload: `{"hook_event_name":"agent.start","session_id":"T-00000000-0000-7000-8000-000000000001"}`,
 		},
+		{
+			// opencode keeps no file of a session: the thread comes from a
+			// service at 127.0.0.1 that this test runs, as opencode 2.0.32
+			// answers, and the plugin's report names the session.
+			name: "opencode", harness: "opencode", fixture: "opencode-messages.json", sessionID: "ses_01Fixture",
+			file:    "service.json",
+			want:    []string{"b is three. One test fails.", "Command exited with code 1", "edit", "const b = 3;", "Rate limit reached."},
+			once:    "Set b to three.",
+			payload: `{"hook_event_name":"chat.message","session_id":"ses_01Fixture"}`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -83,6 +98,10 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := filepath.Join(xdgDir(base, "HOME"), c.file)
+			if c.harness == "opencode" {
+				path = filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "opencode", "service.json")
+				fixture = fakeOpenCodeService(t, fixture, c.sessionID)
+			}
 			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -169,4 +188,30 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			alive(t, term, "after the "+c.name+" thread")
 		})
 	}
+}
+
+// fakeOpenCodeService runs a service that answers as opencode 2.0.32 does,
+// with page as the session's messages, and returns the service.json that
+// names it.
+func fakeOpenCodeService(t *testing.T, page []byte, session string) []byte {
+	t.Helper()
+	// Made when the test runs, so no secret scanner reads a literal.
+	password := strings.Repeat("y", 8) + strconv.Itoa(os.Getpid())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if user, pass, ok := r.BasicAuth(); !ok || user != "opencode" || pass != password {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/info":
+			fmt.Fprintf(w, `{"version":"2.0.32","pid":%d}`, os.Getpid())
+		case "/api/session/" + session + "/message":
+			_, _ = w.Write(page)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	data, _ := json.Marshal(map[string]any{"id": "svc", "version": "2.0.32", "url": srv.URL, "pid": os.Getpid(), "password": password})
+	return data
 }

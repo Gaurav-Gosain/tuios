@@ -61,6 +61,20 @@ not      = ["interrupt"]
 # How a prompt is typed in. Measured on opencode 1.18.30: it turns on bracketed
 # paste (DECSET 2004) at start and pushes no kitty keyboard flags, so Enter
 # arrives as a carriage return.
+# opencode 2.x keeps its sessions in a database and serves them from a
+# background service. The service writes its address and password to
+# $XDG_STATE_HOME/opencode/service.json, mode 0600. The plugin (tuios
+# integration install opencode) reports the session id with every event, and
+# by_session joins the pane to that session in the store the file names. The
+# daemon reads the session from the service at 127.0.0.1 only when a person
+# reads the thread, and falls back to `opencode session export --standalone`
+# when no service answers. It gives no state: the plugin does that.
+[transcript]
+reader     = "opencode-service"
+dir        = "{state}/opencode"
+glob       = "service.json"
+by_session = true
+
 [input]
 submit          = "cr"
 bracketed_paste = true

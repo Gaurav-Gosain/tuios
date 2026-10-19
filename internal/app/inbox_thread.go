@@ -159,7 +159,7 @@ type threadWatchEnded struct{ key string }
 // reader internal/transcriptview has.
 func threadTranscriptHarness(h string) bool {
 	switch h {
-	case "claude-code", "codex", "gemini-cli", "qwen", "copilot", "amp":
+	case "claude-code", "codex", "gemini-cli", "qwen", "copilot", "amp", "opencode":
 		return true
 	}
 	return false

@@ -1,0 +1,219 @@
+{
+ "data": [
+  {
+   "id": "msg_06",
+   "time": {
+    "created": 1760778010000
+   },
+   "type": "model-switched",
+   "model": {
+    "id": "model-b",
+    "providerID": "provider-a"
+   }
+  },
+  {
+   "id": "msg_05",
+   "time": {
+    "created": 1760778010000
+   },
+   "type": "idle",
+   "outcome": "completed"
+  },
+  {
+   "id": "msg_04",
+   "time": {
+    "created": 1760778008000,
+    "completed": 1760778009000
+   },
+   "type": "shell",
+   "shellID": "sh_01",
+   "command": "git status",
+   "status": "exited",
+   "exit": 0
+  },
+  {
+   "id": "msg_03",
+   "time": {
+    "created": 1760778007000
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "model-a",
+    "providerID": "provider-a"
+   },
+   "content": [
+    {
+     "type": "text",
+     "text": "b is three. One test fails."
+    }
+   ],
+   "error": {
+    "type": "provider",
+    "message": "Rate limit reached."
+   }
+  },
+  {
+   "id": "msg_02",
+   "time": {
+    "created": 1760778002000,
+    "streamed": 1760778005000,
+    "completed": 1760778006000
+   },
+   "type": "assistant",
+   "agent": "build",
+   "model": {
+    "id": "model-a",
+    "providerID": "provider-a",
+    "variant": "default"
+   },
+   "content": [
+    {
+     "type": "reasoning",
+     "text": "The value is in app.ts.",
+     "state": {
+      "reasoningField": "x"
+     },
+     "time": {
+      "created": 1760778002000,
+      "completed": 1760778003000
+     }
+    },
+    {
+     "type": "text",
+     "text": "Editing app.ts."
+    },
+    {
+     "type": "tool",
+     "id": "call_edit",
+     "name": "edit",
+     "state": {
+      "status": "completed",
+      "input": {
+       "path": "/work/project/app.ts",
+       "oldString": "const b = 2;",
+       "newString": "const b = 3;"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Edit applied."
+       }
+      ],
+      "metadata": {
+       "files": [
+        {
+         "file": "/work/project/app.ts",
+         "patch": "Index: /work/project/app.ts\n===================================================================\n--- /work/project/app.ts\n+++ /work/project/app.ts\n@@ -10,3 +10,3 @@\n const a = 1;\n-const b = 2;\n+const b = 3;\n const c = 4;\n",
+         "status": "modified",
+         "additions": 1,
+         "deletions": 1
+        }
+       ],
+       "truncated": false
+      }
+     },
+     "time": {
+      "created": 1760778003000,
+      "ran": 1760778003000,
+      "completed": 1760778004000
+     }
+    },
+    {
+     "type": "tool",
+     "id": "call_test",
+     "name": "bash",
+     "state": {
+      "status": "error",
+      "input": {
+       "command": "npm test"
+      },
+      "error": {
+       "type": "tool",
+       "message": "Command exited with code 1"
+      },
+      "metadata": {}
+     },
+     "time": {
+      "created": 1760778004000
+     }
+    },
+    {
+     "type": "tool",
+     "id": "call_todo",
+     "name": "todowrite",
+     "state": {
+      "status": "completed",
+      "input": {
+       "todos": [
+        {
+         "content": "Edit app.ts",
+         "status": "completed",
+         "priority": "high"
+        },
+        {
+         "content": "Run tests",
+         "status": "in_progress",
+         "priority": "high"
+        }
+       ]
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "ok"
+       }
+      ],
+      "metadata": {
+       "truncated": false
+      }
+     },
+     "time": {
+      "created": 1760778005000
+     }
+    },
+    {
+     "type": "tool",
+     "id": "call_read",
+     "name": "read",
+     "state": {
+      "status": "running",
+      "input": {
+       "path": "/work/project/README.md"
+      },
+      "metadata": {}
+     },
+     "time": {
+      "created": 1760778005000
+     }
+    }
+   ],
+   "finish": "stop",
+   "rawFinish": "stop",
+   "cost": 0,
+   "tokens": {
+    "input": 10,
+    "output": 5,
+    "reasoning": 1,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   }
+  },
+  {
+   "id": "msg_01",
+   "time": {
+    "created": 1760778001000
+   },
+   "type": "user",
+   "text": "Set b to three.",
+   "files": [],
+   "agents": []
+  }
+ ],
+ "cursor": {
+  "previous": "cur_prev",
+  "next": "cur_next"
+ }
+}

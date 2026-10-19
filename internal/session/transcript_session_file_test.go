@@ -34,7 +34,7 @@ func TestSessionFileJoin(t *testing.T) {
 		sess := makeSessionWithWindow(t, d, name)
 		win := sess.GetState().Windows[0].ID
 		return name, func() string {
-			path, _, _, ok := sess.transcriptJoinOf(win)
+			path, _, _, _, ok := sess.transcriptJoinOf(win)
 			if !ok {
 				return ""
 			}
