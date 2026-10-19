@@ -2955,6 +2955,15 @@ for it: the dials start only when the connection is lost. The goodbye is one
 message per client at shutdown. The new budgets leave 4,198 and 4,198 bytes
 of room.
 
+The budgets went to 38,506,760 (linux/amd64) and 36,137,790 (darwin/arm64)
+for the cockpit's spawn sheet: the sheet's fields and lists, its layout and
+drawing, the machine ranking, the preset, and the start through fan and
+start-agent. The branch before it measured 38,338,722 and 35,999,202 bytes
+(Go 1.26.9, a clean clone, as CI builds it). The change measured 38,502,562
+and 36,133,586, so it adds 163,840 and 134,384 bytes. It reads the manifests
+and git only when the sheet opens. The new budgets leave 4,198 and 4,204
+bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
