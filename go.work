@@ -22,4 +22,4 @@ replace tuios.dev/shot v0.2.0 => ./shot
 
 replace tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb => ./vt
 
-replace tuios.dev/plot v0.0.0-20261019124130-4e6ddb6a06d8 => ./plot
+replace tuios.dev/plot v0.0.0-20261019124635-9a5f78def379 => ./plot
