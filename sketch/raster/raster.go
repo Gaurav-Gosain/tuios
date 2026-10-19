@@ -78,6 +78,10 @@ type renderer struct {
 	base matrix
 	// readable is Options.Readable.
 	readable bool
+	// layered is set while a group layer is drawn. A group with an opacity
+	// inside it draws its shapes with the opacity folded in, so there is at
+	// most one layer at a time.
+	layered bool
 	// probe, when set, sees each run of text before it is drawn. Tests use it.
 	probe func(r *renderer, p path, st state)
 }
@@ -415,10 +419,21 @@ func (r *renderer) groupLayer(n *node, parent, st state, a float64) {
 		pad := 2 + st.strokeWidth*st.m.scale()*4
 		rect = image.Rect(int(math.Floor(b.x0-pad)), int(math.Floor(b.y0-pad)), int(math.Ceil(b.x1+pad)), int(math.Ceil(b.y1+pad))).Intersect(rect)
 	}
-	if rect.Empty() || rect.Dx()*rect.Dy() > 16_000_000 {
+	// One layer at a time. Nested groups would each take up to 64 MB, and
+	// the XML allows 256 levels.
+	if r.layered || rect.Empty() || rect.Dx()*rect.Dy() > 16_000_000 {
 		r.children(n, st)
 		return
 	}
+	// The layer is work too: its pixels are allocated, cleared and composed.
+	cost := float64(rect.Dx()) * float64(rect.Dy())
+	if cost > float64(r.budget) {
+		r.budget = -1
+		return
+	}
+	r.budget -= int(cost)
+	r.layered = true
+	defer func() { r.layered = false }()
 	layer := image.NewRGBA(rect)
 	dst := r.dst
 	r.dst = layer
