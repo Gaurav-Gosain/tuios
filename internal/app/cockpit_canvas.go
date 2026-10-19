@@ -27,6 +27,8 @@ type ckSeg struct {
 	t      string
 	fg, bg color.Color
 	attrs  uint8
+	// link is the address the run opens, sent as OSC 8 and underlined.
+	link string
 }
 
 // Styles of a run.
@@ -119,8 +121,13 @@ func (c *ckCanvas) text(x, y, limit int, segs ...ckSeg) int {
 						st.Bg = under.Style.Bg
 					}
 				}
+				var link uv.Link
+				if s.link != "" {
+					st.Underline = uv.UnderlineSingle
+					link.URL = s.link
+				}
 				line := c.buf.Lines[y]
-				line[x] = uv.Cell{Content: cl, Width: w, Style: st}
+				line[x] = uv.Cell{Content: cl, Width: w, Style: st, Link: link}
 				for k := 1; k < w && x+k < c.w; k++ {
 					line[x+k] = uv.Cell{}
 				}

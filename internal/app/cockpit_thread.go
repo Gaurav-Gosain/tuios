@@ -65,8 +65,10 @@ type threadDiffLine struct {
 
 // ckLine is one line of a card, before it is drawn.
 type ckLine struct {
-	// bg is the line's ground across the width, nil for the canvas.
-	bg color.Color
+	// bg is the line's ground from column bgAt to the width, nil for the
+	// canvas.
+	bg   color.Color
+	bgAt int
 	// bar is a mark in the first cell, such as a card's edge.
 	bar    string
 	barInk color.Color
@@ -154,7 +156,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	gen := theme.Generation()
 	cached := func(en threadEntry, variant int, build func() []ckLine) {
 		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth,
-			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status}
+			folded: t.folded[en.ID], expand: t.expandAll, changes: changes, variant: variant, status: en.Status, sum: en.sum}
 		if card, ok := t.cards[en.ID]; ok && card.key == key {
 			items = ckAddItem(items, card.item, blank)
 			return
@@ -198,9 +200,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				if variant == 0 {
 					ls = append(ls, ckLine{label: true, segs: []ckSeg{{t: who, fg: pal.FgDim, attrs: ckBold}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}})
 				}
-				for _, s := range threadWrap(en.Text, max(width-2, 8)) {
-					ls = append(ls, ckLine{segs: []ckSeg{{t: s, fg: pal.Fg}}})
-				}
+				ls = append(ls, m.ckMarkdown(l, en.Text, max(width-2, 8))...)
 				return append(ls, ckLine{})
 			})
 			prevText = true
@@ -298,8 +298,7 @@ type ckCard struct {
 	item ckItem
 }
 
-// ckCardKey is what a card's lines depend on beside the entry itself, which
-// a transcript never changes once written.
+// ckCardKey is what a card's lines depend on beside the entry's id.
 type ckCardKey struct {
 	width                   int
 	theme, look             uint64
@@ -309,6 +308,8 @@ type ckCardKey struct {
 	variant                 int
 	// status is a tool call's, which its result can change.
 	status string
+	// sum is the entry's text hash: a message written again keeps its id.
+	sum uint64
 }
 
 // ckAddItem appends a card's lines. A card or a new speaker starts after a
@@ -661,7 +662,7 @@ func (m *OS) ckDiffTheme(l ckLook) *diffview.Theme {
 // ckRender draws one card line at width on c, a blank canvas one line high.
 func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	if ln.bg != nil {
-		c.fill(0, 0, width, 1, ln.bg)
+		c.fill(ln.bgAt, 0, width-ln.bgAt, 1, ln.bg)
 	}
 	if ln.bar != "" {
 		c.text(0, 0, 0, ckSeg{t: ln.bar, fg: ln.barInk})

@@ -178,6 +178,7 @@ tuios/
 │   ├── dirwatch/           # Tells the rail's files section when the listed folder's entries change
 │   ├── review/             # Reading a worktree's diff, and the notes left on it
 │   ├── diffview/           # Drawing diff lines: chroma highlighting, split layout, changed words
+│   ├── markdown/           # Reads the Markdown agents write into blocks and styled runs; draws nothing
 │   ├── capture/            # Turns a screenshot request and config into what shot renders
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share

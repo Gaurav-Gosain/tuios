@@ -62,6 +62,22 @@ type threadEntry struct {
 	At     int64       `json:"at"`
 	ToolID string      `json:"tool_id"`
 	Diff   *threadDiff `json:"diff"`
+	// sum is a hash of the text and the plan, set when the entry is taken
+	// in, for the key of its card: a message written again, or still being
+	// written, keeps its id and changes its text.
+	sum uint64
+}
+
+// threadSum hashes an entry's text and plan, FNV-1a.
+func threadSum(e *threadEntry) uint64 {
+	h := uint64(14695981039346656037)
+	for _, s := range [2]string{e.Text, e.Plan} {
+		for i := 0; i < len(s); i++ {
+			h = (h ^ uint64(s[i])) * 1099511628211
+		}
+		h = (h ^ 0xff) * 1099511628211
+	}
+	return h
 }
 
 // agentThread is one agent's thread.
@@ -311,7 +327,9 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	}
 	t.read, t.err = true, ""
 	if !msg.after || msg.reset {
-		t.entries = nil
+		// A whole page draws every card again: the file may have been
+		// written anew under the same ids.
+		t.entries, t.cards = nil, nil
 	}
 	// An entry with an id the thread holds replaces it where it is: a tool
 	// call's status changes once its result is in, and Gemini CLI writes a
@@ -321,6 +339,7 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		at[e.ID] = i
 	}
 	for _, e := range msg.entries {
+		e.sum = threadSum(&e)
 		if i, ok := at[e.ID]; ok {
 			t.entries[i] = e
 			continue

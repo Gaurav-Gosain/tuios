@@ -10,6 +10,9 @@ const Enabled = false
 // Highlight draws nothing in the browser build: every line is plain.
 func Highlight(string, []string) [][]Span { return nil }
 
+// HighlightLang draws nothing in the browser build: every line is plain.
+func HighlightLang(string, []string) [][]Span { return nil }
+
 // Token is a run of one token class in a line. The browser build makes none.
 type Token struct {
 	Start, End int

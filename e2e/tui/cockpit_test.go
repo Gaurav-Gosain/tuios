@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -285,8 +286,9 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string) {
 // TestCockpitThreadCards reads a Claude Code transcript as cards: a run of
 // reads folds to one line, the Edit opens on its diff with the changed words
 // lit, the todo list is a plan with its count, and the failed command shows
-// its output. A click on the diff's header folds it, and ] shows the last
-// turn's changes alone.
+// its output. The agent's Markdown is drawn: strong, lists, a highlighted
+// code block and a link. A click on the diff's header folds it, and ] shows
+// the last turn's changes alone.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the changed
 // range left out of the diff lines the word check fails; with the todos
@@ -335,7 +337,8 @@ func TestCockpitThreadCards(t *testing.T) {
 	for _, sz := range [][2]int{{200, 55}, {100, 30}} {
 		// Each size attaches a session of its own, so the two clients do
 		// not share a size.
-		term := startIn(t, base, startOpts{args: []string{"attach", "home" + strconv.Itoa(sz[0])}, cols: sz[0], rows: sz[1], shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+		out := &lockedBuffer{}
+		term := startIn(t, base, startOpts{args: []string{"attach", "home" + strconv.Itoa(sz[0])}, cols: sz[0], rows: sz[1], shippedLooks: true, out: out, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 			t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 		}
@@ -368,6 +371,10 @@ func TestCockpitThreadCards(t *testing.T) {
 		}, uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: the thread has no plan card: %v\n%s", err, term.Snapshot())
 		}
+		// Above the plan, the agent's Markdown is drawn, not shown raw.
+		scrollTo("K", "refresh loop")
+		cockpitMarkdown(t, term, out, scrollTo)
+		saveCockpitFrames(t, term, "markdown-"+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]))
 		scrollTo("J", "Add(refreshSkew).Before")
 		if err := term.WaitForText("Add(refreshSkew).Before", uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: the thread has no diff card: %v\n%s", err, term.Snapshot())
@@ -423,6 +430,70 @@ func TestCockpitThreadCards(t *testing.T) {
 			t.Fatal(err)
 		}
 		alive(t, term, "after the thread cards")
+	}
+}
+
+// cockpitMarkdown checks the agent's Markdown message of cockpit-auth.jsonl
+// as the thread draws it: no markup left, strong text bold, a bullet for each
+// item, the code block on a ground of its own with its keywords coloured,
+// the link underlined and sent as OSC 8, and escape sequences and a
+// javascript: link in the text kept from the host.
+func cockpitMarkdown(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, scrollTo func(key, want string)) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "in token.go and the refresh loop reads it", "• Move the check to a method with a skew",
+			"return now.Add(refreshSkew).After(t.Expiry)")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the Markdown message is not drawn: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+	text := s.Text()
+	for _, raw := range []string{"**refresh", "`token.go`", "```", "](https://"} {
+		if strings.Contains(text, raw) {
+			t.Fatalf("ASSERTION: the thread shows the Markdown %q raw\n%s", raw, term.Snapshot())
+		}
+	}
+	cell := func(needle string, off int) tuitest.Cell {
+		t.Helper()
+		row := rowWith(s, needle)
+		if row < 0 {
+			t.Fatalf("no row holds %q\n%s", needle, term.Snapshot())
+		}
+		line := s.Line(row)
+		col := len([]rune(line[:strings.Index(line, needle)])) + off
+		return s.Cell(col, row)
+	}
+	if !cell("and the refresh loop reads", 8).Bold || cell("and the refresh loop reads", 0).Bold {
+		t.Fatalf("ASSERTION: the strong words are not bold, or the words before them are\n%s", term.Snapshot())
+	}
+	fn, name := cell("func (t Token)", 0), cell("func (t Token)", 5)
+	if fn.Fg == name.Fg {
+		t.Fatalf("ASSERTION: the code block is not highlighted: func and its receiver share a colour\n%s", term.Snapshot())
+	}
+	if fn.Bg == cell("in token.go and", -3).Bg {
+		t.Fatalf("ASSERTION: the code block has no ground of its own\n%s", term.Snapshot())
+	}
+	scrollTo("J", "See RFC 6749 for the refresh rules.")
+	s = term.Screen()
+	if !cell("RFC 6749", 0).Underline || cell("See RFC 6749", 0).Underline {
+		t.Fatalf("ASSERTION: the link is not underlined, or the word before it is\n%s", term.Snapshot())
+	}
+	link := regexp.MustCompile(`\x1b\]8;[^;\x07\x1b]*;` + regexp.QuoteMeta("https://www.rfc-editor.org/rfc/rfc6749") + `(\x07|\x1b\\)`)
+	deadline := time.Now().Add(uiTimeout)
+	for !link.MatchString(out.String()) {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: no frame carries the link as OSC 8\n%s", term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	// Escape sequences in the text reach the host as text, never as
+	// sequences, and a javascript: link opens nothing.
+	scrollTo("J", "not a link")
+	if err := term.WaitForText("not a link", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the message's last line is not drawn: %v\n%s", err, term.Snapshot())
+	}
+	if raw := out.String(); strings.Contains(raw, "\x1b]0;pwned") || strings.Contains(raw, "\x1b[31mred") || strings.Contains(raw, "javascript:") {
+		t.Fatalf("ASSERTION: an escape sequence or a javascript: link in the message reached the host terminal\n%s", term.Snapshot())
 	}
 }
 

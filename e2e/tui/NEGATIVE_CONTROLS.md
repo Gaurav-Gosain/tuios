@@ -7323,3 +7323,30 @@ binding. Run on 2026-10-19.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The leader two times sends the leader over a prefix binding | `leaderBoundInPrefix` in `HandleTerminalModeKey` | The check cut | `TestLeaderBoundInPrefixRunsItsAction` ("the leader two times did not run prefix_new_window, bound to ctrl+a") | **caught** |
+## Markdown in the agent thread
+
+`TestCockpitThreadCards` reads an agent message in `cockpit-auth.jsonl` that
+holds strong text, a code span, a list, a Go code block, a table, a task
+list, a quote and a link. `cockpitMarkdown` checks that no markup is left,
+that the strong words are bold, that the code block is highlighted on a
+ground of its own, and that the link is underlined and sent as OSC 8. Run on
+2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The thread shows an agent's Markdown raw | `ckMarkdown` in `threadCardLines` | The text drawn through `threadWrap`, as before | `TestCockpitThreadCards` ("the Markdown message is not drawn") | **caught** |
+| A link opens nothing | The cell's `Link` in `ckCanvas.text` | Never set | `TestCockpitThreadCards` ("no frame carries the link as OSC 8") | **caught** |
+
+After review (F1, F3, missing controls). `FuzzParse` seeds hold a table one
+column past `maxTableCols` and one past `maxTableCells`, and assert both
+bounds. `TestCockpitThreadOtherHarnesses/gemini` appends a line that writes
+the last Gemini message again with new text while the thread is open.
+`TestCockpitThreadCards` reads a message with an OSC title, an SGR colour
+and a `javascript:` link, and asserts on the raw output. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A table pads short rows to millions of cells | The cell cap in `parseBlocks` | Removed | `FuzzParse/seed#9` ("a table of 64 columns and 70 rows is past the bounds") | **caught** |
+| A table may have thousands of columns | The column cap in `parseBlocks` and `delimiterRow` | Removed | `FuzzParse/seed#8` ("a table of 65 columns and 1 rows is past the bounds") | **caught** |
+| A message written again keeps its old card | `sum` in `ckCardKey` | Left out of the key | `TestCockpitThreadOtherHarnesses/gemini` ("kept the old text of a message written again") | **caught** |
+| A `javascript:` link is sent as OSC 8 | The scheme check in `ckLinkTarget` | Never taken | `TestCockpitThreadCards` ("an escape sequence or a javascript: link in the message reached the host terminal") | **caught** |

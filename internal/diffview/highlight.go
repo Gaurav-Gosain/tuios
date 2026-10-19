@@ -96,6 +96,70 @@ func Highlight(path string, lines []string) [][]Span {
 	return out
 }
 
+// langCache holds the lexer for each language name a lexer answers to. The
+// names come from a fixed registry, so it stays small.
+var langCache sync.Map // string -> chroma.Lexer
+
+// langMisses holds names no lexer answers to, at most langMissMax of them:
+// the names come from agents' text, so the set is emptied when it fills.
+var (
+	langMissMu sync.Mutex
+	langMisses = map[string]bool{}
+)
+
+const langMissMax = 64
+
+// lexerForLang finds the lexer for a language as a Markdown code fence
+// names it: a name or alias such as "go", "python" or "sh", or a file
+// extension.
+func lexerForLang(lang string) chroma.Lexer {
+	lang = strings.ToLower(lang)
+	if v, ok := langCache.Load(lang); ok {
+		return v.(chroma.Lexer)
+	}
+	langMissMu.Lock()
+	miss := langMisses[lang]
+	langMissMu.Unlock()
+	if miss {
+		return nil
+	}
+	l := lexers.Registry().Get(lang)
+	if l == nil {
+		langMissMu.Lock()
+		if len(langMisses) >= langMissMax {
+			clear(langMisses)
+		}
+		langMisses[lang] = true
+		langMissMu.Unlock()
+		return nil
+	}
+	l = chroma.Coalesce(l)
+	langCache.Store(lang, l)
+	return l
+}
+
+// HighlightLang is Highlight for a code block whose language is named, as
+// a Markdown fence names it, rather than known by its file name. It returns
+// nil for an empty or unknown name.
+func HighlightLang(lang string, lines []string) [][]Span {
+	if lang == "" || len(lang) > 32 {
+		return nil
+	}
+	out := make([][]Span, len(lines))
+	ok := tokeniseWith(func(string) chroma.Lexer { return lexerForLang(lang) }, lines, func(line, start, end int, t chroma.TokenType) {
+		out[line] = addSpan(out[line], start, end, classOf(t))
+	})
+	if !ok {
+		return nil
+	}
+	for i, spans := range out {
+		if n := len(spans); n > 0 && spans[n-1].End > len(lines[i]) {
+			out[i] = nil
+		}
+	}
+	return out
+}
+
 // Token is a run of one token class in a line, in bytes of the line's text.
 // Class is chroma's short CSS class name for the token type: "k" for a
 // keyword, "s2" for a double-quoted string, "c1" for a line comment.
@@ -161,6 +225,11 @@ func cssClass(t chroma.TokenType) string {
 // reports false when the file type is not known, the text is past the
 // limits, or the lexer fails.
 func tokenise(path string, lines []string, add func(line, start, end int, t chroma.TokenType)) (ok bool) {
+	return tokeniseWith(func(text string) chroma.Lexer { return lexerFor(path, text) }, lines, add)
+}
+
+// tokeniseWith is tokenise with the lexer found by find from the text.
+func tokeniseWith(find func(text string) chroma.Lexer, lines []string, add func(line, start, end int, t chroma.TokenType)) (ok bool) {
 	// A lexer that hands text to one this build does not carry panics
 	// mid-tokenise. lexers/gen.go refuses to write such a set, and this
 	// keeps a mistake in it to a plain hunk rather than a crash.
@@ -183,7 +252,7 @@ func tokenise(path string, lines []string, add func(line, start, end int, t chro
 		return false
 	}
 	text := strings.Join(lines, "\n") + "\n"
-	lexer := lexerFor(path, text)
+	lexer := find(text)
 	if lexer == nil {
 		return false
 	}

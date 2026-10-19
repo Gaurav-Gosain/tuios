@@ -24,7 +24,8 @@ import (
 // into the file. Each thread has to show a tool card
 // with a failed command's output, a diff card with its added line, and the
 // harness's error. Gemini writes a message again when a tool call finishes,
-// and the thread has to show that edit once.
+// and the thread has to show that edit once. A Gemini message written again
+// with new text while the thread is open shows the new text.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the cockpit
 // reading transcripts of Claude Code alone (threadTranscriptHarness), both
@@ -45,6 +46,10 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		// payload is the hook's input, the SessionStart of hookPayload when
 		// empty.
 		payload string
+		// rewrite is a line appended to the transcript while the thread is
+		// open, which writes a message again with new text, and rewritten
+		// the text the thread then shows in place of want[0].
+		rewrite, rewritten string
 	}{
 		{
 			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
@@ -54,9 +59,11 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		},
 		{
 			name: "gemini", harness: "gemini-cli", fixture: "gemini-chat.jsonl", sessionID: "11111111-2222-4333-8444-555555555555",
-			file: filepath.Join(".gemini", "tmp", "project", "chats", "session-2026-10-18T09-00-11111111.jsonl"),
-			want: []string{"b is three now. The tests fail.", "Command exited with code 1", "replace", "const b = 3;", "quota reached"},
-			once: "const b = 3;",
+			file:      filepath.Join(".gemini", "tmp", "project", "chats", "session-2026-10-18T09-00-11111111.jsonl"),
+			want:      []string{"b is three now. The tests fail.", "Command exited with code 1", "replace", "const b = 3;", "quota reached"},
+			once:      "const b = 3;",
+			rewrite:   `{"id":"m-gem-2","timestamp":"2026-10-18T09:00:05.000Z","type":"gemini","content":"b is three now. **The tests pass.**","model":"gemini-3-pro"}` + "\n",
+			rewritten: "b is three now. The tests pass.",
 		},
 		{
 			name: "copilot", harness: "copilot", fixture: "copilot-events.jsonl", sessionID: "s-copilot",
@@ -196,6 +203,33 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				_ = term.WaitStable(uiTimeout)
 			}
 			saveCockpitFrames(t, term, "thread-"+c.name)
+			if c.rewrite != "" {
+				// The message is written again under its id with new text,
+				// and the thread draws the new text, not the card it kept.
+				f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f.WriteString(c.rewrite); err != nil {
+					t.Fatal(err)
+				}
+				_ = f.Close()
+				for range 20 {
+					if strings.Contains(term.Screen().Text(), "b is three now.") {
+						break
+					}
+					if err := term.SendKeys("J"); err != nil {
+						t.Fatal(err)
+					}
+					_ = term.WaitStable(uiTimeout)
+				}
+				if err := term.WaitFor(func(s tuitest.Screen) bool {
+					text := s.Text()
+					return strings.Contains(text, c.rewritten) && !strings.Contains(text, c.want[0])
+				}, uiTimeout); err != nil {
+					t.Fatalf("ASSERTION: the %s thread kept the old text of a message written again: %v\n%s", c.name, err, term.Snapshot())
+				}
+			}
 			alive(t, term, "after the "+c.name+" thread")
 		})
 	}
