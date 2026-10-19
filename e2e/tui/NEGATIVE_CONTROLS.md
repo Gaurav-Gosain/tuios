@@ -8880,3 +8880,9 @@ Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
 | `frame_panels` does not frame a panel | The `FramePanels` read in `overlay.Derive` | Removed | `/double-frame-panels` (palette corners are spaces, want `╔`); `/double`'s unframed palette still passes | **caught** |
 | A hidden style draws a rounded dialog | The `hidden` case in `Settings.OverlayBorder` | Removed, so it falls to rounded | `/hidden` (got `╭`, want a space) | **caught** |
 | A block style draws a solid dialog | The rounded default in `Settings.OverlayBorder` | Returns `GetBorderForStyle()` | `/block` (got `█`, want `╭`) | **caught** |
+
+After review: under `hidden`, a frame that is a surface's only edge falls back to rounded: a panel framed at 16 colours, and an `overlay.Box` region. `/hidden-16` runs the hidden style at 16 colours (`TERM=xterm`, no `COLORTERM`), with the positive half in the same fixture: the rename dialog still draws no frame, and the command palette draws `╭ ╮ ╰ ╯`. Before the fix it failed with the palette corners as spaces. Box takes the same `edgeFrame` call and has no E2E of its own under hidden. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A 16-colour panel loses its only edge under hidden | `panelFrame(pal)` at the `Panel.Render` frame site | Calls `dialogFrame()` again | `/hidden-16` (`got tl=" " … want tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│"`) | **caught** |
