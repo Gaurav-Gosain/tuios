@@ -24,6 +24,8 @@ on:
       - plot/go.sum
       - loom/go.mod
       - loom/go.sum
+      - sketch/go.mod
+      - sketch/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock
@@ -46,6 +48,8 @@ on:
       - plot/go.sum
       - loom/go.mod
       - loom/go.sum
+      - sketch/go.mod
+      - sketch/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock
