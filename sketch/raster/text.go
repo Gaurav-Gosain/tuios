@@ -348,7 +348,14 @@ func (r *renderer) text(n *node, st state) {
 				}
 				penX += g.advance * k
 			}
-			r.shape(p, run.st, true)
+			st := run.st
+			if r.readable && !st.authored {
+				st = r.readableText(p, st)
+			}
+			if r.probe != nil {
+				r.probe(r, p, st)
+			}
+			r.shape(p, st, true)
 		}
 	}
 }

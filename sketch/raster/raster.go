@@ -29,6 +29,10 @@ type Options struct {
 	// Background paints the image in the diagram's background colour first.
 	// Without it the image is transparent where nothing is drawn.
 	Background bool
+	// Readable lets text in a theme colour change to the theme's text or
+	// background colour where a fill the diagram sets itself leaves it below
+	// TextFloor. pele leaves such text as it is.
+	Readable bool
 	// MaxPixels bounds the image. 0 means 40 million pixels.
 	MaxPixels int
 }
@@ -51,6 +55,13 @@ type state struct {
 	anchor                     string
 	preserve                   bool
 	m                          matrix
+	// plain is m without the overrides of a motion frame. moved says they differ,
+	// so text is shifted to where its anchor went instead of being scaled.
+	plain matrix
+	moved bool
+	// authored says a fill or text colour came from the diagram's own style,
+	// not from the theme.
+	authored bool
 }
 
 type renderer struct {
@@ -61,6 +72,14 @@ type renderer struct {
 	// budget bounds the drawing work, so that hostile markup cannot run for long:
 	// each fill costs the pixels of its mask and the rows its edges cross.
 	budget int
+	// over holds the overrides of a motion frame, by element. nil for a still drawing.
+	over map[*node]*override
+	// base is the device matrix of the root's user space.
+	base matrix
+	// readable is Options.Readable.
+	readable bool
+	// probe, when set, sees each run of text before it is drawn. Tests use it.
+	probe func(r *renderer, p path, st state)
 }
 
 // Draw rasterises an SVG that sketch wrote. Its budgets bound the work a
@@ -89,21 +108,33 @@ func Draw(svg string, opt Options) (*image.RGBA, error) {
 	if pw <= 0 || ph <= 0 || pw > 32768 || ph > 32768 || pw*ph > limit {
 		return nil, ErrTooLarge
 	}
-	r := &renderer{env: map[string]string{}, dst: image.NewRGBA(image.Rect(0, 0, pw, ph)), budget: 300_000_000}
+	m := matrix{scale, 0, 0, scale, 0, 0}
+	if vb, ok := root.attr("viewBox"); ok {
+		if n := numbers(vb); len(n) == 4 && n[2] > 0 && n[3] > 0 {
+			m = m.mul(matrix{width / n[2], 0, 0, height / n[3], 0, 0}).mul(translate(-n[0], -n[1]))
+		}
+	}
+	r, st := newRenderer(root, image.NewRGBA(image.Rect(0, 0, pw, ph)), opt.Theme, m)
+	r.readable = opt.Readable
+	if opt.Background {
+		r.paintBackground()
+	}
+	st = r.apply(root, st)
+	r.children(root, st)
+	return r.dst, nil
+}
+
+// newRenderer sets up drawing root into dst with m as the root's device matrix.
+func newRenderer(root *node, dst *image.RGBA, theme *sketch.Theme, m matrix) (*renderer, state) {
+	r := &renderer{env: map[string]string{}, dst: dst, budget: 300_000_000, base: m}
 	style, _ := root.attr("style")
 	for _, d := range declarations(style) {
 		if strings.HasPrefix(d[0], "--") {
 			r.env[d[0]] = d[1]
 		}
 	}
-	for _, v := range opt.Theme.Vars() {
+	for _, v := range theme.Vars() {
 		r.env[v[0]] = v[1]
-	}
-	m := matrix{scale, 0, 0, scale, 0, 0}
-	if vb, ok := root.attr("viewBox"); ok {
-		if n := numbers(vb); len(n) == 4 && n[2] > 0 && n[3] > 0 {
-			m = m.mul(matrix{width / n[2], 0, 0, height / n[3], 0, 0}).mul(translate(-n[0], -n[1]))
-		}
 	}
 	st := state{
 		fill:          paint{c: color.NRGBA{0, 0, 0, 255}},
@@ -119,15 +150,16 @@ func Draw(svg string, opt Options) (*image.RGBA, error) {
 		fontSize:      16,
 		anchor:        "start",
 		m:             m,
+		plain:         m,
 	}
-	if opt.Background {
-		if c, ok := parseColor(r.resolve("var(--_bg)")); ok {
-			draw.Draw(r.dst, r.dst.Bounds(), &image.Uniform{c}, image.Point{}, draw.Src)
-		}
+	return r, st
+}
+
+// paintBackground fills the image with the diagram's background colour.
+func (r *renderer) paintBackground() {
+	if c, ok := parseColor(r.resolve("var(--_bg)")); ok {
+		draw.Draw(r.dst, r.dst.Bounds(), &image.Uniform{c}, image.Point{}, draw.Src)
 	}
-	st = r.apply(root, st)
-	r.children(root, st)
-	return r.dst, nil
 }
 
 func (r *renderer) resolve(v string) string {
@@ -146,6 +178,11 @@ func lengthOf(s string, def float64) float64 {
 	return v
 }
 
+func attrOr(n *node, name string) string {
+	v, _ := n.attr(name)
+	return v
+}
+
 func number(n *node, name string) float64 {
 	v, _ := n.attr(name)
 	return lengthOf(v, 0)
@@ -160,6 +197,12 @@ func (r *renderer) apply(n *node, st state) state {
 	}
 	for _, p := range props {
 		name, value := p[0], r.resolve(p[1])
+		switch name {
+		case "fill", "color", "stroke":
+			if raw := strings.ToLower(p[1]); !strings.Contains(raw, "var(") && raw != "none" && raw != "currentcolor" {
+				st.authored = true
+			}
+		}
 		switch name {
 		case "fill":
 			if pt, ok := parsePaint(value); ok {
@@ -264,10 +307,34 @@ func (r *renderer) element(n *node, parent state) {
 	}
 	st := r.apply(n, parent)
 	if t, ok := n.attr("transform"); ok {
-		st.m = st.m.mul(parseTransform(t))
+		tm := parseTransform(t)
+		st.m = st.m.mul(tm)
+		st.plain = st.plain.mul(tm)
+	}
+	if o := r.over[n]; o != nil {
+		st.opacity *= o.opacity
+		if st.opacity <= 0.002 {
+			return
+		}
+		if o.hasM {
+			st.m = o.m.mul(st.plain)
+			st.moved = true
+		}
+		if o.replace {
+			ps := st
+			ps.m = r.base
+			r.shape(o.path, ps, true)
+			return
+		}
 	}
 	switch n.name {
 	case "g", "a":
+		if op, ok := n.attr("opacity"); ok && len(n.children) > 1 {
+			if a := unit(r.resolve(op), 1); a < 1 {
+				r.groupLayer(n, parent, st, a)
+				return
+			}
+		}
 		r.children(n, st)
 	case "svg":
 		x, y := number(n, "x"), number(n, "y")
@@ -322,8 +389,59 @@ func (r *renderer) element(n *node, parent state) {
 		d, _ := n.attr("d")
 		r.shape(parsePath(d), st, true)
 	case "text":
+		if st.moved {
+			a := pt{lengthOf(firstNumber(attrOr(n, "x")), 0), lengthOf(firstNumber(attrOr(n, "y")), 0)}
+			to, from := st.m.apply(a), st.plain.apply(a)
+			st.m = translate(to.x-from.x, to.y-from.y).mul(st.plain)
+		}
 		r.text(n, st)
 	}
+}
+
+// groupLayer draws a group with an opacity of its own the way SVG does: its
+// children are drawn together on a layer, and the layer is laid over the
+// image once at that opacity, so shapes that overlap inside the group do not
+// add up.
+func (r *renderer) groupLayer(n *node, parent, st state, a float64) {
+	// The layer covers the group's shapes, with room for stroke widths. Text
+	// is not measured here, so a group with text takes the whole image.
+	rect := r.dst.Bounds()
+	if !hasText(n, 0) {
+		b := emptyBox()
+		shapesBox(n, st.m, &b, 0)
+		if b.empty() {
+			return
+		}
+		pad := 2 + st.strokeWidth*st.m.scale()*4
+		rect = image.Rect(int(math.Floor(b.x0-pad)), int(math.Floor(b.y0-pad)), int(math.Ceil(b.x1+pad)), int(math.Ceil(b.y1+pad))).Intersect(rect)
+	}
+	if rect.Empty() || rect.Dx()*rect.Dy() > 16_000_000 {
+		r.children(n, st)
+		return
+	}
+	layer := image.NewRGBA(rect)
+	dst := r.dst
+	r.dst = layer
+	inner := st
+	inner.opacity = st.opacity / a
+	r.children(n, inner)
+	r.dst = dst
+	draw.DrawMask(r.dst, rect, layer, rect.Min, image.NewUniform(color.Alpha{uint8(math.Round(a * 255))}), image.Point{}, draw.Over)
+}
+
+func hasText(n *node, depth int) bool {
+	if n.name == "text" {
+		return true
+	}
+	if depth > maxDepth {
+		return false
+	}
+	for _, c := range n.children {
+		if c.name != "" && hasText(c, depth+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // paintColor is the colour a paint gives with an opacity, or false for none.
@@ -424,7 +542,7 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		return
 	}
 	b := r.dst.Bounds()
-	W, H := float64(b.Dx()), float64(b.Dy())
+	X0, Y0, X1, Y1 := float64(b.Min.X), float64(b.Min.Y), float64(b.Max.X), float64(b.Max.Y)
 	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	clipped := make([]polygon, 0, len(polys))
 	for _, p := range polys {
@@ -441,7 +559,7 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		// y is clipped a pixel outside the image, so every coordinate that
 		// reaches the rasterizer is in range and the rows at the edges keep
 		// their coverage.
-		q := clipRect(p, 0, W, -1, H+1)
+		q := clipRect(p, X0, X1, Y0-1, Y1+1)
 		if len(q) < 3 {
 			continue
 		}
@@ -455,7 +573,7 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		return
 	}
 	x0, x1 := int(math.Floor(minX)), int(math.Ceil(maxX))
-	y0, y1 := int(math.Floor(math.Max(0, minY))), int(math.Ceil(math.Min(H, maxY)))
+	y0, y1 := int(math.Floor(math.Max(Y0, minY))), int(math.Ceil(math.Min(Y1, maxY)))
 	if x1 <= x0 || y1 <= y0 {
 		return
 	}
