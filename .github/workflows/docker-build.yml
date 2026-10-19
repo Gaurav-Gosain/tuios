@@ -31,6 +31,7 @@ on:
       - shot/**
       - tml/**
       - plot/**
+      - loom/**
       - cmd/**
       - .github/workflows/docker-build.yml
   pull_request:
@@ -47,6 +48,7 @@ on:
       - shot/**
       - tml/**
       - plot/**
+      - loom/**
       - cmd/**
       - .github/workflows/docker-build.yml
   workflow_dispatch:

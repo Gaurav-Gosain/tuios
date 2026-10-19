@@ -22,6 +22,8 @@ on:
       - tml/go.mod
       - plot/go.mod
       - plot/go.sum
+      - loom/go.mod
+      - loom/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock
@@ -42,6 +44,8 @@ on:
       - tml/go.mod
       - plot/go.mod
       - plot/go.sum
+      - loom/go.mod
+      - loom/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock

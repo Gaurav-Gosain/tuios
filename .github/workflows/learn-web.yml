@@ -21,6 +21,7 @@ on:
       - "shot/**"
       - "tml/**"
       - "plot/**"
+      - "loom/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"

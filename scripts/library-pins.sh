@@ -80,16 +80,32 @@ commit_of() {
 	git rev-parse --verify --quiet "$ref^{commit}"
 }
 
+# wanted prints "dir module version" for each library version the proxy
+# serves: the version tuios pins, and each version another library of the
+# workspace requires (loom requires plot before tuios imports either).
+wanted() {
+	local dir module version libs
+	libs=$(libraries)
+	while read -r dir module; do
+		version=$(pinned "$module")
+		if [ -n "$version" ] || imported "$module"; then
+			echo "$dir $module $version"
+		fi
+		while read -r other _; do
+			(cd "$other" && go mod edit -json) |
+				jq -r --arg m "$module" '.Require[]? | select(.Path == $m) | .Version'
+		done <<<"$libs" | sort -u | while read -r version; do
+			[ -n "$version" ] && echo "$dir $module $version"
+		done
+	done <<<"$libs" | sort -u
+}
+
 # build_proxy writes a GOPROXY directory with every library at its pin.
 build_proxy() {
 	local out=$1 dir module version commit stage
 	mkdir -p "$out"
 	out=$(cd "$out" && pwd)
-	while read -r dir module; do
-		version=$(pinned "$module")
-		if [ -z "$version" ] && ! imported "$module"; then
-			continue
-		fi
+	while read -r dir module version; do
 		if ! commit=$(commit_of "$dir" "$version"); then
 			echo "$module@${version:-<no pin>}: no commit for this version in this clone" >&2
 			return 1
@@ -108,7 +124,7 @@ build_proxy() {
 			>"$out/$module/@v/$version.info"
 		echo "$version" >>"$out/$module/@v/list"
 		rm -rf "$stage"
-	done < <(libraries)
+	done < <(wanted)
 }
 
 # with_proxy runs a command with GOPROXY set to a directory of the pinned

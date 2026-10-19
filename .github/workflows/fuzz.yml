@@ -98,6 +98,8 @@ jobs:
             targets: FuzzParseXML FuzzParseJSON FuzzExpr FuzzPatch
           - pkg: plot
             targets: FuzzCharts
+          - pkg: loom
+            targets: FuzzLayout FuzzIncremental
 
     steps:
       - uses: actions/checkout@v7

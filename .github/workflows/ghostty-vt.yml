@@ -45,6 +45,7 @@ on:
       - "shot/**"
       - "tml/**"
       - "plot/**"
+      - "loom/**"
   pull_request:
     paths:
       - "vt/**"
@@ -77,6 +78,7 @@ on:
       - "shot/**"
       - "tml/**"
       - "plot/**"
+      - "loom/**"
   workflow_dispatch:
 
 permissions:

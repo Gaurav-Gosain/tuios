@@ -113,8 +113,8 @@ Some parts of tuios are Go modules of their own, published under
 `tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
 that points the go command at the folder in this repository. They are
 `progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`), `swatch/`
-(`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`)
-and `plot/` (`tuios.dev/plot`).
+(`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`),
+`plot/` (`tuios.dev/plot`) and `loom/` (`tuios.dev/loom`).
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -132,7 +132,10 @@ and `plot/` (`tuios.dev/plot`).
 
 - A new library joins `go.work` first. It gets its pin with the first change
   that imports it, because `go mod tidy` drops a requirement nothing imports.
-  Until then `scripts/library-pins.sh` skips it.
+  Until then `scripts/library-pins.sh` skips it. A library may require
+  another one at a commit before tuios imports either, as loom requires plot.
+  `scripts/library-pins.sh proxy` serves that version too, so the tidy check
+  needs no network for it.
 - `./...` from the root stops at a nested module. Name a library to test it:
   `go test ./progstatus/... ./vt/... ./tml/...`.
 - A library imports no `github.com/Gaurav-Gosain/tuios/...` package.
@@ -213,6 +216,7 @@ tuios/
 │   └── ui/                 # Animation system
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil)
+├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
 ├── plot/                   # tuios.dev/plot, a Go module of its own: bar, line, area, sparkline, gauge and histogram charts as cells with theme roles
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells

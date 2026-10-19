@@ -86,6 +86,13 @@ jobs:
           working-directory: plot
           args: --timeout 10m
 
+      - name: golangci-lint (loom)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          working-directory: loom
+          args: --timeout 10m
+
   bom:
     name: no byte order mark in Go files
     runs-on: ubuntu-latest
@@ -147,4 +154,4 @@ jobs:
       - name: Vet
         env:
           GOOS: ${{ matrix.goos }}
-        run: go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/...
+        run: go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/...
