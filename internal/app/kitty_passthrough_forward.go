@@ -928,6 +928,16 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// delete that rebuilding the entry used to imply.
 		// A frame written at once above is already placed.
 		existing.DataDirty = !placedNow
+		existing.ImagePixelWidth = sized.Width
+		existing.ImagePixelHeight = sized.Height
+		// A transmit that does not place (a=t) replaces the image and nothing
+		// else. The placement keeps the cell box and crop its own command gave
+		// it. Taken from the a=t they would be the picture's own size, and a
+		// cropped placement would come back uncropped over the panes beside it.
+		if !andPlace {
+			kittyPassthroughLog("forwardFileTransmit: replaced the data of hostID=%d, placement kept", hostID)
+			return
+		}
 		existing.GuestX = cursorX
 		existing.AbsoluteLine = scrollbackLen + cursorY
 		existing.HostX = hostX
@@ -940,8 +950,6 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		existing.SourceY = cmd.SourceY
 		existing.SourceWidth = cmd.SourceWidth
 		existing.SourceHeight = cmd.SourceHeight
-		existing.ImagePixelWidth = sized.Width
-		existing.ImagePixelHeight = sized.Height
 		existing.PlacedOnAltScreen = isAltScreen
 		kittyPassthroughLog("forwardFileTransmit: refreshed placement hostID=%d in place", hostID)
 		return
