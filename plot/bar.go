@@ -8,22 +8,29 @@ var (
 	eighthsRight = [...]string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}
 )
 
-// Bar is a bar chart: one bar per value, from zero. Negative values draw as
-// zero.
+// Bar is a bar chart: one bar per value. Negative values draw as the
+// base.
 type Bar struct {
 	Values []float64
 	Labels []string // one per value, or none
 	Role   Role     // the bars; Series1 when empty
 	Roles  []Role   // per bar, over Role
-	// Horizontal draws one bar per row, with the label at the left and the
-	// value at the right. Otherwise each value is a column.
+	// Horizontal draws one bar per row: the label at the left, the value
+	// at the right. Otherwise each value is a column.
 	Horizontal bool
-	// Max is the value of a full bar. 0 means the largest value.
-	Max float64
-	// Format writes a value for a horizontal bar. Nil means Compact.
+	// Min and Max fix the range. Both 0 means automatic: from zero, or, for
+	// columns whose values all sit far above zero, from a round base under
+	// the smallest value. The axis labels the base, so the chart says
+	// where it starts.
+	Min, Max float64
+	// Format writes a value: the value column of horizontal bars and the
+	// tick labels of columns. Nil means Compact.
 	Format func(float64) string
 	// Guide fills the rest of a horizontal bar's row with a dotted line.
 	Guide bool
+	// Axis draws tick labels at the left of columns, a base line, and the
+	// first, middle and last label under it.
+	Axis bool
 }
 
 func (b Bar) role(i int) Role {
@@ -36,15 +43,36 @@ func (b Bar) role(i int) Role {
 	return Series1
 }
 
-func (b Bar) top() float64 {
-	if b.Max > 0 && finite(b.Max) {
-		return b.Max
+func (b Bar) format() func(float64) string {
+	if b.Format != nil {
+		return b.Format
 	}
-	_, hi, ok := extent(b.Values)
-	if !ok || hi <= 0 {
-		return 1
+	return Compact
+}
+
+// rng returns the range of the bars.
+func (b Bar) rng() (lo, hi float64) {
+	if (b.Min != 0 || b.Max != 0) && finite(b.Min) && finite(b.Max) && b.Max > b.Min {
+		return b.Min, b.Max
 	}
-	return hi
+	vlo, vhi, ok := extent(b.Values)
+	if !ok || vhi <= 0 {
+		return 0, 1
+	}
+	if !b.Horizontal && vlo > 0 && vlo > vhi/2 {
+		// Columns that cluster far from zero: start from a round base
+		// under the smallest value, so the differences show.
+		lo, hi := niceRange(vlo-(vhi-vlo)*0.6, vhi, 4)
+		if lo < 0 {
+			lo = 0
+		}
+		return lo, hi
+	}
+	if b.Horizontal {
+		return 0, vhi
+	}
+	_, hi = niceRange(0, vhi, 4)
+	return 0, hi
 }
 
 // Draw draws the chart into a w by h grid.
@@ -55,18 +83,39 @@ func (b Bar) Draw(w, h int, m Mode) *Grid {
 	}
 	if b.Horizontal {
 		b.drawRows(g, m)
-	} else {
-		b.drawColumns(g, m)
+		return g
 	}
+	lo, hi := b.rng()
+	if b.Axis {
+		labels := xLabels(b.Labels, len(b.Values))
+		// The axis is as wide as the columns, so the first and last labels
+		// sit under the first and last column.
+		labelW := 0
+		for _, t := range []float64{lo, hi, (lo + hi) / 2} {
+			labelW = max(labelW, Width(b.format()(t)))
+		}
+		pw := g.W - min(labelW, g.W/4) - 1
+		if n := len(b.Values); n > 0 && pw > n {
+			step := pw / n
+			pw = n*step - max(1, step/4) + 1
+		}
+		sub := NewGrid(g.W-max(g.W-min(labelW, g.W/4)-1-pw, 0), g.H)
+		a := drawAxes(sub, lo, hi, b.format(), labels, m)
+		p := a.sub()
+		b.drawColumns(p, m, lo, hi, false)
+		a.paste(sub, p)
+		for y := 0; y < sub.H; y++ {
+			copy(g.Cells[y*g.W:y*g.W+sub.W], sub.Cells[y*sub.W:(y+1)*sub.W])
+		}
+		return g
+	}
+	b.drawColumns(g, m, lo, hi, true)
 	return g
 }
 
 func (b Bar) drawRows(g *Grid, m Mode) {
 	n := min(len(b.Values), g.H)
-	format := b.Format
-	if format == nil {
-		format = Compact
-	}
+	format := b.format()
 	labelW, valueW := 0, 0
 	for i := 0; i < n; i++ {
 		if i < len(b.Labels) {
@@ -74,8 +123,9 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		}
 		valueW = max(valueW, Width(format(b.Values[i])))
 	}
-	labelW = min(labelW, g.W/3)
-	valueW = min(valueW, g.W/4)
+	// The values never clip: the labels give way first, then the bars.
+	valueW = min(valueW, max(g.W-4, 0))
+	labelW = min(labelW, max((g.W-valueW-2)*2/5, 0))
 	x0 := 0
 	if labelW > 0 {
 		x0 = labelW + 1
@@ -85,15 +135,15 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		cells -= valueW + 1
 	}
 	cells = max(cells, 0)
-	top := b.top()
+	_, top := b.rng()
 	for i := 0; i < n; i++ {
 		if i < len(b.Labels) && labelW > 0 {
 			g.Text(0, i, Truncate(b.Labels[i], labelW, ellipsis(m)), Dim, false)
 		}
 		v := b.Values[i]
-		units := int(math.Round(unit(math.Max(v, 0), 0, top) * float64(cells*8)))
-		if !finite(v) {
-			units = 0
+		units := 0
+		if finite(v) {
+			units = int(math.Round(unit(math.Max(v, 0), 0, top) * float64(cells*8)))
 		}
 		x := x0
 		for ; units >= 8; units -= 8 {
@@ -101,12 +151,20 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 			x++
 		}
 		if units > 0 {
-			g.set(x, i, block(m, eighthsRight[units], "#"), b.role(i))
+			if m == ASCII {
+				if units >= 4 {
+					g.set(x, i, "#", b.role(i))
+				}
+			} else {
+				g.set(x, i, eighthsRight[units], b.role(i))
+			}
 			x++
 		}
 		if b.Guide && m != ASCII {
 			for ; x < x0+cells; x++ {
-				g.set(x, i, "·", Edge)
+				if (x-x0)%2 == 1 {
+					g.set(x, i, "·", Edge)
+				}
 			}
 		}
 		if valueW > 0 {
@@ -115,41 +173,51 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 	}
 }
 
-func (b Bar) drawColumns(g *Grid, m Mode) {
-	vals, labels := b.Values, b.Labels
+// drawColumns draws one column per value between lo and hi. With labels,
+// and three rows or more, the bottom row names each column that has room.
+func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
+	vals, labels, roles := b.Values, b.Labels, b.Roles
 	rows := g.H
-	withLabels := len(labels) > 0 && g.H >= 3
+	withLabels = withLabels && len(labels) > 0 && g.H >= 3
 	if withLabels {
 		rows--
 	}
-	// Fit: one cell and a gap per bar when there is room, else no gap, else
-	// the most recent bars.
-	gap := 1
-	if 2*len(vals)-1 > g.W {
-		gap = 0
+	if rows <= 0 || g.W <= 0 {
+		return
 	}
+	// More values than cells: the most recent ones.
 	if len(vals) > g.W {
 		drop := len(vals) - g.W
 		vals = vals[drop:]
-		if len(labels) > drop {
-			labels = labels[drop:]
-		} else {
-			labels = nil
-		}
-		b.Roles = shift(b.Roles, drop)
+		labels = shiftS(labels, drop)
+		roles = shift(roles, drop)
 	}
 	n := len(vals)
-	colW := max(1, (g.W+gap)/n-gap)
-	if colW > 1 {
-		// Wide columns read as a block; keep them at most three cells.
-		colW = min(colW, 3)
+	// Every column has the same width and gap, so the spacing is even.
+	step := max(1, g.W/n)
+	gap := 0
+	if step > 1 {
+		gap = max(1, step/4)
 	}
-	top := b.top()
+	colW := min(max(1, step-gap), 8)
 	for i, v := range vals {
-		x := i * (colW + gap)
+		x := i * step
+		if x >= g.W {
+			break
+		}
 		units := 0
 		if finite(v) {
-			units = int(math.Round(unit(math.Max(v, 0), 0, top) * float64(rows*8)))
+			units = int(math.Round(unit(v, lo, hi) * float64(rows*8)))
+			if v > lo && units == 0 {
+				units = 1 // a value above the base always shows
+			}
+		}
+		role := b.Role
+		if i < len(roles) && roles[i] != None {
+			role = roles[i]
+		}
+		if role == None {
+			role = Series1
 		}
 		for r := 0; r < rows; r++ {
 			lv := units - r*8
@@ -160,6 +228,8 @@ func (b Bar) drawColumns(g *Grid, m Mode) {
 			case lv > 0 && m == ASCII:
 				if lv >= 4 {
 					glyph = "#"
+				} else if r == 0 {
+					glyph = "_"
 				}
 			case lv > 0:
 				glyph = eighthsUp[lv]
@@ -167,17 +237,24 @@ func (b Bar) drawColumns(g *Grid, m Mode) {
 			if glyph == "" {
 				continue
 			}
-			for k := 0; k < colW; k++ {
-				g.set(x+k, rows-1-r, glyph, b.role(i))
+			for k := 0; k < colW && x+k < g.W; k++ {
+				g.set(x+k, rows-1-r, glyph, role)
 			}
 		}
 		if withLabels && i < len(labels) {
-			g.Text(x, g.H-1, Truncate(labels[i], colW, ""), Mute, false)
+			g.Text(x, g.H-1, Truncate(labels[i], step, ""), Mute, false)
 		}
 	}
 }
 
 func shift(r []Role, n int) []Role {
+	if n >= len(r) {
+		return nil
+	}
+	return r[n:]
+}
+
+func shiftS(r []string, n int) []string {
 	if n >= len(r) {
 		return nil
 	}
@@ -209,9 +286,10 @@ type Sparkline struct {
 
 var asciiLevels = [...]string{"_", ".", "-", "~", "=", "+", "*", "#"}
 
-// Draw draws the sparkline into a w by h grid, on the bottom row. More
-// values than cells are averaged into buckets. Fewer values take fewer
-// cells, from the left.
+// Draw draws the sparkline into a w by h grid. On one row each value is an
+// eighth block. On more rows it is a column chart with no axis. More
+// values than cells are averaged into buckets; fewer take fewer cells,
+// from the left.
 func (s Sparkline) Draw(w, h int, m Mode) *Grid {
 	g := NewGrid(w, h)
 	if g.W == 0 || g.H == 0 || len(s.Values) == 0 {
@@ -232,20 +310,33 @@ func (s Sparkline) Draw(w, h int, m Mode) *Grid {
 	if role == None {
 		role = Series1
 	}
+	levels := g.H * 8
 	for i, v := range vals {
 		if !finite(v) {
 			continue
 		}
-		k := int(math.Round(unit(v, lo, hi) * 7))
+		// The lowest value keeps one eighth, so the line never vanishes.
+		k := 1 + int(math.Round(unit(v, lo, hi)*float64(levels-1)))
 		if hi-lo <= 0 {
-			k = 3
+			k = levels / 2
 		}
-		k = max(0, min(7, k))
-		glyph := eighthsUp[k+1]
-		if m == ASCII {
-			glyph = asciiLevels[k]
+		if m == ASCII && g.H == 1 {
+			g.set(i, 0, asciiLevels[max(0, min(7, k-1))], role)
+			continue
 		}
-		g.set(i, g.H-1, glyph, role)
+		for r := 0; r < g.H; r++ {
+			lv := k - r*8
+			switch {
+			case lv >= 8:
+				g.set(i, g.H-1-r, block(m, "█", "#"), role)
+			case lv > 0:
+				if m == ASCII {
+					g.set(i, g.H-1-r, asciiLevels[lv-1], role)
+				} else {
+					g.set(i, g.H-1-r, eighthsUp[lv], role)
+				}
+			}
+		}
 	}
 	return g
 }
@@ -345,7 +436,7 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 		case lv >= 8:
 			g.set(i, y, "█", role)
 		case lv > 0:
-			g.set(i, y, eighthsRight[lv], role)
+			g.setBg(i, y, eighthsRight[lv], role, Track)
 		default:
 			g.set(i, y, "░", Track)
 		}
@@ -353,12 +444,13 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	return g
 }
 
-// Histogram counts values into equal bins and draws the counts as columns.
-// With three rows or more, the bottom row shows the range.
+// Histogram counts values into equal bins and draws the counts as columns,
+// with the counts at the left and the range of each end under them.
 type Histogram struct {
 	Values []float64
 	Bins   int  // 0 means one bin per two cells, at most 20
 	Role   Role // Series1 when empty
+	// Format writes the values at the ends of the range. Nil means Compact.
 	Format func(float64) string
 }
 
@@ -393,29 +485,54 @@ func (hg Histogram) Draw(w, h int, m Mode) *Grid {
 	if bins <= 0 {
 		bins = min(20, max(1, g.W/2))
 	}
-	bins = min(bins, g.W)
 	counts, lo, hi := hg.Counts(bins)
 	if counts == nil {
 		return g
 	}
-	rows := g.H
-	axis := g.H >= 3
-	if axis {
-		rows--
+	format := hg.Format
+	if format == nil {
+		format = Compact
 	}
-	bar := Bar{Values: counts, Role: hg.Role}
-	sub := bar.Draw(g.W, rows, m)
-	copy(g.Cells, sub.Cells)
-	if axis {
-		format := hg.Format
-		if format == nil {
-			format = Compact
+	_, top, _ := extent(counts)
+	a := drawAxes(g, 0, top, func(v float64) string { return Compact(math.Round(v)) },
+		[3]string{format(lo), "", format(hi)}, m)
+	p := a.sub()
+	// Columns touch, as a histogram's bins do, and fill the width.
+	colW := max(1, p.W/len(counts))
+	for i, c := range counts {
+		units := int(math.Round(unit(c, 0, top) * float64(p.H*8)))
+		if c > 0 && units == 0 {
+			units = 1
 		}
-		left, right := format(lo), format(hi)
-		if Width(left)+Width(right)+1 <= g.W {
-			g.Text(0, g.H-1, left, Mute, false)
-			g.TextRight(g.W, g.H-1, right, Mute, false)
+		for r := 0; r < p.H; r++ {
+			lv := units - r*8
+			glyph := ""
+			switch {
+			case lv >= 8:
+				glyph = block(m, "█", "#")
+			case lv > 0 && m == ASCII:
+				if lv >= 4 {
+					glyph = "#"
+				}
+			case lv > 0:
+				glyph = eighthsUp[lv]
+			}
+			if glyph == "" {
+				continue
+			}
+			role := hg.Role
+			if role == None {
+				role = Series1
+			}
+			for k := 0; k < colW; k++ {
+				// Wide bins keep a one-cell gap, so they read apart.
+				if colW > 2 && k == colW-1 {
+					continue
+				}
+				p.set(i*colW+k, p.H-1-r, glyph, role)
+			}
 		}
 	}
+	a.paste(g, p)
 	return g
 }

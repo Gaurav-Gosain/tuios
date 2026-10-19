@@ -1,0 +1,57 @@
+=== braille 40x8
+|  25┤     ▄    ▁    ▅                   |
+|    │▄▃█ ▁█▃▂  █▄▁ ▂█▅▃▁  ▄ ▂ ▁▆▂▂      |
+|17.5┤████████▇████▇█████▇████▆████▃     |
+|    │██████████████████████████████     |
+|    │██████████████████████████████     |
+|  10┤██████████████████████████████     |
+|    └──────────────────────────────     |
+|     30 ago                             |
+--- roles
+|  aab     c    c    c                   |
+|    bccc cccc  ccc ccccc  c c cccc      |
+|aaaabcccccccccccccccccccccccccccccc     |
+|    bcccccccccccccccccccccccccccccc     |
+|    bcccccccccccccccccccccccccccccc     |
+|  aabcccccccccccccccccccccccccccccc     |
+|    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb     |
+|     aaaaaa                             |
+a=mute b=edge c=info (upper case is bold)
+=== blocks 40x8
+|  25┤     ▄    ▁    ▅                   |
+|    │▄▃█ ▁█▃▂  █▄▁ ▂█▅▃▁  ▄ ▂ ▁▆▂▂      |
+|17.5┤████████▇████▇█████▇████▆████▃     |
+|    │██████████████████████████████     |
+|    │██████████████████████████████     |
+|  10┤██████████████████████████████     |
+|    └──────────────────────────────     |
+|     30 ago                             |
+--- roles
+|  aab     c    c    c                   |
+|    bccc cccc  ccc ccccc  c c cccc      |
+|aaaabcccccccccccccccccccccccccccccc     |
+|    bcccccccccccccccccccccccccccccc     |
+|    bcccccccccccccccccccccccccccccc     |
+|  aabcccccccccccccccccccccccccccccc     |
+|    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb     |
+|     aaaaaa                             |
+a=mute b=edge c=info (upper case is bold)
+=== ascii 40x8
+|  25+     #         #                   |
+|    |# #  #    ##   ##    #    #        |
+|17.5+#############################      |
+|    |##############################     |
+|    |##############################     |
+|  10+##############################     |
+|    +------------------------------     |
+|     30 ago                             |
+--- roles
+|  aab     c         c                   |
+|    bc c  c    cc   cc    c    c        |
+|aaaabccccccccccccccccccccccccccccc      |
+|    bcccccccccccccccccccccccccccccc     |
+|    bcccccccccccccccccccccccccccccc     |
+|  aabcccccccccccccccccccccccccccccc     |
+|    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb     |
+|     aaaaaa                             |
+a=mute b=edge c=info (upper case is bold)

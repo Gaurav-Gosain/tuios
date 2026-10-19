@@ -1,55 +1,55 @@
 === braille 34x8
-|60│                   ⣀⠤⠊⠑⠒⠤⢄⣀⣀⡠⠤⠔|
-|  │                ⣀⠔⠊            |
-|  │      ⣀⠤⠒⠒⠢⠤⢄⡠⠔⠉               |
-|  │⠒⠒⠒⠒⠒⠉                         |
-|  │                             ⡠⠔|
-|  │               ⢀⠤⠊⠑⠒⠒⠢⠤⠤⠤⣀⡠⠔⠉  |
-|20│⣀⣀⠤⠤⠤⠒⠒⠉⠉⠉⠑⠒⠤⠤⠊⠁               |
+|60┤                   ⣀⣤⠞⠳⠶⣤⣄⣀⣀⣠⣤⡴|
+|  │                ⣀⡴⠞⠉     ⠈⠉⠉⠁  |
+|  │      ⣀⣤⠶⠶⢦⣤⣄⣠⡴⠛⠉              |
+|40┤⠶⠶⠶⠶⠶⠛⠉     ⠈⠁                 |
+|  │                             ⣠⡴|
+|  │               ⢀⣤⠞⠳⠶⠶⢦⣤⣤⣤⣀⣠⡴⠛⠁ |
+|20┤⣀⣀⣤⣤⣤⠶⠶⠛⠛⠛⠳⠶⣤⣤⠞⠋         ⠉⠁    |
 |  └───────────────────────────────|
 --- roles
 |aab                   cccccccccccc|
-|  b                ccc            |
-|  b      cccccccccc               |
-|  bcccccc                         |
+|  b                cccc     cccc  |
+|  b      ccccccccccc              |
+|aabccccccc     cc                 |
 |  b                             dd|
-|  b               dddddddddddddd  |
-|aabdddddddddddddddd               |
+|  b               ddddddddddddddd |
+|aabdddddddddddddddd         dd    |
 |  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a=mute b=edge c=series2 d=series1 (upper case is bold)
 === blocks 34x8
-|60│                   ▂▄▇▇▅▄▂▁▂▃▄▅|
+|60┤                   ▂▄▇▇▅▄▂▁▂▃▄▅|
 |  │                ▂▅▇            |
 |  │      ▁▃▅▆▅▄▃▂▅█               |
-|  │▅▅▅▅▆▇                         |
+|40┤▅▅▅▅▆▇                         |
 |  │                             ▃▆|
 |  │               ▁▃▆▆▆▅▄▄▃▂▂▂▅█  |
-|20│▁▂▂▃▄▄▅▆▇▇▆▅▃▃▆                |
+|20┤▁▂▂▃▄▄▅▆▇▇▆▅▃▃▆                |
 |  └───────────────────────────────|
 --- roles
 |aab                   cccccccccccc|
 |  b                ccc            |
 |  b      cccccccccc               |
-|  bcccccc                         |
+|aabcccccc                         |
 |  b                             dd|
 |  b               dddddddddddddd  |
 |aabddddddddddddddd                |
 |  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a=mute b=edge c=series2 d=series1 (upper case is bold)
 === ascii 34x8
-|60|                   ++++++++++++|
+|60+                   ++++++++++++|
 |  |                +++            |
 |  |      ++++++++++               |
-|  |++++++                         |
+|40+++++++                         |
 |  |                             **|
 |  |               **************  |
-|20|***************                |
+|20+***************                |
 |  +-------------------------------|
 --- roles
 |aab                   cccccccccccc|
 |  b                ccc            |
 |  b      cccccccccc               |
-|  bcccccc                         |
+|aabcccccc                         |
 |  b                             dd|
 |  b               dddddddddddddd  |
 |aabddddddddddddddd                |

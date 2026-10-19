@@ -1,38 +1,38 @@
 === braille 40x5
 |internal/ses… █████████████████████ 6.2s|
-|internal/app  ████████████████▎···· 4.8s|
-|vt            ██████████▌·········· 3.1s|
-|internal/tape ████▊················ 1.4s|
-|internal/con… ███·················· 0.9s|
+|internal/app  ████████████████▎· ·  4.8s|
+|vt            ██████████▌· · · · ·  3.1s|
+|internal/tape ████▊· · · · · · · ·  1.4s|
+|internal/con… ███· · · · · · · · ·  0.9s|
 --- roles
 |aaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbb cccc|
-|aaaaaaaaaaaa  bbbbbbbbbbbbbbbbbdddd cccc|
-|aa            bbbbbbbbbbbdddddddddd cccc|
-|aaaaaaaaaaaaa eeeeedddddddddddddddd cccc|
-|aaaaaaaaaaaaa eeedddddddddddddddddd cccc|
+|aaaaaaaaaaaa  bbbbbbbbbbbbbbbbbd d  cccc|
+|aa            bbbbbbbbbbbd d d d d  cccc|
+|aaaaaaaaaaaaa eeeeed d d d d d d d  cccc|
+|aaaaaaaaaaaaa eeed d d d d d d d d  cccc|
 a=dim b=error c=fg d=edge e=series2 (upper case is bold)
 === blocks 40x5
 |internal/ses… █████████████████████ 6.2s|
-|internal/app  ████████████████▎···· 4.8s|
-|vt            ██████████▌·········· 3.1s|
-|internal/tape ████▊················ 1.4s|
-|internal/con… ███·················· 0.9s|
+|internal/app  ████████████████▎· ·  4.8s|
+|vt            ██████████▌· · · · ·  3.1s|
+|internal/tape ████▊· · · · · · · ·  1.4s|
+|internal/con… ███· · · · · · · · ·  0.9s|
 --- roles
 |aaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbb cccc|
-|aaaaaaaaaaaa  bbbbbbbbbbbbbbbbbdddd cccc|
-|aa            bbbbbbbbbbbdddddddddd cccc|
-|aaaaaaaaaaaaa eeeeedddddddddddddddd cccc|
-|aaaaaaaaaaaaa eeedddddddddddddddddd cccc|
+|aaaaaaaaaaaa  bbbbbbbbbbbbbbbbbd d  cccc|
+|aa            bbbbbbbbbbbd d d d d  cccc|
+|aaaaaaaaaaaaa eeeeed d d d d d d d  cccc|
+|aaaaaaaaaaaaa eeed d d d d d d d d  cccc|
 a=dim b=error c=fg d=edge e=series2 (upper case is bold)
 === ascii 40x5
 |internal/ses~ ##################### 6.2s|
-|internal/app  #################     4.8s|
+|internal/app  ################      4.8s|
 |vt            ###########           3.1s|
 |internal/tape #####                 1.4s|
 |internal/con~ ###                   0.9s|
 --- roles
 |aaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbb cccc|
-|aaaaaaaaaaaa  bbbbbbbbbbbbbbbbb     cccc|
+|aaaaaaaaaaaa  bbbbbbbbbbbbbbbb      cccc|
 |aa            bbbbbbbbbbb           cccc|
 |aaaaaaaaaaaaa ddddd                 cccc|
 |aaaaaaaaaaaaa ddd                   cccc|

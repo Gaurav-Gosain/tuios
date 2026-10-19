@@ -1,0 +1,39 @@
+=== braille 24x5
+|  ▄█████▄    ■ a 75%    |
+|▄█████████▄  ■ b 25%    |
+|▀▀▀▀▀██████  ■ c 0%     |
+|▀█████████▀  ■ d 0%     |
+|  ▀█████▀               |
+--- roles
+|  aaabbbb    b ccccc    |
+|aaaaabbbbbb  a ccccc    |
+|aaaaabbbbbb  d cccc     |
+|bbbbbbbbbbb  e cccc     |
+|  bbbbbbb               |
+a=series2 b=series1 c=dim d=series3 e=series4 (upper case is bold)
+=== blocks 24x5
+|  ▄█████▄    ■ a 75%    |
+|▄█████████▄  ■ b 25%    |
+|▀▀▀▀▀██████  ■ c 0%     |
+|▀█████████▀  ■ d 0%     |
+|  ▀█████▀               |
+--- roles
+|  aaabbbb    b ccccc    |
+|aaaaabbbbbb  a ccccc    |
+|aaaaabbbbbb  d cccc     |
+|bbbbbbbbbbb  e cccc     |
+|  bbbbbbb               |
+a=series2 b=series1 c=dim d=series3 e=series4 (upper case is bold)
+=== ascii 24x5
+|  +++****    * a 75%    |
+|+++++******  + b 25%    |
+|+++++******  o c 0%     |
+|***********  x d 0%     |
+|  *******               |
+--- roles
+|  aaabbbb    b ccccc    |
+|aaaaabbbbbb  a ccccc    |
+|aaaaabbbbbb  d cccc     |
+|bbbbbbbbbbb  e cccc     |
+|  bbbbbbb               |
+a=series2 b=series1 c=dim d=series3 e=series4 (upper case is bold)

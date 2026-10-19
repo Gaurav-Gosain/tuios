@@ -1,39 +1,39 @@
 === braille 24x5
-|▄ ▃ █                   |
-|█ █ █                   |
-|█ █ █ ▄   ▅ ▁ ▅ ▁ ▁ ▃   |
-|█ █ █ █ █ █ █ █ █ █ █ ▇ |
-|10ms                36ms|
+|36┤▅▄█                  |
+|  │███▁ ▂ ▂             |
+| 0┤████▆█▇█▇▇█▅         |
+|  └─────────────────────|
+|   10ms             36ms|
 --- roles
-|a a a                   |
-|a a a                   |
-|a a a a   a a a a a a   |
-|a a a a a a a a a a a a |
-|bbbb                bbbb|
-a=series1 b=mute (upper case is bold)
+|aabccc                  |
+|  bcccc c c             |
+| abcccccccccccc         |
+|  bbbbbbbbbbbbbbbbbbbbbb|
+|   aaaa             aaaa|
+a=mute b=edge c=series1 (upper case is bold)
 === blocks 24x5
-|▄ ▃ █                   |
-|█ █ █                   |
-|█ █ █ ▄   ▅ ▁ ▅ ▁ ▁ ▃   |
-|█ █ █ █ █ █ █ █ █ █ █ ▇ |
-|10ms                36ms|
+|36┤▅▄█                  |
+|  │███▁ ▂ ▂             |
+| 0┤████▆█▇█▇▇█▅         |
+|  └─────────────────────|
+|   10ms             36ms|
 --- roles
-|a a a                   |
-|a a a                   |
-|a a a a   a a a a a a   |
-|a a a a a a a a a a a a |
-|bbbb                bbbb|
-a=series1 b=mute (upper case is bold)
+|aabccc                  |
+|  bcccc c c             |
+| abcccccccccccc         |
+|  bbbbbbbbbbbbbbbbbbbbbb|
+|   aaaa             aaaa|
+a=mute b=edge c=series1 (upper case is bold)
 === ascii 24x5
-|#   #                   |
-|# # #                   |
-|# # # #   #   #         |
-|# # # # # # # # # # # # |
-|10ms                36ms|
+|36+###                  |
+|  |###                  |
+| 0+############         |
+|  +---------------------|
+|   10ms             36ms|
 --- roles
-|a   a                   |
-|a a a                   |
-|a a a a   a   a         |
-|a a a a a a a a a a a a |
-|bbbb                bbbb|
-a=series1 b=mute (upper case is bold)
+|aabccc                  |
+|  bccc                  |
+| abcccccccccccc         |
+|  bbbbbbbbbbbbbbbbbbbbbb|
+|   aaaa             aaaa|
+a=mute b=edge c=series1 (upper case is bold)

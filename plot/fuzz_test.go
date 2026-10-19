@@ -42,7 +42,7 @@ func FuzzCharts(f *testing.F) {
 			labels[i] = string(b)
 		}
 		var g *Grid
-		switch kind % 9 {
+		switch kind % 12 {
 		case 0:
 			g = Bar{Values: vals, Labels: labels, Horizontal: true, Guide: true}.Draw(W, H, m)
 		case 1:
@@ -72,6 +72,16 @@ func FuzzCharts(f *testing.F) {
 			g = Line{Series: []Series{{Values: vals}}, Min: lo, Max: hi, Axis: true}.Draw(W, H, m)
 		case 8:
 			g = Sparkline{Values: vals, Min: -1, Max: 1}.Draw(W, H, m)
+		case 9:
+			var rows [][]float64
+			for i := 0; i < len(vals); i += 3 {
+				rows = append(rows, vals[i:min(i+3, len(vals))])
+			}
+			g = Heatmap{Values: rows, RowLabels: labels, ColLabels: labels}.Draw(W, H, m)
+		case 10:
+			g = Pie{Values: vals, Labels: labels, Donut: kind%2 == 0, Aspect: float64(w%5) - 1}.Draw(W, H, m)
+		case 11:
+			g = Bar{Values: vals, Labels: labels, Axis: true}.Draw(W, H, m)
 		}
 		checkGrid(t, g, W, H, m)
 		_ = g.String()

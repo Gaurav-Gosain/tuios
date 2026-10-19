@@ -66,7 +66,17 @@ const (
 	Series4      Role = "series4"
 	Series5      Role = "series5"
 	Series6      Role = "series6"
+	// Heat1 to Heat5 are a ramp from low to high for a heatmap. They are
+	// not TML roles: a host derives them, such as from the ground toward
+	// the accent.
+	Heat1 Role = "heat1"
+	Heat2 Role = "heat2"
+	Heat3 Role = "heat3"
+	Heat4 Role = "heat4"
+	Heat5 Role = "heat5"
 )
+
+var heat = [...]Role{Heat1, Heat2, Heat3, Heat4, Heat5}
 
 var series = [...]Role{Series1, Series2, Series3, Series4, Series5, Series6}
 
@@ -81,11 +91,14 @@ func SeriesRole(i int) Role {
 
 // Cell is one cell of a Grid. Text is one grapheme, or "" for a blank cell.
 // Width is the grapheme's width in cells. A wide grapheme takes two cells:
-// the second has Width 0 and no Text.
+// the second has Width 0 and no Text. Role colours the text. Bg, when set,
+// colours the cell's background: a half block uses both to show two
+// pixels in one cell.
 type Cell struct {
 	Text  string
 	Width uint8
 	Role  Role
+	Bg    Role
 	Bold  bool
 }
 
@@ -120,6 +133,15 @@ func (g *Grid) set(x, y int, text string, role Role) {
 	}
 	g.clearWide(x, y)
 	g.Cells[y*g.W+x] = Cell{Text: text, Width: 1, Role: role}
+}
+
+// setBg puts a one-cell glyph with a background role at x, y.
+func (g *Grid) setBg(x, y int, text string, role, bg Role) {
+	if x < 0 || y < 0 || x >= g.W || y >= g.H {
+		return
+	}
+	g.clearWide(x, y)
+	g.Cells[y*g.W+x] = Cell{Text: text, Width: 1, Role: role, Bg: bg}
 }
 
 // clearWide blanks the other half of a wide grapheme that x, y is part of.

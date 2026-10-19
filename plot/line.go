@@ -16,10 +16,13 @@ type Series struct {
 type Line struct {
 	Series []Series
 	Fill   bool // fill below the line: an area chart
-	// Axis draws the range at the left and a base line at the bottom.
+	// Axis draws tick labels at the left, a base line, and the first,
+	// middle and last of Labels under it.
 	Axis bool
-	// Min and Max fix the range. Both 0 means the range of the values, with
-	// 0 included for an area.
+	// Labels name the x positions, one per value of the longest series.
+	Labels []string
+	// Min and Max fix the range. Both 0 means a round range around the
+	// values, with 0 included for an area.
 	Min, Max float64
 	Format   func(float64) string
 }
@@ -46,7 +49,22 @@ func (l Line) rng() (lo, hi float64, ok bool) {
 	if hi == lo {
 		lo, hi = lo-1, hi+1
 	}
+	if l.Axis {
+		lo, hi = niceRange(lo, hi, 4)
+	}
 	return lo, hi, true
+}
+
+// Legend returns the series names and roles, for a legend the host draws
+// beside the title.
+func (l Line) Legend() []LegendItem {
+	var out []LegendItem
+	for i, s := range l.Series {
+		if s.Name != "" {
+			out = append(out, LegendItem{Label: s.Name, Role: l.seriesRole(i)})
+		}
+	}
+	return out
 }
 
 // Draw draws the chart into a w by h grid.
@@ -59,55 +77,53 @@ func (l Line) Draw(w, h int, m Mode) *Grid {
 	if !ok {
 		return g
 	}
-	x0, pw, ph := 0, g.W, g.H
-	if l.Axis && g.W >= 6 && g.H >= 2 {
-		format := l.Format
-		if format == nil {
-			format = Compact
+	a := axisFrame{pw: g.W, ph: g.H}
+	if l.Axis {
+		n := 0
+		for _, sr := range l.Series {
+			n = max(n, len(sr.Values))
 		}
-		top, bot := format(hi), format(lo)
-		lw := min(max(Width(top), Width(bot)), g.W/3)
-		g.TextRight(lw, 0, Truncate(top, lw, ""), Mute, false)
-		g.TextRight(lw, g.H-2, Truncate(bot, lw, ""), Mute, false)
-		ph = g.H - 1
-		for y := 0; y < ph; y++ {
-			g.set(lw, y, block(m, "│", "|"), Edge)
-		}
-		g.set(lw, ph, block(m, "└", "+"), Edge)
-		for x := lw + 1; x < g.W; x++ {
-			g.set(x, ph, block(m, "─", "-"), Edge)
-		}
-		x0 = lw + 1
-		pw = g.W - x0
+		labels := xLabels(l.Labels, n)
+		a = drawAxes(g, lo, hi, l.Format, labels, m)
 	}
-	if pw <= 0 || ph <= 0 {
+	if a.pw <= 0 || a.ph <= 0 {
 		return g
 	}
-	area := &Grid{W: pw, H: ph, Cells: make([]Cell, pw*ph)}
-	for i := range area.Cells {
-		area.Cells[i].Width = 1
-	}
-	switch m {
-	case Braille:
-		l.braille(area, lo, hi)
+	p := a.sub()
+	switch {
+	case l.Fill && m != ASCII:
+		l.area(p, lo, hi)
+	case m == Braille:
+		l.braille(p, lo, hi)
 	default:
-		l.columns(area, lo, hi, m)
+		l.columns(p, lo, hi, m)
 	}
-	for y := 0; y < ph; y++ {
-		for x := 0; x < pw; x++ {
-			if c := area.Cells[y*pw+x]; c.Text != "" {
-				g.Cells[y*g.W+x0+x] = c
-			}
-		}
-	}
+	a.paste(g, p)
 	return g
 }
 
-func (l Line) seriesRole(i int) Role {
-	if r := l.Series[i].Role; r != None {
-		return r
+// area fills below each series with eighth blocks, so the top edge is
+// smooth to an eighth of a cell. Later series draw over earlier ones.
+func (l Line) area(g *Grid, lo, hi float64) {
+	for s := range l.Series {
+		pts := points(l.Series[s].Values, g.W)
+		role := l.seriesRole(s)
+		for x, v := range pts {
+			if !finite(v) {
+				continue
+			}
+			units := int(math.Round(unit(v, lo, hi) * float64(g.H*8)))
+			for r := 0; r < g.H; r++ {
+				lv := units - r*8
+				switch {
+				case lv >= 8:
+					g.set(x, g.H-1-r, "█", role)
+				case lv > 0:
+					g.set(x, g.H-1-r, eighthsUp[lv], role)
+				}
+			}
+		}
 	}
-	return SeriesRole(i)
 }
 
 // points spreads a series across n columns: a value per column, NaN where
@@ -176,10 +192,16 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 				continue
 			}
 			y := dh - 1 - int(math.Round(unit(v, lo, hi)*float64(dh-1)))
+			// The stroke is two dots tall, so it reads as a line and not as
+			// a chain of single dots.
+			thick := func(px, py int) {
+				setDot(px, py, s)
+				setDot(px, py+1, s)
+			}
 			if prevX >= 0 {
-				line(prevX, prevY, x, y, func(px, py int) { setDot(px, py, s) })
+				line(prevX, prevY, x, y, thick)
 			} else {
-				setDot(x, y, s)
+				thick(x, y)
 			}
 			if l.Fill {
 				// Fill every column from the previous point to this one.
@@ -282,4 +304,11 @@ func (l Line) columns(g *Grid, lo, hi float64, m Mode) {
 			}
 		}
 	}
+}
+
+func (l Line) seriesRole(i int) Role {
+	if r := l.Series[i].Role; r != None {
+		return r
+	}
+	return SeriesRole(i)
 }

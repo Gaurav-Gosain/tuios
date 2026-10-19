@@ -1,13 +1,13 @@
 === braille 20x4
-|              ⢀⠜⢆   |
-|     ⢀   ⢀⢦  ⢀⠎  ⢣  |
-| ⡄⠠⡀⢠⠃⠱⡀⢠⠃ ⠱⣠⠃    ⠱⡀|
-|⠊  ⠑⠁  ⠑⠁   ⠁      ⠱|
+|              ⢀⡼⣆   |
+|     ⢀   ⢀⣦  ⢀⡞ ⠈⢧  |
+| ⡄⢠⡀⢠⠏⢳⡀⢠⠏⠈⢳⣠⠏   ⠈⢳⡀|
+|⠞⠁ ⠳⠋  ⠳⠋   ⠋      ⢳|
 --- roles
 |              aaa   |
-|     a   aa  aa  a  |
-| aaaaaaaaa aaa    aa|
-|a  aa  aa   a      a|
+|     a   aa  aa aa  |
+| aaaaaaaaaaaaa   aaa|
+|aa aa  aa   a      a|
 a=series1 (upper case is bold)
 === blocks 20x4
 |               ▆▃   |

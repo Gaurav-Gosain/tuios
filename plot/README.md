@@ -2,8 +2,9 @@
 
 [![Go Reference](https://pkg.go.dev/badge/tuios.dev/plot.svg)](https://pkg.go.dev/tuios.dev/plot)
 
-`tuios.dev/plot` draws charts as terminal cells. It has six chart kinds:
-bar (horizontal and vertical), line, area, sparkline, gauge and histogram.
+`tuios.dev/plot` draws charts as terminal cells. It has eight chart kinds:
+bar (horizontal and vertical), line, area, sparkline, gauge, histogram,
+heatmap and pie (a donut or a full disc).
 
 A chart draws into a grid of the size you give it. Each cell holds one
 grapheme and a role, such as `series1`, `mute` or `track`. Your program maps
@@ -37,8 +38,25 @@ and its font can show.
 | `Blocks` | Eighth blocks | Eighth blocks |
 | `ASCII` | `*` and `:` | `#`, `-` and `[ ]` |
 
-In ASCII each series of a line chart has its own mark, so the series stay
-apart without colour.
+Heatmaps use whole cells, or half blocks when the rows do not fit. A pie is a
+disc of half-block pixels. In ASCII each series of a line chart, each slice
+of a pie and each heat level has its own mark, so they stay apart without
+colour.
+
+## Axes and legends
+
+- Columns, lines, areas and histograms can have a y axis with round tick
+  labels, a base line, and the first, middle and last x label under it.
+- Columns whose values all sit far above zero start from a round base under
+  the smallest value. The axis labels that base.
+- Horizontal bars keep a value column at the right that never clips. Labels
+  give way first.
+- `Line.Legend` and `Pie.Legend` return the items for a legend, and
+  `DrawLegend` draws them.
+
+A cell can also have a background role, `Cell.Bg`. Half blocks use it to show
+two pixels in one cell. The heat roles `heat1` to `heat5` are a ramp from low
+to high that the host derives.
 
 ## Rules
 

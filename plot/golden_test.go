@@ -87,6 +87,26 @@ var cases = []chartCase{
 		}
 		return Histogram{Values: vals, Bins: 12, Format: func(v float64) string { return Compact(v) + "ms" }}.Draw(w, h, m)
 	}},
+	{"heatmap", 30, 6, func(w, h int, m Mode) *Grid {
+		rows := [][]float64{{0, 1, 2, 3, 4, 5}, {5, 4, 3, 2, 1, 0}, {0, math.NaN(), 9, 9, 2, 1}}
+		return Heatmap{Values: rows, RowLabels: []string{"mon", "tue", "wed"}, ColLabels: []string{"00h", "01h", "02h", "03h", "04h", "05h"}}.Draw(w, h, m)
+	}},
+	{"heatmap-half", 16, 3, func(w, h int, m Mode) *Grid {
+		var rows [][]float64
+		for r := 0; r < 6; r++ {
+			rows = append(rows, []float64{float64(r), float64(r * 2), float64(10 - r)})
+		}
+		return Heatmap{Values: rows}.Draw(w, h, m)
+	}},
+	{"donut", 40, 8, func(w, h int, m Mode) *Grid {
+		return Pie{Values: []float64{61, 18, 9, 4, 2}, Labels: []string{"Go", "TypeScript", "Zig", "Shell", "Nix"}, Donut: true}.Draw(w, h, m)
+	}},
+	{"pie", 24, 5, func(w, h int, m Mode) *Grid {
+		return Pie{Values: []float64{3, 1, math.NaN(), -2}, Labels: []string{"a", "b", "c", "d"}}.Draw(w, h, m)
+	}},
+	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
+		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
+	}},
 	{"empty", 10, 3, func(w, h int, m Mode) *Grid {
 		return Line{}.Draw(w, h, m)
 	}},
