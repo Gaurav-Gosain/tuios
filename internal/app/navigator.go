@@ -71,10 +71,13 @@ type navPane struct {
 	// marks its commands (OSC 133). The row reads an ssh target from it.
 	Cmdline string
 	// DoneSeen says a finished agent's pane has been looked at since, so
-	// its mark is the resting one. Known for the panes this client draws.
+	// its mark is the resting one. Known for the panes of this machine's
+	// sessions. Another machine's panes leave it false, since the seen
+	// record is this client's and their listing has no completion count.
 	DoneSeen bool
 	// Subagents is how many subagents the pane's agent is running, which
-	// draws a pane at rest as waiting. Known for the panes this client draws.
+	// draws a pane at rest as waiting. Known for the panes of this
+	// machine's sessions.
 	Subagents int
 	// Text is the last lines of the pane's screen, oldest first. For a pane
 	// this client draws, the preview reads the live screen instead.
@@ -125,6 +128,25 @@ type navSession struct {
 
 // key is the session's identity in the navigator.
 func (s *navSession) key() string { return s.Host + "\x00" + s.Name }
+
+// keepAgentMarks gives each pane of a session the load read on this machine
+// the agent state, the seen bit and the subagent count of its row in from,
+// the row built from the rail's tree. The tree's reading is this client's:
+// it folds in the seen record, an open ask and a finished turn at rest,
+// which list-windows does not carry. Taking the load's state instead drew a
+// finished pane as unread again once the load landed. A pane from has no row
+// for, one made since the navigator opened, keeps what the load read.
+func (s *navSession) keepAgentMarks(from *navSession) {
+	for i := range s.Panes {
+		p := &s.Panes[i]
+		for j := range from.Panes {
+			if c := &from.Panes[j]; c.ID == p.ID {
+				p.AgentState, p.DoneSeen, p.Subagents = c.AgentState, c.DoneSeen, c.Subagents
+				break
+			}
+		}
+	}
+}
 
 // workspaceLabel is a workspace's number, with its name when it has one.
 func (s *navSession) workspaceLabel(ws int) string {
@@ -321,7 +343,19 @@ func (m *OS) navigatorSessions() []navSession {
 		}
 		s := navSession{Name: n.ID, Title: n.Title, Count: n.WindowCount}
 		for _, w := range n.Children {
-			s.Panes = append(s.Panes, navPane{ID: w.ID, Name: w.Title, Workspace: w.Workspace, AgentState: w.AgentState})
+			// The tree already folded this client's seen record into the
+			// node (foreignSessionInput), so the row copies it. Without
+			// DoneSeen a finished pane read as unread here however often it
+			// was looked at, and without Subagents a pane at rest lost its
+			// waiting mark.
+			s.Panes = append(s.Panes, navPane{
+				ID:         w.ID,
+				Name:       w.Title,
+				Workspace:  w.Workspace,
+				AgentState: w.AgentState,
+				DoneSeen:   w.DoneSeen,
+				Subagents:  w.Subagents,
+			})
 		}
 		if len(s.Panes) > 0 {
 			s.Count = len(s.Panes)
@@ -753,6 +787,9 @@ func (m *OS) ApplyNavigatorLoaded(msg NavigatorLoadedMsg) {
 				// not be read fresh.
 				s.Note = note
 				break
+			}
+			if loaded.Host == "" {
+				loaded.keepAgentMarks(s)
 			}
 			*s = loaded
 			s.Title = title

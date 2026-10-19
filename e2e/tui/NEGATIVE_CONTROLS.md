@@ -7280,3 +7280,15 @@ holds them. Run on 2026-10-19.
 | A window-mode right-click over a program tracking the mouse opens nothing | The menu opening for every sub-threshold right-click in `handleMouseRelease` | The build before the fix, which skipped the menu when the pane's program tracked the mouse | `TestPlainRightClickOpensMenuOverAMouseApp` ("in window-management mode a plain right-click over a program tracking the mouse opened no pane menu") | **caught** |
 
 A first version counted the program's reports while the menu was open and failed on the fixed build: the menu covers the echoed reports. They are counted once the menu is closed.
+
+### A seen done pane of another session in the navigator (issue #902)
+
+`TestNavigatorKeepsADonePaneSeen` finishes an agent in work, opens the
+navigator from home and reads ■ on the logs row, goes to the pane, comes back
+to home, and reads ○ on the row. Each read waits for the load to bring the
+pane's screen into the preview first. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The cached row drops the seen bit | `DoneSeen` in `navigatorSessions` | The field cut from the row | `TestNavigatorKeepsADonePaneSeen` ("the logs row never showed ○ (seen) after the load") | **caught** |
+| The load puts the unread mark back | `keepAgentMarks` in `ApplyNavigatorLoaded` | The call cut | `TestNavigatorKeepsADonePaneSeen` ("the logs row never showed ○ (seen) after the load") | **caught** |

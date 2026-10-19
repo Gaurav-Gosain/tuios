@@ -188,6 +188,78 @@ func TestNavigatorFindsAPaneByScreenText(t *testing.T) {
 	}
 }
 
+// TestNavigatorKeepsADonePaneSeen: a finished agent in another session is
+// drawn unread (■) until the person looks at it, and seen (○) after, also
+// when the navigator is opened from another session (issue #902).
+//
+// How it could pass wrongly, written down first:
+//   - The seen mark could come from the cached row before the load lands,
+//     and the load could put the unread mark back. Each check waits for the
+//     marker in the preview, which only the load reads, before it reads the
+//     mark.
+//   - No mark at all would read as "not unread". The first check needs ■ on
+//     the logs row, and the second needs ○ there.
+func TestNavigatorKeepsADonePaneSeen(t *testing.T) {
+	base, logs := navigatorSessions(t)
+	for _, state := range []string{"working", "done"} {
+		if o, err := tuiosCLI(t, base, "set-agent-state", "-s", "work", "-w", logs, state, "--harness", "claude-code"); err != nil {
+			t.Fatalf("set-agent-state %s: %v\n%s", state, err, o)
+		}
+	}
+	term := navClient(t, base, nil)
+	logsMark := func(mark, what string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			text := s.Text()
+			if !strings.Contains(text, navMarker) {
+				return false
+			}
+			for _, l := range strings.Split(text, "\n") {
+				if strings.Contains(navListRow(l), mark+" logs") {
+					return true
+				}
+			}
+			return false
+		}, uiTimeout); err != nil {
+			t.Fatalf("the logs row never showed %s (%s) after the load: %v\n%s", mark, what, err, term.Snapshot())
+		}
+	}
+	attached := func(name string) {
+		t.Helper()
+		isAttached := func(rows []lsRow) bool {
+			for _, r := range rows {
+				if r.Name == name && r.Attached {
+					return true
+				}
+			}
+			return false
+		}
+		if !isAttached(waitForRows(t, base, isAttached)) {
+			t.Fatalf("the client never showed %s\n%s", name, term.Snapshot())
+		}
+	}
+
+	openWorkLogs(t, term)
+	logsMark("■", "unread")
+	sendKeys(t, term, tuitest.Enter)
+	attached("work")
+	deadline := time.Now().Add(uiTimeout)
+	for focusedIn(t, base, "work") != logs {
+		if time.Now().After(deadline) {
+			t.Fatalf("enter did not focus logs\n%s", term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if o, err := tuiosCLI(t, base, "switch-session", "-s", "work", "home"); err != nil {
+		t.Fatalf("switch-session home: %v\n%s", err, o)
+	}
+	attached("home")
+	openWorkLogs(t, term)
+	logsMark("○", "seen")
+	saveFrame(t, term, "navigator-done-seen")
+}
+
 // navDecoy is a pane name that holds every character of navMarker in order,
 // spread out, and never the marker whole. A fuzzy search for the marker
 // matches it.
