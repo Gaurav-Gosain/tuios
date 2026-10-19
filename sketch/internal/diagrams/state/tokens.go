@@ -1,0 +1,109 @@
+// Ported from pele src/diagrams/state/tokens.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+
+// Package state parses and draws Mermaid state diagrams.
+package state
+
+// Token types. pele names them T.X; the port names them T_X.
+const (
+	T_END = iota
+	T_ERROR
+	T_NL
+	T_SD
+	T_DESCR
+	T_ARROW
+	T_HIDE_EMPTY
+	T_scale
+	T_WIDTH
+	T_COMPOSIT_STATE
+	T_STRUCT_START
+	T_STRUCT_STOP
+	T_STATE_DESCR
+	T_AS
+	T_ID
+	T_FORK
+	T_JOIN
+	T_CHOICE
+	T_CONCURRENT
+	T_note
+	T_NOTE_TEXT
+	T_acc_title
+	T_acc_title_value
+	T_acc_descr
+	T_acc_descr_value
+	T_acc_descr_multiline_value
+	T_CLICK
+	T_STRING
+	T_HREF
+	T_classDef
+	T_CLASSDEF_ID
+	T_DEFAULT_CLASSDEF_ID
+	T_CLASSDEF_STYLEOPTS
+	T_DEFAULT
+	T_style
+	T_STYLE_IDS
+	T_STYLEDEF_STYLEOPTS
+	T_class
+	T_CLASSENTITY_IDS
+	T_STYLECLASS
+	T_direction_tb
+	T_direction_bt
+	T_direction_rl
+	T_direction_lr
+	T_EDGE_STATE
+	T_STYLE_SEPARATOR
+	T_left_of
+	T_right_of
+	T_INVALID
+)
+
+var TOKEN_NAMES = [...]string{
+	"$end",
+	"INVALID",
+	"NL",
+	"SD",
+	"DESCR",
+	"-->",
+	"HIDE_EMPTY",
+	"scale",
+	"WIDTH",
+	"COMPOSIT_STATE",
+	"STRUCT_START",
+	"STRUCT_STOP",
+	"STATE_DESCR",
+	"AS",
+	"ID",
+	"FORK",
+	"JOIN",
+	"CHOICE",
+	"CONCURRENT",
+	"note",
+	"NOTE_TEXT",
+	"acc_title",
+	"acc_title_value",
+	"acc_descr",
+	"acc_descr_value",
+	"acc_descr_multiline_value",
+	"CLICK",
+	"STRING",
+	"HREF",
+	"classDef",
+	"CLASSDEF_ID",
+	"DEFAULT_CLASSDEF_ID",
+	"CLASSDEF_STYLEOPTS",
+	"DEFAULT",
+	"style",
+	"STYLE_IDS",
+	"STYLEDEF_STYLEOPTS",
+	"class",
+	"CLASSENTITY_IDS",
+	"STYLECLASS",
+	"direction_tb",
+	"direction_bt",
+	"direction_rl",
+	"direction_lr",
+	"EDGE_STATE",
+	"STYLE_SEPARATOR",
+	"left_of",
+	"right_of",
+	"INVALID",
+}

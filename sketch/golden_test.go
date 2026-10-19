@@ -16,6 +16,7 @@ import (
 var done = map[string]bool{
 	"flowchart": true,
 	"sequence":  true,
+	"state":     true,
 }
 
 // goldenNow is the time gold.mjs renders with, for gantt.

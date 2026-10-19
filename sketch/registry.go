@@ -7,8 +7,9 @@ package sketch
 import (
 	"tuios.dev/sketch/internal/diagrams/flowchart"
 	"tuios.dev/sketch/internal/diagrams/sequence"
+	"tuios.dev/sketch/internal/diagrams/state"
 )
 
 func init() {
-	register(flowchart.Flowchart, sequence.Sequence)
+	register(flowchart.Flowchart, sequence.Sequence, state.State)
 }
