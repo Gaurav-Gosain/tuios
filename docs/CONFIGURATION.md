@@ -1193,6 +1193,32 @@ border_gradient_angle = 45
 - A colour value can name a slot or a role, such as `"accent accent_bright"`,
   so the gradient follows the theme.
 
+## Dialog and panel borders
+
+The small dialogs, such as rename, confirm and new space, draw their frame in the pane border style, `appearance.border_style`. The larger panels, such as the command palette, the switchers, the Agents view and the settings page, have no frame unless `appearance.frame_panels` is on. Then they take the same frame.
+
+| Option | Values | Default |
+|---|---|---|
+| `appearance.border_style` | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii`, `outer-half-block`, `inner-half-block`, `glyphs` | `rounded` |
+| `appearance.frame_panels` | `true` frames every panel in the border style, `false` leaves the panels without a frame | `false` |
+
+```toml
+[appearance]
+border_style = "double"
+frame_panels = true
+```
+
+How each border style draws a dialog or a framed panel:
+
+- `rounded`, `normal`, `thick`, `double` and `ascii` draw that style's corners and lines.
+- `hidden` draws no frame. The dialog keeps its size, and its title and key hints stay where the frame would carry them.
+- `block`, `outer-half-block` and `inner-half-block` draw the `rounded` frame. A solid frame is too heavy round a dialog of three rows.
+- `glyphs` draws the border of the active glyph set. A part of the border the set does not name is drawn as in `rounded`.
+- With `--ascii-only`, every frame is drawn with `+`, `-` and `|`.
+- At 16 colours a panel always has a frame, because its background is the terminal's own. The frame takes the border style.
+
+Both options are on the settings page, in the Appearance section. A change applies at once.
+
 ## Borderless zoom
 
 `z` zooms the focused pane. By default the zoomed pane keeps its border, and
