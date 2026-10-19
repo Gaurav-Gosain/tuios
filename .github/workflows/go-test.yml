@@ -168,6 +168,43 @@ jobs:
       - name: Test
         run: go test -count=1 -timeout 10m ./internal/transcriptview/
 
+  sketch-fma:
+    name: sketch goldens (${{ matrix.name }})
+    if: github.event_name != 'schedule'
+    # tuios.dev/sketch promises pele's SVG byte for byte. The Go spec lets the
+    # compiler fuse x*y+z into one FMA, which rounds once where JavaScript
+    # rounds twice. arm64 fuses, and so does amd64 at GOAMD64=v3. The unit job
+    # runs on amd64 at v1, which never fuses, so these two run the goldens
+    # where the compiler does. If one fails, wrap the product in float64(),
+    # which the spec says rounds it on its own.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux/arm64
+            runner: ubuntu-24.04-arm
+            goamd64: ""
+          - name: linux/amd64 v3
+            runner: ubuntu-latest
+            goamd64: v3
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/go-test.yml
+
+      - name: Test sketch
+        env:
+          GOAMD64: ${{ matrix.goamd64 }}
+        run: go test -count=1 -timeout 10m ./sketch/...
+
   race:
     name: go test -race ./...
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
