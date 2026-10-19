@@ -3051,6 +3051,15 @@ clean clone, as CI builds it). The change measured 40,738,978 and 38,123,074,
 so it adds 208,896 and 201,360 bytes. No third-party dependency was added. The
 new budgets leave 4,198 and 4,204 bytes of room.
 
+The budgets went to 40,755,464 (linux/amd64) and 38,127,310 (darwin/arm64) for
+the fixes from the review of sketch and tuios mermaid: safe terminal output
+for diagram text and errors, bounded file reads and text canvases, the raster
+work budget in float64 with y clipping, and the theme font check. The build
+before it measured 40,738,978 and 38,123,074 bytes (Go 1.26.9, a clean clone,
+as CI builds it). The change measured 40,751,266 and 38,123,106, so it adds
+12,288 and 32 bytes. No third-party dependency was added. The new budgets
+leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
