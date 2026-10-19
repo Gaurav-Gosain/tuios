@@ -100,6 +100,14 @@ jobs:
             targets: FuzzCharts
           - pkg: loom
             targets: FuzzLayout FuzzIncremental
+          - pkg: sketch
+            targets: FuzzRender
+          - pkg: sketch/internal/layout
+            targets: FuzzCompoundLayout
+          - pkg: sketch/raster
+            targets: FuzzDraw
+          - pkg: sketch/text
+            targets: FuzzDraw
 
     steps:
       - uses: actions/checkout@v7

@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// FuzzRender drives the whole pipeline with text: preprocess, detect, the flowchart
-// lexer and parser, layout and SVG. The seeds are the flowchart corpus and the
-// security templates. A render may fail with a PeleError, but must not panic, must
+// FuzzRender drives the whole pipeline with text: preprocess, detect, each
+// ported type's lexer and parser, layout and SVG. The seeds are the corpus of
+// every ported type and the security templates of each. A render may fail with a PeleError, but must not panic, must
 // stay inert, and must finish in bounded time.
 func FuzzRender(f *testing.F) {
 	for _, c := range loadGoldens(f) {
@@ -17,9 +17,12 @@ func FuzzRender(f *testing.F) {
 			f.Add(c.source)
 		}
 	}
-	for _, template := range flowchartTemplates {
-		f.Add(template(PAYLOADS[1]))
-		f.Add(template("a&b"))
+	for _, templates := range [][]func(string) string{flowchartTemplates, sequenceTemplates, stateTemplates,
+		classTemplates, erTemplates, ganttTemplates, mindmapTemplates} {
+		for _, template := range templates {
+			f.Add(template(PAYLOADS[1]))
+			f.Add(template("a&b"))
+		}
 	}
 	f.Fuzz(func(t *testing.T, src string) {
 		// Large inputs only slow the search down; the limits cover them.
