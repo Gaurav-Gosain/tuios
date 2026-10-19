@@ -20,6 +20,15 @@ var ErrUnsupported = errors.New("text: this diagram type has no text drawing")
 // ErrTooWide is returned when the drawing needs more columns than Options.Cols.
 var ErrTooWide = errors.New("text: the diagram is wider than the columns there are")
 
+// ErrTooLarge is returned when the drawing would need more than MaxCells
+// cells, whatever Options.Cols is.
+var ErrTooLarge = errors.New("text: the diagram needs too many cells")
+
+// MaxCells bounds the cells of one drawing: 4,000,000 cells is about 48 MB.
+// A diagram at the source limits of sketch can ask for far more, for example a
+// wide rank above a deep chain.
+const MaxCells = 4_000_000
+
 // Options say how to draw.
 type Options struct {
 	// Cols bounds the width in cells. 0 means no bound.
@@ -117,8 +126,11 @@ type canvas struct {
 	cells []cell
 }
 
-func newCanvas(w, h int) *canvas {
-	return &canvas{w: w, h: h, cells: make([]cell, w*h)}
+func newCanvas(w, h int) (*canvas, error) {
+	if w <= 0 || h <= 0 || int64(w)*int64(h) > MaxCells {
+		return nil, ErrTooLarge
+	}
+	return &canvas{w: w, h: h, cells: make([]cell, w*h)}, nil
 }
 
 func (c *canvas) at(x, y int) *cell {
@@ -143,13 +155,14 @@ func (c *canvas) stroke(x, y int, mask uint8, weight uint8, role uint8) {
 	}
 }
 
-// put writes a character, over any strokes.
+// put writes a character, over any strokes. A character that could steer
+// the terminal or reorder the text is written as U+FFFD: see safeRune.
 func (c *canvas) put(x, y int, r rune, role uint8) {
 	p := c.at(x, y)
 	if p == nil {
 		return
 	}
-	p.r = r
+	p.r = safeRune(r)
 	p.role = role
 	p.mask = 0
 	p.wide = false
@@ -350,6 +363,21 @@ func runeWidth(c rune) int {
 		return 2
 	}
 	return 1
+}
+
+// safeRune maps the characters a terminal acts on to U+FFFD: C0 controls,
+// DEL, C1 controls, and the bidirectional overrides and isolates (U+202A to
+// U+202E, U+2066 to U+2069). Labels are entity-decoded, so "#27;" in a source
+// is an ESC; without this, a label could set the window title or write the
+// clipboard on the terminal that shows the drawing. Each of these is one cell
+// wide in runeWidth, as U+FFFD is, so the layout does not move.
+func safeRune(r rune) rune {
+	switch {
+	case r < 0x20, r >= 0x7f && r <= 0x9f,
+		r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+		return '\uFFFD'
+	}
+	return r
 }
 
 // width is the cells a string takes.

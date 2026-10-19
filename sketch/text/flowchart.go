@@ -292,7 +292,10 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 	if opt.Cols > 0 && cw > opt.Cols {
 		return nil, ErrTooWide
 	}
-	c := newCanvas(cw, ch)
+	c, err := newCanvas(cw, ch)
+	if err != nil {
+		return nil, err
+	}
 	move := func(r rect) rect { return rect{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy} }
 
 	// Group frames, the outermost first, as lines that edges cross.
