@@ -2982,6 +2982,14 @@ built in until tuios has native plugins. Then the heavy optional parts, the
 diagram types among them, move out of the binary, and the ceiling comes down
 again.
 
+The budgets went to 39,522,568 (linux/amd64) and 37,028,734 (darwin/arm64) for
+`tuios mermaid` and tuios.dev/sketch: the Go port of pele with flowcharts,
+sketch/raster and two Arimo subsets. The build before it measured 38,510,754
+and 36,150,418 bytes (Go 1.26.9, a clean clone, as CI builds it). The change
+measured 39,518,370 and 37,024,530, so it adds 1,007,616 and 874,112 bytes. No
+third-party dependency was added. The new budgets leave 4,198 and 4,204 bytes
+of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
