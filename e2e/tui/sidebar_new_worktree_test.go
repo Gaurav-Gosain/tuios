@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,10 +16,31 @@ import (
 // it: a throwaway repository, a worktree session the CLI made so the rail has
 // a repository row, a right-click on that row, the branch and the session name
 // typed into the dialog, and a daemon whose ls is the authority on what came
-// out of it. The client should end up attached to the session it named.
+// out of it. The client should end up attached to the session it named, with
+// the configured startup layout applied even though the daemon opened its
+// first pane before the client switched to it. Floating stays opt-in too.
 func TestRailRightClickMakesAWorktree(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		layout string
+		tiled  bool
+	}{
+		{name: "bsp", layout: "bsp", tiled: true},
+		{name: "master-stack", layout: "master-stack", tiled: true},
+		{name: "scrolling", layout: "scrolling", tiled: true},
+		{name: "floating", layout: "bsp", tiled: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			railRightClickMakesAWorktree(t, tc.layout, tc.tiled)
+		})
+	}
+}
+
+func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
+	writeConfig(t, base, fmt.Sprintf("[startup]\ntiled = %t\nlayout = %q\n", tiled, startupLayout))
 	repo := testutil.GitRepo(t)
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 
@@ -108,7 +130,37 @@ func TestRailRightClickMakesAWorktree(t *testing.T) {
 		t.Fatalf("the rail never showed the created worktree as the attached session: %v\n%s", err, term.Snapshot())
 	}
 
-	saveFrame(t, term, "rail-worktree-created")
+	wantTiling := "floating"
+	if tiled {
+		wantTiling = "tiling"
+	}
+	waitTilingMode(t, base, "custom", wantTiling)
+	if tiled {
+		waitLayoutMode(t, base, "custom", startupLayout)
+	}
+	rects := waitForSettledGeometryIn(t, base, "custom", 1)
+	info := sessionInfoOf(t, base, "custom")
+	if tiled && rects[0].Height < info.Height*3/4 {
+		t.Fatalf("the worktree's first pane is still floating in %s: %+v in a %dx%d session",
+			startupLayout, rects[0], info.Width, info.Height)
+	}
+	t.Logf("worktree session: %s %s, first pane: %+v\n%s",
+		info.TilingMode, info.LayoutMode, rects[0], term.Snapshot())
+	saveFrame(t, term, "rail-worktree-created-"+wantTiling+"-"+startupLayout)
+
+	// A later daemon-created pane must join the layout without a manual
+	// tiling toggle; checking the session flag alone would miss stale boxes.
+	if tiled {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", "custom"); err != nil {
+			t.Fatalf("open another worktree pane: %v: %s", err, out)
+		}
+		rects = waitForSettledGeometryIn(t, base, "custom", 2)
+		if len(rects) != 2 || geomOverlap(rects[0], rects[1]) {
+			t.Fatalf("the worktree's panes did not tile in %s: %+v", startupLayout, rects)
+		}
+		t.Logf("worktree panes after new-window (%s): %+v", startupLayout, rects)
+		saveFrame(t, term, "rail-worktree-two-panes-"+startupLayout)
+	}
 
 	alive(t, term, "after making a worktree from the rail")
 }

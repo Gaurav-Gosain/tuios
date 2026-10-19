@@ -7,6 +7,27 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Sidebar-created worktrees apply startup tiling
+
+`TestRailRightClickMakesAWorktree` drives the repository row's real right-click
+menu and worktree dialog. It checks the newly named session, not the session
+left behind: its tiling flag, configured layout mode, first pane's height,
+and a second daemon-created pane joining the layout without overlap. BSP,
+master-stack and scrolling are covered; an explicit `startup.tiled = false`
+case must remain floating.
+
+Before adding the `applyStartupToUnarranged` call to `handleWorktreeCreated`,
+the BSP case was run against a binary built from `50972f48`. It failed with
+`custom is "floating" with 1 windows, want "tiling" from [startup] tiled`.
+With the call wired in, all four cases pass, including three repeated runs.
+The related worktree-refusal, session-switcher create, and fresh/detached
+startup-tiling tests pass too.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
+-run '^TestRailRightClickMakesAWorktree$' -v .` from `e2e/tui`. Setting
+`TUIOS_E2E_FRAMES` to an existing directory saves plain and styled frames
+of the created session and its two tiled panes for each layout.
+
 ## PR #626: a rail must not resize a shared session
 
 `TestSidebarSessionDoesNotShrinkAnotherViewer` attaches a 120x40 ordinary

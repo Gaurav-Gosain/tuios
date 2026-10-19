@@ -310,6 +310,10 @@ func (m *OS) handleWorktreeCreated(msg worktreeCreatedMsg) tea.Cmd {
 	m.ShowNotification(note+", attaching.", "info", m.Settings.NotificationDuration)
 	if err := m.SwitchToSession(msg.Session); err != nil {
 		m.ShowNotification("Could not attach to "+msg.Session+": "+err.Error(), "warning", m.Settings.NotificationDuration*2)
+	} else {
+		// The daemon already opened the worktree's first pane, but nobody
+		// has arranged it. Apply [startup] just as other session creates do.
+		m.applyStartupToUnarranged()
 	}
 	// The listing the rail reads is refreshed off this goroutine; the new
 	// session joins its repository's group when it lands.
