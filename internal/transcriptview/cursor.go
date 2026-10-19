@@ -55,11 +55,12 @@ func cursorLine(r *reader, line []byte, off int64) (decoded, bool) {
 			case "tool_use":
 				name, in := b.str("name"), args(b["input"])
 				class := cursorClass(name)
-				if class == classEdit && in.str("old_string", "old_str") == "" {
+				if class == classEdit && in.str("old_string", "old_str", "oldString") == "" {
 					// Cursor's edit_file sends the edit as code_edit, the new
 					// text with markers for the code it keeps, and no old
-					// text. It shows as the text it writes.
-					class, in = classWrite, jobj{"target_file": fileOf(in), "content": in.str("code_edit")}
+					// text. A search_replace with empty old text makes a
+					// file of its new text. Each shows as the text it writes.
+					class, in = classWrite, jobj{"target_file": fileOf(in), "content": in.str("code_edit", "new_string", "newString")}
 				}
 				out = append(out, callEntry(name, b.str("id"), class, in)...)
 			case "tool_result":
