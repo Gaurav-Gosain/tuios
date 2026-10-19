@@ -24,7 +24,7 @@ func TestDepsAffected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := BuildDeps(doc)
+	d := buildDeps(doc)
 	got := d.Affected([]string{"/failed"})
 	want := []string{"/children/0/children/0/children/1", "/children/0/children/0/children/4"}
 	if !reflect.DeepEqual(got, want) {
@@ -42,7 +42,7 @@ func TestDepsAffected(t *testing.T) {
 		t.Errorf("the dashboard needs no clock, got %v", d.Clock())
 	}
 	clock, _ := tml.Parse([]byte(`<tml version="1"><state>{"items":[{"at":1}]}</state><list items="state.items"><text>{ago(item.at)}</text></list></tml>`), nil)
-	cd := BuildDeps(clock)
+	cd := buildDeps(clock)
 	if !reflect.DeepEqual(cd.Clock(), []string{"/children/0/children/0"}) {
 		t.Errorf("clock nodes %v", cd.Clock())
 	}
@@ -73,7 +73,7 @@ func TestActions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", src, err)
 		}
-		res, err := RunActions(doc, store, view, "/children/0/children/2", acts, env)
+		res, err := runActions(doc, store, view, "/children/0/children/2", acts, env)
 		if err != nil {
 			t.Fatalf("%s: %v", src, err)
 		}
@@ -111,11 +111,11 @@ func TestActions(t *testing.T) {
 		t.Errorf("effects %+v", res.Effects)
 	}
 	rows := []any{map[string]any{"ms": 5.0, "t": "b"}, map[string]any{"ms": 50.0, "t": "A"}, map[string]any{"t": "c"}}
-	sorted := SortRows(rows, SortSpec{"ms", true})
+	sorted := sortRows(rows, SortSpec{"ms", true})
 	if sorted[0].(map[string]any)["ms"] != 50.0 || sorted[2].(map[string]any)["t"] != "c" {
 		t.Errorf("sorted %v", sorted)
 	}
-	if got := FilterRows(rows, "A"); len(got) != 1 {
+	if got := filterRows(rows, "A"); len(got) != 1 {
 		t.Errorf("filtered %v", got)
 	}
 }
@@ -128,7 +128,7 @@ func TestDepsDynamicIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := BuildDeps(doc)
+	d := buildDeps(doc)
 	if got := d.Of("/children/0"); !reflect.DeepEqual(got, []string{"/i", "/items"}) {
 		t.Errorf("deps %v", got)
 	}
@@ -138,7 +138,7 @@ func TestDepsDynamicIndex(t *testing.T) {
 }
 
 func TestExpansion(t *testing.T) {
-	e := NewExpansion(nil)
+	e := newExpansion(nil)
 	if !e.Take(1999) || e.Take(2) || !e.Take(1) || e.Left() != 0 {
 		t.Error("the expansion budget does not hold 2,000 nodes")
 	}

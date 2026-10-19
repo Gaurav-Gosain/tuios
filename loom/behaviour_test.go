@@ -4,10 +4,12 @@ import (
 	"image"
 	"maps"
 	"os"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/tml"
 )
 
@@ -34,12 +36,12 @@ func fileSurface(t testing.TB, path string) *Surface {
 }
 
 // rows returns the text of a buffer, one string per row.
-func rows(buf *uv.Buffer) []string {
+func rows(buf *Buffer) []string {
 	var out []string
 	for y := 0; y < buf.Height(); y++ {
 		var b strings.Builder
 		for x := 0; x < buf.Width(); x++ {
-			if c := buf.CellAt(x, y); c.Width > 0 {
+			if c := buf.b.CellAt(x, y); c.Width > 0 {
 				b.WriteString(c.Content)
 			}
 		}
@@ -48,7 +50,7 @@ func rows(buf *uv.Buffer) []string {
 	return out
 }
 
-func screenHas(t *testing.T, buf *uv.Buffer, want string) {
+func screenHas(t *testing.T, buf *Buffer, want string) {
 	t.Helper()
 	for _, r := range rows(buf) {
 		if strings.Contains(r, want) {
@@ -59,7 +61,7 @@ func screenHas(t *testing.T, buf *uv.Buffer, want string) {
 }
 
 // rowWith returns the row that holds s, or -1.
-func rowWith(buf *uv.Buffer, s string) int {
+func rowWith(buf *Buffer, s string) int {
 	for i, r := range rows(buf) {
 		if strings.Contains(r, s) {
 			return i
@@ -94,7 +96,7 @@ func sameAsFresh(t testing.TB, s *Surface, w, h int) {
 	want := f.Render(w, h)
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			a, b := got.CellAt(x, y), want.CellAt(x, y)
+			a, b := got.b.CellAt(x, y), want.b.CellAt(x, y)
 			if a.Content != b.Content || a.Width != b.Width || !a.Style.Equal(&b.Style) {
 				t.Fatalf("cell %d,%d: incremental %q %+v, fresh %q %+v\nincremental:\n%s\nfresh:\n%s", x, y,
 					a.Content, a.Style, b.Content, b.Style, strings.Join(rows(got), "\n"), strings.Join(rows(want), "\n"))
@@ -369,4 +371,147 @@ func TestRelayoutWithoutRebuild(t *testing.T) {
 		t.Fatalf("the patch built %d boxes, want only the text", s.stats.built)
 	}
 	sameAsFresh(t, s, 40, 4)
+}
+
+// TestHugeBoundNumbers binds every number that sizes something to values a
+// hostile document can send: 1e10, -1e10, 1e308 and NaN. tml.Check does not
+// range-check a binding, so loom must. Before the clamp, bins of 1e10 asked
+// plot for 80 GB, which the Go runtime ends with a fatal error. The test
+// runs under the limits of the machine's test wrapper (ulimit -v and
+// GOMEMLIMIT), and also counts what the render allocates.
+func TestHugeBoundNumbers(t *testing.T) {
+	for _, v := range []string{"1e10", "-1e10", "1e308", "'NaN'"} {
+		src := `<tml version="1"><state>{"v": [1, 2, 3, 4, 5, 6, 7, 8]}</state><col gap="{` + v + `}">
+  <histogram values="state.v" bins="{` + v + `}"/>
+  <textarea name="t" label="t" rows="{` + v + `}"/>
+  <heading level="{` + v + `}">h</heading>
+  <tree items='[{"name": "a", "children": [{"name": "b"}]}]' open="{` + v + `}"/>
+  <row gap="{` + v + `}"><text>a</text></row>
+  <line data="state.v" y="` + strings.Repeat("a,", 5000) + `a"/>
+  <slider name="s" label="s" value="{` + v + `}" min="{` + v + `}" max="{` + v + `}"/>
+</col></tml>`
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		s := mustSurface(t, src)
+		buf := s.Render(80, 40)
+		runtime.ReadMemStats(&after)
+		checkFits(t, buf, 80, 40)
+		if used := after.TotalAlloc - before.TotalAlloc; used > 64<<20 {
+			t.Errorf("value %s: one render allocated %d MB", v, used>>20)
+		}
+	}
+}
+
+// TestHiddenTakesNoInput hides a button with show: its key, tab and a click
+// must not reach it. Before the fix the hidden box's children were still
+// laid out and joined the focus list, so d fired delete with nothing on
+// the screen.
+func TestHiddenTakesNoInput(t *testing.T) {
+	s := mustSurface(t, `<tml version="1"><state>{"confirm": false}</state><col>
+  <col show="state.confirm"><button key="d" on-press="emit('delete')">Delete</button></col>
+  <button key="k" on-press="emit('keep')">Keep</button>
+</col></tml>`)
+	s.Render(30, 4)
+	if res, _ := s.Key("d"); len(res.Effects) != 0 {
+		t.Fatalf("d on a hidden button emitted %+v", res.Effects)
+	}
+	if res, _ := s.Mouse(Mouse{X: 2, Y: 0, Button: MouseLeft}); len(res.Effects) != 0 {
+		t.Fatalf("a click on a hidden button emitted %+v", res.Effects)
+	}
+	for _, b := range s.focus {
+		if bw, ok := b.w.(*buttonWidget); ok && bw.key == "d" {
+			t.Fatal("the hidden button is in the focus order")
+		}
+	}
+	if err := s.Set("state.confirm", true); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(30, 4)
+	if res, _ := s.Key("d"); len(res.Effects) != 1 || res.Effects[0].Name != "delete" {
+		t.Fatalf("d on the shown button: %+v", res.Effects)
+	}
+}
+
+// TestBudgetPerBox renders a list whose bindings together pass one frame's
+// 10,000 steps. With one budget for the frame the last items showed "!"
+// in a full render and their values after an incremental one. Each box
+// now has its own budget, so every item shows its value either way.
+func TestBudgetPerBox(t *testing.T) {
+	var items []string
+	for i := range 1500 {
+		items = append(items, `{"a": "item`+strconv.Itoa(i)+`"}`)
+	}
+	s := mustSurface(t, `<tml version="1"><state>{"rows": [`+strings.Join(items, ",")+`]}</state>
+<list items="state.rows"><text>{item.a} {upper(item.a)} {lower(item.a)}</text></list></tml>`)
+	s.Render(40, 10)
+	bad := 0
+	var walk func(b *box)
+	walk = func(b *box) {
+		if tw, ok := b.w.(*textWidget); ok {
+			for _, sp := range tw.spans {
+				if strings.Contains(sp.text, "!") {
+					bad++
+				}
+			}
+		}
+		for _, k := range b.kids {
+			walk(k)
+		}
+	}
+	walk(s.root)
+	if bad > 0 {
+		t.Fatalf("%d items ran out of budget", bad)
+	}
+}
+
+// TestClockTick: a binding that calls ago() changes only after Tick, and
+// Tick evaluates only the boxes that call it.
+func TestClockTick(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	doc, _, err := tml.Check([]byte(`<tml version="1"><state>{"t": 999940}</state><col><text>{ago(state.t)}</text><text>static</text></col></tml>`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := New(doc, &Options{Now: func() time.Time { return now }})
+	if !s.NeedsClock() {
+		t.Fatal("a surface with ago() needs no clock")
+	}
+	first := strings.TrimSpace(rows(s.Render(20, 2))[0])
+	now = now.Add(10 * time.Minute)
+	s.Render(20, 2)
+	if got := strings.TrimSpace(rows(s.Render(20, 2))[0]); got != first {
+		t.Fatalf("the text changed without a tick: %q", got)
+	}
+	s.Tick()
+	second := strings.TrimSpace(rows(s.Render(20, 2))[0])
+	if second == first || s.stats.built != 1 {
+		t.Fatalf("after a tick: %q (was %q), %d boxes built", second, first, s.stats.built)
+	}
+	plain := mustSurface(t, `<tml version="1"><text>static</text></tml>`)
+	if plain.NeedsClock() {
+		t.Fatal("a surface without ago() asks for a clock")
+	}
+}
+
+// TestLinkNeedsConfirm: a click on a link comes back as a link effect for
+// the host to confirm, and no OSC 8 link reaches the cells unless the host
+// asks for it.
+func TestLinkNeedsConfirm(t *testing.T) {
+	src := `<tml version="1"><text>see <a href="https://tuios.dev">the site</a></text></tml>`
+	s := mustSurface(t, src)
+	buf := s.Render(30, 1)
+	for x := 0; x < 30; x++ {
+		if c := buf.b.CellAt(x, 0); c.Link.URL != "" {
+			t.Fatalf("cell %d carries an OSC 8 link", x)
+		}
+	}
+	res, _ := s.Mouse(Mouse{X: 5, Y: 0, Button: MouseLeft})
+	if len(res.Effects) != 1 || res.Effects[0].Action != "link" || res.Effects[0].Name != "https://tuios.dev" {
+		t.Fatalf("a click on the link gave %+v", res.Effects)
+	}
+	doc, _, _ := tml.Check([]byte(src), nil)
+	s2, _ := New(doc, &Options{Hyperlinks: true})
+	if c := s2.Render(30, 1).b.CellAt(5, 0); c.Link.URL != "https://tuios.dev" {
+		t.Fatalf("with Hyperlinks the cell has link %q", c.Link.URL)
+	}
 }

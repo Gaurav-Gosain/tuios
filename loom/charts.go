@@ -54,7 +54,7 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		w.height, w.width = 1, len(w.values)
 	case "histogram":
 		w.values = numbers(s.data(n, "values", vars), "")
-		w.bins = int(s.num(n, "bins", vars, 0))
+		w.bins = s.count(n, "bins", vars, 0, 0, 200)
 		w.height = 5
 	case "bar":
 		rows := s.data(n, "data", vars)
@@ -69,6 +69,11 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 	case "line", "area":
 		rows := s.data(n, "data", vars)
 		fields := strings.Split(n.AttrString("y"), ",")
+		// Each field allocates a value per row, so the list is bounded;
+		// the series roles cycle after six anyway.
+		if len(fields) > maxSeries {
+			fields = fields[:maxSeries]
+		}
 		for i, f := range fields {
 			sr := plot.Series{Name: strings.TrimSpace(f), Values: numbers(rows, strings.TrimSpace(f))}
 			if i == 0 && validRole(w.role) && w.role != "" {
@@ -171,6 +176,9 @@ func pivot(rows []any, xf, yf, vf string) ([][]float64, []string, []string) {
 	}
 	return grid, ys, xs
 }
+
+// maxSeries bounds the y fields of a line or an area.
+const maxSeries = 12
 
 // numbers reads a data array as numbers: the elements themselves, or the
 // field of each row. A row with no such field, and anything that is not a

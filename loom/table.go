@@ -69,14 +69,14 @@ func (s *Surface) buildTable(b *box, vars map[string]any) widget {
 	if !ok {
 		filter = s.str(n, "filter", vars)
 	}
-	rows = FilterRows(rows, filter)
+	rows = filterRows(rows, filter)
 	if spec, ok := lookup(s.view.Sort, b); ok {
 		w.sort = spec
 	} else {
-		w.sort, _ = ParseSort(n.AttrString("sort"))
+		w.sort, _ = parseSort(n.AttrString("sort"))
 	}
 	if w.sort.Field != "" {
-		rows = SortRows(rows, w.sort)
+		rows = sortRows(rows, w.sort)
 	}
 	w.rows = rows
 	if cur, ok := lookup(s.view.Cursor, b); ok {
@@ -208,6 +208,11 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	if len(w.widths) != len(w.cols) || r.Dy() <= 0 {
 		return
 	}
+	// The rows in view format on a budget of their own, the same at every
+	// paint.
+	frame := s.budget
+	s.budget = tml.NewBudget()
+	defer func() { s.budget = frame }()
 	g := s.g
 	for i, col := range w.cols {
 		t := strings.ToUpper(col.title)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"tuios.dev/tml"
 )
@@ -107,5 +108,34 @@ func TestRenderBudget(t *testing.T) {
 	}
 	if s.stats.cells > 200 {
 		t.Errorf("the patch wrote %d cells, want at most the 200 of the stats row", s.stats.cells)
+	}
+}
+
+// TestDeepRowChainBudget holds a chain of nested rows, as deep as tml.Check accepts, under 400 bytes
+// and within tml's depth limit, to a render budget. Without the measure
+// cache each row measured its child twice, so the chain cost 2^depth measures.
+func TestDeepRowChainBudget(t *testing.T) {
+	// The deepest chain tml.Check accepts.
+	var s *Surface
+	depth := 0
+	for n := 32; n > 0 && s == nil; n-- {
+		src := `<tml version="1">` + strings.Repeat("<row>", n) + `<text>x</text>` + strings.Repeat("</row>", n) + `</tml>`
+		if doc, _, err := tml.Check([]byte(src), nil); err == nil {
+			s, _ = New(doc, nil)
+			depth = n
+		}
+	}
+	if depth < 25 {
+		t.Fatalf("tml accepts a row chain only %d deep", depth)
+	}
+	start := time.Now()
+	s.Render(120, 40)
+	took := time.Since(start)
+	t.Logf("a %d-deep row chain: %d measures, %v", depth, s.stats.measures, took)
+	if s.stats.measures > 200 {
+		t.Errorf("the chain took %d measures, want at most 200", s.stats.measures)
+	}
+	if !testing.Short() && took > 50*time.Millisecond {
+		t.Errorf("the chain took %v, the budget is 50 ms", took)
 	}
 }

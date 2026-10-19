@@ -1,9 +1,12 @@
 package loom
 
 import (
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 
+	"tuios.dev/plot"
 	"tuios.dev/tml"
 )
 
@@ -48,7 +51,7 @@ func (s *Surface) inline(n *tml.Node, vars map[string]any, base style) []span {
 			case "a":
 				cs.fg = "info"
 				cs = cs.with(attrUnderline)
-				if href := c.AttrString("href"); strings.HasPrefix(href, "https:") {
+				if href := c.AttrString("href"); strings.HasPrefix(href, "https:") || strings.HasPrefix(href, "file:") {
 					cs.link = href
 				}
 			}
@@ -76,8 +79,11 @@ func (s *Surface) plainText(n *tml.Node, vars map[string]any) string {
 	return b.String()
 }
 
-// validRole reports whether r is a role a palette holds.
-func validRole(r string) bool { return roleIndex(r) >= 0 }
+// validRole reports whether a document may name r: a TML role. loom's own
+// roles (track, cursor, pill, heat1 to heat5) are for its own marks.
+func validRole(r string) bool { return r != "" && slices.Contains(docRoles, r) }
+
+var docRoles = tml.Roles()
 
 // roleOr returns the role attribute when it is valid, else def.
 func (s *Surface) roleOr(n *tml.Node, vars map[string]any, def string) string {
@@ -221,7 +227,7 @@ func (t *textWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 
 func (s *Surface) buildHeading(b *box, vars map[string]any) widget {
 	n := b.src
-	level := int(s.num(n, "level", vars, 1))
+	level := s.count(n, "level", vars, 1, 1, 3)
 	st := style{fg: s.roleOr(n, vars, "fg"), attrs: attrBold}
 	if level >= 3 {
 		st.fg = s.roleOr(n, vars, "dim")
@@ -387,7 +393,7 @@ func (s *Surface) buildCode(b *box, vars map[string]any) widget {
 	text = strings.TrimSuffix(strings.TrimPrefix(text, "\n"), "\n")
 	w := &codeWidget{lines: strings.Split(text, "\n"), diff: n.Type == "diff"}
 	w.number = s.flag(n, "lines", vars, false)
-	w.from = max(1, int(s.num(n, "from", vars, 1)))
+	w.from = s.count(n, "from", vars, 1, 1, 1e9)
 	return w
 }
 
@@ -545,7 +551,7 @@ const fieldLabelW = 14
 func (s *Surface) buildField(b *box, vars map[string]any) widget {
 	n := b.src
 	w := &fieldWidget{kind: n.Type, label: s.str(n, "label", vars), placeholder: s.str(n, "placeholder", vars),
-		disabled: s.flag(n, "disabled", vars, false), rows: max(1, int(s.num(n, "rows", vars, 3)))}
+		disabled: s.flag(n, "disabled", vars, false), rows: s.count(n, "rows", vars, 3, 1, 100)}
 	var v any
 	if p := n.AttrString("bind"); p != "" {
 		if ptr, err := tml.PathPointer(p); err == nil {
@@ -645,17 +651,17 @@ func (w *fieldWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		}
 		c.drawLine(x, r.Min.Y, right-x, plainLine(mark, style{fg: "accent-bright"}), alignLeft)
 	case "slider":
-		val := strconv.FormatFloat(w.num, 'f', -1, 64)
-		if w.hi == 100 && w.lo == 0 || w.hi <= 50 {
-			val += "%"
+		if math.IsNaN(w.num) || math.IsInf(w.num, 0) {
+			w.num = w.lo
 		}
+		val := plot.Compact(w.num)
 		track := right - x - width(val) - 2
 		if track < 3 {
 			c.drawLine(x, r.Min.Y, right-x, plainLine(val, style{fg: ink}), alignLeft)
 			return
 		}
 		f := 0.0
-		if w.hi > w.lo {
+		if w.hi > w.lo && !math.IsInf(w.hi-w.lo, 0) {
 			f = max(0, min(1, (w.num-w.lo)/(w.hi-w.lo)))
 		}
 		pos := int(f * float64(track-1))
@@ -695,7 +701,7 @@ func (s *Surface) buildTree(b *box, vars map[string]any) widget {
 	if kids == "" {
 		kids = "children"
 	}
-	open := int(s.num(n, "open", vars, 1))
+	open := s.count(n, "open", vars, 1, 0, 32)
 	w := &treeWidget{}
 	var walk func(items []any, depth int)
 	walk = func(items []any, depth int) {

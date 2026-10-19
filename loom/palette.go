@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/plot"
 	"tuios.dev/tml"
 )
 
@@ -37,19 +38,22 @@ func Depths() []Depth { return []Depth{TrueColor, Color256, Color16, ASCII} }
 
 // The roles loom adds to the TML roles. A document cannot name them; loom
 // draws its own marks with them.
+//
+// Roles are plain strings in loom, the names plot.Role holds; Track and
+// the heat ramp are plot's own.
 const (
-	RoleTrack  = "track"  // the empty part of a gauge or a bar
-	RoleCursor = "cursor" // the ground of the cursor row
-	RolePill   = "pill"   // text on an accent ground
+	RoleTrack  = string(plot.Track) // the empty part of a gauge or a bar
+	RoleCursor = "cursor"           // the ground of the cursor row
+	RolePill   = "pill"             // text on an accent ground
 )
 
 // The heat ramp of a heatmap, low to high. tuios.dev/plot names them.
 const (
-	RoleHeat1 = "heat1"
-	RoleHeat2 = "heat2"
-	RoleHeat3 = "heat3"
-	RoleHeat4 = "heat4"
-	RoleHeat5 = "heat5"
+	RoleHeat1 = string(plot.Heat1)
+	RoleHeat2 = string(plot.Heat2)
+	RoleHeat3 = string(plot.Heat3)
+	RoleHeat4 = string(plot.Heat4)
+	RoleHeat5 = string(plot.Heat5)
 )
 
 // roleNames is every role a palette holds: the TML roles, then loom's own.

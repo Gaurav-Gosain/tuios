@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/tml"
 )
 
@@ -77,7 +76,7 @@ func loadCases(t *testing.T, dir string) []goldenCase {
 
 // render draws a case at one depth. A framed case draws the surface inside
 // a host frame, as a popup shows it.
-func (c goldenCase) render(t testing.TB, d Depth) *uv.Buffer {
+func (c goldenCase) render(t testing.TB, d Depth) *Buffer {
 	t.Helper()
 	src, err := os.ReadFile(c.path)
 	if err != nil {
@@ -100,7 +99,7 @@ func (c goldenCase) render(t testing.TB, d Depth) *uv.Buffer {
 	if !c.frame {
 		return s.Render(c.w, c.h)
 	}
-	out := uv.NewBuffer(c.w, c.h)
+	out := NewBuffer(c.w, c.h)
 	owner := ""
 	if c.owner {
 		owner = "from claude in api-auth"
@@ -109,9 +108,9 @@ func (c goldenCase) render(t testing.TB, d Depth) *uv.Buffer {
 	inner := s.Render(c.w-4, c.h-2)
 	for y := 0; y < inner.Height(); y++ {
 		for x := 0; x < inner.Width(); x++ {
-			if cell := inner.CellAt(x, y); cell != nil && cell.Width > 0 {
+			if cell := inner.b.CellAt(x, y); cell != nil && cell.Width > 0 {
 				cp := *cell
-				out.SetCell(x+2, y+1, &cp)
+				out.b.SetCell(x+2, y+1, &cp)
 			}
 		}
 	}
@@ -159,7 +158,7 @@ func compareGolden(t *testing.T, path, got string) {
 
 // checkFits asserts that every row of the buffer is exactly w cells wide by
 // the width of its graphemes, as ansi.StringWidth counts them.
-func checkFits(t testing.TB, buf *uv.Buffer, w, h int) {
+func checkFits(t testing.TB, buf *Buffer, w, h int) {
 	t.Helper()
 	if h == 0 || w == 0 {
 		// An empty buffer has no rows to measure its width by.
@@ -174,7 +173,7 @@ func checkFits(t testing.TB, buf *uv.Buffer, w, h int) {
 	for y := 0; y < h; y++ {
 		total := 0
 		for x := 0; x < w; x++ {
-			c := buf.CellAt(x, y)
+			c := buf.b.CellAt(x, y)
 			if c.Width == 0 {
 				continue
 			}
@@ -196,7 +195,7 @@ func checkFits(t testing.TB, buf *uv.Buffer, w, h int) {
 
 // dumpBuffer writes the text of a buffer between bars, then a letter per
 // cell for its style, with a legend that names each style by its roles.
-func dumpBuffer(buf *uv.Buffer, p *Palette) string {
+func dumpBuffer(buf *Buffer, p *Palette) string {
 	roleOf := map[color.Color]string{}
 	for _, r := range roleNames {
 		if c := p.Color(r); c != nil {
@@ -221,7 +220,7 @@ func dumpBuffer(buf *uv.Buffer, p *Palette) string {
 		text.WriteByte('|')
 		styles.WriteByte('|')
 		for x := 0; x < buf.Width(); x++ {
-			c := buf.CellAt(x, y)
+			c := buf.b.CellAt(x, y)
 			if c.Width == 0 {
 				continue
 			}

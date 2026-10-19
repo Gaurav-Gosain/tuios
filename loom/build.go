@@ -55,6 +55,12 @@ func (s *Surface) build(n *tml.Node, ptr string, sc *scope, parent *box) []*box 
 // buildOne builds the box of one node in a scope, or nil when its if is
 // false.
 func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box {
+	// Each box spends its own step budget, so it evaluates to the same
+	// result in a full render and when it is built again alone. The work
+	// of a frame is then at most the boxes times tml.ExprSteps.
+	frame := s.budget
+	s.budget = tml.NewBudget()
+	defer func() { s.budget = frame }()
 	vars := s.vars(sc)
 	if !s.truthy(n, "if", vars) {
 		return nil
@@ -74,8 +80,8 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	b.minH = parseSize(n.AttrString("min-h"))
 	b.maxH = parseSize(n.AttrString("max-h"))
 	b.pad = parsePad(n.AttrString("pad"))
-	b.gap = clampInt(int(s.num(n, "gap", vars, 0)), 0, 100)
-	b.grow = clampInt(int(s.num(n, "grow", vars, 0)), 0, 100)
+	b.gap = s.count(n, "gap", vars, 0, 0, 100)
+	b.grow = s.count(n, "grow", vars, 0, 0, 100)
 	b.align = n.AttrString("align")
 	b.justify = n.AttrString("justify")
 

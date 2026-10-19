@@ -3,9 +3,9 @@
 [![Go Reference](https://pkg.go.dev/badge/tuios.dev/loom.svg)](https://pkg.go.dev/tuios.dev/loom)
 
 `tuios.dev/loom` draws [TML](https://pkg.go.dev/tuios.dev/tml) documents into
-terminal cells. You give it a document and a size. It gives you an
-[ultraviolet](https://github.com/charmbracelet/ultraviolet) cell buffer, which
-renders to ANSI text or to plain text.
+terminal cells. You give it a document and a size. It gives you a cell
+buffer, which renders to ANSI text or to plain text, and whose cells a host
+can read to composite.
 
 ```go
 doc, _, err := tml.Check(src, nil)
@@ -76,12 +76,31 @@ A button's `key` works from anywhere on the surface. `tab` and `shift+tab`
 move the focus. The focused table or list takes the arrow keys, `enter` and
 `s` (sort by the next column).
 
+## Links and time
+
+A click on an `a` link comes back as a `link` Effect, so the host can ask the
+person before it opens anything. loom writes no OSC 8 link unless the host
+sets `Options.Hyperlinks`.
+
+A binding that calls `ago()` changes with the clock. `NeedsClock` says
+whether a surface has one, and the host then calls `Tick` about once a
+minute. `Tick` evaluates only those boxes. A surface without `ago()` needs
+no timer.
+
 ## Limits
 
-loom draws any tree without a panic, valid or not, at any size. It drops
-control characters at the cell. The store comes from `tml.StoreFor`, so a
-patch cannot grow `each`, `list` or the rows past the document limits. Every
-binding of a frame shares one step budget.
+- loom draws any tree, valid or not, at any size up to 4096 by 4096 cells,
+  without a panic. Layout measures each box once per width in a pass, so
+  deep nesting costs a bounded number of measures.
+- Every number that sizes something, such as `bins` or `rows`, is clamped
+  to its range, and NaN and infinities take the default. A document cannot
+  make loom allocate without bound.
+- It drops control characters at the cell.
+- The store comes from `tml.StoreFor`, so a patch cannot grow `each`,
+  `list` or the rows past the document limits.
+- Each box has its own step budget of `tml.ExprSteps`, so a box shows the
+  same values in a full render and when it is built again alone. A table's
+  rows in view format on a budget of their own.
 
 The package imports `tuios.dev/tml`, `tuios.dev/plot`, ultraviolet and
 `charmbracelet/x/ansi`. It imports no tuios package.

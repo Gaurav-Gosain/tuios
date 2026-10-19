@@ -99,6 +99,24 @@ func bounds(lo, hi size, parent int) (int, int) {
 // included. The width is at most maxW.
 func (s *Surface) measure(b *box, maxW int) (int, int) {
 	maxW = max(maxW, 0)
+	// One layout pass measures a box at a width once. Without the cache a
+	// chain of rows costs 2^depth measures: each row measures a child to
+	// share the width, then again for its height.
+	if b.mgen != s.gen {
+		b.mgen, b.mcache = s.gen, b.mcache[:0]
+	}
+	for _, e := range b.mcache {
+		if e[0] == maxW {
+			return e[1], e[2]
+		}
+	}
+	w, h := s.measureNew(b, maxW)
+	b.mcache = append(b.mcache, [3]int{maxW, w, h})
+	return w, h
+}
+
+func (s *Surface) measureNew(b *box, maxW int) (int, int) {
+	s.stats.measures++
 	if fixed := b.width.resolve(maxW); fixed >= 0 {
 		maxW = min(maxW, fixed)
 	}
@@ -236,6 +254,7 @@ func (s *Surface) gridCols(b *box) int {
 // layoutRoot places the whole tree in the surface.
 func (s *Surface) layoutRoot() {
 	s.focus = s.focus[:0]
+	s.gen++
 	s.root.rect = rect(0, 0, s.w, s.h)
 	s.root.ground = s.ground()
 	// The document's one top box fills the surface, unless it asks for a
@@ -260,7 +279,12 @@ func (s *Surface) place(b *box, r Rect) {
 	if b.ground == "" && b.parent != nil {
 		b.ground = b.parent.ground
 	}
-	if focusable(s, b) {
+	if b.hidden {
+		// show is false: the box keeps its space, and nothing inside it is
+		// laid out, takes the focus, a key or a click.
+		return
+	}
+	if focusable(s, b) && visible(b) {
 		s.focus = append(s.focus, b)
 	}
 	in := b.inner()
@@ -476,4 +500,15 @@ func (s *Surface) splitRatio(b *box) float64 {
 		return f
 	}
 	return 0.5
+}
+
+// visible reports whether some of b is on the screen: its rectangle meets
+// the viewport of every box above it. A box that a short column squeezed
+// to nothing, or that a scroll moved out of view, is not.
+func visible(b *box) bool {
+	r := b.rect
+	for p := b.parent; p != nil && !r.Empty(); p = p.parent {
+		r = r.Intersect(viewport(p))
+	}
+	return !r.Empty()
 }

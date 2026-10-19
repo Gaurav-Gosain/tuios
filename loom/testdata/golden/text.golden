@@ -33,8 +33,8 @@ f: fg=fg bg=panel strike
 g: fg=info bg=panel
 h: fg=success bg=panel
 i: fg=accent-bright bg=panel bold
-j: fg=info bg=panel underline link
-k: bg=panel underline link
+j: fg=info bg=panel underline
+k: bg=panel underline
 l: fg=dim bg=panel
 m: fg=mute bg=panel
 === 256 40x12
@@ -72,8 +72,8 @@ f: fg=fg bg=panel strike
 g: fg=info bg=panel
 h: fg=success bg=panel
 i: fg=accent-bright bg=panel bold
-j: fg=info bg=panel underline link
-k: bg=panel underline link
+j: fg=info bg=panel underline
+k: bg=panel underline
 l: fg=dim bg=panel
 m: fg=mute bg=panel
 === 16 40x12
@@ -110,8 +110,8 @@ e: fg=fg strike
 f: fg=info
 g: fg=success
 h: fg=accent-bright bold
-i: fg=info underline link
-j: underline link
+i: fg=info underline
+j: underline
 k: fg=dim
 l: fg=mute
 === ascii 40x12
@@ -130,7 +130,7 @@ l: fg=mute
 --- styles
 |                aaaa  bbbbbb  ccccc     |
 |dddddd                         aaaaaa   |
-|    eeeeee                              |
+|    cccccc                              |
 |                                        |
 |                                        |
 |                                        |
@@ -144,4 +144,3 @@ a: bold
 b: italic
 c: underline
 d: strike
-e: underline link

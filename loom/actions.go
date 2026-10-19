@@ -14,8 +14,8 @@ type SortSpec struct {
 	Desc  bool
 }
 
-// ParseSort parses field, field:asc or field:desc.
-func ParseSort(s string) (SortSpec, bool) {
+// parseSort parses field, field:asc or field:desc.
+func parseSort(s string) (SortSpec, bool) {
 	f, dir, has := strings.Cut(s, ":")
 	if f == "" || (has && dir != "asc" && dir != "desc") {
 		return SortSpec{}, false
@@ -49,7 +49,7 @@ func NewView() *View {
 
 // Effect is an action that leaves the document: the host carries it out.
 type Effect struct {
-	Action string // emit, close, copy, open, pane
+	Action string // emit, close, copy, open, pane, or link (a click on a link, for the host to confirm)
 	Name   string // emit: the event name; open: the path; pane: the verb
 	Value  any
 	// HasValue tells close(null) from close().
@@ -63,14 +63,14 @@ type Result struct {
 	Effects []Effect
 }
 
-// RunActions runs the actions of one attribute. source is the JSON Pointer
+// runActions runs the actions of one attribute. source is the JSON Pointer
 // of the node that holds the attribute; sort without a table id and tab use
 // it to find their target. env supplies event, form and the other roots;
-// RunActions adds state.
+// runActions adds state.
 //
 // Local actions apply in order, so set('a', 1); emit('x', state.a) emits 1.
 // Effects for the owner and the host come back in Result in order.
-func RunActions(doc *tml.Node, store *tml.Store, view *View, source string, actions []tml.Action, env *tml.Env) (Result, error) {
+func runActions(doc *tml.Node, store *tml.Store, view *View, source string, actions []tml.Action, env *tml.Env) (Result, error) {
 	var res Result
 	if env == nil {
 		env = &tml.Env{}
@@ -145,7 +145,7 @@ func RunActions(doc *tml.Node, store *tml.Store, view *View, source string, acti
 			key := nodeKey(table, tptr)
 			cur, ok := view.Sort[key]
 			if !ok {
-				cur, _ = ParseSort(table.AttrString("sort"))
+				cur, _ = parseSort(table.AttrString("sort"))
 			}
 			if cur.Field == field {
 				cur.Desc = !cur.Desc
@@ -241,9 +241,9 @@ func nodeKey(n *tml.Node, ptr string) string {
 	return ptr
 }
 
-// SortRows returns rows sorted by spec, stably. Numbers sort by value and
+// sortRows returns rows sorted by spec, stably. Numbers sort by value and
 // strings without regard to case. Rows that lack the field sort last.
-func SortRows(rows []any, spec SortSpec) []any {
+func sortRows(rows []any, spec SortSpec) []any {
 	out := append([]any(nil), rows...)
 	fieldOf := func(r any) any {
 		if m, ok := r.(map[string]any); ok {
@@ -271,9 +271,9 @@ func SortRows(rows []any, spec SortSpec) []any {
 	return out
 }
 
-// FilterRows returns the rows that contain text in any field, without regard
+// filterRows returns the rows that contain text in any field, without regard
 // to case. An empty text keeps every row.
-func FilterRows(rows []any, text string) []any {
+func filterRows(rows []any, text string) []any {
 	text = strings.ToLower(strings.TrimSpace(text))
 	if text == "" {
 		return rows

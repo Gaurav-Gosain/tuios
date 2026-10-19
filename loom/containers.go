@@ -3,7 +3,6 @@ package loom
 import (
 	"strconv"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/tml"
 )
 
@@ -206,6 +205,11 @@ func (w *tabsWidget) titleAt(x int) int {
 	return -1
 }
 
+// listItem is the kind of the box that holds one element's children in a
+// list. Its src is the list node, so it is never built on its own: a
+// rebuild of an item rebuilds the list.
+const listItem = "list-item"
+
 // listWidget repeats its children once per element of a state array.
 // Each element's children sit in a group box. With select, a cursor marks
 // one group.
@@ -229,7 +233,7 @@ func (s *Surface) buildList(b *box, vars map[string]any) widget {
 			w.items = w.items[:i]
 			break
 		}
-		g := &box{kind: "col", src: n, ptr: b.ptr, key: b.key + "#" + strconv.Itoa(i), base: b.base, parent: b, scope: b.scope.with(alias, it, i), dirty: true}
+		g := &box{kind: listItem, src: n, ptr: b.ptr, key: b.key + "#" + strconv.Itoa(i), base: b.base, parent: b, scope: b.scope.with(alias, it, i), dirty: true}
 		g.kids = s.buildChildren(n, b.ptr, g.scope, g)
 		b.kids = append(b.kids, g)
 	}
@@ -478,7 +482,8 @@ func markPainted(b *box) {
 // right, such as "from claude in api-auth". The document cannot draw over
 // the frame, so a host uses it to name the owner. The surface draws inside
 // r shrunk by one cell on each side.
-func Frame(buf *uv.Buffer, r Rect, title, label string, p *Palette, focused bool) {
+func Frame(dst *Buffer, r Rect, title, label string, p *Palette, focused bool) {
+	buf := dst.b
 	if p == nil {
 		p = DefaultPalette(TrueColor)
 	}

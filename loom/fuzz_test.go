@@ -38,7 +38,7 @@ var fuzzTexts = []string{"", "a", "hello world", "日本語のテキスト", "�
 // loom must draw any tree.
 func fuzzTree(r *reader, depth int) *tml.Node {
 	typ := fuzzTypes[r.pick(len(fuzzTypes))]
-	if depth > 5 {
+	if depth > 32 {
 		typ = "text"
 	}
 	n := &tml.Node{Type: typ}
@@ -166,6 +166,7 @@ func FuzzLayout(f *testing.F) {
 	f.Add([]byte{1, 3, 10, 11, 12, 13, 14, 15}, uint8(1), uint8(1), uint8(2))
 	f.Add([]byte{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}, uint8(120), uint8(40), uint8(3))
 	f.Add([]byte{}, uint8(0), uint8(0), uint8(1))
+	f.Add(rowChainSeed(31), uint8(120), uint8(40), uint8(0))
 	f.Fuzz(func(t *testing.T, data []byte, w, h, depth uint8) {
 		r := &reader{b: data}
 		doc := fuzzDoc(r)
@@ -176,6 +177,11 @@ func FuzzLayout(f *testing.F) {
 		W, H := int(w%160), int(h%60)
 		buf := s.Render(W, H)
 		checkFits(t, buf, W, H)
+		// The time bound, without a clock: layout measures each box a
+		// bounded number of times, whatever the nesting.
+		if n := countBoxes(s.root); s.stats.measures > 64*(n+1) {
+			t.Fatalf("one render measured %d times for %d boxes", s.stats.measures, n)
+		}
 		// Keys and clicks must not panic either, and the picture after them
 		// must equal a full redraw.
 		for _, k := range []string{"down", "tab", "enter", "s", "right"} {
@@ -227,6 +233,87 @@ func FuzzIncremental(f *testing.F) {
 				w, h = 40+r.pick(120), 10+r.pick(40)
 			case 9:
 				_ = s.Patch([]tml.Op{{Op: "replace", Path: "/byPkg/0/secs", Value: []byte(strconv.Itoa(r.pick(20)))}})
+			}
+			sameAsFresh(t, s, w, h)
+		}
+	})
+}
+
+// rowChainSeed is FuzzLayout input for one row nested depth times, around
+// one text: each row reads type 0 (row), no w or h, no pad, gap, min-w,
+// align, show or each, and one child.
+func rowChainSeed(depth int) []byte {
+	b := []byte{0} // one root child
+	for range depth {
+		b = append(b, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1)
+	}
+	// The text: type 10, no w or h, none of the options, the text "a", no b.
+	return append(b, 10, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1)
+}
+
+func countBoxes(b *box) int {
+	if b == nil {
+		return 0
+	}
+	n := 1
+	for _, k := range b.kids {
+		n += countBoxes(k)
+	}
+	return n
+}
+
+// listDoc has if and each inside a list's item template, a form whose
+// text reads form.x, and a button inside a box that show hides.
+const listDoc = `<tml version="1"><state>{"more": true, "rows": [{"x": "a", "n": [1, 2]}, {"x": "b", "n": [3]}], "y": "hello"}</state>
+<col>
+  <list items="state.rows" select="single">
+    <text if="state.more">{item.x}</text>
+    <text each="item.n" as="k">- {k}</text>
+    <badge show="state.more">{item.x}</badge>
+  </list>
+  <form id="f">
+    <input name="x" label="X" bind="state.y"/>
+    <text>typed: {form.x}</text>
+    <toggle name="t" label="T" bind="state.more"/>
+  </form>
+  <col show="state.more"><button key="d" on-press="emit('d')">Delete</button></col>
+</col></tml>`
+
+// FuzzIncrementalList applies random patches, keys and clicks to listDoc
+// and checks the incremental picture against a full redraw after each
+// step. It reaches the rebuild of a list item (an if or each inside the
+// template), form.NAME readers, and boxes that show hides.
+func FuzzIncrementalList(f *testing.F) {
+	f.Add([]byte{0, 1, 2, 3, 4, 5, 6, 7})
+	f.Add([]byte{0, 0, 3, 3, 1, 5, 0, 8})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 64 {
+			data = data[:64]
+		}
+		s := mustSurface(t, listDoc)
+		w, h := 40, 20
+		s.Render(w, h)
+		r := &reader{b: data}
+		for r.i < len(r.b) {
+			switch r.pick(9) {
+			case 0:
+				_ = s.Patch([]tml.Op{{Op: "replace", Path: "/more", Value: []byte([]string{"true", "false"}[r.pick(2)])}})
+			case 1:
+				_ = s.Patch([]tml.Op{{Op: "add", Path: "/rows/-", Value: []byte(`{"x": "r` + strconv.Itoa(r.pick(9)) + `", "n": [` + strconv.Itoa(r.pick(9)) + `]}`)}})
+			case 2:
+				_ = s.Patch([]tml.Op{{Op: "remove", Path: "/rows/0"}})
+			case 3:
+				_ = s.Patch([]tml.Op{{Op: "replace", Path: "/rows/0/x", Value: []byte(`"z` + strconv.Itoa(r.pick(99)) + `"`)}})
+			case 4:
+				_ = s.Patch([]tml.Op{{Op: "add", Path: "/rows/0/n/-", Value: []byte(strconv.Itoa(r.pick(99)))}})
+			case 5:
+				_ = s.Patch([]tml.Op{{Op: "replace", Path: "/y", Value: []byte(`"y` + strconv.Itoa(r.pick(99)) + `"`)}})
+			case 6:
+				_, _ = s.Key([]string{"up", "down", "enter", "tab", "d", "space"}[r.pick(6)])
+			case 7:
+				_, _ = s.Mouse(Mouse{X: r.pick(w), Y: r.pick(h), Button: MouseLeft})
+			case 8:
+				w, h = 20+r.pick(40), 8+r.pick(20)
 			}
 			sameAsFresh(t, s, w, h)
 		}

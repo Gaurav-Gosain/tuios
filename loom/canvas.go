@@ -43,6 +43,10 @@ type canvas struct {
 	pal   *Palette
 	g     *glyphs
 	cells *int // counts the cells written, when set
+	// links records the link under each cell, for a click; osc8 also
+	// writes it into the cell.
+	links map[image.Point]string
+	osc8  bool
 }
 
 // withClip returns a copy of c that draws only inside r and the current clip.
@@ -65,6 +69,9 @@ func (c *canvas) fill(r Rect, ground string) {
 		line := c.buf.Line(y)
 		for x := r.Min.X; x < r.Max.X; x++ {
 			line.Set(x, &cell)
+			if c.links != nil {
+				delete(c.links, image.Point{x, y})
+			}
 		}
 	}
 }
@@ -99,7 +106,16 @@ func (c *canvas) put(x, y int, g string, w int, st style) {
 		return
 	}
 	cell := uv.Cell{Content: g, Width: w, Style: c.resolve(st, line.At(x))}
-	if st.link != "" {
+	if c.links != nil {
+		if st.link != "" {
+			for k := 0; k < w; k++ {
+				c.links[image.Point{x + k, y}] = st.link
+			}
+		} else {
+			delete(c.links, image.Point{x, y})
+		}
+	}
+	if st.link != "" && c.osc8 {
 		cell.Link = uv.NewLink(st.link)
 	}
 	if c.cells != nil {
@@ -123,6 +139,9 @@ func (c *canvas) text(x, y int, s string, st style, limit int) int {
 		}
 		if x+w > end {
 			break
+		}
+		if g == "\uFFFD" && c.g == &asciiGlyphs {
+			g = "?"
 		}
 		if x >= c.clip.Min.X {
 			c.put(x, y, g, w, st)

@@ -4,7 +4,7 @@
 |Target        ‹ staging ›                               |
 |Canary first  ●━━ on                                    |
 |Dry run       ──○ off                                   |
-|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10%|
+|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
 |Checked       [x]                                       |
 --- styles
 |aaabbbbbbbbbbbcdddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
@@ -12,7 +12,7 @@
 |aaaaaabbbbbbbbebdddddddbebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |aaaaaabaaaaabbfggbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |aaabaaabbbbbbbeeebeeebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbddd|
+|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbdd|
 |aaaaaaabbbbbbbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a: fg=dim bg=panel
 b: bg=panel
@@ -28,7 +28,7 @@ h: fg=track bg=panel
 |Target        ‹ staging ›                               |
 |Canary first  ●━━ on                                    |
 |Dry run       ──○ off                                   |
-|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10%|
+|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
 |Checked       [x]                                       |
 --- styles
 |aaabbbbbbbbbbbcdddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
@@ -36,7 +36,7 @@ h: fg=track bg=panel
 |aaaaaabbbbbbbbebdddddddbebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |aaaaaabaaaaabbfggbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 |aaabaaabbbbbbbeeebeeebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbddd|
+|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbdd|
 |aaaaaaabbbbbbbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a: fg=dim bg=panel
 b: bg=panel
@@ -52,7 +52,7 @@ h: fg=success-tint bg=panel
 |Target        ‹ staging ›                               |
 |Canary first  ●━━ on                                    |
 |Dry run       ──○ off                                   |
-|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10%|
+|Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
 |Checked       [x]                                       |
 --- styles
 |aaa           bccccccc                                 b|
@@ -60,7 +60,7 @@ h: fg=success-tint bg=panel
 |aaaaaa        b ccccccc b                               |
 |aaaaaa aaaaa  dee cc                                    |
 |aaa aaa       bbb bbb                                   |
-|aaaaaa aaaaa  eeeeeedbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  ccc|
+|aaaaaa aaaaa  eeeeeedbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  cc|
 |aaaaaaa       ddd                                       |
 a: fg=dim
 b: fg=mute
@@ -73,7 +73,7 @@ e: fg=accent
 |Target        < staging >                               |
 |Canary first  O== on                                    |
 |Dry run       --( ) off                                 |
-|Canary share  ======O==============================  10%|
+|Canary share  ======O===============================  10|
 |Checked       [x]                                       |
 --- styles
 |                                                        |

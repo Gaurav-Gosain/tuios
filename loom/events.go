@@ -109,6 +109,7 @@ func (s *Surface) Key(key string) (Result, error) {
 	if s.root == nil {
 		return Result{}, nil
 	}
+	s.flush()
 	for _, b := range s.focus {
 		if bw, ok := b.w.(*buttonWidget); ok && bw.key != "" && strings.EqualFold(bw.key, key) && !bw.disabled {
 			return s.run(b, bw.press, nil)
@@ -317,7 +318,7 @@ func (s *Surface) run(b *box, acts []tml.Action, event map[string]any) (Result, 
 	if event != nil {
 		vars["event"] = event
 	}
-	res, err := RunActions(s.doc, s.store, s.view, b.ptr, acts, &tml.Env{Vars: vars, Now: s.opts.Now})
+	res, err := runActions(s.doc, s.store, s.view, b.ptr, acts, &tml.Env{Vars: vars, Now: s.opts.Now})
 	s.pending = append(s.pending, res.Changed...)
 	if res.View {
 		// tab, sort, filter, fold and focus name their targets by id; the
@@ -334,7 +335,12 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 	if s.root == nil {
 		return Result{}, nil
 	}
+	s.flush()
 	pt := image.Point{m.X, m.Y}
+	if s.drag != nil && m.Action == Press {
+		// The release was lost: a new press ends the drag.
+		s.drag = nil
+	}
 	if s.drag != nil {
 		return s.dragSplit(m)
 	}
@@ -357,6 +363,11 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 	}
 	if m.Button != MouseLeft || m.Action != Press {
 		return Result{}, nil
+	}
+	if href := s.links[pt]; href != "" {
+		// A link opens only after the host asks the person: it comes back
+		// as an effect, never as an OSC 8 link the outer terminal follows.
+		return Result{Effects: []Effect{{Action: "link", Name: href, Value: href, HasValue: true}}}, nil
 	}
 	for i := len(path) - 1; i >= 0; i-- {
 		b := path[i]

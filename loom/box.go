@@ -90,6 +90,10 @@ type box struct {
 	prev   Rect // where it was at the last paint
 	dirty  bool // its content changed since the last paint
 	ground string
+
+	// The measures of the current layout pass, by width.
+	mgen   uint64
+	mcache [][3]int
 }
 
 // inner returns the box's rectangle inside its padding.

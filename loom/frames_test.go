@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"golang.org/x/image/font/sfnt"
 	"tuios.dev/shot"
 )
@@ -90,11 +89,11 @@ var shotPalette = &shot.Palette{
 	},
 }
 
-func toGrid(buf *uv.Buffer) *shot.Grid {
+func toGrid(buf *Buffer) *shot.Grid {
 	g := shot.NewGrid(buf.Width(), buf.Height(), shotPalette.FG, shotPalette.BG)
 	for y := 0; y < buf.Height(); y++ {
 		for x := 0; x < buf.Width(); x++ {
-			if c := buf.CellAt(x, y); c != nil {
+			if c := buf.b.CellAt(x, y); c != nil {
 				g.Cells[y][x] = shot.MakeCell(c.Content, c.Width, c.Style, c.Link, shotPalette)
 			}
 		}

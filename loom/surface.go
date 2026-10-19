@@ -2,6 +2,9 @@ package loom
 
 import (
 	"errors"
+	"image"
+	"math"
+	"slices"
 	"strconv"
 	"time"
 
@@ -29,6 +32,10 @@ type Options struct {
 	// CellAspect is a cell's height over its width on the client, such as
 	// 19.0/8. A pie uses it to stay round. 0 means 2.2.
 	CellAspect float64
+	// Hyperlinks writes a link's target into its cells as an OSC 8 link.
+	// Off by default: a click on a link comes back as a "link" Effect, so
+	// the host can ask the person first, as TML requires.
+	Hyperlinks bool
 }
 
 // Surface is one TML document drawn into a cell buffer: the tree, the state
@@ -44,7 +51,7 @@ type Surface struct {
 	doc   *tml.Node
 	store *tml.Store
 	view  *View
-	deps  *Deps
+	deps  *depGraph
 	opts  Options
 	pal   *Palette
 	g     *glyphs
@@ -55,16 +62,20 @@ type Surface struct {
 	root  *box
 	byPtr map[string][]*box
 	buf   *uv.Buffer
+	out   *Buffer
 	w, h  int
 
-	full    bool     // the next Render rebuilds and repaints everything
-	pending []string // state pointers changed since the last Render
-	viewDue []string // view keys changed since the last Render
+	full    bool                   // the next Render rebuilds and repaints everything
+	clock   bool                   // Tick asked for the ago() readers to evaluate again
+	links   map[image.Point]string // the link under each cell
+	pending []string               // state pointers changed since the last Render
+	viewDue []string               // view keys changed since the last Render
 	damage  []Rect
 
 	budget *tml.Budget
-	exp    *Expansion
+	exp    *expansion
 	focus  []*box // focusable boxes in tree order, from the last layout
+	gen    uint64 // the layout pass, for the measure cache
 	drag   *box   // the split whose divider is being dragged
 
 	// The work of the last Render, for the budgets the tests hold.
@@ -73,8 +84,9 @@ type Surface struct {
 
 // renderStats counts the work of one Render.
 type renderStats struct {
-	built int // boxes evaluated
-	cells int // cells written
+	built    int // boxes evaluated
+	cells    int // cells written
+	measures int // boxes measured (not counting cache hits)
 }
 
 // compiled holds the parsed bindings and actions of one source node.
@@ -115,7 +127,7 @@ func (s *Surface) setDoc(doc *tml.Node, store *tml.Store) error {
 		store = st
 	}
 	s.doc, s.store = doc, store
-	s.deps = BuildDeps(doc)
+	s.deps = buildDeps(doc)
 	s.cache = map[*tml.Node]*compiled{}
 	s.full = true
 	return nil
@@ -134,7 +146,7 @@ func (s *Surface) SetPalette(p *Palette) {
 		s.g = &asciiGlyphs
 		s.mode = plot.ASCII
 	}
-	if s.opts.Charts != nil {
+	if s.opts.Charts != nil && p.Depth != ASCII {
 		s.mode = *s.opts.Charts
 	}
 	s.full = true
@@ -143,9 +155,33 @@ func (s *Surface) SetPalette(p *Palette) {
 // Document returns the tree.
 func (s *Surface) Document() *tml.Node { return s.doc }
 
-// Store returns the state store. Change it only through Patch or Set, so the
-// surface knows what to redraw.
-func (s *Surface) Store() *tml.Store { return s.store }
+// State returns a copy of the state. Change the state through Patch or
+// Set, so the surface knows what to redraw.
+func (s *Surface) State() map[string]any {
+	out, _ := deepCopy(s.store.State()).(map[string]any)
+	return out
+}
+
+// Version counts the changes to the state.
+func (s *Surface) Version() uint64 { return s.store.Version() }
+
+func deepCopy(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(x))
+		for k, e := range x {
+			m[k] = deepCopy(e)
+		}
+		return m
+	case []any:
+		a := make([]any, len(x))
+		for i, e := range x {
+			a[i] = deepCopy(e)
+		}
+		return a
+	}
+	return v
+}
 
 // View returns the view state of this client.
 func (s *Surface) View() *View { return s.view }
@@ -157,8 +193,26 @@ func (s *Surface) Patch(ops []tml.Op) error {
 	if err != nil {
 		return err
 	}
-	s.pending = append(s.pending, changed...)
+	s.addPending(changed)
 	return nil
+}
+
+// addPending records changed state paths for the next Render, once each,
+// so a hidden surface that gets many patches pays once per path.
+func (s *Surface) addPending(changed []string) {
+	for _, c := range changed {
+		if !slices.Contains(s.pending, c) {
+			s.pending = append(s.pending, c)
+		}
+	}
+}
+
+// flush brings the boxes up to date with pending changes before input
+// acts on them, at the last size.
+func (s *Surface) flush() {
+	if s.root != nil && (s.full || len(s.pending) > 0 || len(s.viewDue) > 0 || s.clock) {
+		s.Render(s.w, s.h)
+	}
 }
 
 // Set writes one state path, such as state.cpu, as the set action does.
@@ -167,7 +221,7 @@ func (s *Surface) Set(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	s.pending = append(s.pending, changed...)
+	s.addPending(changed)
 	return nil
 }
 
@@ -189,6 +243,15 @@ func (s *Surface) Replace(doc *tml.Node, keepState bool) error {
 	return s.setDoc(doc, store)
 }
 
+// NeedsClock reports whether a binding calls ago(). Then the host calls
+// Tick about once a minute while the surface shows; otherwise the surface
+// needs no timer at all.
+func (s *Surface) NeedsClock() bool { return len(s.deps.Clock()) > 0 }
+
+// Tick makes the next Render evaluate again only the boxes that call
+// ago().
+func (s *Surface) Tick() { s.clock = true }
+
 // Invalidate makes the next Render rebuild and repaint everything.
 func (s *Surface) Invalidate() { s.full = true }
 
@@ -196,15 +259,20 @@ func (s *Surface) Invalidate() { s.full = true }
 // diffs cells needs it only to skip work.
 func (s *Surface) Damage() []Rect { return s.damage }
 
+// maxSide bounds the width and height of a surface, so a resize passed on
+// unchecked cannot allocate without bound.
+const maxSide = 4096
+
 // Render draws the surface into a w by h buffer and returns it. The buffer
 // belongs to the surface and is reused by the next Render. A call with
-// nothing changed repaints nothing.
-func (s *Surface) Render(w, h int) *uv.Buffer {
-	w, h = max(0, min(w, maxCells)), max(0, min(h, maxCells))
+// nothing changed repaints nothing. A side past 4096 cells counts as 4096.
+func (s *Surface) Render(w, h int) *Buffer {
+	w, h = max(0, min(w, maxSide)), max(0, min(h, maxSide))
 	s.damage = s.damage[:0]
 	s.stats = renderStats{}
 	if s.buf == nil || w != s.w || h != s.h {
 		s.buf = uv.NewBuffer(w, h)
+		s.out = &Buffer{b: s.buf}
 		s.w, s.h = w, h
 		s.full = true
 	}
@@ -212,10 +280,13 @@ func (s *Surface) Render(w, h int) *uv.Buffer {
 	if s.full || s.root == nil {
 		s.rebuildAll()
 	} else if !s.rebuildDirty() {
-		return s.buf
+		return s.out
 	}
 	s.layoutRoot()
-	c := &canvas{buf: s.buf, clip: rect(0, 0, w, h), pal: s.pal, g: s.g, cells: &s.stats.cells}
+	if s.links == nil || s.full {
+		s.links = map[image.Point]string{}
+	}
+	c := &canvas{buf: s.buf, clip: rect(0, 0, w, h), pal: s.pal, g: s.g, cells: &s.stats.cells, links: s.links, osc8: s.opts.Hyperlinks}
 	if s.full {
 		c.fill(c.clip, s.ground())
 		s.damage = append(s.damage, c.clip)
@@ -224,7 +295,7 @@ func (s *Surface) Render(w, h int) *uv.Buffer {
 		s.paint(s.root, c, false)
 	}
 	s.full = false
-	return s.buf
+	return s.out
 }
 
 func (s *Surface) ground() string {
@@ -238,7 +309,7 @@ func (s *Surface) ground() string {
 func (s *Surface) rebuildAll() {
 	s.pending, s.viewDue = nil, nil
 	s.byPtr = map[string][]*box{}
-	s.exp = NewExpansion(s.opts.Limits)
+	s.exp = newExpansion(s.opts.Limits)
 	root := &box{kind: "tml", src: s.doc, key: "", dirty: true}
 	if s.doc.Type == "tml" {
 		root.kids = s.buildChildren(s.doc, "", nil, root)
@@ -253,11 +324,16 @@ func (s *Surface) rebuildAll() {
 // rebuildDirty evaluates again the boxes that read changed state or whose
 // view state changed. It reports whether anything changed.
 func (s *Surface) rebuildDirty() bool {
-	if len(s.pending) == 0 && len(s.viewDue) == 0 {
+	if len(s.pending) == 0 && len(s.viewDue) == 0 && !s.clock {
 		return false
 	}
 	var targets []*box
-	for _, ptr := range s.deps.Affected(s.pending) {
+	ptrs := s.deps.Affected(s.pending)
+	if s.clock {
+		ptrs = append(ptrs, s.deps.Clock()...)
+		s.clock = false
+	}
+	for _, ptr := range ptrs {
 		boxes := s.byPtr[ptr]
 		for p := ptr; len(boxes) == 0 && p != ""; {
 			// A node with no box (if was false, or a closed modal):
@@ -269,6 +345,12 @@ func (s *Surface) rebuildDirty() bool {
 			}
 		}
 		for _, b := range boxes {
+			// Inside a form, the field values are the form's scope: the form
+			// builds again, so form.NAME readers see the new values.
+			if f := formOf(b); f != nil {
+				targets = append(targets, f)
+				continue
+			}
 			if _, each := b.src.Attr("each"); each || b.src.AttrString("if") != "" {
 				// The count of copies, or whether there is one, may change:
 				// build the parent's children again.
@@ -293,7 +375,7 @@ func (s *Surface) rebuildDirty() bool {
 		return false
 	}
 	// A target inside another target is rebuilt with it.
-	s.exp = NewExpansion(s.opts.Limits)
+	s.exp = newExpansion(s.opts.Limits)
 	done := map[*box]bool{}
 	for _, b := range targets {
 		if done[b] || insideAny(b, done) {
@@ -303,6 +385,16 @@ func (s *Surface) rebuildDirty() bool {
 		done[b] = true
 	}
 	return true
+}
+
+// formOf returns the nearest form box that holds b, or nil.
+func formOf(b *box) *box {
+	for p := b.parent; p != nil; p = p.parent {
+		if p.kind == "form" {
+			return p
+		}
+	}
+	return nil
 }
 
 func insideAny(b *box, set map[*box]bool) bool {
@@ -317,6 +409,12 @@ func insideAny(b *box, set map[*box]bool) bool {
 // rebuild evaluates a box again in place: its attributes, its widget and
 // its children. The box keeps its place in the tree.
 func (s *Surface) rebuild(b *box) {
+	if b.kind == listItem {
+		// An item's box is the list's to build: building its src (the list
+		// node) here would nest a second list inside the item.
+		s.rebuild(b.parent)
+		return
+	}
 	if b == s.root {
 		s.rebuildAll()
 		s.full = true
@@ -488,6 +586,17 @@ func (s *Surface) num(n *tml.Node, attr string, vars map[string]any, def float64
 		return 0
 	}
 	return def
+}
+
+// count evaluates an attribute to a whole number in [lo, hi]. NaN and
+// infinities give def, so no value from a document can size an allocation
+// past hi, and the result is the same on every architecture.
+func (s *Surface) count(n *tml.Node, attr string, vars map[string]any, def, lo, hi int) int {
+	f := s.num(n, attr, vars, float64(def))
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return def
+	}
+	return int(math.Max(float64(lo), math.Min(float64(hi), math.Trunc(f))))
 }
 
 // flag evaluates an attribute to a boolean.
