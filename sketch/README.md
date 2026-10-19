@@ -2,15 +2,20 @@
 
 `tuios.dev/sketch` draws Mermaid diagrams as SVG, in pure Go.
 
-It is a port of [pele](https://github.com/obsidianmd/pele) by kepano, under
-the MIT licence. The port follows pele v1.6.0, commit
-`458322a5b8abb1ae57ddf127c32017ab9fb14a92`. [LICENSE](LICENSE) has the notice
-of pele and of the port.
+It is a port of [pele](https://github.com/obsidianmd/pele), the Mermaid
+renderer by [kepano](https://github.com/kepano) of
+[Obsidian](https://obsidian.md), under the MIT licence. The layout, the
+shapes, the safety rules and the test corpus are pele's work. The port
+follows pele v1.6.0, commit `458322a5b8abb1ae57ddf127c32017ab9fb14a92`.
+[LICENSE](LICENSE) has the notice of pele and of the port.
+[raster/fonts/NOTICE](raster/fonts/NOTICE) has the licences of the fonts that
+sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
 
 ## Status
 
-The port is in progress. It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps and gantt charts. Each other diagram type gives an
-error with the code `unsupported-diagram` until its port is done.
+It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
+diagrams, pie charts, mindmaps and gantt charts. Each other diagram type gives
+an error with the code `unsupported-diagram` until its port is done.
 
 The output is the same as the output of pele, byte for byte. The test suite
 compares each diagram with an SVG that pele drew from the same source.
@@ -49,7 +54,8 @@ lines, err := text.Draw(d, text.Options{Cols: 100})
 
 `text.ErrTooWide` says the drawing does not fit the columns. The package first
 asks pele for a narrower layout, which turns a flowchart that runs across to
-run down.
+run down. A drawing past `text.MaxCells` gives `text.ErrTooLarge`. Every
+character a terminal acts on, such as ESC in a label, is written as U+FFFD.
 
 ## Layout of the code
 
