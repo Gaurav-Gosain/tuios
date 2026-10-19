@@ -11,8 +11,10 @@ import "strings"
 // (src/main/ai-vault/session-scanner-cursor-parser.ts in stablyai/orca at
 // 5be871e5). The blocks are read as Anthropic content blocks are: text,
 // thinking, image, tool_use {id, name, input} and tool_result {tool_use_id,
-// content, is_error}. Cursor Agent was not installed where this was written,
-// so the tool blocks are not checked against a real file. A user message
+// content, is_error}. The tool inputs use Cursor's own names: target_file,
+// relative_workspace_path, search_term, and code_edit for edit_file. Cursor
+// Agent was not installed where this was written, so the tool blocks are not
+// checked against a real file. A user message
 // wraps the person's words in <user_query>, and only those words show.
 const FormatCursor = "cursor-jsonl"
 
@@ -51,8 +53,15 @@ func cursorLine(r *reader, line []byte, off int64) (decoded, bool) {
 			case "image":
 				out = append(out, Entry{Role: role, Kind: KindText, Text: "[image]"})
 			case "tool_use":
-				name := b.str("name")
-				out = append(out, callEntry(name, b.str("id"), cursorClass(name), args(b["input"]))...)
+				name, in := b.str("name"), args(b["input"])
+				class := cursorClass(name)
+				if class == classEdit && in.str("old_string", "old_str") == "" {
+					// Cursor's edit_file sends the edit as code_edit, the new
+					// text with markers for the code it keeps, and no old
+					// text. It shows as the text it writes.
+					class, in = classWrite, jobj{"target_file": fileOf(in), "content": in.str("code_edit")}
+				}
+				out = append(out, callEntry(name, b.str("id"), class, in)...)
 			case "tool_result":
 				failed, _ := b["is_error"].(bool)
 				out = append(out, resultEntry(b.str("tool_use_id"), blockText(b["content"]), failed))

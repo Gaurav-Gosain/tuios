@@ -337,7 +337,7 @@ func command(a jobj) string {
 //
 //go:noinline
 func fileOf(a jobj) string {
-	return a.str("file_path", "absolute_path", "filePath", "path", "dir_path")
+	return a.str("file_path", "absolute_path", "filePath", "path", "dir_path", "target_file", "relative_workspace_path")
 }
 
 // targetOf is the one line that says what a call acts on.
@@ -350,7 +350,7 @@ func targetOf(a jobj) string {
 	if s := command(a); s != "" {
 		return s
 	}
-	return a.str("pattern", "url", "query", "skill", "description", "objective", "prompt")
+	return a.str("pattern", "url", "query", "search_term", "skill", "description", "objective", "prompt")
 }
 
 // callEntry is a tool call as decoded: a tool call with its target and, for

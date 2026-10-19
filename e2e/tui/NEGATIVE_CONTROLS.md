@@ -7261,3 +7261,13 @@ cursor-agent` sessionStart with transcript_path. Run on 2026-10-19.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The cockpit does not read Cursor Agent | `threadTranscriptHarness` | `cursor-agent` taken out | `TestCockpitThreadOtherHarnesses/cursor` | **caught** |
+
+After review (C1): Cursor's own argument names are read, `target_file`,
+`relative_workspace_path`, `search_term`, and `edit_file`'s `code_edit`,
+which shows as the text it writes. `TestFormatFixtures/cursor-agent.jsonl`
+holds them. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A Cursor read or edit card names no file | `target_file` in `fileOf` | Removed | `TestFormatFixtures/cursor-agent.jsonl` | **caught** |
+| A Cursor edit shows an empty diff | The `code_edit` write in `cursorLine` | Never taken | `TestFormatFixtures/cursor-agent.jsonl` | **caught** |
