@@ -38,17 +38,17 @@
 |│     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  │|
 |│                                                                                                                                                                                                      │|
 |│  Builds per hour                                           Lines by language                                                     Latency distribution, ms                                            │|
-|│  mon ████████████████████████████████████████████████            ▗▄▄▟▜█████▙▄▄▖                                                  84┤          ██▂▂                                                   │|
-|│  tue ████████████████████████████████████████████████         ▗▄██▙██▙██████████▄▖                                                 │          ████                                                   │|
-|│  wed ████████████████████████████████████████████████        ▟██████▜▀▀▀▀▀▀███████▙                                                │          ████                                                   │|
-|│  thu ████████████████████████████████████████████████      ▗█▙▄▄██▀          ▀██████▖  ■ Go 64%                                    │        ▅▅████                                                   │|
-|│  fri ████████████████████████████████████████████████      ▟█████▘            ▝█████▙  ■ TypeScript 19%                          42┤        ██████                                                   │|
-|│  sat ████████████████████████████████████████████████      █████▌              ▐█████  ■ Zig 10%                                   │      ▅▅██████▇▇                                                 │|
-|│  sun ████████████████████████████████████████████████      ▜█████▖            ▗█████▛  ■ Shell 5%                                  │      ██████████                                                 │|
-|│      00h                                          23h      ▝██████▄          ▄██████▘  ■ Nix 2%                                    │    ▆▆██████████▄▄            ▄▄                                 │|
-|│      ███████████████                                         ▜█▄▟████▄▄▄▄▄▄███████▛                                               0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁                 │|
-|│      2     7.5    13                                          ▝▀████████████████▀▘                                                 └───────────────────────────────────────────────────────────────  │|
-|│                                                                  ▝▀▀▜██████▛▀▀▘                                                     11                                                          144  │|
+|│  mon ████████████████████████████████████████████████            ▄▄▄█▀██████▄▄▄                                                  84┤          ██▂▂                                                   │|
+|│  tue ████████████████████████████████████████████████          ▄████████████████▄                                                  │          ████                                                   │|
+|│  wed ████████████████████████████████████████████████        ▄███████▀▀▀▀▀▀███████▄                                                │          ████                                                   │|
+|│  thu ████████████████████████████████████████████████       ██▀▀██▀          ▀██████   ■ Go 64%                                    │        ▅▅████                                                   │|
+|│  fri ████████████████████████████████████████████████      ██████              ██████  ■ TypeScript 19%                          42┤        ██████                                                   │|
+|│  sat ████████████████████████████████████████████████      ██████              ██████  ■ Zig 10%                                   │      ▅▅██████▇▇                                                 │|
+|│  sun ············████████████████████████████████████      ██████              ██████  ■ Shell 5%                                  │      ██████████                                                 │|
+|│      00h                                          23h       ██████▄          ▄██████   ■ Nix 2%                                    │    ▆▆██████████▄▄            ▄▄                                 │|
+|│      ███████████████                                         ▀█▀▀████▄▄▄▄▄▄███████▀                                               0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁                 │|
+|│      3     8.5    14                                           ▀████████████████▀                                                  └───────────────────────────────────────────────────────────────  │|
+|│                                                                  ▀▀▀████████▀▀▀                                                     11                                                          144  │|
 |│                                                                                                                                                                                                      │|
 |│  flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆ 3                                                            wall   ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁ 18.4                                                                 │|
 |│  allocs ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁ 35                                                           passed ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██ 412                                                                  │|
@@ -94,16 +94,16 @@
 |adddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddwwwwwddddddddddddddddddddddddddddwwwwwdddddddddddddddddddddddddddddwwwwwdda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addxxxxxxbxxxbxxxxdddddddddddddddddddddddddddddddddddddddddddxxxxxbxxbxxxxxxxxdddddddddddddddddddddddddddddddddddddddddddddddddddddxxxxxxxbxxxxxxxxxxxxxbxxdddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCDDrrzzEEEEEEzzzzrrDDDDDDCCCCCCCCddddddddddddBtttFyyzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddwwvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCCCrrEEzzEEzzzzzzEErrDDCCCCCCCCCCdddddddddBBBBGttHyyzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCCCDDzzrrzzzzEEzzEErrCCCCCCCCCCCCddddddddBBBBBBBIttyzzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCDDrrrrzzEEEEzzzzrrrrDDCCCCCCCCCCddddddrrJJJBBBddddddddddzzzzzzzzddzdjjdjjjddddddddddddddddddddddddddddddddddddvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCCCrrEEEErrzzEEEEEEDDDDDDCCCCCCCCddddddrrrrrrrddddddddddddzzzzzzzddrdjjjjjjjjjjdjjjddddddddddddddddddddddddddwwvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDCCCCCCCCCCCCCCddddddrrrrrrddddddddddddddzzzzzzddBdjjjdjjjdddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDCCCCCCCCCCCCCCCCddddddrrrrrrrddddddddddddzzzzzzzddtdjjjjjdjjddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddddwwwddddddddddddddddddddddddddddddddddddddddddwwwddddddrrrrrrrzddddddddddzzzzzzzzddydjjjdjjddddddddddddddddddddddddddddddddddddvddddzzzzzzzzzzzzzzddddddddddddzzddddddddddddddddddddddddddddddddda|
-|addddddCCCDDDrrrEEEzzzdddddddddddddddddddddddddddddddddddddddddrrKKzzzzzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddwvzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzddddddddddddddddda|
-|addddddwdddddwwwddddwwddddddddddddddddddddddddddddddddddddddddddzzzzzzzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
+|addjjjdCCCCCCrrCCCCCCCCDDrrrrEEzzzzzzEErrDDDDDDCCCCCCCCddddddddddddBtttFyyzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddwwvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdCCCCDDrrCCCCCCCCCCEEEEzzzzEEEEEErrrrrrCCCCCCCCCCddddddddddBBBBtttyyzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdCCCCCCDDCCCCCCCCDDrrzzEEzzEEzzzzrrrrDDCCCCCCCCCCddddddddBBBBBBBttyyzzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdCCCCCCDDCCCCCCCCDDDDEEzzzzzzzzzzEEDDrrCCCCCCCCCCdddddddrrGGBBBddddddddddzzzzzzzdddzdjjdjjjddddddddddddddddddddddddddddddddddddvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdCCCCCCrrCCCCCCCCDDrrzzEEEEzzzzEEzzrrDDCCDDCCCCCCddddddrrrrrrddddddddddddddzzzzzzddrdjjjjjjjjjjdjjjddddddddddddddddddddddddddwwvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdCCCCDDDDCCCCCCCCCCDDDDDDrrDDDDrrDDCCCCCCCCCCCCCCddddddrrrrrrddddddddddddddzzzzzzddBdjjjdjjjdddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdvvvvvvvvvvvvCCCCDDDDDDDDDDDDrrDDrrCCCCCCCCCCCCCCddddddrrrrrrddddddddddddddzzzzzzddtdjjjjjdjjddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddddwwwddddddddddddddddddddddddddddddddddddddddddwwwdddddddrrrrrrzddddddddddzzzzzzzdddydjjjdjjddddddddddddddddddddddddddddddddddddvddddzzzzzzzzzzzzzzddddddddddddzzddddddddddddddddddddddddddddddddda|
+|addddddCCCDDDrrrEEEzzzdddddddddddddddddddddddddddddddddddddddddrrHHzzzzzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddwvzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzddddddddddddddddda|
+|addddddwdddddwwwddddwwdddddddddddddddddddddddddddddddddddddddddddzzzzzzzzzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddddddddwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwwdda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjjjjjddttttttttttttttttttttttttttttttdcddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddjjjjdddrrrrrrrrrrrrrrrrrrrrdccccddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -116,11 +116,8 @@ C: fg=heat1 bg=panel
 D: fg=heat2 bg=panel
 E: fg=heat4 bg=panel
 F: fg=error bg=warning
-G: fg=series3 bg=warning
-H: fg=warning bg=error
-I: fg=warning bg=series3
-J: fg=info bg=series3
-K: fg=accent-bright bg=info
+G: fg=series3 bg=info
+H: fg=info bg=accent-bright
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -187,17 +184,17 @@ z: fg=accent-bright bg=panel
 |│     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  │|
 |│                                                                                                                                                                                                      │|
 |│  Builds per hour                                           Lines by language                                                     Latency distribution, ms                                            │|
-|│  mon ████████████████████████████████████████████████            ▗▄▄▟▜█████▙▄▄▖                                                  84┤          ██▂▂                                                   │|
-|│  tue ████████████████████████████████████████████████         ▗▄██▙██▙██████████▄▖                                                 │          ████                                                   │|
-|│  wed ████████████████████████████████████████████████        ▟██████▜▀▀▀▀▀▀███████▙                                                │          ████                                                   │|
-|│  thu ████████████████████████████████████████████████      ▗█▙▄▄██▀          ▀██████▖  ■ Go 64%                                    │        ▅▅████                                                   │|
-|│  fri ████████████████████████████████████████████████      ▟█████▘            ▝█████▙  ■ TypeScript 19%                          42┤        ██████                                                   │|
-|│  sat ████████████████████████████████████████████████      █████▌              ▐█████  ■ Zig 10%                                   │      ▅▅██████▇▇                                                 │|
-|│  sun ████████████████████████████████████████████████      ▜█████▖            ▗█████▛  ■ Shell 5%                                  │      ██████████                                                 │|
-|│      00h                                          23h      ▝██████▄          ▄██████▘  ■ Nix 2%                                    │    ▆▆██████████▄▄            ▄▄                                 │|
-|│      ███████████████                                         ▜█▄▟████▄▄▄▄▄▄███████▛                                               0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁                 │|
-|│      2     7.5    13                                          ▝▀████████████████▀▘                                                 └───────────────────────────────────────────────────────────────  │|
-|│                                                                  ▝▀▀▜██████▛▀▀▘                                                     11                                                          144  │|
+|│  mon ████████████████████████████████████████████████            ▄▄▄█▀██████▄▄▄                                                  84┤          ██▂▂                                                   │|
+|│  tue ████████████████████████████████████████████████          ▄████████████████▄                                                  │          ████                                                   │|
+|│  wed ████████████████████████████████████████████████        ▄███████▀▀▀▀▀▀███████▄                                                │          ████                                                   │|
+|│  thu ████████████████████████████████████████████████       ██▀▀██▀          ▀██████   ■ Go 64%                                    │        ▅▅████                                                   │|
+|│  fri ████████████████████████████████████████████████      ██████              ██████  ■ TypeScript 19%                          42┤        ██████                                                   │|
+|│  sat ████████████████████████████████████████████████      ██████              ██████  ■ Zig 10%                                   │      ▅▅██████▇▇                                                 │|
+|│  sun ············████████████████████████████████████      ██████              ██████  ■ Shell 5%                                  │      ██████████                                                 │|
+|│      00h                                          23h       ██████▄          ▄██████   ■ Nix 2%                                    │    ▆▆██████████▄▄            ▄▄                                 │|
+|│      ███████████████                                         ▀█▀▀████▄▄▄▄▄▄███████▀                                               0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁                 │|
+|│      3     8.5    14                                           ▀████████████████▀                                                  └───────────────────────────────────────────────────────────────  │|
+|│                                                                  ▀▀▀████████▀▀▀                                                     11                                                          144  │|
 |│                                                                                                                                                                                                      │|
 |│  flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆ 3                                                            wall   ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁ 18.4                                                                 │|
 |│  allocs ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁ 35                                                           passed ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██ 412                                                                  │|
@@ -243,16 +240,16 @@ z: fg=accent-bright bg=panel
 |adddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddwwwwwddddddddddddddddddddddddddddwwwwwdddddddddddddddddddddddddddddwwwwwdda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addxxxxxxbxxxbxxxxdddddddddddddddddddddddddddddddddddddddddddxxxxxbxxbxxxxxxxxdddddddddddddddddddddddddddddddddddddddddddddddddddddxxxxxxxbxxxxxxxxxxxxxbxxdddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllCCrrzzDDDDDDzzzzrrCCCCCCllllllllddddddddddddBtttEyyzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddwwvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllllrrDDzzDDzzzzzzDDrrCClllllllllldddddddddBBBBFttGyyzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllllCCzzrrzzzzDDzzDDrrllllllllllllddddddddBBBBBBBHttyzzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllCCrrrrzzDDDDzzzzrrrrCCllllllllllddddddrrIIIBBBddddddddddzzzzzzzzddzdjjdjjjddddddddddddddddddddddddddddddddddddvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllllrrDDDDrrzzDDDDDDCCCCCCllllllllddddddrrrrrrrddddddddddddzzzzzzzddrdjjjjjjjjjjdjjjddddddddddddddddddddddddddwwvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllllllCCCCCCCCCCCCCCllllllllllllllddddddrrrrrrddddddddddddddzzzzzzddBdjjjdjjjdddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjdllllllllllllllllllllCCCCCCCCCCCCllllllllllllllllddddddrrrrrrrddddddddddddzzzzzzzddtdjjjjjdjjddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddddwwwddddddddddddddddddddddddddddddddddddddddddwwwddddddrrrrrrrzddddddddddzzzzzzzzddydjjjdjjddddddddddddddddddddddddddddddddddddvddddzzzzzzzzzzzzzzddddddddddddzzddddddddddddddddddddddddddddddddda|
-|addddddlllCCCrrrDDDzzzdddddddddddddddddddddddddddddddddddddddddrrJJzzzzzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddwvzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzddddddddddddddddda|
-|addddddwdddddwwwddddwwddddddddddddddddddddddddddddddddddddddddddzzzzzzzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
+|addjjjdllllllrrllllllllCCrrrrDDzzzzzzDDrrCCCCCCllllllllddddddddddddBtttEyyzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddwwvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdllllCCrrllllllllllDDDDzzzzDDDDDDrrrrrrllllllllllddddddddddBBBBtttyyzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdllllllCCllllllllCCrrzzDDzzDDzzzzrrrrCCllllllllllddddddddBBBBBBBttyyzzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddvddddddddddzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdllllllCCllllllllCCCCDDzzzzzzzzzzDDCCrrlllllllllldddddddrrFFBBBddddddddddzzzzzzzdddzdjjdjjjddddddddddddddddddddddddddddddddddddvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdllllllrrllllllllCCrrzzDDDDzzzzDDzzrrCCllCCllllllddddddrrrrrrddddddddddddddzzzzzzddrdjjjjjjjjjjdjjjddddddddddddddddddddddddddwwvddddddddzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdllllCCCCllllllllllCCCCCCrrCCCCrrCCllllllllllllllddddddrrrrrrddddddddddddddzzzzzzddBdjjjdjjjdddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjdvvvvvvvvvvvvllllCCCCCCCCCCCCrrCCrrllllllllllllllddddddrrrrrrddddddddddddddzzzzzzddtdjjjjjdjjddddddddddddddddddddddddddddddddddvddddddzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddddwwwddddddddddddddddddddddddddddddddddddddddddwwwdddddddrrrrrrzddddddddddzzzzzzzdddydjjjdjjddddddddddddddddddddddddddddddddddddvddddzzzzzzzzzzzzzzddddddddddddzzddddddddddddddddddddddddddddddddda|
+|addddddlllCCCrrrDDDzzzdddddddddddddddddddddddddddddddddddddddddrrGGzzzzzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddwvzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzddddddddddddddddda|
+|addddddwdddddwwwddddwwdddddddddddddddddddddddddddddddddddddddddddzzzzzzzzzzzzzzzzzzddddddddddddddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddzzzzzzzzzzzzzzdddddddddddddddddddddddddddddddddddddddddddddddddddddwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwwdda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjjjjjddttttttttttttttttttttttttttttttdcddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddjjjjdddrrrrrrrrrrrrrrrrrrrrdccccddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -264,11 +261,8 @@ B: fg=series3 bg=panel
 C: fg=accent-tint bg=panel
 D: fg=heat4 bg=panel
 E: fg=error bg=warning
-F: fg=series3 bg=warning
-G: fg=warning bg=error
-H: fg=warning bg=series3
-I: fg=info bg=series3
-J: fg=accent-bright bg=info
+F: fg=series3 bg=info
+G: fg=info bg=accent-bright
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -335,17 +329,17 @@ z: fg=accent-bright bg=panel
 |│     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  │|
 |│                                                                                                                                                                                                      │|
 |│  Builds per hour                                           Lines by language                                                     Latency distribution, ms                                            │|
-|│  mon ████████████████████████████████████████████████            ▗▄▄▟▜█████▙▄▄▖                                                  84┤          ██▂▂                                                   │|
-|│  tue ████████████████████████████████████████████████         ▗▄██▙██▙██████████▄▖                                                 │          ████                                                   │|
-|│  wed ████████████████████████████████████████████████        ▟██████▜▀▀▀▀▀▀███████▙                                                │          ████                                                   │|
-|│  thu ████████████████████████████████████████████████      ▗█▙▄▄██▀          ▀██████▖  ■ Go 64%                                    │        ▅▅████                                                   │|
-|│  fri ████████████████████████████████████████████████      ▟█████▘            ▝█████▙  ■ TypeScript 19%                          42┤        ██████                                                   │|
-|│  sat ████████████████████████████████████████████████      █████▌              ▐█████  ■ Zig 10%                                   │      ▅▅██████▇▇                                                 │|
-|│  sun ████████████████████████████████████████████████      ▜█████▖            ▗█████▛  ■ Shell 5%                                  │      ██████████                                                 │|
-|│      00h                                          23h      ▝██████▄          ▄██████▘  ■ Nix 2%                                    │    ▆▆██████████▄▄            ▄▄                                 │|
-|│      ███████████████                                         ▜█▄▟████▄▄▄▄▄▄███████▛                                               0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁                 │|
-|│      2     7.5    13                                          ▝▀████████████████▀▘                                                 └───────────────────────────────────────────────────────────────  │|
-|│                                                                  ▝▀▀▜██████▛▀▀▘                                                     11                                                          144  │|
+|│  mon ████████████████████████████████████████████████            ▄▄▄█▀██████▄▄▄                                                  84┤          ██▂▂                                                   │|
+|│  tue ████████████████████████████████████████████████          ▄████████████████▄                                                  │          ████                                                   │|
+|│  wed ████████████████████████████████████████████████        ▄███████▀▀▀▀▀▀███████▄                                                │          ████                                                   │|
+|│  thu ████████████████████████████████████████████████       ██▀▀██▀          ▀██████   ■ Go 64%                                    │        ▅▅████                                                   │|
+|│  fri ████████████████████████████████████████████████      ██████              ██████  ■ TypeScript 19%                          42┤        ██████                                                   │|
+|│  sat ████████████████████████████████████████████████      ██████              ██████  ■ Zig 10%                                   │      ▅▅██████▇▇                                                 │|
+|│  sun ············████████████████████████████████████      ██████              ██████  ■ Shell 5%                                  │      ██████████                                                 │|
+|│      00h                                          23h       ██████▄          ▄██████   ■ Nix 2%                                    │    ▆▆██████████▄▄            ▄▄                                 │|
+|│      ███████████████                                         ▀█▀▀████▄▄▄▄▄▄███████▀                                               0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁                 │|
+|│      3     8.5    14                                           ▀████████████████▀                                                  └───────────────────────────────────────────────────────────────  │|
+|│                                                                  ▀▀▀████████▀▀▀                                                     11                                                          144  │|
 |│                                                                                                                                                                                                      │|
 |│  flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆ 3                                                            wall   ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁ 18.4                                                                 │|
 |│  allocs ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁ 35                                                           passed ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██ 412                                                                  │|
@@ -391,16 +385,16 @@ z: fg=accent-bright bg=panel
 |a     hhhhh                                                hhhhh                                                hhhhh        hhhhh                            hhhhh                             hhhhh  a|
 |a                                                                                                                                                                                                      a|
 |a  kkkkkkbkkkbkkkk                                           kkkkkbkkbkkkkkkkk                                                     kkkkkkkbkkkkkkkkkkkkkbkk                                            a|
-|a  eee ppppppppppppppppllqqooaaaaaaooooqqllllllpppppppp            dmmmrffooooooo                                                  hhh          oooo                                                   a|
-|a  eee ppppppppppppppppppqqaaooaaooooooaaqqllpppppppppp         ddddsmmtffoooooooooo                                                 h          oooo                                                   a|
-|a  eee ppppppppppppppppppllooqqooooaaooaaqqpppppppppppp        dddddddummfooooooooooo                                                h          oooo                                                   a|
-|a  eee ppppppppppppppppllqqqqooaaaaooooqqqqllpppppppppp      llvvvddd          oooooooo  o ee eee                                    h        oooooo                                                   a|
-|a  eee ppppppppppppppppppqqaaaaqqooaaaaaallllllpppppppp      lllllll            ooooooo  l eeeeeeeeee eee                          hhh        oooooo                                                   a|
-|a  eee ppppppppppppppppppppllllllllllllllpppppppppppppp      llllll              oooooo  d eee eee                                   h      oooooooooo                                                 a|
-|a  eee ppppppppppppppppppppllllllllllllpppppppppppppppp      lllllll            ooooooo  m eeeee ee                                  h      oooooooooo                                                 a|
-|a      hhh                                          hhh      lllllllo          oooooooo  f eee ee                                    h    oooooooooooooo            oo                                 a|
-|a      ppplllqqqaaaooo                                         llwwoooooooooooooooooo                                               hhoooooooooooooooooooooooooooooooooooooooooooooooo                 a|
-|a      h     hhh    hh                                          oooooooooooooooooooo                                                 hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  a|
+|a  eee ppppppqqppppppppllqqqqaaooooooaaqqllllllpppppppp            dmmmrffooooooo                                                  hhh          oooo                                                   a|
+|a  eee ppppllqqppppppppppaaaaooooaaaaaaqqqqqqpppppppppp          ddddmmmffooooooooo                                                  h          oooo                                                   a|
+|a  eee ppppppllppppppppllqqooaaooaaooooqqqqllpppppppppp        dddddddmmffooooooooooo                                                h          oooo                                                   a|
+|a  eee ppppppllppppppppllllaaooooooooooaallqqpppppppppp       llssddd          ooooooo   o ee eee                                    h        oooooo                                                   a|
+|a  eee ppppppqqppppppppllqqooaaaaooooaaooqqllppllpppppp      llllll              oooooo  l eeeeeeeeee eee                          hhh        oooooo                                                   a|
+|a  eee ppppllllppppppppppllllllqqllllqqllpppppppppppppp      llllll              oooooo  d eee eee                                   h      oooooooooo                                                 a|
+|a  eee hhhhhhhhhhhhppppllllllllllllqqllqqpppppppppppppp      llllll              oooooo  m eeeee ee                                  h      oooooooooo                                                 a|
+|a      hhh                                          hhh       llllllo          ooooooo   f eee ee                                    h    oooooooooooooo            oo                                 a|
+|a      ppplllqqqaaaooo                                         llttoooooooooooooooooo                                               hhoooooooooooooooooooooooooooooooooooooooooooooooo                 a|
+|a      h     hhh    hh                                           oooooooooooooooooo                                                  hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  a|
 |a                                                                  oooooooooooooo                                                     hh                                                          hhh  a|
 |a                                                                                                                                                                                                      a|
 |a  eeeee  mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm c                                                            eeee   llllllllllllllllllll cccc                                                                 a|
@@ -425,11 +419,8 @@ o: fg=accent-bright
 p: fg=heat1
 q: fg=heat3
 r: fg=error bg=warning
-s: fg=success bg=warning
-t: fg=warning bg=error
-u: fg=warning bg=success
-v: fg=info bg=success
-w: fg=accent-bright bg=info
+s: fg=success bg=info
+t: fg=info bg=accent-bright
 === ascii 200x55
 |+- plot gallery ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+|
 ||                                                                                                                                                                                                      ||
@@ -470,16 +461,16 @@ w: fg=accent-bright bg=info
 ||     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  ||
 ||                                                                                                                                                                                                      ||
 ||  Builds per hour                                           Lines by language                                                     Latency distribution, ms                                            ||
-||  mon ................::++@@######@@@@++::::::........            oxxx%%%*******                                                  84+          ##                                                     ||
-||  tue ..................++##@@##@@@@@@##++::..........         oooooxxx%%**********                                                 |          ####                                                   ||
-||  wed ..................::@@++@@@@##@@##++............        oooooooxxx%***********                                                |          ####                                                   ||
-||  thu ................::++++@@####@@@@++++::..........      +++++ooo          ********  * Go 64%                                    |        ######                                                   ||
-||  fri ..................++####++@@######::::::........      +++++++            *******  + TypeScript 19%                          42+        ######                                                   ||
-||  sat ....................::::::::::::::..............      ++++++              ******  o Zig 10%                                   |      ##########                                                 ||
-||  sun ....................::::::::::::................      +++++++            *******  x Shell 5%                                  |      ##########                                                 ||
-||      00h                                          23h      +++++++*          ********  % Nix 2%                                    |    ##############            ##                                 ||
-||      ...:::+++###@@@                                         ++********************                                               0+    ################      ############  ####                     ||
-||      2     7.5    13                                          ********************                                                 +---------------------------------------------------------------  ||
+||  mon ......++........::++++##@@@@@@##++::::::........            oxxx%%%*******                                                  84+          ##                                                     ||
+||  tue ....::++..........####@@@@######++++++..........          ooooxxx%%*********                                                  |          ####                                                   ||
+||  wed ......::........::++@@##@@##@@@@++++::..........        oooooooxx%%***********                                                |          ####                                                   ||
+||  thu ......::........::::##@@@@@@@@@@##::++..........       ++ooooo          *******   * Go 64%                                    |        ######                                                   ||
+||  fri ......++........::++@@####@@@@##@@++::..::......      ++++++              ******  + TypeScript 19%                          42+        ######                                                   ||
+||  sat ....::::..........::::::++::::++::..............      ++++++              ******  o Zig 10%                                   |      ##########                                                 ||
+||  sun             ....::::::::::::++::++..............      ++++++              ******  x Shell 5%                                  |      ##########                                                 ||
+||      00h                                          23h       ++++++*          *******   % Nix 2%                                    |    ##############            ##                                 ||
+||      ...:::+++###@@@                                         ++++******************                                               0+    ################      ############  ####                     ||
+||      3     8.5    14                                           ******************                                                  +---------------------------------------------------------------  ||
 ||                                                                  **************                                                     11                                                          144  ||
 ||                                                                                                                                                                                                      ||
 ||  flaky  __-__+-___--___#-____-____+--+ 3                                                            wall   *=--~#=~-.-=-~.-=~~_ 18.4                                                                 ||

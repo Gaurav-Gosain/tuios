@@ -31,12 +31,12 @@
 |    1                                           12  |
 |                                                    |
 |  mon ██████                                        |
-|  tue ██████                  ▗▄▄▄▄▖                |
-|      00  02                ▟█▄▛▀▀▜██▙   ■ go 60%   |
-|      ███████████████      ▟█▛      ▜█▙  ■ zig 30%  |
-|      1      5      9      ▜█▙      ▟█▛  ■ sh 10%   |
-|                            ▜█▄▙▄▄▟██▛              |
-|                              ▝▀▀▀▀▘                |
+|  tue ██████                  ▄▄▄▄▄▄                |
+|      00  02                ▄█▀█▀▀███▄   ■ go 60%   |
+|      ███████████████      ███      ███  ■ zig 30%  |
+|      1      5      9      ███      ███  ■ sh 10%   |
+|                            ▀█▀█▄▄███▀              |
+|                              ▀▀▀▀▀▀                |
 |                                                    |
 |                                                    |
 |                                                    |
@@ -114,8 +114,8 @@ k: fg=fg bg=panel bold
 l: fg=heat1 bg=panel
 m: fg=heat2 bg=panel
 n: fg=heat4 bg=panel
-o: fg=info bg=series3
-p: fg=accent-bright bg=info
+o: fg=series3 bg=info
+p: fg=info bg=accent-bright
 === 256 52x50
 |                                                    |
 |  Seconds by package                                |
@@ -149,12 +149,12 @@ p: fg=accent-bright bg=info
 |    1                                           12  |
 |                                                    |
 |  mon ██████                                        |
-|  tue ██████                  ▗▄▄▄▄▖                |
-|      00  02                ▟█▄▛▀▀▜██▙   ■ go 60%   |
-|      ███████████████      ▟█▛      ▜█▙  ■ zig 30%  |
-|      1      5      9      ▜█▙      ▟█▛  ■ sh 10%   |
-|                            ▜█▄▙▄▄▟██▛              |
-|                              ▝▀▀▀▀▘                |
+|  tue ██████                  ▄▄▄▄▄▄                |
+|      00  02                ▄█▀█▀▀███▄   ■ go 60%   |
+|      ███████████████      ███      ███  ■ zig 30%  |
+|      1      5      9      ███      ███  ■ sh 10%   |
+|                            ▀█▀█▄▄███▀              |
+|                              ▀▀▀▀▀▀                |
 |                                                    |
 |                                                    |
 |                                                    |
@@ -232,8 +232,8 @@ k: fg=fg bg=panel bold
 l: fg=success-tint bg=panel
 m: fg=accent-tint bg=panel
 n: fg=heat4 bg=panel
-o: fg=info bg=series3
-p: fg=accent-bright bg=info
+o: fg=series3 bg=info
+p: fg=info bg=accent-bright
 === 16 52x50
 |                                                    |
 |  Seconds by package                                |
@@ -267,12 +267,12 @@ p: fg=accent-bright bg=info
 |    1                                           12  |
 |                                                    |
 |  mon ██████                                        |
-|  tue ██████                  ▗▄▄▄▄▖                |
-|      00  02                ▟█▄▛▀▀▜██▙   ■ go 60%   |
-|      ███████████████      ▟█▛      ▜█▙  ■ zig 30%  |
-|      1      5      9      ▜█▙      ▟█▛  ■ sh 10%   |
-|                            ▜█▄▙▄▄▟██▛              |
-|                              ▝▀▀▀▀▘                |
+|  tue ██████                  ▄▄▄▄▄▄                |
+|      00  02                ▄█▀█▀▀███▄   ■ go 60%   |
+|      ███████████████      ███      ███  ■ zig 30%  |
+|      1      5      9      ███      ███  ■ sh 10%   |
+|                            ▀█▀█▄▄███▀              |
+|                              ▀▀▀▀▀▀                |
 |                                                    |
 |                                                    |
 |                                                    |
@@ -347,9 +347,9 @@ h: fg=success
 i: fg=fg bold
 j: fg=heat1
 k: fg=accent
-l: fg=info bg=success
+l: fg=success bg=info
 m: fg=heat3
-n: fg=accent-bright bg=info
+n: fg=info bg=accent-bright
 === ascii 52x50
 |                                                    |
 |  Seconds by package                                |
@@ -384,10 +384,10 @@ n: fg=accent-bright bg=info
 |                                                    |
 |  mon ..::@@                                        |
 |  tue ..##::                  ooo***                |
-|      00  02                +++oo*****   * go 60%   |
+|      00  02                ++ooo*****   * go 60%   |
 |      ...:::+++###@@@      +++      ***  + zig 30%  |
 |      1      5      9      +++      ***  o sh 10%   |
-|                            ++********              |
+|                            +++*******              |
 |                              ******                |
 |                                                    |
 |                                                    |
