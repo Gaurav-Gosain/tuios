@@ -17,3 +17,16 @@ node /path/to/sketch/testdata/golden/gen.mjs /path/to/pele /path/to/sketch/testd
 ```
 
 Do not write a golden from the Go output.
+
+## Time zone
+
+pele reads gantt dates in the local time zone of the process, as JavaScript
+does. The gantt goldens were written in `Asia/Dubai`. Under `TZ=UTC`,
+`gantt-002.svg` comes out different.
+
+sketch reads gantt dates in `RenderOptions.Location`. A nil location means
+`time.Local`, which follows the zone of the process as pele does. `TestGolden`
+sets `Location` to `Asia/Dubai`, so the test passes on a machine in any zone.
+The test binary embeds the zone data, so the machine does not need it.
+
+To write the gantt goldens again, run `gen.mjs` with `TZ=Asia/Dubai`.

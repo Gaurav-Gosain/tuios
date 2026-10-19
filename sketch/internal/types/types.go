@@ -55,6 +55,9 @@ type RenderOptions struct {
 	Config  Config
 	// The time gantt charts treat as now. The zero time means the current time.
 	Now time.Time
+	// The time zone gantt charts read dates in. It is not part of pele, which reads them in
+	// the process's zone as JavaScript does: nil means time.Local.
+	Location *time.Location
 	// Theme sets the --pele-* tokens on the root element. It is not part of pele:
 	// nil gives pele's output, byte for byte.
 	Theme *Theme

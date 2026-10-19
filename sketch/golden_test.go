@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata"
 )
 
 // done lists the corpus files whose goldens must all match. A type joins it
@@ -17,14 +18,26 @@ var done = map[string]bool{
 	"class":     true,
 	"er":        true,
 	"flowchart": true,
+	"gantt":     true,
 	"mindmap":   true,
 	"pie":       true,
 	"sequence":  true,
 	"state":     true,
 }
 
-// goldenNow is the time gold.mjs renders with, for gantt.
+// goldenNow is the time gen.mjs renders with, for gantt.
 var goldenNow = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+
+// goldenZone is the time zone the gantt goldens were written in. pele reads dates in
+// the process's zone, and gen.mjs ran in Asia/Dubai. The zone comes from the tzdata
+// embedded in the test binary, so the test passes on a machine without the zone files.
+var goldenZone = func() *time.Location {
+	loc, err := time.LoadLocation("Asia/Dubai")
+	if err != nil {
+		panic(err)
+	}
+	return loc
+}()
 
 type goldenCase struct {
 	name   string // corpus file without -docs.json
@@ -98,7 +111,7 @@ func TestGolden(t *testing.T) {
 			counts[c.name] = tl
 			order = append(order, c.name)
 		}
-		out, err := Render(c.source, RenderOptions{Now: goldenNow})
+		out, err := Render(c.source, RenderOptions{Now: goldenNow, Location: goldenZone})
 		if err != nil {
 			if e, ok := err.(*Error); ok && e.Code == CodeUnsupported {
 				tl.unsupported++

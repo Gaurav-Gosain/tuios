@@ -9,7 +9,7 @@ of pele and of the port.
 
 ## Status
 
-The port is in progress. It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts and mindmaps. Each other diagram type gives an
+The port is in progress. It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps and gantt charts. Each other diagram type gives an
 error with the code `unsupported-diagram` until its port is done.
 
 The output is the same as the output of pele, byte for byte. The test suite
@@ -24,6 +24,7 @@ compares each diagram with an SVG that pele drew from the same source.
 | er | 25/25 |
 | pie | 2/2 |
 | mindmap | 13/13 |
+| gantt | 11/11 |
 
 ## Use
 
