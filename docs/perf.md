@@ -2975,6 +2975,13 @@ bytes (Go 1.26.9, as CI builds it). The change measured 38,510,754 and
 check runs only when a person reads an opencode thread. The new budgets
 leave 4,198 and 4,204 bytes of room.
 
+The ceiling is now 45 MB. Mermaid diagrams are built in: tuios.dev/sketch, a
+Go port of pele, draws them as SVG, as kitty pictures and as box-drawing text,
+and the diagram types it ports take most of the room above 40 MB. They stay
+built in until tuios has native plugins. Then the heavy optional parts, the
+diagram types among them, move out of the binary, and the ceiling comes down
+again.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
