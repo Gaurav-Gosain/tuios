@@ -2943,6 +2943,18 @@ from the commands instead of a second flag set. No dependency was added. The
 dialog costs nothing while it is closed: one comparison after each message.
 The new budgets leave 4,204 and 4,192 bytes of room.
 
+The budgets went to 38,342,920 (linux/amd64) and 36,003,400 (darwin/arm64)
+for the reattach after a daemon restart: the daemon's goodbye with its reason
+(MsgGoodbye, kill-server --restart), and a local client that waits for a new
+daemon after "restart" or a silent drop, dials it with a 2 second handshake,
+and attaches to the session the new daemon restored. The branch before it
+measured 38,314,146 and 35,981,858 bytes (Go 1.26.9, a clean clone, as CI
+builds it). The change measured 38,338,722 and 35,999,202, so it adds 24,576
+and 17,344 bytes. No dependency was added. An attached client runs no timer
+for it: the dials start only when the connection is lost. The goodbye is one
+message per client at shutdown. The new budgets leave 4,198 and 4,198 bytes
+of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
