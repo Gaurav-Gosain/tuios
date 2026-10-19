@@ -56,10 +56,10 @@ func (l Line) rng() (lo, hi float64, ok bool) {
 }
 
 // Legend returns the series names and roles, for a legend the host draws
-// beside the title.
+// beside the title: the series Draw draws, at most 64.
 func (l Line) Legend() []LegendItem {
 	var out []LegendItem
-	for i, s := range l.Series {
+	for i, s := range l.Series[:min(len(l.Series), maxSeries)] {
 		if s.Name != "" {
 			out = append(out, LegendItem{Label: s.Name, Role: l.seriesRole(i)})
 		}
