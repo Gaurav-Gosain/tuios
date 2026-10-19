@@ -7481,3 +7481,13 @@ A guest that scales a PNG into a cell box and places it past the pane's bottom r
 The `-later` cases store the picture with a=t and place it with a=p, as snacks.nvim does. The check is on the last command for each placement id. The real placement still goes out unclipped for one command before the refresh pass clips it under the same id; that is older than this fix, happens inline too, and is not covered here.
 
 `/direct` passes on every build: an inline PNG's size was already read from its first chunk, and it is the case that shows the test's arithmetic is right.
+### A pane in a detached session takes a measured cell
+
+`TestDetachedPaneTakesTheCellOfAClientElsewhere` attaches a client with an 8x16 cell to one session, opens a detached session from the command line, and has its first pane print every pixel size a program can read. Each must be in 8x16 cells, not the 10x20 fallback. Run on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane made by a verb takes no cell when it is made | The `CellSize` call in `AddDaemonWindowWith` | Branch skipped | `TestDetachedPaneTakesTheCellOfAClientElsewhere` ("TIOCGWINSZ is 780x440 pixels, want 624;352") | **caught** |
+| A session nobody measures has no cell | The fallback to a client elsewhere in `sessionCellSize` | Branch skipped | `TestDetachedPaneTakesTheCellOfAClientElsewhere` (same) | **caught** |
+
+`TestDetachedPaneReportsAPixelSize`, where no client is attached anywhere and the fallback cell is right, passes with the fix.
