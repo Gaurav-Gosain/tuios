@@ -217,6 +217,13 @@ archives:
     files:
       - README.md
       - LICENSE*
+      # tuios links tuios.dev/sketch, a port of pele (MIT), and draws its
+      # pictures in Arimo (SIL OFL 1.1) and Go Mono. Both licences ask to
+      # travel with copies of the binary.
+      - src: sketch/LICENSE
+        dst: licenses/sketch/LICENSE
+      - src: sketch/raster/fonts/NOTICE
+        dst: licenses/sketch/NOTICE
 
   - id: tuios-web-archive
     name_template: >-
@@ -248,6 +255,13 @@ archives:
     files:
       - README.md
       - LICENSE*
+      # tuios links tuios.dev/sketch, a port of pele (MIT), and draws its
+      # pictures in Arimo (SIL OFL 1.1) and Go Mono. Both licences ask to
+      # travel with copies of the binary.
+      - src: sketch/LICENSE
+        dst: licenses/sketch/LICENSE
+      - src: sketch/raster/fonts/NOTICE
+        dst: licenses/sketch/NOTICE
 
 
 checksum:
@@ -321,6 +335,8 @@ aurs:
 
       # license
       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+      install -Dm644 "./licenses/sketch/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/sketch/LICENSE"
+      install -Dm644 "./licenses/sketch/NOTICE" "${pkgdir}/usr/share/licenses/${pkgname}/sketch/NOTICE"
 
       # documentation
       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
