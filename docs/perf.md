@@ -2904,7 +2904,11 @@ struct type per record, and the small helpers stay out of line. Nothing in it
 runs unless a person reads a thread or an agent pane has no join yet. The
 Copilot CLI and Amp threads (#901) measured 38,052,002 and 35,763,698: about
 29 KB and 33 KB for two more decoders on the same walker and the join by a
-session id.
+session id. The opencode thread measured 38,097,058 and 35,780,722: about
+45 KB and 17 KB for the reader of opencode's service, its export fallback,
+the check that the service's port is this user's, and the join to the
+session the plugin reports. It asks the service only
+when a person reads the thread.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
