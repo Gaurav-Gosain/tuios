@@ -1,27 +1,27 @@
 === braille 16x3
-|▀▀▀▀▀▀▀▀▀▀▀▀    |
-|▀▀▀▀▀▀▀▀▀▀▀▀    |
-|▀▀▀▀▀▀▀▀▀▀▀▀    |
+|▀▀▀▀▀▀          |
+|▀▀▀▀▀▀          |
+|▀▀▀▀▀▀          |
 --- roles
-|aaaaaaaabbbb    |
-|aaaaccccdddd    |
-|ccccddddeeee    |
+|aaaabb          |
+|aaccdd          |
+|ccddee          |
 a=heat1 b=heat5 c=heat2 d=heat4 e=heat3 (upper case is bold)
 === blocks 16x3
-|▀▀▀▀▀▀▀▀▀▀▀▀    |
-|▀▀▀▀▀▀▀▀▀▀▀▀    |
-|▀▀▀▀▀▀▀▀▀▀▀▀    |
+|▀▀▀▀▀▀          |
+|▀▀▀▀▀▀          |
+|▀▀▀▀▀▀          |
 --- roles
-|aaaaaaaabbbb    |
-|aaaaccccdddd    |
-|ccccddddeeee    |
+|aaaabb          |
+|aaccdd          |
+|ccddee          |
 a=heat1 b=heat5 c=heat2 d=heat4 e=heat3 (upper case is bold)
 === ascii 16x3
-|........@@@@    |
-|........@@@@    |
-|....::::####    |
+|....@@          |
+|....@@          |
+|..::##          |
 --- roles
-|aaaaaaaabbbb    |
-|aaaaaaaabbbb    |
-|aaaaccccdddd    |
+|aaaabb          |
+|aaaabb          |
+|aaccdd          |
 a=heat1 b=heat5 c=heat2 d=heat4 (upper case is bold)

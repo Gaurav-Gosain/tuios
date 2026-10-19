@@ -1,45 +1,45 @@
 === braille 30x6
-|mon ████████████████████████  |
-|tue ████████████████████████  |
-|wed ████    ████████████████  |
-|    00h                  05h  |
-|    0 ██████████ 9            |
-|                              |
+|mon ████████████              |
+|tue ████████████              |
+|wed ██  ████████              |
+|    00h      05h              |
+|    ███████████████           |
+|    0     4.5     9           |
 --- roles
-|aaa bbbbbbbbccccccccdddddddd  |
-|aaa ddddddddccccccccbbbbbbbb  |
-|aaa bbbb    eeeeeeeeccccbbbb  |
-|    fff                  fff  |
-|    ffbbccddggee f            |
-|                              |
+|aaa bbbbccccdddd              |
+|aaa ddddccccbbbb              |
+|aaa bb  eeeeccbb              |
+|    fff      fff              |
+|    bbbcccdddgggeee           |
+|    f     fff     f           |
 a=dim b=heat1 c=heat2 d=heat3 e=heat5 f=mute g=heat4 (upper case is bold)
 === blocks 30x6
-|mon ████████████████████████  |
-|tue ████████████████████████  |
-|wed ████    ████████████████  |
-|    00h                  05h  |
-|    0 ██████████ 9            |
-|                              |
+|mon ████████████              |
+|tue ████████████              |
+|wed ██  ████████              |
+|    00h      05h              |
+|    ███████████████           |
+|    0     4.5     9           |
 --- roles
-|aaa bbbbbbbbccccccccdddddddd  |
-|aaa ddddddddccccccccbbbbbbbb  |
-|aaa bbbb    eeeeeeeeccccbbbb  |
-|    fff                  fff  |
-|    ffbbccddggee f            |
-|                              |
+|aaa bbbbccccdddd              |
+|aaa ddddccccbbbb              |
+|aaa bb  eeeeccbb              |
+|    fff      fff              |
+|    bbbcccdddgggeee           |
+|    f     fff     f           |
 a=dim b=heat1 c=heat2 d=heat3 e=heat5 f=mute g=heat4 (upper case is bold)
 === ascii 30x6
-|mon ........::::::::++++++++  |
-|tue ++++++++::::::::........  |
-|wed ....    @@@@@@@@::::....  |
-|    00h                  05h  |
-|    0 ..::++##@@ 9            |
-|                              |
+|mon ....::::++++              |
+|tue ++++::::....              |
+|wed ..  @@@@::..              |
+|    00h      05h              |
+|    ...:::+++###@@@           |
+|    0     4.5     9           |
 --- roles
-|aaa bbbbbbbbccccccccdddddddd  |
-|aaa ddddddddccccccccbbbbbbbb  |
-|aaa bbbb    eeeeeeeeccccbbbb  |
-|    fff                  fff  |
-|    ffbbccddggee f            |
-|                              |
+|aaa bbbbccccdddd              |
+|aaa ddddccccbbbb              |
+|aaa bb  eeeeccbb              |
+|    fff      fff              |
+|    bbbcccdddgggeee           |
+|    f     fff     f           |
 a=dim b=heat1 c=heat2 d=heat3 e=heat5 f=mute g=heat4 (upper case is bold)

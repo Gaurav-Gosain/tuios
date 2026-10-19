@@ -62,7 +62,7 @@ func (b Bar) rng() (lo, hi float64) {
 	if !b.Horizontal && vlo > 0 && vlo > vhi/2 {
 		// Columns that cluster far from zero: start from a round base
 		// under the smallest value, so the differences show.
-		lo, hi := niceRange(vlo-(vhi-vlo)*0.6, vhi, 4)
+		lo, hi := niceRange(vlo-(vhi-vlo)*0.3, vhi, 4)
 		if lo < 0 {
 			lo = 0
 		}
@@ -200,6 +200,15 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 		gap = max(1, step/4)
 	}
 	colW := min(max(1, step-gap), 8)
+	// In ASCII, columns of different roles take the legend's marks: the
+	// first role seen is *, the next +, and so on, as DrawLegend numbers
+	// them.
+	markOf := map[Role]string{}
+	for _, r := range roles {
+		if _, ok := markOf[r]; !ok && r != None {
+			markOf[r] = asciiMarks[len(markOf)%len(asciiMarks)]
+		}
+	}
 	for i, v := range vals {
 		x := i * step
 		if x >= g.W {
@@ -219,15 +228,19 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 		if role == None {
 			role = Series1
 		}
+		full := block(m, "█", "#")
+		if mk, ok := markOf[role]; ok && m == ASCII {
+			full = mk
+		}
 		for r := 0; r < rows; r++ {
 			lv := units - r*8
 			glyph := ""
 			switch {
 			case lv >= 8:
-				glyph = block(m, "█", "#")
+				glyph = full
 			case lv > 0 && m == ASCII:
 				if lv >= 4 {
-					glyph = "#"
+					glyph = full
 				} else if r == 0 {
 					glyph = "_"
 				}

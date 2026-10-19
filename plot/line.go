@@ -192,16 +192,13 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 				continue
 			}
 			y := dh - 1 - int(math.Round(unit(v, lo, hi)*float64(dh-1)))
-			// The stroke is two dots tall, so it reads as a line and not as
-			// a chain of single dots.
-			thick := func(px, py int) {
-				setDot(px, py, s)
-				setDot(px, py+1, s)
-			}
+			// Consecutive points join with a Bresenham line in the dot grid,
+			// so each series is one unbroken stroke one dot wide.
+			stroke := func(px, py int) { setDot(px, py, s) }
 			if prevX >= 0 {
-				line(prevX, prevY, x, y, thick)
+				line(prevX, prevY, x, y, stroke)
 			} else {
-				thick(x, y)
+				stroke(x, y)
 			}
 			if l.Fill {
 				// Fill every column from the previous point to this one.

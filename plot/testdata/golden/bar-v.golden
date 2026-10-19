@@ -1,33 +1,33 @@
 === braille 21x4
-|            ▂▂       |
-|▁▁    ▃▃    ██ ▆▆    |
-|██ ▇▇ ██ ██ ██ ██ ▆▆ |
+|            ▄▄       |
+|      ▂▂    ██ ▆▆    |
+|▆▆ ▄▄ ██ ▅▅ ██ ██ ▂▂ |
 |██ ██ ██ ██ ██ ██ ██ |
 --- roles
 |            aa       |
-|aa    aa    aa aa    |
+|      aa    aa aa    |
 |aa aa aa aa aa aa aa |
 |aa aa aa aa aa aa aa |
 a=series1 (upper case is bold)
 === blocks 21x4
-|            ▂▂       |
-|▁▁    ▃▃    ██ ▆▆    |
-|██ ▇▇ ██ ██ ██ ██ ▆▆ |
+|            ▄▄       |
+|      ▂▂    ██ ▆▆    |
+|▆▆ ▄▄ ██ ▅▅ ██ ██ ▂▂ |
 |██ ██ ██ ██ ██ ██ ██ |
 --- roles
 |            aa       |
-|aa    aa    aa aa    |
+|      aa    aa aa    |
 |aa aa aa aa aa aa aa |
 |aa aa aa aa aa aa aa |
 a=series1 (upper case is bold)
 === ascii 21x4
-|                     |
+|            ##       |
 |            ## ##    |
-|## ## ## ## ## ## ## |
+|## ## ## ## ## ##    |
 |## ## ## ## ## ## ## |
 --- roles
-|                     |
+|            aa       |
 |            aa aa    |
-|aa aa aa aa aa aa aa |
+|aa aa aa aa aa aa    |
 |aa aa aa aa aa aa aa |
 a=series1 (upper case is bold)

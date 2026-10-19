@@ -1,20 +1,20 @@
 === braille 34x8
-|60┤                   ⣀⣤⠞⠳⠶⣤⣄⣀⣀⣠⣤⡴|
-|  │                ⣀⡴⠞⠉     ⠈⠉⠉⠁  |
-|  │      ⣀⣤⠶⠶⢦⣤⣄⣠⡴⠛⠉              |
-|40┤⠶⠶⠶⠶⠶⠛⠉     ⠈⠁                 |
-|  │                             ⣠⡴|
-|  │               ⢀⣤⠞⠳⠶⠶⢦⣤⣤⣤⣀⣠⡴⠛⠁ |
-|20┤⣀⣀⣤⣤⣤⠶⠶⠛⠛⠛⠳⠶⣤⣤⠞⠋         ⠉⠁    |
+|60┤                   ⣀⠤⠊⠑⠒⠤⢄⣀⣀⡠⠤⠔|
+|  │                ⣀⠔⠊            |
+|  │      ⣀⠤⠒⠒⠢⠤⢄⡠⠔⠉               |
+|40┤⠒⠒⠒⠒⠒⠉                         |
+|  │                             ⡠⠔|
+|  │               ⢀⠤⠊⠑⠒⠒⠢⠤⠤⠤⣀⡠⠔⠉  |
+|20┤⣀⣀⠤⠤⠤⠒⠒⠉⠉⠉⠑⠒⠤⠤⠊⠁               |
 |  └───────────────────────────────|
 --- roles
 |aab                   cccccccccccc|
-|  b                cccc     cccc  |
-|  b      ccccccccccc              |
-|aabccccccc     cc                 |
+|  b                ccc            |
+|  b      cccccccccc               |
+|aabcccccc                         |
 |  b                             dd|
-|  b               ddddddddddddddd |
-|aabdddddddddddddddd         dd    |
+|  b               dddddddddddddd  |
+|aabdddddddddddddddd               |
 |  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a=mute b=edge c=series2 d=series1 (upper case is bold)
 === blocks 34x8

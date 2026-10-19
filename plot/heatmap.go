@@ -54,12 +54,12 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	if labelW > 0 {
 		x0 = labelW + 1
 	}
-	// The bottom rows: column labels, then the scale.
+	// The bottom rows: column labels, then the scale and its labels.
 	foot := 0
-	if g.H >= 4 {
-		foot = 1
+	if g.H >= 5 {
+		foot = 2
 	}
-	colRow := len(hm.ColLabels) > 0 && g.H >= 5
+	colRow := len(hm.ColLabels) > 0 && g.H >= 6
 	if colRow {
 		foot++
 	}
@@ -70,7 +70,12 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	} else {
 		rows = min(rows, area)
 	}
-	cellW := max(1, min(4, (g.W-x0)/cols))
+	// A value is two cells wide when there is room: a cell is about twice
+	// as tall as it is wide, so two cells read about square.
+	cellW := 1
+	if (g.W-x0)/cols >= 2 {
+		cellW = 2
+	}
 	cols = min(cols, (g.W-x0)/cellW)
 	at := func(r, c int) float64 {
 		if r < len(hm.Values) && c < len(hm.Values[r]) {
@@ -135,19 +140,24 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 		}
 		y++
 	}
-	if foot > 0 && y < g.H {
-		// The scale: the low value, the five shades, the high value.
-		x := g.Text(x0, y, format(lo)+" ", Mute, false)
+	if foot >= 2 && y+1 < g.H {
+		// The scale: three cells of each shade, with the low value, the
+		// middle and the high value under it.
+		sw := 3
 		for i, r := range heat {
-			for k := 0; k < 2; k++ {
+			for k := 0; k < sw; k++ {
 				if m == ASCII {
-					g.set(x+2*i+k, y, asciiShades[i], r)
+					g.set(x0+sw*i+k, y, asciiShades[i], r)
 				} else {
-					g.set(x+2*i+k, y, "█", r)
+					g.set(x0+sw*i+k, y, "█", r)
 				}
 			}
 		}
-		g.Text(x+2*len(heat)+1, y, format(hi), Mute, false)
+		end := x0 + sw*len(heat)
+		g.Text(x0, y+1, format(lo), Mute, false)
+		mid := format((lo + hi) / 2)
+		g.Text(x0+(sw*len(heat)-Width(mid))/2, y+1, mid, Mute, false)
+		g.TextRight(end, y+1, format(hi), Mute, false)
 	}
 	return g
 }
