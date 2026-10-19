@@ -9,8 +9,8 @@
 |aaabccccccccccccccddddddddddddddddddbeee|
 |ffffffffffffffffffffffffffffffffffbeeeee|
 |ddddddddddddddddddbebbbbbbbbbbbbbbbbbbbb|
-|cccccccccccccccdddddddddddddddddddddbeee|
-|fffffffffffffffffffffffffddddddddbegeege|
+|ccccccccccccccgdddddddddddddddddddddbeee|
+|ffffffffffffffffffffffffhddddddddbeieeie|
 |cccccccbeeeebbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a: fg=dim bg=panel
 b: bg=panel
@@ -18,7 +18,9 @@ c: fg=accent bg=panel
 d: fg=track bg=panel
 e: fg=fg bg=panel bold
 f: fg=success bg=panel
-g: bg=panel bold
+g: fg=accent bg=track
+h: fg=success bg=track
+i: bg=panel bold
 === 256 40x6
 |CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%|
 |━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%|
@@ -30,8 +32,8 @@ g: bg=panel bold
 |aaabccccccccccccccddddddddddddddddddbeee|
 |ffffffffffffffffffffffffffffffffffbeeeee|
 |ddddddddddddddddddbebbbbbbbbbbbbbbbbbbbb|
-|cccccccccccccccdddddddddddddddddddddbeee|
-|fffffffffffffffffffffffffddddddddbegeege|
+|ccccccccccccccgdddddddddddddddddddddbeee|
+|ffffffffffffffffffffffffhddddddddbeieeie|
 |cccccccbeeeebbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a: fg=dim bg=panel
 b: bg=panel
@@ -39,7 +41,9 @@ c: fg=accent bg=panel
 d: fg=success-tint bg=panel
 e: fg=fg bg=panel bold
 f: fg=success bg=panel
-g: bg=panel bold
+g: fg=accent bg=success-tint
+h: fg=success bg=success-tint
+i: bg=panel bold
 === 16 40x6
 |CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%|
 |━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%|
@@ -51,15 +55,17 @@ g: bg=panel bold
 |aaa bbbbbbbbbbbbbbcccccccccccccccccc ddd|
 |eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee ddddd|
 |cccccccccccccccccc d                    |
-|bbbbbbbbbbbbbbbccccccccccccccccccccc ddd|
-|eeeeeeeeeeeeeeeeeeeeeeeeecccccccc dfddfd|
+|bbbbbbbbbbbbbbfccccccccccccccccccccc ddd|
+|eeeeeeeeeeeeeeeeeeeeeeeegcccccccc dhddhd|
 |bbbbbbb dddd                            |
 a: fg=dim
 b: fg=accent
 c: fg=mute
 d: fg=fg bold
 e: fg=success
-f: bold
+f: fg=accent bg=mute
+g: fg=success bg=mute
+h: bold
 === ascii 40x6
 |CPU [#############-----------------] 43%|
 |[################################] 98.8%|

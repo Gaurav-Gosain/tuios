@@ -1,309 +1,455 @@
-=== truecolor 48x34
-|Seconds by package                              |
-|vt           ███████████████████████████████   4|
-|internal/app ███████████████████▍··········· 2.5|
-|tml          ███████▊·······················   1|
-|                                                |
-|▁▁▁     ▃▃▃ ▁▁▁ ███ ▅▅▅                         |
-|███ ███ ███ ███ ███ ███ ▇▇▇                     |
-|███ ███ ███ ███ ███ ███ ███                     |
-|███ ███ ███ ███ ███ ███ ███                     |
-|                                                |
-|Latency                                         |
-|60│           ⣀              ⢀⣀⡠⠤⠔⠒⠊⠉⠉⠑⠒⠒⠒⠤⠤⠤⠤⣀⣀|
-|  │⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉ ⠉⠉⠉⠉⠉⠒⠒⠒⠒⠒⠔⠒⠊⠉⠁                  |
-|  │                                ⢀⣀⣀⡀         |
-|20│⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠉⠉⠉⠁  ⠈⠉⠉⠉⠉⠉⠉⠉⠒⠒|
-|  └─────────────────────────────────────────────|
-|                                                |
-|                       ⣀⣀⣀⣤⣤⣴⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣤⣤⣤⣤⣴⣶⣶⣶⣶⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|                                                |
-|trend ▃▂▄▂█▆▁                                   |
-|                                                |
-|▂▂▂ ███ ▂▂▂                                     |
-|███ ███ ███                                     |
-|███ ███ ███                                     |
-|███ ███ ███         ▆▆▆     ▆▆▆                 |
-|1                                             12|
-|                                                |
-|<heatmap>            <pie>                      |
-|                                                |
-|                                                |
-|                                                |
+=== truecolor 52x50
+|                                                    |
+|  Seconds by package                                |
+|  vt           ███████████████████████████████   4  |
+|  internal/app ███████████████████▍ · · · · ·  2.5  |
+|  tml          ███████▊ · · · · · · · · · · ·    1  |
+|                                                    |
+|  60┤                        ▃▃▃▃▃                  |
+|    │▅▅▅▅▅ ▃▃▃▃▃ ▆▆▆▆▆ ▄▄▄▄▄ █████ █████ ▃▃▃▃▃      |
+|  20┤█████ █████ █████ █████ █████ █████ █████      |
+|    └──────────────────────────────────────────     |
+|                                                    |
+|  Latency                              ■ ms  ■ p95  |
+|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⣤⣤⡴⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⣤⣤⣤⣤  |
+|    │⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠛⠛⠛⠛⠛⠉⠉⠉                    |
+|  20┤⣀⣀⣀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⠶⠶⠶⠶  |
+|    └─────────────────────────────────────────────  |
+|     1                     3                     5  |
+|                                                    |
+|  300┤                                 ▁▁▁▁▁▁▁▁     |
+|     │▂▂▂▂▃▃▃▄▄▄▄▄▄▄▃▃▃▃▄▄▅▅▅▆▆▇▇▇████████████████  |
+|    0┤████████████████████████████████████████████  |
+|     └────────────────────────────────────────────  |
+|                                                    |
+|  trend ▃▂▄▂█▆▁ 38                                  |
+|                                                    |
+|  5┤▃▃▃▃ ████ ▃▃▃▃                                  |
+|   │████ ████ ████                                  |
+|  0┤████ ████ ████           ▅▅▅▅      ▅▅▅▅         |
+|   └──────────────────────────────────────────────  |
+|    1                                           12  |
+|                                                    |
+|  mon ████████████                                  |
+|  tue ████████████            ▄▄▄▄▄▄                |
+|      00        02          ██▀▀▀▀▀███   ■ go 60%   |
+|      1 ██████████ 9       ███      ███  ■ zig 30%  |
+|                           ███      ███  ■ sh 10%   |
+|                            ██▀▄▄▄▄███              |
+|                              ▀▀▀▀▀▀                |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
 --- styles
-|aaaaaaabaabaaaaaaacccccccccccccccccccccccccccccc|
-|ddccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecccf|
-|ddddddddddddceeeeeeeeeeeeeeeeeeeegggggggggggcfff|
-|dddcccccccccceeeeeeeegggggggggggggggggggggggcccf|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|hhhccccchhhchhhchhhchhhccccccccccccccccccccccccc|
-|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
-|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
-|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|aaaaaaaccccccccccccccccccccccccccccccccccccccccc|
-|iigccccccccccchcccccccccccccchhhhhhhhhhhhhhhhhhh|
-|ccghhhhhhhhhhhchhhhhhhhhhhhhhhcccccccccccccccccc|
-|ccgcccccccccccccccccccccccccccccccceeeeccccccccc|
-|iigeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecceeeeeeeeee|
-|ccgggggggggggggggggggggggggggggggggggggggggggggg|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccjjjjjjjjjjjjjjjjjjjjjjjjj|
-|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
-|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
-|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|fffffcdddddddccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccceeeccccceeeccccccccccccccccc|
-|icccccccccccccccccccccccccccccccccccccccccccccii|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|iiiiiiiiicccccccccccciiiiicccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-a: fg=dim bg=panel bold
-b: bg=panel bold
-c: bg=panel
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aabbbbbbbcbbcbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaddaaaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaafaa|
+|aaddddddddddddaeeeeeeeeeeeeeeeeeeeeagagagagagaafffaa|
+|aadddaaaaaaaaaaeeeeeeeeagagagagagagagagagagagaaaafaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahhgaaaaaaaaaaaaaaaaaaaaaaaaiiiiiaaaaaaaaaaaaaaaaaa|
+|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
+|aahhgiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
+|aaaagggggggggggggggggggggggggggggggggggggggggggaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaaiahhhaa|
+|aahhgaaaaaaaiiiiiiiiiiiiaaaaaiiiiiiiiiiiiiiiiiiiiiaa|
+|aaaagiiiiiiiiiiiiiiiiiiiiiiiiiiiaaaaaaaaaaaaaaaaaaaa|
+|aahhgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
+|aaaaggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aaaaahaaaaaaaaaaaaaaaaaaaaahaaaaaaaaaaaaaaaaaaaaahaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahhhgaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaajjjjjjjjaaaaa|
+|aaaaagjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
+|aaaahgjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
+|aaaaagggggggggggggggggggggggggggggggggggggggggggggaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddddaiiiiiiiakkaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahgeeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaageeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahgeeeeaeeeeaeeeeaaaaaaaaaaaeeeeaaaaaaeeeeaaaaaaaaa|
+|aaagggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aaaahaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaahhaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddallllmmmmeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddallllnnnnmmmmaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
+|aaaaaahhaaaaaaaahhaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
+|aaaaaahallmmiinneeahaaaaaaaiiiaaaaaaeeeaaiadddadddaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaiiiaaaaaaeeeaajaddadddaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaiipeeeeeeeaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=dim bg=panel bold
+c: bg=panel bold
 d: fg=dim bg=panel
 e: fg=accent-bright bg=panel
 f: fg=fg bg=panel
 g: fg=edge bg=panel
-h: fg=info bg=panel
-i: fg=mute bg=panel
+h: fg=mute bg=panel
+i: fg=info bg=panel
 j: fg=series3 bg=panel
-=== 256 48x34
-|Seconds by package                              |
-|vt           ███████████████████████████████   4|
-|internal/app ███████████████████▍··········· 2.5|
-|tml          ███████▊·······················   1|
-|                                                |
-|▁▁▁     ▃▃▃ ▁▁▁ ███ ▅▅▅                         |
-|███ ███ ███ ███ ███ ███ ▇▇▇                     |
-|███ ███ ███ ███ ███ ███ ███                     |
-|███ ███ ███ ███ ███ ███ ███                     |
-|                                                |
-|Latency                                         |
-|60│           ⣀              ⢀⣀⡠⠤⠔⠒⠊⠉⠉⠑⠒⠒⠒⠤⠤⠤⠤⣀⣀|
-|  │⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉ ⠉⠉⠉⠉⠉⠒⠒⠒⠒⠒⠔⠒⠊⠉⠁                  |
-|  │                                ⢀⣀⣀⡀         |
-|20│⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠉⠉⠉⠁  ⠈⠉⠉⠉⠉⠉⠉⠉⠒⠒|
-|  └─────────────────────────────────────────────|
-|                                                |
-|                       ⣀⣀⣀⣤⣤⣴⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣤⣤⣤⣤⣴⣶⣶⣶⣶⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|                                                |
-|trend ▃▂▄▂█▆▁                                   |
-|                                                |
-|▂▂▂ ███ ▂▂▂                                     |
-|███ ███ ███                                     |
-|███ ███ ███                                     |
-|███ ███ ███         ▆▆▆     ▆▆▆                 |
-|1                                             12|
-|                                                |
-|<heatmap>            <pie>                      |
-|                                                |
-|                                                |
-|                                                |
+k: fg=fg bg=panel bold
+l: fg=heat1 bg=panel
+m: fg=heat2 bg=panel
+n: fg=heat4 bg=panel
+o: fg=series3 bg=info
+p: fg=info bg=accent-bright
+=== 256 52x50
+|                                                    |
+|  Seconds by package                                |
+|  vt           ███████████████████████████████   4  |
+|  internal/app ███████████████████▍ · · · · ·  2.5  |
+|  tml          ███████▊ · · · · · · · · · · ·    1  |
+|                                                    |
+|  60┤                        ▃▃▃▃▃                  |
+|    │▅▅▅▅▅ ▃▃▃▃▃ ▆▆▆▆▆ ▄▄▄▄▄ █████ █████ ▃▃▃▃▃      |
+|  20┤█████ █████ █████ █████ █████ █████ █████      |
+|    └──────────────────────────────────────────     |
+|                                                    |
+|  Latency                              ■ ms  ■ p95  |
+|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⣤⣤⡴⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⣤⣤⣤⣤  |
+|    │⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠛⠛⠛⠛⠛⠉⠉⠉                    |
+|  20┤⣀⣀⣀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⠶⠶⠶⠶  |
+|    └─────────────────────────────────────────────  |
+|     1                     3                     5  |
+|                                                    |
+|  300┤                                 ▁▁▁▁▁▁▁▁     |
+|     │▂▂▂▂▃▃▃▄▄▄▄▄▄▄▃▃▃▃▄▄▅▅▅▆▆▇▇▇████████████████  |
+|    0┤████████████████████████████████████████████  |
+|     └────────────────────────────────────────────  |
+|                                                    |
+|  trend ▃▂▄▂█▆▁ 38                                  |
+|                                                    |
+|  5┤▃▃▃▃ ████ ▃▃▃▃                                  |
+|   │████ ████ ████                                  |
+|  0┤████ ████ ████           ▅▅▅▅      ▅▅▅▅         |
+|   └──────────────────────────────────────────────  |
+|    1                                           12  |
+|                                                    |
+|  mon ████████████                                  |
+|  tue ████████████            ▄▄▄▄▄▄                |
+|      00        02          ██▀▀▀▀▀███   ■ go 60%   |
+|      1 ██████████ 9       ███      ███  ■ zig 30%  |
+|                           ███      ███  ■ sh 10%   |
+|                            ██▀▄▄▄▄███              |
+|                              ▀▀▀▀▀▀                |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
 --- styles
-|aaaaaaabaabaaaaaaacccccccccccccccccccccccccccccc|
-|ddccccccccccceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecccf|
-|ddddddddddddceeeeeeeeeeeeeeeeeeeegggggggggggcfff|
-|dddcccccccccceeeeeeeegggggggggggggggggggggggcccf|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|hhhccccchhhchhhchhhchhhccccccccccccccccccccccccc|
-|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
-|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
-|hhhchhhchhhchhhchhhchhhchhhccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|aaaaaaaccccccccccccccccccccccccccccccccccccccccc|
-|iigccccccccccchcccccccccccccchhhhhhhhhhhhhhhhhhh|
-|ccghhhhhhhhhhhchhhhhhhhhhhhhhhcccccccccccccccccc|
-|ccgcccccccccccccccccccccccccccccccceeeeccccccccc|
-|iigeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeecceeeeeeeeee|
-|ccgggggggggggggggggggggggggggggggggggggggggggggg|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccjjjjjjjjjjjjjjjjjjjjjjjjj|
-|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
-|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
-|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|fffffcdddddddccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccccccccccccccccccccccccccccccc|
-|eeeceeeceeeccccccccceeeccccceeeccccccccccccccccc|
-|icccccccccccccccccccccccccccccccccccccccccccccii|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|iiiiiiiiicccccccccccciiiiicccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-|cccccccccccccccccccccccccccccccccccccccccccccccc|
-a: fg=dim bg=panel bold
-b: bg=panel bold
-c: bg=panel
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aabbbbbbbcbbcbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaddaaaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaafaa|
+|aaddddddddddddaeeeeeeeeeeeeeeeeeeeeagagagagagaafffaa|
+|aadddaaaaaaaaaaeeeeeeeeagagagagagagagagagagagaaaafaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahhgaaaaaaaaaaaaaaaaaaaaaaaaiiiiiaaaaaaaaaaaaaaaaaa|
+|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
+|aahhgiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
+|aaaagggggggggggggggggggggggggggggggggggggggggggaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaaiahhhaa|
+|aahhgaaaaaaaiiiiiiiiiiiiaaaaaiiiiiiiiiiiiiiiiiiiiiaa|
+|aaaagiiiiiiiiiiiiiiiiiiiiiiiiiiiaaaaaaaaaaaaaaaaaaaa|
+|aahhgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
+|aaaaggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aaaaahaaaaaaaaaaaaaaaaaaaaahaaaaaaaaaaaaaaaaaaaaahaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahhhgaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaajjjjjjjjaaaaa|
+|aaaaagjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
+|aaaahgjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
+|aaaaagggggggggggggggggggggggggggggggggggggggggggggaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddddaiiiiiiiakkaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahgeeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaageeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahgeeeeaeeeeaeeeeaaaaaaaaaaaeeeeaaaaaaeeeeaaaaaaaaa|
+|aaagggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aaaahaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaahhaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddallllmmmmeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddallllnnnnmmmmaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
+|aaaaaahhaaaaaaaahhaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
+|aaaaaahallmmiinneeahaaaaaaaiiiaaaaaaeeeaaiadddadddaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaiiiaaaaaaeeeaajaddadddaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaiipeeeeeeeaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=dim bg=panel bold
+c: bg=panel bold
 d: fg=dim bg=panel
 e: fg=accent-bright bg=panel
 f: fg=fg bg=panel
 g: fg=edge bg=panel
-h: fg=info bg=panel
-i: fg=mute bg=panel
+h: fg=mute bg=panel
+i: fg=info bg=panel
 j: fg=series3 bg=panel
-=== 16 48x34
-|Seconds by package                              |
-|vt           ███████████████████████████████   4|
-|internal/app ███████████████████▍            2.5|
-|tml          ███████▊                          1|
-|                                                |
-|▁▁▁     ▃▃▃ ▁▁▁ ███ ▅▅▅                         |
-|███ ███ ███ ███ ███ ███ ▇▇▇                     |
-|███ ███ ███ ███ ███ ███ ███                     |
-|███ ███ ███ ███ ███ ███ ███                     |
-|                                                |
-|Latency                                         |
-|60│           ⣀              ⢀⣀⡠⠤⠔⠒⠊⠉⠉⠑⠒⠒⠒⠤⠤⠤⠤⣀⣀|
-|  │⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉ ⠉⠉⠉⠉⠉⠒⠒⠒⠒⠒⠔⠒⠊⠉⠁                  |
-|  │                                ⢀⣀⣀⡀         |
-|20│⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠉⠉⠉⠁  ⠈⠉⠉⠉⠉⠉⠉⠉⠒⠒|
-|  └─────────────────────────────────────────────|
-|                                                |
-|                       ⣀⣀⣀⣤⣤⣴⣶⣶⣶⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣤⣤⣤⣤⣴⣶⣶⣶⣶⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
-|                                                |
-|trend ▃▂▄▂█▆▁                                   |
-|                                                |
-|▂▂▂ ███ ▂▂▂                                     |
-|███ ███ ███                                     |
-|███ ███ ███                                     |
-|███ ███ ███         ▆▆▆     ▆▆▆                 |
-|1                                             12|
-|                                                |
-|<heatmap>            <pie>                      |
-|                                                |
-|                                                |
-|                                                |
+k: fg=fg bg=panel bold
+l: fg=success-tint bg=panel
+m: fg=accent-tint bg=panel
+n: fg=heat4 bg=panel
+o: fg=series3 bg=info
+p: fg=info bg=accent-bright
+=== 16 52x50
+|                                                    |
+|  Seconds by package                                |
+|  vt           ███████████████████████████████   4  |
+|  internal/app ███████████████████▍            2.5  |
+|  tml          ███████▊                          1  |
+|                                                    |
+|  60┤                        ▃▃▃▃▃                  |
+|    │▅▅▅▅▅ ▃▃▃▃▃ ▆▆▆▆▆ ▄▄▄▄▄ █████ █████ ▃▃▃▃▃      |
+|  20┤█████ █████ █████ █████ █████ █████ █████      |
+|    └──────────────────────────────────────────     |
+|                                                    |
+|  Latency                              ■ ms  ■ p95  |
+|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⣤⣤⡴⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⣤⣤⣤⣤  |
+|    │⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠛⠛⠛⠛⠛⠉⠉⠉                    |
+|  20┤⣀⣀⣀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⠶⠶⠶⠶  |
+|    └─────────────────────────────────────────────  |
+|     1                     3                     5  |
+|                                                    |
+|  300┤                                 ▁▁▁▁▁▁▁▁     |
+|     │▂▂▂▂▃▃▃▄▄▄▄▄▄▄▃▃▃▃▄▄▅▅▅▆▆▇▇▇████████████████  |
+|    0┤████████████████████████████████████████████  |
+|     └────────────────────────────────────────────  |
+|                                                    |
+|  trend ▃▂▄▂█▆▁ 38                                  |
+|                                                    |
+|  5┤▃▃▃▃ ████ ▃▃▃▃                                  |
+|   │████ ████ ████                                  |
+|  0┤████ ████ ████           ▅▅▅▅      ▅▅▅▅         |
+|   └──────────────────────────────────────────────  |
+|    1                                           12  |
+|                                                    |
+|  mon ████████████                                  |
+|  tue ████████████            ▄▄▄▄▄▄                |
+|      00        02          ██▀▀▀▀▀███   ■ go 60%   |
+|      1 ██████████ 9       ███      ███  ■ zig 30%  |
+|                           ███      ███  ■ sh 10%   |
+|                            ██▀▄▄▄▄███              |
+|                              ▀▀▀▀▀▀                |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
 --- styles
-|aaaaaaabaabaaaaaaa                              |
-|cc           ddddddddddddddddddddddddddddddd   e|
-|cccccccccccc dddddddddddddddddddd            eee|
-|ccc          dddddddd                          e|
-|                                                |
-|fff     fff fff fff fff                         |
-|fff fff fff fff fff fff fff                     |
-|fff fff fff fff fff fff fff                     |
-|fff fff fff fff fff fff fff                     |
-|                                                |
-|aaaaaaa                                         |
-|ggg           f              fffffffffffffffffff|
-|  gfffffffffff fffffffffffffff                  |
-|  g                                dddd         |
-|gggddddddddddddddddddddddddddddddddd  dddddddddd|
-|  gggggggggggggggggggggggggggggggggggggggggggggg|
-|                                                |
-|                       hhhhhhhhhhhhhhhhhhhhhhhhh|
-|hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh|
-|hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh|
-|hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh|
-|                                                |
-|eeeee ccccccc                                   |
-|                                                |
-|ddd ddd ddd                                     |
-|ddd ddd ddd                                     |
-|ddd ddd ddd                                     |
-|ddd ddd ddd         ddd     ddd                 |
-|g                                             gg|
-|                                                |
-|ggggggggg            ggggg                      |
-|                                                |
-|                                                |
-|                                                |
+|                                                    |
+|  aaaaaaabaabaaaaaaa                                |
+|  cc           ddddddddddddddddddddddddddddddd   e  |
+|  cccccccccccc dddddddddddddddddddd            eee  |
+|  ccc          dddddddd                          e  |
+|                                                    |
+|  fff                        ggggg                  |
+|    fggggg ggggg ggggg ggggg ggggg ggggg ggggg      |
+|  fffggggg ggggg ggggg ggggg ggggg ggggg ggggg      |
+|    fffffffffffffffffffffffffffffffffffffffffff     |
+|                                                    |
+|  aaaaaaa                              d ff  g fff  |
+|  fff       gggggggggggg     ggggggggggggggggggggg  |
+|    fggggggggggggggggggggggggggg                    |
+|  fffddddddddddddddddddddddddddddddddddddddddddddd  |
+|    ffffffffffffffffffffffffffffffffffffffffffffff  |
+|     f                     f                     f  |
+|                                                    |
+|  ffff                                 hhhhhhhh     |
+|     fhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  |
+|    ffhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  |
+|     fffffffffffffffffffffffffffffffffffffffffffff  |
+|                                                    |
+|  ccccc ggggggg ii                                  |
+|                                                    |
+|  ffdddd dddd dddd                                  |
+|   fdddd dddd dddd                                  |
+|  ffdddd dddd dddd           dddd      dddd         |
+|   fffffffffffffffffffffffffffffffffffffffffffffff  |
+|    f                                           ff  |
+|                                                    |
+|  ccc jjjjkkkkdddd                                  |
+|  ccc jjjjllllkkkk            hhhddd                |
+|      ff        ff          ggmhhddddd   d cc ccc   |
+|      f jjkkgglldd f       ggg      ddd  g ccc ccc  |
+|                           ggg      ddd  h cc ccc   |
+|                            ggnddddddd              |
+|                              dddddd                |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
 a: fg=dim bold
 b: bold
 c: fg=dim
 d: fg=accent-bright
 e: fg=fg
-f: fg=info
-g: fg=mute
+f: fg=mute
+g: fg=info
 h: fg=success
-=== ascii 48x34
-|Seconds by package                              |
-|vt           ###############################   4|
-|internal/app ####################            2.5|
-|tml          ########                          1|
-|                                                |
-|                ### ###                         |
-|### ### ### ### ### ### ###                     |
-|### ### ### ### ### ### ###                     |
-|### ### ### ### ### ### ###                     |
-|                                                |
-|Latency                                         |
-|60|           ++             +++++++++++++++++++|
-|  |+++++++++++  +++++++++++++                   |
-|  |                                 *           |
-|20|********************************* ***********|
-|  +---------------------------------------------|
-|                                                |
-|                       *************************|
-|***********************:::::::::::::::::::::::::|
-|::::::::::::::::::::::::::::::::::::::::::::::::|
-|::::::::::::::::::::::::::::::::::::::::::::::::|
-|                                                |
-|trend -.~.#+_                                   |
-|                                                |
-|    ###                                         |
-|### ### ###                                     |
-|### ### ###                                     |
-|### ### ###         ###     ###                 |
-|1                                             12|
-|                                                |
-|<heatmap>            <pie>                      |
-|                                                |
-|                                                |
-|                                                |
+i: fg=fg bold
+j: fg=pill
+k: fg=heat2
+l: fg=accent
+m: fg=success bg=info
+n: fg=info bg=accent-bright
+=== ascii 52x50
+|                                                    |
+|  Seconds by package                                |
+|  vt           ###############################   4  |
+|  internal/app ###################             2.5  |
+|  tml          ########                          1  |
+|                                                    |
+|  60+                                               |
+|    |#####       ##### ##### ##### #####            |
+|  20+##### ##### ##### ##### ##### ##### #####      |
+|    +------------------------------------------     |
+|                                                    |
+|  Latency                              * ms  + p95  |
+|  60+       ++++++++++++     +++++++++++++++++++++  |
+|    |+++++++            +++++                       |
+|  20+*********************************************  |
+|    +---------------------------------------------  |
+|     1                     3                     5  |
+|                                                    |
+|  300+                                ************  |
+|     |********************************::::::::::::  |
+|    0+::::::::::::::::::::::::::::::::::::::::::::  |
+|     +--------------------------------------------  |
+|                                                    |
+|  trend -.~.#+_ 38                                  |
+|                                                    |
+|  5+     ####                                       |
+|   |#### #### ####                                  |
+|  0+#### #### ####           ####      ####         |
+|   +----------------------------------------------  |
+|    1                                           12  |
+|                                                    |
+|  mon ....::::@@@@                                  |
+|  tue ....####::::            ooo***                |
+|      00        02          ++ooo*****   * go 60%   |
+|      1 ..::++##@@ 9       +++      ***  + zig 30%  |
+|                           +++      ***  o sh 10%   |
+|                            +++*******              |
+|                              ******                |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
 --- styles
-|aaaaaaaaaaaaaaaaaa                              |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|aaaaaaa                                         |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
-|                                                |
+|                                                    |
+|  aaaaaaaaaaaaaaaaaa                                |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|  aaaaaaa                                           |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                aa                                  |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
+|                                                    |
 a: bold

@@ -43,8 +43,17 @@ const (
 	RolePill   = "pill"   // text on an accent ground
 )
 
+// The heat ramp of a heatmap, low to high. tuios.dev/plot names them.
+const (
+	RoleHeat1 = "heat1"
+	RoleHeat2 = "heat2"
+	RoleHeat3 = "heat3"
+	RoleHeat4 = "heat4"
+	RoleHeat5 = "heat5"
+)
+
 // roleNames is every role a palette holds: the TML roles, then loom's own.
-var roleNames = append(tml.Roles(), RoleTrack, RoleCursor, RolePill)
+var roleNames = append(tml.Roles(), RoleTrack, RoleCursor, RolePill, RoleHeat1, RoleHeat2, RoleHeat3, RoleHeat4, RoleHeat5)
 
 func roleIndex(name string) int {
 	for i, r := range roleNames {
@@ -85,6 +94,7 @@ func NewPalette(d Depth, roles map[string]color.Color) *Palette {
 		{"dim", "fg"}, {"mute", "dim"}, {"edge", "mute"}, {RoleTrack, "edge"},
 		{"accent-bright", "accent"}, {"attention", "warning"}, {"busy", "info"},
 		{RoleCursor, "surface"}, {RolePill, "fg"},
+		{RoleHeat1, "mute"}, {RoleHeat2, "info"}, {RoleHeat3, "info"}, {RoleHeat4, "accent"}, {RoleHeat5, "accent-bright"},
 		{"series1", "accent-bright"}, {"series2", "info"}, {"series3", "success"},
 		{"series4", "warning"}, {"series5", "error"}, {"series6", "attention"},
 	}
@@ -185,6 +195,12 @@ var defaultRGB = func() map[string]color.RGBA {
 		RoleTrack:  mixRGB(panel, mute, 0.30),
 		RoleCursor: surface,
 		RolePill:   fg,
+		// From the ground through the info blue to the accent.
+		RoleHeat1: mixRGB(panel, info, 0.22),
+		RoleHeat2: mixRGB(panel, info, 0.48),
+		RoleHeat3: info,
+		RoleHeat4: mixRGB(info, bright, 0.55),
+		RoleHeat5: bright,
 	}
 }()
 
@@ -194,6 +210,7 @@ var default16 = map[string]int{
 	"accent": 5, "accent-bright": 13, RolePill: 0,
 	"success": 10, "error": 9, "warning": 11, "info": 12, "attention": 11, "busy": 12,
 	"series1": 13, "series2": 12, "series3": 10, "series4": 11, "series5": 9, "series6": 14,
+	RoleHeat1: 0, RoleHeat2: 4, RoleHeat3: 12, RoleHeat4: 5, RoleHeat5: 13,
 }
 
 // DefaultPalette returns the tuios chrome palette with no theme at depth d.

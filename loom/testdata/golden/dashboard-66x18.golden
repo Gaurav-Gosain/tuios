@@ -4,9 +4,9 @@
 |│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
-|│  ▃▃▃ ▂▂▂ ▄▄▄ ▂▂▂ ███ ▆▆▆ ▂▂▂                                   │|
-|│  ███ ███ ███ ███ ███ ███ ███                                   │|
-|│  ███ ███ ███ ███ ███ ███ ███                                   │|
+|│                                  ▃▃▃▃▃▃                        │|
+|│  ▅▅▅▅▅▅  ▃▃▃▃▃▃  ▆▆▆▆▆▆  ▄▄▄▄▄▄  ██████  ██████  ▃▃▃▃▃▃        │|
+|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
 |│                                                                │|
 |│  ▾ Failures  3                                                 │|
 |│    PACKAGE               TEST                          TIME ▼  │|
@@ -23,9 +23,9 @@
 |addfffdeeeeeedddgdeeeeeedddhdeeeeeeedddddddddddddaaaaaaaadcccccdda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
-|addiiidiiidiiidiiidiiidiiidiiiddddddddddddddddddddddddddddddddddda|
-|addiiidiiidiiidiiidiiidiiidiiiddddddddddddddddddddddddddddddddddda|
-|addiiidiiidiiidiiidiiidiiidiiiddddddddddddddddddddddddddddddddddda|
+|addddddddddddddddddddddddddddddddddiiiiiidddddddddddddddddddddddda|
+|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
+|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addddjjjjjjjdddddddddddddddjjjjddddddddddddddddddddddddddkkkkdidda|
@@ -61,9 +61,9 @@ s: fg=fg bg=surface
 |│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
-|│  ▃▃▃ ▂▂▂ ▄▄▄ ▂▂▂ ███ ▆▆▆ ▂▂▂                                   │|
-|│  ███ ███ ███ ███ ███ ███ ███                                   │|
-|│  ███ ███ ███ ███ ███ ███ ███                                   │|
+|│                                  ▃▃▃▃▃▃                        │|
+|│  ▅▅▅▅▅▅  ▃▃▃▃▃▃  ▆▆▆▆▆▆  ▄▄▄▄▄▄  ██████  ██████  ▃▃▃▃▃▃        │|
+|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
 |│                                                                │|
 |│  ▾ Failures  3                                                 │|
 |│    PACKAGE               TEST                          TIME ▼  │|
@@ -80,9 +80,9 @@ s: fg=fg bg=surface
 |addfffdeeeeeedddgdeeeeeedddhdeeeeeeedddddddddddddaaaaaaaadcccccdda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
-|addiiidiiidiiidiiidiiidiiidiiiddddddddddddddddddddddddddddddddddda|
-|addiiidiiidiiidiiidiiidiiidiiiddddddddddddddddddddddddddddddddddda|
-|addiiidiiidiiidiiidiiidiiidiiiddddddddddddddddddddddddddddddddddda|
+|addddddddddddddddddddddddddddddddddiiiiiidddddddddddddddddddddddda|
+|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
+|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addddjjjjjjjdddddddddddddddjjjjddddddddddddddddddddddddddkkkkdidda|
@@ -118,9 +118,9 @@ s: fg=fg bg=surface
 |│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
-|│  ▃▃▃ ▂▂▂ ▄▄▄ ▂▂▂ ███ ▆▆▆ ▂▂▂                                   │|
-|│  ███ ███ ███ ███ ███ ███ ███                                   │|
-|│  ███ ███ ███ ███ ███ ███ ███                                   │|
+|│                                  ▃▃▃▃▃▃                        │|
+|│  ▅▅▅▅▅▅  ▃▃▃▃▃▃  ▆▆▆▆▆▆  ▄▄▄▄▄▄  ██████  ██████  ▃▃▃▃▃▃        │|
+|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
 |│                                                                │|
 |│  ▾ Failures  3                                                 │|
 |│    PACKAGE               TEST                          TIME ▼  │|
@@ -137,9 +137,9 @@ s: fg=fg bg=surface
 |a  eee dddddd   f dddddd   g ddddddd             aaaaaaaa ccccc  a|
 |a                                                                a|
 |a  gggggggbgggbggggbggggbg                                       a|
-|a  hhh hhh hhh hhh hhh hhh hhh                                   a|
-|a  hhh hhh hhh hhh hhh hhh hhh                                   a|
-|a  hhh hhh hhh hhh hhh hhh hhh                                   a|
+|a                                  hhhhhh                        a|
+|a  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh        a|
+|a  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh        a|
 |a                                                                a|
 |a  i ccccccccbbf                                                 a|
 |a    iiiiiii               iiii                          jjjj h  a|
@@ -171,9 +171,9 @@ o: fg=accent-bright bold
 ||  412 passed   3 failed   9 skipped             [######] 99.3%  ||
 ||                                                                ||
 ||  Seconds per run, last 7                                       ||
-||          ###     ### ###                                       ||
-||  ### ### ### ### ### ### ###                                   ||
-||  ### ### ### ### ### ### ###                                   ||
+||                                                                ||
+||  ######          ######  ######  ######  ######                ||
+||  ######  ######  ######  ######  ######  ######  ######        ||
 ||                                                                ||
 ||  v Failures  3                                                 ||
 ||    PACKAGE               TEST                          TIME v  ||

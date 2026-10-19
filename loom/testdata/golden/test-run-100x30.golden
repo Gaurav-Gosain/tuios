@@ -8,10 +8,10 @@
 |│                                                                                                  │|
 |│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
 |│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
-|│ internal/app     ██████████████████████████▍······· 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
-|│ vt               █████████████████················· 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
-|│ internal/tape    ███████▋·························· 1.4                                          │|
-|│ internal/config  ████▉····························· 0.9                                          │|
+|│ internal/app     ██████████████████████████▍· · · · 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               █████████████████· · · · · · · · · 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ███████▋ · · · · · · · · · · · · · 1.4                                          │|
+|│ internal/config  ████▉· · · · · · · · · · · · · · · 0.9                                          │|
 |│                                                                                                  │|
 |│ ▾ Failures  5                                                                                    │|
 |│   PACKAGE               TEST                     TIME ▼                                          │|
@@ -39,10 +39,10 @@
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggda|
 |adeeeeeeeeeeeeeeeedlllllllllllllllllllllllllllllllllldmmmddddeeeedddnnnnnnnnnnnnnnnnnnnnnnndcccccdda|
-|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgggggggdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
-|adeedddddddddddddddlllllllllllllllllgggggggggggggggggdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
-|adeeeeeeeeeeeeeddddllllllllggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adeeeeeeeeeeeeeeeddlllllgggggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgdgdgdgdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
+|adeedddddddddddddddlllllllllllllllllgdgdgdgdgdgdgdgdgdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
+|adeeeeeeeeeeeeeddddlllllllldgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeddlllllgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddfffffffdddddddddddddddffffdddddddddddddddddddddqqqqdpdddddddddddddddddddddddddddddddddddddddddda|
@@ -99,10 +99,10 @@ z: bg=card bold
 |│                                                                                                  │|
 |│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
 |│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
-|│ internal/app     ██████████████████████████▍······· 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
-|│ vt               █████████████████················· 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
-|│ internal/tape    ███████▋·························· 1.4                                          │|
-|│ internal/config  ████▉····························· 0.9                                          │|
+|│ internal/app     ██████████████████████████▍· · · · 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               █████████████████· · · · · · · · · 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ███████▋ · · · · · · · · · · · · · 1.4                                          │|
+|│ internal/config  ████▉· · · · · · · · · · · · · · · 0.9                                          │|
 |│                                                                                                  │|
 |│ ▾ Failures  5                                                                                    │|
 |│   PACKAGE               TEST                     TIME ▼                                          │|
@@ -130,10 +130,10 @@ z: bg=card bold
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggda|
 |adeeeeeeeeeeeeeeeedlllllllllllllllllllllllllllllllllldmmmddddeeeedddnnnnnnnnnnnnnnnnnnnnnnndcccccdda|
-|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgggggggdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
-|adeedddddddddddddddlllllllllllllllllgggggggggggggggggdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
-|adeeeeeeeeeeeeeddddllllllllggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adeeeeeeeeeeeeeeeddlllllgggggggggggggggggggggggggggggdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgdgdgdgdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
+|adeedddddddddddddddlllllllllllllllllgdgdgdgdgdgdgdgdgdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
+|adeeeeeeeeeeeeeddddlllllllldgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeddlllllgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddfffffffdddddddddddddddffffdddddddddddddddddddddqqqqdpdddddddddddddddddddddddddddddddddddddddddda|
@@ -273,7 +273,7 @@ u: fg=accent-bright bold
 ||                                                                                                  ||
 || Time by package ------------------------------  seconds    Suite time, last 30 runs ------------ ||
 || internal/session ################################## 6.2    wall   ~-=.#-..+-.-#~._-.-.=-_ 18.4s  ||
-|| internal/app     ###########################        4.8    flaky  __-_+-__-.__#.__.___+-= 3      ||
+|| internal/app     ##########################         4.8    flaky  __-_+-__-.__#.__.___+-= 3      ||
 || vt               #################                  3.1    alloc  ++*+#**+**==+=~~~--..__ 35M    ||
 || internal/tape    ########                           1.4                                          ||
 || internal/config  #####                              0.9                                          ||

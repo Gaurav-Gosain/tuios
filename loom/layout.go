@@ -318,7 +318,8 @@ func (s *Surface) placeRow(b *box, in Rect) {
 	for i, k := range b.kids {
 		wd := widths[i]
 		h := in.Dy()
-		if b.align != "stretch" && b.align != "" || k.height.kind != sizeAuto {
+		// fill on the cross axis stretches, as align="stretch" does.
+		if (b.align != "stretch" && b.align != "" || k.height.kind != sizeAuto) && k.height.kind != sizeFill {
 			_, kh := s.measure(k, wd)
 			if fixed := k.height.resolve(in.Dy()); fixed >= 0 {
 				kh = fixed

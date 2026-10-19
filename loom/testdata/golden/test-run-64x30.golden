@@ -8,10 +8,10 @@
 |│                                                              │|
 |│ Time by package ───────────────────────────────────  seconds │|
 |│ internal/session ███████████████████████████████████████ 6.2 │|
-|│ internal/app     ██████████████████████████████▎········ 4.8 │|
-|│ vt               ███████████████████▌··················· 3.1 │|
-|│ internal/tape    ████████▊······························ 1.4 │|
-|│ internal/config  █████▋································· 0.9 │|
+|│ internal/app     ██████████████████████████████▎· · · ·  4.8 │|
+|│ vt               ███████████████████▌ · · · · · · · · ·  3.1 │|
+|│ internal/tape    ████████▊· · · · · · · · · · · · · · ·  1.4 │|
+|│ internal/config  █████▋ · · · · · · · · · · · · · · · ·  0.9 │|
 |│                                                              │|
 |│ ▾ Failures  5                                                │|
 |│   PACKAGE               TEST                     TIME ▼      │|
@@ -39,10 +39,10 @@
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdgggggggggggggggggggggggggggggggggggddfffffffda|
 |adeeeeeeeeeeeeeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdlllda|
-|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggggdlllda|
-|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkgggggggggggggggggggdlllda|
-|adeeeeeeeeeeeeeddddkkkkkkkkkggggggggggggggggggggggggggggggdlllda|
-|adeeeeeeeeeeeeeeeddkkkkkkgggggggggggggggggggggggggggggggggdlllda|
+|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgdgdgdgddlllda|
+|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkdgdgdgdgdgdgdgdgdgddlllda|
+|adeeeeeeeeeeeeeddddkkkkkkkkkgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
+|adeeeeeeeeeeeeeeeddkkkkkkdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddfffffffdddddddddddddddffffdddddddddddddddddddddmmmmdndddddda|
@@ -96,10 +96,10 @@ z: fg=accent-bright bg=panel bold
 |│                                                              │|
 |│ Time by package ───────────────────────────────────  seconds │|
 |│ internal/session ███████████████████████████████████████ 6.2 │|
-|│ internal/app     ██████████████████████████████▎········ 4.8 │|
-|│ vt               ███████████████████▌··················· 3.1 │|
-|│ internal/tape    ████████▊······························ 1.4 │|
-|│ internal/config  █████▋································· 0.9 │|
+|│ internal/app     ██████████████████████████████▎· · · ·  4.8 │|
+|│ vt               ███████████████████▌ · · · · · · · · ·  3.1 │|
+|│ internal/tape    ████████▊· · · · · · · · · · · · · · ·  1.4 │|
+|│ internal/config  █████▋ · · · · · · · · · · · · · · · ·  0.9 │|
 |│                                                              │|
 |│ ▾ Failures  5                                                │|
 |│   PACKAGE               TEST                     TIME ▼      │|
@@ -127,10 +127,10 @@ z: fg=accent-bright bg=panel bold
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdgggggggggggggggggggggggggggggggggggddfffffffda|
 |adeeeeeeeeeeeeeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdlllda|
-|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggggdlllda|
-|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkgggggggggggggggggggdlllda|
-|adeeeeeeeeeeeeeddddkkkkkkkkkggggggggggggggggggggggggggggggdlllda|
-|adeeeeeeeeeeeeeeeddkkkkkkgggggggggggggggggggggggggggggggggdlllda|
+|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgdgdgdgddlllda|
+|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkdgdgdgdgdgdgdgdgdgddlllda|
+|adeeeeeeeeeeeeeddddkkkkkkkkkgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
+|adeeeeeeeeeeeeeeeddkkkkkkdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddfffffffdddddddddddddddffffdddddddddddddddddddddmmmmdndddddda|
@@ -264,7 +264,7 @@ r: fg=accent-bright bold
 ||                                                              ||
 || Time by package -----------------------------------  seconds ||
 || internal/session ####################################### 6.2 ||
-|| internal/app     ###############################         4.8 ||
+|| internal/app     ##############################          4.8 ||
 || vt               ####################                    3.1 ||
 || internal/tape    #########                               1.4 ||
 || internal/config  ######                                  0.9 ||

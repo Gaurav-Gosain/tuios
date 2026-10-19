@@ -1,0 +1,533 @@
+=== truecolor 200x55
+|╭─ plot gallery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
+|│                                                                                                                                                                                                      │|
+|│  ▎ passed                    ▎ failed                    ▎ skipped                   ▎ wall time                 pass rate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%  │|
+|│  ▎ 412 +12                   ▎ 5 +3                      ▎ 9                         ▎ 18.4s -2.1s               cpu       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%  │|
+|│  ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██      ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█      ▎                           ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁      ████████████████████████████████████████████████████▌░░░░░░░░░░░░░░░░░░░░ disk 72%  │|
+|│                                                                                                                                                                                                      │|
+|│  Time by package ─────────────────────────────────────────────────────────────────  seconds    Suite time, last 30 runs                                                                              │|
+|│  internal/session    ██████████████████████████████████████████████████████████████████ 6.2      25┤                                             ▂▂                                                  │|
+|│  internal/app        ███████████████████████████████████████████████████▏ · · · · · · · 4.8        │               ██             ▃▃             ██                                                  │|
+|│  vt                  █████████████████████████████████· · · · · · · · · · · · · · · · · 3.1        │      ▇▇       ██             ██ ▁▁          ██ ▃▃                            ▅▅                 │|
+|│  internal/tape       ██████████████▉· · · · · · · · · · · · · · · · · · · · · · · · · · 1.4        │██ ▅▅ ██    ▂▂ ██ ▆▆ ▄▄    ▁▁ ██ ██ ▁▁    ▃▃ ██ ██ ▆▆ ▃▃       ██    ▄▄    ▁▁ ██ ▄▄ ▃▃           │|
+|│  internal/config     █████████▋ · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.9        │██ ██ ██ ▇▇ ██ ██ ██ ██ ▆▆ ██ ██ ██ ██ ▇▇ ██ ██ ██ ██ ██ ▅▅ ██ ██ ▇▇ ██ ▅▅ ██ ██ ██ ██           │|
+|│  internal/terminal   ████████▌· · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.8    17.5┤██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ▆▆        │|
+|│  internal/federation ██████▍· · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.6        │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│  progstatus          ███▎ · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.3        │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                  10┤██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    └──────────────────────────────────────────────────────────────────────────────────────────       │|
+|│                                                                                                     30 runs ago                            median 20.5s                                    now       │|
+|│                                                                                                                                                                                                      │|
+|│  Request latency, ms                                                                                   ■ p50  ■ p95    Memory, MB                                                                    │|
+|│  60┤                                                                                                                   400┤                                                                          │|
+|│    │             ⢀⣄   ⣠⣤⣀⣀⣀⣤⡴⠶⢦⣄⣀⣠⠞⠳⠶⡴⠶⠶⣄⡀                                                              ⣀⣤⡀  ⣀⣤⡴⠶⣄        │                                                                          │|
+|│    │  ⣀⡴⠞⠛⠳⠶⠶⠶⠶⢦⠶⠋⠈⠳⢦⠞⠁ ⠉⠉⠉    ⠈⠉⠁      ⠈⠙⢦⡀                                                    ⢀⣀⣤⠶⠛⠛⠳⠛⠉ ⠙⠶⠞⠉   ⠈⠳       │                                                                      ▁▃  │|
+|│    │⣠⠞⠉                                    ⠙⠶⠞⠳⣤⡀                                        ⢀⣀⣤⠶⠛⠛⠛⠋⠉                        │                     ▁                                            ▁▃▄▇██  │|
+|│    │⠁                                           ⠙⢦⣄⢀⣀⣀                                 ⢀⡼⠋⠉                               │          ▂▄▅▅▅▅▆▇▇█████▇▆▆▅▃▂▃▂▁                            ▁▂▄▆▇██████  │|
+|│  30┤                                              ⠈⠋⠉⠉⠳⣄⣠⣤⠶⠶⣤⠶⠶⠳⠶⠶⢦⣄⣀⣀⣠⡴⠛⠶⢦⣤⣤⣀⡀ ⣠⡴⢦⣤⣀⣀⣠⠞                               200┤   ▂▂▂▄▆▇█████████████████████████▇▆▄▃▂                ▁▂▃▅█████████████  │|
+|│    │                       ⣀⣀⣀                         ⠈⠁          ⠈⠉⠉⠁      ⠉⠙⠛⠁   ⠉⠉⠁                                   │▃▅████████████████████████████████████████▆▆▅▅▅▅▅▅▅▅▆▇██████████████████  │|
+|│    │    ⣀⣀⡀ ⣀⣀⣀⣠⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠛⠉⠉⠉⠛⠳⠶⠶⠶⣤⣤⣤⣤⣤⣤⣄⣀                                                         ⢀⣀⣀⣠⣤⣤⣤⣤⠶⠶⠛⠛⠛⠛⠳       │████████████████████████████████████████████████████████████████████████  │|
+|│    │⠶⠞⠛⠛⠉⠉⠙⠛⠉⠉⠉⠁                         ⠈⠉⠛⠛⠛⠛⠳⠶⣤⣤⣤⣤⣤⣄⡀                         ⢀⣀    ⣀⣤⡴⠶⠶⠶⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠁                  │████████████████████████████████████████████████████████████████████████  │|
+|│    │                                                  ⠈⠙⠛⠛⠛⠛⠛⠛⠛⠛⠶⢦⣤⣤⣤⣀⣠⡴⠶⠶⠶⠶⠶⠶⠶⠞⠛⠋⠉⠛⠛⠛⠛⠉                                  │████████████████████████████████████████████████████████████████████████  │|
+|│    │                                                                 ⠉⠁                                                   │████████████████████████████████████████████████████████████████████████  │|
+|│   0┤                                                                                                                     0┤████████████████████████████████████████████████████████████████████████  │|
+|│    └───────────────────────────────────────────────────────────────────────────────────────────────────────────────       └────────────────────────────────────────────────────────────────────────  │|
+|│     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  │|
+|│                                                                                                                                                                                                      │|
+|│  Failures by hour                                                                     Lines by language                                        Latency distribution, ms                              │|
+|│  mon ████████████████████████████████████████████████████████████████████████               ▄▄▄██████▄▄▄                                       84┤          ██▂▂                                     │|
+|│  tue ████████████████████████████████████████████████████████████████████████            ▄████████████████▄                                      │          ████                                     │|
+|│  wed ████████████████████████████████████████████████████████████████████████           ███████▀▀▀▀▀▀███████                                     │          ████                                     │|
+|│  thu ████████████████████████████████████████████████████████████████████████          ███▀▀█▀        ▀██████   ■ Go 64%                         │        ▅▅████                                     │|
+|│  fri ████████████████████████████████████████████████████████████████████████         ██████            ██████  ■ TypeScript 19%               42┤        ██████                                     │|
+|│  sat ████████████████████████████████████████████████████████████████████████         █████              █████  ■ Zig 10%                        │      ▅▅██████▇▇                                   │|
+|│  sun ████████████████████████████████████████████████████████████████████████         ██████            ██████  ■ Shell 5%                       │      ██████████                                   │|
+|│      00h                                                                  23h          █████▀▄        ▄██████   ■ Nix 2%                         │    ▆▆██████████▄▄            ▄▄                   │|
+|│      0 ██████████ 10                                                                    █▀█████▄▄▄▄▄▄███████                                    0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁   │|
+|│                                                                                          ▀████████████████▀                                      └─────────────────────────────────────────────────  │|
+|│                                                                                             ▀▀▀██████▀▀▀                                          11                                            144  │|
+|│                                                                                                                                                                                                      │|
+|│  flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆ 3                                                            wall   ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁ 18.4                                                                 │|
+|│  allocs ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁ 35                                                           passed ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██ 412                                                                  │|
+|│                                                                                                                                                                                                      │|
+|╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccccccbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addfghhhhhhggggggggggggggggggddighhhhhhggggggggggggggggggddhghhhhhhhgggggggggggggggggddjghhhhghhhhgggggggggggggggddeeeedeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkldcccccdda|
+|addfgmmmgnnngggggggggggggggggddigognnggggggggggggggggggggddhgpgggggggggggggggggggggggddjgqqqqqgnnnnngggggggggggggddeeedddddddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrllllllllllllllllllllllllllllllllllllllldcccdda|
+|addfgffffffffffffffffffffggggddigiiiiiiiiiiiiiiiiiiiiggggddhgggggggggggggggggggggggggddjgssssssssssssssssssssggggddttttttttttttttttttttttttttttttttttttttttttttttttttttulllllllllllllllllllldccccbcccdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addccccbccbcccccccdvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddwwwwwwwddddxxxxxbxxxxxbxxxxbxxbxxxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeeeeeeeeeeeeddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydzzzddddddwwvdddddddddddddddddddddddddddddddddddddddddddddrrdddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeeeeeeeeddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydvdvdvdvdvdvdvdzzzddddddddvdddddddddddddddrrdddddddddddddrrdddddddddddddrrdddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeddddddddddddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvddddddrrdddddddrrdddddddddddddrrdrrddddddddddrrdrrddddddddddddddddddddddddddddrrddddddddddddddddda|
+|addeeeeeeeeeeeeedddddddyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrddddrrdrrdrrdrrddddrrdrrdrrdrrddddrrdrrdrrdrrdrrdddddddrrddddrrddddrrdrrdrrdrrddddddddddda|
+|addeeeeeeeeeeeeeeedddddyyyyyyyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrddddddddddda|
+|addeeeeeeeeeeeeeeeeedddyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddwwwwvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addeeeeeeeeeeeeeeeeeeedyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addeeeeeeeeeeddddddddddyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwdwwwwdwwwddddddddddddddddddddddddddddwwwwwwdwwwwwddddddddddddddddddddddddddddddddddddwwwddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addxxxxxxxbxxxxxxxxbxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAdwwwddrdwwwddddxxxxxxxbxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addwwvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwwvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddvdddddddddddddrrdddrrrrrrrrrrrrrrrrrrrrddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddrrrddrrrrrddddddddvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddvddrrrrrrrrrrrrrrrrrdrrrddddrrrddddddrrrrddddddddddddddddddddddddddddddddddddddddddddddddddddrrrrrrrrrdrrrrdddrrdddddddvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddBBdda|
+|addddvrrrddddddddddddddddddddddddddddddddddddrrrrrrddddddddddddddddddddddddddddddddddddddddrrrrrrrrrddddddddddddddddddddddddvdddddddddddddddddddddBddddddddddddddddddddddddddddddddddddddddddddBBBBBBdda|
+|addddvrdddddddddddddddddddddddddddddddddddddddddddrrrrrrdddddddddddddddddddddddddddddddddrrrrdddddddddddddddddddddddddddddddvddddddddddBBBBBBBBBBBBBBBBBBBBBBBddddddddddddddddddddddddddddBBBBBBBBBBBdda|
+|addwwvddddddddddddddddddddddddddddddddddddddddddddddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrdrrrrrrrrdddddddddddddddddddddddddddddddwwwvdddBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBddddddddddddddddBBBBBBBBBBBBBBBBBdda|
+|addddvdddddddddddddddddddddddAAAdddddddddddddddddddddddddrrddddddddddrrrrddddddrrrrdddrrrdddddddddddddddddddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvddddAAAdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAAAAdddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvAAAAAAAAAAAAdddddddddddddddddddddddddAAAAAAAAAAAAAAAdddddddddddddddddddddddddAAddddAAAAAAAAAAAAAAAAAddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAddddddddddddddddddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAdddddddddddddddddddddddddddddddddddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|adddwvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
+|adddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddwwwwwddddddddddddddddddddddddddddwwwwwdddddddddddddddddddddddddddddwwwwwdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addxxxxxxxxbxxbxxxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddxxxxxbxxbxxxxxxxxddddddddddddddddddddddddddddddddddddddddxxxxxxxbxxxxxxxxxxxxxbxxdddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCAAArrrDDDrrrCCCAAAAAAAAAEEEDDDCCCCCCCCCCCCCCCdddddddddddddddBttttyAAAAAAdddddddddddddddddddddddddddddddddddddddwwvddddddddddAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCrrrrrrCCCCCCDDDEEEEEEAAArrrAAACCCCCCCCCCCCCCCddddddddddddBBBBBtttyAAAAAAAAAddddddddddddddddddddddddddddddddddddddvddddddddddAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCEEEAAAEEEEEErrrEEEEEEDDDEEEAAACCCCCCCCCCCCCCCdddddddddddBBBBBBBttyAAAAAAAAAAdddddddddddddddddddddddddddddddddddddvddddddddddAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCrrrDDDCCCAAAEEEAAAAAArrrAAAEEECCCCCCCCCCCCCCCddddddddddrrrFFBBddddddddAAAAAAAdddAdeedeeedddddddddddddddddddddddddvddddddddAAAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCAAArrrrrrrrrCCCAAADDDCCCEEEDDDCCCCCCCCCCCCCCCdddddddddrrrrrrddddddddddddAAAAAAddrdeeeeeeeeeedeeedddddddddddddddwwvddddddddAAAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCdddddddddrrrrrddddddddddddddAAAAAddBdeeedeeeddddddddddddddddddddddddvddddddAAAAAAAAAAddddddddddddddddddddddddddddddddddda|
+|addeeedCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCdddddddddrrrrrrddddddddddddAAAAAAddtdeeeeedeedddddddddddddddddddddddvddddddAAAAAAAAAAddddddddddddddddddddddddddddddddddda|
+|addddddwwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwwddddddddddrrrrrGAddddddddAAAAAAAdddydeeedeedddddddddddddddddddddddddvddddAAAAAAAAAAAAAAddddddddddddAAddddddddddddddddddda|
+|addddddwdCCDDrrEEAAdwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddrGAAAAAAAAAAAAAAAAAAddddddddddddddddddddddddddddddddddddwvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAAAAAAAddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAddddddddddddddddddddddddddddddddddddddddddwwddddddddddddddddddddddddddddddddddddddddddddwwwdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeddttttttttttttttttttttttttttttttdcddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeedddrrrrrrrrrrrrrrrrrrrrdccccddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeedAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdccdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeedkkkkkkkkkkkkkkkkkkkkdcccdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+A: fg=accent-bright bg=panel
+B: fg=series3 bg=panel
+C: fg=heat1 bg=panel
+D: fg=heat2 bg=panel
+E: fg=heat4 bg=panel
+F: fg=series3 bg=info
+G: fg=info bg=accent-bright
+a: fg=accent bg=panel
+b: bg=panel bold
+c: fg=fg bg=panel bold
+d: bg=panel
+e: fg=dim bg=panel
+f: fg=success bg=surface
+g: bg=surface
+h: fg=dim bg=surface
+i: fg=error bg=surface
+j: fg=fg bg=surface
+k: fg=success bg=panel
+l: fg=track bg=panel
+m: fg=success bg=surface bold
+n: fg=mute bg=surface
+o: fg=error bg=surface bold
+p: fg=dim bg=surface bold
+q: fg=fg bg=surface bold
+r: fg=info bg=panel
+s: fg=info bg=surface
+t: fg=warning bg=panel
+u: fg=warning bg=track
+v: fg=edge bg=panel
+w: fg=mute bg=panel
+x: fg=dim bg=panel bold
+y: fg=error bg=panel
+z: fg=fg bg=panel
+=== 256 200x55
+|╭─ plot gallery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
+|│                                                                                                                                                                                                      │|
+|│  ▎ passed                    ▎ failed                    ▎ skipped                   ▎ wall time                 pass rate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%  │|
+|│  ▎ 412 +12                   ▎ 5 +3                      ▎ 9                         ▎ 18.4s -2.1s               cpu       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%  │|
+|│  ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██      ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█      ▎                           ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁      ████████████████████████████████████████████████████▌░░░░░░░░░░░░░░░░░░░░ disk 72%  │|
+|│                                                                                                                                                                                                      │|
+|│  Time by package ─────────────────────────────────────────────────────────────────  seconds    Suite time, last 30 runs                                                                              │|
+|│  internal/session    ██████████████████████████████████████████████████████████████████ 6.2      25┤                                             ▂▂                                                  │|
+|│  internal/app        ███████████████████████████████████████████████████▏ · · · · · · · 4.8        │               ██             ▃▃             ██                                                  │|
+|│  vt                  █████████████████████████████████· · · · · · · · · · · · · · · · · 3.1        │      ▇▇       ██             ██ ▁▁          ██ ▃▃                            ▅▅                 │|
+|│  internal/tape       ██████████████▉· · · · · · · · · · · · · · · · · · · · · · · · · · 1.4        │██ ▅▅ ██    ▂▂ ██ ▆▆ ▄▄    ▁▁ ██ ██ ▁▁    ▃▃ ██ ██ ▆▆ ▃▃       ██    ▄▄    ▁▁ ██ ▄▄ ▃▃           │|
+|│  internal/config     █████████▋ · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.9        │██ ██ ██ ▇▇ ██ ██ ██ ██ ▆▆ ██ ██ ██ ██ ▇▇ ██ ██ ██ ██ ██ ▅▅ ██ ██ ▇▇ ██ ▅▅ ██ ██ ██ ██           │|
+|│  internal/terminal   ████████▌· · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.8    17.5┤██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ▆▆        │|
+|│  internal/federation ██████▍· · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.6        │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│  progstatus          ███▎ · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.3        │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                  10┤██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    └──────────────────────────────────────────────────────────────────────────────────────────       │|
+|│                                                                                                     30 runs ago                            median 20.5s                                    now       │|
+|│                                                                                                                                                                                                      │|
+|│  Request latency, ms                                                                                   ■ p50  ■ p95    Memory, MB                                                                    │|
+|│  60┤                                                                                                                   400┤                                                                          │|
+|│    │             ⢀⣄   ⣠⣤⣀⣀⣀⣤⡴⠶⢦⣄⣀⣠⠞⠳⠶⡴⠶⠶⣄⡀                                                              ⣀⣤⡀  ⣀⣤⡴⠶⣄        │                                                                          │|
+|│    │  ⣀⡴⠞⠛⠳⠶⠶⠶⠶⢦⠶⠋⠈⠳⢦⠞⠁ ⠉⠉⠉    ⠈⠉⠁      ⠈⠙⢦⡀                                                    ⢀⣀⣤⠶⠛⠛⠳⠛⠉ ⠙⠶⠞⠉   ⠈⠳       │                                                                      ▁▃  │|
+|│    │⣠⠞⠉                                    ⠙⠶⠞⠳⣤⡀                                        ⢀⣀⣤⠶⠛⠛⠛⠋⠉                        │                     ▁                                            ▁▃▄▇██  │|
+|│    │⠁                                           ⠙⢦⣄⢀⣀⣀                                 ⢀⡼⠋⠉                               │          ▂▄▅▅▅▅▆▇▇█████▇▆▆▅▃▂▃▂▁                            ▁▂▄▆▇██████  │|
+|│  30┤                                              ⠈⠋⠉⠉⠳⣄⣠⣤⠶⠶⣤⠶⠶⠳⠶⠶⢦⣄⣀⣀⣠⡴⠛⠶⢦⣤⣤⣀⡀ ⣠⡴⢦⣤⣀⣀⣠⠞                               200┤   ▂▂▂▄▆▇█████████████████████████▇▆▄▃▂                ▁▂▃▅█████████████  │|
+|│    │                       ⣀⣀⣀                         ⠈⠁          ⠈⠉⠉⠁      ⠉⠙⠛⠁   ⠉⠉⠁                                   │▃▅████████████████████████████████████████▆▆▅▅▅▅▅▅▅▅▆▇██████████████████  │|
+|│    │    ⣀⣀⡀ ⣀⣀⣀⣠⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠛⠉⠉⠉⠛⠳⠶⠶⠶⣤⣤⣤⣤⣤⣤⣄⣀                                                         ⢀⣀⣀⣠⣤⣤⣤⣤⠶⠶⠛⠛⠛⠛⠳       │████████████████████████████████████████████████████████████████████████  │|
+|│    │⠶⠞⠛⠛⠉⠉⠙⠛⠉⠉⠉⠁                         ⠈⠉⠛⠛⠛⠛⠳⠶⣤⣤⣤⣤⣤⣄⡀                         ⢀⣀    ⣀⣤⡴⠶⠶⠶⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠁                  │████████████████████████████████████████████████████████████████████████  │|
+|│    │                                                  ⠈⠙⠛⠛⠛⠛⠛⠛⠛⠛⠶⢦⣤⣤⣤⣀⣠⡴⠶⠶⠶⠶⠶⠶⠶⠞⠛⠋⠉⠛⠛⠛⠛⠉                                  │████████████████████████████████████████████████████████████████████████  │|
+|│    │                                                                 ⠉⠁                                                   │████████████████████████████████████████████████████████████████████████  │|
+|│   0┤                                                                                                                     0┤████████████████████████████████████████████████████████████████████████  │|
+|│    └───────────────────────────────────────────────────────────────────────────────────────────────────────────────       └────────────────────────────────────────────────────────────────────────  │|
+|│     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  │|
+|│                                                                                                                                                                                                      │|
+|│  Failures by hour                                                                     Lines by language                                        Latency distribution, ms                              │|
+|│  mon ████████████████████████████████████████████████████████████████████████               ▄▄▄██████▄▄▄                                       84┤          ██▂▂                                     │|
+|│  tue ████████████████████████████████████████████████████████████████████████            ▄████████████████▄                                      │          ████                                     │|
+|│  wed ████████████████████████████████████████████████████████████████████████           ███████▀▀▀▀▀▀███████                                     │          ████                                     │|
+|│  thu ████████████████████████████████████████████████████████████████████████          ███▀▀█▀        ▀██████   ■ Go 64%                         │        ▅▅████                                     │|
+|│  fri ████████████████████████████████████████████████████████████████████████         ██████            ██████  ■ TypeScript 19%               42┤        ██████                                     │|
+|│  sat ████████████████████████████████████████████████████████████████████████         █████              █████  ■ Zig 10%                        │      ▅▅██████▇▇                                   │|
+|│  sun ████████████████████████████████████████████████████████████████████████         ██████            ██████  ■ Shell 5%                       │      ██████████                                   │|
+|│      00h                                                                  23h          █████▀▄        ▄██████   ■ Nix 2%                         │    ▆▆██████████▄▄            ▄▄                   │|
+|│      0 ██████████ 10                                                                    █▀█████▄▄▄▄▄▄███████                                    0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁   │|
+|│                                                                                          ▀████████████████▀                                      └─────────────────────────────────────────────────  │|
+|│                                                                                             ▀▀▀██████▀▀▀                                          11                                            144  │|
+|│                                                                                                                                                                                                      │|
+|│  flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆ 3                                                            wall   ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁ 18.4                                                                 │|
+|│  allocs ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁ 35                                                           passed ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██ 412                                                                  │|
+|│                                                                                                                                                                                                      │|
+|╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccccccbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addfghhhhhhggggggggggggggggggddighhhhhhggggggggggggggggggddhghhhhhhhgggggggggggggggggddjghhhhghhhhgggggggggggggggddeeeedeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkldcccccdda|
+|addfgmmmgnnngggggggggggggggggddigognnggggggggggggggggggggddhgpgggggggggggggggggggggggddjgqqqqqgnnnnngggggggggggggddeeedddddddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrllllllllllllllllllllllllllllllllllllllldcccdda|
+|addfgffffffffffffffffffffggggddigiiiiiiiiiiiiiiiiiiiiggggddhgggggggggggggggggggggggggddjgssssssssssssssssssssggggddttttttttttttttttttttttttttttttttttttttttttttttttttttulllllllllllllllllllldccccbcccdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addccccbccbcccccccdvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddwwwwwwwddddxxxxxbxxxxxbxxxxbxxbxxxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeeeeeeeeeeeeddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydzzzddddddwwvdddddddddddddddddddddddddddddddddddddddddddddrrdddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeeeeeeeeddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydvdvdvdvdvdvdvdzzzddddddddvdddddddddddddddrrdddddddddddddrrdddddddddddddrrdddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeddddddddddddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvddddddrrdddddddrrdddddddddddddrrdrrddddddddddrrdrrddddddddddddddddddddddddddddrrddddddddddddddddda|
+|addeeeeeeeeeeeeedddddddyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrddddrrdrrdrrdrrddddrrdrrdrrdrrddddrrdrrdrrdrrdrrdddddddrrddddrrddddrrdrrdrrdrrddddddddddda|
+|addeeeeeeeeeeeeeeedddddyyyyyyyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrddddddddddda|
+|addeeeeeeeeeeeeeeeeedddyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddwwwwvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addeeeeeeeeeeeeeeeeeeedyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addeeeeeeeeeeddddddddddyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdzzzddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwvrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwdwwwwdwwwddddddddddddddddddddddddddddwwwwwwdwwwwwddddddddddddddddddddddddddddddddddddwwwddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addxxxxxxxbxxxxxxxxbxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAdwwwddrdwwwddddxxxxxxxbxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addwwvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwwvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddvdddddddddddddrrdddrrrrrrrrrrrrrrrrrrrrddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddrrrddrrrrrddddddddvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddvddrrrrrrrrrrrrrrrrrdrrrddddrrrddddddrrrrddddddddddddddddddddddddddddddddddddddddddddddddddddrrrrrrrrrdrrrrdddrrdddddddvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddBBdda|
+|addddvrrrddddddddddddddddddddddddddddddddddddrrrrrrddddddddddddddddddddddddddddddddddddddddrrrrrrrrrddddddddddddddddddddddddvdddddddddddddddddddddBddddddddddddddddddddddddddddddddddddddddddddBBBBBBdda|
+|addddvrdddddddddddddddddddddddddddddddddddddddddddrrrrrrdddddddddddddddddddddddddddddddddrrrrdddddddddddddddddddddddddddddddvddddddddddBBBBBBBBBBBBBBBBBBBBBBBddddddddddddddddddddddddddddBBBBBBBBBBBdda|
+|addwwvddddddddddddddddddddddddddddddddddddddddddddddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrdrrrrrrrrdddddddddddddddddddddddddddddddwwwvdddBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBddddddddddddddddBBBBBBBBBBBBBBBBBdda|
+|addddvdddddddddddddddddddddddAAAdddddddddddddddddddddddddrrddddddddddrrrrddddddrrrrdddrrrdddddddddddddddddddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvddddAAAdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAAAAdddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvAAAAAAAAAAAAdddddddddddddddddddddddddAAAAAAAAAAAAAAAdddddddddddddddddddddddddAAddddAAAAAAAAAAAAAAAAAddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAddddddddddddddddddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAdddddddddddddddddddddddddddddddddddddddddddddddddddvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|adddwvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwvBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBdda|
+|addddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
+|adddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddddddddddddddddddddddddddddddddddddddddddwwwwwddddddddwwwwwddddddddddddddddddddddddddddwwwwwdddddddddddddddddddddddddddddwwwwwdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addxxxxxxxxbxxbxxxxdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddxxxxxbxxbxxxxxxxxddddddddddddddddddddddddddddddddddddddddxxxxxxxbxxxxxxxxxxxxxbxxdddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllAAArrrCCCrrrlllAAAAAAAAADDDCCCllllllllllllllldddddddddddddddBttttyAAAAAAdddddddddddddddddddddddddddddddddddddddwwvddddddddddAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllrrrrrrllllllCCCDDDDDDAAArrrAAAlllllllllllllllddddddddddddBBBBBtttyAAAAAAAAAddddddddddddddddddddddddddddddddddddddvddddddddddAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllDDDAAADDDDDDrrrDDDDDDCCCDDDAAAllllllllllllllldddddddddddBBBBBBBttyAAAAAAAAAAdddddddddddddddddddddddddddddddddddddvddddddddddAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllrrrCCClllAAADDDAAAAAArrrAAADDDlllllllllllllllddddddddddrrrEEBBddddddddAAAAAAAdddAdeedeeedddddddddddddddddddddddddvddddddddAAAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllAAArrrrrrrrrlllAAACCClllDDDCCCllllllllllllllldddddddddrrrrrrddddddddddddAAAAAAddrdeeeeeeeeeedeeedddddddddddddddwwvddddddddAAAAAAddddddddddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllldddddddddrrrrrddddddddddddddAAAAAddBdeeedeeeddddddddddddddddddddddddvddddddAAAAAAAAAAddddddddddddddddddddddddddddddddddda|
+|addeeedlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllldddddddddrrrrrrddddddddddddAAAAAAddtdeeeeedeedddddddddddddddddddddddvddddddAAAAAAAAAAddddddddddddddddddddddddddddddddddda|
+|addddddwwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwwddddddddddrrrrrFAddddddddAAAAAAAdddydeeedeedddddddddddddddddddddddddvddddAAAAAAAAAAAAAAddddddddddddAAddddddddddddddddddda|
+|addddddwdllCCrrDDAAdwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddrFAAAAAAAAAAAAAAAAAAddddddddddddddddddddddddddddddddddddwvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAAAAAAAddddddddddddddddddddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddAAAAAAAAAAAAddddddddddddddddddddddddddddddddddddddddddwwddddddddddddddddddddddddddddddddddddddddddddwwwdda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeddttttttttttttttttttttttttttttttdcddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeedddrrrrrrrrrrrrrrrrrrrrdccccddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addeeeeeedAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdccdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeedkkkkkkkkkkkkkkkkkkkkdcccdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+A: fg=accent-bright bg=panel
+B: fg=series3 bg=panel
+C: fg=accent-tint bg=panel
+D: fg=heat4 bg=panel
+E: fg=series3 bg=info
+F: fg=info bg=accent-bright
+a: fg=accent bg=panel
+b: bg=panel bold
+c: fg=fg bg=panel bold
+d: bg=panel
+e: fg=dim bg=panel
+f: fg=success bg=surface
+g: bg=surface
+h: fg=dim bg=surface
+i: fg=error bg=surface
+j: fg=fg bg=surface
+k: fg=success bg=panel
+l: fg=success-tint bg=panel
+m: fg=success bg=surface bold
+n: fg=mute bg=surface
+o: fg=error bg=surface bold
+p: fg=dim bg=surface bold
+q: fg=fg bg=surface bold
+r: fg=info bg=panel
+s: fg=info bg=surface
+t: fg=warning bg=panel
+u: fg=warning bg=success-tint
+v: fg=edge bg=panel
+w: fg=mute bg=panel
+x: fg=dim bg=panel bold
+y: fg=error bg=panel
+z: fg=fg bg=panel
+=== 16 200x55
+|╭─ plot gallery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
+|│                                                                                                                                                                                                      │|
+|│  ▎ passed                    ▎ failed                    ▎ skipped                   ▎ wall time                 pass rate ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.8%  │|
+|│  ▎ 412 +12                   ▎ 5 +3                      ▎ 9                         ▎ 18.4s -2.1s               cpu       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43%  │|
+|│  ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██      ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█      ▎                           ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁      ████████████████████████████████████████████████████▌░░░░░░░░░░░░░░░░░░░░ disk 72%  │|
+|│                                                                                                                                                                                                      │|
+|│  Time by package ─────────────────────────────────────────────────────────────────  seconds    Suite time, last 30 runs                                                                              │|
+|│  internal/session    ██████████████████████████████████████████████████████████████████ 6.2      25┤                                             ▂▂                                                  │|
+|│  internal/app        ███████████████████████████████████████████████████▏               4.8        │               ██             ▃▃             ██                                                  │|
+|│  vt                  █████████████████████████████████                                  3.1        │      ▇▇       ██             ██ ▁▁          ██ ▃▃                            ▅▅                 │|
+|│  internal/tape       ██████████████▉                                                    1.4        │██ ▅▅ ██    ▂▂ ██ ▆▆ ▄▄    ▁▁ ██ ██ ▁▁    ▃▃ ██ ██ ▆▆ ▃▃       ██    ▄▄    ▁▁ ██ ▄▄ ▃▃           │|
+|│  internal/config     █████████▋                                                         0.9        │██ ██ ██ ▇▇ ██ ██ ██ ██ ▆▆ ██ ██ ██ ██ ▇▇ ██ ██ ██ ██ ██ ▅▅ ██ ██ ▇▇ ██ ▅▅ ██ ██ ██ ██           │|
+|│  internal/terminal   ████████▌                                                          0.8    17.5┤██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ▆▆        │|
+|│  internal/federation ██████▍                                                            0.6        │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│  progstatus          ███▎                                                               0.3        │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                  10┤██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██        │|
+|│                                                                                                    └──────────────────────────────────────────────────────────────────────────────────────────       │|
+|│                                                                                                     30 runs ago                            median 20.5s                                    now       │|
+|│                                                                                                                                                                                                      │|
+|│  Request latency, ms                                                                                   ■ p50  ■ p95    Memory, MB                                                                    │|
+|│  60┤                                                                                                                   400┤                                                                          │|
+|│    │             ⢀⣄   ⣠⣤⣀⣀⣀⣤⡴⠶⢦⣄⣀⣠⠞⠳⠶⡴⠶⠶⣄⡀                                                              ⣀⣤⡀  ⣀⣤⡴⠶⣄        │                                                                          │|
+|│    │  ⣀⡴⠞⠛⠳⠶⠶⠶⠶⢦⠶⠋⠈⠳⢦⠞⠁ ⠉⠉⠉    ⠈⠉⠁      ⠈⠙⢦⡀                                                    ⢀⣀⣤⠶⠛⠛⠳⠛⠉ ⠙⠶⠞⠉   ⠈⠳       │                                                                      ▁▃  │|
+|│    │⣠⠞⠉                                    ⠙⠶⠞⠳⣤⡀                                        ⢀⣀⣤⠶⠛⠛⠛⠋⠉                        │                     ▁                                            ▁▃▄▇██  │|
+|│    │⠁                                           ⠙⢦⣄⢀⣀⣀                                 ⢀⡼⠋⠉                               │          ▂▄▅▅▅▅▆▇▇█████▇▆▆▅▃▂▃▂▁                            ▁▂▄▆▇██████  │|
+|│  30┤                                              ⠈⠋⠉⠉⠳⣄⣠⣤⠶⠶⣤⠶⠶⠳⠶⠶⢦⣄⣀⣀⣠⡴⠛⠶⢦⣤⣤⣀⡀ ⣠⡴⢦⣤⣀⣀⣠⠞                               200┤   ▂▂▂▄▆▇█████████████████████████▇▆▄▃▂                ▁▂▃▅█████████████  │|
+|│    │                       ⣀⣀⣀                         ⠈⠁          ⠈⠉⠉⠁      ⠉⠙⠛⠁   ⠉⠉⠁                                   │▃▅████████████████████████████████████████▆▆▅▅▅▅▅▅▅▅▆▇██████████████████  │|
+|│    │    ⣀⣀⡀ ⣀⣀⣀⣠⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠛⠉⠉⠉⠛⠳⠶⠶⠶⣤⣤⣤⣤⣤⣤⣄⣀                                                         ⢀⣀⣀⣠⣤⣤⣤⣤⠶⠶⠛⠛⠛⠛⠳       │████████████████████████████████████████████████████████████████████████  │|
+|│    │⠶⠞⠛⠛⠉⠉⠙⠛⠉⠉⠉⠁                         ⠈⠉⠛⠛⠛⠛⠳⠶⣤⣤⣤⣤⣤⣄⡀                         ⢀⣀    ⣀⣤⡴⠶⠶⠶⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠁                  │████████████████████████████████████████████████████████████████████████  │|
+|│    │                                                  ⠈⠙⠛⠛⠛⠛⠛⠛⠛⠛⠶⢦⣤⣤⣤⣀⣠⡴⠶⠶⠶⠶⠶⠶⠶⠞⠛⠋⠉⠛⠛⠛⠛⠉                                  │████████████████████████████████████████████████████████████████████████  │|
+|│    │                                                                 ⠉⠁                                                   │████████████████████████████████████████████████████████████████████████  │|
+|│   0┤                                                                                                                     0┤████████████████████████████████████████████████████████████████████████  │|
+|│    └───────────────────────────────────────────────────────────────────────────────────────────────────────────────       └────────────────────────────────────────────────────────────────────────  │|
+|│     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  │|
+|│                                                                                                                                                                                                      │|
+|│  Failures by hour                                                                     Lines by language                                        Latency distribution, ms                              │|
+|│  mon ████████████████████████████████████████████████████████████████████████               ▄▄▄██████▄▄▄                                       84┤          ██▂▂                                     │|
+|│  tue ████████████████████████████████████████████████████████████████████████            ▄████████████████▄                                      │          ████                                     │|
+|│  wed ████████████████████████████████████████████████████████████████████████           ███████▀▀▀▀▀▀███████                                     │          ████                                     │|
+|│  thu ████████████████████████████████████████████████████████████████████████          ███▀▀█▀        ▀██████   ■ Go 64%                         │        ▅▅████                                     │|
+|│  fri ████████████████████████████████████████████████████████████████████████         ██████            ██████  ■ TypeScript 19%               42┤        ██████                                     │|
+|│  sat ████████████████████████████████████████████████████████████████████████         █████              █████  ■ Zig 10%                        │      ▅▅██████▇▇                                   │|
+|│  sun ████████████████████████████████████████████████████████████████████████         ██████            ██████  ■ Shell 5%                       │      ██████████                                   │|
+|│      00h                                                                  23h          █████▀▄        ▄██████   ■ Nix 2%                         │    ▆▆██████████▄▄            ▄▄                   │|
+|│      0 ██████████ 10                                                                    █▀█████▄▄▄▄▄▄███████                                    0┤▁▁▃▃██████████████▇▇▁▁▃▃▃▃▅▅▅▅██▅▅▅▅▅▅▃▃██▄▄▃▃▁▁   │|
+|│                                                                                          ▀████████████████▀                                      └─────────────────────────────────────────────────  │|
+|│                                                                                             ▀▀▀██████▀▀▀                                          11                                            144  │|
+|│                                                                                                                                                                                                      │|
+|│  flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆ 3                                                            wall   ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁ 18.4                                                                 │|
+|│  allocs ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁ 35                                                           passed ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██ 412                                                                  │|
+|│                                                                                                                                                                                                      │|
+|╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯|
+--- styles
+|aabccccbcccccccbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
+|a                                                                                                                                                                                                      a|
+|a  e dddddd                    f dddddd                    d ddddddd                   g dddd dddd                 dddd dddd eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeh ccccc  a|
+|a  e iii hhh                   f j hh                      d k                         g ccccc hhhhh               ddd       lllllllllllllllllllllllllllllhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh ccc  a|
+|a  e eeeeeeeeeeeeeeeeeeee      f ffffffffffffffffffff      d                           g llllllllllllllllllll      mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmnhhhhhhhhhhhhhhhhhhhh ccccbccc  a|
+|a                                                                                                                                                                                                      a|
+|a  ccccbccbccccccc hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  hhhhhhh    kkkkkbkkkkkbkkkkbkkbkkkk                                                                              a|
+|a  dddddddddddddddd    ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ggg      hhh                                             ll                                                  a|
+|a  dddddddddddd        ffffffffffffffffffffffffffffffffffffffffffffffffffff               ggg        h               ll             ll             ll                                                  a|
+|a  dd                  fffffffffffffffffffffffffffffffff                                  ggg        h      ll       ll             ll ll          ll ll                            ll                 a|
+|a  ddddddddddddd       fffffffffffffff                                                    ggg        hll ll ll    ll ll ll ll    ll ll ll ll    ll ll ll ll ll       ll    ll    ll ll ll ll           a|
+|a  ddddddddddddddd     ffffffffff                                                         ggg        hll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll           a|
+|a  ddddddddddddddddd   fffffffff                                                          ggg    hhhhhll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a  ddddddddddddddddddd fffffff                                                            ggg        hll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a  dddddddddd          ffff                                                               ggg        hll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a                                                                                                    hll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a                                                                                                    hll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a                                                                                                    hll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a                                                                                                  hhhll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll ll        a|
+|a                                                                                                    hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh       a|
+|a                                                                                                     hh hhhh hhh                            hhhhhh hhhhh                                    hhh       a|
+|a                                                                                                                                                                                                      a|
+|a  kkkkkkkbkkkkkkkkbkk                                                                                   o hhh  l hhh    kkkkkkkbkk                                                                    a|
+|a  hhh                                                                                                                   hhhh                                                                          a|
+|a    h             ll   llllllllllllllllllll                                                              lll  lllll        h                                                                          a|
+|a    h  lllllllllllllllll lll    lll      llll                                                    lllllllll llll   ll       h                                                                      ee  a|
+|a    hlll                                    llllll                                        lllllllll                        h                     e                                            eeeeee  a|
+|a    hl                                           llllll                                 llll                               h          eeeeeeeeeeeeeeeeeeeeeee                            eeeeeeeeeee  a|
+|a  hhh                                              lllllllllllllllllllllllllllll llllllll                               hhhh   eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee                eeeeeeeeeeeeeeeee  a|
+|a    h                       ooo                         ll          llll      llll   lll                                   heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  a|
+|a    h    ooo ooooooooooooooooooooooooooooooo                                                         ooooooooooooooo       heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  a|
+|a    hoooooooooooo                         ooooooooooooooo                         oo    ooooooooooooooooo                  heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  a|
+|a    h                                                  oooooooooooooooooooooooooooooooooo                                  heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  a|
+|a    h                                                                 oo                                                   heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  a|
+|a   hh                                                                                                                     hheeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  a|
+|a    hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh       hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  a|
+|a     hhhhh                                                hhhhh                                                hhhhh        hhhhh                            hhhhh                             hhhhh  a|
+|a                                                                                                                                                                                                      a|
+|a  kkkkkkkkbkkbkkkk                                                                     kkkkkbkkbkkkkkkkk                                        kkkkkkkbkkkkkkkkkkkkkbkk                              a|
+|a  ddd pppppppppppppppppppppppppppooolllqqqlllpppoooooooooaaaqqqppppppppppppppp               emmmmfoooooo                                       hhh          oooo                                     a|
+|a  ddd pppppppppppppppppppppppppppllllllppppppqqqaaaaaaooollloooppppppppppppppp            eeeeemmmfooooooooo                                      h          oooo                                     a|
+|a  ddd pppppppppppppppppppppppppppaaaoooaaaaaalllaaaaaaqqqaaaoooppppppppppppppp           eeeeeeemmfoooooooooo                                     h          oooo                                     a|
+|a  ddd ppppppppppppppppppppppppppplllqqqpppoooaaaoooooollloooaaappppppppppppppp          lllrree        ooooooo   o dd ddd                         h        oooooo                                     a|
+|a  ddd pppppppppppppppppppppppppppooolllllllllpppoooqqqpppaaaqqqppppppppppppppp         llllll            oooooo  l dddddddddd ddd               hhh        oooooo                                     a|
+|a  ddd pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp         lllll              ooooo  e ddd ddd                        h      oooooooooo                                   a|
+|a  ddd pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp         llllll            oooooo  m ddddd dd                       h      oooooooooo                                   a|
+|a      hhh                                                                  hhh          lllllso        ooooooo   f ddd dd                         h    oooooooooooooo            oo                   a|
+|a      h ppqqllaaoo hh                                                                    lsoooooooooooooooooo                                    hhoooooooooooooooooooooooooooooooooooooooooooooooo   a|
+|a                                                                                          oooooooooooooooooo                                      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  a|
+|a                                                                                             oooooooooooo                                          hh                                            hhh  a|
+|a                                                                                                                                                                                                      a|
+|a  ddddd  mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm c                                                            dddd   llllllllllllllllllll cccc                                                                 a|
+|a  dddddd oooooooooooooooooooooooooooooo cc                                                           dddddd eeeeeeeeeeeeeeeeeeee ccc                                                                  a|
+|a                                                                                                                                                                                                      a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: fg=accent
+b: bold
+c: fg=fg bold
+d: fg=dim
+e: fg=success
+f: fg=error
+g: fg=fg
+h: fg=mute
+i: fg=success bold
+j: fg=error bold
+k: fg=dim bold
+l: fg=info
+m: fg=warning
+n: fg=warning bg=mute
+o: fg=accent-bright
+p: fg=pill
+q: fg=heat2
+r: fg=success bg=info
+s: fg=info bg=accent-bright
+=== ascii 200x55
+|+- plot gallery ------------------------------------------------------------------------------------------------------------------------------------------------------------- from claude in api-auth -+|
+||                                                                                                                                                                                                      ||
+||  | passed                    | failed                    | skipped                   | wall time                 pass rate [###############################################################-] 98.8%  ||
+||  | 412 +12                   | 5 +3                      | 9                         | 18.4s -2.1s               cpu       [############################--------------------------------------] 43%  ||
+||  | _..-.-~-~=~=++****##      | ._~__._=__.__~__._~#      |                           | *=--~#=~-.-=-~.-=~~_      [###################################################--------------------] disk 72%  ||
+||                                                                                                                                                                                                      ||
+||  Time by package -----------------------------------------------------------------  seconds    Suite time, last 30 runs                                                                              ||
+||  internal/session    ################################################################## 6.2      25+                                                                                                 ||
+||  internal/app        ###################################################                4.8        |               ##                            ##                                                  ||
+||  vt                  #################################                                  3.1        |      ##       ##             ##             ##                               ##                 ||
+||  internal/tape       ###############                                                    1.4        |## ## ##       ## ## ##       ## ##          ## ## ##          ##    ##       ## ##              ||
+||  internal/config     ##########                                                         0.9        |## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##           ||
+||  internal/terminal   #########                                                          0.8    17.5+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||  internal/federation ######                                                             0.6        |## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||  progstatus          ###                                                                0.3        |## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||                                                                                                    |## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||                                                                                                    |## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||                                                                                                    |## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||                                                                                                  10+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ##        ||
+||                                                                                                    +------------------------------------------------------------------------------------------       ||
+||                                                                                                     30 runs ago                            median 20.5s                                    now       ||
+||                                                                                                                                                                                                      ||
+||  Request latency, ms                                                                                   * p50  + p95    Memory, MB                                                                    ||
+||  60+                                                                                                                   400+                                                                          ||
+||    |              +   ++++++++++++++++++++                                                              ++   +++++        |                                                                          ||
+||    |  ++++++++++++ +++                    ++                                                    ++++++++  +++     +       |                                                                      **  ||
+||    |++                                      ++++                                         +++++++                          |                    ***                                           ****::  ||
+||    |                                            +++ ++                                  +                                 |         ***********:::***********                          ******::::::  ||
+||  30+                                               +  ++++++++++++++++++++++++  ++++++++                               200+   ******:::::::::::::::::::::::::********             *****::::::::::::  ||
+||    |                       ***                                                ++                                          |***:::::::::::::::::::::::::::::::::::::::*************:::::::::::::::::  ||
+||    |    **   **************   *************                                                          **************       |::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::  ||
+||    |****  ***                              ************                                **************                     |::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::  ||
+||    |                                                   ********************************                                   |::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::  ||
+||    |                                                                                                                      |::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::  ||
+||   0+                                                                                                                     0+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::  ||
+||    +---------------------------------------------------------------------------------------------------------------       +------------------------------------------------------------------------  ||
+||     08:00                                                14:00                                                19:45        00:00                            12:00                             23:00  ||
+||                                                                                                                                                                                                      ||
+||  Failures by hour                                                                     Lines by language                                        Latency distribution, ms                              ||
+||  mon ...........................@@@+++:::+++...@@@@@@@@@###:::...............               oxxxx%******                                       84+          ##                                       ||
+||  tue ...........................++++++......:::######@@@+++@@@...............            oooooxxx%*********                                      |          ####                                     ||
+||  wed ...........................###@@@######+++######:::###@@@...............           oooooooxx%**********                                     |          ####                                     ||
+||  thu ...........................+++:::...@@@###@@@@@@+++@@@###...............          +++oooo        *******   * Go 64%                         |        ######                                     ||
+||  fri ...........................@@@+++++++++...@@@:::...###:::...............         ++++++            ******  + TypeScript 19%               42+        ######                                     ||
+||  sat ........................................................................         +++++              *****  o Zig 10%                        |      ##########                                   ||
+||  sun ........................................................................         ++++++            ******  x Shell 5%                       |      ##########                                   ||
+||      00h                                                                  23h          ++++++*        *******   % Nix 2%                         |    ##############            ##                   ||
+||      0 ..::++##@@ 10                                                                    ++******************                                    0+    ################      ############  ####       ||
+||                                                                                          ******************                                      +-------------------------------------------------  ||
+||                                                                                             ************                                          11                                            144  ||
+||                                                                                                                                                                                                      ||
+||  flaky  __-__+-___--___#-____-____+--+ 3                                                            wall   *=--~#=~-.-=-~.-=~~_ 18.4                                                                 ||
+||  allocs ++*++#**++**+==+=====~~~---.._ 35                                                           passed _..-.-~-~=~=++****## 412                                                                  ||
+||                                                                                                                                                                                                      ||
+|+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+|
+--- styles
+|  aaaaaaaaaaaaaa                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                aaaaa   |
+|     aaa                         a                           a                           aaaaa                                                                                                    aaa   |
+|                                                                                                                                                                                             aaaaaaaa   |
+|                                                                                                                                                                                                        |
+|   aaaaaaaaaaaaaaa                                                                               aaaaaaaaaaaaaaaaaaaaaaaa                                                                               |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|   aaaaaaaaaaaaaaaaaaa                                                                                                   aaaaaaaaaa                                                                     |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|   aaaaaaaaaaaaaaaa                                                                     aaaaaaaaaaaaaaaaa                                        aaaaaaaaaaaaaaaaaaaaaaaa                               |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+|                                         a                                                                                        aaaa                                                                  |
+|                                         aa                                                                                       aaa                                                                   |
+|                                                                                                                                                                                                        |
+|                                                                                                                                                                                                        |
+a: bold

@@ -21,13 +21,17 @@ fmt.Print(buf.Render()) // ANSI; buf.String() gives plain text
 | Layout | `row`, `col`, `grid`, `stack`, `spacer`, `scroll`, `split` |
 | Text | `text` with `b`, `i`, `u`, `s`, `code`, `c`, `kbd` and `a`, `heading`, `code` (plain) |
 | Data | `table` (sort, select, scroll), `list`, `kv`, `stat`, `tree` |
-| Charts | `bar`, `line`, `area`, `sparkline`, `gauge`, `progress`, `histogram`, through [tuios.dev/plot](https://pkg.go.dev/tuios.dev/plot) |
+| Charts | `bar`, `line`, `area`, `sparkline`, `gauge`, `progress`, `histogram`, `heatmap`, `pie`, through [tuios.dev/plot](https://pkg.go.dev/tuios.dev/plot) |
 | Containers | `card`, `tabs`, `modal` (in place), `toast` |
 | Status | `badge`, `status`, `spinner`, `button` |
 | Forms | The fields show their label and value. Editing comes later. |
 
 `markdown`, `diff` and `mermaid` show their source. `image` shows its alt text.
-`heatmap` and `pie` show their name. Nothing is left out without a mark.
+Nothing is left out without a mark.
+
+Columns and areas get an axis when they have the room. A line with more than
+one series shows a legend at the right of its title. A one-row sparkline
+with a title shows its last value after the trend.
 
 ## Layout
 

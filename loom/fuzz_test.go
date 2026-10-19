@@ -119,6 +119,11 @@ func fuzzTree(r *reader, depth int) *tml.Node {
 		set("data", tml.StringValue("state.rows"))
 		set("y", tml.StringValue("v"))
 		set("x", tml.StringValue("k"))
+		set("label", tml.StringValue("k"))
+		set("v", tml.StringValue("v"))
+		// No new byte is read here: the kept corpus inputs must decode to
+		// the same trees.
+		set("style", tml.StringValue("donut"))
 		if r.pick(2) == 0 {
 			set("dir", tml.StringValue("h"))
 		}

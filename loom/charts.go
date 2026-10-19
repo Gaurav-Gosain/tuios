@@ -25,8 +25,12 @@ type chartWidget struct {
 	bins   int
 	axis   bool
 	horiz  bool
-	height int // the rows the chart wants, without the title
-	width  int // the cells it wants, 0 for the whole width
+	donut  bool
+	grid   [][]float64 // heatmap: rows of columns
+	rowsL  []string    // heatmap row labels
+	colsL  []string    // heatmap column labels
+	height int         // the rows the chart wants, without the title
+	width  int         // the cells it wants, 0 for the whole width
 }
 
 func (s *Surface) buildChart(b *box, vars map[string]any) widget {
@@ -55,7 +59,7 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		w.values = numbers(rows, n.AttrString("y"))
 		w.labels = labels(rows, n.AttrString("x"))
 		w.horiz = n.AttrString("dir") == "h"
-		w.height = 4
+		w.height = 6
 		if w.horiz {
 			w.height = len(w.values)
 		}
@@ -69,13 +73,69 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 			}
 			w.series = append(w.series, sr)
 		}
+		w.labels = labels(rows, n.AttrString("x"))
 		w.axis = s.flag(n, "axis", vars, false)
 		w.height = 6
-	default:
-		// heatmap and pie come with the next chart wave.
-		w.height = 1
+	case "heatmap":
+		w.grid, w.rowsL, w.colsL = pivot(s.data(n, "data", vars), n.AttrString("x"), n.AttrString("y"), n.AttrString("v"))
+		w.height = len(w.rowsL) + 2
+	case "pie":
+		rows := s.data(n, "data", vars)
+		w.values = numbers(rows, n.AttrString("v"))
+		w.labels = labels(rows, n.AttrString("label"))
+		w.donut = n.AttrString("style") == "donut"
+		w.height = 7
 	}
 	return w
+}
+
+// pivot turns rows of {x, y, v} into a grid: one row per y and one column
+// per x, in the order they first appear. A pair with no row is NaN.
+func pivot(rows []any, xf, yf, vf string) ([][]float64, []string, []string) {
+	var xs, ys []string
+	xi, yi := map[string]int{}, map[string]int{}
+	type cell struct {
+		x, y int
+		v    float64
+	}
+	var cells []cell
+	for _, r := range rows {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		x, y := tml.Stringify(m[xf]), tml.Stringify(m[yf])
+		if _, ok := xi[x]; !ok {
+			if len(xs) >= 200 {
+				continue
+			}
+			xi[x] = len(xs)
+			xs = append(xs, x)
+		}
+		if _, ok := yi[y]; !ok {
+			if len(ys) >= 200 {
+				continue
+			}
+			yi[y] = len(ys)
+			ys = append(ys, y)
+		}
+		v, ok := m[vf].(float64)
+		if !ok {
+			v = math.NaN()
+		}
+		cells = append(cells, cell{xi[x], yi[y], v})
+	}
+	grid := make([][]float64, len(ys))
+	for i := range grid {
+		grid[i] = make([]float64, len(xs))
+		for j := range grid[i] {
+			grid[i][j] = math.NaN()
+		}
+	}
+	for _, c := range cells {
+		grid[c.y][c.x] = c.v
+	}
+	return grid, ys, xs
 }
 
 // numbers reads a data array as numbers: the elements themselves, or the
@@ -142,16 +202,64 @@ func (w *chartWidget) measure(s *Surface, _ *box, maxW int) (int, int) {
 	case "gauge", "progress":
 		return min(maxW, max(20, width(w.label)+16)), h
 	case "sparkline":
+		if w.title != "" && w.height == 1 {
+			// One row: the title, the trend, the last value.
+			return min(maxW, width(w.title)+1+w.width+1+width(w.last())), 1
+		}
 		return min(maxW, max(w.width, width(w.title))), h
-	case "heatmap", "pie":
-		return min(maxW, len(w.kind)+12), h
 	}
 	return maxW, h
 }
 
+// last is the last value of a sparkline as text.
+func (w *chartWidget) last() string {
+	for i := len(w.values) - 1; i >= 0; i-- {
+		if v := w.values[i]; !math.IsNaN(v) && !math.IsInf(v, 0) {
+			return plot.Compact(v)
+		}
+	}
+	return ""
+}
+
+// legend is what the title row shows at the right: the series of a line
+// or an area with more than one.
+func (w *chartWidget) legend() []plot.LegendItem {
+	if (w.kind == "line" || w.kind == "area") && len(w.series) > 1 {
+		return plot.Line{Series: w.series}.Legend()
+	}
+	return nil
+}
+
 func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
-	if w.title != "" {
-		c.drawLine(r.Min.X, r.Min.Y, r.Dx(), plainLine(w.title, style{fg: "dim", attrs: attrBold}), alignLeft)
+	if w.kind == "sparkline" && w.title != "" && r.Dy() == 1 {
+		x := c.text(r.Min.X, r.Min.Y, w.title, style{fg: "dim"}, r.Dx()/3) + 1
+		last := w.last()
+		room := r.Max.X - x
+		if last != "" {
+			room -= width(last) + 1
+		}
+		n := min(len(w.values), max(room, 0))
+		g := plot.Sparkline{Values: w.values, Role: plot.Role(w.role)}.Draw(n, 1, s.mode)
+		s.blit(c, g, x, r.Min.Y)
+		if last != "" && room > 0 {
+			// The last value sits right after the trend, where the eye ends.
+			c.text(x+n+1, r.Min.Y, last, style{fg: "fg", attrs: attrBold}, -1)
+		}
+		return
+	}
+	if w.title != "" || w.legend() != nil {
+		end := r.Min.X
+		if w.title != "" {
+			end = c.text(r.Min.X, r.Min.Y, truncate(w.title, r.Dx(), s.g.ellipsis), style{fg: "dim", attrs: attrBold}, -1)
+		}
+		if items := w.legend(); items != nil {
+			lw := plot.LegendWidth(items)
+			if r.Max.X-lw > end+1 {
+				g := plot.NewGrid(lw, 1)
+				plot.DrawLegend(g, 0, 0, items, s.mode)
+				s.blit(c, g, r.Max.X-lw, r.Min.Y)
+			}
+		}
 		r.Min.Y++
 	}
 	if r.Dx() <= 0 || r.Dy() <= 0 {
@@ -181,13 +289,19 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	case "histogram":
 		g = plot.Histogram{Values: w.values, Bins: w.bins, Role: role}.Draw(r.Dx(), r.Dy(), s.mode)
 	case "bar":
-		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Horizontal: w.horiz, Guide: s.pal.grounded()}
+		// Columns get an axis when they have the room for one.
+		axis := !w.horiz && r.Dy() >= 4 && r.Dx() >= 16
+		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Horizontal: w.horiz, Guide: s.pal.grounded(), Axis: axis}
 		g = bar.Draw(r.Dx(), r.Dy(), s.mode)
 	case "line", "area":
-		g = plot.Line{Series: w.series, Fill: w.kind == "area", Axis: w.axis}.Draw(r.Dx(), r.Dy(), s.mode)
-	default:
-		c.drawLine(r.Min.X, r.Min.Y, r.Dx(), plainLine("<"+w.kind+">", style{fg: "mute"}), alignLeft)
-		return
+		// An area has no axis attribute; it gets one when it has the room,
+		// as columns do.
+		axis := w.axis || w.kind == "area" && r.Dy() >= 4 && r.Dx() >= 16
+		g = plot.Line{Series: w.series, Fill: w.kind == "area", Axis: axis, Labels: w.labels}.Draw(r.Dx(), r.Dy(), s.mode)
+	case "heatmap":
+		g = plot.Heatmap{Values: w.grid, RowLabels: w.rowsL, ColLabels: w.colsL}.Draw(r.Dx(), r.Dy(), s.mode)
+	case "pie":
+		g = plot.Pie{Values: w.values, Labels: w.labels, Donut: w.donut}.Draw(r.Dx(), r.Dy(), s.mode)
 	}
 	s.blit(c, g, r.Min.X, r.Min.Y)
 }
@@ -201,7 +315,7 @@ func (s *Surface) blit(c *canvas, g *plot.Grid, x0, y0 int) {
 			if cell.Width == 0 || cell.Text == "" {
 				continue
 			}
-			st := style{fg: string(cell.Role)}
+			st := style{fg: string(cell.Role), bg: string(cell.Bg)}
 			if st.fg == "" {
 				st.fg = "fg"
 			}
