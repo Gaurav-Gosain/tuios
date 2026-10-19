@@ -18,7 +18,7 @@ import (
 	"golang.org/x/term"
 	"tuios.dev/sketch"
 	"tuios.dev/sketch/raster"
-	"tuios.dev/shot/mosaic"
+	sketchtext "tuios.dev/sketch/text"
 
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -28,7 +28,6 @@ import (
 type mermaidOptions struct {
 	format  string
 	out     string
-	symbols string
 	scale   float64
 	cols    int
 	rows    int
@@ -46,12 +45,13 @@ FILE is a Mermaid source (.mmd), a Markdown file, or - for standard input.
 A Markdown file gives each of its mermaid code blocks.
 
 In a terminal that shows kitty graphics, the diagram is a picture. In other
-terminals with 256 colours or more, it is drawn with block characters. At 16
-colours the command writes the source. When the output is not a terminal,
-the command writes SVG.
+terminals it is drawn with box-drawing characters and its labels as text. A
+diagram type with no text drawing yet, or one too wide for the terminal, is
+written as its source. When the output is not a terminal, the command writes
+SVG.
 
 The colours come from your tuios theme. tuios.dev/sketch draws the diagrams. It
-is a Go port of pele and draws flowcharts now.`,
+is a Go port of pele and draws flowcharts and sequence diagrams now.`,
 		Example: `  # Draw a diagram here
   tuios mermaid flow.mmd
 
@@ -68,15 +68,14 @@ is a Go port of pele and draws flowcharts now.`,
 			return runMermaid(args[0], o, os.Stdout)
 		},
 	}
-	cmd.Flags().StringVarP(&o.format, "format", "f", "", "Output format: svg, png, kitty, cells or text")
+	cmd.Flags().StringVarP(&o.format, "format", "f", "", "Output format: svg, png, kitty or text")
 	cmd.Flags().StringVarP(&o.out, "out", "o", "", "Write to this file instead of the terminal")
-	cmd.Flags().StringVar(&o.symbols, "symbols", "quadrant", "Block characters for cells: half, quadrant, sextant or octant")
 	cmd.Flags().Float64Var(&o.scale, "scale", 2, "Pixels per SVG unit for png")
 	cmd.Flags().IntVar(&o.cols, "cols", 0, "Width in cells, 0 for the terminal width")
 	cmd.Flags().IntVar(&o.rows, "rows", 0, "Height in cells, 0 for the terminal height")
 	cmd.Flags().IntVar(&o.diagram, "diagram", 0, "Draw only diagram N of the file, from 1")
 	_ = cmd.RegisterFlagCompletionFunc("format", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
-		return []string{"svg", "png", "kitty", "cells", "text"}, cobra.ShellCompDirectiveNoFileComp
+		return []string{"svg", "png", "kitty", "text"}, cobra.ShellCompDirectiveNoFileComp
 	})
 	return cmd
 }
@@ -110,7 +109,7 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		profile = colorprofile.TrueColor
 	}
 	theme.SetColorProfile(profile)
-	th := mermaid.Theme(theme.UI(), theme.GetANSIPalette())
+	th := mermaid.Theme(theme.UI(), theme.GetANSIPalette(), theme.TerminalBg(), theme.TerminalFg())
 
 	format := strings.ToLower(o.format)
 	if format == "" && o.out != "" {
@@ -129,16 +128,14 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 			format = "svg"
 		case kittyGraphics(stdout):
 			format = "kitty"
-		case profile >= colorprofile.ANSI256:
-			format = "cells"
 		default:
 			format = "text"
 		}
 	}
 	switch format {
-	case "svg", "png", "kitty", "cells", "text":
+	case "svg", "png", "kitty", "text":
 	default:
-		return fmt.Errorf("unknown format %q: use svg, png, kitty, cells or text", o.format)
+		return fmt.Errorf("unknown format %q: use svg, png, kitty or text", o.format)
 	}
 	if o.out != "" && format != "svg" && format != "png" {
 		return fmt.Errorf("--out takes svg or png, not %s", format)
@@ -150,12 +147,12 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		if err != nil {
 			failed++
 			fmt.Fprintf(os.Stderr, "diagram %d: %v\n", i+1, err)
-			if format == "text" || format == "cells" || format == "kitty" {
+			if format == "text" || format == "kitty" {
 				fmt.Fprintln(stdout, strings.TrimRight(src, "\n"))
 			}
 			continue
 		}
-		if err := writeMermaid(out, src, i, len(sources), format, o, profile, stdout); err != nil {
+		if err := writeMermaid(out, src, i, len(sources), format, o, profile, tty, stdout); err != nil {
 			return err
 		}
 	}
@@ -174,7 +171,7 @@ func numbered(name string, i, n int) string {
 	return strings.TrimSuffix(name, ext) + "-" + strconv.Itoa(i+1) + ext
 }
 
-func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaidOptions, profile colorprofile.Profile, stdout *os.File) error {
+func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaidOptions, profile colorprofile.Profile, tty bool, stdout *os.File) error {
 	write := func(data []byte) error {
 		if o.out == "" {
 			_, err := stdout.Write(data)
@@ -189,6 +186,22 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		if i > 0 {
 			fmt.Fprintln(stdout)
 		}
+		cols, _, _, _ := terminalCells(stdout)
+		if o.cols > 0 {
+			cols = o.cols
+		}
+		if d, err := sketch.Parse(src, sketch.ParseOptions{}); err == nil {
+			lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: cols, Color: tty && profile >= colorprofile.ANSI})
+			if err == nil {
+				for _, line := range lines {
+					if _, err := fmt.Fprintln(stdout, line); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+		}
+		// No text drawing for this type, or none that fits: the source.
 		_, err := fmt.Fprintln(stdout, strings.TrimRight(src, "\n"))
 		return err
 	}
@@ -205,9 +218,6 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		// As large as the terminal allows, leaving two rows for the prompt, and no
 		// larger than twice the SVG size.
 		scale = math.Min(2, math.Min(float64(cols*cellW)/math.Max(1, out.Width), float64(max(rows-2, 4)*cellH)/math.Max(1, out.Height)))
-	}
-	if format == "cells" {
-		scale = 2
 	}
 	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: true})
 	if err != nil {
@@ -227,31 +237,6 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		}
 		c := int(math.Ceil(float64(img.Bounds().Dx()) / float64(cellW)))
 		return mermaid.Kitty(stdout, b.Bytes(), c)
-	}
-	// Cells: as wide as the diagram at 8 pixels a cell, no wider than the terminal,
-	// and no taller than the terminal less two rows.
-	kind, ok := mosaic.ParseKind(o.symbols)
-	if !ok || kind == mosaic.Off {
-		return fmt.Errorf("unknown --symbols %q: use half, quadrant, sextant or octant", o.symbols)
-	}
-	c := min(cols, max(8, int(math.Round(out.Width/8))))
-	aspect := float64(cellH) / float64(cellW)
-	r := max(1, int(math.Round(float64(c)*out.Height/out.Width/aspect)))
-	if limit := max(rows-2, 4); r > limit {
-		c = max(1, int(math.Round(float64(c)*float64(limit)/float64(r))))
-		r = limit
-	}
-	colors := mosaic.TrueColor
-	switch {
-	case profile < colorprofile.ANSI256:
-		colors = mosaic.ANSI16
-	case profile < colorprofile.TrueColor:
-		colors = mosaic.XTerm256
-	}
-	for _, line := range mermaid.Mosaic(img, c, r, kind, colors, theme.UI().Surface) {
-		if _, err := fmt.Fprintln(stdout, line); err != nil {
-			return err
-		}
 	}
 	return nil
 }

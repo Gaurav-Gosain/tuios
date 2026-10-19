@@ -83,7 +83,7 @@ require (
 	golang.org/x/text v0.42.0
 	tuios.dev/progstatus v0.1.0
 	tuios.dev/shot v0.2.0
-	tuios.dev/sketch v0.0.0-20261019190701-0bd6a21996b6
+	tuios.dev/sketch v0.0.0-20261019190718-b16e62bfc359
 	tuios.dev/swatch v0.1.0
 	tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb
 )
