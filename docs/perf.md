@@ -2917,6 +2917,16 @@ blocks use the lexers internal/diffview already holds. goldmark with its GFM
 extensions measured about 480 KB before any renderer, and glamour, which links
 every chroma lexer, about 8.8 MB.
 
+The budgets went to 38,265,100 (linux/amd64) and 35,919,100 (darwin/arm64)
+for `tuios restart-server`: the command, its plan of what a restart stops in
+internal/restartplan (shared with the app), the detached worker that does the
+stop and the start, the restart lock and log, the choice of the newest tuios
+installed, and the `agent_resumable` mark in list-windows. Main at e6a67800
+measured 38,203,554 and 35,864,450 bytes (Go 1.26.9, a clean clone, as CI
+builds it). The change measured 38,260,898 and 35,914,898, so it adds 57,344
+and 50,448 bytes. No dependency was added. The new budgets leave 4,202 and
+4,202 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
