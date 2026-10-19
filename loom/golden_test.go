@@ -26,10 +26,15 @@ type goldenCase struct {
 	path  string
 	w, h  int
 	frame bool
+	owner bool // the frame names an owner, as a tuios popup does
 }
 
 var sizeLine = regexp.MustCompile(`^<!--(.*)-->`)
-var sizeItem = regexp.MustCompile(`^\s*(\d+)x(\d+)(\s+frame)?\s*$`)
+var sizeItem = regexp.MustCompile(`^\s*(\d+)x(\d+)(\s+frame(-owner)?)?\s*$`)
+
+// cellAspect is the cell of the frames: JetBrainsMono NFM through shot at
+// scale 1 is 8 by 19 pixels.
+const cellAspect = 19.0 / 8
 
 // loadCases reads the cases of a folder. The first line of a case file
 // gives the sizes, comma separated: <!-- 48x10 --> or
@@ -64,7 +69,7 @@ func loadCases(t *testing.T, dir string) []goldenCase {
 			if len(items) > 1 {
 				name += "-" + sm[1] + "x" + sm[2]
 			}
-			out = append(out, goldenCase{name: name, path: f, w: w, h: h, frame: sm[3] != ""})
+			out = append(out, goldenCase{name: name, path: f, w: w, h: h, frame: sm[3] != "", owner: sm[4] != ""})
 		}
 	}
 	return out
@@ -88,7 +93,7 @@ func (c goldenCase) render(t testing.TB, d Depth) *uv.Buffer {
 		}
 	}
 	pal := DefaultPalette(d)
-	s, err := New(doc, &Options{Palette: pal})
+	s, err := New(doc, &Options{Palette: pal, CellAspect: cellAspect})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +101,11 @@ func (c goldenCase) render(t testing.TB, d Depth) *uv.Buffer {
 		return s.Render(c.w, c.h)
 	}
 	out := uv.NewBuffer(c.w, c.h)
-	Frame(out, rect(0, 0, c.w, c.h), doc.AttrString("title"), "from claude in api-auth", pal, true)
+	owner := ""
+	if c.owner {
+		owner = "from claude in api-auth"
+	}
+	Frame(out, rect(0, 0, c.w, c.h), doc.AttrString("title"), owner, pal, true)
 	inner := s.Render(c.w-4, c.h-2)
 	for y := 0; y < inner.Height(); y++ {
 		for x := 0; x < inner.Width(); x++ {

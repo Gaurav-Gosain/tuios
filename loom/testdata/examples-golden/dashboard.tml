@@ -1,4 +1,4 @@
-<!-- 66x18 frame, 66x14 frame -->
+<!-- 66x18 frame-owner, 66x14 frame-owner -->
 <tml version="1" title="go test ./...">
   <state>{"passed": 412, "failed": 3, "skipped": 9, "secs": [41,39,44,40,52,47,38], "failures": [
       {"pkg": "internal/session", "test": "TestAttachRace", "ms": 2210},

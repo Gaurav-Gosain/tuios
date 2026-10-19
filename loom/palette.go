@@ -210,7 +210,7 @@ var default16 = map[string]int{
 	"accent": 5, "accent-bright": 13, RolePill: 0,
 	"success": 10, "error": 9, "warning": 11, "info": 12, "attention": 11, "busy": 12,
 	"series1": 13, "series2": 12, "series3": 10, "series4": 11, "series5": 9, "series6": 14,
-	RoleHeat1: 0, RoleHeat2: 4, RoleHeat3: 12, RoleHeat4: 5, RoleHeat5: 13,
+	RoleHeat1: 4, RoleHeat2: 12, RoleHeat3: 6, RoleHeat4: 5, RoleHeat5: 13,
 }
 
 // DefaultPalette returns the tuios chrome palette with no theme at depth d.

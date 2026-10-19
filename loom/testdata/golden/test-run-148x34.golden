@@ -10,10 +10,10 @@
 |│                                                                                                                                                  │|
 |│ Time by package ────────────────────────────────────────────────────  seconds    Suite time, last 30 runs ────────────────────────────────────── │|
 |│ internal/session    █████████████████████████████████████████████████████ 6.2    26┤                                                             │|
-|│ internal/app        █████████████████████████████████████████· · · · · ·  4.8      │          ⣤⡀        ⢀         ⢠⢦                             │|
-|│ vt                  ██████████████████████████▌· · · · · · · · · · · · ·  3.1    22┤⡀  ⣠⢦⡀   ⡼⠁⠳⡄      ⢀⡞⠳⣄      ⢠⠏⠈⠳⣄⡀        ⡀        ⢀⣤⣀      │|
-|│ internal/tape       ████████████ · · · · · · · · · · · · · · · · · · · ·  1.4      │⠙⠛⠛⠁ ⠹⣤⣤⡼⠁  ⠙⠛⠶⢦⣀⣠⣤⠏  ⠈⠛⢦⣤⣄⣤⡴⠋   ⠈⠙⠛⠶⢦⣄⣀⣠⣤⠞⠙⠶⣤⡴⠶⣤⣀⣠⡴⠋ ⠉⠳⠶⠶⣄  │|
-|│ internal/config     ███████▊ · · · · · · · · · · · · · · · · · · · · · ·  0.9    18┤                ⠉⠁        ⠈           ⠈⠉⠁        ⠉⠁       ⠘⢦ │|
+|│ internal/app        █████████████████████████████████████████· · · · · ·  4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
+|│ vt                  ██████████████████████████▌· · · · · · · · · · · · ·  3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
+|│ internal/tape       ████████████ · · · · · · · · · · · · · · · · · · · ·  1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
+|│ internal/config     ███████▊ · · · · · · · · · · · · · · · · · · · · · ·  0.9    18┤                                                          ⠈⠢ │|
 |│ internal/terminal   ██████▉· · · · · · · · · · · · · · · · · · · · · · ·  0.8      └──────────────────────────────────────────────────────────── │|
 |│ internal/federation █████▏ · · · · · · · · · · · · · · · · · · · · · · ·  0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
 |│ progstatus          ██▋· · · · · · · · · · · · · · · · · · · · · · · · ·  0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
@@ -46,9 +46,9 @@
 |adccccbccbcccccccdggggggggggggggggggggggggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggggggggggggggggggggggggggggda|
 |adeeeeeeeeeeeeeeeeddddtttttttttttttttttttttttttttttttttttttttttttttttttttttduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adeeeeeeeeeeeeddddddddtttttttttttttttttttttttttttttttttttttttttgdgdgdgdgdgdduuuddddddgddddddddddvvddddddddvdddddddddvvddddddddddddddddddddddddddddda|
-|adeeddddddddddddddddddtttttttttttttttttttttttttttgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgvddvvvdddvvvvddddddvvvvddddddvvvvvvddddddddvddddddddvvvdddddda|
-|adeeeeeeeeeeeeedddddddttttttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgvvvvdvvvvvddvvvvvvvvddvvvvvvvvdddvvvvvvvvvvvvvvvvvvvvdvvvvvdda|
-|adeeeeeeeeeeeeeeedddddttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgddddddddddddddddvvddddddddvdddddddddddvvvddddddddvvdddddddvvda|
+|adeeddddddddddddddddddtttttttttttttttttttttttttttgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgvddvvvdddvdvvddddddvvvvddddddvvdvvvddddddddvddddddddvvvdddddda|
+|adeeeeeeeeeeeeedddddddttttttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgvvvddvvvvdddvvvvvvvvdddvvvvvvvddddvvvvvvvvvvvvvvvvvvvddvvvvdda|
+|adeeeeeeeeeeeeeeedddddttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvvda|
 |adeeeeeeeeeeeeeeeeedddtttttttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adeeeeeeeeeeeeeeeeeeedttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeedddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddddddddddddddddddddcccccdda|
 |adeeeeeeeeeeddddddddddtttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeeeddwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwddddddddddddddddddddcdddddda|
@@ -115,10 +115,10 @@ z: fg=mute bg=panel bold
 |│                                                                                                                                                  │|
 |│ Time by package ────────────────────────────────────────────────────  seconds    Suite time, last 30 runs ────────────────────────────────────── │|
 |│ internal/session    █████████████████████████████████████████████████████ 6.2    26┤                                                             │|
-|│ internal/app        █████████████████████████████████████████· · · · · ·  4.8      │          ⣤⡀        ⢀         ⢠⢦                             │|
-|│ vt                  ██████████████████████████▌· · · · · · · · · · · · ·  3.1    22┤⡀  ⣠⢦⡀   ⡼⠁⠳⡄      ⢀⡞⠳⣄      ⢠⠏⠈⠳⣄⡀        ⡀        ⢀⣤⣀      │|
-|│ internal/tape       ████████████ · · · · · · · · · · · · · · · · · · · ·  1.4      │⠙⠛⠛⠁ ⠹⣤⣤⡼⠁  ⠙⠛⠶⢦⣀⣠⣤⠏  ⠈⠛⢦⣤⣄⣤⡴⠋   ⠈⠙⠛⠶⢦⣄⣀⣠⣤⠞⠙⠶⣤⡴⠶⣤⣀⣠⡴⠋ ⠉⠳⠶⠶⣄  │|
-|│ internal/config     ███████▊ · · · · · · · · · · · · · · · · · · · · · ·  0.9    18┤                ⠉⠁        ⠈           ⠈⠉⠁        ⠉⠁       ⠘⢦ │|
+|│ internal/app        █████████████████████████████████████████· · · · · ·  4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
+|│ vt                  ██████████████████████████▌· · · · · · · · · · · · ·  3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
+|│ internal/tape       ████████████ · · · · · · · · · · · · · · · · · · · ·  1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
+|│ internal/config     ███████▊ · · · · · · · · · · · · · · · · · · · · · ·  0.9    18┤                                                          ⠈⠢ │|
 |│ internal/terminal   ██████▉· · · · · · · · · · · · · · · · · · · · · · ·  0.8      └──────────────────────────────────────────────────────────── │|
 |│ internal/federation █████▏ · · · · · · · · · · · · · · · · · · · · · · ·  0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
 |│ progstatus          ██▋· · · · · · · · · · · · · · · · · · · · · · · · ·  0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
@@ -151,9 +151,9 @@ z: fg=mute bg=panel bold
 |adccccbccbcccccccdggggggggggggggggggggggggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggggggggggggggggggggggggggggda|
 |adeeeeeeeeeeeeeeeeddddtttttttttttttttttttttttttttttttttttttttttttttttttttttduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adeeeeeeeeeeeeddddddddtttttttttttttttttttttttttttttttttttttttttgdgdgdgdgdgdduuuddddddgddddddddddvvddddddddvdddddddddvvddddddddddddddddddddddddddddda|
-|adeeddddddddddddddddddtttttttttttttttttttttttttttgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgvddvvvdddvvvvddddddvvvvddddddvvvvvvddddddddvddddddddvvvdddddda|
-|adeeeeeeeeeeeeedddddddttttttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgvvvvdvvvvvddvvvvvvvvddvvvvvvvvdddvvvvvvvvvvvvvvvvvvvvdvvvvvdda|
-|adeeeeeeeeeeeeeeedddddttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgddddddddddddddddvvddddddddvdddddddddddvvvddddddddvvdddddddvvda|
+|adeeddddddddddddddddddtttttttttttttttttttttttttttgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgvddvvvdddvdvvddddddvvvvddddddvvdvvvddddddddvddddddddvvvdddddda|
+|adeeeeeeeeeeeeedddddddttttttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgvvvddvvvvdddvvvvvvvvdddvvvvvvvddddvvvvvvvvvvvvvvvvvvvddvvvvdda|
+|adeeeeeeeeeeeeeeedddddttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvvda|
 |adeeeeeeeeeeeeeeeeedddtttttttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adeeeeeeeeeeeeeeeeeeedttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeedddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddddddddddddddddddddcccccdda|
 |adeeeeeeeeeeddddddddddtttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeeeddwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwddddddddddddddddddddcdddddda|
@@ -220,10 +220,10 @@ z: fg=mute bg=panel bold
 |│                                                                                                                                                  │|
 |│ Time by package ────────────────────────────────────────────────────  seconds    Suite time, last 30 runs ────────────────────────────────────── │|
 |│ internal/session    █████████████████████████████████████████████████████ 6.2    26┤                                                             │|
-|│ internal/app        █████████████████████████████████████████             4.8      │          ⣤⡀        ⢀         ⢠⢦                             │|
-|│ vt                  ██████████████████████████▌                           3.1    22┤⡀  ⣠⢦⡀   ⡼⠁⠳⡄      ⢀⡞⠳⣄      ⢠⠏⠈⠳⣄⡀        ⡀        ⢀⣤⣀      │|
-|│ internal/tape       ████████████                                          1.4      │⠙⠛⠛⠁ ⠹⣤⣤⡼⠁  ⠙⠛⠶⢦⣀⣠⣤⠏  ⠈⠛⢦⣤⣄⣤⡴⠋   ⠈⠙⠛⠶⢦⣄⣀⣠⣤⠞⠙⠶⣤⡴⠶⣤⣀⣠⡴⠋ ⠉⠳⠶⠶⣄  │|
-|│ internal/config     ███████▊                                              0.9    18┤                ⠉⠁        ⠈           ⠈⠉⠁        ⠉⠁       ⠘⢦ │|
+|│ internal/app        █████████████████████████████████████████             4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
+|│ vt                  ██████████████████████████▌                           3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
+|│ internal/tape       ████████████                                          1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
+|│ internal/config     ███████▊                                              0.9    18┤                                                          ⠈⠢ │|
 |│ internal/terminal   ██████▉                                               0.8      └──────────────────────────────────────────────────────────── │|
 |│ internal/federation █████▏                                                0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
 |│ progstatus          ██▋                                                   0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
@@ -256,9 +256,9 @@ z: fg=mute bg=panel bold
 |a ccccbccbccccccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  eeeeeee    cccccbcccccbccccbccbcccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
 |a dddddddddddddddd    ggggggggggggggggggggggggggggggggggggggggggggggggggggg hhh    eee                                                             a|
 |a dddddddddddd        ggggggggggggggggggggggggggggggggggggggggg             hhh      e          ll        l         ll                             a|
-|a dd                  ggggggggggggggggggggggggggg                           hhh    eeel  lll   llll      llll      llllll        l        lll      a|
-|a ddddddddddddd       gggggggggggg                                          hhh      ellll lllll  llllllll  llllllll   llllllllllllllllllll lllll  a|
-|a ddddddddddddddd     gggggggg                                              hhh    eee                ll        l           lll        ll       ll a|
+|a dd                  ggggggggggggggggggggggggggg                           hhh    eeel  lll   l ll      llll      ll lll        l        lll      a|
+|a ddddddddddddd       gggggggggggg                                          hhh      elll  llll   llllllll   lllllll    lllllllllllllllllll  llll  a|
+|a ddddddddddddddd     gggggggg                                              hhh    eee                                                          ll a|
 |a ddddddddddddddddd   ggggggg                                               hhh      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
 |a ddddddddddddddddddd gggggg                                                hhh    dddd   llllllllllllllllllllllllllllll                    ccccc  a|
 |a dddddddddd          ggg                                                   hhh    ddddd  mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm                    c      a|

@@ -5,15 +5,15 @@
 |  internal/app ███████████████████▍ · · · · ·  2.5  |
 |  tml          ███████▊ · · · · · · · · · · ·    1  |
 |                                                    |
-|  60┤                        ▃▃▃▃▃                  |
-|    │▅▅▅▅▅ ▃▃▃▃▃ ▆▆▆▆▆ ▄▄▄▄▄ █████ █████ ▃▃▃▃▃      |
-|  20┤█████ █████ █████ █████ █████ █████ █████      |
-|    └──────────────────────────────────────────     |
+|  55┤                        ▅▅▅▅▅                  |
+|    │▃▃▃▃▃ ▁▁▁▁▁ ▅▅▅▅▅ ▂▂▂▂▂ █████ █████            |
+|  30┤█████ █████ █████ █████ █████ █████ █████      |
+|    └────────────────────────────────────────────   |
 |                                                    |
 |  Latency                              ■ ms  ■ p95  |
-|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⣤⣤⡴⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⣤⣤⣤⣤  |
-|    │⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠛⠛⠛⠛⠛⠉⠉⠉                    |
-|  20┤⣀⣀⣀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⠶⠶⠶⠶  |
+|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉⠉⠒⠒⠒⠒⠒⠤⠤⠤⠤  |
+|    │⠒⠒⠒⠒⠉⠉⠉⠁          ⠈⠉⠉⠉⠉⠉                       |
+|  20┤⣀⣀⣀⣀⣀⡠⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠒⠊⠉⠉⠉⠒⠒⠒⠒⠒⠒⠒⠒⠒  |
 |    └─────────────────────────────────────────────  |
 |     1                     3                     5  |
 |                                                    |
@@ -30,13 +30,13 @@
 |   └──────────────────────────────────────────────  |
 |    1                                           12  |
 |                                                    |
-|  mon ████████████                                  |
-|  tue ████████████            ▄▄▄▄▄▄                |
-|      00        02          ██▀▀▀▀▀███   ■ go 60%   |
-|      1 ██████████ 9       ███      ███  ■ zig 30%  |
-|                           ███      ███  ■ sh 10%   |
-|                            ██▀▄▄▄▄███              |
-|                              ▀▀▀▀▀▀                |
+|  mon ██████                                        |
+|  tue ██████                  ▗▄▄▄▄▖                |
+|      00  02                ▟█▄▛▀▀▜██▙   ■ go 60%   |
+|      ███████████████      ▟█▛      ▜█▙  ■ zig 30%  |
+|      1      5      9      ▜█▙      ▟█▛  ■ sh 10%   |
+|                            ▜█▄▙▄▄▟██▛              |
+|                              ▝▀▀▀▀▘                |
 |                                                    |
 |                                                    |
 |                                                    |
@@ -57,13 +57,13 @@
 |aadddaaaaaaaaaaeeeeeeeeagagagagagagagagagagagaaaafaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aahhgaaaaaaaaaaaaaaaaaaaaaaaaiiiiiaaaaaaaaaaaaaaaaaa|
-|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
+|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaaaaaaaa|
 |aahhgiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
-|aaaagggggggggggggggggggggggggggggggggggggggggggaaaaa|
+|aaaagggggggggggggggggggggggggggggggggggggggggggggaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaaiahhhaa|
 |aahhgaaaaaaaiiiiiiiiiiiiaaaaaiiiiiiiiiiiiiiiiiiiiiaa|
-|aaaagiiiiiiiiiiiiiiiiiiiiiiiiiiiaaaaaaaaaaaaaaaaaaaa|
+|aaaagiiiiiiiiaaaaaaaaaaiiiiiiaaaaaaaaaaaaaaaaaaaaaaa|
 |aahhgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
 |aaaaggggggggggggggggggggggggggggggggggggggggggggggaa|
 |aaaaahaaaaaaaaaaaaaaaaaaaaahaaaaaaaaaaaaaaaaaaaaahaa|
@@ -81,11 +81,11 @@
 |aaagggggggggggggggggggggggggggggggggggggggggggggggaa|
 |aaaahaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaahhaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallllmmmmeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallllnnnnmmmmaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
-|aaaaaahhaaaaaaaahhaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
-|aaaaaahallmmiinneeahaaaaaaaiiiaaaaaaeeeaaiadddadddaa|
-|aaaaaaaaaaaaaaaaaaaaaaaaaaaiiiaaaaaaeeeaajaddadddaaa|
+|aadddallmmeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddallnnmmaaaaaaaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
+|aaaaaahhaahhaaaaaaaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
+|aaaaaalllmmmiiinnneeeaaaaaaiiiaaaaaaeeeaaiadddadddaa|
+|aaaaaahaaaaaahaaaaaahaaaaaaiiiaaaaaaeeeaajaddadddaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaiipeeeeeeeaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -114,8 +114,8 @@ k: fg=fg bg=panel bold
 l: fg=heat1 bg=panel
 m: fg=heat2 bg=panel
 n: fg=heat4 bg=panel
-o: fg=series3 bg=info
-p: fg=info bg=accent-bright
+o: fg=info bg=series3
+p: fg=accent-bright bg=info
 === 256 52x50
 |                                                    |
 |  Seconds by package                                |
@@ -123,15 +123,15 @@ p: fg=info bg=accent-bright
 |  internal/app ███████████████████▍ · · · · ·  2.5  |
 |  tml          ███████▊ · · · · · · · · · · ·    1  |
 |                                                    |
-|  60┤                        ▃▃▃▃▃                  |
-|    │▅▅▅▅▅ ▃▃▃▃▃ ▆▆▆▆▆ ▄▄▄▄▄ █████ █████ ▃▃▃▃▃      |
-|  20┤█████ █████ █████ █████ █████ █████ █████      |
-|    └──────────────────────────────────────────     |
+|  55┤                        ▅▅▅▅▅                  |
+|    │▃▃▃▃▃ ▁▁▁▁▁ ▅▅▅▅▅ ▂▂▂▂▂ █████ █████            |
+|  30┤█████ █████ █████ █████ █████ █████ █████      |
+|    └────────────────────────────────────────────   |
 |                                                    |
 |  Latency                              ■ ms  ■ p95  |
-|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⣤⣤⡴⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⣤⣤⣤⣤  |
-|    │⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠛⠛⠛⠛⠛⠉⠉⠉                    |
-|  20┤⣀⣀⣀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⠶⠶⠶⠶  |
+|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉⠉⠒⠒⠒⠒⠒⠤⠤⠤⠤  |
+|    │⠒⠒⠒⠒⠉⠉⠉⠁          ⠈⠉⠉⠉⠉⠉                       |
+|  20┤⣀⣀⣀⣀⣀⡠⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠒⠊⠉⠉⠉⠒⠒⠒⠒⠒⠒⠒⠒⠒  |
 |    └─────────────────────────────────────────────  |
 |     1                     3                     5  |
 |                                                    |
@@ -148,13 +148,13 @@ p: fg=info bg=accent-bright
 |   └──────────────────────────────────────────────  |
 |    1                                           12  |
 |                                                    |
-|  mon ████████████                                  |
-|  tue ████████████            ▄▄▄▄▄▄                |
-|      00        02          ██▀▀▀▀▀███   ■ go 60%   |
-|      1 ██████████ 9       ███      ███  ■ zig 30%  |
-|                           ███      ███  ■ sh 10%   |
-|                            ██▀▄▄▄▄███              |
-|                              ▀▀▀▀▀▀                |
+|  mon ██████                                        |
+|  tue ██████                  ▗▄▄▄▄▖                |
+|      00  02                ▟█▄▛▀▀▜██▙   ■ go 60%   |
+|      ███████████████      ▟█▛      ▜█▙  ■ zig 30%  |
+|      1      5      9      ▜█▙      ▟█▛  ■ sh 10%   |
+|                            ▜█▄▙▄▄▟██▛              |
+|                              ▝▀▀▀▀▘                |
 |                                                    |
 |                                                    |
 |                                                    |
@@ -175,13 +175,13 @@ p: fg=info bg=accent-bright
 |aadddaaaaaaaaaaeeeeeeeeagagagagagagagagagagagaaaafaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aahhgaaaaaaaaaaaaaaaaaaaaaaaaiiiiiaaaaaaaaaaaaaaaaaa|
-|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
+|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaaaaaaaa|
 |aahhgiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
-|aaaagggggggggggggggggggggggggggggggggggggggggggaaaaa|
+|aaaagggggggggggggggggggggggggggggggggggggggggggggaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaaiahhhaa|
 |aahhgaaaaaaaiiiiiiiiiiiiaaaaaiiiiiiiiiiiiiiiiiiiiiaa|
-|aaaagiiiiiiiiiiiiiiiiiiiiiiiiiiiaaaaaaaaaaaaaaaaaaaa|
+|aaaagiiiiiiiiaaaaaaaaaaiiiiiiaaaaaaaaaaaaaaaaaaaaaaa|
 |aahhgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
 |aaaaggggggggggggggggggggggggggggggggggggggggggggggaa|
 |aaaaahaaaaaaaaaaaaaaaaaaaaahaaaaaaaaaaaaaaaaaaaaahaa|
@@ -199,11 +199,11 @@ p: fg=info bg=accent-bright
 |aaagggggggggggggggggggggggggggggggggggggggggggggggaa|
 |aaaahaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaahhaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallllmmmmeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallllnnnnmmmmaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
-|aaaaaahhaaaaaaaahhaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
-|aaaaaahallmmiinneeahaaaaaaaiiiaaaaaaeeeaaiadddadddaa|
-|aaaaaaaaaaaaaaaaaaaaaaaaaaaiiiaaaaaaeeeaajaddadddaaa|
+|aadddallmmeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddallnnmmaaaaaaaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
+|aaaaaahhaahhaaaaaaaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
+|aaaaaalllmmmiiinnneeeaaaaaaiiiaaaaaaeeeaaiadddadddaa|
+|aaaaaahaaaaaahaaaaaahaaaaaaiiiaaaaaaeeeaajaddadddaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaiipeeeeeeeaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -232,8 +232,8 @@ k: fg=fg bg=panel bold
 l: fg=success-tint bg=panel
 m: fg=accent-tint bg=panel
 n: fg=heat4 bg=panel
-o: fg=series3 bg=info
-p: fg=info bg=accent-bright
+o: fg=info bg=series3
+p: fg=accent-bright bg=info
 === 16 52x50
 |                                                    |
 |  Seconds by package                                |
@@ -241,15 +241,15 @@ p: fg=info bg=accent-bright
 |  internal/app ███████████████████▍            2.5  |
 |  tml          ███████▊                          1  |
 |                                                    |
-|  60┤                        ▃▃▃▃▃                  |
-|    │▅▅▅▅▅ ▃▃▃▃▃ ▆▆▆▆▆ ▄▄▄▄▄ █████ █████ ▃▃▃▃▃      |
-|  20┤█████ █████ █████ █████ █████ █████ █████      |
-|    └──────────────────────────────────────────     |
+|  55┤                        ▅▅▅▅▅                  |
+|    │▃▃▃▃▃ ▁▁▁▁▁ ▅▅▅▅▅ ▂▂▂▂▂ █████ █████            |
+|  30┤█████ █████ █████ █████ █████ █████ █████      |
+|    └────────────────────────────────────────────   |
 |                                                    |
 |  Latency                              ■ ms  ■ p95  |
-|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⣤⣤⡴⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⣤⣤⣤⣤  |
-|    │⠶⠶⠶⠶⠛⠛⠛⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠛⠛⠛⠛⠛⠉⠉⠉                    |
-|  20┤⣀⣀⣀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⡴⠶⠶⠶⠶⠞⠛⠛⠛⠶⠶⠶⠶⠶⠶⠶⠶⠶  |
+|  60┤       ⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀     ⣀⣀⣀⠤⠤⠔⠒⠒⠊⠉⠉⠉⠒⠒⠒⠒⠒⠤⠤⠤⠤  |
+|    │⠒⠒⠒⠒⠉⠉⠉⠁          ⠈⠉⠉⠉⠉⠉                       |
+|  20┤⣀⣀⣀⣀⣀⡠⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠔⠒⠒⠒⠒⠊⠉⠉⠉⠒⠒⠒⠒⠒⠒⠒⠒⠒  |
 |    └─────────────────────────────────────────────  |
 |     1                     3                     5  |
 |                                                    |
@@ -266,13 +266,13 @@ p: fg=info bg=accent-bright
 |   └──────────────────────────────────────────────  |
 |    1                                           12  |
 |                                                    |
-|  mon ████████████                                  |
-|  tue ████████████            ▄▄▄▄▄▄                |
-|      00        02          ██▀▀▀▀▀███   ■ go 60%   |
-|      1 ██████████ 9       ███      ███  ■ zig 30%  |
-|                           ███      ███  ■ sh 10%   |
-|                            ██▀▄▄▄▄███              |
-|                              ▀▀▀▀▀▀                |
+|  mon ██████                                        |
+|  tue ██████                  ▗▄▄▄▄▖                |
+|      00  02                ▟█▄▛▀▀▜██▙   ■ go 60%   |
+|      ███████████████      ▟█▛      ▜█▙  ■ zig 30%  |
+|      1      5      9      ▜█▙      ▟█▛  ■ sh 10%   |
+|                            ▜█▄▙▄▄▟██▛              |
+|                              ▝▀▀▀▀▘                |
 |                                                    |
 |                                                    |
 |                                                    |
@@ -293,13 +293,13 @@ p: fg=info bg=accent-bright
 |  ccc          dddddddd                          e  |
 |                                                    |
 |  fff                        ggggg                  |
-|    fggggg ggggg ggggg ggggg ggggg ggggg ggggg      |
+|    fggggg ggggg ggggg ggggg ggggg ggggg            |
 |  fffggggg ggggg ggggg ggggg ggggg ggggg ggggg      |
-|    fffffffffffffffffffffffffffffffffffffffffff     |
+|    fffffffffffffffffffffffffffffffffffffffffffff   |
 |                                                    |
 |  aaaaaaa                              d ff  g fff  |
 |  fff       gggggggggggg     ggggggggggggggggggggg  |
-|    fggggggggggggggggggggggggggg                    |
+|    fgggggggg          gggggg                       |
 |  fffddddddddddddddddddddddddddddddddddddddddddddd  |
 |    ffffffffffffffffffffffffffffffffffffffffffffff  |
 |     f                     f                     f  |
@@ -317,11 +317,11 @@ p: fg=info bg=accent-bright
 |   fffffffffffffffffffffffffffffffffffffffffffffff  |
 |    f                                           ff  |
 |                                                    |
-|  ccc jjjjkkkkdddd                                  |
-|  ccc jjjjllllkkkk            hhhddd                |
-|      ff        ff          ggmhhddddd   d cc ccc   |
-|      f jjkkgglldd f       ggg      ddd  g ccc ccc  |
-|                           ggg      ddd  h cc ccc   |
+|  ccc jjggdd                                        |
+|  ccc jjkkgg                  hhhddd                |
+|      ff  ff                gglhhddddd   d cc ccc   |
+|      jjjgggmmmkkkddd      ggg      ddd  g ccc ccc  |
+|      f      f      f      ggg      ddd  h cc ccc   |
 |                            ggnddddddd              |
 |                              dddddd                |
 |                                                    |
@@ -345,11 +345,11 @@ f: fg=mute
 g: fg=info
 h: fg=success
 i: fg=fg bold
-j: fg=pill
-k: fg=heat2
-l: fg=accent
-m: fg=success bg=info
-n: fg=info bg=accent-bright
+j: fg=heat1
+k: fg=accent
+l: fg=info bg=success
+m: fg=heat3
+n: fg=accent-bright bg=info
 === ascii 52x50
 |                                                    |
 |  Seconds by package                                |
@@ -357,10 +357,10 @@ n: fg=info bg=accent-bright
 |  internal/app ###################             2.5  |
 |  tml          ########                          1  |
 |                                                    |
-|  60+                                               |
-|    |#####       ##### ##### ##### #####            |
-|  20+##### ##### ##### ##### ##### ##### #####      |
-|    +------------------------------------------     |
+|  55+                        #####                  |
+|    |            #####       ##### #####            |
+|  30+##### ##### ##### ##### ##### ##### #####      |
+|    +--------------------------------------------   |
 |                                                    |
 |  Latency                              * ms  + p95  |
 |  60+       ++++++++++++     +++++++++++++++++++++  |
@@ -382,12 +382,12 @@ n: fg=info bg=accent-bright
 |   +----------------------------------------------  |
 |    1                                           12  |
 |                                                    |
-|  mon ....::::@@@@                                  |
-|  tue ....####::::            ooo***                |
-|      00        02          ++ooo*****   * go 60%   |
-|      1 ..::++##@@ 9       +++      ***  + zig 30%  |
-|                           +++      ***  o sh 10%   |
-|                            +++*******              |
+|  mon ..::@@                                        |
+|  tue ..##::                  ooo***                |
+|      00  02                +++oo*****   * go 60%   |
+|      ...:::+++###@@@      +++      ***  + zig 30%  |
+|      1      5      9      +++      ***  o sh 10%   |
+|                            ++********              |
 |                              ******                |
 |                                                    |
 |                                                    |

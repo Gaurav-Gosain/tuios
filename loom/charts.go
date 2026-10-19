@@ -26,6 +26,8 @@ type chartWidget struct {
 	axis   bool
 	horiz  bool
 	donut  bool
+	roles  []plot.Role // bar: a role per row, from the row's role field
+	keys   []plot.LegendItem
 	grid   [][]float64 // heatmap: rows of columns
 	rowsL  []string    // heatmap row labels
 	colsL  []string    // heatmap column labels
@@ -59,6 +61,7 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		w.values = numbers(rows, n.AttrString("y"))
 		w.labels = labels(rows, n.AttrString("x"))
 		w.horiz = n.AttrString("dir") == "h"
+		w.roles, w.keys = rowRoles(rows)
 		w.height = 6
 		if w.horiz {
 			w.height = len(w.values)
@@ -87,6 +90,37 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		w.height = 7
 	}
 	return w
+}
+
+// rowRoles reads the colour of each bar from its row: a row's role field
+// names a theme role, and its series field names the legend entry for
+// that role, such as {"secs": 24.1, "role": "error", "series": "failed"}.
+// A row without a valid role takes the chart's.
+func rowRoles(rows []any) ([]plot.Role, []plot.LegendItem) {
+	var roles []plot.Role
+	var keys []plot.LegendItem
+	seen := map[string]bool{}
+	colored := false
+	for _, r := range rows {
+		m, _ := r.(map[string]any)
+		role, _ := m["role"].(string)
+		if !validRole(role) {
+			role = ""
+		}
+		roles = append(roles, plot.Role(role))
+		if role != "" {
+			colored = true
+		}
+		name, _ := m["series"].(string)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			keys = append(keys, plot.LegendItem{Label: name, Role: plot.Role(role)})
+		}
+	}
+	if !colored {
+		return nil, nil
+	}
+	return roles, keys
 }
 
 // pivot turns rows of {x, y, v} into a grid: one row per y and one column
@@ -227,6 +261,11 @@ func (w *chartWidget) legend() []plot.LegendItem {
 	if (w.kind == "line" || w.kind == "area") && len(w.series) > 1 {
 		return plot.Line{Series: w.series}.Legend()
 	}
+	if w.kind == "bar" {
+		// The legend names the chart's own role as well, when some rows
+		// take it.
+		return w.keys
+	}
 	return nil
 }
 
@@ -291,7 +330,7 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	case "bar":
 		// Columns get an axis when they have the room for one.
 		axis := !w.horiz && r.Dy() >= 4 && r.Dx() >= 16
-		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Horizontal: w.horiz, Guide: s.pal.grounded(), Axis: axis}
+		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Roles: w.roles, Horizontal: w.horiz, Guide: s.pal.grounded(), Axis: axis}
 		g = bar.Draw(r.Dx(), r.Dy(), s.mode)
 	case "line", "area":
 		// An area has no axis attribute; it gets one when it has the room,
@@ -301,7 +340,7 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	case "heatmap":
 		g = plot.Heatmap{Values: w.grid, RowLabels: w.rowsL, ColLabels: w.colsL}.Draw(r.Dx(), r.Dy(), s.mode)
 	case "pie":
-		g = plot.Pie{Values: w.values, Labels: w.labels, Donut: w.donut}.Draw(r.Dx(), r.Dy(), s.mode)
+		g = plot.Pie{Values: w.values, Labels: w.labels, Donut: w.donut, Aspect: s.opts.CellAspect}.Draw(r.Dx(), r.Dy(), s.mode)
 	}
 	s.blit(c, g, r.Min.X, r.Min.Y)
 }

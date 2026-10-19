@@ -4,8 +4,8 @@
 |│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
-|│                                  ▃▃▃▃▃▃                        │|
-|│  ▅▅▅▅▅▅  ▃▃▃▃▃▃  ▆▆▆▆▆▆  ▄▄▄▄▄▄  ██████  ██████  ▃▃▃▃▃▃        │|
+|│                                  ▅▅▅▅▅▅                        │|
+|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████                │|
 |│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
 |│                                                                │|
 |│  ▾ Failures  3                                                 │|
@@ -20,7 +20,7 @@
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
 |addddddddddddddddddddddddddddddddddiiiiiidddddddddddddddddddddddda|
-|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
+|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddddddddddda|
 |addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -49,8 +49,8 @@ o: fg=fg bg=surface bold
 |│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
-|│                                  ▃▃▃▃▃▃                        │|
-|│  ▅▅▅▅▅▅  ▃▃▃▃▃▃  ▆▆▆▆▆▆  ▄▄▄▄▄▄  ██████  ██████  ▃▃▃▃▃▃        │|
+|│                                  ▅▅▅▅▅▅                        │|
+|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████                │|
 |│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
 |│                                                                │|
 |│  ▾ Failures  3                                                 │|
@@ -65,7 +65,7 @@ o: fg=fg bg=surface bold
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
 |addddddddddddddddddddddddddddddddddiiiiiidddddddddddddddddddddddda|
-|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
+|addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddddddddddda|
 |addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -94,8 +94,8 @@ o: fg=fg bg=surface bold
 |│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
-|│                                  ▃▃▃▃▃▃                        │|
-|│  ▅▅▅▅▅▅  ▃▃▃▃▃▃  ▆▆▆▆▆▆  ▄▄▄▄▄▄  ██████  ██████  ▃▃▃▃▃▃        │|
+|│                                  ▅▅▅▅▅▅                        │|
+|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████                │|
 |│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
 |│                                                                │|
 |│  ▾ Failures  3                                                 │|
@@ -110,7 +110,7 @@ o: fg=fg bg=surface bold
 |a                                                                a|
 |a  gggggggbgggbggggbggggbg                                       a|
 |a                                  hhhhhh                        a|
-|a  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh        a|
+|a  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh                a|
 |a  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh        a|
 |a                                                                a|
 |a  i ccccccccbbf                                                 a|
@@ -137,8 +137,8 @@ m: fg=dim bold reverse
 ||  412 passed   3 failed   9 skipped             [######] 99.3%  ||
 ||                                                                ||
 ||  Seconds per run, last 7                                       ||
-||                                                                ||
-||  ######          ######  ######  ######  ######                ||
+||                                  ######                        ||
+||                  ######          ######  ######                ||
 ||  ######  ######  ######  ######  ######  ######  ######        ||
 ||                                                                ||
 ||  v Failures  3                                                 ||

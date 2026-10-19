@@ -26,6 +26,9 @@ type Options struct {
 	Limits *tml.Limits
 	// Now is the clock of ago(). Nil means time.Now.
 	Now func() time.Time
+	// CellAspect is a cell's height over its width on the client, such as
+	// 19.0/8. A pie uses it to stay round. 0 means 2.2.
+	CellAspect float64
 }
 
 // Surface is one TML document drawn into a cell buffer: the tree, the state
