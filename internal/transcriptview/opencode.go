@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
@@ -37,10 +39,14 @@ const (
 	openCodeFileMax = 64 << 10
 	// openCodeBodyMax bounds one reply or one export.
 	openCodeBodyMax = 32 << 20
-	// openCodeTimeout bounds one request to the service.
-	openCodeTimeout = 2 * time.Second
-	// openCodeExportTimeout bounds the export command.
-	openCodeExportTimeout = 10 * time.Second
+	// openCodeReadBudget bounds one read, the service and the export
+	// together. The client gives a read 5 s.
+	openCodeReadBudget = 4 * time.Second
+	// openCodeServiceBudget bounds the requests to the service.
+	openCodeServiceBudget = 1500 * time.Millisecond
+	// openCodeShare is how long the result of one fetch serves other reads
+	// of the session.
+	openCodeShare = 2 * time.Second
 	// openCodePage is the most messages one read asks for, the service's
 	// own limit.
 	openCodePage = 200
@@ -56,35 +62,42 @@ type openCodeService struct {
 
 // opencodeRead reads the newest messages of an opencode session.
 //
-// It first asks the background service the session's opencode is attached
-// to. service.json gives its address and password. The file must belong to
-// this user and be writable by no one else, since whoever can write it
-// chooses where the password goes, and the address must be 127.0.0.1. A
-// request goes to that address alone, with no proxy and a short timeout,
-// and the service must name the same process as the file (GET /api/info)
-// before the session is asked for.
+// It asks the background service the session's opencode is attached to.
+// service.json gives its address and password. The file must belong to this
+// user and be writable by no one else, since whoever can write it chooses
+// where the password goes, and the address must be 127.0.0.1. Before the
+// password goes out, the port must be shown to be this user's: a service
+// that exited leaves its file, and another user may hold its port now
+// (portOwnedByMe). A request goes to that address alone, with no proxy.
 //
-// When the service does not answer, it runs `opencode session export
-// --standalone <id>`, which reads the same database through a private server
-// and starts no service. That runs only here, when a person reads the
-// thread.
+// When no service is there (no service.json, the port not this user's or
+// not listening), it runs `opencode session export --standalone <id>`,
+// which reads the same database through a private server and starts no
+// service. A service that is there but slow or failing is an error, never a
+// reason to start the export: the export is a whole opencode process.
+//
+// The whole read stays under openCodeReadBudget, inside the client's own
+// limit, so a read the client gave up on is not still running. Reads of one
+// session share one fetch, kept for openCodeShare, so the events of a
+// streaming session do not start a fetch each.
 //
 // There is no cursor into a session the service pages by its own cursors, so
-// a read after a cursor returns the newest page again with Reset. The thread
-// grows on the plugin's reports, which come once per opencode event, so the
-// page is read again only when the session changed.
+// a read after a cursor returns the newest page again with Reset, and a read
+// before one returns nothing: the page is all this reader shows.
 func opencodeRead(path string, opts Options) (Page, error) {
 	if !validOpenCodeSession(opts.Session) {
 		return Page{}, ErrService
 	}
-	limit := min(opts.Limit, openCodePage)
-	msgs, err := openCodeFromService(path, opts.Session, limit)
-	if err != nil {
-		msgs, err = openCodeFromExport(opts.Session)
-		if err != nil {
-			return Page{}, ErrService
-		}
+	if opts.Before != "" {
+		return Page{Cursor: "oc1"}, nil
 	}
+	msgs, err := openCodeShared(path+"\x00"+opts.Session, func() ([]any, error) {
+		return openCodeFetch(path, opts.Session)
+	})
+	if err != nil {
+		return Page{}, ErrService
+	}
+	limit := min(opts.Limit, openCodePage)
 	if len(msgs) > limit {
 		msgs = msgs[len(msgs)-limit:]
 	}
@@ -106,6 +119,68 @@ func opencodeRead(path string, opts Options) (Page, error) {
 	return Page{Entries: entries[keep:], Cursor: "oc1", Reset: opts.After != ""}, nil
 }
 
+// errNoService says no service of this user is there to ask, which is the
+// one case the export runs for.
+var errNoService = errors.New("transcriptview: no opencode service")
+
+// openCodeFetch reads the newest messages of a session, oldest first: from
+// the service, or by the export when there is none.
+func openCodeFetch(path, session string) ([]any, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), openCodeReadBudget)
+	defer cancel()
+	svcCtx, svcCancel := context.WithTimeout(ctx, openCodeServiceBudget)
+	defer svcCancel()
+	msgs, err := openCodeFromService(svcCtx, path, session)
+	if errors.Is(err, errNoService) {
+		return openCodeFromExport(ctx, session)
+	}
+	return msgs, err
+}
+
+// openCodeFlight is one fetch of a session, shared by the reads that come
+// while it runs and for openCodeShare after.
+type openCodeFlight struct {
+	done chan struct{}
+	msgs []any
+	err  error
+	at   time.Time
+}
+
+var openCodeFlights struct {
+	sync.Mutex
+	m map[string]*openCodeFlight
+}
+
+// openCodeShared runs fetch once for key at a time, and gives a result less
+// than openCodeShare old to every read that asks for it.
+func openCodeShared(key string, fetch func() ([]any, error)) ([]any, error) {
+	fl := &openCodeFlights
+	fl.Lock()
+	now := time.Now()
+	for k, f := range fl.m {
+		if !f.at.IsZero() && now.Sub(f.at) > openCodeShare {
+			delete(fl.m, k)
+		}
+	}
+	if f := fl.m[key]; f != nil {
+		fl.Unlock()
+		<-f.done
+		return f.msgs, f.err
+	}
+	f := &openCodeFlight{done: make(chan struct{})}
+	if fl.m == nil {
+		fl.m = make(map[string]*openCodeFlight)
+	}
+	fl.m[key] = f
+	fl.Unlock()
+	f.msgs, f.err = fetch()
+	fl.Lock()
+	f.at = time.Now()
+	fl.Unlock()
+	close(f.done)
+	return f.msgs, f.err
+}
+
 // validOpenCodeSession reports an opencode session id: "ses_" and letters
 // and digits. It is checked before it goes into a URL or an argument.
 func validOpenCodeSession(id string) bool {
@@ -122,42 +197,44 @@ func validOpenCodeSession(id string) bool {
 }
 
 // readServiceFile reads service.json, refusing a file another user owns or
-// another user could have written.
-func readServiceFile(path string) (openCodeService, error) {
+// another user could have written. A missing file is errNoService.
+func readServiceFile(path string) (openCodeService, *url.URL, error) {
 	var svc openCodeService
 	f, err := transcript.OpenRegular(path)
 	if err != nil {
-		return svc, err
+		if os.IsNotExist(err) {
+			return svc, nil, errNoService
+		}
+		return svc, nil, err
 	}
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
-		return svc, err
+		return svc, nil, err
 	}
 	if info.Mode().Perm()&0o022 != 0 || !ownedByMe(info) || info.Size() > openCodeFileMax {
-		return svc, ErrService
+		return svc, nil, ErrService
 	}
 	data, err := io.ReadAll(io.LimitReader(f, openCodeFileMax))
 	defer clear(data)
 	if err != nil {
-		return svc, err
+		return svc, nil, err
 	}
 	if json.Unmarshal(data, &svc) != nil || svc.Password == "" {
-		return svc, ErrService
+		return svc, nil, ErrService
 	}
 	u, err := url.Parse(svc.URL)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" || u.User != nil {
-		return svc, ErrService
+		return svc, nil, ErrService
 	}
-	return svc, nil
+	return svc, u, nil
 }
 
 // openCodeClient talks to 127.0.0.1 only: no proxy, no redirect, and a dial
 // that refuses any other address whatever the URL says.
 func openCodeClient() *http.Client {
-	dialer := &net.Dialer{Timeout: openCodeTimeout}
+	dialer := &net.Dialer{}
 	return &http.Client{
-		Timeout: openCodeTimeout,
 		Transport: &http.Transport{
 			Proxy: nil,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -173,23 +250,35 @@ func openCodeClient() *http.Client {
 	}
 }
 
-// openCodeFromService asks the service for the newest limit messages, oldest
-// first.
-func openCodeFromService(path, session string, limit int) ([]any, error) {
-	svc, err := readServiceFile(path)
+// openCodeFromService asks the service for the newest messages, oldest
+// first. It returns errNoService when no service of this user is there: no
+// file, a port it cannot show to be this user's, or nothing listening.
+func openCodeFromService(ctx context.Context, path, session string) ([]any, error) {
+	svc, base, err := readServiceFile(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { svc.Password = "" }()
+	port, err := strconv.Atoi(base.Port())
+	if err != nil || !portOwnedByMe(port) {
+		// The password goes to no port this user cannot be shown to hold.
+		return nil, errNoService
+	}
 	client := openCodeClient()
-	get := func(p string) (jobj, error) {
-		req, err := http.NewRequest(http.MethodGet, svc.URL+p, nil)
+	get := func(path string, query url.Values) (jobj, error) {
+		u := *base
+		u.Path, u.RawPath, u.RawQuery, u.Fragment = "", "", query.Encode(), ""
+		u = *u.JoinPath(path)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 		if err != nil {
 			return nil, ErrService
 		}
 		req.SetBasicAuth("opencode", svc.Password)
 		resp, err := client.Do(req)
 		if err != nil {
+			if errors.Is(err, syscall.ECONNREFUSED) {
+				return nil, errNoService
+			}
 			return nil, ErrService
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -207,15 +296,17 @@ func openCodeFromService(path, session string, limit int) ([]any, error) {
 		}
 		return o, nil
 	}
-	info, err := get("/api/info")
+	info, err := get("/api/info", nil)
 	if err != nil {
 		return nil, err
 	}
 	if pid, _ := info["pid"].(float64); svc.PID != 0 && int(pid) != svc.PID {
-		// Another process holds the port now.
+		// Another process of this user holds the port now.
 		return nil, ErrService
 	}
-	page, err := get("/api/session/" + session + "/message?order=desc&limit=" + strconv.Itoa(max(limit, 1)))
+	page, err := get("/api/session/"+session+"/message", url.Values{
+		"order": {"desc"}, "limit": {strconv.Itoa(openCodePage)},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -224,15 +315,15 @@ func openCodeFromService(path, session string, limit int) ([]any, error) {
 	return msgs, nil
 }
 
-// openCodeFromExport runs the export command, oldest message first.
-func openCodeFromExport(session string) ([]any, error) {
+// openCodeFromExport runs the export command, oldest message first. The
+// command and every process it starts are killed when ctx ends.
+func openCodeFromExport(ctx context.Context, session string) ([]any, error) {
 	bin, err := exec.LookPath("opencode")
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), openCodeExportTimeout)
-	defer cancel()
 	cmd := childproc.CommandContext(ctx, bin, "session", "export", "--standalone", session)
+	killTreeOnCancel(cmd)
 	var out capWriter
 	cmd.Stdout = &out
 	cmd.Stdin = nil

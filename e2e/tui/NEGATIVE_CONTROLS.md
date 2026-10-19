@@ -7223,5 +7223,20 @@ one, and the password must stay out of every error and page. Run on
 | The cockpit does not read opencode | `threadTranscriptHarness` | `opencode` taken out | `TestCockpitThreadOtherHarnesses/opencode` | **caught** |
 | A service.json others can write sends the password where they choose | The mode and owner check in `readServiceFile` | Removed | `TestOpenCodeService/a_file_others_can_write` | **caught** |
 | The password goes to an address other than 127.0.0.1 | The host check in `readServiceFile` and the dial guard | Both removed | `TestOpenCodeService/an_address_other_than_127.0.0.1` | **caught** |
-| A port another process holds now is trusted | The pid check against `/api/info` | Never true | `TestOpenCodeService/another_process_on_the_port` | **caught** |
+| A service of this user that is not the file's process is trusted | The pid check against `/api/info` | Never true | `TestOpenCodeService/another_process_on_the_port` | **caught** (the check runs after the password is sent, so it stops only a process of this user; the port owner check below is what keeps the password from another user) |
 | A reported session id goes into a URL or an argument unchecked | `validOpenCodeSession` | Any id but "" | `TestOpenCodeService/a_session_id_that_is_not_one` | **caught** |
+
+After review (F1, F2): the password goes out only to a port this user is
+shown to hold (`portOwnedByMe`, the uid column of /proc/net/tcp; on other
+systems it is never sent, and the export is read). The export runs only
+when no service is there, under the read's 4 s budget, killed with its
+process group when the budget ends, and one fetch serves a session's reads
+for 2 s. `TestOpenCodeServiceRules` (internal/transcriptview, Linux). Run
+on 2026-10-19.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The password goes to a port another user holds | `portOwnedByMe` in `openCodeFromService` | Never refuses | `TestOpenCodeServiceRules/a_port_another_user_holds` | **caught** |
+| A slow or failing service starts an opencode process | The `errNoService` gate in `openCodeFetch` | Export on any error | `TestOpenCodeServiceRules/a_service_that_is_there_but_fails` | **caught** |
+| Each event of a streaming session starts a fetch | `openCodeShared` | No sharing | `TestOpenCodeServiceRules/reads_of_one_session_share_a_fetch` | **caught** |
+| A timed-out export leaves its processes running | `killTreeOnCancel` | Not called | `TestOpenCodeServiceRules/an_export_that_runs_too_long` (the read took 30 s) | **caught** |
