@@ -1,0 +1,6 @@
+[
+ "---\ntitle: \"TCP Packet\"\n---\npacket\n0-15: \"Source Port\"\n16-31: \"Destination Port\"\n32-63: \"Sequence Number\"\n64-95: \"Acknowledgment Number\"\n96-99: \"Data Offset\"\n100-105: \"Reserved\"\n106: \"URG\"\n107: \"ACK\"\n108: \"PSH\"\n109: \"RST\"\n110: \"SYN\"\n111: \"FIN\"\n112-127: \"Window\"\n128-143: \"Checksum\"\n144-159: \"Urgent Pointer\"\n160-191: \"(Options and Padding)\"\n192-255: \"Data (variable length)\"\n",
+ "packet\ntitle UDP Packet\n+16: \"Source Port\"\n+16: \"Destination Port\"\n32-47: \"Length\"\n48-63: \"Checksum\"\n64-95: \"Data (variable length)\"\n",
+ "---\nconfig:\n  packet:\n    showBits: true\n    bitOrder: descending\n    bitsPerRow: 16\n---\npacket\n0-7: \"DATA\"\n8-11: \"TYPE\"\n12: \"EN\"\n13-15: \"RESERVED\"\n",
+ "---\nconfig:\n  packet:\n    showBits: true\n  themeVariables:\n    packet:\n      startByteColor: red\n---\npacket\n0-15: \"Source Port\"\n16-31: \"Destination Port\"\n32-63: \"Sequence Number\"\n"
+]

@@ -1,0 +1,15 @@
+[
+ "mindmap\n  root((mindmap))\n    Origins\n      Long history\n      ::icon(fa fa-book)\n      Popularisation\n        British popular psychology author Tony Buzan\n    Research\n      On effectiveness<br/>and features\n      On Automatic creation\n        Uses\n            Creative techniques\n            Strategic planning\n            Argument mapping\n    Tools\n      Pen and paper\n      Mermaid\n\n",
+ "mindmap\nRoot\n    A\n      B\n      C\n",
+ "mindmap\n    id[I am a square]\n",
+ "mindmap\n    id(I am a rounded square)\n",
+ "mindmap\n    id((I am a circle))\n",
+ "mindmap\n    id))I am a bang((\n",
+ "mindmap\n    id)I am a cloud(\n",
+ "mindmap\n    id{{I am a hexagon}}\n",
+ "mindmap\n    I am the default shape\n",
+ "mindmap\n    Root\n        A\n        ::icon(fa fa-book)\n        B(B)\n        ::icon(mdi mdi-skull-outline)\n",
+ "mindmap\n    Root\n        A[A]\n        :::urgent large\n        B(B)\n        C\n",
+ "mindmap\nRoot\n    A\n        B\n      C\n",
+ "mindmap\n    id1[\"`**Root** with\na second line\nUnicode works too: 🤓`\"]\n      id2[\"`The dog in **the** hog... a *very long text* that wraps to a new line`\"]\n      id3[Regular labels still works]\n"
+]

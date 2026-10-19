@@ -1,0 +1,15 @@
+[
+ "treeView-beta\n├── src/\n│   ├── index.ts\n│   └── utils.ts\n├── package.json\n└── README.md\n",
+ "treeView-beta\n├── src/\n│   ├── App.tsx :::highlight icon(logos:react) ## main component\n│   └── index.ts ## entry point\n├── .env ## environment variables\n├── Dockerfile\n└── package.json\n",
+ "treeView-beta\n├── packages/\n│   ├── mermaid/\n│   │   ├── src/\n│   │   │   ├── parser.ts\n│   │   │   └── renderer.ts\n│   │   └── package.json\n│   └── parser/\n│       └── src/\n└── README.md\n",
+ "treeView-beta\n    src/\n        App.tsx :::highlight\n        index.js\n    package.json\n",
+ "treeView-beta\n    src/\n        index.js ## app entry point\n        config.ts ## runtime configuration\n    package.json ## project manifest\n",
+ "---\nconfig:\n  treeView:\n    showIcons: true\n---\ntreeView-beta\n    src/\n        index.js\n    package.json\n",
+ "---\nconfig:\n  treeView:\n    showIcons: true\n    defaultIconPack: material-icon-theme\n    filenameIcons:\n      Dockerfile: docker\n    extensionIcons:\n      .ts: typescript\n      .tsx: react-ts\n      .txt: none\n---\ntreeView-beta\n    src/\n        App.tsx\n        utils.ts\n    Dockerfile\n    notes.txt\n    README.md\n",
+ "treeView-beta\n    src/\n        App.tsx icon(logos:react)\n        index.js\n    package.json\n",
+ "---\nconfig:\n  treeView:\n    showIcons: true\n---\ntreeView-beta\n    src/\n        index.js icon(none)\n    package.json\n",
+ "treeView-beta\n    my-project/\n        src/\n            App.tsx :::highlight icon(logos:react) ## main component\n            index.js ## entry point\n        .env ## environment variables\n        Dockerfile\n        package.json\n",
+ "treeView-beta\n    \"packages\"\n        \"mermaid\"\n            \"src\"\n        \"parser\"\n",
+ "treeView-beta\n    🚀 rocket-app/\n        📦 packages/\n            🎨 ui/\n            🛠️ utils/\n        🧪 tests/\n        📝 README.md\n        ⚙️ config.yaml\n",
+ "---\nconfig:\n    treeView:\n        rowIndent: 80\n        lineThickness: 3\n    themeVariables:\n        treeView:\n            labelFontSize: '20px'\n            labelColor: '#FF0000'\n            lineColor: '#00FF00'\n---\ntreeView-beta\n    \"packages\"\n        \"mermaid\"\n            \"src\"\n        \"parser\"\n"
+]

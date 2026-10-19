@@ -1,0 +1,5 @@
+[
+ "---\ntitle: \"Grades\"\n---\nradar-beta\n  axis m[\"Math\"], s[\"Science\"], e[\"English\"]\n  axis h[\"History\"], g[\"Geography\"], a[\"Art\"]\n  curve a[\"Alice\"]{85, 90, 80, 70, 75, 90}\n  curve b[\"Bob\"]{70, 75, 85, 80, 90, 85}\n\n  max 100\n  min 0\n",
+ "radar-beta\n  title Restaurant Comparison\n  axis food[\"Food Quality\"], service[\"Service\"], price[\"Price\"]\n  axis ambiance[\"Ambiance\"]\n\n  curve a[\"Restaurant A\"]{4, 3, 2, 4}\n  curve b[\"Restaurant B\"]{3, 4, 3, 3}\n  curve c[\"Restaurant C\"]{2, 3, 4, 2}\n  curve d[\"Restaurant D\"]{2, 2, 4, 3}\n\n  graticule polygon\n  max 5\n\n",
+ "---\nconfig:\n  radar:\n    axisScaleFactor: 0.25\n    curveTension: 0.1\n  theme: base\n  themeVariables:\n    cScale0: \"#FF0000\"\n    cScale1: \"#00FF00\"\n    cScale2: \"#0000FF\"\n    radar:\n      curveOpacity: 0\n---\nradar-beta\n  axis A, B, C, D, E\n  curve c1{1,2,3,4,5}\n  curve c2{5,4,3,2,1}\n  curve c3{3,3,3,3,3}\n"
+]

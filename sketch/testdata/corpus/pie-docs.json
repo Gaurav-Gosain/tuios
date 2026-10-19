@@ -1,0 +1,4 @@
+[
+ "pie title Pets adopted by volunteers\n    \"Dogs\" : 386\n    \"Cats\" : 85\n    \"Rats\" : 15\n",
+ "---\nconfig:\n  pie:\n    textPosition: 0.5\n    donutHole: 0.2\n    highlightSlice: Potassium\n  themeVariables:\n    pieOuterStrokeWidth: \"5px\"\n---\npie showData\n    title Key elements in Product X\n    \"Calcium\" : 42.96\n    \"Potassium\" : 50.05\n    \"Magnesium\" : 10.01\n    \"Iron\" :  5\n"
+]

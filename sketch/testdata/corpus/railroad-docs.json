@@ -1,0 +1,16 @@
+[
+ "railroad-ebnf-beta\ntitle \"Digit Definition\"\n\ndigit = \"0\" | \"1\" | \"2\" | \"3\" | \"4\" | \"5\" | \"6\" | \"7\" | \"8\" | \"9\" ;\n",
+ "railroad-ebnf-beta\nletter = \"a\" | \"b\" | \"c\" ;\nidentifier = letter ;\n",
+ "railroad-ebnf-beta\ngreeting = \"Hello\" \" \" \"World\" ;\n",
+ "railroad-ebnf-beta\nsign = \"+\" | \"-\" ;\n",
+ "railroad-ebnf-beta\ntitle \"Optional Sign\"\n\nsign = \"+\" | \"-\" ;\nnumber = sign? digit+ ;\ndigit = \"0\" | \"1\" | \"2\" | \"3\" | \"4\" | \"5\" | \"6\" | \"7\" | \"8\" | \"9\" ;\n",
+ "railroad-ebnf-beta\ntitle \"Identifier with Repetition\"\n\nidentifier = letter ( letter | digit | \"_\" )* ;\nletter = \"a\" | \"b\" | \"c\" | \"d\" | \"e\" ;\ndigit = \"0\" | \"1\" | \"2\" ;\n",
+ "railroad-ebnf-beta\nexpression = term ( ( \"+\" | \"-\" ) term )* ;\nterm = \"number\" ;\n",
+ "railroad-ebnf-beta\ntitle \"Arithmetic Expression Grammar\"\n\nexpression = term ( ( \"+\" | \"-\" ) term )* ;\nterm = factor ( ( \"*\" | \"/\" ) factor )* ;\nfactor = number | \"(\" expression \")\" ;\nnumber = digit+ ;\ndigit = \"0\" | \"1\" | \"2\" | \"3\" | \"4\" | \"5\" | \"6\" | \"7\" | \"8\" | \"9\" ;\n",
+ "railroad-ebnf-beta\ntitle \"JSON Grammar\"\n\njson = element ;\nelement = object | array | string | number | \"true\" | \"false\" | \"null\" ;\nobject = \"{\" [ member ( \",\" member )* ] \"}\" ;\narray = \"[\" [ element ( \",\" element )* ] \"]\" ;\nmember = string \":\" element ;\n",
+ "railroad-abnf-beta\ntitle \"Email Address\"\n\naddress = local-part \"@\" domain ;\nlocal-part = 1*( ALPHA / DIGIT / \".\" / \"-\" ) ;\ndomain = label *( \".\" label ) ;\nlabel = 1*( ALPHA / DIGIT / \"-\" ) ;\n",
+ "railroad-abnf-beta\ntitle \"Phone Number\"\n\nphone = [ \"+\" country-code ] subscriber ;\ncountry-code = 1*DIGIT ;\nsubscriber = 1*( DIGIT / \"-\" / \" \" ) ;\n",
+ "railroad-peg-beta\ntitle \"Calculator Grammar\"\n\nExpression <- Term ((\"+\" / \"-\") Term)* ;\nTerm <- Factor ((\"*\" / \"/\") Factor)* ;\nFactor <- Number / \"(\" Expression \")\" ;\nNumber <- Digit+ ;\nDigit <- \"0\" / \"1\" / \"2\" / \"3\" / \"4\" / \"5\" / \"6\" / \"7\" / \"8\" / \"9\" ;\n",
+ "railroad-peg-beta\ntitle \"Identifiers (keywords excluded)\"\n\nIdentifier <- !Keyword Letter Letter* ;\nKeyword <- \"if\" / \"else\" / \"while\" ;\nLetter <- \"a\" / \"b\" / \"c\" / \"_\" ;\n",
+ "railroad-beta\ntitle Expression Grammar\n\nexpression = sequence(\n    nonterminal(\"term\"),\n    zeroOrMore(sequence(\n        choice(terminal(\"+\"), terminal(\"-\")),\n        nonterminal(\"term\")\n    ))\n) ;\nterm = sequence(\n    nonterminal(\"factor\"),\n    zeroOrMore(sequence(\n        choice(terminal(\"*\"), terminal(\"/\")),\n        nonterminal(\"factor\")\n    ))\n) ;\nfactor = choice(\n    nonterminal(\"number\"),\n    sequence(terminal(\"(\"), nonterminal(\"expression\"), terminal(\")\"))\n) ;\nnumber = oneOrMore(nonterminal(\"digit\")) ;\ndigit = choice(terminal(\"0\"), terminal(\"1\"), terminal(\"2\"), terminal(\"3\"), terminal(\"4\"), terminal(\"5\"), terminal(\"6\"), terminal(\"7\"), terminal(\"8\"), terminal(\"9\")) ;\n"
+]

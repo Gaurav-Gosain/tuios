@@ -1,0 +1,5 @@
+[
+ "cynefin-beta\n  title Incident Response\n\n  complex\n    \"Investigate root cause\"\n    \"Run chaos experiment\"\n\n  complicated\n    \"Analyze performance data\"\n    \"Expert review needed\"\n\n  clear\n    \"Restart service\"\n    \"Apply known fix\"\n\n  chaotic\n    \"Page on-call immediately\"\n\n  confusion\n    \"Unknown failure mode\"\n",
+ "cynefin-beta\n  title Strategy Categorization\n\n  complex\n    \"Market research\"\n\n  complicated\n    \"Competitive analysis\"\n\n  clear\n    \"Standard pricing\"\n\n  chaotic\n    \"Crisis management\"\n\n  complex --> complicated : \"Pattern identified\"\n  complicated --> clear : \"Best practice codified\"\n  clear --> chaotic : \"Complacency\"\n  chaotic --> complex : \"Stabilized\"\n",
+ "cynefin-beta\n  title Cynefin Framework\n\n  complex\n  complicated\n  clear\n  chaotic\n"
+]

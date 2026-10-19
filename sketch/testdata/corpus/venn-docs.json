@@ -1,0 +1,10 @@
+[
+ "venn-beta\n  title What makes a good feature\n  set Desirable\n  set Feasible\n  set Viable\n  union Desirable,Feasible[\"Buildable\"]\n  union Feasible,Viable[\"Sustainable\"]\n  union Desirable,Viable[\"Marketable\"]\n  union Desirable,Feasible,Viable[\"Ship it\"]\n",
+ "---\nconfig:\n  theme: default\n  look: classic\n---\nvenn-beta\n  title What makes a good feature\n  set Desirable\n  set Feasible\n  set Viable\n  union Desirable,Feasible[\"Buildable\"]\n  union Feasible,Viable[\"Sustainable\"]\n  union Desirable,Viable[\"Marketable\"]\n  union Desirable,Feasible,Viable[\"Ship it\"]\n",
+ "venn-beta\n  title \"Team overlap\"\n  set Frontend\n  set Backend\n  union Frontend,Backend[\"APIs\"]\n",
+ "venn-beta\n  set A[\"Alpha\"]\n  set B[\"Beta\"]\n  union A,B[\"AB\"]\n",
+ "venn-beta\n  set Desirable\n  set Feasible\n  set Viable\n  union Desirable,Feasible,Viable[\"Innovation\"]\n",
+ "venn-beta\n  set A[\"Alpha\"]:20\n  set B[\"Beta\"]:12\n  union A,B[\"AB\"]:3\n",
+ "venn-beta\n  set A[\"Frontend\"]\n    text A1[\"React\"]\n    text A2[\"Design Systems\"]\n  set B[\"Backend\"]\n    text B1[\"API\"]\n  union A,B[\"Shared\"]\n    text AB1[\"OpenAPI\"]\n",
+ "venn-beta\n  set A[\"Alpha\"]:20\n    text A1[\"React\"]\n    text A2[\"Design Systems\"]\n  set B[\"Beta\"]:12\n  union A,B[\"AB\"]:3\n  style A fill:#ff6b6b\n  style A,B color:#333\n  style A1 color:red\n"
+]

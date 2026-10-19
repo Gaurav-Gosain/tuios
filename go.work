@@ -9,6 +9,7 @@ use (
 	./plot
 	./progstatus
 	./shot
+	./sketch
 	./swatch
 	./tml
 	./vt
