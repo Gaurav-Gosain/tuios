@@ -3060,6 +3060,15 @@ as CI builds it). The change measured 40,751,266 and 38,123,106, so it adds
 12,288 and 32 bytes. No third-party dependency was added. The new budgets
 leave 4,198 and 4,204 bytes of room.
 
+The budgets went to 40,964,360 (linux/amd64) and 38,314,750 (darwin/arm64) for
+the named diagram themes, the frames that move a diagram from one layout to
+the next, the readable-text pass in sketch/raster, and tuios mermaid --watch
+and --demo with their kitty frame encoder. The build before it measured
+40,751,266 and 38,123,106 bytes (Go 1.26.9, a clean clone, as CI builds it).
+The change measured 40,960,162 and 38,310,546, so it adds 208,896 and 187,440
+bytes. No third-party dependency was added. The new budgets leave 4,198 and
+4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
