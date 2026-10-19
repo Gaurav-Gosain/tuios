@@ -35,7 +35,7 @@ type Box struct {
 // Render draws the box on bg and returns its rows.
 func (b Box) Render(bg color.Color, pal Palette) []string {
 	w := max(b.Width, 2)
-	tl, tr, bl, br, h, v := dialogFrame()
+	tl, tr, bl, br, h, v := edgeFrame()
 
 	edgeInk, titleInk := pal.Edge, pal.FgDim
 	if b.Active {

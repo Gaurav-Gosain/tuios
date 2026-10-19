@@ -435,7 +435,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	// frame costs no geometry: the body, the tabs and every hit rectangle a
 	// host recorded are where they are on an unframed panel.
 	if pal.Framed && sidePad() >= 1 {
-		tl, tr, bl, br, h, v := dialogFrame()
+		tl, tr, bl, br, h, v := panelFrame(pal)
 		edge := Style(bg).Foreground(pal.Edge)
 		side := edge.Render(v)
 		inner := totalW - 2
@@ -494,7 +494,7 @@ func FrameBlock(rows []string, totalW int, bg color.Color, pal Palette) []string
 	if !pal.Framed || len(rows) < 2 || totalW < 2 {
 		return rows
 	}
-	tl, tr, bl, br, h, v := dialogFrame()
+	tl, tr, bl, br, h, v := panelFrame(pal)
 	edge := Style(bg).Foreground(pal.Edge)
 	side := edge.Render(v)
 	out := make([]string, len(rows))

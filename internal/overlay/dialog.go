@@ -54,6 +54,28 @@ func dialogFrame() (tl, tr, bl, br, h, v string) {
 	return "╭", "╮", "╰", "╯", "─", "│"
 }
 
+// edgeFrame is dialogFrame for a frame that is the only edge its surface has:
+// a Box inside a panel, or a panel at 16 colours, whose ground is the
+// terminal's own. A blank frame (the hidden border style) would leave such a
+// surface with no edge at all, so it draws the rounded frame instead. A dialog
+// and a filled panel keep the blank frame, because their fill is an edge.
+func edgeFrame() (tl, tr, bl, br, h, v string) {
+	tl, tr, bl, br, h, v = dialogFrame()
+	if strings.TrimSpace(tl+tr+bl+br+h+v) == "" {
+		return "╭", "╮", "╰", "╯", "─", "│"
+	}
+	return tl, tr, bl, br, h, v
+}
+
+// panelFrame is the frame a framed panel draws: edgeFrame at 16 colours,
+// where the frame is the panel's only edge, else dialogFrame.
+func panelFrame(pal Palette) (tl, tr, bl, br, h, v string) {
+	if pal.Depth == Depth16 {
+		return edgeFrame()
+	}
+	return dialogFrame()
+}
+
 // DashRule returns a dashed internal separator, the micro-dialog's answer to a
 // Panel's solid rule: lighter, so it divides without drawing a second frame.
 func DashRule(width int, bg color.Color, pal Palette) string {
