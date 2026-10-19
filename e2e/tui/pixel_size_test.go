@@ -372,6 +372,130 @@ func cellOf(r [4]int) string {
 	return fmt.Sprintf("%dx%d", r[3]/r[1], r[2]/r[0])
 }
 
+// startPixelLoop makes a detached session and runs the pixel guest in its
+// report loop there, and returns once the guest has turned 2048 on with the
+// fallback cell. Otherwise the first client could settle the cell before the
+// guest turns 2048 on, and no report would follow.
+func startPixelLoop(t *testing.T, base, session, guest string) {
+	t.Helper()
+	if out, err := tuiosCLI(t, base, "new", "-d", session); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", session, "--raw", "python3 "+guest); err != nil {
+		t.Fatalf("send-keys: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", session, "Enter"); err != nil {
+		t.Fatalf("send-keys Enter: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		out, _ := tuiosOut(base, "capture-pane", "-s", session)
+		if s, ok := parsePaneSizes(out); ok && strings.Contains(out, "PIXON") {
+			if s.t16 != "20;10" {
+				t.Fatalf("the guest started with a %q cell, want the fallback\n%s", s.t16, out)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the guest never printed its sizes:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// waitIBCell waits until the guest's last 2048 report implies cell, and
+// returns how many reports there were then.
+func waitIBCell(t *testing.T, base, session, what, cell string) int {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, got := ibReports(base, session)
+		if len(got) > 0 && cellOf(got[len(got)-1]) == cell {
+			return len(got)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: %s: the guest's 2048 reports %v never came to a %s cell\n%s", what, got, cell, out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// TestDetachLeavesThePaneCellAlone covers a session whose last client has
+// left, while a client with another cell is attached to a different one. A new
+// pane in a session nobody is attached to takes that client's cell (see
+// TestDetachedPaneTakesTheCellOfAClientElsewhere), but the panes already
+// there keep the cell they have. Switching them would send every program in
+// them a 2048 report and a redraw that nobody sees, and another when a client
+// comes back.
+//
+// The leave itself recalculates nothing once no client is left, so the test
+// then has the daemon recalculate the session's size with nobody attached,
+// as a latest hold timer firing after the leave or a set-option of
+// daemon.window_size does. Each of those syncs the panes' cell.
+//
+// How this could pass wrongly: the check could run before the daemon has
+// seen client a leave, or before the recalculation reached the guest. It
+// waits until list-clients shows no client on the session, makes the call,
+// and then waits longer than a cell sync takes to reach the guest.
+func TestDetachLeavesThePaneCellAlone(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	guest := writePixelGuest(t)
+	startPixelLoop(t, base, "cells", guest)
+	if out, err := tuiosCLI(t, base, "new", "-d", "other"); err != nil {
+		t.Fatalf("create the other session: %v\n%s", err, out)
+	}
+
+	a := attachIn(t, base, "cells", startOpts{env: []string{"TUIOS_CELL_SIZE=8x16"}})
+	waitIBCell(t, base, "cells", "client a attached", "8x16")
+	attachIn(t, base, "other", startOpts{env: []string{"TUIOS_CELL_SIZE=12x24"}})
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		sessions := map[string]bool{}
+		for _, r := range clientRows(t, base) {
+			sessions[r.Session] = true
+		}
+		if sessions["cells"] && sessions["other"] {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("both clients never showed as attached: %v", clientRows(t, base))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if err := a.Close(); err != nil {
+		t.Fatalf("close client a: %v", err)
+	}
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		left := true
+		for _, r := range clientRows(t, base) {
+			if r.Session == "cells" {
+				left = false
+			}
+		}
+		if left {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("client a never left the session: %v", clientRows(t, base))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if out, err := tuiosCLI(t, base, "call", "set-option", `{"session":"cells","key":"daemon.window_size","value":"smallest"}`); err != nil {
+		t.Fatalf("set-option daemon.window_size: %v\n%s", err, out)
+	}
+	time.Sleep(2 * time.Second)
+	out, got := ibReports(base, "cells")
+	t.Logf("reports after client a left: %v", got)
+	for _, r := range got {
+		if c := cellOf(r); c != "8x16" && c != "10x20" {
+			t.Fatalf("ASSERTION: after the last client left the session, the guest was told a %s cell (%v), want it to keep client a's 8x16\n%s", c, got, out)
+		}
+	}
+}
+
 // TestPaneCellFollowsOneClient covers two clients with different fonts on
 // one session. The pane's cell used to be set by whichever client spoke
 // last, on every resize and attach, so a guest's pixel size flipped between
@@ -386,50 +510,8 @@ func TestPaneCellFollowsOneClient(t *testing.T) {
 	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n")
 	killDaemon(t, base)
 	guest := writePixelGuest(t)
-	if out, err := tuiosCLI(t, base, "new", "-d", "cells"); err != nil {
-		t.Fatalf("create the session: %v\n%s", err, out)
-	}
-	if out, err := tuiosCLI(t, base, "send-keys", "-s", "cells", "--raw", "python3 "+guest); err != nil {
-		t.Fatalf("send-keys: %v\n%s", err, out)
-	}
-	if out, err := tuiosCLI(t, base, "send-keys", "-s", "cells", "Enter"); err != nil {
-		t.Fatalf("send-keys Enter: %v\n%s", err, out)
-	}
-
-	// waitCell waits until the guest's last 2048 report implies cell, and
-	// returns how many reports there were then.
-	waitCell := func(what, cell string) int {
-		t.Helper()
-		deadline := time.Now().Add(uiTimeout)
-		for {
-			out, got := ibReports(base, "cells")
-			if len(got) > 0 && cellOf(got[len(got)-1]) == cell {
-				return len(got)
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("ASSERTION: %s: the guest's 2048 reports %v never came to a %s cell\n%s", what, got, cell, out)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	// The guest is in its report loop, with the fallback cell, before any
-	// client attaches. Otherwise the first client could settle the cell
-	// before the guest turns 2048 on, and no report would follow.
-	deadline := time.Now().Add(shellTimeout)
-	for {
-		out, _ := tuiosOut(base, "capture-pane", "-s", "cells")
-		if s, ok := parsePaneSizes(out); ok && strings.Contains(out, "PIXON") {
-			if s.t16 != "20;10" {
-				t.Fatalf("the guest started with a %q cell, want the fallback\n%s", s.t16, out)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the guest never printed its sizes:\n%s", out)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	startPixelLoop(t, base, "cells", guest)
+	waitCell := func(what, cell string) int { return waitIBCell(t, base, "cells", what, cell) }
 
 	a := attachIn(t, base, "cells", startOpts{env: []string{"TUIOS_CELL_SIZE=8x16"}})
 	waitCell("client a attached", "8x16")
@@ -438,7 +520,7 @@ func TestPaneCellFollowsOneClient(t *testing.T) {
 	// b is smaller, so the session shrinks to it and the guest gets a report
 	// for the new size. That report must still be in a's cell. The wait is for
 	// the shrink to reach the guest, so the check below has b's attach in it.
-	deadline = time.Now().Add(uiTimeout)
+	deadline := time.Now().Add(uiTimeout)
 	for {
 		_, got := ibReports(base, "cells")
 		if len(got) > 0 && got[len(got)-1][1] <= 100 {
