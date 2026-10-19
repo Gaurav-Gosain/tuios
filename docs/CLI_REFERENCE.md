@@ -4608,6 +4608,37 @@ fi
 
 ---
 
+### `tuios mermaid`
+
+Draw the Mermaid diagrams of a file in the terminal, or save them as SVG or PNG.
+
+**Usage:**
+```bash
+tuios mermaid FILE [--format svg|png|kitty|cells|text] [-o FILE] [--diagram N]
+```
+
+FILE is a Mermaid source (`.mmd`), a Markdown file, or `-` for standard input.
+A Markdown file gives each of its `mermaid` code blocks.
+
+| Output | When |
+|--------|------|
+| `kitty` | The terminal shows kitty graphics. The picture fits the terminal |
+| `cells` | The terminal shows 256 colours or more, and no graphics. Block characters draw the picture |
+| `text` | The terminal shows 16 colours. The command writes the source |
+| `svg` | The output is not a terminal |
+
+`-o FILE` saves to a file, as SVG or PNG from its extension. With more than one
+diagram, the files get `-2`, `-3` and so on. `--scale` sets the pixels per SVG
+unit of a PNG, 2 by default. `--symbols` picks the block characters of `cells`:
+`half`, `quadrant`, `sextant` or `octant`. `--cols` and `--rows` set the size
+in cells.
+
+The colours come from your tuios theme. tuios.dev/sketch draws the diagrams. It is
+a Go port of pele and draws flowcharts now. A diagram of another type gives an
+error and its source. The command exits 1 when a diagram cannot be drawn.
+
+---
+
 ### `tuios mcp`
 
 Serve tuios to an agent harness as a Model Context Protocol server over stdin
