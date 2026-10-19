@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -210,7 +211,7 @@ func checkGrid(t *testing.T, g *Grid, w, h int, m Mode) {
 		t.Fatalf("grid is %dx%d with %d cells, want %dx%d", g.W, g.H, len(g.Cells), w, h)
 	}
 	for y := 0; y < g.H; y++ {
-		width := 0
+		rowW := 0
 		for x := 0; x < g.W; x++ {
 			c := g.At(x, y)
 			switch c.Width {
@@ -219,10 +220,10 @@ func checkGrid(t *testing.T, g *Grid, w, h int, m Mode) {
 					t.Fatalf("row %d: a continuation cell at %d follows no wide cell", y, x)
 				}
 			case 1, 2:
-				if c.Text != "" && Width(c.Text) != int(c.Width) {
-					t.Fatalf("row %d col %d: %q is %d wide, the cell says %d", y, x, c.Text, Width(c.Text), c.Width)
+				if c.Text != "" && width(c.Text) != int(c.Width) {
+					t.Fatalf("row %d col %d: %q is %d wide, the cell says %d", y, x, c.Text, width(c.Text), c.Width)
 				}
-				width += int(c.Width)
+				rowW += int(c.Width)
 			default:
 				t.Fatalf("row %d col %d: width %d", y, x, c.Width)
 			}
@@ -243,8 +244,8 @@ func checkGrid(t *testing.T, g *Grid, w, h int, m Mode) {
 				}
 			}
 		}
-		if width != g.W {
-			t.Fatalf("row %d is %d cells wide, want %d", y, width, g.W)
+		if rowW != g.W {
+			t.Fatalf("row %d is %d cells wide, want %d", y, rowW, g.W)
 		}
 	}
 }
@@ -264,5 +265,26 @@ func TestFormat(t *testing.T) {
 	}
 	if got := Percent(1); got != "100%" {
 		t.Errorf("Percent(1) = %q", got)
+	}
+}
+
+// TestHugeBins asks a histogram for 1e10 bins, as a bound attribute could.
+// The bins size an allocation, so plot caps them: before the cap this asked
+// for 80 GB and the Go runtime ended the process.
+func TestHugeBins(t *testing.T) {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	g := Histogram{Values: []float64{1, 2, 3}, Bins: 1e10}.Draw(40, 6, Braille)
+	counts, _, _ := Histogram{Values: []float64{1, 2, 3}}.Counts(1e10)
+	runtime.ReadMemStats(&after)
+	checkGrid(t, g, 40, 6, Braille)
+	if len(counts) > maxBins {
+		t.Errorf("Counts made %d bins", len(counts))
+	}
+	if used := after.TotalAlloc - before.TotalAlloc; used > 1<<20 {
+		t.Errorf("1e10 bins allocated %d KB", used>>10)
+	}
+	if NewGrid(1<<30, 1<<30).W != MaxSide {
+		t.Error("NewGrid does not cap its size")
 	}
 }

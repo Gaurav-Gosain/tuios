@@ -66,7 +66,7 @@ func drawAxes(g *Grid, lo, hi float64, format func(float64) string, xLabels [3]s
 	}
 	labelW := 0
 	for _, t := range ticks {
-		labelW = max(labelW, Width(format(t)))
+		labelW = max(labelW, width(format(t)))
 	}
 	labelW = min(labelW, g.W/4)
 	ax := labelW + 1
@@ -77,7 +77,7 @@ func drawAxes(g *Grid, lo, hi float64, format func(float64) string, xLabels [3]s
 	}
 	for i, t := range ticks {
 		y := tickRow(i)
-		g.TextRight(ax-1, y, Truncate(format(t), labelW, ""), Mute, false)
+		g.TextRight(ax-1, y, truncate(format(t), labelW, ""), Mute, false)
 		g.set(ax-1, y, block(m, "┤", "+"), Edge)
 	}
 	g.set(ax-1, rows, block(m, "└", "+"), Edge)
@@ -87,14 +87,14 @@ func drawAxes(g *Grid, lo, hi float64, format func(float64) string, xLabels [3]s
 	if xRow {
 		y := rows + 1
 		pw := g.W - ax
-		left := Truncate(xLabels[0], pw/3, ellipsis(m))
-		right := Truncate(xLabels[2], pw/3, ellipsis(m))
+		left := truncate(xLabels[0], pw/3, ellipsis(m))
+		right := truncate(xLabels[2], pw/3, ellipsis(m))
 		g.Text(ax, y, left, Mute, false)
 		g.TextRight(g.W, y, right, Mute, false)
 		if mid := xLabels[1]; mid != "" {
-			mw := Width(mid)
+			mw := width(mid)
 			x := ax + (pw-mw)/2
-			if x > ax+Width(left)+1 && x+mw < g.W-Width(right)-1 {
+			if x > ax+width(left)+1 && x+mw < g.W-width(right)-1 {
 				g.Text(x, y, mid, Mute, false)
 			}
 		}
@@ -129,7 +129,7 @@ type LegendItem struct {
 func DrawLegend(g *Grid, x, y int, items []LegendItem, m Mode) int {
 	for i, it := range items {
 		mark := block(m, "■", asciiMarks[i%len(asciiMarks)])
-		need := 2 + Width(it.Label)
+		need := 2 + width(it.Label)
 		if i > 0 {
 			need += 2
 		}
@@ -149,7 +149,7 @@ func DrawLegend(g *Grid, x, y int, items []LegendItem, m Mode) int {
 func LegendWidth(items []LegendItem) int {
 	n := 0
 	for i, it := range items {
-		n += 2 + Width(it.Label)
+		n += 2 + width(it.Label)
 		if i > 0 {
 			n += 2
 		}

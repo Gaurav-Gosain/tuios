@@ -40,6 +40,10 @@ func FuzzCharts(f *testing.F) {
 				b[k] = ' ' + b[k]%95
 			}
 			labels[i] = string(b)
+			if i == 1 {
+				// One wide label, for the wide-grapheme paths.
+				labels[i] = "日本" + labels[i]
+			}
 		}
 		var g *Grid
 		switch kind % 12 {
@@ -63,7 +67,7 @@ func FuzzCharts(f *testing.F) {
 			}
 			g = Gauge{Value: v, Max: top, Style: GaugeStyle(kind % 2)}.Draw(W, H, m)
 		case 6:
-			g = Histogram{Values: vals, Bins: int(kind)}.Draw(W, H, m)
+			g = Histogram{Values: vals, Bins: int(kind) * 10_000_000}.Draw(W, H, m)
 		case 7:
 			lo, hi := 0.0, 0.0
 			if len(vals) > 1 {

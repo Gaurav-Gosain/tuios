@@ -92,7 +92,7 @@ func (b Bar) Draw(w, h int, m Mode) *Grid {
 		// sit under the first and last column.
 		labelW := 0
 		for _, t := range []float64{lo, hi, (lo + hi) / 2} {
-			labelW = max(labelW, Width(b.format()(t)))
+			labelW = max(labelW, width(b.format()(t)))
 		}
 		pw := g.W - min(labelW, g.W/4) - 1
 		if n := len(b.Values); n > 0 && pw > n {
@@ -119,9 +119,9 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 	labelW, valueW := 0, 0
 	for i := 0; i < n; i++ {
 		if i < len(b.Labels) {
-			labelW = max(labelW, Width(b.Labels[i]))
+			labelW = max(labelW, width(b.Labels[i]))
 		}
-		valueW = max(valueW, Width(format(b.Values[i])))
+		valueW = max(valueW, width(format(b.Values[i])))
 	}
 	// The values never clip: the labels give way first, then the bars.
 	valueW = min(valueW, max(g.W-4, 0))
@@ -135,15 +135,15 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		cells -= valueW + 1
 	}
 	cells = max(cells, 0)
-	_, top := b.rng()
+	base, top := b.rng()
 	for i := 0; i < n; i++ {
 		if i < len(b.Labels) && labelW > 0 {
-			g.Text(0, i, Truncate(b.Labels[i], labelW, ellipsis(m)), Dim, false)
+			g.Text(0, i, truncate(b.Labels[i], labelW, ellipsis(m)), Dim, false)
 		}
 		v := b.Values[i]
 		units := 0
 		if finite(v) {
-			units = int(math.Round(unit(math.Max(v, 0), 0, top) * float64(cells*8)))
+			units = int(math.Round(unit(math.Max(v, base), base, top) * float64(cells*8)))
 		}
 		x := x0
 		for ; units >= 8; units -= 8 {
@@ -168,7 +168,7 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 			}
 		}
 		if valueW > 0 {
-			g.TextRight(g.W, i, Truncate(format(v), valueW, ellipsis(m)), Fg, false)
+			g.TextRight(g.W, i, truncate(format(v), valueW, ellipsis(m)), Fg, false)
 		}
 	}
 }
@@ -255,7 +255,7 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 			}
 		}
 		if withLabels && i < len(labels) {
-			g.Text(x, g.H-1, Truncate(labels[i], step, ""), Mute, false)
+			g.Text(x, g.H-1, truncate(labels[i], step, ""), Mute, false)
 		}
 	}
 }
@@ -401,10 +401,10 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	default:
 		label = Percent(f)
 	}
-	label = Truncate(label, max(g.W/2, 0), "")
+	label = truncate(label, max(g.W/2, 0), "")
 	cells := g.W
 	if label != "" {
-		cells -= Width(label) + 1
+		cells -= width(label) + 1
 		g.TextRight(g.W, y, label, Fg, true)
 	}
 	if cells <= 0 {
@@ -457,6 +457,9 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	return g
 }
 
+// maxBins bounds a histogram's bins.
+const maxBins = 1000
+
 // Histogram counts values into equal bins and draws the counts as columns,
 // with the counts at the left and the range of each end under them.
 type Histogram struct {
@@ -470,6 +473,7 @@ type Histogram struct {
 // Counts returns the bins' counts, and the range the bins cover.
 func (hg Histogram) Counts(bins int) (counts []float64, lo, hi float64) {
 	lo, hi, ok := extent(hg.Values)
+	bins = min(bins, maxBins)
 	if !ok || bins <= 0 {
 		return nil, 0, 0
 	}
@@ -498,6 +502,8 @@ func (hg Histogram) Draw(w, h int, m Mode) *Grid {
 	if bins <= 0 {
 		bins = min(20, max(1, g.W/2))
 	}
+	// More bins than cells cannot show, and the count sizes an allocation.
+	bins = min(bins, max(g.W, 1), maxBins)
 	counts, lo, hi := hg.Counts(bins)
 	if counts == nil {
 		return g

@@ -83,10 +83,11 @@ var series = [...]Role{Series1, Series2, Series3, Series4, Series5, Series6}
 // SeriesRole returns the role of series i, counting from 0. It cycles after
 // six.
 func SeriesRole(i int) Role {
-	if i < 0 {
-		i = -i
+	k := i % len(series)
+	if k < 0 {
+		k += len(series)
 	}
-	return series[i%len(series)]
+	return series[k]
 }
 
 // Cell is one cell of a Grid. Text is one grapheme, or "" for a blank cell.
@@ -108,9 +109,14 @@ type Grid struct {
 	Cells []Cell // row-major
 }
 
-// NewGrid returns a blank grid. A negative size counts as 0.
+// MaxSide is the largest width or height of a grid. A larger size is cut
+// to it, so a caller cannot make a chart allocate without bound.
+const MaxSide = 4096
+
+// NewGrid returns a blank grid. A negative size counts as 0, and a size
+// past MaxSide counts as MaxSide.
 func NewGrid(w, h int) *Grid {
-	w, h = max(w, 0), max(h, 0)
+	w, h = min(max(w, 0), MaxSide), min(max(h, 0), MaxSide)
 	g := &Grid{W: w, H: h, Cells: make([]Cell, w*h)}
 	for i := range g.Cells {
 		g.Cells[i].Width = 1
@@ -189,7 +195,7 @@ func (g *Grid) Text(x, y int, s string, role Role, bold bool) int {
 
 // TextRight writes s so that it ends at column right, exclusive.
 func (g *Grid) TextRight(right, y int, s string, role Role, bold bool) {
-	g.Text(right-Width(s), y, s, role, bold)
+	g.Text(right-width(s), y, s, role, bold)
 }
 
 // String returns the grid as text, one line per row, with trailing blanks
@@ -216,8 +222,8 @@ func (g *Grid) String() string {
 	return b.String()
 }
 
-// Width returns the width of s in cells, as Grid.Text counts it.
-func Width(s string) int {
+// width returns the width of s in cells, as Grid.Text counts it.
+func width(s string) int {
 	n := 0
 	for s != "" {
 		cl, w := ansi.FirstGraphemeCluster(s, ansi.GraphemeWidth)
@@ -229,12 +235,12 @@ func Width(s string) int {
 	return n
 }
 
-// Truncate cuts s to at most n cells. A cut string ends in tail.
-func Truncate(s string, n int, tail string) string {
-	if Width(s) <= n {
+// truncate cuts s to at most n cells. A cut string ends in tail.
+func truncate(s string, n int, tail string) string {
+	if width(s) <= n {
 		return s
 	}
-	tw := Width(tail)
+	tw := width(tail)
 	if n < tw {
 		return ""
 	}

@@ -47,7 +47,7 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	}
 	labelW := 0
 	for _, l := range hm.RowLabels {
-		labelW = max(labelW, Width(l))
+		labelW = max(labelW, width(l))
 	}
 	labelW = min(labelW, g.W/4)
 	x0 := 0
@@ -86,7 +86,7 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	if half {
 		for y := 0; y*2 < rows; y++ {
 			if labelW > 0 && 2*y < len(hm.RowLabels) {
-				g.Text(0, y, Truncate(hm.RowLabels[2*y], labelW, ellipsis(m)), Dim, false)
+				g.Text(0, y, truncate(hm.RowLabels[2*y], labelW, ellipsis(m)), Dim, false)
 			}
 			for c := 0; c < cols; c++ {
 				up, down := at(2*y, c), at(2*y+1, c)
@@ -109,7 +109,7 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	} else {
 		for y := 0; y < rows; y++ {
 			if labelW > 0 && y < len(hm.RowLabels) {
-				g.Text(0, y, Truncate(hm.RowLabels[y], labelW, ellipsis(m)), Dim, false)
+				g.Text(0, y, truncate(hm.RowLabels[y], labelW, ellipsis(m)), Dim, false)
 			}
 			for c := 0; c < cols; c++ {
 				v := at(y, c)
@@ -138,9 +138,10 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	y := min(area, used)
 	if colRow {
 		n := len(hm.ColLabels)
-		g.Text(x0, y, Truncate(hm.ColLabels[0], max(cols*cellW/2-1, 0), ""), Mute, false)
-		if n > 1 {
-			g.TextRight(x0+cols*cellW, y, Truncate(hm.ColLabels[min(n, cols)-1], max(cols*cellW/2-1, 0), ""), Mute, false)
+		g.Text(x0, y, truncate(hm.ColLabels[0], max(cols*cellW/2-1, 0), ""), Mute, false)
+		if n >= cols && cols > 1 {
+			// The right label names the column at the right edge.
+			g.TextRight(x0+cols*cellW, y, truncate(hm.ColLabels[cols-1], max(cols*cellW/2-1, 0), ""), Mute, false)
 		}
 		y++
 	}
@@ -160,7 +161,7 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 		end := x0 + sw*len(heat)
 		g.Text(x0, y+1, format(lo), Mute, false)
 		mid := format((lo + hi) / 2)
-		g.Text(x0+(sw*len(heat)-Width(mid))/2, y+1, mid, Mute, false)
+		g.Text(x0+(sw*len(heat)-width(mid))/2, y+1, mid, Mute, false)
 		g.TextRight(end, y+1, format(hi), Mute, false)
 	}
 	return g

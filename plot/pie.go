@@ -2,6 +2,7 @@ package plot
 
 import (
 	"math"
+	"sort"
 	"strconv"
 )
 
@@ -24,6 +25,33 @@ type Pie struct {
 // minArc is the smallest share of the circle a slice takes on screen, so
 // a slice of 1% is still a visible arc. The legend keeps the real share.
 const minArc = 0.035
+
+// maxSlices bounds the slices drawn: the slices after the first
+// maxSlices-1 fold into one, labelled "other".
+const maxSlices = 12
+
+// fold returns the pie with its slices after the first maxSlices-1 summed
+// into one.
+func (p Pie) fold() Pie {
+	if len(p.Values) <= maxSlices {
+		return p
+	}
+	q := p
+	q.Values = append([]float64(nil), p.Values[:maxSlices-1]...)
+	rest := 0.0
+	for _, v := range p.Values[maxSlices-1:] {
+		if finite(v) && v > 0 {
+			rest += v
+		}
+	}
+	q.Values = append(q.Values, rest)
+	q.Labels = append(append([]string(nil), p.Labels[:min(len(p.Labels), maxSlices-1)]...), make([]string, max(0, maxSlices-1-len(p.Labels)))...)
+	q.Labels = append(q.Labels, "other")
+	if len(p.Roles) > maxSlices-1 {
+		q.Roles = p.Roles[:maxSlices-1]
+	}
+	return q
+}
 
 func (p Pie) role(i int) Role {
 	if i < len(p.Roles) && p.Roles[i] != None {
@@ -96,6 +124,7 @@ func arcs(shares []float64) []float64 {
 // Draw draws the pie into a w by h grid: the disc at the left, the legend
 // at the right when there is room.
 func (p Pie) Draw(w, h int, m Mode) *Grid {
+	p = p.fold()
 	g := NewGrid(w, h)
 	if g.W == 0 || g.H == 0 {
 		return g
@@ -111,7 +140,7 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 	legend := p.legend(shares)
 	legendW := 0
 	for _, it := range legend {
-		legendW = max(legendW, 2+Width(it.Label))
+		legendW = max(legendW, 2+width(it.Label))
 	}
 	// The disc's size in cells: as tall as the grid and as wide as that is
 	// round, leaving room for the legend.
@@ -152,12 +181,11 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		if a < 0 {
 			a++
 		}
-		for i, e := range ends {
-			if a < e && shares[i] > 0 {
-				return i
-			}
+		i := sort.SearchFloat64s(ends, a)
+		for i < len(ends) && (shares[i] <= 0 || ends[i] <= a) {
+			i++
 		}
-		return len(shares) - 1
+		return min(i, len(shares)-1)
 	}
 	// pixel returns the slice that covers most of a pixel, from a 4 by 4
 	// sample grid inside it, or -1 when less than half of it is on the
@@ -227,7 +255,7 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		}
 		mark := block(m, "■", asciiMarks[i%len(asciiMarks)])
 		g.set(lx, ly+i, mark, it.Role)
-		g.Text(lx+2, ly+i, Truncate(it.Label, g.W-lx-2, ellipsis(m)), Dim, false)
+		g.Text(lx+2, ly+i, truncate(it.Label, g.W-lx-2, ellipsis(m)), Dim, false)
 	}
 	return g
 }
@@ -248,6 +276,7 @@ func (p Pie) legend(shares []float64) []LegendItem {
 
 // Legend returns the slices' labels with their shares, and their roles.
 func (p Pie) Legend() []LegendItem {
+	p = p.fold()
 	shares, ok := p.shares()
 	if !ok {
 		return nil

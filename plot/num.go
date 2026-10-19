@@ -28,10 +28,12 @@ func unit(v, lo, hi float64) float64 {
 	if !finite(v) {
 		return 0
 	}
-	if hi-lo <= 0 || !finite(hi-lo) {
+	// Halves first, so a range such as [-1e308, 1e308] does not overflow.
+	span := hi/2 - lo/2
+	if span <= 0 || !finite(span) {
 		return 0.5
 	}
-	f := (v - lo) / (hi - lo)
+	f := (v/2 - lo/2) / span
 	return math.Max(0, math.Min(1, f))
 }
 

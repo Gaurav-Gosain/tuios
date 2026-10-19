@@ -63,6 +63,7 @@ to high that the host derives.
 - Every chart is total. NaN and infinite values count as missing. Empty data
   draws an empty grid.
 - A grid is always the size you ask for, and each row is exactly that wide.
+- Sizes that a caller could pass unchecked are bounded: a grid is at most 4096 cells a side, a histogram has at most one bin per cell and 1000 bins, a line draws at most 64 series, and a pie draws 12 slices, the rest folded into one called "other".
 - Labels are cut with an ellipsis to fit. Control characters are dropped and
   invalid UTF-8 shows as `?`.
 - A line chart with more values than cells is reduced with largest triangle

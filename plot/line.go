@@ -67,8 +67,14 @@ func (l Line) Legend() []LegendItem {
 	return out
 }
 
+// maxSeries bounds the series a chart draws; the rest are left out.
+const maxSeries = 64
+
 // Draw draws the chart into a w by h grid.
 func (l Line) Draw(w, h int, m Mode) *Grid {
+	if len(l.Series) > maxSeries {
+		l.Series = l.Series[:maxSeries]
+	}
 	g := NewGrid(w, h)
 	if g.W == 0 || g.H == 0 {
 		return g
@@ -169,7 +175,7 @@ func points(vals []float64, n int) []float64 {
 func (l Line) braille(g *Grid, lo, hi float64) {
 	dw, dh := g.W*2, g.H*4
 	dots := make([]uint8, g.W*g.H)
-	owner := make([]int8, g.W*g.H)
+	owner := make([]int16, g.W*g.H)
 	for i := range owner {
 		owner[i] = -1
 	}
@@ -179,7 +185,7 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 		}
 		cx, cy := x/2, y/4
 		dots[cy*g.W+cx] |= brailleBit(x%2, y%4)
-		owner[cy*g.W+cx] = int8(s % 127)
+		owner[cy*g.W+cx] = int16(s)
 	}
 	for s := range l.Series {
 		pts := points(l.Series[s].Values, dw)
