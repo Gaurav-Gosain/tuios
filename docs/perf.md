@@ -3115,6 +3115,12 @@ a clean clone, as CI builds it). The change measured 41,009,314 and 38,360,994,
 so it adds 20,480 and 16,784 bytes. No third-party dependency was added. The
 new budgets leave 4,198 and 4,204 bytes of room.
 
+The linux/amd64 budget went to 41,025,800 for the move to Go 1.26.10 and the
+harness pid and kitty a=t follow-ups (#929, #930). Go 1.26.10 left 102 bytes of
+room on linux/amd64. #929 measured 41,017,506 bytes (Go 1.26.10, a clean clone,
+as CI builds it), and #930 adds about 4,096 more on top. The new budget leaves
+about 4,198 bytes of room after both. darwin/arm64 is unchanged.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
