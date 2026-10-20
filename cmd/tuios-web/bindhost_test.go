@@ -83,20 +83,23 @@ func TestBindHostLoopbackSpellings(t *testing.T) {
 }
 
 // TestBindHostOthers: a network name binds its address, a zone that picks an
-// interface stays, a mix of kinds is refused, and the empty host is left to
-// sip, which binds it to localhost and checks the Host header.
+// interface stays, a mix of kinds is refused, a host with a port is refused,
+// and the empty host is left to sip, which binds it to localhost and checks
+// the Host header.
 func TestBindHostOthers(t *testing.T) {
 	for host, want := range map[string]string{
 		"lan-name":     "192.168.1.20",
 		"192.168.1.20": "192.168.1.20",
 		"fe80::1%eth0": "fe80::1%eth0",
+		"[::1]":        "::1",
 		"":             "",
 	} {
 		if got, err := resolveBindHost(context.Background(), cgoResolver, host); err != nil || got != want {
 			t.Errorf("--host %q: got %q, %v, want %q", host, got, err, want)
 		}
 	}
-	for _, host := range []string{"split-name", "wild-and-lan", "no-such-name", "link-name"} {
+	for _, host := range []string{"split-name", "wild-and-lan", "no-such-name", "link-name",
+		"127.0.0.1:7681", "[::1]:7681", "0.0.0.0:7681", "192.168.1.20:7681", "localhost:7681"} {
 		if got, err := resolveBindHost(context.Background(), cgoResolver, host); err == nil {
 			t.Errorf("--host %s: got %q, want a refusal", host, got)
 		}

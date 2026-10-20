@@ -54,6 +54,12 @@ func resolveBindHost(ctx context.Context, r hostResolver, host string) (string, 
 	if host == "" {
 		return "", nil
 	}
+	// A port in --host was dropped from a loopback or unspecified address
+	// and kept on any other one, where sip v0.9.4 refuses it only after the
+	// password is printed. Refuse it here, before anything starts.
+	if _, port, err := net.SplitHostPort(host); err == nil {
+		return "", fmt.Errorf("cannot use --host %s, because it has a port (%s). Give the port with --port", host, port)
+	}
 	if addr, ok := netutil.HostAddr(host); ok {
 		if addr.IsLoopback() || addr.IsUnspecified() {
 			return addr.String(), nil
