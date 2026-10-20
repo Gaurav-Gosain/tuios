@@ -370,12 +370,18 @@ func footerKey(hints []Hint, bg color.Color, pal Palette, width int) string {
 // cells between pairs, and the ellipsis last when hints were dropped. It
 // returns the strip and its width.
 func renderHints(f fittedHints, sep int, bg color.Color, pal Palette) (string, int) {
+	return renderHintsOn(f, sep, bg, bg, pal)
+}
+
+// renderHintsOn is renderHints drawn on ground with the key colour measured
+// against measure, for hints on a ground known only once composited.
+func renderHintsOn(f fittedHints, sep int, ground, measure color.Color, pal Palette) (string, int) {
 	// Both measured against the ground they land on: the accent follows the
 	// terminal theme. FgDim, not FgMute, for the labels: the footer is the only
 	// place a panel says what its keys do, and FgMute is a furniture token
 	// picked to disappear against the canvas.
-	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, bg)).Bold(true)
-	labelStyle := Style(bg).Foreground(pal.FgDim)
+	keyStyle := Style(ground).Foreground(Readable(pal.AccentBright, measure)).Bold(true)
+	labelStyle := Style(ground).Foreground(pal.FgDim)
 	gap := labelStyle.Render(strings.Repeat(" ", sep))
 	var b strings.Builder
 	for i, h := range f.Hints {
