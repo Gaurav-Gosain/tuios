@@ -46,6 +46,12 @@ type TUIClient struct {
 	// dials a daemon that may still be starting sets it. See handshaking.
 	HandshakeTimeout time.Duration
 	handshaking      bool
+	// AttachDeadline, when set, is the latest time the reply to the next
+	// AttachSession may come, instead of 30 seconds from the request. A
+	// client that waits for a new daemon sets it to the end of its wait: a
+	// daemon that says hello and then stalls must not hold it past that.
+	// AttachSession clears it.
+	AttachDeadline time.Time
 	// goodbye is the daemon's last word before it closed, and when it came.
 	// See daemon_goodbye.go.
 	goodbye atomic.Pointer[Goodbye]
@@ -602,11 +608,19 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	}
 	c.DetachOthers = false
 
+	deadline := c.AttachDeadline
+	c.AttachDeadline = time.Time{}
+
 	if err := c.send(msg); err != nil {
 		return nil, err
 	}
 
-	resp, err := c.recv()
+	var resp *Message
+	if deadline.IsZero() {
+		resp, err = c.recv()
+	} else {
+		resp, err = c.recvUntil(deadline)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2443,14 +2457,23 @@ func (c *TUIClient) send(msg *Message) error {
 }
 
 func (c *TUIClient) recv() (*Message, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
-
 	wait := 30 * time.Second
 	if c.handshaking && c.HandshakeTimeout > 0 {
 		wait = c.HandshakeTimeout
 	}
-	_ = c.conn.SetReadDeadline(time.Now().Add(wait))
+	return c.recvUntil(time.Now().Add(wait))
+}
+
+// recvUntil reads one message that must arrive by deadline, and never later
+// than the 30 seconds recv gives.
+func (c *TUIClient) recvUntil(deadline time.Time) (*Message, error) {
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
+
+	if limit := time.Now().Add(30 * time.Second); deadline.After(limit) {
+		deadline = limit
+	}
+	_ = c.conn.SetReadDeadline(deadline)
 	return ReadMessage(c.reader())
 }
 
