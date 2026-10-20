@@ -76,7 +76,7 @@ func TestInitBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	allocs := 0
+	allocs, records := 0, 0
 	for line := range strings.Lines(string(out)) {
 		// init tuios.dev/sketch/internal/svg @1.2 ms, 0.009 ms clock, 6416 bytes, 183 allocs
 		f := strings.Fields(line)
@@ -88,6 +88,10 @@ func TestInitBudget(t *testing.T) {
 			t.Fatalf("cannot read %q", line)
 		}
 		allocs += n
+		records++
+	}
+	if records == 0 {
+		t.Fatalf("no init record of an internal package in the inittrace output; its format may have changed:\n%s", out)
 	}
 	t.Logf("sketch's internal packages make %d allocations at init", allocs)
 	if allocs > initAllocBudget {

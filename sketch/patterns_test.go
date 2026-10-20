@@ -10,11 +10,16 @@ import (
 	"tuios.dev/sketch/internal/lazyre"
 )
 
+// lazyPatterns is how many patterns sketch's packages declare. A package that
+// drops out of this test binary would take its patterns out of the check, so
+// the count is exact. Change it when a pattern is added or removed.
+const lazyPatterns = 91
+
 // Patterns compile on first use. A pattern that does not compile would panic
 // only on the input that reaches it, so compile them all here.
 func TestLazyPatternsCompile(t *testing.T) {
-	if n := lazyre.MustCompileAll(); n < 90 {
-		t.Fatalf("only %d patterns registered", n)
+	if n := lazyre.MustCompileAll(); n != lazyPatterns {
+		t.Fatalf("%d patterns registered, want %d", n, lazyPatterns)
 	}
 }
 
