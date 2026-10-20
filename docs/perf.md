@@ -3098,6 +3098,13 @@ refused. The build before it measured 40,980,642 and 38,327,522 bytes (Go
 38,344,210, so it adds 8,192 and 16,688 bytes. No third-party dependency was
 added. The new budgets leave 4,198 and 4,204 bytes of room.
 
+tuios-web has no budget, and its growth is recorded here. The refusal of
+`--no-auth` on a wildcard bind, the bind host that is resolved once, and the
+owner and DACL check of the password file on Windows add 8,192 bytes on
+linux/amd64 (42,410,146 to 42,418,338) and 22,016 bytes on windows/amd64
+(42,994,176 to 43,016,192), built the release way on Go 1.26.9. tuios uses
+the shared bind host parse in internal/netutil and does not change size, so its budgets stay.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
