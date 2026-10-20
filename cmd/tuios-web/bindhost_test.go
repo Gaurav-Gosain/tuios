@@ -40,6 +40,7 @@ var cgoResolver = fakeResolver{
 	"lan-name":        {"192.168.1.20"},
 	"split-name":      {"127.0.0.1", "192.168.1.20"},
 	"wild-and-lan":    {"0.0.0.0", "192.168.1.20"},
+	"link-name":       {"fe80::1"},
 }
 
 // TestBindHostWildcardSpellings: every spelling that binds every interface
@@ -95,7 +96,7 @@ func TestBindHostOthers(t *testing.T) {
 			t.Errorf("--host %q: got %q, %v, want %q", host, got, err, want)
 		}
 	}
-	for _, host := range []string{"split-name", "wild-and-lan", "no-such-name"} {
+	for _, host := range []string{"split-name", "wild-and-lan", "no-such-name", "link-name"} {
 		if got, err := resolveBindHost(context.Background(), cgoResolver, host); err == nil {
 			t.Errorf("--host %s: got %q, want a refusal", host, got)
 		}

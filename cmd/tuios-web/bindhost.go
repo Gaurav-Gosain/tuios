@@ -110,10 +110,11 @@ func pickBindAddr(host string, found []netip.Addr) (string, error) {
 			break
 		}
 	}
-	// A link-local address of a name keeps no zone here, and the listener
-	// could not use it without one, so the name is kept for it.
-	if kind == "network" && pick.Is6() && pick.IsLinkLocalUnicast() {
-		return host, nil
+	// A link-local address needs a zone, and a name gives none. Handing the
+	// name on would make the listener resolve it a second time, after the
+	// checks, so refuse it and ask for the address with its zone.
+	if pick.Is6() && pick.IsLinkLocalUnicast() {
+		return "", fmt.Errorf("--host %s is a link-local address (%s). Give the address with its zone, such as fe80::1%%eth0", host, pick)
 	}
 	return pick.String(), nil
 }
