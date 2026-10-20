@@ -283,7 +283,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	leftLabels := on(leftConf, "showLabel", true)
 	bottomLabels := on(bottomConf, "showLabel", true)
 
-	wrapAt := math.Max(48, (width-2*pad-64-legendSpace)*slot-8)
+	wrapAt := math.Max(48, float64((width-2*pad-64-legendSpace)*slot)-8)
 	if horizontal {
 		wrapAt = width * 0.3
 	}
