@@ -23,4 +23,4 @@ replace tuios.dev/shot v0.2.0 => ./shot
 
 replace tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb => ./vt
 
-replace tuios.dev/sketch v0.0.0-20261020111935-c2ed3d12dd0a => ./sketch
+replace tuios.dev/sketch v0.1.2-0.20261020132632-83c6caa076f2 => ./sketch
