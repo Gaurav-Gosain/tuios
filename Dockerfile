@@ -30,12 +30,15 @@ ENTRYPOINT ["/tuios"]
 # The web terminal is run by naming it, rather than by being the default:
 #
 #   docker run --rm -p 7681:7681 --entrypoint /tuios-web <image> \
-#     --host 0.0.0.0 --auto-tls
+#     --host 0.0.0.0 --auto-tls --random-password
+#
+# A published port needs a bind on every interface, and tuios-web refuses
+# --no-auth there, so a container always needs a password: --random-password
+# prints one at start, and --password-file reads one from a mounted file.
 #
 # Neither the host nor --insecure is baked in, and that is the whole point of
-# leaving it to the command line. tuios-web serves a shell, it has no
-# authentication of its own, and it refuses a non-loopback bind in clear text
-# on purpose. An image that arrived already listening on 0.0.0.0 would turn
+# leaving it to the command line. tuios-web serves a shell, and it refuses a
+# non-loopback bind in clear text or with no password on purpose. An image that arrived already listening on 0.0.0.0 would turn
 # that refusal into a default, and anyone who ran it to see what it did would
 # be publishing a terminal. The operator passes the host when they know their
 # network, and passes TLS or says --insecure in the same breath.
