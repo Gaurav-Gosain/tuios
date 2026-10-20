@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -569,5 +569,53 @@ func TestQuadrantOutputIsInert(t *testing.T) {
 		"  classDef constructor radius: 3\n  classDef hasOwnProperty color: #f00", RenderOptions{})
 	if err != nil || strings.Count(out.Data, "<circle") != 3 || strings.Count(out.Data, ` r="3"`) != 1 {
 		t.Fatalf("classes named after Object properties: %v\n%s", err, out.Data)
+	}
+}
+
+func TestJourneyOutputIsInert(t *testing.T) {
+	corpus := append(corpusOf(t, "journey"),
+		"journey\n  title Day\n  section Work\n    Make tea: 5: Me\n    Do work: 1: Me, Cat\n  section Home\n    Sit down: 4: Me\n",
+		"journey\n  accTitle: a\n  accDescr { b }\n  First: 3\n  section S\n  One<br>two: 2: A, B, C\n")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	// A semicolon is a syntax error in a journey, so hostile text is also tried with its semicolons removed.
+	noSemicolons := func(p string) string { return strings.ReplaceAll(p, ";", "") }
+	hostile(t, journeyTemplates, 500, RenderOptions{}, true, noSemicolons)
+	out, err := Render("journey\n  title <script>alert(1)</script>\n  section \"><img src=x onerror=alert(1)>\n  <svg onload=alert(1)>: 5: </text><script>x</script>, \"onload=\"alert(1)", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") ||
+		!strings.Contains(out.Data, "&lt;script&gt;alert(1)&lt;/script&gt;") ||
+		!strings.Contains(out.Data, `data-id="&quot;&gt;&lt;img src=x onerror=alert(1)&gt;"`) ||
+		!strings.Contains(out.Data, "<title>&lt;/text&gt;&lt;script&gt;x&lt;/script&gt;</title>") ||
+		!strings.Contains(out.Data, `data-id="&quot;onload=&quot;alert(1)"`) {
+		t.Fatalf("journey markup is not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "journey\n  accTitle: t\n  accDescr: d\n  Task: 5: Me", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, true) {
+			t.Fatal("hostile id prefix and font: did not render")
+		}
+	}
+	fragments := []string{":", ": 5", ": 3: Me", ",", "\n", "title ", "section ", "accTitle: ", "accDescr {", "}", "<br>", "#", "%%"}
+	for _, p := range PAYLOADS {
+		if strings.Contains(p, ";") {
+			fragments = append(fragments, noSemicolons(p))
+		}
+	}
+	count := 4000
+	if testing.Short() {
+		count /= 8
+	}
+	if n := mutate(t, corpus, fragments, 3, 4000, RenderOptions{}, true); n <= count/20 {
+		t.Fatalf("%d of %d mutated journeys rendered", n, count)
+	}
+	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
+	out, err = Render("journey\n  section __proto__\n  constructor: 5: __proto__, constructor, toString, hasOwnProperty\n  __proto__: 1: valueOf\n", RenderOptions{})
+	if err != nil || strings.Count(out.Data, `class="pele-legend-item"`) != 5 || !strings.Contains(out.Data, `data-id="__proto__"`) {
+		t.Fatalf("names like __proto__: %v\n%s", err, out.Data)
+	}
+	if !inertTry(t, "---\nconfig:\n  journey:\n    __proto__:\n      polluted: true\n---\njourney\n  Task: 5: Me", RenderOptions{}, true) {
+		t.Fatal("a config with __proto__ did not render")
 	}
 }

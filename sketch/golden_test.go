@@ -19,6 +19,7 @@ var done = map[string]bool{
 	"er":        true,
 	"flowchart": true,
 	"gantt":     true,
+	"journey":   true,
 	"mindmap":   true,
 	"pie":       true,
 	"quadrant":  true,

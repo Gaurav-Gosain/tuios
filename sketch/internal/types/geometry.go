@@ -34,6 +34,8 @@ type Geometry struct {
 
 	// Quadrant chart.
 	Quadrant *GeoQuadrant
+	// Journey.
+	Journey *GeoJourney
 }
 
 type GeoNode struct {
@@ -239,4 +241,23 @@ type GeoQuadrant struct {
 type GeoQPoint struct {
 	X, Y  float64
 	Label string
+}
+
+// GeoJourney is a user journey as lists: a text drawing lays it out again in cells.
+type GeoJourney struct {
+	Title []string
+	// Sections are the runs of tasks that share a section, in order. A run outside any
+	// section has no label.
+	Sections []GeoGroup
+	Tasks    []GeoStep
+}
+
+// GeoStep is a task of a user journey.
+type GeoStep struct {
+	Label []string
+	// Level is the score as drawn, from 1 to 5; a score that is not a number is drawn at 3.
+	Level float64
+	// Mood is happy, neutral or sad.
+	Mood   string
+	People []string
 }

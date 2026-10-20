@@ -4,8 +4,8 @@
 // text. It is not a port of pele: pele draws only SVG.
 //
 // Flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams,
-// pie charts, mindmaps, gantt charts, timelines, XY charts and quadrant charts
-// have a text drawing. Other types give ErrUnsupported.
+// pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant charts
+// and user journeys have a text drawing. Other types give ErrUnsupported.
 package text
 
 import (
@@ -42,7 +42,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -85,6 +85,8 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 		c, err = drawXY(layout, opt)
 	case "quadrantChart":
 		c, err = drawQuadrant(layout, opt)
+	case "journey":
+		c, err = drawJourney(layout, opt)
 	default:
 		c, err = drawSequence(layout, opt)
 	}

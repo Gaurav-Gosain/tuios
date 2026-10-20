@@ -512,3 +512,33 @@ var quadrantTemplates = []func(p string) string{
 	func(p string) string { return "quadrantChart " + p + "\n  A: [0.5, 0.5]" },
 	func(p string) string { return "quadrantChart\n  %% " + p + "\n  A: [0.5, 0.5]" },
 }
+
+var journeyTemplates = []func(p string) string{
+	func(p string) string { return "journey\n  title " + p + "\n  Task: 5: Me" },
+	func(p string) string { return "journey\n  " + p + ": 5: Me" },
+	func(p string) string { return "journey\n  " + p },
+	func(p string) string { return "journey\n  Task: " + p },
+	func(p string) string { return "journey\n  Task: " + p + ": Me" },
+	func(p string) string { return "journey\n  Task: 5: " + p },
+	func(p string) string { return "journey\n  Task: 5: Me, " + p + ", You" },
+	func(p string) string { return "journey\n  Task: 5: Me: " + p },
+	func(p string) string { return "journey\n  section " + p + "\n  Task: 5: Me" },
+	func(p string) string { return "journey\n  section " + p },
+	func(p string) string {
+		return "journey\n  title " + p + "\n  section " + p + "\n  x" + p + ": 3: y" + p + ", z" + p
+	},
+	func(p string) string { return "journey " + p + "\n  Task: 5: Me" },
+	func(p string) string { return "journey\n  accTitle: " + p + "\n  accDescr: " + p + "\n  Task: 5: Me" },
+	func(p string) string { return "journey\n  accDescr {\n " + p + "\n }\n  Task: 5: Me" },
+	func(p string) string { return "journey\n  a<br>" + p + "<br/>b: 5: Me<br>" + p },
+	func(p string) string { return "journey\n  fa:fa-" + p + " x: 5: fa:fa-" + p },
+	func(p string) string { return "journey\n  %% " + p + "\n  Task: 5: Me # " + p },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\njourney\n  Task: 5: Me" },
+	func(p string) string {
+		return "---\nconfig:\n  journey:\n    actorColours: [\"" + p + "\"]\n    sectionFills: [\"" + p + "\"]\n    taskFontFamily: \"" + p + "\"\n---\njourney\n  section S\n  Task: 5: Me"
+	},
+	func(p string) string { return "---\nconfig:\n  journey: \"" + p + "\"\n---\njourney\n  Task: 5: Me" },
+	func(p string) string {
+		return "%%{init: {\"journey\": {\"width\": \"" + p + "\", \"titleColor\": \"" + p + "\"}, \"themeVariables\": {\"fillType0\": \"" + p + "\"}}}%%\njourney\n  Task: 5: Me"
+	},
+}
