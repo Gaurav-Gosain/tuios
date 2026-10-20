@@ -71,7 +71,7 @@ recording: the diagram of FILE, or a built-in one. Press q to quit and r to
 start the demo again.
 
 The colours come from your tuios theme, or from --theme or [mermaid] theme. tuios.dev/sketch draws the diagrams. It
-is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant charts, user journeys, kanban boards, git graphs and sankey diagrams now.`,
+is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant charts, user journeys, kanban boards, git graphs, sankey diagrams, block diagrams, architecture diagrams and requirement diagrams now.`,
 		Example: `  # Draw a diagram here
   tuios mermaid flow.mmd
 
