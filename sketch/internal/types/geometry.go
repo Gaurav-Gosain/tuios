@@ -75,6 +75,9 @@ type Geometry struct {
 
 	// Wardley.
 	Wardley *GeoWardley
+
+	// Railroad.
+	Railroad *GeoRailroad
 }
 
 type GeoNode struct {
@@ -546,4 +549,25 @@ type GeoWardleyLink struct {
 	Label    string
 	Dashed   bool
 	Flow     string
+}
+
+// GeoRailroad is a railroad diagram as its rules, each a tree.
+type GeoRailroad struct {
+	Title []string
+	Rules []GeoRule
+}
+
+type GeoRule struct {
+	Name string
+	Root *GeoRailNode
+}
+
+// GeoRailNode is a terminal, nonterminal or special with its Text, or a sequence, choice,
+// optional or repetition of its Kids. A repetition runs from Min to Max times; Max is +Inf
+// for no bound.
+type GeoRailNode struct {
+	Kind     string
+	Text     string
+	Kids     []*GeoRailNode
+	Min, Max float64
 }

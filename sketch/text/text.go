@@ -8,7 +8,8 @@
 // user journeys, kanban boards, git graphs, sankey diagrams, block diagrams,
 // architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams,
 // radar charts, treemaps, info, treeView, ishikawa, cynefin, eventmodeling,
-// venn and wardley have a text drawing. Other types give ErrUnsupported.
+// venn, wardley and railroad have a text drawing. Other types give
+// ErrUnsupported.
 package text
 
 import (
@@ -45,7 +46,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley", "railroad":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -106,6 +107,8 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawVenn(layout, opt)
 	case "wardley":
 		c, err = drawWardley(layout, opt)
+	case "railroad":
+		c, err = drawRailroad(layout, opt)
 	case "timeline":
 		c, err = drawTimeline(layout, opt)
 	case "xychart":

@@ -1225,3 +1225,73 @@ var wardleyTemplates = []func(p string) string{
 		return "---\ntitle: \"" + cynefinQuoted(p) + "\"\nconfig:\n  wardley-beta:\n    width: '" + cynefinSingle(p) + "'\n    height: 1e999\n    showGrid: '" + cynefinSingle(p) + "'\n---\nwardley-beta\ncomponent A [0.5, 0.5]"
 	},
 }
+
+var railroadTemplates = []func(p string) string{
+	func(p string) string { return "railroad-beta\nr = terminal(\"" + railroadQuoted(p) + "\") ;" },
+	func(p string) string { return "railroad-beta\nr = terminal('" + railroadSingle(p) + "') ;" },
+	func(p string) string { return "railroad-beta\nr = nonterminal(\"" + railroadQuoted(p) + "\") ;" },
+	func(p string) string { return "railroad-beta\nr = special(\"" + railroadQuoted(p) + "\") ;" },
+	func(p string) string {
+		return "railroad-beta\nr = sequence(terminal(\"" + railroadQuoted(p) + "\"), choice(nonterminal(\"" + railroadQuoted(p) + "\"), optional(special(\"" + railroadQuoted(p) + "\")))) ;"
+	},
+	func(p string) string {
+		return "railroad-beta\nr = zeroOrMore(oneOrMore(terminal(\"" + railroadQuoted(p) + "\"))) ;"
+	},
+	func(p string) string { return "railroad-beta\nr = terminal(\"" + p + "\") ;" },
+	func(p string) string { return "railroad-beta\n" + p + " = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta\nr = " + p + " ;" },
+	func(p string) string { return "railroad-beta\nr = " + p + "(\"a\") ;" },
+	func(p string) string { return "railroad-beta\ntitle " + p + "\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta\ntitle \"" + p + "\"\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta title " + p },
+	func(p string) string {
+		return "railroad-beta\naccTitle: " + p + "\naccDescr: " + p + "\nr = terminal(\"a\") ;"
+	},
+	func(p string) string { return "railroad-beta\naccDescr {\n " + p + "\n }\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta\n/* " + p + " */\nr = terminal(\"a\") ; %% " + p },
+	func(p string) string { return "railroad-beta " + p + "\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = \"" + railroadQuoted(p) + "\" ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = \"" + p + "\" ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = ? " + railroadNoSpecial(p) + " ? ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = ? " + p + " ? ;" },
+	func(p string) string {
+		return "railroad-ebnf-beta\nr = a - \"" + railroadQuoted(p) + "\" | [ \"" + railroadQuoted(p) + "\" ] | { ? " + railroadNoSpecial(p) + " ? }+ ;"
+	},
+	func(p string) string { return "railroad-ebnf-beta\nr = " + p + " ;" },
+	func(p string) string { return "railroad-ebnf-beta\n" + p + " ::= a ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = a (* " + p + " *) b /* " + p + " */ ;" },
+	func(p string) string {
+		return "railroad-ebnf-beta\ntitle " + p + "\naccTitle: " + p + "\naccDescr { " + p + " }\nr = a ;"
+	},
+	func(p string) string { return "railroad-abnf-beta\nr = \"" + railroadBare(p) + "\" ;" },
+	func(p string) string {
+		return "railroad-abnf-beta\nr = 2*3\"" + railroadBare(p) + "\" [ \"" + railroadBare(p) + "\" ] / *( \"" + railroadBare(p) + "\" ) ;"
+	},
+	func(p string) string { return "railroad-abnf-beta\nr = \"" + p + "\" ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = " + p + " ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = %x" + p + " ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = " + p + "*" + p + "a ;" },
+	func(p string) string { return "railroad-abnf-beta\n" + p + " = a ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = a ; " + p + "\n ;\n" },
+	func(p string) string { return "railroad-abnf-beta\ntitle \"" + p + "\"\nr = a ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- \"" + railroadQuoted(p) + "\" ;" },
+	func(p string) string {
+		return "railroad-peg-beta\nR <- !\"" + railroadQuoted(p) + "\" &'x' ( \"" + railroadQuoted(p) + "\" )* . ;"
+	},
+	func(p string) string { return "railroad-peg-beta\nR <- \"" + p + "\" ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- " + p + " ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- !" + p + " ;" },
+	func(p string) string { return "railroad-peg-beta\n" + p + " <- a ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- a # " + p + "\n ;" },
+	func(p string) string { return "railroad-peg-beta\ntitle " + p + "\naccDescr: " + p + "\nR <- a ;" },
+	func(p string) string {
+		return "---\ntitle: \"" + railroadQuoted(p) + "\"\n---\nrailroad-ebnf-beta\nr = a ;"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\nrailroad-ebnf-beta\nr = a ;" },
+	func(p string) string {
+		return "---\nconfig:\n  railroad:\n    arcRadius: \"" + railroadQuoted(p) + "\"\n    padding: \"" + railroadQuoted(p) + "\"\n    fontSize: \"" + railroadQuoted(p) + "\"\n    fontFamily: \"" + railroadQuoted(p) + "\"\n    terminalFill: \"" + railroadQuoted(p) + "\"\n    lineColor: \"" + railroadQuoted(p) + "\"\n    strokeWidth: \"" + railroadQuoted(p) + "\"\n    showMarkers: \"" + railroadQuoted(p) + "\"\n    markerRadius: \"" + railroadQuoted(p) + "\"\n---\nrailroad-ebnf-beta\nr = a \"b\" ? c ? ;"
+	},
+	func(p string) string {
+		return "%%{init: {\"railroad\": {\"arcRadius\": \"" + railroadQuoted(p) + "\", \"strokeWidth\": \"" + railroadQuoted(p) + "\"}, \"themeVariables\": {\"fontFamily\": \"" + railroadQuoted(p) + "\"}}}%%\nrailroad-ebnf-beta\nr = a+ ;"
+	},
+}

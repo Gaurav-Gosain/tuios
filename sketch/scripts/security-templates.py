@@ -12,7 +12,8 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'radar': 'radarTemplates', 'treemap': 'treemapTemplates', 'info': 'infoTemplates',
          'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates',
          'cynefin': 'cynefinTemplates', 'eventmodeling': 'eventmodelingTemplates',
-         'venn': 'vennTemplates', 'wardley': 'wardleyTemplates'}
+         'venn': 'vennTemplates', 'wardley': 'wardleyTemplates',
+         'railroad': 'railroadTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead', 'V': 'vennHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
          "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)'}
@@ -21,7 +22,9 @@ exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'gant
 type_exprs = {'requirement': {'BODY': 'requirementBody'},
               'cynefin': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'},
               'eventmodeling': {'line(p)': 'emLine(p)'},
-              'wardley': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'}}
+              'wardley': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'},
+              'railroad': {'quoted(p)': 'railroadQuoted(p)', 'bare(p)': 'railroadBare(p)', "p.replace(/[?;]/g, '')": 'railroadNoSpecial(p)',
+                           "p.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\")": 'railroadSingle(p)'}}
 
 def lit(s):
     out, i = [], 0

@@ -34,6 +34,7 @@ var done = map[string]bool{
 	"pie":           true,
 	"quadrant":      true,
 	"radar":         true,
+	"railroad":      true,
 	"requirement":   true,
 	"sankey":        true,
 	"sequence":      true,

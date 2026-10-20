@@ -68,6 +68,8 @@ func TestNoTerminalControls(t *testing.T) {
 		"eventmodeling":          "eventmodeling\ntf 01 ui A \"#27;]0x#7;\"\ntf 02 cmd B { #155;31m }\nnote 02 {\n  #144;x\n}\n",
 		"venn":                   "venn-beta\n  title t#27;]0x#7;\n  set A[\"#27;[2J\"]\n    text q[\"#144;x\"]\n  set B\n  union A, B[\"#155;31m\"]",
 		"wardley":                "wardley-beta\ntitle t#27;]0x#7;\ncomponent \"#27;[2J\" [0.5, 0.5]\ncomponent B [0.2, 0.2]\n\"#27;[2J\" -> B; #155;31m\nnote \"#144;x\" [0.3, 0.3]",
+		"railroad":               "railroad-beta\ntitle t#27;]0x#7;\nr = sequence(terminal(\"#27;[2J\"), nonterminal(\"#155;31m\"), special(\"#144;x\")) ;",
+		"railroad text":          "railroad-ebnf-beta\nr = \"a very long terminal #27;[2J that cannot fit in any narrow column at all, not even close\" ;",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

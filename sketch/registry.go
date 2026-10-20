@@ -24,6 +24,7 @@ import (
 	"tuios.dev/sketch/internal/diagrams/pie"
 	"tuios.dev/sketch/internal/diagrams/quadrant"
 	"tuios.dev/sketch/internal/diagrams/radar"
+	"tuios.dev/sketch/internal/diagrams/railroad"
 	"tuios.dev/sketch/internal/diagrams/requirement"
 	"tuios.dev/sketch/internal/diagrams/sankey"
 	"tuios.dev/sketch/internal/diagrams/sequence"
@@ -41,5 +42,6 @@ func init() {
 		xychart.XyChart, timeline.Timeline, quadrant.QuadrantChart, journey.Journey, kanban.Kanban, git.GitGraph, sankey.Sankey, block.BlockDiagram,
 		architecture.Architecture, requirement.RequirementDiagram, c4.C4, packet.Packet, radar.Radar, treemap.Treemap,
 		info.Info, treeview.TreeView, ishikawa.Ishikawa, cynefin.Cynefin,
-		eventmodeling.EventModeling, venn.Venn, wardley.Wardley)
+		eventmodeling.EventModeling, venn.Venn, wardley.Wardley,
+		railroad.Railroad)
 }

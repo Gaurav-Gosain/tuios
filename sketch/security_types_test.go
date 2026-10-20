@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1204,4 +1204,54 @@ func TestWardleyOutputIsInert(t *testing.T) {
 	if !testing.Short() && rendered <= 100 {
 		t.Fatalf("%d mutated wardley maps rendered, want more than 100", rendered)
 	}
+}
+
+func railroadQuoted(p string) string { return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(p) }
+
+func railroadBare(p string) string { return strings.ReplaceAll(p, `"`, "'") }
+
+func railroadNoSpecial(p string) string { return strings.NewReplacer("?", "", ";", "").Replace(p) }
+
+func railroadSingle(p string) string { return strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(p) }
+
+// TestRailroadOutputIsInert leaves out pele's prototype check, as the other types do, and
+// mutates the corpus of all four notations together where pele mutates each with its own
+// generated grammars.
+func TestRailroadOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "railroad")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, railroadTemplates, 700, RenderOptions{}, false)
+	out, err := Render("railroad-beta\ntitle <b onclick=alert(1)>T</b>\nr = sequence(terminal(\"<img src=x onerror=alert(1)>\"), nonterminal(\"\\\"><script>alert(1)</script>\"), "+
+		"special(\"</text></g></svg><script>a&b</script>\")) ;", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "onclick") ||
+		!strings.Contains(out.Data, "&lt;img src=x onerror=alert(1)&gt;") || !strings.Contains(out.Data, `data-id="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`) ||
+		!strings.Contains(out.Data, "a&amp;b") {
+		t.Fatalf("railroad text is not escaped: %v\n%s", err, out.Data)
+	}
+	src := "railroad-ebnf-beta\naccTitle: t\naccDescr: d\nr = a \"b\" ? c ? - d* ;"
+	for _, payload := range PAYLOADS {
+		for _, opt := range []RenderOptions{
+			{IDPrefix: types.Ptr(payload), FontFamily: payload},
+			{Config: Config{"railroad": map[string]any{"arcRadius": payload, "padding": payload, "fontSize": payload, "strokeWidth": payload, "markerRadius": payload, "showMarkers": payload}}},
+			{Config: Config{"railroad": payload}},
+		} {
+			if !inertTry(t, src, opt, false) {
+				t.Fatalf("hostile railroad options %q: did not render", payload)
+			}
+		}
+	}
+	for _, src := range []string{
+		"railroad-ebnf-beta\n__proto__ = constructor | toString hasOwnProperty ;\nconstructor = \"__proto__\" ;\n__proto__ = prototype ;",
+		"railroad-beta\nr = sequence(nonterminal(\"__proto__\"), terminal(\"constructor\"), special(\"__proto__\")) ;",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+	mutate(t, corpus, []string{"\n", " ", "(", ")", "\"", "'", ";", "|", "/", "[", "]", "{", "}", "?", "*", "+", "-", "=", "::=", "<-", "!", "&", ".",
+		"terminal(\"a\")", "sequence(", "choice(", "optional(", "zeroOrMore(", "2*3", "%x41", "(* c *)", "/* c */", "# c\n", "title ", "accDescr {"}, 3, 2400, RenderOptions{}, false)
 }
