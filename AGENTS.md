@@ -151,6 +151,7 @@ tuios/
 ├── cmd/tuios/              # CLI entry point (main.go with cobra commands)
 ├── cmd/tuios-web/          # Web terminal server binary (separate for security)
 ├── cmd/tuios-wasm/         # Browser build for the Learn tuios tour (js/wasm)
+├── cmd/sketch-wasm/        # tuios.dev/sketch for the browser: the Mermaid playground at tuios.dev/sketch
 ├── cmd/tuios-fuzz/         # The property fuzzer, drawn while it runs; kept out of the shipped binary
 ├── internal/
 │   ├── app/                # Core window manager, OS model, rendering
