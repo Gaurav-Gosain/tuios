@@ -98,8 +98,22 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 			label = n
 		}
 	}
-	if !strings.HasPrefix(label, "from pane agent ") {
-		t.Fatalf("the window name does not start with its real owner: %q", label)
+	agentID := ""
+	listedAll, _ := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+	var all struct {
+		Windows []struct {
+			WindowID   string `json:"window_id"`
+			CustomName string `json:"custom_name"`
+		} `json:"windows"`
+	}
+	_ = json.Unmarshal([]byte(listedAll), &all)
+	for _, w := range all.Windows {
+		if w.CustomName == "agent" {
+			agentID = w.WindowID
+		}
+	}
+	if agentID == "" || !strings.HasPrefix(label, "from pane "+agentID[:8]+" (agent) · ") {
+		t.Fatalf("the window name does not start with its real owner, id first: %q", label)
 	}
 	if strings.Count(label, "·") != 1 {
 		t.Fatalf("the title kept a separator that can draw a second owner: %q", label)
@@ -107,9 +121,21 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	if len([]rune(label)) > 90 {
 		t.Fatalf("the title was not cut to its width: %q (%d runes)", label, len([]rune(label)))
 	}
-	if !screenHas(term.Screen(), "from pane agent") {
+	if !screenHas(term.Screen(), "from pane "+agentID[:8]+" (agent)") {
 		t.Fatalf("the frame does not show the owner\n%s", term.Snapshot())
 	}
+	// One click on the popup's button only focuses the popup: the button
+	// is not pressed, and the popup stays.
+	col, row := tmlLocate(t, term, "Yes")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	time.Sleep(500 * time.Millisecond)
+	if !screenHas(term.Screen(), "FORGED-SURFACE") {
+		t.Fatalf("the first click on a pane's popup pressed its button\n%s", term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", sess, "build"); err != nil {
+		t.Fatalf("focus build again: %v\n%s", err, out)
+	}
+	time.Sleep(300 * time.Millisecond)
 
 	// The popup a pane opened did not take the keys: the person's typing
 	// still reaches build, and the popup's y does not answer it.
@@ -193,10 +219,10 @@ func TestTMLNewWindowAsksFirst(t *testing.T) {
 	if err := term.SendKeys("v"); err != nil {
 		t.Fatalf("send v: %v", err)
 	}
-	if err := term.WaitForText("sh -c echo RAN", uiTimeout); err != nil {
+	if err := term.WaitForText("Let this surface run this in a new window in", uiTimeout); err != nil {
 		t.Fatalf("no question before a new window: %v\n%s", err, term.Snapshot())
 	}
-	if !screenHas(term.Screen(), "in "+sess+"?", "y yes  n no") {
+	if !screenHas(term.Screen(), sess+"?", `"echo RAN >`, "y yes  n no") {
 		t.Fatalf("the question does not name the session\n%s", term.Snapshot())
 	}
 	saveTMLFrame(t, term, "1-new-window-question")
@@ -218,4 +244,170 @@ func TestTMLNewWindowAsksFirst(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 	}
 	waitWindowCount(t, term, 3, "the new window beside the surface")
+}
+
+// TestTMLOwnerIsNotWhatTheProgramCallsItself runs tml show from unnamed
+// panes whose programs set argv[0] to "prod", and to "prod" plus the real
+// prod pane's id. The label is the opening pane's own id, then a name only
+// when the person or an admin action gave the window one, so neither
+// surface can pass for the pane named prod.
+//
+// Negative control, in NEGATIVE_CONTROLS.md: the label takes the program's
+// name (the surface reads "from pane prod ...").
+func TestTMLOwnerIsNotWhatTheProgramCallsItself(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-tmlargv0"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("new: %v %s", err, out)
+	}
+	newWin := func(args ...string) string {
+		out, err := tuiosCLI(t, base, append(append([]string{"new-window", "-s", sess}, args...), "--json")...)
+		if err != nil {
+			t.Fatalf("new-window %v: %v\n%s", args, err, out)
+		}
+		var w struct {
+			WindowID string `json:"window_id"`
+		}
+		_ = json.Unmarshal([]byte(out), &w)
+		return w.WindowID
+	}
+	prod := newWin("prod")
+	agent := newWin("--grants", "write")
+	agent2 := newWin("--grants", "write")
+	term := startIn(t, base, startOpts{cols: 140, rows: 36, args: []string{"attach", sess}})
+	waitWindowCount(t, term, 4, "four panes")
+	doc := writeTMLDoc(t, base, "a.tml", `<tml version="1" title="Approve deploy"><col pad="1"><text>ARGV0-SURFACE</text></col></tml>`)
+	o1, o2 := filepath.Join(base, "o1"), filepath.Join(base, "o2")
+	line1 := fmt.Sprintf(`bash -c 'exec -a prod bash -c "sleep 3; %s tml show %s --pane --json > %s 2>&1; sleep 60"'`+"\n", tuiosBin, doc, o1)
+	fake := "prod " + prod[:8]
+	line2 := fmt.Sprintf(`bash -c 'exec -a "%s" bash -c "sleep 3; %s tml show %s --pane --json > %s 2>&1; sleep 60"'`+"\n", fake, tuiosBin, doc, o2)
+	for win, line := range map[string]string{agent: line1, agent2: line2} {
+		if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", win, line); err != nil {
+			t.Fatalf("send-text: %v %s", err, out)
+		}
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		_, e1 := os.Stat(o1)
+		_, e2 := os.Stat(o2)
+		if e1 == nil && e2 == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("tml show did not run in the two panes")
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	time.Sleep(time.Second)
+	saveTMLFrame(t, term, "1-argv0")
+	found := 0
+	for _, n := range tmlWindowNames(t, base, sess) {
+		if !strings.HasSuffix(n, "· Approve deploy") {
+			continue
+		}
+		found++
+		if strings.HasPrefix(n, "from pane prod") {
+			t.Errorf("the program's argv[0] named the owner: %q", n)
+		}
+		if !strings.HasPrefix(n, "from pane "+agent[:8]+" · ") && !strings.HasPrefix(n, "from pane "+agent2[:8]+" · ") {
+			t.Errorf("the owner is not the opening pane's id: %q", n)
+		}
+	}
+	if found != 2 {
+		t.Fatalf("found %d surfaces, want 2: %v", found, tmlWindowNames(t, base, sess))
+	}
+}
+
+// TestTMLNewWindowYesCoversOneCommand gives a yes to one new-window command
+// and checks that it covers neither a second command that starts the same
+// way nor the same command in another folder. The question shows each whole.
+//
+// Negative control, in NEGATIVE_CONTROLS.md: the yes keyed on the command cut
+// to 40 cells (the second command ran with no question).
+func TestTMLNewWindowYesCoversOneCommand(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-tmlnw2"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("new: %v %s", err, out)
+	}
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", sess}})
+	waitWindowCount(t, term, 1, "first")
+	ma, mb, mc := filepath.Join(base, "MA"), filepath.Join(base, "MB"), filepath.Join(base, "MC")
+	cwd := filepath.Join(base, "elsewhere")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := writeTMLDoc(t, base, "nw.tml", fmt.Sprintf(`<tml version="1" title="Build report">
+  <state>{"a": {"command": ["sh", "-c", "echo opening the build report viewer now; echo A > %s"]},
+          "b": {"command": ["sh", "-c", "echo opening the build report viewer now; echo B > %s"]},
+          "c": {"command": ["sh", "-c", "echo opening the build report viewer now; echo A > %s"], "cwd": "%s"}}</state>
+  <col pad="1"><text>NW-SURFACE</text>
+    <button key="a" on-press="pane('new-window', state.a)">Open report</button>
+    <button key="b" on-press="pane('new-window', state.b)">Open again</button>
+    <button key="c" on-press="pane('new-window', state.c)">Open elsewhere</button>
+  </col></tml>`, ma, mb, mc, cwd))
+	if out, err := tuiosCLI(t, base, "tml", "show", doc, "-s", sess, "--width", "120", "--height", "20"); err != nil {
+		t.Fatalf("tml show: %v %s", err, out)
+	}
+	if err := term.WaitForText("NW-SURFACE", uiTimeout); err != nil {
+		t.Fatalf("no surface: %v", err)
+	}
+	ask := func(key, wantInQuestion string) {
+		t.Helper()
+		if err := term.SendKeys(key); err != nil {
+			t.Fatalf("send %s: %v", key, err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return screenHas(s, "Let this surface run this in a new window", wantInQuestion, "y yes  n no")
+		}, uiTimeout); err != nil {
+			t.Fatalf("%s asked no question showing %q: %v\n%s", key, wantInQuestion, err, term.Snapshot())
+		}
+	}
+	waitFile := func(path string) {
+		t.Helper()
+		deadline := time.Now().Add(shellTimeout)
+		for {
+			if _, err := os.Stat(path); err == nil {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s was not made after y\n%s", path, term.Snapshot())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	refocus := func() {
+		t.Helper()
+		col, row := tmlLocate(t, term, "NW-SURFACE")
+		mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	ask("a", "echo A > "+ma[:20])
+	saveTMLFrame(t, term, "1-question-a")
+	if err := term.SendKeys("y"); err != nil {
+		t.Fatal(err)
+	}
+	waitFile(ma)
+	refocus()
+
+	ask("b", "echo B >")
+	if _, err := os.Stat(mb); err == nil {
+		t.Fatal("the yes for one command ran another")
+	}
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	ask("c", "in the folder "+cwd[:20])
+	saveTMLFrame(t, term, "2-question-c")
+	if _, err := os.Stat(mc); err == nil {
+		t.Fatal("the yes for one folder ran the command in another")
+	}
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
 }

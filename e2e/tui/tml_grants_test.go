@@ -92,8 +92,12 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 	// its button. It asks the person first, under the surface, and names
 	// the session.
 	col, row := tmlLocate(t, term, "Type into build")
+	// The first click only focuses a surface a pane opened; the second
+	// presses the button.
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
-	if err := term.WaitForText("Type into e2e-tmlgr/build?", uiTimeout); err != nil {
+	time.Sleep(gestureGap)
+	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Type into e2e-tmlgr/build", uiTimeout); err != nil {
 		t.Fatalf("no question before the surface typed: %v\n%s", err, term.Snapshot())
 	}
 	saveTMLFrame(t, term, "1-ask")
@@ -125,7 +129,7 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("send t: %v", err)
 	}
-	if err := term.WaitForText("Type into e2e-tmlgr/build?", uiTimeout); err != nil {
+	if err := term.WaitForText("Type into e2e-tmlgr/build", uiTimeout); err != nil {
 		t.Fatalf("no question on the person's surface: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("y"); err != nil {
@@ -162,7 +166,7 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 
 	// The window names who opened each surface.
 	listed, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
-	if err != nil || !strings.Contains(listed, `"from pane agent `) || !strings.Contains(listed, "· Typer") || !strings.Contains(listed, "from tuios tml show · Typer") {
+	if err != nil || !strings.Contains(listed, " (agent) · Typer") || !strings.Contains(listed, "from tuios tml show · Typer") {
 		t.Fatalf("the windows do not name their owners: %v\n%s", err, listed)
 	}
 

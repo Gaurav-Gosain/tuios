@@ -294,12 +294,13 @@ func (d *Daemon) tmlCallerKey(cs *connState) string {
 	return ""
 }
 
-// tmlOwnerLabel names the caller on cs for the frame: its pane, or the CLI.
+// tmlOwnerLabel names the caller on cs for the frame: its pane, a linked
+// machine, or the CLI.
 //
-// The label is built from what the program in the pane cannot set: the name
-// the window was given, else the program the daemon sees in the foreground,
-// and always the window's short id. Never the pane's title, which the
-// program sets with OSC 2.
+// A pane is named by its window id, which no program chooses, and then by
+// the window's name in brackets when it has one: a name the person gave it,
+// or an admin action, which is the person's level. Never the pane's title or
+// the name of the program in it, which the program sets (OSC 2, argv[0]).
 func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 	if cs.viaLink {
 		return "machine " + tmlLabelText(cmp.Or(cs.linkPeer, "unknown"), 24)
@@ -309,15 +310,12 @@ func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 		if sess := d.sessionHoldingWindow(ref.Window); sess != nil {
 			for _, w := range sess.GetState().Windows {
 				if w.ID == ref.Window {
-					name = w.CustomName
-					if name == "" && w.ForegroundCmd != "tuios" {
-						name = w.ForegroundCmd
-					}
+					name = tmlLabelText(w.CustomName, 24)
 				}
 			}
 		}
-		if name = tmlLabelText(name, 24); name != "" {
-			return "pane " + name + " " + shortID(ref.Window)
+		if name != "" {
+			return "pane " + shortID(ref.Window) + " (" + name + ")"
 		}
 		return "pane " + shortID(ref.Window)
 	}
@@ -331,10 +329,11 @@ func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 const tmlTitleWidth = 48
 
 // tmlLabelText makes text safe for a window name: no control characters, no
-// separator dot, which only the owner part uses, and at most max runes.
+// separator dot or brackets, which only the owner part uses, and at most max
+// runes.
 func tmlLabelText(text string, max int) string {
 	text = strings.Join(strings.Fields(tml.Sanitize(text)), " ")
-	text = strings.ReplaceAll(text, "·", "-")
+	text = strings.NewReplacer("·", "-", "(", "[", ")", "]").Replace(text)
 	if r := []rune(text); len(r) > max {
 		text = string(r[:max-1]) + "…"
 	}
@@ -617,6 +616,9 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 	}
 	// The limits are checked before anything applies, so a refused input
 	// changes nothing.
+	if len(p.Actions) > tmlActionsPerInput {
+		return nil, invalidParam("actions", fmt.Sprintf("one tml-input carries at most %d pane actions", tmlActionsPerInput))
+	}
 	if len(p.Events) > tmlEventsPerInput {
 		return nil, invalidParam("events", fmt.Sprintf("one tml-input carries at most %d events", tmlEventsPerInput))
 	}
@@ -1084,8 +1086,12 @@ func (d *Daemon) verbTMLValidate(cs *connState, params json.RawMessage) (any, *v
 	return map[string]any{"type": "tml_valid", "warnings": problems}, nil
 }
 
-// tmlEventsPerInput bounds the emits one tml-input carries.
-const tmlEventsPerInput = 16
+// tmlEventsPerInput bounds the emits one tml-input carries, and
+// tmlActionsPerInput its pane actions: one key or click runs a few.
+const (
+	tmlEventsPerInput  = 16
+	tmlActionsPerInput = 4
+)
 
 // tmlReach refuses a caller that may not reach a surface's session: a pane
 // outside the session and its fan group, a pane without the read grant for

@@ -7665,3 +7665,13 @@ The test reads the daemon's peak memory (VmHWM), not its resident set at the end
 | A pane's popup takes the focus | "the person's typing did not reach the pane they were in" | **caught** |
 | new-window runs without the question | "no question before a new window" | **caught** |
 | The pane that opened a surface may not read it without read | "the pane that opened a surface could not read it" | **caught** |
+
+### The owner by window id, one command per yes, focus on the first click
+
+`TestTMLOwnerIsNotWhatTheProgramCallsItself` and `TestTMLNewWindowYesCoversOneCommand` in `tml_label_test.go`, and the click step of `TestTMLOwnerComesFirstAndCannotBeForged`. Run on 2026-10-20, the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The owner named by the program in the pane (argv[0]) | "the owner is not the opening pane's id" ("from pane eac063df (prod c3c92458) · Approve deploy") | **caught** |
+| The new-window yes keyed on the command cut to 40 cells | "b asked no question" (the second command ran on the first yes) | **caught** |
+| The first click on a pane's popup presses its button | "the first click on a pane's popup pressed its button" | **caught** |

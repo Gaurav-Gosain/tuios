@@ -80,11 +80,14 @@ op that no longer matches is refused: read with `tml get`, then patch again.
   Opening, changing and closing need the `write` grant.
 - A `pane()` action runs with the grants of the pane that opened the surface,
   never the person's. The first `send-text` into a pane, and every
-  `new-window`, asks the person (y/n), naming the session and the command.
+  `new-window`, asks the person (y/n). Name the pane by its name or id, not
+  a number. A yes covers the pane, not the text: your grants decide what may
+  be typed there.
   A target that holds more than your pane is refused, as your own `send-text`
   would be.
-- The window name says who opened it, first: "from pane api 3f2a91c0 ·
-  Deploy". The document cannot change that.
+- The window name says who opened it, first: "from pane 3f2a91c0 (api) ·
+  Deploy", the pane's id and the name the person gave it. The document and
+  your program's name cannot change that.
 - A surface your pane opens does not take the focus. The person clicks it.
 - 100 patches a second per surface; past that, `rate_limited`. Put many
   operations in one patch.

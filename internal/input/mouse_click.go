@@ -389,6 +389,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Forward mouse events to terminal if in terminal mode and window has mouse tracking
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode {
 		clickedWindow := o.Windows[clickedWindowIndex]
+		// The first click on a TML window that does not have the focus
+		// only focuses it. A popup a pane opened under the pointer must not
+		// take the click the person meant for what was there before.
+		if o.DrawsTML(clickedWindow) && o.FocusedWindow != clickedWindowIndex {
+			o.FocusWindowFromClick(clickedWindowIndex, X, Y)
+			return o, nil
+		}
 		// Forward mouse only when app explicitly requested mouse tracking (DECSET 1000-1003)
 		if clickedWindow.Terminal != nil && clickedWindow.Terminal.HasMouseMode() {
 			// Convert to terminal-relative coordinates (0-based)
