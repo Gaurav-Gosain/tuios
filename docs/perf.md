@@ -3069,6 +3069,16 @@ The change measured 40,960,162 and 38,310,546, so it adds 208,896 and 187,440
 bytes. No third-party dependency was added. The new budgets leave 4,198 and
 4,204 bytes of room.
 
+The linux/amd64 budget went to 40,972,552 when a picture sent as a file
+started to read its pixel size from the PNG header, a placement started to
+keep its cell box through an a=t re-send, and a new pane in a detached session
+started to take the cell of a client attached elsewhere (#906). The build
+before it measured 40,960,162 and 38,310,546 bytes (Go 1.26.9, a clean clone,
+as CI builds it). The change measured 40,968,354 and 38,310,754, so it adds
+8,192 and 208 bytes. No third-party dependency was added. darwin/arm64 stays
+inside its budget with 3,996 bytes of room. The new linux/amd64 budget leaves
+4,198 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
