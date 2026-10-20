@@ -7,6 +7,8 @@ package sketch
 
 import (
 	"encoding/json"
+	"io"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -283,6 +285,39 @@ func findDirectives(s string) []directive {
 	return out
 }
 
+// parseJSON is JSON.parse. encoding/json rejects a number too large for a float64, such as
+// 1e999, where JavaScript reads it as Infinity, and the whole directive was lost.
+func parseJSON(text string) (any, bool) {
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	var args any
+	if dec.Decode(&args) != nil {
+		return nil, false
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, false
+	}
+	return numbers(args), true
+}
+
+// numbers turns each json.Number into a float64, out of range ones into an infinity or a zero.
+func numbers(v any) any {
+	switch v := v.(type) {
+	case json.Number:
+		f, _ := strconv.ParseFloat(string(v), 64)
+		return f
+	case map[string]any:
+		for k, e := range v {
+			v[k] = numbers(e)
+		}
+	case []any:
+		for i, e := range v {
+			v[i] = numbers(e)
+		}
+	}
+	return v
+}
+
 func directives(text string, config Config) string {
 	if !strings.Contains(text, "%%{") {
 		return text
@@ -293,9 +328,8 @@ func directives(text string, config Config) string {
 		if typ == "wrap" {
 			config["wrap"] = true
 		} else if (typ == "init" || typ == "initialize") && match.args != "" {
-			var args any
 			// Mermaid ignores an init directive whose body is not valid JSON.
-			if json.Unmarshal([]byte(js.Trim(match.args)), &args) == nil {
+			if args, ok := parseJSON(js.Trim(match.args)); ok {
 				if m, ok := args.(map[string]any); ok {
 					merge(config, m)
 				}
