@@ -8,11 +8,11 @@
 package flowchart
 
 import (
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/util"
 )
 
@@ -55,7 +55,7 @@ var NODE_CHAR = func() [128]uint8 {
 const sp = `[` + js.S + `]`
 
 // sticky compiles a pattern that pele runs with the y flag: it must match at the position.
-func sticky(pattern string) *regexp.Regexp { return regexp.MustCompile(`^(?:` + pattern + `)`) }
+func sticky(pattern string) *lazyre.Regexp { return lazyre.New(`^(?:` + pattern + `)`) }
 
 var (
 	RE_ACC_TITLE    = sticky(`accTitle` + sp + `*:` + sp + `*`)
@@ -67,7 +67,7 @@ var (
 	RE_DIR          = sticky(sp + `*(?:LR|RL|TB|BT|TD|BR)\b`)
 	RE_DIR_SYM      = sticky(sp + `*[<>^]`)
 	RE_DIR_V        = sticky(sp + `*v\b`)
-	RE_DIRECTION    = [5]*regexp.Regexp{
+	RE_DIRECTION    = [5]*lazyre.Regexp{
 		sticky(js.Dot + `*direction` + sp + `+TB[^\n]*`),
 		sticky(js.Dot + `*direction` + sp + `+BT[^\n]*`),
 		sticky(js.Dot + `*direction` + sp + `+RL[^\n]*`),
@@ -85,7 +85,7 @@ var (
 	// [^\S\n\r]: whitespace other than \n and \r.
 	RE_SPACE      = sticky(`[\t\v\f \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]+`)
 	RE_EMPTY_CALL = sticky(`\(` + sp + `*\)`)
-	RE_BR         = regexp.MustCompile(`\n` + sp + `*`)
+	RE_BR         = lazyre.New(`\n` + sp + `*`)
 )
 
 func tokenize(src string) Tokens {
@@ -152,7 +152,7 @@ func tokenize(src string) Tokens {
 			stack = stack[:len(stack)-1]
 		}
 	}
-	at := func(re *regexp.Regexp, q int) int {
+	at := func(re *lazyre.Regexp, q int) int {
 		if q > n {
 			return -1
 		}
@@ -642,7 +642,7 @@ func tokenize(src string) Tokens {
 		return false
 	}
 
-	edgeText := func(c rune, linkRe *regexp.Regexp, a, b rune) bool {
+	edgeText := func(c rune, linkRe *lazyre.Regexp, a, b rune) bool {
 		if c == 34 {
 			quote()
 			return true

@@ -3,10 +3,10 @@
 package flowchart
 
 import (
-	"regexp"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/types"
 )
 
@@ -37,7 +37,7 @@ type frame struct {
 const TEXT_TOKENS = "'UNICODE_TEXT', 'TEXT', 'TAGSTART'"
 
 // Mermaid trims whitespace between a closing brace and the end of its line before parsing.
-var RE_BRACE_TRAIL = regexp.MustCompile(`\}[` + js.S + `]*\n`)
+var RE_BRACE_TRAIL = lazyre.New(`\}[` + js.S + `]*\n`)
 
 var DIRECTIONS = [...]string{"TB", "BT", "RL", "LR", "TD"}
 

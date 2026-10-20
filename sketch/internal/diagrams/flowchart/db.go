@@ -3,12 +3,12 @@
 package flowchart
 
 import (
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/types"
 	"tuios.dev/sketch/internal/util"
 )
@@ -549,7 +549,7 @@ func (db *FlowDb) SetClickEvent(ids string) {
 	db.SetClass(ids, "clickable")
 }
 
-var reDescrIndent = regexp.MustCompile(`\n[` + js.S + `]+`)
+var reDescrIndent = lazyre.New(`\n[` + js.S + `]+`)
 
 func (db *FlowDb) SetAccTitle(text string) {
 	db.AccTitle = js.TrimStart(text)

@@ -9,11 +9,11 @@ package gantt
 
 import (
 	"math"
-	"regexp"
 	"strings"
 	"time"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 // The parts of dayjs 1.11 that Mermaid's gantt code relies on, with the plugins it loads (custom parse format,
@@ -153,8 +153,8 @@ func isoWeek(date js.Date) float64 {
 }
 
 var (
-	RE_ADVANCED = regexp.MustCompile(`\[([^\]]+)\]|Q|wo|ww|w|WW|W|zzz|z|gggg|GGGG|Do|X|x|k{1,2}|S`)
-	RE_FORMAT   = regexp.MustCompile(`\[([^\]]+)\]|YYYY|YY|M{1,4}|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|SSS`)
+	RE_ADVANCED = lazyre.New(`\[([^\]]+)\]|Q|wo|ww|w|WW|W|zzz|z|gggg|GGGG|Do|X|x|k{1,2}|S`)
+	RE_FORMAT   = lazyre.New(`\[([^\]]+)\]|YYYY|YY|M{1,4}|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|SSS`)
 )
 
 const DEFAULT_FORMAT = "YYYY-MM-DDTHH:mm:ssZ"
@@ -335,26 +335,26 @@ const (
 // Step is a literal, or a pattern and the reader of what it matches.
 type Step struct {
 	literal string
-	re      *regexp.Regexp
+	re      *lazyre.Regexp
 	read    int
 }
 
 var (
-	RE_TOKENS    = regexp.MustCompile(`(\[[^\[]*\])|([-_:/.,()` + js.S + `]+)|(A|a|Q|YYYY|YY?|ww?|MM?M?M?|Do|DD?|hh?|HH?|mm?|ss?|S{1,3}|z|ZZ?)`)
-	RE_LITERAL   = regexp.MustCompile(`\[[^\]]+\]`)
-	MATCH_1      = regexp.MustCompile(`\d`)
-	MATCH_2      = regexp.MustCompile(`\d\d`)
-	MATCH_3      = regexp.MustCompile(`\d{3}`)
-	MATCH_4      = regexp.MustCompile(`\d{4}`)
-	MATCH_1_TO_2 = regexp.MustCompile(`\d\d?`)
-	MATCH_SIGNED = regexp.MustCompile(`[+-]?\d+`)
-	MATCH_OFFSET = regexp.MustCompile(`[+-]\d\d:?(\d\d)?|Z`)
-	MATCH_WORD   = regexp.MustCompile(`\d*[^-_:/,()` + js.S + `\d]+`)
-	RE_DIGIT_RUN = regexp.MustCompile(`\d+`)
+	RE_TOKENS    = lazyre.New(`(\[[^\[]*\])|([-_:/.,()` + js.S + `]+)|(A|a|Q|YYYY|YY?|ww?|MM?M?M?|Do|DD?|hh?|HH?|mm?|ss?|S{1,3}|z|ZZ?)`)
+	RE_LITERAL   = lazyre.New(`\[[^\]]+\]`)
+	MATCH_1      = lazyre.New(`\d`)
+	MATCH_2      = lazyre.New(`\d\d`)
+	MATCH_3      = lazyre.New(`\d{3}`)
+	MATCH_4      = lazyre.New(`\d{4}`)
+	MATCH_1_TO_2 = lazyre.New(`\d\d?`)
+	MATCH_SIGNED = lazyre.New(`[+-]?\d+`)
+	MATCH_OFFSET = lazyre.New(`[+-]\d\d:?(\d\d)?|Z`)
+	MATCH_WORD   = lazyre.New(`\d*[^-_:/,()` + js.S + `\d]+`)
+	RE_DIGIT_RUN = lazyre.New(`\d+`)
 )
 
 // READERS is READERS.get(token): nil when no reader takes the token.
-func READERS(token string) (*regexp.Regexp, int) {
+func READERS(token string) (*lazyre.Regexp, int) {
 	switch token {
 	case "A":
 		return MATCH_WORD, rAfternoonUpper
@@ -515,7 +515,7 @@ type formatCache struct {
 	compiledSteps  []Step
 }
 
-var reLocalized = regexp.MustCompile(`[Ll]`)
+var reLocalized = lazyre.New(`[Ll]`)
 
 func (c *formatCache) compile(template string) []Step {
 	if c.compiled && template == c.compiledFormat {

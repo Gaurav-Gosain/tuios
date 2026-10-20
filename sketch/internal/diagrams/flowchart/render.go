@@ -4,12 +4,12 @@ package flowchart
 
 import (
 	"math"
-	"regexp"
 	"strings"
 
 	"tuios.dev/sketch/internal/diagrams/common"
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/layout"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/svg"
 	"tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/types"
@@ -78,10 +78,10 @@ func renderFlowchart(db *FlowDb, config types.Config, options types.RenderOption
 }
 
 var (
-	reDefaultClass = regexp.MustCompile(`^default[` + js.S + `]?`)
-	reInternalLink = regexp.MustCompile(` internal-link(?: |$)`)
-	reEdgeClasses  = regexp.MustCompile(`edge-thickness-normal|edge-pattern-solid|flowchart-link`)
-	reStep         = regexp.MustCompile(`^step`)
+	reDefaultClass = lazyre.New(`^default[` + js.S + `]?`)
+	reInternalLink = lazyre.New(` internal-link(?: |$)`)
+	reEdgeClasses  = lazyre.New(`edge-thickness-normal|edge-pattern-solid|flowchart-link`)
+	reStep         = lazyre.New(`^step`)
 )
 
 // draw: `turned` draws a flowchart that runs across as one that runs down. `tight` sets nodes closer together.

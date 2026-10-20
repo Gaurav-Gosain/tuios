@@ -8,12 +8,12 @@ package util
 import (
 	"math"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/svg"
 	"tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/types"
@@ -22,14 +22,14 @@ import (
 const BLANK = "about:blank"
 
 var (
-	reInvalidProtocol = regexp.MustCompile(`(?im)^([^\w]*)(javascript|data|vbscript)`)
-	reHTMLEntities    = regexp.MustCompile(`&#(\w+)(;)?`)
-	reHTMLCtrlEntity  = regexp.MustCompile(`(?i)&(newline|tab);`)
-	reCtrl            = regexp.MustCompile(`[\x{0}-\x{1F}\x{7F}-\x{9F}\x{2000}-\x{200D}\x{FEFF}]`)
-	reScheme          = regexp.MustCompile(`(?im)^` + js.Dot + `+(:|&colon;)`)
-	reWSEscape        = regexp.MustCompile(`(\\|%5[cC])((%(6[eE]|72|74))|[nrt])`)
-	reSchemeName      = regexp.MustCompile(`(?i)^([a-z][a-z0-9+.-]*):`)
-	reNetworkPath     = regexp.MustCompile(`^[\\/]{2}`)
+	reInvalidProtocol = lazyre.New(`(?im)^([^\w]*)(javascript|data|vbscript)`)
+	reHTMLEntities    = lazyre.New(`&#(\w+)(;)?`)
+	reHTMLCtrlEntity  = lazyre.New(`(?i)&(newline|tab);`)
+	reCtrl            = lazyre.New(`[\x{0}-\x{1F}\x{7F}-\x{9F}\x{2000}-\x{200D}\x{FEFF}]`)
+	reScheme          = lazyre.New(`(?im)^` + js.Dot + `+(:|&colon;)`)
+	reWSEscape        = lazyre.New(`(\\|%5[cC])((%(6[eE]|72|74))|[nrt])`)
+	reSchemeName      = lazyre.New(`(?i)^([a-z][a-z0-9+.-]*):`)
+	reNetworkPath     = lazyre.New(`^[\\/]{2}`)
 )
 
 // decodeURIComponent, or false where JavaScript throws a URIError.

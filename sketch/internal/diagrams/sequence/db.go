@@ -4,11 +4,11 @@ package sequence
 
 import (
 	"encoding/json"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/types"
 	"tuios.dev/sketch/internal/util"
 )
@@ -21,14 +21,14 @@ type SeqDbOptions struct {
 }
 
 var (
-	reWrap           = regexp.MustCompile(`^:?wrap:`)
-	reNowrap         = regexp.MustCompile(`^:?nowrap:`)
-	reWrapPrefix     = regexp.MustCompile(`^:?(?:no)?wrap:`)
-	reBoxFunction    = regexp.MustCompile(`^(?:rgba?|hsla?)[` + js.S + `]*\(`)
-	reLineTerminator = regexp.MustCompile(`[\r\x{2028}\x{2029}]`)
-	reWord           = regexp.MustCompile(`^\w*`)
-	reLeadSpace      = regexp.MustCompile(`^[` + js.S + `]+`)
-	reDescrIndent    = regexp.MustCompile(`\n[` + js.S + `]+`)
+	reWrap           = lazyre.New(`^:?wrap:`)
+	reNowrap         = lazyre.New(`^:?nowrap:`)
+	reWrapPrefix     = lazyre.New(`^:?(?:no)?wrap:`)
+	reBoxFunction    = lazyre.New(`^(?:rgba?|hsla?)[` + js.S + `]*\(`)
+	reLineTerminator = lazyre.New(`[\r\x{2028}\x{2029}]`)
+	reWord           = lazyre.New(`^\w*`)
+	reLeadSpace      = lazyre.New(`^[` + js.S + `]+`)
+	reDescrIndent    = lazyre.New(`\n[` + js.S + `]+`)
 )
 
 func failSeq(message string) {

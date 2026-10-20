@@ -3,11 +3,12 @@
 package text
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 const named_ = "amp:38,lt:60,gt:62,quot:34,apos:39,nbsp:160,iexcl:161,cent:162,pound:163,curren:164,yen:165,sect:167," +
@@ -55,7 +56,7 @@ func codePoint(n float64, fallback string) string {
 	return fallback
 }
 
-var reEntity = regexp.MustCompile(`&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(\w+));`)
+var reEntity = lazyre.New(`&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(\w+));`)
 
 const (
 	OPEN  = "ﬂ°"

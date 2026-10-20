@@ -4,10 +4,10 @@ package svg
 
 import (
 	"math"
-	"regexp"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/types"
 )
 
@@ -54,9 +54,9 @@ var textProps = map[string]bool{
 }
 
 var (
-	reUnsafe    = regexp.MustCompile(`(?i)url[` + js.S + `]*\(|expression[` + js.S + `]*\(|javascript:|[<>{};\\]|@import|image-set|/\*`)
-	reImportant = regexp.MustCompile(`(?i)!important`)
-	rePx        = regexp.MustCompile(`^[\d.]+(px)?$`)
+	reUnsafe    = lazyre.New(`(?i)url[` + js.S + `]*\(|expression[` + js.S + `]*\(|javascript:|[<>{};\\]|@import|image-set|/\*`)
+	reImportant = lazyre.New(`(?i)!important`)
+	rePx        = lazyre.New(`^[\d.]+(px)?$`)
 )
 
 type ResolvedStyle struct {
@@ -158,7 +158,7 @@ func ResolveStyle(declarations []string) ResolvedStyle {
 	return out
 }
 
-var reClass = regexp.MustCompile(`[^\w-]+`)
+var reClass = lazyre.New(`[^\w-]+`)
 
 func ClassNames(raw string) string {
 	cleaned := js.Trim(reClass.ReplaceAllString(raw, " "))

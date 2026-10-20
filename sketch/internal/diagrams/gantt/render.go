@@ -7,12 +7,12 @@ package gantt
 
 import (
 	"math"
-	"regexp"
 	"slices"
 	"strings"
 
 	"tuios.dev/sketch/internal/diagrams/common"
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/svg"
 	"tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/types"
@@ -26,8 +26,8 @@ const (
 )
 
 var (
-	RE_BREAK       = regexp.MustCompile(`(?i)<br[` + js.S + `]*/?>`)
-	reNewlineSpace = regexp.MustCompile(`\n[` + js.S + `]+`)
+	RE_BREAK       = lazyre.New(`(?i)<br[` + js.S + `]*/?>`)
+	reNewlineSpace = lazyre.New(`\n[` + js.S + `]+`)
 )
 
 func ganttConfig(config types.Config, key string) any {

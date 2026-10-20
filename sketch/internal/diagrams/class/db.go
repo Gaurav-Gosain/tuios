@@ -3,11 +3,11 @@
 package class
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/util"
 )
@@ -28,7 +28,7 @@ const (
 // Mermaid looks up ids that start with a digit under this prefix, so they never match a class.
 const DOM_ID_PREFIX = "classId-"
 
-var reDescrIndent = regexp.MustCompile(`\n[` + js.S + `]+`)
+var reDescrIndent = lazyre.New(`\n[` + js.S + `]+`)
 
 func splitName(id string) (className string, typ string) {
 	at := strings.IndexByte(id, '~')

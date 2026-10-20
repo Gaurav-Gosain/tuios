@@ -8,11 +8,11 @@ package util
 import (
 	"errors"
 	"math"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 // A small YAML reader covering what Mermaid feeds to js-yaml with the JSON schema:
@@ -35,7 +35,7 @@ type reader struct {
 	i     int
 }
 
-var reCRLFYaml = regexp.MustCompile(`\r\n?`)
+var reCRLFYaml = lazyre.New(`\r\n?`)
 
 func newReader(src string) *reader {
 	return &reader{lines: strings.Split(reCRLFYaml.ReplaceAllString(src, "\n"), "\n")}
@@ -64,20 +64,20 @@ func (r *reader) indent() int {
 }
 
 var (
-	reInt         = regexp.MustCompile(`^[-+]?(?:0|[1-9][0-9]*)$`)
-	reHex         = regexp.MustCompile(`^[-+]?0x[0-9a-fA-F]+$`)
-	reOct         = regexp.MustCompile(`^[-+]?0o[0-7]+$`)
-	reBin         = regexp.MustCompile(`^[-+]?0b[01]+$`)
-	reFloat       = regexp.MustCompile(`^[-+]?(?:[0-9][0-9]*(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$`)
-	reKeyStart    = regexp.MustCompile(`[` + js.S + `#:,\[\]{}&*!|>'"%@` + "`" + `]`)
-	reInf         = regexp.MustCompile(`^[-+]?\.(?:inf|Inf|INF)$`)
-	reNaN         = regexp.MustCompile(`^\.(?:nan|NaN|NAN)$`)
-	reFlowEnd     = regexp.MustCompile(`[` + js.S + `,\[\]{}]`)
-	reDigit19     = regexp.MustCompile(`[1-9]`)
-	reBlockHeader = regexp.MustCompile(`^[|>][-+0-9]*[` + js.S + `]*(?:#` + js.Dot + `*)?$`)
-	reLeadBlank   = regexp.MustCompile(`^[ \t]`)
-	reEscNL       = regexp.MustCompile(`\\\n[ \t]*`)
-	reNewlines    = regexp.MustCompile(`\n+`)
+	reInt         = lazyre.New(`^[-+]?(?:0|[1-9][0-9]*)$`)
+	reHex         = lazyre.New(`^[-+]?0x[0-9a-fA-F]+$`)
+	reOct         = lazyre.New(`^[-+]?0o[0-7]+$`)
+	reBin         = lazyre.New(`^[-+]?0b[01]+$`)
+	reFloat       = lazyre.New(`^[-+]?(?:[0-9][0-9]*(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$`)
+	reKeyStart    = lazyre.New(`[` + js.S + `#:,\[\]{}&*!|>'"%@` + "`" + `]`)
+	reInf         = lazyre.New(`^[-+]?\.(?:inf|Inf|INF)$`)
+	reNaN         = lazyre.New(`^\.(?:nan|NaN|NAN)$`)
+	reFlowEnd     = lazyre.New(`[` + js.S + `,\[\]{}]`)
+	reDigit19     = lazyre.New(`[1-9]`)
+	reBlockHeader = lazyre.New(`^[|>][-+0-9]*[` + js.S + `]*(?:#` + js.Dot + `*)?$`)
+	reLeadBlank   = lazyre.New(`^[ \t]`)
+	reEscNL       = lazyre.New(`\\\n[ \t]*`)
+	reNewlines    = lazyre.New(`\n+`)
 )
 
 // at is the byte of s at i, or 0 past its end, where pele reads undefined.

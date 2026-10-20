@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 // A list of font names, quoted or not, and nothing that could end the
@@ -19,7 +19,7 @@ import (
 // src/svg/theme.ts; internal/svg uses it too.
 const family = `(?:"[^"'\\\n<>{}();:@]*"|'[^"'\\\n<>{}();:@]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ .-]*)`
 
-var reFamilies = regexp.MustCompile(`^[` + js.S + `]*` + family + `(?:[` + js.S + `]*,[` + js.S + `]*` + family + `)*[` + js.S + `]*$`)
+var reFamilies = lazyre.New(`^[` + js.S + `]*` + family + `(?:[` + js.S + `]*,[` + js.S + `]*` + family + `)*[` + js.S + `]*$`)
 
 // SafeFamilies reports whether list is a font family list that cannot end
 // the declaration it is put in.

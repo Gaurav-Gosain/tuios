@@ -4,11 +4,11 @@ package text
 
 import (
 	"math"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 type Span struct {
@@ -31,12 +31,12 @@ type Label struct {
 const LINE_HEIGHT = 1.5
 
 var (
-	reBreak  = regexp.MustCompile(`(?i)<br[` + js.S + `]*/?>|\\n|\n`)
-	reTag    = regexp.MustCompile(`^</?([a-zA-Z][\w-]*)(?:[` + js.S + `][^<>]*)?/?>`)
-	reIcon   = regexp.MustCompile(`(fa[bklrs]?):fa-([\w-]+)`)
-	reMarkup = regexp.MustCompile(`[<\\\n*_]|fa[bklrs]?:fa-`)
-	rePieces = regexp.MustCompile(`[` + js.S + `]*[^` + js.S + `]+[` + js.S + `]*|[` + js.S + `]+`)
-	reCRLF   = regexp.MustCompile(`\r\n?`)
+	reBreak  = lazyre.New(`(?i)<br[` + js.S + `]*/?>|\\n|\n`)
+	reTag    = lazyre.New(`^</?([a-zA-Z][\w-]*)(?:[` + js.S + `][^<>]*)?/?>`)
+	reIcon   = lazyre.New(`(fa[bklrs]?):fa-([\w-]+)`)
+	reMarkup = lazyre.New(`[<\\\n*_]|fa[bklrs]?:fa-`)
+	rePieces = lazyre.New(`[` + js.S + `]*[^` + js.S + `]+[` + js.S + `]*|[` + js.S + `]+`)
+	reCRLF   = lazyre.New(`\r\n?`)
 )
 
 var EMPTY = Label{}

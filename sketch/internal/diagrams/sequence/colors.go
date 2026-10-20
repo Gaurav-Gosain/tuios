@@ -3,11 +3,11 @@
 package sequence
 
 import (
-	"regexp"
 	"strings"
 	"sync"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 // Mermaid asks the browser whether the first word of a box title is a color. Pele has no browser,
@@ -20,7 +20,7 @@ var (
 	keywords     map[string]bool
 )
 
-var reTerm = regexp.MustCompile(`(?i)^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(%|deg|grad|rad|turn)?$`)
+var reTerm = lazyre.New(`(?i)^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(%|deg|grad|rad|turn)?$`)
 
 const (
 	kBad = iota
@@ -52,7 +52,7 @@ func isAlpha(term string, modern bool) bool {
 	return k == kNumber || k == kPercent || (modern && k == kNone)
 }
 
-var reSpaces = regexp.MustCompile(`[` + js.S + `]+`)
+var reSpaces = lazyre.New(`[` + js.S + `]+`)
 
 func isFunction(color string) bool {
 	hsl := strings.HasPrefix(color, "hsl")

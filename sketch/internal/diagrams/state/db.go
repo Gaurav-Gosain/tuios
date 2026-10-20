@@ -3,11 +3,11 @@
 package state
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 )
 
 // Mermaid's StateDB in its version 2 form, which is what Mermaid uses for both `stateDiagram`
@@ -274,7 +274,7 @@ func (db *StateDb) setAccTitle(text string) {
 	db.AccTitle = js.TrimStart(text)
 }
 
-var reAccDescr = regexp.MustCompile(`\n[` + js.S + `]+`)
+var reAccDescr = lazyre.New(`\n[` + js.S + `]+`)
 
 func (db *StateDb) setAccDescription(text string) {
 	db.AccDescr = reAccDescr.ReplaceAllString(text, "\n")
