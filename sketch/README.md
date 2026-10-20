@@ -52,9 +52,12 @@ v1.7.0 does.
 
 ## Text
 
-`tuios.dev/sketch/text` draws flowcharts and sequence diagrams with box-drawing
-characters, for a terminal that shows no pictures. It takes the layout that
-sketch works out for the SVG and maps it to cells. The labels stay real text.
+`tuios.dev/sketch/text` draws flowcharts, sequence, state, class and ER
+diagrams, pie charts, mindmaps and gantt charts with box-drawing characters,
+for a terminal that shows no pictures. For a graph it takes the layout that
+sketch works out for the SVG and maps it to cells. A pie chart is a bar for
+each slice, a mindmap is a tree, and a gantt chart is bars on a date axis. The
+labels stay real text.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

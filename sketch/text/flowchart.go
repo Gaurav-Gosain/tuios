@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"tuios.dev/sketch"
+	"tuios.dev/sketch/internal/types"
 )
 
 // rect is a box in cells, edges included.
@@ -21,11 +22,50 @@ var roundShapes = map[string]bool{"rounded": true, "stadium": true, "circle": tr
 var pointShapes = map[string]bool{"diam": true, "hex": true}
 var dotShapes = map[string]bool{"sm-circ": true, "f-circ": true, "fr-circ": true, "cross-circ": true}
 
-func scaleOf(l *sketch.Layout) (sx, sy float64) {
+// graphKind is what a diagram type changes in the drawing of a graph of
+// boxes and edges. The zero value draws a flowchart.
+type graphKind struct {
+	// size gives the cells a node's box needs, borders included. ok false
+	// keeps the flowchart rule.
+	size func(n *types.GeoNode) (w, h int, ok bool)
+	// node draws a node; false leaves it to drawNode.
+	node func(c *canvas, b rect, n *types.GeoNode) bool
+	// head draws the marker at an edge end; false leaves it to head.
+	head func(c *canvas, at point, side int, kind string) bool
+	// endText is the text beside an edge end. nil gives StartText and EndText.
+	endText func(e *types.GeoEdge, last bool) string
+	// frame says whether to draw a group's frame and title, and with what line.
+	frame func(n *types.GeoNode) (draw bool, weight uint8, title bool)
+}
+
+func (k *graphKind) sizeOf(n *types.GeoNode) (w, h int, ok bool) {
+	if k.size == nil || n.Group {
+		return 0, 0, false
+	}
+	return k.size(n)
+}
+
+func (k *graphKind) textAt(e *types.GeoEdge, last bool) string {
+	if k.endText != nil {
+		return k.endText(e, last)
+	}
+	if last {
+		return e.EndText
+	}
+	return e.StartText
+}
+
+func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 	sx = 1.0 / 9
 	sy = 0
-	for _, n := range l.Nodes {
+	for i := range l.Nodes {
+		n := &l.Nodes[i]
 		if n.W <= 0 || n.H <= 0 {
+			continue
+		}
+		// A dot or a bar takes the cells it takes, whatever the scale. The
+		// flowchart keeps its rule, so that its drawings stay as they are.
+		if kind.size != nil && (dotShapes[n.Shape] || n.Shape == "fork") {
 			continue
 		}
 		need := float64(widest(n.Label) + 4)
@@ -35,9 +75,13 @@ func scaleOf(l *sketch.Layout) (sx, sy float64) {
 		if n.Group {
 			need = float64(widest(n.Label) + 6)
 		}
+		tall := float64(len(n.Label) + 2)
+		if w, h, ok := kind.sizeOf(n); ok {
+			need, tall = float64(w), float64(h)
+		}
 		sx = math.Max(sx, need/n.W)
 		if !n.Group {
-			sy = math.Max(sy, float64(len(n.Label)+2)/n.H)
+			sy = math.Max(sy, tall/n.H)
 		}
 	}
 	// A cell is about twice as tall as it is wide.
@@ -46,7 +90,13 @@ func scaleOf(l *sketch.Layout) (sx, sy float64) {
 }
 
 func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
-	sx, sy := scaleOf(l)
+	return drawGraph(l, opt, &graphKind{})
+}
+
+// drawGraph draws boxes joined by edges: a flowchart, or a state, class or ER
+// diagram, as kind says.
+func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) {
+	sx, sy := scaleOf(l, kind)
 	col := func(x float64) int { return int(math.Round(x * sx)) }
 	row := func(y float64) int { return int(math.Round(y * sy)) }
 
@@ -80,12 +130,7 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 		return 1
 	}
 	// The ends on each side of each node, in the order pele spread them.
-	type end struct {
-		edge int
-		last bool
-		at   float64
-	}
-	ends := map[[2]int][]end{}
+	ends := map[[2]int][]graphEnd{}
 	for k, e := range l.Edges {
 		if e.From == e.To || len(e.Route) < 6 || e.Stroke == "invisible" {
 			continue
@@ -103,7 +148,7 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 				at = f.y
 			}
 			key := [2]int{f.node, s}
-			ends[key] = append(ends[key], end{k, f.last, at})
+			ends[key] = append(ends[key], graphEnd{k, f.last, at, width(kind.textAt(&l.Edges[k], f.last))})
 		}
 	}
 
@@ -119,10 +164,19 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 		// As tall as the text needs, or as the ends on a side need: a taller
 		// box only spreads the drawing.
 		h := len(n.Label) + 2
-		for _, sd := range []int{1, 3} {
-			h = max(h, len(ends[[2]int{i, sd}])+2)
+		sized := false
+		if kw, kh, ok := kind.sizeOf(&l.Nodes[i]); ok {
+			w, h, sized = max(col(n.W), kw), kh, true
 		}
-		if dotShapes[n.Shape] || n.Shape == "fork" {
+		for _, sd := range []int{1, 3} {
+			h = max(h, span(ends[[2]int{i, sd}], true)+2)
+		}
+		for _, sd := range []int{0, 2} {
+			if list := ends[[2]int{i, sd}]; span(list, false) > len(list) {
+				w = max(w, span(list, false)+2)
+			}
+		}
+		if !sized && (dotShapes[n.Shape] || n.Shape == "fork") {
 			w, h = 3, 1
 			if n.Shape == "fork" {
 				w = max(3, col(n.W))
@@ -187,7 +241,7 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 	for key, list := range ends {
 		node, sd := key[0], key[1]
 		b := boxes[node]
-		slices.SortStableFunc(list, func(a, b end) int {
+		slices.SortStableFunc(list, func(a, b graphEnd) int {
 			switch {
 			case a.at < b.at:
 				return -1
@@ -203,13 +257,15 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 			scale = row
 		}
 		prev := lo - 1
+		gap := 1
 		for k, e := range list {
 			want := min(max(scale(e.at), lo), hi)
 			// Keep order and room for the ends still to come.
-			want = max(want, prev+1)
-			want = min(want, hi-(len(list)-1-k))
+			want = max(want, prev+gap)
+			want = min(want, hi-room(list[k:], sd == 1 || sd == 3))
 			want = max(want, lo)
 			prev = want
+			gap = endRoom(e.text, sd == 1 || sd == 3)
 			var at point
 			if sd == 1 || sd == 3 {
 				at = outside(b, sd, point{b.x0, want})
@@ -235,11 +291,12 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 		lx, ly     int
 		self       bool
 		from       int
+		edge       int
 		invisible  bool
 	}
 	var paths []edgePath
 	for ei, e := range l.Edges {
-		p := edgePath{start: e.Start, end: e.End, label: e.Label, lx: col(e.LabelX), ly: row(e.LabelY), from: e.From}
+		p := edgePath{start: e.Start, end: e.End, label: e.Label, lx: col(e.LabelX), ly: row(e.LabelY), from: e.From, edge: ei}
 		switch e.Stroke {
 		case "thick":
 			p.weight = heavy
@@ -300,11 +357,19 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 
 	// Group frames, the outermost first, as lines that edges cross.
 	for k := len(groups) - 1; k >= 0; k-- {
+		weight := uint8(light)
+		if kind.frame != nil {
+			draw, w, _ := kind.frame(&l.Nodes[groups[k]])
+			if !draw {
+				continue
+			}
+			weight = w
+		}
 		b := move(boxes[groups[k]])
-		c.hline(b.x0, b.x1, b.y0, light, roleFrame)
-		c.hline(b.x0, b.x1, b.y1, light, roleFrame)
-		c.vline(b.x0, b.y0, b.y1, light, roleFrame)
-		c.vline(b.x1, b.y0, b.y1, light, roleFrame)
+		c.hline(b.x0, b.x1, b.y0, weight, roleFrame)
+		c.hline(b.x0, b.x1, b.y1, weight, roleFrame)
+		c.vline(b.x0, b.y0, b.y1, weight, roleFrame)
+		c.vline(b.x1, b.y0, b.y1, weight, roleFrame)
 	}
 
 	// Edges.
@@ -354,10 +419,17 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 		if n.Group {
 			continue
 		}
-		drawNode(c, move(boxes[i]), n.Shape, n.Label)
+		if kind.node == nil || !kind.node(c, move(boxes[i]), &l.Nodes[i]) {
+			drawNode(c, move(boxes[i]), n.Shape, n.Label)
+		}
 	}
 	// Group titles, on the top line.
 	for _, g := range groups {
+		if kind.frame != nil {
+			if draw, _, title := kind.frame(&l.Nodes[g]); !draw || !title {
+				continue
+			}
+		}
 		b := move(boxes[g])
 		if t := l.Nodes[g].Label; len(t) > 0 && t[0] != "" {
 			c.text(b.x0+2, b.y0, " "+t[0]+" ", roleTitle)
@@ -391,10 +463,77 @@ func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
 			c.put(x+w, y, ' ', roleText)
 		}
 		last := len(p.pts) - 1
-		head(c, point{p.pts[last].x + dx, p.pts[last].y + dy}, p.endSide, p.end)
-		head(c, point{p.pts[0].x + dx, p.pts[0].y + dy}, p.startSide, p.start)
+		for _, at := range [2]struct {
+			pt   point
+			side int
+			kind string
+			last bool
+		}{{p.pts[last], p.endSide, p.end, true}, {p.pts[0], p.startSide, p.start, false}} {
+			q := point{at.pt.x + dx, at.pt.y + dy}
+			if kind.head == nil || !kind.head(c, q, at.side, at.kind) {
+				head(c, q, at.side, at.kind)
+			}
+			if s := kind.textAt(&l.Edges[p.edge], at.last); s != "" {
+				endLabel(c, q, at.side, s)
+			}
+		}
 	}
 	return c, nil
+}
+
+// endRoom is the cells an end with text of width w takes along its side
+// before the next end.
+func endRoom(w int, upright bool) int {
+	switch {
+	case w == 0:
+		return 1
+	case upright:
+		return 2
+	}
+	return w + 3
+}
+
+// graphEnd is where an edge meets a side of a node, in the layout.
+type graphEnd struct {
+	edge int
+	last bool
+	at   float64
+	// text is the width of the text beside the end.
+	text int
+}
+
+// room is the cells from the first end of a list to the last, along a side.
+func room(list []graphEnd, upright bool) int {
+	n := 0
+	for k := 0; k+1 < len(list); k++ {
+		n += endRoom(list[k].text, upright)
+	}
+	return n
+}
+
+// span is the cells a list of ends needs along a side, the text after the last included.
+func span(list []graphEnd, upright bool) int {
+	if len(list) == 0 {
+		return 0
+	}
+	n := room(list, upright) + 1
+	if t := list[len(list)-1].text; t > 0 && !upright {
+		n += t + 2
+	}
+	return n
+}
+
+// endLabel writes the text beside an edge end: right of a line that comes in
+// from above or below, above one that comes in from a side.
+func endLabel(c *canvas, at point, side int, s string) {
+	switch side {
+	case 0, 2:
+		c.text(at.x+2, at.y, s, roleNote)
+	case 1:
+		c.text(at.x+1, at.y-1, s, roleNote)
+	default:
+		c.text(at.x-width(s), at.y-1, s, roleNote)
+	}
 }
 
 // head draws a marker in the cell outside a box's side, pointing into the box.

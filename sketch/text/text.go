@@ -3,8 +3,8 @@
 // to cells at a scale where every label fits, and writes the labels as real
 // text. It is not a port of pele: pele draws only SVG.
 //
-// Flowcharts and sequence diagrams have a text drawing. Other types give
-// ErrUnsupported.
+// Flowcharts, sequence, state, class and ER diagrams, pie charts, mindmaps
+// and gantt charts have a text drawing. Other types give ErrUnsupported.
 package text
 
 import (
@@ -40,7 +40,9 @@ type Options struct {
 
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
-	if d.Type != "flowchart" && d.Type != "sequence" {
+	switch d.Type {
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt":
+	default:
 		return nil, ErrUnsupported
 	}
 	lines, err := draw(d, opt, sketch.RenderOptions{})
@@ -61,9 +63,22 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 		return nil, err
 	}
 	var c *canvas
-	if d.Type == "flowchart" {
+	switch d.Type {
+	case "flowchart":
 		c, err = drawFlowchart(layout, opt)
-	} else {
+	case "state":
+		c, err = drawState(layout, opt)
+	case "class":
+		c, err = drawClass(layout, opt)
+	case "er":
+		c, err = drawER(layout, opt)
+	case "pie":
+		c, err = drawPie(layout, opt)
+	case "mindmap":
+		c, err = drawMindmap(layout, opt)
+	case "gantt":
+		c, err = drawGantt(layout, opt)
+	default:
 		c, err = drawSequence(layout, opt)
 	}
 	if err != nil {
@@ -82,6 +97,7 @@ const (
 	roleFrame
 	roleTitle
 	roleHead
+	roleCrit
 )
 
 var roleSGR = [...]string{
@@ -93,6 +109,7 @@ var roleSGR = [...]string{
 	roleFrame: "90",
 	roleTitle: "1",
 	roleHead:  "",
+	roleCrit:  "31",
 }
 
 // Directions of the strokes in a cell, for joining lines.

@@ -23,6 +23,15 @@ func TestNoTerminalControls(t *testing.T) {
 		"sequence message":   "sequenceDiagram\n  A->>B: #27;[2J#127;gone",
 		"sequence note C1":   "sequenceDiagram\n  A->>B: hi\n  Note over A: #144;x#156;",
 		"sequence actor ESC": "sequenceDiagram\n  participant A as x#27;[31my\n  A->>A: self",
+		"state label OSC":    "stateDiagram-v2\n  s1 : x#27;]2;pwned#7;\n  [*] --> s1",
+		"state edge C1":      "stateDiagram-v2\n  s1 --> s2 : #155;31m red",
+		"class member ESC":   "classDiagram\n  class A {\n    +x#27;[31m\n  }",
+		"class card C1":      "classDiagram\n  A \"#155;31m\" --> \"1\" B",
+		"er comment OSC":     "erDiagram\n  A {\n    string name \"#27;]52;c;eA==#7;\"\n  }",
+		"er label ESC":       "erDiagram\n  A ||--o{ B : \"x#27;[2Jy\"",
+		"pie label ESC":      "pie title t#27;]2;x#7;\n  \"a#27;[2J\" : 1",
+		"mindmap node OSC":   "mindmap\n  r(\"a#27;]2;b#7;\")\n    child #155;31m x",
+		"gantt task ESC":     "gantt\n  dateFormat YYYY-MM-DD\n  section S#27;[31m\n  t#27;]2;x#7; :a1, 2024-01-01, 3d",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

@@ -12,11 +12,11 @@ import (
 	"tuios.dev/sketch"
 )
 
-// FuzzDraw draws diagram text as box drawing. The seeds are every flowchart and
-// sequence source of the corpus. A draw may fail, but must not panic, must take
+// FuzzDraw draws diagram text as box drawing. The seeds are every corpus
+// source of a type with a text drawing. A draw may fail, but must not panic, must take
 // bounded time, and must keep within the columns it was given.
 func FuzzDraw(f *testing.F) {
-	for _, name := range []string{"flowchart", "sequence"} {
+	for _, name := range []string{"flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt"} {
 		data, err := os.ReadFile("../testdata/corpus/" + name + "-docs.json")
 		if err != nil {
 			f.Fatal(err)
