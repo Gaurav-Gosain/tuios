@@ -958,3 +958,31 @@ var packetTemplates = []func(p string) string{
 		return "%%{init: {\"packet\": {\"bitWidth\": \"" + p + "\", \"paddingX\": \"" + p + "\"}, \"themeVariables\": {\"packet\": {\"blockFillColor\": \"" + p + "\"}}}}%%\npacket\n0-31: \"a\""
 	},
 }
+
+var radarTemplates = []func(p string) string{
+	func(p string) string { return "radar-beta\n axis a[\"" + p + "\"], b, c\n curve x{1,2,3}" },
+	func(p string) string { return "radar-beta\n axis a['" + p + "'], b, c\n curve x{1,2,3}" },
+	func(p string) string { return "radar-beta\n axis a, b, c\n curve x[\"" + p + "\"]{1,2,3}" },
+	func(p string) string { return "radar-beta\n axis a, b, c\n curve x['" + p + "']{ a: 1, b: 2, c: 3 }" },
+	func(p string) string { return "radar-beta\n axis " + p + ", b\n curve x{1,2}" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve " + p + "{1,2}" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{ " + p + ": 1, a: 1, b: 2 }" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{ " + p + ", 2 }" },
+	func(p string) string { return "radar-beta\n title " + p + "\n axis a, b\n curve x{1,2}" },
+	func(p string) string { return "radar-beta title " + p },
+	func(p string) string {
+		return "radar-beta\n accTitle: " + p + "\n accDescr: " + p + "\n axis a, b\n curve x{1,2}"
+	},
+	func(p string) string { return "radar-beta\n accDescr {\n " + p + "\n }\n axis a, b\n curve x{1,2}" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{1,2}\n graticule " + p },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{1,2}\n max " + p + "\n ticks " + p },
+	func(p string) string { return "radar-beta\n axis a, b %% " + p + "\n curve x{1,2}" },
+	func(p string) string { return "radar-beta: " + p + "\n axis a, b" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\nradar-beta\n axis a, b\n curve x{1,2}" },
+	func(p string) string {
+		return "---\nconfig:\n  radar:\n    width: \"" + p + "\"\n    curveTension: \"" + p + "\"\n    marginLeft: \"" + p + "\"\n---\nradar-beta\n axis a, b\n curve x{1,2}"
+	},
+	func(p string) string {
+		return "%%{init: {\"radar\": {\"axisLabelFactor\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\", \"radar\": {\"axisColor\": \"" + p + "\"}}}}%%\nradar-beta\n axis a, b\n curve x{1,2}"
+	},
+}

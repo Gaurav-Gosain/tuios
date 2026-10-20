@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -975,4 +975,25 @@ func TestPacketOutputIsInert(t *testing.T) {
 		}
 	}
 	mutate(t, corpus, []string{"\"", "'", ":", "-", "+", "\n", "title ", "0-7: \"", "+8: \""}, 3, 4000, RenderOptions{}, false)
+}
+
+func TestRadarOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "radar")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, radarTemplates, 200, RenderOptions{}, false)
+	out, err := Render("radar-beta\n axis a[\"<script>x</script>\"], b[\"\\\"q\\\" & co\"]\n curve c[\"<img src=x>\"]{1,2}", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") || !strings.Contains(out.Data, "&quot;q&quot; &amp; co") {
+		t.Fatalf("radar names are not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "radar-beta\n accTitle: t\n axis a, b\n curve x{1,2}", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile radar options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", "[", "]", "{", "}", ":", ",", "\n", "title ", "axis ", "curve c{1,2}", "max 3", "graticule polygon"},
+		3, 4000, RenderOptions{}, false)
 }

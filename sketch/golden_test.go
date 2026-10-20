@@ -29,6 +29,7 @@ var done = map[string]bool{
 	"packet":       true,
 	"pie":          true,
 	"quadrant":     true,
+	"radar":        true,
 	"requirement":  true,
 	"sankey":       true,
 	"sequence":     true,

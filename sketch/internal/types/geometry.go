@@ -48,6 +48,9 @@ type Geometry struct {
 
 	// Packet.
 	Packet *GeoPacket
+
+	// Radar.
+	Radar *GeoRadar
 }
 
 type GeoNode struct {
@@ -356,4 +359,20 @@ type GeoField struct {
 	Row        int
 	Start, End float64
 	Label      string
+}
+
+// GeoRadar is a radar chart as lists: a text drawing shows each value as a bar.
+type GeoRadar struct {
+	Title []string
+	// Axes are the axis labels, in order around the chart.
+	Axes []string
+	// Curves are the curves drawn, each with a value for every axis.
+	Curves []GeoCurve
+	// Min and Max are the values at the centre and at the rim.
+	Min, Max float64
+}
+
+type GeoCurve struct {
+	Label  string
+	Values []float64
 }
