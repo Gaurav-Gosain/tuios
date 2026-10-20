@@ -440,6 +440,8 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	// Excluded days, as Mermaid marks them: a day at a time from the first task's start, and not at all
 	// when the chart spans more than five years.
 	var excluded strings.Builder
+	// The excluded spans as times, for the geometry.
+	var excludedSpans [][2]float64
 	if (len(model.excludes) > 0 || len(model.includes) > 0) && add(js.NewDate(start, loc), 6, "y").T > stop {
 		var from, to *js.Date
 		flush := func() {
@@ -453,6 +455,9 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 			ex0 := math.Max(left, p.x(dayStart.T))
 			ex1 := math.Min(right, p.x(dayEnd.T))
 			if ex1 > ex0 {
+				if options.Geometry != nil {
+					excludedSpans = append(excludedSpans, [2]float64{math.Max(start, dayStart.T), math.Min(stop, dayEnd.T)})
+				}
 				excluded.WriteString(`<rect x="` + num(ex0) + `" y="` + num(plotTop) + `" width="` + num(ex1-ex0) + `" height="` + num(plotHeight) + `"/>`)
 			}
 			from, to = nil, nil
@@ -584,6 +589,7 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	rendered := types.Rendered{SVG: svg.SvgDocument("gantt", width, height, size, options, acc, content...), Width: width, Height: height, Links: links}
 	if options.Geometry != nil {
 		rendered.Geometry = ganttGeometry(title, start, stop, rowSection, bars, ticks, tickLabel, sortedVerts, now, model.todayMarker != "off", width, height)
+		rendered.Geometry.Gantt.Excluded = excludedSpans
 	}
 	return rendered
 }
@@ -601,7 +607,9 @@ func ganttGeometry(title text.Label, start, stop float64, rows []string, bars []
 			Milestone: task.milestone, Crit: task.crit, Done: task.done, Active: task.active}
 		if t.Scheduled {
 			end := task.endTime
-			if task.renderEndTime != nil {
+			// A milestone sits where the SVG puts it, at the middle of its own
+			// times; a bar runs to where excluded days pushed its end.
+			if task.renderEndTime != nil && !task.milestone {
 				end = task.renderEndTime
 			}
 			t.Start, t.End = task.startTime.T, end.T

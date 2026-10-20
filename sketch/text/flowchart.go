@@ -84,6 +84,23 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 			sy = math.Max(sy, tall/n.H)
 		}
 	}
+	// An edge with text at its ends is long enough for both texts apart:
+	// across, the two side by side with room between them; down, a row each.
+	for k := range l.Edges {
+		e := &l.Edges[k]
+		ts, te := width(kind.textAt(e, false)), width(kind.textAt(e, true))
+		if ts+te == 0 || e.From == e.To || len(e.Route) < 6 {
+			continue
+		}
+		last := len(e.Route) - 3
+		dx := math.Abs(e.Route[last] - e.Route[0])
+		dy := math.Abs(e.Route[last+1] - e.Route[1])
+		if dx >= dy && dx > 0 {
+			sx = math.Max(sx, float64(ts+te+5)/dx)
+		} else if dy > 0 {
+			sy = math.Max(sy, 4/dy)
+		}
+	}
 	// A cell is about twice as tall as it is wide.
 	sy = math.Max(sy, sx*0.45)
 	return sx, sy
@@ -526,14 +543,45 @@ func span(list []graphEnd, upright bool) int {
 // endLabel writes the text beside an edge end: right of a line that comes in
 // from above or below, above one that comes in from a side.
 func endLabel(c *canvas, at point, side int, s string) {
+	w := width(s)
+	// Where the text may go, the first choice first: a cell of space and
+	// then the text, beside the line for an end on the top or the bottom,
+	// over or under it for an end on a side.
+	var tries [2]point
 	switch side {
 	case 0, 2:
-		c.text(at.x+2, at.y, s, roleNote)
+		tries = [2]point{{at.x + 2, at.y}, {at.x - 1 - w, at.y}}
 	case 1:
-		c.text(at.x+1, at.y-1, s, roleNote)
+		tries = [2]point{{at.x + 1, at.y - 1}, {at.x + 1, at.y + 1}}
 	default:
-		c.text(at.x-width(s), at.y-1, s, roleNote)
+		tries = [2]point{{at.x - w, at.y - 1}, {at.x - w, at.y + 1}}
 	}
+	for _, p := range tries {
+		if c.free(p.x-1, p.x+w, p.y) {
+			c.text(p.x, p.y, s, roleNote)
+			return
+		}
+	}
+	// No room on either side: the first choice, over what is there.
+	c.text(tries[0].x, tries[0].y, s, roleNote)
+}
+
+// free reports whether the cells from x0 to x1 on row y hold nothing yet.
+func (c *canvas) free(x0, x1, y int) bool {
+	for x := x0; x <= x1; x++ {
+		p := c.at(x, y)
+		if p == nil {
+			if x == x0 || x == x1 {
+				// The margin may run off the canvas.
+				continue
+			}
+			return false
+		}
+		if p.r != 0 || p.mask != 0 || p.wide {
+			return false
+		}
+	}
+	return true
 }
 
 // head draws a marker in the cell outside a box's side, pointing into the box.

@@ -57,7 +57,8 @@ diagrams, pie charts, mindmaps and gantt charts with box-drawing characters,
 for a terminal that shows no pictures. For a graph it takes the layout that
 sketch works out for the SVG and maps it to cells. A pie chart is a bar for
 each slice, a mindmap is a tree, and a gantt chart is bars on a date axis. The
-labels stay real text.
+labels stay real text. A pie chart in text lists every slice with its value. pele leaves a
+slice under 1% out of the pie, and shows values only with `showData`.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

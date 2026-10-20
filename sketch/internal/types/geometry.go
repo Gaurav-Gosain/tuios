@@ -131,6 +131,8 @@ type GeoGantt struct {
 	Verts []GeoTick
 	// Today is the time of the today line, or NaN for none.
 	Today float64
+	// Excluded holds the start and the end of each run of excluded days.
+	Excluded [][2]float64
 }
 
 type GeoTask struct {

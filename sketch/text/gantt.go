@@ -2,15 +2,53 @@ package text
 
 import (
 	"math"
+	"strings"
 
 	"tuios.dev/sketch"
+	"tuios.dev/sketch/internal/types"
 )
 
 // Gantt charts: each section is a group of rows under its name, and each task
-// a bar on a date axis with tick labels under it. The bar's shade says its
-// state: █ a task, ▒ an active one, ░ a done one, ▓ a critical one, which is
-// red too. A milestone is ◆. Vertical markers and the today line run down
-// the chart.
+// a bar on a date axis with tick labels under it. The bar's glyph says its
+// state, so that it reads without colour too: █ a task, ▒ an active one, ░ a
+// done one, ▓ a critical one, ▚ a critical active one and ▘ a critical done
+// one. Critical tasks are red as well. A milestone is ◆, and excluded days
+// are dotted. Vertical markers and the today line run down the chart. A
+// legend under the axis names the glyphs the chart uses.
+
+// ganttKinds are the glyphs of the legend, in its order, with their names.
+var ganttKinds = [...]struct {
+	glyph rune
+	name  string
+	role  uint8
+}{
+	{'█', "task", roleBox},
+	{'▒', "active", roleBox},
+	{'░', "done", roleLine},
+	{'▓', "critical", roleCrit},
+	{'▚', "critical, active", roleCrit},
+	{'▘', "critical, done", roleCrit},
+	{'◆', "milestone", roleBox},
+	{'·', "excluded", roleFrame},
+}
+
+// ganttKind is the index in ganttKinds of a task's glyph.
+func ganttKind(t *types.GeoTask) int {
+	k := 0
+	switch {
+	case t.Done:
+		k = 2
+	case t.Active:
+		k = 1
+	}
+	if t.Crit {
+		k += 3
+	}
+	if t.Milestone {
+		k = 6
+	}
+	return k
+}
 
 func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 	g := l.Gantt
@@ -30,15 +68,17 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 		return withTitle(c, g.Title, opt.Cols)
 	}
 	// The labels of each row, and where sections start.
-	rowLabel := make([]string, len(g.Rows))
+	// A compact chart can put every task on one row: the labels are joined
+	// once, not grown a task at a time.
+	labels := make([][]string, len(g.Rows))
 	for _, t := range g.Tasks {
-		if t.Row < 0 || t.Row >= len(g.Rows) {
-			continue
+		if t.Row >= 0 && t.Row < len(g.Rows) {
+			labels[t.Row] = append(labels[t.Row], t.Label)
 		}
-		if rowLabel[t.Row] != "" {
-			rowLabel[t.Row] += ", "
-		}
-		rowLabel[t.Row] += t.Label
+	}
+	rowLabel := make([]string, len(g.Rows))
+	for i, l := range labels {
+		rowLabel[i] = strings.Join(l, ", ")
 	}
 	named := false
 	for _, s := range g.Rows {
@@ -96,11 +136,40 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 			lines = append(lines, line{label: part, row: row})
 		}
 	}
-	// Then the axis, the tick labels and the labels of the vertical markers.
+	// Then the axis, the tick labels, the labels of the vertical markers and
+	// the legend.
 	axis := len(lines)
-	h := axis + 2 + len(g.Verts)
 	x0 := labelW + 2
 	w := x0 + plotW + 1
+	var used [len(ganttKinds)]bool
+	for i := range g.Tasks {
+		if g.Tasks[i].Scheduled {
+			used[ganttKind(&g.Tasks[i])] = true
+		}
+	}
+	used[7] = len(g.Excluded) > 0
+	var legend [][]int
+	lineW := 0
+	for k, u := range used {
+		if !u {
+			continue
+		}
+		iw := 2 + width(ganttKinds[k].name)
+		if len(legend) == 0 || lineW+2+iw > w {
+			legend = append(legend, nil)
+			lineW = -2
+		}
+		legend[len(legend)-1] = append(legend[len(legend)-1], k)
+		lineW += 2 + iw
+	}
+	if len(legend) == 1 && len(legend[0]) == 1 && legend[0][0] == 0 {
+		// Plain tasks alone need no legend.
+		legend = nil
+	}
+	h := axis + 2 + len(g.Verts)
+	if len(legend) > 0 {
+		h += 1 + len(legend)
+	}
 	c, err := newCanvas(w, h)
 	if err != nil {
 		return nil, err
@@ -135,6 +204,17 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 		c.stroke(t.x, axis, down, light, roleFrame)
 		c.text(t.at, axis+1, t.label, roleLine)
 	}
+	for _, ex := range g.Excluded {
+		a := col(ex[0])
+		b := min(max(int(math.Ceil(at(ex[1])))-1, a), plotW-1)
+		for y := 0; y < axis; y++ {
+			for x := a; x <= b; x++ {
+				if p := c.at(x0+x, y); p != nil && p.r == 0 && p.mask == 0 {
+					c.put(x0+x, y, '·', roleFrame)
+				}
+			}
+		}
+	}
 	if !math.IsNaN(g.Today) {
 		x := x0 + col(g.Today)
 		for y := 0; y < axis; y++ {
@@ -156,25 +236,18 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 		}
 		c.text(2, y, ln.label, roleText)
 	}
-	for _, t := range g.Tasks {
+	for i := range g.Tasks {
+		t := &g.Tasks[i]
 		if !t.Scheduled || t.Row < 0 || t.Row >= len(g.Rows) {
 			continue
 		}
 		y := firstLine[t.Row]
-		role := uint8(roleBox)
-		glyph := '█'
-		switch {
-		case t.Done:
-			glyph, role = '░', roleLine
-		case t.Active:
-			glyph = '▒'
-		case t.Crit:
-			glyph = '▓'
-		}
-		if t.Crit {
-			role = roleCrit
-		}
+		kind := ganttKinds[ganttKind(t)]
+		glyph, role := kind.glyph, kind.role
 		if t.Milestone {
+			if t.Crit {
+				role = roleCrit
+			}
 			c.put(x0+col((t.Start+t.End)/2), y, '◆', role)
 			continue
 		}
@@ -194,6 +267,16 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 			x = max(x-width(s)+1, 0)
 		}
 		c.text(x, axis+2+k, s, roleNote)
+	}
+	for k, ln := range legend {
+		y := axis + 3 + len(g.Verts) + k
+		x := 0
+		for _, i := range ln {
+			kind := ganttKinds[i]
+			c.put(x, y, kind.glyph, kind.role)
+			c.text(x+2, y, kind.name, roleLine)
+			x += 4 + width(kind.name)
+		}
 	}
 	return withTitle(c, g.Title, opt.Cols)
 }
