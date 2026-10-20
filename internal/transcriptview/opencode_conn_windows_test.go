@@ -39,12 +39,17 @@ func TestOpenCodeServiceDACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// icacls is found before noOpenCode empties the PATH.
+	icaclsBin, err := exec.LookPath("icacls")
+	if err != nil {
+		t.Fatal(err)
+	}
 	noOpenCode(t)
 	f := newFakeOpenCode(t, page)
 	path := writeService(t, f.srv.URL, f.pid, 0o600)
 	icacls := func(args ...string) {
 		t.Helper()
-		out, err := exec.Command("icacls", append([]string{path}, args...)...).CombinedOutput()
+		out, err := exec.Command(icaclsBin, append([]string{path}, args...)...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("icacls %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
