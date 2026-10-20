@@ -2982,6 +2982,10 @@ built in until tuios has native plugins. Then the heavy optional parts, the
 diagram types among them, move out of the binary, and the ceiling comes down
 again.
 
+The ceiling is now 50 MB until the plugin system can move rarely used parts
+out. The last pele types that sketch ports, use case diagrams, agent flows and
+swimlanes among them, take tuios past 45 MB.
+
 The budgets went to 39,522,568 (linux/amd64) and 37,028,734 (darwin/arm64) for
 `tuios mermaid` and tuios.dev/sketch: the Go port of pele with flowcharts,
 sketch/raster and two Arimo subsets. The build before it measured 38,510,754
