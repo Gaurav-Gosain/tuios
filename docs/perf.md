@@ -3088,6 +3088,16 @@ as the caller. The build before it measured 40,964,258 and 38,310,754 bytes
 and 38,327,282, so it adds 16,384 and 16,528 bytes. No third-party dependency
 was added. The new budgets leave 8,294 and 3,996 bytes of room, as before.
 
+The budgets went to 40,993,032 (linux/amd64) and 38,348,414 (darwin/arm64)
+when the link plane was hardened (#926): a resurrect name is checked before it
+becomes a path, the read deny list holds every credential carrier of the write
+deny list, MsgWatchDir keeps to the read rules, a walk over a link leaves out
+and counts the denied entries, and session names that Windows folds are
+refused. The build before it measured 40,980,642 and 38,327,522 bytes (Go
+1.26.9, a clean clone, as CI builds it). The change measured 40,988,834 and
+38,344,210, so it adds 8,192 and 16,688 bytes. No third-party dependency was
+added. The new budgets leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
