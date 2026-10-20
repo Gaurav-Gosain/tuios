@@ -179,11 +179,18 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	w := max(d.Width, MinDialogWidth)
 	tl, tr, bl, br, h, v := dialogFrame()
 
-	frame := frameStyle(bg, pal.FgMute, tl, tr, bl, br, h, v)
-	// The title and hints ride in the frame, so they sit on its ground. That
-	// ground is the cell beneath, known only once composited, so their colours
-	// are measured against the dialog's own surface.
-	label := frameGround(bg, tl, tr, bl, br, h, v)
+	// A dialog with a drawn frame reads as a pane window: the frame and the
+	// whole dialog, its title and hints in the frame line included, go onto
+	// the host's ground. A blank frame, the hidden style's, leaves the dialog
+	// on its canvas, which is then the only edge it has.
+	measure := bg
+	ground, m, grounded := framedGround()
+	grounded = grounded && drawn(tl, tr, bl, br, h, v)
+	if grounded && m != nil {
+		measure = m
+	}
+
+	frame := Style(bg).Foreground(frameInk(pal.FgMute))
 	rule := func(n int) string { return frame.Render(strings.Repeat(h, max(n, 0))) }
 
 	// Top border: the title sits in it rather than on a row of its own, which
@@ -191,9 +198,9 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	top := frame.Render(tl)
 	if title := Truncate(d.Title, max(w-3, 1)); title != "" {
 		top += rule(1) +
-			Style(label).Render(" ") +
-			Style(label).Foreground(Readable(pal.Accent, bg)).Bold(true).Render(title) +
-			Style(label).Render(" ") +
+			Style(bg).Render(" ") +
+			Style(bg).Foreground(Readable(pal.Accent, measure)).Bold(true).Render(title) +
+			Style(bg).Render(" ") +
 			rule(w-lipgloss.Width(title)-3)
 	} else {
 		top += rule(w)
@@ -208,11 +215,11 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	var strip string
 	var stripW int
 	if len(d.Hints) > 0 {
-		strip, stripW = renderHintsOn(fitted, dialogSep, label, bg, pal)
+		strip, stripW = renderHintsOn(fitted, dialogSep, bg, measure, pal)
 	}
 	bottom := frame.Render(bl)
 	if stripW > 0 {
-		bottom += rule(w-stripW-3) + Style(label).Render(" ") + strip + Style(label).Render(" ") + rule(1)
+		bottom += rule(w-stripW-3) + Style(bg).Render(" ") + strip + Style(bg).Render(" ") + rule(1)
 	} else {
 		bottom += rule(w)
 	}
@@ -244,7 +251,11 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 		}
 	}
 
-	return strings.Join(lines, "\n"), Geometry{
+	out := strings.Join(lines, "\n")
+	if grounded {
+		out = onGround(out, bg, ground)
+	}
+	return out, Geometry{
 		Width:      w + 2,
 		Height:     len(lines),
 		InnerWidth: w,

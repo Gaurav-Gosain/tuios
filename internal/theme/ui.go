@@ -135,6 +135,9 @@ var chromeRamp = struct {
 // terminal's own colours, slots and attributes at 16. Every derived token and
 // every contrast check goes through overlay.Derive.
 //
+// A framed overlay is filled with a ground the host pushes (see
+// overlay.FrameColors), and the inks are measured against that ground as well.
+//
 // It is memoised on what it is built from, because the derivation measures
 // every ink on every ground it is promised on and render code asks for the
 // palette many times a frame.
@@ -145,7 +148,7 @@ func UI() overlay.Palette {
 	if uiMemo.valid && uiMemo.key == key {
 		return uiMemo.pal
 	}
-	p := buildUI(key.depth)
+	p := buildUI(key.depth).MeasuredOn(overlay.FrameMeasure())
 	uiMemo.key, uiMemo.valid, uiMemo.pal = key, true, p
 	return p
 }
@@ -161,10 +164,18 @@ type uiKey struct {
 	host    *hostGround
 	// framed is overlay.FramePanels, which Derive reads into the palette.
 	framed bool
+	// frameGround is overlay.FrameMeasure, the ground a framed overlay is
+	// seen on, which UI measures the inks against; set says there is one.
+	frameGround [4]uint32
+	frameSet    bool
 }
 
 func currentUIKey() uiKey {
 	k := uiKey{depth: Depth(), framed: overlay.FramePanels()}
+	if g := overlay.FrameMeasure(); g != nil {
+		r, gr, b, a := g.RGBA()
+		k.frameGround, k.frameSet = [4]uint32{r, gr, b, a}, true
+	}
 	if t := Current(); t != nil {
 		k.tint = t
 		k.colours = [6]*tint.Color{t.BrightBlue, t.BrightCyan, t.BrightRed, t.BrightGreen, t.Yellow, t.Bg}
