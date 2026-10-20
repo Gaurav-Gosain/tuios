@@ -7643,3 +7643,13 @@ The last control shows that the patch path, not a full state replace, draws the 
 | The client only logs a refused input | `TestTMLEmitOverTheLimitIsShown` ("the refused emit left no message") | **caught** |
 
 The test reads the daemon's peak memory (VmHWM), not its resident set at the end: the garbage collector gives back what the burst held, and a first version that read VmRSS passed the control once.
+### What a TML surface may do
+
+`TestTMLPaneActionsRunWithTheOwnersGrants` in `tml_grants_test.go`. Run on 2026-10-20, the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| A pane() action runs with the person's rights, not the opening pane's | "the refusal was not shown" (the agent's surface typed into build) | **caught** |
+| The owner check of tml-patch, tml-replace and tml-close | "the agent's patch of the person's surface was not refused" | **caught** |
+| The rate limit of 100 patches a second | "250 patches back to back were all taken" | **caught** |
+| The question before a surface first types into a pane | "no question before the surface typed" | **caught** |
