@@ -3163,6 +3163,16 @@ builds it), so it adds 114,688 and 100,336 bytes. It links no new package.
 This uses the plugin system allowance. The new budgets leave 4,198 and 4,134
 bytes of room.
 
+The budgets went to 42,254,600 and 39,486,500 for native plugins:
+`tuios-plugin.toml`, the owner table that places a plugin's processes, the
+grants they are held to on the verbs, the client protocol and the herdr
+socket, the machine-local admin approval, and the check table of the herdr
+socket methods. On main at 66961010 the binaries measured 42,209,442 and
+39,447,666 bytes. With native plugins they measured 42,250,402 and
+39,482,338 (Go 1.26.10, a shallow clone, as CI builds it), so they add
+40,960 and 34,672 bytes. It links no new package. This uses the plugin
+system allowance. The new budgets leave 4,198 and 4,162 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
