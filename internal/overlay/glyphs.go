@@ -123,6 +123,16 @@ func SetFrameColors(c FrameColors) {
 	frameColors.Store(&stored)
 }
 
+// frameGround is the ground for text that rides in an overlay's frame: the
+// pushed ground under a drawn frame, so a label sits on the line as a pane's
+// title sits on its border, and bg otherwise.
+func frameGround(bg color.Color, glyphs ...string) color.Color {
+	if p := frameColors.Load(); p != nil && p.Ground != nil && strings.TrimSpace(strings.Join(glyphs, "")) != "" {
+		return p.Ground
+	}
+	return bg
+}
+
 // frameStyle is the style an overlay's outer frame is drawn in: the pushed ink,
 // or fallback when none is pushed, on the pushed ground rather than the
 // surface's bg. A blank frame (the hidden border style) is part of the
