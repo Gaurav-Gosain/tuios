@@ -7885,3 +7885,14 @@ refuses a native plugin's commands (`plugin_unsupported_platform`). The
 cross builds compile that path. The fixed build passes
 `TestNativePluginGrants`, `TestPluginsInstallFromGit` and every
 `TestHerdrPlugin*` 3 of 3.
+### Follow-up: an outside report keeps the harness pid's start time
+
+A case joins the test for the maintainer's note on #929. `outside-same-pid` runs the stand-in claude to rest through the real hook, so its pid is recorded timed. Then the test process, which is no ancestor of it, reports `working` for the pane with `tuios call set-agent-state`, naming the same `harness_pid` and conversation. The stand-in then leaves with no `SessionEnd`, and the shell has the pane again. Run on 2026-10-21 on macOS against upstream main at 25245bdb. The fixed build passes all nine cases.
+
+Upstream main fails the new case: "the agents section still lists the pane after its agent left it, with the shell running". The outside report recorded the pid again without its start time, so its exit was never taken for the harness's.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| A recorded pid re-recorded: the `old.pid == pid && old.timed` early return in `setAgentHarnessPID` disabled | `outside-same-pid` ("the agents section still lists the pane after its agent left it, with the shell running") | **caught** |
+
+The early returns in `callerRunsHarness` and in `verbSetAgentState` change no outcome, only skip an ancestry walk whose answer is not used, so they have no control.
