@@ -217,8 +217,8 @@ func (a *webAccess) apply(cfg *sip.Config) {
 //
 // The checks run on the open file, not on the path, so the file cannot be
 // swapped between the check and the read. The file must belong to the
-// current user and must not be readable or writable by anyone else. Windows
-// has no such mode bits, so there it is not checked.
+// current user and must not be readable or writable by anyone else. On
+// Windows the same rule is read from the file's owner and DACL.
 func readPasswordFile(path string) (string, error) {
 	f, err := os.Open(path) //nolint:gosec // the path is the operator's own configuration
 	if err != nil {
@@ -232,7 +232,7 @@ func readPasswordFile(path string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("the password file %s is not a regular file", path)
 	}
-	if err := checkPasswordFileMode(path, info, os.Getuid()); err != nil {
+	if err := checkPasswordFileMode(f, path, info, os.Getuid()); err != nil {
 		return "", err
 	}
 	data, err := io.ReadAll(io.LimitReader(f, 4096))

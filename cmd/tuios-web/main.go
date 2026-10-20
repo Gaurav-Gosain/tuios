@@ -160,7 +160,7 @@ Client features:
 	rootCmd.Flags().BoolVar(&webAutoTLS, "auto-tls", false, "Serve HTTPS from a self-signed certificate tuios-web generates and keeps (see `tuios-web cert`)")
 	rootCmd.Flags().BoolVar(&webInsecure, "insecure", false, "Serve a non-loopback host over plain HTTP, sending every keystroke unencrypted (trusted networks only)")
 	rootCmd.Flags().StringVar(&webUser, "user", defaultWebUser, "User name the browser must give with the password")
-	rootCmd.Flags().StringVar(&webPasswordFile, "password-file", "", "Read the password from the first line of this file. The file must be yours, with mode 600 or 400")
+	rootCmd.Flags().StringVar(&webPasswordFile, "password-file", "", "Read the password from the first line of this file. The file must be yours, with mode 600 or 400 (on Windows, only you, SYSTEM and Administrators may read it)")
 	rootCmd.Flags().BoolVar(&webRandomPassword, "random-password", false, "Make a new password at start and print it")
 	rootCmd.Flags().BoolVar(&webNoAuth, "no-auth", false, "Serve a non-loopback host with no password. Anyone who reaches the port gets a shell (trusted networks only). Not with 0.0.0.0 or ::")
 	rootCmd.Flags().StringSliceVar(&webAllowHosts, "allow-host", nil, "On a loopback --host, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or --no-auth (repeatable)")

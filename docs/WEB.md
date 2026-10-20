@@ -28,8 +28,8 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
   Use `--user` to change it.
 - There is no flag that takes the password itself. Other users can see command
   line arguments in `ps`.
-- The password file must belong to you. Its mode must be 600 or 400.
-  tuios-web does not check the file permissions on Windows.
+- The password file must belong to you. Its mode must be 600 or 400. On
+  Windows, only you, SYSTEM and Administrators may read or change it.
 - tuios-web also reads the password from `TUIOS_WEB_PASSWORD`. It does not
   pass this variable to panes. But your own processes can still read it from
   `/proc`. Use `--password-file` instead.

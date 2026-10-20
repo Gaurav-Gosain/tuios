@@ -4904,7 +4904,7 @@ tuios-web [flags]
 - `--auto-tls`: Generate and serve a self-signed certificate (managed with `tuios-web cert`)
 - `--insecure`: Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
 - `--random-password`: Make a new password at start and print it
-- `--password-file <path>`: Read the password from the first line of this file. The file must be yours, with mode 600 or 400
+- `--password-file <path>`: Read the password from the first line of this file. The file must be yours, with mode 600 or 400 (on Windows, only you, SYSTEM and Administrators may read it)
 - `--user <string>`: User name the browser must give with the password (default: "tuios")
 - `--no-auth`: Serve a non-loopback host with no password (trusted networks only). Not with `0.0.0.0` or `::`
 - `--allow-host <name>`: On a loopback `--host`, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or `--no-auth`. You can give it more than one time
@@ -4932,8 +4932,8 @@ connects. The browser asks for the user name and the password.
 - `--random-password`: tuios-web makes a new password at start and prints it
   with a URL that holds it.
 - `--password-file <path>`: tuios-web reads the password from the first line
-  of the file. The file must belong to you, with mode 600 or 400. tuios-web
-  does not check the file permissions on Windows.
+  of the file. The file must belong to you, with mode 600 or 400. On Windows,
+  only you, SYSTEM and Administrators may read or change it.
 - `TUIOS_WEB_PASSWORD`: tuios-web reads the password from this environment
   variable. It does not pass the variable to panes. But your own processes
   can still read it from `/proc`. Use `--password-file` instead.

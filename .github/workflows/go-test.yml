@@ -124,7 +124,8 @@ jobs:
     # The packages whose Windows code runs only on Windows: the herdr link
     # (hardlink, copy and a running link), the PATHEXT lookup and the job
     # object for plugin processes, the stop event kill-server sets, the
-    # herdr command line the link runs, and the opencode socket owner check.
+    # herdr command line the link runs, the opencode socket owner check, and
+    # the owner and DACL check of the tuios-web password file.
     # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
@@ -145,6 +146,10 @@ jobs:
         # The rest of internal/transcriptview runs shell scripts, so only the
         # owner check and its table parsers run here.
         run: go test -count=1 -timeout 5m -run "TestOpenCodeConnOwner|TestTCPTableOwner|TestPcblistOwner|TestProcNetOwner" ./internal/transcriptview/
+
+      - name: Test the tuios-web password file check
+        # The owner and DACL check runs only on Windows.
+        run: go test -count=1 -timeout 5m -run "TestPasswordFileDACL|TestPasswordFileChecks" ./cmd/tuios-web/
 
   macos:
     name: go test (macos)

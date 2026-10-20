@@ -19,10 +19,10 @@ func TestPasswordFileOfAnotherUserIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkPasswordFileMode(path, info, os.Getuid()); err != nil {
+	if err := checkPasswordFileMode(nil, path, info, os.Getuid()); err != nil {
 		t.Fatalf("own file refused: %v", err)
 	}
-	if err := checkPasswordFileMode(path, info, os.Getuid()+1); err == nil {
+	if err := checkPasswordFileMode(nil, path, info, os.Getuid()+1); err == nil {
 		t.Fatal("a file owned by another user was accepted")
 	}
 }
