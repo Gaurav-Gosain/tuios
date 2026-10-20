@@ -68,7 +68,7 @@ func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 
 	t.Run("double-frame-panels", func(t *testing.T) {
 		term := startOverlayBorders(t, "border_style = \"double\"\nframe_panels = true\n", truecolor)
-		panel := openPaletteFrame(t, term)
+		panel := openPaletteFrameByCorners(t, term, "╗", "╚")
 		saveArtifact(t, term, art, "double-frame-panels-palette")
 		wantFrame(t, term, "the command palette with frame_panels", panel, overlayFrame{"╔", "╗", "╚", "╝", "═", "║"})
 		closePalette(t, term, "under frame_panels")
@@ -122,7 +122,7 @@ func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 		wantFrame(t, term, "the rename dialog under hidden at 16 colours", dialog, overlayFrame{" ", " ", " ", " ", " ", " "})
 		closeRename(t, term)
 
-		panel := openPaletteFrame16(t, term)
+		panel := openPaletteFrameByCorners(t, term, "╮", "╰")
 		saveArtifact(t, term, art, "hidden-16-palette")
 		wantFrame(t, term, "the command palette under hidden at 16 colours", panel, overlayFrame{"╭", "╮", "╰", "╯", "─", "│"})
 		closePalette(t, term, "under hidden at 16 colours")
@@ -266,12 +266,13 @@ func openPaletteFrame(t *testing.T, term *tuitest.Terminal) overlayBox {
 	return overlayBox{}
 }
 
-// openPaletteFrame16 is openPaletteFrame at 16 colours, where every ground is
-// the terminal's own and the panel's extent cannot be read off a fill. The
-// left edge is found the same way, and the right edge and the bottom are the
-// rounded corners the test expects there: a missing corner leaves the box at
-// the left edge alone, and wantFrame then reports what is drawn there.
-func openPaletteFrame16(t *testing.T, term *tuitest.Terminal) overlayBox {
+// openPaletteFrameByCorners is openPaletteFrame for a framed panel, whose
+// frame cells sit on what is behind the panel rather than on its fill, so the
+// panel's extent cannot be read off a fill. The left edge is found the same
+// way, and the right edge and the bottom are the top-right corner tr and the
+// bottom-left corner bl the test expects there: a missing corner leaves the
+// box at the left edge alone, and wantFrame then reports what is drawn there.
+func openPaletteFrameByCorners(t *testing.T, term *tuitest.Terminal, tr, bl string) overlayBox {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('p'))
 	waitPaletteOpen(t, term, "to read its frame")
@@ -284,13 +285,13 @@ func openPaletteFrame16(t *testing.T, term *tuitest.Terminal) overlayBox {
 		}
 		b := overlayBox{x0: tx - 3, x1: tx - 3, y0: y - 1, y1: y - 1}
 		for x := b.x0 + 1; x < cols; x++ {
-			if s.Cell(x, b.y0).Content == "╮" {
+			if s.Cell(x, b.y0).Content == tr {
 				b.x1 = x
 				break
 			}
 		}
 		for yy := y; yy < rows; yy++ {
-			if s.Cell(b.x0, yy).Content == "╰" {
+			if s.Cell(b.x0, yy).Content == bl {
 				b.y1 = yy
 				break
 			}
