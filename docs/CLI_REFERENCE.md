@@ -4630,6 +4630,11 @@ surface, so it stays when you detach and comes back when you attach.
 **Usage:**
 ```bash
 tuios tml show FILE [--popup | --pane] [--wait] [--width W] [--height H]
+tuios tml show FILE --events
+tuios tml patch SURFACE OPS
+tuios tml replace SURFACE FILE [--keep-state]
+tuios tml get SURFACE
+tuios tml list [-s SESSION]
 tuios tml close SURFACE [VALUE]
 tuios tml validate FILE
 ```
@@ -4647,6 +4652,14 @@ status 0. It prints `null` and exits with status 1 when the person closed the
 surface without a value. It exits with status 2 when a program closed it with
 `tml close`: the value it prints is then not the person's answer.
 
+With `--events` the command prints the answer, then one JSON line for each
+`tml-event` of the surface: an `emit` action the person ran, and the close,
+which is the last line. A script that reads them is the surface's owner. It
+answers with `tml patch`, a JSON Patch on the state (`-` reads it from standard
+input), or `tml replace`, a new document. A patch with a `test` that no longer
+matches is refused: read the state with `tml get` and send it again.
+`tml list` names the open surfaces of a session.
+
 `tml close` closes a surface. VALUE is JSON, and a waiting `tml show` prints
 it. `tml validate` prints each problem with its line, the node and the fix,
 and exits with status 1 when the document has errors. It needs no daemon.
@@ -4661,6 +4674,7 @@ and exits with status 1 when the document has errors. It needs no daemon.
 - `--wait`: Stay open until the surface closes, and print its value
 - `--timeout <ms>`: With `--wait`, how long to wait
 - `--json`: Output the result as JSON
+- `--events`: Print the surface's events as JSON lines until it closes
 
 **Examples:**
 ```bash
@@ -4672,6 +4686,14 @@ some-generator | tuios tml show - --pane
 
 # Ask a question and use the answer
 answer=$(tuios tml show confirm.tml --wait)
+
+# Own a dashboard from a script: answer each rerun with a patch
+tuios tml show dash.tml --events | while IFS= read -r line; do
+  case $line in
+    *'"type":"tml_opened"'*) id=$(printf '%s' "$line" | jq -r .surface) ;;
+    *'"name":"rerun"'*) tuios tml patch "$id" '[{"op":"replace","path":"/runs","value":2}]' ;;
+  esac
+done
 ```
 
 A small document:
@@ -4689,8 +4711,9 @@ A small document:
 </tml>
 ```
 
-The verbs behind these commands are `tml-open`, `tml-close` and `tml-input`,
-in [protocol.md](protocol.md).
+The verbs behind these commands are `tml-open`, `tml-patch`, `tml-replace`,
+`tml-get`, `tml-list`, `tml-close` and `tml-validate`, in
+[protocol.md](protocol.md). The events are `tml-event`.
 
 ### `tuios mermaid`
 

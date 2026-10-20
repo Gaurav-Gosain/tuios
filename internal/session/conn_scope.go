@@ -231,9 +231,17 @@ var verbScopes = map[string]scopeKind{
 	"popup":            scopeDeny,
 	// A TML surface is a window on the screen, and the input verb acts as
 	// the person.
-	"tml-open":             scopeDeny,
-	"tml-close":            scopeDeny,
-	"tml-input":            scopeDeny,
+	"tml-open":  scopeDeny,
+	"tml-close": scopeDeny,
+	"tml-input": scopeDeny,
+	// The owner verbs change one surface. A restricted caller gets them
+	// with the owner rules.
+	"tml-patch":   scopeDeny,
+	"tml-replace": scopeDeny,
+	"tml-get":     scopeRead,
+	"tml-list":    scopeRead,
+	// tml-validate reads only the document it is given.
+	"tml-validate":         scopeOpen,
 	"split-window":         scopeDeny,
 	"focus-window":         scopeDeny,
 	"move-window":          scopeDeny,

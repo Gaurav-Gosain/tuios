@@ -104,7 +104,12 @@ const (
 	// done, same, skipped, conflict or failed. It reaches only a subscriber
 	// that names it in types, and it is not kept for replay.
 	EventTransferFile = "transfer-file"
-	EventSubscribed   = "subscribed" // subscribe ack result type
+	// EventTML is what a person did on a TML surface that its owner hears:
+	// an emit action, or the close. TML carries the surface, the name and
+	// the value. It reaches only a subscriber that names it in types, and a
+	// tml-open with events. See tml_surface.go.
+	EventTML        = "tml-event"
+	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -198,6 +203,8 @@ type streamEvent struct {
 	Transfer *TransferRow `json:"transfer,omitempty"`
 	// File is a transfer-file event's file.
 	File *TransferFile `json:"file,omitempty"`
+	// TML is a tml-event's surface, name and value.
+	TML *TMLEvent `json:"tml,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -316,6 +323,9 @@ type eventFilter struct {
 	// mirrored from a host, or host-changed), because every other subscriber
 	// reads session and window as names on this machine.
 	hosts bool
+	// surface admits only the tml-event events of one TML surface: the
+	// stream a tml-open with events holds on its connection.
+	surface string
 }
 
 func (f eventFilter) match(ev streamEvent) bool {
@@ -344,6 +354,9 @@ func (f eventFilter) match(ev streamEvent) bool {
 	if len(f.types) > 0 && !f.types[ev.Type] {
 		return false
 	}
+	if f.surface != "" && (ev.TML == nil || ev.TML.Surface != f.surface) {
+		return false
+	}
 	// An opt-in type reaches only a filter that names it, so a subscriber
 	// written before it existed, which names no types, never sees it.
 	if len(f.types) == 0 && optInEventTypes[ev.Type] {
@@ -355,7 +368,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.

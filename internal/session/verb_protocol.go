@@ -1115,9 +1115,12 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "workspace", Type: "int", Description: "Workspace to open it on. Omit for the current one."},
 				{Name: "wait", Type: "bool", Description: "Keep the call open until the surface closes, and return the close value in a tml_result.", Default: "false"},
 				{Name: "timeout", Type: "int", Description: "With wait: milliseconds to wait before failing with the timeout code. The surface stays open. 0 waits as long as it is open.", Default: "0"},
+				{Name: "events", Type: "bool", Description: "Keep the connection and stream the surface's tml-event events on it after the answer, as subscribe does: each emit, and the close as the last one. Not with wait.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "surface", Type: "string", Description: "Id of the surface. Use it to close the surface."},
+				{Name: "surface", Type: "string", Description: "Id of the surface. Use it to patch, replace, read or close the surface."},
+				{Name: "seq", Type: "int", Description: "With events: the last event number when the stream went live, as subscribe answers."},
+				{Name: "boot_id", Type: "string", Description: "With events: the daemon start that numbers the events."},
 				{Name: "window_id", Type: "string", Description: "Id of the window the surface is drawn in."},
 				{Name: "target", Type: "string", Description: "popup or pane."},
 				{Name: "workspace", Type: "int", Description: "Workspace the surface was opened on."},
@@ -1153,6 +1156,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "ops", Type: "[]object", Description: "A JSON Patch (RFC 6902) on the surface's state."},
 				{Name: "close", Type: "bool", Description: "Close the surface.", Default: "false"},
 				{Name: "value", Type: "any", Description: "With close: the value. Omit when the person dismissed the surface."},
+				{Name: "events", Type: "[]object", Description: "The emit actions the person ran, each {name, value}. Each becomes a tml-event for the owner."},
 			},
 			returns: []verbParam{
 				{Name: "version", Type: "int", Description: "The surface's version after the change."},
@@ -1161,6 +1165,80 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"tml-input","params":{"surface":"tml-4f1a9c02","human_nonce":"...","ops":[{"op":"replace","path":"/tab","value":"log"}]}}`,
 			},
 			handler: (*Daemon).verbTMLInput,
+		},
+		"tml-patch": {
+			description: "Change a TML surface's state with a JSON Patch (RFC 6902). Only the parts of the surface that read the changed paths are drawn again.",
+			params: []verbParam{
+				{Name: "surface", Type: "string", Required: true, Description: "The surface id tml-open answered with."},
+				{Name: "ops", Type: "[]object", Required: true, Description: "The JSON Patch: add, remove, replace, move, copy and test operations on the state. A test that does not match refuses the whole patch, so read the state again with tml-get."},
+			},
+			returns: []verbParam{
+				{Name: "version", Type: "int", Description: "The surface's version after the patch."},
+				{Name: "changed", Type: "[]string", Description: "The JSON Pointers the patch changed."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-patch","params":{"surface":"tml-4f1a9c02","ops":[{"op":"replace","path":"/failed","value":0}]}}`,
+			},
+			handler: (*Daemon).verbTMLPatch,
+		},
+		"tml-replace": {
+			description: "Swap a TML surface's tree. Each client keeps its view state (the open tab, the cursor row) for the nodes whose ids stay.",
+			params: []verbParam{
+				{Name: "surface", Type: "string", Required: true, Description: "The surface id."},
+				{Name: "doc", Type: "string", Required: true, Description: "The new document, as tml-open takes it."},
+				{Name: "keep_state", Type: "bool", Description: "Keep the state the surface has now instead of the new document's state.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "version", Type: "int", Description: "The surface's version after the swap."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-replace","params":{"surface":"tml-4f1a9c02","doc":"<tml version=\"1\"><text>Done</text></tml>"}}`,
+			},
+			handler: (*Daemon).verbTMLReplace,
+		},
+		"tml-get": {
+			description: "Read a TML surface: its tree as TML JSON, its state and its version.",
+			params: []verbParam{
+				{Name: "surface", Type: "string", Required: true, Description: "The surface id."},
+			},
+			returns: []verbParam{
+				{Name: "doc", Type: "object", Description: "The tree as TML JSON, with the state it was opened with."},
+				{Name: "state", Type: "object", Description: "The state now."},
+				{Name: "version", Type: "int", Description: "The version: it counts every change of the tree or the state."},
+				{Name: "window_id", Type: "string", Description: "The window the surface is drawn in."},
+				{Name: "title", Type: "string", Description: "The surface's title."},
+				{Name: "owner", Type: "string", Description: "Who opened it: a pane, or tuios tml show."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-get","params":{"surface":"tml-4f1a9c02"}}`,
+			},
+			handler: (*Daemon).verbTMLGet,
+		},
+		"tml-list": {
+			description: "List the open TML surfaces of a session.",
+			params: []verbParam{
+				sessionParam,
+			},
+			returns: []verbParam{
+				{Name: "surfaces", Type: "[]object", Description: "Each surface: surface, window_id, title, owner and version."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-list","params":{"session":"work"}}`,
+			},
+			handler: (*Daemon).verbTMLList,
+		},
+		"tml-validate": {
+			description: "Check a TML document as tml-open would. Needs no session.",
+			params: []verbParam{
+				{Name: "doc", Type: "string", Required: true, Description: "The document: TML text or TML JSON as a string, or a TML JSON object."},
+			},
+			returns: []verbParam{
+				{Name: "warnings", Type: "[]object", Description: "The warnings, each with at, code and message. A document with errors fails with invalid_tml instead."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-validate","params":{"doc":"<tml version=\"1\"><text>Hello</text></tml>"}}`,
+			},
+			handler: (*Daemon).verbTMLValidate,
 		},
 		"split-window": {
 			description: "Split a pane and put a new one beside it. Needs an attached client and tiling on.",

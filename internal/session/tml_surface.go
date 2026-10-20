@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -90,9 +91,49 @@ type TMLSurfacePayload struct {
 	// Version counts every change, DocVersion only the changes to the tree.
 	Version    uint64
 	DocVersion uint64
-	Doc        []byte
-	State      []byte
-	Closed     bool
+	// Doc is set when the client may not hold this tree yet: on open, on
+	// attach and after a tml-replace. Otherwise it is empty and the tree is
+	// the one of DocVersion the client has.
+	Doc   []byte
+	State []byte
+	// Ops is the JSON Patch that made Version from Version-1, when a patch
+	// did. A client one version behind applies it instead of the state, so
+	// only the boxes that read the changed paths are drawn again.
+	Ops    []byte
+	Closed bool
+}
+
+// MergeTMLPush folds an older push of a surface into a newer one that
+// replaces it before anybody applied the older: the newer keeps the tree the
+// older carried when it has none of its own for the same tree. Its Ops then
+// skip a version, so a client applies its State instead.
+func MergeTMLPush(older, newer *TMLSurfacePayload) *TMLSurfacePayload {
+	if older == nil || newer.Closed {
+		return newer
+	}
+	if older.Version > newer.Version && !older.Closed {
+		older, newer = newer, older
+	}
+	if len(newer.Doc) == 0 && older.DocVersion == newer.DocVersion {
+		merged := *newer
+		merged.Doc = older.Doc
+		return &merged
+	}
+	return newer
+}
+
+// TMLEvent is the body of a tml-event: what a person did on a surface that
+// its owner hears.
+type TMLEvent struct {
+	Surface string `json:"surface"`
+	// Name is the emit action's name, or close.
+	Name string `json:"name"`
+	// Value is the emit's value, or the close value. Absent when it is null.
+	Value any `json:"value,omitempty"`
+	// Reason is a close's reason: closed or dismissed.
+	Reason string `json:"reason,omitempty"`
+	// Version is the surface's version when it happened.
+	Version uint64 `json:"version"`
 }
 
 // TMLSurfaceID returns the surface a TML window's URI names, or "".
@@ -144,6 +185,8 @@ type tmlSurface struct {
 	// caller keys the surface cap: the opening pane, or "" for a caller in
 	// no pane.
 	caller string
+	// ownerClient is the connection that opened the surface.
+	ownerClient string
 
 	doc     *tml.Node
 	docJSON []byte
@@ -166,15 +209,20 @@ type tmlHost struct {
 	surfaces map[string]*tmlSurface
 }
 
-// payload builds the push for s. The caller holds the host's lock.
-func (s *tmlSurface) payload() *TMLSurfacePayload {
+// payload builds the push for s: with the tree when withDoc, and with the
+// patch that made this version when ops is set. The caller holds the host's
+// lock.
+func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 	p := &TMLSurfacePayload{Surface: s.id, WindowID: s.windowID, Title: s.title, Owner: s.owner,
 		Version: s.version, DocVersion: s.docVersion, Closed: s.closed}
 	if s.closed {
 		return p
 	}
-	p.Doc = s.docJSON
+	if withDoc {
+		p.Doc = s.docJSON
+	}
 	p.State, _ = json.Marshal(s.store.State())
+	p.Ops = ops
 	return p
 }
 
@@ -276,9 +324,23 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 		Workspace int             `json:"workspace"`
 		Wait      bool            `json:"wait"`
 		Timeout   int             `json:"timeout"`
+		Events    bool            `json:"events"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Events && p.Wait {
+		return nil, invalidParam("events", "events streams what happens on the surface, and its close is the last event, so it needs no wait")
+	}
+	if p.Events {
+		cs.mu.Lock()
+		streaming := cs.streaming
+		cs.mu.Unlock()
+		if streaming {
+			return nil, hintedVerbError(ErrVerbInvalidRequest, "connection is already subscribed", &VerbHint{
+				Detail: "One event stream per connection. Open the surface with events on a connection of its own.",
+			})
+		}
 	}
 	src, verr := tmlDocSource(p.Doc)
 	if verr != nil {
@@ -329,15 +391,16 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	// document's text is: no control characters.
 	title := cmp.Or(tml.Sanitize(p.Name), doc.AttrString("title"), "TML")
 	s := &tmlSurface{
-		id:        newTMLSurfaceID(),
-		sessionID: sess.ID,
-		title:     title,
-		owner:     d.tmlOwnerLabel(cs),
-		doc:       doc,
-		docJSON:   tml.FormatJSON(doc, false),
-		store:     store,
-		limits:    limits,
-		version:   1, docVersion: 1,
+		id:          newTMLSurfaceID(),
+		sessionID:   sess.ID,
+		title:       title,
+		owner:       d.tmlOwnerLabel(cs),
+		ownerClient: cs.clientID,
+		doc:         doc,
+		docJSON:     tml.FormatJSON(doc, false),
+		store:       store,
+		limits:      limits,
+		version:     1, docVersion: 1,
 		done: make(chan struct{}),
 	}
 	uri := TMLURIPrefix + s.id
@@ -398,18 +461,29 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	d.tml.mu.Lock()
 	s.windowID = win.ID
-	payload := s.payload()
+	payload := s.payload(true, nil)
 	d.tml.mu.Unlock()
 	d.pushTMLSurface(sess.ID, payload)
 
 	if !p.Wait {
-		return map[string]any{
+		res := map[string]any{
 			"type":      "tml_opened",
 			"surface":   s.id,
 			"window_id": win.ID,
 			"target":    target,
 			"workspace": win.Workspace,
-		}, nil
+		}
+		if p.Events {
+			// The events of this surface follow the answer on this
+			// connection, as a subscribe's do. Nothing is missed in between:
+			// the subscription is made before the answer is written.
+			sub, baseline, _ := d.events.subscribeFrom(eventFilter{types: map[string]bool{EventTML: true}, surface: s.id}, 0, nil)
+			cs.mu.Lock()
+			cs.eventSub, cs.pendingStream, cs.streaming = sub, sub, true
+			cs.mu.Unlock()
+			res["seq"], res["boot_id"] = baseline, d.events.bootIdentity()
+		}
+		return res, nil
 	}
 	var timeout <-chan time.Time
 	if p.Timeout > 0 {
@@ -464,6 +538,10 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 		Ops        json.RawMessage `json:"ops"`
 		Close      bool            `json:"close"`
 		Value      json.RawMessage `json:"value"`
+		Events     []struct {
+			Name  string          `json:"name"`
+			Value json.RawMessage `json:"value"`
+		} `json:"events"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -493,12 +571,22 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 				s.version++
 			}
 		}
-		payload := s.payload()
+		payload := s.payload(false, ops)
 		d.tml.mu.Unlock()
 		if err != nil {
 			return nil, invalidParam("ops", err.Error())
 		}
 		d.pushTMLSurface(sessionID, payload)
+	}
+	for _, e := range p.Events {
+		var value any
+		if len(bytes.TrimSpace(e.Value)) > 0 {
+			if err := json.Unmarshal(e.Value, &value); err != nil {
+				return nil, invalidParam("events", "an event value is not JSON: "+err.Error())
+			}
+			value = tml.SanitizeValue(value)
+		}
+		d.publishTMLEvent(s, tml.Sanitize(e.Name), value, "")
 	}
 	if p.Close {
 		var value any
@@ -541,11 +629,12 @@ func (d *Daemon) tmlClose(id string, value any, has bool, reason string) *verbEr
 	}
 	s.closed, s.value, s.hasValue, s.reason = true, value, has, reason
 	delete(d.tml.surfaces, id)
-	payload := s.payload()
+	payload := s.payload(false, nil)
 	close(s.done)
 	sessionID, windowID := s.sessionID, s.windowID
 	d.tml.mu.Unlock()
 	d.pushTMLSurface(sessionID, payload)
+	d.publishTMLEvent(s, "close", value, reason)
 	if sess := d.manager.GetSessionByID(sessionID); sess != nil && windowID != "" {
 		d.goTracked(func() { _, _ = sess.CloseDaemonWindow(windowID) })
 	}
@@ -564,11 +653,12 @@ func (d *Daemon) tmlWindowGone(id string) {
 	}
 	s.closed, s.reason = true, TMLDismissed
 	delete(d.tml.surfaces, id)
-	payload := s.payload()
+	payload := s.payload(false, nil)
 	close(s.done)
 	sessionID := s.sessionID
 	d.tml.mu.Unlock()
 	d.pushTMLSurface(sessionID, payload)
+	d.publishTMLEvent(s, "close", nil, TMLDismissed)
 }
 
 // tmlReader reports whether cs is told about the surfaces of a session: an
@@ -610,7 +700,7 @@ func (d *Daemon) sendTMLSurfaces(cs *connState, sessionID string) {
 	var payloads []*TMLSurfacePayload
 	for _, s := range d.tml.surfaces {
 		if s.sessionID == sessionID && !s.closed {
-			payloads = append(payloads, s.payload())
+			payloads = append(payloads, s.payload(true, nil))
 		}
 	}
 	d.tml.mu.Unlock()
@@ -619,4 +709,210 @@ func (d *Daemon) sendTMLSurfaces(cs *connState, sessionID string) {
 			d.queueBroadcast(cs, msg, "sendTMLSurfaces")
 		}
 	}
+}
+
+// publishTMLEvent tells the owner, and any subscriber of tml-event, what
+// happened on a surface.
+func (d *Daemon) publishTMLEvent(s *tmlSurface, name string, value any, reason string) {
+	d.tml.mu.Lock()
+	ev := &TMLEvent{Surface: s.id, Name: name, Value: value, Reason: reason, Version: s.version}
+	sessionID, window := s.sessionID, s.windowID
+	d.tml.mu.Unlock()
+	session := ""
+	if sess := d.manager.GetSessionByID(sessionID); sess != nil {
+		session = sess.Name()
+	}
+	d.events.publish(streamEvent{Type: EventTML, Session: session, Window: window, TML: ev})
+}
+
+// tmlSurfaceOf finds an open surface, or answers no_surface.
+func (d *Daemon) tmlSurfaceOf(id string) (*tmlSurface, *verbError) {
+	d.tml.mu.Lock()
+	s := d.tml.surfaces[id]
+	d.tml.mu.Unlock()
+	if s == nil {
+		return nil, noSurface(id)
+	}
+	return s, nil
+}
+
+// verbTMLPatch applies a JSON Patch to a surface's state.
+func (d *Daemon) verbTMLPatch(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Surface string          `json:"surface"`
+		Ops     json.RawMessage `json:"ops"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr != nil {
+		return nil, verr
+	}
+	ops := bytes.TrimSpace(p.Ops)
+	if len(ops) == 0 || ops[0] != '[' {
+		return nil, invalidParam("ops", "ops is a JSON Patch: an array of operations such as {\"op\":\"replace\",\"path\":\"/count\",\"value\":3}")
+	}
+	d.tml.mu.Lock()
+	parsed, err := tml.DecodePatch(ops, &s.limits)
+	if err == nil && s.closed {
+		d.tml.mu.Unlock()
+		return nil, noSurface(p.Surface)
+	}
+	var changed []string
+	if err == nil {
+		changed, err = s.store.Apply(parsed)
+	}
+	if err != nil {
+		d.tml.mu.Unlock()
+		return nil, tmlPatchError(err)
+	}
+	s.version++
+	payload := s.payload(false, ops)
+	version, sessionID := s.version, s.sessionID
+	d.tml.mu.Unlock()
+	d.pushTMLSurface(sessionID, payload)
+	return map[string]any{"type": "tml_patched", "surface": p.Surface, "version": version, "changed": changed}, nil
+}
+
+// tmlPatchError is the answer to a patch that cannot apply. A failed test
+// says to read the state again.
+func tmlPatchError(err error) *verbError {
+	var pe *tml.PatchError
+	if errors.As(err, &pe) && pe.Code == tml.CodeTestFailed {
+		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
+			Param:   "ops",
+			Verb:    "tml-get",
+			Command: "tuios tml get <surface>",
+			Detail:  "A test operation did not match: the state changed since you read it. Nothing was changed. Read the state again and send the patch again.",
+		})
+	}
+	return invalidParam("ops", err.Error())
+}
+
+// verbTMLReplace swaps a surface's tree, and its state unless keep_state.
+func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Surface   string          `json:"surface"`
+		Doc       json.RawMessage `json:"doc"`
+		KeepState bool            `json:"keep_state"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr != nil {
+		return nil, verr
+	}
+	src, verr := tmlDocSource(p.Doc)
+	if verr != nil {
+		return nil, verr
+	}
+	d.tml.mu.Lock()
+	limits := s.limits
+	d.tml.mu.Unlock()
+	doc, problems, err := tml.Check(src, &tml.ValidateOptions{Limits: &limits, NoStateCheck: p.KeepState})
+	if err != nil {
+		return nil, tmlInvalid(problems, err)
+	}
+	d.tml.mu.Lock()
+	if s.closed {
+		d.tml.mu.Unlock()
+		return nil, noSurface(p.Surface)
+	}
+	var store *tml.Store
+	if p.KeepState {
+		// The kept state goes into the new tree, so the store checks it
+		// against the new tree's limits on each, list and rows.
+		raw, _ := json.Marshal(s.store.State())
+		withState := doc.Clone()
+		withState.SetAttr("state", tml.Value{Kind: tml.KindObject, Raw: raw})
+		store, err = tml.StoreFor(withState, &limits)
+	} else {
+		store, err = tml.StoreFor(doc, &limits)
+	}
+	if err != nil {
+		d.tml.mu.Unlock()
+		return nil, tmlInvalid(nil, err)
+	}
+	s.doc, s.docJSON, s.store = doc, tml.FormatJSON(doc, false), store
+	if t := doc.AttrString("title"); t != "" {
+		s.title = t
+	}
+	s.version++
+	s.docVersion++
+	payload := s.payload(true, nil)
+	version, sessionID := s.version, s.sessionID
+	d.tml.mu.Unlock()
+	d.pushTMLSurface(sessionID, payload)
+	return map[string]any{"type": "tml_replaced", "surface": p.Surface, "version": version}, nil
+}
+
+// verbTMLGet reads a surface: its tree, its state and its version.
+func (d *Daemon) verbTMLGet(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Surface string `json:"surface"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr != nil {
+		return nil, verr
+	}
+	d.tml.mu.Lock()
+	defer d.tml.mu.Unlock()
+	state, _ := json.Marshal(s.store.State())
+	return map[string]any{
+		"type": "tml_surface", "surface": s.id, "window_id": s.windowID, "title": s.title, "owner": s.owner,
+		"version": s.version, "doc": json.RawMessage(s.docJSON), "state": json.RawMessage(state),
+	}, nil
+}
+
+// verbTMLList lists the open surfaces of a session.
+func (d *Daemon) verbTMLList(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string `json:"session"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	d.tml.mu.Lock()
+	defer d.tml.mu.Unlock()
+	list := []map[string]any{}
+	for _, s := range d.tml.surfaces {
+		if s.sessionID != sess.ID {
+			continue
+		}
+		list = append(list, map[string]any{"surface": s.id, "window_id": s.windowID, "title": s.title, "owner": s.owner, "version": s.version})
+	}
+	slices.SortFunc(list, func(a, b map[string]any) int { return strings.Compare(a["surface"].(string), b["surface"].(string)) })
+	return map[string]any{"type": "tml_list", "session": sess.Name(), "surfaces": list}, nil
+}
+
+// verbTMLValidate checks a document as tml-open would, with no session.
+func (d *Daemon) verbTMLValidate(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Doc json.RawMessage `json:"doc"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	src, verr := tmlDocSource(p.Doc)
+	if verr != nil {
+		return nil, verr
+	}
+	limits := d.tmlLimitsFor(cs)
+	_, problems, err := tml.Check(src, &tml.ValidateOptions{Limits: &limits})
+	if err != nil {
+		return nil, tmlInvalid(problems, err)
+	}
+	if problems == nil {
+		problems = []tml.Problem{}
+	}
+	return map[string]any{"type": "tml_valid", "warnings": problems}, nil
 }

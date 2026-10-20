@@ -1963,7 +1963,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 				if c.tmlBacklog == nil {
 					c.tmlBacklog = map[string]*TMLSurfacePayload{}
 				}
-				c.tmlBacklog[payload.Surface] = &payload
+				c.tmlBacklog[payload.Surface] = MergeTMLPush(c.tmlBacklog[payload.Surface], &payload)
 			}
 		}
 		c.multiClientMu.Unlock()

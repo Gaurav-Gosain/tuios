@@ -2130,6 +2130,8 @@ func (m *OS) SwitchToSession(targetSession string) error {
 // It runs only once the daemon has confirmed which session this connection is
 // on, because every step of it is irreversible.
 func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHeight int) {
+	// The surfaces of the session left are not drawn here any more.
+	m.pruneTMLViews(state)
 	// The daemon already dropped these subscriptions when it took the detach.
 	// Unsubscribing again is what clears the client's own output, resize and
 	// exit handlers, so a pane from the session just left cannot fire into the

@@ -98,10 +98,8 @@ func (m *OS) queueTMLSurface(p *session.TMLSurfacePayload) {
 		m.tml.pending = map[string]*session.TMLSurfacePayload{}
 	}
 	// A newer push replaces an older one not yet applied: each carries the
-	// whole surface.
-	if old := m.tml.pending[p.Surface]; old == nil || old.Version <= p.Version || p.Closed {
-		m.tml.pending[p.Surface] = p
-	}
+	// whole state, and the merge keeps the tree the older one carried.
+	m.tml.pending[p.Surface] = session.MergeTMLPush(m.tml.pending[p.Surface], p)
 	m.tml.mu.Unlock()
 	m.signalTML()
 }
@@ -181,7 +179,22 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 			return false
 		}
 	}
+	// One version behind on the same tree: the patch that made this version
+	// repaints only what reads the paths it changed.
+	if v != nil && v.surface != nil && len(p.Ops) > 0 && p.DocVersion == v.docVersion && p.Version == v.version+1 {
+		lim := tml.PersonLimits()
+		if ops, err := tml.DecodePatch(p.Ops, &lim); err == nil && v.surface.Patch(ops) == nil {
+			v.version = p.Version
+			m.markTMLDirty(p.Surface)
+			return true
+		}
+	}
 	if v == nil || p.DocVersion != v.docVersion || v.doc == nil {
+		if len(p.Doc) == 0 {
+			// A tree this client never got; the next push that carries
+			// one draws it. Every push after an attach or a replace does.
+			return false
+		}
 		// The daemon checked the document against the limits of its owner,
 		// which are at most the person's, before it ever pushed it.
 		lim := tml.PersonLimits()
@@ -226,6 +239,26 @@ func ptr[T any](v T) *T { return &v }
 // a surface goes back through this machine's socket.
 func (m *OS) DrawsTML(w *terminal.Window) bool {
 	return w != nil && w.Kind == session.WindowKindTML && m.DaemonClient != nil && m.DaemonClient.DrawsTML()
+}
+
+// pruneTMLViews forgets the views of surfaces no window of state shows: the
+// surfaces that closed while this client was away, or that belong to the
+// session it left. An attach pushes every open surface again.
+func (m *OS) pruneTMLViews(state *session.SessionState) {
+	if len(m.tml.views) == 0 || state == nil {
+		return
+	}
+	shown := map[string]bool{}
+	for _, w := range state.Windows {
+		if w.Kind == session.WindowKindTML {
+			shown[session.TMLSurfaceID(w.URI)] = true
+		}
+	}
+	for id := range m.tml.views {
+		if !shown[id] {
+			delete(m.tml.views, id)
+		}
+	}
 }
 
 // tmlViewOf is the view a window draws, or nil.
@@ -359,7 +392,7 @@ func (m *OS) TMLKey(w *terminal.Window, key string) tea.Cmd {
 		clientLog("TML surface %s: key %s: %v", v.id, key, err)
 	}
 	if key == "esc" && w.IsPopup && len(res.Changed) == 0 && !res.View && len(res.Effects) == 0 {
-		return m.tmlInput(v, nil, true, nil, false)
+		return m.tmlInput(v, nil, nil, true, nil, false)
 	}
 	return m.tmlResult(w, v, res)
 }
@@ -410,8 +443,11 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 	ops := tmlStateOps(v.surface.State(), res.Changed)
 	closing, hasValue := false, false
 	var value any
+	var events []tmlEmit
 	for _, e := range res.Effects {
 		switch e.Action {
+		case "emit":
+			events = append(events, tmlEmit{Name: e.Name, Value: e.Value})
 		case "close":
 			if !closing {
 				closing, value, hasValue = true, e.Value, true
@@ -419,13 +455,13 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 		case "copy":
 			cmds = append(cmds, m.CopyToClipboard(tml.Stringify(e.Value)))
 		default:
-			// emit, open, pane and link reach the owner and the person in a
-			// later version. They do nothing here yet.
+			// open, pane and link go through the grants, in a later
+			// version. They do nothing here yet.
 			clientLog("TML surface %s: %s is not carried out yet", v.id, e.Action)
 		}
 	}
-	if len(ops) > 0 || closing {
-		cmds = append(cmds, m.tmlInput(v, ops, closing, value, hasValue))
+	if len(ops) > 0 || closing || len(events) > 0 {
+		cmds = append(cmds, m.tmlInput(v, ops, events, closing, value, hasValue))
 	}
 	return tea.Batch(cmds...)
 }
@@ -498,12 +534,22 @@ func tmlLookup(state map[string]any, pointer string) (any, any, bool) {
 // tmlInputTimeout bounds one tml-input call.
 const tmlInputTimeout = 5 * time.Second
 
-// tmlInput sends what the person did to the daemon, off the UI goroutine.
-func (m *OS) tmlInput(v *tmlView, ops []tml.Op, closing bool, value any, hasValue bool) tea.Cmd {
+// tmlEmit is one emit action, for the owner.
+type tmlEmit struct {
+	Name  string `json:"name"`
+	Value any    `json:"value,omitempty"`
+}
+
+// tmlInput sends what the person did to the daemon, off the UI goroutine:
+// the state, the emits for the owner, and a close.
+func (m *OS) tmlInput(v *tmlView, ops []tml.Op, events []tmlEmit, closing bool, value any, hasValue bool) tea.Cmd {
 	call, nonce := m.inboxCaller(), m.inboxNonce()
 	params := map[string]any{"surface": v.id, "human_nonce": nonce}
 	if len(ops) > 0 {
 		params["ops"] = ops
+	}
+	if len(events) > 0 {
+		params["events"] = events
 	}
 	if closing {
 		params["close"] = true

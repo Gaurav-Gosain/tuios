@@ -378,6 +378,8 @@ var EventTypes = []string{
 	// every connection of tuios mcp is, so these two never arrive here.
 	// They are listed so the list stays the daemon's.
 	"transfer", "transfer-progress", "transfer-file",
+	// What a person did on a TML surface. Opt-in.
+	"tml-event",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

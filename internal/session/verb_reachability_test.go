@@ -69,6 +69,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"tml-open#2":             {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	"tml-close#0":            {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
 	"tml-input#0":            {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
+	"tml-patch#0":            {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
+	"tml-replace#0":          {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
+	"tml-get#0":              {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
 	"popup#1":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	"popup#2":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	// The question waits for an answer nobody in the fixture gives, and the
