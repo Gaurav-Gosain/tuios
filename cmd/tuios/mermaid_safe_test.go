@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 )
@@ -52,6 +53,36 @@ func TestMermaidWritesNoTerminalControls(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestMermaidTextFallbacks holds what --format text writes when it cannot
+// draw a diagram in the columns there are. A drawing wider than --cols is
+// drawn at its own width on stdout, with a note on stderr.
+func TestMermaidTextFallbacks(t *testing.T) {
+	dir := t.TempDir()
+	run := func(name, src string, cols int) (string, string) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return runCaptured(t, func(stdout *os.File) error {
+			return runMermaid(path, mermaidOptions{format: "text", cols: cols, rows: 40}, stdout)
+		})
+	}
+
+	wide := "flowchart LR\n  A[" + strings.Repeat("x", 60) + "] --> B\n"
+	out, errOut := run("wide.mmd", wide, 20)
+	widest := 0
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		widest = max(widest, utf8.RuneCountInString(line))
+	}
+	if widest <= 20 || !strings.Contains(out, strings.Repeat("x", 60)) || strings.Contains(out, "flowchart LR") {
+		t.Errorf("too wide: stdout is not the drawing at its own width (widest line %d):\n%s", widest, out)
+	}
+	if errOut != "diagram 1: the text drawing is wider than 20 columns.\n" {
+		t.Errorf("too wide: stderr is %q", errOut)
 	}
 }
 
