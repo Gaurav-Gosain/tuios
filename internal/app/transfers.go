@@ -608,6 +608,13 @@ func (m *OS) transferEndNotice(row session.TransferRow) {
 		if row.FailedFiles > 0 {
 			text += " " + countOf(row.FailedFiles, "file") + " did not copy."
 		}
+		if row.Denied > 0 {
+			were := " were"
+			if row.Denied == 1 {
+				were = " was"
+			}
+			text += " " + countOf(row.Denied, "item") + were + " not copied. A linked machine may not read keys or credentials."
+		}
 		m.ShowNotification(text, "success", d)
 	case "failed":
 		text := transferFailedText(row)

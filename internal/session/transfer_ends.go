@@ -528,6 +528,7 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 		Bytes        int64         `json:"bytes"`
 		Skipped      []SkippedItem `json:"skipped"`
 		SkippedCount int           `json:"skipped_count"`
+		Denied       int           `json:"denied"`
 	}
 	if err := json.Unmarshal(raw, &reply); err != nil {
 		return walkResult{}, err
@@ -537,7 +538,7 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 		if len(reply.Skipped) > fileWalkSkippedMax {
 			reply.Skipped = reply.Skipped[:fileWalkSkippedMax]
 		}
-		return walkResult{entries: reply.Entries, total: reply.Bytes, skipped: reply.Skipped, skippedCount: max(reply.SkippedCount, len(reply.Skipped))}, nil
+		return walkResult{entries: reply.Entries, total: reply.Bytes, skipped: reply.Skipped, skippedCount: max(reply.SkippedCount, len(reply.Skipped)), denied: max(reply.Denied, 0)}, nil
 	}
 	stop := context.AfterFunc(ctx, func() { _ = c.Close() })
 	defer stop()
@@ -556,6 +557,7 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 			Bytes        int64         `json:"bytes"`
 			Skipped      []SkippedItem `json:"skipped"`
 			SkippedCount int           `json:"skipped_count"`
+			Denied       int           `json:"denied"`
 			Code         string        `json:"code"`
 			Error        string        `json:"error"`
 		}
@@ -570,6 +572,7 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 				rec.Skipped = rec.Skipped[:fileWalkSkippedMax]
 			}
 			out.skipped, out.skippedCount = rec.Skipped, max(rec.SkippedCount, len(rec.Skipped))
+			out.denied = max(rec.Denied, 0)
 			return out, nil
 		}
 		if len(out.entries) >= fileWalkMax {

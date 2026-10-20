@@ -5736,7 +5736,7 @@ this section is the contract around them.
 | `file-read` | Up to 4 MiB of a regular file, base64, from `offset`. |
 | `file-preview` | What Quick Look in the GUI shows of one file, made on the machine the file is on. An image comes back scaled to `max_px` (default 1600, at most 4096) on its long side, a PDF page (`page`) and a film frame as an image when that machine has `pdftoppm` and `ffmpeg`, text as its first 256 KiB, and anything else as its type and size (`kind` `binary`). Without `pdftoppm` a PDF up to 8 MiB is sent as it is. A WebP or a BMP, and a picture whose decode would take more than 256 MB here (a large progressive JPEG), is sent as it is, up to 16 MiB, with its own `mime`, for the client to decode. The file is opened once, with the read rules of `file-read`, and the tools read that open file, not the path. ffmpeg and ffprobe open only the file and only the MP4, QuickTime, Matroska, WebM and AVI containers. A pipe or a device is described, not read. |
 | `file-hash` | The sha256 of a file, of a range of it (`offset`, `length`), or of a copy's part (`part`, `part_id`). |
-| `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. With `stream`, up to 1000000 entries, one JSON line each after the reply, then a last line `{end, bytes, skipped, skipped_count}`, or `{end, code, error}`. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. |
+| `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. With `stream`, up to 1000000 entries, one JSON line each after the reply, then a last line `{end, bytes, skipped, skipped_count, denied}`, or `{end, code, error}`. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. Over a link, an entry in the read deny list is left out and not named. `denied` counts those entries, and a denied folder counts once. |
 | `file-mkdir` | Makes a folder and its parents. With `receive`, it ignores `path` and makes the receive folder: where a copy from the caller lands when it names no folder. For a linked machine that is the first folder of its `files_roots`, else `~/Downloads/tuios`. The reply's `path` names it. |
 | `file-rename` | Moves a path on one disk. It does not replace what is at `to` unless `replace` is set. Another disk answers `cross_device`. |
 | `file-remove` | Deletes a path. A folder that holds files needs `recursive`. The home folder and `/` are refused. |
@@ -5869,8 +5869,9 @@ an `id`. A row has `id`, `name`, `src`, `dst`, `target`, `final`, `kind`,
 that crossed a link, fewer than `done` when compressed), `rate`, `eta_ms`,
 `files`, `files_done`, `current`, `current_done`, `current_size`, `error`,
 `code`, `resumed_from`, `resumes`, `sha256`, `verified`, `created`,
-`started`, `ended`, `retry_in_ms`, `skipped`, `skipped_items`, `same`,
-`conflicts_skipped`, `conflicts_left`, `conflicts`, `conflict_count`,
+`started`, `ended`, `retry_in_ms`, `skipped`, `skipped_items`, `denied` (the
+entries of a folder copy left out because a linked machine may not read them),
+`same`, `conflicts_skipped`, `conflicts_left`, `conflicts`, `conflict_count`,
 `failed_files`, and `pane` and `pane_session` for a copy started from a
 pane. `transfer-clear` removes the jobs that ended, or only `ids`, and
 answers `cleared`. Each job it removes is a `transfer` event with action
@@ -5958,7 +5959,9 @@ new file first. `read-dir`, `wait-dir` and the binary `MsgReadDir` and
 `MsgWatchDir` keep to the read rules too, so a machine with only `list` cannot
 list or watch `~/.ssh` or `/proc`. `file-walk` over a link leaves out every
 entry in the read deny list, so a walk of the home folder, and the file list of
-a folder copy, does not name the files in `~/.ssh`.
+a folder copy, does not name the files in `~/.ssh`. The copy still ends `done`,
+and its `denied` field counts what was left out. `tuios cp` prints the count and
+exits as a partial copy.
 
 **Copies a link starts.** `transfer-start` and `drop-files` called over a link
 read and write this machine's disk for that machine, so they keep to the same

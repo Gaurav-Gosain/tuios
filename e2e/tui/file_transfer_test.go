@@ -350,6 +350,7 @@ type transferRow struct {
 	Final       string `json:"final"`
 	Error       string `json:"error"`
 	Code        string `json:"code"`
+	Denied      int    `json:"denied"`
 }
 
 func transferNow(t *testing.T, base, id string) transferRow {

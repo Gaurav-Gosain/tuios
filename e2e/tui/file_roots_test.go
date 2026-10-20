@@ -165,6 +165,12 @@ func TestALinkCannotReadKeys(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(farHome, "notes.txt"), []byte("ordinary\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(farHome, ".config", "app"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(farHome, ".config", "app", "settings.txt"), []byte("ordinary\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// Files the link may not write because they can hold a token. A link may
 	// not read them either.
 	carriers := []string{".gitconfig", ".bashrc", ".config/git/credentials"}
@@ -226,7 +232,23 @@ func TestALinkCannotReadKeys(t *testing.T) {
 	if !slices.Contains(names, "notes.txt") {
 		t.Errorf("ASSERTION: a walk of build's home folder left out notes.txt: %v", names)
 	}
-	saveTransferArtifact(t, "files-read-deny", map[string]any{"reads": reads, "walk": names})
+	// A folder copy from build leaves the denied entries out and says how
+	// many, without their names.
+	var row transferRow
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
+		"src": map[string]any{"host": "build", "path": "~/.config"}, "dst": map[string]any{"path": filepath.Join(base, "cfg")},
+	}, &row)
+	row = waitTransferEnd(t, base, row.ID, 30*time.Second)
+	if row.State != "done" || row.Denied < 1 {
+		t.Errorf("ASSERTION: a folder copy of build's ~/.config ended %s with denied=%d, want done with a count: %+v", row.State, row.Denied, row)
+	}
+	if _, err := os.Stat(filepath.Join(base, "cfg", "git", "credentials")); err == nil {
+		t.Errorf("ASSERTION: a folder copy carried build's git credentials")
+	}
+	if _, err := os.Stat(filepath.Join(base, "cfg", "app", "settings.txt")); err != nil {
+		t.Errorf("ASSERTION: a folder copy left out an ordinary file: %v", err)
+	}
+	saveTransferArtifact(t, "files-read-deny", map[string]any{"reads": reads, "walk": names, "copy": row})
 }
 
 // TestADarwinCaseFoldedDenyNameIsRefused is the review's finding 3: on a disk

@@ -63,6 +63,7 @@ type copyRow struct {
 	RetryInMs        int64                  `json:"retry_in_ms"`
 	Skipped          int                    `json:"skipped"`
 	SkippedItems     []session.SkippedItem  `json:"skipped_items"`
+	Denied           int                    `json:"denied"`
 	Same             int                    `json:"same"`
 	ConflictsSkipped int                    `json:"conflicts_skipped"`
 	ConflictsLeft    int                    `json:"conflicts_left"`
@@ -137,7 +138,7 @@ func exitForCode(code string) int {
 func rowExit(r copyRow, explicit bool) int {
 	switch r.State {
 	case "done":
-		if r.Skipped > 0 || r.ConflictsLeft > 0 || (!explicit && r.ConflictsSkipped > 0) {
+		if r.Skipped > 0 || r.Denied > 0 || r.ConflictsLeft > 0 || (!explicit && r.ConflictsSkipped > 0) {
 			return exitCopyPartial
 		}
 		return 0
@@ -423,7 +424,7 @@ func (f *follower) jsonRow(r copyRow, was string) {
 		if was == "done" {
 			return
 		}
-		f.emit(map[string]any{"event": "done", "id": r.ID, "dst": r.where(), "files": r.Files, "files_done": r.FilesDone, "bytes": r.Size, "wire_bytes": r.Wire, "same": r.Same, "conflicts_skipped": r.ConflictsSkipped, "conflicts_left": r.ConflictsLeft, "skipped": r.Skipped, "verified": r.Verified, "sha256": r.SHA256, "exit": rowExit(r, f.explicit)})
+		f.emit(map[string]any{"event": "done", "id": r.ID, "dst": r.where(), "files": r.Files, "files_done": r.FilesDone, "bytes": r.Size, "wire_bytes": r.Wire, "same": r.Same, "conflicts_skipped": r.ConflictsSkipped, "conflicts_left": r.ConflictsLeft, "skipped": r.Skipped, "denied": r.Denied, "verified": r.Verified, "sha256": r.SHA256, "exit": rowExit(r, f.explicit)})
 		return
 	case r.State == "failed" || r.State == "cancelled":
 		if was == r.State {
@@ -834,6 +835,11 @@ func (f *follower) notes(r copyRow) {
 			items = append(items, fileNote{rel: s.Rel + " (" + s.Kind + ")"})
 		}
 		list(f.stdout, fmt.Sprintf("%s %s not files or folders, so %s not copied:", commas(r.Skipped), pluralWord(r.Skipped, "item is", "items are"), pluralWord(r.Skipped, "it was", "they were")), items, r.Skipped)
+	}
+	if r.Denied > 0 {
+		// The source machine does not name them: their names are part of
+		// what a linked machine may not read.
+		_, _ = fmt.Fprintf(f.stdout, "%s %s not copied. A linked machine may not read keys, credentials or shell start files.\n", commas(r.Denied), pluralWord(r.Denied, "item was", "items were"))
 	}
 	if len(failed) > 1 {
 		list(f.stderr, "These files did not copy:", failed, max(r.FailedFiles, len(failed)))

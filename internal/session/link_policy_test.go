@@ -601,4 +601,9 @@ func TestALinkReadsNoCredentialCarrier(t *testing.T) {
 	if !slices.Contains(names, "notes.txt") {
 		t.Errorf("a walk of the home folder over a link left out an ordinary file: %v", names)
 	}
+	// .ssh, .gitconfig, .bashrc, .config/git and .config/environment.d: a
+	// denied folder counts once, and nothing is named.
+	if n, _ := walk["denied"].(float64); n != 5 {
+		t.Errorf("ASSERTION: the walk counts %v entries left out, want 5", walk["denied"])
+	}
 }
