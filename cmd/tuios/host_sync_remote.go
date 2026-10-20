@@ -152,8 +152,8 @@ func syncProbeScript() string {
 // syncStopFunc defines stopd BINARY, which stops the daemon with BINARY.
 // kill-server --restart tells the attached clients to wait for the new daemon
 // and attach to it again. A binary older than the flag refuses it with
-// "unknown flag", and then stops the daemon without it, as runRestart does.
-const syncStopFunc = `stopd() { if so=$("$1" kill-server --restart </dev/null 2>&1); then return 0; fi; case $so in *"unknown flag"*) "$1" kill-server </dev/null >/dev/null 2>&1 ;; *) return 1 ;; esac; }`
+// "unknown flag" (or "Unknown flag" from fang before v0.8.0), and then stops the daemon without it, as runRestart does.
+const syncStopFunc = `stopd() { if so=$("$1" kill-server --restart </dev/null 2>&1); then return 0; fi; case $so in *[Uu]"nknown flag"*) "$1" kill-server </dev/null >/dev/null 2>&1 ;; *) return 1 ;; esac; }`
 
 // syncInstallScript receives a binary on stdin and puts it in place.
 //

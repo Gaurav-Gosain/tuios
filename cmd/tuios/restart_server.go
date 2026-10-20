@@ -282,7 +282,7 @@ func runRestart(plan *restartReport, step func(string)) *restartReport {
 		// --restart tells the attached clients to wait for the new daemon. A
 		// binary older than the flag stops the daemon without it.
 		out, err := runTuios(plan.Binary, "kill-server", "--restart")
-		if err != nil && strings.Contains(out, "unknown flag") {
+		if err != nil && strings.Contains(strings.ToLower(out), "unknown flag") {
 			out, err = runTuios(plan.Binary, "kill-server")
 		}
 		if err != nil {
