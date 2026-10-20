@@ -4741,9 +4741,9 @@ A Markdown file gives each of its `mermaid` code blocks.
 | `svg` | The output is not a terminal |
 
 `text` draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
-diagrams, pie charts, mindmaps and gantt charts. Another type is written as its
-source, with a note on stderr. A drawing wider than the terminal is written at
-its full width, with a note on stderr.
+diagrams, pie charts, mindmaps, gantt charts and timelines. Another type is
+written as its source, with a note on stderr. A drawing wider than the terminal
+is written at its full width, with a note on stderr.
 
 `-o FILE` saves to a file, as SVG or PNG from its extension. With more than one
 diagram, the files get `-2`, `-3` and so on. `--scale` sets the pixels per SVG
@@ -4784,7 +4784,7 @@ two seconds after the end. Press `r` to start again and `q` to quit.
 
 The live view sends no frames and uses no CPU while nothing moves.
 tuios.dev/sketch draws the diagrams. It is a Go port of pele
-and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps and gantt charts now. A diagram of another type gives
+and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines and quadrant charts now. A diagram of another type gives
 an error and its source. The command exits 1 when a diagram cannot be drawn.
 
 ---
