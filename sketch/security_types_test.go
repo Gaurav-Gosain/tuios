@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -955,4 +955,24 @@ func TestC4OutputIsInert(t *testing.T) {
 		"Rel(__proto__, constructor, \"x\")\nUpdateElementStyle(__proto__, $prototype=\"x\")\nUpdateRelStyle(__proto__, constructor, $__proto__=\"1\")", RenderOptions{}, false) {
 		t.Fatal("names like __proto__ did not render")
 	}
+}
+
+func TestPacketOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "packet")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, packetTemplates, 150, RenderOptions{}, false)
+	out, err := Render("packet\n0-31: \"<b>&amp;</b> <script>x</script>\"", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, "&lt;b&gt;&amp;&lt;/b&gt; &lt;script&gt;x&lt;/script&gt;") {
+		t.Fatalf("packet label is not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "packet\naccTitle: t\n0-31: \"a\"", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile packet options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", ":", "-", "+", "\n", "title ", "0-7: \"", "+8: \""}, 3, 4000, RenderOptions{}, false)
 }

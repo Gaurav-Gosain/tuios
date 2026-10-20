@@ -56,6 +56,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"architecture":           "architecture-beta\n  group g(cloud)[\"t#27;]0x#7;\"]\n  service a \"#155;31m\"[\"a#27;[2J\"] in g\n  service b(server)\n  a:R -[#144;x]-> L:b",
 		"requirement":            "requirementDiagram\n  requirement \"r#27;[2J\" {\n  id: 1\n  text: \"t#155;31m\"\n  }\n  element e {\n  type: \"#144;x\"\n  }\n  e - satisfies -> \"r#27;[2J\"",
 		"c4":                     "C4Context\n  title t#27;]0x#7;\n  Person(u, \"u#27;[2J\", \"#155;31m\")\n  System_Boundary(b, \"#144;x\") {\n  System(s, \"s\", \"#27;[31m\")\n  }\n  Rel(u, s, \"#27;[2J\", \"#155;31m\")",
+		"packet":                 "packet\n  title t#27;]0x#7;\n  0-15: \"a#27;[2J\"\n  16-31: \"#155;31m#144;x\"",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

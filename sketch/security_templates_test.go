@@ -936,3 +936,25 @@ var c4Templates = []func(p string) string{
 		return "%%{init: {\"c4\": {\"c4ShapeInRow\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nC4Context\n" + c4Two
 	},
 }
+
+var packetTemplates = []func(p string) string{
+	func(p string) string { return "packet\n0-31: \"" + p + "\"" },
+	func(p string) string { return "packet\n0-31: '" + p + "'" },
+	func(p string) string { return "packet\n0: \"" + p + "\"\n1: \"" + p + "\"\n2-31: \"ok\"" },
+	func(p string) string { return "packet\n+8: \"" + p + "\"\n+200: \"" + p + "\"" },
+	func(p string) string { return "packet\ntitle " + p + "\n0-31: \"a\"" },
+	func(p string) string { return "packet title " + p },
+	func(p string) string { return "packet\naccTitle: " + p + "\naccDescr: " + p + "\n0-31: \"a\"" },
+	func(p string) string { return "packet\naccDescr {\n " + p + "\n }\n0-31: \"a\"" },
+	func(p string) string { return "packet\n0-31: \"a\" %% " + p },
+	func(p string) string { return "packet\n" + p + ": \"a\"" },
+	func(p string) string { return "packet\n0-" + p + ": \"a\"" },
+	func(p string) string { return "packet " + p + "\n0-31: \"a\"" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\npacket\n0-31: \"a\"" },
+	func(p string) string {
+		return "---\nconfig:\n  packet:\n    bitOrder: \"" + p + "\"\n    bitsPerRow: \"" + p + "\"\n    showBits: \"" + p + "\"\n    rowHeight: \"" + p + "\"\n---\npacket\n0-31: \"a\""
+	},
+	func(p string) string {
+		return "%%{init: {\"packet\": {\"bitWidth\": \"" + p + "\", \"paddingX\": \"" + p + "\"}, \"themeVariables\": {\"packet\": {\"blockFillColor\": \"" + p + "\"}}}}%%\npacket\n0-31: \"a\""
+	},
+}

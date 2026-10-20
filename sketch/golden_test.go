@@ -26,6 +26,7 @@ var done = map[string]bool{
 	"journey":      true,
 	"kanban":       true,
 	"mindmap":      true,
+	"packet":       true,
 	"pie":          true,
 	"quadrant":     true,
 	"requirement":  true,

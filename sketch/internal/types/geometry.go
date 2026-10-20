@@ -45,6 +45,9 @@ type Geometry struct {
 
 	// Sankey.
 	Sankey *GeoSankey
+
+	// Packet.
+	Packet *GeoPacket
 }
 
 type GeoNode struct {
@@ -335,4 +338,22 @@ type GeoFlow struct {
 	// SourceY and TargetY are the middle of the band where it leaves its source
 	// and where it enters its target, in SVG units.
 	SourceY, TargetY float64
+}
+
+// GeoPacket is a packet as lists: a text drawing lays it out again in cells.
+type GeoPacket struct {
+	Title []string
+	// BitsPerRow is the row length the fields were split at.
+	BitsPerRow int
+	// Descending numbers the bits of a row from the right.
+	Descending bool
+	ShowBits   bool
+	// Fields are the pieces of the fields in order, each within one row.
+	Fields []GeoField
+}
+
+type GeoField struct {
+	Row        int
+	Start, End float64
+	Label      string
 }
