@@ -1465,6 +1465,8 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		HarnessPID: p.HarnessPID,
 		IfState:    ifState,
 
+		HarnessIsCaller: callerRunsHarness(cs, p.HarnessPID),
+
 		SessionStart: p.SessionStart,
 		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
 	}
@@ -1665,7 +1667,7 @@ func (d *Daemon) verbReportAgentActivity(cs *connState, params json.RawMessage) 
 
 // verbSetAgentSession stores the conversation id a harness reports for a pane
 // without touching the pane's state. See applyAgentSession.
-func (d *Daemon) verbSetAgentSession(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any, *verbError) {
 	// The herdr socket calls this handler directly, past admitVerb.
 	if !d.agentsEnabled() {
 		return nil, agentsDisabledError()
@@ -1707,6 +1709,8 @@ func (d *Daemon) verbSetAgentSession(_ *connState, params json.RawMessage) (any,
 		Harness:    harnessID,
 		SessionID:  sid,
 		HarnessPID: p.HarnessPID,
+
+		HarnessIsCaller: callerRunsHarness(cs, p.HarnessPID),
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)

@@ -4600,7 +4600,9 @@ The five hook fields:
   is in one of them.
 - `harness_pid`: the pid of the harness process that ran the hook. Read only
   with `agent_session_id`, and held in daemon memory. It lets a new session
-  from the same harness process pass the nested-session guard below.
+  from the same harness process pass the nested-session guard below. When it
+  is the calling process or one of its ancestors, its exit also clears a
+  report's state once the pane is back at its shell.
 - `session_start`: true on the report a conversation's `SessionStart` sends.
   It matters only for a harness whose manifest sets `shared_server`. See the
   guard below.

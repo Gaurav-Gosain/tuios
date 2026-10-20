@@ -20,6 +20,8 @@ type AgentSessionReport struct {
 	// HarnessPID is the pid of the harness process that ran the hook, 0 when
 	// unknown. See applyAgentSession for what it decides.
 	HarnessPID int
+	// HarnessIsCaller is AgentReport.HarnessIsCaller.
+	HarnessIsCaller bool
 }
 
 // errAgentSessionUnchanged tells mutateState that the report named the id the
@@ -70,7 +72,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		owner := s.agentHarnessPIDs[w.ID].pid
 		if w.AgentSessionID == r.SessionID && w.AgentSessionHarness == r.Harness {
 			if r.HarnessPID > 1 && owner != r.HarnessPID {
-				s.setAgentHarnessPID(w.ID, r.HarnessPID)
+				s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller)
 			}
 			return errAgentSessionUnchanged
 		}
@@ -82,7 +84,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		w.AgentSessionID = r.SessionID
 		w.AgentSessionHarness = r.Harness
 		stored = r.SessionID
-		s.setAgentHarnessPID(w.ID, r.HarnessPID)
+		s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller)
 		// A person pointing the pane at a conversation clears the Codex
 		// guard, so the next SessionStart arms it afresh.
 		delete(s.agentSharedGuards, w.ID)
@@ -101,9 +103,10 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 }
 
 // setAgentHarnessPID records the harness pid a window's session id came from,
-// with its start time when it reads (harnessProc), forgetting it when the pid
-// is unknown. Called with stateMu held.
-func (s *Session) setAgentHarnessPID(windowID string, pid int) {
+// forgetting it when the pid is unknown. Its start time is read only for a
+// pid the caller runs under (isCaller), so only that pid's exit can clear the
+// pane (harnessProc). Called with stateMu held.
+func (s *Session) setAgentHarnessPID(windowID string, pid int, isCaller bool) {
 	if pid <= 1 {
 		delete(s.agentHarnessPIDs, windowID)
 		return
@@ -111,5 +114,44 @@ func (s *Session) setAgentHarnessPID(windowID string, pid int) {
 	if s.agentHarnessPIDs == nil {
 		s.agentHarnessPIDs = make(map[string]harnessProc)
 	}
-	s.agentHarnessPIDs[windowID] = readHarnessProc(pid)
+	h := harnessProc{pid: pid}
+	if isCaller {
+		h = readHarnessProc(pid)
+	}
+	s.agentHarnessPIDs[windowID] = h
+}
+
+// callerRunsHarness reports whether pid, the harness pid a report names, is
+// the process on cs or one of its ancestors.
+//
+// A harness pid is the reporter's word. A hook works it out from its own
+// ancestry, so it names a process of this machine, unless the harness runs in
+// another pid namespace, an agent in a container with the socket passed in
+// say. There the number may also name an unrelated live process here, and
+// that process exiting would clear the pane while the agent works on. The
+// kernel's record of who connected is what ties the pid to this machine.
+//
+// A call the daemon makes itself (cs nil) is herdr's, whose harness pid is
+// the peer pid the kernel gave it. A caller whose pid the kernel does not
+// give, or whose ancestry cannot be read, is not trusted: its pid is still
+// recorded for the session guard, and is never taken for exited.
+func callerRunsHarness(cs *connState, pid int) bool {
+	if cs == nil {
+		return pid > 1
+	}
+	cur := cs.peerPID
+	for range paneOriginMaxDepth {
+		if cur <= 1 {
+			return false
+		}
+		if cur == pid {
+			return true
+		}
+		next, _, ok := readProcLineage(cur)
+		if !ok {
+			return false
+		}
+		cur = next
+	}
+	return false
 }

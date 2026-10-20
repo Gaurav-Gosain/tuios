@@ -515,11 +515,12 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 }
 
 // harnessProc is the harness process a hook named (harness_pid): its pid, and
-// its start time when the pid could be read on this machine as it was
-// recorded. The pid alone is what sessionGuard compares. The start time is
-// what says the process has exited: a pid in another pid namespace, an agent
-// in a container say, or on a platform that reads no processes, has none, and
-// is never taken for gone.
+// its start time when the pid is the reporter or one of its ancestors
+// (callerRunsHarness) and could be read as it was recorded. The pid alone is
+// what sessionGuard compares. The start time is what says the process has
+// exited: a pid from another pid namespace, an agent in a container say, or
+// on a platform that reads no processes, has none, and is never taken for
+// gone.
 type harnessProc struct {
 	pid   int
 	start uint64
