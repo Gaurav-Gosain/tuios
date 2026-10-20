@@ -1029,3 +1029,28 @@ var infoTemplates = []func(p string) string{
 		return "%%{init: {\"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\ninfo"
 	},
 }
+
+var treeviewTemplates = []func(p string) string{
+	func(p string) string { return "treeView-beta\n  " + p },
+	func(p string) string { return "treeView-beta\n  " + p + "/\n    child" },
+	func(p string) string { return "treeView-beta\n  \"" + p + "\"" },
+	func(p string) string { return "treeView-beta\n  '" + p + "'" },
+	func(p string) string { return "treeView-beta\n  a ## " + p },
+	func(p string) string { return "treeView-beta\n  a :::" + p },
+	func(p string) string { return "treeView-beta\n  a :::highlight ## " + p },
+	func(p string) string { return "treeView-beta\n  a icon(" + p + ")" },
+	func(p string) string { return "treeView-beta\n  a icon(x:" + p + ")" },
+	func(p string) string { return "treeView-beta\ntitle " + p + "\n  a" },
+	func(p string) string { return "treeView-beta\naccTitle: " + p + "\naccDescr: " + p + "\n  a" },
+	func(p string) string { return "treeView-beta\naccDescr {\n " + p + "\n}\n  a" },
+	func(p string) string {
+		return "treeView-beta\n├── " + p + "\n│   └── " + p + " ## " + p + "\n└── x"
+	},
+	func(p string) string { return "---\ntitle: \"" + stripQuotes(p) + "\"\n---\ntreeView-beta\n  a" },
+	func(p string) string {
+		return "---\nconfig:\n  treeView:\n    showIcons: true\n    defaultIconPack: '" + stripApostrophes(p) + "'\n    filenameIcons:\n      a: '" + stripApostrophes(p) + "'\n    extensionIcons:\n      .b: '" + stripApostrophes(p) + "'\n---\ntreeView-beta\n  a\n  c.b\n  d icon(e)\n  " + p
+	},
+	func(p string) string {
+		return "---\nconfig:\n  treeView:\n    rowIndent: '" + stripApostrophes(p) + "'\n    paddingX: 1e999\n    paddingY: -5\n    lineThickness: .nan\n---\ntreeView-beta\n  a\n    b"
+	},
+}

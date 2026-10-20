@@ -17,8 +17,8 @@ It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
 diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant
 charts, user journeys, kanban boards, git graphs, sankey diagrams, block
 diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packets,
-radar charts, treemaps and info diagrams. Each other diagram type gives an
-error with the code `unsupported-diagram` until its port is done.
+radar charts, treemaps, info diagrams and tree views. Each other diagram type
+gives an error with the code `unsupported-diagram` until its port is done.
 
 The output matches the output of pele, except links. The test suite compares
 each diagram with an SVG that pele drew from the same source, byte for byte.
@@ -59,6 +59,7 @@ other than http, https, mailto or tel.
 | radar | 3/3 |
 | treemap | 8/8 |
 | info | 2/2 |
+| treeView | 13/13 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
@@ -85,12 +86,12 @@ v1.7.0 does.
 class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, timelines, XY
 charts, quadrant charts, user journeys, kanban boards, git graphs, sankey
 diagrams, block diagrams, architecture diagrams, requirement diagrams, C4
-diagrams, packet diagrams, radar charts, treemaps and info diagrams with
-box-drawing characters, for a terminal that shows no pictures. For a graph it
-takes the layout that sketch works out for the SVG and maps it to cells. The
-labels stay real text. A pie chart is a bar for each slice, with its value.
-pele leaves a slice under 1% out of the pie, and shows values only with
-`showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
+diagrams, packet diagrams, radar charts, treemaps, info diagrams and tree
+views with box-drawing characters, for a terminal that shows no pictures. For
+a graph it takes the layout that sketch works out for the SVG and maps it to
+cells. The labels stay real text. A pie chart is a bar for each slice, with
+its value. pele leaves a slice under 1% out of the pie, and shows values only
+with `showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
 timeline runs across, and runs down when it does not fit the columns. So does
 a user journey. An XY chart draws its bars and lines with tuios.dev/plot, and
 turns its categories into rows when they do not fit across. It writes point
@@ -105,7 +106,8 @@ architecture, requirement and C4 diagrams are drawn as a flowchart is. A block
 arrow shows an arrow character. A service without a title shows its icon name.
 A packet diagram is rows of bit fields. A radar chart is a table with one bar
 for each curve on each axis. A treemap is nested boxes, or an indented tree
-when the boxes are too small. An info diagram is its line of text.
+when the boxes are too small. An info diagram is its line of text. A tree view
+is drawn as the `tree` command draws a folder.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

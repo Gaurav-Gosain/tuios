@@ -7,8 +7,8 @@
 // pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant charts,
 // user journeys, kanban boards, git graphs, sankey diagrams, block diagrams,
 // architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams,
-// radar charts, treemaps and info have a text drawing. Other types give
-// ErrUnsupported.
+// radar charts, treemaps, info and treeView have a text drawing. Other types
+// give ErrUnsupported.
 package text
 
 import (
@@ -45,7 +45,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -94,6 +94,8 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawTreemap(layout, opt)
 	case "info":
 		c, err = drawInfo(layout, opt)
+	case "treeView":
+		c, err = drawTreeView(layout, opt)
 	case "timeline":
 		c, err = drawTimeline(layout, opt)
 	case "xychart":

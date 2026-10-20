@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1040,4 +1040,31 @@ func TestInfoOutputIsInert(t *testing.T) {
 	hostileOptions(t, "info\naccTitle: t")
 	mutate(t, append(corpus, "info\ntitle T\naccTitle: A\naccDescr: D\n", "---\ntitle: T\n---\ninfo showInfo\n"),
 		[]string{"\n", "title ", "accTitle: ", "accDescr {", "}", "showInfo"}, 3, 4000, RenderOptions{}, false)
+}
+
+func stripApostrophes(p string) string { return strings.ReplaceAll(p, "'", "") }
+
+func stripQuotes(p string) string { return strings.NewReplacer(`"`, "", `\`, "").Replace(p) }
+
+// TestTreeviewOutputIsInert leaves out pele's check for "function" and "[object" in the output:
+// Go has no prototypes, so names like __proto__ must only render.
+func TestTreeviewOutputIsInert(t *testing.T) {
+	hostile(t, treeviewTemplates, len(PAYLOADS)*8, RenderOptions{}, false)
+	for _, key := range []string{"__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"} {
+		src := "---\nconfig:\n  treeView:\n    showIcons: true\n    defaultIconPack: p\n---\ntreeView-beta\n  " + key + "\n  x." + key + "\n  y icon(" + key + ")\n"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", key)
+		}
+	}
+	corpus := corpusOf(t, "treeview")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{" :::", " icon(", " ## ", "\"", "'", "\n", "    ", "├── ", "/"}, 11, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 300 {
+		t.Fatalf("%d mutated treeView sources rendered, want more than 300", rendered)
+	}
 }

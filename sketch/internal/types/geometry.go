@@ -57,6 +57,9 @@ type Geometry struct {
 
 	// Info.
 	Info *GeoInfo
+
+	// TreeView.
+	TreeView *GeoTreeView
 }
 
 type GeoNode struct {
@@ -408,4 +411,20 @@ type GeoTreeBox struct {
 type GeoInfo struct {
 	Title []string
 	Text  string
+}
+
+// GeoTreeView is a file tree as its rows, in the order they are drawn.
+type GeoTreeView struct {
+	Title []string
+	Rows  []GeoTreeRow
+}
+
+type GeoTreeRow struct {
+	// Depth is 0 for a top-level entry; a row's children follow it one level deeper.
+	Depth       int
+	Name        string
+	Directory   bool
+	Icon        string
+	Description string
+	Highlight   bool
 }
