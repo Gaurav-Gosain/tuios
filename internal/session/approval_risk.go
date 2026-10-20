@@ -347,18 +347,48 @@ func respondApproves(prompt harness.Prompt, action string, reply harness.Reply) 
 // grant, such an answer is refused outright unless the policy lets panes
 // allow risky calls: an agent with the grant may deny one and never allow
 // it. A deny is always taken.
-func (d *Daemon) respondRiskRefusal(sess *Session, window string, prompt harness.Prompt, action string, reply harness.Reply, ack []string, byPane bool) *verbError {
+//
+// The item's mark comes from what the pane reported, and a pane may report
+// again. So for a pane, seen adds the rules the prompt on the screen matched
+// (promptRisk), and either one refuses the allow. The person's risk_ack is
+// still held to the item's mark, which is what the Inbox showed them.
+func (d *Daemon) respondRiskRefusal(sess *Session, window string, prompt harness.Prompt, action string, reply harness.Reply, ack []string, byPane bool, seen []string) *verbError {
 	rules := d.attention.riskOn(sess.Name(), window)
-	if len(rules) == 0 || !respondApproves(prompt, action, reply) {
+	if !respondApproves(prompt, action, reply) {
 		return nil
 	}
 	if byPane && !d.approvalPolicy().PanesMayAllow {
-		return hintedVerbError(ErrVerbForbidden, "this call matched the risk rules "+strings.Join(rules, ", ")+", and a pane may not allow a risky call", &VerbHint{
+		all := append(slices.Clone(rules), seen...)
+		slices.Sort(all)
+		if all = slices.Compact(all); len(all) == 0 {
+			return nil
+		}
+		return hintedVerbError(ErrVerbForbidden, "this call matched the risk rules "+strings.Join(all, ", ")+", and a pane may not allow a risky call", &VerbHint{
 			Detail: "Nothing was pressed. A pane with the respond grant may deny a risky call and never allow one, unless [agents.approvals.risk] panes_may_allow is true. Ask the person with send-agent-message -w human.",
 		})
+	}
+	if len(rules) == 0 {
+		return nil
 	}
 	if !sameRuleSet(ack, rules) {
 		return riskUnacknowledgedError(rules, "Nothing was pressed. The Inbox's peek allows a risky call on a second press of the same key.")
 	}
 	return nil
+}
+
+// promptRisk is the rules the prompt on a pane's screen matches, read with
+// the root and run folder the pane's approval line is marked with. Each line
+// the rule read is matched as the pane's line would be, so a line the screen
+// cut short is marked cut short too.
+func (d *Daemon) promptRisk(sess *Session, w WindowState, prompt harness.Prompt) []string {
+	st := sess.GetState()
+	root := sess.windowApprovalRoot(managedWorktreePath(st.Worktree), w.ID, w.AgentSessionID)
+	runDir := resolvedRunDir(sess.paneRunDir(w.PTYID))
+	var names []string
+	for _, line := range append([]string{prompt.Message}, prompt.Lines...) {
+		if line = strings.TrimSpace(line); line != "" {
+			names = append(names, risk.Names(d.attention.riskOfLine(line, root, runDir))...)
+		}
+	}
+	return names
 }

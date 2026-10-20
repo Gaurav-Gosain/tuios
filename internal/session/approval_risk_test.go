@@ -374,8 +374,12 @@ func TestRespondToARiskyPrompt(t *testing.T) {
 // risky prompt and may not allow one, even acknowledging it, unless
 // panes_may_allow is set.
 //
+// The mark on the item is the pane's own report, so the daemon also reads the
+// prompt on the screen, and a pane that clears the mark is still refused.
+//
 // Negative control: with the byPane check removed from respondRiskRefusal, the
-// pane's acknowledged approve presses 1.
+// pane's acknowledged approve presses 1. With promptRisk's result left out of
+// verbRespond, the approve after the mark is cleared presses 1.
 func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	ag := startBlockedAgent(t, d, sp, "grant", "claude-code", "approve")
@@ -388,6 +392,23 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 	wantForbidden(t, "a pane allowing a risky prompt", callVerb(t, c, "respond", params))
 	params["action"], params["value"] = "choose", "1"
 	wantForbidden(t, "a pane choosing the allow option of a risky prompt", callVerb(t, c, "respond", params))
+	if got := ag.received(); got != "" {
+		t.Fatalf("ASSERTION: a pane's allow reached the agent: %q", got)
+	}
+
+	// The mark comes from the pane's own report, and a pane may report a
+	// harmless line over it. The prompt on the screen still shows rm -rf,
+	// and the daemon reads that too.
+	d.SetApprovalPolicy(ApprovalPolicyFromConfig(config.ApprovalsConfig{}))
+	markRisky(t, d, "grant", ag.window)
+	delete(params, "value")
+	delete(params, "risk_ack")
+	params["action"] = "approve"
+	resp := callVerb(t, c, "respond", params)
+	wantForbidden(t, "a pane allowing a risky prompt it marked harmless", resp)
+	if msg := fmt.Sprint(resp["error"]); !strings.Contains(msg, risk.RuleRecursiveDelete) {
+		t.Errorf("the refusal does not name the rule the screen matched: %s", msg)
+	}
 	if got := ag.received(); got != "" {
 		t.Fatalf("ASSERTION: a pane's allow reached the agent: %q", got)
 	}

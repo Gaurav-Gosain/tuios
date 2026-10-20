@@ -470,7 +470,13 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 			Detail:    "The actions this prompt offers now are listed. Anything else is answered in the pane.",
 		})
 	}
-	if verr := d.respondRiskRefusal(sess, w.ID, look.prompt, p.Action, reply, p.RiskAck, byPane != ""); verr != nil {
+	// A pane's allow is also held to the prompt the daemon read, since the
+	// item's mark is the pane's own report. See respondRiskRefusal.
+	var seen []string
+	if byPane != "" {
+		seen = d.promptRisk(sess, look.window, look.prompt)
+	}
+	if verr := d.respondRiskRefusal(sess, w.ID, look.prompt, p.Action, reply, p.RiskAck, byPane != "", seen); verr != nil {
 		return nil, verr
 	}
 	pty := sess.GetPTY(look.window.PTYID)
