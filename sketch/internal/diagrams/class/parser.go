@@ -4,6 +4,7 @@ package class
 
 import (
 	"slices"
+	"strings"
 
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
@@ -82,23 +83,43 @@ func (ps *parser) alphaNum() string {
 }
 
 func (ps *parser) name(generic bool) string {
-	out := ""
+	// A name of one token, the usual case, is that token's text. A longer one is built in a
+	// Builder: Go copies the string on each +=, where JavaScript ropes do not.
+	first := ""
+	var more strings.Builder
+	parts := 0
+	add := func(s string) {
+		switch parts {
+		case 0:
+			first = s
+		case 1:
+			more.WriteString(first)
+			fallthrough
+		default:
+			more.WriteString(s)
+		}
+		parts++
+	}
 	for {
 		if ps.types[ps.i] == T_BQUOTE_STR {
-			out += ps.text()
+			add(ps.text())
 			break
 		}
 		if ALPHANUM[ps.types[ps.i]] == 0 {
 			ps.fail(NAME_TOKENS)
 		}
-		out += ps.text()
+		add(ps.text())
 		t := ps.types[ps.i]
 		if t == T_DOT {
-			out += "."
+			add(".")
 			ps.i++
 		} else if ALPHANUM[t] == 0 && t != T_BQUOTE_STR {
 			break
 		}
+	}
+	out := first
+	if parts > 1 {
+		out = more.String()
 	}
 	if generic && ps.types[ps.i] == T_GENERICTYPE {
 		out += "~" + ps.text() + "~"
@@ -294,11 +315,13 @@ func (ps *parser) styles() []string {
 		if STYLE_PART[ps.types[ps.i]] == 0 {
 			ps.fail("'ALPHA', 'NUM', 'COLON', 'UNIT', 'SPACE', 'BRKT', 'STYLE', 'PCT', 'LABEL'")
 		}
-		s := ps.text()
+		start := ps.i
+		ps.i++
 		for STYLE_PART[ps.types[ps.i]] == 1 {
-			s += ps.text()
+			ps.i++
 		}
-		out = append(out, s)
+		// One join, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
+		out = append(out, strings.Join(ps.texts[start:ps.i], ""))
 		if ps.types[ps.i] != T_COMMA {
 			return out
 		}

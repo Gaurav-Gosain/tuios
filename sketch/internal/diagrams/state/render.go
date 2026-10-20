@@ -750,10 +750,14 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			at := PAD_Y - h/2 + v.label.Height
 			body += `<path d="M` + svg.Num(-w/2) + `,` + svg.Num(at+6) + `H` + svg.Num(w/2) + `"` + RULE + style.Line + `/>` + svg.LabelSvg(v.label, 0, at-v.label.Height/2, labelAttrs, icons)
 			at += 14
+			// One Builder, not a += per line: Go copies the string on each +=, where JavaScript ropes do not.
+			var lines strings.Builder
+			lines.WriteString(body)
 			for _, line := range v.lines {
-				body += svg.LabelSvg(line, 0, at+line.Height/2, ` class="pele-state-description" font-size="`+js.Num(small)+`"`+style.Text, icons)
+				lines.WriteString(svg.LabelSvg(line, 0, at+line.Height/2, ` class="pele-state-description" font-size="`+js.Num(small)+`"`+style.Text, icons))
 				at += line.Height
 			}
+			body = lines.String()
 		}
 
 		if link, ok := db.Links[node.ID]; ok {

@@ -3,6 +3,8 @@
 package xychart
 
 import (
+	"strings"
+
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
 )
@@ -71,15 +73,15 @@ func (p *parser) text() XyText {
 	if !p.isText(p.typ(p.i)) {
 		p.fail("'STR', 'ALPHA', 'NUM'")
 	}
-	s := p.toks.texts[p.i]
+	start := p.i
 	p.i++
 	if p.typ(p.i-1) != T_STR {
 		for p.word(p.i) {
-			s += p.toks.texts[p.i]
 			p.i++
 		}
 	}
-	return XyText{text: s, typ: "text"}
+	// One join, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
+	return XyText{text: strings.Join(p.toks.texts[start:p.i], ""), typ: "text"}
 }
 
 func (p *parser) rng() (float64, float64) {

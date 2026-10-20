@@ -116,8 +116,9 @@ func (db *ErDb) addClass(ids []string, styles []string) {
 func (db *ErDb) setClass(ids []string, classNames []string) {
 	for _, id := range ids {
 		if entity, ok := db.entities.Get(id); ok {
-			for _, name := range classNames {
-				entity.cssClasses += " " + name
+			// One concatenation per entity, not a += per name: Go copies the string on each +=.
+			if len(classNames) > 0 {
+				entity.cssClasses += " " + strings.Join(classNames, " ")
 			}
 		}
 		if subgraph := db.subgraphLookup[id]; subgraph != nil {

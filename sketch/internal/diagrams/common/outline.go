@@ -529,12 +529,15 @@ func ParseOutline(src string, db OutlineDb, kanban bool) {
 				nodeId = *id
 			}
 			if o.typ(o.i) == T_SHAPE_DATA {
-				shapeData := o.text(o.i)
+				// One Builder, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
+				var shape strings.Builder
+				shape.WriteString(o.text(o.i))
 				o.i++
 				for o.typ(o.i) == T_SHAPE_DATA {
-					shapeData += o.text(o.i)
+					shape.WriteString(o.text(o.i))
 					o.i++
 				}
+				shapeData := shape.String()
 				if !isStop(o.typ(o.i)) {
 					o.fail(STOP + data)
 				}

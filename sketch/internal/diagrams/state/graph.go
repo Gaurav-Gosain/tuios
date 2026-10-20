@@ -188,7 +188,9 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 		if item.Description.truthy() {
 			if d.description.IsList {
 				d.shape = "rectWithTitle"
-				d.description.List = append(append([]string{}, d.description.List...), flat(item.Description)...)
+				// pele copies the list here. The draft owns its list (every branch below makes a new one),
+				// so appending in place is the same and keeps a state with many descriptions linear.
+				d.description.List = append(d.description.List, flat(item.Description)...)
 			} else if d.description.Text != "" {
 				d.shape = "rectWithTitle"
 				if d.description.Text == id {
@@ -266,7 +268,9 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 		if full.IsList {
 			if len(full.List) > 0 {
 				node.Label = full.List[0]
-				node.Description = append([]string{}, full.List[1:]...)
+				// Shared, not copied: a state is visited once per statement, and nothing writes the list.
+				// The capped capacity makes an append copy rather than write into the draft's list.
+				node.Description = full.List[1:len(full.List):len(full.List)]
 			}
 		} else {
 			node.Label = full.Text

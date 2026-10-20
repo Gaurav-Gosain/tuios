@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -383,5 +384,35 @@ func TestFlowchartLimits(t *testing.T) {
 	}
 	if _, err := Render("flowchart TD\n  A --> B\n", RenderOptions{OutputLimit: 100}); !errors.As(err, &pe) || pe.Code != CodeLimit {
 		t.Fatalf("output limit of 100: got %v, want a limit error", err)
+	}
+	longRunsStayLinear(t)
+}
+
+// longRunsStayLinear renders statements of 200,000 characters, past the
+// default limit, that a parser reads as one long run of tokens or lines. JavaScript
+// ropes make s += token linear in pele. In Go each += copies the string, so a
+// run built that way allocates gigabytes. The bound is on bytes allocated, which
+// does not depend on the speed of the machine.
+func longRunsStayLinear(t *testing.T) {
+	const n = 200_000
+	const bound = 512 << 20
+	for name, src := range map[string]string{
+		"quadrant axis text":   "quadrantChart\n x-axis " + strings.Repeat("a1-", n/3),
+		"quadrant point style": "quadrantChart\n a: [0.1, 0.2] color: " + strings.Repeat("a1:", n/3),
+		"quadrant classDef id": "quadrantChart\n classDef " + strings.Repeat("a1", n/2) + " color: #fff",
+		"xychart axis text":    "xychart\n x-axis " + strings.Repeat("word ", n/5) + "[a]\n bar [1]",
+		"class name":           "classDiagram\nclass " + strings.Repeat("a.", n/2) + "a",
+		"class style":          "classDiagram\nclass A\nstyle A fill:" + strings.Repeat("a:", n/2),
+		"er subgraph title":    "erDiagram\nsubgraph s [" + strings.Repeat("a ", n/2) + "]\nA\nend",
+		"er class names":       "erDiagram\nA\nclass A " + strings.Repeat("b,", n/2) + "b",
+		"state descriptions":   "stateDiagram-v2\nA\n" + strings.Repeat("A : x\n", n/6),
+	} {
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		_, _ = Render(src, RenderOptions{Limit: 1 << 20, OutputLimit: 1 << 30})
+		runtime.ReadMemStats(&after)
+		if got := after.TotalAlloc - before.TotalAlloc; got > bound {
+			t.Errorf("%s of %d characters: %d MB allocated, want at most %d MB", name, n, got>>20, bound>>20)
+		}
 	}
 }

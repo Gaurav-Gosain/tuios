@@ -3,6 +3,8 @@
 package quadrant
 
 import (
+	"strings"
+
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
 )
@@ -46,6 +48,11 @@ func (p *parser) take() string {
 	return p.toks.texts[p.i-1]
 }
 
+// join returns the texts of the tokens from start up to the current one, in one allocation.
+func (p *parser) join(start int) string {
+	return strings.Join(p.toks.texts[start:p.i], "")
+}
+
 func (p *parser) fail(expected string) {
 	t := p.typ(p.i)
 	if t == T_ERROR {
@@ -74,10 +81,13 @@ func (p *parser) text() QuadrantText {
 	if !isText(first) {
 		p.fail(TEXT_TOKENS)
 	}
-	s := p.take()
+	start := p.i
+	p.i++
 	for t := p.typ(p.i); in(&WORD, t) || t == T_SPACE || t == T_MINUS; t = p.typ(p.i) {
-		s += p.take()
+		p.i++
 	}
+	// One join, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
+	s := p.join(start)
 	typ := "text"
 	if first == T_MD_STR {
 		typ = "markdown"
@@ -91,11 +101,12 @@ func (p *parser) styles() []string {
 		if !in(&STYLE, p.typ(p.i)) {
 			p.fail("'ALPHA', 'NUM', 'COLON', 'SPACE', 'BRKT', 'MINUS'")
 		}
-		s := p.take()
+		start := p.i
+		p.i++
 		for in(&STYLE, p.typ(p.i)) {
-			s += p.take()
+			p.i++
 		}
-		out = append(out, js.Trim(s))
+		out = append(out, js.Trim(p.join(start)))
 		if p.typ(p.i) != T_COMMA {
 			return out
 		}
@@ -123,10 +134,12 @@ func parseQuadrant(src string, db *QuadrantDb) {
 			if !in(&ID, p.typ(p.i)) {
 				p.fail("'ALPHA', 'NUM', 'UNICODE_TEXT'")
 			}
-			id := p.take()
+			start := p.i
+			p.i++
 			for in(&ID, p.typ(p.i)) {
-				id += p.take()
+				p.i++
 			}
+			id := p.join(start)
 			p.expect(T_SPACE)
 			db.addClass(id, p.styles())
 		case T_X_AXIS, T_Y_AXIS:

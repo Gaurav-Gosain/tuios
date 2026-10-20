@@ -349,10 +349,12 @@ func (ps *parser) run() {
 			title := id
 			if ps.types[ps.i] == T_SQS {
 				ps.i++
-				title = ps.entityName()
+				// One join, not a += per name: Go copies the string on each +=, where JavaScript ropes do not.
+				words := []string{ps.entityName()}
 				for isName(ps.types[ps.i]) {
-					title += " " + ps.entityName()
+					words = append(words, ps.entityName())
 				}
+				title = strings.Join(words, " ")
 				ps.expect(T_SQE)
 			}
 			ps.separator()
