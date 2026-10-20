@@ -434,6 +434,8 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	}
 
 	var clusters, nodesOut strings.Builder
+	// An entity takes about 700 bytes of markup and a relationship about 400.
+	nodesOut.Grow(len(views) * 704)
 	for i, view := range views {
 		c := cnodes[i]
 		node := view.node
@@ -547,6 +549,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	}
 
 	var edgesOut, labelsOut strings.Builder
+	edgesOut.Grow(len(cedges) * 400)
 	for i, ce := range cedges {
 		edge := drawn[i]
 		label := edgeLabels[i]

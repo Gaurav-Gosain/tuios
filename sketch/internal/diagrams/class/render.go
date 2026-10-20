@@ -808,6 +808,8 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	var clusters, struckTitles, nodesOut strings.Builder
+	// A class takes about 500 bytes of markup and a relation about 400.
+	nodesOut.Grow(len(views) * 512)
 	for i, view := range views {
 		c := cnodes[i]
 		node := view.node
@@ -856,6 +858,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	var edgesOut, labelsOut strings.Builder
+	edgesOut.Grow(len(cedges) * 400)
 	for i, ce := range cedges {
 		edge := drawn[i]
 		label := edgeLabels[i]

@@ -99,6 +99,10 @@ func yearFromTime(t float64) float64 {
 }
 
 func inLeapYear(y float64) bool {
+	// A whole year in int64 range: the same test without math.Mod, which is slow.
+	if i := int64(y); float64(i) == y && y > -1e18 && y < 1e18 {
+		return i%4 == 0 && (i%100 != 0 || i%400 == 0)
+	}
 	return math.Mod(y, 4) == 0 && (math.Mod(y, 100) != 0 || math.Mod(y, 400) == 0)
 }
 

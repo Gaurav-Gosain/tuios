@@ -69,9 +69,12 @@ func Num(value float64) string {
 		return "0"
 	}
 	if n > -1e11 && n < 1e11 {
-		if n > 0 && n < 10000 && math.Mod(n, 100) == 0 {
-			// A small whole number: strconv keeps these, so it costs no allocation.
-			return strconv.Itoa(int(n) / 100)
+		if n > 0 && n < 10000 {
+			// n is whole. A small whole number of units comes from strconv,
+			// which keeps these, so it costs no allocation.
+			if i := int(n); i%100 == 0 {
+				return strconv.Itoa(i / 100)
+			}
 		}
 		var buf [24]byte
 		return string(appendHundredths(buf[:0], n))

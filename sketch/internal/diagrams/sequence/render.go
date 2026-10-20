@@ -733,6 +733,8 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	// the inner ones end up on top.
 	var rectsOut, activationsOut []string
 	var framesOut, edgesOut, labelsOut, notesOut, actorsOut, crossesOut strings.Builder
+	// A message takes about 300 bytes of markup.
+	edgesOut.Grow(len(views) * 304)
 	endActivation := func(col *column, end float64) float64 {
 		start := col.activations[len(col.activations)-1]
 		col.activations = col.activations[:len(col.activations)-1]
@@ -1074,7 +1076,11 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					y = lineY + b.size.H/2 - 6
 				}
 			}
-			edgesOut.WriteString(`<g class="pele-edge pele-message" data-id="i` + svg.EscText(m.ID) + `">` + inner + `</g>`)
+			edgesOut.WriteString(`<g class="pele-edge pele-message" data-id="i`)
+			edgesOut.WriteString(svg.EscText(m.ID))
+			edgesOut.WriteString(`">`)
+			edgesOut.WriteString(inner)
+			edgesOut.WriteString(`</g>`)
 			y = math.Max(y, lineY)
 			if a.destroyAt == i {
 				y = math.Max(y, destroy(a, lineY))

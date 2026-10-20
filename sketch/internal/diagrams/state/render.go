@@ -630,6 +630,8 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	var clusters, dividers, nodesOut, notesOut strings.Builder
+	// A state takes about 230 bytes of markup and a transition about 300.
+	nodesOut.Grow(len(cnodes) * 232)
 	// Draws the dashed lines between the regions among a composite's members.
 	divide := func(items []int, left, top, right, bottom float64) {
 		var regions []int
@@ -812,6 +814,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	var edgesOut, labelsOut strings.Builder
+	edgesOut.Grow(len(cedges) * 304)
 	loopSeen := make([]int, states)
 	loopText := make([]float64, states)
 	for i, ce := range cedges {
