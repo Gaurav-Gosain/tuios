@@ -15,42 +15,20 @@ import (
 // first there, for a radius the diagram's author set to come after it and win.
 const rootRounded = ` rx="` + RADIUS + `"`
 
-// rounded moves the corner radius of each <rect> with rx="var(--pele-radius,4px)"
-// into its style, in the content the parts make when joined. pele does it with
-// /<rect\b[^>]*>/g; a scan does the same without a regexp pass over the whole
-// drawing.
-func rounded(parts []string) string {
-	if len(parts) == 1 {
-		return roundedIn(parts[0])
-	}
-	total := 0
+// splitTag reports whether a part ends inside a tag, which the next part may
+// finish.
+func splitTag(parts []string) bool {
 	for _, part := range parts {
-		total += len(part)
 		if strings.LastIndexByte(part, '<') > strings.LastIndexByte(part, '>') {
-			// The part ends inside a tag, which the next one may finish. Scan
-			// the joined content, so that a tag across parts is seen whole.
-			return roundedIn(strings.Join(parts, ""))
+			return true
 		}
 	}
-	var b strings.Builder
-	b.Grow(total)
-	for _, part := range parts {
-		writeRounded(&b, part)
-	}
-	return b.String()
+	return false
 }
 
-func roundedIn(content string) string {
-	if !strings.Contains(content, rootRounded) {
-		return content
-	}
-	var b strings.Builder
-	b.Grow(len(content))
-	writeRounded(&b, content)
-	return b.String()
-}
-
-// writeRounded writes content to b with the radius of each rect moved.
+// writeRounded writes content to b with the corner radius of each <rect> with
+// rx="var(--pele-radius,4px)" moved into its style. pele does it with
+// /<rect\b[^>]*>/g; a scan does the same without a regexp pass.
 func writeRounded(b *strings.Builder, content string) {
 	last := 0
 	for i := 0; ; {
@@ -126,6 +104,45 @@ type Accessible struct {
 	AccDescr string
 }
 
+// rootVars are the variables of the root style a drawing uses.
+type rootVars struct {
+	radius bool
+	bold   [len(weights)]bool
+}
+
+// usedVars finds the variables the parts use, in one pass over each var(--
+// in them. With moved, a radius that writeRounded will move counts as
+// var(--_r) already; that makes a guess, which a scan of the written content
+// confirms.
+func usedVars(moved bool, parts ...string) rootVars {
+	var v rootVars
+	for _, content := range parts {
+		for i := 0; ; {
+			at := strings.Index(content[i:], "var(--")
+			if at < 0 {
+				break
+			}
+			start := i + at
+			i = start + len("var(")
+			rest := content[i:]
+			if strings.HasPrefix(rest, "--_r)") {
+				v.radius = true
+				continue
+			}
+			if moved && start >= len(` rx="`) && strings.HasPrefix(content[start-len(` rx="`):], rootRounded) {
+				v.radius = true
+				continue
+			}
+			for k, pair := range weights {
+				if strings.HasPrefix(rest, pair[0]) && strings.HasPrefix(rest[len(pair[0]):], ")") {
+					v.bold[k] = true
+				}
+			}
+		}
+	}
+	return v
+}
+
 func SvgDocument(typ string, width, height, fontSize float64, options types.RenderOptions, acc Accessible, parts ...string) string {
 	prefix := Esc(types.Or(options.IDPrefix, "pele"))
 	head := ""
@@ -142,41 +159,46 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	if options.Responsive != nil && !*options.Responsive {
 		fit = ""
 	}
-	// The parts of the drawing, in order. Joined, they are what pele calls content.
-	content := rounded(parts)
-	// Which of var(--_r) and the weights' variables the drawing uses, in one
-	// pass over each var(--_ in it.
-	radius := false
-	var bold [len(weights)]bool
-	for i := 0; ; {
-		at := strings.Index(content[i:], "var(--_")
-		if at < 0 {
-			break
-		}
-		i += at + len("var(")
-		rest := content[i:]
-		if strings.HasPrefix(rest, "--_r)") {
-			radius = true
-			continue
+	open := func(v rootVars) string {
+		w := ""
+		if v.radius {
+			w = ";--_r:" + RADIUS
 		}
 		for k, pair := range weights {
-			if strings.HasPrefix(rest, pair[0]) && strings.HasPrefix(rest[len(pair[0]):], ")") {
-				bold[k] = true
+			if v.bold[k] {
+				w += ";" + pair[0] + ":var(--pele-" + pair[1] + "-weight,bold)"
 			}
 		}
+		return `<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-` + typ + `" viewBox="0 0 ` + js.Num(width) + ` ` + js.Num(height) +
+			`" width="` + js.Num(width) + `" height="` + js.Num(height) + `" style="` + fit + Esc(options.Theme.Style()) + ROOT_STYLE + w +
+			Esc(FontStyle(fontSize, options.FontFamily, options.FontFamilyMono)) +
+			`" fill="var(--_fg)" role="graphics-document document" aria-roledescription="` + typ + `"` + aria + `>` +
+			head
 	}
-	w := ""
-	if radius {
-		w = ";--_r:" + RADIUS
+	// The parts of the drawing, in order. Joined, they are what pele calls
+	// content. The root's style depends on the variables the content uses
+	// once the radius has moved; the parts give a guess, which the written
+	// content confirms.
+	if len(parts) > 1 && splitTag(parts) {
+		parts = []string{strings.Join(parts, "")}
 	}
-	for k, pair := range weights {
-		if bold[k] {
-			w += ";" + pair[0] + ":var(--pele-" + pair[1] + "-weight,bold)"
-		}
+	guess := usedVars(true, parts...)
+	root := open(guess)
+	total := len(root) + len("</svg>")
+	for _, part := range parts {
+		total += len(part)
 	}
-	return `<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-` + typ + `" viewBox="0 0 ` + js.Num(width) + ` ` + js.Num(height) +
-		`" width="` + js.Num(width) + `" height="` + js.Num(height) + `" style="` + fit + Esc(options.Theme.Style()) + ROOT_STYLE + w +
-		Esc(FontStyle(fontSize, options.FontFamily, options.FontFamilyMono)) +
-		`" fill="var(--_fg)" role="graphics-document document" aria-roledescription="` + typ + `"` + aria + `>` +
-		head + content + `</svg>`
+	var b strings.Builder
+	b.Grow(total)
+	b.WriteString(root)
+	for _, part := range parts {
+		writeRounded(&b, part)
+	}
+	b.WriteString("</svg>")
+	out := b.String()
+	content := out[len(root) : len(out)-len("</svg>")]
+	if used := usedVars(false, content); used != guess {
+		return open(used) + content + "</svg>"
+	}
+	return out
 }
