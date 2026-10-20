@@ -7,9 +7,9 @@
 // is in the public domain. The zip's SHA-256 is pinned, so a new release
 // fails the run until the pin moves on purpose.
 //
-// The idea of a dot-matrix world map from country polygons comes from iptop
-// (github.com/franlol/iptop, MIT), whose scripts/generate-worldmap.ts does
-// the same for GeoJSON. This is a new program: it reads the shapefile,
+// The idea and the look come from iptop by franlol
+// (https://github.com/franlol/iptop, MIT). Its scripts/generate-worldmap.ts
+// does the same for GeoJSON. This is a new program: it reads the shapefile,
 // keeps the holes of each polygon, and samples each cell 3 by 3.
 //
 // The output, before compression, is:

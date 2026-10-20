@@ -134,8 +134,10 @@ func decodeWorld(raw []byte) *world {
 // to fill the grid, and is centred. A cell is about twice as tall as it is
 // wide, as Aspect sets. Fit returns the cells it takes.
 //
-// The idea and the look come from iptop (github.com/franlol/iptop, MIT),
-// a network monitor by franlol. The land and the borders are Natural Earth
+// The idea and the look come from iptop by franlol
+// (https://github.com/franlol/iptop, MIT).
+//
+// The land and the borders are Natural Earth
 // 1:50m Admin 0 Countries, version 5.1.1, which is in the public domain
 // (https://www.naturalearthdata.com/about/terms-of-use/), rasterised by
 // internal/worldgen into 720 by 288 cells of half a degree.
