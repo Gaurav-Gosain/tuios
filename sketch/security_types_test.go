@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -715,4 +715,61 @@ func TestGitOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpus, []string{"\"", "'", "\n", "commit ", "branch ", "merge ", "id: \"", "tag: \"", "title ", "TB:", "cherry-pick id: \""}, 11, 2000, RenderOptions{}, false)
 	hostileOptions(t, "gitGraph\n accTitle: t\n accDescr: d\n commit tag: \"v1\"\n branch b\n commit\n checkout main\n merge b")
+}
+
+const sankeyBody = "a,b,2\nb,c,1\n"
+
+func sankeyQuoted(p string) string { return `"` + strings.ReplaceAll(p, `"`, `""`) + `"` }
+
+func TestSankeyOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "sankey")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, sankeyTemplates, 450, RenderOptions{}, false)
+	out, err := Render("sankey\n<script>alert(1)</script>,\"<img src=x onerror=alert(1)>\",1\n", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") ||
+		!strings.Contains(out.Data, `data-id="&lt;script&gt;alert(1)&lt;/script&gt;"`) {
+		t.Fatalf("sankey markup is not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		sankey := map[string]any{"prefix": payload, "suffix": payload, "linkColor": payload, "nodeAlignment": payload, "labelStyle": payload,
+			"nodeColors": map[string]any{"a": payload, "b": "red;" + payload}, "width": payload, "height": payload}
+		if !inertTry(t, "sankey\n"+sankeyBody, RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload, Config: Config{"sankey": sankey}}, false) {
+			t.Fatalf("hostile sankey options %q: did not render", payload)
+		}
+	}
+	for _, value := range []float64{0, -1, 1e-9, 1e9, math.Inf(1), math.Inf(-1), math.NaN()} {
+		sankey := map[string]any{"width": value, "height": value, "nodeWidth": value, "nodePadding": value}
+		if !inertTry(t, "sankey\n"+sankeyBody, RenderOptions{Config: Config{"sankey": sankey}}, false) {
+			t.Fatalf("sankey config value %v: did not render", value)
+		}
+		size := 16.0
+		switch {
+		case value == 0:
+			size = 1
+		case math.Abs(value) <= 1e6 && !math.IsNaN(value) && value != 0:
+			size = math.Abs(value)
+		}
+		pad := 8.0
+		if !math.IsNaN(value) && !math.IsInf(value, 0) {
+			pad = math.Mod(math.Abs(value), 100)
+		}
+		if !inertTry(t, "sankey\n"+sankeyBody, RenderOptions{FontSize: &size, Padding: &pad}, false) {
+			t.Fatalf("sankey font size %v and padding %v: did not render", size, pad)
+		}
+	}
+	count := 3000
+	if testing.Short() {
+		count /= 8
+	}
+	if n := mutate(t, corpus, []string{"\"", "\"\"", ",", "\n", "a,b,1", "1e308", "-1", "NaN", "sankey\n", "linkColor: ", "prefix: "}, 3, 3000, RenderOptions{}, false); n <= count/8 {
+		t.Fatalf("%d of %d mutated sankey diagrams rendered", n, count)
+	}
+	// pele checks that these leave Object.prototype alone. Go has no prototypes; it must render.
+	if !inertTry(t, "---\nconfig:\n  sankey:\n    nodeColors:\n      __proto__: red\n      constructor: blue\n---\nsankey\n__proto__,constructor,1\nconstructor,toString,2\nhasOwnProperty,__proto__,3\n", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
 }

@@ -630,3 +630,37 @@ var gitTemplates = []func(q, p string) string{
 		return "%%{init: {\"gitGraph\": {\"mainBranchName\": " + q + ", \"showCommitLabel\": " + q + ", \"parallelCommits\": " + q + "}}}%%\ngitGraph\n commit\n branch b\n commit"
 	},
 }
+
+var sankeyTemplates = []func(p string) string{
+	func(p string) string { return "sankey\n" + p + ",b,1\n" },
+	func(p string) string { return "sankey\na," + p + ",1\n" },
+	func(p string) string { return "sankey\na,b," + p + "\n" },
+	func(p string) string { return "sankey\n" + sankeyQuoted(p) + ",b,1\n" + sankeyBody },
+	func(p string) string { return "sankey\na," + sankeyQuoted(p) + ",1\n" + sankeyQuoted(p) + ",c,2\n" },
+	func(p string) string { return "sankey\na,b," + sankeyQuoted(p) + "\n" },
+	func(p string) string { return "sankey-beta\n\"" + p + "\",\"" + p + "2\",1\n" },
+	func(p string) string { return "sankey " + p + "\n" + sankeyBody },
+	func(p string) string { return "sankey\n%% " + p + "\n" + sankeyBody },
+	func(p string) string { return "---\ntitle: " + jsonText(p) + "\n---\nsankey\n" + sankeyBody },
+	func(p string) string {
+		return "---\nconfig:\n  sankey:\n    prefix: " + jsonText(p) + "\n    suffix: " + jsonText(p) + "\n---\nsankey\n" + sankeyBody
+	},
+	func(p string) string {
+		return "---\nconfig:\n  sankey:\n    linkColor: " + jsonText(p) + "\n---\nsankey\n" + sankeyBody
+	},
+	func(p string) string {
+		return "---\nconfig:\n  sankey:\n    nodeColors:\n      a: " + jsonText(p) + "\n      " + jsonText(p) + ": red\n---\nsankey\n" + sankeyBody
+	},
+	func(p string) string {
+		return "---\nconfig:\n  sankey:\n    nodeAlignment: " + jsonText(p) + "\n    labelStyle: " + jsonText(p) + "\n    showValues: " + jsonText(p) + "\n---\nsankey\n" + sankeyBody
+	},
+	func(p string) string {
+		return "---\nconfig:\n  sankey:\n    width: " + jsonText(p) + "\n    height: " + jsonText(p) + "\n    nodeWidth: " + jsonText(p) + "\n    nodePadding: " + jsonText(p) + "\n---\nsankey\n" + sankeyBody
+	},
+	func(p string) string {
+		return "---\nconfig:\n  sankey: " + jsonText(p) + "\n---\nsankey\n" + sankeyBody
+	},
+	func(p string) string {
+		return "%%{init: {\"sankey\": {\"prefix\": " + jsonText(p) + ", \"linkColor\": " + jsonText(p) + ", \"nodeColors\": {\"a\": " + jsonText(p) + "}}, \"themeVariables\": {\"fontFamily\": " + jsonText(p) + "}}}%%\nsankey\n" + sankeyBody
+	},
+}
