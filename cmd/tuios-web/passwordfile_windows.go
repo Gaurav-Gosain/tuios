@@ -17,12 +17,14 @@ const passwordFileAccess = windows.FILE_READ_DATA | windows.FILE_WRITE_DATA | wi
 	windows.GENERIC_READ | windows.GENERIC_WRITE | windows.GENERIC_ALL |
 	windows.WRITE_DAC | windows.WRITE_OWNER
 
-// ACE types whose body starts with a mask and a SID, as ACCESS_ALLOWED_ACE
-// does. The object ACE types put two GUIDs before the SID.
+// ACE types beyond the two x/sys names. Only ACCESS_ALLOWED_ACE and its
+// callback form have the layout ACCESS_ALLOWED_ACE describes: a mask, then a
+// SID. The deny types only take access away.
 const (
-	accessAllowedCallbackACEType       = 0x9
-	accessAllowedObjectACEType         = 0x5
-	accessAllowedCallbackObjectACEType = 0xB
+	accessAllowedCallbackACEType = 0x9
+	accessDeniedObjectACEType    = 0x6
+	accessDeniedCallbackACEType  = 0xA
+	accessDeniedCallbackObjType  = 0xC
 )
 
 // checkPasswordFileMode refuses a password file that another user owns, or
@@ -71,7 +73,8 @@ func checkPasswordFileMode(f *os.File, path string, _ os.FileInfo, _ int) error 
 // daclGrantsOther returns the name of the first account the DACL lets read or
 // change the file that is not in trusted, or "" when there is none. A missing
 // or NULL DACL lets everyone in. A deny entry is not weighed against an allow
-// entry: the check only refuses more, never less, by ignoring it.
+// entry: ignoring it only makes the check refuse more. An entry of a type the
+// check does not know is refused.
 func daclGrantsOther(sd *windows.SECURITY_DESCRIPTOR, trusted []*windows.SID) (string, error) {
 	dacl, _, err := sd.DACL()
 	if errors.Is(err, windows.ERROR_OBJECT_NOT_FOUND) || (err == nil && dacl == nil) {
@@ -90,11 +93,14 @@ func daclGrantsOther(sd *windows.SECURITY_DESCRIPTOR, trusted []*windows.SID) (s
 		}
 		switch ace.Header.AceType {
 		case windows.ACCESS_ALLOWED_ACE_TYPE, accessAllowedCallbackACEType:
-		case accessAllowedObjectACEType, accessAllowedCallbackObjectACEType:
-			// A file does not carry these. Refuse rather than parse them.
-			return "An object access entry", nil
-		default:
+		case windows.ACCESS_DENIED_ACE_TYPE, accessDeniedObjectACEType,
+			accessDeniedCallbackACEType, accessDeniedCallbackObjType:
 			continue
+		default:
+			// An allow entry of another layout (object, compound) or a type
+			// this check does not know. A file does not normally carry one.
+			// Refuse rather than guess what it grants.
+			return fmt.Sprintf("An access entry of type %#x", ace.Header.AceType), nil
 		}
 		if uint32(ace.Mask)&passwordFileAccess == 0 {
 			continue
