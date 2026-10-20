@@ -28,9 +28,11 @@ type certFlags struct {
 
 func applyCertFlags(t *testing.T, f certFlags) {
 	t.Helper()
+	savedBind := webBindAddr
 	saved := certFlags{webHost, webPort, webTLSCert, webTLSKey, webAutoTLS, webInsecure, webCertDir, webCertHosts, webCertDays, webCertForce}
 	t.Cleanup(func() {
 		webHost, webPort = saved.host, saved.port
+		webBindAddr = savedBind
 		webTLSCert, webTLSKey = saved.cert, saved.key
 		webAutoTLS, webInsecure = saved.autoTLS, saved.insecure
 		webCertDir, webCertHosts, webCertDays = saved.dir, saved.hosts, saved.days
@@ -40,6 +42,9 @@ func applyCertFlags(t *testing.T, f certFlags) {
 		f.port = "7681"
 	}
 	webHost, webPort = f.host, f.port
+	// runWebServer resolves --host before the checks. These tests give
+	// addresses and "localhost", which the checks read as they are.
+	webBindAddr = f.host
 	webTLSCert, webTLSKey = f.cert, f.key
 	webAutoTLS, webInsecure = f.autoTLS, f.insecure
 	webCertDir, webCertHosts, webCertDays = f.dir, f.hosts, f.days

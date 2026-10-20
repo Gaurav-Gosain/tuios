@@ -48,16 +48,3 @@ func HostAddr(host string) (addr netip.Addr, ok bool) {
 	}
 	return addr.WithZone("").Unmap(), true
 }
-
-// CanonicalBindHost returns host with the zone removed when host is a
-// loopback or an unspecified address, and host unchanged otherwise. A zone
-// changes nothing for these addresses, but a dependency that parses the bind
-// address without zones would not see that "::1%lo" is loopback. A zone stays
-// on any other address, where it picks the interface (fe80::1%eth0).
-func CanonicalBindHost(host string) string {
-	addr, ok := HostAddr(host)
-	if !ok || !(addr.IsLoopback() || addr.IsUnspecified()) {
-		return host
-	}
-	return addr.String()
-}

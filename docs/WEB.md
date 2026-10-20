@@ -40,6 +40,9 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
   addresses also listen on this machine. tuios-web checks the Host header only
   on a loopback host, so a web page in your browser can open a shell (DNS
   rebinding). Give `--no-auth` the address of one interface, or set a password.
+- tuios-web finds the address of a `--host` name once and binds that address.
+  The rules above apply to the address, not to the name. tuios-web refuses a
+  name that has both loopback and other addresses.
 - On `localhost`, the password is optional. With no password, other users on
   this machine can connect, and tuios-web prints one line at start to say so.
   Use `--random-password` to stop this.

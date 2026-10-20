@@ -207,7 +207,7 @@ func main() {
 // accessFlags collects the command line that decides who may connect.
 func accessFlags() webAccessFlags {
 	return webAccessFlags{
-		host:           webHost,
+		host:           webBindAddr,
 		port:           webPort,
 		tls:            webTLSCert != "" || webAutoTLS,
 		user:           webUser,
@@ -238,10 +238,13 @@ func runWebServer() error {
 	// anything is started, so the user gets the answer instead of a daemon
 	// and a half-open port. The password comes first: it is read and removed
 	// from the environment before the daemon starts, so no pane inherits it.
-	// sip reads the bind address without a zone, so it would not see that
-	// "::1%lo" is loopback and would skip its Host check. The zone means
-	// nothing on a loopback or an unspecified address, so drop it there.
-	webHost = netutil.CanonicalBindHost(webHost)
+	// Resolve --host once. The checks read the address it binds, and sip
+	// binds that address, so the two cannot disagree. See bindhost.go.
+	bind, err := resolveBindHost(context.Background(), netResolver, webHost)
+	if err != nil {
+		return err
+	}
+	webBindAddr = bind
 
 	access, err := planWebAccess(os.Stderr, accessFlags())
 	if err != nil {
@@ -361,7 +364,7 @@ func runWebServer() error {
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
-	sipConfig.Host = webHost
+	sipConfig.Host = webBindAddr
 	sipConfig.Port = webPort
 	sipConfig.ReadOnly = webReadOnly
 	sipConfig.MaxConnections = webMaxConnections
@@ -417,7 +420,7 @@ func runWebServer() error {
 		mode = "ephemeral"
 	}
 	log.Printf("Starting web server on %s (mode: %s)", serverURL(), mode)
-	if webInsecure && !isLoopbackHost(webHost) {
+	if webInsecure && !isLoopbackHost(webBindAddr) {
 		log.Printf("Insecure: %s is served over plain HTTP, so anyone on this network can read what you type", serverURL())
 	}
 
@@ -595,7 +598,7 @@ func checkTransportSecurity(w io.Writer) error {
 		// error rendering.
 		return errors.New("pass both --cert and --key, or neither: a certificate is no use without its key")
 	}
-	if webTLSCert != "" || webAutoTLS || webInsecure || isLoopbackHost(webHost) {
+	if webTLSCert != "" || webAutoTLS || webInsecure || isLoopbackHost(webBindAddr) {
 		return nil
 	}
 
