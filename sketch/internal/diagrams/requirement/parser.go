@@ -139,9 +139,15 @@ func parseRequirement(src string, db *RequirementDb) {
 			}
 			style := texts[i]
 			i++
-			for isStylePart(typs[i]) {
-				style += texts[i]
-				i++
+			if isStylePart(typs[i]) {
+				// A builder keeps a long run linear; pele's += is linear only through V8 ropes.
+				var b strings.Builder
+				b.WriteString(style)
+				for isStylePart(typs[i]) {
+					b.WriteString(texts[i])
+					i++
+				}
+				style = b.String()
 			}
 			styles = append(styles, style)
 			if typs[i] != T_COMMA {

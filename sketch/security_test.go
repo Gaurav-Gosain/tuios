@@ -407,6 +407,7 @@ func longRunsStayLinear(t *testing.T) {
 		"er class names":        "erDiagram\nA\nclass A " + strings.Repeat("b,", n/2) + "b",
 		"state descriptions":    "stateDiagram-v2\nA\n" + strings.Repeat("A : x\n", n/6),
 		"git cherry-pick chain": cherryPickChain(2 * n),
+		"requirement style":     "requirementDiagram\nelement A {\n}\nstyle A fill:" + strings.Repeat("a:", n/2),
 	} {
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
