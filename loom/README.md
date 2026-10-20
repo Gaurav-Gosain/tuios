@@ -41,6 +41,10 @@ Layout works like flex boxes for cells. `w` and `h` take cells, a percentage,
 tables, lists, text, cards and tabs give rows back first. A box never draws
 outside its parent.
 
+A row that holds a button wraps when its children do not fit side by side:
+whole buttons go to the next line instead of a cut label. A spacer goes with
+the child after it, so a hint at the right stays at the right on its line.
+
 A binding can read `view.width`, `view.height` and `view.band`. The band is
 `narrow` below 72 cells, `medium` below 120 and `wide` from 120. Use it to
 change the layout with the width, such as `if="view.band == 'wide'"`.

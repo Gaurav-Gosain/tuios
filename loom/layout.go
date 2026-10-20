@@ -1,5 +1,7 @@
 package loom
 
+import "slices"
+
 // Layout runs in two passes. measure returns a box's natural size within a
 // width. place gives each box its rectangle, from the root down, sharing
 // space along a row or a column the way flex boxes do: fixed and percent
@@ -178,7 +180,14 @@ func (s *Surface) measureCol(kids []*box, inner, gap int) (int, int) {
 }
 
 func (s *Surface) measureRow(b *box, inner int) (int, int) {
-	widths := s.rowWidths(b, inner)
+	if lines := s.rowLines(b, inner); lines != nil {
+		ch := 0
+		for _, line := range lines {
+			ch += s.lineHeight(line, s.rowWidths(line, b.gap, inner))
+		}
+		return inner, ch
+	}
+	widths := s.rowWidths(b.kids, b.gap, inner)
 	cw, ch, fill := 0, 0, false
 	for i, k := range b.kids {
 		cw += widths[i]
@@ -197,15 +206,88 @@ func (s *Surface) measureRow(b *box, inner int) (int, int) {
 	return min(cw, inner), ch
 }
 
-// rowWidths shares a row's inner width among its children.
-func (s *Surface) rowWidths(b *box, inner int) []int {
-	n := len(b.kids)
+// lineHeight is the height of one line of a row: its tallest child.
+func (s *Surface) lineHeight(kids []*box, widths []int) int {
+	h := 0
+	for i, k := range kids {
+		_, kh := s.measure(k, widths[i])
+		h = max(h, kh)
+	}
+	return h
+}
+
+// rowLines splits a row that holds a button into lines when its children
+// do not fit side by side at their natural widths: an action bar wraps
+// whole buttons to the next line instead of cutting their labels. A spacer
+// goes with the child after it, so a hint pushed to the right stays at the
+// right on its own line. nil means one line, laid out as before.
+func (s *Surface) rowLines(b *box, inner int) [][]*box {
+	if len(b.kids) < 2 || !slices.ContainsFunc(b.kids, func(k *box) bool { return k.kind == "button" }) {
+		return nil
+	}
+	natural := func(k *box) int {
+		if fixed := k.width.resolve(inner); fixed >= 0 {
+			return fixed
+		}
+		if k.kind == "spacer" {
+			return 0
+		}
+		w, _ := s.measure(k, inner)
+		return w
+	}
+	total := 0
+	for i, k := range b.kids {
+		total += natural(k)
+		if i > 0 {
+			total += b.gap
+		}
+	}
+	if total <= inner {
+		return nil
+	}
+	var lines [][]*box
+	var cur, pending []*box
+	curW := 0
+	for _, k := range b.kids {
+		if k.kind == "spacer" {
+			pending = append(pending, k)
+			continue
+		}
+		w := natural(k)
+		if len(cur) > 0 && curW+b.gap*(len(pending)+1)+w > inner {
+			lines = append(lines, cur)
+			cur, curW = nil, 0
+		}
+		for _, p := range pending {
+			if len(cur) > 0 {
+				curW += b.gap
+			}
+			cur = append(cur, p)
+		}
+		pending = nil
+		if len(cur) > 0 {
+			curW += b.gap
+		}
+		cur = append(cur, k)
+		curW += w
+	}
+	cur = append(cur, pending...)
+	lines = append(lines, cur)
+	if len(lines) < 2 {
+		return nil
+	}
+	return lines
+}
+
+// rowWidths shares a row's inner width among the given children.
+func (s *Surface) rowWidths(kids []*box, gap, inner int) []int {
+	n := len(kids)
 	if n == 0 {
 		return nil
 	}
-	avail := max(inner-b.gap*(n-1), 0)
+	avail := max(inner-gap*(n-1), 0)
 	items := make([]item, n)
-	for i, k := range b.kids {
+	for i, k := range kids {
 		lo, hi := bounds(k.minW, k.maxW, avail)
 		it := item{lo: lo, hi: hi, weight: k.grow}
 		switch fixed := k.width.resolve(avail); {
@@ -317,7 +399,22 @@ type placer interface {
 }
 
 func (s *Surface) placeRow(b *box, in Rect) {
-	widths := s.rowWidths(b, in.Dx())
+	lines := s.rowLines(b, in.Dx())
+	if lines == nil {
+		s.placeLine(b, b.kids, s.rowWidths(b.kids, b.gap, in.Dx()), in)
+		return
+	}
+	y := in.Min.Y
+	for _, line := range lines {
+		widths := s.rowWidths(line, b.gap, in.Dx())
+		h := min(s.lineHeight(line, widths), max(in.Max.Y-y, 0))
+		s.placeLine(b, line, widths, rect(in.Min.X, y, in.Dx(), h))
+		y += h
+	}
+}
+
+// placeLine places one line of a row's children at the given widths.
+func (s *Surface) placeLine(b *box, kids []*box, widths []int, in Rect) {
 	used := 0
 	for i, wd := range widths {
 		used += wd
@@ -342,7 +439,7 @@ func (s *Surface) placeRow(b *box, in Rect) {
 			x += step / 2
 		}
 	}
-	for i, k := range b.kids {
+	for i, k := range kids {
 		wd := widths[i]
 		h := in.Dy()
 		// fill on the cross axis stretches, as align="stretch" does.
