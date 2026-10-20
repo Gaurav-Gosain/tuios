@@ -2,9 +2,10 @@
 
 [![Go Reference](https://pkg.go.dev/badge/tuios.dev/plot.svg)](https://pkg.go.dev/tuios.dev/plot)
 
-`tuios.dev/plot` draws charts as terminal cells. It has nine chart kinds:
+`tuios.dev/plot` draws charts as terminal cells. It has ten chart kinds:
 bar (horizontal and vertical), line, area, sparkline, gauge, histogram,
-heatmap, pie (a donut or a full disc) and mirrored bars.
+heatmap, pie (a donut or a full disc), mirrored bars, and inline bars for
+table cells.
 
 A chart draws into a grid of the size you give it. Each cell holds one
 grapheme and a role, such as `series1`, `mute` or `track`. Your program maps
@@ -82,8 +83,31 @@ g := m.Draw(100, 10, plot.Braille)
 - In `Blocks` mode each value is one cell of eighth blocks. In `ASCII`
   mode it is `#` and `.`.
 
-The idea comes from [iptop](https://github.com/franlol/iptop) (MIT), a
-network monitor by franlol.
+The idea for mirrored and inline bars comes from
+[iptop](https://github.com/franlol/iptop) (MIT), a network monitor by franlol.
+
+## Inline bars
+
+`InlineBar` is a bar one row high for a table cell. It fills the cell to
+`Value / Max`, to an eighth of a cell, and draws no label. `DivergingBar`
+grows left from a centre mark for `Left` and right for `Right`, such as
+download and upload of one service.
+
+```go
+for _, h := range hosts {
+	bar := plot.InlineBar{Value: h.Rate, Max: busiest, Track: true}
+	cell := bar.Draw(12, 1, plot.Blocks) // put it in the row's bar column
+	_ = cell
+}
+```
+
+- Give every row the same `Max`, so the bars compare.
+- `Track` paints the whole bar on the `track` role as a background.
+- Block elements that grow from the right come only in an eighth and a
+  half. On a track, the left side of a `DivergingBar` is still exact to an
+  eighth: its partial cell is a left block in the track colour on a ground
+  of the bar colour. Without a track it is the nearest of the two.
+- A value above zero always shows.
 
 ## Fades
 

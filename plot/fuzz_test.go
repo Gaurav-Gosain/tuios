@@ -46,7 +46,7 @@ func FuzzCharts(f *testing.F) {
 			}
 		}
 		var g *Grid
-		switch kind % 13 {
+		switch kind % 15 {
 		case 0:
 			g = Bar{Values: vals, Labels: labels, Horizontal: true, Guide: true}.Draw(W, H, m)
 		case 1:
@@ -94,6 +94,19 @@ func FuzzCharts(f *testing.F) {
 			}
 			g = Mirror{Up: Series{Name: name, Values: vals}, Down: Series{Values: reverse(vals)},
 				Peaks: true, Stats: true, Shared: kind%2 == 0}.Draw(W, H, m)
+		case 13, 14:
+			a, b := 0.0, 0.0
+			if len(vals) > 0 {
+				a = vals[0]
+			}
+			if len(vals) > 1 {
+				b = vals[1]
+			}
+			if kind%15 == 13 {
+				g = InlineBar{Value: a, Max: b, Track: kind%2 == 0}.Draw(W, H, m)
+			} else {
+				g = DivergingBar{Left: a, Right: b, Max: float64(w % 3), Track: kind%2 == 0}.Draw(W, H, m)
+			}
 		}
 		checkGrid(t, g, W, H, m)
 		_ = g.String()
