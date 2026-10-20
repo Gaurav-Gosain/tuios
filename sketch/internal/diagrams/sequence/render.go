@@ -1160,41 +1160,46 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	width := math.Ceil(maxX - minX + 2*pad)
 	height := math.Ceil(bottom - minY + 2*pad)
 	smallStr := js.Num(small)
-	content := `<g transform="translate(` + svg.Num(pad-minX) + `,` + svg.Num(pad-minY) + `)">` + titleOut
+	content := make([]string, 0, 32)
+	content = append(content, `<g transform="translate(`+svg.Num(pad-minX)+`,`+svg.Num(pad-minY)+`)">`, titleOut)
 	if boxesOut.Len() > 0 {
-		content += `<g class="pele-boxes" font-size="` + smallStr + `">` + boxesOut.String() + `</g>`
+		content = append(content, `<g class="pele-boxes" font-size="`+smallStr+`">`, boxesOut.String(), `</g>`)
 	}
 	if len(rectsOut) > 0 {
 		slices.Reverse(rectsOut)
-		content += `<g class="pele-rects" fill="var(--_a)">` + strings.Join(rectsOut, "") + `</g>`
+		content = append(content, `<g class="pele-rects" fill="var(--_a)">`)
+		content = append(content, rectsOut...)
+		content = append(content, `</g>`)
 	}
 	if lifelines.Len() > 0 {
-		content += `<g class="pele-lifelines" fill="none" stroke="var(--_b)">` + lifelines.String() + `</g>`
+		content = append(content, `<g class="pele-lifelines" fill="none" stroke="var(--_b)">`, lifelines.String(), `</g>`)
 	}
 	if len(activationsOut) > 0 {
 		slices.Reverse(activationsOut)
-		content += `<g class="pele-activations" fill="var(--_s)" stroke="var(--_b)">` + strings.Join(activationsOut, "") + `</g>`
+		content = append(content, `<g class="pele-activations" fill="var(--_s)" stroke="var(--_b)">`)
+		content = append(content, activationsOut...)
+		content = append(content, `</g>`)
 	}
 	if framesOut.Len() > 0 {
-		content += `<g class="pele-frames" font-size="` + smallStr + `" stroke="var(--_b)">` + framesOut.String() + `</g>`
+		content = append(content, `<g class="pele-frames" font-size="`+smallStr+`" stroke="var(--_b)">`, framesOut.String(), `</g>`)
 	}
 	if edgesOut.Len() > 0 {
-		content += `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">` + edgesOut.String() + `</g>`
+		content = append(content, `<g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round">`, edgesOut.String(), `</g>`)
 	}
 	if crossesOut.Len() > 0 {
-		content += `<g class="pele-destroys" fill="none" stroke="var(--_l)" stroke-width="1.5" stroke-linecap="round">` + crossesOut.String() + `</g>`
+		content = append(content, `<g class="pele-destroys" fill="none" stroke="var(--_l)" stroke-width="1.5" stroke-linecap="round">`, crossesOut.String(), `</g>`)
 	}
 	if labelsOut.Len() > 0 {
-		content += `<g class="pele-edge-labels" font-size="` + smallStr + `">` + labelsOut.String() + `</g>`
+		content = append(content, `<g class="pele-edge-labels" font-size="`+smallStr+`">`, labelsOut.String(), `</g>`)
 	}
 	if notesOut.Len() > 0 {
-		content += `<g class="pele-notes" font-size="` + smallStr + `" fill="var(--_a)" stroke="var(--_b)">` + notesOut.String() + `</g>`
+		content = append(content, `<g class="pele-notes" font-size="`+smallStr+`" fill="var(--_a)" stroke="var(--_b)">`, notesOut.String(), `</g>`)
 	}
 	if actorsOut.Len() > 0 {
-		content += `<g class="pele-nodes">` + actorsOut.String() + `</g>`
+		content = append(content, `<g class="pele-nodes">`, actorsOut.String(), `</g>`)
 	}
-	content += `</g>`
-	out := svg.SvgDocument("sequence", width, height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, content)
+	content = append(content, `</g>`)
+	out := svg.SvgDocument("sequence", width, height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, content...)
 	rendered := types.Rendered{SVG: out, Width: width, Height: height, Links: []types.LinkInfo{}}
 	if geo {
 		ox, oy := pad-minX, pad-minY

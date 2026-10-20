@@ -3,6 +3,7 @@
 package svg
 
 import (
+	"bytes"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
@@ -15,14 +16,48 @@ import (
 const rootRounded = ` rx="` + RADIUS + `"`
 
 // rounded moves the corner radius of each <rect> with rx="var(--pele-radius,4px)"
-// into its style. pele does it with /<rect\b[^>]*>/g; a scan does the same
-// without a regexp pass over the whole drawing.
-func rounded(content string) string {
+// into its style, in the content the parts make when joined. pele does it with
+// /<rect\b[^>]*>/g; a scan does the same without a regexp pass over the whole
+// drawing.
+func rounded(parts []string) string {
+	total := 0
+	round := false
+	for _, part := range parts {
+		total += len(part)
+		if strings.LastIndexByte(part, '<') > strings.LastIndexByte(part, '>') {
+			// The part ends inside a tag, which the next one may finish. Scan
+			// the joined content, so that a tag across parts is seen whole.
+			return roundedIn(strings.Join(parts, ""))
+		}
+		round = round || strings.Contains(part, rootRounded)
+	}
+	if !round {
+		return strings.Join(parts, "")
+	}
+	var b strings.Builder
+	b.Grow(total)
+	for _, part := range parts {
+		writeRounded(&b, part)
+	}
+	return b.String()
+}
+
+func roundedIn(content string) string {
 	if !strings.Contains(content, rootRounded) {
 		return content
 	}
 	var b strings.Builder
-	b.Grow(len(content) + 64)
+	b.Grow(len(content))
+	writeRounded(&b, content)
+	return b.String()
+}
+
+// writeRounded writes content to b with the radius of each rect moved.
+func writeRounded(b *strings.Builder, content string) {
+	if !strings.Contains(content, rootRounded) {
+		b.WriteString(content)
+		return
+	}
 	last := 0
 	for i := 0; ; {
 		at := strings.Index(content[i:], "<rect")
@@ -43,33 +78,46 @@ func rounded(content string) string {
 		end += next + 1
 		tag := content[at:end]
 		b.WriteString(content[last:at])
-		b.WriteString(roundTag(tag))
+		roundTag(b, tag)
 		last = end
 		i = end
 	}
 	b.WriteString(content[last:])
-	return b.String()
 }
 
 func isWordByte(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
 }
 
-func roundTag(tag string) string {
+func roundTag(b *strings.Builder, tag string) {
 	at := strings.Index(tag, rootRounded)
 	if at < 0 {
-		return tag
+		b.WriteString(tag)
+		return
 	}
-	rest := tag[:at] + tag[at+len(rootRounded):]
-	style := strings.Index(rest, ` style="`)
+	// The tag without the attribute. A tag is short, so it is put together on
+	// the stack; a long one falls back to a string.
+	var stack [512]byte
+	var rest []byte
+	if len(tag) <= len(stack) {
+		rest = append(append(stack[:0], tag[:at]...), tag[at+len(rootRounded):]...)
+	} else {
+		rest = []byte(tag[:at] + tag[at+len(rootRounded):])
+	}
+	style := bytes.Index(rest, []byte(` style="`))
 	if style >= 0 {
-		return rest[:style+8] + "rx:var(--_r);" + rest[style+8:]
+		b.Write(rest[:style+8])
+		b.WriteString("rx:var(--_r);")
+		b.Write(rest[style+8:])
+		return
 	}
 	end := len(rest) - 1
-	if strings.HasSuffix(rest, "/>") {
+	if bytes.HasSuffix(rest, []byte("/>")) {
 		end = len(rest) - 2
 	}
-	return rest[:end] + ` style="rx:var(--_r)"` + rest[end:]
+	b.Write(rest[:end])
+	b.WriteString(` style="rx:var(--_r)"`)
+	b.Write(rest[end:])
 }
 
 // The weights of bold text, each set only in a diagram that has such text.
@@ -84,7 +132,7 @@ type Accessible struct {
 	AccDescr string
 }
 
-func SvgDocument(typ string, width, height, fontSize float64, options types.RenderOptions, acc Accessible, content string) string {
+func SvgDocument(typ string, width, height, fontSize float64, options types.RenderOptions, acc Accessible, parts ...string) string {
 	prefix := Esc(types.Or(options.IDPrefix, "pele"))
 	head := ""
 	aria := ""
@@ -100,7 +148,8 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	if options.Responsive != nil && !*options.Responsive {
 		fit = ""
 	}
-	content = rounded(content)
+	// The parts of the drawing, in order. Joined, they are what pele calls content.
+	content := rounded(parts)
 	w := ""
 	if strings.Contains(content, "var(--_r)") {
 		w = ";--_r:" + RADIUS

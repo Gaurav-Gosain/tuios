@@ -5,6 +5,7 @@ package svg
 import (
 	"math"
 	"slices"
+	"strings"
 
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/layout"
@@ -76,7 +77,11 @@ func DefaultReach(trim float64) float64 {
 func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, endReach float64) EdgePath {
 	linear := curve == "linear"
 	stepped := curve == "step" || curve == "stepBefore" || curve == "stepAfter"
-	var xs, ys, axes []float64
+	// A stepped route adds up to two turns at a point, and a lead adds a point at each end.
+	room := len(route)/3*3 + 2
+	xs := make([]float64, 0, room)
+	ys := make([]float64, 0, room)
+	axes := make([]float64, 0, room)
 	near := func(ax, ay, bx, by float64) bool { return math.Abs(ax-bx) < 0.01 && math.Abs(ay-by) < 0.01 }
 	for i := 0; i < len(route); i += 3 {
 		x := route[i]
@@ -176,14 +181,17 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 		last++
 	}
 
-	d := "M" + Num(xs[0]) + "," + Num(ys[0])
+	d := make([]byte, 0, 16+len(xs)*40)
+	d = append(d, 'M')
+	d = appendPoint(d, xs[0], ys[0])
 	atX := xs[0]
 	atY := ys[0]
 	lineTo := func(x, y float64) {
 		if near(x, y, atX, atY) {
 			return
 		}
-		d += "L" + Num(x) + "," + Num(y)
+		d = append(d, 'L')
+		d = appendPoint(d, x, y)
 		atX = x
 		atY = y
 	}
@@ -203,7 +211,12 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 			if down {
 				ux, uy = 0, js.Sign(al)*k
 			}
-			d += "C" + Num(atX+ux) + "," + Num(atY+uy) + " " + Num(x-ux) + "," + Num(y-uy) + " " + Num(x) + "," + Num(y)
+			d = append(d, 'C')
+			d = appendPoint(d, atX+ux, atY+uy)
+			d = append(d, ' ')
+			d = appendPoint(d, x-ux, y-uy)
+			d = append(d, ' ')
+			d = appendPoint(d, x, y)
 			atX = x
 			atY = y
 			continue
@@ -236,12 +249,27 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 		atX = x + vx*after
 		atY = y + vy*after
 		if stepped {
-			d += "Q" + Num(x) + "," + Num(y) + " " + Num(atX) + "," + Num(atY)
+			d = append(d, 'Q')
+			d = appendPoint(d, x, y)
+			d = append(d, ' ')
+			d = appendPoint(d, atX, atY)
 		} else {
-			d += "C" + Num(x-ux*before*(1-HANDLE)) + "," + Num(y-uy*before*(1-HANDLE)) + " " + Num(x+vx*after*(1-HANDLE)) + "," + Num(y+vy*after*(1-HANDLE)) + " " + Num(atX) + "," + Num(atY)
+			d = append(d, 'C')
+			d = appendPoint(d, x-ux*before*(1-HANDLE), y-uy*before*(1-HANDLE))
+			d = append(d, ' ')
+			d = appendPoint(d, x+vx*after*(1-HANDLE), y+vy*after*(1-HANDLE))
+			d = append(d, ' ')
+			d = appendPoint(d, atX, atY)
 		}
 	}
-	return EdgePath{D: d, Sx: sx, Sy: sy, Sdx: -sdx, Sdy: -sdy, Ex: ex, Ey: ey, Edx: edx, Edy: edy}
+	return EdgePath{D: string(d), Sx: sx, Sy: sy, Sdx: -sdx, Sdy: -sdy, Ex: ex, Ey: ey, Edx: edx, Edy: edy}
+}
+
+// appendPoint appends "x,y".
+func appendPoint(b []byte, x, y float64) []byte {
+	b = AppendNum(b, x)
+	b = append(b, ',')
+	return AppendNum(b, y)
 }
 
 func MarkerTrim(typ string) float64 {
@@ -258,17 +286,41 @@ func MarkerTrim(typ string) float64 {
 
 // Marker draws a marker whose tip is at (x, y), pointing along (dx, dy).
 func Marker(typ string, x, y, dx, dy float64, color string) string {
+	var b strings.Builder
+	WriteMarker(&b, typ, x, y, dx, dy, color)
+	return b.String()
+}
+
+// WriteMarker writes Marker(typ, x, y, dx, dy, color) to b.
+func WriteMarker(b *strings.Builder, typ string, x, y, dx, dy float64, color string) {
 	nx := -dy
 	ny := dx
+	var buf [256]byte
+	d := buf[:0]
 	switch typ {
 	case "arrow_point":
 		bx := x - dx*ARROW
 		by := y - dy*ARROW
 		half := ARROW * 0.42
-		return `<path class="pele-marker" d="M` + Num(x) + `,` + Num(y) + `L` + Num(bx+nx*half) + `,` + Num(by+ny*half) + `L` +
-			Num(bx-nx*half) + `,` + Num(by-ny*half) + `Z" fill="` + color + `" stroke="none"/>`
+		d = append(d, `<path class="pele-marker" d="M`...)
+		d = appendPoint(d, x, y)
+		d = append(d, 'L')
+		d = appendPoint(d, bx+nx*half, by+ny*half)
+		d = append(d, 'L')
+		d = appendPoint(d, bx-nx*half, by-ny*half)
+		d = append(d, `Z" fill="`...)
+		b.Write(d)
+		b.WriteString(color)
+		b.WriteString(`" stroke="none"/>`)
 	case "arrow_circle":
-		return `<circle class="pele-marker" cx="` + Num(x-dx*4) + `" cy="` + Num(y-dy*4) + `" r="3.5" fill="` + color + `" stroke="none"/>`
+		d = append(d, `<circle class="pele-marker" cx="`...)
+		d = AppendNum(d, x-dx*4)
+		d = append(d, `" cy="`...)
+		d = AppendNum(d, y-dy*4)
+		d = append(d, `" r="3.5" fill="`...)
+		b.Write(d)
+		b.WriteString(color)
+		b.WriteString(`" stroke="none"/>`)
 	case "arrow_cross":
 		cx := x - dx*4
 		cy := y - dy*4
@@ -277,10 +329,17 @@ func Marker(typ string, x, y, dx, dy float64, color string) string {
 		uy := (dy + ny) * a
 		vx := (dx - nx) * a
 		vy := (dy - ny) * a
-		return `<path class="pele-marker" d="M` + Num(cx-ux) + `,` + Num(cy-uy) + `L` + Num(cx+ux) + `,` + Num(cy+uy) + `M` +
-			Num(cx-vx) + `,` + Num(cy-vy) + `L` + Num(cx+vx) + `,` + Num(cy+vy) + `"/>`
+		d = append(d, `<path class="pele-marker" d="M`...)
+		d = appendPoint(d, cx-ux, cy-uy)
+		d = append(d, 'L')
+		d = appendPoint(d, cx+ux, cy+uy)
+		d = append(d, 'M')
+		d = appendPoint(d, cx-vx, cy-vy)
+		d = append(d, 'L')
+		d = appendPoint(d, cx+vx, cy+vy)
+		d = append(d, `"/>`...)
+		b.Write(d)
 	}
-	return ""
 }
 
 // EdgeLabelSvg is an edge label on a patch of the background, so the line does not run through the text.

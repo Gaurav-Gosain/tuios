@@ -170,6 +170,10 @@ func scalar(raw string) YamlValue {
 	case "false", "False", "FALSE":
 		return false
 	}
+	// Every number pattern below starts with a sign, a dot or a digit.
+	if !strings.ContainsRune("+-.0123456789", rune(s[0])) {
+		return s
+	}
 	if reInt.MatchString(s) || reFloat.MatchString(s) {
 		return js.Number(s)
 	}

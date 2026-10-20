@@ -34,7 +34,6 @@ var (
 	reBreak  = lazyre.New(`(?i)<br[` + js.S + `]*/?>|\\n|\n`)
 	reTag    = lazyre.New(`^</?([a-zA-Z][\w-]*)(?:[` + js.S + `][^<>]*)?/?>`)
 	reIcon   = lazyre.New(`(fa[bklrs]?):fa-([\w-]+)`)
-	reMarkup = lazyre.New(`[<\\\n*_]|fa[bklrs]?:fa-`)
 	rePieces = lazyre.New(`[` + js.S + `]*[^` + js.S + `]+[` + js.S + `]*|[` + js.S + `]+`)
 	reCRLF   = lazyre.New(`\r\n?`)
 )
@@ -282,7 +281,7 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	}
 	lineHeight := js.Round(size * LINE_HEIGHT)
 
-	if !reMarkup.MatchString(raw) && !strings.Contains(raw, "&") && !strings.Contains(raw, "ﬂ") {
+	if !hasMarkup(raw) && !strings.Contains(raw, "&") && !strings.Contains(raw, "ﬂ") {
 		text := js.Trim(raw)
 		width := measurer.Width(text, size, base)
 		if width <= maxWidth || !strings.Contains(text, " ") {
@@ -333,6 +332,25 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 		}
 	}
 	return Label{Lines: lines, Widths: widths, Width: width, Height: float64(len(lines)) * lineHeight, Size: size, LineHeight: lineHeight}
+}
+
+// hasMarkup is /[<\\\n*_]|fa[bklrs]?:fa-/: whether raw may hold a break, a tag, an
+// escape, emphasis or an icon.
+func hasMarkup(raw string) bool {
+	if strings.ContainsAny(raw, "<\\\n*_") {
+		return true
+	}
+	for i := 0; ; {
+		j := strings.Index(raw[i:], "fa")
+		if j < 0 {
+			return false
+		}
+		k := i + j + 2
+		if strings.HasPrefix(raw[k:], ":fa-") || k < len(raw) && strings.IndexByte("bklrs", raw[k]) >= 0 && strings.HasPrefix(raw[k+1:], ":fa-") {
+			return true
+		}
+		i += j + 1
+	}
 }
 
 // Plain gives the label as lines of plain text. Not part of pele.

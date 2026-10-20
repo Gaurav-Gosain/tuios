@@ -952,7 +952,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	}
 	content.WriteString(`<g class="pele-nodes">` + nodesOut.String() + notesOut.String() + `</g>`)
 	titled := svg.WithTitle(db.Title, measurer, size, pad, width, height, content.String())
-	out := svg.SvgDocument("state", titled.Width, titled.Height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, titled.Content)
+	out := svg.SvgDocument("state", titled.Width, titled.Height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, titled.Content...)
 
 	return types.Rendered{SVG: out, Width: titled.Width, Height: titled.Height, Links: links}
 }

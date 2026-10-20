@@ -62,38 +62,59 @@ func EscText(s string) string {
 	return Esc(text.DecodeEntities(s))
 }
 
-// The two decimals of a coordinate, by hundredths.
-var fraction = func() [100]string {
-	var f [100]string
-	for i := 1; i < 100; i++ {
-		if i%10 == 0 {
-			f[i] = "." + strconv.Itoa(i/10)
-		} else if i < 10 {
-			f[i] = ".0" + strconv.Itoa(i)
-		} else {
-			f[i] = "." + strconv.Itoa(i)
-		}
-	}
-	return f
-}()
-
 // Num writes a coordinate with at most two decimals.
 func Num(value float64) string {
 	n := js.Round(value * 100)
 	if n == 0 {
 		return "0"
 	}
-	if n > 0 {
-		if n < 1e11 {
-			q := math.Floor(n / 100)
-			return strconv.FormatInt(int64(q), 10) + fraction[int(n-q*100)]
+	if n > -1e11 && n < 1e11 {
+		if n > 0 && n < 10000 && math.Mod(n, 100) == 0 {
+			// A small whole number: strconv keeps these, so it costs no allocation.
+			return strconv.Itoa(int(n) / 100)
 		}
-	} else if n > -1e11 {
-		m := -n
-		q := math.Floor(m / 100)
-		return "-" + strconv.FormatInt(int64(q), 10) + fraction[int(m-q*100)]
+		var buf [24]byte
+		return string(appendHundredths(buf[:0], n))
 	}
 	return js.Num(n / 100)
+}
+
+// AppendNum appends Num(value) to b.
+func AppendNum(b []byte, value float64) []byte {
+	n := js.Round(value * 100)
+	if n == 0 {
+		return append(b, '0')
+	}
+	if n > -1e11 && n < 1e11 {
+		return appendHundredths(b, n)
+	}
+	return append(b, js.Num(n/100)...)
+}
+
+// WriteNum writes Num(value) to b.
+func WriteNum(b *strings.Builder, value float64) {
+	var buf [32]byte
+	b.Write(AppendNum(buf[:0], value))
+}
+
+// appendHundredths writes n/100 for a whole n with 0 < |n| < 1e11: the whole
+// part, then up to two decimals without trailing zeros.
+func appendHundredths(b []byte, n float64) []byte {
+	if n < 0 {
+		b = append(b, '-')
+		n = -n
+	}
+	q := math.Floor(n / 100)
+	b = strconv.AppendInt(b, int64(q), 10)
+	r := int(n - q*100)
+	if r == 0 {
+		return b
+	}
+	b = append(b, '.', byte('0'+r/10))
+	if r%10 != 0 {
+		b = append(b, byte('0'+r%10))
+	}
+	return b
 }
 
 // LabelSvg writes a measured label as SVG text centered on (cx, cy).

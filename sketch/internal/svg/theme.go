@@ -158,14 +158,40 @@ func ResolveStyle(declarations []string) ResolvedStyle {
 	return out
 }
 
-var reClass = lazyre.New(`[^\w-]+`)
-
+// ClassNames turns raw into class names, each after a space. pele replaces
+// each run of /[^\w-]+/ with a space and trims; what is left is the runs of
+// [\w-] one space apart.
 func ClassNames(raw string) string {
-	cleaned := js.Trim(reClass.ReplaceAllString(raw, " "))
-	if cleaned == "" {
-		return ""
+	clean := raw != ""
+	for i := 0; i < len(raw) && clean; i++ {
+		if !classByte(raw[i]) && (raw[i] != ' ' || i == 0 || i == len(raw)-1 || raw[i-1] == ' ') {
+			clean = false
+		}
 	}
-	return " " + cleaned
+	if clean {
+		return " " + raw
+	}
+	b := make([]byte, 0, len(raw)+1)
+	for i := 0; i < len(raw); {
+		if !classByte(raw[i]) {
+			i++
+			continue
+		}
+		j := i
+		for j < len(raw) && classByte(raw[j]) {
+			j++
+		}
+		b = append(b, ' ')
+		b = append(b, raw[i:j]...)
+		i = j
+	}
+	return string(b)
+}
+
+// classByte reports whether c is in [\w-]. Go's \w is ASCII, so every byte of
+// a character past ASCII is outside it.
+func classByte(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c == '-'
 }
 
 var series = [8]string{"#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2", "#eeca3b", "#b279a2", "#9d755d"}

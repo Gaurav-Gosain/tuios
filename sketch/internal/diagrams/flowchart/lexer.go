@@ -81,18 +81,53 @@ var (
 	RE_DOTTED_LINK  = sticky(sp + `*[xo<]?-?\.+-[xo>]?` + sp + `*`)
 	RE_DOTTED_START = sticky(sp + `*[xo<]?-\.` + sp + `*`)
 	RE_INVIS_LINK   = sticky(sp + `*~~~+` + sp + `*`)
-	RE_NEWLINE      = sticky(`(?:\r?\n)+`)
-	// [^\S\n\r]: whitespace other than \n and \r.
-	RE_SPACE      = sticky(`[\t\v\f \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]+`)
-	RE_EMPTY_CALL = sticky(`\(` + sp + `*\)`)
-	RE_BR         = lazyre.New(`\n` + sp + `*`)
+	RE_EMPTY_CALL   = sticky(`\(` + sp + `*\)`)
+	RE_BR           = lazyre.New(`\n` + sp + `*`)
 )
+
+// newlineRun is /(?:\r?\n)+/y at p: where the run of line ends from p ends, or
+// -1 if there is none.
+func newlineRun(src string, p int) int {
+	q := p
+	for q < len(src) {
+		if src[q] == '\n' {
+			q++
+		} else if src[q] == '\r' && q+1 < len(src) && src[q+1] == '\n' {
+			q += 2
+		} else {
+			break
+		}
+	}
+	if q == p {
+		return -1
+	}
+	return q
+}
+
+// spaceRun is /[^\S\n\r]+/y at p: where the run of whitespace other than \n
+// and \r from p ends, or -1 if there is none.
+func spaceRun(src string, p int) int {
+	q := p
+	for q < len(src) {
+		r, size := utf8.DecodeRuneInString(src[q:])
+		if r == '\n' || r == '\r' || !js.IsSpace(r) {
+			break
+		}
+		q += size
+	}
+	if q == p {
+		return -1
+	}
+	return q
+}
 
 func tokenize(src string) Tokens {
 	n := len(src)
-	var types []int
-	var texts []string
-	var starts []int
+	// About one token for every three bytes of a flowchart.
+	guess := n/3 + 8
+	types := make([]int, 0, guess)
+	texts := make([]string, 0, guess)
+	starts := make([]int, 0, guess)
 	var stack []int
 	state := S_INITIAL
 	p := 0
@@ -621,11 +656,11 @@ func tokenize(src string) Tokens {
 			if link(c) {
 				return true
 			}
-			if e = at(RE_NEWLINE, p); e >= 0 {
+			if e = newlineRun(src, p); e >= 0 {
 				emit(T_NEWLINE, p, e)
 				return true
 			}
-			if e = at(RE_SPACE, p); e >= 0 {
+			if e = spaceRun(src, p); e >= 0 {
 				emit(T_SPACE, p, e)
 				return true
 			}
