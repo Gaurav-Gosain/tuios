@@ -1375,7 +1375,13 @@ editor or a pager the agent opened, is counted, and the claim clears after six
 consecutive ticks of it (twelve seconds at the default interval). One missed
 read is not an exit.
 
-A state a hook reported is cleared the same way once the harness has gone. The hook names the harness process it ran under (`harness_pid`), and the daemon records that pid with the process's start time when it is the process that sent the report or one of its ancestors. When the start time no longer reads, or reads different because another process was given the pid, and the pane is back at its shell, the pane goes to `none` and its row leaves the agents section. This is what clears a Claude Code that quit without its `SessionEnd` hook landing, crashed, or was killed. Any other pid is never taken for exited, so its pane keeps its state until it is changed: one the reporter does not run under, which is what an agent in a container with the socket passed in reports from its own pid namespace, and which may name an unrelated process here; one whose start time cannot be read when it is recorded; and any on a platform that reads no processes or does not say which process connected.
+A state a hook reported is cleared the same way once the harness has gone. The hook names the harness process it ran under (`harness_pid`), and the daemon records that pid with the process's start time when it is the process that sent the report or one of its ancestors. When the start time no longer reads, or reads different because another process was given the pid, and the pane is back at its shell, the pane goes to `none` and its row leaves the agents section. This is what clears a Claude Code that quit without its `SessionEnd` hook landing, crashed, or was killed. Any other pid is never taken for exited, so its pane keeps its state until it is changed. That is a pid:
+
+- the reporter does not run under. An agent in a container with the socket passed in reports one from its own pid namespace, and it may name an unrelated process here.
+- whose start time cannot be read when it is recorded.
+- on a platform that reads no processes or does not say which process connected.
+
+A report naming the pid already recorded keeps the start time it was recorded with, so a later report from outside the harness does not stop the pane clearing when the harness exits.
 
 A state set with `tuios set-agent-state` names no harness process. It does not forget one either: a note set while a hook's harness is still recorded, over a running agent say, clears once that harness has exited and the pane is at its shell. `none` forgets the harness process, as does the detector clearing the pane, so a note left on a pane at its prompt after that stays until it is changed.
 
