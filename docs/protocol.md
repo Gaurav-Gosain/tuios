@@ -4952,11 +4952,12 @@ Response:
 `applied` is false: `outranked` (a higher-ranked source owns the window),
 `if_state` (the condition did not hold), `foreign_pane`, `foreign_session` or
 `foreign_harness`. `foreign_pane` refuses a report whose `harness_pid` is a
-local process that inherited the pane in `TUIOS_PANE_ID` but runs outside it:
-not the pane's process, not on its terminal, not descended from it, and with
-no multiplexer server (tmux, screen, zellij, dtach or abduco, by the name of
-its executable) among its ancestors. A harness in tmux inside the pane is
-taken for the pane that shows the tmux client. A `harness_pid` that is not
+local process that inherited the pane in `TUIOS_PANE_ID` but runs outside it,
+not the pane's process, not on its terminal and not descended from it, under
+a harness daemon: Claude Code's daemon or the pty host of its background
+sessions. A harness under anything else that left the pane, such as a tmux
+server or a rootless container's conmon, is taken for the pane that shows
+it. A `harness_pid` that is not
 the caller or one of its ancestors is not believed, and the caller is checked
 in its place. A report without `harness_pid`, from a link, for a pane on
 another machine, or from a harness that cannot be read (it exited, or the

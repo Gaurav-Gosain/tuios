@@ -4069,17 +4069,17 @@ the one that owns the pane. These filters keep those events off the pane:
   starts them on its own terminal, with the environment of the pane that asked
   for them. The daemon refuses a report with `foreign_pane` when its
   `harness_pid` is a process whose own environment names the pane in
-  `TUIOS_PANE_ID` and which is not the pane's process, not on the pane's
-  terminal and not descended from it. A multiplexer is the exception. tmux,
-  screen, zellij, dtach and abduco run their server outside the pane too,
-  under init and on terminals of their own, while the programs in it keep the
-  pane's environment. So a harness with one of those servers among its
-  ancestors, by the name of its executable, is taken for the pane that shows
-  the multiplexer's client. `systemd-run --pty` leaves no such mark: its
-  service runs under systemd, where a daemon that left the pane also ends up,
-  so a harness started that way with the pane's `TUIOS_PANE_ID` passed in is
-  refused. Leave `TUIOS_PANE_ID` out of its environment and point its hooks
-  at the pane with `--window` instead. The caller's pid, which the kernel
+  `TUIOS_PANE_ID`, which is not the pane's process, not on the pane's
+  terminal and not descended from it, and which has a harness daemon among
+  its ancestors: Claude Code's daemon (`claude daemon`) or the pty host it
+  runs each background session on (`claude --bg-pty-host`). A daemon is known
+  by its program name and an argument it runs with, so the same program in a
+  pane is not one. Leaving the pane is not enough to be refused. A tmux,
+  screen or zellij server, the conmon helper of a rootless container
+  (distrobox, toolbox, podman, docker) and `systemd-run --pty` all run what
+  they hold outside the pane, on terminals of their own, with the pane's
+  environment, and a harness under one of them is taken for the pane that
+  shows it. The caller's pid, which the kernel
   gives, checks the `harness_pid` a report claims: a hook runs under its
   harness, so a claim that is neither the caller nor one of its ancestors is
   not believed, and the caller is checked in its place. The pane's state, its

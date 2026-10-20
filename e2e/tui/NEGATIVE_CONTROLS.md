@@ -8280,6 +8280,7 @@ second look with `tuios look pick`. Run on 2026-10-22.
 | --- | --- | --- | --- |
 | Enter applies the look under the cursor | the picker's Enter chooses row 0 | `TestLookPickAppliesAGalleryLook` (Alpha goes in, so the take-over question for Beta's border never comes) | **caught** |
 ## A hook report lands only on the pane its harness runs in
+### A hook report lands only on the pane its harness runs in
 
 `TestAgentReportOnlyFromTheHarnessInThePane` (in
 `harness_integrations_test.go`) runs the real Claude Code hook under a
@@ -8287,30 +8288,46 @@ stand-in harness, the test binary itself, a process that is not a shell, so
 the hook reports it as `harness_pid`. Outside the pane, a server started from
 the test leaves it, so it runs under init in a session of its own, and runs
 the harness on a terminal of its own with the pane's `TUIOS_PANE_ID` and
-`TUIOS_SESSION`, the way Claude Code's daemon runs a background session. Its
-prompt, its `SubagentStart` and a Droid `SessionStart` must each be refused
-with `foreign_pane`, and so must a `tuios call set-agent-state` from there
-that claims the pane's own shell as its `harness_pid`; the pane must stay
-`none` and unlisted by `list-agents`. The positive halves: the same harness
-and hook run from the pane's shell set the pane to `working`; a harness
-outside the pane whose environment names no pane may still choose it with
-`--window`; and the same server started from the pane's shell as a copy of
-the test binary named `tmux` (its ancestry then reaches a process whose
-executable is `tmux`, which has left the pane's tree and terminal just as the
-outside one has) sets the pane to `working` with its own conversation. The
-test writes each hook's `--explain` line and the pane's state after it to
-`agent-report-own-pane.log` in its artifact directory.
+`TUIOS_SESSION`, the way Claude Code's daemon runs a background session. The
+server is a copy of the test binary named `claude`, started with
+`--bg-pty-host`, as Claude Code's pty host is. Its prompt, its
+`SubagentStart` and a Droid `SessionStart` must each be refused with
+`foreign_pane`, and so must a `tuios call set-agent-state` from there that
+claims the pane's own shell as its `harness_pid`; the pane must stay `none`
+and unlisted by `list-agents`. The positive halves: the same harness and hook
+run from the pane's shell set the pane to `working`; a harness outside the
+pane whose environment names no pane may still choose it with `--window`; and
+the same kind of server started from the pane's shell as a copy named
+`conmon` (a rootless container's helper) and as a copy named `tmux` has left
+the pane's tree and terminal just as the background session has, with no
+harness daemon above it, and its prompt (and, for `conmon`, its `Stop`) sets
+the pane with its own conversation. The test writes each hook's `--explain`
+line and the pane's state after it to `agent-report-own-pane.log` in its
+artifact directory.
 
 Run on 2026-10-18 on macOS, on the branch rebased onto `upstream/main` at
-`55590f29`. The second row was run before the rebase, with the test of that
-time.
+`55590f29`, with the test of that time: the outside server was a plain copy
+of the test binary, and the exception was for multiplexer servers by name.
+The second row was run before the rebase.
 
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A harness outside the pane, with the pane's inherited `TUIOS_PANE_ID`, set its state | yes | `harnessOutsidePane` returns false at once, which cuts the check from all three verbs | `TestAgentReportOnlyFromTheHarnessInThePane` ("a prompt from a harness outside the pane: applied=true reason=\"\", want refused with foreign_pane"; then the subagent with `reason=""`, the Droid id with `foreign_harness` and the claimed shell with `foreign_session`, as the pane held `phantom-1`) | **caught** |
 | The same, on the branch's base | yes | `upstream/main` at `ccde47cf`, built unchanged | the same test, with the same first failure | **caught** |
-| A harness in tmux in the pane was refused, so the pane showing the tmux client lost its agent | yes | `harnessOutsidePane` without the `ancestryReachesMultiplexer` exception | the same test ("a prompt from a harness in tmux in the pane: applied=false reason=\"foreign_pane\", want applied"); every other case passes | **caught** |
+| A harness in tmux in the pane was refused, so the pane showing the tmux client lost its agent | yes | `harnessOutsidePane` without the multiplexer exception, since replaced by the harness daemon check | the same test ("a prompt from a harness in tmux in the pane: applied=false reason=\"foreign_pane\", want applied"); every other case passes | **caught** |
 | A caller outside the pane passed by naming the pane's shell as its `harness_pid` | yes | `harnessOutsidePane` without the check of the claim against the caller's pid | the same test ("a report from outside the pane claiming the pane's shell as its harness: applied=true reason=\"\", want refused with foreign_pane") | **caught** |
+
+Run on 2026-10-20 on macOS, on `upstream/main` at `5d290099` plus the
+branch, after review: the check refuses only a harness with a harness daemon
+(`harnessDaemons`) among its ancestors, not every harness that left the pane.
+Each control cut one thing from `internal/session/agent_report_pane.go`,
+built, ran the test, and restored the file byte for byte (same SHA-1).
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A harness in a rootless container in the pane (distrobox, toolbox, podman, docker, through conmon) was refused | yes | The branch before the change, which refused every harness that left the pane unless a multiplexer server was above it | the same test ("a prompt from a harness in conmon in the pane: applied=false reason=\"foreign_pane\", want applied", and the same for its `Stop`); every other case passes | **caught** |
+| The same, and a harness in tmux in the pane | yes | `harnessOutsidePane` refuses every harness that left the pane (`return !harnessDaemonAbove(...) \|\| true`) | the same test: the `conmon` prompt and `Stop`, and "a prompt from a harness in tmux in the pane: applied=false reason=\"foreign_pane\", want applied" | **caught** |
+| A background session outside the pane set its state (the bug the check is for) | yes | `harnessDaemons` emptied | the same test ("a prompt from a harness outside the pane: applied=true reason=\"\", want refused with foreign_pane", then the subagent; the phantom's id then refuses every later case with `foreign_session`) | **caught** |
 
 The fixed build passes it three runs in a row (`-count=3`).
 

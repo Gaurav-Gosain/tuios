@@ -2,17 +2,24 @@ package session
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
+	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// multiplexerServers are the executable names of the terminal multiplexers
-// whose server leaves the pane it was started from: it runs in a session of its
-// own, on terminals of its own, under init, while the programs in its panes
-// keep the environment of the pane that started it, TUIOS_PANE_ID included. A
-// harness whose ancestry reaches one of them is taken as running in the pane
-// that shows the multiplexer's client. See harnessOutsidePane.
-var multiplexerServers = []string{"tmux", "screen", "zellij", "dtach", "abduco"}
+// harnessDaemons are the processes a harness runs its background sessions
+// under, away from the pane that asked for them. Each is a program name and
+// an argument it is started with, so the same program running in a pane is
+// not taken for one. The name is matched against the process's name, its
+// argv[0] and its executable, each reduced by daemonName. See
+// harnessOutsidePane.
+var harnessDaemons = []struct{ name, arg string }{
+	// Claude Code's daemon, `claude daemon run`, and the pty host it starts
+	// each background session on, `claude --bg-pty-host`.
+	{"claude", "daemon"},
+	{"claude", "--bg-pty-host"},
+}
 
 // harnessOutsidePane says whether a hook report about window target of sess
 // comes from a harness that does not run in that pane, and so must not be
@@ -25,6 +32,13 @@ var multiplexerServers = []string{"tmux", "screen", "zellij", "dtach", "abduco"}
 // that held only a shell, and the rail showed an agent there that the pane
 // did not run.
 //
+// Plenty of programs leave the pane and keep its environment for what they
+// run: tmux, screen and zellij servers, the conmon helper of a rootless
+// container (distrobox, toolbox, podman, docker), systemd-run --pty. A harness
+// under one of them belongs to the pane that shows it, so the check does not
+// ask whether the harness left the pane, but whether a harness daemon took it
+// out.
+//
 // A report is refused when all of these hold:
 //
 //   - it names the harness process (harness_pid), and came from this machine.
@@ -36,10 +50,8 @@ var multiplexerServers = []string{"tmux", "screen", "zellij", "dtach", "abduco"}
 //     pane is a choice, and it keeps working.
 //   - the harness is not the pane's process, does not share its terminal and
 //     does not descend from it.
-//   - no ancestor of the harness is a multiplexer server (multiplexerServers).
-//     A harness in tmux inside the pane has left the pane's process tree the
-//     same way a background session has, and its reports belong on the pane
-//     that shows the tmux client.
+//   - an ancestor of the harness outside the pane is a harness daemon
+//     (harnessDaemons).
 //
 // The caller's pid, which the kernel gives, checks the harness_pid it claims:
 // a hook runs under its harness, so the harness is the caller or one of its
@@ -69,8 +81,7 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 	if in, known := processInPane(harnessPID, root); !known || in {
 		return false
 	}
-	reached, known := ancestryReachesMultiplexer(harnessPID)
-	return known && !reached
+	return harnessDaemonAbove(harnessPID, root)
 }
 
 // paneProcess returns the id of the window target names and the pid of the
@@ -113,35 +124,50 @@ func selfOrAncestor(pid, child int) bool {
 	return false
 }
 
-// ancestryReachesMultiplexer says whether an ancestor of pid is a
-// multiplexer server, by the name of its executable. known is false when a
-// process record on the way cannot be read.
-func ancestryReachesMultiplexer(pid int) (reached, known bool) {
+// harnessDaemonAbove says whether an ancestor of pid is a harness daemon, one
+// in harnessDaemons, before the walk reaches a process in the pane whose
+// process is root. It is false when a process record on the way cannot be
+// read: only a positive reading refuses a report.
+func harnessDaemonAbove(pid, root int) bool {
 	ppid, _, ok := readProcLineage(pid)
 	if !ok {
-		return false, false
+		return false
 	}
+	_, rootTTY, rootOK := readProcLineage(root)
 	for depth := 0; depth < paneOriginMaxDepth && ppid > 1; depth++ {
-		if slices.Contains(multiplexerServers, executableName(ppid)) {
-			return true, true
+		next, tty, ok := readProcLineage(ppid)
+		if !ok || ppid == root || (rootOK && tty != 0 && tty == rootTTY) {
+			return false
 		}
-		next, _, ok := readProcLineage(ppid)
-		if !ok {
-			return false, false
+		if isHarnessDaemon(readProcessInfo(ppid)) {
+			return true
 		}
 		ppid = next
 	}
-	return false, true
+	return false
 }
 
-// executableName is the base name of the file process pid executes, or of its
-// process name when the executable cannot be read.
-func executableName(pid int) string {
-	info := readProcessInfo(pid)
-	if info.exe != "" {
-		return filepath.Base(info.exe)
+// isHarnessDaemon says whether a process is one of harnessDaemons.
+func isHarnessDaemon(info foregroundInfo) bool {
+	if len(info.argv) < 2 {
+		return false
 	}
-	return info.comm
+	names := []string{daemonName(info.comm), daemonName(info.argv[0]), daemonName(info.exe)}
+	for _, d := range harnessDaemons {
+		if slices.Contains(names, d.name) && slices.Contains(info.argv[1:], d.arg) {
+			return true
+		}
+	}
+	return false
+}
+
+// daemonName reduces a process name or path to the name a program is known
+// by. A process that retitles itself keeps the name as the first word, as
+// Claude Code's pty host shows as "claude bg-pty-host", and Nix runs a wrapped
+// program as .name-wrapped.
+func daemonName(s string) string {
+	name, _, _ := strings.Cut(harness.BaseName(s), " ")
+	return strings.TrimSuffix(strings.TrimPrefix(name, "."), "-wrapped")
 }
 
 // processInPane says whether process pid runs in the pane whose process is
