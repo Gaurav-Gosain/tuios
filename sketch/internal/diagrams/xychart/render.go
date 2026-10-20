@@ -221,7 +221,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		count = max(len(x.categories), 1)
 	} else {
 		for _, plot := range plots {
-			count = max(count, len(plot.data))
+			count = max(count, plot.length)
 		}
 	}
 	slot := 1 / float64(count)
@@ -512,16 +512,16 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 			id = ` data-id="` + svg.EscText(plot.title) + `"`
 		}
 		// A series declared before the categories can hold more values than there are categories.
-		n := len(plot.data)
+		n := plot.length
 		if band {
-			n = min(len(plot.data), count)
+			n = min(plot.length, count)
 		}
 		if plot.typ == "bar" {
 			offset := float64((float64(bar)-float64(bars-1)/2)*thickness) - (thickness-gap)/2
 			bar++
 			svg.WriteStrings(&series, `<g class="pele-series pele-bars"`, id, ` fill="`, color, `">`)
 			for i := 0; i < n; i++ {
-				value, ok := finite(plot.data[i])
+				value, ok := finite(plot.at(i))
 				if !ok {
 					continue
 				}
@@ -588,7 +588,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		pc := 0.0
 		pv := math.NaN()
 		for i := 0; i < n; i++ {
-			value, ok := finite(plot.data[i])
+			value, ok := finite(plot.at(i))
 			if !ok {
 				pv = math.NaN()
 				continue
@@ -780,13 +780,13 @@ func geometryOf(model *XyChartDb, title text.Label, names []string, ticks, marks
 	band := g.Band
 	for index, plot := range model.plots {
 		s := types.GeoSeries{Bar: plot.typ == "bar", Name: names[index]}
-		n := len(plot.data)
+		n := plot.length
 		if band {
 			n = min(n, count)
 		}
 		gap := false
 		for i := 0; i < n; i++ {
-			value, ok := finite(plot.data[i])
+			value, ok := finite(plot.at(i))
 			if !ok {
 				gap = true
 				continue

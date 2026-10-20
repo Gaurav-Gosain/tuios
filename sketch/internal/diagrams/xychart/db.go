@@ -33,10 +33,23 @@ type Axis struct {
 // with no value has NaN, which stands for pele's `undefined`. pele also keeps each
 // place's name as text, which nothing reads; the port leaves it out.
 type Plot struct {
-	typ         string // "line" or "bar"
-	title       string
-	data        []float64
+	typ   string // "line" or "bar"
+	title string
+	data  []float64
+	// length is the series length pele works with: on a band axis, the count of
+	// categories when the series was added. data stops at the last value given,
+	// and at reads the rest as NaN, so a source cannot ask for one value per
+	// category for each of thousands of series.
+	length      int
 	pointLabels []string
+}
+
+// at is value i of the series, NaN past the values given.
+func (p *Plot) at(i int) float64 {
+	if i < len(p.data) {
+		return p.data[i]
+	}
+	return math.NaN()
 }
 
 type XyChartDb struct {
@@ -94,9 +107,9 @@ func (db *XyChartDb) setYAxisRangeData(min, max float64) {
 	db.hasSetYAxis = true
 }
 
-func (db *XyChartDb) plotData(values []float64) []float64 {
+func (db *XyChartDb) plotData(values []float64) ([]float64, int) {
 	if len(values) == 0 {
-		return nil
+		return nil, 0
 	}
 	// The first series fixes the x range when no x-axis statement did.
 	if !db.hasSetXAxis {
@@ -119,17 +132,10 @@ func (db *XyChartDb) plotData(values []float64) []float64 {
 		db.yAxis = Axis{typ: "linear", title: db.yAxis.title, min: min, max: max}
 	}
 	if x.typ == "band" {
-		out := make([]float64, len(x.categories))
-		for i := range out {
-			if i < len(values) {
-				out[i] = values[i]
-			} else {
-				out[i] = math.NaN()
-			}
-		}
-		return out
+		// pele pads the series with NaN to the count of categories; Plot.at does that on read.
+		return values, len(x.categories)
 	}
-	return values
+	return values, len(values)
 }
 
 func (db *XyChartDb) addPlot(typ string, title XyText, data []DataPoint) {
@@ -137,7 +143,8 @@ func (db *XyChartDb) addPlot(typ string, title XyText, data []DataPoint) {
 	for i, d := range data {
 		values[i] = d.value
 	}
-	plot := Plot{typ: typ, title: js.Trim(title.text), data: db.plotData(values)}
+	plot := Plot{typ: typ, title: js.Trim(title.text)}
+	plot.data, plot.length = db.plotData(values)
 	// Mermaid accepts labels on the points of a bar series and ignores them.
 	if typ == "line" {
 		for _, d := range data {
