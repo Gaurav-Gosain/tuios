@@ -68,9 +68,9 @@ func ExampleInlineBar() {
 		fmt.Println(g.String())
 	}
 	// Output:
-	// ████████
-	// ███▎
-	// ▉
+	// ▄▄▄▄▄▄▄▄
+	// ▄▄▄▖
+	// ▄
 }
 
 func ExampleDivergingBar() {
@@ -78,5 +78,5 @@ func ExampleDivergingBar() {
 	g := plot.DivergingBar{Left: 24, Right: 9, Max: 24}.Draw(11, 1, plot.Blocks)
 	fmt.Println(g.String())
 	// Output:
-	// █████┊█▉
+	// ▄▄▄▄▄┊▄▄
 }

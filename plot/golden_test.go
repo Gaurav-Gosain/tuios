@@ -161,6 +161,23 @@ var cases = []chartCase{
 		}
 		return g
 	}},
+	{"inline-bars-blocks", 12, 6, func(w, h int, m Mode) *Grid {
+		// One bar per row, as in a table: the same Max for every row.
+		g := NewGrid(w, h)
+		for i, v := range []float64{30, 12.4, 3.1, 0.84, 0, math.NaN()} {
+			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0, Style: BarBlocks}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"diverging-bars-blocks", 15, 5, func(w, h int, m Mode) *Grid {
+		g := NewGrid(w, h)
+		for i, lr := range [][2]float64{{24, 1.1}, {6, 3.2}, {0.04, 0.22}, {0, 0}, {1.2, 9}} {
+			row := DivergingBar{Left: lr[0], Right: lr[1], Max: 24, LeftRole: Series3, RightRole: Series5, Track: i%2 == 0, Style: BarBlocks}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
 	{"empty", 10, 3, func(w, h int, m Mode) *Grid {
 		return Line{}.Draw(w, h, m)
 	}},

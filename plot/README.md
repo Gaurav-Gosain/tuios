@@ -89,24 +89,26 @@ The idea for mirrored and inline bars comes from
 ## Inline bars
 
 `InlineBar` is a bar one row high for a table cell. It fills the cell to
-`Value / Max`, to an eighth of a cell, and draws no label. `DivergingBar`
+`Value / Max` and draws no label. By default it is a lower half block,
+exact to half a cell, so the bars of a table stay apart. `Style: plot.BarBlocks` fills the row with eighth blocks, exact to an
+eighth of a cell. `DivergingBar`
 grows left from a centre mark for `Left` and right for `Right`, such as
 download and upload of one service.
 
 ```go
 for _, h := range hosts {
 	bar := plot.InlineBar{Value: h.Rate, Max: busiest, Track: true}
-	cell := bar.Draw(12, 1, plot.Blocks) // put it in the row's bar column
+	cell := bar.Draw(12, 1, plot.Blocks) // ▄▄▄▄▄▖ in the bar column
 	_ = cell
 }
 ```
 
 - Give every row the same `Max`, so the bars compare.
-- `Track` paints the whole bar on the `track` role as a background.
+- `Track` shows the empty part in the `track` role.
 - Block elements that grow from the right come only in an eighth and a
-  half. On a track, the left side of a `DivergingBar` is still exact to an
-  eighth: its partial cell is a left block in the track colour on a ground
-  of the bar colour. Without a track it is the nearest of the two.
+  half. With `BarBlocks` on a track, the left side of a `DivergingBar` is
+  still exact to an eighth: its partial cell is a left block in the track
+  colour on a ground of the bar colour.
 - A value above zero always shows.
 
 ## Fades

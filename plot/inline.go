@@ -13,10 +13,24 @@ type InlineBar struct {
 	Value float64
 	Max   float64 // 0 means 1
 	Role  Role    // the filled part; Series1 when empty
-	// Track paints the whole bar on the Track role as a background, so the
-	// empty part shows how much is left.
+	// Track shows the empty part in the Track role: as a lower half block
+	// for BarThin, as the background for BarBlocks.
 	Track bool
+	Style BarStyle
 }
+
+// BarStyle is how an inline bar draws.
+type BarStyle uint8
+
+// The bar styles.
+const (
+	// BarThin is a lower half block, exact to half a cell. It is half as
+	// tall as the row, so the bars of a table stay apart: ▄▄▄▄▖
+	BarThin BarStyle = iota
+	// BarBlocks fills the row with eighth blocks, exact to an eighth of a
+	// cell: ████▊
+	BarBlocks
+)
 
 // Fraction returns Value / Max, clamped to [0, 1]. A missing or negative
 // value is 0.
@@ -38,7 +52,12 @@ func (b InlineBar) Draw(w, h int, m Mode) *Grid {
 	if role == None {
 		role = Series1
 	}
-	fillRight(g, (g.H-1)/2, 0, g.W, b.Fraction(), role, b.Track, m)
+	y := (g.H - 1) / 2
+	if b.Style == BarThin {
+		lineRight(g, y, 0, g.W, b.Fraction(), role, b.Track, m)
+	} else {
+		fillRight(g, y, 0, g.W, b.Fraction(), role, b.Track, m)
+	}
 	return g
 }
 
@@ -56,8 +75,9 @@ type DivergingBar struct {
 	// LeftRole and RightRole colour the two sides: Series1 and Series2
 	// when empty.
 	LeftRole, RightRole Role
-	// Track paints the whole bar on the Track role as a background.
+	// Track shows the empty part, as for InlineBar.
 	Track bool
+	Style BarStyle
 }
 
 // Fractions returns Left / Max and Right / Max, each clamped to [0, 1].
@@ -95,15 +115,54 @@ func (d DivergingBar) Draw(w, h int, m Mode) *Grid {
 	}
 	left, right := d.Fractions()
 	lw := (g.W - 1) / 2
+	centre := block(m, "┊", "|")
+	if d.Style == BarThin {
+		lineLeft(g, y, 0, lw, left, lr, d.Track, m)
+		lineRight(g, y, lw+1, g.W-lw-1, right, rr, d.Track, m)
+		g.set(lw, y, centre, Dim)
+		return g
+	}
 	fillLeft(g, y, 0, lw, left, lr, d.Track, m)
 	fillRight(g, y, lw+1, g.W-lw-1, right, rr, d.Track, m)
-	centre := block(m, "┊", "|")
 	if d.Track {
 		g.setBg(lw, y, centre, Dim, Track)
 	} else {
 		g.set(lw, y, centre, Dim)
 	}
 	return g
+}
+
+// lineRight draws a thin bar on cells x0 to x0+n-1 of row y from the left
+// to fraction f, to half a cell, and the track after it.
+func lineRight(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
+	lineSide(g, y, n, f, role, track, m, func(i int) int { return x0 + i }, "▖")
+}
+
+// lineLeft is lineRight growing from the right.
+func lineLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
+	lineSide(g, y, n, f, role, track, m, func(i int) int { return x0 + n - 1 - i }, "▗")
+}
+
+// lineSide draws the cells of a line bar, the i-th from its base at x(i).
+// half is the glyph of a cell half full: the quadrant on the base's side.
+func lineSide(g *Grid, y, n int, f float64, role Role, track bool, m Mode, x func(int) int, half string) {
+	if n <= 0 {
+		return
+	}
+	units := cellsOf(f, n*2)
+	for i := 0; i < n; i++ {
+		lv := units - i*2
+		switch {
+		case lv >= 2:
+			g.set(x(i), y, block(m, "▄", "="), role)
+		case lv == 1 && m == ASCII:
+			g.set(x(i), y, "=", role)
+		case lv == 1:
+			g.set(x(i), y, half, role)
+		case track:
+			g.set(x(i), y, block(m, "▄", "-"), Track)
+		}
+	}
 }
 
 // fillRight fills cells x0 to x0+n-1 of row y from the left to fraction f.

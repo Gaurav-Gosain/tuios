@@ -1,39 +1,39 @@
 === braille 12x6
-|████████████|
-|█████       |
-|█▎          |
-|▍           |
-|            |
+|▄▄▄▄▄▄▄▄▄▄▄▄|
+|▄▄▄▄▄       |
+|▄▄▄▄▄▄▄▄▄▄▄▄|
+|▖           |
+|▄▄▄▄▄▄▄▄▄▄▄▄|
 |            |
 --- roles
 |aaaaaaaaaaaa|
 |aaaaa       |
-|aa          |
+|abbbbbbbbbbb|
 |a           |
+|bbbbbbbbbbbb|
 |            |
-|            |
-a=series1 (upper case is bold)
+a=series1 b=track (upper case is bold)
 === blocks 12x6
-|████████████|
-|█████       |
-|█▎          |
-|▍           |
-|            |
+|▄▄▄▄▄▄▄▄▄▄▄▄|
+|▄▄▄▄▄       |
+|▄▄▄▄▄▄▄▄▄▄▄▄|
+|▖           |
+|▄▄▄▄▄▄▄▄▄▄▄▄|
 |            |
 --- roles
 |aaaaaaaaaaaa|
 |aaaaa       |
-|aa          |
+|abbbbbbbbbbb|
 |a           |
+|bbbbbbbbbbbb|
 |            |
-|            |
-a=series1 (upper case is bold)
+a=series1 b=track (upper case is bold)
 === ascii 12x6
-|############|
-|#####       |
-|#...........|
-|#           |
-|............|
+|============|
+|=====       |
+|=-----------|
+|=           |
+|------------|
 |            |
 --- roles
 |aaaaaaaaaaaa|
