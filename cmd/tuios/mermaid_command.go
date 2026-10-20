@@ -71,7 +71,7 @@ recording: the diagram of FILE, or a built-in one. Press q to quit and r to
 start the demo again.
 
 The colours come from your tuios theme, or from --theme or [mermaid] theme. tuios.dev/sketch draws the diagrams. It
-is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant charts, user journeys, kanban boards, git graphs, sankey diagrams, block diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams, radar charts and treemaps now.`,
+is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant charts, user journeys, kanban boards, git graphs, sankey diagrams, block diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams, radar charts, treemaps, info diagrams, tree views, Ishikawa diagrams, Cynefin diagrams, event models, Venn diagrams, Wardley maps and railroad diagrams now.`,
 		Example: `  # Draw a diagram here
   tuios mermaid flow.mmd
 
@@ -254,6 +254,14 @@ var diagramKinds = map[sketch.Type]string{
 	"packet":        "packet diagrams",
 	"radar":         "radar charts",
 	"treemap":       "treemaps",
+	"info":          "info diagrams",
+	"treeView":      "tree views",
+	"ishikawa":      "Ishikawa diagrams",
+	"cynefin":       "Cynefin diagrams",
+	"eventmodeling": "event models",
+	"venn":          "Venn diagrams",
+	"wardley":       "Wardley maps",
+	"railroad":      "railroad diagrams",
 }
 
 // diagramKind is the plural name of a diagram type for a message, such as
