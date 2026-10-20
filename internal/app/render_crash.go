@@ -56,16 +56,17 @@ var crashLead = []string{
 // composeFrame, so nothing in the normal render path runs. A caller with no
 // size yet gets a small block rather than nothing.
 func RenderCrashScreen(report *CrashReport, notice string, width, height int) string {
-	pal := theme.UI()
 	if width < 1 {
 		width = 1
 	}
 	if height < 1 {
 		height = 1
 	}
-	// Nothing composes this screen, so nothing would replace a see-through
-	// frame ground: the frame goes on the terminal's own background instead.
-	overlay.SetFrameColors(overlay.FrameColors{Ink: theme.BorderFocusedWindow()})
+	// No pane is behind this screen: the panel sits on the chrome's canvas, so
+	// a framed one is filled with that.
+	canvas := theme.UI().Canvas
+	overlay.SetFrameColors(overlay.FrameColors{Ink: theme.BorderFocusedWindow(), Ground: canvas, Measure: canvas})
+	pal := theme.UI()
 	panel := crashPanel(report, notice, width, height, pal)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel,
 		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(pal.Canvas)))

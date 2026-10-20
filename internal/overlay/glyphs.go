@@ -4,8 +4,6 @@ import (
 	"image/color"
 	"strings"
 	"sync/atomic"
-
-	"charm.land/lipgloss/v2"
 )
 
 // Chrome is the handful of characters the overlay family draws its own
@@ -99,22 +97,25 @@ func SetFramePanels(on bool) { framePanels.Store(on) }
 // memoises a palette can key it on the answer.
 func FramePanels() bool { return framePanels.Load() }
 
-// FrameColors is what an overlay's frame is drawn in when a host pushes it: Ink
-// for the glyphs, and Ground for the cells under them. A host pushes the ink
-// its focused pane's border is drawn in, because an open overlay is the focused
-// thing, and a ground its compositor reads as the cell beneath the overlay, so
-// the frame sits on the panes the way a pane's own border does. A nil Ink keeps
-// the palette's; a nil Ground leaves the frame cells on the terminal's default
-// background.
+// FrameColors is what a host draws overlay frames with. An overlay with a
+// drawn frame reads as a pane window: the frame line in a pane border's colour,
+// and the frame and everything inside it on the ground an empty pane cell
+// shows, so no shaded band sits between the line and the content.
+//
+// Ink is the frame's colour; nil keeps the palette's. Ground is what a framed
+// overlay is filled with, nil being the terminal's default background, and
+// Measure is the colour that ground shows, which inks drawn on it are measured
+// against. Until a host pushes FrameColors, a framed overlay keeps its own
+// surface. At 16 colours, where there are no grounds, it does too.
 type FrameColors struct {
-	Ink, Ground color.Color
+	Ink, Ground, Measure color.Color
 }
 
-// frameColors holds the pushed FrameColors; nil is the zero value.
+// frameColors holds the pushed FrameColors; nil until a host pushes one.
 var frameColors atomic.Pointer[FrameColors]
 
-// SetFrameColors records the colours overlay frames are drawn in. A host calls
-// it every frame; an unchanged pair is not stored again.
+// SetFrameColors records what overlay frames are drawn with. A host calls it
+// every frame; an unchanged set is not stored again.
 func SetFrameColors(c FrameColors) {
 	if cur := frameColors.Load(); cur != nil && *cur == c {
 		return
@@ -123,35 +124,38 @@ func SetFrameColors(c FrameColors) {
 	frameColors.Store(&stored)
 }
 
-// frameGround is the ground for text that rides in an overlay's frame: the
-// pushed ground under a drawn frame, so a label sits on the line as a pane's
-// title sits on its border, and bg otherwise.
-func frameGround(bg color.Color, glyphs ...string) color.Color {
-	if p := frameColors.Load(); p != nil && p.Ground != nil && strings.TrimSpace(strings.Join(glyphs, "")) != "" {
-		return p.Ground
+// frameInk is the colour a frame is drawn in: the pushed ink, or fallback.
+func frameInk(fallback color.Color) color.Color {
+	if p := frameColors.Load(); p != nil && p.Ink != nil {
+		return p.Ink
 	}
-	return bg
+	return fallback
 }
 
-// frameStyle is the style an overlay's outer frame is drawn in: the pushed ink,
-// or fallback when none is pushed, on the pushed ground rather than the
-// surface's bg. A blank frame (the hidden border style) is part of the
-// surface's fill, the fill being its edge, so it keeps bg.
-func frameStyle(bg, fallback color.Color, glyphs ...string) lipgloss.Style {
-	var c FrameColors
-	if p := frameColors.Load(); p != nil {
-		c = *p
+// framedGround is the pushed ground a framed overlay is filled with and the
+// colour to measure its inks against. ok is false when none applies: nothing
+// was pushed, or the depth is 16 colours.
+func framedGround() (ground, measure color.Color, ok bool) {
+	p := frameColors.Load()
+	if p == nil || CurrentDepth() == Depth16 {
+		return nil, nil, false
 	}
-	ink := fallback
-	if c.Ink != nil {
-		ink = c.Ink
+	return p.Ground, p.Measure, true
+}
+
+// FrameMeasure is the colour a framed overlay's ground shows, or nil when no
+// framed overlay is drawn on a ground of the host's. A host that memoises a
+// palette keys it on the answer, because MeasuredOn takes it into the inks.
+func FrameMeasure() color.Color {
+	_, m, ok := framedGround()
+	if !ok {
+		return nil
 	}
-	if strings.TrimSpace(strings.Join(glyphs, "")) == "" {
-		return Style(bg).Foreground(ink)
-	}
-	st := lipgloss.NewStyle().Foreground(ink)
-	if c.Ground != nil {
-		st = st.Background(c.Ground)
-	}
-	return st
+	return m
+}
+
+// drawn reports whether a frame's glyphs draw anything: the hidden border
+// style's blank frame is part of the surface's fill.
+func drawn(glyphs ...string) bool {
+	return strings.TrimSpace(strings.Join(glyphs, "")) != ""
 }
