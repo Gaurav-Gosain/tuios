@@ -3154,6 +3154,15 @@ CI builds it), so the fix adds 8,192 and 240 bytes. No third-party dependency
 was added. The new linux/amd64 budget leaves 4,198 bytes of room.
 darwin/arm64 is unchanged, with 3,870 bytes of room.
 
+The budgets went to 42,213,640 and 39,451,800 for the plugin manager:
+`tuios plugins install`, `plugins.lock`, the build folders, the state file,
+the managed plugin origin and `plugin.restart`. On main at 9e6a518a the
+binaries measured 42,094,754 and 39,347,330 bytes. With the plugin manager
+they measured 42,209,442 and 39,447,666 (Go 1.26.10, a shallow clone, as CI
+builds it), so it adds 114,688 and 100,336 bytes. It links no new package.
+This uses the plugin system allowance. The new budgets leave 4,198 and 4,134
+bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
