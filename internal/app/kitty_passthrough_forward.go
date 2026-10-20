@@ -939,7 +939,10 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		existing.DataDirty = !placedNow
 		// A size this frame does not state, and whose header did not read,
 		// is unknown rather than zero. The size the placement already has is
-		// the better guess: zero measures the crop in the host's cell.
+		// the better guess: zero measures the crop in the host's cell. This
+		// holds for an a=T too, on purpose: one with a new c= or r= and no
+		// size it can read keeps the old picture's size, which is still
+		// nearer than the host's cell.
 		if sized.Width > 0 && sized.Height > 0 {
 			existing.ImagePixelWidth = sized.Width
 			existing.ImagePixelHeight = sized.Height
