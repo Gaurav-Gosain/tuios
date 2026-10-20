@@ -1,6 +1,6 @@
 // Package plot draws charts as terminal cells: bar, line, area, sparkline,
-// gauge, histogram, heatmap, pie, mirrored bars, and inline bars for table
-// cells.
+// gauge, histogram, heatmap, pie, mirrored bars, inline bars for table
+// cells, and a world map.
 //
 // A chart draws into a Grid of a given width and height. Each cell holds one
 // grapheme and a Role, the name of a theme colour such as "series1" or

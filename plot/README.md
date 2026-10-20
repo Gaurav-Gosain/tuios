@@ -2,10 +2,10 @@
 
 [![Go Reference](https://pkg.go.dev/badge/tuios.dev/plot.svg)](https://pkg.go.dev/tuios.dev/plot)
 
-`tuios.dev/plot` draws charts as terminal cells. It has ten chart kinds:
+`tuios.dev/plot` draws charts as terminal cells. It has eleven chart kinds:
 bar (horizontal and vertical), line, area, sparkline, gauge, histogram,
-heatmap, pie (a donut or a full disc), mirrored bars, and inline bars for
-table cells.
+heatmap, pie (a donut or a full disc), mirrored bars, inline bars for table
+cells, and a world map.
 
 A chart draws into a grid of the size you give it. Each cell holds one
 grapheme and a role, such as `series1`, `mute` or `track`. Your program maps
@@ -110,6 +110,45 @@ for _, h := range hosts {
   still exact to an eighth: its partial cell is a left block in the track
   colour on a ground of the bar colour.
 - A value above zero always shows.
+
+## World map
+
+`Map` draws a dot-matrix world map. Land shows in the `track` role. Each
+country with a value is filled with a shade of `Ramp`, `heat1` to `heat5`
+by default. Markers light one dot each.
+
+```go
+mp := plot.Map{
+	Values:  map[string]float64{"US": 410e6, "DE": 120e6, "SG": 14e6},
+	Log:     true, // spread values that span orders of magnitude
+	Markers: []plot.Marker{{Lat: 52.37, Lon: 4.9}},
+}
+g := mp.Draw(100, 20, plot.Braille)
+legend := mp.Legend() // one item per shade: "120k", "≥ 610k", ...
+```
+
+- Countries are ISO 3166-1 alpha-2 codes, such as `DE` or `jp`.
+- The projection is equirectangular, from 180° W to 180° E and from 84° N
+  to 60° S, as iptop draws it. The map keeps its shape and is centred.
+  `Stretch` fills the grid. `Aspect` is the cell's height over its width.
+- The shades start at round values, so the legend reads `≥ 2.8k` and not
+  `≥ 2786`. With `Log` and no `Min` and `Max`, the range is from the
+  smallest value above zero to the largest.
+- `Blocks` mode draws half blocks, two pixels to a cell. `ASCII` draws `.`
+  for land, the legend's marks for the shades and `&` for a marker.
+- A country too small to cover a third of a cell, such as Singapore or
+  Malta, takes the cell it covers most. It shows only when it has a value.
+- The map data takes about 240 KB when the first map is drawn. A program
+  that draws no map does not link the data.
+
+The land and the borders are
+[Natural Earth](https://www.naturalearthdata.com/) 1:50m Admin 0 Countries,
+version 5.1.1, which is in the public domain. `go generate` runs
+`internal/worldgen`, which downloads the zip, checks its SHA-256, and
+rasterises the polygons into 720 by 288 cells of half a degree. It writes
+`world.bin`: a land bitmap and the country of each land cell as runs,
+compressed to 10.4 KB. The idea comes from iptop, whose generator does the
+same for GeoJSON.
 
 ## Fades
 

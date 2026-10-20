@@ -195,6 +195,20 @@ var cases = []chartCase{
 		copy(g.Cells[w:], DivergingBar{Left: 0, Right: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
 		return g
 	}},
+	{"map", 44, 10, func(w, h int, m Mode) *Grid {
+		return Map{
+			Values:  map[string]float64{"US": 410, "de": 120, "BR": 6, "IN": 9, "AU": 2.5, "ZA": 0.4, "XX": 99, "RU": math.NaN()},
+			Markers: []Marker{{Lat: 52.37, Lon: 4.9}, {Lat: 35.68, Lon: 139.69, Role: Warning}, {Lat: -80, Lon: 0}},
+			Log:     true,
+		}.Draw(w, h, m)
+	}},
+	{"map-small", 30, 6, func(w, h int, m Mode) *Grid {
+		// Countries too small to win a cell show when they have a value.
+		return Map{Values: map[string]float64{"SG": 1, "MT": 1, "BH": 1, "FR": 1, "NO": 1}}.Draw(w, h, m)
+	}},
+	{"map-stretch", 20, 4, func(w, h int, m Mode) *Grid {
+		return Map{Stretch: true}.Draw(w, h, m)
+	}},
 	{"empty", 10, 3, func(w, h int, m Mode) *Grid {
 		return Line{}.Draw(w, h, m)
 	}},
@@ -352,6 +366,24 @@ func TestFormat(t *testing.T) {
 	}
 	if got := Percent(1); got != "100%" {
 		t.Errorf("Percent(1) = %q", got)
+	}
+}
+
+// TestMapBudget holds the world map's embedded data under its budget, and
+// checks it decodes to the map the generator wrote: 720 by 288 cells with
+// the countries a reader is most likely to ask for.
+func TestMapBudget(t *testing.T) {
+	if n := len(worldBin); n > 12<<10 {
+		t.Errorf("world.bin is %d bytes, over the 12 KB budget", n)
+	}
+	wd := loadWorld()
+	if wd.w != 720 || wd.h != 288 {
+		t.Errorf("the map is %dx%d cells", wd.w, wd.h)
+	}
+	for _, c := range []string{"US", "FR", "NO", "SG", "MT", "XK", "TW"} {
+		if _, ok := wd.index[c]; !ok {
+			t.Errorf("the map has no %s", c)
+		}
 	}
 }
 

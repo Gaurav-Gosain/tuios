@@ -80,3 +80,26 @@ func ExampleDivergingBar() {
 	// Output:
 	// ▄▄▄▄▄┊▄▄
 }
+
+func ExampleMap() {
+	mp := plot.Map{
+		Values:  map[string]float64{"US": 410, "DE": 120, "BR": 6, "JP": 18},
+		Markers: []plot.Marker{{Lat: 1.35, Lon: 103.82}}, // Singapore
+	}
+	g := mp.Draw(24, 5, plot.Braille)
+	fmt.Println(g.String())
+	for _, it := range mp.Legend() {
+		fmt.Println(it.Role, it.Label)
+	}
+	// Output:
+	// ⣰⣶⢶⣴⣶⣾⣟⣏⠻⠟⠋⢀⣠⣴⣤⣴⣴⣶⣶⣶⣶⡶⢦⢤
+	//  ⢀ ⠘⠿⡿⠿⠋   ⣼⣿⣽⣿⣿⢿⣿⣿⡿⠻⠋
+	//       ⠱⣷⣶⣤ ⠙⠹⣿⣿⠁ ⠁⠘⠵⢀⠤
+	//        ⡿⠛⠁   ⠛⠁⠁   ⠘⠛⠻⠂
+	//
+	// heat1 0
+	// heat2 ≥ 82
+	// heat3 ≥ 160
+	// heat4 ≥ 250
+	// heat5 ≥ 330
+}
