@@ -3132,6 +3132,13 @@ clone, as CI builds it). The change measured 41,975,970 and 39,229,138, so it
 adds 954,368 and 867,840 bytes. The binary stays under the 45 MB ceiling. The
 new budgets leave 4,130 and 4,162 bytes of room.
 
+The budgets then went to 42,045,700 and 39,317,600 for the owners of TML
+surfaces: the events, the patch, replace, get, list and validate verbs and
+their commands, the pushes that carry a patch, and the outbox that holds one
+push per client and surface. They add 65,536 bytes on linux/amd64
+(42,041,506) and 84,336 on darwin/arm64 (39,313,474), Go 1.26.10. The new
+budgets leave 4,194 and 4,126 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
