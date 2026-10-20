@@ -10,7 +10,7 @@ require (
 	charm.land/ssh v0.4.3
 	charm.land/tone v0.1.0
 	charm.land/wish/v2 v2.0.3
-	github.com/Gaurav-Gosain/sip v0.9.3
+	github.com/Gaurav-Gosain/sip v0.9.4
 	github.com/Gaurav-Gosain/tuiffects v0.7.1
 	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma/v2 v2.27.0

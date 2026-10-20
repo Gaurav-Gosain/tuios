@@ -28,9 +28,11 @@ import (
 //   - A bind outside this machine needs a password, or --no-auth. TLS alone
 //     is not enough: it hides the traffic but does not say who is connecting.
 //   - --no-auth is refused on an unspecified bind (0.0.0.0, ::). Such a bind
-//     also listens on loopback, but sip checks the Host header only when the
-//     bind address itself is loopback. With no password and no Host check, a
-//     page in a browser on this machine reaches the server by DNS rebinding.
+//     also listens on loopback, so with no password a page in a browser on
+//     this machine reaches the server by DNS rebinding. sip v0.9.4 checks the
+//     Host header on that bind when it has no TLS and no password, but that
+//     check lets every IP address through, and TLS turns it off. tuios-web
+//     keeps its own refusal so the rule does not depend on sip's.
 //   - A loopback bind may run with no password, for a browser on this
 //     machine. sip checks the Host header, because a web page whose name the
 //     attacker points at 127.0.0.1 (DNS rebinding) passes the same-origin
