@@ -16,8 +16,8 @@ set -euo pipefail
 
 budget() {
 	case "$1" in
-	linux/amd64) echo 42045700 ;;
-	darwin/arm64) echo 39317600 ;;
+	linux/amd64) echo 42090700 ;;
+	darwin/arm64) echo 39351200 ;;
 	*) echo "no budget for $1" >&2; return 1 ;;
 	esac
 }

@@ -3139,6 +3139,13 @@ push per client and surface. They add 65,536 bytes on linux/amd64
 (42,041,506) and 84,336 on darwin/arm64 (39,313,474), Go 1.26.10. The new
 budgets leave 4,194 and 4,126 bytes of room.
 
+They then went to 42,090,700 and 39,351,200 for what a TML surface may do: the
+owner rules, the pane() actions run with the opener's grants, the questions
+before a surface types or opens a window, the owner label, the rate limit,
+the minute tick of ago() and the tml skill topic. They add 45,056 bytes on
+linux/amd64 (42,086,562) and 33,616 on darwin/arm64 (39,347,090), Go 1.26.10.
+The new budgets leave 4,138 and 4,110 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
