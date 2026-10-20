@@ -7,9 +7,10 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
-	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/Gaurav-Gosain/tuios/internal/winjob"
 )
 
 // detach starts the command suspended, so track can put it in a job before
@@ -51,7 +52,9 @@ func track(cmd *exec.Cmd) (*procGroup, error) {
 	}
 	defer func() { _ = windows.CloseHandle(h) }()
 	if useJobs {
-		if job, err := newJob(); err == nil {
+		// The job kills what is in it when it closes, and lets a process
+		// start a child outside it with CREATE_BREAKAWAY_FROM_JOB.
+		if job, err := winjob.New(windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK); err == nil {
 			if err := windows.AssignProcessToJobObject(job, h); err == nil {
 				g.job = job
 			} else {
@@ -59,48 +62,10 @@ func track(cmd *exec.Cmd) (*procGroup, error) {
 			}
 		}
 	}
-	if err := ntResumeProcess(h); err != nil {
+	if err := winjob.Resume(h); err != nil {
 		return g, fmt.Errorf("could not resume the plugin process: %w", err)
 	}
 	return g, nil
-}
-
-// newJob makes a job that kills what is in it when it closes, and that
-// lets a process start a child outside it with CREATE_BREAKAWAY_FROM_JOB.
-func newJob() (windows.Handle, error) {
-	job, err := windows.CreateJobObject(nil, nil)
-	if err != nil {
-		return 0, err
-	}
-	if err := setLimits(job, windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE|windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK); err != nil {
-		_ = windows.CloseHandle(job)
-		return 0, err
-	}
-	return job, nil
-}
-
-func setLimits(job windows.Handle, flags uint32) error {
-	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
-	info.BasicLimitInformation.LimitFlags = flags
-	_, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation,
-		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)))
-	return err
-}
-
-var procNtResumeProcess = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtResumeProcess")
-
-// ntResumeProcess resumes every thread of a process started suspended. Go
-// does not hand back the thread handle CreateProcess returned, and this
-// needs only the process handle.
-func ntResumeProcess(h windows.Handle) error {
-	if err := procNtResumeProcess.Find(); err != nil {
-		return err
-	}
-	r, _, _ := procNtResumeProcess.Call(uintptr(h))
-	if r != 0 {
-		return fmt.Errorf("NtResumeProcess: NTSTATUS 0x%08x", uint32(r))
-	}
-	return nil
 }
 
 // kill kills everything in the job, or the command alone without one. The
@@ -127,7 +92,7 @@ func (g *procGroup) release() {
 	if g.job == 0 {
 		return
 	}
-	if err := setLimits(g.job, 0); err != nil {
+	if err := winjob.SetLimits(g.job, 0); err != nil {
 		// The limit stays, so closing the job would kill what is left.
 		// The handle is left open instead: those processes then end with
 		// the daemon, which is the lesser loss.

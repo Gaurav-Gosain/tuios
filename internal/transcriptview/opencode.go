@@ -496,12 +496,11 @@ func openCodeFromExport(ctx context.Context, session string) ([]any, error) {
 		return nil, err
 	}
 	cmd := childproc.CommandContext(ctx, bin, "session", "export", "--standalone", session)
-	killTreeOnCancel(cmd)
 	var out capWriter
 	cmd.Stdout = &out
 	cmd.Stdin = nil
 	defer clear(out.buf.Bytes())
-	if err := cmd.Run(); err != nil || out.over {
+	if err := runTree(cmd); err != nil || out.over {
 		return nil, ErrService
 	}
 	o, ok := parseObj(out.buf.Bytes())
