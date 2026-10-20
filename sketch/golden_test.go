@@ -19,6 +19,7 @@ var done = map[string]bool{
 	"er":        true,
 	"flowchart": true,
 	"gantt":     true,
+	"git":       true,
 	"journey":   true,
 	"kanban":    true,
 	"mindmap":   true,

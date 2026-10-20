@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -677,4 +677,42 @@ func TestKanbanOutputIsInert(t *testing.T) {
 			t.Fatalf("%q did not render", src)
 		}
 	}
+}
+
+// gitStrip is p.replace(/["\\\n]/g, ”), for a commit id in double quotes.
+func gitStrip(p string) string {
+	return strings.NewReplacer(`"`, "", `\`, "", "\n", "").Replace(p)
+}
+
+func TestGitOutputIsInert(t *testing.T) {
+	// A string in double quotes cannot hold a double quote or a line break, so the payload is tried
+	// as written, in single quotes, and with its quotes escaped.
+	quoted := func(p string) []string {
+		return []string{`"` + p + `"`, `'` + p + `'`, `"` + strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(p) + `"`}
+	}
+	rendered, turn := 0, 0
+	for _, payload := range PAYLOADS {
+		forms := quoted(payload)
+		for _, template := range gitTemplates {
+			if inertTry(t, template(forms[turn%len(forms)], payload), RenderOptions{}, false) {
+				rendered++
+			}
+			turn++
+		}
+	}
+	if rendered <= 300 {
+		t.Fatalf("%d hostile sources rendered, want more than 300", rendered)
+	}
+	out, err := Render("gitGraph\n commit id: \"<script>alert(1)</script>\" tag: \"\\\"><img src=x onerror=alert(1)>\"\n branch \"</text><script>\"\n commit", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") || !strings.Contains(out.Data, "&lt;script&gt;alert(1)&lt;/script&gt;") {
+		t.Fatalf("git markup is not escaped: %v\n%s", err, out.Data)
+	}
+	corpus := corpusOf(t, "git")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", "\n", "commit ", "branch ", "merge ", "id: \"", "tag: \"", "title ", "TB:", "cherry-pick id: \""}, 11, 2000, RenderOptions{}, false)
+	hostileOptions(t, "gitGraph\n accTitle: t\n accDescr: d\n commit tag: \"v1\"\n branch b\n commit\n checkout main\n merge b")
 }

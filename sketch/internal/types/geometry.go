@@ -39,6 +39,9 @@ type Geometry struct {
 
 	// Kanban.
 	Kanban *GeoKanban
+
+	// GitGraph.
+	Git *GeoGit
 }
 
 type GeoNode struct {
@@ -280,4 +283,25 @@ type GeoCard struct {
 	Label []string
 	// Ticket, Assigned and Priority are as written, "" for none.
 	Ticket, Assigned, Priority string
+}
+
+// GeoGit is a git graph as lists: a text drawing lays it out again in cells.
+type GeoGit struct {
+	Title []string
+	// Lanes are the branch names in drawing order, "" where branch names are hidden.
+	Lanes   []string
+	Commits []GeoCommit
+}
+
+type GeoCommit struct {
+	Lane int
+	// Pos is the place along the history; commits that grow side by side share one.
+	Pos float64
+	// Kind is normal, reverse, highlight, merge or cherry-pick.
+	Kind string
+	// Label is the commit id as drawn, nil when ids are hidden.
+	Label []string
+	Tags  [][]string
+	// Parents are indexes into Commits.
+	Parents []int
 }

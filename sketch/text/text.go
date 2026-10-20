@@ -5,7 +5,8 @@
 //
 // Flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams,
 // pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant charts,
-// user journeys and kanban boards have a text drawing. Other types give
+// user journeys, kanban boards and git graphs have a text drawing. Other types
+// give ErrUnsupported.
 // ErrUnsupported.
 package text
 
@@ -43,7 +44,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -90,6 +91,8 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 		c, err = drawJourney(layout, opt)
 	case "kanban":
 		c, err = drawKanban(layout, opt)
+	case "gitGraph":
+		c, err = drawGit(layout, opt)
 	default:
 		c, err = drawSequence(layout, opt)
 	}

@@ -24,6 +24,10 @@ func FuzzRender(f *testing.F) {
 			f.Add(template("a&b"))
 		}
 	}
+	for _, template := range gitTemplates {
+		f.Add(template(`"`+PAYLOADS[1]+`"`, PAYLOADS[1]))
+		f.Add(template(`"a&b"`, "a&b"))
+	}
 	f.Fuzz(func(t *testing.T, src string) {
 		// Large inputs only slow the search down; the limits cover them.
 		if len(src) > 4096 {

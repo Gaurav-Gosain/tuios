@@ -588,3 +588,45 @@ var kanbanTemplates = []func(p string) string{
 	func(p string) string { return "kanban " + p + "\n  todo" },
 	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\nkanban\n  todo\n    a" },
 }
+
+var gitTemplates = []func(q, p string) string{
+	func(q, p string) string { return "gitGraph\n commit id: " + q },
+	func(q, p string) string {
+		return "gitGraph\n commit id: " + q + " msg: " + q + " tag: " + q + " tag: " + q + " type: HIGHLIGHT"
+	},
+	func(q, p string) string { return "gitGraph\n commit " + q },
+	func(q, p string) string {
+		return "gitGraph\n commit\n branch " + q + "\n commit\n checkout " + q + "\n commit"
+	},
+	func(q, p string) string {
+		return "gitGraph\n commit\n branch " + q + " order: 2\n commit\n switch main\n commit\n merge " + q + " id: " + q + " tag: " + q + " type: REVERSE"
+	},
+	func(q, p string) string {
+		return "gitGraph\n commit id: " + q + "\n branch b\n commit\n cherry-pick id: " + q
+	},
+	func(q, p string) string {
+		return "gitGraph\n commit id: \"a\"\n branch b\n commit id: \"c\"\n checkout main\n commit\n cherry-pick id: \"c\" tag: " + q
+	},
+	func(q, p string) string {
+		return "gitGraph\n commit id:\"z\"\n branch b\n commit id:\"a\"\n checkout main\n commit\n merge b id:\"m\"\n checkout b\n cherry-pick id:\"m\" parent:\"a\" tag: " + q
+	},
+	func(q, p string) string {
+		return "gitGraph TB:\n commit id: " + q + " tag: " + q + "\n branch " + q + "\n commit"
+	},
+	func(q, p string) string {
+		return "gitGraph BT:\n commit id: " + q + " tag: " + q + "\n branch " + q + "\n commit"
+	},
+	func(q, p string) string { return "gitGraph\n commit\n branch " + p + "\n commit" },
+	func(q, p string) string { return "gitGraph\n title " + p + "\n commit" },
+	func(q, p string) string { return "gitGraph\n accTitle: " + p + "\n accDescr: " + p + "\n commit" },
+	func(q, p string) string { return "gitGraph\n accDescr {\n " + p + "\n }\n commit" },
+	func(q, p string) string { return "gitGraph " + p + ":\n commit" },
+	func(q, p string) string { return "gitGraph\n commit type: " + p },
+	func(q, p string) string { return "gitGraph\n commit\n branch b order: " + p },
+	func(q, p string) string {
+		return "---\ntitle: " + q + "\nconfig:\n  gitGraph:\n    mainBranchName: " + q + "\n    mainBranchOrder: " + q + "\n    showBranches: " + q + "\n    rotateCommitLabel: " + q + "\n---\ngitGraph\n commit id: \"" + gitStrip(p) + "\""
+	},
+	func(q, p string) string {
+		return "%%{init: {\"gitGraph\": {\"mainBranchName\": " + q + ", \"showCommitLabel\": " + q + ", \"parallelCommits\": " + q + "}}}%%\ngitGraph\n commit\n branch b\n commit"
+	},
+}
