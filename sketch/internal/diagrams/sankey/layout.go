@@ -193,11 +193,11 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		}
 		into, out, value, valueOut := 0.0, 0.0, 0.0, 0.0
 		for _, k := range incoming[i] {
-			into += links[k].value * unit
+			into += float64(links[k].value * unit)
 			value += links[k].value
 		}
 		for _, k := range outgoing[i] {
-			out += links[k].value * unit
+			out += float64(links[k].value * unit)
 			valueOut += links[k].value
 		}
 		flow[i] = math.Max(into, out)
@@ -222,7 +222,7 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 			sum += flow[i]
 		}
 		if sum > 0 {
-			scale = math.Min(scale, (options.height-float64(len(column)-1)*gap)/sum)
+			scale = math.Min(scale, (options.height-float64(float64(len(column)-1)*gap))/sum)
 		}
 	}
 	if math.IsNaN(scale) || math.IsInf(scale, 0) || scale < 0 {
@@ -272,12 +272,12 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 			nodes[i].height = flow[i] * scale
 			margin[i] = math.Max(0, claim-nodes[i].height) / 2
 			nodes[i].y = y + margin[i]
-			y += nodes[i].height + 2*margin[i] + gap
+			y += nodes[i].height + float64(2*margin[i]) + gap
 		}
 		// Spare room is shared out between the nodes of a column.
 		spare := (options.height - y + gap) / float64(len(column)+1)
 		for k, i := range column {
-			nodes[i].y += spare * float64(k+1)
+			nodes[i].y += float64(spare * float64(k+1))
 		}
 	}
 
@@ -340,7 +340,7 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 					level = nodes[links[k].target].y + targetOffset[k] - sourceOffset[k]
 					other = links[k].target
 				}
-				weighted += level * links[k].thickness
+				weighted += float64(level * links[k].thickness)
 				weight += links[k].thickness
 				plain += center(other) - nodes[i].height/2
 			}
@@ -348,7 +348,7 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 			if weight > 0 {
 				wanted = weighted / weight
 			}
-			nodes[i].y += (wanted - nodes[i].y) * pull
+			nodes[i].y += float64((wanted - nodes[i].y) * pull)
 		}
 		sort(column, byCenter)
 		y := 0.0

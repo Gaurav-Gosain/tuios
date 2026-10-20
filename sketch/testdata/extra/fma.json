@@ -1,5 +1,8 @@
 [
  {
   "src": "xychart horizontal\n  title \"Sales\"\n  x-axis [Jan, Feb, Mar, Apr, May, Jun]\n  bar [60, 50, 120, -24.55, 1, -73, 89]"
+ },
+ {
+  "src": "sankey\n\nGas 3.0,Wind 4.1,2\nGas 1.0,Solar 4.2,5\nOil 2.0,Wind 4.1,5\nGas 1.1,Gas 3.0,0.85941\n"
  }
 ]

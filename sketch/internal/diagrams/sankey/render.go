@@ -154,13 +154,13 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 			minX = math.Min(minX, x-textWidth)
 			maxX = math.Max(maxX, x)
 		}
-		minY = math.Min(minY, y-small*0.75)
-		maxY = math.Max(maxY, y+small*0.75)
+		minY = math.Min(minY, y-float64(small*0.75))
+		maxY = math.Max(maxY, y+float64(small*0.75))
 		anchor := "end"
 		if after {
 			anchor = "start"
 		}
-		position := ` x="` + num(x) + `" y="` + num(y+small*0.35) + `" text-anchor="` + anchor + `"`
+		position := ` x="` + num(x) + `" y="` + num(y+float64(small*0.35)) + `" text-anchor="` + anchor + `"`
 		svg.WriteStrings(&labelsOut, `<g class="pele-label" data-id="`, svg.EscText(id), `">`)
 		if outlined {
 			svg.WriteStrings(&labelsOut, `<text`, position, ` fill="none" stroke="var(--_bg)" stroke-width="3" stroke-linejoin="round">`, svg.Esc(id))
@@ -213,8 +213,8 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 	inner := math.Max(maxX-minX, title.Width)
 	ox := pad - minX + (inner-(maxX-minX))/2
 	oy := pad + titleHeight - minY
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(maxY - minY + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 
 	var geometry *types.Geometry
 	if options.Geometry != nil {
