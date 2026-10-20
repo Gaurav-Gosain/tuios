@@ -6,7 +6,7 @@ package session
 // ConPTY and a guest pty. Such a pane cannot be quiesced.
 type readGate struct{}
 
-func newReadGate(paneIO) *readGate   { return nil }
-func (g *readGate) wait(paneIO) bool { return true }
-func (g *readGate) wake()            {}
-func (g *readGate) close()           {}
+func newReadGate(paneIO) *readGate            { return nil }
+func (g *readGate) wait(paneIO) (bool, error) { return true, nil }
+func (g *readGate) wake()                     {}
+func (g *readGate) close()                    {}

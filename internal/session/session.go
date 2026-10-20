@@ -4839,6 +4839,10 @@ func (p *PTY) ExitStatus() (int, bool) {
 	return p.exitCode, p.exited
 }
 
+// gateRetryDelay is how long a pane's reader waits before it asks the read
+// gate again after a poll failed.
+const gateRetryDelay = 50 * time.Millisecond
+
 func (p *PTY) readOutput() {
 	// Closing vtWriteChan lets vtWriter's range terminate when the read loop
 	// exits. Resize sends on it too, so the close is taken under the lock it
@@ -4858,6 +4862,7 @@ func (p *PTY) readOutput() {
 	}()
 
 	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
+	gateFailed := false
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -4872,8 +4877,26 @@ func (p *PTY) readOutput() {
 
 		// Output is waited for outside readMu and read under it, so a
 		// quiesce never waits on a quiet program. See pty_quiesce.go.
-		if p.gate != nil && !p.gate.wait(p.pty) {
-			return
+		if p.gate != nil {
+			ready, err := p.gate.wait(p.pty)
+			if err != nil {
+				// Not knowing whether output waits, the reader asks again
+				// rather than read: a read with nothing to take would hold
+				// readMu until the program next prints.
+				if !gateFailed {
+					LogError("Pane %s: %v. Retrying", shortID(p.ID), err)
+					gateFailed = true
+				}
+				select {
+				case <-time.After(gateRetryDelay):
+				case <-p.ctx.Done():
+					return
+				}
+				continue
+			}
+			if !ready {
+				return
+			}
 		}
 		p.readMu.Lock()
 		if p.quiesced {
