@@ -5,7 +5,7 @@
 // so a crop measured in the host's cell instead of in the picture's own scale
 // is half the size it should be.
 //
-// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend]
+// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend|same]
 //
 // A file medium is written under DIR, the test's own temporary directory, so
 // nothing is left behind in /tmp. Without it the system's is used.
@@ -26,7 +26,9 @@
 // natural it names no cell box, as kitty icat does, so the picture is drawn
 // at its own size: 200x20 of the 10x20 cells. With resend it places the
 // picture, then sends other pixels under the same id with a=t, which replaces
-// the stored image and places nothing.
+// the stored image and places nothing. With same it places the picture, moves
+// the cursor to the top left and sends the same bytes again with a=t, which
+// places nothing either, so the picture stays where it was.
 package main
 
 import (
@@ -81,10 +83,17 @@ func main() {
 	if later {
 		fmt.Printf("\x1b_Ga=p,i=%d,c=%d,r=%d,C=1,q=2\x1b\\", imageID, cols, rows)
 	}
-	if how == "resend" {
-		other, err := picture(0x40)
+	if how == "resend" || how == "same" {
+		again := data
+		var err error
+		switch how {
+		case "same":
+			os.Stdout.WriteString("\x1b[H")
+		case "resend":
+			again, err = picture(0x40)
+		}
 		if err == nil {
-			err = send(medium, fmt.Sprintf("a=t,f=100,i=%d,q=2", imageID), other)
+			err = send(medium, fmt.Sprintf("a=t,f=100,i=%d,q=2", imageID), again)
 		}
 		if err != nil {
 			fmt.Printf("\x1b[?1049lOVERFLOW-ERR %v\n", err)
