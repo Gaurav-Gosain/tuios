@@ -23,6 +23,7 @@ var done = map[string]bool{
 	"pie":       true,
 	"sequence":  true,
 	"state":     true,
+	"timeline":  true,
 	"xychart":   true,
 }
 

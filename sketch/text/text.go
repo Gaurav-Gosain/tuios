@@ -3,8 +3,9 @@
 // to cells at a scale where every label fits, and writes the labels as real
 // text. It is not a port of pele: pele draws only SVG.
 //
-// Flowcharts, sequence, state, class and ER diagrams, pie charts, mindmaps
-// and gantt charts have a text drawing. Other types give ErrUnsupported.
+// Flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams,
+// pie charts, mindmaps, gantt charts and timelines have a text drawing. Other
+// types give ErrUnsupported.
 package text
 
 import (
@@ -41,7 +42,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -78,6 +79,8 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 		c, err = drawMindmap(layout, opt)
 	case "gantt":
 		c, err = drawGantt(layout, opt)
+	case "timeline":
+		c, err = drawTimeline(layout, opt)
 	default:
 		c, err = drawSequence(layout, opt)
 	}

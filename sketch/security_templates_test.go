@@ -437,3 +437,33 @@ var xychartTemplates = []func(p string) string{
 	},
 	func(p string) string { return "xychart\n  %% " + p + "\n  line [1, 2]" },
 }
+
+var timelineTemplates = []func(p string) string{
+	func(p string) string { return "timeline\n  title " + p + "\n  2001 : a" },
+	func(p string) string { return "timeline\n  " + p },
+	func(p string) string { return "timeline\n  " + p + " : event" },
+	func(p string) string { return "timeline\n  2001 : " + p },
+	func(p string) string { return "timeline\n  2001 : a : " + p + " : b" },
+	func(p string) string { return "timeline\n  2001 : a\n       : " + p },
+	func(p string) string { return "timeline\n  section " + p + "\n  2001 : a" },
+	func(p string) string { return "timeline\n  section " + p },
+	func(p string) string {
+		return "timeline TD\n  title " + p + "\n  section " + p + "\n  " + p + " : " + p
+	},
+	func(p string) string { return "timeline TD\n  x" + p + " : y" + p + " : z" + p },
+	func(p string) string { return "timeline " + p + "\n  2001 : a" },
+	func(p string) string { return "timeline\n  accTitle: " + p + "\n  accDescr: " + p + "\n  2001 : a" },
+	func(p string) string { return "timeline\n  accDescr {\n " + p + "\n }\n  2001 : a" },
+	func(p string) string { return "timeline\n  2001 : a<br>" + p + "<br/>b" },
+	func(p string) string { return "timeline\n  2001 : <b>" + p + "</b> <i>" + p },
+	func(p string) string { return "timeline\n  2001 : fa:fa-" + p + " x" },
+	func(p string) string { return "timeline\n  %% " + p + "\n  2001 : a # " + p },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\ntimeline\n  2001 : a" },
+	func(p string) string {
+		return "---\nconfig:\n  timeline:\n    disableMulticolor: \"" + p + "\"\n---\ntimeline\n  2001 : a\n  2002 : b"
+	},
+	func(p string) string { return "---\nconfig:\n  timeline: \"" + p + "\"\n---\ntimeline\n  2001 : a" },
+	func(p string) string {
+		return "%%{init: {\"timeline\": {\"disableMulticolor\": \"" + p + "\", \"padding\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\"}}}%%\ntimeline\n  2001 : a"
+	},
+}

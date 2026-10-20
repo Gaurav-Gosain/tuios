@@ -43,6 +43,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"gantt vert label OSC":   "gantt\n  dateFormat YYYY-MM-DD\n  section S\n  t :a, 2024-01-01, 3d\n  v#27;]2;x#7; :vert, v1, 2024-01-02, 0d",
 		"gantt axisFormat bidi":  "gantt\n  dateFormat YYYY-MM-DD\n  axisFormat %Y\u202e%m\n  section S\n  t :a, 2024-01-01, 3d",
 		"gantt section bidi":     "gantt\n  dateFormat YYYY-MM-DD\n  section a#8238;b\n  t :a, 2024-01-01, 3d",
+		"timeline period":        "timeline\n  title t#27;]2;x#7;\n  section s#155;31m\n  #27;[2J : e\n  2002 : a#144;b",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

@@ -25,6 +25,9 @@ type Geometry struct {
 	Pie     *GeoPie
 	Mindmap []GeoMindNode
 	Gantt   *GeoGantt
+
+	// Timeline.
+	Timeline *GeoTimeline
 }
 
 type GeoNode struct {
@@ -147,4 +150,23 @@ type GeoTask struct {
 type GeoTick struct {
 	T     float64
 	Label string
+}
+
+// GeoTimeline is a timeline as lists, not places: a text drawing lays it out again in cells.
+type GeoTimeline struct {
+	Title []string
+	// Groups are the sections in order, each with the periods in it. A group without a
+	// label holds the periods that come before the first section.
+	Groups  []GeoGroup
+	Periods []GeoPeriod
+}
+
+type GeoGroup struct {
+	Label   []string
+	Periods []int
+}
+
+type GeoPeriod struct {
+	Label  []string
+	Events [][]string
 }

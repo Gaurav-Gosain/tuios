@@ -14,8 +14,9 @@ sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
 ## Status
 
 It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
-diagrams, pie charts, mindmaps, gantt charts and XY charts. Each other diagram type gives
-an error with the code `unsupported-diagram` until its port is done.
+diagrams, pie charts, mindmaps, gantt charts, XY charts and timelines. Each
+other diagram type gives an error with the code `unsupported-diagram` until
+its port is done.
 
 The output is the same as the output of pele, byte for byte. The test suite
 compares each diagram with an SVG that pele drew from the same source.
@@ -31,6 +32,7 @@ compares each diagram with an SVG that pele drew from the same source.
 | mindmap | 13/13 |
 | gantt | 11/11 |
 | xychart | 8/8 |
+| timeline | 14/14 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
@@ -53,13 +55,14 @@ v1.7.0 does.
 
 ## Text
 
-`tuios.dev/sketch/text` draws flowcharts, sequence, state, class and ER
-diagrams, pie charts, mindmaps and gantt charts with box-drawing characters,
-for a terminal that shows no pictures. For a graph it takes the layout that
-sketch works out for the SVG and maps it to cells. A pie chart is a bar for
-each slice, a mindmap is a tree, and a gantt chart is bars on a date axis. The
-labels stay real text. A pie chart in text lists every slice with its value. pele leaves a
-slice under 1% out of the pie, and shows values only with `showData`.
+`tuios.dev/sketch/text` draws flowcharts, sequence diagrams, state diagrams,
+class diagrams, ER diagrams, pie charts, mindmaps, gantt charts and timelines
+with box-drawing characters, for a terminal that shows no pictures. For a
+graph it takes the layout that sketch works out for the SVG and maps it to
+cells. The labels stay real text. A pie chart is a bar for each slice, with
+its value. pele leaves a slice under 1% out of the pie, and shows values only
+with `showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
+timeline runs across, and runs down when it does not fit the columns.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

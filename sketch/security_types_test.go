@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -482,6 +482,46 @@ func TestXyChartOutputIsInert(t *testing.T) {
 		"---\nconfig:\n  xyChart:\n    __proto__:\n      polluted: true\n    constructor: 1\n---\nxychart\n  line [1, 2]",
 	} {
 		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+}
+
+func TestTimelineOutputIsInert(t *testing.T) {
+	rendered := 0
+	for _, src := range corpusOf(t, "timeline") {
+		if inertTry(t, src, RenderOptions{}, true) {
+			rendered++
+		}
+	}
+	if rendered < len(corpusOf(t, "timeline")) {
+		t.Fatalf("%d of the timeline corpus rendered", rendered)
+	}
+	hostile(t, timelineTemplates, 500, RenderOptions{}, true)
+	out, err := Render("timeline\n  title <script>alert(1)</script>\n  section \"><img src=x onerror=alert(1)>\n  <svg onload=alert(1)> : </text><script>x</script>", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") ||
+		!strings.Contains(out.Data, "&lt;script&gt;") || !strings.Contains(out.Data, `data-id="&quot;&gt;&lt;img src=x onerror=alert(1)&gt;"`) {
+		t.Fatalf("timeline markup is not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "timeline\n  accTitle: t\n  accDescr: d\n  2001 : a", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, true) {
+			t.Fatal("hostile id prefix and font: did not render")
+		}
+	}
+	count := 4000
+	if testing.Short() {
+		count /= 8
+	}
+	if n := mutate(t, corpusOf(t, "timeline"), []string{":", " : ", "\n", "title ", "section ", "accTitle: ", "accDescr {", "}", "<br>",
+		" TD", "#", "%%"}, 3, 4000, RenderOptions{}, true); n <= count/10 {
+		t.Fatalf("%d of %d mutated timelines rendered", n, count)
+	}
+	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
+	for _, src := range []string{
+		"timeline\n  section __proto__\n  __proto__ : constructor : toString\n  constructor : __proto__\n  section constructor\n  hasOwnProperty",
+		"---\nconfig:\n  timeline:\n    __proto__:\n      polluted: true\n---\ntimeline\n  2001 : a",
+	} {
+		if !inertTry(t, src, RenderOptions{}, true) {
 			t.Fatalf("%q did not render", src)
 		}
 	}
