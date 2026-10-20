@@ -17,7 +17,7 @@ import (
 // writes the picked row into the state, a button that sets a number, and one
 // that closes with a value.
 const tmlRunDoc = `<tml version="1" title="Test run">
-  <state>{"tab": "sum", "picked": "none", "passed": 412, "failed": 5, "failures": [
+  <state>{"tab": "sum", "picked": "none", "passed": 412, "failed": 4, "failures": [
     {"pkg": "internal/session", "test": "TestAttachRace", "ms": 2210},
     {"pkg": "internal/session", "test": "TestAttachReplay", "ms": 1950},
     {"pkg": "internal/app", "test": "TestDockClick", "ms": 840},
