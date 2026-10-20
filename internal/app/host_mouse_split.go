@@ -30,24 +30,48 @@ import (
 // anything reads keys or mouse events. It holds the unknown head, takes the
 // keys that can only be the rest of the report, and on the final M or m
 // decodes the whole report again with each negative position clamped to the
-// grid's first column or row. Any other input ends the hold, and the key that
-// ended it is passed on.
+// grid's first column or row.
+//
+// The reader in uv holds an unknown sequence until its escape timeout (50 ms)
+// runs out, and then emits the head and the keys after it back to back. So
+// the rest of a report normally arrives at once. The head can also arrive
+// alone: a report split between two reads by more than the timeout, which a
+// slow link can do, ends the head before the minus sign. The head is then
+// digits and separators only, and the keys start with the sign.
+//
+// When a key that cannot be part of the report ends the hold, the keys held
+// so far are typed after all, in order, before that key. They were the
+// person's. A report longer than any terminal sends is dropped whole, up to
+// its final byte, so none of it is typed.
 
-// splitMouseHold bounds how long a head waits for the rest of its report. The
-// decoder emits the head and the keys from one read, back to back, so the
-// rest arrives at once. A head that waits longer was not a split report, and
-// the keys after it are the person's.
+// splitMouseHold bounds how long a head waits for the rest of its report. A
+// head that waits longer was not a split report, and the keys after it are the
+// person's.
 const splitMouseHold = time.Second
 
 // splitMouseMax bounds the held report. A real one is a prefix, three numbers
 // of a few digits each, two separators and a final byte.
 const splitMouseMax = 40
 
-// splitMouseReport is a mouse report the decoder split at a minus sign, held
-// until the rest of it arrives.
+// splitMouseReport is a mouse report the decoder split, held until the rest of
+// it arrives.
 type splitMouseReport struct {
-	buf []byte
-	at  time.Time
+	buf  []byte
+	keys []tea.KeyPressMsg
+	at   time.Time
+	// dropping says the report outgrew splitMouseMax. Its keys are swallowed
+	// up to its final byte.
+	dropping bool
+}
+
+// reset ends the hold and forgets what it held.
+func (sp *splitMouseReport) reset() {
+	sp.buf, sp.keys, sp.dropping = sp.buf[:0], sp.keys[:0], false
+}
+
+// holding reports whether a head is waiting for the rest of its report.
+func (sp *splitMouseReport) holding() bool {
+	return len(sp.buf) > 0 || sp.dropping
 }
 
 // rejoinSplitMouse holds the pieces of a split SGR mouse report and returns
@@ -57,56 +81,76 @@ func (m *OS) rejoinSplitMouse(msg tea.Msg) tea.Msg {
 	sp := &m.splitMouse
 	switch e := msg.(type) {
 	case uv.UnknownEvent:
+		sp.reset()
 		if splitMouseHead(string(e)) {
-			sp.buf = append(sp.buf[:0], e...)
+			sp.buf = append(sp.buf, e...)
 			sp.at = time.Now()
 			return nil
 		}
-		sp.buf = sp.buf[:0]
 	case tea.KeyPressMsg:
-		if len(sp.buf) == 0 {
+		if !sp.holding() {
 			return msg
 		}
 		if time.Since(sp.at) > splitMouseHold || len(e.Text) != 1 {
-			sp.buf = sp.buf[:0]
-			return msg
+			return sp.giveBack(msg)
 		}
 		switch c := e.Text[0]; {
 		case c >= '0' && c <= '9', c == ';', c == '-':
+			if sp.dropping {
+				return nil
+			}
 			if len(sp.buf) >= splitMouseMax {
-				sp.buf = sp.buf[:0]
+				sp.buf, sp.keys, sp.dropping = sp.buf[:0], sp.keys[:0], true
 				return nil
 			}
 			sp.buf = append(sp.buf, c)
+			sp.keys = append(sp.keys, e)
 			return nil
 		case c == 'M', c == 'm':
+			if sp.dropping {
+				sp.reset()
+				return nil
+			}
 			sp.buf = append(sp.buf, c)
 			joined := clampedSGRMouse(sp.buf)
-			sp.buf = sp.buf[:0]
+			sp.reset()
 			return joined
 		}
-		sp.buf = sp.buf[:0]
+		return sp.giveBack(msg)
 	case tea.KeyReleaseMsg:
 		// A terminal reporting key releases does it for real keys only, and
 		// the pieces of a split report were never keys.
 	case tea.MouseMsg, tea.PasteMsg, tea.PasteStartMsg:
-		sp.buf = sp.buf[:0]
+		sp.reset()
 	}
 	return msg
 }
 
+// giveBack ends a hold that was not a report. The keys it held are delivered
+// in order, then msg.
+func (sp *splitMouseReport) giveBack(msg tea.Msg) tea.Msg {
+	if len(sp.keys) == 0 {
+		sp.reset()
+		return msg
+	}
+	cmds := make([]tea.Cmd, 0, len(sp.keys)+1)
+	for _, k := range sp.keys {
+		cmds = append(cmds, func() tea.Msg { return k })
+	}
+	cmds = append(cmds, func() tea.Msg { return msg })
+	sp.reset()
+	return tea.Sequence(cmds...)()
+}
+
 // splitMouseHead reports whether s is what the decoder hands on when an SGR
-// mouse report has a minus sign: the prefix, digits and separators, and the
-// sign last.
+// mouse report breaks: the prefix, then digits and separators, then the
+// minus sign that stopped the decoder or nothing when a read ended there.
 func splitMouseHead(s string) bool {
 	rest, ok := strings.CutPrefix(s, "\x1b[<")
 	if !ok {
 		return false
 	}
-	rest, ok = strings.CutSuffix(rest, "-")
-	if !ok || rest == "" {
-		return false
-	}
+	rest = strings.TrimSuffix(rest, "-")
 	for i := range len(rest) {
 		if c := rest[i]; (c < '0' || c > '9') && c != ';' {
 			return false
