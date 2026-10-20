@@ -263,8 +263,11 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 			lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: cols, Color: color})
 			if errors.Is(err, sketchtext.ErrTooWide) {
 				// Drawn at its full width: the terminal wraps or cuts the lines.
-				fmt.Fprintf(os.Stderr, "diagram %d: the text drawing is wider than %d columns.\n", i+1, cols)
+				// The note comes once that drawing is known to work.
 				lines, err = sketchtext.Draw(d, sketchtext.Options{Color: color})
+				if err == nil {
+					fmt.Fprintf(os.Stderr, "diagram %d: the text drawing is wider than %d columns.\n", i+1, cols)
+				}
 			}
 			if err == nil {
 				for _, line := range lines {
