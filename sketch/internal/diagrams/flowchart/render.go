@@ -501,23 +501,15 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			}
 			body = util.Linked(body, *node.Link, node.ID, &links, options, attrs)
 		}
-		nodesOut.WriteString(`<g class="pele-node pele-shape-`)
-		nodesOut.WriteString(view.shape)
-		nodesOut.WriteString(classes)
-		nodesOut.WriteString(`" data-id="`)
-		nodesOut.WriteString(id)
-		nodesOut.WriteString(`" transform="translate(`)
+		svg.WriteStrings(&nodesOut, `<g class="pele-node pele-shape-`, view.shape, classes, `" data-id="`, id, `" transform="translate(`)
 		svg.WriteNum(&nodesOut, x)
 		nodesOut.WriteByte(',')
 		svg.WriteNum(&nodesOut, y)
-		nodesOut.WriteString(`)">`)
 		if plain {
-			nodesOut.WriteString(innerSvg)
-			nodesOut.WriteString(label)
+			svg.WriteStrings(&nodesOut, `)">`, innerSvg, label, `</g>`)
 		} else {
-			nodesOut.WriteString(body)
+			svg.WriteStrings(&nodesOut, `)">`, body, `</g>`)
 		}
-		nodesOut.WriteString(`</g>`)
 	}
 
 	reach := svg.NewSideReach()
@@ -577,17 +569,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			if style != nil {
 				line = style.Line
 			}
-			edgesOut.WriteString(`<g class="pele-edge`)
-			edgesOut.WriteString(classes)
-			edgesOut.WriteString(`" data-id="`)
-			edgesOut.WriteString(svg.EscText(edge.ID))
-			edgesOut.WriteString(`"`)
-			edgesOut.WriteString(line)
-			edgesOut.WriteString(`><path d="`)
-			edgesOut.WriteString(path.D)
-			edgesOut.WriteString(`"`)
-			edgesOut.WriteString(attrs)
-			edgesOut.WriteString(`/>`)
+			svg.WriteStrings(&edgesOut, `<g class="pele-edge`, classes, `" data-id="`, svg.EscText(edge.ID), `"`, line, `><path d="`, path.D, `"`, attrs, `/>`)
 			svg.WriteMarker(&edgesOut, startType, path.Sx, path.Sy, path.Sdx, path.Sdy, color)
 			svg.WriteMarker(&edgesOut, endType, path.Ex, path.Ey, path.Edx, path.Edy, color)
 			edgesOut.WriteString(`</g>`)

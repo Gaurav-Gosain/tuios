@@ -294,32 +294,24 @@ func Marker(typ string, x, y, dx, dy float64, color string) string {
 func WriteMarker(b *strings.Builder, typ string, x, y, dx, dy float64, color string) {
 	nx := -dy
 	ny := dx
-	var buf [256]byte
-	d := buf[:0]
 	switch typ {
 	case "arrow_point":
 		bx := x - dx*ARROW
 		by := y - dy*ARROW
 		half := ARROW * 0.42
-		d = append(d, `<path class="pele-marker" d="M`...)
-		d = appendPoint(d, x, y)
-		d = append(d, 'L')
-		d = appendPoint(d, bx+nx*half, by+ny*half)
-		d = append(d, 'L')
-		d = appendPoint(d, bx-nx*half, by-ny*half)
-		d = append(d, `Z" fill="`...)
-		b.Write(d)
-		b.WriteString(color)
-		b.WriteString(`" stroke="none"/>`)
+		b.WriteString(`<path class="pele-marker" d="M`)
+		writePoint(b, x, y)
+		b.WriteByte('L')
+		writePoint(b, bx+nx*half, by+ny*half)
+		b.WriteByte('L')
+		writePoint(b, bx-nx*half, by-ny*half)
+		WriteStrings(b, `Z" fill="`, color, `" stroke="none"/>`)
 	case "arrow_circle":
-		d = append(d, `<circle class="pele-marker" cx="`...)
-		d = AppendNum(d, x-dx*4)
-		d = append(d, `" cy="`...)
-		d = AppendNum(d, y-dy*4)
-		d = append(d, `" r="3.5" fill="`...)
-		b.Write(d)
-		b.WriteString(color)
-		b.WriteString(`" stroke="none"/>`)
+		b.WriteString(`<circle class="pele-marker" cx="`)
+		WriteNum(b, x-dx*4)
+		b.WriteString(`" cy="`)
+		WriteNum(b, y-dy*4)
+		WriteStrings(b, `" r="3.5" fill="`, color, `" stroke="none"/>`)
 	case "arrow_cross":
 		cx := x - dx*4
 		cy := y - dy*4
@@ -328,17 +320,23 @@ func WriteMarker(b *strings.Builder, typ string, x, y, dx, dy float64, color str
 		uy := (dy + ny) * a
 		vx := (dx - nx) * a
 		vy := (dy - ny) * a
-		d = append(d, `<path class="pele-marker" d="M`...)
-		d = appendPoint(d, cx-ux, cy-uy)
-		d = append(d, 'L')
-		d = appendPoint(d, cx+ux, cy+uy)
-		d = append(d, 'M')
-		d = appendPoint(d, cx-vx, cy-vy)
-		d = append(d, 'L')
-		d = appendPoint(d, cx+vx, cy+vy)
-		d = append(d, `"/>`...)
-		b.Write(d)
+		b.WriteString(`<path class="pele-marker" d="M`)
+		writePoint(b, cx-ux, cy-uy)
+		b.WriteByte('L')
+		writePoint(b, cx+ux, cy+uy)
+		b.WriteByte('M')
+		writePoint(b, cx-vx, cy-vy)
+		b.WriteByte('L')
+		writePoint(b, cx+vx, cy+vy)
+		b.WriteString(`"/>`)
 	}
+}
+
+// writePoint writes "x,y" to b.
+func writePoint(b *strings.Builder, x, y float64) {
+	WriteNum(b, x)
+	b.WriteByte(',')
+	WriteNum(b, y)
 }
 
 // EdgeLabelSvg is an edge label on a patch of the background, so the line does not run through the text.

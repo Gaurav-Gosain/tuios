@@ -94,7 +94,20 @@ func AppendNum(b []byte, value float64) []byte {
 	return append(b, js.Num(n/100)...)
 }
 
-// WriteNum writes Num(value) to b.
+// WriteStrings writes each of strs to b. One call in place of a run of
+// WriteString calls keeps the code that writes markup small.
+//
+//go:noinline
+func WriteStrings(b *strings.Builder, strs ...string) {
+	for _, s := range strs {
+		b.WriteString(s)
+	}
+}
+
+// WriteNum writes Num(value) to b. It is called from many places, and kept
+// out of line so each call stays small.
+//
+//go:noinline
 func WriteNum(b *strings.Builder, value float64) {
 	var buf [32]byte
 	b.Write(AppendNum(buf[:0], value))
@@ -134,15 +147,11 @@ func LabelSvg(label text.Label, cx, cy float64, attrs string, icons IconResolver
 		text := Esc(lines[0][0].Text)
 		var b strings.Builder
 		b.Grow(len(attrs) + len(text) + 72)
-		b.WriteString(`<text`)
-		b.WriteString(attrs)
-		b.WriteString(` x="`)
+		WriteStrings(&b, `<text`, attrs, ` x="`)
 		WriteNum(&b, cx)
 		b.WriteString(`" y="`)
 		WriteNum(&b, y)
-		b.WriteString(`" text-anchor="middle">`)
-		b.WriteString(text)
-		b.WriteString(`</text>`)
+		WriteStrings(&b, `" text-anchor="middle">`, text, `</text>`)
 		return b.String()
 	}
 

@@ -1076,11 +1076,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					y = lineY + b.size.H/2 - 6
 				}
 			}
-			edgesOut.WriteString(`<g class="pele-edge pele-message" data-id="i`)
-			edgesOut.WriteString(svg.EscText(m.ID))
-			edgesOut.WriteString(`">`)
-			edgesOut.WriteString(inner)
-			edgesOut.WriteString(`</g>`)
+			svg.WriteStrings(&edgesOut, `<g class="pele-edge pele-message" data-id="i`, svg.EscText(m.ID), `">`, inner, `</g>`)
 			y = math.Max(y, lineY)
 			if a.destroyAt == i {
 				y = math.Max(y, destroy(a, lineY))

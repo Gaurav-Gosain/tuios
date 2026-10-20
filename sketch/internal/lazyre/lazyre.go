@@ -23,6 +23,11 @@ var all []*Regexp
 
 // New returns a Regexp for pattern. The pattern compiles on first use and
 // panics there if it is not valid, as regexp.MustCompile does.
+//
+// New is called from about a hundred package-level declarations. Kept out of
+// line, each call is a few bytes of init code instead of the whole body.
+//
+//go:noinline
 func New(pattern string) *Regexp {
 	r := &Regexp{pattern: pattern}
 	all = append(all, r)
@@ -61,10 +66,6 @@ func (r *Regexp) FindStringSubmatchIndex(s string) []int { return r.Re().FindStr
 
 func (r *Regexp) FindAllString(s string, n int) []string { return r.Re().FindAllString(s, n) }
 
-func (r *Regexp) FindAllStringSubmatch(s string, n int) [][]string {
-	return r.Re().FindAllStringSubmatch(s, n)
-}
-
 func (r *Regexp) FindAllStringSubmatchIndex(s string, n int) [][]int {
 	return r.Re().FindAllStringSubmatchIndex(s, n)
 }
@@ -80,7 +81,5 @@ func (r *Regexp) ReplaceAllLiteralString(src, repl string) string {
 func (r *Regexp) ReplaceAllStringFunc(src string, repl func(string) string) string {
 	return r.Re().ReplaceAllStringFunc(src, repl)
 }
-
-func (r *Regexp) ReplaceAll(src, repl []byte) []byte { return r.Re().ReplaceAll(src, repl) }
 
 func (r *Regexp) Split(s string, n int) []string { return r.Re().Split(s, n) }

@@ -3,7 +3,6 @@
 package svg
 
 import (
-	"bytes"
 	"math"
 	"strconv"
 	"strings"
@@ -78,29 +77,16 @@ func roundTag(b *strings.Builder, tag string) (moved, joined bool) {
 	}
 	// A var(--_...) across the cut would take the byte before it.
 	joined = at > 0 && varByte(tag[at-1])
-	// The tag without the attribute. A tag is short, so it is put together on
-	// the stack; a long one falls back to a string.
-	var stack [512]byte
-	var rest []byte
-	if len(tag) <= len(stack) {
-		rest = append(append(stack[:0], tag[:at]...), tag[at+len(rootRounded):]...)
-	} else {
-		rest = []byte(tag[:at] + tag[at+len(rootRounded):])
-	}
-	style := bytes.Index(rest, []byte(` style="`))
-	if style >= 0 {
-		b.Write(rest[:style+8])
-		b.WriteString("rx:var(--_r);")
-		b.Write(rest[style+8:])
+	rest := tag[:at] + tag[at+len(rootRounded):]
+	if style := strings.Index(rest, ` style="`); style >= 0 {
+		WriteStrings(b, rest[:style+8], "rx:var(--_r);", rest[style+8:])
 		return true, joined
 	}
 	end := len(rest) - 1
-	if bytes.HasSuffix(rest, []byte("/>")) {
+	if strings.HasSuffix(rest, "/>") {
 		end = len(rest) - 2
 	}
-	b.Write(rest[:end])
-	b.WriteString(` style="rx:var(--_r)"`)
-	b.Write(rest[end:])
+	WriteStrings(b, rest[:end], ` style="rx:var(--_r)"`, rest[end:])
 	return true, joined
 }
 
@@ -176,49 +162,34 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 		fit = ""
 	}
 	// open writes the root's start tag and the head.
+	// open writes the root's start tag and the head.
 	open := func(b *strings.Builder, v rootVars) {
-		b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-`)
-		b.WriteString(typ)
-		b.WriteString(`" viewBox="0 0 `)
+		WriteStrings(b, `<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-`, typ, `" viewBox="0 0 `)
 		writeJSNum(b, width)
-		b.WriteString(` `)
+		b.WriteByte(' ')
 		writeJSNum(b, height)
 		b.WriteString(`" width="`)
 		writeJSNum(b, width)
 		b.WriteString(`" height="`)
 		writeJSNum(b, height)
-		b.WriteString(`" style="`)
-		b.WriteString(fit)
-		b.WriteString(Esc(options.Theme.Style()))
-		b.WriteString(ROOT_STYLE)
+		WriteStrings(b, `" style="`, fit, Esc(options.Theme.Style()), ROOT_STYLE)
 		if v.radius {
 			b.WriteString(";--_r:" + RADIUS)
 		}
 		for k, pair := range weights {
 			if v.bold[k] {
-				b.WriteString(";")
-				b.WriteString(pair[0])
-				b.WriteString(":var(--pele-")
-				b.WriteString(pair[1])
-				b.WriteString("-weight,bold)")
+				WriteStrings(b, ";", pair[0], ":var(--pele-", pair[1], "-weight,bold)")
 			}
 		}
 		// The fonts the labels were measured in are the ones they are drawn
 		// in, unless the page names others. The rest of what text inherits
 		// is pinned, as none of it was measured. Esc works byte by byte, so
 		// the font lists are escaped on their own.
-		b.WriteString(";--_fm:var(--pele-font-mono,")
-		b.WriteString(Esc(families(options.FontFamilyMono, "monospace")))
-		b.WriteString(");font:")
+		WriteStrings(b, ";--_fm:var(--pele-font-mono,", Esc(families(options.FontFamilyMono, "monospace")), ");font:")
 		writeJSNum(b, fontSize)
-		b.WriteString("px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,")
-		b.WriteString(Esc(families(options.FontFamily, "sans-serif")))
-		b.WriteString(`)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="`)
-		b.WriteString(typ)
-		b.WriteString(`"`)
-		b.WriteString(aria)
-		b.WriteString(`>`)
-		b.WriteString(head)
+		WriteStrings(b, "px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,",
+			Esc(families(options.FontFamily, "sans-serif")),
+			`)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="`, typ, `"`, aria, `>`, head)
 	}
 	// The parts of the drawing, in order. Joined, they are what pele calls
 	// content. The root's style depends on the variables the content uses
@@ -269,6 +240,8 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 }
 
 // writeJSNum writes js.Num(x) to b.
+//
+//go:noinline
 func writeJSNum(b *strings.Builder, x float64) {
 	if x != 0 && x == math.Trunc(x) && math.Abs(x) < 1e21 {
 		// js.Num formats a whole number with FormatFloat(x, 'f', -1).
