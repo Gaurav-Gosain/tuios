@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -396,4 +397,176 @@ func TestSelfExecAdoptsPanes(t *testing.T) {
 			t.Fatalf("ASSERTION: start-server after kill-server failed, so something kept the start lock: %v\n%s", err, out)
 		}
 	})
+}
+
+// callVerbWithin is callVerb with a deadline on the whole call, connect
+// included: a daemon that stopped accepting would leave callVerb waiting in
+// the listen backlog for as long as the test runs.
+func callVerbWithin(t *testing.T, base string, within time.Duration, verb string, params any) (map[string]any, error) {
+	t.Helper()
+	raw, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("encode %s params: %v", verb, err)
+	}
+	pinPreV080Looks(t, base)
+	ctx, cancel := context.WithTimeout(context.Background(), within)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, tuiosBin, "call", verb, string(raw))
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	cmd.Env = append(cmd.Env, handoffTestEnv...)
+	cmd.WaitDelay = time.Second
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("call %s did not return within %s", verb, within)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("call %s: %w: %s", verb, err, strings.TrimSpace(string(out)))
+	}
+	var res map[string]any
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &res); err != nil {
+		return nil, fmt.Errorf("call %s: decode %q: %w", verb, out, err)
+	}
+	return res, nil
+}
+
+// TestHandoffRefusedWhileHostedPaneRuns opens a pane this daemon runs for
+// another machine and asks for a handoff. A hosted pane's master is not among
+// the descriptors the exec keeps, so a handoff would close it and end the
+// remote pane. It must be refused with an error that names the hosted pane,
+// leave the daemon on its image and accepting, and leave the pane's process
+// running.
+//
+// How it could pass wrongly, and what stops it: a handoff refused for any
+// other reason also leaves everything as it was. So the error must name the
+// hosted pane, and the positive half closes the hosted pane and hands off
+// with everything else unchanged, which must then go through to a new image.
+func TestHandoffRefusedWhileHostedPaneRuns(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const session = "e2e-hosted"
+	const marker = "sleep 600.4343"
+	newCommandWindow(t, base, session, "local", false, "sh", "-c", "exec "+marker+"1")
+	t.Cleanup(func() { _ = exec.Command("pkill", "-f", marker).Run() })
+
+	// open-pane is what another machine's daemon sends over a link. The
+	// connection becomes the pane's terminal, so it is held open, as the
+	// owner's would be.
+	raw, err := dialFileVerbs(t, base).call("open-pane", map[string]any{
+		"width": 80, "height": 24, "command": []string{"sh", "-c", "exec " + marker + "2"},
+	})
+	if err != nil {
+		t.Fatalf("open-pane: %v", err)
+	}
+	var opened struct {
+		Pane string `json:"pane"`
+	}
+	if err := json.Unmarshal(raw, &opened); err != nil || opened.Pane == "" {
+		t.Fatalf("open-pane returned no pane id: %s", raw)
+	}
+	pane := opened.Pane
+	hostedRuns := func() bool { return len(commandLinesContaining(t, marker+"2")) > 0 }
+	deadline := time.Now().Add(5 * time.Second)
+	for !hostedRuns() && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !hostedRuns() {
+		t.Fatalf("the hosted pane's process never started")
+	}
+
+	img := helloImage(t, base)
+	_, refusal := callVerbWithin(t, base, 30*time.Second, "test-handoff", map[string]any{})
+	if refusal == nil {
+		awaitNewImage(t, base, img, 20*time.Second)
+		writeHandoffArtifact(t, map[string]any{"refusal": nil, "hosted_alive_after_handoff": hostedRuns()})
+		t.Fatalf("ASSERTION: the handoff went ahead with a hosted pane open, which closes its terminal at the exec")
+	}
+	still := helloImage(t, base)
+	hostedAlive := hostedRuns()
+
+	_ = mustCall(t, base, "close-pane", map[string]any{"pane": pane})
+	res, err := callVerbWithin(t, base, 30*time.Second, "test-handoff", map[string]any{})
+	if err != nil {
+		t.Fatalf("ASSERTION: the handoff after the hosted pane closed failed: %v (the refused one: %v)", err, refusal)
+	}
+	after := awaitNewImage(t, base, img, 20*time.Second)
+
+	writeHandoffArtifact(t, map[string]any{
+		"refusal": refusal.Error(), "instance_before": img.Instance, "instance_after_refusal": still.Instance,
+		"hosted_alive_after_refusal": hostedAlive, "instance_after_close": after.Instance, "panes": res["panes"],
+	})
+	if !strings.Contains(refusal.Error(), "another machine") {
+		t.Errorf("ASSERTION: the refusal does not name the hosted pane: %s", refusal)
+	}
+	if still.Instance != img.Instance || still.PID != img.PID {
+		t.Errorf("ASSERTION: the refused handoff changed the daemon from %+v to %+v", img, still)
+	}
+	if !hostedAlive {
+		t.Errorf("ASSERTION: the hosted pane's process did not survive the refused handoff")
+	}
+}
+
+// TestHandoffRefusedByPaneNotReadingInput hands off while one pane's program
+// asked for replies and never reads its input. The replies fill the terminal's
+// input queue, so the write of the next one blocks until the program reads,
+// which it never does. A handoff that waited for that write would hang with
+// the sockets not accepting and every pane's open and close held, so the
+// daemon would answer nobody. It must give up within its quiesce deadline,
+// fail with an error that says why, and put the daemon back.
+//
+// How it could pass wrongly, and what stops it: the program might not fill
+// the queue at all, and the handoff would go through. So the refusal is
+// required, the daemon must answer hello on its old image after it, and the
+// positive half closes the stuck pane, after which the handoff goes through.
+func TestHandoffRefusedByPaneNotReadingInput(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const session = "e2e-noread"
+	const marker = "sleep 600.4545"
+	t.Cleanup(func() { _ = exec.Command("pkill", "-f", marker).Run() })
+	newCommandWindow(t, base, session, "anchor", false, "sh", "-c", "exec "+marker+"1")
+	// Raw mode, so the input queue blocks the writer when full rather than
+	// dropping, and no echo, so the replies are not printed back. Each DA1
+	// query is answered with a reply of a dozen bytes or more, and 6000 of
+	// them are far past the input queue on Linux (4 KB) and macOS.
+	stuck := newCommandWindow(t, base, session, "stuck", false, "sh", "-c",
+		`stty raw -echo; i=0; while [ $i -lt 6000 ]; do printf '\033[c'; i=$((i+1)); done; printf 'flooded\r\n'; exec `+marker+`2`)
+	waitHandoffPane(t, base, session, stuck, regexp.MustCompile(`flooded`), 30*time.Second)
+
+	img := helloImage(t, base)
+	started := time.Now()
+	// The quiesce deadline is 10s. Twice that is a hang.
+	_, refusal := callVerbWithin(t, base, 20*time.Second, "test-handoff", map[string]any{})
+	took := time.Since(started)
+	t.Logf("the handoff answered after %s: %v", took.Round(time.Millisecond), refusal)
+	if refusal == nil {
+		t.Fatalf("ASSERTION: the handoff went ahead while a reply to a pane could not be written")
+	}
+	if strings.Contains(refusal.Error(), "did not return within") {
+		t.Fatalf("ASSERTION: the handoff hung on the pane that does not read its input: %s", refusal)
+	}
+	still, helloErr := callVerbWithin(t, base, 10*time.Second, "hello", map[string]any{})
+	if helloErr != nil {
+		t.Fatalf("ASSERTION: the daemon did not answer after the refused handoff: %v", helloErr)
+	}
+
+	_ = mustCall(t, base, "close-window", map[string]any{"session": session, "window": stuck})
+	if _, err := callVerbWithin(t, base, 30*time.Second, "test-handoff", map[string]any{}); err != nil {
+		t.Fatalf("ASSERTION: the handoff after the stuck pane closed failed: %v (the refused one: %v)", err, refusal)
+	}
+	after := awaitNewImage(t, base, img, 20*time.Second)
+
+	writeHandoffArtifact(t, map[string]any{
+		"refusal": refusal.Error(), "refusal_ms": took.Milliseconds(), "instance_before": img.Instance,
+		"instance_after_refusal": still["instance"], "instance_after_close": after.Instance,
+	})
+	if !strings.Contains(refusal.Error(), "not reading its input") {
+		t.Errorf("ASSERTION: the refusal does not say the pane is not reading its input: %s", refusal)
+	}
+	if still["instance"] != img.Instance {
+		t.Errorf("ASSERTION: the refused handoff changed the daemon's image from %s to %v", img.Instance, still["instance"])
+	}
 }
