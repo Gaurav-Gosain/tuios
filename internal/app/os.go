@@ -598,6 +598,9 @@ type OS struct {
 	// hostPixel is the state of SGR-pixel mouse reports from this client's
 	// terminal. See host_pixel_mouse.go.
 	hostPixel hostPixelMouse
+	// splitMouse holds a pixel report the input decoder split at a minus
+	// sign while the rest of it arrives. See host_mouse_split.go.
+	splitMouse splitMouseReport
 	// hostPS is whether this client's terminal takes OSC 7501 reports and
 	// what was last sent to it. See host_program_status.go.
 	hostPS hostProgramStatus

@@ -7685,3 +7685,15 @@ The test reads the daemon's peak memory (VmHWM), not its resident set at the end
 | y and n answer while the question does not fit | "y ran a command whose question the person could not see whole" | **caught** |
 | The fit checked only at the press, drawing a cut question | "a smaller surface did not hide the cut question" | **caught** |
 | The window name left out of the new-window yes | "d asked no question showing \"with the window name prod\"" | **caught** |
+
+## Snapping left with a pixel-mouse pane on screen
+
+`TestFloatingSnapLeftWithPixelMousePastTheEdge` in `snap_pixel_edge_test.go` runs a pane that shows a kitty image and turns on SGR-pixel mouse reports (1016), as disktree does. It drags the other floating pane to the left edge in host pixels, holds the pointer past the edge at a negative x, and lets go there. A terminal in 1016 reports such a pointer at a negative position, and ghostty does. The test asserts that the pane lands on the left half at full height, that the screen holds still while the pointer is held, and that the client draws no frame and sends no image command in the 3s after the snap lands. `standalone` and `daemon` run the same steps.
+
+Run on 2026-10-20 on Linux. The control is the build of `origin/main` at e5334a8c, which has no `rejoinSplitMouse`. Both cases fail with "the pane never landed on the left half at full height". The release came in as the keys `6;410m` and the `m` minimized a pane: the frame shows the dragged pane parked off the left edge and the other pane in the dock. With the fix both cases pass, with 0 renders and 0 image commands in the 3s after the snap.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The rejoin removed: `FilterMouseMotion` without its `rejoinSplitMouse` call (`origin/main`) | `standalone`, `daemon` ("the pane never landed on the left half at full height") | **caught** |
+
+Not covered: the screen-stillness check while the pointer is held passes on both builds in this fixture. The keys typed there select panes that do not change the look of a two-pane screen. The release is what this fixture catches.

@@ -125,6 +125,12 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A report at a negative position reaches here in pieces, the last of
+	// them as typed keys. It is put back together before anything reads keys.
+	if msg = m.rejoinSplitMouse(msg); msg == nil {
+		return nil
+	}
+
 	// A terminal asked for SGR-pixel reports sends the pointer in pixels.
 	// Everything below, and everything in Update, works in cells.
 	msg = m.convertHostPixelMouse(msg)
