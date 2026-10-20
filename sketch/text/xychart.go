@@ -137,6 +137,11 @@ func barParts(vals []float64, base float64) (up, down []float64) {
 var eighthUp = map[string]int{"▁": 1, "▂": 2, "▃": 3, "▄": 4, "▅": 5, "▆": 6, "▇": 7, "█": 8}
 var eighthRight = map[string]int{"▏": 1, "▎": 2, "▍": 3, "▌": 4, "▋": 5, "▊": 6, "▉": 7, "█": 8}
 
+// barGlyph reports whether r is a block a bar is drawn with.
+func barGlyph(r rune) bool {
+	return (r >= '▀' && r <= '█') || r == '▔' || r == '▐' || r == '▕' || (r >= '▉' && r <= '▏')
+}
+
 func hanging(lv int) rune {
 	switch {
 	case lv >= 8:
@@ -359,9 +364,10 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 					}
 					r := []rune(cell.Text)[0]
 					p := c.at(c0+x, top+y)
-					if p == nil || p.r == '█' {
-						// A line passes behind the full part of a bar: a cell
-						// cannot show both, and a hole in the bar reads as a gap.
+					if p == nil || barGlyph(p.r) {
+						// A line passes behind a bar: a cell cannot show both,
+						// and a line dot in place of the bar's top block changes
+						// the height the bar shows.
 						continue
 					}
 					if p.r >= 0x2800 && p.r <= 0x28ff && p.role == canvasRole(cell.Role) {
