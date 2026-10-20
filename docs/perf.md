@@ -3146,6 +3146,14 @@ the minute tick of ago() and the tml skill topic. They add 45,056 bytes on
 linux/amd64 (42,086,562) and 33,616 on darwin/arm64 (39,347,090), Go 1.26.10.
 The new budgets leave 4,138 and 4,110 bytes of room.
 
+The linux/amd64 budget went to 42,098,952 for the fix that rejoins pixel
+mouse reports at a negative position (`internal/app/host_mouse_split.go`). On
+main at da356715 the binaries measured 42,086,562 and 39,347,090 bytes. With
+the fix they measured 42,094,754 and 39,347,330 (Go 1.26.10, a clean clone, as
+CI builds it), so the fix adds 8,192 and 240 bytes. No third-party dependency
+was added. The new linux/amd64 budget leaves 4,198 bytes of room.
+darwin/arm64 is unchanged, with 3,870 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
