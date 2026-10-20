@@ -168,6 +168,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.overlay_border_color", Type: OptionString, Section: "appearance",
+		Description: "Colour of every overlay's frame: #89b4fa, a slot name such as bright_cyan, or a role such as accent. Empty follows the focused pane's border",
+		Default:     "", Color: true,
+	},
+	{
 		Path: "appearance.zen_mode", Type: OptionString, Section: "appearance",
 		Description: "When window borders are hidden: never, always, or while the mouse is idle",
 		Accepted:    ZenModeModes, Default: ZenModeDisabled,
