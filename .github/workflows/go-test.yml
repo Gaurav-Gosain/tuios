@@ -124,8 +124,9 @@ jobs:
     # The packages whose Windows code runs only on Windows: the herdr link
     # (hardlink, copy and a running link), the PATHEXT lookup and the job
     # object for plugin processes, the stop event kill-server sets, the
-    # herdr command line the link runs, the opencode socket owner check, and
-    # the owner and DACL check of the tuios-web password file.
+    # herdr command line the link runs, the opencode socket owner check, the
+    # owner and DACL checks of service.json and of the tuios-web password
+    # file, and the job object of the opencode export.
     # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
@@ -142,14 +143,28 @@ jobs:
       - name: Test
         run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/
 
-      - name: Test the opencode socket owner check
+      - name: Test the opencode and password file checks
         # The rest of internal/transcriptview runs shell scripts, so only the
-        # owner check and its table parsers run here.
-        run: go test -count=1 -timeout 5m -run "TestOpenCodeConnOwner|TestTCPTableOwner|TestPcblistOwner|TestProcNetOwner" ./internal/transcriptview/
-
-      - name: Test the tuios-web password file check
-        # The owner and DACL check runs only on Windows.
-        run: go test -count=1 -timeout 5m -run "TestPasswordFileDACL|TestPasswordFileChecks" ./cmd/tuios-web/
+        # opencode checks and the table parsers run here: the socket owner,
+        # the owner and DACL of service.json, and the job that kills the
+        # export's processes. The owner and DACL checks of service.json and
+        # of the tuios-web password file share internal/winacl.
+        #
+        # go test passes when -run matches nothing, and a test that skips
+        # passes too. Each test named below must print its PASS line, so a
+        # rename or a skip fails the step.
+        shell: bash
+        run: |
+          go test -count=1 -timeout 5m -v \
+            -run "TestOpenCodeConnOwner|TestOpenCodeServiceDACL|TestOpenCodeExportTree|TestTCPTableOwner|TestPcblistOwner|TestProcNetOwner|TestPasswordFileDACL|TestPasswordFileChecks|TestGrantsOther" \
+            ./internal/transcriptview/ ./cmd/tuios-web/ ./internal/winacl/ | tee "$RUNNER_TEMP/owner-tests.log"
+          for name in TestOpenCodeConnOwner TestOpenCodeServiceDACL TestOpenCodeExportTree TestTCPTableOwner \
+            TestPasswordFileDACL TestGrantsOther; do
+            if ! grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/owner-tests.log"; then
+              echo "::error::$name did not run and pass"
+              exit 1
+            fi
+          done
 
   macos:
     name: go test (macos)
