@@ -1,45 +1,45 @@
 === braille 30x6
-|⠄⢤⣤⣤⣴⣶⣶⡿⢯⡍⠻⡿⠿⠃⠂⣨⣿⣧⣤⣴⣤⣴⣶⣶⣶⣦⣴⣦⣤⡤|
-|    ⠹⣿⣿⣿⡿⠛⠂   ⢽⣾⡿⢿⣿⣿⣿⣿⣿⣿⣿⢿⡻ ⠁ |
-|     ⠈⠻⠥⢁⣠⢀  ⠰⣿⣿⣿⣿⣿⡟⠙⠿⠛⠿⠋⡀    |
-|        ⠺⣿⣿⣶   ⠈⣿⣿⣏    ⠙⠋⣀⣲⡀  |
-|        ⢀⡿⠟⠁    ⠙⠋⠈⠈    ⠘⠛⠻⠗ ⡀|
-|        ⠈⠁                    |
+|⠄⣠⣤⣤⣴⣶⣴⣿⢯⡝⢻⡿⠿⠃⠄⣈⣿⣧⣄⣴⣤⣤⣶⣶⣦⣤⣴⣤⣤⣤|
+| ⠈ ⠈⢻⣿⣿⣿⣾⠿⠂   ⣸⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟ ⠁ |
+|     ⠙⠿⣉⠁⢀   ⢠⣿⣿⣿⣾⣿⡿⠛⣿⠿⣿⠟     |
+|        ⢼⣿⣶⣤  ⠉⠙⣿⣿⡟⠁   ⠲⠶⠁⢤⡀  |
+|        ⠈⣿⡿⠋    ⢿⡿⠑⠐    ⢰⣾⣿⡦  |
+|        ⠰⠏                 ⠁ ⠊|
 --- roles
 |aaaaaaaaaaaaaabbbbaaaaaaaaaaaa|
-|    aaaaaaa   bbbaaaaaaaaaa a |
-|     aaaabb  aaaaaabaaaaaa    |
-|        aaba   aaaa    baaaa  |
-|        aaaa    aaab    aaaa a|
-|        aa                    |
+| a aaaaaaaa   bbaaaaaaaaaaa a |
+|     aaaab   aaabaabaaaaa     |
+|        aaba  aaaaaa   baaaa  |
+|        aaaa    aaab    aaaa  |
+|        aa                 a a|
 a=track b=heat5 (upper case is bold)
 === blocks 30x6
-| ▄▄▄▄▀▄▀▀▀▀▀▀▀▀▀▀▀▄▄▄▄▀▀▄▄▄▄▄▄|
+| ▄▄▄▄▄▄▀▀▀▀▀▀▀▄▀▀▀▄▄▄▄▀▀▄▄▄▄▄▄|
 |    ▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀▀▀▀▀▀   |
-|      ▀▄ ▄▄   ▀▀▀▀▀▀▀▀▀▀▀     |
-|        ▀▀▀▀    ▀▀▀    ▀▀▄▄   |
-|         ▀▀     ▀▀ ▀    ▀▀▀▀  |
-|                              |
+|     ▀▀▀ ▄   ▄▀▀▀▀▀▀▀▀▀▀▀     |
+|        ▀▀▀▄  ▀▀▀▀▀    ▀  ▄   |
+|         ▀▀▀    ▀▀▀▀    ▄▀▀▄  |
+|         ▀                    |
 --- roles
 | aaaaaaaaaaaaabbbbaaaaaaaaaaaa|
 |    aaaaaa    bbaaaaaaaaaaa   |
-|      aa bb   aaaaabaaaaa     |
-|        aaba    aaa    baaa   |
-|         aa     aa b    aaaa  |
-|                              |
+|     aaa b   aaabaabaaaaa     |
+|        aaba  aaaaa    b  a   |
+|         aaa    aaab    aaaa  |
+|         a                    |
 a=track b=heat5 (upper case is bold)
 === ascii 30x6
-|  ........... %%%%........... |
-|     .....    %%%..........   |
-|         %%   .....% . %.     |
+|  ........... %%%% ...........|
+|    ......    %%...........   |
+|      .. %    ..%..%.....     |
+|        ..%.   ....    %      |
 |         ...    .. %     ...  |
 |         .                    |
-|                              |
 --- roles
-|  aaaaaaaaaaa bbbbaaaaaaaaaaa |
-|     aaaaa    bbbaaaaaaaaaa   |
-|         bb   aaaaab a ba     |
+|  aaaaaaaaaaa bbbb aaaaaaaaaaa|
+|    aaaaaa    bbaaaaaaaaaaa   |
+|      aa b    aabaabaaaaa     |
+|        aaba   aaaa    b      |
 |         aaa    aa b     aaa  |
 |         a                    |
-|                              |
 a=track b=heat5 (upper case is bold)

@@ -130,8 +130,9 @@ func decodeWorld(raw []byte) *world {
 // optional markers. The projection is equirectangular, from 180 W to 180 E
 // and from 84 N to 60 S, so Antarctica is left out.
 //
-// The map keeps its shape and is centred in the grid. A cell is about
-// twice as tall as it is wide, as Aspect sets.
+// The map keeps its shape, stretched at most a tenth along its short side
+// to fill the grid, and is centred. A cell is about twice as tall as it is
+// wide, as Aspect sets. Fit returns the cells it takes.
 //
 // The idea and the look come from iptop (github.com/franlol/iptop, MIT),
 // a network monitor by franlol. The land and the borders are Natural Earth
@@ -293,6 +294,47 @@ func pixelsPerCell(m Mode) (int, int) {
 	return 1, 1
 }
 
+// maxSlack is how far the map may stretch its short side past its true
+// shape to fill the grid: a box a little taller or wider than the map is
+// filled edge to edge, and a much taller or wider one leaves a margin.
+const maxSlack = 1.1
+
+// layout returns the map's size in pixels and in cells for a w by h grid.
+// A pixel is 1/px of a cell wide and aspect/py of a cell tall, in cell
+// widths, and the map spans 360 by top-bottom degrees.
+func (mp Map) layout(w, h int, m Mode) (pw, ph, cw, ch int) {
+	wd := loadWorld()
+	px, py := pixelsPerCell(m)
+	aspect := mp.Aspect
+	if aspect <= 0 || !finite(aspect) || aspect > 10 {
+		aspect = 2.2
+	}
+	ratio := 360 / (wd.top - wd.bottom) // width over height
+	pw, ph = w*px, h*py
+	if !mp.Stretch {
+		rows := float64(pw) / float64(px) / ratio / aspect * float64(py)
+		if rows <= float64(ph) {
+			ph = max(1, min(ph, int(math.Round(rows*maxSlack))))
+		} else {
+			cols := float64(ph) * aspect / float64(py) * ratio * float64(px)
+			pw = max(1, min(pw, int(math.Round(cols*maxSlack))))
+		}
+	}
+	return pw, ph, (pw + px - 1) / px, (ph + py - 1) / py
+}
+
+// Fit returns the cells the map takes in a w by h grid: all of them with
+// Stretch, otherwise as many as keep a sensible shape. Size a panel to it
+// to put a legend right under the map.
+func (mp Map) Fit(w, h int, m Mode) (cols, rows int) {
+	w, h = min(max(w, 0), MaxSide), min(max(h, 0), MaxSide)
+	if w == 0 || h == 0 {
+		return 0, 0
+	}
+	_, _, cols, rows = mp.layout(w, h, m)
+	return cols, rows
+}
+
 // Draw draws the map into a w by h grid.
 func (mp Map) Draw(w, h int, m Mode) *Grid {
 	g := NewGrid(w, h)
@@ -300,25 +342,7 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 		return g
 	}
 	wd := loadWorld()
-	px, py := pixelsPerCell(m)
-	aspect := mp.Aspect
-	if aspect <= 0 || !finite(aspect) || aspect > 10 {
-		aspect = 2.2
-	}
-	// The map's size in pixels. A pixel is 1/px of a cell wide and
-	// aspect/py of a cell tall, in cell widths, and the map spans 360 by
-	// top-bottom degrees.
-	ratio := 360 / (wd.top - wd.bottom) // width over height
-	pw, ph := g.W*px, g.H*py
-	if !mp.Stretch {
-		want := float64(pw) / float64(px) / ratio // the height in cell widths
-		if rows := want / aspect * float64(py); rows <= float64(ph) {
-			ph = max(1, int(math.Round(rows)))
-		} else {
-			pw = max(1, int(math.Round(float64(ph)*aspect/float64(py)*ratio*float64(px))))
-		}
-	}
-	cw, ch := (pw+px-1)/px, (ph+py-1)/py
+	pw, ph, cw, ch := mp.layout(g.W, g.H, m)
 	x0, y0 := (g.W-cw)/2, (g.H-ch)/2
 
 	// level holds the shade of each cell value of the world, -1 for none.
