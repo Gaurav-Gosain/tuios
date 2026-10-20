@@ -8594,7 +8594,25 @@ Each control is a build that cuts one line, run on 2026-10-17 on macOS arm64 (Da
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
-  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes|TestPaneCellFollowsOneClient|TestOmarchyThemeSwitchIsFollowed)$' .
+  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes|TestPaneCellFollowsOneClient|TestOmarchyThemeSwitchIsFollowed|TestHandoffRefusedWhileHostedPaneRuns|TestHandoffRefusedByPaneNotReadingInput)$' .
 ```
 
 The two reply-forwarder rows were run on 2026-10-19 on macOS arm64 against pr/live-handoff-1. Without either wake (the head before the fix) both tests fail on every run, 3 of 3 each, as they did in CI shards 5 and 8. With both, the two tests and `TestKittyUploadReply` passed 3 runs of 3.
+
+### Refusals: hosted panes and a pane that does not read its input
+
+- `TestHandoffRefusedWhileHostedPaneRuns`: a pane opened with `open-pane`, as another machine's daemon opens one, is running when a handoff is asked for. The handoff must be refused with an error that names the panes run for another machine, the daemon must answer hello on its old image, and the hosted pane's process must still run. The positive half: after `close-pane` the same handoff goes through to a new image.
+- `TestHandoffRefusedByPaneNotReadingInput`: a pane in raw mode sends 6000 DA1 queries and never reads its input, so the replies fill the terminal's input queue and the write of the next one blocks. The handoff must answer within twice the 10 s quiesce deadline, refused with an error saying the program is not reading its input, and the daemon must answer hello on its old image. The positive half: after the stuck window is closed the handoff goes through to a new image.
+- `TestReadGateNeverReportsOutputAfterAFailedPoll` (`internal/session/pty_gate_unix_test.go`, a kept unit test: a deterministic hang regression, since a real poll cannot be made to fail on two valid descriptors): with the gate's poll failing with ENOMEM, `wait` must report neither output nor a wake. Its positive half: an EINTR is retried and the output already on the master is reported.
+
+Each control cuts one change from the fix, rebuilds, runs the test twice, and restores the file, checked byte for byte with sha256. Run on 2026-10-20 on macOS arm64 (Darwin 27, Go 1.26.9) against pr/live-handoff-1.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Hosted panes are not refused | drop the `shutHostedPanes` check and its undo from `handoffRun.prepare` | `TestHandoffRefusedWhileHostedPaneRuns`, 2 runs of 2: "the handoff went ahead with a hosted pane open, which closes its terminal at the exec" (the artifact records the hosted process gone after it) | **caught** |
+| The reply flush ignores the deadline | flush under `respMu` inline in `Quiesce`, as before the fix | `TestHandoffRefusedByPaneNotReadingInput`, 2 runs of 2: "the handoff hung on the pane that does not read its input: call test-handoff did not return within 20s" | **caught** |
+| A failed poll reads as output | drop `pollErr = err` from `readGate.wait` | `TestReadGateNeverReportsOutputAfterAFailedPoll`, 2 runs of 2: "the gate reported output after poll failed with ENOMEM, so the reader would block in read holding readMu" | **caught** |
+
+```sh
+go test -count=1 -run '^TestReadGateNeverReportsOutputAfterAFailedPoll$' ./internal/session/
+```
