@@ -128,7 +128,19 @@ func LabelSvg(label text.Label, cx, cy float64, attrs string, icons IconResolver
 	y := cy - label.Height/2 + lh/2 + shift
 
 	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Style == 0 {
-		return `<text` + attrs + ` x="` + Num(cx) + `" y="` + Num(y) + `" text-anchor="middle">` + Esc(lines[0][0].Text) + `</text>`
+		text := Esc(lines[0][0].Text)
+		var b strings.Builder
+		b.Grow(len(attrs) + len(text) + 72)
+		b.WriteString(`<text`)
+		b.WriteString(attrs)
+		b.WriteString(` x="`)
+		WriteNum(&b, cx)
+		b.WriteString(`" y="`)
+		WriteNum(&b, y)
+		b.WriteString(`" text-anchor="middle">`)
+		b.WriteString(text)
+		b.WriteString(`</text>`)
+		return b.String()
 	}
 
 	shared := SharedStyle(label)

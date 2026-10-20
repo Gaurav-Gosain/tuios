@@ -358,16 +358,16 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 		edge.LabelType = labelType(typ.Text.Type)
 	}
 	if typ != nil {
-		t := typ.Type
-		edge.Type = &t
-		s := typ.Stroke
-		edge.Stroke = &s
+		// The edge's own copies, in one allocation.
+		own := &struct {
+			typ, stroke string
+			length      int
+		}{typ: typ.Type, stroke: typ.Stroke}
+		edge.Type = &own.typ
+		edge.Stroke = &own.stroke
 		if typ.Length != nil {
-			l := *typ.Length
-			if l > 10 {
-				l = 10
-			}
-			edge.Length = &l
+			own.length = min(*typ.Length, 10)
+			edge.Length = &own.length
 		}
 	}
 	pair := start + "\x00" + end

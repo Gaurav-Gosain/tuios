@@ -78,14 +78,39 @@ func renderFlowchart(db *FlowDb, config types.Config, options types.RenderOption
 }
 
 // edgeClasses are the classes every edge has, which the drawing leaves out.
-var edgeClasses = strings.NewReplacer("edge-thickness-normal", "", "edge-pattern-solid", "", "flowchart-link", "")
+var edgeClasses = [...]string{"edge-thickness-normal", "edge-pattern-solid", "flowchart-link"}
 
-// withoutEdgeClasses drops edgeClasses from classes.
+// withoutEdgeClasses is /edge-thickness-normal|edge-pattern-solid|flowchart-link/g
+// replaced with "": from left to right, each match is cut, and the scan goes on
+// after it.
 func withoutEdgeClasses(classes string) string {
-	if !strings.Contains(classes, "edge-thickness-normal") && !strings.Contains(classes, "edge-pattern-solid") && !strings.Contains(classes, "flowchart-link") {
+	var b []byte
+	last := 0
+	for i := 0; i < len(classes); {
+		cut := ""
+		if c := classes[i]; c == 'e' || c == 'f' {
+			for _, class := range edgeClasses {
+				if strings.HasPrefix(classes[i:], class) {
+					cut = class
+					break
+				}
+			}
+		}
+		if cut == "" {
+			i++
+			continue
+		}
+		if b == nil {
+			b = make([]byte, 0, len(classes))
+		}
+		b = append(b, classes[last:i]...)
+		i += len(cut)
+		last = i
+	}
+	if b == nil {
 		return classes
 	}
-	return edgeClasses.Replace(classes)
+	return string(append(b, classes[last:]...))
 }
 
 // withoutDefault is /^default\s?/ replaced with "".
@@ -459,7 +484,13 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			label = `<a class="internal-link"` + href + ` data-href="` + target + `">` + label + `</a>`
 			links = append(links, types.LinkInfo{ID: node.ID, Href: name, Internal: true})
 		}
-		body := innerSvg + label
+		// A plain node's body is its shape and its label, written one after the other.
+		body := ""
+		plain := true
+		if (node.Tooltip != nil && *node.Tooltip != "") || (node.Link != nil && *node.Link != "") {
+			plain = false
+			body = innerSvg + label
+		}
 		if node.Tooltip != nil && *node.Tooltip != "" {
 			body = `<title>` + svg.EscText(*node.Tooltip) + `</title>` + body
 		}
@@ -480,7 +511,12 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		nodesOut.WriteByte(',')
 		svg.WriteNum(&nodesOut, y)
 		nodesOut.WriteString(`)">`)
-		nodesOut.WriteString(body)
+		if plain {
+			nodesOut.WriteString(innerSvg)
+			nodesOut.WriteString(label)
+		} else {
+			nodesOut.WriteString(body)
+		}
 		nodesOut.WriteString(`</g>`)
 	}
 

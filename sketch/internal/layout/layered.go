@@ -2571,7 +2571,10 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 		}
 	}
 
-	var results [][]float64
+	// The four layouts share one allocation, and x is cleared for each.
+	var results [4][]float64
+	all := make([]float64, 4*n)
+	x := make([]float64, n)
 	root := make([]int, n)
 	align := make([]int, n)
 	// Offset of each node from its block's root, so that aligned edges meet at their attachment points.
@@ -2689,7 +2692,7 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 			fill[eFrom[e]]++
 		}
 
-		x := make([]float64, n)
+		clear(x)
 		count := 0
 		for i := 0; i < n; i++ {
 			if root[i] == i && indeg[i] == 0 {
@@ -2726,7 +2729,7 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 				x[v] = min
 			}
 		}
-		xs := make([]float64, n)
+		xs := all[variant*n : (variant+1)*n : (variant+1)*n]
 		for i := 0; i < n; i++ {
 			if right {
 				xs[i] = -x[root[i]] + shift[i]
@@ -2734,12 +2737,12 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 				xs[i] = x[root[i]] + shift[i]
 			}
 		}
-		results = append(results, xs)
+		results[variant] = xs
 	}
 
 	narrowest := 0
 	bestWidth := inf
-	var mins, maxs []float64
+	var mins, maxs [4]float64
 	for k := 0; k < 4; k++ {
 		lo := inf
 		hi := negInf
@@ -2753,8 +2756,8 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 				hi = xs[i] + half
 			}
 		}
-		mins = append(mins, lo)
-		maxs = append(maxs, hi)
+		mins[k] = lo
+		maxs[k] = hi
 		if hi-lo < bestWidth {
 			bestWidth = hi - lo
 			narrowest = k
