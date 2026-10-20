@@ -126,6 +126,16 @@ func Custom(name string, tools []string, pattern string) (Rule, error) {
 	return Rule{Name: name, Why: "matches the rule " + name + " in your config", Tools: slices.Clone(tools), pattern: re}, nil
 }
 
+// Same reports whether r and o are the same rule: the same name, tools and
+// pattern. A shipped rule has no pattern, so a rule of the person's that takes
+// a shipped rule's name is not the shipped rule.
+func (r Rule) Same(o Rule) bool {
+	if r.Name != o.Name || !slices.Equal(r.Tools, o.Tools) || (r.pattern == nil) != (o.pattern == nil) {
+		return false
+	}
+	return r.pattern == nil || r.pattern.String() == o.pattern.String()
+}
+
 // ShellTools are the tool names whose Text is a command line. A call with no
 // tool name is read as one too.
 var ShellTools = []string{"Bash", "bash", "shell", "exec_command", "local_shell", "run_shell_command", "execute", "terminal"}

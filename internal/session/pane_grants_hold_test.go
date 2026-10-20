@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
+	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -372,6 +374,62 @@ func TestAHostsReloadOnlyNarrows(t *testing.T) {
 	d.onConfigReload(&config.UserConfig{}, nil)
 	if _, err := d.federation.Table().Lookup("build"); err == nil {
 		t.Error("a host removed from config.toml is still dialled")
+	}
+}
+
+// TestAnApprovalsReloadOnlyNarrows: the risk rules and panes_may_allow bound
+// what a pane may allow, and a process in a pane can write config.toml. So a
+// reload keeps a rule it drops, keeps panes_may_allow off, and says a change
+// waits. A rule it adds applies at once. The person applies the rest.
+//
+// Negative control: with applyUserConfig setting the table as read, the
+// shipped rules are gone and panes may allow after the first reload.
+func TestAnApprovalsReloadOnlyNarrows(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	d.configPath = filepath.Join(t.TempDir(), "config.toml")
+	d.SetApprovalPolicy(ApprovalPolicyFromConfig(config.ApprovalsConfig{}))
+	shipped := len(d.approvalPolicy().Risk)
+	reload := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(d.configPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := config.ParseUserConfig([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.onConfigReload(cfg, nil)
+	}
+	marks := func() []string { return risk.Names(d.attention.riskOfLine(riskyLine, "", "")) }
+
+	reload("[agents.approvals.risk]\nbuiltin = false\npanes_may_allow = true\n")
+	if pol := d.approvalPolicy(); len(pol.Risk) != shipped || pol.PanesMayAllow {
+		t.Fatalf("after a widening reload: %d rules, panes_may_allow %v; want %d and false", len(pol.Risk), pol.PanesMayAllow, shipped)
+	}
+	if !slices.Contains(marks(), risk.RuleRecursiveDelete) {
+		t.Errorf("rm -rf is not marked after the reload: %v", marks())
+	}
+	if !d.configWaiting() {
+		t.Error("the daemon does not say a change waits")
+	}
+
+	// A rule added applies at once, and nothing waits.
+	reload("[[agents.approvals.risk.rule]]\nname = \"deploy\"\npattern = \"deploy\"\n")
+	if n := len(d.approvalPolicy().Risk); n != shipped+1 {
+		t.Errorf("after a reload that adds a rule: %d rules, want %d", n, shipped+1)
+	}
+	if d.configWaiting() {
+		t.Error("a change waits after a reload that only adds a rule")
+	}
+
+	// The person applies the wider table.
+	reload("[agents.approvals.risk]\nbuiltin = false\npanes_may_allow = true\n")
+	result(t, callP(dialVerb(t, sp), t, "apply-config", nil))
+	if pol := d.approvalPolicy(); len(pol.Risk) != 0 || !pol.PanesMayAllow {
+		t.Errorf("after apply-config: %d rules, panes_may_allow %v; want 0 and true", len(pol.Risk), pol.PanesMayAllow)
+	}
+	if d.configWaiting() {
+		t.Error("a change still waits after apply-config")
 	}
 }
 

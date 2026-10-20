@@ -159,6 +159,10 @@ type Daemon struct {
 	// notify sends the Inbox's push notifications ([notify]). See
 	// daemon_notify.go.
 	notify *pushNotifier
+	// approvalsWaiting is true while config.toml drops a risk rule or sets
+	// panes_may_allow, and the person has not applied it
+	// (narrowApprovalPolicy).
+	approvalsWaiting atomic.Bool
 	// hostsWaiting is set when a config reload changed [hosts] in a way that
 	// dials more or gives a linked machine more, and only what narrows was
 	// applied (reloadHosts, reloadLinkPolicies).

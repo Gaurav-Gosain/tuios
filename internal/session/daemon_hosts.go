@@ -77,8 +77,9 @@ func (d *Daemon) stopHostsWatch() {
 // single_client and ssh_agent, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
 // [agents.recap] test_patterns, and reads nothing else out of the file. A new
-// approval policy applies to the next request; a hold already running keeps
-// the length it started with. A new permission default that narrows applies
+// approval policy applies to the next request, except a risk rule it drops or
+// a panes_may_allow it sets, which wait (narrowApprovalPolicy); a hold
+// already running keeps the length it started with. A new permission default that narrows applies
 // to the next call from every pane that holds the default; one that widens
 // waits for a restart (reloadPanePermissions).
 func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
@@ -93,7 +94,7 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 // runs. The file is the user's, and a process in a pane runs as the user and
 // can write it. So from a file change (byPerson false) the parts that bound
 // panes and links apply only where they narrow: [agents.permissions], the
-// link policies of [hosts], and the hosts the daemon dials, since ssh runs
+// risk rules of [agents.approvals], the link policies of [hosts], and the hosts the daemon dials, since ssh runs
 // what a host entry or ~/.ssh/config says as the daemon's child. What widens
 // waits for tuios config apply from outside every pane (byPerson true), or a
 // daemon restart.
@@ -122,7 +123,17 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}
-	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
+	// The risk rules and panes_may_allow bound what a pane may allow, so a
+	// file change only narrows them, like [agents.permissions].
+	approvals, approvalsWait := ApprovalPolicyFromConfig(cfg.Agents.Approvals), false
+	if !byPerson {
+		approvals, approvalsWait = narrowApprovalPolicy(d.approvalPolicy(), approvals)
+		if approvalsWait {
+			log.Printf("The new [agents.approvals.risk] gives panes more than before. The risk rules in force stay, and panes may not allow a risky call. The rest applies after tuios config apply from outside tuios, or a daemon restart.")
+		}
+	}
+	d.SetApprovalPolicy(approvals)
+	d.approvalsWaiting.Store(approvalsWait)
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
@@ -164,7 +175,7 @@ func (d *Daemon) noteConfigWaiting() {
 // configWaiting reports whether config.toml holds a change that widens what
 // panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
-	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load()
+	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load()
 }
 
 // reloadHosts applies a changed host table only where it dials less: a host

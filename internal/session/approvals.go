@@ -160,6 +160,26 @@ func ApprovalPolicyFromConfig(c config.ApprovalsConfig) ApprovalPolicy {
 	return p
 }
 
+// narrowApprovalPolicy is next as a file change may apply it over was: only
+// where it narrows. A rule in force that next drops stays in force, beside
+// the rules next adds, and a pane may not allow a risky call unless it could
+// already. waits reports that next asks for more than it was given, which
+// waits for tuios config apply or a restart.
+func narrowApprovalPolicy(was, next ApprovalPolicy) (kept ApprovalPolicy, waits bool) {
+	kept = next
+	for _, r := range was.Risk {
+		if !slices.ContainsFunc(next.Risk, r.Same) {
+			kept.Risk = append(slices.Clone(kept.Risk), r)
+			waits = true
+		}
+	}
+	if next.PanesMayAllow && !was.PanesMayAllow {
+		kept.PanesMayAllow = false
+		waits = true
+	}
+	return kept, waits
+}
+
 // canonicalHarness resolves a harness name to the id hooks report under, or
 // lower-cases a name nothing knows.
 func canonicalHarness(name string) string {

@@ -1996,7 +1996,12 @@ max_untracked_mb = 50
   the rules. `panes_may_allow` lets a pane holding the `respond` grant allow a
   risky call; it is off, so only you can. The shipped rules are listed under
   [Risk rules](AGENT_STATE.md#risk-rules). They are a speed bump, not a
-  sandbox.
+  sandbox. The daemon reads the risk rules again when the file changes. A
+  change that adds a rule applies at once. A change that removes a rule, or
+  sets `panes_may_allow`, waits, because a process in a pane can write
+  config.toml. The rules in force stay, and panes may not allow a risky call.
+  Run `tuios config apply` from a terminal outside tuios to apply the change,
+  or restart the daemon. Until then the Inbox shows that a change waits.
 - `[agents.recap]` is the summary of what an agent did while you were away:
   `mode` says where it is shown (`toast` in the dock when you come back to the
   pane, and in the Inbox; `inbox` only in the Inbox; `off` only in
