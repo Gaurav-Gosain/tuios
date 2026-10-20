@@ -7617,3 +7617,17 @@ A control that sets a TML window's output flag on each render does not fail the 
 | The placeholder ends on any byte after an esc, not only on a lone esc | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("a click closed the far surface") | **caught** |
 
 The hello claim is kept off through a host anyway: it spares the link the pushes. The cap of open surfaces per caller (8 per pane, 32 per session outside the panes) has no e2e case. Reaching it opens 32 windows.
+
+### The owner of a TML surface
+
+`TestTMLOwnerScriptAnswersEvents` in `tml_owner_test.go`. Run on 2026-10-20, the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The client sends no emit to the daemon | "the owner's patch never reached the frame" (the script never heard rerun) | **caught** |
+| `tml-open` with events opens no stream on its connection | the same step | **caught** |
+| `tml-patch` changes the state and pushes nothing | the same step | **caught** |
+| `tml-replace` ignores `keep_state` | "the replaced tree never drew with the kept state" | **caught** |
+| A client one version behind applies only the patch's first operation | "the owner's patch never reached the frame" (Runs: 2 came, the note did not) | **caught** |
+
+The last control shows that the patch path, not a full state replace, draws the owner's answer.
