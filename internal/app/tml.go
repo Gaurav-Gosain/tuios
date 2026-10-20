@@ -283,7 +283,13 @@ func (m *OS) tmlRefresh(id string) tea.Cmd {
 	return func() tea.Msg {
 		raw, err := call("tml-get", map[string]any{"surface": id}, tmlInputTimeout)
 		if err != nil {
+			// Once more, then give up: the next full push draws the
+			// surface, and a later gap reads again.
+			raw, err = call("tml-get", map[string]any{"surface": id}, tmlInputTimeout)
+		}
+		if err != nil {
 			clientLog("TML surface %s: tml-get: %v", id, err)
+			m.queueTMLCmd(func() tea.Msg { return tmlRefreshFailedMsg{id: id} })
 			return nil
 		}
 		var res struct {
@@ -303,6 +309,10 @@ func (m *OS) tmlRefresh(id string) tea.Cmd {
 		return nil
 	}
 }
+
+// tmlRefreshFailedMsg says a refresh read failed twice, so the next gap may
+// read again.
+type tmlRefreshFailedMsg struct{ id string }
 
 // tmlViewOf is the view a window draws, or nil.
 func (m *OS) tmlViewOf(w *terminal.Window) *tmlView {
@@ -574,6 +584,10 @@ func tmlLookup(state map[string]any, pointer string) (any, any, bool) {
 	return parent, cur, true
 }
 
+// TMLInputFailedMsg says the daemon refused what the person did on a
+// surface.
+type TMLInputFailedMsg struct{ Text string }
+
 // tmlInputTimeout bounds one tml-input call.
 const tmlInputTimeout = 5 * time.Second
 
@@ -609,13 +623,16 @@ func (m *OS) tmlInput(v *tmlView, ops []tml.Op, events []tmlEmit, closing bool, 
 	m.tml.mu.Unlock()
 	return func() tea.Msg {
 		_, err := call("tml-input", params, tmlInputTimeout)
-		if err != nil {
-			clientLog("TML surface %s: tml-input: %v", v.id, err)
-		}
 		m.tml.mu.Lock()
 		v.inflight--
 		m.tml.mu.Unlock()
 		m.signalTML()
+		if err != nil {
+			clientLog("TML surface %s: tml-input: %v", v.id, err)
+			// The person sees what did not go through, such as an emit
+			// value over the limit.
+			return TMLInputFailedMsg{Text: "The surface could not send what you did: " + err.Error()}
+		}
 		return nil
 	}
 }

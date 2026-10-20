@@ -555,6 +555,16 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 			Detail: "A program changes a surface with tml-patch and closes it with tml-close.",
 		})
 	}
+	// The limits are checked before anything applies, so a refused input
+	// changes nothing.
+	if len(p.Events) > tmlEventsPerInput {
+		return nil, invalidParam("events", fmt.Sprintf("one tml-input carries at most %d events", tmlEventsPerInput))
+	}
+	for _, e := range p.Events {
+		if len(e.Value) > s.limits.PatchBytes {
+			return nil, invalidParam("events", fmt.Sprintf("an event value is %d bytes; the limit is %d bytes, as for a patch", len(e.Value), s.limits.PatchBytes))
+		}
+	}
 	if ops := bytes.TrimSpace(p.Ops); len(ops) > 0 && string(ops) != "null" {
 		d.tml.mu.Lock()
 		parsed, err := tml.DecodePatch(ops, &s.limits)
@@ -570,14 +580,6 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 			return nil, invalidParam("ops", err.Error())
 		}
 		d.pushTMLSurface(sessionID, payload)
-	}
-	if len(p.Events) > tmlEventsPerInput {
-		return nil, invalidParam("events", fmt.Sprintf("one tml-input carries at most %d events", tmlEventsPerInput))
-	}
-	for _, e := range p.Events {
-		if len(e.Value) > s.limits.PatchBytes {
-			return nil, invalidParam("events", fmt.Sprintf("an event value is %d bytes; the limit is %d bytes, as for a patch", len(e.Value), s.limits.PatchBytes))
-		}
 	}
 	for _, e := range p.Events {
 		var value any

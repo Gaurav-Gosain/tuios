@@ -1686,6 +1686,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.ShowNotification(msg.Message, "error", m.Settings.NotificationDuration)
 		return m, ListenForClientEvents(m.ClientEventChan)
 
+	case TMLInputFailedMsg:
+		m.ShowNotification(msg.Text, "warning", m.Settings.NotificationDuration)
+		return m, nil
+
+	case tmlRefreshFailedMsg:
+		if v := m.tml.views[msg.id]; v != nil {
+			v.refreshing = false
+		}
+		return m, nil
+
 	case TMLWakeMsg:
 		// A TML surface was pushed, an answer came back, or a click left a
 		// side effect. See tml.go.

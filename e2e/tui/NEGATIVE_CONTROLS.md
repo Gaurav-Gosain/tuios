@@ -7634,11 +7634,12 @@ The last control shows that the patch path, not a full state replace, draws the 
 
 ### TML pushes to a slow client, and reads in scope
 
-`TestTMLStalledClientKeepsDaemonMemoryBounded` and `TestTMLSurfaceReadsStayInScope` in `tml_bounds_test.go`. Run on 2026-10-20, the same way.
+`TestTMLStalledClientKeepsDaemonMemoryBounded`, `TestTMLSurfaceReadsStayInScope` and `TestTMLEmitOverTheLimitIsShown` in `tml_bounds_test.go`. Run on 2026-10-20, the same way.
 
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | Every push queued on its own, each with the whole state (the build before the outbox) | `TestTMLStalledClientKeepsDaemonMemoryBounded` ("the daemon's peak memory grew by 634312 kB") | **caught** |
 | tml-get without the session check | `TestTMLSurfaceReadsStayInScope` ("a read pane in alpha was not refused a surface in beta") | **caught** |
+| The client only logs a refused input | `TestTMLEmitOverTheLimitIsShown` ("the refused emit left no message") | **caught** |
 
 The test reads the daemon's peak memory (VmHWM), not its resident set at the end: the garbage collector gives back what the burst held, and a first version that read VmRSS passed the control once.

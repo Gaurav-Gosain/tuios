@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // tmlDaemonPID finds the daemon of the isolation root base.
@@ -198,5 +200,52 @@ func TestTMLSurfaceReadsStayInScope(t *testing.T) {
 	}
 	if _, err := c.call("tml-get", map[string]any{"surface": s.Surface}); err == nil {
 		t.Fatal("a connection restricted to its own session read a surface in beta")
+	}
+}
+
+// TestTMLEmitOverTheLimitIsShown presses a button whose emit value is over
+// the 64 KiB limit. The daemon refuses it, the person sees that it did not go
+// through, and a small emit after it still reaches the owner.
+//
+// Negative control, in NEGATIVE_CONTROLS.md: the client only logs a refused
+// input (no message on the screen).
+func TestTMLEmitOverTheLimitIsShown(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-tmlemit"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("new: %v %s", err, out)
+	}
+	term := startIn(t, base, startOpts{cols: 120, rows: 36, args: []string{"attach", sess}})
+	waitWindowCount(t, term, 1, "first pane")
+	big := strings.Repeat("z", 70<<10)
+	doc := writeTMLDoc(t, base, "e.tml", fmt.Sprintf(`<tml version="1" title="Emit"><state>{"big": %q}</state><col pad="1"><text>EMIT-SURFACE</text>
+<button key="e" on-press="emit('big', state.big)">Big</button>
+<button key="f" on-press="emit('small', 1)">Small</button></col></tml>`, big))
+	stream := startCLIBackground(t, base, "tml", "show", doc, "-s", sess, "--width", "60", "--height", "10", "--events")
+	if err := term.WaitForText("EMIT-SURFACE", uiTimeout); err != nil {
+		t.Fatalf("no surface: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatalf("send e: %v", err)
+	}
+	if err := term.WaitForText("could not send what you did", uiTimeout); err != nil {
+		t.Fatalf("the refused emit left no message: %v\n%s", err, term.Snapshot())
+	}
+	saveTMLFrame(t, term, "1-emit-refused")
+	if err := term.SendKeys("f"); err != nil {
+		t.Fatalf("send f: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
+	}
+	select {
+	case run := <-stream:
+		if !strings.Contains(run.out, `"name":"small"`) || strings.Contains(run.out, `"name":"big"`) {
+			t.Fatalf("the owner did not hear exactly the small emit:\n%.400s", run.out)
+		}
+	case <-time.After(uiTimeout):
+		t.Fatal("the owner stream did not end after esc")
 	}
 }
