@@ -8886,3 +8886,13 @@ After review: under `hidden`, a frame that is a surface's only edge falls back t
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A 16-colour panel loses its only edge under hidden | `panelFrame(pal)` at the `Panel.Render` frame site | Calls `dialogFrame()` again | `/hidden-16` (`got tl=" " … want tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│"`) | **caught** |
+
+## Overlay frames match the pane borders
+
+`TestOverlayFramesMatchPaneBorders` attaches a truecolor client with `frame_panels = true`, `border_focused_color = "#ff8800"` and `pane_background = "#203040"`, tiles the one pane so the overlay covers pane content, and reads the four corners, a top-edge cell and a left-edge cell of the command palette (`/panel`) and the rename dialog (`/dialog`). Each must carry `#ff8800` as ink and `#203040` as ground. The positive halves share the fixture: the cell just outside the frame is `#203040`, the cell just inside it is not, and a pane border cell outside the overlay carries `#ff8800`. Each control was built into its own binary and the test run against it. Run on 2026-10-20.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A frame is drawn in the overlay's own edge colour | The focused border ink in `syncOverlayFrame` | `Ink` pushed as nil | `/panel` (fg `#646269`, the palette's edge), `/dialog` (fg `#858392`, its muted ink) | **caught** |
+| A frame cell sits on the overlay's shade | The pushed ground in `overlay.frameStyle` | Returns `Style(bg)` again | `/panel` (bg `#3a3943`, the panel surface), `/dialog` (bg `#201f26`, the dialog canvas) | **caught** |
+| The compositor paints the frame on its own ground | The see-through pass in `cellLayer.blit` | Never taken | `/panel`, `/dialog` (bg `#01fe02`, the marker itself) | **caught** |
