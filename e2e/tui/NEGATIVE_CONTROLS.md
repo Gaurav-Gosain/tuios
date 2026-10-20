@@ -7588,3 +7588,17 @@ Upstream main fails both new cases with the pane at `none`: `host-pid` ("a host 
 | The shell test dropped from the exit lapse: `&& fg == ""` removed, leaving `info.atShell()` alone | `protocol-pane` ("a protocol pane lost its state when a harness under it exited, with the pane program still running: the pane is {State:none ...}") | **caught** |
 
 Not covered end to end: an agent actually in another pid namespace. `host-pid` stands in for it with a pid the reporter does not descend from, which is what the daemon sees of one. Nor a platform that does not give the peer's pid, where no harness pid is timed and a report claim stays until it is cleared.
+## TML surfaces in popups and panes
+
+The tests are `TestTMLShowPopup` and `TestTMLShowPaneAndClose` in `tml_test.go`, and the `tml surface` case of `TestIdleCostStaysLow`. Each control is a text replacement in the branch's checkout, built and put back before the next. Run on 2026-10-20 on Linux.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The render hook: `renderTerminal` no longer hands a TML window to `renderTML` | `TestTMLShowPopup` ("the popup never drew the surface"; the box shows the placeholder line) | **caught** |
+| The key routing: terminal mode sends the keys of a TML window to its PTY | `TestTMLShowPopup` ("the keys never picked the second row") | **caught** |
+| The mouse routing: `sendMouseToWindow` sends a TML window's clicks to its PTY | `TestTMLShowPopup` ("a click on the Log tab never showed the log") | **caught** |
+| The attach push: the daemon sends no open surface after the attach reply | `TestTMLShowPopup` ("the reattached client did not draw the surface with its state") | **caught** |
+| The early-push backlog: a push that arrives before the client wires its handler is dropped | `TestTMLShowPopup`, the same reattach step | **caught** |
+| Idle: the client draws every surface again every 100 ms | `TestIdleCostStaysLow/tml_surface` (25 ticks, budget 2; 4182 context switches, budget 400) | **caught** |
+
+A control that sets a TML window's output flag on each render does not fail the idle case: the flag is read only on a pass that something else woke, so it starts no loop. It is not kept.
