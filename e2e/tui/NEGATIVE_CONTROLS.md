@@ -7653,3 +7653,15 @@ The test reads the daemon's peak memory (VmHWM), not its resident set at the end
 | The owner check of tml-patch, tml-replace and tml-close | "the agent's patch of the person's surface was not refused" | **caught** |
 | The rate limit of 100 patches a second | "250 patches back to back were all taken" | **caught** |
 | The question before a surface first types into a pane | "no question before the surface typed" | **caught** |
+
+### The owner label, the focus of a pane's surface, and new-window
+
+`TestTMLOwnerComesFirstAndCannotBeForged` and `TestTMLNewWindowAsksFirst` in `tml_label_test.go`, and the own-read step of `TestTMLPaneActionsRunWithTheOwnersGrants`. Run on 2026-10-20, the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The label with the title first ("TITLE · from OWNER") | "the window name does not start with its real owner" | **caught** |
+| The owner named from the pane's OSC title | "the owner came from the pane's own title" ("from pane tuios d02f72cd · Approve") | **caught** |
+| A pane's popup takes the focus | "the person's typing did not reach the pane they were in" | **caught** |
+| new-window runs without the question | "no question before a new window" | **caught** |
+| The pane that opened a surface may not read it without read | "the pane that opened a surface could not read it" | **caught** |

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // tmlTypeDoc has a button that types into the pane named build.
@@ -79,11 +81,19 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 		t.Fatalf("the agent's tml show printed %q (%v)", data, err)
 	}
 
-	// The button asks the person first, under the surface.
-	if err := term.SendKeys("t"); err != nil {
-		t.Fatalf("send t: %v", err)
+	// The pane holds write and not read, and reads its own surface.
+	ownGet := filepath.Join(base, "own-get.out")
+	tmlRunIn(t, base, sess, "agent", fmt.Sprintf("%s tml get %s > %s 2>&1", tuiosBin, agentSurface.Surface, ownGet))
+	if data, _ := os.ReadFile(ownGet); !strings.Contains(string(data), "TYPED-BY-AGENT") {
+		t.Fatalf("the pane that opened a surface could not read it:\n%s", data)
 	}
-	if err := term.WaitForText("Type into build? y yes  n no", uiTimeout); err != nil {
+
+	// A surface a pane opened does not take the keys, so the person clicks
+	// its button. It asks the person first, under the surface, and names
+	// the session.
+	col, row := tmlLocate(t, term, "Type into build")
+	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Type into e2e-tmlgr/build?", uiTimeout); err != nil {
 		t.Fatalf("no question before the surface typed: %v\n%s", err, term.Snapshot())
 	}
 	saveTMLFrame(t, term, "1-ask")
@@ -115,7 +125,7 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("send t: %v", err)
 	}
-	if err := term.WaitForText("Type into build? y yes  n no", uiTimeout); err != nil {
+	if err := term.WaitForText("Type into e2e-tmlgr/build?", uiTimeout); err != nil {
 		t.Fatalf("no question on the person's surface: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("y"); err != nil {
@@ -152,7 +162,7 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 
 	// The window names who opened each surface.
 	listed, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
-	if err != nil || !strings.Contains(listed, "Typer · from pane agent") || !strings.Contains(listed, "Typer · from tuios tml show") {
+	if err != nil || !strings.Contains(listed, `"from pane agent `) || !strings.Contains(listed, "· Typer") || !strings.Contains(listed, "from tuios tml show · Typer") {
 		t.Fatalf("the windows do not name their owners: %v\n%s", err, listed)
 	}
 

@@ -283,25 +283,69 @@ const (
 // tmlCallerKey names the caller on cs for the surface cap: its pane, or ""
 // for a caller in no pane.
 func (d *Daemon) tmlCallerKey(cs *connState) string {
-	if ref := d.callerPaneRef(cs); ref != nil {
-		return ref.Window
+	if cs.viaLink {
+		return "link:" + cs.linkPeer
+	}
+	if pa := d.paneAuthority(cs); pa != nil {
+		// A pane this daemon cannot place, or one it runs for another
+		// machine, is still not the person.
+		return cmp.Or(pa.window, unplacedWindow)
 	}
 	return ""
 }
 
 // tmlOwnerLabel names the caller on cs for the frame: its pane, or the CLI.
+//
+// The label is built from what the program in the pane cannot set: the name
+// the window was given, else the program the daemon sees in the foreground,
+// and always the window's short id. Never the pane's title, which the
+// program sets with OSC 2.
 func (d *Daemon) tmlOwnerLabel(cs *connState) string {
+	if cs.viaLink {
+		return "machine " + tmlLabelText(cmp.Or(cs.linkPeer, "unknown"), 24)
+	}
 	if ref := d.callerPaneRef(cs); ref != nil {
+		name := ""
 		if sess := d.sessionHoldingWindow(ref.Window); sess != nil {
 			for _, w := range sess.GetState().Windows {
 				if w.ID == ref.Window {
-					return "pane " + cmp.Or(w.CustomName, w.Title, shortID(w.ID))
+					name = w.CustomName
+					if name == "" && w.ForegroundCmd != "tuios" {
+						name = w.ForegroundCmd
+					}
 				}
 			}
 		}
+		if name = tmlLabelText(name, 24); name != "" {
+			return "pane " + name + " " + shortID(ref.Window)
+		}
 		return "pane " + shortID(ref.Window)
 	}
+	if d.paneAuthority(cs) != nil {
+		return "a pane tuios cannot place"
+	}
 	return "tuios tml show"
+}
+
+// tmlTitleWidth bounds the document's part of a TML window's name.
+const tmlTitleWidth = 48
+
+// tmlLabelText makes text safe for a window name: no control characters, no
+// separator dot, which only the owner part uses, and at most max runes.
+func tmlLabelText(text string, max int) string {
+	text = strings.Join(strings.Fields(tml.Sanitize(text)), " ")
+	text = strings.ReplaceAll(text, "·", "-")
+	if r := []rune(text); len(r) > max {
+		text = string(r[:max-1]) + "…"
+	}
+	return text
+}
+
+// tmlWindowName is a TML window's name: the owner first, which is never cut,
+// then the document's title, which the frame cuts when it must. The title
+// cannot hold the separator, so it cannot draw a second owner.
+func tmlWindowName(owner, title string) string {
+	return "from " + owner + " · " + tmlLabelText(title, tmlTitleWidth)
 }
 
 // verbTMLOpen opens a surface as a popup or a pane.
@@ -431,12 +475,15 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	// The window's name names the owner, and the document cannot change it,
 	// so a surface cannot pass for one another program opened.
-	label := title + " · from " + s.owner
+	label := tmlWindowName(s.owner, title)
 	opts := NewWindowOptions{
-		Title:       label,
-		Name:        label,
-		Workspace:   p.Workspace,
-		Focus:       true,
+		Title:     label,
+		Name:      label,
+		Workspace: p.Workspace,
+		// A surface a pane opened does not take the keys: the person
+		// focuses it with a click or a key, so text meant for another pane
+		// cannot answer it. The person's own surface takes the focus.
+		Focus:       s.caller == "",
 		Command:     tmlPlaceholderCommand(uri),
 		Popup:       target == TMLTargetPopup,
 		PopupWidth:  p.Width,
@@ -1059,6 +1106,13 @@ func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool)
 	if pa == nil || pa.grants.Has(GrantAdmin) {
 		return nil
 	}
+	// The pane that opened a surface reaches it, with write alone.
+	d.tml.mu.Lock()
+	owner := s.caller
+	d.tml.mu.Unlock()
+	if pa.window != "" && pa.window == owner {
+		return nil
+	}
 	if !d.sessionInScope(pa.session, target) {
 		return grantForbidden(verb, pa, "the surface is in session "+echoName(target)+", which is not the pane's own session or in its fan group")
 	}
@@ -1119,6 +1173,9 @@ var tmlPaneVerbs = map[string]string{
 	"send-text":  "send-text",
 }
 
+// tmlNewWindowParams are the new-window parameters a surface may pass.
+var tmlNewWindowParams = []string{"session", "name", "workspace", "cwd", "focus", "command"}
+
 // tmlPaneAction is one pane() action the person ran on a surface.
 type tmlPaneAction struct {
 	Verb   string         `json:"verb"`
@@ -1137,11 +1194,20 @@ func (d *Daemon) runTMLPaneAction(s *tmlSurface, a tmlPaneAction) map[string]any
 	}
 	params := map[string]any{}
 	for k, v := range a.Params {
+		// A new window from a surface takes only these: no host, no
+		// environment, no wait, no grants and no kind. The person saw the
+		// command in the question before the action came here.
+		if verb == "new-window" && !slices.Contains(tmlNewWindowParams, k) {
+			continue
+		}
 		params[k] = v
 	}
 	d.tml.mu.Lock()
 	owner, sessionID := s.caller, s.sessionID
 	d.tml.mu.Unlock()
+	if owner != "" && d.sessionHoldingWindow(owner) == nil {
+		return map[string]any{"verb": a.Verb, "ok": false, "error": "the surface was not opened by a pane of this machine, so it runs no pane action here"}
+	}
 	if _, named := params["session"]; !named {
 		if sess := d.manager.GetSessionByID(sessionID); sess != nil {
 			params["session"] = sess.Name()

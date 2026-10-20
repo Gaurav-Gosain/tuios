@@ -2484,17 +2484,27 @@ surface with that value. `copy(value)` copies through the client.
 `pane('new-window', params)` run that verb (`send-text`, `focus-window`,
 `new-window`) with the grants of the pane that opened the surface, never the
 person's: a surface an agent opened cannot type into a pane that holds more
-than the agent's pane. The first `send-text` from a surface into a pane asks
-the person under the surface, and nothing is typed until they press `y`. A
-refusal shows as a message. `open` and links do nothing yet.
+than the agent's pane. The first `send-text` into a pane, and each
+`new-window` command, asks the person under the surface; the question names
+the session, the pane or the command, and nothing happens until they press
+`y`. A `new-window` from a surface takes only `session`, `name`, `workspace`,
+`cwd`, `focus` and `command`. A refusal shows as a message. A surface opened
+over a link, or by a pane this daemon cannot place, runs no pane action.
+`open` and links do nothing yet.
 
 Who may change a surface: a caller in a pane may patch, replace and close only
 the surfaces its pane opened, and needs the `write` grant for `tml-open`,
 `tml-patch`, `tml-replace` and `tml-close`; any other pane fails with
 `forbidden`. A caller in no pane, the person's own commands and hooks, may act
 on any surface. A surface takes at most 100 patches and replaces a second, and
-one more fails with `rate_limited`. The window's name is the title and the
-owner, such as `Deploy · from pane api`, which the document cannot change. A
+one more fails with `rate_limited`. The window's name is the owner, then the
+title, such as `from pane api 3f2a91c0 · Deploy`, which the document cannot
+change: the owner is the window's own name, else the program the daemon sees
+in its foreground, and its short id, never the pane's title; the title drops
+the separator dot and is cut to 48 runes. A surface a pane opened does not
+take the focus: the person clicks it or focuses it. A surface the person
+opened takes the focus. The pane that opened a surface reads it with
+`tml-get` with the `write` grant alone. A
 binding that calls `ago()` is evaluated again once a minute while its surface
 is shown; no other surface arms a timer. A paste into a surface is dropped, with a message: no
 component takes text yet.

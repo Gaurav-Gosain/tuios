@@ -322,7 +322,7 @@ func TestTMLProgramCloseIsNotThePersons(t *testing.T) {
 	surface, window := tmlSurfaceOf(t, base, "e2e-tmlprog")
 
 	listed, err := tuiosCLI(t, base, "list-windows", "-s", "e2e-tmlprog", "--json")
-	if err != nil || strings.Contains(listed, `\u001b`) || strings.Contains(listed, `\u0007`) || !strings.Contains(listed, `"custom_name": "Run]0;PWNED[41mName · from tuios tml show"`) {
+	if err != nil || strings.Contains(listed, `\u001b`) || strings.Contains(listed, `\u0007`) || !strings.Contains(listed, `"custom_name": "from tuios tml show · Run]0;PWNED[41mName"`) {
 		t.Fatalf("the window name kept its control characters, or lost its text: %v\n%s", err, listed)
 	}
 

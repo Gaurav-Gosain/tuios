@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"image/color"
 	"strconv"
@@ -108,10 +109,61 @@ type tmlView struct {
 	confirmed map[string]bool
 }
 
-// tmlTarget names the pane a pane() action types into.
-func tmlTarget(a tmlPaneAction) string {
-	t, _ := a.Params["window"].(string)
+// tmlParam is a string parameter of a pane() action.
+func tmlParam(a tmlPaneAction, name string) string {
+	t, _ := a.Params[name].(string)
 	return t
+}
+
+// tmlActionSession is the session a pane() action acts in: the one it
+// names, else this client's, which is the surface's.
+func (m *OS) tmlActionSession(a tmlPaneAction) string {
+	return cmp.Or(tmlParam(a, "session"), m.SessionName)
+}
+
+// tmlConfirmKey names what the person said yes to: the verb, the session and
+// the window, by id where this client knows it, so a second name for the
+// same pane asks again only when it names another pane.
+func (m *OS) tmlConfirmKey(a tmlPaneAction) string {
+	win := tmlParam(a, "window")
+	if m.tmlActionSession(a) == m.SessionName {
+		for _, w := range m.Windows {
+			if w != nil && (w.ID == win || w.CustomName == win) {
+				win = w.ID
+				break
+			}
+		}
+	}
+	key := a.Verb + "\x00" + m.tmlActionSession(a) + "\x00" + win
+	if a.Verb == "new-window" {
+		// Each command is asked about on its own.
+		key += "\x00" + tmlCommandText(a)
+	}
+	return key
+}
+
+// tmlAsks reports whether a pane() action waits for the person's yes: one
+// that types into a pane or starts a program.
+func tmlAsks(a tmlPaneAction) bool {
+	return a.Verb == "send-text" || a.Verb == "new-window"
+}
+
+// tmlCommandText is a new-window action's command as the question shows it,
+// at most 40 cells, or "" for the shell.
+func tmlCommandText(a tmlPaneAction) string {
+	var words []string
+	switch c := a.Params["command"].(type) {
+	case []any:
+		for _, w := range c {
+			if s, ok := w.(string); ok {
+				words = append(words, s)
+			}
+		}
+	case string:
+		words = []string{c}
+	}
+	text := strings.Join(strings.Fields(tml.Sanitize(strings.Join(words, " "))), " ")
+	return ansi.Truncate(text, 40, "…")
 }
 
 // TMLWakeMsg says a push, an answer or a side effect for a surface is waiting.
@@ -395,7 +447,8 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 	}
 	sh := ch
 	if v.confirm != nil && ch > 1 {
-		sh = ch - 1
+		sh = ch - strings.Count(m.tmlConfirmLine(v, cw), "\n") - 1
+		sh = max(sh, 1)
 	}
 	buf := v.surface.Render(cw, sh)
 	if damage := v.surface.Damage(); len(damage) > 0 || v.content == "" || v.w != cw || v.h != sh {
@@ -413,18 +466,29 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 // tuios draws it under the surface, so a document cannot draw it or hide it.
 func (m *OS) tmlConfirmLine(v *tmlView, w int) string {
 	pal := theme.UI()
-	target := tmlTarget(*v.confirm)
-	text := "Let this surface type into pane " + target + "? "
-	if ansi.StringWidth(text)+12 > w {
-		// A narrow pane gets the short question, so y and n stay on it.
-		text = "Type into " + target + "? "
+	a := *v.confirm
+	where := m.tmlActionSession(a) + "/" + tmlParam(a, "window")
+	text := "Let this surface type into pane " + where + "? "
+	short := "Type into " + where + "? "
+	if a.Verb == "new-window" {
+		what := cmp.Or(tmlCommandText(a), "a shell")
+		text = "Let this surface run " + what + " in a new window in " + m.tmlActionSession(a) + "? "
+		short = "Run " + what + " in " + m.tmlActionSession(a) + "? "
 	}
-	line := lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render(text) +
-		lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("y") +
+	keys := lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("y") +
 		lipgloss.NewStyle().Foreground(pal.FgDim).Render(" yes  ") +
 		lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("n") +
 		lipgloss.NewStyle().Foreground(pal.FgDim).Render(" no")
-	return ansi.Truncate(line, w, "…")
+	if ansi.StringWidth(text)+12 > w {
+		text = short
+	}
+	ask := lipgloss.NewStyle().Foreground(pal.Warning).Bold(true)
+	if ansi.StringWidth(text)+12 > w {
+		// A narrow pane puts the keys on a line of their own, so they are
+		// never the part that is cut.
+		return ansi.Truncate(ask.Render(strings.TrimSpace(text)), w, "…") + "\n" + keys
+	}
+	return ask.Render(text) + keys
 }
 
 // tmlWaitingFrame is the content of a TML window with no surface yet.
@@ -519,7 +583,7 @@ func (m *OS) TMLKey(w *terminal.Window, key string) tea.Cmd {
 			if v.confirmed == nil {
 				v.confirmed = map[string]bool{}
 			}
-			v.confirmed[tmlTarget(a)] = true
+			v.confirmed[m.tmlConfirmKey(a)] = true
 			w.MarkContentDirty()
 			m.cachedViewContent = ""
 			return m.tmlInput(v, tmlInputReq{actions: []tmlPaneAction{a}})
@@ -597,9 +661,10 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 		case "pane":
 			a := tmlPaneAction{Verb: e.Name}
 			a.Params, _ = e.Value.(map[string]any)
-			if a.Verb == "send-text" && !v.confirmed[tmlTarget(a)] {
-				// The first time a surface types into a pane, the person
-				// says yes to it. The action waits for the answer.
+			if tmlAsks(a) && !v.confirmed[m.tmlConfirmKey(a)] {
+				// The first time a surface types into a pane, or starts a
+				// program, the person says yes to it. The action waits for
+				// the answer.
 				v.confirm = &a
 				w.MarkContentDirty()
 				m.cachedViewContent = ""
