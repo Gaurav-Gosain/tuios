@@ -44,6 +44,8 @@ var ErrHandoffUnsupported = errors.New("live upgrade is not supported on this pl
 var (
 	errHandoffBusy     = errors.New("a live upgrade is already running")
 	errHandoffEmbedded = errors.New("this daemon runs inside another program (tuios-web or the SSH server), and replacing its image would replace that program")
+	// errHandoffHostedOpen is an open-pane that arrives during an upgrade.
+	errHandoffHostedOpen = errors.New("a live upgrade of this daemon is running. Try again once it is done")
 )
 
 // handoffQuiesceTimeout bounds how long the panes may take to stop.
@@ -155,6 +157,11 @@ func (r *handoffRun) prepare() error {
 	r.undo = append(r.undo, d.manager.paneLife.Unlock)
 	// A pane started between the two is in now, and its gate shuts too.
 	shutAll()
+
+	if n := d.shutHostedPanes(); n > 0 {
+		return fmt.Errorf("this daemon runs %d pane(s) for another machine, and their terminals would close at the upgrade. Close those windows on the machine that opened them first", n)
+	}
+	r.undo = append(r.undo, d.openHostedPanes)
 
 	sessions := d.manager.AllSessions()
 	var refs []handoffPaneRef
@@ -269,6 +276,27 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 	}
 	r.fds = append(r.fds, int(r.file.Fd())) //nolint:gosec // a descriptor number
 	return nil
+}
+
+// shutHostedPanes refuses new hosted panes and reports how many run. A
+// hosted pane's master is not among the descriptors the exec keeps, so the
+// exec would close its terminal and end the pane on the machine that opened
+// it. When some run, nothing is shut, and the handoff is refused.
+func (d *Daemon) shutHostedPanes() int {
+	d.hostedPanesMu.Lock()
+	defer d.hostedPanesMu.Unlock()
+	if n := len(d.hostedPanes); n > 0 {
+		return n
+	}
+	d.hostedPanesShut = true
+	return 0
+}
+
+// openHostedPanes lets hosted panes open again.
+func (d *Daemon) openHostedPanes() {
+	d.hostedPanesMu.Lock()
+	d.hostedPanesShut = false
+	d.hostedPanesMu.Unlock()
 }
 
 // namedListeners is every listening socket, by the name the manifest gives it.

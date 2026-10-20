@@ -199,6 +199,9 @@ type Daemon struct {
 	// hosted_pane.go.
 	hostedPanes   map[string]*hostedPane
 	hostedPanesMu sync.Mutex
+	// hostedPanesShut refuses a new hosted pane while a live upgrade runs,
+	// whose exec would close its terminal. See shutHostedPanes.
+	hostedPanesShut bool
 
 	// outbox holds mail for machines whose link is down, and delivers it when
 	// the link comes back. See host_outbox.go.

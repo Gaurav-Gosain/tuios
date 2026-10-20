@@ -210,6 +210,13 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 	}
 
 	d.hostedPanesMu.Lock()
+	if d.hostedPanesShut {
+		d.hostedPanesMu.Unlock()
+		_ = cmd.Process.Kill()
+		_ = pty.Close()
+		_ = cmd.Wait()
+		return nil, errHandoffHostedOpen
+	}
 	if d.hostedPanes == nil {
 		d.hostedPanes = make(map[string]*hostedPane)
 	}
