@@ -699,7 +699,14 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	// Kept for a screenshot before the host is sent the name: for t=t and
 	// t=s the host deletes the object once it has read it.
-	kp.keepFileMedium(cmd, windowID, hostID, filePath, !reusingID || cmd.ImageID == 0)
+	//
+	// Not for an a=t under i=0: it has no id a later a=p could name, so
+	// nothing ever shows it, and a path entry counts no bytes against the
+	// bound, so one kept for it would never be evicted. The direct path keeps
+	// nothing for it either.
+	if andPlace || cmd.ImageID != 0 {
+		kp.keepFileMedium(cmd, windowID, hostID, filePath, !reusingID || cmd.ImageID == 0)
+	}
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
 	// The host (Ghostty/Kitty) reads the file itself, so there is no need to
