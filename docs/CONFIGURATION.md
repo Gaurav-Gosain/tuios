@@ -1197,6 +1197,8 @@ border_gradient_angle = 45
 
 The small dialogs, such as rename, confirm and new space, draw their frame in the pane border style, `appearance.border_style`. The larger panels, such as the command palette, the switchers, the Agents view and the settings page, have no frame unless `appearance.frame_panels` is on. Then they take the same frame.
 
+A frame looks like a pane's border. It is drawn in the colour the focused pane's border has at that moment, because an open dialog or panel is the focused thing: `appearance.border_focused_color` when it is set, else the theme's colour for the current mode, copy mode or a waiting agent, or the session's tint. The frame has no background of its own, so whatever is behind the dialog or panel shows through round its edge, as it does at a pane's corner. The inside keeps the dialog's or the panel's own background.
+
 | Option | Values | Default |
 |---|---|---|
 | `appearance.border_style` | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii`, `outer-half-block`, `inner-half-block`, `glyphs` | `rounded` |
