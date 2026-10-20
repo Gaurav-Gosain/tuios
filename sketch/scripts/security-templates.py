@@ -10,13 +10,15 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'sankey': 'sankeyTemplates', 'block': 'blockTemplates', 'architecture': 'architectureTemplates',
          'requirement': 'requirementTemplates', 'c4': 'c4Templates', 'packet': 'packetTemplates',
          'radar': 'radarTemplates', 'treemap': 'treemapTemplates', 'info': 'infoTemplates',
-         'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates'}
+         'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates',
+         'cynefin': 'cynefinTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
          "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)'}
 
 # Names that mean something else in one type's test.
-type_exprs = {'requirement': {'BODY': 'requirementBody'}}
+type_exprs = {'requirement': {'BODY': 'requirementBody'},
+              'cynefin': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'}}
 
 def lit(s):
     out, i = [], 0
@@ -33,7 +35,7 @@ def go(body, typ):
     pieces = []
     for k, part in enumerate(parts):
         if k % 2:
-            pieces.append(type_exprs.get(typ, {}).get(part, exprs[part]))
+            pieces.append(type_exprs.get(typ, {}).get(part) or exprs[part])
         elif part:
             pieces.append('"' + lit(part) + '"')
     return ' + '.join(pieces) if pieces else '""'

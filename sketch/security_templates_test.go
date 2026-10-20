@@ -1085,3 +1085,25 @@ var ishikawaTemplates = []func(p string) string{
 		return "%%{init: {\"ishikawa\": {\"useMaxWidth\": \"" + p + "\"}, \"themeVariables\": {\"lineColor\": \"" + p + "\"}}}%%\n" + ishikawaHead + "  Effect\n    Cause"
 	},
 }
+
+var cynefinTemplates = []func(p string) string{
+	func(p string) string { return "cynefin-beta\ncomplex\n\"" + cynefinQuoted(p) + "\"" },
+	func(p string) string { return "cynefin-beta\ncomplex\n'" + cynefinSingle(p) + "'" },
+	func(p string) string {
+		return "cynefin-beta\nconfusion\n\"" + cynefinQuoted(p) + "\"\n\"" + cynefinQuoted(p) + "\"\n\"" + cynefinQuoted(p) + "\"\n\"" + cynefinQuoted(p) + "\""
+	},
+	func(p string) string { return "cynefin-beta\nclear\n\"a \\\"" + cynefinQuoted(p) + "\\\" \\\\ b\"" },
+	func(p string) string { return "cynefin-beta\ncomplex --> clear : \"" + cynefinQuoted(p) + "\"" },
+	func(p string) string { return "cynefin-beta\nconfusion --> chaotic : '" + cynefinSingle(p) + "'" },
+	func(p string) string { return "cynefin-beta\ntitle " + p + "\ncomplex" },
+	func(p string) string { return "cynefin-beta\naccTitle: " + p + "\naccDescr: " + p + "\ncomplex" },
+	func(p string) string { return "cynefin-beta\naccDescr {\n " + p + "\n}\ncomplex" },
+	func(p string) string { return "cynefin-beta\n" + p },
+	func(p string) string { return "cynefin-beta\ncomplex --> " + p },
+	func(p string) string {
+		return "---\ntitle: \"" + cynefinQuoted(p) + "\"\n---\ncynefin-beta\ncomplex\n\"a\""
+	},
+	func(p string) string {
+		return "---\nconfig:\n  cynefin:\n    width: '" + cynefinSingle(p) + "'\n    height: 1e999\n    seed: .nan\n    boundaryAmplitude: '" + cynefinSingle(p) + "'\n    showDomainDescriptions: '" + cynefinSingle(p) + "'\n---\ncynefin-beta\ncomplex\n\"a\"\nclear --> chaotic : \"b\""
+	},
+}

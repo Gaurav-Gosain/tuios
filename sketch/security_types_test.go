@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1092,4 +1092,33 @@ func TestIshikawaOutputIsInert(t *testing.T) {
 		t.Fatal("names like __proto__ did not render")
 	}
 	mutate(t, corpus, []string{"\n", "\n  ", "\n      ", "\t", " ", "%%", "<br>", "#35;", "ishikawa"}, 3, 4000, RenderOptions{}, false)
+}
+
+func cynefinQuoted(p string) string {
+	return strings.NewReplacer(`"`, "", `\`, "", "\n", "").Replace(p)
+}
+
+func cynefinSingle(p string) string {
+	return strings.NewReplacer(`'`, "", `\`, "", "\n", "").Replace(p)
+}
+
+func TestCynefinOutputIsInert(t *testing.T) {
+	hostile(t, cynefinTemplates, len(PAYLOADS)*8, RenderOptions{}, false)
+	for _, body := range []string{"width: 1\n    height: 1", "width: 10000\n    height: 10000", "seed: 1e300", "seed: -7", "boundaryAmplitude: 50", "boundaryAmplitude: -1"} {
+		src := "---\nconfig:\n  cynefin:\n    " + body + "\n---\ncynefin-beta\ncomplex\n\"a\"\ncomplex --> clear\n"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+	corpus := corpusOf(t, "cynefin")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{"\"", "'", "\n", " --> ", " : ", "complex", "confusion", "title "}, 13, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 100 {
+		t.Fatalf("%d mutated cynefin sources rendered, want more than 100", rendered)
+	}
 }

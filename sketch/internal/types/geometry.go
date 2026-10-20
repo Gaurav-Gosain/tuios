@@ -63,6 +63,9 @@ type Geometry struct {
 
 	// Ishikawa.
 	Ishikawa *GeoIshikawa
+
+	// Cynefin.
+	Cynefin *GeoCynefin
 }
 
 type GeoNode struct {
@@ -448,4 +451,23 @@ type GeoCategory struct {
 type GeoCause struct {
 	Label string
 	Depth int
+}
+
+// GeoCynefin is a Cynefin diagram as lists: the domains in the order complex, complicated,
+// chaotic, clear and confusion, and the transitions between them.
+type GeoCynefin struct {
+	Title       []string
+	Domains     []GeoDomain
+	Transitions []GeoTransition
+}
+
+type GeoDomain struct {
+	Name string
+	// Model and Practice are the decision model and the kind of practice, "" when hidden.
+	Model, Practice string
+	Items           []string
+}
+
+type GeoTransition struct {
+	From, To, Label string
 }

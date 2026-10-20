@@ -19,6 +19,7 @@ var done = map[string]bool{
 	"block":        true,
 	"c4":           true,
 	"class":        true,
+	"cynefin":      true,
 	"er":           true,
 	"flowchart":    true,
 	"gantt":        true,
