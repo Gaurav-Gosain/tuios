@@ -298,7 +298,8 @@ func buildFlowGraph(model *FlowDb, defaultCurve string) FlowGraph {
 		}
 		var tooltip *string
 		if t, ok := model.Tooltips[vertex.ID]; ok {
-			tooltip = &t
+			kept := t
+			tooltip = &kept
 		}
 		node := &GraphNode{
 			ID:                vertex.ID,

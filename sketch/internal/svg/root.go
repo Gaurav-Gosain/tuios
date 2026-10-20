@@ -20,8 +20,10 @@ const rootRounded = ` rx="` + RADIUS + `"`
 // /<rect\b[^>]*>/g; a scan does the same without a regexp pass over the whole
 // drawing.
 func rounded(parts []string) string {
+	if len(parts) == 1 {
+		return roundedIn(parts[0])
+	}
 	total := 0
-	round := false
 	for _, part := range parts {
 		total += len(part)
 		if strings.LastIndexByte(part, '<') > strings.LastIndexByte(part, '>') {
@@ -29,10 +31,6 @@ func rounded(parts []string) string {
 			// the joined content, so that a tag across parts is seen whole.
 			return roundedIn(strings.Join(parts, ""))
 		}
-		round = round || strings.Contains(part, rootRounded)
-	}
-	if !round {
-		return strings.Join(parts, "")
 	}
 	var b strings.Builder
 	b.Grow(total)
@@ -54,10 +52,6 @@ func roundedIn(content string) string {
 
 // writeRounded writes content to b with the radius of each rect moved.
 func writeRounded(b *strings.Builder, content string) {
-	if !strings.Contains(content, rootRounded) {
-		b.WriteString(content)
-		return
-	}
 	last := 0
 	for i := 0; ; {
 		at := strings.Index(content[i:], "<rect")
@@ -121,7 +115,7 @@ func roundTag(b *strings.Builder, tag string) {
 }
 
 // The weights of bold text, each set only in a diagram that has such text.
-var weights = [][2]string{
+var weights = [...][2]string{
 	{"--_tw", "title"},
 	{"--_hw", "heading"},
 	{"--_w", "bold"},
@@ -150,12 +144,33 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	}
 	// The parts of the drawing, in order. Joined, they are what pele calls content.
 	content := rounded(parts)
+	// Which of var(--_r) and the weights' variables the drawing uses, in one
+	// pass over each var(--_ in it.
+	radius := false
+	var bold [len(weights)]bool
+	for i := 0; ; {
+		at := strings.Index(content[i:], "var(--_")
+		if at < 0 {
+			break
+		}
+		i += at + len("var(")
+		rest := content[i:]
+		if strings.HasPrefix(rest, "--_r)") {
+			radius = true
+			continue
+		}
+		for k, pair := range weights {
+			if strings.HasPrefix(rest, pair[0]) && strings.HasPrefix(rest[len(pair[0]):], ")") {
+				bold[k] = true
+			}
+		}
+	}
 	w := ""
-	if strings.Contains(content, "var(--_r)") {
+	if radius {
 		w = ";--_r:" + RADIUS
 	}
-	for _, pair := range weights {
-		if strings.Contains(content, "var("+pair[0]+")") {
+	for k, pair := range weights {
+		if bold[k] {
 			w += ";" + pair[0] + ":var(--pele-" + pair[1] + "-weight,bold)"
 		}
 	}

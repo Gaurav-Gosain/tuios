@@ -80,6 +80,14 @@ func renderFlowchart(db *FlowDb, config types.Config, options types.RenderOption
 // edgeClasses are the classes every edge has, which the drawing leaves out.
 var edgeClasses = strings.NewReplacer("edge-thickness-normal", "", "edge-pattern-solid", "", "flowchart-link", "")
 
+// withoutEdgeClasses drops edgeClasses from classes.
+func withoutEdgeClasses(classes string) string {
+	if !strings.Contains(classes, "edge-thickness-normal") && !strings.Contains(classes, "edge-pattern-solid") && !strings.Contains(classes, "flowchart-link") {
+		return classes
+	}
+	return edgeClasses.Replace(classes)
+}
+
 // withoutDefault is /^default\s?/ replaced with "".
 func withoutDefault(classes string) string {
 	rest, ok := strings.CutPrefix(classes, "default")
@@ -348,6 +356,8 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	}
 
 	var clusters, struckTitles, nodesOut strings.Builder
+	// A node takes about 270 bytes of markup and an edge about 200.
+	nodesOut.Grow(len(views) * 272)
 	for i, view := range views {
 		c := cnodes[i]
 		node := view.node
@@ -484,6 +494,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	}
 
 	var edgesOut, labelsOut strings.Builder
+	edgesOut.Grow(len(cedges) * 208)
 	loopSeen := map[int]int{}
 	for i, ce := range cedges {
 		edge := drawn[i]
@@ -525,7 +536,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			case "dotted":
 				attrs += ` stroke-dasharray="3 4"`
 			}
-			classes := svg.ClassNames(edgeClasses.Replace(edge.Classes))
+			classes := svg.ClassNames(withoutEdgeClasses(edge.Classes))
 			line := ""
 			if style != nil {
 				line = style.Line

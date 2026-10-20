@@ -596,7 +596,11 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	pieceStart := make([]int, m+1)
 	var pieces *Pieces
 	if opt.Tracks || (EFK != nil && !opt.Straight) {
-		pieces = &Pieces{}
+		// Each edge has one piece more than the dummies it passes, so m+n bounds them all.
+		c := m + n
+		fl := make([]float64, 2*c)
+		in := make([]int, 2*c)
+		pieces = &Pieces{from: fl[:0:c], to: fl[c:c:2*c], rank: in[:0:c], lower: in[c:c:2*c]}
 	}
 	trackCount := make([]int, maxRank+1)
 	if pieces != nil {
@@ -746,6 +750,7 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			}
 			below[r] = next
 		}
+		pieces.wide = make([]int, 0, len(pieces.from))
 		for k := 0; k < len(pieces.from); k++ {
 			w := 0
 			if math.Abs(pieces.from[k]-pieces.to[k]) > LEVEL_WIDE*room[pieces.rank[k]] {
@@ -842,8 +847,16 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			first, last = nodes[e.Head], nodes[e.Tail]
 			firstDx, lastDx = e.HeadDx, e.TailDx
 		}
-		pts := []float64{first.X + firstDx, first.Y + first.H/2}
 		d0 := firstDummy[ei]
+		// Room for every point the cases below can add.
+		most := 4
+		if pieces != nil && pieceStart[ei+1] > pieceStart[ei] {
+			most += 8 * (pieceStart[ei+1] - pieceStart[ei])
+		} else if d0 >= 0 {
+			most += 4 * span[ei]
+		}
+		pts := make([]float64, 2, most)
+		pts[0], pts[1] = first.X+firstDx, first.Y+first.H/2
 		if pieces != nil && pieceStart[ei+1] > pieceStart[ei] {
 			for k := pieceStart[ei]; k < pieceStart[ei+1]; k++ {
 				if pieces.track[k] >= 0 && (opt.Tracks || pieces.wide[k] == 1) {
@@ -1731,6 +1744,8 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	total := len(from)
 	var byRankKeys []int
 	byRank := map[int][]int{}
+	pieces.track = slices.Grow(pieces.track, total)
+	pieces.levels = slices.Grow(pieces.levels, total)
 	for k := 0; k < total; k++ {
 		pieces.track = append(pieces.track, -1)
 		pieces.levels = append(pieces.levels, 0)

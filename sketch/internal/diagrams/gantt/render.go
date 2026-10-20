@@ -556,25 +556,26 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	if topAxis {
 		axisLine += "M" + num(left) + "," + num(plotTop-gridLead) + "H" + num(right)
 	}
-	var content strings.Builder
-	content.WriteString(svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil))
+	content := make([]string, 0, 32)
+	content = append(content, svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil))
 	if bands.Len() > 0 {
-		content.WriteString(`<g class="pele-sections">` + bands.String() + `</g>`)
+		content = append(content, `<g class="pele-sections">`, bands.String(), `</g>`)
 	}
 	if excluded.Len() > 0 {
-		content.WriteString(`<g class="pele-excluded" fill="var(--_a)">` + excluded.String() + `</g>`)
+		content = append(content, `<g class="pele-excluded" fill="var(--_a)">`, excluded.String(), `</g>`)
 	}
-	content.WriteString(`<g class="pele-grid" fill="none"><path d="` + grid.String() + `" stroke="var(--_b)" stroke-dasharray="1 3"/><path d="` + axisLine + `" stroke="var(--_b)"/></g>`)
+	// The grid's path data sits inside a tag, so it joins the strings around it.
+	content = append(content, `<g class="pele-grid" fill="none"><path d="`+grid.String()+`" stroke="var(--_b)" stroke-dasharray="1 3"/><path d="`+axisLine+`" stroke="var(--_b)"/></g>`)
 	if vertLines.Len() > 0 {
-		content.WriteString(`<g class="pele-verts" fill="none" stroke="var(--_l)" stroke-width="1.5" stroke-dasharray="4 3">` + vertLines.String() + `</g>`)
+		content = append(content, `<g class="pele-verts" fill="none" stroke="var(--_l)" stroke-width="1.5" stroke-dasharray="4 3">`, vertLines.String(), `</g>`)
 	}
-	content.WriteString(today)
-	content.WriteString(`<g class="pele-tasks" font-size="` + num(labelSize) + `">` + tasksOut.String() + `</g>`)
-	content.WriteString(`<g class="pele-section-labels" font-size="` + num(sectionSize) + `">` + sectionOut.String() + `</g>`)
-	content.WriteString(`<g class="pele-axis" font-size="` + js.Num(tickSize) + `" fill="var(--_m)">` + axisBottom.String() + axisTop.String() + `</g>`)
+	content = append(content, today)
+	content = append(content, `<g class="pele-tasks" font-size="`+num(labelSize)+`">`, tasksOut.String(), `</g>`)
+	content = append(content, `<g class="pele-section-labels" font-size="`+num(sectionSize)+`">`, sectionOut.String(), `</g>`)
+	content = append(content, `<g class="pele-axis" font-size="`+js.Num(tickSize)+`" fill="var(--_m)">`, axisBottom.String(), axisTop.String(), `</g>`)
 	if vertLabels.Len() > 0 {
-		content.WriteString(`<g class="pele-vert-labels" font-size="` + num(labelSize) + `">` + vertLabels.String() + `</g>`)
+		content = append(content, `<g class="pele-vert-labels" font-size="`+num(labelSize)+`">`, vertLabels.String(), `</g>`)
 	}
 
-	return types.Rendered{SVG: svg.SvgDocument("gantt", width, height, size, options, acc, content.String()), Width: width, Height: height, Links: links}
+	return types.Rendered{SVG: svg.SvgDocument("gantt", width, height, size, options, acc, content...), Width: width, Height: height, Links: links}
 }

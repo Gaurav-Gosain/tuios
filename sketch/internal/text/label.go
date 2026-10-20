@@ -285,9 +285,18 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 		text := js.Trim(raw)
 		width := measurer.Width(text, size, base)
 		if width <= maxWidth || !strings.Contains(text, " ") {
+			// One span on one line: its slices share one allocation.
+			one := &struct {
+				lines  [1][]Span
+				spans  [1]Span
+				widths [1]float64
+			}{}
+			one.spans[0] = Span{Text: text, Style: base, Width: width}
+			one.lines[0] = one.spans[:]
+			one.widths[0] = width
 			return Label{
-				Lines:      [][]Span{{{Text: text, Style: base, Width: width}}},
-				Widths:     []float64{width},
+				Lines:      one.lines[:],
+				Widths:     one.widths[:],
 				Width:      width,
 				Height:     lineHeight,
 				Size:       size,

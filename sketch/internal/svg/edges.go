@@ -79,9 +79,8 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 	stepped := curve == "step" || curve == "stepBefore" || curve == "stepAfter"
 	// A stepped route adds up to two turns at a point, and a lead adds a point at each end.
 	room := len(route)/3*3 + 2
-	xs := make([]float64, 0, room)
-	ys := make([]float64, 0, room)
-	axes := make([]float64, 0, room)
+	all := make([]float64, 3*room)
+	xs, ys, axes := all[:0:room], all[room:room:2*room], all[2*room:2*room:3*room]
 	near := func(ax, ay, bx, by float64) bool { return math.Abs(ax-bx) < 0.01 && math.Abs(ay-by) < 0.01 }
 	for i := 0; i < len(route); i += 3 {
 		x := route[i]

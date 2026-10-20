@@ -9,24 +9,24 @@ import (
 )
 
 type Titled struct {
-	Width   float64
-	Height  float64
+	Width  float64
+	Height float64
 	// Content is the drawing in parts, to be joined in order.
 	Content []string
 }
 
 // WithTitle puts a diagram title above content that was laid out without one.
-func WithTitle(title string, measurer text.TextMeasurer, size, pad, width, height float64, content string) Titled {
+func WithTitle(title string, measurer text.TextMeasurer, size, pad, width, height float64, content ...string) Titled {
 	label := text.LayoutLabel(title, false, measurer, size, 4000, text.Bold)
 	if label.Height == 0 {
-		return Titled{width, height, []string{content}}
+		return Titled{width, height, content}
 	}
 	shift := label.Height + 12
 	full := math.Max(width, math.Ceil(label.Width+2*pad))
 	return Titled{
 		Width:  full,
 		Height: math.Ceil(height + shift),
-		Content: []string{LabelSvg(label, full/2, pad+label.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil) +
-			`<g transform="translate(` + Num((full-width)/2) + `,` + Num(shift) + `)">`, content, `</g>`},
+		Content: append(append([]string{LabelSvg(label, full/2, pad+label.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil) +
+			`<g transform="translate(` + Num((full-width)/2) + `,` + Num(shift) + `)">`}, content...), `</g>`),
 	}
 }

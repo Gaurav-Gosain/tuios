@@ -253,9 +253,6 @@ func (db *FlowDb) AddVertex(id string, textObj *FlowText, typ *string, style []s
 	if dir != nil {
 		vertex.Dir = *dir
 	}
-	if props == nil {
-		props = map[string]string{}
-	}
 	if vertex.Props == nil {
 		vertex.Props = props
 	} else {
@@ -373,11 +370,12 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 			edge.Length = &l
 		}
 	}
+	pair := start + "\x00" + end
 	if _, taken := db.edgeById[id]; id != "" && !taken {
 		edge.ID = id
 		edge.IsUserDefinedId = true
 	} else {
-		existing := db.pairCount[start+"\x00"+end]
+		existing := db.pairCount[pair]
 		n := 0
 		if existing != 0 {
 			n = existing + 1
@@ -389,7 +387,6 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 		throwFlow("Edge limit exceeded. "+strconv.Itoa(len(db.Edges))+" edges found, but the limit is "+strconv.Itoa(max)+".", types.CodeLimit)
 	}
 	db.Edges = append(db.Edges, edge)
-	pair := start + "\x00" + end
 	db.pairCount[pair]++
 	if _, ok := db.edgeById[edge.ID]; !ok {
 		db.edgeById[edge.ID] = edge
