@@ -70,6 +70,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"wardley":                "wardley-beta\ntitle t#27;]0x#7;\ncomponent \"#27;[2J\" [0.5, 0.5]\ncomponent B [0.2, 0.2]\n\"#27;[2J\" -> B; #155;31m\nnote \"#144;x\" [0.3, 0.3]",
 		"railroad":               "railroad-beta\ntitle t#27;]0x#7;\nr = sequence(terminal(\"#27;[2J\"), nonterminal(\"#155;31m\"), special(\"#144;x\")) ;",
 		"railroad text":          "railroad-ebnf-beta\nr = \"a very long terminal #27;[2J that cannot fit in any narrow column at all, not even close\" ;",
+		"swimlane":               "swimlane-beta LR\n  subgraph L[\"t#27;]0x#7;\"]\n    a[\"#27;[2J#155;31m\"] -- \"#27;[31m\" --> b\n  end\n  subgraph M[\"#144;x\"]\n    c\n  end\n  b --> c",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

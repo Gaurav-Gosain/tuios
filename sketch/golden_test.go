@@ -39,6 +39,7 @@ var done = map[string]bool{
 	"sankey":        true,
 	"sequence":      true,
 	"state":         true,
+	"swimlane":      true,
 	"timeline":      true,
 	"treemap":       true,
 	"treeview":      true,

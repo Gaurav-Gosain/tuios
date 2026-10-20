@@ -67,7 +67,8 @@ func deref(s *string) string {
 	return *s
 }
 
-func renderFlowchart(db *FlowDb, config types.Config, options types.RenderOptions, variant FlowVariant) types.Rendered {
+// RenderFlowchart draws a flowchart, or with a variant a type built on one, such as swimlane.
+func RenderFlowchart(db *FlowDb, config types.Config, options types.RenderOptions, variant FlowVariant) types.Rendered {
 	fitted := func(down bool) types.Rendered {
 		return common.Tighten(options, func(tight bool) types.Rendered { return draw(db, config, options, variant, down, tight) })
 	}

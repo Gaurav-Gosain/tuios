@@ -1295,3 +1295,24 @@ var railroadTemplates = []func(p string) string{
 		return "%%{init: {\"railroad\": {\"arcRadius\": \"" + railroadQuoted(p) + "\", \"strokeWidth\": \"" + railroadQuoted(p) + "\"}, \"themeVariables\": {\"fontFamily\": \"" + railroadQuoted(p) + "\"}}}%%\nrailroad-ebnf-beta\nr = a+ ;"
 	},
 }
+
+var swimlaneTemplates = []func(p string) string{
+	func(p string) string { return "swimlane-beta TD\n  subgraph L[\"" + p + "\"]\n    a\n  end" },
+	func(p string) string {
+		return "swimlane-beta LR\n  subgraph L[\"" + p + "\"]\n    a[\"" + p + "\"] -- \"" + p + "\" --> b\n  end"
+	},
+	func(p string) string { return "swimlane-beta TD\n  subgraph " + p + "\n    a\n  end" },
+	func(p string) string { return "swimlane-beta " + p + "\n  a --> b" },
+	func(p string) string {
+		return "swimlane-beta TD\n  subgraph L\n    a\n  end\n  style L " + p + "\n  class L " + p
+	},
+	func(p string) string {
+		return "swimlane-beta LR\n  subgraph L\n    a\n  end\n  click a \"" + p + "\" \"" + p + "\"\n  L:::" + p
+	},
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  swimlane: \"" + p + "\"\n---\nswimlane-beta TD\n  a"
+	},
+	func(p string) string {
+		return "swimlane-beta RL\n  subgraph L[\"`**" + p + "**`\"]\n    a\n  end\n  accTitle: " + p + "\n  accDescr: " + p
+	},
+}

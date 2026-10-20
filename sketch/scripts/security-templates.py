@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # security-templates.py PELE_DIR > security_templates_test.go: print Go template lists translated from pele's
-# tests/render/{type}-security.test.ts TEMPLATES arrays.
+# tests/render/{type}-security.test.ts TEMPLATES arrays (swimlane's are in swimlane.test.ts).
 import re, sys
 pele = sys.argv[1]
 names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'classTemplates',
@@ -13,10 +13,13 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates',
          'cynefin': 'cynefinTemplates', 'eventmodeling': 'eventmodelingTemplates',
          'venn': 'vennTemplates', 'wardley': 'wardleyTemplates',
-         'railroad': 'railroadTemplates'}
+         'railroad': 'railroadTemplates', 'swimlane': 'swimlaneTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead', 'V': 'vennHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
          "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)'}
+
+# Types whose templates are in their render test, which has no security file.
+files = {'swimlane': 'swimlane.test.ts'}
 
 # Names that mean something else in one type's test.
 type_exprs = {'requirement': {'BODY': 'requirementBody'},
@@ -48,7 +51,7 @@ def go(body, typ):
 
 print('// Code generated from pele tests/render/*-security.test.ts at 8603bf33. DO NOT EDIT.\n\npackage sketch\n')
 for typ, var in names.items():
-    src = open(f'{pele}/tests/render/{typ}-security.test.ts').read()
+    src = open(f'{pele}/tests/render/' + files.get(typ, f'{typ}-security.test.ts')).read()
     block = src[src.index('const TEMPLATES'):]
     block = block[:block.index('\n];')]
     # git's templates take the payload quoted (q) and as written (p).

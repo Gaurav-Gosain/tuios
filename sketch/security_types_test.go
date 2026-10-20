@@ -1,7 +1,7 @@
 package sketch
 
 // Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad}-security.test.ts,
-// the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
+// the inert parts of tests/render/pie.test.ts and tests/render/swimlane.test.ts, and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
 
@@ -1254,4 +1254,26 @@ func TestRailroadOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpus, []string{"\n", " ", "(", ")", "\"", "'", ";", "|", "/", "[", "]", "{", "}", "?", "*", "+", "-", "=", "::=", "<-", "!", "&", ".",
 		"terminal(\"a\")", "sequence(", "choice(", "optional(", "zeroOrMore(", "2*3", "%x41", "(* c *)", "/* c */", "# c\n", "title ", "accDescr {"}, 3, 2400, RenderOptions{}, false)
+}
+
+var reLane = regexp.MustCompile(`<g class="pele-cluster pele-lane[^"]*" data-id="([^"]*)"><rect`)
+
+func TestSwimlaneOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "swimlane")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, swimlaneTemplates, 40, RenderOptions{}, true)
+	hostileOptions(t, "swimlane-beta LR\n  accTitle: t\n  subgraph L[\"Lane\"]\n    a --> b\n  end\n  subgraph M\n    c\n  end\n  b -- x --> c")
+	mutate(t, corpus, []string{"\"", "[", "]", "\n", "subgraph L\n", "end\n", " --> ", " -- x --> ", "direction LR\n", ":::", "style a fill:", "click a \"", "swimlane-beta LR\n"},
+		3, 4000, RenderOptions{}, true)
+	// Lane names that are object keys in JavaScript are plain names.
+	for _, name := range []string{"__proto__", "constructor", "toString", "hasOwnProperty"} {
+		out, err := Render("swimlane-beta TD\n  subgraph "+name+"\n    a --> b\n  end\n  subgraph other\n    c\n  end\n  b --> c", RenderOptions{})
+		if err != nil || len(reLane.FindAllString(out.Data, -1)) != 2 {
+			t.Fatalf("lane %s: %v\n%s", name, err, out.Data)
+		}
+	}
 }

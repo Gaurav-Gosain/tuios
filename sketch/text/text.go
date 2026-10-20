@@ -8,7 +8,7 @@
 // user journeys, kanban boards, git graphs, sankey diagrams, block diagrams,
 // architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams,
 // radar charts, treemaps, info, treeView, ishikawa, cynefin, eventmodeling,
-// venn, wardley and railroad have a text drawing. Other types give
+// venn, wardley, railroad and swimlane have a text drawing. Other types give
 // ErrUnsupported.
 package text
 
@@ -46,7 +46,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley", "railroad":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley", "railroad", "swimlane":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -85,6 +85,8 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawMindmap(layout, opt)
 	case "gantt":
 		c, err = drawGantt(layout, opt)
+	case "swimlane":
+		c, err = drawSwimlane(layout, opt, squeeze)
 	case "c4":
 		c, err = drawC4(d, layout, opt, ro, squeeze)
 	case "packet":

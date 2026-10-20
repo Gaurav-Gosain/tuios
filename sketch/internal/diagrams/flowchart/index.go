@@ -17,6 +17,6 @@ var Flowchart = &types.Diagram{
 		return db
 	},
 	Render: func(model any, config types.Config, options types.RenderOptions) types.Rendered {
-		return renderFlowchart(model.(*FlowDb), config, options, nil)
+		return RenderFlowchart(model.(*FlowDb), config, options, nil)
 	},
 }

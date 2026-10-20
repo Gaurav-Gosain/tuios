@@ -29,6 +29,7 @@ import (
 	"tuios.dev/sketch/internal/diagrams/sankey"
 	"tuios.dev/sketch/internal/diagrams/sequence"
 	"tuios.dev/sketch/internal/diagrams/state"
+	"tuios.dev/sketch/internal/diagrams/swimlane"
 	"tuios.dev/sketch/internal/diagrams/timeline"
 	"tuios.dev/sketch/internal/diagrams/treemap"
 	"tuios.dev/sketch/internal/diagrams/treeview"
@@ -43,5 +44,5 @@ func init() {
 		architecture.Architecture, requirement.RequirementDiagram, c4.C4, packet.Packet, radar.Radar, treemap.Treemap,
 		info.Info, treeview.TreeView, ishikawa.Ishikawa, cynefin.Cynefin,
 		eventmodeling.EventModeling, venn.Venn, wardley.Wardley,
-		railroad.Railroad)
+		railroad.Railroad, swimlane.Swimlane)
 }
