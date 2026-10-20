@@ -8,13 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/winacl"
 )
 
 // TestPasswordFileDACL: on Windows the owner and the DACL decide who can read
 // the password. A file only its owner can read is accepted. The same file is
 // refused once Everyone may read it.
 func TestPasswordFileDACL(t *testing.T) {
-	me, _, err := currentUserSIDs()
+	me, _, err := winacl.CurrentUser()
 	if err != nil {
 		t.Fatal(err)
 	}

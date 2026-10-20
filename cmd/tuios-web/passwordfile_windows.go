@@ -3,12 +3,12 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/Gaurav-Gosain/tuios/internal/winacl"
 )
 
 // passwordFileAccess is the access to a password file that only its owner may
@@ -17,28 +17,17 @@ const passwordFileAccess = windows.FILE_READ_DATA | windows.FILE_WRITE_DATA | wi
 	windows.GENERIC_READ | windows.GENERIC_WRITE | windows.GENERIC_ALL |
 	windows.WRITE_DAC | windows.WRITE_OWNER
 
-// ACE types beyond the two x/sys names. Only ACCESS_ALLOWED_ACE and its
-// callback form have the layout ACCESS_ALLOWED_ACE describes: a mask, then a
-// SID. The deny types only take access away.
-const (
-	accessAllowedCallbackACEType = 0x9
-	accessDeniedObjectACEType    = 0x6
-	accessDeniedCallbackACEType  = 0xA
-	accessDeniedCallbackObjType  = 0xC
-)
-
 // checkPasswordFileMode refuses a password file that another user owns, or
 // whose DACL lets anyone other than its owner, SYSTEM and Administrators read
 // or change it. Windows keeps no Unix mode, so the owner and the DACL in the
 // file's security descriptor are what is checked. They are read from the open
 // handle, so the file cannot be swapped between the check and the read.
 func checkPasswordFileMode(f *os.File, path string, _ os.FileInfo, _ int) error {
-	sd, err := windows.GetSecurityInfo(windows.Handle(f.Fd()), windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	sd, err := winacl.FileSecurity(windows.Handle(f.Fd()))
 	if err != nil {
 		return fmt.Errorf("cannot read the permissions of the password file %s: %w", path, err)
 	}
-	me, mine, err := currentUserSIDs()
+	me, mine, err := winacl.CurrentUser()
 	if err != nil {
 		return fmt.Errorf("cannot find the current user: %w", err)
 	}
@@ -49,111 +38,17 @@ func checkPasswordFileMode(f *os.File, path string, _ os.FileInfo, _ int) error 
 	if !owner.Equals(me) && !owner.Equals(mine) {
 		return fmt.Errorf("the password file %s belongs to another user. Use a file that you own", path)
 	}
-
-	trusted := []*windows.SID{me, mine, owner}
-	for _, known := range []windows.WELL_KNOWN_SID_TYPE{windows.WinLocalSystemSid, windows.WinBuiltinAdministratorsSid} {
-		sid, err := windows.CreateWellKnownSid(known)
-		if err != nil {
-			return fmt.Errorf("cannot check the password file %s: %w", path, err)
-		}
-		trusted = append(trusted, sid)
+	trusted, err := winacl.Trusted(me, mine, owner)
+	if err != nil {
+		return fmt.Errorf("cannot check the password file %s: %w", path, err)
 	}
-
-	other, err := daclGrantsOther(sd, trusted)
+	other, err := winacl.GrantsOther(sd, passwordFileAccess, trusted)
 	if err != nil {
 		return fmt.Errorf("cannot read the permissions of the password file %s: %w", path, err)
 	}
 	if other != "" {
 		return fmt.Errorf("%s can read or change the password file %s. Run 'icacls \"%s\" /inheritance:r /grant:r \"%s:F\"', then start tuios-web again",
-			other, path, path, accountName(me))
+			other, path, path, winacl.AccountName(me))
 	}
 	return nil
-}
-
-// daclGrantsOther returns the name of the first account the DACL lets read or
-// change the file that is not in trusted, or "" when there is none. A missing
-// or NULL DACL lets everyone in. A deny entry is not weighed against an allow
-// entry: ignoring it only makes the check refuse more. An entry of a type the
-// check does not know is refused.
-func daclGrantsOther(sd *windows.SECURITY_DESCRIPTOR, trusted []*windows.SID) (string, error) {
-	dacl, _, err := sd.DACL()
-	if errors.Is(err, windows.ERROR_OBJECT_NOT_FOUND) || (err == nil && dacl == nil) {
-		return "Everyone", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	for i := range uint32(dacl.AceCount) {
-		var ace *windows.ACCESS_ALLOWED_ACE
-		if err := windows.GetAce(dacl, i, &ace); err != nil {
-			return "", err
-		}
-		if ace.Header.AceFlags&windows.INHERIT_ONLY_ACE != 0 {
-			continue
-		}
-		switch ace.Header.AceType {
-		case windows.ACCESS_ALLOWED_ACE_TYPE, accessAllowedCallbackACEType:
-		case windows.ACCESS_DENIED_ACE_TYPE, accessDeniedObjectACEType,
-			accessDeniedCallbackACEType, accessDeniedCallbackObjType:
-			continue
-		default:
-			// An allow entry of another layout (object, compound) or a type
-			// this check does not know. A file does not normally carry one.
-			// Refuse rather than guess what it grants.
-			return fmt.Sprintf("An access entry of type %#x", ace.Header.AceType), nil
-		}
-		if uint32(ace.Mask)&passwordFileAccess == 0 {
-			continue
-		}
-		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		if !containsSID(trusted, sid) {
-			return accountName(sid), nil
-		}
-	}
-	return "", nil
-}
-
-func containsSID(list []*windows.SID, sid *windows.SID) bool {
-	for _, s := range list {
-		if s != nil && s.Equals(sid) {
-			return true
-		}
-	}
-	return false
-}
-
-// accountName names a SID as DOMAIN\name, or as *S-1-... when it has no name.
-// icacls accepts both forms.
-func accountName(sid *windows.SID) string {
-	account, domain, _, err := sid.LookupAccount("")
-	if err != nil || account == "" {
-		return "*" + sid.String()
-	}
-	if domain == "" {
-		return account
-	}
-	return domain + `\` + account
-}
-
-// currentUserSIDs gives the SID of this user and the SID that owns the files
-// this process makes: the same SID, or the Administrators group for an
-// elevated process.
-func currentUserSIDs() (user, fileOwner *windows.SID, err error) {
-	tok := windows.GetCurrentProcessToken()
-	tu, err := tok.GetTokenUser()
-	if err != nil {
-		return nil, nil, err
-	}
-	n := uint32(64)
-	for range 3 {
-		b := make([]byte, n)
-		err = windows.GetTokenInformation(tok, windows.TokenOwner, &b[0], n, &n)
-		if err == nil {
-			return tu.User.Sid, (*struct{ Owner *windows.SID })(unsafe.Pointer(&b[0])).Owner, nil
-		}
-		if err != windows.ERROR_INSUFFICIENT_BUFFER {
-			return nil, nil, err
-		}
-	}
-	return nil, nil, err
 }
