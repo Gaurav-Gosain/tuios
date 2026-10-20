@@ -2489,8 +2489,11 @@ than the agent's pane. The first `send-text` into a pane, and each
 until they press `y`. A send-text yes covers one pane, which the client
 resolves to its id in the surface's session before it asks; a number or a
 pane of another session is refused. A new-window yes covers one exact
-command, folder and session, and the question shows the whole command and
-the folder; a command too long to show in the window is not run. A `new-window` from a surface takes only `session`, `name`, `workspace`,
+command, folder, window name and session, and the question shows each of
+them, quoted with any control or invisible character escaped; a command too
+long to show in the window is not run. The question is drawn whole or not at
+all: when the window is too small for it, it asks for room, and y and n do
+nothing until it fits. The client sends the session by name. A `new-window` from a surface takes only `session`, `name`, `workspace`,
 `cwd`, `focus` and `command`. A refusal shows as a message. A surface opened
 over a link, or by a pane this daemon cannot place, runs no pane action.
 `open` and links do nothing yet.

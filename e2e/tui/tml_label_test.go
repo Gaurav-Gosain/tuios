@@ -342,12 +342,14 @@ func TestTMLNewWindowYesCoversOneCommand(t *testing.T) {
 	doc := writeTMLDoc(t, base, "nw.tml", fmt.Sprintf(`<tml version="1" title="Build report">
   <state>{"a": {"command": ["sh", "-c", "echo opening the build report viewer now; echo A > %s"]},
           "b": {"command": ["sh", "-c", "echo opening the build report viewer now; echo B > %s"]},
-          "c": {"command": ["sh", "-c", "echo opening the build report viewer now; echo A > %s"], "cwd": "%s"}}</state>
+          "c": {"command": ["sh", "-c", "echo opening the build report viewer now; echo A > %s"], "cwd": "%s"},
+          "d": {"command": ["sh", "-c", "echo opening the build report viewer now; echo A > %s"], "name": "prod"}}</state>
   <col pad="1"><text>NW-SURFACE</text>
     <button key="a" on-press="pane('new-window', state.a)">Open report</button>
     <button key="b" on-press="pane('new-window', state.b)">Open again</button>
     <button key="c" on-press="pane('new-window', state.c)">Open elsewhere</button>
-  </col></tml>`, ma, mb, mc, cwd))
+    <button key="d" on-press="pane('new-window', state.d)">Open as prod</button>
+  </col></tml>`, ma, mb, mc, cwd, ma))
 	if out, err := tuiosCLI(t, base, "tml", "show", doc, "-s", sess, "--width", "120", "--height", "20"); err != nil {
 		t.Fatalf("tml show: %v %s", err, out)
 	}
@@ -406,6 +408,110 @@ func TestTMLNewWindowYesCoversOneCommand(t *testing.T) {
 	saveTMLFrame(t, term, "2-question-c")
 	if _, err := os.Stat(mc); err == nil {
 		t.Fatal("the yes for one folder ran the command in another")
+	}
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	// The same command with a window name the document picked asks again,
+	// and shows the name.
+	before := len(tmlWindowNames(t, base, sess))
+	ask("d", "with the window name prod")
+	time.Sleep(500 * time.Millisecond)
+	if n := len(tmlWindowNames(t, base, sess)); n != before {
+		t.Fatal("the yes for a command ran it again under a window name the person did not see")
+	}
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestTMLQuestionWaitsForRoom asks about a command whose question fits the
+// surface, then makes the surface smaller with more tiled windows. The
+// question is not drawn in part: a line asks for room, and y does nothing
+// until the whole question shows again.
+//
+// Negative control, in NEGATIVE_CONTROLS.md: the fit checked only at the
+// press (the shrunk question hid the tail, and y ran it).
+func TestTMLQuestionWaitsForRoom(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-tmlroom"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("new: %v %s", err, out)
+	}
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", sess}})
+	waitWindowCount(t, term, 1, "first")
+	mark := filepath.Join(base, "SHRUNK")
+	mid := "echo START; " + strings.Repeat("echo harmless-step; ", 18) + "echo TAIL-DANGER > " + mark + "; sleep 30"
+	doc := writeTMLDoc(t, base, "l.tml", fmt.Sprintf(`<tml version="1" title="Long">
+  <state>{"mid": {"command": ["sh", "-c", %q]}}</state>
+  <col pad="1"><text>LONG-SURFACE</text>
+  <button key="m" on-press="pane('new-window', state.mid)">M</button>
+  </col></tml>`, mid))
+	if out, err := tuiosCLI(t, base, "tml", "show", doc, "-s", sess, "--pane", "--name", "Long"); err != nil {
+		t.Fatalf("tml show: %v %s", err, out)
+	}
+	if err := term.WaitForText("LONG-SURFACE", uiTimeout); err != nil {
+		t.Fatalf("no surface: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := term.SendKeys("m"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "TAIL-DANGER", "y yes  n no") }, uiTimeout); err != nil {
+		t.Fatalf("the whole question was not shown: %v\n%s", err, term.Snapshot())
+	}
+	var extra []string
+	for range 3 {
+		out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--no-focus", "--json")
+		if err != nil {
+			t.Fatalf("new-window: %v %s", err, out)
+		}
+		var w struct {
+			WindowID string `json:"window_id"`
+		}
+		_ = json.Unmarshal([]byte(out), &w)
+		extra = append(extra, w.WindowID)
+	}
+	if err := term.WaitForText("Make this pane bigger", uiTimeout); err != nil {
+		t.Fatalf("a smaller surface did not hide the cut question: %v\n%s", err, term.Snapshot())
+	}
+	saveTMLFrame(t, term, "1-too-small")
+	for _, n := range tmlWindowNames(t, base, sess) {
+		if strings.Contains(n, "Long") {
+			_, _ = tuiosCLI(t, base, "focus-window", "-s", sess, n)
+		}
+	}
+	listed, _ := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+	var all struct {
+		Windows []struct {
+			WindowID   string `json:"window_id"`
+			CustomName string `json:"custom_name"`
+		} `json:"windows"`
+	}
+	_ = json.Unmarshal([]byte(listed), &all)
+	for _, w := range all.Windows {
+		if strings.Contains(w.CustomName, "Long") {
+			_, _ = tuiosCLI(t, base, "focus-window", "-s", sess, w.WindowID)
+		}
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := term.SendKeys("y"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if _, err := os.Stat(mark); err == nil {
+		t.Fatal("y ran a command whose question the person could not see whole")
+	}
+	for _, id := range extra {
+		if out, err := tuiosCLI(t, base, "close-window", "-s", sess, id); err != nil {
+			t.Fatalf("close-window: %v %s", err, out)
+		}
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "TAIL-DANGER", "y yes  n no") }, uiTimeout); err != nil {
+		t.Fatalf("the question did not come back with the room: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("n"); err != nil {
 		t.Fatal(err)

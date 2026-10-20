@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"image/color"
 	"strconv"
 	"strings"
@@ -128,18 +129,26 @@ func (m *OS) tmlActionSession(a tmlPaneAction) string {
 // window of another session are refused. It returns the action to run, or
 // why it cannot.
 func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
+	params := map[string]any{}
+	for k, v := range a.Params {
+		params[k] = v
+	}
+	// The session is sent by name, never empty, so the daemon does not
+	// pick one: the yes is for the session the question named.
+	params["session"] = m.tmlActionSession(a)
+	a = tmlPaneAction{Verb: a.Verb, Params: params}
 	if a.Verb != "send-text" {
 		return a, ""
 	}
 	if m.tmlActionSession(a) != m.SessionName {
-		return a, "a surface types only into panes of its own session"
+		return a, "pane in another session"
 	}
 	win := tmlParam(a, "window")
 	if win == "" {
-		return a, "send-text from a surface names its pane with window"
+		return a, "no pane named"
 	}
 	if _, err := strconv.Atoi(win); err == nil {
-		return a, "a surface names a pane by its name or id, not by its place in the list"
+		return a, "name the pane, not a number"
 	}
 	var found *terminal.Window
 	for _, w := range m.Windows {
@@ -148,20 +157,16 @@ func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
 		}
 		if w.ID == win || w.CustomName == win || (len(win) >= 8 && strings.HasPrefix(w.ID, win)) {
 			if found != nil && found != w {
-				return a, "the name " + win + " fits more than one pane"
+				return a, "two panes match " + tmlQuote(win)
 			}
 			found = w
 		}
 	}
 	if found == nil {
-		return a, "no pane " + win + " in this session"
+		return a, "no pane " + tmlQuote(win)
 	}
-	params := map[string]any{}
-	for k, v := range a.Params {
-		params[k] = v
-	}
-	params["window"], params["session"] = found.ID, m.SessionName
-	return tmlPaneAction{Verb: a.Verb, Params: params}, ""
+	params["window"] = found.ID
+	return a, ""
 }
 
 // tmlConfirmKey names what the person said yes to. A send-text yes covers
@@ -169,7 +174,7 @@ func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
 // command in one folder in one session, and nothing else.
 func (m *OS) tmlConfirmKey(a tmlPaneAction) string {
 	if a.Verb == "new-window" {
-		raw, _ := json.Marshal(map[string]any{"command": a.Params["command"], "cwd": a.Params["cwd"], "session": m.tmlActionSession(a)})
+		raw, _ := json.Marshal(map[string]any{"command": a.Params["command"], "cwd": a.Params["cwd"], "name": a.Params["name"], "session": m.tmlActionSession(a)})
 		return a.Verb + "\x00" + string(raw)
 	}
 	return a.Verb + "\x00" + m.tmlActionSession(a) + "\x00" + tmlParam(a, "window")
@@ -190,16 +195,23 @@ func tmlCommandText(a tmlPaneAction) string {
 	case []any:
 		for _, w := range c {
 			s, _ := w.(string)
-			s = tml.Sanitize(s)
-			if s == "" || strings.ContainsAny(s, " \t\n'\"\\$`;&|<>()*?") {
-				s = strconv.Quote(s)
-			}
-			words = append(words, s)
+			words = append(words, tmlQuote(s))
 		}
 	case string:
-		words = []string{strconv.Quote(tml.Sanitize(c))}
+		words = []string{strconv.Quote(c)}
 	}
 	return strings.Join(words, " ")
+}
+
+// tmlQuote shows a word as the question shows it: as is when it is plain,
+// else in double quotes with every control or invisible character escaped
+// (a tab as \t, a soft hyphen as \u00ad), so the person reads each character
+// that will be used.
+func tmlQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " '\"\\$`;&|<>()*?#~=[]{}") && strconv.Quote(s) == "\""+s+"\"" {
+		return s
+	}
+	return strconv.Quote(s)
 }
 
 // tmlWrap cuts text into lines of at most w cells, by cells, so nothing of
@@ -221,7 +233,7 @@ func tmlWrap(text string, w int) []string {
 // tmlQuestion is the question under a surface, as plain lines, the keys
 // last. A new-window question shows the whole command and the folder.
 func (m *OS) tmlQuestion(a tmlPaneAction, w int) []string {
-	sess := m.tmlActionSession(a)
+	sess := tmlQuote(m.tmlActionSession(a))
 	if a.Verb == "new-window" {
 		lines := tmlWrap("Let this surface run this in a new window in "+sess+"?", w)
 		if cmdText := tmlCommandText(a); cmdText != "" {
@@ -229,8 +241,11 @@ func (m *OS) tmlQuestion(a tmlPaneAction, w int) []string {
 		} else {
 			lines = append(lines, "  a shell")
 		}
-		if cwd := tmlParam(a, "cwd"); cwd != "" {
-			lines = append(lines, tmlWrap("  in the folder "+tml.Sanitize(cwd), w)...)
+		if cwd, ok := a.Params["cwd"].(string); ok {
+			lines = append(lines, tmlWrap("  in the folder "+tmlQuote(cwd), w)...)
+		}
+		if name, ok := a.Params["name"].(string); ok {
+			lines = append(lines, tmlWrap("  with the window name "+tmlQuote(name), w)...)
 		}
 		return append(lines, "y yes  n no")
 	}
@@ -241,6 +256,32 @@ func (m *OS) tmlQuestion(a tmlPaneAction, w int) []string {
 	}
 	return append(tmlWrap("Type into "+where+"?", w), "y yes  n no")
 }
+
+// tmlWrapWords wraps plain text at spaces to lines of at most w cells.
+func tmlWrapWords(text string, w int) []string {
+	var lines []string
+	line := ""
+	for _, word := range strings.Fields(text) {
+		if line != "" && ansi.StringWidth(line)+1+ansi.StringWidth(word) > w {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	return append(lines, line)
+}
+
+// tmlQuestionFits reports whether a question of n lines fits a window h
+// rows tall, with a row of the surface left above it.
+func tmlQuestionFits(n, h int) bool {
+	return n <= min(12, h-1)
+}
+
+// tmlTooSmall stands in for a question that does not fit the window now.
+const tmlTooSmall = "Make this pane bigger to see the whole question."
 
 // tmlWindowLabel names a window id for the question: its name and its short
 // id.
@@ -540,17 +581,29 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		v.palKey = key
 	}
 	sh := ch
-	if v.confirm != nil && ch > 1 {
-		sh = ch - strings.Count(m.tmlConfirmLine(v, cw), "\n") - 1
-		sh = max(sh, 1)
+	confirmText := ""
+	if v.confirm != nil {
+		// The question is drawn whole or not at all: a window made smaller
+		// after the press shows a line that asks for room, and y waits.
+		if tmlQuestionFits(len(m.tmlQuestion(*v.confirm, cw)), ch) {
+			confirmText = m.tmlConfirmLine(v, cw)
+		} else {
+			ask := lipgloss.NewStyle().Foreground(theme.UI().Warning).Bold(true)
+			var lines []string
+			for _, l := range tmlWrapWords(tmlTooSmall, cw) {
+				lines = append(lines, ask.Render(l))
+			}
+			confirmText = strings.Join(lines[:min(len(lines), max(ch-1, 1))], "\n")
+		}
+		sh = max(ch-strings.Count(confirmText, "\n")-1, 1)
 	}
 	buf := v.surface.Render(cw, sh)
 	if damage := v.surface.Damage(); len(damage) > 0 || v.content == "" || v.w != cw || v.h != sh {
 		v.content, v.w, v.h = buf.Render(), cw, sh
 	}
 	out := v.content
-	if sh < ch {
-		out += "\n" + m.tmlConfirmLine(v, cw)
+	if confirmText != "" && sh < ch {
+		out += "\n" + confirmText
 	}
 	cacheRender(window, out, 0, 0, dim)
 	return out
@@ -669,6 +722,10 @@ func (m *OS) TMLKey(w *terminal.Window, key string) tea.Cmd {
 	}
 	if v.confirm != nil {
 		a := *v.confirm
+		if (key == "y" || key == "n") && !tmlQuestionFits(len(m.tmlQuestion(a, w.ContentWidth())), w.ContentHeight()) {
+			// The person cannot see the whole question, so no answer counts.
+			return nil
+		}
 		switch key {
 		case "y":
 			v.confirm = nil
@@ -755,10 +812,10 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 			a.Params, _ = e.Value.(map[string]any)
 			a, why := m.tmlResolve(a)
 			if why != "" {
-				m.ShowNotification("The surface could not run "+a.Verb+": "+why+".", "warning", m.Settings.NotificationDuration)
+				m.ShowNotification("Not run: "+why+".", "warning", m.Settings.NotificationDuration)
 				continue
 			}
-			if tmlAsks(a) && len(m.tmlQuestion(a, w.ContentWidth())) > min(12, w.ContentHeight()-1) {
+			if tmlAsks(a) && !tmlQuestionFits(len(m.tmlQuestion(a, w.ContentWidth())), w.ContentHeight()) {
 				// The whole question must fit, or the person would say
 				// yes to a part of it.
 				m.ShowNotification("The surface's command is too long to show here, so tuios does not run it.", "warning", m.Settings.NotificationDuration)
@@ -787,6 +844,10 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 			// asks the person about. They do nothing yet.
 			clientLog("TML surface %s: %s is not carried out yet", v.id, e.Action)
 		}
+	}
+	if len(actions) > tmlActionsPerPress {
+		m.ShowNotification(fmt.Sprintf("One press can run at most %d pane actions. Nothing ran.", tmlActionsPerPress), "warning", m.Settings.NotificationDuration)
+		actions = nil
 	}
 	if len(ops) > 0 || closing || len(events) > 0 || len(actions) > 0 {
 		cmds = append(cmds, m.tmlInput(v, tmlInputReq{ops: ops, events: events, actions: actions, closing: closing, value: value, hasValue: hasValue}))
@@ -871,6 +932,10 @@ type tmlEmit struct {
 	Name  string `json:"name"`
 	Value any    `json:"value,omitempty"`
 }
+
+// tmlActionsPerPress is the most pane actions one key or click runs, as the
+// daemon holds a tml-input to.
+const tmlActionsPerPress = 4
 
 // tmlInputReq is what one tml-input carries.
 type tmlInputReq struct {

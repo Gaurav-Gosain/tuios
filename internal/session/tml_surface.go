@@ -617,7 +617,7 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 	// The limits are checked before anything applies, so a refused input
 	// changes nothing.
 	if len(p.Actions) > tmlActionsPerInput {
-		return nil, invalidParam("actions", fmt.Sprintf("one tml-input carries at most %d pane actions", tmlActionsPerInput))
+		return nil, invalidParam("actions", fmt.Sprintf("one press can run at most %d pane actions", tmlActionsPerInput))
 	}
 	if len(p.Events) > tmlEventsPerInput {
 		return nil, invalidParam("events", fmt.Sprintf("one tml-input carries at most %d events", tmlEventsPerInput))

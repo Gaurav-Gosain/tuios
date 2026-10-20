@@ -7675,3 +7675,13 @@ The test reads the daemon's peak memory (VmHWM), not its resident set at the end
 | The owner named by the program in the pane (argv[0]) | "the owner is not the opening pane's id" ("from pane eac063df (prod c3c92458) · Approve deploy") | **caught** |
 | The new-window yes keyed on the command cut to 40 cells | "b asked no question" (the second command ran on the first yes) | **caught** |
 | The first click on a pane's popup presses its button | "the first click on a pane's popup pressed its button" | **caught** |
+
+### The question whole or not at all, and the window name in the yes
+
+`TestTMLQuestionWaitsForRoom` and the name step of `TestTMLNewWindowYesCoversOneCommand` in `tml_label_test.go`. Run on 2026-10-20, the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| y and n answer while the question does not fit | "y ran a command whose question the person could not see whole" | **caught** |
+| The fit checked only at the press, drawing a cut question | "a smaller surface did not hide the cut question" | **caught** |
+| The window name left out of the new-window yes | "d asked no question showing \"with the window name prod\"" | **caught** |
