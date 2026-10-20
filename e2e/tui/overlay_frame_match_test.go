@@ -60,6 +60,7 @@ func TestOverlayFramesMatchPaneBorders(t *testing.T) {
 		box := openRenameFrame(t, term)
 		saveArtifact(t, term, art, "frame-match-rename")
 		wantFrameColours(t, term, art, "frame-match-rename", "the rename dialog's frame", box)
+		wantFrameRowsOnPane(t, term, art, "frame-match-rename", box)
 		closeRename(t, term)
 		alive(t, term, "after the rename frame-match check")
 	})
@@ -113,6 +114,39 @@ func wantFrameColours(t *testing.T, term *tuitest.Terminal, art, name, what stri
 	if err != nil {
 		t.Fatalf("%s at %+v does not match the focused pane's border (want fg=%+v bg=%+v, a different bg inside):\n%s\n%s",
 			what, b, matchBorder, matchPaneBg, report, term.Snapshot())
+	}
+}
+
+// wantFrameRowsOnPane fails unless every cell of b's top and bottom rows sits
+// on the pane's ground: the dialog's title and its hints ride in those rows,
+// and a label on the dialog's own surface would be a shaded patch on an
+// unshaded line. The title row must hold a letter, so a frame drawn with no
+// title cannot pass for one whose title was checked.
+func wantFrameRowsOnPane(t *testing.T, term *tuitest.Terminal, art, name string, b overlayBox) {
+	t.Helper()
+	var report string
+	err := term.WaitFor(func(s tuitest.Screen) bool {
+		var r strings.Builder
+		ok, letters := true, 0
+		for _, y := range []int{b.y0, b.y1} {
+			for x := b.x0; x <= b.x1; x++ {
+				c := s.Cell(x, y)
+				if c.Content != "" && !strings.Contains(frameGlyphs+" ", c.Content) {
+					letters++
+				}
+				if c.Bg != matchPaneBg {
+					fmt.Fprintf(&r, "(%d,%d) %q bg=%+v\n", x, y, c.Content, c.Bg)
+					ok = false
+				}
+			}
+		}
+		fmt.Fprintf(&r, "label cells: %d\n", letters)
+		report = r.String()
+		return ok && letters > 0
+	}, uiTimeout)
+	saveOverlayText(t, art, name+"-label-grounds", report)
+	if err != nil {
+		t.Fatalf("the dialog's title or hints at %+v are not on the pane's ground %+v:\n%s\n%s", b, matchPaneBg, report, term.Snapshot())
 	}
 }
 
