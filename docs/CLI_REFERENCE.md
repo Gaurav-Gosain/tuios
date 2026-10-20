@@ -4661,7 +4661,12 @@ matches is refused: read the state with `tml get` and send it again.
 `tml list` names the open surfaces of a session.
 
 `tml close` closes a surface. VALUE is JSON, and a waiting `tml show` prints
-it. `tml validate` prints each problem with its line, the node and the fix,
+it.
+
+From a pane, these commands need the `write` grant, and `tml patch`,
+`tml replace` and `tml close` work only on the surfaces that pane opened. A
+button's `pane('send-text', ...)` runs with the opening pane's grants, and tuios
+asks the person before a surface first types into a pane. `tml validate` prints each problem with its line, the node and the fix,
 and exits with status 1 when the document has errors. It needs no daemon.
 
 **Flags of `tml show`:**

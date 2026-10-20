@@ -1696,6 +1696,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
+	case TMLClockMsg:
+		return m, m.handleTMLClock()
+
+	case TMLActionFailedMsg:
+		m.ShowNotification(msg.Text, "warning", m.Settings.NotificationDuration)
+		return m, nil
+
 	case TMLWakeMsg:
 		// A TML surface was pushed, an answer came back, or a click left a
 		// side effect. See tml.go.

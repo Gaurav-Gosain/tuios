@@ -1157,9 +1157,11 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "close", Type: "bool", Description: "Close the surface.", Default: "false"},
 				{Name: "value", Type: "any", Description: "With close: the value. Omit when the person dismissed the surface."},
 				{Name: "events", Type: "[]object", Description: "The emit actions the person ran, each {name, value}. Each becomes a tml-event for the owner."},
+				{Name: "actions", Type: "[]object", Description: "The pane() actions the person ran, each {verb, params}: focus, new-window or send-text. Each runs with the grants of the pane that opened the surface, never the person's."},
 			},
 			returns: []verbParam{
 				{Name: "version", Type: "int", Description: "The surface's version after the change."},
+				{Name: "actions", Type: "[]object", Description: "Each pane() action's result: verb, ok, and error and code when it was refused."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"tml-input","params":{"surface":"tml-4f1a9c02","human_nonce":"...","ops":[{"op":"replace","path":"/tab","value":"log"}]}}`,

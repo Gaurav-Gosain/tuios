@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/loom"
 	"tuios.dev/tml"
 )
@@ -45,6 +46,40 @@ type tmlClient struct {
 
 	// views is read and written on the UI goroutine only.
 	views map[string]*tmlView
+	// clockArmed says a minute tick is on its way for the views whose
+	// bindings call ago(). UI goroutine only.
+	clockArmed bool
+}
+
+// TMLClockMsg is the minute tick of the surfaces that call ago().
+type TMLClockMsg struct{}
+
+// tmlClockCmd arms the minute tick when a view needs it and none is armed.
+// A surface without ago() never arms one.
+func (m *OS) tmlClockCmd() tea.Cmd {
+	if m.tml.clockArmed {
+		return nil
+	}
+	for _, v := range m.tml.views {
+		if v.surface != nil && v.surface.NeedsClock() {
+			m.tml.clockArmed = true
+			return tea.Tick(time.Minute, func(time.Time) tea.Msg { return TMLClockMsg{} })
+		}
+	}
+	return nil
+}
+
+// handleTMLClock moves the ago() bindings on, and arms the next tick while
+// a surface still needs it.
+func (m *OS) handleTMLClock() tea.Cmd {
+	m.tml.clockArmed = false
+	for id, v := range m.tml.views {
+		if v.surface != nil && v.surface.NeedsClock() {
+			v.surface.Tick()
+			m.markTMLDirty(id)
+		}
+	}
+	return m.tmlClockCmd()
 }
 
 // tmlView is one surface as this client draws it.
@@ -67,6 +102,16 @@ type tmlView struct {
 	w, h    int
 	// refreshing says a tml-get is on its way, after a missed version.
 	refreshing bool
+	// confirm is a send-text the person has not said yes to yet, and
+	// confirmed the targets they said yes to, per surface.
+	confirm   *tmlPaneAction
+	confirmed map[string]bool
+}
+
+// tmlTarget names the pane a pane() action types into.
+func tmlTarget(a tmlPaneAction) string {
+	t, _ := a.Params["window"].(string)
+	return t
 }
 
 // TMLWakeMsg says a push, an answer or a side effect for a surface is waiting.
@@ -145,7 +190,7 @@ func (m *OS) handleTMLWake() tea.Cmd {
 	if !changed {
 		m.renderSkipped = len(cmds) == 0
 	}
-	cmds = append(cmds, m.listenForTML())
+	cmds = append(cmds, m.listenForTML(), m.tmlClockCmd())
 	return tea.Batch(cmds...)
 }
 
@@ -348,12 +393,38 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		v.surface.SetPalette(m.tmlPalette())
 		v.palKey = key
 	}
-	buf := v.surface.Render(cw, ch)
-	if damage := v.surface.Damage(); len(damage) > 0 || v.content == "" || v.w != cw || v.h != ch {
-		v.content, v.w, v.h = buf.Render(), cw, ch
+	sh := ch
+	if v.confirm != nil && ch > 1 {
+		sh = ch - 1
 	}
-	cacheRender(window, v.content, 0, 0, dim)
-	return v.content
+	buf := v.surface.Render(cw, sh)
+	if damage := v.surface.Damage(); len(damage) > 0 || v.content == "" || v.w != cw || v.h != sh {
+		v.content, v.w, v.h = buf.Render(), cw, sh
+	}
+	out := v.content
+	if sh < ch {
+		out += "\n" + m.tmlConfirmLine(v, cw)
+	}
+	cacheRender(window, out, 0, 0, dim)
+	return out
+}
+
+// tmlConfirmLine asks the person whether the surface may type into a pane.
+// tuios draws it under the surface, so a document cannot draw it or hide it.
+func (m *OS) tmlConfirmLine(v *tmlView, w int) string {
+	pal := theme.UI()
+	target := tmlTarget(*v.confirm)
+	text := "Let this surface type into pane " + target + "? "
+	if ansi.StringWidth(text)+12 > w {
+		// A narrow pane gets the short question, so y and n stay on it.
+		text = "Type into " + target + "? "
+	}
+	line := lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render(text) +
+		lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("y") +
+		lipgloss.NewStyle().Foreground(pal.FgDim).Render(" yes  ") +
+		lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("n") +
+		lipgloss.NewStyle().Foreground(pal.FgDim).Render(" no")
+	return ansi.Truncate(line, w, "…")
 }
 
 // tmlWaitingFrame is the content of a TML window with no surface yet.
@@ -440,12 +511,31 @@ func (m *OS) TMLKey(w *terminal.Window, key string) tea.Cmd {
 	if v == nil || v.surface == nil {
 		return nil
 	}
+	if v.confirm != nil {
+		a := *v.confirm
+		switch key {
+		case "y":
+			v.confirm = nil
+			if v.confirmed == nil {
+				v.confirmed = map[string]bool{}
+			}
+			v.confirmed[tmlTarget(a)] = true
+			w.MarkContentDirty()
+			m.cachedViewContent = ""
+			return m.tmlInput(v, tmlInputReq{actions: []tmlPaneAction{a}})
+		case "n", "esc":
+			v.confirm = nil
+			w.MarkContentDirty()
+			m.cachedViewContent = ""
+		}
+		return nil
+	}
 	res, err := v.surface.Key(key)
 	if err != nil {
 		clientLog("TML surface %s: key %s: %v", v.id, key, err)
 	}
 	if key == "esc" && w.IsPopup && len(res.Changed) == 0 && !res.View && len(res.Effects) == 0 {
-		return m.tmlInput(v, nil, nil, true, nil, false)
+		return m.tmlInput(v, tmlInputReq{closing: true})
 	}
 	return m.tmlResult(w, v, res)
 }
@@ -478,6 +568,10 @@ func (m *OS) TMLMouse(w *terminal.Window, ev uv.MouseEvent) {
 	case uv.MouseMotionEvent:
 		lm.Action = loom.Motion
 	}
+	if v.confirm != nil {
+		// The question under the surface waits for y or n.
+		return
+	}
 	res, err := v.surface.Mouse(lm)
 	if err != nil {
 		clientLog("TML surface %s: mouse: %v", v.id, err)
@@ -497,8 +591,21 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 	closing, hasValue := false, false
 	var value any
 	var events []tmlEmit
+	var actions []tmlPaneAction
 	for _, e := range res.Effects {
 		switch e.Action {
+		case "pane":
+			a := tmlPaneAction{Verb: e.Name}
+			a.Params, _ = e.Value.(map[string]any)
+			if a.Verb == "send-text" && !v.confirmed[tmlTarget(a)] {
+				// The first time a surface types into a pane, the person
+				// says yes to it. The action waits for the answer.
+				v.confirm = &a
+				w.MarkContentDirty()
+				m.cachedViewContent = ""
+				continue
+			}
+			actions = append(actions, a)
 		case "emit":
 			events = append(events, tmlEmit{Name: e.Name, Value: e.Value})
 		case "close":
@@ -508,13 +615,13 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 		case "copy":
 			cmds = append(cmds, m.CopyToClipboard(tml.Stringify(e.Value)))
 		default:
-			// open, pane and link go through the grants, in a later
-			// version. They do nothing here yet.
+			// open and link reach files and pages, which a later version
+			// asks the person about. They do nothing yet.
 			clientLog("TML surface %s: %s is not carried out yet", v.id, e.Action)
 		}
 	}
-	if len(ops) > 0 || closing || len(events) > 0 {
-		cmds = append(cmds, m.tmlInput(v, ops, events, closing, value, hasValue))
+	if len(ops) > 0 || closing || len(events) > 0 || len(actions) > 0 {
+		cmds = append(cmds, m.tmlInput(v, tmlInputReq{ops: ops, events: events, actions: actions, closing: closing, value: value, hasValue: hasValue}))
 	}
 	return tea.Batch(cmds...)
 }
@@ -597,21 +704,44 @@ type tmlEmit struct {
 	Value any    `json:"value,omitempty"`
 }
 
+// tmlInputReq is what one tml-input carries.
+type tmlInputReq struct {
+	ops      []tml.Op
+	events   []tmlEmit
+	actions  []tmlPaneAction
+	closing  bool
+	value    any
+	hasValue bool
+}
+
+// tmlPaneAction is one pane() action, run by the daemon with the grants of
+// the surface's owner.
+type tmlPaneAction struct {
+	Verb   string         `json:"verb"`
+	Params map[string]any `json:"params"`
+}
+
+// TMLActionFailedMsg says the daemon refused a pane() action of a surface.
+type TMLActionFailedMsg struct{ Text string }
+
 // tmlInput sends what the person did to the daemon, off the UI goroutine:
-// the state, the emits for the owner, and a close.
-func (m *OS) tmlInput(v *tmlView, ops []tml.Op, events []tmlEmit, closing bool, value any, hasValue bool) tea.Cmd {
+// the state, the emits for the owner, the pane() actions, and a close.
+func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 	call, nonce := m.inboxCaller(), m.inboxNonce()
 	params := map[string]any{"surface": v.id, "human_nonce": nonce}
-	if len(ops) > 0 {
-		params["ops"] = ops
+	if len(r.ops) > 0 {
+		params["ops"] = r.ops
 	}
-	if len(events) > 0 {
-		params["events"] = events
+	if len(r.events) > 0 {
+		params["events"] = r.events
 	}
-	if closing {
+	if len(r.actions) > 0 {
+		params["actions"] = r.actions
+	}
+	if r.closing {
 		params["close"] = true
-		if hasValue {
-			raw, err := json.Marshal(value)
+		if r.hasValue {
+			raw, err := json.Marshal(r.value)
 			if err != nil {
 				raw = []byte("null")
 			}
@@ -622,7 +752,7 @@ func (m *OS) tmlInput(v *tmlView, ops []tml.Op, events []tmlEmit, closing bool, 
 	v.inflight++
 	m.tml.mu.Unlock()
 	return func() tea.Msg {
-		_, err := call("tml-input", params, tmlInputTimeout)
+		raw, err := call("tml-input", params, tmlInputTimeout)
 		m.tml.mu.Lock()
 		v.inflight--
 		m.tml.mu.Unlock()
@@ -632,6 +762,20 @@ func (m *OS) tmlInput(v *tmlView, ops []tml.Op, events []tmlEmit, closing bool, 
 			// The person sees what did not go through, such as an emit
 			// value over the limit.
 			return TMLInputFailedMsg{Text: "The surface could not send what you did: " + err.Error()}
+		}
+		var res struct {
+			Actions []struct {
+				Verb  string `json:"verb"`
+				OK    bool   `json:"ok"`
+				Error string `json:"error"`
+			} `json:"actions"`
+		}
+		if err == nil && json.Unmarshal(raw, &res) == nil {
+			for _, a := range res.Actions {
+				if !a.OK {
+					return TMLActionFailedMsg{Text: "The surface could not run " + a.Verb + ": " + a.Error}
+				}
+			}
 		}
 		return nil
 	}

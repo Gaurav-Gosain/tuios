@@ -229,15 +229,14 @@ var verbScopes = map[string]scopeKind{
 	"drop-files":       scopeDeny,
 	"new-window":       scopeDeny,
 	"popup":            scopeDeny,
-	// A TML surface is a window on the screen, and the input verb acts as
-	// the person.
-	"tml-open":  scopeDeny,
-	"tml-close": scopeDeny,
-	"tml-input": scopeDeny,
-	// The owner verbs change one surface. A restricted caller gets them
-	// with the owner rules.
-	"tml-patch":   scopeDeny,
-	"tml-replace": scopeDeny,
+	// A pane opens, changes and closes a TML surface with the write grant,
+	// in its own session, and only its own surfaces (tmlOwnerCheck). The
+	// input verb acts as the person.
+	"tml-open":    scopeWrite,
+	"tml-close":   scopeWrite,
+	"tml-input":   scopeDeny,
+	"tml-patch":   scopeWrite,
+	"tml-replace": scopeWrite,
 	"tml-get":     scopeRead,
 	"tml-list":    scopeRead,
 	// tml-validate reads only the document it is given.

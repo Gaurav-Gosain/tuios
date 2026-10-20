@@ -314,6 +314,7 @@ Print one with `tuios --skill <topic>`:
 | `tmux` | The tmux shim for tools that only drive tmux |
 | `herdr` | herdr's command line and socket, for tools built for herdr |
 | `notify` | Push notifications from the Inbox to the person's phone, and `notify test` |
+| `tml` | TML surfaces: show the person a result, a dashboard or a question, get the answer, own a live surface |
 | `pair` | `tuios pair`: what it changes, what the person must check, and why an agent does not run it |
 | `agents-off` | What works and what fails with `agents_disabled` when the person turns agent features off |
 | `grants` | Pane grants: what a pane may do, and giving a helper less |
