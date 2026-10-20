@@ -270,7 +270,7 @@ func (db *FlowDb) AddVertex(id string, textObj *FlowText, typ *string, style []s
 		if shape != strings.ToLower(shape) || strings.Contains(shape, "_") {
 			throwFlow("No such shape: "+shape+". Shape names should be lowercase.", types.CodeSemantic)
 		}
-		if !isValidShape(shape) {
+		if !IsValidShape(shape) {
 			throwFlow("No such shape: "+shape+".", types.CodeSemantic)
 		}
 		vertex.Type = shape

@@ -211,7 +211,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			c.PadBottom = groupPad
 			c.MinW = label.Width + 2*groupPad - 12
 		} else {
-			shape := canonicalShape(node.Shape)
+			shape := CanonicalShape(node.Shape)
 			labelText := ""
 			if node.Img != "" || node.Icon != "" || svg.ShapeHasLabel(shape) {
 				labelText = deref(node.Label)

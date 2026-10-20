@@ -14,7 +14,7 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'cynefin': 'cynefinTemplates', 'eventmodeling': 'eventmodelingTemplates',
          'venn': 'vennTemplates', 'wardley': 'wardleyTemplates',
          'railroad': 'railroadTemplates', 'swimlane': 'swimlaneTemplates',
-         'usecase': 'usecaseTemplates'}
+         'usecase': 'usecaseTemplates', 'agentflow': 'agentflowTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead', 'V': 'vennHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
          "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)',
@@ -30,7 +30,8 @@ type_exprs = {'requirement': {'BODY': 'requirementBody'},
               'wardley': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'},
               'railroad': {'quoted(p)': 'railroadQuoted(p)', 'bare(p)': 'railroadBare(p)', "p.replace(/[?;]/g, '')": 'railroadNoSpecial(p)',
                            "p.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\")": 'railroadSingle(p)'},
-              'usecase': {'U': 'usecaseHead'}}
+              'usecase': {'U': 'usecaseHead'},
+              'agentflow': {'H': 'agentflowHead'}}
 
 def lit(s):
     out, i = [], 0

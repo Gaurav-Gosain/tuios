@@ -1415,3 +1415,120 @@ var usecaseTemplates = []func(p string) string{
 	},
 	func(p string) string { return "usecase-beta " + p + "\nA" },
 }
+
+var agentflowTemplates = []func(p string) string{
+	func(p string) string { return agentflowHead + "  " + p },
+	func(p string) string { return agentflowHead + "  " + p + " --> b" },
+	func(p string) string { return agentflowHead + "  a --> " + p },
+	func(p string) string { return agentflowHead + "  a[" + p + "]" },
+	func(p string) string { return agentflowHead + "  a[\"" + p + "\"]" },
+	func(p string) string { return agentflowHead + "  a[\"`" + p + "`\"]" },
+	func(p string) string { return agentflowHead + "  a(" + p + ")" },
+	func(p string) string { return agentflowHead + "  a{" + p + "}" },
+	func(p string) string { return agentflowHead + "  a{\"" + p + "\"}" },
+	func(p string) string { return agentflowHead + "  a{{" + p + "}}" },
+	func(p string) string { return agentflowHead + "  a[[" + p + "]]" },
+	func(p string) string { return agentflowHead + "  a[/" + p + "/]" },
+	func(p string) string { return agentflowHead + "  a[\\" + p + "\\]" },
+	func(p string) string { return agentflowHead + "  a(-" + p + "-)" },
+	func(p string) string { return agentflowHead + "  a>" + p + "]" },
+	func(p string) string { return agentflowHead + "  a((" + p + "))" },
+	func(p string) string { return agentflowHead + "  a([" + p + "])" },
+	func(p string) string { return agentflowHead + "  a[|" + p + ":" + p + "|x]" },
+	func(p string) string { return agentflowHead + "  a -- " + p + " --> b" },
+	func(p string) string { return agentflowHead + "  a -- \"" + p + "\" --> b" },
+	func(p string) string { return agentflowHead + "  a -->|" + p + "| b" },
+	func(p string) string { return agentflowHead + "  a -->|\"" + p + "\"| b" },
+	func(p string) string { return agentflowHead + "  a --x|\"" + p + "\"| a" },
+	func(p string) string { return agentflowHead + "  a " + p + "@--> b" },
+	func(p string) string {
+		return agentflowHead + "  a e1@--> b\n  e1@{ curve: \"" + p + "\", animate: \"" + p + "\", animation: \"" + p + "\", instruction: \"" + p + "\" }"
+	},
+	func(p string) string { return agentflowHead + "  a@{ label: \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ label: \"" + p + "\", labelType: \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ shape: " + p + " }" },
+	func(p string) string { return agentflowHead + "  a@{ shape: \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ \"" + p + "\": \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ " + p + " }" },
+	func(p string) string { return agentflowHead + "  a@{\n    " + p + "\n  }" },
+	func(p string) string { return agentflowHead + "  a@{\n    label: |\n      " + p + "\n  }" },
+	func(p string) string {
+		return agentflowHead + "  a[\"A\"]@{ shape: tool, icon: \"" + p + "\", img: \"" + p + "\", form: \"" + p + "\", pos: \"" + p + "\", w: \"" + p + "\", h: \"" + p + "\" }"
+	},
+	func(p string) string {
+		return agentflowHead + "  a@{ shape: tool, class: \"" + p + "\", style: \"" + p + "\", view: \"" + p + "\" }"
+	},
+	func(p string) string { return agentflowHead + "  flow " + p + "\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  flow \"" + p + "\"\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  flow f[" + p + "]\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  flow f[\"" + p + "\"]\n  a --> f\n  end\n  f --> b" },
+	func(p string) string {
+		return agentflowHead + "  flow f[\"" + p + "\"]@{ view: collapsed, model: \"" + p + "\" }\n  a\n  end\n  a --> b"
+	},
+	func(p string) string {
+		return agentflowHead + "  flow f\n  a\n  end\n  f@{ view: \"" + p + "\", \"" + p + "\": 1 }"
+	},
+	func(p string) string {
+		return agentflowHead + "  flow f\n  a\n  end\n  style f fill:" + p + "\n  class f " + p
+	},
+	func(p string) string { return agentflowHead + "  flow f\n  direction " + p + "\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  connector " + p },
+	func(p string) string { return agentflowHead + "  connector \"" + p + "\"" },
+	func(p string) string { return agentflowHead + "  connector c[" + p + "]" },
+	func(p string) string {
+		return agentflowHead + "  connector c[\"" + p + "\"]@{ protocol: \"" + p + "\", \"" + p + "\": \"" + p + "\" }\n  c --> a"
+	},
+	func(p string) string {
+		return agentflowHead + "  global\n  " + p + "\n  a[\"" + p + "\"]\n  end\n  flow f\n  a\n  end"
+	},
+	func(p string) string { return agentflowHead + "  a:::" + p },
+	func(p string) string { return agentflowHead + "  a:::" + p + " --> b:::" + p },
+	func(p string) string { return agentflowHead + "  a\n  class a " + p },
+	func(p string) string { return agentflowHead + "  a\n  class " + p + " x" },
+	func(p string) string { return agentflowHead + "  a\n  classDef " + p + " fill:red\n  class a " + p },
+	func(p string) string { return agentflowHead + "  a\n  classDef c fill:" + p + "\n  class a c" },
+	func(p string) string { return agentflowHead + "  a\n  classDef c " + p + ":red\n  class a c" },
+	func(p string) string {
+		return agentflowHead + "  a\n  classDef default fill:" + p + ",color:" + p + ",stroke:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  style a fill:" + p + "\n" },
+	func(p string) string { return agentflowHead + "  a\n  style a " + p + ":red\n" },
+	func(p string) string {
+		return agentflowHead + "  a\n  style a color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  style " + p + " fill:red\n" },
+	func(p string) string {
+		return agentflowHead + "  a --> b\n  linkStyle 0 stroke:" + p + ",fill:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a --> b\n  linkStyle default " + p + ":" + p + "\n" },
+	func(p string) string { return agentflowHead + "  a --> b\n  linkStyle 0 interpolate " + p + "\n" },
+	func(p string) string {
+		return agentflowHead + "  a --> b\n  linkStyle default interpolate " + p + " stroke:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  click a \"" + p + "\"\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a href \"" + p + "\"\n" },
+	func(p string) string {
+		return agentflowHead + "  a\n  click a href \"" + p + "\" \"" + p + "\" _blank\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  click a \"https://example.com\" \"" + p + "\"\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a call " + p + "()\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a call cb(\"" + p + "\") \"" + p + "\"\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a " + p + "\n" },
+	func(p string) string { return agentflowHead + "  a\n  click " + p + " href \"https://example.com\"\n" },
+	func(p string) string { return agentflowHead + "  a[\"" + p + "\"]:::internal-link" },
+	func(p string) string { return agentflowHead + "  " + p + ":::internal-link" },
+	func(p string) string { return agentflowHead + "  accTitle: " + p + "\n  accDescr: " + p + "\n  a" },
+	func(p string) string { return agentflowHead + "  accDescr {\n " + p + "\n }\n  a" },
+	func(p string) string { return "agentflow-beta " + p + "\n  a" },
+	func(p string) string { return agentflowHead + "  direction " + p + "\n  a" },
+	func(p string) string {
+		return agentflowHead + "  %% " + p + "\n  a %% " + p + "\n  b[x %% " + p + "\n y]"
+	},
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  agentflow:\n    nodeSpacing: \"" + p + "\"\n    rankSpacing: \"" + p + "\"\n    wrappingWidth: \"" + p + "\"\n  flowchart:\n    curve: \"" + p + "\"\n    inheritDir: \"" + p + "\"\n---\n" + agentflowHead + "  a --> b"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\n" + agentflowHead + "  a" },
+	func(p string) string {
+		return "%%{init: {\"agentflow\": {\"nodeSpacing\": \"" + p + "\"}, \"flowchart\": {\"curve\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\n" + agentflowHead + "  a --> b"
+	},
+}

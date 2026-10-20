@@ -5,6 +5,7 @@
 package sketch
 
 import (
+	"tuios.dev/sketch/internal/diagrams/agentflow"
 	"tuios.dev/sketch/internal/diagrams/architecture"
 	"tuios.dev/sketch/internal/diagrams/block"
 	"tuios.dev/sketch/internal/diagrams/c4"
@@ -43,5 +44,5 @@ func init() {
 	register(flowchart.Flowchart, sequence.Sequence, state.State, class.Class, er.Er, pie.Pie, mindmap.Mindmap, gantt.Gantt,
 		xychart.XyChart, timeline.Timeline, quadrant.QuadrantChart, journey.Journey, kanban.Kanban, git.GitGraph, sankey.Sankey, block.BlockDiagram,
 		architecture.Architecture, requirement.RequirementDiagram, c4.C4, packet.Packet, radar.Radar, treemap.Treemap,
-		info.Info, treeview.TreeView, ishikawa.Ishikawa, cynefin.Cynefin, eventmodeling.EventModeling, venn.Venn, wardley.Wardley, railroad.Railroad, swimlane.Swimlane, usecase.Usecase)
+		info.Info, treeview.TreeView, ishikawa.Ishikawa, cynefin.Cynefin, eventmodeling.EventModeling, venn.Venn, wardley.Wardley, railroad.Railroad, swimlane.Swimlane, usecase.Usecase, agentflow.Agentflow)
 }

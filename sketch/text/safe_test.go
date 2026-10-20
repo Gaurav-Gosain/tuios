@@ -72,6 +72,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"railroad text":          "railroad-ebnf-beta\nr = \"a very long terminal #27;[2J that cannot fit in any narrow column at all, not even close\" ;",
 		"swimlane":               "swimlane-beta LR\n  subgraph L[\"t#27;]0x#7;\"]\n    a[\"#27;[2J#155;31m\"] -- \"#27;[31m\" --> b\n  end\n  subgraph M[\"#144;x\"]\n    c\n  end\n  b --> c",
 		"usecase":                "usecase-beta\nactor \"a#27;[2J\" <<#155;31m>>\nsystemBoundary b[\"t#27;]0x#7;\"]\n  u(\"#144;x\")\nend\njson j@{\"#27;[31m\": \"#27;[2J\"}\na_27__2J -- \"#27;[31m\" --> u\nnote for u \"#27;[2J\"",
+		"agentflow":              "agentflow-beta TB\n  flow f[\"t#27;]0x#7;\"]\n    a[\"#27;[2J#155;31m\"]@{ shape: tool }\n  end\n  b[\"#144;x\"]\n  a -- \"#27;[31m\" --> b",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

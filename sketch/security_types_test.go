@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad,usecase}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad,usecase,agentflow}-security.test.ts,
 // the inert parts of tests/render/pie.test.ts and tests/render/swimlane.test.ts, and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1321,5 +1321,53 @@ func TestUsecaseOutputIsInert(t *testing.T) {
 	out, err = Render(usecaseHead+"json P@{\"__proto__\": {\"x\": 1}, \"constructor\": 2}", RenderOptions{})
 	if err != nil || !strings.Contains(out.Data, ">__proto__.x</text>") || !strings.Contains(out.Data, ">constructor</text>") {
 		t.Fatalf("a JSON key named __proto__: %v\n%s", err, out.Data)
+	}
+}
+
+const agentflowHead = "agentflow-beta TB\n"
+
+// TestAgentflowOutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same sources must only render.
+func TestAgentflowOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "agentflow")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, agentflowTemplates, 900, RenderOptions{}, true)
+	out, err := Render(agentflowHead+"  a[\"<img src=x onerror=alert(1)>\"] -- \"</text><script>alert(1)</script>\" --> b[\"a&b\"]\n  flow f[\"<svg onload=alert(1)>\"]\n   c\n  end", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<svg onload") || !strings.Contains(out.Data, "a&amp;b") {
+		t.Fatalf("agentflow markup is not escaped: %v\n%s", err, out.Data)
+	}
+	out, err = Render(agentflowHead+"  flow q&r\n  a\n  end\n  connector 'x&y'", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, `data-id="q&amp;r"`) || !strings.Contains(out.Data, `data-id="'x&amp;y'"`) {
+		t.Fatalf("agentflow ids are not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, agentflowHead+"  accTitle: t\n  flow f[\"F\"]\n  a --> b\n  end", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, true) {
+			t.Fatalf("hostile agentflow options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "`", "{", "}", "[", "]", "(", ")", "|", "\n", ":::", "-->", "--x", "-.-", " -- ", "@{ ", "label: ",
+		"shape: ", "view: collapsed", "style a fill:", "classDef c ", "click a href \"", "flow ", "connector ", "global\n", "end\n", "%% "}, 3, 4000, RenderOptions{}, true)
+	for _, url := range []string{"javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,<script>alert(1)</script>", "vbscript:x"} {
+		noLinks(t, agentflowHead+"  a\n  click a href \""+url+"\"", RenderOptions{})
+	}
+	out, err = Render(agentflowHead+"  a[\"javascript:alert(1)\"]:::internal-link", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, `<a class="internal-link" data-href="javascript:alert(1)">`) ||
+		len(out.Links) != 1 || out.Links[0] != (LinkInfo{ID: "a", Href: "javascript:alert(1)", Internal: true}) {
+		t.Fatalf("an internal link to a script: %v %v\n%s", err, out.Links, out.Data)
+	}
+	for _, src := range []string{
+		agentflowHead + "  __proto__ --> constructor --> toString\n  flow __proto__[constructor]\n  hasOwnProperty\n  end\n  connector prototype[\"__proto__\"]",
+		agentflowHead + "  a\n  classDef __proto__ fill:red\n  class a __proto__\n  class __proto__ constructor\n  style __proto__ fill:red\n  a:::__proto__",
+		agentflowHead + "  a@{ __proto__: 1, constructor: 2, prototype: 3 }\n  a@{\n    __proto__:\n      polluted: true\n    constructor:\n      prototype:\n        polluted: true\n  }",
+		agentflowHead + "  a[|__proto__:polluted|x]\n  global\n  __proto__\n  end\n  flow f@{ __proto__: 1 }\n  __proto__\n  end",
+		agentflowHead + "  a@{ shape: constructor }",
+	} {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", src)
+		}
 	}
 }
