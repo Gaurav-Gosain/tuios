@@ -724,3 +724,41 @@ var blockTemplates = []func(p string) string{
 	func(p string) string { return "block " + p + "\n  a" },
 	func(p string) string { return "block-beta\n  " + p + "[\"" + p + "\"] --> " + p },
 }
+
+var architectureTemplates = []func(p string) string{
+	func(p string) string { return archHead + "service a(server)[" + p + "]" },
+	func(p string) string { return archHead + "service a(server)[\"" + p + "\"]" },
+	func(p string) string { return archHead + "service a(server)['" + p + "']" },
+	func(p string) string { return archHead + "service a \"" + p + "\"[A]" },
+	func(p string) string { return archHead + "service a '" + p + "'" },
+	func(p string) string { return archHead + "service a(" + p + ")[A]" },
+	func(p string) string { return archHead + "service " + p },
+	func(p string) string { return archHead + "group g(cloud)[" + p + "]\nservice a in g" },
+	func(p string) string { return archHead + "group g(cloud)[\"" + p + "\"]\nservice a[" + p + "] in g" },
+	func(p string) string { return archHead + "group g(" + p + ")[G]" },
+	func(p string) string { return archHead + "group " + p },
+	func(p string) string { return archHead + "group g\nservice a in " + p },
+	func(p string) string { return archHead + "junction " + p },
+	func(p string) string { return archHead + "service a\nservice b\na:R -[" + p + "]-> L:b" },
+	func(p string) string { return archHead + "service a\nservice b\na:R -[\"" + p + "\"]- L:b" },
+	func(p string) string { return archHead + "service a\nservice b\na:B <-['" + p + "']-> T:b" },
+	func(p string) string { return archHead + "service a\nservice b\na:" + p + " -- L:b" },
+	func(p string) string { return archHead + "service a\nservice b\n" + p + ":R -- L:b" },
+	func(p string) string { return archHead + "service a\nservice b\na" + p + ":R -- L:b{group}" },
+	func(p string) string { return archHead + "service a\nservice b\nalign row a " + p },
+	func(p string) string { return archHead + "service a\nservice b\nalign " + p + " a b" },
+	func(p string) string { return archHead + "title " + p + "\nservice a" },
+	func(p string) string { return archHead + "accTitle: " + p + "\naccDescr: " + p + "\nservice a" },
+	func(p string) string { return archHead + "accDescr {\n " + p + "\n }\nservice a" },
+	func(p string) string { return "architecture-beta " + p + "\nservice a" },
+	func(p string) string { return archHead + "%% " + p + "\nservice a" },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  architecture:\n    iconSize: \"" + p + "\"\n    fontSize: \"" + p + "\"\n    padding: \"" + p + "\"\n---\n" + archHead + "group g[G]\nservice a[A] in g"
+	},
+	func(p string) string {
+		return "%%{init: {\"architecture\": {\"iconSize\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\n" + archHead + "service a[A]"
+	},
+	func(p string) string {
+		return "---\nconfig:\n  architecture: \"" + p + "\"\n---\n" + archHead + "service a[A]"
+	},
+}
