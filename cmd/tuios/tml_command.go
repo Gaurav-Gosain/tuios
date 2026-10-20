@@ -99,7 +99,7 @@ tuios tml close: the value is then not the person's answer.`,
 // refused with the limit named.
 func readTMLSource(name string, stdin io.Reader) ([]byte, error) {
 	limit := tml.PersonLimits().DocBytes
-	var r io.Reader = stdin
+	r := stdin
 	if name != "-" {
 		f, err := os.Open(name)
 		if err != nil {
