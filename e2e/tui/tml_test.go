@@ -351,8 +351,8 @@ func TestTMLProgramCloseIsNotThePersons(t *testing.T) {
 // TestTMLSurfaceThroughAHostShowsThePlaceholder attaches through another
 // machine, where the person's input on a surface could not reach the
 // surface's daemon. The client must not draw the surface or take its keys: it
-// shows the placeholder line, and the far surface stays open until the far
-// machine closes it.
+// shows the placeholder, which says what to do, and q on it dismisses the
+// surface on the far machine.
 func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -366,23 +366,52 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	}
 	doc := writeTMLDoc(t, remote, "run.tml", tmlRunDoc)
 	shown := startCLIBackground(t, remote, "tml", "show", doc, "--wait", "-s", "far", "--width", "90", "--height", "24")
-	if err := term.WaitForText("This pane shows a TML surface", uiTimeout); err != nil {
+	if err := term.WaitForText("Open this session on its own machine to use it.", uiTimeout); err != nil {
 		t.Fatalf("the far surface did not show its placeholder line: %v\n%s", err, term.Snapshot())
 	}
 	if screenHas(term.Screen(), "Picked: none") {
 		t.Fatalf("a client attached through a host drew a surface it cannot answer for\n%s", term.Snapshot())
 	}
 	saveTMLFrame(t, term, "1-through-a-host")
+	// q on the placeholder closes the window, which dismisses the surface
+	// on the far machine.
 	if err := term.SendKeys("q"); err != nil {
 		t.Fatalf("send q: %v", err)
 	}
-	surface, _ := tmlSurfaceOf(t, remote, "far")
-	if out, err := tuiosCLI(t, remote, "tml", "close", surface); err != nil {
-		t.Fatalf("the far surface did not stay open: %v\n%s", err, out)
+	select {
+	case run := <-shown:
+		var exit *exec.ExitError
+		if !errors.As(run.err, &exit) || exit.ExitCode() != 1 || strings.TrimSpace(run.out) != "null" {
+			t.Fatalf("the far tml show --wait ended with %v %q, want null and exit status 1", run.err, run.out)
+		}
+	case <-time.After(uiTimeout):
+		t.Fatalf("q on the placeholder did not close the far surface\n%s", term.Snapshot())
+	}
+
+	// esc does the same, and a click does not: the mouse report that starts
+	// with an esc is told apart.
+	again := startCLIBackground(t, remote, "tml", "show", doc, "--wait", "-s", "far", "--width", "90", "--height", "24")
+	if err := term.WaitForText("Press q to close it.", uiTimeout); err != nil {
+		t.Fatalf("the second far surface did not show its placeholder: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(300 * time.Millisecond)
+	col, row := tmlLocate(t, term, "Press q to close it.")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	time.Sleep(500 * time.Millisecond)
+	select {
+	case run := <-again:
+		t.Fatalf("a click closed the far surface: %v %q", run.err, run.out)
+	default:
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("send esc: %v", err)
 	}
 	select {
-	case <-shown:
+	case run := <-again:
+		if strings.TrimSpace(run.out) != "null" {
+			t.Fatalf("esc on the placeholder ended the wait with %q", run.out)
+		}
 	case <-time.After(uiTimeout):
-		t.Fatal("the far tml show --wait never returned")
+		t.Fatalf("esc on the placeholder did not close the far surface\n%s", term.Snapshot())
 	}
 }

@@ -104,14 +104,34 @@ func TMLSurfaceID(uri string) string {
 	return id
 }
 
-// tmlPlaceholderCommand is the program of a TML window. It prints one line
-// for a terminal client that does not draw TML, and holds the alternate
-// screen and button-event mouse reporting (SGR) while it waits, so a client
-// that does draw TML sends the wheel and clicks to the pane.
+// tmlPlaceholderCommand is the program of a TML window. It prints what to do
+// for a client that does not draw the surface: a client attached through
+// another machine, or one that predates TML. q or esc ends it, and with it
+// the window, which dismisses the surface. It holds the alternate screen and
+// button-event mouse reporting (SGR), so a client that does draw TML sends
+// the wheel and clicks to the pane, where its TML code takes them before
+// they reach this program.
+//
+// An esc is told from the start of a mouse report by the byte after it: a
+// report follows at once, and a lone esc has nothing after it for a tenth of
+// a second. A mouse report holds no q.
 func tmlPlaceholderCommand(uri string) []string {
-	return []string{"/bin/sh", "-c",
-		`stty -echo 2>/dev/null; printf '\033[?1049h\033[?1002h\033[?1006h\033[2m%s\033[0m\n%s\n' "$1" "$2"; exec sleep 2147483647`,
-		"tuios-tml", "This pane shows a TML surface. A newer tuios client draws it.", uri}
+	return []string{"/bin/sh", "-c", `stty -echo -icanon min 1 time 0 2>/dev/null
+printf '\033[?1049h\033[?1002h\033[?1006h\033[2m%s\n%s\033[0m\n%s\n' "$1" "$2" "$3"
+e=$(printf '\033')
+while :; do
+	k=$(dd bs=1 count=1 2>/dev/null) || exit 0
+	case "$k" in
+	q) exit 0 ;;
+	"$e")
+		stty min 0 time 1 2>/dev/null
+		n=$(dd bs=1 count=1 2>/dev/null)
+		stty min 1 time 0 2>/dev/null
+		[ -z "$n" ] && exit 0 ;;
+	esac
+done`,
+		"tuios-tml", "This pane shows a TML surface. Open this session on its own machine to use it.",
+		"Press q to close it.", uri}
 }
 
 // tmlSurface is one open surface.

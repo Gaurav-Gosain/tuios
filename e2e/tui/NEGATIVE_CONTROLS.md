@@ -7614,5 +7614,6 @@ A control that sets a TML window's output flag on each render does not fail the 
 | `--name` stored with its control characters | `TestTMLProgramCloseIsNotThePersons` ("the window name kept its control characters") | **caught** |
 | A client attached through a host draws TML windows itself | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("the far surface did not show its placeholder line") | **caught** |
 | A client attached through a host claims `tml_surfaces` in its hello | none: the client still does not draw the window, so the pushes it gets go unused | not caught |
+| The placeholder ends on any byte after an esc, not only on a lone esc | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("a click closed the far surface") | **caught** |
 
 The hello claim is kept off through a host anyway: it spares the link the pushes. The cap of open surfaces per caller (8 per pane, 32 per session outside the panes) has no e2e case. Reaching it opens 32 windows.
