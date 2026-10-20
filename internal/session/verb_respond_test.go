@@ -25,10 +25,13 @@ out=$2
 menu() {
   printf '\033[2J\033[H Bash command\r\n   rm -rf build\r\n Do you want to proceed?\r\n \342\235\257 1. Yes\r\n   2. Yes, and don'\''t ask again for rm commands\r\n   3. No, and tell Claude what to do differently (esc)\r\n'
 }
+wmenu() {
+  printf '\033[2J\033[H Create file\r\n   /etc/tuios-test-target\r\n Do you want to create tuios-test-target?\r\n \342\235\257 1. Yes\r\n   2. Yes, allow all edits during this session\r\n   3. No, and tell Claude what to do differently (esc)\r\n'
+}
 case $1 in
-approve)
+approve|write)
   stty raw -echo
-  menu
+  if [ "$1" = write ]; then wmenu; else menu; fi
   k=$(dd bs=1 count=1 2>/dev/null)
   printf '%s' "$k" >> "$out"
   printf '\033[2J\033[Hanswered\r\n\342\217\265\342\217\265 auto mode on \302\267 esc to interrupt\r\n'

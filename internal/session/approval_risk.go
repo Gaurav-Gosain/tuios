@@ -110,6 +110,18 @@ func (a *attentionStore) riskOfLine(line, root, runDir string) []risk.Hit {
 	return hits
 }
 
+// stickyRisk is an open item's mark after a new one: the rules it had, then
+// any the new one adds. A rule is never taken off while the item is open.
+func stickyRisk(had, next []string) []string {
+	out := slices.Clone(had)
+	for _, r := range next {
+		if !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // riskOn is the risk marked on a pane's blocking item, for respond.
 func (a *attentionStore) riskOn(session, window string) []string {
 	if a == nil {

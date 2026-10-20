@@ -473,6 +473,11 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
 			}
 		}
+		// The mark lasts as long as the prompt: while the item is open a new
+		// report may add rules to it and never take one off. The report is
+		// the pane's own, and a pane could otherwise clear the mark on a
+		// risky call before it answers. A new prompt opens a new item.
+		next.Risk = stickyRisk(cur.Risk, next.Risk)
 		if attentionSame(*cur, next) {
 			return
 		}

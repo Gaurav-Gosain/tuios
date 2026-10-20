@@ -346,7 +346,9 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	a.rev++
 	it.RequestID, it.Options, it.Expires = h.id, h.options, spec.expires.UnixNano()
 	it.Summary, it.AlwaysScope = spec.summary, slices.Clone(scope)
-	it.Kind, it.Risk, it.DenyMessage = kind, risk.Names(h.risk), h.denyMessage
+	// A hold adds to the mark on the item and takes nothing off it
+	// (stickyRisk): the requester may be the pane itself.
+	it.Kind, it.Risk, it.DenyMessage = kind, stickyRisk(it.Risk, risk.Names(h.risk)), h.denyMessage
 	it.PlanLines, it.PlanSHA = 0, h.planSHA
 	if kind == AttentionPlan {
 		it.PlanLines = planLineCount(h.plan)
@@ -388,7 +390,7 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 		// reason for, so the item is the pane's approval again, marked by
 		// what its line says now.
 		it.Kind, it.DenyMessage, it.PlanLines, it.PlanSHA = AttentionApproval, false, 0, ""
-		it.Risk = risk.Names(a.riskOfLine(it.Summary, h.root, h.runDir))
+		it.Risk = stickyRisk(it.Risk, risk.Names(a.riskOfLine(it.Summary, h.root, h.runDir)))
 		it.Seq = a.rev
 		a.publish(attentionEvent(AttentionUpdated, *it))
 		a.changedLocked()
