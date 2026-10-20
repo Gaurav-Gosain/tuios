@@ -36,6 +36,10 @@ type graphKind struct {
 	endText func(e *types.GeoEdge, last bool) string
 	// frame says whether to draw a group's frame and title, and with what line.
 	frame func(n *types.GeoNode) (draw bool, weight uint8, title bool)
+	// squeeze lets a drawing up to squeezeSpan times too wide be drawn and
+	// then narrowed by dropping columns that hold only gaps and horizontal
+	// lines. tight gives each box no more room than its text needs.
+	squeeze, tight bool
 }
 
 func (k *graphKind) sizeOf(n *types.GeoNode) (w, h int, ok bool) {
@@ -106,8 +110,16 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 	return sx, sy
 }
 
-func drawFlowchart(l *sketch.Layout, opt Options) (*canvas, error) {
-	return drawGraph(l, opt, &graphKind{})
+// drawFlowchart draws a graph from its layout. With squeeze, a drawing up to
+// squeezeSpan times too wide is drawn and then narrowed by dropping columns
+// that hold only gaps and horizontal lines. If that is not enough, the boxes
+// lose the room the layout gave them beyond their text, and it is tried again.
+func drawFlowchart(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error) {
+	c, err := drawGraph(l, opt, &graphKind{squeeze: squeeze})
+	if err == ErrTooWide && squeeze {
+		return drawGraph(l, opt, &graphKind{squeeze: true, tight: true})
+	}
+	return c, err
 }
 
 // drawGraph draws boxes joined by edges: a flowchart, or a state, class or ER
@@ -175,6 +187,9 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			continue
 		}
 		w := max(col(n.W), widest(n.Label)+4)
+		if kind.tight {
+			w = widest(n.Label) + 4
+		}
 		if pointShapes[n.Shape] {
 			w = max(w, widest(n.Label)+6)
 		}
@@ -363,7 +378,7 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 	}
 	dx, dy := -all.x0, -all.y0
 	cw, ch := all.x1-all.x0+1, all.y1-all.y0+2
-	if opt.Cols > 0 && cw > opt.Cols {
+	if opt.Cols > 0 && cw > opt.Cols && (!kind.squeeze || cw > squeezeSpan*opt.Cols) {
 		return nil, ErrTooWide
 	}
 	c, err := newCanvas(cw, ch)
@@ -391,12 +406,18 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 
 	// Edges.
 	toward := [4]uint8{down, left, up, right}
+	outward := [4]uint8{up, right, down, left}
 	for _, p := range paths {
 		if p.invisible || p.self {
 			continue
 		}
-		// The first cell joins the box it leaves.
+		// The first cell joins the box it leaves. A group's frame is a line, so
+		// it gets a junction where the edge leaves it.
 		c.stroke(p.pts[0].x+dx, p.pts[0].y+dy, toward[p.startSide], p.weight, roleLine)
+		if l.Nodes[p.from].Group {
+			in := [4]point{{0, 1}, {-1, 0}, {0, -1}, {1, 0}}[p.startSide]
+			c.stroke(p.pts[0].x+dx+in.x, p.pts[0].y+dy+in.y, outward[p.startSide], light, roleFrame)
+		}
 		for k := 1; k < len(p.pts); k++ {
 			a := point{p.pts[k-1].x + dx, p.pts[k-1].y + dy}
 			b := point{p.pts[k].x + dx, p.pts[k].y + dy}
@@ -495,6 +516,12 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			}
 		}
 	}
+	if opt.Cols > 0 && c.w > opt.Cols {
+		c.squeeze(c.w - opt.Cols)
+		if c.w > opt.Cols {
+			return nil, ErrTooWide
+		}
+	}
 	return c, nil
 }
 
@@ -583,6 +610,10 @@ func (c *canvas) free(x0, x1, y int) bool {
 	}
 	return true
 }
+
+// squeezeSpan is how many times wider than the columns a graph may be drawn
+// before it is squeezed.
+const squeezeSpan = 3
 
 // head draws a marker in the cell outside a box's side, pointing into the box.
 func head(c *canvas, at point, side int, kind string) {

@@ -48,19 +48,21 @@ func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	default:
 		return nil, ErrUnsupported
 	}
-	lines, err := draw(d, opt, sketch.RenderOptions{})
+	lines, err := draw(d, opt, sketch.RenderOptions{}, false)
 	if err == ErrTooWide {
 		// pele draws narrower when it is told the width there is: a flowchart
 		// that runs across turns to run down, and spacing tightens. A cell is
 		// about 8 units of the layout.
 		w := float64(opt.Cols) * 8
 		turn := true
-		lines, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]})
+		// A graph still too wide loses the columns that hold only gaps and
+		// horizontal lines.
+		lines, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
 	}
 	return lines, err
 }
 
-func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, error) {
+func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool) ([]string, error) {
 	layout, err := d.Layout(ro)
 	if err != nil {
 		return nil, err
@@ -68,7 +70,6 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 	var c *canvas
 	switch d.Type {
 	case "flowchart", "block", "architecture", "requirement":
-		c, err = drawFlowchart(layout, opt)
 	case "state":
 		c, err = drawState(layout, opt)
 	case "class":
@@ -81,6 +82,7 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 		c, err = drawMindmap(layout, opt)
 	case "gantt":
 		c, err = drawGantt(layout, opt)
+		c, err = drawFlowchart(layout, opt, squeeze)
 	case "timeline":
 		c, err = drawTimeline(layout, opt)
 	case "xychart":
@@ -334,6 +336,87 @@ func (p *cell) glyph() rune {
 		}
 	}
 	return joins[p.mask]
+}
+
+// plainColumn reports whether a column holds nothing but straight horizontal lines.
+func (c *canvas) plainColumn(x int) bool {
+	for y := 0; y < c.h; y++ {
+		p := &c.cells[y*c.w+x]
+		if p.r != 0 || p.wide || p.mask&(up|down) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// squeeze drops up to n columns that hold only gaps and horizontal lines. It
+// takes them from the widest runs of such columns first, from the middle of
+// each run, and keeps one column of every run, so boxes keep a space between
+// them and lines across a gap stay joined.
+func (c *canvas) squeeze(n int) {
+	type run struct{ x, n int }
+	var runs []run
+	longest := 0
+	for x := 0; x < c.w; {
+		if !c.plainColumn(x) {
+			x++
+			continue
+		}
+		s := x
+		for x < c.w && c.plainColumn(x) {
+			x++
+		}
+		runs = append(runs, run{s, x - s})
+		longest = max(longest, x-s)
+	}
+	// The least length every run can be cut to with n columns or fewer.
+	cut := func(t int) int {
+		k := 0
+		for _, r := range runs {
+			k += max(0, r.n-t)
+		}
+		return k
+	}
+	lo, hi := 1, max(longest, 1)
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if cut(mid) <= n {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	left := n - cut(lo)
+	drop := make([]bool, c.w)
+	dropped := 0
+	for _, r := range runs {
+		keep := min(r.n, lo)
+		if keep == lo && lo > 1 && left > 0 {
+			keep--
+			left--
+		}
+		gone := r.n - keep
+		from := r.x + (keep+1)/2
+		for x := from; x < from+gone; x++ {
+			drop[x] = true
+		}
+		dropped += gone
+	}
+	if dropped == 0 {
+		return
+	}
+	w := c.w - dropped
+	cells := make([]cell, w*c.h)
+	for y := 0; y < c.h; y++ {
+		i := y * w
+		for x := 0; x < c.w; x++ {
+			if !drop[x] {
+				cells[i] = c.cells[y*c.w+x]
+				i++
+			}
+		}
+	}
+	c.w, c.cells = w, cells
 }
 
 // plain reports whether a row holds nothing but straight vertical lines.
