@@ -1,0 +1,17 @@
+       ┌───────────────┐
+       │   «Element»   │
+       │     auth      │
+       │ Type: service │
+       └───────────────┘
+               ┆
+          «satisfies»
+               ┆
+               ▼
+  ┌─────────────────────────┐
+  │      «Requirement»      │
+  │          login          │
+  │          ID: 1          │
+  │  Text: Users sign in.   │
+  │       Risk: High        │
+  │   Verification: Test    │
+  └─────────────────────────┘

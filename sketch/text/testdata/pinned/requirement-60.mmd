@@ -1,0 +1,11 @@
+requirementDiagram
+  requirement login {
+    id: 1
+    text: Users sign in.
+    risk: high
+    verifymethod: test
+  }
+  element auth {
+    type: service
+  }
+  auth - satisfies -> login
