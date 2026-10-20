@@ -1182,6 +1182,15 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 //     the pane sits at its shell. Its harness_pid names no process here, so
 //     it is never taken for exited, and the row stays rather than going at
 //     every detection pass.
+//   - host-pid: the same agent in a container, whose harness_pid happens to
+//     name a live process on this machine, one the reporter does not descend
+//     from. That process then exits, and the row has to stay: only a pid
+//     that is the caller or one of its ancestors is the harness's here.
+//   - protocol-pane: a start-agent --protocol pane, whose pane process is the
+//     protocol program rather than a shell, so it reads as at its shell while
+//     the agent runs. A harness process under it reports through its hook
+//     and exits, as a harness child that restarts does, and the pane has to
+//     keep its state: the pane is running something, so nothing has left it.
 //
 // The daemon's listing is printed on failure, so a failure says which side
 // kept or dropped the row.
@@ -1198,6 +1207,7 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", fakeClaudeBin, "./testdata/fakeclaude").CombinedOutput(); err != nil {
 		t.Fatalf("build fakeclaude: %v\n%s", err, out)
 	}
+	fakeACP := buildFakeACP(t)
 	for _, tc := range []struct {
 		name string
 		end  string
@@ -1212,6 +1222,13 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		// foreign reports from outside the pane with a harness_pid this
 		// machine cannot read, and runs no stand-in.
 		foreign bool
+		// hostPID reports from outside the pane with a harness_pid that names
+		// a live process the reporter does not descend from, then ends that
+		// process, and runs no stand-in.
+		hostPID bool
+		// protocol starts a protocol pane on the scripted ACP agent, and a
+		// harness under it reports with its own pid and exits.
+		protocol bool
 	}{
 		{name: "session-end", end: sessionEnd},
 		{name: "session-end-typed", end: sessionEnd, typed: true},
@@ -1219,6 +1236,8 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		{name: "crash"},
 		{name: "note-after-exit", end: sessionEnd, note: true},
 		{name: "unreadable-pid", foreign: true},
+		{name: "host-pid", hostPID: true},
+		{name: "protocol-pane", protocol: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
@@ -1303,6 +1322,73 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				saveFrame(t, term, "agent-exit-"+tc.name)
 				if st := readAgentState(t, base, session, win); st.State != "working" || st.Harness != "claude-code" || !shown(term.Screen()) {
 					t.Fatalf("a harness pid this machine cannot read was taken for exited: the pane is %+v\nagents section: %q\ndaemon listing:\n%s\n%s",
+						st, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
+				}
+				return
+			}
+
+			if tc.hostPID {
+				win := windowID(t, base, session, "pilot")
+				// A process of this machine's that the reporter, tuios call
+				// below, does not descend from: its sibling.
+				host := exec.Command("sleep", "300")
+				if err := host.Start(); err != nil {
+					t.Fatalf("start the host process: %v", err)
+				}
+				ended := false
+				endHost := func() {
+					if !ended {
+						ended = true
+						_ = host.Process.Kill()
+						_ = host.Wait()
+					}
+				}
+				defer endHost()
+				params := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"claude-code","agent_session_id":%q,"harness_pid":%d}`, session, win, ccSession, host.Process.Pid)
+				if out, err := tuiosCLI(t, base, "call", "set-agent-state", params); err != nil {
+					t.Fatalf("report from outside the pane: %v\n%s", err, out)
+				}
+				if err := term.WaitFor(shown, uiTimeout); err != nil {
+					t.Fatalf("the agents section never listed the agent: %v\n%s", err, term.Snapshot())
+				}
+				endHost()
+				time.Sleep(ticks)
+				saveFrame(t, term, "agent-exit-"+tc.name)
+				if st := readAgentState(t, base, session, win); st.State != "working" || st.Harness != "claude-code" || !shown(term.Screen()) {
+					t.Fatalf("a host process the reporter does not descend from was taken for its harness, and its exit for the harness's: the pane is %+v\nagents section: %q\ndaemon listing:\n%s\n%s",
+						st, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
+				}
+				return
+			}
+
+			if tc.protocol {
+				if out, err := tuiosCLI(t, base, "start-agent", fakeACP, "--protocol", "acp", "-s", session, "--name", "helper"); err != nil || !strings.Contains(out, "is ready: it reads idle") {
+					t.Fatalf("start-agent: %v\n%s", err, out)
+				}
+				win := windowID(t, base, session, "helper")
+				helperShown := func(s tuitest.Screen) bool { return railHasAgent(s, railCol, "helper") }
+				// The harness is the reporter itself: sh hands its pid to the
+				// tuios call it execs, which reports and exits.
+				format := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"acp","agent_session_id":"child-1","harness_pid":%%d}`, session, win)
+				report := exec.Command("/bin/sh", "-c", `exec "$0" call set-agent-state "$(printf "$1" "$$")"`, tuiosBin, format)
+				report.Dir = workDirIn(t, base)
+				report.Env = append(os.Environ(), "SHELL=/bin/sh")
+				for _, key := range xdgKeys {
+					report.Env = append(report.Env, key+"="+xdgDir(base, key))
+				}
+				if out, err := report.CombinedOutput(); err != nil {
+					t.Fatalf("report from the harness under the protocol pane: %v\n%s", err, out)
+				}
+				if st := readAgentState(t, base, session, win); st.State != "working" {
+					t.Fatalf("the harness's report did not apply: the pane is %+v\n%s", st, listing())
+				}
+				if err := term.WaitFor(helperShown, uiTimeout); err != nil {
+					t.Fatalf("the agents section never listed the protocol pane: %v\n%s", err, term.Snapshot())
+				}
+				time.Sleep(ticks)
+				saveFrame(t, term, "agent-exit-"+tc.name)
+				if st := readAgentState(t, base, session, win); st.State != "working" || !helperShown(term.Screen()) {
+					t.Fatalf("a protocol pane lost its state when a harness under it exited, with the pane program still running: the pane is %+v\nagents section: %q\ndaemon listing:\n%s\n%s",
 						st, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
 				}
 				return
