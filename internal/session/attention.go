@@ -603,6 +603,8 @@ func (a *attentionStore) noteSessionEvent(sessionName string, ev SessionEvent) {
 		a.noteAgentState(sessionName, ev)
 	case EventWindowClosed:
 		a.closeWindow(sessionName, ev.Window)
+	case EventWindowMoved:
+		a.windowWorkspace(sessionName, ev.Window, ev.Workspace)
 	case eventCompletionSeen:
 		a.noteCompletionSeen(sessionName, ev.Window, ev.completionSeq)
 	case eventPaneFocused:
@@ -714,6 +716,26 @@ func (a *attentionStore) closeWindow(sessionName, window string) {
 		if it := a.items[id]; it.Kind == AttentionAsk && it.Session == sessionName && it.Window == window {
 			a.closeLocked(id, AttentionClosedWindow)
 		}
+	}
+}
+
+// windowWorkspace gives the items about a pane the workspace it moved to, which is
+// also how they follow a renumber of the workspaces.
+func (a *attentionStore) windowWorkspace(sessionName, window string, workspace int) {
+	if window == "" || workspace < 1 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, id := range a.sortedIDsLocked() {
+		it := a.items[id]
+		if it.Host != "" || it.Session != sessionName || it.Window != window || it.Workspace == workspace {
+			continue
+		}
+		a.rev++
+		it.Workspace, it.Seq = workspace, a.rev
+		a.publish(attentionEvent(AttentionUpdated, *it))
+		a.changedLocked()
 	}
 }
 
