@@ -73,11 +73,30 @@ func (variant) DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedSt
 		bw, bh = c.PadTop, c.H
 	}
 	var b strings.Builder
-	b.WriteString(`<g class="pele-cluster pele-lane` + classes + `" data-id="` + id + `">`)
-	b.WriteString(`<rect x="` + svg.Num(left) + `" y="` + svg.Num(top) + `" width="` + svg.Num(c.W) + `" height="` + svg.Num(c.H) + `" fill="none" stroke="var(--_b)"/>`)
-	b.WriteString(`<rect x="` + svg.Num(left) + `" y="` + svg.Num(top) + `" width="` + svg.Num(bw) + `" height="` + svg.Num(bh) + `" fill="var(--_a)" stroke="var(--_b)"` + style.Shape + `/>`)
+	b.Grow(320 + len(txt) + len(classes) + len(id) + len(style.Shape))
+	svg.WriteStrings(&b, `<g class="pele-cluster pele-lane`, classes, `" data-id="`, id, `"><rect x="`)
+	svg.WriteNum(&b, left)
+	b.WriteString(`" y="`)
+	svg.WriteNum(&b, top)
+	b.WriteString(`" width="`)
+	svg.WriteNum(&b, c.W)
+	b.WriteString(`" height="`)
+	svg.WriteNum(&b, c.H)
+	b.WriteString(`" fill="none" stroke="var(--_b)"/><rect x="`)
+	svg.WriteNum(&b, left)
+	b.WriteString(`" y="`)
+	svg.WriteNum(&b, top)
+	b.WriteString(`" width="`)
+	svg.WriteNum(&b, bw)
+	b.WriteString(`" height="`)
+	svg.WriteNum(&b, bh)
+	svg.WriteStrings(&b, `" fill="var(--_a)" stroke="var(--_b)"`, style.Shape, `/>`)
 	if sideways && txt != "" {
-		b.WriteString(`<g transform="rotate(-90 ` + svg.Num(cx) + ` ` + svg.Num(cy) + `)">` + txt + `</g>`)
+		b.WriteString(`<g transform="rotate(-90 `)
+		svg.WriteNum(&b, cx)
+		b.WriteByte(' ')
+		svg.WriteNum(&b, cy)
+		svg.WriteStrings(&b, `)">`, txt, `</g>`)
 	} else {
 		b.WriteString(txt)
 	}
