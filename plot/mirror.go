@@ -42,8 +42,8 @@ func (r Role) Faded() (base Role, k int) {
 // and writes. Each value is one column of dots, graded in colour by height,
 // and the newest value is at the right edge, as a monitor scrolls.
 //
-// The idea and the look come from iptop (github.com/franlol/iptop, MIT),
-// a network monitor by franlol.
+// The idea and the look come from iptop by franlol
+// (https://github.com/franlol/iptop, MIT).
 type Mirror struct {
 	// Up and Down are the two halves. Name is written at the left of the
 	// half's corner row, in the series role. Role is Series1 for Up and
