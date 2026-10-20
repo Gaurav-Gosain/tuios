@@ -33,6 +33,46 @@ const (
 	laneClose  = 3
 )
 
+// laneArena hands out the scratch slices of one placing of the lanes, from a few large
+// blocks that the next placing reuses. Not in pele.
+type laneArena struct {
+	ints, intBlock     []int
+	floats, floatBlock []float64
+}
+
+// reset starts handing out the blocks again, made at least this large.
+func (a *laneArena) reset(ints, floats int) {
+	if len(a.intBlock) < ints {
+		a.intBlock = make([]int, ints)
+	}
+	if len(a.floatBlock) < floats {
+		a.floatBlock = make([]float64, floats)
+	}
+	a.ints, a.floats = a.intBlock, a.floatBlock
+}
+
+func (a *laneArena) int(n int) []int {
+	if n > len(a.ints) {
+		a.intBlock = make([]int, max(n, 2*len(a.intBlock)))
+		a.ints = a.intBlock
+	}
+	out := a.ints[:n:n]
+	a.ints = a.ints[n:]
+	clear(out)
+	return out
+}
+
+func (a *laneArena) float(n int) []float64 {
+	if n > len(a.floats) {
+		a.floatBlock = make([]float64, max(n, 2*len(a.floatBlock)))
+		a.floats = a.floatBlock
+	}
+	out := a.floats[:n:n]
+	a.floats = a.floats[n:]
+	clear(out)
+	return out
+}
+
 type lanePlaced struct {
 	width   float64
 	height  float64
@@ -119,15 +159,19 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		return c.W
 	}
 
+	// The nodes and edges of the ranking, each held in one block.
 	lnodes := make([]*LNode, len(real))
+	nodeBlock := make([]LNode, len(real))
 	for k, i := range real {
-		lnodes[k] = Lnode(cross(nodes[i]), along(nodes[i]), KindNode)
+		nodeBlock[k] = LNode{W: cross(nodes[i]), H: along(nodes[i]), Kind: KindNode}
+		lnodes[k] = &nodeBlock[k]
 	}
-	var ledges []*LEdge
-	var edgeOf []int
+	ledges := make([]*LEdge, 0, len(edges))
+	edgeBlock := make([]LEdge, 0, len(edges))
+	edgeOf := make([]int, 0, len(edges))
 	step := 1
 	{
-		seen := map[int]bool{}
+		seen := make(map[int]bool, len(edges))
 		for ei, e := range edges {
 			a := itemOf[e.Src]
 			b := itemOf[e.Dst]
@@ -139,11 +183,12 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				step = 2
 			}
 			seen[key] = true
+			le := LEdge{Tail: a, Head: b, Minlen: e.Minlen, LabelW: e.LabelW, LabelH: e.LabelH, Points: []float64{}}
 			if sideways {
-				ledges = append(ledges, Ledge(a, b, e.Minlen, e.LabelH, e.LabelW))
-			} else {
-				ledges = append(ledges, Ledge(a, b, e.Minlen, e.LabelW, e.LabelH))
+				le.LabelW, le.LabelH = e.LabelH, e.LabelW
 			}
+			edgeBlock = append(edgeBlock, le)
+			ledges = append(ledges, &edgeBlock[len(edgeBlock)-1])
 			edgeOf = append(edgeOf, ei)
 		}
 	}
@@ -157,8 +202,23 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 	}
 	// Lays the ranked items out and routes the relations. A plain relation is a handoff that takes
 	// a simple route of its own, and so keeps no room through the ranks it passes.
+	var arena laneArena
+	var pts, way []float64
 	place := func(plain []uint8, margins []uint8) lanePlaced {
-		pad := make([]float64, laneCount)
+		dummies := 0
+		for k := 0; k < m; k++ {
+			if plain[k] == 0 {
+				dummies += absInt(lnodes[ledges[k].Head].Rank-lnodes[ledges[k].Tail].Rank) - 1
+			}
+		}
+		ranks := 1
+		for _, v := range lnodes {
+			ranks = max(ranks, v.Rank+1)
+		}
+		// Every placing takes its scratch from the blocks the first one made, sized for it.
+		items := len(real) + dummies
+		arena.reset(9*items+7*m+2*n+ranks+8, 7*items+4*n+3*ranks+3*laneCount+8)
+		pad := arena.float(laneCount)
 		for lane, room := range lanePads {
 			if margins[lane] != 0 {
 				pad[lane] = math.Max(room, laneMargin)
@@ -168,8 +228,8 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		}
 		used := make([]uint8, laneCount)
 		// Items: the real ones, then a dummy for every rank an edge passes through.
-		dummies := 0
-		span := make([]int, m)
+		dummies = 0
+		span := arena.int(m)
 		for k := 0; k < m; k++ {
 			span[k] = absInt(lnodes[ledges[k].Head].Rank - lnodes[ledges[k].Tail].Rank)
 			if plain[k] == 0 {
@@ -181,10 +241,10 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		if !direct {
 			total += dummies
 		}
-		RANK := make([]int, total)
-		LANE := make([]int, total)
-		SIZE := make([]float64, total)
-		DEPTH := make([]float64, total)
+		RANK := arena.int(total)
+		LANE := arena.int(total)
+		SIZE := arena.float(total)
+		DEPTH := arena.float(total)
 		DUMMY := make([]uint8, total)
 		maxRank := 0
 		for k := 0; k < len(real); k++ {
@@ -196,9 +256,12 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				maxRank = RANK[k]
 			}
 		}
-		firstDummy := fillInt(m, -1)
-		labelItem := fillInt(m, -1)
-		var links []int
+		firstDummy := arena.int(m)
+		labelItem := arena.int(m)
+		for k := range firstDummy {
+			firstDummy[k], labelItem[k] = -1, -1
+		}
+		links := arena.int(2 * (m + dummies))[:0]
 		{
 			next := len(real)
 			for k := 0; k < m; k++ {
@@ -241,8 +304,8 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 		}
 
-		upStart := make([]int, total+1)
-		downStart := make([]int, total+1)
+		upStart := arena.int(total + 1)
+		downStart := arena.int(total + 1)
 		for k := 0; k < len(links); k += 2 {
 			downStart[links[k]+1]++
 			upStart[links[k+1]+1]++
@@ -251,11 +314,13 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			upStart[i+1] += upStart[i]
 			downStart[i+1] += downStart[i]
 		}
-		up := make([]int, len(links)/2)
-		down := make([]int, len(links)/2)
+		up := arena.int(len(links) / 2)
+		down := arena.int(len(links) / 2)
 		{
-			uf := slices.Clone(upStart[:total])
-			df := slices.Clone(downStart[:total])
+			uf := arena.int(total)
+			copy(uf, upStart)
+			df := arena.int(total)
+			copy(df, downStart)
 			for k := 0; k < len(links); k += 2 {
 				down[df[links[k]]] = links[k+1]
 				df[links[k]]++
@@ -266,11 +331,25 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 
 		// Order within each rank: by lane first, then by where the item's neighbours sit.
 		rows := make([][]int, maxRank+1)
-		for i := 0; i < total; i++ {
-			rows[RANK[i]] = append(rows[RANK[i]], i)
+		{
+			// The items of each rank, in order, as slices of one block.
+			count := arena.int(maxRank + 2)
+			for i := 0; i < total; i++ {
+				count[RANK[i]+1]++
+			}
+			for r := 0; r <= maxRank; r++ {
+				count[r+1] += count[r]
+			}
+			flat := arena.int(total)
+			for r := range rows {
+				rows[r] = flat[count[r]:count[r]:count[r+1]]
+			}
+			for i := 0; i < total; i++ {
+				rows[RANK[i]] = append(rows[RANK[i]], i)
+			}
 		}
-		pos := make([]float64, total)
-		key := make([]float64, total)
+		pos := arena.float(total)
+		key := arena.float(total)
 		settle := func(row []int) {
 			js.Sort(row, func(a, b int) float64 {
 				if d := LANE[a] - LANE[b]; d != 0 {
@@ -343,7 +422,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		}
 
 		// Lane breadth: enough for its fullest rank, and for its title.
-		breadth := make([]float64, laneCount)
+		breadth := arena.float(laneCount)
 		head := 0.0
 		if len(lanes) > 0 {
 			head = laneHead
@@ -363,15 +442,15 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				}
 			})
 		}
-		laneStart := make([]float64, laneCount+1)
+		laneStart := arena.float(laneCount + 1)
 		for k := 0; k < laneCount; k++ {
 			laneStart[k+1] = laneStart[k] + breadth[k] + 2*pad[k]
 		}
 
 		// Across the flow: each lane's items start centered, then line up with their neighbours in
 		// the same lane as far as the lane and the items beside them allow.
-		C := make([]float64, total)
-		want := make([]float64, total)
+		C := arena.float(total)
+		want := arena.float(total)
 		center := func(row []int, from, to int) {
 			lane := LANE[row[from]]
 			at := (laneStart[lane] + pad[lane] + (laneStart[lane+1] - pad[lane]) - runSize(row, from, to)) / 2
@@ -434,13 +513,13 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		}
 
 		// Along the flow: one band per rank, after the lane titles.
-		bandStart := make([]float64, maxRank+1)
-		bandEnd := make([]float64, maxRank+1)
+		bandStart := arena.float(maxRank + 1)
+		bandEnd := arena.float(maxRank + 1)
 		// The room after a rank is for the relations that turn there or are only as long as they
 		// were asked to be. Where just plain handoffs and straight lines pass, the ranks close up,
 		// as far as the label of a handoff between them leaves it a line to sit on.
 		full := opt.RankSep / float64(step)
-		sep := make([]float64, maxRank+1)
+		sep := arena.float(maxRank + 1)
 		for r := range sep {
 			sep[r] = full
 		}
@@ -548,8 +627,8 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		}
 
 		// Groups inside a lane are drawn around their members, deepest first.
-		depthOf := make([]int, n)
-		var inner []int
+		depthOf := arena.int(n)
+		inner := arena.int(n)[:0]
 		for i := 0; i < n; i++ {
 			if !nodes[i].IsGroup || laneSlot[i] >= 0 || itemOf[i] >= 0 {
 				continue
@@ -567,7 +646,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 			return float64(a - b)
 		})
-		box := make([]float64, n*4)
+		box := arena.float(n * 4)
 		for i := 0; i < n; i++ {
 			box[i*4] = math.Inf(1)
 			box[i*4+1] = math.Inf(1)
@@ -611,6 +690,12 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		for _, e := range edges {
 			e.Route = []float64{}
 		}
+		// The routes of a placing are slices of one block: at most two points a rank.
+		routeRoom := 0
+		for k := 0; k < m; k++ {
+			routeRoom += 3 * (2 + 2*max(span[k]-1, 0))
+		}
+		block := make([]float64, 0, routeRoom)
 		for k := 0; k < m; k++ {
 			e := ledges[k]
 			out := edges[edgeOf[k]]
@@ -618,7 +703,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			if e.Reversed {
 				a, b = e.Head, e.Tail
 			}
-			pts := []float64{C[a], bandEnd[RANK[a]] - (bandEnd[RANK[a]]-bandStart[RANK[a]]-DEPTH[a])/2}
+			pts = append(pts[:0], C[a], bandEnd[RANK[a]]-(bandEnd[RANK[a]]-bandStart[RANK[a]]-DEPTH[a])/2)
 			d0 := firstDummy[k]
 			if d0 >= 0 {
 				for d := d0; d < d0+span[k]-1; d++ {
@@ -629,10 +714,11 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				}
 			}
 			pts = append(pts, C[b], bandStart[RANK[b]]+float64((bandEnd[RANK[b]]-bandStart[RANK[b]]-DEPTH[b])/2))
-			route := make([]float64, 0, len(pts)/2*3)
+			from := len(block)
 			for p := 0; p < len(pts); p += 2 {
-				route = append(route, px(pts[p], pts[p+1]), py(pts[p], pts[p+1]), axis)
+				block = append(block, px(pts[p], pts[p+1]), py(pts[p], pts[p+1]), axis)
 			}
+			route := block[from:len(block):len(block)]
 			if e.Reversed {
 				for i, j := 0, len(route)-3; i < j; i, j = i+3, j-3 {
 					for t := 0; t < 2; t++ {
@@ -829,7 +915,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 					}
 					// A point short of each corner and one past it keep the turn close to the corner, so
 					// that the line stays under its label and the handoff takes little room.
-					way := []float64{pts[0], pts[1]}
+					way = append(way[:0], pts[0], pts[1])
 					for p := 2; p < len(pts); p += 2 {
 						dx, dy := pts[p]-pts[p-2], pts[p+1]-pts[p-1]
 						run := math.Abs(dx) + math.Abs(dy)
