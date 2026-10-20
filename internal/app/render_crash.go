@@ -63,6 +63,9 @@ func RenderCrashScreen(report *CrashReport, notice string, width, height int) st
 	if height < 1 {
 		height = 1
 	}
+	// Nothing composes this screen, so nothing would replace a see-through
+	// frame ground: the frame goes on the terminal's own background instead.
+	overlay.SetFrameColors(overlay.FrameColors{Ink: theme.BorderFocusedWindow()})
 	panel := crashPanel(report, notice, width, height, pal)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel,
 		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(pal.Canvas)))
