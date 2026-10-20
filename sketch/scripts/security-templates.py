@@ -7,7 +7,7 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'er': 'erTemplates', 'gantt': 'ganttTemplates', 'mindmap': 'mindmapTemplates',
          'xychart': 'xychartTemplates', 'timeline': 'timelineTemplates', 'quadrant': 'quadrantTemplates',
          'journey': 'journeyTemplates', 'kanban': 'kanbanTemplates', 'git': 'gitTemplates',
-         'sankey': 'sankeyTemplates'}
+         'sankey': 'sankeyTemplates', 'block': 'blockTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)'}
 

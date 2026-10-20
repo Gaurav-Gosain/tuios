@@ -15,6 +15,7 @@ import (
 // done lists the corpus files whose goldens must all match. A type joins it
 // in the pull request that ports it.
 var done = map[string]bool{
+	"block":     true,
 	"class":     true,
 	"er":        true,
 	"flowchart": true,

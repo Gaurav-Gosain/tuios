@@ -52,6 +52,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"kanban card":            "kanban\n  t#27;]0x#7;\n    a[#27;[2J#155;31m]@{ ticket: \"#27;[31m\", assigned: \"#144;x\", priority: \"#127;\" }",
 		"git commit":             "gitGraph\n  title t#27;]0x#7;\n  commit id: \"a#27;[2J\" tag: \"#155;31m\"\n  branch \"b#144;x\"\n  commit",
 		"sankey title":           "---\ntitle: \"t\\e]2;x\\a\\x9b31m\"\n---\nsankey\n\na,b,3\nb,c,2\n",
+		"block":                  "block\n  columns 2\n  a[\"#27;[2J#155;31m\"] b<[\"#144;x\"]>(right)\n  block:g[\"t#27;]0x#7;\"]\n    c\n  end\n  a -- \"#27;[31m\" --> c",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

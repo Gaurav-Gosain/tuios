@@ -664,3 +664,63 @@ var sankeyTemplates = []func(p string) string{
 		return "%%{init: {\"sankey\": {\"prefix\": " + jsonText(p) + ", \"linkColor\": " + jsonText(p) + ", \"nodeColors\": {\"a\": " + jsonText(p) + "}}, \"themeVariables\": {\"fontFamily\": " + jsonText(p) + "}}}%%\nsankey\n" + sankeyBody
 	},
 }
+
+var blockTemplates = []func(p string) string{
+	func(p string) string { return "block\n  " + p },
+	func(p string) string { return "block\n  a " + p + " b" },
+	func(p string) string { return "block\n  a[\"" + p + "\"]" },
+	func(p string) string {
+		return "block\n  a(\"" + p + "\") b([\"" + p + "\"]) c[[\"" + p + "\"]] d[(\"" + p + "\")]"
+	},
+	func(p string) string {
+		return "block\n  a((\"" + p + "\")) b(((\"" + p + "\"))) c>\"" + p + "\"] d{\"" + p + "\"} e{{\"" + p + "\"}}"
+	},
+	func(p string) string {
+		return "block\n  a[/\"" + p + "\"/] b[\\\"" + p + "\"\\] c[/\"" + p + "\"\\] d[\\\"" + p + "\"/]"
+	},
+	func(p string) string { return "block\n  a<[\"" + p + "\"]>(right) b<[\"" + p + "\"]>(x, y)" },
+	func(p string) string { return "block\n  a<[\"x\"]>(" + p + ")" },
+	func(p string) string { return "block\n  a[\"`" + p + "`\"]" },
+	func(p string) string { return "block\n  block:g[\"" + p + "\"]\n    a\n  end" },
+	func(p string) string { return "block\n  block:" + p + "\n    a\n  end" },
+	func(p string) string { return "block\n  block:g:" + p + "\n    a\n  end" },
+	func(p string) string { return "block\n  a space b\n  a -- \"" + p + "\" --> b" },
+	func(p string) string {
+		return "block\n  a space b\n  a == \"" + p + "\" ==> b\n  b -. \"" + p + "\" .-> a\n  a -- \"" + p + "\" --> a"
+	},
+	func(p string) string { return "block\n  a space b\n  a " + p + " b" },
+	func(p string) string { return "block\n  a:" + p + " b" },
+	func(p string) string { return "block\n  a space:" + p + " b" },
+	func(p string) string { return "block\n  columns " + p + "\n  a b" },
+	func(p string) string { return "block\n  a b\n  class a " + p },
+	func(p string) string { return "block\n  a b\n  class " + p + " hot" },
+	func(p string) string { return "block\n  a b\n  classDef " + p + " fill:red\n  class a " + p },
+	func(p string) string { return "block\n  a b\n  classDef hot fill:" + p + "\n  class a hot" },
+	func(p string) string { return "block\n  a b\n  classDef hot " + p + "\n  class a,b hot" },
+	func(p string) string {
+		return "block\n  a b\n  classDef hot color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p + "\n  class a hot"
+	},
+	func(p string) string { return "block\n  a b\n  classDef default " + p + ":red,fill:" + p },
+	func(p string) string { return "block\n  a b\n  style a fill:" + p },
+	func(p string) string { return "block\n  a b\n  style a " + p },
+	func(p string) string { return "block\n  a b\n  style a " + p + ":red;" + p },
+	func(p string) string {
+		return "block\n  a b\n  style a color:" + p + ",stroke:" + p + ",stroke-dasharray:" + p
+	},
+	func(p string) string { return "block\n  a b\n  style " + p + " fill:red" },
+	func(p string) string {
+		return "block\n  block:g\n    a\n  end\n  style g fill:" + p + ",color:" + p + "\n  class g " + p
+	},
+	func(p string) string { return "block\n  a[\"fa:fa-" + p + " x\"]" },
+	func(p string) string { return "block\n  a\n  accDescr {\n " + p + "\n }" },
+	func(p string) string { return "block\n  accTitle: " + p + "\n  a" },
+	func(p string) string { return "block\n  %% " + p + "\n  a" },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  block:\n    padding: \"" + p + "\"\n---\nblock\n  a b"
+	},
+	func(p string) string {
+		return "%%{init: {\"block\": {\"padding\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nblock\n  a b"
+	},
+	func(p string) string { return "block " + p + "\n  a" },
+	func(p string) string { return "block-beta\n  " + p + "[\"" + p + "\"] --> " + p },
+}
