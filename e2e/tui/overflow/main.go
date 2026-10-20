@@ -5,7 +5,7 @@
 // so a crop measured in the host's cell instead of in the picture's own scale
 // is half the size it should be.
 //
-// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend|same]
+// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend|same|badhead]
 //
 // A file medium is written under DIR, the test's own temporary directory, so
 // nothing is left behind in /tmp. Without it the system's is used.
@@ -28,7 +28,10 @@
 // picture, then sends other pixels under the same id with a=t, which replaces
 // the stored image and places nothing. With same it places the picture, moves
 // the cursor to the top left and sends the same bytes again with a=t, which
-// places nothing either, so the picture stays where it was.
+// places nothing either, so the picture stays where it was. With badhead it
+// places the picture, then sends other pixels with a=t from a file whose PNG
+// header cannot be read, so the picture's size has to come from what was
+// already known of it.
 package main
 
 import (
@@ -83,14 +86,17 @@ func main() {
 	if later {
 		fmt.Printf("\x1b_Ga=p,i=%d,c=%d,r=%d,C=1,q=2\x1b\\", imageID, cols, rows)
 	}
-	if how == "resend" || how == "same" {
+	if how == "resend" || how == "same" || how == "badhead" {
 		again := data
 		var err error
 		switch how {
 		case "same":
 			os.Stdout.WriteString("\x1b[H")
-		case "resend":
+		case "resend", "badhead":
 			again, err = picture(0x40)
+			if err == nil && how == "badhead" {
+				copy(again, "not a PNG")
+			}
 		}
 		if err == nil {
 			err = send(medium, fmt.Sprintf("a=t,f=100,i=%d,q=2", imageID), again)
