@@ -63,19 +63,21 @@ v1.7.0 does.
 
 `tuios.dev/sketch/text` draws flowcharts, sequence diagrams, state diagrams,
 class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, timelines, XY
-charts, quadrant charts, user journeys, kanban boards and git graphs with
-box-drawing characters, for a terminal that shows no pictures. For a graph it
-takes the layout that sketch works out for the SVG and maps it to cells. The
-labels stay real text. A pie chart is a bar for each slice, with its value.
-pele leaves a slice under 1% out of the pie, and shows values only with
-`showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
+charts, quadrant charts, user journeys, kanban boards, git graphs and sankey
+diagrams with box-drawing characters, for a terminal that shows no pictures.
+For a graph it takes the layout that sketch works out for the SVG and maps it
+to cells. The labels stay real text. A pie chart is a bar for each slice, with
+its value. pele leaves a slice under 1% out of the pie, and shows values only
+with `showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
 timeline runs across, and runs down when it does not fit the columns. So does
 a user journey. An XY chart draws its bars and lines with tuios.dev/plot, and
 turns its categories into rows when they do not fit across. It writes point
 labels and bar values where they cover nothing, and leaves out a label that
 has no room. A quadrant chart is a box in four parts, with its points as dots.
 A kanban board puts its columns in more rows when they do not fit. A git graph
-runs down, as `git log --graph` does.
+runs down, as `git log --graph` does. A sankey diagram puts its nodes in
+columns of boxes joined by lines. When the lines cross more than three times,
+or the columns do not fit, it is a table of flows: source, target and value.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

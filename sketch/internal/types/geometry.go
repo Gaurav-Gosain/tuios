@@ -42,6 +42,9 @@ type Geometry struct {
 
 	// GitGraph.
 	Git *GeoGit
+
+	// Sankey.
+	Sankey *GeoSankey
 }
 
 type GeoNode struct {
@@ -304,4 +307,32 @@ type GeoCommit struct {
 	Tags  [][]string
 	// Parents are indexes into Commits.
 	Parents []int
+}
+
+// GeoSankey is a sankey diagram as lists: a text drawing lays it out again in cells.
+type GeoSankey struct {
+	Title []string
+	Nodes []GeoFlowNode
+	// Flows are in the order of the source.
+	Flows []GeoFlow
+}
+
+type GeoFlowNode struct {
+	Label string
+	// Value is the flow through the node as the SVG writes it, "" when values are hidden.
+	Value string
+	// Layer is the column of the node, from 0 at the left.
+	Layer int
+	// Y is the middle of the node's bar, in SVG units.
+	Y float64
+}
+
+type GeoFlow struct {
+	// Source and Target are indexes into Nodes.
+	Source, Target int
+	// Value is the flow as written, with the prefix and the suffix.
+	Value string
+	// SourceY and TargetY are the middle of the band where it leaves its source
+	// and where it enters its target, in SVG units.
+	SourceY, TargetY float64
 }

@@ -216,7 +216,25 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 	width := math.Ceil(inner + 2*pad)
 	height := math.Ceil(maxY - minY + titleHeight + 2*pad)
 
+	var geometry *types.Geometry
+	if options.Geometry != nil {
+		// Not part of pele: the diagram as lists, for a text drawing (sketch/text).
+		g := &types.GeoSankey{Title: title.Plain()}
+		for i, node := range nodes {
+			value := ""
+			if showValues {
+				value = prefix + js.Num(rounded(node.value)) + suffix
+			}
+			g.Nodes = append(g.Nodes, types.GeoFlowNode{Label: model.nodes[i].id, Value: value, Layer: node.layer, Y: node.y + node.height/2})
+		}
+		for _, link := range links {
+			g.Flows = append(g.Flows, types.GeoFlow{Source: link.source, Target: link.target, Value: prefix + js.Num(rounded(link.value)) + suffix,
+				SourceY: link.sourceY, TargetY: link.targetY})
+		}
+		geometry = &types.Geometry{Width: width, Height: height, Sankey: g}
+	}
 	return types.Rendered{
+		Geometry: geometry,
 		SVG: svg.SvgDocument("sankey", width, height, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr},
 			svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil),
 			`<g transform="translate(`+num(ox)+`,`+num(oy)+`)">`,
