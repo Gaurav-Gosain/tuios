@@ -868,11 +868,15 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			// A blocker the screen took over a herdr report follows the same
 			// reporter, so it lapses the same way.
 			reportHeld := claim.source == AgentSourceReport || (claim.blocker && claim.prior.source == AgentSourceReport)
-			if reportHeld && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
+			if reportHeld && claim.herdrClaimLapsed(now) && fg == "" {
 				lapsed = true
 			}
-			// The shell check goes first: a busy pane costs no process read.
-			if !lapsed && reportHeld && running && info.atShell() && s.agentHarnessPIDs[w.ID].exited() {
+			// The same shell test as herdr's: a start-agent --protocol pane
+			// has the protocol program as its "shell", so it reads as at its
+			// shell while the agent runs, and a harness child of it that
+			// restarts has not left the pane. The shell check goes first: a
+			// busy pane costs no process read.
+			if !lapsed && reportHeld && running && info.atShell() && fg == "" && s.agentHarnessPIDs[w.ID].exited() {
 				lapsed = true
 			}
 			if running && info.atShell() && lapsed {
