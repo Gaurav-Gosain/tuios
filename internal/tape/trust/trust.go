@@ -192,8 +192,18 @@ func LoadFromPath(path string) (*Store, error) {
 		return s, nil
 	}
 
-	// #nosec G304 - path is the trust store location, reading it is the point.
-	data, err := os.ReadFile(path)
+	// Read from a descriptor that did not wait on the open, and only from a
+	// regular file: a FIFO or a device would block the read or never end it.
+	f, err := openNoBlock(path)
+	if err != nil {
+		return s, fmt.Errorf("reading tape trust store: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		s.Warning = fmt.Sprintf("tape trust store %s is not a regular file; ignoring it", path)
+		return s, nil
+	}
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return s, fmt.Errorf("reading tape trust store: %w", err)
 	}
@@ -256,8 +266,8 @@ func (s *Store) Check(tapePath string) (Result, error) {
 
 	// Open once and stat the descriptor. Doing hygiene on the fd (not a second
 	// path stat) ties the checks to the same inode the bytes come from.
-	// #nosec G304 - opening the resolved tape to hash it is the intended action.
-	f, err := os.Open(real)
+	// It does not wait on a FIFO: the hygiene rules turn one away.
+	f, err := openNoBlock(real)
 	if err != nil {
 		return Result{
 			Status: StatusIneligible,
