@@ -2495,7 +2495,9 @@ runs out.
 With `events` the connection becomes the surface's owner stream: the answer
 carries `seq` and `boot_id` as a `subscribe` ack does, and each `tml-event` of
 this surface follows on the same connection, one JSON line each. The close is
-the last one. `events` cannot be used with `wait`, and a connection that has
+the last one. A `tml-event` value is at most 64 KiB, and the events are not
+kept for a later `subscribe` to replay. `events` cannot be used with `wait`,
+and a connection that has
 an event stream already is refused. The owner answers on another connection
 with `tml-patch` or `tml-replace`. Anyone may also `subscribe` with
 `types: ["tml-event"]`.
@@ -2548,7 +2550,12 @@ state for the nodes whose ids stay. Answers `{"type": "tml_replaced",
 ### tml-get
 
 Read a surface. Params: `surface`. Answers `doc` (the tree as TML JSON),
-`state`, `version`, `window_id`, `title` and `owner`.
+`state`, `version`, `doc_version`, `window_id`, `title` and `owner`.
+
+`tml-get`, `tml-patch`, `tml-replace` and `tml-close` check the surface's
+session against the caller: a pane reaches its own session and its fan group,
+a read needs the `read` grant, and a connection restricted to its own session
+reaches only that session. Each refusal is `forbidden`.
 
 ### tml-list
 
@@ -2564,8 +2571,11 @@ The daemon sends each surface to a TUI client whose hello sets
 `tml_surfaces`, as a `MsgTMLSurface` frame: when it opens, when it changes,
 when it closes, and for every open surface right after the attach reply. A
 push carries the tree only when the client may not have it: on open, on attach
-and after a replace. A push that a patch made carries the patch as well as the
-state, so a client one version behind applies only the patch.
+and after a replace. A push that a patch made carries the patch and no state:
+a client one version behind applies it, and a client further behind reads the
+surface with `tml-get`. Each client has at most one push waiting per surface:
+a newer one folds into it, and the folded push goes out as the whole surface.
+A client that reads slowly costs the daemon one push per surface.
 
 ### close-window
 

@@ -533,6 +533,9 @@ type connState struct {
 	// tmlSurfaces says the client's hello set TMLSurfaces: it draws TML
 	// surfaces and reads MsgTMLSurface. Guarded by mu. See tml_surface.go.
 	tmlSurfaces bool
+	// tmlOut holds the TML pushes not yet written to this client: one per
+	// surface, the newest. See tml_surface.go.
+	tmlOut tmlOutbox
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool

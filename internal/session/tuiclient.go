@@ -294,7 +294,7 @@ type TUIClient struct {
 	// did, the newest per surface: the daemon sends the open surfaces right
 	// behind the attach reply, before the client has wired its handlers.
 	tmlSurfaceHandler func(*TMLSurfacePayload)
-	tmlBacklog        map[string]*TMLSurfacePayload
+	tmlBacklog        []*TMLSurfacePayload
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
 	// and pasteBarriers the pings behind them, by request id, under
@@ -1954,17 +1954,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.multiClientMu.Lock()
 		handler := c.tmlSurfaceHandler
 		if handler == nil {
-			// Kept for the handler OnTMLSurface registers. A closed
-			// surface leaves nothing to draw, and at most the open
-			// surfaces of one session wait here.
-			if payload.Closed {
-				delete(c.tmlBacklog, payload.Surface)
-			} else {
-				if c.tmlBacklog == nil {
-					c.tmlBacklog = map[string]*TMLSurfacePayload{}
-				}
-				c.tmlBacklog[payload.Surface] = MergeTMLPush(c.tmlBacklog[payload.Surface], &payload)
-			}
+			// Kept, in order, for the handler OnTMLSurface registers. The
+			// handler is wired right after the attach, so only the pushes
+			// that follow the attach reply wait here.
+			c.tmlBacklog = append(c.tmlBacklog, &payload)
 		}
 		c.multiClientMu.Unlock()
 		if handler != nil {

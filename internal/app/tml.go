@@ -39,7 +39,7 @@ type tmlClient struct {
 	// mu guards pending, cmds and inflight, which the daemon's read loop and
 	// the tml-input goroutines write.
 	mu      sync.Mutex
-	pending map[string]*session.TMLSurfacePayload
+	pending []*session.TMLSurfacePayload
 	cmds    []tea.Cmd
 	wake    chan struct{}
 
@@ -65,6 +65,8 @@ type tmlView struct {
 	// content is the last frame, for the size in w and h.
 	content string
 	w, h    int
+	// refreshing says a tml-get is on its way, after a missed version.
+	refreshing bool
 }
 
 // TMLWakeMsg says a push, an answer or a side effect for a surface is waiting.
@@ -94,12 +96,9 @@ func (m *OS) signalTML() {
 // queueTMLSurface takes a push from the daemon's read loop.
 func (m *OS) queueTMLSurface(p *session.TMLSurfacePayload) {
 	m.tml.mu.Lock()
-	if m.tml.pending == nil {
-		m.tml.pending = map[string]*session.TMLSurfacePayload{}
-	}
-	// A newer push replaces an older one not yet applied: each carries the
-	// whole state, and the merge keeps the tree the older one carried.
-	m.tml.pending[p.Surface] = session.MergeTMLPush(m.tml.pending[p.Surface], p)
+	// Kept in order: a push that carries a patch applies on the version
+	// before it. The daemon folds pushes for a slow client, so few wait.
+	m.tml.pending = append(m.tml.pending, p)
 	m.tml.mu.Unlock()
 	m.signalTML()
 }
@@ -166,6 +165,9 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		return true
 	}
 	if v != nil && p.Version <= v.version {
+		if len(p.State) > 0 {
+			v.refreshing = false
+		}
 		return false
 	}
 	if v != nil && p.DocVersion == v.docVersion {
@@ -179,15 +181,27 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 			return false
 		}
 	}
-	// One version behind on the same tree: the patch that made this version
-	// repaints only what reads the paths it changed.
-	if v != nil && v.surface != nil && len(p.Ops) > 0 && p.DocVersion == v.docVersion && p.Version == v.version+1 {
-		lim := tml.PersonLimits()
-		if ops, err := tml.DecodePatch(p.Ops, &lim); err == nil && v.surface.Patch(ops) == nil {
-			v.version = p.Version
-			m.markTMLDirty(p.Surface)
-			return true
+	// A push that carries a patch: one version behind on the same tree,
+	// the patch repaints only what reads the paths it changed. Otherwise
+	// this client missed a version, and reads the surface again.
+	if len(p.Ops) > 0 && len(p.State) == 0 {
+		if v != nil && v.surface != nil && p.DocVersion == v.docVersion && p.Version == v.version+1 {
+			lim := tml.PersonLimits()
+			if ops, err := tml.DecodePatch(p.Ops, &lim); err == nil && v.surface.Patch(ops) == nil {
+				v.version = p.Version
+				m.markTMLDirty(p.Surface)
+				return true
+			}
 		}
+		// One read at a time: the pushes that follow it are older than
+		// what it brings.
+		if v == nil || !v.refreshing {
+			if v != nil {
+				v.refreshing = true
+			}
+			m.queueTMLCmd(m.tmlRefresh(p.Surface))
+		}
+		return false
 	}
 	if v == nil || p.DocVersion != v.docVersion || v.doc == nil {
 		if len(p.Doc) == 0 {
@@ -225,6 +239,7 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		return false
 	}
 	v.title, v.owner = p.Title, p.Owner
+	v.refreshing = false
 	v.version, v.docVersion = p.Version, p.DocVersion
 	v.content = ""
 	m.markTMLDirty(p.Surface)
@@ -258,6 +273,34 @@ func (m *OS) pruneTMLViews(state *session.SessionState) {
 		if !shown[id] {
 			delete(m.tml.views, id)
 		}
+	}
+}
+
+// tmlRefresh reads a surface whole with tml-get and applies it as a push, for
+// a client that missed a version. Its answer comes back through the wake.
+func (m *OS) tmlRefresh(id string) tea.Cmd {
+	call := m.inboxCaller()
+	return func() tea.Msg {
+		raw, err := call("tml-get", map[string]any{"surface": id}, tmlInputTimeout)
+		if err != nil {
+			clientLog("TML surface %s: tml-get: %v", id, err)
+			return nil
+		}
+		var res struct {
+			WindowID   string          `json:"window_id"`
+			Title      string          `json:"title"`
+			Owner      string          `json:"owner"`
+			Version    uint64          `json:"version"`
+			DocVersion uint64          `json:"doc_version"`
+			Doc        json.RawMessage `json:"doc"`
+			State      json.RawMessage `json:"state"`
+		}
+		if json.Unmarshal(raw, &res) != nil {
+			return nil
+		}
+		m.queueTMLSurface(&session.TMLSurfacePayload{Surface: id, WindowID: res.WindowID, Title: res.Title, Owner: res.Owner,
+			Version: res.Version, DocVersion: res.DocVersion, Doc: res.Doc, State: res.State})
+		return nil
 	}
 }
 

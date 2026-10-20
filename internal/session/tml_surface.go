@@ -97,29 +97,11 @@ type TMLSurfacePayload struct {
 	Doc   []byte
 	State []byte
 	// Ops is the JSON Patch that made Version from Version-1, when a patch
-	// did. A client one version behind applies it instead of the state, so
-	// only the boxes that read the changed paths are drawn again.
+	// did. Such a push has no State: the client one version behind applies
+	// the patch, so only the boxes that read the changed paths are drawn
+	// again. A client that is further behind reads the surface with tml-get.
 	Ops    []byte
 	Closed bool
-}
-
-// MergeTMLPush folds an older push of a surface into a newer one that
-// replaces it before anybody applied the older: the newer keeps the tree the
-// older carried when it has none of its own for the same tree. Its Ops then
-// skip a version, so a client applies its State instead.
-func MergeTMLPush(older, newer *TMLSurfacePayload) *TMLSurfacePayload {
-	if older == nil || newer.Closed {
-		return newer
-	}
-	if older.Version > newer.Version && !older.Closed {
-		older, newer = newer, older
-	}
-	if len(newer.Doc) == 0 && older.DocVersion == newer.DocVersion {
-		merged := *newer
-		merged.Doc = older.Doc
-		return &merged
-	}
-	return newer
 }
 
 // TMLEvent is the body of a tml-event: what a person did on a surface that
@@ -130,7 +112,8 @@ type TMLEvent struct {
 	Name string `json:"name"`
 	// Value is the emit's value, or the close value. Absent when it is null.
 	Value any `json:"value,omitempty"`
-	// Reason is a close's reason: closed or dismissed.
+	// Reason is a close's reason: closed (the person's close action),
+	// program (a tml-close) or dismissed.
 	Reason string `json:"reason,omitempty"`
 	// Version is the surface's version when it happened.
 	Version uint64 `json:"version"`
@@ -221,8 +204,13 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 	if withDoc {
 		p.Doc = s.docJSON
 	}
+	// A patch travels alone: the client one version behind applies it. The
+	// outbox sends the state instead when it folds two pushes into one.
+	if ops != nil && !withDoc {
+		p.Ops = ops
+		return p
+	}
 	p.State, _ = json.Marshal(s.store.State())
-	p.Ops = ops
 	return p
 }
 
@@ -506,7 +494,7 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 }
 
 // verbTMLClose closes a surface with a value.
-func (d *Daemon) verbTMLClose(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbTMLClose(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface string          `json:"surface"`
 		Value   json.RawMessage `json:"value"`
@@ -521,6 +509,11 @@ func (d *Daemon) verbTMLClose(_ *connState, params json.RawMessage) (any, *verbE
 			return nil, invalidParam("value", "value is not JSON: "+err.Error())
 		}
 		value = tml.SanitizeValue(value)
+	}
+	if s, verr := d.tmlSurfaceOf(p.Surface); verr != nil {
+		return nil, verr
+	} else if verr := d.tmlReach(cs, s, "tml-close", true); verr != nil {
+		return nil, verr
 	}
 	if verr := d.tmlClose(p.Surface, value, has, TMLClosedByProgram); verr != nil {
 		return nil, verr
@@ -577,6 +570,14 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 			return nil, invalidParam("ops", err.Error())
 		}
 		d.pushTMLSurface(sessionID, payload)
+	}
+	if len(p.Events) > tmlEventsPerInput {
+		return nil, invalidParam("events", fmt.Sprintf("one tml-input carries at most %d events", tmlEventsPerInput))
+	}
+	for _, e := range p.Events {
+		if len(e.Value) > s.limits.PatchBytes {
+			return nil, invalidParam("events", fmt.Sprintf("an event value is %d bytes; the limit is %d bytes, as for a patch", len(e.Value), s.limits.PatchBytes))
+		}
 	}
 	for _, e := range p.Events {
 		var value any
@@ -671,22 +672,95 @@ func tmlReader(cs *connState, sessionID string) bool {
 }
 
 // pushTMLSurface sends one surface to every client of its session that draws
-// TML.
+// TML, through each client's outbox.
 func (d *Daemon) pushTMLSurface(sessionID string, payload *TMLSurfacePayload) {
-	var msg *Message
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
-		if !tmlReader(cs, sessionID) {
+		if tmlReader(cs, sessionID) {
+			d.tmlEnqueue(cs, payload)
+		}
+	}
+}
+
+// tmlOutbox is one client's TML pushes not yet written: at most one per
+// surface. A client that reads slowly, or not at all, makes the daemon hold
+// one push per surface, never one per change. The zero value is ready.
+type tmlOutbox struct {
+	mu      sync.Mutex
+	pending map[string]*tmlPending
+	order   []string
+	sending bool
+}
+
+// tmlPending is a push waiting for its client. full says two or more pushes
+// were folded into it, so it goes out as the whole surface at send time;
+// withDoc says one of them carried the tree.
+type tmlPending struct {
+	p             *TMLSurfacePayload
+	full, withDoc bool
+}
+
+// tmlEnqueue puts a push in cs's outbox, folding it into one not yet written
+// for the same surface, and starts the writer when none runs.
+func (d *Daemon) tmlEnqueue(cs *connState, p *TMLSurfacePayload) {
+	ob := &cs.tmlOut
+	ob.mu.Lock()
+	if ob.pending == nil {
+		ob.pending = map[string]*tmlPending{}
+	}
+	if old := ob.pending[p.Surface]; old != nil {
+		old.p = p
+		old.full = !p.Closed
+		old.withDoc = old.withDoc || len(p.Doc) > 0
+	} else {
+		ob.pending[p.Surface] = &tmlPending{p: p, withDoc: len(p.Doc) > 0}
+		ob.order = append(ob.order, p.Surface)
+	}
+	start := !ob.sending
+	ob.sending = true
+	ob.mu.Unlock()
+	if start && !d.goTracked(func() { d.tmlDrain(cs) }) {
+		ob.mu.Lock()
+		ob.sending = false
+		ob.mu.Unlock()
+	}
+}
+
+// tmlDrain writes cs's outbox in the order the surfaces first queued, until
+// it is empty. A folded push is built again from the surface as it is now.
+func (d *Daemon) tmlDrain(cs *connState) {
+	ob := &cs.tmlOut
+	for {
+		ob.mu.Lock()
+		if len(ob.order) == 0 {
+			ob.sending = false
+			ob.mu.Unlock()
+			return
+		}
+		id := ob.order[0]
+		ob.order = ob.order[1:]
+		pend := ob.pending[id]
+		delete(ob.pending, id)
+		ob.mu.Unlock()
+		p := pend.p
+		if pend.full {
+			d.tml.mu.Lock()
+			if s := d.tml.surfaces[id]; s != nil {
+				p = s.payload(pend.withDoc, nil)
+			}
+			d.tml.mu.Unlock()
+		}
+		msg, err := NewMessage(MsgTMLSurface, p)
+		if err != nil {
 			continue
 		}
-		if msg == nil {
-			var err error
-			if msg, err = NewMessage(MsgTMLSurface, payload); err != nil {
-				return
-			}
+		if err := d.sendEncoded(cs, msg); err != nil {
+			ob.mu.Lock()
+			ob.pending, ob.order, ob.sending = nil, nil, false
+			ob.mu.Unlock()
+			return
 		}
-		d.queueBroadcast(cs, msg, "pushTMLSurface")
 	}
 }
 
@@ -705,9 +779,7 @@ func (d *Daemon) sendTMLSurfaces(cs *connState, sessionID string) {
 	}
 	d.tml.mu.Unlock()
 	for _, p := range payloads {
-		if msg, err := NewMessage(MsgTMLSurface, p); err == nil {
-			d.queueBroadcast(cs, msg, "sendTMLSurfaces")
-		}
+		d.tmlEnqueue(cs, p)
 	}
 }
 
@@ -737,7 +809,7 @@ func (d *Daemon) tmlSurfaceOf(id string) (*tmlSurface, *verbError) {
 }
 
 // verbTMLPatch applies a JSON Patch to a surface's state.
-func (d *Daemon) verbTMLPatch(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbTMLPatch(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface string          `json:"surface"`
 		Ops     json.RawMessage `json:"ops"`
@@ -746,6 +818,9 @@ func (d *Daemon) verbTMLPatch(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr == nil {
+		verr = d.tmlReach(cs, s, "tml-patch", true)
+	}
 	if verr != nil {
 		return nil, verr
 	}
@@ -801,6 +876,9 @@ func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr == nil {
+		verr = d.tmlReach(cs, s, "tml-replace", true)
+	}
 	if verr != nil {
 		return nil, verr
 	}
@@ -849,7 +927,7 @@ func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *ve
 }
 
 // verbTMLGet reads a surface: its tree, its state and its version.
-func (d *Daemon) verbTMLGet(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbTMLGet(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface string `json:"surface"`
 	}
@@ -857,6 +935,9 @@ func (d *Daemon) verbTMLGet(_ *connState, params json.RawMessage) (any, *verbErr
 		return nil, verr
 	}
 	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr == nil {
+		verr = d.tmlReach(cs, s, "tml-get", false)
+	}
 	if verr != nil {
 		return nil, verr
 	}
@@ -865,7 +946,7 @@ func (d *Daemon) verbTMLGet(_ *connState, params json.RawMessage) (any, *verbErr
 	state, _ := json.Marshal(s.store.State())
 	return map[string]any{
 		"type": "tml_surface", "surface": s.id, "window_id": s.windowID, "title": s.title, "owner": s.owner,
-		"version": s.version, "doc": json.RawMessage(s.docJSON), "state": json.RawMessage(state),
+		"version": s.version, "doc_version": s.docVersion, "doc": json.RawMessage(s.docJSON), "state": json.RawMessage(state),
 	}, nil
 }
 
@@ -915,4 +996,35 @@ func (d *Daemon) verbTMLValidate(cs *connState, params json.RawMessage) (any, *v
 		problems = []tml.Problem{}
 	}
 	return map[string]any{"type": "tml_valid", "warnings": problems}, nil
+}
+
+// tmlEventsPerInput bounds the emits one tml-input carries.
+const tmlEventsPerInput = 16
+
+// tmlReach refuses a caller that may not reach a surface's session: a pane
+// outside the session and its fan group, a pane without the read grant for
+// a read, and a connection restricted to its own session. A caller in no
+// pane, and a pane that holds admin, reach every surface.
+func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool) *verbError {
+	d.tml.mu.Lock()
+	sessionID := s.sessionID
+	d.tml.mu.Unlock()
+	target := d.sessionNameByID(sessionID)
+	if sc := cs.scope.Load(); sc != nil && sc.own {
+		own := d.sessionNameByID(sc.sessionID)
+		if own == "" || !d.sessionInScope(own, target) {
+			return scopeForbidden(verb, "the surface is in session "+echoName(target)+", outside the connection's own")
+		}
+	}
+	pa := d.paneAuthority(cs)
+	if pa == nil || pa.grants.Has(GrantAdmin) {
+		return nil
+	}
+	if !d.sessionInScope(pa.session, target) {
+		return grantForbidden(verb, pa, "the surface is in session "+echoName(target)+", which is not the pane's own session or in its fan group")
+	}
+	if !write && !pa.grants.Has(GrantRead) {
+		return grantForbidden(verb, pa, verb+" needs the read grant")
+	}
+	return nil
 }

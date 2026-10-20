@@ -429,6 +429,10 @@ type eventHub struct {
 	lastFileSeq uint64
 	// lastLayoutSeq is the same for layout-changed events.
 	lastLayoutSeq uint64
+	// lastTMLSeq is the same for tml-event events, whose values can be
+	// large and are the person's input: they go live to the owner and to
+	// subscribers, and are not kept for a later reader.
+	lastTMLSeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -531,7 +535,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq,
 		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq,
 		filter.types[EventTransferFile] && h.lastFileSeq > from.afterSeq,
-		filter.types[EventLayoutChanged] && h.lastLayoutSeq > from.afterSeq:
+		filter.types[EventLayoutChanged] && h.lastLayoutSeq > from.afterSeq,
+		filter.types[EventTML] && h.lastTMLSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -572,6 +577,9 @@ func (h *eventHub) retain(ev streamEvent) {
 		// missed some reads list-windows, which is the layout they described.
 		// Counted, so a resume over one is marked with a gap.
 		h.lastLayoutSeq = ev.Seq
+		return
+	case EventTML:
+		h.lastTMLSeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {
