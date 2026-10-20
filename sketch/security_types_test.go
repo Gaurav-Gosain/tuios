@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -524,5 +524,50 @@ func TestTimelineOutputIsInert(t *testing.T) {
 		if !inertTry(t, src, RenderOptions{}, true) {
 			t.Fatalf("%q did not render", src)
 		}
+	}
+}
+
+func TestQuadrantOutputIsInert(t *testing.T) {
+	rendered := 0
+	for _, src := range corpusOf(t, "quadrant") {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	if rendered < len(corpusOf(t, "quadrant")) {
+		t.Fatalf("%d of the quadrant corpus rendered", rendered)
+	}
+	hostile(t, quadrantTemplates, 250, RenderOptions{}, false)
+	hostileOptions(t, "quadrantChart\n  accTitle: t\n  A: [0.5, 0.5]")
+	keys := []string{"chartWidth", "chartHeight", "titlePadding", "quadrantPadding", "xAxisLabelPadding", "yAxisLabelPadding",
+		"quadrantTextTopPadding", "pointTextPadding", "pointRadius"}
+	for _, value := range []string{"1e999", "-1", "0", "0.0001", "99999999", "NaN", ".inf", "-.inf", "[1]", "{a: 1}", "true", "null"} {
+		config := make([]string, len(keys))
+		for i, key := range keys {
+			config[i] = "    " + key + ": " + value
+		}
+		src := "---\nconfig:\n  quadrantChart:\n" + strings.Join(config, "\n") +
+			"\n---\nquadrantChart\n  title t\n  x-axis a --> b\n  y-axis c --> d\n  quadrant-1 q\n  A: [0.5, 0.5]"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("settings of %s: did not render", value)
+		}
+	}
+	huge := strings.Repeat("9", 400)
+	for _, src := range []string{
+		"quadrantChart\n  A: [0.5, 0.5] radius: " + huge + ", stroke-width: " + huge + "px",
+		"quadrantChart\n  A: [0x5, 0e9]\n  B: [0,5, 0 5]\n  C: [055, 0b1]",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	mutate(t, corpusOf(t, "quadrant"), []string{"\"", "`", ":", ":::", ": [", "]", "\n", ", ", "classDef ", "color: #", "radius: ",
+		"-->"}, 3, 4000, RenderOptions{}, false)
+	// pele checks that class names like __proto__ leave Object.prototype alone and find no
+	// class that was not defined.
+	out, err := Render("quadrantChart\n  __proto__:::__proto__: [0.5, 0.5]\n  constructor:::constructor: [0.1, 0.1]\n  toString:::toString: [0.2, 0.2]\n"+
+		"  classDef constructor radius: 3\n  classDef hasOwnProperty color: #f00", RenderOptions{})
+	if err != nil || strings.Count(out.Data, "<circle") != 3 || strings.Count(out.Data, ` r="3"`) != 1 {
+		t.Fatalf("classes named after Object properties: %v\n%s", err, out.Data)
 	}
 }

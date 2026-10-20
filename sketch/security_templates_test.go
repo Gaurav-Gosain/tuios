@@ -467,3 +467,48 @@ var timelineTemplates = []func(p string) string{
 		return "%%{init: {\"timeline\": {\"disableMulticolor\": \"" + p + "\", \"padding\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\"}}}%%\ntimeline\n  2001 : a"
 	},
 }
+
+var quadrantTemplates = []func(p string) string{
+	func(p string) string { return "quadrantChart\n  title " + p + "\n  A: [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  x-axis " + p + " --> " + p },
+	func(p string) string {
+		return "quadrantChart\n  x-axis \"" + p + "\" --> \"" + p + "\"\n  A: [0.5, 0.5]"
+	},
+	func(p string) string { return "quadrantChart\n  y-axis \"" + p + "\" --> \"" + p + "\"" },
+	func(p string) string { return "quadrantChart\n  y-axis " + p + "\n  A: [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  x-axis \"" + p + "\" -->" },
+	func(p string) string { return "quadrantChart\n  quadrant-1 " + p + "\n  quadrant-2 \"" + p + "\"" },
+	func(p string) string {
+		return "quadrantChart\n  quadrant-3 \"`" + p + "`\"\n  quadrant-4 \"`**" + p + "**`\"\n  A: [0.1, 0.9]"
+	},
+	func(p string) string { return "quadrantChart\n  " + p + ": [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  \"" + p + "\": [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  \"`" + p + "`\": [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  A:::" + p + ": [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  A:::k: [0.5, 0.5]\n  classDef " + p + " color: #f00" },
+	func(p string) string { return "quadrantChart\n  A:::k: [0.5, 0.5]\n  classDef k color: " + p },
+	func(p string) string { return "quadrantChart\n  A:::k: [0.5, 0.5]\n  classDef k " + p + ": 3" },
+	func(p string) string { return "quadrantChart\n  A: [0.5, 0.5] color: " + p },
+	func(p string) string {
+		return "quadrantChart\n  A: [0.5, 0.5] radius: " + p + ", stroke-width: " + p + ", stroke-color: " + p
+	},
+	func(p string) string { return "quadrantChart\n  A: [0.5, 0.5] " + p },
+	func(p string) string { return "quadrantChart\n  A: [" + p + ", 0.5]" },
+	func(p string) string { return "quadrantChart\n  A: [0.5, " + p + "]" },
+	func(p string) string {
+		return "quadrantChart\n  accTitle: " + p + "\n  accDescr: " + p + "\n  A: [0.5, 0.5]"
+	},
+	func(p string) string { return "quadrantChart\n  accDescr {\n " + p + "\n }\n  A: [0.5, 0.5]" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\nquadrantChart\n  A: [0.5, 0.5]" },
+	func(p string) string {
+		return "---\nconfig:\n  quadrantChart:\n    chartWidth: \"" + p + "\"\n    chartHeight: \"" + p + "\"\n    pointRadius: \"" + p + "\"\n    quadrantPadding: \"" + p + "\"\n    xAxisPosition: \"" + p + "\"\n    yAxisPosition: \"" + p + "\"\n---\nquadrantChart\n  x-axis a --> b\n  y-axis c --> d\n  A: [0.5, 0.5]"
+	},
+	func(p string) string {
+		return "---\nconfig:\n  quadrantChart: \"" + p + "\"\n---\nquadrantChart\n  A: [0.5, 0.5]"
+	},
+	func(p string) string {
+		return "%%{init: {\"quadrantChart\": {\"chartWidth\": \"" + p + "\", \"titlePadding\": \"" + p + "\"}, \"themeVariables\": {\"quadrant1Fill\": \"" + p + "\"}}}%%\nquadrantChart\n  title t\n  A: [0.5, 0.5]"
+	},
+	func(p string) string { return "quadrantChart " + p + "\n  A: [0.5, 0.5]" },
+	func(p string) string { return "quadrantChart\n  %% " + p + "\n  A: [0.5, 0.5]" },
+}

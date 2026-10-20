@@ -21,6 +21,7 @@ var done = map[string]bool{
 	"gantt":     true,
 	"mindmap":   true,
 	"pie":       true,
+	"quadrant":  true,
 	"sequence":  true,
 	"state":     true,
 	"timeline":  true,

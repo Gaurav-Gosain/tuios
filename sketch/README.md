@@ -14,9 +14,9 @@ sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
 ## Status
 
 It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
-diagrams, pie charts, mindmaps, gantt charts, XY charts and timelines. Each
-other diagram type gives an error with the code `unsupported-diagram` until
-its port is done.
+diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines and
+quadrant charts. Each other diagram type gives an error with the code
+`unsupported-diagram` until its port is done.
 
 The output is the same as the output of pele, byte for byte. The test suite
 compares each diagram with an SVG that pele drew from the same source.
@@ -33,6 +33,7 @@ compares each diagram with an SVG that pele drew from the same source.
 | gantt | 11/11 |
 | xychart | 8/8 |
 | timeline | 14/14 |
+| quadrantChart | 3/3 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
