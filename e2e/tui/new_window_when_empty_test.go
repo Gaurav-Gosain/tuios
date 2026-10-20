@@ -173,7 +173,7 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	// 2. A switch from a workspace with no pane takes the session's start
 	// directory. The pane on 2 exits, and return_when_empty is off, so the
 	// session stays on 2 with nothing focused. opt+5 opens the next workspace,
-	// 3, and workspace 2, left with no pane, goes, so 3 becomes 2.
+	// which is that empty 2, and opens its pane there.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("exit", tuitest.Enter); err != nil {
 		t.Fatalf("type exit: %v", err)

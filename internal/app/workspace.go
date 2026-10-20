@@ -25,6 +25,7 @@ import (
 // session state without coming here, so only the client that made the
 // switch opens the pane, and the session gets one.
 func (m *OS) SwitchToWorkspace(workspace int) {
+	asked := workspace
 	workspace = m.newWorkspaceSlot(workspace)
 	from := m.CurrentWorkspace
 	var fromPane *terminal.Window
@@ -32,6 +33,11 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 		fromPane = fw
 	}
 	m.switchToWorkspace(workspace, -1)
+	// A switch to a new workspace from the empty one on screen stays on it,
+	// and is still a switch to a new workspace: it opens the pane one opens.
+	if asked != from && workspace == from {
+		from = 0
+	}
 	m.openPaneOnEmptyWorkspace(from, workspace, fromPane)
 }
 
@@ -45,20 +51,27 @@ func (m *OS) workspaceTabKey(ws int) int {
 }
 
 // newWorkspaceSlot is where a switch to workspace lands. A daemon session
-// numbers its workspaces 1 to their count (see the session's
-// noteWorkspacesLocked), so a switch to a number past the last one opens the
-// next one instead: opt+5 with three workspaces opens workspace 4. Landing
-// there at once, rather than on 5 until the daemon renumbers it, keeps a pane
-// opened right after the switch on the workspace the user sees.
+// numbers its workspaces from 1 (see the session's noteWorkspacesLocked), so a
+// switch to a number past the last workspace that holds a pane opens the one
+// after it instead: opt+5 with three workspaces opens workspace 4, and opt+6
+// from that empty 4 stays on it, since the empty workspace on screen is the
+// new one, unless a pane is on its way to it. Landing there at once, rather
+// than on 5 until the daemon renumbers it, keeps a pane opened right after the
+// switch on the workspace the user sees.
 func (m *OS) newWorkspaceSlot(workspace int) int {
 	if !m.IsDaemonSession || session.IsScratchWorkspace(workspace) {
 		return workspace
 	}
-	occupied := m.occupiedWorkspaceNumbers()
-	if slices.Contains(occupied, workspace) {
-		return workspace
+	last := 0
+	for ws := 1; ws <= m.NumWorkspaces; ws++ {
+		// A pane asked for and on its way counts as there: opt+2 opt+3 with
+		// new_window_when_empty opens both.
+		at, asked := m.paneRequests[ws]
+		if m.GetWorkspaceWindowCount(ws) > 0 || (asked && time.Since(at) < paneRequestTimeout) {
+			last = ws
+		}
 	}
-	return min(workspace, len(occupied)+1)
+	return min(workspace, last+1)
 }
 
 // NextWorkspace switches to the next workspace that holds at least one
