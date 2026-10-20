@@ -8,6 +8,8 @@ import (
 	"image"
 	"image/png"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"tuios.dev/vt"
@@ -78,5 +80,53 @@ func TestKeptImageDecodeBounds(t *testing.T) {
 				t.Fatalf("decode gave %v, want a refusal", img.Bounds())
 			}
 		})
+	}
+}
+
+// TestUnnamedTransmitIsNotKept is a security boundary: the pane decides how
+// many images it sends, and what tuios keeps for a screenshot must stay
+// bounded however many that is. The ways it could go wrong, written down
+// before the fix:
+//
+//  1. An a=t under i=0 keeps an entry. An image sent with no id cannot be
+//     named by a later a=p, and an a=t places nothing, so the entry is never
+//     shown. A t=f entry holds only a path and counts no bytes, so the bound
+//     on kept bytes never evicts it, and a guest that repeats the command
+//     grows the store without end.
+//  2. A fix that keeps nothing for any a=t drops an image a later a=p shows:
+//     an a=t under an id the guest chose must still be kept.
+//  3. A fix that keeps nothing under i=0 drops one on screen: an a=T under
+//     i=0 must still be kept.
+func TestUnnamedTransmitIsNotKept(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{KittyGraphics: true, KittyFileTransfer: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: &hostRecorder{}})
+	if !kp.hostReadsFiles() {
+		t.Fatal("the host should read files in this test")
+	}
+	path := filepath.Join(kittyTestTempDir(t), "frame.rgba")
+	if err := os.WriteFile(path, make([]byte, 2*2*4), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	send := func(action vt.KittyGraphicsAction, id uint32) {
+		cmd := kittyFileCmd(vt.KittyMediumFile, path)
+		cmd.Action, cmd.ImageID = action, id
+		sendKitty(kp, cmd)
+	}
+
+	for range 100 {
+		send(vt.KittyActionTransmit, 0)
+	}
+	if n := len(kp.kept[kittyMediumWin]); n != 0 {
+		t.Fatalf("100 a=t under i=0 left %d kept entries, want none: nothing can show them", n)
+	}
+
+	send(vt.KittyActionTransmit, 7)
+	if n := len(kp.kept[kittyMediumWin]); n != 1 {
+		t.Fatalf("an a=t under i=7 left %d kept entries, want 1: a later a=p can show it", n)
+	}
+
+	send(vt.KittyActionTransmitPlace, 0)
+	if n := len(kp.kept[kittyMediumWin]); n != 2 {
+		t.Fatalf("an a=T under i=0 left %d kept entries, want 2: it is on screen", n)
 	}
 }
