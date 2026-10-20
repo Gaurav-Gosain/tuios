@@ -59,9 +59,9 @@ A Markdown file gives each of its mermaid code blocks.
 
 In a terminal that shows kitty graphics, the diagram is a picture. In other
 terminals it is drawn with box-drawing characters and its labels as text. A
-diagram type with no text drawing yet, or one too wide for the terminal, is
-written as its source. When the output is not a terminal, the command writes
-SVG.
+diagram type with no text drawing yet is written as its source. A drawing
+wider than the terminal is written at its full width. When the output is not a
+terminal, the command writes SVG.
 
 With --watch the diagram fills the terminal and is drawn again each time the
 file is saved. In a terminal with kitty graphics it moves to the new layout:
@@ -259,7 +259,13 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 			cols = o.cols
 		}
 		if d, err := sketch.Parse(src, sketch.ParseOptions{}); err == nil {
-			lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: cols, Color: tty && profile >= colorprofile.ANSI})
+			color := tty && profile >= colorprofile.ANSI
+			lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: cols, Color: color})
+			if errors.Is(err, sketchtext.ErrTooWide) {
+				// Drawn at its full width: the terminal wraps or cuts the lines.
+				fmt.Fprintf(os.Stderr, "diagram %d: the text drawing is wider than %d columns.\n", i+1, cols)
+				lines, err = sketchtext.Draw(d, sketchtext.Options{Color: color})
+			}
 			if err == nil {
 				for _, line := range lines {
 					if _, err := fmt.Fprintln(stdout, line); err != nil {
@@ -268,8 +274,15 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 				}
 				return nil
 			}
+			// No text drawing for this type, or none that fits: say so on
+			// stderr, so that piped output stays the source alone.
+			switch {
+			case errors.Is(err, sketchtext.ErrUnsupported):
+				fmt.Fprintf(os.Stderr, "diagram %d: %s diagrams have no text drawing. The source follows.\n", i+1, mermaid.TermSafe(string(d.Type)))
+			case errors.Is(err, sketchtext.ErrTooLarge):
+				fmt.Fprintf(os.Stderr, "diagram %d: the text drawing is too large. The source follows.\n", i+1)
+			}
 		}
-		// No text drawing for this type, or none that fits: the source.
 		_, err := fmt.Fprintln(stdout, mermaid.TermSafe(strings.TrimRight(src, "\n")))
 		return err
 	}

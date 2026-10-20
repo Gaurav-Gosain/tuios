@@ -4740,8 +4740,10 @@ A Markdown file gives each of its `mermaid` code blocks.
 | `text` | Any other terminal. Box-drawing characters draw the diagram, and the labels are text |
 | `svg` | The output is not a terminal |
 
-`text` draws flowcharts and sequence diagrams. Another type, or a drawing too
-wide for the terminal, is written as its source.
+`text` draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
+diagrams, pie charts, mindmaps and gantt charts. Another type is written as its
+source, with a note on stderr. A drawing wider than the terminal is written at
+its full width, with a note on stderr.
 
 `-o FILE` saves to a file, as SVG or PNG from its extension. With more than one
 diagram, the files get `-2`, `-3` and so on. `--scale` sets the pixels per SVG
