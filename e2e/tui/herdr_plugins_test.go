@@ -214,6 +214,17 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 		t.Fatalf("plugins enable: %v\n%s", err, out)
 	}
 	waitPluginFile(t, base, id, "startup.log", "startup startup e2e.hooks")
+	// A pane cannot restart it either. plugin.restart has no herdr CLI
+	// command, so the step sends the request on the socket itself. A
+	// restart that went through would run startup a second time, which the
+	// count below catches.
+	steps = runHerdrSteps(t, base, "w1", "restart", "step restart python3 -c '"+
+		`import json,os,socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(os.environ["HERDR_SOCKET_PATH"]); `+
+		`s.sendall((json.dumps({"id":"r1","method":"plugin.restart","params":{"plugin_id":sys.argv[1]}})+"\n").encode()); `+
+		`r=json.loads(s.makefile().readline()); print(r); sys.exit(1 if "error" in r else 0)' `+id+"\n")
+	if s := steps["restart"]; s.code == 0 || !strings.Contains(s.out, "forbidden") {
+		t.Fatalf("plugin.restart from a pane was not refused: exit %d\n%s%s", s.code, s.out, s.err)
+	}
 	if out, err := tuiosCLI(t, base, "plugins", "run", "e2e.actions", "hello", "--wait"); err == nil || !strings.Contains(out, "plugin_disabled") {
 		t.Fatalf("the person's enable of %s also enabled e2e.actions, which a pane wrote into config.toml: %v\n%s", id, err, out)
 	}

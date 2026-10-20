@@ -7769,3 +7769,17 @@ fail without a kill in the middle of a restart.
 
 The fixed build passes `TestPluginsInstallFromGit` 3 of 3, and every
 `TestHerdrPlugin*` 3 of 3.
+
+### After the rebase onto main of 2026-10-21
+
+`TestHerdrPluginTrustAndHooks` now also sends `plugin.restart` for an
+enabled plugin from a pane, on the herdr socket. herdr's CLI has no restart
+command, so the step writes the request with python3. The pane variables
+stay set, as for the other herdr steps.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `plugin.restart` is for the person | the `herdrPluginTrust` check in `herdrPluginRestart` | `TestHerdrPluginTrustAndHooks` ("plugin.restart from a pane was not refused: exit 0", with `restarted: true`) | **caught** |
+
+The fixed build passes `TestHerdrPluginTrustAndHooks` and
+`TestPluginsInstallFromGit` 3 of 3.
