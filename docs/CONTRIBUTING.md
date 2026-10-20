@@ -40,4 +40,4 @@ The `justfile` at the root holds the dev commands. Install [just](https://just.s
 
 Only `install`, `install-ghostty`, `deploy`, `deploy-hosts` and `restart` touch the daemon you work in.
 
-Use conventional commit prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`), keep commits focused, and run `go fmt` before committing. Security reports go through [SECURITY.md](../SECURITY.md), not the issue tracker.
+Use conventional commit prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`), keep commits focused, and run `go fmt` before committing. A commit message ends with its body: please add no trailers, such as `Co-authored-by:`. Security reports go through [SECURITY.md](../SECURITY.md), not the issue tracker.
