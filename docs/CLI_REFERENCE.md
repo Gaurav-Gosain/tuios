@@ -4786,7 +4786,7 @@ two seconds after the end. Press `r` to start again and `q` to quit.
 
 The live view sends no frames and uses no CPU while nothing moves.
 tuios.dev/sketch draws the diagrams. It is a Go port of pele
-and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant charts, user journeys, kanban boards, git graphs, sankey diagrams, block diagrams, architecture diagrams and requirement diagrams now. A diagram of another type gives
+and draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant charts, user journeys, kanban boards, git graphs, sankey diagrams, block diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams, radar charts and treemaps now. A diagram of another type gives
 an error and its source. The command exits 1 when a diagram cannot be drawn.
 
 ---
