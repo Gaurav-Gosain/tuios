@@ -369,7 +369,10 @@ func TestHostsSync(t *testing.T) {
 
 // TestHostsSyncRestartWithYes restarts a daemon of the old version with
 // --restart --yes, and checks that the new daemon runs the new version and
-// brings the session back.
+// brings the session back. A client attached on old has to reattach by
+// itself, in the same process: the sync stops the daemon with kill-server
+// --restart, as restart-server does. A plain kill-server says "stop", and the
+// client quits.
 func TestHostsSyncRestartWithYes(t *testing.T) {
 	next := syncNextBinary(t)
 	f := newSyncFleet(t, []string{"old"}, nil)
@@ -378,6 +381,7 @@ func TestHostsSyncRestartWithYes(t *testing.T) {
 	if out, err := old.run(t, "new", "work", "--detach"); err != nil {
 		t.Fatalf("start the daemon on old: %v\n%s", err, out)
 	}
+	attached := attachIn(t, old.base, "work", startOpts{cols: 160, rows: 40})
 	before, out, err := f.syncJSON(t, "--binary", next, "--dry-run")
 	if err != nil || before["old"].Daemon.PID == 0 {
 		t.Fatalf("read old: %v\n%s", err, out)
@@ -411,6 +415,12 @@ func TestHostsSyncRestartWithYes(t *testing.T) {
 	}
 	if now["old"].RestartNeeded || now["old"].Action != "up to date" {
 		t.Errorf("ASSERTION: after the restart, old still plans %q (restart needed %v)\n%s", now["old"].Action, now["old"].RestartNeeded, out)
+	}
+	if err := attached.WaitForText("tuios reattached", bootTimeout); err != nil {
+		t.Errorf("ASSERTION: the client attached on old did not reattach after the sync restarted its daemon: %v\n%s", err, attached.Snapshot())
+	}
+	if code, exited := attached.ExitCode(); exited {
+		t.Errorf("ASSERTION: the client attached on old quit (code %d) instead of reattaching", code)
 	}
 }
 
