@@ -60,7 +60,7 @@ func cursorLine(r *reader, line []byte, off int64) (decoded, bool) {
 					// text with markers for the code it keeps, and no old
 					// text. A search_replace with empty old text makes a
 					// file of its new text. Each shows as the text it writes.
-					class, in = classWrite, jobj{"target_file": fileOf(in), "content": in.str("code_edit", "new_string", "newString")}
+					class, in = classWrite, jobj{"target_file": fileOf(in), "content": in.str("code_edit", "new_string", "newString", "new_str")}
 				}
 				out = append(out, callEntry(name, b.str("id"), class, in)...)
 			case "tool_result":
