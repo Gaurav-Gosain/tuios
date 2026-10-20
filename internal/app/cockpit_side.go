@@ -177,6 +177,17 @@ func (m *OS) cockpitLiveRelease() {
 	}
 }
 
+// cockpitLiveForget drops the live pane without touching its stream, for
+// a client whose panes were just replaced. A prime still pending is dropped
+// with it.
+func (m *OS) cockpitLiveForget() {
+	ck := &m.Inbox.ck
+	ck.liveID, ck.liveOwned, ck.live, ck.primeID = "", false, "", ""
+	ck.liveDirty = true
+	ck.livePrime++
+	ck.liveGen++
+}
+
 // cockpitKeepsStream reports whether w's stream stays open because it is the
 // live pane of the open agents view.
 func (m *OS) cockpitKeepsStream(w *terminal.Window) bool {

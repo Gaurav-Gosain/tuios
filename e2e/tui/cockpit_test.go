@@ -735,6 +735,83 @@ func TestCockpitSideColumn(t *testing.T) {
 	alive(t, term, "after the side column")
 }
 
+// TestCockpitLiveBoxAfterDaemonRestart keeps the live box updating across a
+// daemon restart. The agent's pane is on workspace 2, so only the agents view
+// streams it. The daemon restarts under the open view, the client reattaches
+// by itself, and output the pane prints after that has to reach the box with
+// no key pressed. The markers are computed by the shell, so the echoed
+// command line cannot satisfy the wait.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with the live pane
+// kept across the rebuild, the box keeps the old rows; with no follow after
+// the reattach, the box stays empty until a key.
+func TestCockpitLiveBoxAfterDaemonRestart(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if out, err := tuiosCLI(t, base, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("new session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "worker", "-s", "agent", "--workspace", "2", "--no-focus"); err != nil {
+		t.Fatalf("open the agent's pane on workspace 2: %v\n%s", err, out)
+	}
+	report := func() {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "agent", "-w", "worker", "--harness", "codex", "-m", "Bash go test ./..."); err != nil {
+			t.Fatalf("report: %v\n%s", err, out)
+		}
+	}
+	report()
+	term := startIn(t, base, startOpts{args: []string{"attach", "agent"}, cols: 200, rows: 55, shippedLooks: true,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	side := func(s tuitest.Screen, want string) bool {
+		_, rows := s.Size()
+		for r := range rows {
+			line := []rune(s.Line(r))
+			if len(line) > 154 && strings.Contains(string(line[154:]), want) {
+				return true
+			}
+		}
+		return false
+	}
+	say := func(marker string) {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "send-text", "-s", "agent", "-w", "worker", "echo LIVE-"+marker+"\n"); err != nil {
+			t.Fatalf("print in the agent's pane: %v\n%s", err, out)
+		}
+	}
+	say("before-$((3*4))")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return side(s, "LIVE-before-12") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the live box did not show the pane on workspace 2: %v\n%s", err, term.Snapshot())
+	}
+
+	if out, err := tuiosCLI(t, base, "restart-server", "--yes"); err != nil {
+		t.Fatalf("restart-server --yes: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("tuios reattached", 2*bootTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client did not reattach after the restart: %v\n%s", err, term.Snapshot())
+	}
+	// A real agent reports again from its hooks. The pane is a new shell.
+	report()
+	say("after-$((5*6))")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return side(s, "LIVE-after-30") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the live box did not follow the pane after the daemon restart: %v\n%s", err, term.Snapshot())
+	}
+	// The agents list comes back too: its watch dials the new daemon again.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "not connected") }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the agents view still says it is not connected after the restart: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "live-after-restart-200x55")
+	alive(t, term, "after the restart under the agents view")
+}
+
 // TestCockpitSideTabs is the side column's pieces as focus tabs on a screen
 // narrower than it: Checkpoints lists them, and Pane shows the live pane.
 func TestCockpitSideTabs(t *testing.T) {

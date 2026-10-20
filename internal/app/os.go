@@ -2161,6 +2161,11 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	// dropped above, and on a switch back the ids match again with nothing
 	// streaming the pane, so the view would show a frozen screen.
 	m.pip = pipState{occluder: m.pip.occluder[:0]}
+	// The agents view's live box has the same problem. A session the daemon
+	// restored keeps its window ids, so the box would see the same id after
+	// a reattach, prime nothing, and stop updating. Forget it, and let the
+	// next follow pick the pane again.
+	m.cockpitLiveForget()
 
 	// The box the panes go in is the new session's: its size under its own
 	// window_size policy and its clients, and the chrome reserve its clients

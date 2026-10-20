@@ -313,7 +313,8 @@ func (m *OS) resumeOnHost(client *session.TUIClient, state *session.SessionState
 	m.MarkAllDirty()
 	m.LogInfo("The link to %s is back after %s", host, took)
 	m.ShowNotification(fmt.Sprintf("The link to %s is back.", host), "success", m.Settings.NotificationDuration)
-	return nil
+	// A rebuild forgot the agents view's live pane. See rebuildForSession.
+	return m.CockpitSideFetch()
 }
 
 // samePaneSet reports whether the session still has exactly the panes this

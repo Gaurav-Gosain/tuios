@@ -196,7 +196,9 @@ func (m *OS) resumeOnNewDaemon(client *session.TUIClient, state *session.Session
 	}
 	m.LogInfo("%s", text)
 	m.ShowNotification(text, "success", 2*m.Settings.NotificationDuration)
-	return nil
+	// An open agents view picks its live pane again: no input may come to
+	// run the follow, and the box stays empty until one does.
+	return m.CockpitSideFetch()
 }
 
 // ReconnectingToDaemon reports whether the client waits for a new daemon.
