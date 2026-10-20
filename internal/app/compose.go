@@ -2,7 +2,6 @@ package app
 
 import (
 	"image"
-	"image/color"
 	"slices"
 	"time"
 
@@ -84,11 +83,6 @@ type cellLayer struct {
 	// if any, so a change of any of them reparses. See background.go.
 	fillRect             image.Rectangle
 	fillInner, fillOuter string
-	// see is the cells whose background is the cell beneath them, and under
-	// is scratch for those backgrounds while the layer is drawn. See
-	// overlay_frame.go.
-	see   []seeThroughCell
-	under []color.Color
 }
 
 // wideMargin is the room past a layer's right edge that a head cell on the
@@ -114,7 +108,7 @@ func (cl *cellLayer) WidthMethod() uv.WidthMethod {
 // the cells are keyed on: a layer whose string did not change but whose ground
 // did (an option was switched, the theme changed, a pane moved under a clip)
 // is parsed again rather than copied with the old paint.
-func (cl *cellLayer) update(content string, w, h int, fill *layerFill, seeThrough bool) {
+func (cl *cellLayer) update(content string, w, h int, fill *layerFill) {
 	if cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect &&
 		cl.fillInner == fill.inner.key && cl.fillOuter == fill.outer.key {
 		return
@@ -127,10 +121,6 @@ func (cl *cellLayer) update(content string, w, h int, fill *layerFill, seeThroug
 	uv.NewStyledString(content).Draw(&cellLayerScreen{cl}, uv.Rect(0, 0, cl.w, cl.h))
 	if fill.on() {
 		paintLayerFill(cl.buf.Lines, cl.w, cl.h, fill)
-	}
-	cl.see = cl.see[:0]
-	if seeThrough {
-		cl.see = findSeeThrough(content, cl.buf.Lines, cl.w, cl.h, cl.see)
 	}
 	cl.spill = slices.Grow(cl.spill[:0], cl.h)[:cl.h]
 	for row, line := range cl.buf.Lines {
@@ -215,10 +205,6 @@ func (s *cellLayerScreen) WidthMethod() uv.WidthMethod  { return ansi.GraphemeWi
 // exactly once to the value the source holds. The rest go through Line.Set a
 // cell at a time.
 func (cl *cellLayer) blit(canvas *frameCanvas, x, y int) {
-	if len(cl.see) > 0 {
-		under := cl.groundsUnder(canvas, x, y)
-		defer cl.showThrough(canvas, x, y, under)
-	}
 	for row := range cl.h {
 		cy := y + row
 		if cy < 0 || cy >= len(canvas.Lines) {
@@ -431,7 +417,7 @@ func (m *OS) drawComposedLayer(canvas *frameCanvas, cl composedLayer, painted bo
 		// cellLayer too, and each has to hold its own cells at the moment
 		// it is drawn. Nothing on the frame today shares an id, and
 		// nothing enforces that either.
-		cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill, !m.showsProgramOutput(cl.layer.GetID()))
+		cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
 		cl.cells.blit(canvas, cl.bounds.Min.X, cl.bounds.Min.Y)
 		return
 	}
@@ -456,7 +442,7 @@ func (m *OS) drawPaneLayer(canvas *frameCanvas, cl composedLayer, at, clip image
 	if painted {
 		fill = m.layerFill(cl.layer.GetID(), cl.bounds, cl.layer.Width(), cl.layer.Height(), grounds)
 	}
-	cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill, false)
+	cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
 	if at.In(clip) {
 		cl.cells.blit(canvas, at.Min.X, at.Min.Y)
 		return

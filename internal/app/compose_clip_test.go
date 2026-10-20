@@ -50,7 +50,7 @@ func randomCellLayer(rng *rand.Rand, w, h int) *cellLayer {
 		}
 	}
 	cl := &cellLayer{w: -1}
-	cl.update(sb.String(), w, h, &layerFill{}, false)
+	cl.update(sb.String(), w, h, &layerFill{})
 	return cl
 }
 
@@ -88,7 +88,7 @@ func clippedPaneLayer(tb testing.TB) (*cellLayer, *frameCanvas, image.Rectangle)
 	row := strings.Repeat("the quick brown fox jumps over the lazy dog ", realCols/44+1)[:realCols]
 	content := strings.TrimSuffix(strings.Repeat(row+"\n", realRows), "\n")
 	cl := &cellLayer{w: -1}
-	cl.update(content, realCols, realRows, &layerFill{}, false)
+	cl.update(content, realCols, realRows, &layerFill{})
 	canvas := &frameCanvas{}
 	canvas.Resize(realCols, realRows)
 	canvas.Clear()

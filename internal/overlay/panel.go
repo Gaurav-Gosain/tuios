@@ -319,14 +319,15 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 }
 
 // footerRows renders the muted key-hint strip on one row, shortened in tiers
-// when the hints do not fit across it (see fitHints).
-func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
-	key := footerKey(hints, bg, pal, width)
+// when the hints do not fit across it (see fitHints). The keys are measured
+// against measure, the colour the strip is seen on.
+func footerRows(hints []Hint, bg, measure color.Color, pal Palette, width int) []string {
+	key := footerKey(hints, bg, measure, pal, width)
 	footerMemo.Lock()
 	strip, ok := footerMemo.m[key]
 	footerMemo.Unlock()
 	if !ok {
-		strip, _ = renderHints(fitHints(hints, width, footerSep), footerSep, bg, pal)
+		strip, _ = renderHintsOn(fitHints(hints, width, footerSep), footerSep, bg, measure, pal)
 		footerMemo.Lock()
 		if footerMemo.m == nil || len(footerMemo.m) >= footerMemoMax {
 			footerMemo.m = make(map[string]string, footerMemoMax)
@@ -353,10 +354,10 @@ const footerMemoMax = 64
 // the width, the inks and the ground with their types (an ANSI colour and an
 // RGB one can print alike), the depth the inks are measured at, and the
 // glyphs a strip draws.
-func footerKey(hints []Hint, bg color.Color, pal Palette, width int) string {
+func footerKey(hints []Hint, bg, measure color.Color, pal Palette, width int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d|%d|%t|%s|%s|%T%v|%T%v|%T%v|", width, CurrentDepth(), UseASCII(), Ellipsis(), EnterKey(),
-		bg, bg, pal.AccentBright, pal.AccentBright, pal.FgDim, pal.FgDim)
+	fmt.Fprintf(&b, "%d|%d|%t|%s|%s|%T%v|%T%v|%T%v|%T%v|", width, CurrentDepth(), UseASCII(), Ellipsis(), EnterKey(),
+		bg, bg, measure, measure, pal.AccentBright, pal.AccentBright, pal.FgDim, pal.FgDim)
 	for _, h := range hints {
 		b.WriteString(h.Key)
 		b.WriteByte(0)
@@ -373,15 +374,16 @@ func renderHints(f fittedHints, sep int, bg color.Color, pal Palette) (string, i
 	return renderHintsOn(f, sep, bg, bg, pal)
 }
 
-// renderHintsOn is renderHints drawn on ground with the key colour measured
-// against measure, for hints on a ground known only once composited.
-func renderHintsOn(f fittedHints, sep int, ground, measure color.Color, pal Palette) (string, int) {
+// renderHintsOn is renderHints with the keys measured against measure, the
+// colour the strip is seen on once its overlay is moved onto a ground (see
+// onGround).
+func renderHintsOn(f fittedHints, sep int, bg, measure color.Color, pal Palette) (string, int) {
 	// Both measured against the ground they land on: the accent follows the
 	// terminal theme. FgDim, not FgMute, for the labels: the footer is the only
 	// place a panel says what its keys do, and FgMute is a furniture token
 	// picked to disappear against the canvas.
-	keyStyle := Style(ground).Foreground(Readable(pal.AccentBright, measure)).Bold(true)
-	labelStyle := Style(ground).Foreground(pal.FgDim)
+	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, measure)).Bold(true)
+	labelStyle := Style(bg).Foreground(pal.FgDim)
 	gap := labelStyle.Render(strings.Repeat(" ", sep))
 	var b strings.Builder
 	for i, h := range f.Hints {
@@ -439,10 +441,20 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 
 	// A framed panel draws its hairline in the outermost padding cells, so the
 	// frame costs no geometry: the body, the tabs and every hit rectangle a
-	// host recorded are where they are on an unframed panel.
+	// host recorded are where they are on an unframed panel. It reads as a pane
+	// window: the frame and the whole panel go onto the host's ground.
+	measure := bg
+	var ground color.Color
+	var grounded bool
 	if pal.Framed && sidePad() >= 1 {
 		tl, tr, bl, br, h, v := panelFrame(pal)
-		edge := frameStyle(bg, pal.Edge, tl, tr, bl, br, h, v)
+		var m color.Color
+		ground, m, grounded = framedGround()
+		grounded = grounded && drawn(tl, tr, bl, br, h, v)
+		if grounded && m != nil {
+			measure = m
+		}
+		edge := Style(bg).Foreground(frameInk(pal.Edge))
 		side := edge.Render(v)
 		inner := totalW - 2
 		innerPad := Style(bg).Render(strings.Repeat(" ", sidePad()-1))
@@ -481,27 +493,32 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	if len(p.Hints) > 0 {
 		lines = append(lines, blank)
 		lines = append(lines, line(Rule(p.Width, bg, pal)))
-		for _, r := range footerRows(p.Hints, bg, pal, p.Width) {
+		for _, r := range footerRows(p.Hints, bg, measure, pal, p.Width) {
 			lines = append(lines, line(r))
 		}
 	}
 	lines = append(lines, bottom) // bottom pad
 
 	geo.Height = len(lines)
-	return strings.Join(lines, "\n"), geo
+	out := strings.Join(lines, "\n")
+	if grounded {
+		out = onGround(out, bg, ground)
+	}
+	return out, geo
 }
 
 // FrameBlock gives a block drawn outside Panel the frame a Panel draws when the
 // palette asks for one (Palette.Framed): rows is the block, each totalW cells
 // wide with at least one blank cell of padding on every side, and the frame
-// takes that outermost cell, so the block keeps its size. On a palette that
-// needs no frame the rows come back as they are.
+// takes that outermost cell, so the block keeps its size. Like a framed Panel,
+// the framed block goes onto the host's ground, every cell on bg with it. On a
+// palette that needs no frame the rows come back as they are.
 func FrameBlock(rows []string, totalW int, bg color.Color, pal Palette) []string {
 	if !pal.Framed || len(rows) < 2 || totalW < 2 {
 		return rows
 	}
 	tl, tr, bl, br, h, v := panelFrame(pal)
-	edge := frameStyle(bg, pal.Edge, tl, tr, bl, br, h, v)
+	edge := Style(bg).Foreground(frameInk(pal.Edge))
 	side := edge.Render(v)
 	out := make([]string, len(rows))
 	out[0] = edge.Render(tl + strings.Repeat(h, totalW-2) + tr)
@@ -509,5 +526,10 @@ func FrameBlock(rows []string, totalW int, bg color.Color, pal Palette) []string
 		out[i] = side + Fill(ansi.Cut(rows[i], 1, totalW-1), totalW-2, bg) + side
 	}
 	out[len(rows)-1] = edge.Render(bl + strings.Repeat(h, totalW-2) + br)
+	if ground, _, ok := framedGround(); ok && drawn(tl, tr, bl, br, h, v) {
+		for i := range out {
+			out[i] = onGround(out[i], bg, ground)
+		}
+	}
 	return out
 }
