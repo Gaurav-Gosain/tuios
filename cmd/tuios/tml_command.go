@@ -64,7 +64,8 @@ it, unless the document uses esc. A pane is tiled like any pane.
 With --wait the command stays open until the surface closes. It prints the
 value the document closed with as JSON, such as the button a person pressed.
 It prints null and exits with status 1 when the person closed the surface
-without a value.`,
+without a value, and exits with status 2 when a program closed it with
+tuios tml close: the value is then not the person's answer.`,
 		Example: `  # Show a report as a popup
   tuios tml show report.tml
 
@@ -199,8 +200,11 @@ func runTMLShow(name string, o tmlShowOptions, stdin io.Reader, stdout io.Writer
 		value = json.RawMessage("null")
 	}
 	fmt.Fprintln(stdout, string(value))
-	if res.Reason == "dismissed" {
+	switch res.Reason {
+	case session.TMLDismissed:
 		return &statusError{code: 1}
+	case session.TMLClosedByProgram:
+		return &statusError{code: 2}
 	}
 	return nil
 }
@@ -213,7 +217,8 @@ func newTMLCloseCommand() *cobra.Command {
 		Long: `Close a TML surface and its window.
 
 VALUE is JSON, such as "done" or {"ok": true}. A tuios tml show --wait that
-waits on the surface prints it. Without VALUE it prints null.`,
+waits on the surface prints it and exits with status 2, so a script can tell
+it from the person's answer. Without VALUE it prints null.`,
 		Example: `  tuios tml close tml-4f1a9c02
   tuios tml close tml-4f1a9c02 '"done"'`,
 		Args: cobra.RangeArgs(1, 2),

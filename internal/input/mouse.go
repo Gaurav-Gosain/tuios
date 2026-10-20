@@ -3,7 +3,6 @@ package input
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -17,7 +16,7 @@ import (
 func sendMouseToWindow(o *app.OS, win *terminal.Window, event uv.MouseEvent) {
 	// A TML window's surface takes the event. Its placeholder asks for
 	// mouse reporting, which is what routes the event here. See app/tml.go.
-	if win.Kind == session.WindowKindTML {
+	if o.DrawsTML(win) {
 		o.TMLMouse(win, event)
 		return
 	}

@@ -136,9 +136,10 @@ var errorCodeCatalog = []struct {
 	{ErrVerbSourceChanged, "A file changed on its machine while it was copied: its size or time is not what the copy started from. Nothing was put in place for it. Copy it again when it is not being written."},
 	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
 	{ErrVerbSameSession, "move-window was given to_session, and the window is already in that session. Nothing moved. Name another session, or leave out to_session and give workspace."},
-	{ErrVerbPaneNotMovable, "move-window cannot move the window to another session: it is a popup, a scratch pane, or a pane that runs on another machine. Nothing moved."},
+	{ErrVerbPaneNotMovable, "move-window cannot move the window to another session: it is a popup, a scratch pane, a TML pane, or a pane that runs on another machine. Nothing moved."},
 	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
 	{ErrVerbNoSurface, "No open TML surface has that id. It closed, or the id is wrong. list-windows names the surface of each TML window."},
+	{ErrVerbTooManySurfaces, "The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. Close one with tml-close."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 

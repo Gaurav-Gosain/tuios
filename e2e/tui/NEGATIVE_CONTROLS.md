@@ -7602,3 +7602,17 @@ The tests are `TestTMLShowPopup` and `TestTMLShowPaneAndClose` in `tml_test.go`,
 | Idle: the client draws every surface again every 100 ms | `TestIdleCostStaysLow/tml_surface` (25 ticks, budget 2; 4182 context switches, budget 400) | **caught** |
 
 A control that sets a TML window's output flag on each render does not fail the idle case: the flag is read only on a pass that something else woke, so it starts no loop. It is not kept.
+
+### After the review of #944
+
+`TestTMLProgramCloseIsNotThePersons` and `TestTMLSurfaceThroughAHostShowsThePlaceholder` in `tml_test.go`. Run on 2026-10-20, the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `movableRefusal` lets a TML pane move to another session | `TestTMLProgramCloseIsNotThePersons` ("a TML pane moved to another session") | **caught** |
+| `tml-close` reports its value as the person's (`closed`) | `TestTMLProgramCloseIsNotThePersons` ("ended with <nil> after a program's close, want exit status 2") | **caught** |
+| `--name` stored with its control characters | `TestTMLProgramCloseIsNotThePersons` ("the window name kept its control characters") | **caught** |
+| A client attached through a host draws TML windows itself | `TestTMLSurfaceThroughAHostShowsThePlaceholder` ("the far surface did not show its placeholder line") | **caught** |
+| A client attached through a host claims `tml_surfaces` in its hello | none: the client still does not draw the window, so the pushes it gets go unused | not caught |
+
+The hello claim is kept off through a host anyway: it spares the link the pushes. The cap of open surfaces per caller (8 per pane, 32 per session outside the panes) has no e2e case. Reaching it opens 32 windows.

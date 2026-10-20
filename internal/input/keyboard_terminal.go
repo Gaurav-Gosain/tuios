@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -251,7 +250,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// A TML window takes the key itself: its surface is drawn by this
 	// client, and its PTY only holds the place. See app/tml.go.
-	if focusedWindow != nil && focusedWindow.Kind == session.WindowKindTML {
+	if o.DrawsTML(focusedWindow) {
 		recordTerminalKey(o, msg)
 		o.NotePaneKey()
 		return o, o.TMLKey(focusedWindow, msg.String())

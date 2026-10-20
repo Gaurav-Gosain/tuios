@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,22 @@ const (
 	ErrVerbInvalidTML = "invalid_tml"
 	// ErrVerbNoSurface is a surface id that names no open surface.
 	ErrVerbNoSurface = "no_surface"
+	// ErrVerbTooManySurfaces is a tml-open over the caller's cap of open
+	// surfaces.
+	ErrVerbTooManySurfaces = "too_many_surfaces"
+)
+
+// The reasons a surface closed, in tml_result.
+const (
+	// TMLClosedByPerson is a close() action the person ran: the value is
+	// the person's answer.
+	TMLClosedByPerson = "closed"
+	// TMLDismissed is the window closed without a value: esc, close-window,
+	// or the session ended.
+	TMLDismissed = "dismissed"
+	// TMLClosedByProgram is a tml-close: a program gave the value, not the
+	// person.
+	TMLClosedByProgram = "program"
 )
 
 // TML targets tml-open takes.
@@ -104,6 +121,9 @@ type tmlSurface struct {
 	windowID  string
 	title     string
 	owner     string
+	// caller keys the surface cap: the opening pane, or "" for a caller in
+	// no pane.
+	caller string
 
 	doc     *tml.Node
 	docJSON []byte
@@ -183,14 +203,30 @@ func tmlInvalid(problems []tml.Problem, err error) *verbError {
 }
 
 // tmlLimitsFor is what a document from cs may hold: the person's limits for
-// a caller in no pane or in a pane that holds admin, which is the person's
-// own shell under the default grants, and the default limits otherwise.
+// a caller in no pane, and the default limits for any pane, whatever it
+// holds. An agent runs in a pane.
 func (d *Daemon) tmlLimitsFor(cs *connState) tml.Limits {
-	pa := d.paneAuthority(cs)
-	if pa == nil || pa.grants.Has(GrantAdmin) {
+	if d.paneAuthority(cs) == nil {
 		return tml.PersonLimits()
 	}
 	return tml.DefaultLimits()
+}
+
+// Open surfaces a caller may hold at once: a pane, and every caller outside
+// the panes together, per session. A surface is a window, a PTY and a
+// process, so a loop that opens them must stop.
+const (
+	tmlSurfacesPerPane    = 8
+	tmlSurfacesPerSession = 32
+)
+
+// tmlCallerKey names the caller on cs for the surface cap: its pane, or ""
+// for a caller in no pane.
+func (d *Daemon) tmlCallerKey(cs *connState) string {
+	if ref := d.callerPaneRef(cs); ref != nil {
+		return ref.Window
+	}
+	return ""
 }
 
 // tmlOwnerLabel names the caller on cs for the frame: its pane, or the CLI.
@@ -269,7 +305,9 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 			})
 	}
 
-	title := cmp.Or(p.Name, doc.AttrString("title"), "TML")
+	// The name is shown on the frame and listed, so it is held to what a
+	// document's text is: no control characters.
+	title := cmp.Or(tml.Sanitize(p.Name), doc.AttrString("title"), "TML")
 	s := &tmlSurface{
 		id:        newTMLSurfaceID(),
 		sessionID: sess.ID,
@@ -283,12 +321,30 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 		done: make(chan struct{}),
 	}
 	uri := TMLURIPrefix + s.id
+	s.caller = d.tmlCallerKey(cs)
 	// The surface is registered before the window exists, so the push that
 	// follows the window's creation finds it; a client that sees the window
 	// first draws it empty until the push lands.
 	d.tml.mu.Lock()
 	if d.tml.surfaces == nil {
 		d.tml.surfaces = map[string]*tmlSurface{}
+	}
+	limit := tmlSurfacesPerSession
+	if s.caller != "" {
+		limit = tmlSurfacesPerPane
+	}
+	open := 0
+	for _, o := range d.tml.surfaces {
+		if o.caller == s.caller && (s.caller != "" || o.sessionID == s.sessionID) {
+			open++
+		}
+	}
+	if open >= limit {
+		d.tml.mu.Unlock()
+		return nil, hintedVerbError(ErrVerbTooManySurfaces, fmt.Sprintf("%d surfaces are open already, the most one caller may hold", limit), &VerbHint{
+			Command: "tuios tml close <surface>",
+			Detail:  fmt.Sprintf("A pane holds at most %d open surfaces, and the callers outside the panes %d per session. Close one first.", tmlSurfacesPerPane, tmlSurfacesPerSession),
+		})
 	}
 	d.tml.surfaces[s.id] = s
 	d.tml.mu.Unlock()
@@ -372,7 +428,7 @@ func (d *Daemon) verbTMLClose(_ *connState, params json.RawMessage) (any, *verbE
 		}
 		value = tml.SanitizeValue(value)
 	}
-	if verr := d.tmlClose(p.Surface, value, has, "closed"); verr != nil {
+	if verr := d.tmlClose(p.Surface, value, has, TMLClosedByProgram); verr != nil {
 		return nil, verr
 	}
 	return map[string]any{"type": "tml_closed", "surface": p.Surface}, nil
@@ -433,9 +489,9 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 			}
 			value = tml.SanitizeValue(value)
 		}
-		reason := "closed"
+		reason := TMLClosedByPerson
 		if !has {
-			reason = "dismissed"
+			reason = TMLDismissed
 		}
 		if verr := d.tmlClose(p.Surface, value, has, reason); verr != nil {
 			return nil, verr
@@ -486,7 +542,7 @@ func (d *Daemon) tmlWindowGone(id string) {
 		d.tml.mu.Unlock()
 		return
 	}
-	s.closed, s.reason = true, "dismissed"
+	s.closed, s.reason = true, TMLDismissed
 	delete(d.tml.surfaces, id)
 	payload := s.payload()
 	close(s.done)

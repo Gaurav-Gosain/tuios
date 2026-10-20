@@ -70,6 +70,8 @@ func movableRefusal(w WindowState) string {
 		return "the pane is a scratch pane, and a scratch pane stays in its session"
 	case w.Popup:
 		return "the pane is a popup, and a popup stays in its session"
+	case w.Kind == WindowKindTML:
+		return "the pane shows a TML surface, and a surface stays in the session it was opened in"
 	case w.PTYID == "":
 		return "the pane has no process"
 	}

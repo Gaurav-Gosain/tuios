@@ -166,9 +166,10 @@ var verbCapabilities = map[string][]string{
 	"new-window":   {config.LinkAllowOpen},
 	"split-window": {config.LinkAllowOpen},
 	"popup":        {config.LinkAllowOpen},
-	// A TML surface from another machine names that machine on its frame,
-	// which comes with the rest of the TML grants. Until then a link
-	// may not open one, and the input verb acts as the person here.
+	// A link needs every relay capability for the TML verbs, which the
+	// default policy does not give: a surface names its owner on its frame,
+	// and a surface opened from another machine would need that machine's
+	// name there. tml-input acts as the person on this machine.
 	"tml-open":    {capRelay},
 	"tml-close":   {capRelay},
 	"tml-input":   {capRelay},

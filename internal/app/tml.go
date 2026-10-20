@@ -220,6 +220,14 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 
 func ptr[T any](v T) *T { return &v }
 
+// DrawsTML reports whether this client draws w as a TML surface: a window of
+// kind tml, on a client of this machine's daemon. A client attached through
+// a host shows the window's placeholder line, since what the person does on
+// a surface goes back through this machine's socket.
+func (m *OS) DrawsTML(w *terminal.Window) bool {
+	return w != nil && w.Kind == session.WindowKindTML && m.DaemonClient != nil && m.DaemonClient.DrawsTML()
+}
+
 // tmlViewOf is the view a window draws, or nil.
 func (m *OS) tmlViewOf(w *terminal.Window) *tmlView {
 	if w == nil || w.Kind != session.WindowKindTML {

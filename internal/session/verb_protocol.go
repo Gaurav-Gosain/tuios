@@ -1122,7 +1122,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "target", Type: "string", Description: "popup or pane."},
 				{Name: "workspace", Type: "int", Description: "Workspace the surface was opened on."},
 				{Name: "value", Type: "any", Description: "With wait: the value the surface closed with. null when the person dismissed it."},
-				{Name: "reason", Type: "string", Description: "With wait: closed when a close action or tml-close gave a value, dismissed when the window closed without one."},
+				{Name: "reason", Type: "string", Description: "With wait: closed when the person ran a close action, so the value is the person's answer; program when a tml-close gave the value; dismissed when the window closed without one."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"tml-open","params":{"session":"work","doc":"<tml version=\"1\" title=\"Hi\"><text>Hello</text></tml>"}}`,
@@ -1209,7 +1209,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "window", Type: "string", Description: "Window to move. Omit to move the focused one."},
 				{Name: "workspace", Type: "int", Description: "Workspace number to move the window to. Required without to_session. With to_session, omit it to use the workspace the destination shows."},
 				{Name: "follow", Type: "bool", Description: "Switch to that workspace after moving. With to_session, focus the window in the destination.", Default: "false"},
-				{Name: "to_session", Type: "string", Description: "Session to move the window to, by name or id. A popup, a scratch pane and a pane on another machine cannot move (pane_not_movable). The window's own session is refused (same_session)."},
+				{Name: "to_session", Type: "string", Description: "Session to move the window to, by name or id. A popup, a scratch pane, a TML pane and a pane on another machine cannot move (pane_not_movable). The window's own session is refused (same_session)."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the window that moved. A move to another session keeps it."},

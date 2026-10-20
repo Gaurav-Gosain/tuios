@@ -449,9 +449,12 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		PaneMarks: true,
 		// See daemon_goodbye.go.
 		Goodbye: true,
-		// See tml_surface.go.
-		TMLSurfaces: true,
 	}
+	// A client draws TML surfaces of this machine's daemon only: what the
+	// person does on one goes back through this machine's socket, which
+	// holds no surface of a session on another machine. Through a host the
+	// window shows its placeholder line instead. See tml_surface.go.
+	hello.TMLSurfaces = c.viaHost == ""
 
 	// Add graphics capabilities if provided
 	if caps != nil {
@@ -1191,6 +1194,10 @@ func (c *TUIClient) OnPaneMark(handler func(PaneMarkPayload)) {
 	c.paneMarkHandler = handler
 	c.multiClientMu.Unlock()
 }
+
+// DrawsTML reports whether this client draws TML surfaces: only a client of
+// this machine's daemon does. See the hello.
+func (c *TUIClient) DrawsTML() bool { return c.viaHost == "" }
 
 // OnTMLSurface registers the handler for MsgTMLSurface, the daemon's push of
 // a TML surface when it opens, changes or closes, and of every open one when

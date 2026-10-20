@@ -4642,8 +4642,10 @@ window id. A popup floats over the panes and needs an attached client. Press
 like any pane.
 
 With `--wait` the command stays open until the surface closes. It prints the
-value the document closed with as JSON, such as `"rerun"`. It prints `null`
-and exits with status 1 when the person closed the surface without a value.
+value the document closed with as JSON, such as `"rerun"`, and exits with
+status 0. It prints `null` and exits with status 1 when the person closed the
+surface without a value. It exits with status 2 when a program closed it with
+`tml close`: the value it prints is then not the person's answer.
 
 `tml close` closes a surface. VALUE is JSON, and a waiting `tml show` prints
 it. `tml validate` prints each problem with its line, the node and the fix,

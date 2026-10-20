@@ -276,3 +276,113 @@ func TestTMLShowRefusesABadDocument(t *testing.T) {
 		}
 	}
 }
+
+// tmlSurfaceOf waits for list-windows to name a surface in session and
+// returns it with its window.
+func tmlSurfaceOf(t *testing.T, base, sess string) (string, string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+		var res struct {
+			Windows []struct {
+				WindowID string `json:"window_id"`
+				Surface  string `json:"surface"`
+			} `json:"windows"`
+		}
+		if err == nil && json.Unmarshal([]byte(out), &res) == nil {
+			for _, w := range res.Windows {
+				if w.Surface != "" {
+					return w.Surface, w.WindowID
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("list-windows of %s never named a surface", sess)
+	return "", ""
+}
+
+// TestTMLProgramCloseIsNotThePersons checks that a waiting tml show can tell
+// a program's tml close from the person's answer: it prints the value and
+// exits with status 2. It also checks that a name with escapes is stored
+// without them, and that a TML pane cannot move to another session, where
+// its surface would not follow it.
+func TestTMLProgramCloseIsNotThePersons(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	for _, name := range []string{"e2e-tmlprog", "e2e-tmlother"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v: %s", name, err, out)
+		}
+	}
+	doc := writeTMLDoc(t, base, "run.tml", tmlRunDoc)
+	shown := startCLIBackground(t, base, "tml", "show", doc, "--pane", "--wait", "-s", "e2e-tmlprog",
+		"--name", "Run\x1b]0;PWNED\x07\x1b[41mName")
+	surface, window := tmlSurfaceOf(t, base, "e2e-tmlprog")
+
+	listed, err := tuiosCLI(t, base, "list-windows", "-s", "e2e-tmlprog", "--json")
+	if err != nil || strings.Contains(listed, `\u001b`) || strings.Contains(listed, `\u0007`) || !strings.Contains(listed, `"custom_name": "Run]0;PWNED[41mName"`) {
+		t.Fatalf("the window name kept its control characters, or lost its text: %v\n%s", err, listed)
+	}
+
+	out, err := tuiosCLI(t, base, "move-window", "-s", "e2e-tmlprog", "-w", window, "--to-session", "e2e-tmlother")
+	if err == nil || !strings.Contains(out, "TML surface") {
+		t.Fatalf("a TML pane moved to another session: %v\n%s", err, out)
+	}
+
+	if out, err := tuiosCLI(t, base, "tml", "close", surface, `"yes"`); err != nil {
+		t.Fatalf("tml close: %v\n%s", err, out)
+	}
+	select {
+	case run := <-shown:
+		var exit *exec.ExitError
+		if !errors.As(run.err, &exit) || exit.ExitCode() != 2 {
+			t.Fatalf("tml show --wait ended with %v after a program's close, want exit status 2\n%s", run.err, run.out)
+		}
+		if got := strings.TrimSpace(run.out); got != `"yes"` {
+			t.Fatalf("tml show --wait printed %q, want \"yes\"", got)
+		}
+	case <-time.After(uiTimeout):
+		t.Fatal("tml show --wait never returned after tml close")
+	}
+}
+
+// TestTMLSurfaceThroughAHostShowsThePlaceholder attaches through another
+// machine, where the person's input on a surface could not reach the
+// surface's daemon. The client must not draw the surface or take its keys: it
+// shows the placeholder line, and the far surface stays open until the far
+// machine closes it.
+func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+	env := hubWithBuild(t, base, remote)
+	term := startIn(t, base, startOpts{cols: 120, rows: 36, args: []string{"attach", "--host", "build", "far"}, env: env})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("never attached through build: %v\n%s", err, term.Snapshot())
+	}
+	doc := writeTMLDoc(t, remote, "run.tml", tmlRunDoc)
+	shown := startCLIBackground(t, remote, "tml", "show", doc, "--wait", "-s", "far", "--width", "90", "--height", "24")
+	if err := term.WaitForText("This pane shows a TML surface", uiTimeout); err != nil {
+		t.Fatalf("the far surface did not show its placeholder line: %v\n%s", err, term.Snapshot())
+	}
+	if screenHas(term.Screen(), "Picked: none") {
+		t.Fatalf("a client attached through a host drew a surface it cannot answer for\n%s", term.Snapshot())
+	}
+	saveTMLFrame(t, term, "1-through-a-host")
+	if err := term.SendKeys("q"); err != nil {
+		t.Fatalf("send q: %v", err)
+	}
+	surface, _ := tmlSurfaceOf(t, remote, "far")
+	if out, err := tuiosCLI(t, remote, "tml", "close", surface); err != nil {
+		t.Fatalf("the far surface did not stay open: %v\n%s", err, out)
+	}
+	select {
+	case <-shown:
+	case <-time.After(uiTimeout):
+		t.Fatal("the far tml show --wait never returned")
+	}
+}

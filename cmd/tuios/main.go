@@ -1413,7 +1413,8 @@ the move instead of staying put.
 With --to-session, the window moves to another session. The program in it
 keeps running, and the window keeps its id and its scrollback. The workspace
 is optional then: without it, the window goes to the workspace that session
-shows. A popup, a scratch pane and a pane on another machine cannot move.`,
+shows. A popup, a scratch pane, a TML pane and a pane on another machine
+cannot move.`,
 		Example: `  # Move the focused window to workspace 3
   tuios move-window 3
 

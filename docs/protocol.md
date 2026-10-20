@@ -1640,6 +1640,7 @@ catalog.
 | `busy` | The daemon had no room for the request now, or (`transfer-start`) another copy writes that destination now. Nothing was done. |
 | `invalid_tml` | The TML document does not parse or does not validate. Nothing was opened or changed. The error carries `problems`: each one has `at` (a JSON Pointer to the node), `code`, `message`, and where it helps `did_you_mean`, `accepted` or `available`. |
 | `no_surface` | No open TML surface has that id. It closed, or the id is wrong. `list-windows` names the surface of each TML window. |
+| `too_many_surfaces` | The caller holds as many open TML surfaces as it may: 8 for a pane, and 32 per session for the callers outside the panes. Nothing was opened. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -2460,15 +2461,19 @@ object), `target` (`popup`, the default, or `pane`), `session`, `name`
 
 The document is checked as `tuios tml validate` checks it. A document with
 errors fails with `invalid_tml`, and the error carries `problems`, each with a
-JSON Pointer to the node and the fix. A caller in no pane, or in a pane that
-holds admin, may send up to 1 MiB; any other pane up to 256 KiB. A popup needs
-an attached client and fails with `needs_client` without one.
+JSON Pointer to the node and the fix. A caller in no pane may send up to 1 MiB,
+and a caller in a pane up to 256 KiB. A pane may hold 8 open surfaces, and the
+callers outside the panes 32 per session; one more fails with
+`too_many_surfaces`. A popup needs an attached client and fails with
+`needs_client` without one. Control characters are dropped from `name`.
 
 The window is of kind `tml`, and `list-windows` reports it with `kind`, `uri`
 (`tuios://tml/<surface>`) and `surface`. Like a `view` window it has a PTY,
 whose program prints one line for a client that does not draw TML. A popup
 closes on an esc the document does not use. Focus, close-window and the
-layout treat it as any window.
+layout treat it as any window, but it cannot move to another session. A
+client draws the surfaces of its own machine's daemon only: a client attached
+through a host shows the placeholder line.
 
 The surface's local actions run in the client: tabs, sorting, the cursor,
 folding, scrolling, `set` and `toggle`. A change to the state goes back to the
@@ -2478,8 +2483,10 @@ surface with that value. `copy(value)` copies through the client. `emit`,
 
 With `wait` the call stays open until the surface closes, and answers
 `{"type": "tml_result", "surface", "window_id", "value", "reason"}`. `reason`
-is `closed` when a `close()` action or `tml-close` gave a value, and
-`dismissed` when the window closed without one; `value` is then null.
+says who gave the value. `closed` is a `close()` action the person ran, so the
+value is the person's answer. `program` is a `tml-close`: a program gave the
+value, not the person. `dismissed` is the window closing without a value
+(esc, close-window, the session ending); `value` is then null.
 `timeout` bounds the wait in milliseconds and leaves the surface open when it
 runs out.
 
@@ -2500,7 +2507,7 @@ Response:
 
 Close a TML surface and its window. Params: `surface` (required) and `value`
 (any JSON, optional). A `tml-open` that waits on the surface answers with the
-value and reason `closed`. An unknown or closed surface fails with
+value and reason `program`. An unknown or closed surface fails with
 `no_surface`.
 
 ### tml-input
