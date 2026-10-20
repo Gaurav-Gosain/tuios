@@ -37,3 +37,9 @@ func groupAlive(pgid int) bool {
 	err := syscall.Kill(-pgid, 0)
 	return err == nil || err == syscall.EPERM
 }
+
+// procAlive reports whether a process with pid exists.
+func procAlive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || err == syscall.EPERM
+}

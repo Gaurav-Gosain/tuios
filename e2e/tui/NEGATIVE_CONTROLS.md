@@ -7791,33 +7791,45 @@ under mode `open`. `e2e.native` is a native plugin that asks for `read`,
 installed from a bare repository over `file://`. `e2e.herdrprobe` is a herdr
 plugin installed from a folder. `e2e.linked` is a native plugin that is
 linked and enabled, not installed. The startup script reads with
-`list-sessions`, types with `send-text`, and leaves a process behind whose
-parent exits, whose `TUIOS_*` variables are cut and which holds none of the
-script's output open. Then the script ends. One second later that process
-types, and tries to disable its own plugin. The native plugin's pane records
-its grants. Before that, five manifests are refused at install: `[[wasm]]`,
-`admin` without `--grant admin`, `respond`, an unknown key, and a
-`[herdr]` manifest with another id.
+`list-sessions` and with herdr's `workspace list`, lists the plugins with
+herdr's `plugin list`, subscribes to window events, types with `send-text`,
+makes a session over the client protocol with `tuios new`, and leaves a
+process behind whose parent exits, whose `TUIOS_*` variables are cut and
+which holds none of the script's output open. Then the script ends. One
+second later that process types, and tries to disable its own plugin. The
+native plugin's pane records its grants. Before that, five manifests are
+refused at install: `[[wasm]]`, `admin` without `--grant admin`, `respond`,
+an unknown key, and a `[herdr]` manifest with another id. After it, a
+native plugin that asks for `admin` is installed from a folder with
+`--grant admin`: it holds admin, and without the approval file it is
+refused. A folder plugin whose `plugins.lock` entry is given `admin` by hand
+is refused as changed.
 
-The test wants: `e2e.native` reads and does nothing else. `e2e.herdrprobe`
-reads and types, as the default grants allow, and cannot disable a plugin.
-`e2e.linked` does nothing. Only the herdr plugin's text is in the pane. The
-native plugin's pane holds `read`, though the person opened it. The
-artifacts are `install.txt`, `info.txt`, `pane.txt` and each plugin's
-`.out` files.
+The test wants: `e2e.native` reads, lists and gets events from every
+session, and does nothing else. `e2e.herdrprobe` reads and types, as the
+default grants allow, and cannot disable a plugin. `e2e.linked` sees no
+session, cannot list plugins or subscribe, and does nothing. Only the herdr
+plugin's text and session exist. The native plugin's pane holds `read`,
+though the person opened it. The artifacts are `install.txt`, `info.txt`,
+`pane.txt`, the forged `plugins.lock` and each plugin's `.out` files.
 
 Each control cut the wiring in the branch, built the binary, and ran the
-one test. Run on 2026-10-21.
+one test. Run on 2026-10-21, after the review of #956.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| A native plugin's process is placed in its plugin | `pluginAuthority` returns nil | `TestNativePluginGrants` ("e2e.native: write exited 0", "e2e.linked: read exited 0") | **caught** |
-| Grants are checked while a native plugin runs, also under `open` | the `nativePluginsRun` term in the early return of `checkGrants` | `TestNativePluginGrants` ("e2e.linked: read exited 0") | **caught** |
-| The runner enters the owner before the command can call | the `setOwner` call in `Runner.Start` | `TestNativePluginGrants` ("e2e.native: write exited 0") | **caught** |
-| The owner stays while the leader's group lives | `setOwner` drops the entry when the leader exits | `TestNativePluginGrants` ("e2e.native: orphan-write exited 0", "e2e.native: orphan-trust exited 0", "e2e.herdrprobe: orphan-trust exited 0") | **caught** |
+| A native plugin's process is placed in its plugin | `pluginAuthority` returns nil | `TestNativePluginGrants` ("e2e.native: write exited 0", "binary exited 0", "e2e.linked: pluginlist exited 0") | **caught** |
+| Verbs are checked while a native plugin runs, also under `open` | the `nativePluginsRun` term in the early return of `checkGrants` | `TestNativePluginGrants` ("e2e.linked: read exited 0") | **caught** |
+| The client protocol is checked while a native plugin runs | the `nativePluginsRun` term in the early return of `checkGrantMessage` (review F1) | `TestNativePluginGrants` ("e2e.native: binary exited 0", "the sessions the plugins made over the client protocol") | **caught** |
+| The runner enters the owner before the command can call | the `setOwner` call in `Runner.Start` | `TestNativePluginGrants` ("e2e.linked: read exited 0", "binary exited 0") | **caught** |
+| The owner stays while what the leader left is in its group | `setOwner` drops the entry when the leader exits | `TestNativePluginGrants` ("e2e.native: orphan-write exited 0", "orphan-trust exited 0", "e2e.herdrprobe: orphan-trust exited 0") | **caught** |
 | No plugin process acts as the person | the `pluginOfPeer` check in `connFromPane` | `TestNativePluginGrants` (each plugin's "orphan-trust exited 0": the orphan disabled its own plugin) | **caught** |
 | A native plugin's pane holds no more than the plugin | the cut in `herdrPluginPaneOpen` | `TestNativePluginGrants` ("the plugin's pane holds {Pane:true Grants:[admin]}") | **caught** |
-| A native plugin holds the approved grants, or none | `Discover` gives every native plugin the grants its manifest asks for | `TestNativePluginGrants` ("e2e.linked: read exited 0", "plugins info of the linked plugin") | **caught** |
+| A native plugin holds the approved grants, or none | `Discover` gives every native plugin the grants its manifest asks for | `TestNativePluginGrants` ("e2e.linked: read exited 0", "pluginlist exited 0") | **caught** |
+| `admin` needs a machine-local approval (review F2) | the `adminApproved` check in `Discover` | `TestNativePluginGrants` ("an admin plugin with no approval on this machine") | **caught** |
+| A `path:` plugin is held to its approved manifest (review F2) | `checkManaged` skips the hash and grants check for a local entry | `TestNativePluginGrants` ("a local plugin whose lock entry was given admin by hand") | **caught** |
+| herdr read methods need `read` (review F3) | the `herdrRead` check in `herdrAllowed` | `TestNativePluginGrants` ("e2e.linked: pluginlist exited 0") | **caught** |
+| A plugin with `read` gets events from every session (review M1) | `eventInScope` holds a plugin to its empty session | `TestNativePluginGrants` ("events.code of e2e.native never held") | **caught** |
 | `[[wasm]]` is refused | the `len(n.Wasm)` case in `parseNative` | `TestNativePluginGrants` ("install of the wasm manifest: <nil>") | **caught** |
 | `admin` needs `--grant admin` | the admin check in `checkNativeAsks` | `TestNativePluginGrants` ("install of the admin manifest: <nil>") | **caught** |
 
@@ -7826,7 +7838,13 @@ too: a process a plugin leaves behind, with its parent gone and its
 `TUIOS_*` variables cut, was taken for the person and could disable a
 plugin.
 
-Not covered here: Windows and the BSDs, where the runner refuses a native
-plugin's commands (`plugin_unsupported_platform`). The cross builds compile
-that path. The fixed build passes `TestNativePluginGrants`,
-`TestPluginsInstallFromGit` and every `TestHerdrPlugin*` 3 of 3.
+`TestHerdrMethodsNameTheirCheck` in `internal/session` is a security
+boundary test: every herdr socket method names its check in `herdrChecks`,
+and a method with none is refused at run time.
+
+Not covered end to end: the pid reuse check in `leftBehind` (it needs pid
+wraparound), the git timeout, and Windows and the BSDs, where the runner
+refuses a native plugin's commands (`plugin_unsupported_platform`). The
+cross builds compile that path. The fixed build passes
+`TestNativePluginGrants`, `TestPluginsInstallFromGit` and every
+`TestHerdrPlugin*` 3 of 3.

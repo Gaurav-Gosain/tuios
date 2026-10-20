@@ -367,6 +367,9 @@ func (d *Daemon) herdrAPICall(cs *connState, method string, params json.RawMessa
 		}
 		return nil, nil, false
 	}
+	if herr := d.herdrAllowed(cs, method); herr != nil {
+		return nil, herr, true
+	}
 	in := &herdrIn{}
 	if herr := herdrDecode(params, in, m.required...); herr != nil {
 		return nil, herr, true

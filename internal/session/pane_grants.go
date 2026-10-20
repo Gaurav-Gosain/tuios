@@ -1128,7 +1128,7 @@ func (d *Daemon) checkGrantMessage(cs *connState, t MessageType) *verbError {
 	if t == MsgHello || t == MsgPing || cs == nil || cs.viaLink || cs.paneOnly {
 		return nil
 	}
-	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() {
+	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() && !d.nativePluginsRun() {
 		return nil
 	}
 	pa := d.paneAuthority(cs)

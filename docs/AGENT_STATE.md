@@ -947,8 +947,18 @@ opens holds no more than the plugin.
 
 tuios knows a plugin's process by its process session, which the kernel
 records. A process that the plugin starts is the plugin's too, also after
-its parent exits and with its environment changed. A process that starts a
-new session leaves the plugin. No plugin process can act as the person.
+its parent exits and with its environment changed. After the plugin's
+command ends, this holds while the process stays in the command's process
+group. A process that starts a new session leaves the plugin. So does a
+process that moves to another process group, after the command ends. This
+check stops mistakes and misled tools. It does not stop a program that
+tries to escape. No plugin process can act as the person.
+
+A native plugin holds `admin` only when you approved it on this machine:
+`tuios plugins install --grant admin` records the approval in the state
+folder, for that exact manifest. `plugins.lock` alone never gives `admin`.
+A plugin installed from a folder is checked against its approved manifest
+too. After you change its manifest, install it again.
 On Windows and the BSDs, the kernel does not tell tuios which process
 calls. There tuios does not run the commands of a native plugin yet.
 

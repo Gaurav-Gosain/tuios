@@ -361,6 +361,10 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 		return
 	}
 	if req.Method == "events.subscribe" {
+		if herr := d.herdrAllowed(cs, req.Method); herr != nil {
+			writeHerdr(conn, req.ID, nil, herr.code, herr.msg)
+			return
+		}
 		// A stream is held open, so a caller holds fewer of them. The key
 		// is apart from the connection count's.
 		if !d.herdrConns.take(-1-cs.peerPID, herdrStreamsPerCaller) {
@@ -433,6 +437,9 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 			return nil, herr.code, herr.msg
 		}
 		return out, "", ""
+	}
+	if herr := d.herdrAllowed(cs, req.Method); herr != nil {
+		return nil, herr.code, herr.msg
 	}
 	var p herdrParams
 	if len(req.Params) > 0 {

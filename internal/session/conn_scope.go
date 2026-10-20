@@ -613,7 +613,10 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	if sc := cs.scope.Load(); sc != nil && sc.own {
 		owners = append(owners, d.sessionNameByID(sc.sessionID))
 	}
-	if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
+	if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) && pa.plugin == "" {
+		// A plugin is in no session, and the read grant its subscribe
+		// needed reaches every session (plugin_grants.go).
+		//
 		// The pane's session as it is named now: the view was taken at the
 		// stream's subscribe, and the session may have been renamed since.
 		own := pa.session

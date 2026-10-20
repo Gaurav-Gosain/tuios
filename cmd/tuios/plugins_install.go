@@ -150,10 +150,19 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	return s, herdrplugin.CheckSubdir(s.subdir)
 }
 
+// gitTimeout bounds one git command, so a remote that stops answering
+// does not hold the install lock until Ctrl-C.
+const gitTimeout = 5 * time.Minute
+
 // git runs the system git. Only the transports a plugin source may name
 // are allowed.
 func git(dir string, args ...string) (string, error) {
-	out, err := review.Git(context.Background(), dir, []string{"GIT_ALLOW_PROTOCOL=https:ssh:git:file"}, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	out, err := review.Git(ctx, dir, []string{"GIT_ALLOW_PROTOCOL=https:ssh:git:file"}, args...)
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("git %s did not finish in %s. Check the network and the source, then try again", args[0], gitTimeout)
+	}
 	if err != nil {
 		if _, lerr := exec.LookPath("git"); lerr != nil {
 			return "", errors.New("tuios plugins install needs git, and git is not on your PATH. Install git, then try again")
@@ -371,6 +380,12 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		st.Commit, st.Dir, st.Built = e.Commit, rel, built
 		if err := herdrplugin.WriteState(in.dirs.StatePath(), in.state); err != nil {
 			return fail(err)
+		}
+	}
+	if slices.Contains(e.Grants, "admin") {
+		// checkNativeAsks made sure the person typed --grant admin.
+		if err := herdrplugin.ApproveAdmin(in.dirs.AdminApprovalsPath(), e.ID, e.Approved); err != nil {
+			return err
 		}
 	}
 	lock, err := herdrplugin.ReadLock(in.dirs.LockPath())

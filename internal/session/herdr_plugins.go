@@ -64,6 +64,9 @@ func (d *Daemon) herdrPluginCall(cs *connState, method string, params json.RawMe
 	if !ok {
 		return nil, nil, false
 	}
+	if herr := d.herdrAllowed(cs, method); herr != nil {
+		return nil, herr, true
+	}
 	if d.plugins == nil {
 		return nil, herdrErr("unsupported", "this tuios daemon runs no plugins"), true
 	}

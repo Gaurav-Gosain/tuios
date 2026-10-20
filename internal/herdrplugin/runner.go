@@ -83,8 +83,8 @@ type Runner struct {
 	wg       sync.WaitGroup
 	// owners are the plugins whose commands lead each process session, by
 	// the session id, which is the leader's pid. An entry stays after the
-	// leader exits while the group lives, so what a command leaves behind
-	// is still its plugin's. native counts the native plugins among them.
+	// leader exits while leftBehind holds, so what a command leaves behind
+	// in its process group is still its plugin's. native counts the native plugins among them.
 	owners map[int]owner
 	native atomic.Int32
 	// OnPID, when set, is told each process the runner starts and ends, so
@@ -370,18 +370,26 @@ var _ io.Writer = (*capBuffer)(nil)
 type owner struct {
 	plugin *Plugin
 	// exited is set once the leader is reaped. The entry then holds only
-	// while the leader's process group lives.
+	// while leftBehind says the session is still the plugin's.
 	exited bool
 }
 
+// leftBehind reports whether session sid, whose leader the runner reaped,
+// still holds what the leader left: its process group has a member, and no
+// process has the leader's pid. The kernel does not hand out a pid while a
+// group or session uses it as its id, so a live process with that pid
+// means the group died, the pid was given out again, and the new process
+// started a session of its own. That session is not the plugin's.
+func leftBehind(sid int) bool { return groupAlive(sid) && !procAlive(sid) }
+
 // setOwner enters or updates the owner of session sid, or drops it once
-// the leader exited and its group is gone. r.mu is held.
+// the leader exited and nothing it left is in its group. r.mu is held.
 func (r *Runner) setOwner(sid int, o owner) {
 	old, had := r.owners[sid]
 	if had && old.plugin.Format == FormatTuios {
 		r.native.Add(-1)
 	}
-	if o.exited && !groupAlive(sid) {
+	if o.exited && !leftBehind(sid) {
 		delete(r.owners, sid)
 		return
 	}
@@ -404,7 +412,7 @@ func (r *Runner) Owner(sid int) *Plugin {
 	if !ok {
 		return nil
 	}
-	if o.exited && !groupAlive(sid) {
+	if o.exited && !leftBehind(sid) {
 		r.setOwner(sid, o)
 		return nil
 	}

@@ -128,15 +128,13 @@ func Inside(file, dir string) bool {
 
 // checkManaged checks a loaded managed plugin against its lock entry: the
 // id, that the manifest is in the checkout, and that the manifest is the
-// one the person approved. A local folder is the person's, so only the id
-// is checked.
+// one the person approved. A local folder is checked the same way, except
+// that it is no checkout: a changed manifest there needs a new install too.
 func checkManaged(d Dirs, le LockEntry, dir string, p *Plugin) *Error {
 	switch {
 	case p.PluginID != le.ID:
 		return errf("plugin_lock_mismatch", "the lock file installs %s, and the manifest in %s names %s. Install the plugin again", le.ID, p.PluginRoot, p.PluginID)
-	case le.Local():
-		return nil
-	case !Inside(p.ManifestPath, d.BuildDir(dir)):
+	case !le.Local() && !Inside(p.ManifestPath, d.BuildDir(dir)):
 		return errf("plugin_outside_checkout", "the manifest of %s is outside its checkout. Install the plugin again", le.ID)
 	case TrustHash(le.Source, p, le.Grants) != le.Approved, !slices.Equal(p.Grants, le.Grants):
 		return errf("plugin_changed", "the manifest of %s is different from the approved one in plugins.lock. Install the plugin again", le.ID)

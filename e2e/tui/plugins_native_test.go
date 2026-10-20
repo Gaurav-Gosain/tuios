@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -15,7 +16,9 @@ import (
 // processes hold what the person approved at install, in every session.
 //
 // The probe asks for read. Its startup script, in probe.sh, reads with
-// list-sessions, tries to type with send-text, and leaves a process behind
+// list-sessions and through herdr's CLI, lists the plugins, subscribes to
+// window events, tries to type with send-text, tries to make a session over
+// the client protocol with tuios new, and leaves a process behind
 // whose parent exits at once, whose TUIOS_* variables are cut, and which
 // holds none of the script's output open. Then the script ends. A second later the process it left tries to type, and tries
 // to disable the plugin, which only the person may do. Each result goes to
@@ -32,7 +35,11 @@ D="$HERDR_PLUGIN_STATE_DIR"
 run() { n=$1; shift; "$@" >"$D/$n.out" 2>&1; echo $? >"$D/$n.code"; }
 run grants "$T" pane-grants --json
 run read "$T" list-sessions
+run herdrlist "$HERDR_BIN_PATH" workspace list
+run pluginlist "$HERDR_BIN_PATH" plugin list
 run write "$T" send-text -s probe "echo from-$HERDR_PLUGIN_ID"
+( timeout 30 "$T" subscribe --types window-created --count 1 >"$D/events.out" 2>&1; echo $? >"$D/events.code" ) </dev/null &
+run binary "$T" new "made-by-$(echo "$HERDR_PLUGIN_ID" | tr . -)" --detach
 ( ( sleep 1
     exec env -u TUIOS_SOCKET -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID -u TUIOS_PANE_TOKEN sh -c '
       D=$1; T=$2
@@ -157,12 +164,12 @@ func TestNativePluginGrants(t *testing.T) {
 	want := map[string]map[string]string{
 		// The native probe reads, and neither it nor what it left behind
 		// types or changes which plugins run.
-		"e2e.native": {"read": "0", "write": "x", "orphan-write": "x", "orphan-trust": "x"},
+		"e2e.native": {"read": "0", "herdrlist": "0", "pluginlist": "0", "write": "x", "binary": "x", "orphan-write": "x", "orphan-trust": "x"},
 		// A herdr plugin holds the default grants: admin under open. What it
 		// left behind still cannot act as the person.
-		"e2e.herdrprobe": {"read": "0", "write": "0", "orphan-write": "0", "orphan-trust": "x"},
+		"e2e.herdrprobe": {"read": "0", "herdrlist": "0", "pluginlist": "0", "write": "0", "binary": "0", "orphan-write": "0", "orphan-trust": "x"},
 		// A linked native plugin was approved by nobody and holds nothing.
-		"e2e.linked": {"read": "x", "write": "x", "orphan-write": "x", "orphan-trust": "x"},
+		"e2e.linked": {"read": "x", "herdrlist": "0", "pluginlist": "x", "write": "x", "binary": "x", "orphan-write": "x", "orphan-trust": "x"},
 	}
 	for id, codes := range want {
 		for name, code := range codes {
@@ -171,13 +178,19 @@ func TestNativePluginGrants(t *testing.T) {
 				t.Errorf("%s: %s exited %s, want %s (x is any failure). Output:\n%s", id, name, got, code, readPluginFile(base, id, name+".out"))
 			}
 		}
-		for _, name := range []string{"grants.out", "read.out", "write.out", "orphan-write.out", "orphan-trust.out"} {
+		for _, name := range []string{"grants.out", "read.out", "herdrlist.out", "pluginlist.out", "write.out", "binary.out", "orphan-write.out", "orphan-trust.out"} {
 			savePluginArtifact(t, base, id, name)
 		}
 	}
 	for _, c := range []struct{ id, file, want string }{
 		{"e2e.native", "write.out", "refused for plugin e2e.native: send-text needs the write grant"},
 		{"e2e.native", "orphan-write.out", "refused for plugin e2e.native"},
+		{"e2e.native", "binary.out", "refused for plugin e2e.native"},
+		// The herdr surface agrees with the verbs: read reaches every
+		// session, and a plugin without read sees none and is told no.
+		{"e2e.native", "herdrlist.out", `"label":"probe"`},
+		{"e2e.linked", "herdrlist.out", `"workspaces":[]`},
+		{"e2e.linked", "pluginlist.out", "plugin.list needs the read grant"},
 		{"e2e.native", "orphan-trust.out", "forbidden"},
 		{"e2e.native", "grants.out", `e2e.native`},
 		{"e2e.herdrprobe", "orphan-trust.out", "forbidden"},
@@ -186,6 +199,65 @@ func TestNativePluginGrants(t *testing.T) {
 		if got := readPluginFile(base, c.id, c.file); !strings.Contains(got, c.want) {
 			t.Errorf("%s %s lacks %q:\n%s", c.id, c.file, c.want, got)
 		}
+	}
+	// admin holds only with an approval on this machine, at the exact
+	// trust hash. tuios plugins install --grant admin writes it.
+	adminDir := nativeProbeDir(t, "tuios-plugin.toml", nativeManifest("e2e.admin", `"admin"`, ""))
+	if out, err := tuiosCLI(t, base, "plugins", "install", adminDir, "--yes", "--no-enable", "--grant", "admin"); err != nil {
+		t.Fatalf("install with --grant admin: %v\n%s", err, out)
+	}
+	approvals := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", "%admin-approvals.toml")
+	if st, err := os.Stat(approvals); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("the admin approval file: %v, mode %v, want 0600", err, st)
+	}
+	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.admin"); !strings.Contains(info, "holds admin") || strings.Contains(info, "error") {
+		t.Errorf("plugins info of the approved admin plugin:\n%s", info)
+	}
+	_ = os.Remove(approvals)
+	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.admin"); !strings.Contains(info, "plugin_admin_not_approved") {
+		t.Errorf("an admin plugin with no approval on this machine:\n%s", info)
+	}
+	// A hand-written grant in plugins.lock does not widen a local plugin:
+	// its trust hash no longer matches.
+	localDir := nativeProbeDir(t, "tuios-plugin.toml", nativeManifest("e2e.local", `"fan"`, ""))
+	if out, err := tuiosCLI(t, base, "plugins", "install", localDir, "--yes", "--no-enable"); err != nil {
+		t.Fatalf("install of the local plugin: %v\n%s", err, out)
+	}
+	lockPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "plugins.lock")
+	lockText, _ := os.ReadFile(lockPath)
+	forged := regexp.MustCompile(`grants = \[[^\]]*fan[^\]]*\]`).ReplaceAllString(string(lockText), "grants = ['admin']")
+	if forged == string(lockText) {
+		t.Fatalf("the test found no fan grant to change in plugins.lock:\n%s", lockText)
+	}
+	if err := os.WriteFile(lockPath, []byte(forged), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.local"); !strings.Contains(info, "plugin_changed") || strings.Contains(info, "holds admin") {
+		t.Errorf("a local plugin whose lock entry was given admin by hand:\n%s", info)
+	}
+	_ = os.WriteFile(filepath.Join(art, "plugins.lock"), []byte(forged), 0o644)
+
+	// The event stream agrees with the verbs too: a plugin with read gets
+	// events from every session, and one without read cannot subscribe.
+	for _, id := range []string{"e2e.native", "e2e.herdrprobe"} {
+		waitPluginFile(t, base, id, "events.out", "seq")
+	}
+	waitPluginFile(t, base, "e2e.linked", "events.code", "\n")
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "probe", "--no-focus"); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	for id, want := range map[string]string{"e2e.native": "window-created", "e2e.herdrprobe": "window-created", "e2e.linked": "needs the read grant"} {
+		waitPluginFile(t, base, id, "events.code", "\n")
+		if got := readPluginFile(base, id, "events.out"); !strings.Contains(got, want) {
+			t.Errorf("%s events.out lacks %q:\n%s", id, want, got)
+		}
+		savePluginArtifact(t, base, id, "events.out")
+	}
+
+	// Only the herdr plugin made a session over the client protocol.
+	sessions, _ := tuiosCLI(t, base, "list-sessions")
+	if !strings.Contains(sessions, "made-by-e2e-herdrprobe") || strings.Contains(sessions, "made-by-e2e-native") || strings.Contains(sessions, "made-by-e2e-linked") {
+		t.Errorf("the sessions the plugins made over the client protocol:\n%s", sessions)
 	}
 	// Only the herdr plugin typed into the pane.
 	screen, _ := tuiosCLI(t, base, "capture-pane", "-s", "probe")
