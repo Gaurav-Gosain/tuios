@@ -1003,7 +1003,7 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 				Error string `json:"error"`
 			} `json:"actions"`
 		}
-		if err == nil && json.Unmarshal(raw, &res) == nil {
+		if json.Unmarshal(raw, &res) == nil {
 			for _, a := range res.Actions {
 				if !a.OK {
 					return TMLActionFailedMsg{Text: "The surface could not run " + a.Verb + ": " + a.Error}
