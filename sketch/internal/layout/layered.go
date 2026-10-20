@@ -600,7 +600,7 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		c := m + n
 		fl := make([]float64, 2*c)
 		in := make([]int, 2*c)
-		pieces = &Pieces{from: fl[:0:c], to: fl[c:c:2*c], rank: in[:0:c], lower: in[c:c:2*c]}
+		pieces = &Pieces{from: fl[:0:c], to: fl[c : c : 2*c], rank: in[:0:c], lower: in[c : c : 2*c]}
 	}
 	trackCount := make([]int, maxRank+1)
 	if pieces != nil {
