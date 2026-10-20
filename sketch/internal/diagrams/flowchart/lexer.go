@@ -75,7 +75,6 @@ var (
 		sticky(js.Dot + `*direction` + sp + `+TD[^\n]*`),
 	}
 	RE_LINK         = sticky(sp + `*[xo<]?--+[-xo>]` + sp + `*`)
-	RE_START_LINK   = sticky(sp + `*[xo<]?--` + sp + `*`)
 	RE_THICK_LINK   = sticky(sp + `*[xo<]?==+[=xo>]` + sp + `*`)
 	RE_THICK_START  = sticky(sp + `*[xo<]?==` + sp + `*`)
 	RE_DOTTED_LINK  = sticky(sp + `*[xo<]?-?\.+-[xo>]?` + sp + `*`)
@@ -84,6 +83,52 @@ var (
 	RE_EMPTY_CALL   = sticky(`\(` + sp + `*\)`)
 	RE_BR           = lazyre.New(`\n` + sp + `*`)
 )
+
+// skipJSSpace returns where the run of JavaScript whitespace from q ends.
+func skipJSSpace(src string, q int) int {
+	for q < len(src) {
+		r, size := utf8.DecodeRuneInString(src[q:])
+		if !js.IsSpace(r) {
+			break
+		}
+		q += size
+	}
+	return q
+}
+
+// linkEnd is RE_LINK, /\s*[xo<]?--+[-xo>]\s*/y, at p: where the link ends, or -1.
+func linkEnd(src string, p int) int {
+	q := skipJSSpace(src, p)
+	if q < len(src) && (src[q] == 'x' || src[q] == 'o' || src[q] == '<') {
+		q++
+	}
+	j := q
+	for j < len(src) && src[j] == '-' {
+		j++
+	}
+	switch dashes := j - q; {
+	case dashes >= 2 && j < len(src) && (src[j] == 'x' || src[j] == 'o' || src[j] == '>'):
+		j++
+	case dashes >= 3:
+		// The last dash is the [-xo>].
+	default:
+		return -1
+	}
+	return skipJSSpace(src, j)
+}
+
+// startLinkEnd is RE_START_LINK, /\s*[xo<]?--\s*/y, at p: where the start of
+// a link with text ends, or -1.
+func startLinkEnd(src string, p int) int {
+	q := skipJSSpace(src, p)
+	if q < len(src) && (src[q] == 'x' || src[q] == 'o' || src[q] == '<') {
+		q++
+	}
+	if !strings.HasPrefix(src[q:], "--") {
+		return -1
+	}
+	return skipJSSpace(src, q+2)
+}
 
 // newlineRun is /(?:\r?\n)+/y at p: where the run of line ends from p ends, or
 // -1 if there is none.
@@ -342,11 +387,11 @@ func tokenize(src string) Tokens {
 		d := linkChar(p)
 		var e int
 		if d == 45 {
-			if e = at(RE_LINK, p); e >= 0 {
+			if e = linkEnd(src, p); e >= 0 {
 				emit(T_LINK, p, e)
 				return true
 			}
-			if e = at(RE_START_LINK, p); e >= 0 {
+			if e = startLinkEnd(src, p); e >= 0 {
 				push(S_edgeText)
 				emit(T_START_LINK, p, e)
 				return true
