@@ -3105,6 +3105,16 @@ linux/amd64 (42,410,146 to 42,418,338) and 22,016 bytes on windows/amd64
 (42,994,176 to 43,016,192), built the release way on Go 1.26.9. tuios uses
 the shared bind host parse in internal/netutil and does not change size, so its budgets stay.
 
+The budgets went to 41,013,512 (linux/amd64) and 38,365,198 (darwin/arm64) for
+the perf pass on tuios.dev/sketch, which renders a diagram about 30% faster
+and starts about 1 ms sooner. Its regexps compile on first use through a small
+wrapper, its hot ones have hand-written matchers, and its SVG writers append
+to buffers. The new writers stay out of line, which took 17 KB of the growth
+back. The build before it measured 40,988,834 and 38,344,210 bytes (Go 1.26.9,
+a clean clone, as CI builds it). The change measured 41,009,314 and 38,360,994,
+so it adds 20,480 and 16,784 bytes. No third-party dependency was added. The
+new budgets leave 4,198 and 4,204 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
