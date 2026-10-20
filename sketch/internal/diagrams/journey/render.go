@@ -31,13 +31,22 @@ const (
 
 const EYES = `<circle cx="-3.6" cy="-2.8" r="1.3"/><circle cx="3.6" cy="-2.8" r="1.3"/>`
 
-var MOUTHS = map[string]string{"happy": "M-5,2A6,6 0 0 0 5,2", "neutral": "M-4.5,4.5H4.5", "sad": "M-5,6.5A6,6 0 0 1 5,6.5"}
+// MOUTHS is a switch rather than a map, which would allocate at init.
+func MOUTHS(mood string) string {
+	switch mood {
+	case "happy":
+		return "M-5,2A6,6 0 0 0 5,2"
+	case "sad":
+		return "M-5,6.5A6,6 0 0 1 5,6.5"
+	}
+	return "M-4.5,4.5H4.5"
+}
 
 func face(b *strings.Builder, x, y float64, mood string) {
 	svg.WriteStrings(b, `<g class="pele-face pele-face-`, mood, `" transform="translate(`, svg.Num(x), `,`, svg.Num(y), `)">`,
 		`<circle r="`, strconv.Itoa(FACE), `" fill="var(--_bg)" stroke="var(--_l)"/>`,
 		`<g fill="var(--_l)">`, EYES, `</g>`,
-		`<path d="`, MOUTHS[mood], `" fill="none" stroke="var(--_l)" stroke-linecap="round"/>`,
+		`<path d="`, MOUTHS(mood), `" fill="none" stroke="var(--_l)" stroke-linecap="round"/>`,
 		`</g>`)
 }
 

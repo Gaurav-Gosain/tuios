@@ -190,6 +190,11 @@ var series = [8]string{"#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2", "#
 
 // SeriesColor is the color for the nth data series in a chart, cycling through eight tokens.
 func SeriesColor(index int) string {
-	k := ((index % 8) + 8) % 8
-	return "var(--pele-series-" + js.Int(k+1) + "," + series[k] + ")"
+	return seriesVars[((index%8)+8)%8]
+}
+
+// seriesVars are the eight colors as SeriesColor writes them, so that a call allocates nothing.
+var seriesVars = [8]string{
+	"var(--pele-series-1,#4c78a8)", "var(--pele-series-2,#f58518)", "var(--pele-series-3,#54a24b)", "var(--pele-series-4,#e45756)",
+	"var(--pele-series-5,#72b7b2)", "var(--pele-series-6,#eeca3b)", "var(--pele-series-7,#b279a2)", "var(--pele-series-8,#9d755d)",
 }

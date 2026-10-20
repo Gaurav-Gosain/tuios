@@ -27,11 +27,19 @@ const (
 // PRIORITY: Mermaid names five priorities and gives Medium no color. Matching here ignores case. The high
 // ones are marked in the critical color and the low ones in the muted one, the nearer to Medium
 // the fainter. They are not series colors, as a theme may put those in any order.
-var PRIORITY = map[string]string{
-	"very high": `stroke="` + svg.CRITICAL + `"`,
-	"high":      `stroke="` + svg.CRITICAL + `" opacity="0.5"`,
-	"low":       `stroke="var(--_m)" opacity="0.5"`,
-	"very low":  `stroke="var(--_m)"`,
+// It is a switch rather than a map, which would allocate at init.
+func PRIORITY(priority string) (string, bool) {
+	switch priority {
+	case "very high":
+		return `stroke="` + svg.CRITICAL + `"`, true
+	case "high":
+		return `stroke="` + svg.CRITICAL + `" opacity="0.5"`, true
+	case "low":
+		return `stroke="var(--_m)" opacity="0.5"`, true
+	case "very low":
+		return `stroke="var(--_m)"`, true
+	}
+	return "", false
 }
 
 // priorityKey is priority.trim().toLowerCase(). Go lowers U+0130 to "i" where JavaScript
@@ -266,7 +274,7 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 		for _, card := range cards[index] {
 			item := card.item
 			priority := priorityKey(item.priority)
-			color, colored := PRIORITY[priority]
+			color, colored := PRIORITY(priority)
 			var inner strings.Builder
 			svg.WriteStrings(&inner, `<rect width="`, js.Num(cardWidth), `" height="`, num(card.height), `" rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"/>`)
 			if colored {
