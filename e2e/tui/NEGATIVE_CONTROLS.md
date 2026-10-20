@@ -7370,6 +7370,7 @@ and a `javascript:` link, and asserts on the raw output. Run on 2026-10-19.
 | A table may have thousands of columns | The column cap in `parseBlocks` and `delimiterRow` | Removed | `FuzzParse/seed#8` ("a table of 65 columns and 1 rows is past the bounds") | **caught** |
 | A message written again keeps its old card | `sum` in `ckCardKey` | Left out of the key | `TestCockpitThreadOtherHarnesses/gemini` ("kept the old text of a message written again") | **caught** |
 | A `javascript:` link is sent as OSC 8 | The scheme check in `ckLinkTarget` | Never taken | `TestCockpitThreadCards` ("an escape sequence or a javascript: link in the message reached the host terminal") | **caught** |
+
 ## tuios restart-server
 
 `TestRestartServerMovesTheDaemonToTheNewBuild` starts a daemon of this build
@@ -7428,6 +7429,30 @@ not reattach. Run on 2026-10-18 on branch `feat/reattach-after-daemon-restart`.
 | The client attaches and keeps its old panes | `resumeOnNewDaemon`: the `rebuildForSessionOn` call cut | `TestRestartTheDaemonFromTheVersionNotice` ("the second client did not reattach with the panes") | **caught** |
 | The restart does not say "restart" | `runRestart`: `kill-server` without `--restart` | `TestRestartTheDaemonFromTheVersionNotice` ("the second client quit (code 1) instead of reattaching") | **caught** |
 | The client is deaf to "stop" | `beginDaemonReconnect`: the goodbye check cut | `TestPlainKillServerEndsClientsAtOnce` ("the client did not quit within 1 s of a plain kill-server") | **caught** |
+
+## Restart follow-ups
+
+`TestHostsSyncRestartWithYes` now attaches a client on the fake host before
+the sync restarts its daemon. The client must reattach in the same process.
+`TestCockpitLiveBoxAfterDaemonRestart` opens the agents view on an agent
+whose pane is on workspace 2, restarts the daemon with `restart-server
+--yes`, and prints in the pane. The live box must show the new output with no
+key pressed. `TestAttachDeadlineBoundsTheReply` (in `internal/session`) is a
+daemon that reads the attach and never answers. Run on 2026-10-20 on branch
+`fix/daemon-restart-followups`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| hosts sync stops the daemon with a plain kill-server | `syncStopFunc`: `--restart` left out | `TestHostsSyncRestartWithYes` ("the client attached on old quit (code 1) instead of reattaching") | **caught** |
+| The live box keeps its pane across the reattach, and nothing follows again | `rebuildForSession`: the `cockpitLiveForget` call cut, and `resumeOnNewDaemon` returns nil | `TestCockpitLiveBoxAfterDaemonRestart` ("the live box did not follow the pane after the daemon restart") | **caught** |
+| Only the `cockpitLiveForget` call cut | as above, the follow kept | none: the follow after the reattach also picks the pane | not caught |
+| Only the follow after the reattach cut | as above, the forget kept | none: a frame that wants the side column runs the follow | not caught |
+| The attach reply waits 30 s | `AttachSession`: `recv` instead of `recvUntil(deadline)` | `TestAttachDeadlineBoundsTheReply` ("still waiting 5 s later, past its 300 ms deadline") | **caught** |
+
+The two halves of the live box fix each cover the bug alone in this test, so
+the test guards the pair. Both stay: the forget drops a pane id that can
+match again after a restore, and the follow does not wait for a key.
+
 ## The cockpit's spawn sheet
 
 `TestCockpitSpawnSheet` opens the cockpit with `ctrl+b i`, presses `n`, types
