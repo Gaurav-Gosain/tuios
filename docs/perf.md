@@ -3121,6 +3121,17 @@ room on linux/amd64. #929 measured 41,017,506 bytes (Go 1.26.10, a clean clone,
 as CI builds it), and #930 adds about 4,096 more on top. The new budget leaves
 about 4,198 bytes of room after both. darwin/arm64 is unchanged.
 
+The budgets went to 41,980,100 (linux/amd64) and 39,233,300 (darwin/arm64) for
+TML surfaces in popups and panes: `tuios tml show`, the TML verbs, and the
+renderer in the client. tuios now links three libraries of its own,
+tuios.dev/tml (the language), tuios.dev/loom (layout, widgets and input) and
+tuios.dev/plot (charts). By symbol size they are about 226 KB, 216 KB and 56 KB,
+and the glue in tuios about 27 KB. No third-party dependency was added. The
+build before it measured 41,021,602 and 38,361,298 bytes (Go 1.26.10, a clean
+clone, as CI builds it). The change measured 41,975,970 and 39,229,138, so it
+adds 954,368 and 867,840 bytes. The binary stays under the 45 MB ceiling. The
+new budgets leave 4,130 and 4,162 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
