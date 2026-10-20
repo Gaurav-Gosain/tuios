@@ -823,15 +823,24 @@ A workspace's number is its position. Moving a workspace with
 `move_workspace_left` or `move_workspace_right`, or dragging its tab in the
 dock, renumbers it. A workspace exists while it holds a pane or is on screen.
 When a workspace that held a pane stops existing, because its last pane
-closed or moved away and it is not on screen, it loses its name and every
-workspace above it moves down one: closing workspace 2 of 1, 2 and 3 leaves
-1 and 2. An empty workspace you only looked at goes without moving anything.
+closed or moved away and it is not on screen, it loses its name.
 
-`Alt+N` with a number past the last workspace opens the next one: with three
-workspaces, `Alt+5` opens workspace 4. When the workspace on screen is empty,
-it is the new one, and `Alt+N` to an unused number stays on it. A pane put
-directly on a higher number, with `tuios new-window --workspace 7` or
-`send_to_workspace_7`, keeps that number until a workspace below it goes.
+The numbers close up only when you change something: close a pane, move a
+pane to another workspace, close a workspace or move one. Then every
+workspace above an empty place moves down one: closing workspace 2 of 1, 2
+and 3 leaves 1 and 2. A pane whose program exits on its own (a command
+window with `close_on_exit`, a `tuios xpanes` run, an agent finishing)
+leaves the numbers alone, so a script or agent that holds a workspace number
+still names the same workspace. Its place stays empty until your next close
+or move closes it up. An empty workspace you only looked at goes without
+moving anything.
+
+`Alt+N` with a number past the last workspace that holds a pane opens the
+next one: with three workspaces, `Alt+5` opens workspace 4. When the
+workspace on screen is empty, it is the new one, and `Alt+N` to an unused
+number stays on it. A pane put directly on a higher number, with
+`tuios new-window --workspace 7` or `send_to_workspace_7`, keeps that number
+until the numbers below it close up.
 
 ## When a workspace becomes empty
 

@@ -1030,6 +1030,10 @@ type PTY struct {
 
 	// Callback when PTY process exits, used by daemon to notify clients
 	onExit func(ptyID string)
+	// exitedAlone is told, before onExit, when the process exits without
+	// the PTY having been closed and the window will not be kept open. See
+	// Session.notePaneExitedAlone.
+	exitedAlone func(ptyID string)
 
 	// emit, when set, raises a control-plane event (output activity, bell, mode
 	// change, process exit) already tagged with this PTY's window and PTY ID. It
@@ -1301,6 +1305,21 @@ type Session struct {
 	// hadPanes is the workspaces that have held a pane since they last came
 	// into existence: only such a workspace closes up its place when it goes.
 	hadPanes map[int]bool
+	// The rest of what decides whether a workspace that goes closes up its
+	// place, guarded by stateMu: panesAt is where each pane was at the last
+	// change, selfEmptied the workspaces whose last pane exited on its own,
+	// gaps the places such workspaces left, which a person's change closes
+	// up, and closeUpPending a move that asked for that. See
+	// noteWorkspacesLocked.
+	panesAt        map[string]paneAt
+	selfEmptied    map[int]bool
+	gaps           map[int]bool
+	closeUpPending bool
+	// exitedAlone is the PTYs whose process exited on its own, guarded by
+	// exitedAloneMu rather than stateMu, because the exit is heard on the
+	// PTY's goroutine. See notePaneExitedAlone.
+	exitedAloneMu sync.Mutex
+	exitedAlone   map[string]bool
 	// tabKeys is the state's WorkspaceTabKeys as last written, readable
 	// without stateMu, for a shell started while the state is being written.
 	// See herdrTabFor.
@@ -2395,6 +2414,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		paceWake:     make(chan struct{}, 1),
 		vtWriteChan:  make(chan vtChunk, 256),
 		onExit:       sp.onExit,
+		exitedAlone:  s.notePaneExitedAlone,
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
 		spawnedAt:    time.Now(),
@@ -5027,6 +5047,10 @@ func (p *PTY) noteExit(code int) {
 	if p.progStatus.DropTransient() {
 		p.progStatusDirty.Store(true)
 		p.flushProgramStatus()
+	}
+
+	if p.exitedAlone != nil && p.ctx.Err() == nil && p.keepOpen == nil {
+		p.exitedAlone(p.ID)
 	}
 
 	// Notify callback (used by daemon to inform clients)

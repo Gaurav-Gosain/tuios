@@ -237,6 +237,9 @@ func (s *Session) RenumberWorkspaces(order []int) (map[int]int, error) {
 		}
 		state.renumberWorkspaces(newOf)
 		state.WorkspaceOrder = nil
+		// A move is a person's change, so the gaps panes exiting on their
+		// own left close up with it (noteWorkspacesLocked).
+		s.closeUpPending = len(s.gaps) > 0
 		if newOf == nil {
 			return nil
 		}
@@ -274,18 +277,31 @@ func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 	s.tabListed = RenumberWorkspaceMap(s.tabListed, newOf)
 	s.existed = RenumberWorkspaceMap(s.existed, newOf)
 	s.hadPanes = RenumberWorkspaceMap(s.hadPanes, newOf)
+	s.selfEmptied = RenumberWorkspaceMap(s.selfEmptied, newOf)
+	s.gaps = RenumberWorkspaceMap(s.gaps, newOf)
+	for id, at := range s.panesAt {
+		s.panesAt[id] = paneAt{ws: to(at.ws), pty: at.pty}
+	}
 }
 
 // noteWorkspacesLocked runs after every change to the state, a client's push
 // included, and keeps a workspace's number its position:
 //
 //   - A workspace exists while it holds a pane or is the one shown. When one
-//     that has held a pane stops existing it loses its name, and every
-//     workspace above it moves down one, so closing workspace 2 of three
-//     leaves 1 and 2. An empty workspace that was only looked at goes without
-//     moving anything, and a number past the last workspace that a pane is put
-//     on directly stays as it is until something below it goes: only a
-//     workspace going away renumbers.
+//     that has held a pane stops existing it loses its name.
+//   - Its place closes up, every workspace above it moving down one, only
+//     when a person made the change: closed a pane (by key, menu, verb or
+//     herdr), moved one off the workspace, closed the workspace or moved one.
+//     Closing workspace 2 of three leaves 1 and 2.
+//   - A workspace whose last pane exited on its own (close_on_exit, an xpanes
+//     run, an agent finishing) leaves a gap instead, and nothing renumbers:
+//     the workspace on screen keeps its number, so no hook fires for a switch
+//     nobody made, no window-moved goes out for a pane that did not move, and
+//     a script or agent holding a number still holds the same workspace. The
+//     next change a person makes closes every gap up.
+//   - An empty workspace that was only looked at goes without moving
+//     anything, and a number past the last workspace that a pane is put on
+//     directly stays as it is until a close-up below it.
 //   - A workspace that stops being a herdr tab gives up its tab key, so a tab
 //     made there later gets a key no client has seen.
 //
@@ -306,6 +322,13 @@ func (s *Session) noteWorkspacesLocked() bool {
 	if s.hadPanes == nil {
 		s.hadPanes = make(map[int]bool)
 	}
+	person := s.closeUpPending
+	s.closeUpPending = false
+	now, byPerson := s.notePaneMovesLocked()
+	if byPerson {
+		person = true
+	}
+
 	var gone []int
 	for ws := range s.existed {
 		if ws <= st.workspaceBound() && !exists[ws] && s.hadPanes[ws] {
@@ -317,10 +340,8 @@ func (s *Session) noteWorkspacesLocked() bool {
 			delete(s.hadPanes, ws)
 		}
 	}
-	for i := range st.Windows {
-		if w := &st.Windows[i]; !w.Scratch {
-			s.hadPanes[max(w.Workspace, 1)] = true
-		}
+	for _, at := range now {
+		s.hadPanes[at.ws] = true
 	}
 	for _, ws := range gone {
 		if st.WorkspaceNames[ws] != "" {
@@ -328,17 +349,104 @@ func (s *Session) noteWorkspacesLocked() bool {
 			delete(names, ws)
 			st.WorkspaceNames = names
 		}
+		if s.selfEmptied[ws] {
+			if s.gaps == nil {
+				s.gaps = make(map[int]bool)
+			}
+			s.gaps[ws] = true
+		} else {
+			person = true
+		}
+		delete(s.selfEmptied, ws)
 	}
 	s.existed = exists
 	s.retireTabKeysLocked()
 
-	newOf := st.closeUp(gone)
+	if !person {
+		return false
+	}
+	closing := slices.DeleteFunc(gone, func(ws int) bool { return s.gaps[ws] })
+	for ws := range s.gaps {
+		if !exists[ws] && ws <= st.workspaceBound() {
+			closing = append(closing, ws)
+		}
+	}
+	s.gaps = nil
+	newOf := st.closeUp(closing)
 	if newOf == nil {
 		return false
 	}
 	st.renumberWorkspaces(newOf)
 	s.renumberSessionRecordsLocked(newOf)
 	return true
+}
+
+// paneAt is where a pane was at the last change: its workspace and its PTY.
+type paneAt struct {
+	ws  int
+	pty string
+}
+
+// notePaneMovesLocked compares the panes with where they were at the last
+// change, records each workspace that lost its last pane as emptied on its own
+// or by a person, and reports whether a person took a pane off a workspace: a
+// pane that is gone without its process having exited on its own, or one that
+// moved. It returns where the panes are now. The caller holds stateMu.
+func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
+	st := s.state
+	now := make(map[string]paneAt, len(st.Windows))
+	held := make(map[int]bool)
+	for i := range st.Windows {
+		if w := &st.Windows[i]; !w.Scratch {
+			ws := max(w.Workspace, 1)
+			now[w.ID] = paneAt{ws: ws, pty: w.PTYID}
+			held[ws] = true
+		}
+	}
+	byPerson := false
+	left := make(map[int]bool)
+	s.exitedAloneMu.Lock()
+	for id, was := range s.panesAt {
+		if cur, ok := now[id]; ok && cur.ws == was.ws {
+			continue
+		} else if !ok && was.pty != "" && s.exitedAlone[was.pty] {
+			delete(s.exitedAlone, was.pty)
+			if _, seen := left[was.ws]; !seen {
+				left[was.ws] = false
+			}
+			continue
+		}
+		left[was.ws] = true
+		byPerson = true
+	}
+	s.exitedAloneMu.Unlock()
+	for ws, person := range left {
+		if held[ws] {
+			continue
+		}
+		if s.selfEmptied == nil {
+			s.selfEmptied = make(map[int]bool)
+		}
+		s.selfEmptied[ws] = !person
+	}
+	for ws := range held {
+		delete(s.selfEmptied, ws)
+		delete(s.gaps, ws)
+	}
+	s.panesAt = now
+	return now, byPerson
+}
+
+// notePaneExitedAlone records that the process of a PTY exited on its own, so
+// the workspace its window leaves does not close up its place. It runs on the
+// PTY's exit goroutine, before the daemon tells anyone the pane closed.
+func (s *Session) notePaneExitedAlone(ptyID string) {
+	s.exitedAloneMu.Lock()
+	defer s.exitedAloneMu.Unlock()
+	if s.exitedAlone == nil {
+		s.exitedAlone = make(map[string]bool)
+	}
+	s.exitedAlone[ptyID] = true
 }
 
 // existingWorkspaces is the workspaces that exist: each one holding a pane,
