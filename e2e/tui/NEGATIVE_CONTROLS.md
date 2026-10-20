@@ -7541,6 +7541,26 @@ A plain leave recalculates nothing once no client is left (`notifyClientLeft` on
 `/direct-natural` and `/direct-resend` pass on every build: an inline PNG's size was already read from its first chunk, and an inline a=t passes through without touching the placement.
 
 Real kitty icat (0.49.2) through a pane of this build and of main sends `s=`, `v=`, `c=` and `r=` itself: a 2000x400 PNG comes as a 1180x236 bitmap in 118x12 cells, and a 600x200 one as a file in 60x10 cells, the same commands on both builds. So icat at the left of a pane wide enough is not clipped; the `-natural` cases cover a guest that names no box.
+
+### An a=t that re-sends a placed picture's frame, or whose PNG header does not read
+
+`TestKittyOverflowCropKeepsThePicturesScale` has two more kinds of case, both file media only. `-same` places the picture, moves the cursor to the top left, where the whole 100x10 box fits, and sends the same bytes again with a=t, so the frame is dropped as unchanged; a placement moved to the cursor there is not clipped. `-badhead` places the picture and then sends other pixels with a=t from a file whose PNG signature is broken, so the picture's size has to stay what it was. Each control is a text replacement in the branch's checkout, built to a separate binary and put back byte for byte (`shasum -c`) before the next. The build before both fixes fails all four cases the same way. Run on 2026-10-20 on macOS.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| An a=t whose frame the host already holds moves the placement to the cursor | `&& andPlace` on the unchanged-frame branch of `forwardFileTransmit` | Removed | `/file-same`, `/temp-same` ("the placement is 100x10 cells, want it clipped to fewer than 100x10") | **caught** |
+| An a=t whose PNG header does not read zeroes the placement's pixel size | The `sized.Width > 0 && sized.Height > 0` guard on the existing placement's pixel size | Removed, the size assigned as it comes | `/file-badhead`, `/temp-badhead` ("41x4 cells show the source rectangle x=0,y=0,w=410,h=80, want x=0,y=0,w=820,h=160") | **caught** |
+
+Each control fails only its own two cases; `/file-resend` and `/temp-resend` pass under both.
+
+An a=t of a file under i=0 is held by a kept unit test, not here: `TestUnnamedTransmitIsNotKept` in `internal/app/kitty_keep_test.go`. No verb reports what is kept for a screenshot, and such an entry never reaches a screenshot, which is the only thing that reads the store.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| Every file a=t under i=0 keeps an entry the byte bound never evicts | The `andPlace \|\| cmd.ImageID != 0` guard on `keepFileMedium` | Replaced with `true` | `TestUnnamedTransmitIsNotKept` ("100 a=t under i=0 left 100 kept entries, want none") | **caught** |
+| A fix that keeps nothing for any a=t | Same guard | Replaced with `andPlace` | `TestUnnamedTransmitIsNotKept` ("an a=t under i=7 left 0 kept entries, want 1") | **caught** |
+| A fix that keeps nothing under i=0 | Same guard | Replaced with `cmd.ImageID != 0` | `TestUnnamedTransmitIsNotKept` ("an a=T under i=0 left 1 kept entries, want 2") | **caught** |
+
 ## Agent row after exit
 
 The test is `TestHookClaimLapsesWithTheHarness` in `harness_integrations_test.go`. A program named `claude` (`testdata/fakeclaude`) runs the stand-in script, which replays a Claude Code session with tool calls through the real `tuios agent-hook claude-code`, ends the turn with `Stop`, and then leaves the pane at its shell. The `unreadable-pid` case runs no stand-in: it reports for the pane from outside it with `tuios call set-agent-state` and a `harness_pid` of 2000000000, which no pid namespace on Linux or macOS reaches, as an agent in a container with the socket passed in would, and holds the pane at its shell for three detection ticks. Each control is a text replacement in the branch's checkout, built to a separate binary and put back before the next. Run on 2026-10-18 on macOS against upstream main at 55590f29. The fixed build passes all six cases.
