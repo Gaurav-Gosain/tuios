@@ -1,0 +1,5 @@
+[
+ {
+  "src": "xychart horizontal\n  title \"Sales\"\n  x-axis [Jan, Feb, Mar, Apr, May, Jun]\n  bar [60, 50, 120, -24.55, 1, -73, 89]"
+ }
+]

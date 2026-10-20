@@ -72,7 +72,7 @@ func aligned(b *strings.Builder, label text.Label, x, y float64, anchor string) 
 			b.WriteString(`<text x="`)
 			svg.WriteNum(b, x)
 			b.WriteString(`" y="`)
-			svg.WriteNum(b, y+label.Size*0.35)
+			svg.WriteNum(b, y+float64(label.Size*0.35))
 			svg.WriteStrings(b, `" text-anchor="`, anchor, `">`, svg.Esc(line[0].Text), `</text>`)
 			return
 		}
@@ -246,7 +246,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		} else if ranged {
 			at = 0
 		}
-		return inset + at*(1-2*inset)
+		return inset + float64(at*(1-2*inset))
 	}
 
 	categoryConf := record(chart["xAxis"])
@@ -326,7 +326,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 			}
 			step := tickStep(math.Abs(x1-x0), math.Max(2, math.Min(10, math.Floor(length/spacing))))
 			for _, value := range ticksBetween(math.Min(x0, x1), math.Max(x0, x1), step) {
-				marks = append(marks, Mark{at: inset + ((value-x0)/(x1-x0))*(1-2*inset), label: label(js.Num(value), small, 4000)})
+				marks = append(marks, Mark{at: inset + float64(((value-x0)/(x1-x0))*(1-2*inset)), label: label(js.Num(value), small, 4000)})
 			}
 		} else if has0 {
 			marks = append(marks, Mark{at: 0.5, label: label(js.Num(x0), small, 4000)})
@@ -417,7 +417,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	if bottomLabels && legendSpace+reach == 0 {
 		over := 0.0
 		for _, mark := range bottomMarks {
-			over = math.Max(over, mark.at*plotWidth+mark.label.Width/2-plotWidth)
+			over = math.Max(over, float64(mark.at*plotWidth)+mark.label.Width/2-plotWidth)
 		}
 		plotWidth = math.Max(1, plotWidth-over)
 	}
@@ -425,15 +425,15 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 
 	px := func(c, v float64) float64 {
 		if horizontal {
-			return left + v*plotWidth
+			return left + float64(v*plotWidth)
 		}
-		return left + c*plotWidth
+		return left + float64(c*plotWidth)
 	}
 	py := func(c, v float64) float64 {
 		if horizontal {
-			return top + c*plotHeight
+			return top + float64(c*plotHeight)
 		}
-		return bottom - v*plotHeight
+		return bottom - float64(v*plotHeight)
 	}
 	scale := func(value float64) float64 { return (value - lo) / (hi - lo) }
 	clamp := func(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
@@ -464,9 +464,9 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		svg.WriteStrings(&axis, "M", num(left), ",", num(bottom), "H", num(right))
 	}
 	for _, mark := range leftMarks {
-		y := bottom - mark.at*plotHeight
+		y := bottom - float64(mark.at*plotHeight)
 		if horizontal {
-			y = top + mark.at*plotHeight
+			y = top + float64(mark.at*plotHeight)
 		}
 		if leftTick != 0 {
 			svg.WriteStrings(&axis, "M", num(left), ",", num(y), "h", js.Num(-leftTick))
@@ -476,7 +476,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		}
 	}
 	for _, mark := range bottomMarks {
-		at := left + mark.at*plotWidth
+		at := left + float64(mark.at*plotWidth)
 		if bottomTick != 0 {
 			svg.WriteStrings(&axis, "M", num(at), ",", num(bottom), "v", js.Num(bottomTick))
 		}
@@ -517,7 +517,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 			n = min(len(plot.data), count)
 		}
 		if plot.typ == "bar" {
-			offset := (float64(bar)-float64(bars-1)/2)*thickness - (thickness-gap)/2
+			offset := float64((float64(bar)-float64(bars-1)/2)*thickness) - (thickness-gap)/2
 			bar++
 			svg.WriteStrings(&series, `<g class="pele-series pele-bars"`, id, ` fill="`, color, `">`)
 			for i := 0; i < n; i++ {
@@ -560,10 +560,10 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 						continue
 					}
 					if out > 0 {
-						tx = bx + bw + out*6
+						tx = bx + bw + float64(out*6)
 						anchor = "start"
 					} else {
-						tx = bx + out*6
+						tx = bx + float64(out*6)
 						anchor = "end"
 					}
 				} else {
@@ -571,12 +571,12 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 						continue
 					}
 					if out > 0 {
-						ty = by - out*(tinyHeight/2+2)
+						ty = by - float64(out*(tinyHeight/2+2))
 					} else {
-						ty = by + bh - out*(tinyHeight/2+2)
+						ty = by + bh - float64(out*(tinyHeight/2+2))
 					}
 				}
-				svg.WriteStrings(&outside, `<text x="`, num(tx), `" y="`, num(ty+tiny*0.35), `" text-anchor="`, anchor, `">`, valueLabel, `</text>`)
+				svg.WriteStrings(&outside, `<text x="`, num(tx), `" y="`, num(ty+float64(tiny*0.35)), `" text-anchor="`, anchor, `">`, valueLabel, `</text>`)
 			}
 			series.WriteString(`</g>`)
 			continue
@@ -614,10 +614,10 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 					t0 = 2
 				}
 				if t0 <= t1 {
-					c0 := pc + (c-pc)*t0
-					v0 := pv + dv*t0
-					c1 := pc + (c-pc)*t1
-					v1 := pv + dv*t1
+					c0 := pc + float64((c-pc)*t0)
+					v0 := pv + float64(dv*t0)
+					c1 := pc + float64((c-pc)*t1)
+					v1 := pv + float64(dv*t1)
 					if !pen || t0 > 0 {
 						svg.WriteStrings(&d, "M", num(px(c0, v0)), ",", num(py(c0, v0)))
 					}
