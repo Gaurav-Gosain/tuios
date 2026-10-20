@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1067,4 +1067,29 @@ func TestTreeviewOutputIsInert(t *testing.T) {
 	if !testing.Short() && rendered <= 300 {
 		t.Fatalf("%d mutated treeView sources rendered, want more than 300", rendered)
 	}
+}
+
+const ishikawaHead = "ishikawa-beta\n"
+
+// TestIshikawaOutputIsInert leaves out pele's prototype check: Go has no prototypes, so the same
+// source must only render.
+func TestIshikawaOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "ishikawa")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, ishikawaTemplates, 450, RenderOptions{}, false)
+	out, err := Render(ishikawaHead+"  <img src=x onerror=alert(1)>\n    <script>a&b</script>\n      </text></g></svg><script>alert(1)</script>\n        \" onload=\"alert(1)\n", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, `onload="alert`) ||
+		!strings.Contains(out.Data, `data-id="&lt;img src=x onerror=alert(1)&gt;"`) || !strings.Contains(out.Data, `data-id="&lt;script&gt;a&amp;b&lt;/script&gt;"`) ||
+		!strings.Contains(out.Data, "&quot; onload=&quot;alert(1)") {
+		t.Fatalf("ishikawa text is not escaped: %v\n%s", err, out.Data)
+	}
+	hostileOptions(t, ishikawaHead+"  Effect\n    Category\n      Cause")
+	if !inertTry(t, ishikawaHead+"  __proto__\n    constructor\n      toString\n        hasOwnProperty\n    __proto__\n", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+	mutate(t, corpus, []string{"\n", "\n  ", "\n      ", "\t", " ", "%%", "<br>", "#35;", "ishikawa"}, 3, 4000, RenderOptions{}, false)
 }

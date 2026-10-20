@@ -1054,3 +1054,34 @@ var treeviewTemplates = []func(p string) string{
 		return "---\nconfig:\n  treeView:\n    rowIndent: '" + stripApostrophes(p) + "'\n    paddingX: 1e999\n    paddingY: -5\n    lineThickness: .nan\n---\ntreeView-beta\n  a\n    b"
 	},
 }
+
+var ishikawaTemplates = []func(p string) string{
+	func(p string) string { return ishikawaHead + p },
+	func(p string) string { return ishikawaHead + "  " + p },
+	func(p string) string { return ishikawaHead + "  Effect\n    " + p },
+	func(p string) string { return ishikawaHead + "  Effect\n    Category\n      " + p },
+	func(p string) string { return ishikawaHead + "  Effect\n    Category\n      Cause\n        " + p },
+	func(p string) string {
+		return ishikawaHead + "  Effect\n    Category\n      Cause\n        Sub\n          " + p + "\n            " + p
+	},
+	func(p string) string {
+		return ishikawaHead + "  " + p + "\n    " + p + "\n      " + p + "\n    " + p + "\n      " + p + "\n        " + p
+	},
+	func(p string) string {
+		return ishikawaHead + "  Effect " + p + "\n    Category " + p + "\n      Cause " + p + " more"
+	},
+	func(p string) string { return ishikawaHead + "  Effect\n    A\n    B\n    " + p + "\n    C" },
+	func(p string) string { return ishikawaHead + "  Effect\n%% " + p + "\n    Category" },
+	func(p string) string { return ishikawaHead + "  Effect\n    Category %% " + p },
+	func(p string) string { return "ishikawa " + p },
+	func(p string) string { return "ishikawa-beta " + p + "\n  Cause" },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\n---\n" + ishikawaHead + "  Effect\n    Cause"
+	},
+	func(p string) string {
+		return "---\ntitle: " + p + "\nconfig:\n  ishikawa:\n    diagramPadding: \"" + p + "\"\n---\n" + ishikawaHead + "  Effect"
+	},
+	func(p string) string {
+		return "%%{init: {\"ishikawa\": {\"useMaxWidth\": \"" + p + "\"}, \"themeVariables\": {\"lineColor\": \"" + p + "\"}}}%%\n" + ishikawaHead + "  Effect\n    Cause"
+	},
+}

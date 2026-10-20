@@ -17,7 +17,7 @@ import (
 // source of a type with a text drawing. A draw may fail, but must not panic, must take
 // bounded time, and must keep within the columns it was given.
 func FuzzDraw(f *testing.F) {
-	for _, name := range []string{"flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrant", "journey", "kanban", "git", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeview"} {
+	for _, name := range []string{"flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrant", "journey", "kanban", "git", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeview", "ishikawa"} {
 		data, err := os.ReadFile("../testdata/corpus/" + name + "-docs.json")
 		if err != nil {
 			f.Fatal(err)

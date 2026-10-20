@@ -60,6 +60,9 @@ type Geometry struct {
 
 	// TreeView.
 	TreeView *GeoTreeView
+
+	// Ishikawa.
+	Ishikawa *GeoIshikawa
 }
 
 type GeoNode struct {
@@ -427,4 +430,22 @@ type GeoTreeRow struct {
 	Icon        string
 	Description string
 	Highlight   bool
+}
+
+// GeoIshikawa is a fishbone as its outline: the effect, and each category with its causes.
+type GeoIshikawa struct {
+	Title      []string
+	Effect     string
+	Categories []GeoCategory
+}
+
+type GeoCategory struct {
+	Label string
+	// Causes are in outline order; Depth is 1 for a cause of the category itself.
+	Causes []GeoCause
+}
+
+type GeoCause struct {
+	Label string
+	Depth int
 }

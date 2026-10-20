@@ -10,8 +10,8 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'sankey': 'sankeyTemplates', 'block': 'blockTemplates', 'architecture': 'architectureTemplates',
          'requirement': 'requirementTemplates', 'c4': 'c4Templates', 'packet': 'packetTemplates',
          'radar': 'radarTemplates', 'treemap': 'treemapTemplates', 'info': 'infoTemplates',
-         'treeview': 'treeviewTemplates'}
-exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two',
+         'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates'}
+exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
          "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)'}
 

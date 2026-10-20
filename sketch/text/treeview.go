@@ -26,21 +26,15 @@ func drawTreeView(l *sketch.Layout, opt Options) (*canvas, error) {
 	if tv == nil {
 		return nil, ErrUnsupported
 	}
-	rows := tv.Rows
-	// last[i]: no later sibling follows row i. seen[d] is the latest row at depth d under the
-	// current parent; a row at depth d gives it a later sibling.
-	last := make([]bool, len(rows))
-	var seen []int
-	deepest := 0
-	for i, row := range rows {
-		last[i] = true
-		d := min(row.Depth, len(seen))
-		if d < len(seen) {
-			last[seen[d]] = false
+	// A folder's name ends in a slash.
+	rows := make([]types.GeoTreeRow, len(tv.Rows))
+	for i, row := range tv.Rows {
+		rows[i] = row
+		if row.Directory {
+			rows[i].Name += "/"
 		}
-		seen = append(seen[:d], i)
-		deepest = max(deepest, d)
 	}
+	last, deepest := treeLast(rows)
 	// Every line carries the branches of its depth.
 	if int64(deepest+1)*4*int64(len(rows)) > MaxCells {
 		return nil, ErrTooLarge
@@ -100,9 +94,9 @@ func treeWidth(lines []treeLine, title []string) int {
 	return w
 }
 
-// treeLines lays the rows out with branches `unit` cells wide. With aligned set, descriptions
-// start in one column. With cols set, a name or description wider than the room left wraps, and
-// a description goes on the lines under its name.
+// treeLines lays the rows out with branches `unit` cells wide, a directory's name in bold. With
+// aligned set, descriptions start in one column. With cols set, a name or description wider than
+// the room left wraps, and a description goes on the lines under its name.
 func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned bool) []treeLine {
 	branch := "├" + strings.Repeat("─", unit-2) + " "
 	corner := "└" + strings.Repeat("─", unit-2) + " "
@@ -140,9 +134,6 @@ func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned boo
 			under += blank
 		}
 		name := row.Name
-		if row.Directory {
-			name += "/"
-		}
 		role := uint8(roleText)
 		if row.Directory {
 			role = roleTitle
@@ -185,4 +176,22 @@ func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned boo
 		}
 	}
 	return out
+}
+
+// treeLast reports for each row whether no later sibling follows it, and the deepest depth. seen[d]
+// is the latest row at depth d under the current parent; a row at depth d gives it a later sibling.
+func treeLast(rows []types.GeoTreeRow) ([]bool, int) {
+	last := make([]bool, len(rows))
+	var seen []int
+	deepest := 0
+	for i, row := range rows {
+		last[i] = true
+		d := min(row.Depth, len(seen))
+		if d < len(seen) {
+			last[seen[d]] = false
+		}
+		seen = append(seen[:d], i)
+		deepest = max(deepest, d)
+	}
+	return last, deepest
 }
