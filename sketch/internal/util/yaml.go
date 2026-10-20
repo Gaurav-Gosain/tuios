@@ -460,8 +460,20 @@ func stripComment(s string) string {
 	return s
 }
 
-// leadingWidth is `line.length - line.trimStart().length`, in bytes.
-func leadingWidth(line string) int { return len(line) - len(js.TrimStart(line)) }
+// leadingWidth is `line.length - line.trimStart().length`: the leading whitespace in UTF-16
+// units, which count a no-break space as one where UTF-8 has two bytes.
+func leadingWidth(line string) int { return js.Len(line[:len(line)-len(js.TrimStart(line))]) }
+
+// sliceUnits is line.slice(k) for a k that falls within the leading whitespace, which is in the BMP:
+// it skips k characters.
+func sliceUnits(line string, k int) string {
+	i := 0
+	for ; k > 0 && i < len(line); k-- {
+		_, size := utf8.DecodeRuneInString(line[i:])
+		i += size
+	}
+	return line[i:]
+}
 
 func blockScalar(r *reader, header string, parentIndent int) string {
 	folded := header[0] == '>'
@@ -493,7 +505,7 @@ func blockScalar(r *reader, header string, parentIndent int) string {
 		if k < indent {
 			break
 		}
-		out = append(out, line[indent:])
+		out = append(out, sliceUnits(line, indent))
 		r.i++
 	}
 	trailing := 0
