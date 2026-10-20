@@ -682,7 +682,9 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// position is taken from this frame even though the frame itself is
 		// not sent, and the refresh pass re-places only if it actually moved.
 		// Marking the data dirty is what is skipped, because the data is not.
-		if existing := kp.placements[windowID][imageKey(hostID)]; existing != nil {
+		// A transmit that does not place (a=t) moves nothing, wherever the
+		// cursor is, as it changes no geometry when its frame is new.
+		if existing := kp.placements[windowID][imageKey(hostID)]; existing != nil && andPlace {
 			existing.GuestX = cursorX
 			existing.AbsoluteLine = scrollbackLen + cursorY
 			existing.HostX = windowX + contentOffsetX + cursorX
