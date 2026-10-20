@@ -397,22 +397,42 @@ func longRunsStayLinear(t *testing.T) {
 	const n = 200_000
 	const bound = 512 << 20
 	for name, src := range map[string]string{
-		"quadrant axis text":   "quadrantChart\n x-axis " + strings.Repeat("a1-", n/3),
-		"quadrant point style": "quadrantChart\n a: [0.1, 0.2] color: " + strings.Repeat("a1:", n/3),
-		"quadrant classDef id": "quadrantChart\n classDef " + strings.Repeat("a1", n/2) + " color: #fff",
-		"xychart axis text":    "xychart\n x-axis " + strings.Repeat("word ", n/5) + "[a]\n bar [1]",
-		"class name":           "classDiagram\nclass " + strings.Repeat("a.", n/2) + "a",
-		"class style":          "classDiagram\nclass A\nstyle A fill:" + strings.Repeat("a:", n/2),
-		"er subgraph title":    "erDiagram\nsubgraph s [" + strings.Repeat("a ", n/2) + "]\nA\nend",
-		"er class names":       "erDiagram\nA\nclass A " + strings.Repeat("b,", n/2) + "b",
-		"state descriptions":   "stateDiagram-v2\nA\n" + strings.Repeat("A : x\n", n/6),
+		"quadrant axis text":    "quadrantChart\n x-axis " + strings.Repeat("a1-", n/3),
+		"quadrant point style":  "quadrantChart\n a: [0.1, 0.2] color: " + strings.Repeat("a1:", n/3),
+		"quadrant classDef id":  "quadrantChart\n classDef " + strings.Repeat("a1", n/2) + " color: #fff",
+		"xychart axis text":     "xychart\n x-axis " + strings.Repeat("word ", n/5) + "[a]\n bar [1]",
+		"class name":            "classDiagram\nclass " + strings.Repeat("a.", n/2) + "a",
+		"class style":           "classDiagram\nclass A\nstyle A fill:" + strings.Repeat("a:", n/2),
+		"er subgraph title":     "erDiagram\nsubgraph s [" + strings.Repeat("a ", n/2) + "]\nA\nend",
+		"er class names":        "erDiagram\nA\nclass A " + strings.Repeat("b,", n/2) + "b",
+		"state descriptions":    "stateDiagram-v2\nA\n" + strings.Repeat("A : x\n", n/6),
+		"git cherry-pick chain": cherryPickChain(2 * n),
 	} {
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
 		_, _ = Render(src, RenderOptions{Limit: 1 << 20, OutputLimit: 1 << 30})
 		runtime.ReadMemStats(&after)
 		if got := after.TotalAlloc - before.TotalAlloc; got > bound {
-			t.Errorf("%s of %d characters: %d MB allocated, want at most %d MB", name, n, got>>20, bound>>20)
+			t.Errorf("%s of %d characters: %d MB allocated, want at most %d MB", name, len(src), got>>20, bound>>20)
 		}
 	}
+}
+
+// cherryPickChain is a gitGraph of about n characters in which each commit
+// cherry-picks the one before it, between two branches in turn. pele names each
+// pick "cherry-picked <message of the source> into <branch>", so the names nest.
+// The chain is twice as long as the other cases: at 200,000 characters the
+// nested names cost about 250 MB, under the bound.
+func cherryPickChain(n int) string {
+	var b strings.Builder
+	b.WriteString("gitGraph\n commit id: \"c\"\n branch a\n commit\n branch b\n commit\n")
+	prev, seq := "c", 3
+	for i := 0; b.Len() < n; i++ {
+		b.WriteString(" checkout " + string(rune('a'+i%2)) + "\n cherry-pick id: \"" + prev + "\"\n")
+		// The id gitBuilder.nextId gives the pick.
+		h := strconv.FormatUint(uint64(uint32(seq+1)*0x9e3779b1), 16)
+		prev = strconv.Itoa(seq) + "-" + (strings.Repeat("0", max(0, 8-len(h))) + h)[:7]
+		seq++
+	}
+	return b.String()
 }

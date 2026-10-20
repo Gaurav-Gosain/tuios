@@ -310,9 +310,12 @@ func (b *gitBuilder) cherryPick(c CherryPickDB) {
 		}
 		tags = []string{tag}
 	}
+	// pele sets message to `cherry-picked ${source.message} into ${current}`. A pick of
+	// a pick nests the text, which JavaScript ropes share but Go copies, so a chain of
+	// picks costs memory in the square of its length. The renderer shows a message only
+	// below MERGE, so this one is never read and is left out.
 	b.add(&GitCommit{
 		id:         b.nextId(),
-		message:    "cherry-picked " + source.message + " into " + b.current,
 		seq:        b.seq,
 		parents:    parents,
 		branch:     b.current,
