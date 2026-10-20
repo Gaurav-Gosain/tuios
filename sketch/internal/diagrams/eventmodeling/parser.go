@@ -4,6 +4,7 @@ package eventmodeling
 
 import (
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/diagrams/common"
@@ -183,7 +184,8 @@ var WORDS = []string{
 	"text", "data", "note", "when", "then", "rmo", "cmd", "evt", "pcr", "uri",
 }
 
-var EVENTMODELING_TOKENS = func() []*common.TokenType {
+// buildTokens makes the token table. It runs on the first parse, not at init.
+func buildTokens() []*common.TokenType {
 	keyword := *common.Keyword("eventmodeling")
 	keyword.Longer = []*common.TokenType{EM_ID}
 	out := []*common.TokenType{&keyword}
@@ -215,27 +217,10 @@ var EVENTMODELING_TOKENS = func() []*common.TokenType {
 		&common.TokenType{Name: "EM_ML_COMMENT", Match: matchBlockComment, Hidden: true},
 		&common.TokenType{Name: "EM_SL_COMMENT", Match: matchLineComment, Hidden: true},
 	)
-}()
-
-func index(name string) int {
-	for k, t := range EVENTMODELING_TOKENS {
-		if t.Name == name {
-			return k
-		}
-	}
-	return -1
 }
 
 // kindSet is a set of token kinds.
 type kindSet []int
-
-func kinds(names ...string) kindSet {
-	var out kindSet
-	for _, name := range names {
-		out = append(out, index(name))
-	}
-	return out
-}
 
 func (s kindSet) has(kind int) bool {
 	for _, k := range s {
@@ -246,21 +231,57 @@ func (s kindSet) has(kind int) bool {
 	return false
 }
 
-var T = struct {
+type tokenKinds struct {
 	keyword, arrow, open, close, tick, dot, id, frameID, inline, block, accDescr, accTitle, title, entity, data, note, gwt, given, when, then int
-}{
-	keyword: 0, arrow: index("->>"), open: index("[["), close: index("]]"), tick: index("`"), dot: index("."), id: index("EM_ID"),
-	frameID: index("EM_FID"), inline: index("EM_DATA_INLINE"), block: index("EM_DATA_BLOCK"), accDescr: index("EM_ACC_DESCR"),
-	accTitle: index("EM_ACC_TITLE"), title: index("EM_TITLE"), entity: index("entity"), data: index("data"), note: index("note"),
-	gwt: index("gwt"), given: index("given"), when: index("when"), then: index("then"),
+}
+
+// lexicon is the token table with the kinds the parser looks for, made once on first use so
+// that a program that draws no event model pays nothing for it at start.
+type lexicon struct {
+	tokens                                      []*common.TokenType
+	T                                           tokenKinds
+	timeFrame, resetFrame, entityType, dataType kindSet
 }
 
 var (
-	TIME_FRAME  = kinds("tf", "timeframe")
-	RESET_FRAME = kinds("rf", "resetframe")
-	ENTITY_TYPE = kinds("rmo", "readmodel", "ui", "cmd", "command", "evt", "event", "pcr", "processor")
-	DATA_TYPE   = kinds("json", "jsobj", "figma", "salt", "uri", "md", "html", "text")
+	lexiconOnce sync.Once
+	theLexicon  *lexicon
 )
+
+func getLexicon() *lexicon {
+	lexiconOnce.Do(func() {
+		tokens := buildTokens()
+		index := func(name string) int {
+			for k, t := range tokens {
+				if t.Name == name {
+					return k
+				}
+			}
+			return -1
+		}
+		kinds := func(names ...string) kindSet {
+			var out kindSet
+			for _, name := range names {
+				out = append(out, index(name))
+			}
+			return out
+		}
+		theLexicon = &lexicon{
+			tokens: tokens,
+			T: tokenKinds{
+				keyword: 0, arrow: index("->>"), open: index("[["), close: index("]]"), tick: index("`"), dot: index("."), id: index("EM_ID"),
+				frameID: index("EM_FID"), inline: index("EM_DATA_INLINE"), block: index("EM_DATA_BLOCK"), accDescr: index("EM_ACC_DESCR"),
+				accTitle: index("EM_ACC_TITLE"), title: index("EM_TITLE"), entity: index("entity"), data: index("data"), note: index("note"),
+				gwt: index("gwt"), given: index("given"), when: index("when"), then: index("then"),
+			},
+			timeFrame:  kinds("tf", "timeframe"),
+			resetFrame: kinds("rf", "resetframe"),
+			entityType: kinds("rmo", "readmodel", "ui", "cmd", "command", "evt", "event", "pcr", "processor"),
+			dataType:   kinds("json", "jsobj", "figma", "salt", "uri", "md", "html", "text"),
+		}
+	})
+	return theLexicon
+}
 
 type EmFrame struct {
 	reset            bool
@@ -308,7 +329,9 @@ type EventModelAst struct {
 }
 
 func parseEventModel(src string) *EventModelAst {
-	r := common.NewReader(common.Tokenize(src, EVENTMODELING_TOKENS, "eventmodeling"), EVENTMODELING_TOKENS, "eventmodeling")
+	lx := getLexicon()
+	T, TIME_FRAME, RESET_FRAME, ENTITY_TYPE, DATA_TYPE := lx.T, lx.timeFrame, lx.resetFrame, lx.entityType, lx.dataType
+	r := common.NewReader(common.Tokenize(src, lx.tokens, "eventmodeling"), lx.tokens, "eventmodeling")
 	ast := &EventModelAst{source: src}
 	at := func(kind int) bool { return r.Kind() == kind }
 	one := func(set kindSet, expected string) string {
