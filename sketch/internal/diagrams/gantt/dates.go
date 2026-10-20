@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/gantt/dates.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/diagrams/gantt/dates.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 //
 // A JavaScript Date is a js.Date, which reads and sets its fields in the local time of
 // its location. pele caches the last compiled format in module state; the port keeps

@@ -27,7 +27,7 @@ def go(body):
             pieces.append('"' + lit(part) + '"')
     return ' + '.join(pieces) if pieces else '""'
 
-print('// Code generated from pele tests/render/*-security.test.ts at 458322a5. DO NOT EDIT.\n\npackage sketch\n')
+print('// Code generated from pele tests/render/*-security.test.ts at 8603bf33. DO NOT EDIT.\n\npackage sketch\n')
 for typ, var in names.items():
     src = open(f'{pele}/tests/render/{typ}-security.test.ts').read()
     block = src[src.index('const TEMPLATES'):]

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/lexer.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/diagrams/flowchart/lexer.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 //
 // pele reads UTF-16 code units with charCodeAt. The port reads the UTF-8 bytes:
 // code() decodes the character at a byte offset, and where pele steps one unit

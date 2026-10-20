@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/common/literal-label.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/diagrams/common/literal-label.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 
 package common
 

@@ -2,7 +2,7 @@ package sketch
 
 // Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
-// 458322a5b8abb1ae57ddf127c32017ab9fb14a92. The template lists are in
+// 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
 
 import (

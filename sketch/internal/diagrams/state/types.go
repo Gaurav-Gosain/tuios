@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/state/types.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/diagrams/state/types.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 //
 // A statement is a Stmt: a string or a pointer to one of the statement
 // structs. Fields that pele leaves undefined are "" or nil where pele never
