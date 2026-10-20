@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -74,8 +75,13 @@ func getResurrectionPath(sessionName string) (string, error) {
 // stateJoin is dir/name+suffix, for a name that is one path element. Any
 // other name is an error, so a session name or a window id can never name a
 // file outside the state folder it is joined to.
+//
+// Windows drops the dots and spaces at the end of a path element, so "..." is
+// the folder itself there and "foo." is "foo", and "con" is a device. Such a
+// name is refused too.
 func stateJoin(dir, name, suffix string) (string, error) {
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") {
+	if name == "" || strings.Trim(name, ".") == "" || strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") ||
+		strings.ContainsAny(name, "/\\\x00") || (runtime.GOOS == "windows" && windowsDeviceName(name)) {
 		return "", fmt.Errorf("the name %q cannot name a saved state file", name)
 	}
 	path := filepath.Join(dir, name+suffix)
@@ -99,16 +105,41 @@ func ValidateSessionName(name string) error {
 	if strings.TrimSpace(name) != name {
 		return fmt.Errorf("session name %q has leading or trailing whitespace", name)
 	}
-	if name == "." || name == ".." {
-		return fmt.Errorf("session name %q is reserved", name)
+	if strings.Trim(name, ".") == "" {
+		return fmt.Errorf("session name %q is reserved. Use a name with a letter or a digit", name)
 	}
 	if strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("session name %q contains a path separator; a session name is also the name of its state file", name)
+		return fmt.Errorf("session name %q contains a path separator. A session name is also the name of its state file", name)
+	}
+	// Windows drops a dot at the end of a file name, so "foo." and "foo"
+	// would share one state folder there. The rule holds on every system, so
+	// a saved session keeps its name when it moves to another machine.
+	if strings.HasSuffix(name, ".") {
+		return fmt.Errorf("session name %q ends in a dot. Remove the dot", name)
+	}
+	if windowsDeviceName(name) {
+		return fmt.Errorf("session name %q is a device name on Windows. Use a different name", name)
 	}
 	if strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return fmt.Errorf("session name %q contains a control character", name)
 	}
 	return nil
+}
+
+// windowsDeviceName reports whether Windows opens a file of this name as a
+// device: CON, PRN, AUX, NUL, COM1 to COM9 and LPT1 to LPT9, in any case, also
+// with an extension ("nul.txt").
+func windowsDeviceName(name string) bool {
+	base, _, _ := strings.Cut(name, ".")
+	base = strings.ToUpper(strings.TrimRight(base, " "))
+	switch base {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	if len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) {
+		return base[3] >= '1' && base[3] <= '9'
+	}
+	return false
 }
 
 // ResurrectionStateDir returns the directory holding saved session state, so a

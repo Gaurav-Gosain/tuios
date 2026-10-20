@@ -455,6 +455,8 @@ func TestAResurrectOnALinkStaysInTheStateFolder(t *testing.T) {
 		filepath.Join(rel, "victim"),
 		filepath.Join(rel, "planted"),
 		"x/../" + filepath.Join(rel, "victim"),
+		// On Windows "..." is the state folder itself.
+		"...",
 	} {
 		conn := linkBinary(t, sp, MsgResurrect, &ResurrectPayload{SessionName: name})
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -472,6 +474,19 @@ func TestAResurrectOnALinkStaysInTheStateFolder(t *testing.T) {
 	}
 	if d.manager.GetSession("planted") != nil {
 		t.Errorf("ASSERTION: a link restored a session from a file outside the state folder")
+	}
+	// Names Windows folds onto another file: all dots, a dot at the end, a
+	// device. They are refused on every system, so a name moves between
+	// machines. The controls are names that only look close.
+	for _, name := range []string{"...", "foo.", "con", "NUL.txt", "com1", "Lpt9"} {
+		if ValidateSessionName(name) == nil {
+			t.Errorf("ASSERTION: the session name %q is allowed", name)
+		}
+	}
+	for _, name := range []string{"foo.bar", "console", "com10", ".hidden"} {
+		if err := ValidateSessionName(name); err != nil {
+			t.Errorf("the session name %q is refused: %v", name, err)
+		}
 	}
 }
 
