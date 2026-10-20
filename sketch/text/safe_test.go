@@ -65,6 +65,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"ishikawa":               "ishikawa-beta\n  e#27;]0x#7;\n    c#155;31m\n      a#144;x",
 		"ishikawa tree":          "ishikawa-beta\n  e#27;]0x#7;\n    c#155;31m\n      a very long cause #144;x that will never fit in the columns there are at all",
 		"cynefin":                "cynefin-beta\n  title t#27;]0x#7;\n  complex\n    \"#27;[2J\"\n  confusion\n    \"#155;31m\"\n  clear --> chaotic : \"#144;x\"",
+		"eventmodeling":          "eventmodeling\ntf 01 ui A \"#27;]0x#7;\"\ntf 02 cmd B { #155;31m }\nnote 02 {\n  #144;x\n}\n",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1120,5 +1120,30 @@ func TestCynefinOutputIsInert(t *testing.T) {
 	rendered += mutate(t, corpus, []string{"\"", "'", "\n", " --> ", " : ", "complex", "confusion", "title "}, 13, 2000, RenderOptions{}, false)
 	if !testing.Short() && rendered <= 100 {
 		t.Fatalf("%d mutated cynefin sources rendered, want more than 100", rendered)
+	}
+}
+
+func emLine(p string) string { return strings.NewReplacer("\n", " ", "\r", " ").Replace(p) }
+
+// TestEventmodelingOutputIsInert leaves out pele's check for "function" and "[object" in the output:
+// Go has no prototypes, so names like __proto__ must only render.
+func TestEventmodelingOutputIsInert(t *testing.T) {
+	hostile(t, eventmodelingTemplates, len(PAYLOADS)*8, RenderOptions{}, false)
+	for _, key := range []string{"__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"} {
+		src := "eventmodeling\ntf 01 cmd " + key + "." + key + " [[" + key + "]]\ntf 02 evt " + key + "\ndata " + key + " {\n x\n}\nentity " + key + "\ngwt 01 given evt " + key + " then evt " + key + "\n"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", key)
+		}
+	}
+	corpus := corpusOf(t, "eventmodeling")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{"\"", "'", "\n", "{", "}", " ->> 01", "[[", "]]", "tf 09 evt Z", "note 01 {\n", "\n}\n"}, 19, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 100 {
+		t.Fatalf("%d mutated event models rendered, want more than 100", rendered)
 	}
 }

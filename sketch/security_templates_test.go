@@ -1107,3 +1107,25 @@ var cynefinTemplates = []func(p string) string{
 		return "---\nconfig:\n  cynefin:\n    width: '" + cynefinSingle(p) + "'\n    height: 1e999\n    seed: .nan\n    boundaryAmplitude: '" + cynefinSingle(p) + "'\n    showDomainDescriptions: '" + cynefinSingle(p) + "'\n---\ncynefin-beta\ncomplex\n\"a\"\nclear --> chaotic : \"b\""
 	},
 }
+
+var eventmodelingTemplates = []func(p string) string{
+	func(p string) string { return "eventmodeling\ntf 01 cmd A { " + emLine(p) + " }" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A \"" + emLine(p) + "\"" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A '" + emLine(p) + "'" },
+	func(p string) string { return "eventmodeling\ntf 01 rmo A `json`{ \"k\": \"" + emLine(p) + "\" }" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A [[D]]\ndata D {\n  " + p + "\n}\n" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A\nnote 01 {\n  " + p + "\n}\n" },
+	func(p string) string {
+		return "eventmodeling\ntf 01 evt A\nnote 01 `html` {\n  <div>" + p + "</div>\n}\n"
+	},
+	func(p string) string { return "eventmodeling title " + emLine(p) + "\ntf 01 ui A" },
+	func(p string) string {
+		return "eventmodeling accTitle: " + emLine(p) + "\ntf 01 ui A accDescr: " + emLine(p)
+	},
+	func(p string) string { return "eventmodeling accDescr {\n " + p + "\n}\ntf 01 ui A" },
+	func(p string) string { return "eventmodeling\ntf 01 ui " + p },
+	func(p string) string { return "eventmodeling\ntf 01 ui A." + p },
+	func(p string) string { return "eventmodeling\ntf 01 evt A\ngwt 01 given evt " + p + " then evt B" },
+	func(p string) string { return "eventmodeling\n/* " + p + " */\ntf 01 ui A // " + emLine(p) + "\n" },
+	func(p string) string { return "---\ntitle: \"" + gitStrip(p) + "\"\n---\neventmodeling\ntf 01 ui A" },
+}

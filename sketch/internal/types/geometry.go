@@ -66,6 +66,9 @@ type Geometry struct {
 
 	// Cynefin.
 	Cynefin *GeoCynefin
+
+	// Event modeling.
+	EventModel *GeoEventModel
 }
 
 type GeoNode struct {
@@ -470,4 +473,27 @@ type GeoDomain struct {
 
 type GeoTransition struct {
 	From, To, Label string
+}
+
+// GeoEventModel is an event model as lists: the lanes from top to bottom, the frames in time
+// order, the relations between them, and the notes and specifications.
+type GeoEventModel struct {
+	Title     []string
+	Lanes     []string
+	Boxes     []GeoFrame
+	Relations [][2]int
+	Notes     []GeoEventCard
+}
+
+type GeoFrame struct {
+	ID, Name, Kind string
+	// Lane is an index into Lanes.
+	Lane  int
+	Reset bool
+	Data  []string
+}
+
+type GeoEventCard struct {
+	Head  string
+	Lines []string
 }
