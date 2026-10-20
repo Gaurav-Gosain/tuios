@@ -506,7 +506,7 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 		if verr != nil {
 			return walkResult{}, callError(verr)
 		}
-		w, err := walkTree(root, fileWalkMax)
+		w, err := walkTree(root, fileWalkMax, e.d.linkWalkDenied(e.acc.cs))
 		if isWalkTooLarge(err) {
 			return walkResult{}, permanent(ErrVerbInvalidParams, err.Error())
 		}

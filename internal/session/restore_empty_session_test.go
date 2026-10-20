@@ -36,7 +36,7 @@ func TestEmptySavedSessionDoesNotResurrect(t *testing.T) {
 			len(sess.GetState().Windows))
 	}
 	// A state file that can never restore must not go on being offered.
-	if _, err := os.Stat(getResurrectionPath("hollow")); !os.IsNotExist(err) {
+	if _, err := os.Stat(testStatePath("hollow")); !os.IsNotExist(err) {
 		t.Errorf("the unrestorable state file for 'hollow' is still on disk (stat err: %v)", err)
 	}
 

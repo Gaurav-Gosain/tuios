@@ -103,7 +103,17 @@ func (d *Daemon) handleWatchDir(cs *connState, msg *Message) error {
 	if host != "" {
 		go d.runRemoteDirWatch(host, dir, done, notify)
 	} else {
-		go d.runLocalDirWatch(dir, done, notify)
+		go func() {
+			// Over a link a watch tells when a folder's names change, so it
+			// keeps to the read rules a listing and wait-dir keep to. The
+			// check is in here because it reads the path, which can be a
+			// mount that stopped answering. A refused watch never starts and
+			// nothing is sent.
+			if verr := d.checkLinkRead(cs, dir); verr != nil {
+				return
+			}
+			d.runLocalDirWatch(dir, done, notify)
+		}()
 	}
 	return nil
 }

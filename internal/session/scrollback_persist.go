@@ -157,13 +157,18 @@ func historyRoot() string {
 	return filepath.Join(getResurrectionDir(), historyDirName)
 }
 
-// historyDir is where one session's pane files live.
-func historyDir(sessionName string) string {
-	return filepath.Join(historyRoot(), sessionName)
+// historyDir is where one session's pane files live. A name that would leave
+// the history folder is an error, as for getResurrectionPath.
+func historyDir(sessionName string) (string, error) {
+	return stateJoin(historyRoot(), sessionName, "")
 }
 
-func historyPath(sessionName, windowID string) string {
-	return filepath.Join(historyDir(sessionName), windowID+historyExt)
+func historyPath(sessionName, windowID string) (string, error) {
+	dir, err := historyDir(sessionName)
+	if err != nil {
+		return "", err
+	}
+	return stateJoin(dir, windowID, historyExt)
 }
 
 // validHistoryWindowID keeps a window id from naming a path outside the
@@ -176,10 +181,11 @@ func validHistoryWindowID(id string) bool {
 
 // RemoveHistory deletes every saved pane history of a session.
 func RemoveHistory(sessionName string) {
-	if sessionName == "" {
+	dir, err := historyDir(sessionName)
+	if err != nil {
 		return
 	}
-	_ = os.RemoveAll(historyDir(sessionName))
+	_ = os.RemoveAll(dir)
 }
 
 // RemoveAllHistory deletes every saved pane history of every session. The
@@ -200,8 +206,10 @@ func cleanOrphanHistory() {
 		return
 	}
 	for _, e := range entries {
-		if _, err := os.Stat(getResurrectionPath(e.Name())); err == nil {
-			continue
+		if path, err := getResurrectionPath(e.Name()); err == nil {
+			if _, err := os.Stat(path); err == nil {
+				continue
+			}
 		}
 		if err := os.RemoveAll(filepath.Join(historyRoot(), e.Name())); err != nil {
 			LogError("Failed to remove saved history of gone session %s: %v", e.Name(), err)
@@ -222,7 +230,14 @@ func (d *Daemon) dropHistoryWhenOff() {
 // moveHistory moves a session's saved history to its new name. Best effort:
 // a failure loses the history, never the session.
 func moveHistory(oldName, newName string) {
-	from, to := historyDir(oldName), historyDir(newName)
+	from, err := historyDir(oldName)
+	if err != nil {
+		return
+	}
+	to, err := historyDir(newName)
+	if err != nil {
+		return
+	}
 	if _, err := os.Stat(from); err != nil {
 		return
 	}
@@ -322,7 +337,10 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 		lines = int(float64(lines) * float64(budget) / float64(len(data)) * 0.8)
 		data = nil
 	}
-	path := historyPath(sessionName, windowID)
+	path, err := historyPath(sessionName, windowID)
+	if err != nil {
+		return seq, err
+	}
 	if data == nil {
 		debugLog("[DEBUG] pane %s history does not fit in %d bytes, not saved", shortID(windowID), budget)
 		_ = os.Remove(path)
@@ -357,7 +375,11 @@ func writePrivateFile(path string, data []byte) error {
 // otherHistoryBytes is what the session's files other than this pane's take on
 // disk.
 func otherHistoryBytes(sessionName, windowID string) int64 {
-	entries, err := os.ReadDir(historyDir(sessionName))
+	dir, err := historyDir(sessionName)
+	if err != nil {
+		return 0
+	}
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0
 	}
@@ -376,7 +398,10 @@ func otherHistoryBytes(sessionName, windowID string) int64 {
 // pruneHistory removes the files of panes the session no longer has, and any
 // temporary file a crash left behind.
 func pruneHistory(sessionName string, keep map[string]bool) {
-	dir := historyDir(sessionName)
+	dir, err := historyDir(sessionName)
+	if err != nil {
+		return
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -493,7 +518,10 @@ func decodeHistory(r io.Reader) (*savedHistory, error) {
 // that does not read is removed and skipped: it is history, and a restore
 // never waits on it or fails for it.
 func loadHistory(sessionName string) map[string]*savedHistory {
-	dir := historyDir(sessionName)
+	dir, err := historyDir(sessionName)
+	if err != nil {
+		return nil
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil

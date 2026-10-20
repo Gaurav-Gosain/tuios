@@ -432,7 +432,9 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 
 	// A saved session that is not running still owns its state file. Taking
 	// its name would overwrite that file, and the saved session would be lost.
-	if _, err := os.Stat(getResurrectionPath(newName)); err == nil && m.GetSession(newName) == nil {
+	if path, err := getResurrectionPath(newName); err != nil {
+		return nil, err
+	} else if _, err := os.Stat(path); err == nil && m.GetSession(newName) == nil {
 		return nil, fmt.Errorf("a saved session is named '%s'. Restore it with 'tuios resurrect %s', or pick another name", newName, newName)
 	}
 

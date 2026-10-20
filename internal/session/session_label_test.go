@@ -43,7 +43,7 @@ func TestPreChangeResurrectionStateLoads(t *testing.T) {
   "width": 80,
   "height": 24
 }`
-	if err := os.WriteFile(getResurrectionPath("work"), []byte(legacy), 0o600); err != nil {
+	if err := os.WriteFile(testStatePath("work"), []byte(legacy), 0o600); err != nil {
 		t.Fatalf("write legacy state: %v", err)
 	}
 

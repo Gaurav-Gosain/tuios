@@ -615,6 +615,12 @@ func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
 	if payload.SessionName == "" {
 		return d.replyError(cs, msg, ErrCodeInvalidMessage, "session name required")
 	}
+	// The name is also the name of the state file, and the link policy lets
+	// a machine on another host send this message, so the name is checked
+	// before it becomes a path.
+	if err := ValidateSessionName(payload.SessionName); err != nil {
+		return d.replyError(cs, msg, ErrCodeInvalidMessage, err.Error())
+	}
 
 	// Already live (e.g. auto-restored on start): nothing to do, report success.
 	if d.manager.GetSession(payload.SessionName) != nil {

@@ -2228,7 +2228,8 @@ widens `allow`, waits for `tuios config apply`.
 
 **Where a link may read: `files_read_roots`.** Unset, a machine with `files`
 reads any file you can read, apart from the read deny list: keys, credentials,
-keyrings, shell histories, browser profiles, `/proc` and tuios's own state. A
+shell start files, `~/.gitconfig`, keyrings, shell histories, browser profiles,
+`/proc` and tuios's own state. A
 deny list can never name every secret on a machine. Set `files_read_roots` to
 hold reads to the folders you name, plus the folders the machine may write.
 That is the stronger choice:

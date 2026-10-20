@@ -50,8 +50,9 @@ import (
 //     keeps a write out of ~/.ssh.
 //
 // A read over a link (file-read, file-hash, file-walk, open-file-stream read)
-// is held to the read deny list: keys, credentials, /proc, the daemon's
-// socket folder and tuios's own state. A read elsewhere is allowed, so a copy
+// is held to the read deny list: keys, credentials, shell start files, /proc,
+// the daemon's socket folder and tuios's own state. Every credential carrier of
+// the write deny list is in it (linkDenyCredentialHome). A read elsewhere is allowed, so a copy
 // out works. A read does not go through a root, so on Windows a path must also
 // be a plain drive letter path (plainLinkPath).
 //
@@ -66,36 +67,33 @@ import (
 // call's check and its open. That needs a root the person widened on purpose,
 // and a link the person made.
 
-// linkDenyHome is the write deny list, as paths under the home folder. A write
-// to one of them, to anything under it, or to a folder that holds it, is
-// refused.
-var linkDenyHome = []string{
+// linkDenyCredentialHome is the credential carriers, as paths under the home
+// folder: keys, tokens, the files a shell or a session reads its environment
+// from, and tuios's own config and state. Both deny lists hold all of them,
+// so a file a link may not change because it can hold a secret may not be
+// read either. A shell start file or ~/.gitconfig often exports a token, and
+// ~/.config/git holds the credential store git writes by default.
+var linkDenyCredentialHome = []string{
 	".ssh",
 	".gnupg",
 	".config/tuios",
 	".local/state/tuios",
 	".local/share/tuios",
+	"Library/Application Support/tuios",
 	".config/systemd",
-	".config/autostart",
 	".config/environment.d",
 	".config/fish",
 	".config/git",
-	"Library/LaunchAgents",
-	"Library/LaunchDaemons",
-	"Library/Application Support/tuios",
+	".config/zsh",
+	".config/gcloud",
+	".config/tuios-web",
 	".git-credentials",
+	".gitconfig",
 	".netrc",
 	".aws",
 	".azure",
 	".kube",
-	".docker",
-	".gnupg",
 	".password-store",
-	".claude",
-	".codex",
-	".config/gh",
-	".config/gcloud",
-	".config/tuios-web",
 	".pam_environment",
 	".profile",
 	".bash_profile",
@@ -115,14 +113,33 @@ var linkDenyHome = []string{
 	".xprofile",
 	".xsession",
 	".xinitrc",
-	".config/zsh",
-	".gitconfig",
 	".inputrc",
-	// The Windows start folder and PowerShell profiles.
-	"AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+	// The PowerShell profiles, which are shell start files too.
 	"Documents/PowerShell",
 	"Documents/WindowsPowerShell",
 }
+
+// linkDenyWriteOnlyHome is the rest of the write deny list: login items,
+// which run a program but hold no secret, and the folders of tools whose
+// credential file the read deny list names on its own (~/.claude,
+// ~/.codex, ~/.docker, ~/.config/gh). A link may read the rest of those
+// folders, and may change none of them.
+var linkDenyWriteOnlyHome = []string{
+	".config/autostart",
+	"Library/LaunchAgents",
+	"Library/LaunchDaemons",
+	".docker",
+	".claude",
+	".codex",
+	".config/gh",
+	// The Windows start folder.
+	"AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+}
+
+// linkDenyHome is the write deny list, as paths under the home folder. A write
+// to one of them, to anything under it, or to a folder that holds it, is
+// refused.
+var linkDenyHome = slices.Concat(linkDenyCredentialHome, linkDenyWriteOnlyHome)
 
 // linkDenyAbsolute is the write deny list outside the home folder: the crontab
 // spools. They are outside every root a link may write, so they are refused
@@ -144,24 +161,18 @@ var linkReadDenyAbsolute = []string{
 
 // linkReadDenyHome is the read deny list, as paths under the home folder. A
 // read of one of these, over a link, is refused, with an exception for the
-// public keys in ~/.ssh.
-var linkReadDenyHome = []string{
-	".ssh",
-	".gnupg",
-	".aws",
-	".azure",
-	".config/gcloud",
-	".kube",
+// public keys in ~/.ssh. It holds every credential carrier of the write deny
+// list (linkDenyCredentialHome), and the stores, histories and browser
+// profiles below, which a link may not read but which a write needs no rule
+// for.
+var linkReadDenyHome = slices.Concat(linkDenyCredentialHome, linkReadDenyOnlyHome)
+
+// linkReadDenyOnlyHome is the part of the read deny list that is not in the
+// write deny list.
+var linkReadDenyOnlyHome = []string{
 	".docker/config.json",
-	".netrc",
-	".git-credentials",
 	".config/gh/hosts.yml",
-	".password-store",
 	"Library/Keychains",
-	".config/tuios",
-	".local/state/tuios",
-	".local/share/tuios",
-	"Library/Application Support/tuios",
 	".claude/.credentials.json",
 	".config/claude/.credentials.json",
 	".claude.json",
@@ -813,6 +824,25 @@ func (d *Daemon) linkWalkRoot(cs *connState, path string) (string, *verbError) {
 		return "", verr
 	}
 	return real, nil
+}
+
+// linkWalkDenied is what a walk over a link leaves out: an entry in the read
+// deny list. The walk's root is judged by linkWalkRoot, and without this a
+// walk of the home folder would still name the keys in ~/.ssh. The walk does
+// not follow links and starts at the real path, so each entry is its own real
+// path. Nil for a call that did not come over a link.
+func (d *Daemon) linkWalkDenied(cs *connState) func(string) bool {
+	if cs == nil || !cs.viaLink {
+		return nil
+	}
+	home := ""
+	if h, err := os.UserHomeDir(); err == nil {
+		home = realPath(filepath.Clean(h))
+	}
+	lp := d.linkPrivateDirs()
+	return func(p string) bool {
+		return !plainLinkPath(p) || linkReadDenied(p, home, lp)
+	}
 }
 
 // linkReadRootsError refuses a read outside files_read_roots and says how to

@@ -12,7 +12,7 @@ import (
 func waitForSavedState(name string, within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(getResurrectionPath(name)); err == nil {
+		if _, err := os.Stat(testStatePath(name)); err == nil {
 			return true
 		}
 		time.Sleep(20 * time.Millisecond)

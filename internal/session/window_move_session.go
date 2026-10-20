@@ -591,11 +591,17 @@ func moveWindowHistory(src, dst *Session, windowID string) {
 	}
 	src.persistMu.Lock()
 	defer src.persistMu.Unlock()
-	from := historyPath(src.Name(), windowID)
+	from, err := historyPath(src.Name(), windowID)
+	if err != nil {
+		return
+	}
 	if _, err := os.Stat(from); err != nil {
 		return
 	}
-	to := historyPath(dst.Name(), windowID)
+	to, err := historyPath(dst.Name(), windowID)
+	if err != nil {
+		return
+	}
 	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
 		return
 	}

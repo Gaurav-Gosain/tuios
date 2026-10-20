@@ -294,7 +294,7 @@ func TestHistoryFilesArePrivateAndPrunedWithThePane(t *testing.T) {
 
 	s.saveHistory(state, false)
 	for _, win := range []string{"win-a", "win-b"} {
-		fi, err := os.Stat(historyPath("priv", win))
+		fi, err := os.Stat(testHistoryPath("priv", win))
 		if err != nil {
 			t.Fatalf("%s not saved: %v", win, err)
 		}
@@ -302,7 +302,7 @@ func TestHistoryFilesArePrivateAndPrunedWithThePane(t *testing.T) {
 			t.Errorf("%s mode %v, want 0600", win, fi.Mode().Perm())
 		}
 	}
-	if fi, err := os.Stat(historyDir("priv")); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o700) {
+	if fi, err := os.Stat(testHistoryDir("priv")); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o700) {
 		t.Errorf("history dir: %v, %v, want mode 0700", fi, err)
 	}
 
@@ -310,20 +310,20 @@ func TestHistoryFilesArePrivateAndPrunedWithThePane(t *testing.T) {
 	state.Windows = state.Windows[:0]
 	state.Windows = append(state.Windows, WindowState{ID: "win-a", PTYID: "pty-win-a"})
 	s.saveHistory(state, true)
-	if _, err := os.Stat(historyPath("priv", "win-b")); !os.IsNotExist(err) {
+	if _, err := os.Stat(testHistoryPath("priv", "win-b")); !os.IsNotExist(err) {
 		t.Errorf("a closed pane's history is still on disk: %v", err)
 	}
-	if _, err := os.Stat(historyPath("priv", "win-a")); err != nil {
+	if _, err := os.Stat(testHistoryPath("priv", "win-a")); err != nil {
 		t.Errorf("an open pane's history went: %v", err)
 	}
 
 	// A rename takes the history along; a kill removes it.
 	moveHistory("priv", "priv2")
-	if _, err := os.Stat(historyPath("priv2", "win-a")); err != nil {
+	if _, err := os.Stat(testHistoryPath("priv2", "win-a")); err != nil {
 		t.Errorf("the history did not follow the rename: %v", err)
 	}
 	RemoveResurrectionState("priv2")
-	if _, err := os.Stat(historyDir("priv2")); !os.IsNotExist(err) {
+	if _, err := os.Stat(testHistoryDir("priv2")); !os.IsNotExist(err) {
 		t.Errorf("removing the session left its history: %v", err)
 	}
 }
@@ -331,7 +331,7 @@ func TestHistoryFilesArePrivateAndPrunedWithThePane(t *testing.T) {
 func TestHistorySaveIsThrottledAndSkipsIdlePanes(t *testing.T) {
 	defer useResurrectionDir(t.TempDir())()
 	s, state := historyTestSession(t, "busy", ResolveHistoryPolicy(nil, 0, 0), map[string]string{"win": "one\r\n"})
-	path := historyPath("busy", "win")
+	path := testHistoryPath("busy", "win")
 
 	s.saveHistory(state, false)
 	first, err := os.ReadFile(path)
@@ -367,7 +367,7 @@ func TestHistoryPaneAndSessionByteBounds(t *testing.T) {
 	pol := ResolveHistoryPolicy(nil, 5000, 16) // 16 KiB a pane
 	s, state := historyTestSession(t, "bound", pol, map[string]string{"win": big})
 	s.saveHistory(state, true)
-	fi, err := os.Stat(historyPath("bound", "win"))
+	fi, err := os.Stat(testHistoryPath("bound", "win"))
 	if err != nil {
 		t.Fatalf("not saved: %v", err)
 	}
@@ -408,7 +408,7 @@ func TestHistoryOffSavesNothing(t *testing.T) {
 
 func TestHistoryCorruptFileIsDiscarded(t *testing.T) {
 	defer useResurrectionDir(t.TempDir())()
-	path := historyPath("bad", "win")
+	path := testHistoryPath("bad", "win")
 	if err := writePrivateFile(path, []byte("not gzip")); err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestDaemonRestoreShowsSavedHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := writePrivateFile(historyPath("hist", "win-1"), data); err != nil {
+	if err := writePrivateFile(testHistoryPath("hist", "win-1"), data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -465,7 +465,7 @@ func TestDaemonRestoreShowsSavedHistory(t *testing.T) {
 // daemon next starts. A daemon that read no config deletes nothing.
 func TestHistoryTurnedOffIsDeletedAtStart(t *testing.T) {
 	defer useResurrectionDir(t.TempDir())()
-	path := historyPath("gone", "win")
+	path := testHistoryPath("gone", "win")
 	if err := writePrivateFile(path, []byte("x")); err != nil {
 		t.Fatal(err)
 	}
@@ -573,7 +573,7 @@ func TestHistoryWriteIgnoresWhatIsAlreadyThere(t *testing.T) {
 	}
 	dir := t.TempDir()
 	defer useResurrectionDir(dir)()
-	path := historyPath("s", "win")
+	path := testHistoryPath("s", "win")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -631,15 +631,15 @@ func TestHistoryWithoutStateIsCleanedAtStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"kept", "orphan"} {
-		if err := writePrivateFile(historyPath(name, "w"), []byte("x")); err != nil {
+		if err := writePrivateFile(testHistoryPath(name, "w"), []byte("x")); err != nil {
 			t.Fatal(err)
 		}
 	}
 	CleanResurrectionDir()
-	if _, err := os.Stat(historyPath("kept", "w")); err != nil {
+	if _, err := os.Stat(testHistoryPath("kept", "w")); err != nil {
 		t.Errorf("history of a saved session went: %v", err)
 	}
-	if _, err := os.Stat(historyDir("orphan")); !os.IsNotExist(err) {
+	if _, err := os.Stat(testHistoryDir("orphan")); !os.IsNotExist(err) {
 		t.Errorf("history of a session with no state is still there: %v", err)
 	}
 }
@@ -696,7 +696,7 @@ func TestHistoryFirstSaveAfterRestoreKeepsItsTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := writePrivateFile(historyPath("again", "win-1"), data); err != nil {
+	if err := writePrivateFile(testHistoryPath("again", "win-1"), data); err != nil {
 		t.Fatal(err)
 	}
 	d := NewDaemon(&DaemonConfig{History: ResolveHistoryPolicy(nil, 0, 0)})
@@ -733,7 +733,7 @@ func TestHistoryOtherVersionIsSkippedNotDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := historyPath("newer", "win")
+	path := testHistoryPath("newer", "win")
 	if err := writePrivateFile(path, data); err != nil {
 		t.Fatal(err)
 	}
@@ -753,4 +753,21 @@ func packedScrollbackRows(t *testing.T, st *TerminalState) int {
 		t.Fatal(err)
 	}
 	return len(cp.Scrollback)
+}
+
+// testStatePath, testHistoryDir and testHistoryPath are the path helpers for
+// names a test chose, which are always valid.
+func testStatePath(name string) string { return mustPath(getResurrectionPath(name)) }
+
+func testHistoryDir(name string) string { return mustPath(historyDir(name)) }
+
+func testHistoryPath(name, windowID string) string {
+	return mustPath(historyPath(name, windowID))
+}
+
+func mustPath(p string, err error) string {
+	if err != nil {
+		panic(err)
+	}
+	return p
 }

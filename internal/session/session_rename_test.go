@@ -47,7 +47,7 @@ func TestRenameSessionChangesTheNameEverywhere(t *testing.T) {
 
 	// The state file moved with the name, so a daemon restart brings back one
 	// session called work and no session called test.
-	if _, err := os.Stat(getResurrectionPath("test")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(testStatePath("test")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the old state file is still there: %v", err)
 	}
 	loaded, err := LoadResurrectionState("work")
@@ -134,7 +134,7 @@ func TestPersistDropsASnapshotUnderTheOldName(t *testing.T) {
 	if err := sess.persist(snap); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(getResurrectionPath("test")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(testStatePath("test")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("a snapshot taken before the rename brought the old state file back: %v", err)
 	}
 }

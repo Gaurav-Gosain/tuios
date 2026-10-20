@@ -5924,17 +5924,21 @@ its drop folder.
 **Reads over a link.** A read (`file-read`, `file-preview`, `file-hash`, `file-walk`,
 `open-file-stream` read), and a look at a path's name and size (`file-stat`,
 `file-list`), from one of these is `forbidden` too, so a linked
-machine cannot read keys or credentials out: `~/.ssh` (except a `*.pub` key),
-`~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`,
-`~/.docker/config.json`, `~/.netrc`, `~/.git-credentials`,
-`~/.config/gh/hosts.yml`, `~/.password-store`, `~/Library/Keychains`, the
+machine cannot read keys or credentials out: every place in the write deny
+list above that can hold a secret (`~/.ssh` except a `*.pub` key, `~/.gnupg`,
+`~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.netrc`,
+`~/.git-credentials`, `~/.gitconfig`, `~/.config/git`, `~/.password-store`,
+the shell start files, `~/.config/systemd`, `~/.config/environment.d`,
+`.pam_environment`, the PowerShell profiles, and tuios's own config, state and
+data), and also `~/.docker/config.json`,
+`~/.config/gh/hosts.yml`, `~/Library/Keychains`, the
 Claude and Codex credential files, the package and database credentials
 (`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
 `.vault-token`, `.pgpass`, `.my.cnf`, the Terraform credentials,
 `~/.config/rclone`, `~/.config/hub`, `~/.config/op`), `~/.local/share/keyrings`,
 the Windows credential stores and DPAPI keys,
-`/proc` (every process's environment and memory), tuios's own config, state
-and data, and the daemon's socket folder apart from its drop folder. On
+`/proc` (every process's environment and memory), and the daemon's socket
+folder apart from its drop folder. On
 Windows a linked machine must name a path with a drive letter and no other
 colon: a `\\?\` path, a UNC share and a stream name are refused. A read
 elsewhere is allowed, so a copy out works, unless the machine's
@@ -5950,8 +5954,11 @@ cannot swap a denied file in. On macOS a path through
 reads and writes. A regular file with more than one name (a hard
 link) is `forbidden` to read, hash, stream or copy over a link, because no
 check of its path shows what else it is. To share such a file, copy it to a
-new file first. `read-dir`, `wait-dir` and the binary `MsgReadDir` keep to the
-read rules too, so a machine with only `list` cannot list `~/.ssh` or `/proc`.
+new file first. `read-dir`, `wait-dir` and the binary `MsgReadDir` and
+`MsgWatchDir` keep to the read rules too, so a machine with only `list` cannot
+list or watch `~/.ssh` or `/proc`. `file-walk` over a link leaves out every
+entry in the read deny list, so a walk of the home folder, and the file list of
+a folder copy, does not name the files in `~/.ssh`.
 
 **Copies a link starts.** `transfer-start` and `drop-files` called over a link
 read and write this machine's disk for that machine, so they keep to the same

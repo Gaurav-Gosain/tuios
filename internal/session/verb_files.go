@@ -1228,10 +1228,11 @@ func skippedKind(m fs.FileMode) string {
 // folder, so a copy can make them in order. Links are not followed: a link,
 // a pipe, a socket and a device are not copied, and the walk names them, so
 // the person learns what stayed behind. A part file of a copy in flight is
-// neither copied nor named.
-func walkTree(root string, limit int) (walkResult, error) {
+// neither copied nor named. An entry denied reports true for is neither
+// copied nor named either; nil denies nothing.
+func walkTree(root string, limit int, denied func(string) bool) (walkResult, error) {
 	var out walkResult
-	err := walkTreeTo(root, limit, func(e WalkEntry) error {
+	err := walkTreeTo(root, limit, denied, func(e WalkEntry) error {
 		out.entries = append(out.entries, e)
 		out.total += e.Size
 		return nil
@@ -1246,13 +1247,21 @@ func walkTree(root string, limit int) (walkResult, error) {
 
 // walkTreeTo is walkTree that hands each entry to emit as it is found, and
 // each skipped item to skip.
-func walkTreeTo(root string, limit int, emit func(WalkEntry) error, skip func(SkippedItem)) error {
+func walkTreeTo(root string, limit int, denied func(string) bool, emit func(WalkEntry) error, skip func(SkippedItem)) error {
 	n := 0
 	return filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if p == root {
+			return nil
+		}
+		if denied != nil && denied(p) {
+			// Not named at all: the name of a key is already more than a
+			// link may learn. A denied folder is not entered.
+			if de.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, _ := filepath.Rel(root, p)
@@ -1330,7 +1339,7 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 			var total int64
 			var skipped []SkippedItem
 			count := 0
-			err := walkTreeTo(root, fileWalkMax, func(e WalkEntry) error {
+			err := walkTreeTo(root, fileWalkMax, d.linkWalkDenied(cs), func(e WalkEntry) error {
 				total += e.Size
 				return enc.Encode(e)
 			}, func(s SkippedItem) {
@@ -1353,7 +1362,7 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 		}
 		return map[string]any{"path": path, "stream": true}, nil
 	}
-	w, err := walkTree(root, fileWalkReplyMax)
+	w, err := walkTree(root, fileWalkReplyMax, d.linkWalkDenied(cs))
 	if isWalkTooLarge(err) {
 		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error()+". Ask with stream for a larger folder")
 	}

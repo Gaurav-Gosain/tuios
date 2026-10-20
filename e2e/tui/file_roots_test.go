@@ -1,10 +1,12 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -163,6 +165,18 @@ func TestALinkCannotReadKeys(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(farHome, "notes.txt"), []byte("ordinary\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Files the link may not write because they can hold a token. A link may
+	// not read them either.
+	carriers := []string{".gitconfig", ".bashrc", ".config/git/credentials"}
+	for _, rel := range carriers {
+		p := filepath.Join(farHome, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("TOKEN=dummy\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 
 	far := dialHostVerbs(t, base)
@@ -178,6 +192,41 @@ func TestALinkCannotReadKeys(t *testing.T) {
 	if _, err := far.call("file-read", map[string]any{"path": "~/notes.txt"}); err != nil {
 		t.Errorf("ASSERTION: a link could not read an ordinary file: %v", err)
 	}
+	reads := map[string]any{}
+	for _, rel := range carriers {
+		_, err := far.call("file-read", map[string]any{"path": "~/" + rel})
+		reads[rel] = errString(err)
+		if !forbidden(err) {
+			t.Errorf("ASSERTION: a link read ~/%s: %v", rel, err)
+		}
+	}
+	// A walk is what a folder copy lists its source with. It names no file
+	// the link may not read.
+	raw, err := far.call("file-walk", map[string]any{"path": "~"})
+	if err != nil {
+		t.Fatalf("walk build's home folder: %v", err)
+	}
+	var walk struct {
+		Entries []struct {
+			Rel string `json:"rel"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(raw, &walk); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range walk.Entries {
+		names = append(names, e.Rel)
+	}
+	for _, denied := range append([]string{".ssh/id_ed25519"}, carriers...) {
+		if slices.Contains(names, denied) {
+			t.Errorf("ASSERTION: a walk of build's home folder named %s", denied)
+		}
+	}
+	if !slices.Contains(names, "notes.txt") {
+		t.Errorf("ASSERTION: a walk of build's home folder left out notes.txt: %v", names)
+	}
+	saveTransferArtifact(t, "files-read-deny", map[string]any{"reads": reads, "walk": names})
 }
 
 // TestADarwinCaseFoldedDenyNameIsRefused is the review's finding 3: on a disk
