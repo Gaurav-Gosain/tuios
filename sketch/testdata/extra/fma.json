@@ -4,5 +4,8 @@
  },
  {
   "src": "sankey\n\nGas 3.0,Wind 4.1,2\nGas 1.0,Solar 4.2,5\nOil 2.0,Wind 4.1,5\nGas 1.1,Gas 3.0,0.85941\n"
+ },
+ {
+  "src": "block\n  columns 5\n  n0[(\"Sit down\")]\n  n1[/\"iiii lll\"/] n2(\"Q1 2025\") n3\n  block:g4\n    n5[/\"한국어\"\\] n6((\"Feb\")) n7[\\\"Feb\"\\]\n    n8>\"Hello world\"] n9[[\"é\"]]:3 n10<[\"&nbsp;&nbsp;\"]>(x):3\n    n11[\\\"Ω≈ç√\"/] n12([\"Hello world\"]) n13\n  end\n  n14>\"iiii lll\"] n15{{\"日本語ラベル\"}} n16(\"Ω≈ç√\")\n  n17\n  g4 -.-> n9\n  n13 --> n15\n"
  }
 ]

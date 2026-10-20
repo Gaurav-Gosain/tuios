@@ -57,14 +57,14 @@ func flatAcross(cut func(h float64) float64) spanFn {
 		if sideways {
 			return 0
 		}
-		return w - 2*cut(h) - 2*shapeCorner
+		return w - float64(2*cut(h)) - 2*shapeCorner
 	}
 }
 
 // How far an ellipse's outline has fallen away from its bounding box, `t` from the middle of a side `half` long.
 func bulge(t, half, depth float64) float64 {
 	k := math.Min(1, math.Abs(t)/half)
-	return depth * (1 - math.Sqrt(1-k*k))
+	return depth * (1 - math.Sqrt(1-float64(k*k)))
 }
 
 func roundInset(w, h float64, side int, t float64) float64 {
@@ -93,7 +93,7 @@ func fixed(w, h float64) sizer {
 }
 
 func triSize(tw, th float64, flip bool) ShapeSize {
-	w := math.Max(1.6*tw+40, 80)
+	w := math.Max(float64(1.6*tw)+40, 80)
 	h := (th + 10) / (1 - (tw+8)/w)
 	dy := h/2 - 10 - th/2
 	if flip {
@@ -158,7 +158,7 @@ var shapes = map[string]*shapeDef{
 		},
 		size: func(tw, th float64) ShapeSize {
 			h := th + 2*PAD_Y
-			return ShapeSize{tw + h*0.5 + 2*PAD_X - 8, h, 0}
+			return ShapeSize{tw + float64(h*0.5) + 2*PAD_X - 8, h, 0}
 		},
 		draw: func(w, h float64, a, _ string) string { return rect(w, h, a, ` rx="`+Num(h/2)+`"`) },
 	},
@@ -182,7 +182,7 @@ var shapes = map[string]*shapeDef{
 		size: func(tw, th float64) ShapeSize {
 			w := math.Max(tw+2*PAD_X, 56)
 			ry := math.Min(12, math.Max(6, w/14))
-			return ShapeSize{w, th + 2*PAD_Y + 2*ry, ry / 2}
+			return ShapeSize{w, th + 2*PAD_Y + float64(2*ry), ry / 2}
 		},
 		draw: func(w, h float64, a, line string) string {
 			rx := w / 2
@@ -198,7 +198,7 @@ var shapes = map[string]*shapeDef{
 		inset: roundInset,
 		span:  roundSpan,
 		size: func(tw, th float64) ShapeSize {
-			d := math.Max(math.Sqrt(tw*tw+th*th)+16, 44)
+			d := math.Max(math.Sqrt(float64(tw*tw)+float64(th*th))+16, 44)
 			return ShapeSize{d, d, 0}
 		},
 		draw: func(w, _ float64, a, _ string) string { return `<circle r="` + Num(w/2) + `"` + a + `/>` },
@@ -207,7 +207,7 @@ var shapes = map[string]*shapeDef{
 		inset: roundInset,
 		span:  roundSpan,
 		size: func(tw, th float64) ShapeSize {
-			d := math.Max(math.Sqrt(tw*tw+th*th)+26, 54)
+			d := math.Max(math.Sqrt(float64(tw*tw)+float64(th*th))+26, 54)
 			return ShapeSize{d, d, 0}
 		},
 		draw: func(w, _ float64, a, line string) string {
@@ -217,7 +217,9 @@ var shapes = map[string]*shapeDef{
 	"ellipse": {
 		inset: roundInset,
 		span:  roundSpan,
-		size:  func(tw, th float64) ShapeSize { return ShapeSize{tw*1.3 + 2*PAD_X, th*1.2 + 2*PAD_Y, 0} },
+		size: func(tw, th float64) ShapeSize {
+			return ShapeSize{float64(tw*1.3) + 2*PAD_X, float64(th*1.2) + 2*PAD_Y, 0}
+		},
 		draw: func(w, h float64, a, _ string) string {
 			return `<ellipse rx="` + Num(w/2) + `" ry="` + Num(h/2) + `"` + a + `/>`
 		},
@@ -238,7 +240,7 @@ var shapes = map[string]*shapeDef{
 		size: func(tw, th float64) ShapeSize {
 			a := tw + 16
 			b := th + 8
-			return ShapeSize{a + 1.6*b, a/1.6 + b, 0}
+			return ShapeSize{a + float64(1.6*b), a/1.6 + b, 0}
 		},
 		draw: func(w, h float64, a, _ string) string {
 			return poly([]float64{0, -h / 2, w / 2, 0, 0, h / 2, -w / 2, 0}, a)
@@ -464,7 +466,7 @@ var shapes = map[string]*shapeDef{
 		size: func(tw, th float64) ShapeSize {
 			h := th + 2*PAD_Y
 			rx := math.Min(12, h/4)
-			return ShapeSize{tw + 2*PAD_X + 2*rx, h, 0}
+			return ShapeSize{tw + 2*PAD_X + float64(2*rx), h, 0}
 		},
 		draw: func(w, h float64, a, line string) string {
 			ry := h / 2
@@ -501,8 +503,8 @@ var shapes = map[string]*shapeDef{
 			bh := h - 8
 			out := ""
 			for i := 0; i < 3; i++ {
-				x := -w/2 + float64(2-i)*4
-				y := -h/2 + float64(i)*4
+				x := -w/2 + float64(float64(2-i)*4)
+				y := -h/2 + float64(float64(i)*4)
 				out += `<rect x="` + Num(x) + `" y="` + Num(y) + `" width="` + Num(bw) + `" height="` + Num(bh) + `"` + shapeRounded + a + `/>`
 			}
 			return out
@@ -583,7 +585,7 @@ var shapes = map[string]*shapeDef{
 		draw: func(w, h float64, a, line string) string {
 			dots := ""
 			for i := 0; i < 3; i++ {
-				dots += `<circle cx="` + Num(-w/2+8+float64(i)*7) + `" cy="` + Num(-h/2+6) + `" r="1.5" fill="none"` + line + `/>`
+				dots += `<circle cx="` + Num(-w/2+8+float64(float64(i)*7)) + `" cy="` + Num(-h/2+6) + `" r="1.5" fill="none"` + line + `/>`
 			}
 			return rect(w, h, a, shapeRounded) + `<path d="M` + Num(-w/2) + `,` + Num(-h/2+12) + `H` + Num(w/2) + `" fill="none"` + line + `/>` + dots
 		},
@@ -624,8 +626,8 @@ var shapes = map[string]*shapeDef{
 		draw: func(w, h float64, a, _ string) string {
 			x := w / 2
 			y := h / 2
-			r := y * 0.55
-			return path(`M`+Num(-x+r)+`,`+Num(y)+`A`+Num(r)+`,`+Num(r)+` 0 0 1 `+Num(-x+r*0.6)+`,`+Num(-y*0.1)+`A`+Num(x*0.42)+`,`+Num(y*0.7)+
+			r := float64(y * 0.55)
+			return path(`M`+Num(-x+r)+`,`+Num(y)+`A`+Num(r)+`,`+Num(r)+` 0 0 1 `+Num(-x+float64(r*0.6))+`,`+Num(-y*0.1)+`A`+Num(x*0.42)+`,`+Num(y*0.7)+
 				` 0 0 1 `+Num(-x*0.1)+`,`+Num(-y*0.72)+`A`+Num(x*0.4)+`,`+Num(y*0.62)+` 0 0 1 `+Num(x*0.62)+`,`+Num(-y*0.42)+
 				`A`+Num(r*1.05)+`,`+Num(r*1.05)+` 0 0 1 `+Num(x-r)+`,`+Num(y)+`Z`, a)
 		},
@@ -672,7 +674,7 @@ var shapes = map[string]*shapeDef{
 		size: func(tw, th float64) ShapeSize {
 			w := math.Max(tw+2*PAD_X, 56)
 			ry := math.Min(12, math.Max(6, w/14))
-			return ShapeSize{w, th + 2*PAD_Y + 2*ry + 8, ry/2 + 4}
+			return ShapeSize{w, th + 2*PAD_Y + float64(2*ry) + 8, ry/2 + 4}
 		},
 		draw: func(w, h float64, a, line string) string {
 			rx := w / 2
@@ -689,12 +691,12 @@ var shapes = map[string]*shapeDef{
 	"curv-trap": {
 		size: func(tw, th float64) ShapeSize {
 			h := th + 2*PAD_Y
-			return ShapeSize{tw + 2*PAD_X + h*0.6, h, 0}
+			return ShapeSize{tw + 2*PAD_X + float64(h*0.6), h, 0}
 		},
 		draw: func(w, h float64, a, _ string) string {
 			x := w / 2
 			y := h / 2
-			k := h * 0.3
+			k := float64(h * 0.3)
 			return path(`M`+Num(-x+k)+`,`+Num(-y)+`H`+Num(x-k)+`A`+Num(k)+`,`+Num(y)+` 0 0 1 `+Num(x-k)+`,`+Num(y)+`H`+Num(-x+k)+`L`+Num(-x)+`,0Z`, a)
 		},
 	},
@@ -717,7 +719,7 @@ var shapes = map[string]*shapeDef{
 	"bow-rect": {
 		size: func(tw, th float64) ShapeSize {
 			h := th + 2*PAD_Y
-			return ShapeSize{tw + 2*PAD_X + h*0.4, h, 0}
+			return ShapeSize{tw + 2*PAD_X + float64(h*0.4), h, 0}
 		},
 		inset: func(_, h float64, side int, _ float64) float64 {
 			if side == 1 {
@@ -728,7 +730,7 @@ var shapes = map[string]*shapeDef{
 		draw: func(w, h float64, a, _ string) string {
 			x := w / 2
 			y := h / 2
-			k := h * 0.2
+			k := float64(h * 0.2)
 			return path(`M`+Num(-x+k)+`,`+Num(-y)+`H`+Num(x)+`A`+Num(k)+`,`+Num(y)+` 0 0 0 `+Num(x)+`,`+Num(y)+`H`+Num(-x+k)+`A`+Num(k)+`,`+
 				Num(y)+` 0 0 1 `+Num(-x+k)+`,`+Num(-y)+`Z`, a)
 		},

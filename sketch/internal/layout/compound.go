@@ -326,7 +326,7 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 				ln = Lnode(0, 0, KindNode)
 			}
 			if node.IsGroup {
-				ln.Span = math.Min(node.Span, ln.W-2*node.PadX)
+				ln.Span = math.Min(node.Span, ln.W-float64(2*node.PadX))
 			} else {
 				ln.Span = node.Span
 			}
@@ -455,7 +455,7 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		if group != nil {
 			padX, padTop, padBottom, minW = group.PadX, group.PadTop, group.PadBottom, group.MinW
 		}
-		boxW := math.Max(contentW+2*padX, minW)
+		boxW := math.Max(contentW+float64(2*padX), minW)
 		boxH := contentH + padTop + padBottom
 		offX := (boxW - contentW) / 2
 		offY := padTop

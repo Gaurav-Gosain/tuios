@@ -32,7 +32,7 @@ func FitWidth(options types.RenderOptions, natural, least float64, draw func(plo
 // TitleRoom is the width a title may take before it wraps.
 func TitleRoom(options types.RenderOptions) float64 {
 	if options.MaxWidth != nil && *options.MaxWidth > 0 {
-		return math.Max(80, *options.MaxWidth-2*types.Or(options.Padding, 8))
+		return math.Max(80, *options.MaxWidth-float64(2*types.Or(options.Padding, 8)))
 	}
 	return 4000
 }

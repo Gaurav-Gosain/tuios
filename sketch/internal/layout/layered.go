@@ -762,7 +762,7 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		assignTracks(pieces, trackCount, !opt.Tracks, room, tall)
 		for r := 0; r < maxRank; r++ {
 			if trackCount[r] > 0 {
-				gapUnder[r] += math.Max(0, 2*margin+float64(trackCount[r]-1)*leastPitch-room[r])
+				gapUnder[r] += math.Max(0, float64(2*margin)+float64(float64(trackCount[r]-1)*leastPitch)-room[r])
 			} else if tall[r] > 0 {
 				gapUnder[r] += math.Max(0, math.Min(MAX_GAP*opt.RankSep, tall[r])-room[r])
 			}
@@ -793,9 +793,9 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		}
 		pitch := 0.0
 		if count > 1 {
-			pitch = math.Min(mostPitch, (bottom-top-2*margin)/float64(count-1))
+			pitch = math.Min(mostPitch, (bottom-top-float64(2*margin))/float64(count-1))
 		}
-		return (top+bottom)/2 + (float64(onTrack)-float64(count-1)/2)*pitch
+		return (top+bottom)/2 + float64((float64(onTrack)-float64(count-1)/2)*pitch)
 	}
 
 	minX := inf
@@ -1472,7 +1472,7 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 			return math.Max(-lean, math.Min(lean, point-xs[v]))
 		}
 		// Both ends settle on one place in the part the two sides share: nearer the middle of the narrower.
-		place := (xs[v]*width + middle*span) / (width + span)
+		place := (float64(xs[v]*width) + float64(middle*span)) / (width + span)
 		return math.Max(lo, math.Min(hi, place)) - xs[v]
 	}
 	// The ends of an edge follow each other, so the nodes are gone over until none moves: a few
@@ -1923,8 +1923,8 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		for i := 0; i <= SAMPLES; i++ {
 			t := float64(i) / SAMPLES
 			u := 1 - t
-			out[2*i] = from[k] + (to[k]-from[k])*t*t*(3-2*t)
-			out[2*i+1] = h * (3*c*t*u*u + 3*(1-c)*t*t*u + t*t*t)
+			out[2*i] = from[k] + float64((to[k]-from[k])*t*t*(3-float64(2*t)))
+			out[2*i+1] = h * (float64(3*c*t*u*u) + float64(3*(1-c)*t*t*u) + float64(t*t*t))
 		}
 	}
 	lineA := make([]float64, 2*SAMPLES+2)
@@ -1937,8 +1937,8 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 			for j := 0; j < SAMPLES; j++ {
 				dx := line[2*j+2] - line[2*j]
 				dy := line[2*j+3] - line[2*j+1]
-				t := math.Max(0, math.Min(1, ((px-line[2*j])*dx+(py-line[2*j+1])*dy)/or(dx*dx+dy*dy, 1)))
-				d := js.Hypot(px-line[2*j]-t*dx, py-line[2*j+1]-t*dy)
+				t := math.Max(0, math.Min(1, (float64((px-line[2*j])*dx)+float64((py-line[2*j+1])*dy))/or(float64(dx*dx)+float64(dy*dy), 1)))
+				d := js.Hypot(px-line[2*j]-float64(t*dx), py-line[2*j+1]-float64(t*dy))
 				if d < least {
 					least = d
 				}
@@ -2116,7 +2116,7 @@ func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []
 			sortBy(twins, func(a, b int) float64 { return float64(g.pos[a] - g.pos[b]) })
 			for k := 0; k < len(twins); k++ {
 				d := twins[k]
-				xs[d] = want[d] + (float64(k)-float64(len(twins)-1)/2)*sep
+				xs[d] = want[d] + float64((float64(k)-float64(len(twins)-1)/2)*sep)
 				if len(twins) == 1 || sep == 0 {
 					onLine[d] = 1
 				}

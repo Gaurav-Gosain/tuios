@@ -22,7 +22,7 @@ func WithTitle(title string, measurer text.TextMeasurer, size, pad, width, heigh
 		return Titled{width, height, content}
 	}
 	shift := label.Height + 12
-	full := math.Max(width, math.Ceil(label.Width+2*pad))
+	full := math.Max(width, math.Ceil(label.Width+float64(2*pad)))
 	return Titled{
 		Width:  full,
 		Height: math.Ceil(height + shift),

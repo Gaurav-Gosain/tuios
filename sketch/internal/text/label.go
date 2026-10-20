@@ -256,7 +256,7 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 	}
 	for _, span := range line {
 		if span.Icon != "" {
-			w := size * 1.25
+			w := float64(size * 1.25)
 			if width > 0 && width+w > max {
 				commit()
 			}

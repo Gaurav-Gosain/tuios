@@ -137,10 +137,10 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 	sy := ys[0]
 	ex := xs[last]
 	ey := ys[last]
-	xs[0] += sdx * startTrim
-	ys[0] += sdy * startTrim
-	xs[last] -= edx * endTrim
-	ys[last] -= edy * endTrim
+	xs[0] += float64(sdx * startTrim)
+	ys[0] += float64(sdy * startTrim)
+	xs[last] -= float64(edx * endTrim)
+	ys[last] -= float64(edy * endTrim)
 	length := func(i int) float64 { return math.Abs(xs[i]-xs[i-1]) + math.Abs(ys[i]-ys[i-1]) }
 	// Whether the route turns a corner at point i, from running one way to running the other.
 	turns := func(i int) bool {
@@ -150,7 +150,7 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 	// An edge that curves into a marker runs straight for a little way first, where it has the
 	// room, so that the marker does not sit on the bend.
 	along := func(i int, ux, uy float64) float64 {
-		return math.Abs(xs[i]-xs[i-1])*math.Abs(ux) + math.Abs(ys[i]-ys[i-1])*math.Abs(uy)
+		return float64(math.Abs(xs[i]-xs[i-1])*math.Abs(ux)) + float64(math.Abs(ys[i]-ys[i-1])*math.Abs(uy))
 	}
 	// Of the way from the end of a run to where it turns, the part that makes up for a larger
 	// marker beside this one is kept where it can be, and the rest is at most a quarter of what
@@ -168,14 +168,14 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 		leaves = lead(startReach, startTrim, along(1, sdx, sdy))
 	}
 	if arrives >= 1 {
-		xs = slices.Insert(xs, last, xs[last]-edx*arrives)
-		ys = slices.Insert(ys, last, ys[last]-edy*arrives)
+		xs = slices.Insert(xs, last, xs[last]-float64(edx*arrives))
+		ys = slices.Insert(ys, last, ys[last]-float64(edy*arrives))
 		axes = slices.Insert(axes, last, axes[last])
 		last++
 	}
 	if leaves >= 1 {
-		xs = slices.Insert(xs, 1, xs[0]+sdx*leaves)
-		ys = slices.Insert(ys, 1, ys[0]+sdy*leaves)
+		xs = slices.Insert(xs, 1, xs[0]+float64(sdx*leaves))
+		ys = slices.Insert(ys, 1, ys[0]+float64(sdy*leaves))
 		axes = slices.Insert(axes, 1, axes[1])
 		last++
 	}
@@ -222,7 +222,7 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 		}
 		if !turns(i) {
 			// A point part of the way along one straight run adds nothing to the path.
-			if i < last && aligned(i) && aligned(i+1) && (x-xs[i-1])*(xs[i+1]-x)+(y-ys[i-1])*(ys[i+1]-y) > 0 {
+			if i < last && aligned(i) && aligned(i+1) && float64((x-xs[i-1])*(xs[i+1]-x))+float64((y-ys[i-1])*(ys[i+1]-y)) > 0 {
 				continue
 			}
 			lineTo(x, y)
@@ -244,9 +244,9 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 		}
 		ux, uy := unit(i-1, i, axes[i])
 		vx, vy := unit(i, i+1, axes[i+1])
-		lineTo(x-ux*before, y-uy*before)
-		atX = x + vx*after
-		atY = y + vy*after
+		lineTo(x-float64(ux*before), y-float64(uy*before))
+		atX = x + float64(vx*after)
+		atY = y + float64(vy*after)
 		if stepped {
 			d = append(d, 'Q')
 			d = appendPoint(d, x, y)
@@ -254,9 +254,9 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 			d = appendPoint(d, atX, atY)
 		} else {
 			d = append(d, 'C')
-			d = appendPoint(d, x-ux*before*(1-HANDLE), y-uy*before*(1-HANDLE))
+			d = appendPoint(d, x-float64(ux*before*(1-HANDLE)), y-float64(uy*before*(1-HANDLE)))
 			d = append(d, ' ')
-			d = appendPoint(d, x+vx*after*(1-HANDLE), y+vy*after*(1-HANDLE))
+			d = appendPoint(d, x+float64(vx*after*(1-HANDLE)), y+float64(vy*after*(1-HANDLE)))
 			d = append(d, ' ')
 			d = appendPoint(d, atX, atY)
 		}
@@ -296,30 +296,30 @@ func WriteMarker(b *strings.Builder, typ string, x, y, dx, dy float64, color str
 	ny := dx
 	switch typ {
 	case "arrow_point":
-		bx := x - dx*ARROW
-		by := y - dy*ARROW
+		bx := x - float64(dx*ARROW)
+		by := y - float64(dy*ARROW)
 		half := ARROW * 0.42
 		b.WriteString(`<path class="pele-marker" d="M`)
 		writePoint(b, x, y)
 		b.WriteByte('L')
-		writePoint(b, bx+nx*half, by+ny*half)
+		writePoint(b, bx+float64(nx*half), by+float64(ny*half))
 		b.WriteByte('L')
-		writePoint(b, bx-nx*half, by-ny*half)
+		writePoint(b, bx-float64(nx*half), by-float64(ny*half))
 		WriteStrings(b, `Z" fill="`, color, `" stroke="none"/>`)
 	case "arrow_circle":
 		b.WriteString(`<circle class="pele-marker" cx="`)
-		WriteNum(b, x-dx*4)
+		WriteNum(b, x-float64(dx*4))
 		b.WriteString(`" cy="`)
-		WriteNum(b, y-dy*4)
+		WriteNum(b, y-float64(dy*4))
 		WriteStrings(b, `" r="3.5" fill="`, color, `" stroke="none"/>`)
 	case "arrow_cross":
-		cx := x - dx*4
-		cy := y - dy*4
+		cx := x - float64(dx*4)
+		cy := y - float64(dy*4)
 		a := 3.5
-		ux := (dx + nx) * a
-		uy := (dy + ny) * a
-		vx := (dx - nx) * a
-		vy := (dy - ny) * a
+		ux := float64((dx + nx) * a)
+		uy := float64((dy + ny) * a)
+		vx := float64((dx - nx) * a)
+		vy := float64((dy - ny) * a)
 		b.WriteString(`<path class="pele-marker" d="M`)
 		writePoint(b, cx-ux, cy-uy)
 		b.WriteByte('L')
@@ -362,8 +362,8 @@ func LoopPath(cx, cy, w, h float64, k int, sideways bool, base, trim float64, e 
 	if !sideways {
 		half = h / 2
 	}
-	spread := math.Min(half-4, 8+float64(k)*6)
-	reach := base + float64(k)*8
+	spread := math.Min(half-4, 8+float64(float64(k)*6))
+	reach := base + float64(float64(k)*8)
 	length := js.Or(js.Hypot(reach, spread), 1)
 	// Local frame: `out` points away from the node, `along` runs along its side.
 	at := func(out, along float64) string {
@@ -372,8 +372,8 @@ func LoopPath(cx, cy, w, h float64, k int, sideways bool, base, trim float64, e 
 		}
 		return Num(cx+w/2+out) + "," + Num(cy+along)
 	}
-	tx := (reach / length) * trim
-	ty := (spread / length) * trim
+	tx := float64((reach / length) * trim)
+	ty := float64((spread / length) * trim)
 	if sideways {
 		e.LabelX = cx
 		e.LabelY = cy + h/2 + reach + 4 + e.LabelH/2

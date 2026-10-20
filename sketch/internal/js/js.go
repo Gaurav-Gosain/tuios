@@ -218,7 +218,7 @@ func Number(s string) float64 {
 				if d < 0 || d >= base {
 					return math.NaN()
 				}
-				v = v*float64(base) + float64(d)
+				v = float64(v*float64(base)) + float64(d)
 			}
 			return v
 		}
@@ -366,7 +366,7 @@ func ParseIntPrefix(s string, radix int) float64 {
 		if d < 0 || d >= radix {
 			break
 		}
-		v = v*float64(radix) + float64(d)
+		v = float64(v*float64(radix)) + float64(d)
 		n++
 	}
 	if n == 0 {

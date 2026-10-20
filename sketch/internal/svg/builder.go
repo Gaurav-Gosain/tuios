@@ -122,7 +122,7 @@ func appendHundredths(b []byte, n float64) []byte {
 	}
 	q := math.Floor(n / 100)
 	b = strconv.AppendInt(b, int64(q), 10)
-	r := int(n - q*100)
+	r := int(n - float64(q*100))
 	if r == 0 {
 		return b
 	}
