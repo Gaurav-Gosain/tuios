@@ -111,6 +111,11 @@ func (s *Session) setAgentHarnessPID(windowID string, pid int, isCaller bool) {
 		delete(s.agentHarnessPIDs, windowID)
 		return
 	}
+	// A pid already recorded keeps its start time: a later report naming it
+	// from outside the harness would otherwise stop its exit clearing the pane.
+	if old, ok := s.agentHarnessPIDs[windowID]; ok && old.pid == pid && old.timed {
+		return
+	}
 	if s.agentHarnessPIDs == nil {
 		s.agentHarnessPIDs = make(map[string]harnessProc)
 	}
@@ -136,8 +141,11 @@ func (s *Session) setAgentHarnessPID(windowID string, pid int, isCaller bool) {
 // give, or whose ancestry cannot be read, is not trusted: its pid is still
 // recorded for the session guard, and is never taken for exited.
 func callerRunsHarness(cs *connState, pid int) bool {
+	if pid <= 1 {
+		return false
+	}
 	if cs == nil {
-		return pid > 1
+		return true
 	}
 	cur := cs.peerPID
 	for range paneOriginMaxDepth {

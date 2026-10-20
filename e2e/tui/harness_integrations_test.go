@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1186,6 +1187,10 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 //     name a live process on this machine, one the reporter does not descend
 //     from. That process then exits, and the row has to stay: only a pid
 //     that is the caller or one of its ancestors is the harness's here.
+//   - outside-same-pid: while the agent runs, a report from outside it names
+//     its harness_pid and conversation, then the agent crashes. The pid was
+//     recorded from the harness's own hook, so the outside report must not
+//     forget that it can tell when the harness exits, and the row has to go.
 //   - protocol-pane: a start-agent --protocol pane, whose pane process is the
 //     protocol program rather than a shell, so it reads as at its shell while
 //     the agent runs. A harness process under it reports through its hook
@@ -1196,6 +1201,28 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 // kept or dropped the row.
 //
 // Negative controls: NEGATIVE_CONTROLS.md, "Agent row after exit".
+// fakeClaudePID is the pid of the fakeclaude running scenario, the process
+// the hook names as its harness.
+func fakeClaudePID(t *testing.T, scenario string) int {
+	t.Helper()
+	out, err := exec.Command("ps", "-axo", "pid=,command=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		pid, cmd, _ := strings.Cut(strings.TrimSpace(line), " ")
+		if strings.HasPrefix(strings.TrimSpace(cmd), "claude ") && strings.Contains(cmd, scenario) {
+			n, err := strconv.Atoi(pid)
+			if err != nil {
+				t.Fatalf("pid %q: %v", pid, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("no fakeclaude runs %s:\n%s", scenario, out)
+	return 0
+}
+
 func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 	const cols, rows, width = 120, 36, 28
 	const railCol = cols - width
@@ -1229,6 +1256,9 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		// protocol starts a protocol pane on the scripted ACP agent, and a
 		// harness under it reports with its own pid and exits.
 		protocol bool
+		// outside reports from outside the running agent with its harness_pid
+		// and conversation, before the agent leaves.
+		outside bool
 	}{
 		{name: "session-end", end: sessionEnd},
 		{name: "session-end-typed", end: sessionEnd, typed: true},
@@ -1237,6 +1267,7 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		{name: "note-after-exit", end: sessionEnd, note: true},
 		{name: "unreadable-pid", foreign: true},
 		{name: "host-pid", hostPID: true},
+		{name: "outside-same-pid", outside: true},
 		{name: "protocol-pane", protocol: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1417,6 +1448,16 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				t.Fatalf("the agents section never listed the agent: %v\n%s", err, term.Snapshot())
 			}
 			saveFrame(t, term, "agent-exit-"+tc.name+"-before")
+
+			if tc.outside {
+				// The test process is no ancestor of the stand-in, so this
+				// report does not run under the harness it names.
+				params := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"claude-code","agent_session_id":%q,"harness_pid":%d}`,
+					session, windowID(t, base, session, "pilot"), ccSession, fakeClaudePID(t, scenario))
+				if out, err := tuiosCLI(t, base, "call", "set-agent-state", params); err != nil || !strings.Contains(strings.Join(strings.Fields(out), ""), `"applied":true`) {
+					t.Fatalf("report from outside the harness: %v\n%s", err, out)
+				}
+			}
 
 			// Leave the way /exit does: SessionEnd (when there is one), then the
 			// process ends and the shell has the pane again.
