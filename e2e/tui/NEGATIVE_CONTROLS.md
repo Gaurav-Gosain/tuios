@@ -7554,3 +7554,17 @@ Upstream main, which has no fix, passes every case but `crash`: with no `Session
 | A pid recorded without its start time: `readHarnessProc` marks every pid timed, so one that does not read is taken for exited | `unreadable-pid` ("a harness pid this machine cannot read was taken for exited: the pane is {State:none ...}") | **caught** |
 
 Not covered end to end: a pid given to another process between the harness exiting and the detector looking, which the start time comparison in `harnessProc.exited` tells apart. A test cannot make the system hand a chosen pid to a new process. Nor Windows and other platforms that read no processes, where no start time is recorded and a report claim stays until it is cleared.
+
+### Follow-ups: a harness pid the caller runs under, and a busy protocol pane
+
+Two cases join the test for the maintainer's follow-ups to #873. `host-pid` reports from outside the pane with `tuios call set-agent-state` and a `harness_pid` naming a `sleep` the test started, a live process here that the reporter does not descend from, as a container's own pid can happen to be. It ends the `sleep` and holds the pane at its shell for three detection ticks. `protocol-pane` starts a `start-agent --protocol acp` pane on `testdata/fakeacp`, whose pane process is the protocol program and so reads as at its shell while it runs. A harness for it is `sh` handing its pid to the `tuios call set-agent-state` it execs, which reports with that pid and exits, as a harness child that restarts does. The pane is held for three ticks. Run on 2026-10-20 on macOS against upstream main at 0f62e38f. The fixed build passes all eight cases.
+
+Upstream main fails both new cases with the pane at `none`: `host-pid` ("a host process the reporter does not descend from was taken for its harness, and its exit for the harness's") and `protocol-pane` ("a protocol pane lost its state when a harness under it exited, with the pane program still running").
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| Every harness pid timed: `setAgentHarnessPID` reads the start time whether or not `callerRunsHarness` placed the pid under the caller | `host-pid` ("a host process the reporter does not descend from was taken for its harness, and its exit for the harness's: the pane is {State:none ...}") | **caught** |
+| No harness pid timed: `callerRunsHarness` returns false, so a hook's own harness is never taken for exited | `crash` ("the agents section still lists the pane after its agent left it, with the shell running") | **caught** |
+| The shell test dropped from the exit lapse: `&& fg == ""` removed, leaving `info.atShell()` alone | `protocol-pane` ("a protocol pane lost its state when a harness under it exited, with the pane program still running: the pane is {State:none ...}") | **caught** |
+
+Not covered end to end: an agent actually in another pid namespace. `host-pid` stands in for it with a pid the reporter does not descend from, which is what the daemon sees of one. Nor a platform that does not give the peer's pid, where no harness pid is timed and a report claim stays until it is cleared.
