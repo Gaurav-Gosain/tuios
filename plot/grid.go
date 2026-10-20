@@ -1,5 +1,5 @@
 // Package plot draws charts as terminal cells: bar, line, area, sparkline,
-// gauge and histogram.
+// gauge, histogram, heatmap, pie and mirrored bars.
 //
 // A chart draws into a Grid of a given width and height. Each cell holds one
 // grapheme and a Role, the name of a theme colour such as "series1" or
@@ -10,6 +10,9 @@
 // eighth blocks for bars, Blocks uses only block elements, and ASCII uses
 // printable ASCII only. Pick the best mode the terminal and its font can
 // show.
+//
+// A role made by Fade, such as "series1/2", is its base role faded toward
+// the ground. Charts grade marks by height with fades.
 //
 // Every chart is total. NaN and infinite values count as missing, empty data
 // draws an empty grid, and a grid is always exactly the size asked for.

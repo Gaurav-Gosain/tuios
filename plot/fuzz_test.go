@@ -46,7 +46,7 @@ func FuzzCharts(f *testing.F) {
 			}
 		}
 		var g *Grid
-		switch kind % 12 {
+		switch kind % 13 {
 		case 0:
 			g = Bar{Values: vals, Labels: labels, Horizontal: true, Guide: true}.Draw(W, H, m)
 		case 1:
@@ -86,6 +86,14 @@ func FuzzCharts(f *testing.F) {
 			g = Pie{Values: vals, Labels: labels, Donut: kind%2 == 0, Aspect: float64(w%5) - 1}.Draw(W, H, m)
 		case 11:
 			g = Bar{Values: vals, Labels: labels, Axis: true}.Draw(W, H, m)
+		case 12:
+			// The name is in the series role, so it stays ASCII here.
+			name := ""
+			if len(labels) > 0 {
+				name = labels[0]
+			}
+			g = Mirror{Up: Series{Name: name, Values: vals}, Down: Series{Values: reverse(vals)},
+				Peaks: true, Stats: true, Shared: kind%2 == 0}.Draw(W, H, m)
 		}
 		checkGrid(t, g, W, H, m)
 		_ = g.String()

@@ -2,9 +2,9 @@
 
 [![Go Reference](https://pkg.go.dev/badge/tuios.dev/plot.svg)](https://pkg.go.dev/tuios.dev/plot)
 
-`tuios.dev/plot` draws charts as terminal cells. It has eight chart kinds:
+`tuios.dev/plot` draws charts as terminal cells. It has nine chart kinds:
 bar (horizontal and vertical), line, area, sparkline, gauge, histogram,
-heatmap and pie (a donut or a full disc).
+heatmap, pie (a donut or a full disc) and mirrored bars.
 
 A chart draws into a grid of the size you give it. Each cell holds one
 grapheme and a role, such as `series1`, `mute` or `track`. Your program maps
@@ -57,6 +57,41 @@ colour.
 A cell can also have a background role, `Cell.Bg`. Half blocks use it to show
 two pixels in one cell. The heat roles `heat1` to `heat5` are a ramp from low
 to high that the host derives.
+
+## Mirrored bars
+
+`Mirror` draws two series around one baseline: `Up` rises above it and
+`Down` hangs below it. Use it for download and upload, tokens in and out, or
+reads and writes. Each value is one column of braille dots, and the newest
+value is at the right edge.
+
+```go
+m := plot.Mirror{
+	Up:    plot.Series{Name: "▼ 35.1 MB/s", Values: rx, Role: plot.Series3},
+	Down:  plot.Series{Name: "▲ 207 KB/s", Values: tx, Role: plot.Series5},
+	Peaks: true, // • 120M over the highest column of each half
+	Stats: true, // peak · avg · Σ at the right of each corner row
+}
+g := m.Draw(100, 10, plot.Braille)
+```
+
+- Each half scales to its own peak. `Shared` gives both halves one scale.
+- The columns are graded by height. The row next to the baseline is
+  dimmest. `UpRamp` and `DownRamp` set the roles, low to high.
+- Where a column has no value, the baseline shows as a dotted track.
+- In `Blocks` mode each value is one cell of eighth blocks. In `ASCII`
+  mode it is `#` and `.`.
+
+The idea comes from [iptop](https://github.com/franlol/iptop) (MIT), a
+network monitor by franlol.
+
+## Fades
+
+`Fade(role, k)` returns a role faded `k` steps toward the ground, such as
+`series1/2`. `MaxFade` is 3. Map fade `k` to the base colour mixed about `k`
+fifths of the way toward the ground. At 16 colours, use the normal ANSI slot
+of a bright colour for fade 2 and 3, or the base colour. `Role.Faded` splits
+the name into the base role and the step.
 
 ## Rules
 

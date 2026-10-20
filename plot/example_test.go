@@ -32,3 +32,31 @@ func ExampleSparkline() {
 	// ▁▄▂▇▃█
 	// _~.*-#
 }
+
+func ExampleMirror() {
+	m := plot.Mirror{
+		Up:   plot.Series{Name: "down", Values: []float64{1, 3, 8, 4, 2, 6, 9, 5}},
+		Down: plot.Series{Name: "up", Values: []float64{1, 1, 2, 6, 1, 0, 2, 1}},
+	}
+	g := m.Draw(4, 6, plot.Braille)
+	fmt.Println(g.String())
+	// Each half grades by height: the far row has the series role, the
+	// rows toward the baseline take its fades.
+	fmt.Println(g.At(3, 1).Role, g.At(3, 2).Role)
+	// Output:
+	// down
+	//  ⡆⢀⡇
+	// ⣰⣿⣼⣿
+	// ⠉⢿⠁⠏
+	//  ⢸
+	// up
+	// series1 series1/2
+}
+
+func ExampleFade() {
+	r := plot.Fade(plot.Series1, 2)
+	base, k := r.Faded()
+	fmt.Println(r, base, k)
+	// Output:
+	// series1/2 series1 2
+}

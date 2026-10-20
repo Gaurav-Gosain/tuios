@@ -1,0 +1,27 @@
+=== braille 30x3
+|               ⣶⣶⣾⣶⣶⣷⣶⣾⣶⣶⣶⣶⣴⣶⣦|
+|⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⡿⡿⢿⡿⠿|
+--- roles
+|               aaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbbbbccccccccccccccc|
+|bbbbbbbbbbbbbbbbbbbbbbbbbddddd|
+a=series1 b=track c=series1/2 d=series2 (upper case is bold)
+=== blocks 30x3
+|▆▆▇▅▅█▆▆▅▅▇▆▅▅▆█▆▆▆▅▅▆▅▆▅▅▇▆▆▄|
+|██████████████████████████████|
+|▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔██████████|
+--- roles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ccccccccccccccccccccdddddddddd|
+a=series1 b=series1/2 c=track d=series2 (upper case is bold)
+=== ascii 30x3
+|##############################|
+|##############################|
+|....................##########|
+--- roles
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ccccccccccccccccccccdddddddddd|
+a=series1 b=series1/2 c=track d=series2 (upper case is bold)

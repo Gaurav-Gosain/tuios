@@ -112,6 +112,29 @@ var cases = []chartCase{
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},
+	{"mirror", 40, 9, func(w, h int, m Mode) *Grid {
+		return Mirror{
+			Up:    Series{Name: "rx", Values: append([]float64{0, 0}, runSecs...)},
+			Down:  Series{Name: "tx", Values: []float64{1, 2, 0, 3, 9, 2, 1, math.NaN(), 4, 1, 1, 2, 30, 2, 1, 0, 1, 2}},
+			Peaks: true, Stats: true,
+		}.Draw(w, h, m)
+	}},
+	{"mirror-shared", 24, 6, func(w, h int, m Mode) *Grid {
+		return Mirror{
+			Up:     Series{Values: []float64{4, 8, 2, 6, 3, 9, 1, 5}, Role: Info},
+			Down:   Series{Values: []float64{2, 1, 3, 1, 2, 1, 4, 2}, Role: Warning},
+			UpRamp: []Role{Heat2, Heat4},
+			Shared: true, Peaks: true,
+		}.Draw(w, h, m)
+	}},
+	{"mirror-short", 30, 3, func(w, h int, m Mode) *Grid {
+		// Too short for the peaks and the corners: only the columns.
+		return Mirror{
+			Up:    Series{Name: "in", Values: runSecs},
+			Down:  Series{Name: "out", Values: runSecs[:10]},
+			Peaks: true, Stats: true,
+		}.Draw(w, h, m)
+	}},
 	{"empty", 10, 3, func(w, h int, m Mode) *Grid {
 		return Line{}.Draw(w, h, m)
 	}},
