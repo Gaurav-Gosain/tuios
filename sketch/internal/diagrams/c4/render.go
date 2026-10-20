@@ -87,7 +87,7 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 	links := []types.LinkInfo{}
 	room := -1.0
 	if tight {
-		room = math.Max(80, types.Or(options.MaxWidth, 320)-2*pad)
+		room = math.Max(80, types.Or(options.MaxWidth, 320)-float64(2*pad))
 	}
 	lay := layoutC4(db, measurer, size, small, room, gap)
 	order, boxes := lay.order, lay.boxes
@@ -140,7 +140,7 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		}
 	}
 	rels := float64(len(db.rels))
-	careful := rels*(float64(len(nodes)+len(order))+3*rels) <= CARE_BUDGET
+	careful := rels*(float64(len(nodes)+len(order))+float64(3*rels)) <= CARE_BUDGET
 	covered := func(x0, y0, x1, y1 float64) float64 {
 		area := 0.0
 		for i := 0; i < len(taken); i += 4 {
@@ -150,7 +150,7 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 			}
 			h := math.Min(y1, taken[i+3]) - math.Max(y0, taken[i+1])
 			if h > 0 {
-				area += w * h
+				area += float64(w * h)
 			}
 		}
 		return area
@@ -288,7 +288,7 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		}
 
 		// The label sits on the line, or just beside it when another relation runs the opposite way.
-		beside := math.Abs(r.nx)*(lw/2) + math.Abs(r.ny)*(lh/2) + 2
+		beside := float64(math.Abs(r.nx)*(lw/2)) + float64(math.Abs(r.ny)*(lh/2)) + 2
 		aside := beside
 		if truthy(r.lean) {
 			aside = math.Max(0, math.Min(r.lean, beside-14))
@@ -299,14 +299,14 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		if !tight {
 			extraX, extraY = offset(rel.offsetX), offset(rel.offsetY)
 		}
-		dx := r.nx*aside + extraX
-		dy := r.ny*aside + extraY
+		dx := float64(r.nx*aside) + extraX
+		dy := float64(r.ny*aside) + extraY
 		at := 0.5
 		if careful {
 			// Slide along the line to the spot that covers least. Offsets from the diagram are kept unless a spot
 			// on the line itself covers less than any they lead to: they are often tuned for Mermaid's spacing.
 			least := math.Inf(1)
-			moved := dx != r.nx*aside || dy != r.ny*aside
+			moved := dx != float64(r.nx*aside) || dy != float64(r.ny*aside)
 			passes := 1
 			if moved {
 				passes = 2
@@ -314,11 +314,11 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 			for pass := 0; pass < passes && least > 0; pass++ {
 				px, py := dx, dy
 				if pass != 0 {
-					px, py = r.nx*aside, r.ny*aside
+					px, py = float64(r.nx*aside), float64(r.ny*aside)
 				}
 				for _, t := range SLIDE {
-					cx := r.x0 + (r.x1-r.x0)*t + px
-					cy := r.y0 + (r.y1-r.y0)*t + py
+					cx := r.x0 + float64((r.x1-r.x0)*t) + px
+					cy := r.y0 + float64((r.y1-r.y0)*t) + py
 					area := covered(cx-lw/2, cy-lh/2, cx+lw/2, cy+lh/2)
 					if area < least {
 						least = area
@@ -332,8 +332,8 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 				}
 			}
 		}
-		cx := r.x0 + (r.x1-r.x0)*at + dx
-		top := r.y0 + (r.y1-r.y0)*at + dy - lh/2
+		cx := r.x0 + float64((r.x1-r.x0)*at) + dx
+		top := r.y0 + float64((r.y1-r.y0)*at) + dy - lh/2
 		if careful {
 			taken = append(taken, cx-lw/2, top, cx+lw/2, top+lh)
 		}
@@ -435,8 +435,8 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		titleHeight = title.Height + 12
 	}
 	inner := math.Max(maxX-minX, title.Width)
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(maxY - minY + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 	ox := pad - minX + (inner-(maxX-minX))/2
 	oy := pad + titleHeight - minY
 

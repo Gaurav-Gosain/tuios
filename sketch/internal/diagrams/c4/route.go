@@ -87,10 +87,10 @@ func hitEllipse(cx, cy, rx, ry, px, py, dx, dy float64) float64 {
 	uy := dy / ry
 	vx := (px - cx) / rx
 	vy := (py - cy) / ry
-	a := ux*ux + uy*uy
-	b := 2 * (ux*vx + uy*vy)
-	c := vx*vx + vy*vy - 1
-	disc := b*b - 4*a*c
+	a := float64(ux*ux) + float64(uy*uy)
+	b := 2 * (float64(ux*vx) + float64(uy*vy))
+	c := float64(vx*vx) + float64(vy*vy) - 1
+	disc := float64(b*b) - float64(4*a*c)
 	if a == 0 || disc < 0 {
 		return math.Inf(1)
 	}
@@ -179,8 +179,8 @@ func connect(a, b *Box, shift float64) (float64, float64, float64, float64) {
 			oy = outer.y + outer.h
 		}
 		t := math.Min(hit(inner, ox, oy, ix, iy), 1)
-		mx := ox + (ix-ox)*t
-		my := oy + (iy-oy)*t
+		mx := ox + float64((ix-ox)*t)
+		my := oy + float64((iy-oy)*t)
 		if down {
 			return ox, oy, mx, my
 		}
@@ -224,7 +224,7 @@ func connect(a, b *Box, shift float64) (float64, float64, float64, float64) {
 		ta = math.Min(hit(a, qx, qy, px, py), 1)
 		tb = math.Min(hit(b, px, py, qx, qy), 1)
 	}
-	return qx + (px-qx)*ta, qy + (py-qy)*ta, px + (qx-px)*tb, py + (qy-py)*tb
+	return qx + float64((px-qx)*ta), qy + float64((py-qy)*ta), px + float64((qx-px)*tb), py + float64((qy-py)*tb)
 }
 
 // NEAR: parallel stretches closer than this read as one line, and a line FRAME_NEAR close to a
@@ -318,7 +318,7 @@ func (l *Lanes) ports(box *Box, side int, want, lo, hi float64) []float64 {
 		if k&1 != 0 {
 			sign = 1
 		}
-		at := want + sign*math.Ceil(float64(k)/2)*PORT_STEP
+		at := want + float64(sign*math.Ceil(float64(k)/2)*PORT_STEP)
 		if at < lo || at > hi {
 			continue
 		}
@@ -350,7 +350,7 @@ func path(points []float64, startTrim, endTrim float64) string {
 	ux := js.Sign(points[2] - points[0])
 	uy := js.Sign(points[3] - points[1])
 	var d strings.Builder
-	svg.WriteStrings(&d, "M", svg.Num(points[0]+ux*startTrim), ",", svg.Num(points[1]+uy*startTrim))
+	svg.WriteStrings(&d, "M", svg.Num(points[0]+float64(ux*startTrim)), ",", svg.Num(points[1]+float64(uy*startTrim)))
 	for i := 2; i < n-2; i += 2 {
 		x := points[i]
 		y := points[i+1]
@@ -363,18 +363,18 @@ func path(points []float64, startTrim, endTrim float64) string {
 			math.Abs(x-points[i-2]+y-points[i-1])/2),
 			math.Abs(points[i+2]-x+points[i+3]-y)/2)
 		if truthy(ix) {
-			svg.WriteStrings(&d, "H", svg.Num(x-ix*r))
+			svg.WriteStrings(&d, "H", svg.Num(x-float64(ix*r)))
 		} else {
-			svg.WriteStrings(&d, "V", svg.Num(y-iy*r))
+			svg.WriteStrings(&d, "V", svg.Num(y-float64(iy*r)))
 		}
-		svg.WriteStrings(&d, "Q", svg.Num(x), ",", svg.Num(y), " ", svg.Num(x+ox*r), ",", svg.Num(y+oy*r))
+		svg.WriteStrings(&d, "Q", svg.Num(x), ",", svg.Num(y), " ", svg.Num(x+float64(ox*r)), ",", svg.Num(y+float64(oy*r)))
 	}
 	lx := js.Sign(points[n-2] - points[n-4])
 	ly := js.Sign(points[n-1] - points[n-3])
 	if truthy(lx) {
-		svg.WriteStrings(&d, "H", svg.Num(points[n-2]-lx*endTrim))
+		svg.WriteStrings(&d, "H", svg.Num(points[n-2]-float64(lx*endTrim)))
 	} else {
-		svg.WriteStrings(&d, "V", svg.Num(points[n-1]-ly*endTrim))
+		svg.WriteStrings(&d, "V", svg.Num(points[n-1]-float64(ly*endTrim)))
 	}
 	return d.String()
 }
@@ -422,7 +422,7 @@ func across(lo, hi float64) []float64 {
 		if k&1 != 0 {
 			sign = 1
 		}
-		at := mid + sign*math.Ceil(float64(k)/2)*step
+		at := mid + float64(sign*math.Ceil(float64(k)/2)*step)
 		if at >= lo+NEAR && at <= hi-NEAR {
 			out = append(out, at)
 		}
@@ -486,8 +486,8 @@ func elbow(a, b *Box, others []*Box, lanes *Lanes, startTrim, endTrim float64) (
 		for _, y0 := range lanes.ports(a, sides[0], ay+(down*a.h)/4, a.y+8, a.y+a.h-8) {
 			for _, y1 := range lanes.ports(b, sides[1], by-(down*b.h)/4, b.y+8, b.y+b.h-8) {
 				for _, lane := range lanesAcross {
-					x0 := lane + (ax-lane)*math.Min(hit(a, lane, y0, ax, y0), 1)
-					x1 := lane + (bx-lane)*math.Min(hit(b, lane, y1, bx, y1), 1)
+					x0 := lane + float64((ax-lane)*math.Min(hit(a, lane, y0, ax, y0), 1))
+					x1 := lane + float64((bx-lane)*math.Min(hit(b, lane, y1, bx, y1), 1))
 					before := best
 					scratch = [8]float64{x0, y0, lane, y0, lane, y1, x1, y1}
 					consider(scratch[:], true, sides)
@@ -515,8 +515,8 @@ func elbow(a, b *Box, others []*Box, lanes *Lanes, startTrim, endTrim float64) (
 		for _, x0 := range lanes.ports(a, sides[0], ax+(sideways*a.w)/4, a.x+8, a.x+a.w-8) {
 			for _, x1 := range lanes.ports(b, sides[1], bx-(sideways*b.w)/4, b.x+8, b.x+b.w-8) {
 				for _, lane := range lanesAcross {
-					y0 := lane + (ay-lane)*math.Min(hit(a, x0, lane, x0, ay), 1)
-					y1 := lane + (by-lane)*math.Min(hit(b, x1, lane, x1, by), 1)
+					y0 := lane + float64((ay-lane)*math.Min(hit(a, x0, lane, x0, ay), 1))
+					y1 := lane + float64((by-lane)*math.Min(hit(b, x1, lane, x1, by), 1))
 					before := best
 					scratch = [8]float64{x0, y0, x0, lane, x1, lane, x1, y1}
 					consider(scratch[:], false, sides)
@@ -566,8 +566,8 @@ func route(a, b *Box, shift float64, others []*Box, lanes *Lanes, startTrim, end
 		ux := LOOP / length
 		uy := spread / length
 		var d strings.Builder
-		svg.WriteStrings(&d, "M", svg.Num(x+ux*startTrim), ",", svg.Num(cy-spread-uy*startTrim), "C", svg.Num(x+LOOP), ",", svg.Num(cy-spread*2), " ",
-			svg.Num(x+LOOP), ",", svg.Num(cy+spread*2), " ", svg.Num(x+ux*endTrim), ",", svg.Num(cy+spread+uy*endTrim))
+		svg.WriteStrings(&d, "M", svg.Num(x+float64(ux*startTrim)), ",", svg.Num(cy-spread-float64(uy*startTrim)), "C", svg.Num(x+LOOP), ",", svg.Num(cy-float64(spread*2)), " ",
+			svg.Num(x+LOOP), ",", svg.Num(cy+float64(spread*2)), " ", svg.Num(x+float64(ux*endTrim)), ",", svg.Num(cy+spread+float64(uy*endTrim)))
 		return Route{
 			d:    d.String(),
 			sx:   x,
@@ -694,17 +694,17 @@ func route(a, b *Box, shift float64, others []*Box, lanes *Lanes, startTrim, end
 			}
 			pointsAt := func(at float64) []float64 {
 				if upright {
-					x0 := at + (ax-at)*math.Min(hit(a, at, p0, ax, p0), 1)
-					x1 := at + (bx-at)*math.Min(hit(b, at, p1, bx, p1), 1)
+					x0 := at + float64((ax-at)*math.Min(hit(a, at, p0, ax, p0), 1))
+					x1 := at + float64((bx-at)*math.Min(hit(b, at, p1, bx, p1), 1))
 					return []float64{x0, p0, at, p0, at, p1, x1, p1}
 				}
-				y0 := at + (ay-at)*math.Min(hit(a, p0, at, p0, ay), 1)
-				y1 := at + (by-at)*math.Min(hit(b, p1, at, p1, by), 1)
+				y0 := at + float64((ay-at)*math.Min(hit(a, p0, at, p0, ay), 1))
+				y1 := at + float64((by-at)*math.Min(hit(b, p1, at, p1, by), 1))
 				return []float64{p0, y0, p0, at, p1, at, p1, y1}
 			}
-			points := pointsAt(lane + sign*LANE)
+			points := pointsAt(lane + float64(sign*LANE))
 			for k := 0; k <= 4; k++ {
-				at := lane + sign*(LANE+float64(k)*LANE_STEP)
+				at := lane + float64(sign*(LANE+float64(float64(k)*LANE_STEP)))
 				tried := pointsAt(at)
 				if !clearOf(tried, others, a, b) {
 					continue
@@ -774,7 +774,7 @@ func route(a, b *Box, shift float64, others []*Box, lanes *Lanes, startTrim, end
 		lanes.take([]float64{sx, sy, ex, ey})
 	}
 	var d strings.Builder
-	svg.WriteStrings(&d, "M", svg.Num(sx+dx*startTrim), ",", svg.Num(sy+dy*startTrim), "L", svg.Num(ex-dx*endTrim), ",", svg.Num(ey-dy*endTrim))
+	svg.WriteStrings(&d, "M", svg.Num(sx+float64(dx*startTrim)), ",", svg.Num(sy+float64(dy*startTrim)), "L", svg.Num(ex-float64(dx*endTrim)), ",", svg.Num(ey-float64(dy*endTrim)))
 	r := Route{
 		d:      d.String(),
 		sx:     sx,

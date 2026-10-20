@@ -242,7 +242,7 @@ func layoutC4(db *C4Db, measurer text.TextMeasurer, size, small, room, gap float
 			depth := depths[shape.parent]
 			nodeWidth := float64(SHAPE_W)
 			if !loose {
-				nodeWidth = math.Max(100, math.Min(SHAPE_W, room-2*float64(depth)*groupPad-32))
+				nodeWidth = math.Max(100, math.Min(SHAPE_W, room-float64(2*float64(depth)*groupPad)-32))
 			}
 			if g := groups[shape.parent]; g != nil {
 				g.nodes = append(g.nodes, measure(shape, measurer, size, small, nodeWidth))
@@ -276,7 +276,7 @@ func layoutC4(db *C4Db, measurer text.TextMeasurer, size, small, room, gap float
 			for _, box := range boxes {
 				widest = math.Max(widest, box.w)
 			}
-			return math.Max(1, math.Min(limit, math.Floor((room+gap-2*groupPad)/(widest+gap))))
+			return math.Max(1, math.Min(limit, math.Floor((room+gap-float64(2*groupPad))/(widest+gap))))
 		}
 		gridW, gridH := rows(nodeBoxes, count(nodeBoxes, perRow, gapX), gapX, GAP_Y, true)
 		kidsW, kidsH := rows(kidBoxes, count(kidBoxes, groupsPerRow, GROUP_GAP), GROUP_GAP, GROUP_GAP, false)
@@ -289,7 +289,7 @@ func layoutC4(db *C4Db, measurer text.TextMeasurer, size, small, room, gap float
 			frame = 0
 		}
 		kidsTop[group] = gridH + between
-		group.w = math.Max(math.Max(gridW, kidsW), group.headW+2*HEAD_LEFT-2*frame) + 2*frame
+		group.w = math.Max(math.Max(gridW, kidsW), group.headW+2*HEAD_LEFT-float64(2*frame)) + float64(2*frame)
 		head := 0.0
 		if frame != 0 {
 			head = group.head
