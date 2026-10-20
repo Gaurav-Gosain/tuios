@@ -1316,3 +1316,102 @@ var swimlaneTemplates = []func(p string) string{
 		return "swimlane-beta RL\n  subgraph L[\"`**" + p + "**`\"]\n    a\n  end\n  accTitle: " + p + "\n  accDescr: " + p
 	},
 }
+
+var usecaseTemplates = []func(p string) string{
+	func(p string) string { return usecaseHead + p },
+	func(p string) string { return usecaseHead + "actor " + p },
+	func(p string) string { return usecaseHead + "actor A(" + p + ")" },
+	func(p string) string { return usecaseHead + "actor A(\"" + p + "\")" },
+	func(p string) string { return usecaseHead + "actor A('" + p + "')" },
+	func(p string) string { return usecaseHead + "actor A(\"`" + p + "`\")" },
+	func(p string) string { return usecaseHead + "actor \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "actor \"`" + p + "`\"" },
+	func(p string) string { return usecaseHead + "actor A <<" + p + ">>" },
+	func(p string) string { return usecaseHead + "actor A:::" + p },
+	func(p string) string { return usecaseHead + "actor A@{ icon: \"" + p + "\" }" },
+	func(p string) string { return usecaseHead + "actor A@{ type: \"" + p + "\" }" },
+	func(p string) string { return usecaseHead + "actor A@{ \"" + p + "\": true }" },
+	func(p string) string { return usecaseHead + "actor A, \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "U(" + p + ")" },
+	func(p string) string { return usecaseHead + "U[" + p + "]" },
+	func(p string) string { return usecaseHead + "U(\"" + p + "\")" },
+	func(p string) string { return usecaseHead + "U[\"`" + p + "`\"]" },
+	func(p string) string { return usecaseHead + "\"" + p + "\"" },
+	func(p string) string { return usecaseHead + "'" + p + "'" },
+	func(p string) string { return usecaseHead + "\"`" + p + "`\"" },
+	func(p string) string { return usecaseHead + "U(x) <<" + p + ">>:::" + p },
+	func(p string) string { return usecaseHead + "U(x)@{ business: true } <<" + p + ">>" },
+	func(p string) string { return usecaseHead + "A --> \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "\"" + p + "\" --> \"" + p + " \"" },
+	func(p string) string { return usecaseHead + "A -- " + p + " --> B" },
+	func(p string) string { return usecaseHead + "A -- \"" + p + "\" --> B" },
+	func(p string) string { return usecaseHead + "A -- \"`" + p + "`\" --> B" },
+	func(p string) string { return usecaseHead + "A <-- \"" + p + "\" -- B" },
+	func(p string) string { return usecaseHead + "A o-- \"" + p + "\" -- B\nA x-- '" + p + "' -- B" },
+	func(p string) string { return usecaseHead + "A -- \"" + p + "\" --o B\nA -- \"" + p + "\" --x B" },
+	func(p string) string { return usecaseHead + "A -- \"" + p + "\" --> A" },
+	func(p string) string { return usecaseHead + "A " + p + "@--> B" },
+	func(p string) string { return usecaseHead + "A e@--> B\ne@{ animation: \"" + p + "\" }" },
+	func(p string) string { return usecaseHead + "A ..> : include B\nA ..> : " + p + " B" },
+	func(p string) string { return usecaseHead + "A " + p + " B" },
+	func(p string) string { return usecaseHead + "systemBoundary " + p + "\nend" },
+	func(p string) string { return usecaseHead + "systemBoundary \"" + p + "\"\n  U\nend" },
+	func(p string) string { return usecaseHead + "systemBoundary S[" + p + "]\n  U\nend" },
+	func(p string) string {
+		return usecaseHead + "systemBoundary S(\"`" + p + "`\")@{ type: package }\n  U\nend"
+	},
+	func(p string) string {
+		return usecaseHead + "systemBoundary S[\"" + p + "\"]@{ type: package }:::" + p + "\n  actor \"" + p + "\"\n  \"" + p + " \"\nend"
+	},
+	func(p string) string { return usecaseHead + "systemBoundary S@{ type: \"" + p + "\" }\nend" },
+	func(p string) string { return usecaseHead + "U\nnote for U " + p },
+	func(p string) string { return usecaseHead + "U\nnote for U \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "U\nnote for U \"`" + p + "`\"" },
+	func(p string) string { return usecaseHead + "U\nnote for " + p + " \"x\"" },
+	func(p string) string { return usecaseHead + "json P@{\"" + p + "\": \"" + p + "\"}" },
+	func(p string) string {
+		return usecaseHead + "json P@{\"a\": [\"" + p + "\", {\"" + p + "\": null}], \"b\": {\"" + p + "\": 1}}"
+	},
+	func(p string) string {
+		return usecaseHead + "json P@{\"k\": " + jsonText(p) + ", " + jsonText(p) + ": [" + jsonText(p) + "]}"
+	},
+	func(p string) string { return usecaseHead + "json " + p + "@{}" },
+	func(p string) string { return usecaseHead + "json P@{}:::" + p },
+	func(p string) string { return usecaseHead + "json P@" + p },
+	func(p string) string { return usecaseHead + "A\nclass A " + p },
+	func(p string) string { return usecaseHead + "A\nclass " + p + " c" },
+	func(p string) string { return usecaseHead + "A\nclassDef " + p + " fill:red\nclass A " + p },
+	func(p string) string { return usecaseHead + "A\nclassDef c fill:" + p + "\nclass A c" },
+	func(p string) string { return usecaseHead + "A\nclassDef c " + p + ":red\nclass A c" },
+	func(p string) string {
+		return usecaseHead + "A\nclassDef default fill:" + p + ",color:" + p + ",stroke:" + p
+	},
+	func(p string) string { return usecaseHead + "A\nstyle A fill:" + p },
+	func(p string) string { return usecaseHead + "A\nstyle A " + p + ":red" },
+	func(p string) string {
+		return usecaseHead + "actor A\nstyle A color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p
+	},
+	func(p string) string {
+		return usecaseHead + "A e@--> B\nstyle e stroke:" + p + ",stroke-width:" + p + "\nclass e " + p
+	},
+	func(p string) string {
+		return usecaseHead + "systemBoundary S\nend\nstyle S fill:" + p + "\nclass S " + p
+	},
+	func(p string) string { return usecaseHead + "json P@{}\nstyle P fill:" + p + ",stroke-width:" + p },
+	func(p string) string { return usecaseHead + "A\nstyle " + p + " fill:red" },
+	func(p string) string { return usecaseHead + "accTitle: " + p + "\naccDescr: " + p + "\nA" },
+	func(p string) string { return usecaseHead + "accDescr {\n " + p + "\n}\nA" },
+	func(p string) string { return usecaseHead + "direction " + p + "\nA" },
+	func(p string) string { return usecaseHead + "direction TB " + p + "\nA" },
+	func(p string) string { return usecaseHead + "%% " + p + "\nA" },
+	func(p string) string { return usecaseHead + "A@{ " + p + ": true }\nA" },
+	func(p string) string { return usecaseHead + "A\nA@{ business: \"" + p + "\" }" },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  usecase:\n    nodeSpacing: \"" + p + "\"\n    rankSpacing: \"" + p + "\"\n---\n" + usecaseHead + "actor A\nA --> B"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\n" + usecaseHead + "A" },
+	func(p string) string {
+		return "%%{init: {\"usecase\": {\"nodeSpacing\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\n" + usecaseHead + "A"
+	},
+	func(p string) string { return "usecase-beta " + p + "\nA" },
+}

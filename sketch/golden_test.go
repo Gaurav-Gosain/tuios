@@ -43,6 +43,7 @@ var done = map[string]bool{
 	"timeline":      true,
 	"treemap":       true,
 	"treeview":      true,
+	"usecase":       true,
 	"venn":          true,
 	"wardley":       true,
 	"xychart":       true,

@@ -13,10 +13,12 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates',
          'cynefin': 'cynefinTemplates', 'eventmodeling': 'eventmodelingTemplates',
          'venn': 'vennTemplates', 'wardley': 'wardleyTemplates',
-         'railroad': 'railroadTemplates', 'swimlane': 'swimlaneTemplates'}
+         'railroad': 'railroadTemplates', 'swimlane': 'swimlaneTemplates',
+         'usecase': 'usecaseTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead', 'V': 'vennHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
-         "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)'}
+         "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)',
+         'JSON.stringify(p)': 'jsonText(p)'}
 
 # Types whose templates are in their render test, which has no security file.
 files = {'swimlane': 'swimlane.test.ts'}
@@ -27,7 +29,8 @@ type_exprs = {'requirement': {'BODY': 'requirementBody'},
               'eventmodeling': {'line(p)': 'emLine(p)'},
               'wardley': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'},
               'railroad': {'quoted(p)': 'railroadQuoted(p)', 'bare(p)': 'railroadBare(p)', "p.replace(/[?;]/g, '')": 'railroadNoSpecial(p)',
-                           "p.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\")": 'railroadSingle(p)'}}
+                           "p.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\")": 'railroadSingle(p)'},
+              'usecase': {'U': 'usecaseHead'}}
 
 def lit(s):
     out, i = [], 0
@@ -44,7 +47,8 @@ def go(body, typ):
     pieces = []
     for k, part in enumerate(parts):
         if k % 2:
-            pieces.append(type_exprs.get(typ, {}).get(part) or exprs[part])
+            own = type_exprs.get(typ, {})
+            pieces.append(own[part] if part in own else exprs[part])
         elif part:
             pieces.append('"' + lit(part) + '"')
     return ' + '.join(pieces) if pieces else '""'

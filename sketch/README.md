@@ -96,34 +96,36 @@ charts, quadrant charts, user journeys, kanban boards, git graphs, sankey
 diagrams, block diagrams, architecture diagrams, requirement diagrams, C4
 diagrams, packet diagrams, radar charts, treemaps, info diagrams, tree views,
 Ishikawa diagrams, Cynefin diagrams, event models, Venn diagrams, Wardley
-maps, railroad diagrams and swimlane diagrams with box-drawing characters, for
-a terminal that shows no pictures. For a graph it takes the layout that sketch
-works out for the SVG and maps it to cells. The labels stay real text. A pie
-chart is a bar for each slice, with its value. pele leaves a slice under 1%
-out of the pie, and shows values only with `showData`. A mindmap is a tree. A
-gantt chart is bars on a date axis. A timeline runs across, and runs down when
-it does not fit the columns. So does a user journey. An XY chart draws its
-bars and lines with tuios.dev/plot, and turns its categories into rows when
-they do not fit across. It writes point labels and bar values where they cover
-nothing, and leaves out a label that has no room. A quadrant chart is a box in
-four parts, with its points as dots. A kanban board puts its columns in more
-rows when they do not fit. A git graph runs down, one row for each commit,
-with the oldest commit at the top. A sankey diagram puts its nodes in columns
-of boxes joined by lines. When two lines would join, when they cross more than
-three times, or when the columns do not fit, it is a table of flows: source,
-target and value. Block, architecture, requirement and C4 diagrams are drawn
-as a flowchart is. A block arrow shows an arrow character. A service without a
-title shows its icon name. A packet diagram is rows of bit fields. A radar
-chart is a table with one bar for each curve on each axis. A treemap is nested
-boxes, or an indented tree when the boxes are too small. An info diagram is
-its line of text. A tree view is drawn as the `tree` command draws a folder.
-An Ishikawa diagram is a spine with its causes as bones, or an indented tree
-when it is narrow. A Cynefin diagram is a grid of its four domains. An event
-model is swimlanes in time order, or a list of frames when it is narrow. A
-Venn diagram is a table of its sets and their overlaps. A Wardley map is a
-grid of visibility by evolution, or a table when it is narrow. A railroad
-diagram is its tracks in cells, or its rules as EBNF text when they do not
-fit. A swimlane diagram is a flowchart with its lanes as bands.
+maps, railroad diagrams, swimlane diagrams and use case diagrams with
+box-drawing characters, for a terminal that shows no pictures. For a graph it
+takes the layout that sketch works out for the SVG and maps it to cells. The
+labels stay real text. A pie chart is a bar for each slice, with its value.
+pele leaves a slice under 1% out of the pie, and shows values only with
+`showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
+timeline runs across, and runs down when it does not fit the columns. So does
+a user journey. An XY chart draws its bars and lines with tuios.dev/plot, and
+turns its categories into rows when they do not fit across. It writes point
+labels and bar values where they cover nothing, and leaves out a label that
+has no room. A quadrant chart is a box in four parts, with its points as dots.
+A kanban board puts its columns in more rows when they do not fit. A git graph
+runs down, one row for each commit, with the oldest commit at the top. A
+sankey diagram puts its nodes in columns of boxes joined by lines. When two
+lines would join, when they cross more than three times, or when the columns
+do not fit, it is a table of flows: source, target and value. Block,
+architecture, requirement and C4 diagrams are drawn as a flowchart is. A block
+arrow shows an arrow character. A service without a title shows its icon name.
+A packet diagram is rows of bit fields. A radar chart is a table with one bar
+for each curve on each axis. A treemap is nested boxes, or an indented tree
+when the boxes are too small. An info diagram is its line of text. A tree view
+is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
+with its causes as bones, or an indented tree when it is narrow. A Cynefin
+diagram is a grid of its four domains. An event model is swimlanes in time
+order, or a list of frames when it is narrow. A Venn diagram is a table of its
+sets and their overlaps. A Wardley map is a grid of visibility by evolution,
+or a table when it is narrow. A railroad diagram is its tracks in cells, or
+its rules as EBNF text when they do not fit. Use case diagrams and agent flows
+are drawn as a flowchart is. A swimlane diagram is a flowchart with its lanes
+as bands.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

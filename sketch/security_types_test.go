@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad,usecase}-security.test.ts,
 // the inert parts of tests/render/pie.test.ts and tests/render/swimlane.test.ts, and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1275,5 +1275,51 @@ func TestSwimlaneOutputIsInert(t *testing.T) {
 		if err != nil || len(reLane.FindAllString(out.Data, -1)) != 2 {
 			t.Fatalf("lane %s: %v\n%s", name, err, out.Data)
 		}
+	}
+}
+
+const usecaseHead = "usecase-beta\n"
+
+// TestUsecaseOutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same sources must only render.
+func TestUsecaseOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "usecase")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, usecaseTemplates, 600, RenderOptions{}, false)
+	out, err := Render(usecaseHead+"actor \"<img src=x onerror=alert(1)>\" <<</text><script>alert(1)</script >>\n'<script>a&b</script>'\n"+
+		"json P@{\"<b>\": \"</text><script>alert(1)</script>\"}\nnote for P2 \"<svg onload=alert(1)>\"\nP2", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<svg onload") ||
+		!strings.Contains(out.Data, "&lt;script&gt;a&amp;b&lt;/script&gt;") || !strings.Contains(out.Data, `data-id="_img_src_x_onerror_alert_1__"`) ||
+		!strings.Contains(out.Data, ">&lt;b&gt;</text>") || !strings.Contains(out.Data, "«&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script»") {
+		t.Fatalf("use case markup is not escaped: %v\n%s", err, out.Data)
+	}
+	out, err = Render(usecaseHead+"actor A@{ icon: '\"><script>alert(1)</script>' }", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || !strings.Contains(out.Data, `data-icon="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`) {
+		t.Fatalf("an icon name is markup: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, usecaseHead+"accTitle: t\nactor A\nA -- \"l\" --> B\njson P@{\"a\":1}", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile use case options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", "`", "\"`", "`\"", "{", "}", "[", "]", "(", ")", "\n", ":::", "<<", ">>", "@{", " --> ", " -- ", "style A fill:",
+		"classDef c ", "systemBoundary ", "end\n", "json P@", "note for A "}, 3, 4000, RenderOptions{}, false)
+	for _, src := range []string{
+		usecaseHead + "actor __proto__\n__proto__ constructor@--> toString\nconstructor@{ animate: true }\nnote for toString \"__proto__\"",
+		usecaseHead + "A\nclassDef __proto__ fill:red\nclass A __proto__\nstyle A fill:red\nA@{ business: true }",
+		usecaseHead + "systemBoundary __proto__[constructor]\n  hasOwnProperty\n  actor valueOf\nend\n__proto__@{ type: package }",
+		usecaseHead + "json __proto__@{\"__proto__\": {\"polluted\": true}, \"constructor\": {\"prototype\": {\"polluted\": true}}}\nA --> __proto__",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+	out, err = Render(usecaseHead+"json P@{\"__proto__\": {\"x\": 1}, \"constructor\": 2}", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, ">__proto__.x</text>") || !strings.Contains(out.Data, ">constructor</text>") {
+		t.Fatalf("a JSON key named __proto__: %v\n%s", err, out.Data)
 	}
 }
