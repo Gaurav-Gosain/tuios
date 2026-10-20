@@ -162,16 +162,16 @@ type Port struct {
 func route(s, e *Port) []float64 {
 	sx, sy, sdx, sdy := s.x, s.y, s.dx, s.dy
 	ex, ey, edx, edy := e.x, e.y, e.dx, e.dy
-	s1x := sx + sdx*STUB
-	s1y := sy + sdy*STUB
-	e1x := ex + edx*STUB
-	e1y := ey + edy*STUB
-	if sdx*edx+sdy*edy == 0 {
+	s1x := sx + float64(sdx*STUB)
+	s1y := sy + float64(sdy*STUB)
+	e1x := ex + float64(edx*STUB)
+	e1y := ey + float64(edy*STUB)
+	if float64(sdx*edx)+float64(sdy*edy) == 0 {
 		cx, cy := sx, ey
 		if sdx != 0 {
 			cx, cy = ex, sy
 		}
-		if (cx-sx)*sdx+(cy-sy)*sdy > 0 && (cx-ex)*edx+(cy-ey)*edy > 0 {
+		if float64((cx-sx)*sdx)+float64((cy-sy)*sdy) > 0 && float64((cx-ex)*edx)+float64((cy-ey)*edy) > 0 {
 			return []float64{sx, sy, cx, cy, ex, ey}
 		}
 		if sdx != 0 {
@@ -185,7 +185,7 @@ func route(s, e *Port) []float64 {
 		offset = ey - sy
 	}
 	if sdx == -edx && sdy == -edy {
-		ahead := (ex-sx)*sdx + (ey-sy)*sdy
+		ahead := float64((ex-sx)*sdx) + float64((ey-sy)*sdy)
 		if ahead > 0 {
 			if math.Abs(offset) < 0.5 {
 				return []float64{sx, sy, ex, ey}
@@ -286,8 +286,8 @@ func pathData(b *strings.Builder, p []float64, startTrim, endTrim float64) {
 		l := js.Hypot(xs[toward]-xs[at], ys[toward]-ys[at])
 		t := math.Min(amount, math.Max(0, l-1))
 		if l > 0 && t > 0 {
-			xs[at] += ((xs[toward] - xs[at]) / l) * t
-			ys[at] += ((ys[toward] - ys[at]) / l) * t
+			xs[at] += float64(((xs[toward] - xs[at]) / l) * t)
+			ys[at] += float64(((ys[toward] - ys[at]) / l) * t)
 		}
 	}
 	trim(0, 1, startTrim)
@@ -307,10 +307,10 @@ func pathData(b *strings.Builder, p []float64, startTrim, endTrim float64) {
 			svg.WriteNum(b, ys[i])
 			continue
 		}
-		inX := xs[i] - ((xs[i]-xs[i-1])/before)*r
-		inY := ys[i] - ((ys[i]-ys[i-1])/before)*r
-		outX := xs[i] + ((xs[i+1]-xs[i])/after)*r
-		outY := ys[i] + ((ys[i+1]-ys[i])/after)*r
+		inX := xs[i] - float64(((xs[i]-xs[i-1])/before)*r)
+		inY := ys[i] - float64(((ys[i]-ys[i-1])/before)*r)
+		outX := xs[i] + float64(((xs[i+1]-xs[i])/after)*r)
+		outY := ys[i] + float64(((ys[i+1]-ys[i])/after)*r)
 		b.WriteByte('L')
 		svg.WriteNum(b, inX)
 		b.WriteByte(',')
@@ -457,7 +457,7 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 			c := min(nodeCol[a], nodeCol[b])
 			gapX[c] = math.Max(gapX[c], math.Ceil(label.Width)+28)
 		} else {
-			colW[nodeCol[a]] = math.Max(colW[nodeCol[a]], 2*math.Ceil(label.Width/2)+8)
+			colW[nodeCol[a]] = math.Max(colW[nodeCol[a]], float64(2*math.Ceil(label.Width/2))+8)
 			if nodeRow[a] != nodeRow[b] {
 				r := min(nodeRow[a], nodeRow[b])
 				gapY[r] = math.Max(gapY[r], math.Ceil(label.Height)+24)
@@ -592,7 +592,7 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 			p.y0, p.y1 = p.y, p.y
 			p.gap = DOT
 		} else if dx != 0 {
-			p.x = cx + dx*half
+			p.x = cx + float64(dx*half)
 		} else if dy < 0 {
 			p.y = y
 		} else {
@@ -645,10 +645,10 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		e := port(b, sideIndex(edge.rhsDir), edge.rhsGroup)
 		if s.x == e.x && s.y == e.y && s.dx == e.dx {
 			// An edge from a side back to the same side: part the two ends so it shows as a loop.
-			s.x -= 8 * math.Abs(s.dy)
-			s.y -= 8 * math.Abs(s.dx)
-			e.x += 8 * math.Abs(s.dy)
-			e.y += 8 * math.Abs(s.dx)
+			s.x -= float64(8 * math.Abs(s.dy))
+			s.y -= float64(8 * math.Abs(s.dx))
+			e.x += float64(8 * math.Abs(s.dy))
+			e.y += float64(8 * math.Abs(s.dx))
 		}
 		routed := route(&s, &e)
 		if s.wire {
@@ -678,10 +678,10 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		pathData(&edgesOut, points, startTrim, endTrim)
 		edgesOut.WriteString(`"/>`)
 		if edge.lhsInto {
-			svg.WriteMarker(&edgesOut, "arrow_point", s.x+s.dx*s.gap, s.y+s.dy*s.gap, -s.dx, -s.dy, "var(--_l)")
+			svg.WriteMarker(&edgesOut, "arrow_point", s.x+float64(s.dx*s.gap), s.y+float64(s.dy*s.gap), -s.dx, -s.dy, "var(--_l)")
 		}
 		if edge.rhsInto {
-			svg.WriteMarker(&edgesOut, "arrow_point", e.x+e.dx*e.gap, e.y+e.dy*e.gap, -e.dx, -e.dy, "var(--_l)")
+			svg.WriteMarker(&edgesOut, "arrow_point", e.x+float64(e.dx*e.gap), e.y+float64(e.dy*e.gap), -e.dx, -e.dy, "var(--_l)")
 		}
 		edgesOut.WriteString(`</g>`)
 		best, bestLength := -1, -1.0
@@ -839,8 +839,8 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 	if title.Height > 0 {
 		titleHeight = title.Height + 12
 	}
-	width := math.Ceil(math.Max(maxX-minX, title.Width) + 2*pad)
-	height := math.Ceil(maxY - minY + titleHeight + 2*pad)
+	width := math.Ceil(math.Max(maxX-minX, title.Width) + float64(2*pad))
+	height := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 	ox := js.Round((width-(maxX-minX))/2 - minX)
 	oy := js.Round(pad + titleHeight - minY)
 	var body strings.Builder

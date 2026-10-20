@@ -82,7 +82,7 @@ func arrowSize(mask int, tw, th float64) ArrowSize {
 		if mask == RIGHT|LEFT {
 			heads = 2
 		}
-		return ArrowSize{w: math.Max(tw+12, 16) + depth*heads, h: h, dx: (across * depth) / 2, dy: 0}
+		return ArrowSize{w: math.Max(tw+12, 16) + float64(depth*heads), h: h, dx: (across * depth) / 2, dy: 0}
 	}
 	if axis == 'y' {
 		w := math.Max(tw+16, 14) + 2*OVERHANG
@@ -91,11 +91,11 @@ func arrowSize(mask int, tw, th float64) ArrowSize {
 		if mask == UP|DOWN {
 			heads = 2
 		}
-		return ArrowSize{w: w, h: math.Max(th+8, 16) + depth*heads, dx: 0, dy: (along * depth) / 2}
+		return ArrowSize{w: w, h: math.Max(th+8, 16) + float64(depth*heads), dx: 0, dy: (along * depth) / 2}
 	}
 	return ArrowSize{
-		w:  math.Max(tw+16, 24) + NUB*(bit(mask, LEFT)+bit(mask, RIGHT)),
-		h:  math.Max(th+8, 24) + NUB*(bit(mask, UP)+bit(mask, DOWN)),
+		w:  math.Max(tw+16, 24) + float64(NUB*(bit(mask, LEFT)+bit(mask, RIGHT))),
+		h:  math.Max(th+8, 24) + float64(NUB*(bit(mask, UP)+bit(mask, DOWN))),
 		dx: (across * NUB) / 2,
 		dy: (along * NUB) / 2,
 	}

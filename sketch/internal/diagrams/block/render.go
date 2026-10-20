@@ -125,7 +125,7 @@ func edgeY(v *View, x, sign float64) float64 {
 	dx := math.Abs(x - v.x)
 	reach := hh
 	if isRound(v) {
-		reach = math.Sqrt(math.Max(hw*hw-dx*dx, 0))
+		reach = math.Sqrt(math.Max(float64(hw*hw)-float64(dx*dx), 0))
 	} else if v.kind == Leaf && v.shape == "diam" {
 		reach = hh * math.Max(1-dx/hw, 0)
 	} else if v.kind == Leaf {
@@ -137,7 +137,7 @@ func edgeY(v *View, x, sign float64) float64 {
 	} else if v.kind == Arrow && arrowAxis(v.mask) == 'x' {
 		reach = hh - OVERHANG
 	}
-	return v.y + sign*reach
+	return v.y + float64(sign*reach)
 }
 
 // edgeX is where a horizontal line at y meets the outline, right of the center (sign 1) or left of it (sign -1).
@@ -147,7 +147,7 @@ func edgeX(v *View, y, sign float64) float64 {
 	dy := math.Abs(y - v.y)
 	reach := hw
 	if isRound(v) {
-		reach = math.Sqrt(math.Max(hh*hh-dy*dy, 0))
+		reach = math.Sqrt(math.Max(float64(hh*hh)-float64(dy*dy), 0))
 	} else if v.kind == Leaf && v.shape == "diam" {
 		reach = hw * math.Max(1-dy/hh, 0)
 	} else if v.kind == Leaf {
@@ -159,7 +159,7 @@ func edgeX(v *View, y, sign float64) float64 {
 	} else if v.kind == Arrow && arrowAxis(v.mask) == 'y' {
 		reach = hw - OVERHANG
 	}
-	return v.x + sign*reach
+	return v.x + float64(sign*reach)
 }
 
 // border is where the line from the center toward (tx, ty) leaves the outline.
@@ -186,7 +186,7 @@ func border(v *View, tx, ty float64, out []float64) []float64 {
 	if math.IsInf(k, 1) {
 		k = 0
 	}
-	return append(out, v.x+dx*k, v.y+dy*k)
+	return append(out, v.x+float64(dx*k), v.y+float64(dy*k))
 }
 
 func crossesBox(x1, y1, x2, y2 float64, v *View) bool {
@@ -203,7 +203,7 @@ func crossesBox(x1, y1, x2, y2 float64, v *View) bool {
 	// The segment is diagonal and its bounding box overlaps: the box is hit unless all four corners are on one side.
 	dx := x2 - x1
 	dy := y2 - y1
-	side := func(x, y float64) float64 { return js.Sign(dx*(y-y1) - dy*(x-x1)) }
+	side := func(x, y float64) float64 { return js.Sign(float64(dx*(y-y1)) - float64(dy*(x-x1))) }
 	first := side(l, t)
 	return first == 0 || side(r, t) != first || side(r, b) != first || side(l, b) != first
 }
@@ -350,28 +350,28 @@ func trace(p []float64, startTrim, endTrim float64) svg.EdgePath {
 	endTrim = math.Min(endTrim, last)
 	var d strings.Builder
 	d.WriteByte('M')
-	svg.WriteNum(&d, sx+ax*startTrim)
+	svg.WriteNum(&d, sx+float64(ax*startTrim))
 	d.WriteByte(',')
-	svg.WriteNum(&d, sy+ay*startTrim)
+	svg.WriteNum(&d, sy+float64(ay*startTrim))
 	if n == 6 {
 		r := math.Max(0, math.Min(math.Min(CORNER, first-startTrim), last-endTrim))
 		d.WriteByte('L')
-		svg.WriteNum(&d, p[2]-ax*r)
+		svg.WriteNum(&d, p[2]-float64(ax*r))
 		d.WriteByte(',')
-		svg.WriteNum(&d, p[3]-ay*r)
+		svg.WriteNum(&d, p[3]-float64(ay*r))
 		d.WriteByte('Q')
 		svg.WriteNum(&d, p[2])
 		d.WriteByte(',')
 		svg.WriteNum(&d, p[3])
 		d.WriteByte(' ')
-		svg.WriteNum(&d, p[2]+bx*r)
+		svg.WriteNum(&d, p[2]+float64(bx*r))
 		d.WriteByte(',')
-		svg.WriteNum(&d, p[3]+by*r)
+		svg.WriteNum(&d, p[3]+float64(by*r))
 	}
 	d.WriteByte('L')
-	svg.WriteNum(&d, ex-bx*endTrim)
+	svg.WriteNum(&d, ex-float64(bx*endTrim))
 	d.WriteByte(',')
-	svg.WriteNum(&d, ey-by*endTrim)
+	svg.WriteNum(&d, ey-float64(by*endTrim))
 	return svg.EdgePath{D: d.String(), Sx: sx, Sy: sy, Sdx: -ax, Sdy: -ay, Ex: ex, Ey: ey, Edx: bx, Edy: by}
 }
 
@@ -380,13 +380,13 @@ func trace(p []float64, startTrim, endTrim float64) svg.EdgePath {
 func loopArc(v *View, k int) (px, py, r, a1, a2 float64) {
 	hw := v.bw / 2
 	hh := v.bh / 2
-	r = math.Max(1, math.Min(math.Min(10+5*float64(k-1), hw), hh))
+	r = math.Max(1, math.Min(math.Min(10+float64(5*float64(k-1)), hw), hh))
 	if isRound(v) {
-		px := v.x + hw*SQRT1_2
-		py := v.y - hw*SQRT1_2
+		px := v.x + float64(hw*SQRT1_2)
+		py := v.y - float64(hw*SQRT1_2)
 		half := 2 * js.Asin(math.Min(1, r/(2*hw)))
 		angle := func(at float64) float64 {
-			return js.Atan2(v.y-hw*js.Sin(at)-py, v.x+hw*js.Cos(at)-px)
+			return js.Atan2(v.y-float64(hw*js.Sin(at))-py, v.x+float64(hw*js.Cos(at))-px)
 		}
 		return px, py, r, angle(math.Pi/4 + half), angle(math.Pi/4 - half)
 	}
@@ -405,14 +405,14 @@ func loopPath(v *View, k int, startTrim, endTrim float64) svg.EdgePath {
 	if sweep <= 0 {
 		sweep += 2 * math.Pi
 	}
-	x1 := px + r*js.Cos(from)
-	y1 := py + r*js.Sin(from)
-	x2 := px + r*js.Cos(to)
-	y2 := py + r*js.Sin(to)
-	sx := px + r*js.Cos(a1)
-	sy := py + r*js.Sin(a1)
-	ex := px + r*js.Cos(a2)
-	ey := py + r*js.Sin(a2)
+	x1 := px + float64(r*js.Cos(from))
+	y1 := py + float64(r*js.Sin(from))
+	x2 := px + float64(r*js.Cos(to))
+	y2 := py + float64(r*js.Sin(to))
+	sx := px + float64(r*js.Cos(a1))
+	sy := py + float64(r*js.Sin(a1))
+	ex := px + float64(r*js.Cos(a2))
+	ey := py + float64(r*js.Sin(a2))
 	// Each marker lies along the chord it covers, so it follows the curve instead of the tangent at its tip.
 	sl := js.Hypot(sx-x1, sy-y1)
 	el := js.Hypot(ex-x2, ey-y2)
@@ -448,8 +448,8 @@ func labelSpot(p []float64, at int, w, h float64, s, t *View, obstacles []*View,
 		return 0.5
 	}
 	for _, spot := range SPOTS {
-		x := p[at] + (p[at+2]-p[at])*spot
-		y := p[at+1] + (p[at+3]-p[at+1])*spot
+		x := p[at] + float64((p[at+2]-p[at])*spot)
+		y := p[at+1] + float64((p[at+3]-p[at+1])*spot)
 		clear := true
 		for _, v := range obstacles {
 			if v != s && v != t && math.Abs(x-v.x) < (w+v.bw)/2 && math.Abs(y-v.y) < (h+v.bh)/2 {
@@ -546,8 +546,8 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			if v.label.Height > 0 {
 				v.head = v.label.Height + 4
 			}
-			v.nw = v.label.Width + 2*gap
-			v.nh = v.head + 2*gap
+			v.nw = v.label.Width + float64(2*gap)
+			v.nh = v.head + float64(2*gap)
 		case "block_arrow":
 			v.kind = Arrow
 			v.label = text.LayoutLabel(block.label, false, measurer, fontSize, wrap, textStyle)
@@ -702,7 +702,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		var lx, ly float64
 		if s == t {
 			px, py, r, _, _ := loopArc(s, k+1)
-			grow(px, py, 2*r+2, 2*r+2)
+			grow(px, py, float64(2*r)+2, float64(2*r)+2)
 			lx = px + r + 6 + label.Width/2
 			ly = py - r/2
 		} else {
@@ -710,7 +710,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			if labelled[key] {
 				step = js.Round(edgeSize*1.5) + 2
 			}
-			points = routeEdge(s, t, (float64(k)-float64(total-1)/2)*step, obstacles, check)
+			points = routeEdge(s, t, float64((float64(k)-float64(total-1)/2)*step), obstacles, check)
 			n := len(points)
 			// The label goes on the longer leg.
 			firstLeg := math.Abs(points[2]-points[0]) + math.Abs(points[3]-points[1])
@@ -723,8 +723,8 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			if label.Width > 0 {
 				spot = labelSpot(points, at, label.Width+8, label.Height, s, t, obstacles, check)
 			}
-			lx = points[at] + (points[at+2]-points[at])*spot
-			ly = points[at+1] + (points[at+3]-points[at+1])*spot
+			lx = points[at] + float64((points[at+2]-points[at])*spot)
+			ly = points[at+1] + float64((points[at+3]-points[at+1])*spot)
 		}
 		if label.Width > 0 {
 			grow(lx, ly, label.Width+8, label.Height)
@@ -752,8 +752,8 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 		v.x += ox
 		v.y += oy
 	}
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(maxY - minY + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 
 	var clusters, nodes strings.Builder
 	for i := 1; i < len(order); i++ {

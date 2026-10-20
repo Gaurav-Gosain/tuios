@@ -7,5 +7,8 @@
  },
  {
   "src": "block\n  columns 5\n  n0[(\"Sit down\")]\n  n1[/\"iiii lll\"/] n2(\"Q1 2025\") n3\n  block:g4\n    n5[/\"한국어\"\\] n6((\"Feb\")) n7[\\\"Feb\"\\]\n    n8>\"Hello world\"] n9[[\"é\"]]:3 n10<[\"&nbsp;&nbsp;\"]>(x):3\n    n11[\\\"Ω≈ç√\"/] n12([\"Hello world\"]) n13\n  end\n  n14>\"iiii lll\"] n15{{\"日本語ラベル\"}} n16(\"Ω≈ç√\")\n  n17\n  g4 -.-> n9\n  n13 --> n15\n"
+ },
+ {
+  "src": "block\n  columns auto\n  block\n    n1<[\"x\"]>(y, right):1\n    n2([\"Sit down\"]) n3<[\"&nbsp;&nbsp;\"]>(up)\n    n4([\"Sit down\"]) n5[/\"Hello world\"\\]\n    n6{\"한국어\"} n7:1 n8>\"Sit down\"]\n    n9<[\"Q1 2025\"]>(right) n10[[\"é\"]]:1 n11:3\n  end\n  n12<[\" \"]>(y) n13\n  n14(\"Feb\") n15<[\" \"]>(right):2 n16<[\"&nbsp;&nbsp;\"]>(y)\n  n17(\"Ünïcødé\"):2 n18[/\"Feb\"\\]\n  n19[\"jan\"] n20(\"日本語ラベル\"):2\n  n21([\"A much longer label that has to wrap somewhere\"]) n22<[\"&nbsp;&nbsp;\"]>(down) n23(\"Hello world\"):3\n  n24\n  n25{\"Ünïcødé\"}\n  block:g26:1\n    columns 2\n    n27{\"تسمية\"}\n    n28(((\"iiii lll\")))\n    space:1\n    n29[\\\"é\"/] n30{\"é\"}\n  end\n  n31>\"تسمية\"] n32<[\"A much longer label that has to wrap somewhere\"]>(y, right):3 n33[[\"Do work\"]]:1\n  block:g34:1\n    columns 3\n    n35[\"Q1 2025\"] n36\n    n37\n    n38(((\"iiii lll\")))\n    n39(((\"Q1 2025\"))):3 n40 n41(((\"x\")))\n  end\n  block\n    columns 4\n    block\n      n44[/\"Sit down\"\\]:2 n45 n46[[\"日本語ラベル\"]]\n    end\n  end\n  n47(\"한국어\"):1\n  n31 -- \"Sit down\" --> n1\n  g34 ==> n39\n  classDef c1 fill:#f66,stroke-width:4px;\n  class n8 c1\n"
  }
 ]

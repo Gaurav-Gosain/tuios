@@ -89,7 +89,7 @@ func measure(box *Cell, gap, inset float64) {
 		if child.space {
 			continue
 		}
-		width := (child.nw - gap*(span-1)) / span
+		width := (child.nw - float64(gap*(span-1))) / span
 		if width > cw {
 			cw = width
 		}
@@ -106,16 +106,16 @@ func measure(box *Cell, gap, inset float64) {
 	}
 	box.cols = cols
 	box.heights = heights
-	box.nw = math.Max(box.nw, cols*cw+(cols-1)*gap+2*inset)
-	box.nh = height + 2*inset + box.head
+	box.nw = math.Max(box.nw, float64(cols*cw)+float64((cols-1)*gap)+float64(2*inset))
+	box.nh = height + float64(2*inset) + box.head
 }
 
 // arrange gives each child its cell, sharing out any room the container has beyond what it needs.
 func arrange(box *Cell, gap, inset float64) {
 	cols, heights := box.cols, box.heights
 	rows := float64(len(heights))
-	cw := (box.w - 2*inset - (cols-1)*gap) / cols
-	room := box.h - 2*inset - box.head - (rows-1)*gap
+	cw := (box.w - float64(2*inset) - float64((cols-1)*gap)) / cols
+	room := box.h - float64(2*inset) - box.head - float64((rows-1)*gap)
 	needed := 0.0
 	for _, height := range heights {
 		needed += height
@@ -131,11 +131,11 @@ func arrange(box *Cell, gap, inset float64) {
 	row := 0
 	for _, child := range box.children {
 		for ; row < child.row; row++ {
-			top += heights[row]*scale + share + gap
+			top += float64(heights[row]*scale) + share + gap
 		}
-		child.w = cw*child.span + gap*(child.span-1)
-		child.h = heights[row]*scale + share
-		child.x = left + child.col*(cw+gap) + child.w/2
+		child.w = float64(cw*child.span) + float64(gap*(child.span-1))
+		child.h = float64(heights[row]*scale) + share
+		child.x = left + float64(child.col*(cw+gap)) + child.w/2
 		child.y = top + child.h/2
 	}
 }

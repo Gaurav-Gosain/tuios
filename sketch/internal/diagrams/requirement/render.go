@@ -91,7 +91,7 @@ func restyle(label text.Label, bits int, measurer text.TextMeasurer) text.Label 
 
 // startText writes a measured label with its lines starting at x, the first line's box starting at top.
 func startText(b *strings.Builder, label text.Label, x, top float64, attrs string) {
-	y := top + label.LineHeight/2 + label.Size*0.35
+	y := top + label.LineHeight/2 + float64(label.Size*0.35)
 	shared := svg.SharedStyle(label)
 	var body strings.Builder
 	for _, line := range label.Lines {
@@ -121,47 +121,47 @@ func startText(b *strings.Builder, label text.Label, x, top float64, attrs strin
 // containsMarker is the containment mark: a circled plus whose rim touches (x, y), where (dx, dy) points at the node.
 func containsMarker(b *strings.Builder, x, y, dx, dy float64) {
 	r := float64(CONTAINS_RADIUS)
-	cx := x - dx*r
-	cy := y - dy*r
+	cx := x - float64(dx*r)
+	cy := y - float64(dy*r)
 	b.WriteString(`<circle class="pele-marker" cx="`)
 	svg.WriteNum(b, cx)
 	b.WriteString(`" cy="`)
 	svg.WriteNum(b, cy)
 	b.WriteString(`" r="6"/><path class="pele-marker" d="M`)
-	svg.WriteNum(b, cx-dx*r)
+	svg.WriteNum(b, cx-float64(dx*r))
 	b.WriteByte(',')
-	svg.WriteNum(b, cy-dy*r)
+	svg.WriteNum(b, cy-float64(dy*r))
 	b.WriteByte('L')
-	svg.WriteNum(b, cx+dx*r)
+	svg.WriteNum(b, cx+float64(dx*r))
 	b.WriteByte(',')
-	svg.WriteNum(b, cy+dy*r)
+	svg.WriteNum(b, cy+float64(dy*r))
 	b.WriteByte('M')
-	svg.WriteNum(b, cx+dy*r)
+	svg.WriteNum(b, cx+float64(dy*r))
 	b.WriteByte(',')
-	svg.WriteNum(b, cy-dx*r)
+	svg.WriteNum(b, cy-float64(dx*r))
 	b.WriteByte('L')
-	svg.WriteNum(b, cx-dy*r)
+	svg.WriteNum(b, cx-float64(dy*r))
 	b.WriteByte(',')
-	svg.WriteNum(b, cy+dx*r)
+	svg.WriteNum(b, cy+float64(dx*r))
 	b.WriteString(`"/>`)
 }
 
 // arrowMarker is an open arrowhead with its tip at (x, y), pointing along (dx, dy).
 func arrowMarker(b *strings.Builder, x, y, dx, dy float64) {
-	bx := x - dx*ARROW_LENGTH
-	by := y - dy*ARROW_LENGTH
+	bx := x - float64(dx*ARROW_LENGTH)
+	by := y - float64(dy*ARROW_LENGTH)
 	b.WriteString(`<path class="pele-marker" d="M`)
-	svg.WriteNum(b, bx-dy*ARROW_HALF)
+	svg.WriteNum(b, bx-float64(dy*ARROW_HALF))
 	b.WriteByte(',')
-	svg.WriteNum(b, by+dx*ARROW_HALF)
+	svg.WriteNum(b, by+float64(dx*ARROW_HALF))
 	b.WriteByte('L')
 	svg.WriteNum(b, x)
 	b.WriteByte(',')
 	svg.WriteNum(b, y)
 	b.WriteByte('L')
-	svg.WriteNum(b, bx+dy*ARROW_HALF)
+	svg.WriteNum(b, bx+float64(dy*ARROW_HALF))
 	b.WriteByte(',')
-	svg.WriteNum(b, by-dx*ARROW_HALF)
+	svg.WriteNum(b, by-float64(dx*ARROW_HALF))
 	b.WriteString(`" stroke-linejoin="round"/>`)
 }
 
@@ -238,7 +238,7 @@ func spreadEnds(cnodes []*layout.CNode, cedges []*layout.CEdge, views []NodeView
 			return 0
 		})
 		for j := range list {
-			offset := (float64(j) - float64(len(list)-1)/2) * step
+			offset := float64((float64(j) - float64(len(list)-1)/2) * step)
 			if vertical {
 				list[j].route[list[j].at+1] = cnodes[node].Y + offset
 			} else {
@@ -378,9 +378,9 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 		if src == dst {
 			// A self-loop sits beside the node, across the flow, and the node's box grows to hold it.
 			if sideways {
-				cnodes[src].H += 2 * (LOOP + label.Height + 8)
+				cnodes[src].H += float64(2 * (LOOP + label.Height + 8))
 			} else {
-				cnodes[src].W += 2 * (LOOP + label.Width + 12)
+				cnodes[src].W += float64(2 * (LOOP + label.Width + 12))
 			}
 		}
 		drawn = append(drawn, edge)
@@ -405,8 +405,8 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 	inner := math.Max(lay.Width, title.Width)
 	ox := pad + (inner-lay.Width)/2
 	oy := pad + titleHeight
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(lay.Height + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(lay.Height + titleHeight + float64(2*pad))
 
 	var nodesOut strings.Builder
 	for i := range views {
@@ -480,8 +480,8 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 			if sideways {
 				half = view.w / 2
 			}
-			spread := math.Min(half-4, 12+float64(k)*6)
-			reach := LOOP + float64(k)*8
+			spread := math.Min(half-4, 12+float64(float64(k)*6))
+			reach := LOOP + float64(float64(k)*8)
 			// Local frame: `out` points away from the node, `along` runs along its side.
 			at := func(b *strings.Builder, out, along float64) {
 				if sideways {
