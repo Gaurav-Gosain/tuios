@@ -72,6 +72,9 @@ type Geometry struct {
 
 	// Venn.
 	Venn *GeoVenn
+
+	// Wardley.
+	Wardley *GeoWardley
 }
 
 type GeoNode struct {
@@ -513,4 +516,34 @@ type GeoVennRegion struct {
 	Size  float64
 	Label string
 	Texts []string
+}
+
+// GeoWardley is a wardley map as lists. Evolution and visibility are percentages.
+type GeoWardley struct {
+	Title  []string
+	Stages []string
+	// Boundaries are the right edges of the stages, from 0 to 1, when the map sets them.
+	Boundaries []float64
+	Nodes      []GeoWardleyNode
+	Links      []GeoWardleyLink
+	// Trends are a node's index and the evolution it is heading for.
+	Trends [][2]float64
+	// Notes are the notes and the numbered annotations.
+	Notes []string
+}
+
+type GeoWardleyNode struct {
+	Label                 string
+	Evolution, Visibility float64
+	// Kind is anchor, component, pipeline or pipeline-component.
+	Kind     string
+	Strategy string
+	Inertia  bool
+}
+
+type GeoWardleyLink struct {
+	From, To int
+	Label    string
+	Dashed   bool
+	Flow     string
 }

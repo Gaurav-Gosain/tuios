@@ -1180,3 +1180,48 @@ var vennTemplates = []func(p string) string{
 	},
 	func(p string) string { return "venn-beta " + p + "\nset A" },
 }
+
+var wardleyTemplates = []func(p string) string{
+	func(p string) string { return "wardley-beta\ncomponent \"" + cynefinQuoted(p) + "\" [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\ncomponent '" + cynefinSingle(p) + "' [0.5, 0.5] (buy) (inertia)"
+	},
+	func(p string) string { return "wardley-beta\ncomponent " + p + " [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\nanchor \"" + cynefinQuoted(p) + "\" [0.9, 0.5]\ncomponent B [0.5, 0.5]\n\"" + cynefinQuoted(p) + "\" -> B"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent A [0.9, 0.1]\ncomponent B [0.5, 0.5]\nA -> B; " + p
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent A [0.9, 0.1]\ncomponent B [0.5, 0.5]\nA +'" + cynefinSingle(p) + "'> B"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent A [0.9, 0.1]\n\"" + cynefinQuoted(p) + "\" -> A\nA -> \"" + cynefinQuoted(p) + "\""
+	},
+	func(p string) string { return "wardley-beta\nnote \"" + cynefinQuoted(p) + "\" [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\nannotations [0.9, 0.1]\nannotation 1,[0.5, 0.5] \"" + cynefinQuoted(p) + "\""
+	},
+	func(p string) string { return "wardley-beta\nannotation 7,[0.5, 0.5] \"" + cynefinQuoted(p) + "\"" },
+	func(p string) string {
+		return "wardley-beta\naccelerator \"" + cynefinQuoted(p) + "\" [0.5, 0.5]\ndeaccelerator \"" + cynefinQuoted(p) + "\" [0.2, 0.2]"
+	},
+	func(p string) string {
+		return "wardley-beta\nevolution \"" + cynefinQuoted(p) + "\" -> \"" + cynefinQuoted(p) + "\"@0.5 / \"" + cynefinQuoted(p) + "\" -> C\ncomponent A [0.5, 0.5]"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent \"" + cynefinQuoted(p) + "\" [0.5, 0.5]\nevolve \"" + cynefinQuoted(p) + "\" 0.9"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent \"" + cynefinQuoted(p) + "\" [0.5, 0.5]\npipeline \"" + cynefinQuoted(p) + "\" {\n component \"" + cynefinQuoted(p) + "\" [0.2]\n component B [0.8]\n}"
+	},
+	func(p string) string { return "wardley-beta\ntitle " + p + "\ncomponent A [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\naccTitle: " + p + "\naccDescr: " + p + "\ncomponent A [0.5, 0.5]"
+	},
+	func(p string) string { return "wardley-beta\naccDescr {\n " + p + "\n}\ncomponent A [0.5, 0.5]" },
+	func(p string) string {
+		return "---\ntitle: \"" + cynefinQuoted(p) + "\"\nconfig:\n  wardley-beta:\n    width: '" + cynefinSingle(p) + "'\n    height: 1e999\n    showGrid: '" + cynefinSingle(p) + "'\n---\nwardley-beta\ncomponent A [0.5, 0.5]"
+	},
+}

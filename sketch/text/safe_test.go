@@ -67,6 +67,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"cynefin":                "cynefin-beta\n  title t#27;]0x#7;\n  complex\n    \"#27;[2J\"\n  confusion\n    \"#155;31m\"\n  clear --> chaotic : \"#144;x\"",
 		"eventmodeling":          "eventmodeling\ntf 01 ui A \"#27;]0x#7;\"\ntf 02 cmd B { #155;31m }\nnote 02 {\n  #144;x\n}\n",
 		"venn":                   "venn-beta\n  title t#27;]0x#7;\n  set A[\"#27;[2J\"]\n    text q[\"#144;x\"]\n  set B\n  union A, B[\"#155;31m\"]",
+		"wardley":                "wardley-beta\ntitle t#27;]0x#7;\ncomponent \"#27;[2J\" [0.5, 0.5]\ncomponent B [0.2, 0.2]\n\"#27;[2J\" -> B; #155;31m\nnote \"#144;x\" [0.3, 0.3]",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

@@ -18,8 +18,9 @@ diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant
 charts, user journeys, kanban boards, git graphs, sankey diagrams, block
 diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packets,
 radar charts, treemaps, info diagrams, tree views, ishikawa diagrams, Cynefin
-diagrams, event models and venn diagrams. Each other diagram type gives an
-error with the code `unsupported-diagram` until its port is done.
+diagrams, event models, venn diagrams and wardley maps. Each other diagram
+type gives an error with the code `unsupported-diagram` until its port is
+done.
 
 The output matches the output of pele, except links. The test suite compares
 each diagram with an SVG that pele drew from the same source, byte for byte.
@@ -65,6 +66,7 @@ other than http, https, mailto or tel.
 | cynefin | 3/3 |
 | eventmodeling | 12/12 |
 | venn | 8/8 |
+| wardley | 19/19 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
@@ -92,12 +94,12 @@ class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, timelines, XY
 charts, quadrant charts, user journeys, kanban boards, git graphs, sankey
 diagrams, block diagrams, architecture diagrams, requirement diagrams, C4
 diagrams, packet diagrams, radar charts, treemaps, info diagrams, tree views,
-Ishikawa diagrams, Cynefin diagrams, event models and Venn diagrams with
-box-drawing characters, for a terminal that shows no pictures. For a graph it
-takes the layout that sketch works out for the SVG and maps it to cells. The
-labels stay real text. A pie chart is a bar for each slice, with its value.
-pele leaves a slice under 1% out of the pie, and shows values only with
-`showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
+Ishikawa diagrams, Cynefin diagrams, event models, Venn diagrams and Wardley
+maps with box-drawing characters, for a terminal that shows no pictures. For a
+graph it takes the layout that sketch works out for the SVG and maps it to
+cells. The labels stay real text. A pie chart is a bar for each slice, with
+its value. pele leaves a slice under 1% out of the pie, and shows values only
+with `showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
 timeline runs across, and runs down when it does not fit the columns. So does
 a user journey. An XY chart draws its bars and lines with tuios.dev/plot, and
 turns its categories into rows when they do not fit across. It writes point
@@ -117,7 +119,8 @@ is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
 with its causes as bones, or an indented tree when it is narrow. A Cynefin
 diagram is a grid of its four domains. An event model is swimlanes in time
 order, or a list of frames when it is narrow. A Venn diagram is a table of its
-sets and their overlaps.
+sets and their overlaps. A Wardley map is a grid of visibility by evolution,
+or a table when it is narrow.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

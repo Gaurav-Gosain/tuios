@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1174,4 +1174,34 @@ func TestVennOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpus, []string{"\"", "[", "]", "[\"", "\"]", "\n", "\n  ", ",", ":", "set ", "union ", "text ", "style ", "title ", "fill:", "%%", ":5", ":-1", ":1e9"},
 		3, 4000, RenderOptions{}, false)
+}
+
+func TestWardleyOutputIsInert(t *testing.T) {
+	hostile(t, wardleyTemplates, len(PAYLOADS)*12, RenderOptions{}, false)
+	nines := strings.Repeat("9", 400)
+	for _, src := range []string{
+		"wardley-beta\nsize [" + nines + ", " + nines + "]\ncomponent A [0.5, 0.5]",
+		"wardley-beta\nsize [0, 0]\ncomponent A [0.5, 0.5]",
+		"wardley-beta\ncomponent A [0.5, 0.5] label [-" + nines + ", " + nines + "]",
+		"wardley-beta\nannotation " + nines + ",[0.5, 0.5] \"big\"\nannotations [1, 1]",
+		"wardley-beta\nevolution A@" + nines + ".0 -> B@0.0\ncomponent A [0.0, 1.0]",
+		"wardley-beta\ncomponent A [0.5, 0.5]\ncomponent B [0.5, 0.5]\nA -> B\nA +<> B\nevolve A 0.5",
+		"wardley-beta\ncomponent A [0.5, 0.5]\npipeline A {\n component B [0.5]\n component C [0.5]\n}\nevolve A 0.50",
+		"---\nconfig:\n  wardley-beta:\n    width: 1\n    height: 100000\n---\nwardley-beta\ncomponent A [0.5, 0.5]",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	corpus := corpusOf(t, "wardley")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{"\"", "'", "\n", " -> ", "; ", "+'", "component ", " [0.5, 0.5]", "note ", "(buy)"}, 17, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 100 {
+		t.Fatalf("%d mutated wardley maps rendered, want more than 100", rendered)
+	}
 }

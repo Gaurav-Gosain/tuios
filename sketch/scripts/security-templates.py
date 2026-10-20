@@ -12,7 +12,7 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'radar': 'radarTemplates', 'treemap': 'treemapTemplates', 'info': 'infoTemplates',
          'treeview': 'treeviewTemplates', 'ishikawa': 'ishikawaTemplates',
          'cynefin': 'cynefinTemplates', 'eventmodeling': 'eventmodelingTemplates',
-         'venn': 'vennTemplates'}
+         'venn': 'vennTemplates', 'wardley': 'wardleyTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two', 'I': 'ishikawaHead', 'V': 'vennHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)',
          "p.replace(/'/g, '')": 'stripApostrophes(p)', "p.replace(/[\"\\\\]/g, '')": 'stripQuotes(p)'}
@@ -20,7 +20,8 @@ exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'gant
 # Names that mean something else in one type's test.
 type_exprs = {'requirement': {'BODY': 'requirementBody'},
               'cynefin': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'},
-              'eventmodeling': {'line(p)': 'emLine(p)'}}
+              'eventmodeling': {'line(p)': 'emLine(p)'},
+              'wardley': {'quoted(p)': 'cynefinQuoted(p)', 'single(p)': 'cynefinSingle(p)'}}
 
 def lit(s):
     out, i = [], 0
