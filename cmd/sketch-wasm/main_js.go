@@ -27,6 +27,10 @@ import (
 const (
 	maxSource = 20_000
 	maxEdges  = 2_000
+	// maxOutput is the longest SVG, in characters. sketch allows 4,000,000.
+	// The page parses, cleans and lays out the SVG on its main thread, and a
+	// 1 MB drawing already costs about 200 ms there.
+	maxOutput = 1_000_000
 )
 
 func main() {
@@ -54,7 +58,7 @@ func render(_ js.Value, args []js.Value) any {
 	// and a click on it must not take the page anywhere. A click directive
 	// then draws nothing.
 	off := false
-	opt := sketch.RenderOptions{Limit: maxSource, MaxEdges: maxEdges, Links: &off, Images: &off}
+	opt := sketch.RenderOptions{Limit: maxSource, MaxEdges: maxEdges, OutputLimit: maxOutput, Links: &off, Images: &off}
 	if len(args) > 1 && args[1].Type() == js.TypeObject {
 		o := args[1]
 		if w := o.Get("maxWidth"); w.Type() == js.TypeNumber && w.Float() > 0 {
