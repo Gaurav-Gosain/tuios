@@ -1,6 +1,12 @@
 package overlay
 
-import "sync/atomic"
+import (
+	"image/color"
+	"strings"
+	"sync/atomic"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Chrome is the handful of characters the overlay family draws its own
 // furniture with. A host that lets the user choose a glyph set pushes one in;
@@ -92,3 +98,50 @@ func SetFramePanels(on bool) { framePanels.Store(on) }
 // FramePanels reports what SetFramePanels last recorded, so a host that
 // memoises a palette can key it on the answer.
 func FramePanels() bool { return framePanels.Load() }
+
+// FrameColors is what an overlay's frame is drawn in when a host pushes it: Ink
+// for the glyphs, and Ground for the cells under them. A host pushes the ink
+// its focused pane's border is drawn in, because an open overlay is the focused
+// thing, and a ground its compositor reads as the cell beneath the overlay, so
+// the frame sits on the panes the way a pane's own border does. A nil Ink keeps
+// the palette's; a nil Ground leaves the frame cells on the terminal's default
+// background.
+type FrameColors struct {
+	Ink, Ground color.Color
+}
+
+// frameColors holds the pushed FrameColors; nil is the zero value.
+var frameColors atomic.Pointer[FrameColors]
+
+// SetFrameColors records the colours overlay frames are drawn in. A host calls
+// it every frame; an unchanged pair is not stored again.
+func SetFrameColors(c FrameColors) {
+	if cur := frameColors.Load(); cur != nil && *cur == c {
+		return
+	}
+	stored := c
+	frameColors.Store(&stored)
+}
+
+// frameStyle is the style an overlay's outer frame is drawn in: the pushed ink,
+// or fallback when none is pushed, on the pushed ground rather than the
+// surface's bg. A blank frame (the hidden border style) is part of the
+// surface's fill, the fill being its edge, so it keeps bg.
+func frameStyle(bg, fallback color.Color, glyphs ...string) lipgloss.Style {
+	var c FrameColors
+	if p := frameColors.Load(); p != nil {
+		c = *p
+	}
+	ink := fallback
+	if c.Ink != nil {
+		ink = c.Ink
+	}
+	if strings.TrimSpace(strings.Join(glyphs, "")) == "" {
+		return Style(bg).Foreground(ink)
+	}
+	st := lipgloss.NewStyle().Foreground(ink)
+	if c.Ground != nil {
+		st = st.Background(c.Ground)
+	}
+	return st
+}

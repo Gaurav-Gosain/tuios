@@ -179,7 +179,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	w := max(d.Width, MinDialogWidth)
 	tl, tr, bl, br, h, v := dialogFrame()
 
-	frame := Style(bg).Foreground(pal.FgMute)
+	frame := frameStyle(bg, pal.FgMute, tl, tr, bl, br, h, v)
 	rule := func(n int) string { return frame.Render(strings.Repeat(h, max(n, 0))) }
 
 	// Top border: the title sits in it rather than on a row of its own, which
