@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -433,5 +433,56 @@ func TestHugeCharCodes(t *testing.T) {
 	for _, ref := range []string{"&#1e20;", "&#18446744073709551722;", "&#-1;", "&#1e400;", "&#106.5;", "&#65642;"} {
 		inertTry(t, "flowchart LR\n  A --> B\n  click A \""+ref+"avascript:alert(1)\"", RenderOptions{}, false)
 		inertTry(t, "flowchart LR\n  A --> B\n  click A \""+ref+"\"", RenderOptions{}, false)
+	}
+}
+
+func TestXyChartOutputIsInert(t *testing.T) {
+	rendered := 0
+	for _, src := range corpusOf(t, "xychart") {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	if rendered < len(corpusOf(t, "xychart")) {
+		t.Fatalf("%d of the xychart corpus rendered", rendered)
+	}
+	hostile(t, xychartTemplates, 250, RenderOptions{}, false)
+	hostileOptions(t, "xychart\n  accTitle: t\n  line \"s\" [1, 2]")
+	huge := strings.Repeat("9", 400)
+	for _, chart := range []string{
+		"xychart\n  line [" + huge + ", 1]",
+		"xychart\n  bar [-" + huge + ", " + huge + "]\n  line [1, 2]",
+		"xychart\n  y-axis " + huge + " --> -" + huge + "\n  bar [1, 2]",
+		"xychart\n  y-axis 0 --> " + huge + "\n  bar [1, 2]",
+		"xychart\n  x-axis " + huge + " --> " + huge + "\n  line [1, 2]\n  bar [1, 2]",
+		"xychart\n  x-axis -" + huge + " --> 3\n  line [1, 2]",
+		"xychart\n  y-axis 5 --> 5\n  bar [5, 5]",
+		"xychart\n  y-axis 9 --> 1\n  x-axis 9 --> 1\n  bar [5, 3]\n  line [2, 8]",
+		"xychart\n  bar [0, 0, 0]",
+		"xychart\n  line [7]",
+		"xychart\n  line [0.0000001, 0.0000002]",
+		"xychart\n  bar [99999999999999999999, 1]\n  line [-99999999999999999999]",
+		"xychart horizontal\n  x-axis 5 --> 5\n  bar [1]",
+	} {
+		if !inertTry(t, chart, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(chart))
+		}
+	}
+	for _, value := range []string{"1e999", "-1", "0", "0.0001", "99999999", "NaN", ".inf", "-.inf", "[1]", "{a: 1}", "null"} {
+		src := "---\nconfig:\n  xyChart:\n    width: " + value + "\n    height: " + value + "\n    showDataLabel: true\n---\nxychart\n  x-axis x [a, b]\n  bar \"s\" [1, 2]"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("size %s: did not render", value)
+		}
+	}
+	mutate(t, corpusOf(t, "xychart"), []string{"\"", "[", "]", ",", "\n", " --> ", "line ", "bar ", "x-axis ", "y-axis ", "title ",
+		"-", ".", "9999999999"}, 3, 4000, RenderOptions{}, false)
+	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
+	for _, src := range []string{
+		"xychart\n  x-axis \"__proto__\" [\"__proto__\", \"constructor\", \"toString\"]\n  bar \"__proto__\" [1, 2, 3]\n  line \"constructor\" [3 \"__proto__\", 2, 1]",
+		"---\nconfig:\n  xyChart:\n    __proto__:\n      polluted: true\n    constructor: 1\n---\nxychart\n  line [1, 2]",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
 	}
 }

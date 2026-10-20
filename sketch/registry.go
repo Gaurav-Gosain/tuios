@@ -13,8 +13,9 @@ import (
 	"tuios.dev/sketch/internal/diagrams/pie"
 	"tuios.dev/sketch/internal/diagrams/sequence"
 	"tuios.dev/sketch/internal/diagrams/state"
+	"tuios.dev/sketch/internal/diagrams/xychart"
 )
 
 func init() {
-	register(flowchart.Flowchart, sequence.Sequence, state.State, class.Class, er.Er, pie.Pie, mindmap.Mindmap, gantt.Gantt)
+	register(flowchart.Flowchart, sequence.Sequence, state.State, class.Class, er.Er, pie.Pie, mindmap.Mindmap, gantt.Gantt, xychart.XyChart)
 }

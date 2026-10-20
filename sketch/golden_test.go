@@ -23,6 +23,7 @@ var done = map[string]bool{
 	"pie":       true,
 	"sequence":  true,
 	"state":     true,
+	"xychart":   true,
 }
 
 // goldenNow is the time gen.mjs renders with, for gantt.

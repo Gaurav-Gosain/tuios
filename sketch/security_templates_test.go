@@ -402,3 +402,38 @@ var mindmapTemplates = []func(p string) string{
 		return "%%{init: {\"mindmap\": {\"maxNodeWidth\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nmindmap\n  root"
 	},
 }
+
+var xychartTemplates = []func(p string) string{
+	func(p string) string { return "xychart\n  title \"" + p + "\"\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  title " + p + "\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  x-axis \"" + p + "\" [\"" + p + "\", \"b\"]\n  bar [1, 2]" },
+	func(p string) string { return "xychart\n  x-axis " + p + " [" + p + ", b]\n  bar [1, 2]" },
+	func(p string) string { return "xychart\n  x-axis \"" + p + "\" 1 --> 5\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  x-axis " + p + " --> " + p + "\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  y-axis \"" + p + "\"\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  y-axis \"" + p + "\" 0 --> 10\n  bar [1, 2]" },
+	func(p string) string { return "xychart\n  y-axis " + p + " --> " + p + "\n  bar [1, 2]" },
+	func(p string) string { return "xychart\n  line \"" + p + "\" [1, 2]\n  bar \"" + p + "\" [2, 1]" },
+	func(p string) string { return "xychart\n  line " + p + " [1, 2]" },
+	func(p string) string { return "xychart\n  line [1 \"" + p + "\", 2 \"" + p + "\"]" },
+	func(p string) string {
+		return "xychart horizontal\n  x-axis [\"" + p + "\", \"b\"]\n  line \"" + p + "\" [1 \"" + p + "\", 2]\n  bar [3, 4]"
+	},
+	func(p string) string { return "xychart\n  line [" + p + ", 2]" },
+	func(p string) string { return "xychart\n  bar [1, " + p + "]" },
+	func(p string) string { return "xychart " + p + "\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  accTitle: " + p + "\n  accDescr: " + p + "\n  line [1, 2]" },
+	func(p string) string { return "xychart\n  accDescr {\n " + p + "\n }\n  line [1, 2]" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\nxychart\n  line [1, 2]" },
+	func(p string) string {
+		return "---\nconfig:\n  xyChart:\n    width: \"" + p + "\"\n    height: \"" + p + "\"\n    chartOrientation: \"" + p + "\"\n    showDataLabel: \"" + p + "\"\n    showTitle: \"" + p + "\"\n    xAxis:\n      showLabel: \"" + p + "\"\n      showTick: \"" + p + "\"\n    yAxis: \"" + p + "\"\n---\nxychart\n  title t\n  x-axis x [a, b]\n  y-axis y\n  bar \"s\" [1, 2]"
+	},
+	func(p string) string { return "---\nconfig:\n  xyChart: \"" + p + "\"\n---\nxychart\n  line [1, 2]" },
+	func(p string) string {
+		return "---\nconfig:\n  xyChart:\n    xAxis: [\"" + p + "\"]\n    yAxis:\n      \"" + p + "\": true\n---\nxychart\n  line [1, 2]"
+	},
+	func(p string) string {
+		return "%%{init: {\"xyChart\": {\"width\": \"" + p + "\", \"showDataLabel\": true}, \"themeVariables\": {\"xyChart\": {\"plotColorPalette\": \"" + p + "\"}}}}%%\nxychart\n  bar [1, 2]"
+	},
+	func(p string) string { return "xychart\n  %% " + p + "\n  line [1, 2]" },
+}

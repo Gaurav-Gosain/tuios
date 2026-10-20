@@ -14,7 +14,7 @@ sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
 ## Status
 
 It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
-diagrams, pie charts, mindmaps and gantt charts. Each other diagram type gives
+diagrams, pie charts, mindmaps, gantt charts and XY charts. Each other diagram type gives
 an error with the code `unsupported-diagram` until its port is done.
 
 The output is the same as the output of pele, byte for byte. The test suite
@@ -30,6 +30,7 @@ compares each diagram with an SVG that pele drew from the same source.
 | pie | 2/2 |
 | mindmap | 13/13 |
 | gantt | 11/11 |
+| xychart | 8/8 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
@@ -105,3 +106,7 @@ go test ./...
 `TestGolden` draws the 522 sources of the pele documentation corpus. It shows
 how many match for each type. It fails when a diagram of a ported type does not
 match.
+
+`go test -tags differential ./internal/js/` needs node on the path. It checks
+the port of V8's `Math.log` and `Math.log10` against node on 1,086,347 inputs,
+and `10 ** k` for every whole `k` from -400 to 400. They match bit for bit.
