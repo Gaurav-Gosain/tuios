@@ -118,8 +118,9 @@ Client features:
   # Same, with a certificate and a password you already have
   tuios-web --host 0.0.0.0 --cert cert.pem --key key.pem --password-file ~/.config/tuios/web-password
 
-  # Same, on a network you trust, with nothing encrypted and no password
-  tuios-web --host 0.0.0.0 --insecure --no-auth
+  # Same, on a network you trust, with nothing encrypted and no password.
+  # --no-auth needs the address of one interface. It does not work with 0.0.0.0
+  tuios-web --host 192.168.1.20 --insecure --no-auth
 
   # Behind a reverse proxy on this machine that sends its own host name.
   # --allow-host needs a password or --no-auth
@@ -161,7 +162,7 @@ Client features:
 	rootCmd.Flags().StringVar(&webUser, "user", defaultWebUser, "User name the browser must give with the password")
 	rootCmd.Flags().StringVar(&webPasswordFile, "password-file", "", "Read the password from the first line of this file. The file must be yours, with mode 600 or 400")
 	rootCmd.Flags().BoolVar(&webRandomPassword, "random-password", false, "Make a new password at start and print it")
-	rootCmd.Flags().BoolVar(&webNoAuth, "no-auth", false, "Serve a non-loopback host with no password. Anyone who reaches the port gets a shell (trusted networks only)")
+	rootCmd.Flags().BoolVar(&webNoAuth, "no-auth", false, "Serve a non-loopback host with no password. Anyone who reaches the port gets a shell (trusted networks only). Not with 0.0.0.0 or ::")
 	rootCmd.Flags().StringSliceVar(&webAllowHosts, "allow-host", nil, "On a loopback --host, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or --no-auth (repeatable)")
 	registerCertFlags(rootCmd)
 	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Touch input mode: auto, on, off. Touch widens the gestures aimed at a single cell")

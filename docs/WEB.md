@@ -36,6 +36,10 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
 - A host other than `localhost` needs a password. TLS encrypts the connection,
   but it does not check who connects. Use `--no-auth` only on a network you
   trust.
+- `--no-auth` does not work with `--host 0.0.0.0` or `--host ::`. These
+  addresses also listen on this machine. tuios-web checks the Host header only
+  on a loopback host, so a web page in your browser can open a shell (DNS
+  rebinding). Give `--no-auth` the address of one interface, or set a password.
 - On `localhost`, the password is optional. With no password, other users on
   this machine can connect, and tuios-web prints one line at start to say so.
   Use `--random-password` to stop this.

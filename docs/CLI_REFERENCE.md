@@ -4906,7 +4906,7 @@ tuios-web [flags]
 - `--random-password`: Make a new password at start and print it
 - `--password-file <path>`: Read the password from the first line of this file. The file must be yours, with mode 600 or 400
 - `--user <string>`: User name the browser must give with the password (default: "tuios")
-- `--no-auth`: Serve a non-loopback host with no password (trusted networks only)
+- `--no-auth`: Serve a non-loopback host with no password (trusted networks only). Not with `0.0.0.0` or `::`
 - `--allow-host <name>`: On a loopback `--host`, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or `--no-auth`. You can give it more than one time
 - `--touch <auto|on|off>`: Touch support and the on-screen key bar (default: auto-detect)
 - `--default-session <string>`: Default session name for all connections (creates shared session)
@@ -4952,7 +4952,10 @@ line arguments in `ps`.
   `--no-auth`. It works only with a loopback `--host`.
 - On any other host: tuios-web does not start without a password. TLS
   encrypts the connection, but it does not check who connects. Pass
-  `--no-auth` to serve anyway, on a network you trust.
+  `--no-auth` to serve anyway, on a network you trust. `--no-auth` does not
+  work with `0.0.0.0` or `::`. These addresses also listen on this machine,
+  where a web page in your browser can open a shell. Give the address of one
+  interface.
 
 **Subcommands:**
 - `tuios-web cert`: Show the status of the self-signed TLS certificate `--auto-tls` uses
@@ -4990,8 +4993,9 @@ mkdir -p ~/.config/tuios
 tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem \
   --password-file ~/.config/tuios/web-password
 
-# Same, on a network you trust, with nothing encrypted and no password
-tuios-web --host 0.0.0.0 --port 7681 --insecure --no-auth
+# Same, on a network you trust, with nothing encrypted and no password.
+# --no-auth needs the address of one interface. It does not work with 0.0.0.0
+tuios-web --host 192.168.1.20 --port 7681 --insecure --no-auth
 
 # Start in read-only mode (view only)
 tuios-web --read-only

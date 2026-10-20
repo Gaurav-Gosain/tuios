@@ -27,6 +27,10 @@ import (
 //
 //   - A bind outside this machine needs a password, or --no-auth. TLS alone
 //     is not enough: it hides the traffic but does not say who is connecting.
+//   - --no-auth is refused on an unspecified bind (0.0.0.0, ::). Such a bind
+//     also listens on loopback, but sip checks the Host header only when the
+//     bind address itself is loopback. With no password and no Host check, a
+//     page in a browser on this machine reaches the server by DNS rebinding.
 //   - A loopback bind may run with no password, for a browser on this
 //     machine. sip checks the Host header, because a web page whose name the
 //     attacker points at 127.0.0.1 (DNS rebinding) passes the same-origin
@@ -77,6 +81,9 @@ type webAccess struct {
 	announce string
 }
 
+// errNoAuthWildcard is the refusal for --no-auth on an unspecified bind.
+var errNoAuthWildcard = errors.New("refusing --no-auth on an address that listens on every interface")
+
 // errNoWebAuth is the refusal for a network bind with no password. The menu
 // of answers is printed beside it.
 var errNoWebAuth = errors.New("refusing to serve with no password")
@@ -124,6 +131,11 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 			return nil, err
 		}
 		a.password = pw
+	}
+
+	if f.noAuth && isUnspecifiedHost(f.host) {
+		return nil, fmt.Errorf("%w, such as %s. A web page in a browser on this machine can then open a shell. Use --host localhost, or set a password with --random-password or --password-file",
+			errNoAuthWildcard, f.host)
 	}
 
 	loopback := isLoopbackHost(f.host)
@@ -291,17 +303,31 @@ func printNoAuthMenu(w io.Writer, f webAccessFlags) {
 
        ssh -L %s:localhost:%s <this-machine>
 
-  5. Let anyone who reaches the port in. Only on a network you trust.
-
-       tuios-web --host %s --port %s%s --no-auth
-
 `,
 		f.host, netutil.CurrentAccount(),
 		f.host, f.port, f.tlsArgs,
 		f.host, f.port, f.tlsArgs,
 		webPasswordEnv,
-		f.port, f.port,
-		f.host, f.port, f.tlsArgs)
+		f.port, f.port)
+	// planWebAccess refuses --no-auth on 0.0.0.0 and ::, so the menu does not
+	// offer it there.
+	if !isUnspecifiedHost(f.host) {
+		fmt.Fprintf(w, `  5. Let anyone who reaches the port in. Only on a network you trust.
+
+       tuios-web --host %s --port %s%s --no-auth
+
+`, f.host, f.port, f.tlsArgs)
+	}
+}
+
+// isUnspecifiedHost reports whether host is an unspecified IP address, such
+// as 0.0.0.0 or ::, which listens on every interface, loopback included.
+//
+// The empty host also listens on every interface, but sip counts it as
+// loopback and checks the Host header for it, so it is not refused here.
+func isUnspecifiedHost(host string) bool {
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsUnspecified()
 }
 
 // whoCanReach names who can reach a bind address.

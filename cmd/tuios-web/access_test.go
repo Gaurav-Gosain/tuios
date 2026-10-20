@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -237,7 +238,7 @@ func TestNetworkBindNeedsAPassword(t *testing.T) {
 
 	for name, f := range map[string]webAccessFlags{
 		"random password": {host: "0.0.0.0", port: "7681", randomPassword: true},
-		"no-auth":         {host: "0.0.0.0", port: "7681", noAuth: true},
+		"no-auth":         {host: "192.168.1.20", port: "7681", noAuth: true},
 	} {
 		if _, err := planWebAccess(&bytes.Buffer{}, f); err != nil {
 			t.Errorf("%s: refused: %v", name, err)
@@ -247,6 +248,49 @@ func TestNetworkBindNeedsAPassword(t *testing.T) {
 	// An empty host listens on every interface.
 	if _, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "", port: "7681"}); err == nil {
 		t.Error("an empty host, which listens on every interface, was served with no password")
+	}
+}
+
+// TestNoAuthRefusedOnWildcardBind: 0.0.0.0 and :: also listen on loopback,
+// and sip checks the Host header only for a loopback bind address. With
+// --no-auth there is no password either, so a page in a browser on this
+// machine that points its own name at 127.0.0.1 gets a shell.
+func TestNoAuthRefusedOnWildcardBind(t *testing.T) {
+	t.Setenv(webPasswordEnv, "")
+	for _, host := range []string{"0.0.0.0", "::", "[::]", "::ffff:0.0.0.0"} {
+		var out bytes.Buffer
+		_, err := planWebAccess(&out, webAccessFlags{host: host, port: "7681", noAuth: true, tlsArgs: " --insecure"})
+		if !errors.Is(err, errNoAuthWildcard) {
+			t.Errorf("--host %s --no-auth: got %v, want the wildcard refusal", host, err)
+			continue
+		}
+		for _, want := range []string{"localhost", "--random-password", "--password-file"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("--host %s --no-auth: the refusal does not name %s: %v", host, want, err)
+			}
+		}
+	}
+
+	// The opt-out stays for one address, and a password still works on a
+	// wildcard bind.
+	for name, f := range map[string]webAccessFlags{
+		"loopback no-auth":     {host: "127.0.0.1", port: "7681", noAuth: true},
+		"LAN address no-auth":  {host: "192.168.1.20", port: "7681", noAuth: true},
+		"wildcard random pass": {host: "0.0.0.0", port: "7681", randomPassword: true},
+	} {
+		if _, err := planWebAccess(&bytes.Buffer{}, f); err != nil {
+			t.Errorf("%s: refused: %v", name, err)
+		}
+	}
+
+	// The menu for a wildcard bind with no password must not offer a
+	// command that the refusal above stops.
+	var out bytes.Buffer
+	if _, err := planWebAccess(&out, webAccessFlags{host: "0.0.0.0", port: "7681"}); err == nil {
+		t.Fatal("a wildcard bind with no password was accepted")
+	}
+	if strings.Contains(out.String(), "--no-auth") {
+		t.Errorf("the menu for 0.0.0.0 offers --no-auth:\n%s", out.String())
 	}
 }
 
