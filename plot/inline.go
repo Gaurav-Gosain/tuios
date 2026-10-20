@@ -6,9 +6,10 @@ import "math"
 // Max, filled from the left to an eighth of a cell. It draws no label, so
 // the cell next to it can hold the value.
 //
-// Give every row of a table the same Max, so the bars compare. The idea
-// comes from the remote hosts panel of iptop (github.com/franlol/iptop,
-// MIT).
+// Give every row of a table the same Max, so the bars compare.
+//
+// The idea and the look come from iptop by franlol
+// (https://github.com/franlol/iptop, MIT).
 type InlineBar struct {
 	Value float64
 	Max   float64 // 0 means 1
@@ -65,8 +66,10 @@ func (b InlineBar) Draw(w, h int, m Mode) *Grid {
 // one value and right for another, such as download and upload of one
 // service. Each side is a share of Max.
 //
-// Give every row of a table the same Max, so the bars compare. The idea
-// comes from the services panel of iptop (github.com/franlol/iptop, MIT).
+// Give every row of a table the same Max, so the bars compare.
+//
+// The idea and the look come from iptop by franlol
+// (https://github.com/franlol/iptop, MIT).
 type DivergingBar struct {
 	Left, Right float64
 	// Max is the value that fills a side. 0 means the larger of Left and
