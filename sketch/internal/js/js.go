@@ -377,3 +377,36 @@ func ParseIntPrefix(s string, radix int) float64 {
 	}
 	return v
 }
+
+// Compare orders two strings by their UTF-16 code units, as the default
+// Array.prototype.sort and the < operator do. It differs from byte order only
+// where a character above U+FFFF meets one from U+E000 to U+FFFF: its
+// surrogates sort before them.
+func Compare(a, b string) int {
+	i := 0
+	for i < len(a) && i < len(b) && a[i] == b[i] {
+		i++
+	}
+	if i == len(a) || i == len(b) {
+		return len(a) - len(b)
+	}
+	// Back up to the start of the character that differs.
+	for i > 0 && !utf8.RuneStart(a[i]) {
+		i--
+	}
+	ra, _ := utf8.DecodeRuneInString(a[i:])
+	rb, _ := utf8.DecodeRuneInString(b[i:])
+	if ua, ub := unit(ra), unit(rb); ua != ub {
+		return int(ua) - int(ub)
+	}
+	// Two characters with the same high surrogate: the low ones follow the code points.
+	return int(ra) - int(rb)
+}
+
+// unit is the first UTF-16 code unit of r.
+func unit(r rune) rune {
+	if r > 0xffff {
+		return 0xd800 + (r-0x10000)>>10
+	}
+	return r
+}
