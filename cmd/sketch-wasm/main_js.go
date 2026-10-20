@@ -50,7 +50,11 @@ func render(_ js.Value, args []js.Value) any {
 		return failure(errors.New("render needs the diagram text"))
 	}
 	src := args[0].String()
-	opt := sketch.RenderOptions{Limit: maxSource, MaxEdges: maxEdges}
+	// No links and no images: a share link shows someone else's diagram,
+	// and a click on it must not take the page anywhere. A click directive
+	// then draws nothing.
+	off := false
+	opt := sketch.RenderOptions{Limit: maxSource, MaxEdges: maxEdges, Links: &off, Images: &off}
 	if len(args) > 1 && args[1].Type() == js.TypeObject {
 		o := args[1]
 		if w := o.Get("maxWidth"); w.Type() == js.TypeNumber && w.Float() > 0 {
