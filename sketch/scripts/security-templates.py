@@ -6,8 +6,8 @@ pele = sys.argv[1]
 names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'classTemplates',
          'er': 'erTemplates', 'gantt': 'ganttTemplates', 'mindmap': 'mindmapTemplates',
          'xychart': 'xychartTemplates', 'timeline': 'timelineTemplates', 'quadrant': 'quadrantTemplates',
-         'journey': 'journeyTemplates'}
-exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks'}
+         'journey': 'journeyTemplates', 'kanban': 'kanbanTemplates'}
+exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase'}
 
 def lit(s):
     out, i = [], 0

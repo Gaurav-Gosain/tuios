@@ -542,3 +542,49 @@ var journeyTemplates = []func(p string) string{
 		return "%%{init: {\"journey\": {\"width\": \"" + p + "\", \"titleColor\": \"" + p + "\"}, \"themeVariables\": {\"fillType0\": \"" + p + "\"}}}%%\njourney\n  Task: 5: Me"
 	},
 }
+
+var kanbanTemplates = []func(p string) string{
+	func(p string) string { return "kanban\n  " + p + "\n    card" },
+	func(p string) string { return "kanban\n  todo\n    " + p },
+	func(p string) string { return "kanban\n  todo[" + p + "]\n    a[" + p + "]" },
+	func(p string) string { return "kanban\n  " + p + "[Todo]\n    " + p + "[Card]" },
+	func(p string) string {
+		return "kanban\n  todo(" + p + ")\n    a((" + p + "))\n    b{{" + p + "}}\n    c))" + p + "(("
+	},
+	func(p string) string { return "kanban\n  todo[\"" + p + "\"]\n    a[\"" + p + "\"]" },
+	func(p string) string { return "kanban\n  todo[\"`" + p + "`\"]\n    a[\"`**" + p + "**\n" + p + "`\"]" },
+	func(p string) string { return "kanban\n  todo\n    a@{ label: \"" + p + "\" }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ label: '" + p + "' }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ assigned: \"" + p + "\" }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ ticket: \"" + p + "\" }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ priority: \"" + p + "\" }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ icon: \"" + p + "\" }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ shape: \"" + p + "\" }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ " + p + ": 1 }" },
+	func(p string) string { return "kanban\n  todo\n    a@{ " + p + " }" },
+	func(p string) string {
+		return "kanban\n  todo\n    a@{\n      assigned: " + p + "\n      ticket: " + p + "\n      priority: " + p + "\n    }"
+	},
+	func(p string) string {
+		return "kanban\n  todo@{ label: \"" + p + "\", ticket: \"" + p + "\", assigned: \"" + p + "\", priority: \"" + p + "\", icon: \"" + p + "\" }\n    a"
+	},
+	func(p string) string { return kanbanBase + "kanban\n  todo\n    a@{ ticket: \"" + p + "\" }" },
+	func(p string) string {
+		return "---\nconfig:\n  kanban:\n    ticketBaseUrl: \"" + p + "\"\n---\nkanban\n  todo\n    a@{ ticket: T-1 }"
+	},
+	func(p string) string {
+		return "---\nconfig:\n  kanban:\n    ticketBaseUrl: \"" + p + "#TICKET#\"\n---\nkanban\n  todo\n    a@{ ticket: \"" + p + "\" }"
+	},
+	func(p string) string {
+		return "---\nconfig:\n  kanban:\n    ticketBaseUrl: \"#TICKET#\"\n---\nkanban\n  todo\n    a@{ ticket: \"" + p + "\" }"
+	},
+	func(p string) string {
+		return "%%{init: {\"kanban\": {\"ticketBaseUrl\": \"" + p + "\", \"sectionWidth\": \"" + p + "\"}}}%%\nkanban\n  todo\n    a@{ ticket: T-1 }"
+	},
+	func(p string) string { return "kanban\n  todo\n  ::icon(" + p + ")\n    a\n    ::icon(" + p + ")" },
+	func(p string) string { return "kanban\n  todo\n  :::" + p + "\n    a\n    :::" + p + " " + p },
+	func(p string) string { return "kanban\n  todo\n    a %% " + p + "\n    b[c] %% " + p },
+	func(p string) string { return "kanban\n  todo\n    fa:fa-" + p + " x" },
+	func(p string) string { return "kanban " + p + "\n  todo" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\nkanban\n  todo\n    a" },
+}

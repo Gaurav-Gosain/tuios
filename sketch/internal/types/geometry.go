@@ -36,6 +36,9 @@ type Geometry struct {
 	Quadrant *GeoQuadrant
 	// Journey.
 	Journey *GeoJourney
+
+	// Kanban.
+	Kanban *GeoKanban
 }
 
 type GeoNode struct {
@@ -260,4 +263,21 @@ type GeoStep struct {
 	// Mood is happy, neutral or sad.
 	Mood   string
 	People []string
+}
+
+// GeoKanban is a kanban board as lists: a text drawing lays it out again in cells.
+type GeoKanban struct {
+	Title   []string
+	Columns []GeoColumn
+}
+
+type GeoColumn struct {
+	Label []string
+	Cards []GeoCard
+}
+
+type GeoCard struct {
+	Label []string
+	// Ticket, Assigned and Priority are as written, "" for none.
+	Ticket, Assigned, Priority string
 }

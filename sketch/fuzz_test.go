@@ -18,7 +18,7 @@ func FuzzRender(f *testing.F) {
 		}
 	}
 	for _, templates := range [][]func(string) string{flowchartTemplates, sequenceTemplates, stateTemplates,
-		classTemplates, erTemplates, ganttTemplates, mindmapTemplates, xychartTemplates, timelineTemplates, quadrantTemplates, journeyTemplates} {
+		classTemplates, erTemplates, ganttTemplates, mindmapTemplates, xychartTemplates, timelineTemplates, quadrantTemplates, journeyTemplates, kanbanTemplates} {
 		for _, template := range templates {
 			f.Add(template(PAYLOADS[1]))
 			f.Add(template("a&b"))

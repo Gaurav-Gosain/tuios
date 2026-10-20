@@ -49,6 +49,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"xychart point label":    "xychart-beta\n  x-axis [a, b, c]\n  y-axis 0 --> 4\n  line [2 \"p#27;]2;x#7;\", 2, 2]",
 		"xychart across label":   "xychart-beta horizontal\n  x-axis [a, b]\n  line [1 \"p#155;31m\", 2]",
 		"journey task":           "journey\n  title t#27;]0x#7;\n  section s#155;31m\n  #27;[2J: 5: a#144;b, c#27;[31m",
+		"kanban card":            "kanban\n  t#27;]0x#7;\n    a[#27;[2J#155;31m]@{ ticket: \"#27;[31m\", assigned: \"#144;x\", priority: \"#127;\" }",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

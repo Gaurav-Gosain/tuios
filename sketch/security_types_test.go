@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -31,6 +31,7 @@ func jsonText(s string) string {
 const (
 	ganttHead  = "gantt\n  dateFormat YYYY-MM-DD\n"
 	ganttTasks = "  section S\n  A task :a1, 2014-01-01, 30d\n  Another :after a1, 20d\n"
+	kanbanBase = "---\nconfig:\n  kanban:\n    ticketBaseUrl: 'https://example.com/browse/#TICKET#'\n---\n"
 )
 
 var reNaN = regexp.MustCompile(`NaN|Infinity`)
@@ -617,5 +618,63 @@ func TestJourneyOutputIsInert(t *testing.T) {
 	}
 	if !inertTry(t, "---\nconfig:\n  journey:\n    __proto__:\n      polluted: true\n---\njourney\n  Task: 5: Me", RenderOptions{}, true) {
 		t.Fatal("a config with __proto__ did not render")
+	}
+}
+
+func TestKanbanOutputIsInert(t *testing.T) {
+	// A host with an icon for every name, so that each name a diagram gives reaches the output.
+	opt := RenderOptions{Icons: func(string) string { return `<path d="M0,0"/>` }}
+	for _, src := range corpusOf(t, "kanban") {
+		if !inertTry(t, src, opt, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, kanbanTemplates, 400, opt, false)
+	for _, payload := range PAYLOADS {
+		for _, base := range []string{payload, payload + "#TICKET#", "#TICKET#"} {
+			config := Config{"kanban": map[string]any{"ticketBaseUrl": base}}
+			for _, ticket := range []string{"T-1", "javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,x", "$&", "$'"} {
+				o := opt
+				o.Config = config
+				out, err := Render("kanban\n  todo\n    a@{ ticket: \""+ticket+"\" }", o)
+				if err != nil {
+					t.Fatalf("%q %q: %v", base, ticket, err)
+				}
+				if problem := inertProblem(out.Data); problem != "" {
+					t.Fatalf("%q %q: output is not inert: %s", base, ticket, problem)
+				}
+				for _, link := range out.Links {
+					if regexp.MustCompile(`(?i)^\s*(?:javascript|vbscript|data)\s*:`).MatchString(link.Href) {
+						t.Fatalf("%q %q: links to %q", base, ticket, link.Href)
+					}
+				}
+			}
+		}
+	}
+	out, err := Render(kanbanBase+"kanban\n  a<b>\"&[<i onload=x>\"&]\n  :::a\"b <c> d=e\n    c@{ ticket: '\"><x>&', assigned: 'x < y \"&' }", opt)
+	if err != nil || !strings.Contains(out.Data, `data-id="a&lt;b&gt;&quot;&amp;"`) ||
+		!strings.Contains(out.Data, `class="pele-cluster pele-column a b c d e"`) ||
+		!strings.Contains(out.Data, `>x &lt; y &quot;&amp;</text>`) ||
+		strings.Contains(out.Data, "<i") || strings.Contains(out.Data, "<x>") ||
+		len(out.Links) == 0 || out.Links[0].Href != "https://example.com/browse/%22%3E%3Cx%3E&" {
+		t.Fatalf("kanban text, ids, metadata and classes are not escaped: %v %v\n%s", err, out.Links, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		o := opt
+		o.IDPrefix, o.FontFamily = types.Ptr(payload), payload
+		if !inertTry(t, "kanban\n  todo\n    a@{ icon: x, ticket: y }", o, false) {
+			t.Fatal("hostile id prefix and font: did not render")
+		}
+	}
+	mutate(t, corpusOf(t, "kanban"), []string{"\"", "[", "]", "(", ")", "\n", "\n    ", ":::", "::icon(", "@{ ", " }", "@{ ticket: \"",
+		"@{ label: \"", "assigned: ", "priority: High", ", "}, 3, 4000, opt, false)
+	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
+	for _, src := range []string{
+		"kanban\n  __proto__\n    constructor@{ __proto__: [polluted], constructor: 1, label: x }\n    :::__proto__\n    toString[hasOwnProperty]",
+		"kanban\n  todo\n    a@{\n      __proto__:\n        polluted: 1\n    }",
+	} {
+		if !inertTry(t, src, opt, false) {
+			t.Fatalf("%q did not render", src)
+		}
 	}
 }
