@@ -24,9 +24,9 @@ var done = map[string]bool{
 	"eventmodeling": true,
 	"flowchart":     true,
 	"gantt":         true,
+	"git":           true,
 	"info":          true,
 	"ishikawa":      true,
-	"git":           true,
 	"journey":       true,
 	"kanban":        true,
 	"mindmap":       true,
@@ -41,6 +41,8 @@ var done = map[string]bool{
 	"timeline":      true,
 	"treemap":       true,
 	"treeview":      true,
+	"venn":          true,
+	"wardley":       true,
 	"xychart":       true,
 }
 
