@@ -902,6 +902,17 @@ tuios hosts sync build --start    # install tuios on build if needed, then start
 
 ## Adding a Phone
 
+The tuios phone app is not released yet. An Android app is in private
+testing. An iOS app comes later. `tuios pair` pairs a phone with that app.
+
+To use tuios on a phone today:
+
+- Open tuios-web in the browser on the phone. Keep tuios-web on `localhost`
+  and reach it over Tailscale or an ssh tunnel, or start it with a password.
+  See [Who can connect](WEB.md#who-can-connect).
+- Use [Collie](https://github.com/AltanS/collie) to talk to agents. Collie has
+  its own pairing. It does not use `tuios pair`.
+
 A phone connects to this machine over ssh and runs
 `tuios stdio-proxy --as NAME`. To give the phone its key with no copy and
 paste, use `tuios pair`:

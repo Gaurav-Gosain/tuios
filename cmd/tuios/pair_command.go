@@ -130,6 +130,13 @@ func newPairCommand() *cobra.Command {
 		Short: "Show a QR code that adds this machine to a phone",
 		Long: `Show a QR code that adds this machine to a phone.
 
+The tuios phone app is not released yet. An Android app is in private
+testing. An iOS app comes later. To use tuios on a phone today, open
+tuios-web in the browser on the phone. Keep tuios-web on localhost and reach
+it over Tailscale or an ssh tunnel, or start it with a password. To talk to
+agents, use Collie (https://github.com/AltanS/collie). Collie has its own
+pairing. It does not use tuios pair.
+
 Scan the code with the tuios app on the phone. The phone sends its public
 key. tuios shows the device name and the key fingerprint and asks you to
 accept the key. Then it adds the key to your authorized_keys file.

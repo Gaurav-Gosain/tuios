@@ -3852,6 +3852,17 @@ there.
 
 Show a QR code that adds this machine to a phone. You do not copy a key by hand.
 
+The tuios phone app is not released yet. An Android app is in private
+testing. An iOS app comes later. `tuios pair` pairs a phone with that app.
+
+To use tuios on a phone today:
+
+- Open tuios-web in the browser on the phone. Keep tuios-web on `localhost`
+  and reach it over Tailscale or an ssh tunnel, or start it with a password.
+  See [Who can connect](WEB.md#who-can-connect).
+- Use [Collie](https://github.com/AltanS/collie) to talk to agents. Collie has
+  its own pairing. It does not use `tuios pair`.
+
 ```
 tuios pair [--name DEVICE] [--machine NAME] [--allow list,mail,open,write,respond,files] [--timeout 5m]
            [--listen HOST:PORT] [--listen-all] [--accept-local] [--authorized-keys PATH]

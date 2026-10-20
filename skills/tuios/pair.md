@@ -4,6 +4,11 @@
 code. The phone sends its ssh key, the person accepts it, and the key can
 then open a tuios link under one name and nothing else.
 
+The tuios phone app is not released yet. An Android app is in private
+testing. On a phone today, use tuios-web in the browser, or Collie
+(https://github.com/AltanS/collie) for agents. Collie has its own pairing and
+does not use `tuios pair`.
+
 ```sh
 tuios pair --name phone
 tuios pair --name phone --allow list,mail,open,write
