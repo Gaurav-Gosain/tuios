@@ -2,7 +2,6 @@ package session
 
 import (
 	"cmp"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 
@@ -549,11 +548,10 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 		quoted[i] = q
 	}
 	// The name goes first, so the pane is found by it as soon as the agent
-	// is. It is part of starting the agent, which the caller was admitted
-	// for, so it is set as the daemon. A refused typing takes it back off.
+	// is. It is a rename, so it runs as the caller through set-window and
+	// needs what pane.rename needs. A refused typing takes it back off.
 	name := func(n string) *verbError {
-		raw, _ := json.Marshal(herdrArgs{Session: sess.Name(), Window: win.ID, Name: &n})
-		_, verr := d.verbSetWindow(nil, raw)
+		_, verr := d.callVerb(cs, "set-window", herdrArgs{Session: sess.Name(), Window: win.ID, Name: &n})
 		return verr
 	}
 	if verr := name(in.Name); verr != nil {
