@@ -58,6 +58,8 @@ func TestNoTerminalControls(t *testing.T) {
 		"c4":                     "C4Context\n  title t#27;]0x#7;\n  Person(u, \"u#27;[2J\", \"#155;31m\")\n  System_Boundary(b, \"#144;x\") {\n  System(s, \"s\", \"#27;[31m\")\n  }\n  Rel(u, s, \"#27;[2J\", \"#155;31m\")",
 		"packet":                 "packet\n  title t#27;]0x#7;\n  0-15: \"a#27;[2J\"\n  16-31: \"#155;31m#144;x\"",
 		"radar":                  "radar-beta\n  title t#27;]0x#7;\n  axis a[\"#27;[2J\"], b[\"#144;x\"]\n  curve c[\"#155;31m\"]{1, 2}",
+		"treemap":                "treemap-beta\n  title t#27;]0x#7;\n  \"#27;[2J\"\n    \"#155;31m\": 10\n    \"#144;x\": 5",
+		"treemap tree":           "treemap-beta\n  \"s#27;[2J\"\n    \"a very long name #155;31m that cannot fit in any box at all\": 10\n    \"#144;x\": 1",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

@@ -35,6 +35,7 @@ var done = map[string]bool{
 	"sequence":     true,
 	"state":        true,
 	"timeline":     true,
+	"treemap":      true,
 	"xychart":      true,
 }
 

@@ -9,7 +9,7 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'journey': 'journeyTemplates', 'kanban': 'kanbanTemplates', 'git': 'gitTemplates',
          'sankey': 'sankeyTemplates', 'block': 'blockTemplates', 'architecture': 'architectureTemplates',
          'requirement': 'requirementTemplates', 'c4': 'c4Templates', 'packet': 'packetTemplates',
-         'radar': 'radarTemplates'}
+         'radar': 'radarTemplates', 'treemap': 'treemapTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead', 'TWO': 'c4Two',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)'}
 

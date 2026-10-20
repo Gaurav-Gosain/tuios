@@ -25,11 +25,12 @@ import (
 	"tuios.dev/sketch/internal/diagrams/sequence"
 	"tuios.dev/sketch/internal/diagrams/state"
 	"tuios.dev/sketch/internal/diagrams/timeline"
+	"tuios.dev/sketch/internal/diagrams/treemap"
 	"tuios.dev/sketch/internal/diagrams/xychart"
 )
 
 func init() {
 	register(flowchart.Flowchart, sequence.Sequence, state.State, class.Class, er.Er, pie.Pie, mindmap.Mindmap, gantt.Gantt,
 		xychart.XyChart, timeline.Timeline, quadrant.QuadrantChart, journey.Journey, kanban.Kanban, git.GitGraph, sankey.Sankey, block.BlockDiagram,
-		architecture.Architecture, requirement.RequirementDiagram, c4.C4, packet.Packet, radar.Radar)
+		architecture.Architecture, requirement.RequirementDiagram, c4.C4, packet.Packet, radar.Radar, treemap.Treemap)
 }

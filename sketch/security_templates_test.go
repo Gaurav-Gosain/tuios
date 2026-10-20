@@ -986,3 +986,33 @@ var radarTemplates = []func(p string) string{
 		return "%%{init: {\"radar\": {\"axisLabelFactor\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\", \"radar\": {\"axisColor\": \"" + p + "\"}}}}%%\nradar-beta\n axis a, b\n curve x{1,2}"
 	},
 }
+
+var treemapTemplates = []func(p string) string{
+	func(p string) string { return "treemap\n\"" + p + "\"\n  \"a\": 1" },
+	func(p string) string { return "treemap\n'" + p + "'\n  \"a\": 1" },
+	func(p string) string { return "treemap\n\"s\"\n  \"" + p + "\": 1\n  \"b\": 2" },
+	func(p string) string { return "treemap\n\"" + p + "\": 5" },
+	func(p string) string { return "treemap\n\"s\":::" + p + "\n  \"a\": 1" },
+	func(p string) string { return "treemap\n\"s\"\n  \"a\": 1:::" + p },
+	func(p string) string { return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 fill:" + p },
+	func(p string) string { return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 " + p + ":red" },
+	func(p string) string {
+		return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p
+	},
+	func(p string) string { return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 " + p },
+	func(p string) string { return "treemap\n\"s\"\n  \"a\": 1\nclassDef " + p + " fill:red" },
+	func(p string) string { return "treemap\n\"s\"\n  \"a\": " + p },
+	func(p string) string { return "treemap\ntitle " + p + "\n\"a\": 1" },
+	func(p string) string { return "treemap title " + p },
+	func(p string) string { return "treemap\naccTitle: " + p + "\naccDescr: " + p + "\n\"a\": 1" },
+	func(p string) string { return "treemap\naccDescr {\n " + p + "\n }\n\"a\": 1" },
+	func(p string) string { return "treemap\n\"a\": 1 %% " + p },
+	func(p string) string { return "treemap-beta " + p + "\n\"a\": 1" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\ntreemap\n\"a\": 1" },
+	func(p string) string {
+		return "---\nconfig:\n  treemap:\n    valueFormat: \"" + p + "\"\n    padding: \"" + p + "\"\n    showValues: \"" + p + "\"\n---\ntreemap\n\"s\"\n  \"a\": 1"
+	},
+	func(p string) string {
+		return "%%{init: {\"treemap\": {\"nodeWidth\": \"" + p + "\", \"valueFormat\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\"}}}%%\ntreemap\n\"a\": 1"
+	},
+}

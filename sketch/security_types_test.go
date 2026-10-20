@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -996,4 +996,35 @@ func TestRadarOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpus, []string{"\"", "'", "[", "]", "{", "}", ":", ",", "\n", "title ", "axis ", "curve c{1,2}", "max 3", "graticule polygon"},
 		3, 4000, RenderOptions{}, false)
+}
+
+// TestTreemapOutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same source must only render.
+func TestTreemapOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "treemap")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, treemapTemplates, 250, RenderOptions{}, false)
+	out, err := Render("treemap\n\"<script>x</script>\":::bad\n  \"<img src=x onerror=alert(1)>\": 1:::bad\nclassDef bad fill:url(javascript:alert(1)),stroke:red", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "url(") ||
+		!strings.Contains(out.Data, `style="rx:var(--_r);stroke:red;"`) {
+		t.Fatalf("treemap names or styles are not safe: %v\n%s", err, out.Data)
+	}
+	out, err = Render("---\nconfig:\n  treemap:\n    valueFormat: \"<b>\"\n---\ntreemap\n\"a\": 1234", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, ">1,234<") {
+		t.Fatalf("a value format wrote markup: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "treemap\naccTitle: t\n\"a\": 1", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile treemap options %q: did not render", payload)
+		}
+	}
+	if !inertTry(t, "treemap\n\"__proto__\":::__proto__\n  \"constructor\": 1:::constructor\nclassDef __proto__ fill:red\n"+
+		"classDef constructor fill:blue\nclassDef toString polluted:1", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+	mutate(t, corpus, []string{"\"", "'", ":", ":::", ",", "\n", "\n  ", "title ", "\"a\": 1", "classDef c1 fill:", ":::c1"}, 3, 4000, RenderOptions{}, false)
 }

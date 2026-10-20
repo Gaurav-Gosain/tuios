@@ -51,6 +51,9 @@ type Geometry struct {
 
 	// Radar.
 	Radar *GeoRadar
+
+	// Treemap.
+	Treemap *GeoTreemap
 }
 
 type GeoNode struct {
@@ -375,4 +378,25 @@ type GeoRadar struct {
 type GeoCurve struct {
 	Label  string
 	Values []float64
+}
+
+// GeoTreemap is a treemap as its placed boxes, and as the whole tree for a drawing that
+// has no room for the boxes.
+type GeoTreemap struct {
+	Title []string
+	// Width and Height are the size of the area the boxes fill.
+	Width, Height float64
+	// Boxes are the boxes with a size, parents before their children, in the area's coordinates.
+	Boxes []GeoTreeBox
+	// Tree is every node in order, with its depth; its places are not set.
+	Tree []GeoTreeBox
+}
+
+type GeoTreeBox struct {
+	X, Y, W, H float64
+	Label      string
+	// Value is the value as the diagram formats it, "" when values are hidden.
+	Value   string
+	Section bool
+	Depth   int
 }
