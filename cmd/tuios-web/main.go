@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
+	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -181,6 +182,10 @@ Client features:
 }
 
 func main() {
+	// A `go install ...@vX` build has no ldflags; its module version stands in
+	// for them before anything below reads the stamps.
+	applyModuleVersion()
+
 	// See cmd/tuios/main.go: a crash report names the build it came from, and
 	// internal/app cannot read these vars itself.
 	app.SetBuildStamp(version, commit)
@@ -795,4 +800,11 @@ func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 // file the server loaded when it started. See config.AppearanceFrom.
 func webAppearanceOverrides() config.Overrides {
 	return interfaceFlags.Overrides()
+}
+
+// applyModuleVersion replaces the placeholder stamps of a `go install` build
+// with its module version. See release.Stamps.WithModuleVersion.
+func applyModuleVersion() {
+	s := release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy}.WithModuleVersion()
+	version, commit, date, builtBy = s.Version, s.Commit, s.Date, s.BuiltBy
 }

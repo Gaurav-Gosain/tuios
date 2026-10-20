@@ -48,6 +48,10 @@ var (
 )
 
 func main() {
+	// A `go install ...@vX` build has no ldflags; its module version stands in
+	// for them before anything below reads the stamps.
+	applyModuleVersion()
+
 	// The build identity, handed to internal/app before anything can crash.
 	// A crash report that cannot say which build produced it cannot be placed
 	// against a commit, and internal/app cannot read these vars itself.
