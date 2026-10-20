@@ -7,9 +7,13 @@ names = {'sequence': 'sequenceTemplates', 'state': 'stateTemplates', 'class': 'c
          'er': 'erTemplates', 'gantt': 'ganttTemplates', 'mindmap': 'mindmapTemplates',
          'xychart': 'xychartTemplates', 'timeline': 'timelineTemplates', 'quadrant': 'quadrantTemplates',
          'journey': 'journeyTemplates', 'kanban': 'kanbanTemplates', 'git': 'gitTemplates',
-         'sankey': 'sankeyTemplates', 'block': 'blockTemplates', 'architecture': 'architectureTemplates'}
+         'sankey': 'sankeyTemplates', 'block': 'blockTemplates', 'architecture': 'architectureTemplates',
+         'requirement': 'requirementTemplates'}
 exprs = {'p': 'p', 'json(p)': 'jsonText(p)', 'HEAD': 'ganttHead', 'TASKS': 'ganttTasks', 'BASE': 'kanbanBase', 'q': 'q', 'BODY': 'sankeyBody', 'quoted(p)': 'sankeyQuoted(p)', 'head': 'archHead',
          "p.replace(/[\"\\\\\\n]/g, '')": 'gitStrip(p)'}
+
+# Names that mean something else in one type's test.
+type_exprs = {'requirement': {'BODY': 'requirementBody'}}
 
 def lit(s):
     out, i = [], 0
@@ -21,12 +25,12 @@ def lit(s):
         out.append('\\"' if c == '"' else c); i += 1
     return ''.join(out)
 
-def go(body):
+def go(body, typ):
     parts = re.split(r'\$\{([^}]*)\}', body)
     pieces = []
     for k, part in enumerate(parts):
         if k % 2:
-            pieces.append(exprs[part])
+            pieces.append(type_exprs.get(typ, {}).get(part, exprs[part]))
         elif part:
             pieces.append('"' + lit(part) + '"')
     return ' + '.join(pieces) if pieces else '""'
@@ -42,6 +46,6 @@ for typ, var in names.items():
     sig = 'q, p string' if two else 'p string'
     print(f'var {var} = []func({sig}) string{{')
     for b in bodies:
-        print(f'\tfunc({sig}) string {{ return {go(b)} }},')
+        print(f'\tfunc({sig}) string {{ return {go(b, typ)} }},')
     print('}\n')
     print(f'// {typ}: {len(bodies)} templates', file=sys.stderr)

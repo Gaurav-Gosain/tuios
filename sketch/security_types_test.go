@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -883,5 +883,43 @@ func TestArchitectureOutputIsInert(t *testing.T) {
 	if err != nil || strings.Count(out.Data, `class="pele-cluster"`) != 2 || strings.Count(out.Data, `class="pele-node `) != 3 ||
 		!strings.Contains(out.Data, `data-id="__proto__"`) {
 		t.Fatalf("ids like __proto__: %v\n%s", err, out.Data)
+	}
+}
+
+const requirementBody = "requirement a {\nid: 1\n}\nelement b {\ntype: t\n}\n"
+
+// TestRequirementOutputIsInert leaves out pele's test of a model filled in directly, which
+// the parser would not allow: the model is not reachable from this package.
+func TestRequirementOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "requirement")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, requirementTemplates, 550, RenderOptions{}, false)
+	out, err := Render("requirementDiagram\nrequirement \"<script>alert(1)</script>\" {\ntext: \"<img src=x onerror=alert(1)>\"\n}\n", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") ||
+		!strings.Contains(out.Data, `data-id="&lt;script&gt;alert(1)&lt;/script&gt;"`) {
+		t.Fatalf("requirement markup is not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "requirementDiagram\naccTitle: t\n"+requirementBody+"a - contains -> b\n", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile requirement options %q: did not render", payload)
+		}
+	}
+	count := 4000
+	if testing.Short() {
+		count /= 8
+	}
+	if n := mutate(t, corpus, []string{"\"", "{", "}", ":", ":::", "\n", "style a fill:", "classDef c ", "class a ", " - contains -> ", "accTitle: "},
+		3, 4000, RenderOptions{}, false); n <= count/20 {
+		t.Fatalf("%d of %d mutated requirement diagrams rendered", n, count)
+	}
+	// pele checks that this leaves Object.prototype alone. Go has no prototypes; it must render.
+	if !inertTry(t, "requirementDiagram\nrequirement __proto__ {\nid: constructor\n}\nelement constructor {\ntype: toString\n}\n"+
+		"__proto__ - contains -> constructor\nclassDef __proto__ fill:red\nclass __proto__,constructor __proto__,toString\n"+
+		"__proto__:::constructor\nstyle __proto__ fill:red\n", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
 	}
 }

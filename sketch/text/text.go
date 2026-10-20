@@ -5,9 +5,9 @@
 //
 // Flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams,
 // pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant charts,
-// user journeys, kanban boards, git graphs, sankey diagrams, block diagrams
-// and architecture diagrams have a text drawing. Other types give
-// ErrUnsupported.
+// user journeys, kanban boards, git graphs, sankey diagrams, block diagrams,
+// architecture diagrams and requirement diagrams have a text drawing. Other
+// types give ErrUnsupported.
 package text
 
 import (
@@ -44,7 +44,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -67,7 +67,7 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 	}
 	var c *canvas
 	switch d.Type {
-	case "flowchart", "block", "architecture":
+	case "flowchart", "block", "architecture", "requirement":
 		c, err = drawFlowchart(layout, opt)
 	case "state":
 		c, err = drawState(layout, opt)

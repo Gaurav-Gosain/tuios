@@ -54,6 +54,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"sankey title":           "---\ntitle: \"t\\e]2;x\\a\\x9b31m\"\n---\nsankey\n\na,b,3\nb,c,2\n",
 		"block":                  "block\n  columns 2\n  a[\"#27;[2J#155;31m\"] b<[\"#144;x\"]>(right)\n  block:g[\"t#27;]0x#7;\"]\n    c\n  end\n  a -- \"#27;[31m\" --> c",
 		"architecture":           "architecture-beta\n  group g(cloud)[\"t#27;]0x#7;\"]\n  service a \"#155;31m\"[\"a#27;[2J\"] in g\n  service b(server)\n  a:R -[#144;x]-> L:b",
+		"requirement":            "requirementDiagram\n  requirement \"r#27;[2J\" {\n  id: 1\n  text: \"t#155;31m\"\n  }\n  element e {\n  type: \"#144;x\"\n  }\n  e - satisfies -> \"r#27;[2J\"",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

@@ -762,3 +762,77 @@ var architectureTemplates = []func(p string) string{
 		return "---\nconfig:\n  architecture: \"" + p + "\"\n---\n" + archHead + "service a[A]"
 	},
 }
+
+var requirementTemplates = []func(p string) string{
+	func(p string) string { return "requirementDiagram\nrequirement " + p + " {\nid: 1\n}\n" },
+	func(p string) string { return "requirementDiagram\nrequirement \"" + p + "\" {\nid: 1\n}\n" },
+	func(p string) string { return "requirementDiagram\nelement " + p + " {\ntype: t\n}\n" },
+	func(p string) string {
+		return "requirementDiagram\nelement \"" + p + "\" {\ntype: t\n}\n\"" + p + "\" - contains -> \"" + p + "\"\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\nrequirement a {\nid: " + p + "\ntext: " + p + "\n}\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\nrequirement a {\nid: \"" + p + "\"\ntext: \"" + p + "\"\n}\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\nrequirement a {\nrisk: " + p + "\nverifymethod: " + p + "\n}\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\nelement b {\ntype: " + p + "\ndocref: " + p + "\n}\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\nelement b {\ntype: \"" + p + "\"\ndocRef: \"" + p + "\"\n}\n"
+	},
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "a - " + p + " -> b\n" },
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "a - contains -> " + p + "\n" },
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "\"" + p + "\" <- traces - a\n"
+	},
+	func(p string) string { return "requirementDiagram\nrequirement a:::" + p + " {\nid: 1\n}\n" },
+	func(p string) string {
+		return "requirementDiagram\nrequirement a:::\"" + p + "\" {\nid: 1\n}\nelement b:::\"" + p + "\",\"" + p + "\" {\n}\n"
+	},
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "a:::" + p + "\n" },
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "a:::\"" + p + "\"\n" },
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "class a " + p + "\n" },
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "class a,b \"" + p + "\"\n" },
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "class \"" + p + "\" c\n" },
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "classDef " + p + " fill:red\nclass a " + p + "\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "classDef \"" + p + "\" fill:red\nclass a \"" + p + "\"\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "classDef c fill:" + p + "\nclass a c\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "classDef c " + p + ":red\nclass a c\n"
+	},
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "style a fill:" + p + "\n" },
+	func(p string) string { return "requirementDiagram\n" + requirementBody + "style a " + p + "\n" },
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "style a color:" + p + ",stroke:" + p + ",font-family:" + p + "\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\n" + requirementBody + "style \"" + p + "\" fill:red\n"
+	},
+	func(p string) string {
+		return "requirementDiagram\naccTitle: " + p + "\naccDescr: " + p + "\n" + requirementBody
+	},
+	func(p string) string { return "accTitle: " + p + "\nrequirementDiagram\n" + requirementBody },
+	func(p string) string { return "requirementDiagram\naccDescr {\n " + p + "\n }\n" + requirementBody },
+	func(p string) string { return "requirementDiagram\ndirection " + p + "\n" + requirementBody },
+	func(p string) string { return "requirementDiagram\n" + p + " direction LR\n" + requirementBody },
+	func(p string) string { return "requirementDiagram\n# " + p + "\n" + requirementBody },
+	func(p string) string { return "requirementDiagram\n%% " + p + "\n" + requirementBody },
+	func(p string) string { return "requirementDiagram " + p + "\n" + requirementBody },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  requirement:\n    fontSize: \"" + p + "\"\n  theme: \"" + p + "\"\n---\nrequirementDiagram\n" + requirementBody
+	},
+	func(p string) string {
+		return "%%{init: {\"requirement\": {\"rect_fill\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nrequirementDiagram\n" + requirementBody
+	},
+}
