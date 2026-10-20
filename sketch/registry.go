@@ -7,6 +7,7 @@ package sketch
 import (
 	"tuios.dev/sketch/internal/diagrams/architecture"
 	"tuios.dev/sketch/internal/diagrams/block"
+	"tuios.dev/sketch/internal/diagrams/c4"
 	"tuios.dev/sketch/internal/diagrams/class"
 	"tuios.dev/sketch/internal/diagrams/er"
 	"tuios.dev/sketch/internal/diagrams/flowchart"
@@ -28,5 +29,5 @@ import (
 func init() {
 	register(flowchart.Flowchart, sequence.Sequence, state.State, class.Class, er.Er, pie.Pie, mindmap.Mindmap, gantt.Gantt,
 		xychart.XyChart, timeline.Timeline, quadrant.QuadrantChart, journey.Journey, kanban.Kanban, git.GitGraph, sankey.Sankey, block.BlockDiagram,
-		architecture.Architecture, requirement.RequirementDiagram)
+		architecture.Architecture, requirement.RequirementDiagram, c4.C4)
 }

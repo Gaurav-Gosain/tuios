@@ -836,3 +836,103 @@ var requirementTemplates = []func(p string) string{
 		return "%%{init: {\"requirement\": {\"rect_fill\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nrequirementDiagram\n" + requirementBody
 	},
 }
+
+var c4Templates = []func(p string) string{
+	func(p string) string { return "C4Context\nPerson(" + p + ", \"L\")" },
+	func(p string) string { return "C4Context\nPerson(\"" + p + "\", \"L\")" },
+	func(p string) string { return "C4Context\nPerson(a, " + p + ", \"d\")" },
+	func(p string) string { return "C4Context\nPerson(a, \"" + p + "\")" },
+	func(p string) string { return "C4Context\nPerson_Ext(a, \"L\", \"" + p + "\")" },
+	func(p string) string {
+		return "C4Context\nSystem(a, \"L\", \"d\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\nSystemDb(a, \"L\", $link=\"" + p + "\")" },
+	func(p string) string {
+		return "C4Context\nSystemQueue_Ext(a, \"L\", $tags=\"" + p + "\", $sprite=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\nSystem(a, \"L\", $descr=\"" + p + "\", $techn=\"" + p + "\", $type=\"" + p + "\", $label=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\nSystem(a, \"L\", $bgColor=\"" + p + "\", $fontColor=\"" + p + "\", $borderColor=\"" + p + "\", $shape=\"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\nSystem(a, \"L\", $" + p + "=\"x\")" },
+	func(p string) string { return "C4Context\nSystem($" + p + "=\"x\", \"L\")" },
+	func(p string) string { return "C4Context\nSystem(a, $link=\"" + p + "\")" },
+	func(p string) string { return "C4Container\nContainer(a, \"" + p + "\", \"" + p + "\", \"" + p + "\")" },
+	func(p string) string {
+		return "C4Container\nContainerDb_Ext(a, \"L\", \"" + p + "\", \"d\", \"s\", \"t\", \"" + p + "\")"
+	},
+	func(p string) string { return "C4Component\nComponentQueue(a, \"L\", " + p + ", " + p + ")" },
+	func(p string) string { return "C4Context\nBoundary(" + p + ", \"L\") {\nSystem(a, \"A\")\n}" },
+	func(p string) string {
+		return "C4Context\nBoundary(b, \"" + p + "\", \"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Context\nEnterprise_Boundary(b, \"L\", \"" + p + "\", \"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Context\nSystem_Boundary(b, \"L\", $link=\"" + p + "\", $tags=\"" + p + "\", $type=\"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Container\nContainer_Boundary(b, \"L\", $bgColor=\"" + p + "\", $borderColor=\"" + p + "\", $fontColor=\"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Deployment\nDeployment_Node(n, \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\") {\nContainer(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Deployment\nNode_L(n, \"L\", $descr=\"" + p + "\") {\nNode_R(m, \"M\", $link=\"" + p + "\")\n{\nContainer(a, \"A\")\n}\n}"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\n" + c4Two + "Rel(a, b, " + p + ")" },
+	func(p string) string {
+		return "C4Context\n" + c4Two + "BiRel(a, b, \"L\", \"t\", \"d\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel_Back(a, b, \"L\", $link=\"" + p + "\", $techn=\"" + p + "\", $descr=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\nSystem(" + p + ", \"A\")\nSystem(b, \"B\")\nRel(" + p + ", b, \"L\")"
+	},
+	func(p string) string { return "C4Context\nSystem(a, \"A\")\nRel(a, a, \"" + p + "\", \"" + p + "\")" },
+	func(p string) string { return "C4Dynamic\n" + c4Two + "RelIndex(" + p + ", a, b, \"" + p + "\")" },
+	func(p string) string { return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nRel(b, a, \"" + p + "\")" },
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nUpdateRelStyle(a, b, \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nUpdateRelStyle(a, b, $textColor=\"" + p + "\", $lineColor=\"" + p + "\", $offsetX=\"" + p + "\", $offsetY=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nUpdateRelStyle(a, b, $offsetX=\"" + p + "\", $" + p + "=\"1\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateElementStyle(a, \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateElementStyle(a, $bgColor=\"" + p + "\", $fontColor=\"" + p + "\", $borderColor=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateElementStyle(a, $shape=\"" + p + "\", $techn=\"" + p + "\", $legendText=\"" + p + "\", $label=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateLayoutConfig(\"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateLayoutConfig($c4ShapeInRow=\"" + p + "\", $c4BoundaryInRow=\"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\ntitle " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context\naccTitle: " + p + "\naccDescr: " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context\naccDescr {\n " + p + "\n }\n" + c4Two },
+	func(p string) string { return "C4Context\naccDescription " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context\n%% " + p + "\n" + c4Two },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  c4:\n    c4ShapeInRow: \"" + p + "\"\n    wrap: \"" + p + "\"\n---\nC4Context\n" + c4Two
+	},
+	func(p string) string {
+		return "%%{init: {\"c4\": {\"c4ShapeInRow\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nC4Context\n" + c4Two
+	},
+}

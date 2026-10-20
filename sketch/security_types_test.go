@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -920,6 +920,39 @@ func TestRequirementOutputIsInert(t *testing.T) {
 	if !inertTry(t, "requirementDiagram\nrequirement __proto__ {\nid: constructor\n}\nelement constructor {\ntype: toString\n}\n"+
 		"__proto__ - contains -> constructor\nclassDef __proto__ fill:red\nclass __proto__,constructor __proto__,toString\n"+
 		"__proto__:::constructor\nstyle __proto__ fill:red\n", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+}
+
+const c4Two = "System(a, \"A\")\nSystem(b, \"B\")\n"
+
+// TestC4OutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same source must only render.
+func TestC4OutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "c4")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, c4Templates, 700, RenderOptions{}, false)
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "C4Context\naccDescr: d\nSystem(a, \"A\")\nSystem(b, \"B\")\nRel(a, b, \"x\")", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile c4 options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "(", ")", ",", "\n", "{", "}", "$link=\"", "$bgColor=\"", "$offsetX=\"", "Rel(a, b, \"", "UpdateElementStyle(a, \""},
+		3, 4000, RenderOptions{}, false)
+	for _, url := range []string{"javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,x", "vbscript:x", "jav&#x09;ascript:alert(1)"} {
+		noLinks(t, "C4Context\nSystem(a, \"A\", $link=\""+url+"\")\nBoundary(b, \"B\", $link=\""+url+"\") {\nSystem(c, \"C\")\n}\nRel(a, c, \"x\", $link=\""+url+"\")", RenderOptions{})
+	}
+	out, err := Render("C4Context\nSystem(a, \"A\")\nSystem(b, \"B\")\nRel(a, b, \"x\")\n"+
+		"UpdateElementStyle(a, \"red;background:url(//evil.example/x)\", \"expression(alert(1))\", \"url(#x)\")\nUpdateRelStyle(a, b, \"red}\", \"blue<\")", RenderOptions{})
+	if err != nil || regexp.MustCompile(`url\(|expression|evil|red|blue`).MatchString(out.Data) {
+		t.Fatalf("colours that are more than a colour: %v\n%s", err, out.Data)
+	}
+	if !inertTry(t, "C4Context\nSystem(__proto__, \"A\", $__proto__=\"polluted\", $constructor=\"x\")\nSystem(constructor, \"B\", $tags=\"__proto__,constructor\", $shape=\"toString\")\n"+
+		"Rel(__proto__, constructor, \"x\")\nUpdateElementStyle(__proto__, $prototype=\"x\")\nUpdateRelStyle(__proto__, constructor, $__proto__=\"1\")", RenderOptions{}, false) {
 		t.Fatal("names like __proto__ did not render")
 	}
 }

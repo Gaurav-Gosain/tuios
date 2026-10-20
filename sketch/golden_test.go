@@ -17,6 +17,7 @@ import (
 var done = map[string]bool{
 	"architecture": true,
 	"block":        true,
+	"c4":           true,
 	"class":        true,
 	"er":           true,
 	"flowchart":    true,
