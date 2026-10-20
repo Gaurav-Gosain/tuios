@@ -673,7 +673,7 @@ func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, 
 func runPluginBuild(ctx context.Context, cmd *cobra.Command, p *herdrplugin.Plugin, dirs herdrplugin.Dirs) error {
 	out, errw := cmd.OutOrStdout(), cmd.ErrOrStderr()
 	logPath := filepath.Join(dirs.StateDir(p.PluginID), "build.log")
-	var log io.Writer = io.Discard
+	log := io.Discard
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
 		if f, err := os.Create(logPath); err == nil { //nolint:gosec // the plugin's own state folder
 			defer f.Close()

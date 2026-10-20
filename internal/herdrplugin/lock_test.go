@@ -125,7 +125,7 @@ command = ["true"]
 		t.Fatalf("the clean manifest, with a tab in an argument: %v", perr)
 	}
 	for _, field := range []string{"%VERSION%", "%ARG%", "%EVENT%", "%PLACE%"} {
-		for _, bad := range []string{`\u001b[2J`, `x\u001b]0;t\u0007`, `\r`, `\u009b1A`, `‮`, `\u007f`} {
+		for _, bad := range []string{`\u001b[2J`, `x\u001b]0;t\u0007`, `\r`, `\u009b1A`, `\u202e`, `\u007f`} {
 			if _, perr := Parse([]byte(fill(field, "ok"+bad+"x"))); perr == nil {
 				t.Errorf("Parse took %q in %s", bad, field)
 			}
