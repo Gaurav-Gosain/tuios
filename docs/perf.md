@@ -4119,3 +4119,60 @@ compiler folded, and read 1.1 ns.
 `BenchmarkE2EBackgroundFlood` (new): a pane the client does not stream
 prints 16 MiB per iteration. The client gets 1 mark, for the pane's prompt,
 then 0 marks and 0 socket reads per flood. It fails on a second mark.
+
+## 2026-10 tuios.dev/sketch render speed
+
+sketch renders a diagram about 30% faster warm, and a one-shot render starts
+about 1 ms sooner. Its SVG is the same, byte for byte, on the 263 pele goldens
+and on a corpus of 421 diagrams of the eight types it draws: the Mermaid docs
+examples, pele's samples and layout cases, and the diagrams in ondine's docs.
+
+### What changed
+
+- About a hundred package-level regexps compile on first use, through
+  `internal/lazyre`. Mermaid's detectors and the hot regexps of the
+  flowchart lexer, the label and the class names have hand-written matchers.
+  Fuzz targets hold each one to the regexp it replaces.
+- Numbers, paths and markers append to buffers. The diagrams hand their
+  groups to `SvgDocument` as parts, and the document is written into one
+  builder with the root tag. Node and edge builders start at about their
+  final size.
+- Layout sizes its edge points, pieces and routes up front, and
+  Brandes-Koepf positioning shares one buffer among its four layouts.
+
+### Numbers
+
+Intel Core i7-10700, Linux, Go 1.27.1, pinned to one core, other work on the
+machine (load average 3 to 4). `BenchmarkRenderCorpus` renders each golden
+source once an iteration:
+
+| | before | after |
+|---|---:|---:|
+| time per diagram | 51.4 µs | 38.9 µs |
+| allocations per corpus pass | 88,254 | 62,494 |
+| bytes per corpus pass | 8.6 MB | 6.4 MB |
+
+The ondine corpus (421 diagrams, median of three alternating runs of the
+median of 300 renders):
+
+| | before | after |
+|---|---:|---:|
+| median render | 46.1 µs | 32.7 µs |
+| p95 render | 95.0 µs | 70.9 µs |
+| sum of medians | 33.7 ms | 23.4 ms |
+| one-shot CLI, median flowchart | 2.12 ms | 1.12 ms |
+| init of sketch's packages | 0.94 ms | 0.08 ms |
+
+`TestRenderAllocBudget` holds a golden render to 260 allocations (234 now,
+336 before). `TestInitBudget` holds the init of the internal packages to 400
+allocations (255 now, 4,172 before). An allocation count does not depend on
+the machine, so neither test reads a clock.
+
+### Measured and deliberately not changed
+
+- The garbage collector is about 19% of a warm render on one core
+  (`GOGC=off` takes a corpus pass from 30.3 ms to 24.7 ms). A library does not
+  set `GOGC`; fewer allocations is the lever.
+- `js.Hypot` keeps JavaScript's compensated sum, which costs about 2%. A plain
+  `math.Hypot` can differ in the last bit and move a route.
+- The tuios binary grows by 20 KB (see "Binary size budget").
