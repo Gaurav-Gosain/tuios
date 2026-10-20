@@ -160,7 +160,8 @@ var (
 	reBadHead     = regexp.MustCompile(`(?i)^(?:[\\/]{2}|[a-z][a-z0-9+.-]*:)`)
 	reTarget      = regexp.MustCompile(`^_(?:self|blank|parent|top)$`)
 	reUnsafeStyle = regexp.MustCompile(`(?i)url[` + js.S + `]*\(|expression|@import|javascript:|[<>{}\\]`)
-	reUnsafePaint = regexp.MustCompile(`(?i)url[` + js.S + `]*\(|javascript:`)
+	// A backslash is refused too: a CSS escape such as \75 rl( spells url(.
+	reUnsafePaint = regexp.MustCompile(`(?i)url[` + js.S + `]*\(|javascript:|\\`)
 	reTabsBreaks  = regexp.MustCompile(`[\t\n\r]`)
 	reLeadCtrl    = regexp.MustCompile(`^[\x00-\x20]+`)
 )
