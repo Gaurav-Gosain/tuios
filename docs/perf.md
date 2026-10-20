@@ -3079,6 +3079,15 @@ as CI builds it). The change measured 40,968,354 and 38,310,754, so it adds
 inside its budget with 3,996 bytes of room. The new linux/amd64 budget leaves
 4,198 bytes of room.
 
+The budgets went to 40,988,936 (linux/amd64) and 38,331,278 (darwin/arm64)
+for the fixes that keep a config reload from removing risk rules, hold a
+pane's allow to the prompt on the screen and to the mark of the open prompt,
+open a tape without waiting on a FIFO, and name a pane on herdr agent.start
+as the caller. The build before it measured 40,964,258 and 38,310,754 bytes
+(Go 1.26.9, a clean clone, as CI builds it). The change measured 40,980,642
+and 38,327,282, so it adds 16,384 and 16,528 bytes. No third-party dependency
+was added. The new budgets leave 8,294 and 3,996 bytes of room, as before.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
