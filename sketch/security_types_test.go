@@ -1,6 +1,6 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling}-security.test.ts,
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn}-security.test.ts,
 // the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
@@ -1146,4 +1146,32 @@ func TestEventmodelingOutputIsInert(t *testing.T) {
 	if !testing.Short() && rendered <= 100 {
 		t.Fatalf("%d mutated event models rendered, want more than 100", rendered)
 	}
+}
+
+const vennHead = "venn-beta\n"
+
+// TestVennOutputIsInert leaves out pele's prototype check: Go has no prototypes, so the same
+// source must only render.
+func TestVennOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "venn")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, vennTemplates, 400, RenderOptions{}, false)
+	out, err := Render(vennHead+"title <img src=x onerror=alert(1)>\nset \"<script>a&b</script>\"\n  text \"</text><script>alert(1)</script>\"\nset B[<svg onload=alert(1)>]\n"+
+		"style B fill:\"url(javascript:alert(1))\", stroke:\"red' onload='alert(1)\"", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<svg onload") ||
+		strings.Contains(out.Data, "javascript:") || !strings.Contains(out.Data, `data-id="&lt;script&gt;a&amp;b&lt;/script&gt;"`) ||
+		!strings.Contains(out.Data, "&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script&gt;") {
+		t.Fatalf("venn text is not escaped: %v\n%s", err, out.Data)
+	}
+	hostileOptions(t, vennHead+"set A\nset B\nunion A,B[\"x\"]")
+	if !inertTry(t, vennHead+"set __proto__\nset constructor\nunion __proto__,constructor[\"toString\"]\n  text hasOwnProperty[\"__proto__\"]\n"+
+		"style __proto__ __proto__:red, constructor:blue\nstyle hasOwnProperty color:red", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+	mutate(t, corpus, []string{"\"", "[", "]", "[\"", "\"]", "\n", "\n  ", ",", ":", "set ", "union ", "text ", "style ", "title ", "fill:", "%%", ":5", ":-1", ":1e9"},
+		3, 4000, RenderOptions{}, false)
 }

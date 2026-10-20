@@ -69,6 +69,9 @@ type Geometry struct {
 
 	// Event modeling.
 	EventModel *GeoEventModel
+
+	// Venn.
+	Venn *GeoVenn
 }
 
 type GeoNode struct {
@@ -496,4 +499,18 @@ type GeoFrame struct {
 type GeoEventCard struct {
 	Head  string
 	Lines []string
+}
+
+// GeoVenn is a venn diagram as its regions: each set, then each overlap the source states, with
+// the relative size it was given and what is written in it.
+type GeoVenn struct {
+	Title   []string
+	Regions []GeoVennRegion
+}
+
+type GeoVennRegion struct {
+	Sets  []string
+	Size  float64
+	Label string
+	Texts []string
 }

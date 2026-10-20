@@ -1129,3 +1129,54 @@ var eventmodelingTemplates = []func(p string) string{
 	func(p string) string { return "eventmodeling\n/* " + p + " */\ntf 01 ui A // " + emLine(p) + "\n" },
 	func(p string) string { return "---\ntitle: \"" + gitStrip(p) + "\"\n---\neventmodeling\ntf 01 ui A" },
 }
+
+var vennTemplates = []func(p string) string{
+	func(p string) string { return vennHead + p },
+	func(p string) string { return vennHead + "set " + p },
+	func(p string) string { return vennHead + "set \"" + p + "\"" },
+	func(p string) string { return vennHead + "set A[" + p + "]" },
+	func(p string) string { return vennHead + "set A[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A[\"" + p + "\"]:" + p },
+	func(p string) string { return vennHead + "set A:" + p },
+	func(p string) string { return vennHead + "set \"" + p + "\"\nset B\nunion \"" + p + "\",B" },
+	func(p string) string { return vennHead + "set A\nset B\nunion A,B[" + p + "]" },
+	func(p string) string { return vennHead + "set A\nset B\nunion A,B[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\nset B\nunion A,B:" + p },
+	func(p string) string { return vennHead + "set A\nset B\nset C\nunion A,B,C[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\nunion A," + p },
+	func(p string) string { return vennHead + "set A\n  text " + p },
+	func(p string) string { return vennHead + "set A\n  text \"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\n  text T[" + p + "]" },
+	func(p string) string { return vennHead + "set A\n  text T[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\n  text \"" + p + "\"[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\ntext A \"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\ntext A T[\"" + p + "\"]" },
+	func(p string) string {
+		return vennHead + "set A\nset B\nunion A,B\ntext A,B \"" + p + "\"[\"" + p + "\"]"
+	},
+	func(p string) string { return vennHead + "set A\ntext " + p + " T" },
+	func(p string) string { return vennHead + "set A\nstyle A fill:" + p },
+	func(p string) string { return vennHead + "set A\nstyle A fill:\"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\nstyle A " + p + ":red" },
+	func(p string) string {
+		return vennHead + "set A\nstyle A color:\"" + p + "\", stroke:\"" + p + "\", stroke-width:\"" + p + "\", fill-opacity:\"" + p + "\""
+	},
+	func(p string) string {
+		return vennHead + "set A\nset B\nunion A,B[\"x\"]\nstyle A,B fill:\"" + p + "\", color:\"" + p + "\""
+	},
+	func(p string) string { return vennHead + "set A\n  text T\nstyle T color:\"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\nstyle " + p + " fill:red" },
+	func(p string) string { return vennHead + "set A\nstyle \"" + p + "\" fill:red" },
+	func(p string) string { return vennHead + "title " + p + "\nset A" },
+	func(p string) string { return vennHead + "title \"" + p + "\"\nset A" },
+	func(p string) string { return vennHead + "%% " + p + "\nset A" },
+	func(p string) string { return vennHead + "set A %% " + p },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  venn:\n    width: \"" + p + "\"\n    padding: \"" + p + "\"\n---\n" + vennHead + "set A"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\n" + vennHead + "set A\nset B" },
+	func(p string) string {
+		return "%%{init: {\"venn\": {\"useDebugLayout\": \"" + p + "\"}, \"themeVariables\": {\"venn1\": \"" + p + "\"}}}%%\n" + vennHead + "set A"
+	},
+	func(p string) string { return "venn-beta " + p + "\nset A" },
+}
