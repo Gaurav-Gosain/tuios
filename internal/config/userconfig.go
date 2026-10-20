@@ -331,6 +331,7 @@ var WindowSizeModes = []string{WindowSizeSmallest, WindowSizeLargest, WindowSize
 type AppearanceConfig struct {
 	BorderStyle              string                  `toml:"border_style"`                 // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs
 	FramePanels              bool                    `toml:"frame_panels"`                 // Frame overlay panels in the border style at every colour depth (default: false)
+	OverlayBorderColor       string                  `toml:"overlay_border_color"`         // Colour of every overlay frame; empty follows the focused pane's border
 	ZenMode                  string                  `toml:"zen_mode"`                     // Zen mode: disabled, always, mouse (default: disabled)
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
 	LinkClick                string                  `toml:"link_click"`                   // The click that opens a link: both, ctrl, shift, off (default: both)
@@ -2427,6 +2428,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.BorderStyle = cfg.Appearance.BorderStyle
 	}
 	s.FramePanels = cfg.Appearance.FramePanels
+	s.OverlayBorderColor = cfg.Appearance.OverlayBorderColor
 
 	// ZenMode only takes one of its three values, so a typo in the config lands
 	// on the default the validator warned it would fall back to.

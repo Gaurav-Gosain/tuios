@@ -8,12 +8,13 @@ import (
 )
 
 // An overlay with a drawn frame reads as a pane window: its frame in the
-// colour the focused pane's border is drawn in, and the frame and everything
-// inside it on the ground an empty pane cell shows. See overlay.FrameColors.
+// colour the focused pane's border is drawn in, or in
+// appearance.overlay_border_color when that is set, and the frame and
+// everything inside it on the ground an empty pane cell shows. See
+// overlay.FrameColors.
 
-// syncOverlayFrame pushes what overlay frames are drawn with: the focused
-// pane's border colour, which is what the panes show for the focused thing,
-// and the pane's ground.
+// syncOverlayFrame pushes what overlay frames are drawn with: the frame
+// colour, and the pane's ground.
 func (m *OS) syncOverlayFrame() {
 	ground := m.overlayGround()
 	measure := ground
@@ -21,7 +22,7 @@ func (m *OS) syncOverlayFrame() {
 		measure = m.terminalBg()
 	}
 	overlay.SetFrameColors(overlay.FrameColors{
-		Ink:     m.focusedBorderColor(m.focusedStateBorder(m.GetFocusedWindow())),
+		Ink:     m.overlayFrameInk(),
 		Ground:  ground,
 		Measure: solidColor(measure),
 	})
@@ -47,4 +48,14 @@ func (m *OS) overlayGround() color.Color {
 		return overlay.To256(bg)
 	}
 	return bg
+}
+
+// overlayFrameInk is the colour overlay frames are drawn in:
+// appearance.overlay_border_color when it is set, else the focused pane's
+// border colour, which is what the panes show for the focused thing.
+func (m *OS) overlayFrameInk() color.Color {
+	if c := theme.ConfigColor(m.Settings.OverlayBorderColor); !isNilColor(c) {
+		return c
+	}
+	return m.focusedBorderColor(m.focusedStateBorder(m.GetFocusedWindow()))
 }

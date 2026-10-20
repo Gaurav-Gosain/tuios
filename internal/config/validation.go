@@ -589,6 +589,8 @@ func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
 	warnColours(result, "appearance", "The border uses the theme colour",
 		"border_focused_color", a.BorderFocusedColor,
 		"border_unfocused_color", a.BorderUnfocusedColor)
+	warnColours(result, "appearance", "Overlay frames follow the focused border",
+		"overlay_border_color", a.OverlayBorderColor)
 	if a.BorderFocusedGradient == "" {
 		return
 	}

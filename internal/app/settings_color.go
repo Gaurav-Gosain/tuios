@@ -70,6 +70,22 @@ var colorSettings = []colorSetting{
 		},
 	},
 	{
+		Path:  "appearance.overlay_border_color",
+		Label: "Overlay frame color",
+		Desc:  "Colour of every overlay's frame: dialogs, framed panels and which-key",
+		Unset: "(focused border)",
+		apply: func(m *OS, v string) {
+			m.Settings.OverlayBorderColor = v
+			m.MarkAllDirty()
+		},
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			if c := theme.ConfigColor(s.OverlayBorderColor); !isNilColor(c) {
+				return c
+			}
+			return theme.BorderFocusedWindow()
+		},
+	},
+	{
 		Path:  "appearance.scrollbar.tint",
 		Label: "Scrollbar tint",
 		Desc:  "quiet: the pane's own ink, dimmed. border: the focused pane's accent. muted: one grey",
