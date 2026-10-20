@@ -147,3 +147,49 @@ func TestGolden(t *testing.T) {
 	}
 	t.Logf("golden matches by type (types not ported yet are left out):\n%s  all            %3d/%3d", report.String(), passed, total)
 }
+
+// TestGoldenExtra renders the cases under testdata/extra, which pele's corpus does
+// not cover, such as Chinese and Japanese labels that wrap between characters. Each
+// SVG was written by pele (testdata/extra/gen.mjs) and must match byte for byte.
+func TestGoldenExtra(t *testing.T) {
+	files, err := filepath.Glob("testdata/extra/*.json")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no extra cases: %v", err)
+	}
+	sort.Strings(files)
+	n := 0
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cases []struct {
+			Src      string  `json:"src"`
+			MaxWidth float64 `json:"maxWidth"`
+		}
+		if err := json.Unmarshal(data, &cases); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		name := strings.TrimSuffix(filepath.Base(f), ".json")
+		for i, c := range cases {
+			want, err := os.ReadFile(fmt.Sprintf("testdata/extra/golden/%s-%03d.svg", name, i))
+			if err != nil {
+				t.Fatalf("golden for %s #%d: %v", name, i, err)
+			}
+			opts := RenderOptions{Now: goldenNow, Location: goldenZone}
+			if c.MaxWidth > 0 {
+				opts.MaxWidth = &c.MaxWidth
+			}
+			out, err := Render(c.Src, opts)
+			n++
+			if err != nil {
+				t.Errorf("%s-%03d: %v", name, i, err)
+				continue
+			}
+			if out.Data != string(want) {
+				t.Errorf("%s-%03d: %s", name, i, firstDifference([]byte(out.Data), want))
+			}
+		}
+	}
+	t.Logf("%d extra goldens", n)
+}

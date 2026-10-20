@@ -1,4 +1,4 @@
-// Ported from pele src/types.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/types.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 //
 // Optional options are pointers where pele tells `undefined` from a value.
 
@@ -14,6 +14,9 @@ import (
 
 // DiagramType names a kind of diagram, as Mermaid does.
 type DiagramType string
+
+// MermaidType is the diagram type as Mermaid reports it, such as "flowchart-v2" for `graph TD`.
+type MermaidType string
 
 // YamlValue is nil, bool, float64, string, []any or map[string]any.
 type YamlValue = any

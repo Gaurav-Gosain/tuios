@@ -1,4 +1,4 @@
-// Ported from pele src/errors.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/errors.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 
 package types
 
@@ -20,27 +20,30 @@ type PeleError struct {
 	Message string
 	Code    PeleErrorCode
 	// Type is the diagram type, or "" for none.
-	Type    string
-	Line    int
-	Column  int
-	Snippet string
+	Type string
+	// MermaidType is the diagram type as Mermaid names it, or "" for none.
+	MermaidType string
+	Line        int
+	Column      int
+	Snippet     string
 }
 
 func (e *PeleError) Error() string { return e.Message }
 
 // ErrorInfo is the optional part of a PeleError.
 type ErrorInfo struct {
-	Type    string
-	Line    int
-	Column  int
-	Snippet string
+	Type        string
+	MermaidType string
+	Line        int
+	Column      int
+	Snippet     string
 }
 
 func NewPeleError(message string, code PeleErrorCode, info ErrorInfo) *PeleError {
 	if code == "" {
 		code = CodeSyntax
 	}
-	return &PeleError{Message: message, Code: code, Type: info.Type, Line: info.Line, Column: info.Column, Snippet: info.Snippet}
+	return &PeleError{Message: message, Code: code, Type: info.Type, MermaidType: info.MermaidType, Line: info.Line, Column: info.Column, Snippet: info.Snippet}
 }
 
 // Throw panics with a PeleError, as pele throws one.

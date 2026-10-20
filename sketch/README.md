@@ -6,7 +6,7 @@ It is a port of [pele](https://github.com/obsidianmd/pele), the Mermaid
 renderer by [kepano](https://github.com/kepano) of
 [Obsidian](https://obsidian.md), under the MIT licence. The layout, the
 shapes, the safety rules and the test corpus are pele's work. The port
-follows pele v1.6.0, commit `458322a5b8abb1ae57ddf127c32017ab9fb14a92`.
+follows pele v1.7.0, commit `8603bf3313add9143cd417015d4a6bd6c522dada`.
 [LICENSE](LICENSE) has the notice of pele and of the port.
 [raster/fonts/NOTICE](raster/fonts/NOTICE) has the licences of the fonts that
 sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
@@ -31,6 +31,9 @@ compares each diagram with an SVG that pele drew from the same source.
 | mindmap | 13/13 |
 | gantt | 11/11 |
 
+`testdata/extra` holds more cases that pele drew, which its corpus does not
+cover, such as Chinese and Japanese labels that wrap. They match too.
+
 ## Use
 
 ```go
@@ -40,6 +43,10 @@ if err != nil {
 }
 os.WriteFile("out.svg", []byte(svg.Data), 0o644)
 ```
+
+`svg.Type` is pele's name for the diagram type, such as `flowchart`.
+`svg.MermaidType` is the name Mermaid gives it, such as `flowchart-v2` for
+`graph TD`. A `Diagram` and an `Error` carry both names too.
 
 ## Text
 

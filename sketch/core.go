@@ -1,4 +1,4 @@
-// Ported from pele src/core.ts and src/index.ts at 458322a5b8abb1ae57ddf127c32017ab9fb14a92.
+// Ported from pele src/core.ts and src/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
 //
 // mount() and enableZoom() are browser only and are not ported. pele throws a
 // PeleError; the port panics with one inside and returns it as an error here.
@@ -85,8 +85,28 @@ func guarded(err *error) {
 	}
 }
 
+// tagErrors names the diagram type on a PeleError that run panics with and that
+// does not name one yet.
+//
+// pele also turns a RangeError, a JavaScript stack overflow, into a limit error
+// here. Go grows the stack instead, so the port has nothing to catch.
+func tagErrors(found detected) {
+	if e := recover(); e != nil {
+		if pe, ok := e.(*types.PeleError); ok {
+			if pe.Type == "" {
+				pe.Type = string(found.typ)
+			}
+			if pe.MermaidType == "" {
+				pe.MermaidType = string(found.mt)
+			}
+		}
+		panic(e)
+	}
+}
+
 type parsed struct {
 	typ     Type
+	mt      MermaidType
 	diagram *types.Diagram
 	model   any
 	config  Config
@@ -106,13 +126,14 @@ func parseSource(src string, limit, maxEdges int, extra Config) parsed {
 		types.Throw("Diagram source is longer than the limit of "+strconv.Itoa(limit)+" characters.", types.CodeLimit, types.ErrorInfo{})
 	}
 	pre := preprocess(src)
-	typ, ok := detect(pre.text)
+	found, ok := detectDiagram(pre.text)
 	if !ok {
 		types.Throw("No diagram type detected for the given text.", types.CodeUnsupported, types.ErrorInfo{})
 	}
-	diagram := diagrams[typ]
+	diagram := diagrams[found.typ]
 	if diagram == nil {
-		types.Throw(`Diagram type "`+string(typ)+`" is not supported yet.`, types.CodeUnsupported, types.ErrorInfo{Type: string(typ)})
+		types.Throw(`Diagram type "`+string(found.typ)+`" is not supported yet.`, types.CodeUnsupported,
+			types.ErrorInfo{Type: string(found.typ), MermaidType: string(found.mt)})
 	}
 	config := pre.config
 	if extra != nil {
@@ -128,8 +149,13 @@ func parseSource(src string, limit, maxEdges int, extra Config) parsed {
 	if diagram.KeepComments {
 		source = pre.withComments
 	}
-	model := diagram.Parse(encodeEntities(source)+"\n", config, pre.title, pre.lineOffset, types.ParseLimits{MaxEdges: maxEdges})
-	return parsed{typ, diagram, model, config}
+	model := parseModel(found, diagram, encodeEntities(source)+"\n", config, pre, maxEdges)
+	return parsed{found.typ, found.mt, diagram, model, config}
+}
+
+func parseModel(found detected, diagram *types.Diagram, source string, config Config, pre preprocessed, maxEdges int) any {
+	defer tagErrors(found)
+	return diagram.Parse(source, config, pre.title, pre.lineOffset, types.ParseLimits{MaxEdges: maxEdges})
 }
 
 // Detect gives the type of diagram the text describes.
@@ -158,23 +184,27 @@ type ParseOptions struct {
 // Diagram is diagram text that parsed. RenderSVG draws it.
 type Diagram struct {
 	Type Type
-	p    parsed
+	// MermaidType is the type as Mermaid names it.
+	MermaidType MermaidType
+	p           parsed
 }
 
 // Parse reads diagram text.
 func Parse(src string, opt ParseOptions) (d *Diagram, err error) {
 	defer guarded(&err)
 	p := parseSource(src, opt.Limit, opt.MaxEdges, opt.Config)
-	return &Diagram{Type: p.typ, p: p}, nil
+	return &Diagram{Type: p.typ, MermaidType: p.mt, p: p}, nil
 }
 
 // SVG is a drawn diagram.
 type SVG struct {
-	Type   Type
-	Data   string
-	Width  float64
-	Height float64
-	Links  []LinkInfo
+	Type Type
+	// MermaidType is the type as Mermaid names it, such as "flowchart-v2" for `graph TD`.
+	MermaidType MermaidType
+	Data        string
+	Width       float64
+	Height      float64
+	Links       []LinkInfo
 }
 
 // Render parses and draws diagram text.
@@ -216,14 +246,15 @@ func render(p parsed, options RenderOptions) SVG {
 		m = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	options.Measurer = text.WithIcons(m, icons)
-	rendered := p.diagram.Render(p.model, p.config, options)
+	rendered := renderModel(p, options)
 	outputLimit := options.OutputLimit
 	if outputLimit <= 0 {
 		outputLimit = DefaultOutputLimit
 	}
 	// A UTF-16 length is never more than the UTF-8 one, so only a long SVG is counted.
 	if len(rendered.SVG) > outputLimit && js.Len(rendered.SVG) > outputLimit {
-		types.Throw("Diagram output is longer than the limit of "+strconv.Itoa(outputLimit)+" characters.", types.CodeLimit, types.ErrorInfo{Type: string(p.typ)})
+		types.Throw("Diagram output is longer than the limit of "+strconv.Itoa(outputLimit)+" characters.", types.CodeLimit,
+			types.ErrorInfo{Type: string(p.typ), MermaidType: string(p.mt)})
 	}
 	if options.Geometry != nil && rendered.Geometry != nil {
 		*options.Geometry = *rendered.Geometry
@@ -231,7 +262,7 @@ func render(p parsed, options RenderOptions) SVG {
 	for i := range rendered.Links {
 		rendered.Links[i].ID = text.DecodeEntities(rendered.Links[i].ID)
 	}
-	return SVG{Type: p.typ, Data: rendered.SVG, Width: rendered.Width, Height: rendered.Height, Links: rendered.Links}
+	return SVG{Type: p.typ, MermaidType: p.mt, Data: rendered.SVG, Width: rendered.Width, Height: rendered.Height, Links: rendered.Links}
 }
 
 // Layout is the geometry a renderer worked out for a diagram, in SVG units:
@@ -247,4 +278,9 @@ func (d *Diagram) Layout(options RenderOptions) (l *Layout, err error) {
 	options.Geometry = g
 	render(d.p, options)
 	return g, nil
+}
+
+func renderModel(p parsed, options RenderOptions) types.Rendered {
+	defer tagErrors(detected{p.typ, p.mt})
+	return p.diagram.Render(p.model, p.config, options)
 }

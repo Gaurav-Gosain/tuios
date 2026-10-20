@@ -11,7 +11,7 @@ the Mermaid contributors. pele is under the MIT licence, copyright kepano.
 the commit that the port follows:
 
 ```sh
-cd pele && git checkout 458322a5b8abb1ae57ddf127c32017ab9fb14a92
+cd pele && git checkout 8603bf3313add9143cd417015d4a6bd6c522dada
 npm ci && npm run build
 node /path/to/sketch/testdata/golden/gen.mjs /path/to/pele /path/to/sketch/testdata/golden
 ```
@@ -30,3 +30,13 @@ sets `Location` to `Asia/Dubai`, so the test passes on a machine in any zone.
 The test binary embeds the zone data, so the machine does not need it.
 
 To write the gantt goldens again, run `gen.mjs` with `TZ=Asia/Dubai`.
+
+## Extra cases
+
+`testdata/extra` holds cases that the corpus does not cover. Each JSON file is
+a list of `{"src": ..., "maxWidth": ...}`, and `golden/` holds pele's SVG for
+each case. `TestGoldenExtra` compares them. To write them again:
+
+```sh
+TZ=Asia/Dubai node testdata/extra/gen.mjs /path/to/pele testdata/extra/golden
+```
