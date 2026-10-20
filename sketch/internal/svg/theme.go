@@ -34,14 +34,6 @@ func families(list string, generic string) string {
 	return generic
 }
 
-// FontStyle: the fonts the labels were measured in are the ones they are drawn in, unless the page names
-// others. The rest of what text inherits is pinned, as none of it was measured.
-func FontStyle(size float64, family string, mono string) string {
-	return ";--_fm:var(--pele-font-mono," + families(mono, "monospace") + ");font:" + js.Num(size) + "px sans-serif;" +
-		"letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;" +
-		"font-family:var(--pele-font," + families(family, "sans-serif") + ")"
-}
-
 var shapeProps = map[string]bool{
 	"fill": true, "fill-opacity": true, "stroke": true, "stroke-width": true, "stroke-dasharray": true,
 	"stroke-dashoffset": true, "stroke-linecap": true, "stroke-linejoin": true, "stroke-opacity": true,

@@ -4,6 +4,8 @@ package svg
 
 import (
 	"bytes"
+	"math"
+	"strconv"
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
@@ -29,7 +31,10 @@ func splitTag(parts []string) bool {
 // writeRounded writes content to b with the corner radius of each <rect> with
 // rx="var(--pele-radius,4px)" moved into its style. pele does it with
 // /<rect\b[^>]*>/g; a scan does the same without a regexp pass.
-func writeRounded(b *strings.Builder, content string) {
+//
+// It returns how many rects it changed, and whether taking an attribute out
+// may have joined text into a new var(--_...).
+func writeRounded(b *strings.Builder, content string) (moved int, joined bool) {
 	last := 0
 	for i := 0; ; {
 		at := strings.Index(content[i:], "<rect")
@@ -50,23 +55,29 @@ func writeRounded(b *strings.Builder, content string) {
 		end += next + 1
 		tag := content[at:end]
 		b.WriteString(content[last:at])
-		roundTag(b, tag)
+		if m, j := roundTag(b, tag); m {
+			moved++
+			joined = joined || j
+		}
 		last = end
 		i = end
 	}
 	b.WriteString(content[last:])
+	return moved, joined
 }
 
 func isWordByte(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
 }
 
-func roundTag(b *strings.Builder, tag string) {
+func roundTag(b *strings.Builder, tag string) (moved, joined bool) {
 	at := strings.Index(tag, rootRounded)
 	if at < 0 {
 		b.WriteString(tag)
-		return
+		return false, false
 	}
+	// A var(--_...) across the cut would take the byte before it.
+	joined = at > 0 && varByte(tag[at-1])
 	// The tag without the attribute. A tag is short, so it is put together on
 	// the stack; a long one falls back to a string.
 	var stack [512]byte
@@ -81,7 +92,7 @@ func roundTag(b *strings.Builder, tag string) {
 		b.Write(rest[:style+8])
 		b.WriteString("rx:var(--_r);")
 		b.Write(rest[style+8:])
-		return
+		return true, joined
 	}
 	end := len(rest) - 1
 	if bytes.HasSuffix(rest, []byte("/>")) {
@@ -90,6 +101,7 @@ func roundTag(b *strings.Builder, tag string) {
 	b.Write(rest[:end])
 	b.WriteString(` style="rx:var(--_r)"`)
 	b.Write(rest[end:])
+	return true, joined
 }
 
 // The weights of bold text, each set only in a diagram that has such text.
@@ -111,11 +123,9 @@ type rootVars struct {
 }
 
 // usedVars finds the variables the parts use, in one pass over each var(--
-// in them. With moved, a radius that writeRounded will move counts as
-// var(--_r) already; that makes a guess, which a scan of the written content
-// confirms.
-func usedVars(moved bool, parts ...string) rootVars {
-	var v rootVars
+// in them, and reports whether they hold rx="var(--pele-radius,4px)", which
+// writeRounded may turn into var(--_r).
+func usedVars(parts ...string) (v rootVars, movable bool) {
 	for _, content := range parts {
 		for i := 0; ; {
 			at := strings.Index(content[i:], "var(--")
@@ -129,8 +139,8 @@ func usedVars(moved bool, parts ...string) rootVars {
 				v.radius = true
 				continue
 			}
-			if moved && start >= len(` rx="`) && strings.HasPrefix(content[start-len(` rx="`):], rootRounded) {
-				v.radius = true
+			if start >= len(` rx="`) && strings.HasPrefix(content[start-len(` rx="`):], rootRounded) {
+				movable = true
 				continue
 			}
 			for k, pair := range weights {
@@ -140,7 +150,13 @@ func usedVars(moved bool, parts ...string) rootVars {
 			}
 		}
 	}
-	return v
+	return v, movable
+}
+
+// varByte reports whether c can be part of a var(--_...) the root style
+// looks for.
+func varByte(c byte) bool {
+	return strings.IndexByte("var(-_thw)", c) >= 0
 }
 
 func SvgDocument(typ string, width, height, fontSize float64, options types.RenderOptions, acc Accessible, parts ...string) string {
@@ -159,21 +175,50 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	if options.Responsive != nil && !*options.Responsive {
 		fit = ""
 	}
-	open := func(v rootVars) string {
-		w := ""
+	// open writes the root's start tag and the head.
+	open := func(b *strings.Builder, v rootVars) {
+		b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-`)
+		b.WriteString(typ)
+		b.WriteString(`" viewBox="0 0 `)
+		writeJSNum(b, width)
+		b.WriteString(` `)
+		writeJSNum(b, height)
+		b.WriteString(`" width="`)
+		writeJSNum(b, width)
+		b.WriteString(`" height="`)
+		writeJSNum(b, height)
+		b.WriteString(`" style="`)
+		b.WriteString(fit)
+		b.WriteString(Esc(options.Theme.Style()))
+		b.WriteString(ROOT_STYLE)
 		if v.radius {
-			w = ";--_r:" + RADIUS
+			b.WriteString(";--_r:" + RADIUS)
 		}
 		for k, pair := range weights {
 			if v.bold[k] {
-				w += ";" + pair[0] + ":var(--pele-" + pair[1] + "-weight,bold)"
+				b.WriteString(";")
+				b.WriteString(pair[0])
+				b.WriteString(":var(--pele-")
+				b.WriteString(pair[1])
+				b.WriteString("-weight,bold)")
 			}
 		}
-		return `<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-` + typ + `" viewBox="0 0 ` + js.Num(width) + ` ` + js.Num(height) +
-			`" width="` + js.Num(width) + `" height="` + js.Num(height) + `" style="` + fit + Esc(options.Theme.Style()) + ROOT_STYLE + w +
-			Esc(FontStyle(fontSize, options.FontFamily, options.FontFamilyMono)) +
-			`" fill="var(--_fg)" role="graphics-document document" aria-roledescription="` + typ + `"` + aria + `>` +
-			head
+		// The fonts the labels were measured in are the ones they are drawn
+		// in, unless the page names others. The rest of what text inherits
+		// is pinned, as none of it was measured. Esc works byte by byte, so
+		// the font lists are escaped on their own.
+		b.WriteString(";--_fm:var(--pele-font-mono,")
+		b.WriteString(Esc(families(options.FontFamilyMono, "monospace")))
+		b.WriteString(");font:")
+		writeJSNum(b, fontSize)
+		b.WriteString("px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,")
+		b.WriteString(Esc(families(options.FontFamily, "sans-serif")))
+		b.WriteString(`)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="`)
+		b.WriteString(typ)
+		b.WriteString(`"`)
+		b.WriteString(aria)
+		b.WriteString(`>`)
+		b.WriteString(head)
 	}
 	// The parts of the drawing, in order. Joined, they are what pele calls
 	// content. The root's style depends on the variables the content uses
@@ -182,23 +227,54 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	if len(parts) > 1 && splitTag(parts) {
 		parts = []string{strings.Join(parts, "")}
 	}
-	guess := usedVars(true, parts...)
-	root := open(guess)
-	total := len(root) + len("</svg>")
+	found, movable := usedVars(parts...)
+	guess := found
+	guess.radius = found.radius || movable
+	total := 1024 + len(head) + len(aria)
 	for _, part := range parts {
 		total += len(part)
 	}
 	var b strings.Builder
 	b.Grow(total)
-	b.WriteString(root)
-	for _, part := range parts {
-		writeRounded(&b, part)
+	open(&b, guess)
+	root := b.Len()
+	moved, joined := 0, false
+	for i, part := range parts {
+		m, j := writeRounded(&b, part)
+		moved += m
+		// A var(--_...) across two parts would take the last byte of the
+		// first, and none ends in a tag's ">".
+		joined = joined || j || (i < len(parts)-1 && part != "" && part[len(part)-1] != '>')
 	}
 	b.WriteString("</svg>")
 	out := b.String()
-	content := out[len(root) : len(out)-len("</svg>")]
-	if used := usedVars(false, content); used != guess {
-		return open(used) + content + "</svg>"
+	content := out[root : len(out)-len("</svg>")]
+	// Moving a radius takes out text with no var(--_ in it and adds
+	// var(--_r), so what the parts use is what the content uses, unless a
+	// cut or a join between parts made a new one; then the content is read.
+	used := found
+	used.radius = found.radius || moved > 0
+	if joined {
+		used, _ = usedVars(content)
+	}
+	if used != guess {
+		var again strings.Builder
+		again.Grow(len(out) + 256)
+		open(&again, used)
+		again.WriteString(content)
+		again.WriteString("</svg>")
+		return again.String()
 	}
 	return out
+}
+
+// writeJSNum writes js.Num(x) to b.
+func writeJSNum(b *strings.Builder, x float64) {
+	if x != 0 && x == math.Trunc(x) && math.Abs(x) < 1e21 {
+		// js.Num formats a whole number with FormatFloat(x, 'f', -1).
+		var buf [32]byte
+		b.Write(strconv.AppendFloat(buf[:0], x, 'f', -1, 64))
+		return
+	}
+	b.WriteString(js.Num(x))
 }
