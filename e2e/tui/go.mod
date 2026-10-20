@@ -2,7 +2,7 @@ module github.com/Gaurav-Gosain/tuios/e2e/tui
 
 go 1.26.6
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/Gaurav-Gosain/tuitest v0.1.0
