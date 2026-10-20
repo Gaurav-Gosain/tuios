@@ -1,9 +1,16 @@
 package tuie2e
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -446,4 +453,289 @@ func TestWorkspaceSwitchPastTheLastOpensTheNext(t *testing.T) {
 	}
 	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"})
 	alive(t, term, "after opening workspaces past the last")
+}
+
+// TestWorkspaceSwitchFromAnEmptyOneStaysOnIt presses opt+5 with three
+// workspaces, which opens workspace 4, and then opt+6 from that empty 4: the
+// empty workspace on screen is the new one, so the switch stays on 4 rather
+// than opening 5 and leaving the dock at 1, 2, 3, 5.
+//
+// Negative control: see NEGATIVE_CONTROLS.md.
+func TestWorkspaceSwitchFromAnEmptyOneStaysOnIt(t *testing.T) {
+	term, base := renumberSetup(t)
+
+	for _, key := range []rune{'5', '6'} {
+		if err := term.SendKeys(tuitest.Alt(key)); err != nil {
+			t.Fatalf("press alt+%c: %v", key, err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			m := renumberDockStatus(s)
+			return m != nil && m[0] == "4:0"
+		}, uiTimeout); err != nil {
+			t.Fatalf("alt+%c did not show workspace 4: %v\n%s", key, err, term.Snapshot())
+		}
+	}
+	// The status read 4:0 before opt+6 too, so the switch is given time to
+	// land before the dock is read again.
+	time.Sleep(time.Second)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	if m := renumberDockStatus(term.Screen()); m == nil || m[0] != "4:0" || screenHas(term.Screen(), "5·") {
+		t.Fatalf("opt+6 from the empty workspace 4 left it, want it to stay on 4 (status %v)\n%s", m, term.Snapshot())
+	}
+	info := wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"})
+	if info.CurrentWorkspace != 4 {
+		t.Fatalf("the daemon shows workspace %d after opt+6 from the empty 4, want 4", info.CurrentWorkspace)
+	}
+
+	newWindow(t, term)
+	out, err := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v", err)
+	}
+	var payload struct {
+		WorkspaceWindows []int `json:"workspace_windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil || len(payload.WorkspaceWindows) < 4 {
+		t.Fatalf("list-windows output: %v\n%s", err, out)
+	}
+	if got := payload.WorkspaceWindows; got[3] != 1 || (len(got) > 4 && got[4] != 0) {
+		t.Fatalf("panes by workspace are %v, want the new pane on 4 and none past it", got)
+	}
+	alive(t, term, "after switching from an empty workspace")
+}
+
+// renumberExitSetup is renumberSetup with REVW's two panes running a command
+// that exits once release is created, one of them with close_on_exit: the
+// daemon closes that one, and the attached client closes the other when its
+// process ends. The client is left on DPLY, workspace 3.
+func renumberExitSetup(t *testing.T) (term *tuitest.Terminal, base, release string) {
+	t.Helper()
+	base = t.TempDir()
+	release = filepath.Join(base, "release")
+	writeConfig(t, base, renumberConfig)
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", renumberSession, "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+	verbs := dialVerbs(t, filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock"))
+	wait := []string{"/bin/sh", "-c", fmt.Sprintf("while [ ! -e %q ]; do sleep 0.1; done", release)}
+	for _, closeOnExit := range []bool{true, false} {
+		if _, verr := verbs.call("new-window", map[string]any{
+			"session": renumberSession, "workspace": 2, "focus": false,
+			"command": wait, "close_on_exit": closeOnExit,
+		}); verr != "" {
+			t.Fatalf("new-window on 2 (close_on_exit %v): %s", closeOnExit, verr)
+		}
+	}
+	for range renumberPanes["DPLY"] {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", renumberSession, "--workspace", "3", "--no-focus"); err != nil {
+			t.Fatalf("new-window on 3: %v: %s", err, out)
+		}
+	}
+	for num, name := range map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"} {
+		if out, err := tuiosCLI(t, base, "set-workspace-name", num, name, "--session", renumberSession); err != nil {
+			t.Fatalf("name workspace %s: %v: %s", num, err, out)
+		}
+	}
+	term = attachIn(t, base, renumberSession, startOpts{})
+	waitPills(t, term, "1·EDIT", "2·REVW", "3·DPLY")
+	altReaches(t, term, '3', "DPLY")
+	return term, base, release
+}
+
+// subscribeLines streams `tuios subscribe` with args into a buffer until the
+// test ends. It returns once the subscription is acknowledged, so nothing that
+// happens after it can be missed, and read returns the event lines so far.
+func subscribeLines(t *testing.T, base string, args ...string) (read func() []string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	pinPreV080Looks(t, base)
+	cmd := exec.CommandContext(ctx, tuiosBin, append([]string{"subscribe"}, args...)...)
+	cmd.Dir = workDirIn(t, base)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	pipe, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); _ = cmd.Wait() })
+	lines := bufio.NewScanner(pipe)
+	if !lines.Scan() || !strings.Contains(lines.Text(), "subscribed") {
+		t.Fatalf("subscribe %v did not acknowledge: %q", args, lines.Text())
+	}
+	var mu sync.Mutex
+	var got []string
+	go func() {
+		for lines.Scan() {
+			mu.Lock()
+			got = append(got, lines.Text())
+			mu.Unlock()
+		}
+	}()
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
+	}
+}
+
+// waitPaneCount waits until the daemon holds n panes in the session.
+func waitPaneCount(t *testing.T, base string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	var last []int
+	for time.Now().Before(deadline) {
+		out, err := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
+		var payload struct {
+			WorkspaceWindows []int `json:"workspace_windows"`
+		}
+		if err == nil && json.Unmarshal([]byte(out), &payload) == nil {
+			last = payload.WorkspaceWindows
+			total := 0
+			for _, c := range last {
+				total += c
+			}
+			if total == n {
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("the session never came down to %d panes (by workspace %v)", n, last)
+}
+
+// TestWorkspaceSelfExitLeavesTheNumbers lets REVW's panes, below the workspace
+// on screen, exit on their own. Nobody closed anything, so the numbers stay:
+// DPLY is still workspace 3 on the dock and in the daemon, no window-moved
+// event goes out for its panes, and no workspace-switched fires for a switch
+// nobody made. Closing a pane is a person's act, and it closes the gap up.
+//
+// Negative control: see NEGATIVE_CONTROLS.md.
+func TestWorkspaceSelfExitLeavesTheNumbers(t *testing.T) {
+	term, base, release := renumberExitSetup(t)
+	events := subscribeLines(t, base, "-s", renumberSession, "--types", "window-moved,workspace-switched")
+
+	if err := os.WriteFile(release, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneCount(t, base, renumberPanes["EDIT"]+renumberPanes["DPLY"])
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "REVW") }, uiTimeout); err != nil {
+		t.Fatalf("REVW stayed on the dock after its panes exited: %v\n%s", err, term.Snapshot())
+	}
+	// Long enough for a renumber, which is one state push away, to land.
+	time.Sleep(2 * time.Second)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	info := wantNumbering(t, base, map[string]string{"1": "EDIT", "3": "DPLY"})
+	if info.CurrentWorkspace != 3 {
+		t.Fatalf("the workspace on screen became %d when panes below it exited, want 3", info.CurrentWorkspace)
+	}
+	wantPanesOn(t, base, map[int]string{1: "EDIT", 3: "DPLY"})
+	if !screenHas(term.Screen(), "1·EDIT", "3·DPLY") {
+		t.Fatalf("the dock renumbered when panes exited on their own, want 1·EDIT and 3·DPLY\n%s", term.Snapshot())
+	}
+	if m := renumberDockStatus(term.Screen()); m == nil || m[0] != "3:3" {
+		t.Fatalf("the dock status is %v, want 3:3\n%s", m, term.Snapshot())
+	}
+	if got := events(); len(got) > 0 {
+		t.Fatalf("panes exiting on their own sent %d window-moved or workspace-switched events, want none:\n%s", len(got), strings.Join(got, "\n"))
+	}
+
+	// opt+N past the last workspace opens the one after it, not the number
+	// of workspaces plus one, which with a gap is DPLY's.
+	if err := term.SendKeys(tuitest.Alt('5')); err != nil {
+		t.Fatalf("press alt+5: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		m := renumberDockStatus(s)
+		return m != nil && m[0] == "4:0"
+	}, uiTimeout); err != nil {
+		t.Fatalf("opt+5 with a gap at 2 did not open workspace 4: %v\n%s", err, term.Snapshot())
+	}
+	altReaches(t, term, '3', "DPLY")
+	wantNumbering(t, base, map[string]string{"1": "EDIT", "3": "DPLY"})
+
+	// A pane the person closes closes the gap: DPLY becomes 2.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "x"); err != nil {
+		t.Fatalf("close a pane: %v", err)
+	}
+	waitPills(t, term, "1·EDIT", "2·DPLY")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		m := renumberDockStatus(s)
+		return m != nil && m[0] == "2:2" && !screenHas(s, "3·")
+	}, uiTimeout); err != nil {
+		t.Fatalf("closing a pane did not close the gap up: %v\n%s", err, term.Snapshot())
+	}
+	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "DPLY"})
+	alive(t, term, "after panes exited and a pane was closed")
+}
+
+// attentionWorkspace is the workspace list-attention gives the item of the
+// pane named window, or 0 when it lists none.
+func attentionWorkspace(t *testing.T, base, window string) int {
+	t.Helper()
+	out, err := tuiosOut(base, "list-attention", "--json")
+	if err != nil {
+		t.Fatalf("list-attention: %v\n%s", err, out)
+	}
+	var payload struct {
+		Items []struct {
+			Name      string `json:"name"`
+			Workspace int    `json:"workspace"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("list-attention output: %v\n%s", err, out)
+	}
+	for _, it := range payload.Items {
+		if it.Name == window {
+			return it.Workspace
+		}
+	}
+	return 0
+}
+
+// TestWorkspaceMoveRenumbersInboxItems finishes an agent turn on EDIT, which
+// opens an Inbox item that names EDIT's workspace, and moves EDIT right: the
+// item names the workspace EDIT moved to, not the number it left.
+//
+// Negative control: see NEGATIVE_CONTROLS.md.
+func TestWorkspaceMoveRenumbersInboxItems(t *testing.T) {
+	term, base := renumberSetup(t)
+	if out, err := tuiosCLI(t, base, "new-window", "AGENTPANE", "-s", renumberSession, "--workspace", "1", "--no-focus"); err != nil {
+		t.Fatalf("new-window AGENTPANE: %v: %s", err, out)
+	}
+	for _, state := range []string{"working", "done"} {
+		if out, err := tuiosCLI(t, base, "set-agent-state", state, "-s", renumberSession, "-w", "AGENTPANE", "--harness", "claude-code"); err != nil {
+			t.Fatalf("set-agent-state %s: %v: %s", state, err, out)
+		}
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for attentionWorkspace(t, base, "AGENTPANE") != 1 {
+		if time.Now().After(deadline) {
+			out, err := tuiosOut(base, "list-attention", "--json")
+			win, _ := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
+			t.Fatalf("the finished turn opened no Inbox item on workspace 1 (%v):\n%s\n%s", err, out, win)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	moveWorkspaceKey(t, term, ">")
+	waitPills(t, term, "1·REVW", "2·EDIT", "3·DPLY")
+	deadline = time.Now().Add(uiTimeout)
+	for got := attentionWorkspace(t, base, "AGENTPANE"); got != 2; got = attentionWorkspace(t, base, "AGENTPANE") {
+		if time.Now().After(deadline) {
+			t.Fatalf("the Inbox item of a pane on EDIT names workspace %d after EDIT moved to 2", got)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	alive(t, term, "after moving a workspace with an Inbox item")
 }
