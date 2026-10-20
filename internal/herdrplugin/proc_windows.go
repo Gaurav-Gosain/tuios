@@ -102,3 +102,7 @@ func (g *procGroup) release() {
 	_ = windows.CloseHandle(g.job)
 	g.job = 0
 }
+
+// groupAlive is false: the daemon reads no peer pid on Windows, so no call
+// is placed by its process session.
+func groupAlive(int) bool { return false }

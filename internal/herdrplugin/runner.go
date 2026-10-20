@@ -8,8 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -79,6 +81,12 @@ type Runner struct {
 	procs    map[string]map[*exec.Cmd]*procGroup
 	stopped  bool
 	wg       sync.WaitGroup
+	// owners are the plugins whose commands lead each process session, by
+	// the session id, which is the leader's pid. An entry stays after the
+	// leader exits while the group lives, so what a command leaves behind
+	// is still its plugin's. native counts the native plugins among them.
+	owners map[int]owner
+	native atomic.Int32
 	// OnPID, when set, is told each process the runner starts and ends, so
 	// the daemon can tell a plugin's process from a person's.
 	OnPID func(pid int, running bool)
@@ -86,7 +94,7 @@ type Runner struct {
 
 // NewRunner returns an empty runner.
 func NewRunner() *Runner {
-	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}}
+	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}, owners: map[int]owner{}}
 }
 
 // ResolveProgram finds a command's program as herdr does: a relative path
@@ -142,6 +150,8 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		return refuse("plugin_host_stopped", "the plugin host is stopping")
 	case r.inFlight >= MaxInFlight:
 		return refuse("plugin_command_limit_reached", fmt.Sprintf("maximum concurrent plugin commands reached (%d)", MaxInFlight))
+	case j.Plugin.Format == FormatTuios && !kernelPlacesCallers:
+		return refuse("plugin_unsupported_platform", "tuios cannot hold a native plugin to its grants on "+runtime.GOOS+" yet, so it does not run its commands")
 	case r.perPlug[j.Plugin.PluginID] >= MaxPerPlugin:
 		return refuse("plugin_command_limit_reached", fmt.Sprintf("plugin %s already runs %d commands", j.Plugin.PluginID, MaxPerPlugin))
 	}
@@ -181,6 +191,9 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		r.procs[j.Plugin.PluginID] = map[*exec.Cmd]*procGroup{}
 	}
 	r.procs[j.Plugin.PluginID][cmd] = group
+	// Still under r.mu, which Owner takes: the command cannot be asked
+	// about before it is entered here.
+	r.setOwner(cmd.Process.Pid, owner{plugin: j.Plugin})
 	r.pushLocked(e)
 	r.wg.Add(1)
 	onPID := r.OnPID
@@ -215,6 +228,7 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		r.inFlight--
 		r.perPlug[j.Plugin.PluginID]--
 		delete(r.procs[j.Plugin.PluginID], cmd)
+		r.setOwner(cmd.Process.Pid, owner{plugin: j.Plugin, exited: true})
 		group.release()
 		for i := range r.logs {
 			if r.logs[i].LogID != e.LogID {
@@ -351,3 +365,52 @@ func (b *capBuffer) String() string {
 }
 
 var _ io.Writer = (*capBuffer)(nil)
+
+// owner is the plugin of one process session.
+type owner struct {
+	plugin *Plugin
+	// exited is set once the leader is reaped. The entry then holds only
+	// while the leader's process group lives.
+	exited bool
+}
+
+// setOwner enters or updates the owner of session sid, or drops it once
+// the leader exited and its group is gone. r.mu is held.
+func (r *Runner) setOwner(sid int, o owner) {
+	old, had := r.owners[sid]
+	if had && old.plugin.Format == FormatTuios {
+		r.native.Add(-1)
+	}
+	if o.exited && !groupAlive(sid) {
+		delete(r.owners, sid)
+		return
+	}
+	r.owners[sid] = o
+	if o.plugin.Format == FormatTuios {
+		r.native.Add(1)
+	}
+}
+
+// Owner is the plugin whose command leads process session sid, or nil. The
+// caller reads sid from the kernel (procinfo.SessionID). A process that
+// starts a session of its own leaves its plugin.
+func (r *Runner) Owner(sid int) *Plugin {
+	if sid <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	o, ok := r.owners[sid]
+	if !ok {
+		return nil
+	}
+	if o.exited && !groupAlive(sid) {
+		r.setOwner(sid, o)
+		return nil
+	}
+	return o.plugin
+}
+
+// NativeRunning reports whether a native plugin's processes may be running,
+// so a call has to be checked against its grants.
+func (r *Runner) NativeRunning() bool { return r.native.Load() > 0 }

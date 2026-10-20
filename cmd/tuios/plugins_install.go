@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -37,6 +39,8 @@ const buildTimeout = 10 * time.Minute
 type installOpts struct {
 	ref, subdir                     string
 	yes, noEnable, noBuild, replace bool
+	// grants are the grants the person typed with --grant.
+	grants []string
 }
 
 func newPluginsInstallCommand() *cobra.Command {
@@ -69,6 +73,7 @@ tuios shows what the plugin runs and asks first. A plugin runs with your rights.
 	f.BoolVar(&o.noEnable, "no-enable", false, "Install and build, but do not enable")
 	f.BoolVar(&o.noBuild, "no-build", false, "Do not run the build commands")
 	f.BoolVar(&o.replace, "replace", false, "Replace an installed plugin with the same id from another source")
+	f.StringSliceVar(&o.grants, "grant", nil, "Give the admin grant to a plugin that asks for it")
 	return cmd
 }
 
@@ -288,6 +293,10 @@ func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEn
 // approved before.
 func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetched string) error {
 	out := in.out
+	e.Format, e.Grants = cmp.Or(p.Format, "herdr"), p.Grants
+	if err := checkNativeAsks(p, in.o); err != nil {
+		return err
+	}
 	hash := herdrplugin.TrustHash(e.Source, p, e.Grants)
 	changed := e.Approved != "" && e.Approved != hash
 	rel := ""
@@ -610,7 +619,7 @@ func shownArgv(argv ...string) string {
 func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, o installOpts) string {
 	var b strings.Builder
 	f := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
-	f("\nInstall %s %s (herdr plugin)\n  from    %s", p.PluginID, shownArgv(p.Version), shownSource(e.Source))
+	f("\nInstall %s %s (%s plugin)\n  from    %s", p.PluginID, shownArgv(p.Version), cmp.Or(p.Format, "herdr"), shownSource(e.Source))
 	if e.Commit != "" {
 		ref := e.Ref
 		if ref == "" {
@@ -660,7 +669,14 @@ func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, 
 	if b.Len() == n {
 		f("  nothing\n")
 	}
-	f("\nIt can call tuios with the default pane grants.\n")
+	switch {
+	case p.Format != herdrplugin.FormatTuios:
+		f("\nIt can call tuios with the default pane grants.\n")
+	case len(p.Grants) == 0:
+		f("\nIt can call tuios only for what every pane may do.\n")
+	default:
+		f("\nIt can call tuios in every session with these grants: %s.\n", strings.Join(p.Grants, ", "))
+	}
 	if !o.noEnable {
 		f("tuios enables the plugin after the install.\n")
 	}
@@ -775,4 +791,18 @@ func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	}
 	e.Tree = got.Tree
 	return in.finish(e, p, fetched)
+}
+
+// checkNativeAsks refuses a native plugin that needs a newer tuios, or that
+// asks for admin when the person did not type --grant admin.
+func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
+	if p.MinTuios != "" {
+		if newer, ok := release.Newer(version, p.MinTuios); ok && newer {
+			return fmt.Errorf("%s needs tuios %s or later. This is tuios %s. Update tuios first", p.PluginID, p.MinTuios, version)
+		}
+	}
+	if slices.Contains(p.Grants, "admin") && !slices.Contains(o.grants, "admin") {
+		return fmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", p.PluginID)
+	}
+	return nil
 }

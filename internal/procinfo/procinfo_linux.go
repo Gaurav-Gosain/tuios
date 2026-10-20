@@ -136,3 +136,10 @@ func StartedAt(pid int) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// SessionID returns the id of the process session pid is in, which is the
+// pid of the session's leader, and false when the kernel does not say.
+func SessionID(pid int) (int, bool) {
+	sid, err := unix.Getsid(pid)
+	return sid, err == nil && sid > 0
+}

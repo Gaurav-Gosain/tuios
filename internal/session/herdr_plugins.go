@@ -659,6 +659,16 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 	if verr != nil {
 		return nil, herdrFromVerb(verr, "plugin_pane_open_failed")
 	}
+	if e.Plugin.Format == herdrplugin.FormatTuios {
+		// A native plugin's pane holds no more than the plugin: what the
+		// opener could give it, cut to the plugin's grants.
+		g := d.manager.grants.defaults()
+		if grants != nil {
+			g = *grants
+		}
+		g = g.expand() & grantsFromNames(e.Plugin.Held).expand()
+		grants = &g
+	}
 	focus := in.Focus || popup || placement == herdrplugin.PlacementZoomed
 	opts := NewWindowOptions{
 		Title: pane.Title, Name: pane.Title, Cwd: cwd, Workspace: workspace, Focus: focus,

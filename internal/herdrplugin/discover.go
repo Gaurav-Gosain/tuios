@@ -203,6 +203,15 @@ func Discover(d Dirs, enabled []string) []Entry {
 				p.Source = *src
 			}
 			e.ID, e.Plugin = p.PluginID, p
+			if p.Format == FormatTuios {
+				// A native plugin holds what the person approved at
+				// install, which checkManaged held to the manifest, and
+				// otherwise nothing.
+				p.Held = []string{}
+				if lock != nil {
+					p.Held = slices.Clone(lock.Grants)
+				}
+			}
 			if byID[p.PluginID] {
 				e.Err = errf("plugin_id_shadowed", "another plugin with id %s was found first. This copy does not run", p.PluginID)
 			}
@@ -218,7 +227,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 		add(OriginConfig, expandHome(p), nil, nil, "", nil)
 	}
 	for _, dir := range subdirs(d.PluginsDir()) {
-		if fileExists(filepath.Join(dir, ManifestName)) {
+		if HasManifest(dir) {
 			add(OriginTuios, dir, nil, nil, "", nil)
 		}
 	}
@@ -262,7 +271,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 			add(OriginHerdr, r.ManifestPath, &src, nil, "", nil)
 		}
 		for _, dir := range subdirs(filepath.Join(d.HerdrConfig, "plugins", "github")) {
-			if fileExists(filepath.Join(dir, ManifestName)) {
+			if HasManifest(dir) {
 				add(OriginHerdrManaged, dir, &Source{Kind: "github", ManagedPath: dir}, nil, "", nil)
 			}
 		}
@@ -310,7 +319,7 @@ func Find(entries []Entry, id string) *Entry {
 
 // guessID names an entry whose manifest did not load: its folder's name.
 func guessID(path string) string {
-	if strings.HasSuffix(path, ManifestName) {
+	if strings.HasSuffix(path, ManifestName) || strings.HasSuffix(path, NativeManifestName) {
 		path = filepath.Dir(path)
 	}
 	return filepath.Base(path)

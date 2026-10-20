@@ -442,6 +442,9 @@ type paneAuth struct {
 	// for as the person (linkTypingAuthority). It names the [hosts] table
 	// whose allow list holds the caller, for the refusal to point at.
 	linkTable string
+	// plugin names the native plugin whose process the caller is. It has
+	// no pane and no session (plugin_grants.go).
+	plugin string
 }
 
 // addressesHostedPane reports whether a call is one forwardHostedCall sends on
@@ -525,6 +528,9 @@ func (d *Daemon) paneWriteReach(pa *paneAuth, target string) string {
 func (d *Daemon) paneAuthority(cs *connState) *paneAuth {
 	if cs == nil || cs.viaLink || cs.paneOnly {
 		return nil
+	}
+	if pa := d.pluginAuthority(cs); pa != nil {
+		return pa
 	}
 	if cs.paneBound.Load() == nil && d.approvalPeer.Load() == nil && !d.connFromPane(cs) {
 		// Placed outside every pane when it connected (pinPeer). A caller
@@ -640,6 +646,12 @@ func grantKind(verb string) scopeKind {
 
 // grantForbidden is the refusal for a call a pane's grants do not cover.
 func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
+	if pa.plugin != "" {
+		return hintedVerbError(ErrVerbForbidden, verb+" is refused for plugin "+pa.plugin+": "+why, &VerbHint{
+			Detail: "The plugin holds " + pa.grants.String() + ". Nothing was done. A plugin asks for grants in [permissions] of tuios-plugin.toml. " +
+				"It holds them when the person approves them at tuios plugins install, and none when it was not installed.",
+		})
+	}
 	if pa.linkTable != "" {
 		return hintedVerbError(ErrVerbForbidden, verb+" is refused for this link: "+why, &VerbHint{
 			Detail: "Nothing was done. The call came over a link from a pane on the other machine, or from a machine that does not say. " +
@@ -674,7 +686,7 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	// Under open with no pane given grants every pane holds admin, and only a
 	// typing verb has anything to check: whether it answers another pane's
 	// prompt (holdTypingTarget).
-	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() && !typingVerbs[verb] {
+	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() && !d.nativePluginsRun() && !typingVerbs[verb] {
 		return params, nil
 	}
 	pa := d.paneAuthority(cs)
@@ -684,8 +696,11 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	}
 	cs.paneView.Store(pa)
 	deny := func(why string) *verbError {
-		LogBasic("Pane %s (%s) refused %s: %s", shortWindowID(pa.window), pa.grants.String(), verb, why)
+		LogBasic("Pane %s%s (%s) refused %s: %s", shortWindowID(pa.window), pa.plugin, pa.grants.String(), verb, why)
 		return grantForbidden(verb, pa, why)
+	}
+	if pa.plugin != "" {
+		return d.checkPluginGrants(verb, pa, params, deny)
 	}
 	if pa.grants.Has(GrantAdmin) {
 		if typingVerbs[verb] {
@@ -1269,6 +1284,9 @@ func (d *Daemon) verbPaneGrants(cs *connState, params json.RawMessage) (any, *ve
 		return out, nil
 	}
 	out["pane"] = true
+	if pa.plugin != "" {
+		out["pane"], out["plugin"] = false, pa.plugin
+	}
 	out["window"] = pa.window
 	out["session"] = pa.session
 	out["via"] = pa.via

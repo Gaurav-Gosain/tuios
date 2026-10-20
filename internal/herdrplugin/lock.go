@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -137,7 +138,7 @@ func checkManaged(d Dirs, le LockEntry, dir string, p *Plugin) *Error {
 		return nil
 	case !Inside(p.ManifestPath, d.BuildDir(dir)):
 		return errf("plugin_outside_checkout", "the manifest of %s is outside its checkout. Install the plugin again", le.ID)
-	case TrustHash(le.Source, p, le.Grants) != le.Approved:
+	case TrustHash(le.Source, p, le.Grants) != le.Approved, !slices.Equal(p.Grants, le.Grants):
 		return errf("plugin_changed", "the manifest of %s is different from the approved one in plugins.lock. Install the plugin again", le.ID)
 	}
 	return nil

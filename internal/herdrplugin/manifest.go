@@ -224,6 +224,17 @@ type Plugin struct {
 	LinkHandlers    []LinkHandler `json:"link_handlers,omitempty"`
 	Source          Source        `json:"source"`
 	Warnings        []string      `json:"warnings,omitempty"`
+	// Format is FormatTuios for a tuios-plugin.toml and "" for a herdr
+	// manifest.
+	Format string `json:"format,omitempty"`
+	// MinTuios is the oldest tuios release a native plugin runs on.
+	MinTuios string `json:"min_tuios,omitempty"`
+	// Grants are the pane grants a native manifest asks for.
+	Grants []string `json:"grants,omitempty"`
+	// Held are the grants a native plugin's processes hold now: the
+	// approved ones from plugins.lock, or none. nil for a herdr plugin,
+	// which holds the default grants.
+	Held []string `json:"held_grants,omitempty"`
 }
 
 // rawManifest is herdr-plugin.toml as written. Unknown keys are ignored, as
@@ -296,6 +307,9 @@ func Load(path string) (*Plugin, *Error) {
 	manifest := path
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
 		manifest = filepath.Join(path, ManifestName)
+		if fileExists(filepath.Join(path, NativeManifestName)) {
+			manifest = filepath.Join(path, NativeManifestName)
+		}
 	}
 	abs, err := filepath.Abs(manifest)
 	if err != nil {
@@ -313,7 +327,13 @@ func Load(path string) (*Plugin, *Error) {
 	if err != nil {
 		return nil, errf("plugin_manifest_read_failed", "%v", err)
 	}
-	p, perr := Parse(data)
+	var p *Plugin
+	var perr *Error
+	if filepath.Base(abs) == NativeManifestName {
+		p, perr = parseNative(data, filepath.Dir(abs))
+	} else {
+		p, perr = Parse(data)
+	}
 	if perr != nil {
 		return nil, perr
 	}
@@ -331,6 +351,12 @@ func Parse(data []byte) (*Plugin, *Error) {
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, errf("plugin_manifest_parse_failed", "%v", err)
 	}
+	return parseRaw(&raw)
+}
+
+// parseRaw validates a decoded manifest. A native manifest is checked here
+// too, after it is turned into herdr's shape.
+func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 	for _, f := range []struct {
 		name string
 		v    *string
@@ -341,7 +367,7 @@ func Parse(data []byte) (*Plugin, *Error) {
 	}
 	// Every command is required, so a missing one is a parse failure before
 	// any field is checked, as serde reports it.
-	if perr := checkRawCommands(&raw); perr != nil {
+	if perr := checkRawCommands(raw); perr != nil {
 		return nil, perr
 	}
 	p := &Plugin{Source: Source{Kind: "local"}}

@@ -69,6 +69,7 @@ const (
 	paneOriginEnv        = "its environment is a pane's of this daemon"
 	paneOriginUnreadable = "its process could not be read"
 	paneOriginChanged    = "the process that connected has exited"
+	paneOriginPlugin     = "it runs in a plugin's process session"
 )
 
 // pinPeer records the start time of the process on cs and places it, at
@@ -200,6 +201,11 @@ func (d *Daemon) connFromPane(cs *connState) bool {
 		fromPane, why := d.paneOrigin(cs.peerPID)
 		if !fromPane && d.peerChanged(cs) {
 			fromPane, why = true, paneOriginChanged
+		}
+		if !fromPane && d.pluginOfPeer(cs) != nil {
+			// A process a plugin left behind, with its environment
+			// cleaned and its parent gone, is still the plugin's.
+			fromPane, why = true, paneOriginPlugin
 		}
 		cs.fromPane, cs.fromPaneWhy = fromPane, why
 		if fromPane {

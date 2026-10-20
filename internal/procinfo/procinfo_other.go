@@ -21,3 +21,6 @@ func EnvVar(int, string) (string, bool) { return "", false }
 
 // StartedAt cannot be read here.
 func StartedAt(int) (time.Time, bool) { return time.Time{}, false }
+
+// SessionID is unknown where the kernel does not give the peer's pid.
+func SessionID(int) (int, bool) { return 0, false }

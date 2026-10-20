@@ -903,6 +903,55 @@ sandbox: the build and the plugin run with your rights.
 The daemon never fetches and never builds. It only reads `plugins.lock` and
 the checkouts.
 
+**Native plugins.** A folder with `tuios-plugin.toml` is a native plugin.
+It runs the same commands as a herdr plugin, and it says which pane grants
+its processes hold when they call tuios:
+
+```toml
+schema = 1
+id = "example.status"
+name = "Status"
+version = "0.1.0"
+min_tuios = "0.9.0"            # optional
+platforms = ["linux", "macos"]
+
+[permissions]
+grants = ["read"]              # read, write, fan or admin
+
+[[build]]
+command = ["go", "build", "-o", "bin/status", "."]
+
+[[process]]
+id = "main"
+run = "startup"                # startup, action or pane
+command = ["bin/status"]
+```
+
+- `run = "action"` and `run = "pane"` take the keys of `[[actions]]` and
+  `[[panes]]` in a herdr manifest: `title`, `description`, `contexts`,
+  `placement`, `width` and `height`.
+- tuios refuses a key it does not know. It refuses `[[wasm]]` and
+  `run = "event"`, which a later tuios runs.
+- A plugin cannot hold `respond`. `admin` needs `--grant admin` on
+  `tuios plugins install`.
+- With `[herdr] manifest = "herdr-plugin.toml"`, the commands come from the
+  herdr manifest, and `tuios-plugin.toml` adds only the grants. The ids must
+  match. In a folder with both files and no `[herdr]` table,
+  `tuios-plugin.toml` wins.
+
+The processes of a native plugin hold the grants you approved at
+`tuios plugins install`, in every session. A native plugin that you link or
+put in a folder, and did not install, holds no grants. A herdr plugin holds
+the default grants of `[agents.permissions]`. A pane that a native plugin
+opens holds no more than the plugin.
+
+tuios knows a plugin's process by its process session, which the kernel
+records. A process that the plugin starts is the plugin's too, also after
+its parent exits and with its environment changed. A process that starts a
+new session leaves the plugin. No plugin process can act as the person.
+On Windows and the BSDs, the kernel does not tell tuios which process
+calls. There tuios does not run the commands of a native plugin yet.
+
 **Where tuios finds plugins.** tuios looks in five places, in this order:
 
 1. The folders and manifests that `[plugins] dirs` in `config.toml` names.

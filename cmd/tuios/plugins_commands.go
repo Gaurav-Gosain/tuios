@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -222,6 +223,9 @@ func printPluginInfo(w io.Writer, e herdrplugin.Entry) {
 	}
 	if p.Platforms != nil {
 		fmt.Fprintf(w, "  platforms %s\n", strings.Join(p.Platforms, ", "))
+	}
+	if p.Format == herdrplugin.FormatTuios {
+		fmt.Fprintf(w, "  grants    asks %s, holds %s\n", cmp.Or(strings.Join(p.Grants, ","), "none"), cmp.Or(strings.Join(p.Held, ","), "none"))
 	}
 	for _, warn := range p.Warnings {
 		fmt.Fprintf(w, "  warning   %s\n", warn)
