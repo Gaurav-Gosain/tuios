@@ -57,13 +57,16 @@ v1.7.0 does.
 ## Text
 
 `tuios.dev/sketch/text` draws flowcharts, sequence diagrams, state diagrams,
-class diagrams, ER diagrams, pie charts, mindmaps, gantt charts and timelines
-with box-drawing characters, for a terminal that shows no pictures. For a
-graph it takes the layout that sketch works out for the SVG and maps it to
-cells. The labels stay real text. A pie chart is a bar for each slice, with
-its value. pele leaves a slice under 1% out of the pie, and shows values only
-with `showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
-timeline runs across, and runs down when it does not fit the columns.
+class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, timelines, XY
+charts and quadrant charts with box-drawing characters, for a terminal that
+shows no pictures. For a graph it takes the layout that sketch works out for
+the SVG and maps it to cells. The labels stay real text. A pie chart is a bar
+for each slice, with its value. pele leaves a slice under 1% out of the pie,
+and shows values only with `showData`. A mindmap is a tree. A gantt chart is
+bars on a date axis. A timeline runs across, and runs down when it does not
+fit the columns. An XY chart draws its bars and lines with tuios.dev/plot, and
+turns its categories into rows when they do not fit across. A quadrant chart
+is a box in four parts, with its points as dots.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

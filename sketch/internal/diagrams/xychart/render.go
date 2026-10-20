@@ -711,10 +711,90 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		parts = append(parts, `<g class="pele-legend" font-size="`+js.Num(small)+`">`+legendOut.String()+`</g>`)
 	}
 
-	return types.Rendered{
-		SVG:    svg.SvgDocument("xychart", width, height, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}, parts...),
-		Width:  width,
-		Height: height,
-		Links:  []types.LinkInfo{},
+	var geometry *types.Geometry
+	if options.Geometry != nil {
+		names := make([]string, len(plots))
+		for _, item := range legend {
+			names[item.index] = plainLabel(item.label)
+		}
+		geometry = &types.Geometry{Width: width, Height: height,
+			XY: geometryOf(model, title, names, valueMarksOf(horizontal, leftMarks, bottomMarks),
+				categoryMarksOf(horizontal, band, leftMarks, bottomMarks, categories, slot),
+				leftTitle, bottomTitle, horizontal, count, base, place, scale)}
 	}
+	return types.Rendered{
+		Geometry: geometry,
+		SVG:      svg.SvgDocument("xychart", width, height, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}, parts...),
+		Width:    width,
+		Height:   height,
+		Links:    []types.LinkInfo{},
+	}
+}
+
+// Not part of pele: the chart as lists, for a text drawing (sketch/text).
+
+func plainLabel(l text.Label) string { return strings.Join(l.Plain(), " ") }
+
+func valueMarksOf(horizontal bool, leftMarks, bottomMarks []Mark) []types.GeoMark {
+	marks := leftMarks
+	if horizontal {
+		marks = bottomMarks
+	}
+	out := make([]types.GeoMark, len(marks))
+	for i, m := range marks {
+		out[i] = types.GeoMark{At: m.at, Label: plainLabel(m.label)}
+	}
+	return out
+}
+
+// categoryMarksOf gives every category of a band axis, where the SVG thins them
+// out by its own measure, and the ticks of a numeric axis.
+func categoryMarksOf(horizontal, band bool, leftMarks, bottomMarks []Mark, categories []text.Label, slot float64) []types.GeoMark {
+	if band {
+		out := make([]types.GeoMark, len(categories))
+		for i, l := range categories {
+			out[i] = types.GeoMark{At: (float64(i) + 0.5) * slot, Label: plainLabel(l)}
+		}
+		return out
+	}
+	marks := bottomMarks
+	if horizontal {
+		marks = leftMarks
+	}
+	out := make([]types.GeoMark, len(marks))
+	for i, m := range marks {
+		out[i] = types.GeoMark{At: m.at, Label: plainLabel(m.label)}
+	}
+	return out
+}
+
+func geometryOf(model *XyChartDb, title text.Label, names []string, ticks, marks []types.GeoMark,
+	leftTitle, bottomTitle text.Label, horizontal bool, count int, base float64,
+	place func(i, n int) float64, scale func(float64) float64) *types.GeoXY {
+	g := &types.GeoXY{Title: title.Plain(), Horizontal: horizontal, Ticks: ticks, Marks: marks, Slots: count, Base: base}
+	g.Band = model.xAxis.typ == "band"
+	g.ValueTitle, g.CategoryTitle = plainLabel(leftTitle), plainLabel(bottomTitle)
+	if horizontal {
+		g.ValueTitle, g.CategoryTitle = g.CategoryTitle, g.ValueTitle
+	}
+	band := g.Band
+	for index, plot := range model.plots {
+		s := types.GeoSeries{Bar: plot.typ == "bar", Name: names[index]}
+		n := len(plot.data)
+		if band {
+			n = min(n, count)
+		}
+		gap := false
+		for i := 0; i < n; i++ {
+			value, ok := finite(plot.data[i])
+			if !ok {
+				gap = true
+				continue
+			}
+			s.Points = append(s.Points, types.GeoPoint{At: place(i, n), Value: scale(value), Gap: gap})
+			gap = false
+		}
+		g.Series = append(g.Series, s)
+	}
+	return g
 }

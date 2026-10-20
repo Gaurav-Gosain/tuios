@@ -131,6 +131,10 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	}
 
 	textTop := length(config, "quadrantTextTopPadding", 5, 200)
+	var geo *types.GeoQuadrant
+	if options.Geometry != nil {
+		geo = &types.GeoQuadrant{Title: title.Plain(), XLow: plainLabel(xLeft), XHigh: plainLabel(xRight), YLow: plainLabel(yBottom), YHigh: plainLabel(yTop)}
+	}
 	var quadrants strings.Builder
 	for k := 0; k < 4; k++ {
 		x := left
@@ -142,6 +146,9 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 			y = top + h - tileH
 		}
 		t := label(model.quadrants[k], size, tileW-16)
+		if geo != nil {
+			geo.Quadrants[k] = plainLabel(t)
+		}
 		cx := x + tileW/2
 		cy := y + tileH/2
 		if hasPoints {
@@ -231,6 +238,9 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 			reach += math.Min(js.ParseIntPrefix(*strokeWidth, 10), 400) / 2
 		}
 		dots = append(dots, Dot{cx: cx, cy: cy, reach: reach, text: label(&point.text, pointSize, 200)})
+		if geo != nil {
+			geo.Points = append(geo.Points, types.GeoQPoint{X: point.x, Y: point.y, Label: plainLabel(dots[len(dots)-1].text)})
+		}
 		stroke := ""
 		if hasStrokeWidth && !hasStrokeColor {
 			stroke = ` stroke="` + fill + `"`
@@ -306,10 +316,19 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		parts = append(parts, b.String())
 	}
 
+	var geometry *types.Geometry
+	if geo != nil {
+		geometry = &types.Geometry{Width: width, Height: height, Quadrant: geo}
+	}
 	return types.Rendered{
-		SVG:    svg.SvgDocument("quadrantChart", width, height, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}, parts...),
-		Width:  width,
-		Height: height,
-		Links:  []types.LinkInfo{},
+		Geometry: geometry,
+		SVG:      svg.SvgDocument("quadrantChart", width, height, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}, parts...),
+		Width:    width,
+		Height:   height,
+		Links:    []types.LinkInfo{},
 	}
 }
+
+// plainLabel is a label as one line of text. Not part of pele: it is for a
+// text drawing (sketch/text).
+func plainLabel(l text.Label) string { return strings.Join(l.Plain(), " ") }

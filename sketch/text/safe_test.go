@@ -44,6 +44,8 @@ func TestNoTerminalControls(t *testing.T) {
 		"gantt axisFormat bidi":  "gantt\n  dateFormat YYYY-MM-DD\n  axisFormat %Y\u202e%m\n  section S\n  t :a, 2024-01-01, 3d",
 		"gantt section bidi":     "gantt\n  dateFormat YYYY-MM-DD\n  section a#8238;b\n  t :a, 2024-01-01, 3d",
 		"timeline period":        "timeline\n  title t#27;]2;x#7;\n  section s#155;31m\n  #27;[2J : e\n  2002 : a#144;b",
+		"xychart labels":         "xychart-beta\n  title \"t#27;]2;x#7;\"\n  x-axis \"x#155;31m\" [\"a#27;[2J\", b]\n  y-axis \"y#144;\"\n  bar \"s#127;\" [1, 2]\n  line \"l#27;c\" [2, 1]",
+		"quadrant labels":        "quadrantChart\n  title \"t#27;]2;x#7;\"\n  x-axis \"l#155;31m\" --> \"h#27;[2J\"\n  y-axis \"b#144;\" --> \"t#127;\"\n  quadrant-1 \"q#27;c\"\n  \"p#27;]52;c;x#7;\": [0.3, 0.6]",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

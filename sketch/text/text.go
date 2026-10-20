@@ -4,8 +4,8 @@
 // text. It is not a port of pele: pele draws only SVG.
 //
 // Flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams,
-// pie charts, mindmaps, gantt charts and timelines have a text drawing. Other
-// types give ErrUnsupported.
+// pie charts, mindmaps, gantt charts, timelines, XY charts and quadrant charts
+// have a text drawing. Other types give ErrUnsupported.
 package text
 
 import (
@@ -42,7 +42,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -81,6 +81,10 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions) ([]string, er
 		c, err = drawGantt(layout, opt)
 	case "timeline":
 		c, err = drawTimeline(layout, opt)
+	case "xychart":
+		c, err = drawXY(layout, opt)
+	case "quadrantChart":
+		c, err = drawQuadrant(layout, opt)
 	default:
 		c, err = drawSequence(layout, opt)
 	}
@@ -101,7 +105,17 @@ const (
 	roleTitle
 	roleHead
 	roleCrit
+	// roleSeries is the first of six roles, one per data series of a chart.
+	roleSeries
 )
+
+// seriesRoles is the count of series roles; series past it take them again.
+const seriesRoles = 6
+
+// seriesRole is the role of series i, counting from 0.
+func seriesRole(i int) uint8 {
+	return roleSeries + uint8(((i%seriesRoles)+seriesRoles)%seriesRoles)
+}
 
 var roleSGR = [...]string{
 	roleNone:  "",
@@ -113,6 +127,15 @@ var roleSGR = [...]string{
 	roleTitle: "1",
 	roleHead:  "",
 	roleCrit:  "31",
+	// The series take the hues of the SVG's first six series colours, at 16
+	// colours: blue, orange as yellow, green, red, teal as cyan, and magenta.
+	// The blue is the bright one: plain blue is hard to read on a dark ground.
+	roleSeries:     "94",
+	roleSeries + 1: "33",
+	roleSeries + 2: "32",
+	roleSeries + 3: "31",
+	roleSeries + 4: "36",
+	roleSeries + 5: "35",
 }
 
 // Directions of the strokes in a cell, for joining lines.
@@ -417,4 +440,22 @@ func widest(lines []string) int {
 		w = max(w, width(l))
 	}
 	return w
+}
+
+// fit cuts s to at most w cells, ending it in "…" when it is cut.
+func fit(s string, w int) string {
+	if width(s) <= w {
+		return s
+	}
+	if w <= 0 {
+		return ""
+	}
+	n := 0
+	for i, r := range s {
+		if n+runeWidth(r) > w-1 {
+			return s[:i] + "…"
+		}
+		n += runeWidth(r)
+	}
+	return s
 }

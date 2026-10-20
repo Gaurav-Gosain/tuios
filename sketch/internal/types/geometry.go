@@ -28,6 +28,12 @@ type Geometry struct {
 
 	// Timeline.
 	Timeline *GeoTimeline
+
+	// XY chart.
+	XY *GeoXY
+
+	// Quadrant chart.
+	Quadrant *GeoQuadrant
 }
 
 type GeoNode struct {
@@ -169,4 +175,65 @@ type GeoGroup struct {
 type GeoPeriod struct {
 	Label  []string
 	Events [][]string
+}
+
+// GeoXY is an XY chart as lists: a text drawing lays it out again in cells. Places
+// along an axis are fractions of its length.
+type GeoXY struct {
+	Title      []string
+	Horizontal bool
+	// ValueTitle and CategoryTitle are the titles of the value axis and of the
+	// category axis, "" for none.
+	ValueTitle, CategoryTitle string
+	// Ticks are the labelled places of the value axis, At 0 at the low end of the
+	// range the SVG draws and 1 at the high end.
+	Ticks []GeoMark
+	// Marks are the labelled places of the category axis: every category of a band
+	// axis, or the ticks of a numeric one.
+	Marks []GeoMark
+	// Slots is the count of equal slots along the category axis that bars sit in.
+	Slots int
+	// Band is set when the categories are named slots, not a numeric axis.
+	Band bool
+	// Base is the place on the value axis that bars stand on.
+	Base   float64
+	Series []GeoSeries
+}
+
+type GeoMark struct {
+	At    float64
+	Label string
+}
+
+type GeoSeries struct {
+	Bar bool
+	// Name is the name in the legend, "" for none.
+	Name   string
+	Points []GeoPoint
+}
+
+// GeoPoint is a value of a series: At along the category axis, Value along the
+// value axis, not clamped to the range. A missing value is not in the list.
+type GeoPoint struct {
+	At, Value float64
+	// Gap is set when a value is missing before this one, which breaks a line.
+	Gap bool
+}
+
+// GeoQuadrant is a quadrant chart as lists: a text drawing lays it out again in cells.
+type GeoQuadrant struct {
+	Title []string
+	// XLow and XHigh name the left and right ends of the x axis; YLow and YHigh
+	// the bottom and the top of the y axis.
+	XLow, XHigh, YLow, YHigh string
+	// Quadrants are the names of quadrants 1 to 4: top right, top left, bottom
+	// left, bottom right.
+	Quadrants [4]string
+	Points    []GeoQPoint
+}
+
+// GeoQPoint is a point with X and Y from 0 to 1.
+type GeoQPoint struct {
+	X, Y  float64
+	Label string
 }
