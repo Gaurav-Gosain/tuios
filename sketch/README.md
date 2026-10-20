@@ -46,7 +46,9 @@ os.WriteFile("out.svg", []byte(svg.Data), 0o644)
 
 `svg.Type` is pele's name for the diagram type, such as `flowchart`.
 `svg.MermaidType` is the name Mermaid gives it, such as `flowchart-v2` for
-`graph TD`. A `Diagram` and an `Error` carry both names too.
+`graph TD`. A `Diagram` and an `Error` carry both names too. A parse error
+names the diagram type even when the parser of the type does not, as pele
+v1.7.0 does.
 
 ## Text
 

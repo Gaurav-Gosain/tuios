@@ -85,7 +85,8 @@ func TestCJKWrap(t *testing.T) {
 	})
 }
 
-// FuzzHasCJK holds hasCJK to pele's regexp.
+// FuzzHasCJK holds the rune loop of hasCJK to a Go regexp built from the same
+// cjk class. It does not compare cjk with pele: the extra goldens do that.
 func FuzzHasCJK(f *testing.F) {
 	re := regexp.MustCompile(`[` + cjk + `]`)
 	for _, s := range []string{"", "abc", "在", "⺀", "⺀"[:2], "ｰ", "｠", "｡", "豈", "￿", "𠮷"} {

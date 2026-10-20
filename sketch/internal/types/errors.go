@@ -32,7 +32,9 @@ func (e *PeleError) Error() string { return e.Message }
 
 // ErrorInfo is the optional part of a PeleError.
 type ErrorInfo struct {
-	Type        string
+	// Type is the diagram type, or "" for none.
+	Type string
+	// MermaidType is the diagram type as Mermaid names it, or "" for none.
 	MermaidType string
 	Line        int
 	Column      int
