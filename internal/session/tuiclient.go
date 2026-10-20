@@ -289,6 +289,12 @@ type TUIClient struct {
 	sessionsChangedHandler func()
 	// paneMarkHandler takes the daemon's MsgPaneMark push. See OnPaneMark.
 	paneMarkHandler func(PaneMarkPayload)
+	// tmlSurfaceHandler takes the daemon's MsgTMLSurface push. See
+	// OnTMLSurface. tmlBacklog holds the pushes that came before a handler
+	// did, the newest per surface: the daemon sends the open surfaces right
+	// behind the attach reply, before the client has wired its handlers.
+	tmlSurfaceHandler func(*TMLSurfacePayload)
+	tmlBacklog        map[string]*TMLSurfacePayload
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
 	// and pasteBarriers the pings behind them, by request id, under
@@ -443,6 +449,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		PaneMarks: true,
 		// See daemon_goodbye.go.
 		Goodbye: true,
+		// See tml_surface.go.
+		TMLSurfaces: true,
 	}
 
 	// Add graphics capabilities if provided
@@ -1184,6 +1192,25 @@ func (c *TUIClient) OnPaneMark(handler func(PaneMarkPayload)) {
 	c.multiClientMu.Unlock()
 }
 
+// OnTMLSurface registers the handler for MsgTMLSurface, the daemon's push of
+// a TML surface when it opens, changes or closes, and of every open one when
+// this client attaches. It runs on the read-loop goroutine, so it only
+// queues. See tml_surface.go.
+func (c *TUIClient) OnTMLSurface(handler func(*TMLSurfacePayload)) {
+	c.multiClientMu.Lock()
+	c.tmlSurfaceHandler = handler
+	backlog := c.tmlBacklog
+	if handler != nil {
+		c.tmlBacklog = nil
+	}
+	c.multiClientMu.Unlock()
+	if handler != nil {
+		for _, p := range backlog {
+			handler(p)
+		}
+	}
+}
+
 // ListingPush reports whether the daemon pushes listing changes, so the
 // listing needs no poll.
 func (c *TUIClient) ListingPush() bool { return c.listingPush.Load() }
@@ -1910,6 +1937,31 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		var payload PaneMarkPayload
 		if handler != nil && msg.ParsePayload(&payload) == nil {
 			handler(payload)
+		}
+
+	case MsgTMLSurface:
+		var payload TMLSurfacePayload
+		if msg.ParsePayload(&payload) != nil {
+			return
+		}
+		c.multiClientMu.Lock()
+		handler := c.tmlSurfaceHandler
+		if handler == nil {
+			// Kept for the handler OnTMLSurface registers. A closed
+			// surface leaves nothing to draw, and at most the open
+			// surfaces of one session wait here.
+			if payload.Closed {
+				delete(c.tmlBacklog, payload.Surface)
+			} else {
+				if c.tmlBacklog == nil {
+					c.tmlBacklog = map[string]*TMLSurfacePayload{}
+				}
+				c.tmlBacklog[payload.Surface] = &payload
+			}
+		}
+		c.multiClientMu.Unlock()
+		if handler != nil {
+			handler(&payload)
 		}
 
 	case MsgDetached:

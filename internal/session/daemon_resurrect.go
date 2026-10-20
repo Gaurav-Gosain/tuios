@@ -192,6 +192,12 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
 			continue
 		}
+		// A TML surface lives in the daemon, so the daemon that held it took
+		// it along. Its window would come back empty.
+		if w.Kind == WindowKindTML {
+			debugLog("[DEBUG] dropping restored TML window %s, its surface ended with the daemon", shortID(w.ID))
+			continue
+		}
 		if w.Scratch {
 			w.Popup, w.IsFloating, w.Minimized = false, false, false
 			if !IsScratchWorkspace(w.Workspace) {

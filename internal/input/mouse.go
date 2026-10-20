@@ -3,6 +3,7 @@ package input
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -14,6 +15,12 @@ import (
 // The event carries the pane cell. A guest in SGR-pixel mode is also told the
 // pixel inside the pane, when the host reported the pointer in pixels.
 func sendMouseToWindow(o *app.OS, win *terminal.Window, event uv.MouseEvent) {
+	// A TML window's surface takes the event. Its placeholder asks for
+	// mouse reporting, which is what routes the event here. See app/tml.go.
+	if win.Kind == session.WindowKindTML {
+		o.TMLMouse(win, event)
+		return
+	}
 	if win.Terminal == nil {
 		return
 	}

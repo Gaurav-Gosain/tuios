@@ -178,6 +178,10 @@ const (
 	// why it stops. The daemon sends it only to a client whose hello set
 	// Goodbye. See daemon_goodbye.go.
 	MsgGoodbye
+	// MsgTMLSurface is one TML surface as the daemon holds it: the tree, the
+	// state and the version, or a mark that it closed. The daemon sends it
+	// only to a client whose hello set TMLSurfaces. See tml_surface.go.
+	MsgTMLSurface
 )
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
@@ -306,6 +310,10 @@ type HelloPayload struct {
 	PaneMarks bool `json:"pane_marks,omitzero"`
 	// Goodbye says the client reads MsgGoodbye. See daemon_goodbye.go.
 	Goodbye bool `json:"goodbye,omitzero"`
+	// TMLSurfaces says the client draws TML surfaces: it reads
+	// MsgTMLSurface. The daemon sends it to no other client. See
+	// tml_surface.go.
+	TMLSurfaces bool `json:"tml_surfaces,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

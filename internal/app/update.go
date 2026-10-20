@@ -427,6 +427,10 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, ListenForClientEvents(m.ClientEventChan))
 	}
 
+	// The TML surfaces the daemon pushes, and what their inputs left to do.
+	// See tml.go.
+	cmds = append(cmds, m.listenForTML())
+
 	// The session's mail so far, read once. Everything after this arrives as
 	// a push, so an idle client never asks again.
 	if cmd := m.agentMailLoad(); cmd != nil {
@@ -1681,6 +1685,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case PasteRefusedMsg:
 		m.ShowNotification(msg.Message, "error", m.Settings.NotificationDuration)
 		return m, ListenForClientEvents(m.ClientEventChan)
+
+	case TMLWakeMsg:
+		// A TML surface was pushed, an answer came back, or a click left a
+		// side effect. See tml.go.
+		return m, m.handleTMLWake()
 
 	case PaneMarkMsg:
 		// A pane out of view rang the bell or printed. One push per pane

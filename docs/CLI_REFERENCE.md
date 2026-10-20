@@ -4619,6 +4619,77 @@ fi
 
 ---
 
+### `tuios tml`
+
+Show a TML document in tuios: a dashboard, a test result or a question. TML is
+a markup for terminal surfaces: a tree of known components, such as text,
+tables, stats, charts, tabs and buttons, with a JSON state. tuios draws it with
+your theme's colours. Keys and the mouse work in it. The daemon keeps the
+surface, so it stays when you detach and comes back when you attach.
+
+**Usage:**
+```bash
+tuios tml show FILE [--popup | --pane] [--wait] [--width W] [--height H]
+tuios tml close SURFACE [VALUE]
+tuios tml validate FILE
+```
+
+FILE is a TML text or TML JSON file, or `-` for standard input.
+
+`tml show` checks the document, opens it and prints the surface id and the
+window id. A popup floats over the panes and needs an attached client. Press
+`esc` to close it, unless the document uses `esc`. A pane (`--pane`) is tiled
+like any pane.
+
+With `--wait` the command stays open until the surface closes. It prints the
+value the document closed with as JSON, such as `"rerun"`. It prints `null`
+and exits with status 1 when the person closed the surface without a value.
+
+`tml close` closes a surface. VALUE is JSON, and a waiting `tml show` prints
+it. `tml validate` prints each problem with its line, the node and the fix,
+and exits with status 1 when the document has errors. It needs no daemon.
+
+**Flags of `tml show`:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--popup`: Show it as a popup (the default)
+- `--pane`: Show it as a tiled pane
+- `--name <name>`: Name for the window (default: the document's title)
+- `--width`, `--height`: Popup size in cells or percent (default: 80% and 60%)
+- `--workspace <n>`: Workspace to open it on
+- `--wait`: Stay open until the surface closes, and print its value
+- `--timeout <ms>`: With `--wait`, how long to wait
+- `--json`: Output the result as JSON
+
+**Examples:**
+```bash
+# Show a report as a popup
+tuios tml show report.tml
+
+# Show a dashboard as a pane, from standard input
+some-generator | tuios tml show - --pane
+
+# Ask a question and use the answer
+answer=$(tuios tml show confirm.tml --wait)
+```
+
+A small document:
+
+```xml
+<tml version="1" title="Deploy">
+  <state>{"tag": "v0.11.0"}</state>
+  <col pad="1" gap="1">
+    <text>Deploy <b>{state.tag}</b> to production?</text>
+    <row gap="2">
+      <button key="y" kind="primary" on-press="close('yes')">Deploy</button>
+      <button key="n" on-press="close('no')">Cancel</button>
+    </row>
+  </col>
+</tml>
+```
+
+The verbs behind these commands are `tml-open`, `tml-close` and `tml-input`,
+in [protocol.md](protocol.md).
+
 ### `tuios mermaid`
 
 Draw the Mermaid diagrams of a file in the terminal, or save them as SVG or PNG.

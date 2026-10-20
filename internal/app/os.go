@@ -108,6 +108,9 @@ type WindowLayout struct {
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
+	// tml holds the TML surfaces this client draws. See tml.go.
+	tml tmlClient
+
 	// ClientTitle is the title of the terminal this client runs in, set
 	// through herdr's client.window_title.set. Empty sets none.
 	ClientTitle string

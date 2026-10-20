@@ -65,6 +65,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"pip#0":                  {errCode: ErrVerbNeedsClient, why: "the picture-in-picture view is drawn by a client"},
 	"pip#1":                  {errCode: ErrVerbNeedsClient, why: "the picture-in-picture view is drawn by a client"},
 	"popup#0":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
+	"tml-open#0":             {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
+	"tml-open#2":             {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
+	"tml-close#0":            {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
+	"tml-input#0":            {errCode: ErrVerbNoSurface, why: "the example names a surface the fixture never opened"},
 	"popup#1":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	"popup#2":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	// The question waits for an answer nobody in the fixture gives, and the

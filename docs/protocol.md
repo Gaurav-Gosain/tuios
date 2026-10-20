@@ -1638,6 +1638,8 @@ catalog.
 | `disk_full` | The disk had no room for the write. What was written stays in the part. |
 | `no_transfer` | No transfer has that id. A finished one leaves the list 30 minutes after it ends. |
 | `busy` | The daemon had no room for the request now, or (`transfer-start`) another copy writes that destination now. Nothing was done. |
+| `invalid_tml` | The TML document does not parse or does not validate. Nothing was opened or changed. The error carries `problems`: each one has `at` (a JSON Pointer to the node), `code`, `message`, and where it helps `did_you_mean`, `accepted` or `available`. |
+| `no_surface` | No open TML surface has that id. It closed, or the id is wrong. `list-windows` names the surface of each TML window. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -2441,6 +2443,77 @@ Response:
 {"result": {"type": "popup_opened", "window_id": "9a3c...", "name": "fzf",
             "workspace": 1, "pty_id": "4bff...", "width": "60%", "height": "60%"}}
 ```
+
+### tml-open
+
+Show a TML document as a popup or a pane. TML is a markup for terminal
+surfaces: a tree of known components with a JSON state. The daemon keeps the
+surface: its tree, its state and a version. Every attached client draws it in
+the window with its own theme colours, and keeps its own view state (focus,
+the cursor row, the open tab, sort and scroll). The surface stays while nobody
+is attached, and ends with the daemon.
+
+Params: `doc` (required: TML text or TML JSON as a string, or a TML JSON
+object), `target` (`popup`, the default, or `pane`), `session`, `name`
+(default: the document's title), `width` and `height` (popup only, as for
+`popup`), `workspace`, `wait` and `timeout`.
+
+The document is checked as `tuios tml validate` checks it. A document with
+errors fails with `invalid_tml`, and the error carries `problems`, each with a
+JSON Pointer to the node and the fix. A caller in no pane, or in a pane that
+holds admin, may send up to 1 MiB; any other pane up to 256 KiB. A popup needs
+an attached client and fails with `needs_client` without one.
+
+The window is of kind `tml`, and `list-windows` reports it with `kind`, `uri`
+(`tuios://tml/<surface>`) and `surface`. Like a `view` window it has a PTY,
+whose program prints one line for a client that does not draw TML. A popup
+closes on an esc the document does not use. Focus, close-window and the
+layout treat it as any window.
+
+The surface's local actions run in the client: tabs, sorting, the cursor,
+folding, scrolling, `set` and `toggle`. A change to the state goes back to the
+daemon, so another client and a later attach see it. `close(value)` closes the
+surface with that value. `copy(value)` copies through the client. `emit`,
+`open`, `pane` and links do nothing yet.
+
+With `wait` the call stays open until the surface closes, and answers
+`{"type": "tml_result", "surface", "window_id", "value", "reason"}`. `reason`
+is `closed` when a `close()` action or `tml-close` gave a value, and
+`dismissed` when the window closed without one; `value` is then null.
+`timeout` bounds the wait in milliseconds and leaves the surface open when it
+runs out.
+
+Request:
+
+```json
+{"verb": "tml-open", "params": {"doc": "<tml version=\"1\" title=\"Hi\"><text>Hello</text></tml>", "wait": true}}
+```
+
+Response:
+
+```json
+{"result": {"type": "tml_opened", "surface": "tml-4f1a9c02", "window_id": "9a3c...",
+            "target": "popup", "workspace": 1}}
+```
+
+### tml-close
+
+Close a TML surface and its window. Params: `surface` (required) and `value`
+(any JSON, optional). A `tml-open` that waits on the surface answers with the
+value and reason `closed`. An unknown or closed surface fails with
+`no_surface`.
+
+### tml-input
+
+What the person did on a TML surface, sent by the attached client that drew
+it: `ops`, a JSON Patch on the state from its local actions, and `close` with
+an optional `value`. It needs `human_nonce`, the client's attach nonce, and
+fails with `not_human` without one. A program changes a surface with
+`tml-close` now, and with the owner verbs of a later version.
+
+The daemon sends each surface to a TUI client whose hello sets
+`tml_surfaces`, as a `MsgTMLSurface` frame: when it opens, when it changes,
+when it closes, and for every open surface right after the attach reply.
 
 ### close-window
 

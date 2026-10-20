@@ -130,6 +130,18 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ctxsw: 800,
 		}, writeLate, sawLateOutput)
 	})
+	t.Run("tml surface", func(t *testing.T) {
+		// A TML surface in a pane arms no timer and draws nothing while
+		// nothing changes it: the pane serves its cached content.
+		runIdleWindowOpts(t, "", startOpts{daemonDefault: true}, idleBudget{
+			wire:        idleWireBudget,
+			ticks:       2,
+			work:        1,
+			tickerWakes: 1,
+			// About 70 measured.
+			ctxsw: 400,
+		}, tmlPaneAtIdle, nil)
+	})
 	t.Run("git section", func(t *testing.T) {
 		// The rail's git section reads the focused pane's repository every
 		// 2 s, and each reading composes a frame equal to the last one. That
@@ -176,6 +188,25 @@ func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
 		return railHeaderRow(s, "git") >= 0 && !strings.Contains(s.Text(), "Window management mode")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the git section never showed the repository: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// tmlPaneAtIdle opens the TML test document as a pane and waits for it.
+func tmlPaneAtIdle(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	doc := writeTMLDoc(t, base, "run.tml", tmlRunDoc)
+	if out, err := tuiosCLI(t, base, "tml", "show", doc, "--pane"); err != nil {
+		t.Fatalf("tuios tml show --pane: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("Failures", uiTimeout); err != nil {
+		t.Fatalf("the surface never drew: %v\n%s", err, term.Snapshot())
+	}
+	// The window messages of the setup burn for six seconds, and they are
+	// not the surface's cost.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Window created") && !strings.Contains(s.Text(), "Session size")
+	}, 3*uiTimeout); err != nil {
+		t.Fatalf("the window messages never went: %v\n%s", err, term.Snapshot())
 	}
 }
 
@@ -271,8 +302,8 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	if start.ctxsw >= 0 && end.ctxsw >= 0 {
 		got.ctxsw = end.ctxsw - start.ctxsw
 	}
-	t.Logf("idle window %v: wire=%dB ticks=%d work=%d tickerWakes=%d ctxsw=%d",
-		idleWindow, got.wire, got.ticks, got.work, got.tickerWakes, got.ctxsw)
+	t.Logf("idle window %v: wire=%dB ticks=%d work=%d tickerWakes=%d ctxsw=%d renders=%d",
+		idleWindow, got.wire, got.ticks, got.work, got.tickerWakes, got.ctxsw, end.stats["render"]-start.stats["render"])
 
 	var over []string
 	if got.wire > budget.wire {

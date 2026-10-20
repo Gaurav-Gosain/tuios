@@ -166,12 +166,18 @@ var verbCapabilities = map[string][]string{
 	"new-window":   {config.LinkAllowOpen},
 	"split-window": {config.LinkAllowOpen},
 	"popup":        {config.LinkAllowOpen},
-	"open-pane":    {config.LinkAllowOpen},
-	"resize-pane":  {config.LinkAllowOpen},
-	"close-pane":   {config.LinkAllowOpen},
-	"pane-cwd":     {config.LinkAllowOpen},
-	"pane-agent":   {config.LinkAllowOpen},
-	"pane-calls":   {config.LinkAllowOpen},
+	// A TML surface from another machine names that machine on its frame,
+	// which comes with the rest of the TML grants. Until then a link
+	// may not open one, and the input verb acts as the person here.
+	"tml-open":    {capRelay},
+	"tml-close":   {capRelay},
+	"tml-input":   {capRelay},
+	"open-pane":   {config.LinkAllowOpen},
+	"resize-pane": {config.LinkAllowOpen},
+	"close-pane":  {config.LinkAllowOpen},
+	"pane-cwd":    {config.LinkAllowOpen},
+	"pane-agent":  {config.LinkAllowOpen},
+	"pane-calls":  {config.LinkAllowOpen},
 
 	// paste-pane-image writes a file for a hosted pane, which the peer
 	// opened, and needs the pane's token as well. paste-image writes a file

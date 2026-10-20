@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -227,6 +228,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
 		}
 		return window.CachedContent
+	}
+
+	// A TML window draws its surface, not its PTY. See tml.go.
+	if window.Kind == session.WindowKindTML {
+		return m.renderTML(window, dim)
 	}
 
 	// The guest has an open synchronized update (DEC 2026): it has begun a frame

@@ -354,6 +354,16 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 		info["scratch"] = true
 		info["scratch_name"] = w.ScratchKey()
 	}
+	// A window a renderer draws itself names what draws it and what it
+	// shows. Omitted for a terminal. A TML window also names its surface,
+	// for tml-close.
+	if w.Kind != "" {
+		info["kind"] = w.Kind
+		info["uri"] = w.URI
+		if id := TMLSurfaceID(w.URI); w.Kind == WindowKindTML && id != "" {
+			info["surface"] = id
+		}
+	}
 	// Where the window's process is, when it is known. A shell that never
 	// announces and a machine that cannot be reached both leave it empty, so
 	// it is omitted rather than reported as the root.

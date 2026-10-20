@@ -137,6 +137,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
 	{ErrVerbSameSession, "move-window was given to_session, and the window is already in that session. Nothing moved. Name another session, or leave out to_session and give workspace."},
 	{ErrVerbPaneNotMovable, "move-window cannot move the window to another session: it is a popup, a scratch pane, or a pane that runs on another machine. Nothing moved."},
+	{ErrVerbInvalidTML, "The TML document does not parse or does not validate. Nothing was opened or changed. The error lists each problem with a JSON Pointer to the node and the fix. Check a document with tuios tml validate."},
+	{ErrVerbNoSurface, "No open TML surface has that id. It closed, or the id is wrong. list-windows names the surface of each TML window."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 

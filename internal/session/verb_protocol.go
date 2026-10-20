@@ -162,6 +162,8 @@ type verbError struct {
 	Code    string    `json:"code"`
 	Message string    `json:"message"`
 	Hint    *VerbHint `json:"hint,omitempty"`
+	// Problems lists what is wrong with a TML document, on invalid_tml.
+	Problems any `json:"problems,omitempty"`
 }
 
 func (e *verbError) Error() string { return e.Code + ": " + e.Message }
@@ -1100,6 +1102,65 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"popup","params":{"session":"work","command":["fzf"],"wait":true,"capture_stdout":true}}`,
 			},
 			handler: (*Daemon).verbPopup,
+		},
+		"tml-open": {
+			description: "Show a TML document as a popup or a pane. Every attached client draws it, and the daemon keeps it while nobody is attached.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "doc", Type: "string", Required: true, Description: "The document: TML text or TML JSON as a string, or a TML JSON object. It is checked as tml-validate checks it, and a document with errors is refused with invalid_tml and the problem list."},
+				{Name: "target", Type: "string", Description: "Where to show it: popup, a floating box over the panes that needs an attached client, or pane, a tiled pane.", Default: TMLTargetPopup, Accepted: tmlTargets},
+				{Name: "name", Type: "string", Description: "Name for the window. Omit to use the document's title."},
+				{Name: "width", Type: "string", Description: "Popup width, in cells (\"60\") or as a share of the pane region (\"60%\"). Popup only.", Default: PopupDefaultWidth},
+				{Name: "height", Type: "string", Description: "Popup height, in cells (\"20\") or as a share of the pane region (\"50%\"). Popup only.", Default: PopupDefaultHeight},
+				{Name: "workspace", Type: "int", Description: "Workspace to open it on. Omit for the current one."},
+				{Name: "wait", Type: "bool", Description: "Keep the call open until the surface closes, and return the close value in a tml_result.", Default: "false"},
+				{Name: "timeout", Type: "int", Description: "With wait: milliseconds to wait before failing with the timeout code. The surface stays open. 0 waits as long as it is open.", Default: "0"},
+			},
+			returns: []verbParam{
+				{Name: "surface", Type: "string", Description: "Id of the surface. Use it to close the surface."},
+				{Name: "window_id", Type: "string", Description: "Id of the window the surface is drawn in."},
+				{Name: "target", Type: "string", Description: "popup or pane."},
+				{Name: "workspace", Type: "int", Description: "Workspace the surface was opened on."},
+				{Name: "value", Type: "any", Description: "With wait: the value the surface closed with. null when the person dismissed it."},
+				{Name: "reason", Type: "string", Description: "With wait: closed when a close action or tml-close gave a value, dismissed when the window closed without one."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-open","params":{"session":"work","doc":"<tml version=\"1\" title=\"Hi\"><text>Hello</text></tml>"}}`,
+				`{"id":1,"verb":"tml-open","params":{"doc":{"type":"tml","version":1,"title":"Build","children":[{"type":"progress","value":0.4}]},"target":"pane"}}`,
+				`{"id":1,"verb":"tml-open","params":{"doc":"<tml version=\"1\"><button key=\"y\" on-press=\"close('yes')\">Yes</button></tml>","wait":true}}`,
+			},
+			handler: (*Daemon).verbTMLOpen,
+		},
+		"tml-close": {
+			description: "Close a TML surface and its window. A tml-open that waits on it answers with the value.",
+			params: []verbParam{
+				{Name: "surface", Type: "string", Required: true, Description: "The surface id tml-open answered with."},
+				{Name: "value", Type: "any", Description: "A JSON value for the waiting caller. Omit for null."},
+			},
+			returns: []verbParam{
+				{Name: "surface", Type: "string", Description: "The surface that closed."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-close","params":{"surface":"tml-4f1a9c02","value":"done"}}`,
+			},
+			handler: (*Daemon).verbTMLClose,
+		},
+		"tml-input": {
+			description: "Report what the person did on a TML surface: the state its local actions changed, and a close. The attached client sends it, with its attach nonce.",
+			params: []verbParam{
+				{Name: "surface", Type: "string", Required: true, Description: "The surface id."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The attach nonce of the person's client."},
+				{Name: "ops", Type: "[]object", Description: "A JSON Patch (RFC 6902) on the surface's state."},
+				{Name: "close", Type: "bool", Description: "Close the surface.", Default: "false"},
+				{Name: "value", Type: "any", Description: "With close: the value. Omit when the person dismissed the surface."},
+			},
+			returns: []verbParam{
+				{Name: "version", Type: "int", Description: "The surface's version after the change."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-input","params":{"surface":"tml-4f1a9c02","human_nonce":"...","ops":[{"op":"replace","path":"/tab","value":"log"}]}}`,
+			},
+			handler: (*Daemon).verbTMLInput,
 		},
 		"split-window": {
 			description: "Split a pane and put a new one beside it. Needs an attached client and tiling on.",

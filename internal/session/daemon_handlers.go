@@ -20,6 +20,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.listingPush = payload.ListingPush
 	cs.paneMarks = payload.PaneMarks
 	cs.goodbye = payload.Goodbye
+	cs.tmlSurfaces = payload.TMLSurfaces
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
 	cs.scratchWS = payload.ScratchWorkspaces
@@ -379,6 +380,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if hook := attachReplied.Load(); hook != nil {
 		(*hook)()
 	}
+	// The surfaces open in the session, behind the reply that carries the
+	// windows they are drawn in. See tml_surface.go.
+	d.sendTMLSurfaces(cs, session.ID)
 
 	// A probe that has not reached a pane yet may still: see nest_probe.go.
 	if inside == nil && !cs.viaLink {

@@ -2951,6 +2951,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newPluginsCommand())
 	rootCmd.AddCommand(newCpCommand(), newTransfersCommand())
 	rootCmd.AddCommand(newMermaidCommand())
+	rootCmd.AddCommand(newTMLCommand())
 
 	addExplorers(rootCmd)
 	return rootCmd
