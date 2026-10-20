@@ -273,10 +273,22 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 		content += `<g class="pele-legend" font-size="` + js.Num(small) + `">` + legendOut + `</g>`
 	}
 
-	return types.Rendered{
+	rendered := types.Rendered{
 		SVG:    svg.SvgDocument("pie", totalWidth, totalHeight, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}, content),
 		Width:  totalWidth,
 		Height: totalHeight,
 		Links:  []types.LinkInfo{},
 	}
+	if options.Geometry != nil {
+		pie := &types.GeoPie{Title: title.Plain()}
+		for _, label := range entries {
+			share := 0.0
+			if sum > 0 {
+				share = model.values[label] / sum
+			}
+			pie.Slices = append(pie.Slices, types.GeoSlice{Label: text.DecodeEntities(label), Value: js.Num(model.values[label]), Percent: js.ToFixed0(share*100) + "%", Share: share})
+		}
+		rendered.Geometry = &types.Geometry{Width: totalWidth, Height: totalHeight, Pie: pie}
+	}
+	return rendered
 }

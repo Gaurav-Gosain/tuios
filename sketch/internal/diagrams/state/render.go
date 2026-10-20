@@ -957,7 +957,48 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	titled := svg.WithTitle(db.Title, measurer, size, pad, width, height, content...)
 	out := svg.SvgDocument("state", titled.Width, titled.Height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, titled.Content...)
 
-	return types.Rendered{SVG: out, Width: titled.Width, Height: titled.Height, Links: links}
+	rendered := types.Rendered{SVG: out, Width: titled.Width, Height: titled.Height, Links: links}
+	if options.Geometry != nil {
+		rendered.Geometry = stateGeometry(db, views, cnodes, cedges, drawn, edgeLabels, lay, measurer, size)
+	}
+	return rendered
+}
+
+// geoShapes name each kind of state for the geometry: sketch/text draws by them.
+var geoShapes = [...]string{K_State: "state", K_Described: "state", K_Start: "state-start", K_End: "state-end", K_Choice: "choice",
+	K_Fork: "fork", K_Join: "fork", K_Note: "note", K_Composite: "composite", K_Region: "region", K_Hidden: "hidden"}
+
+// stateGeometry is the layout in SVG units, before the padding, for drawing the diagram some other way.
+func stateGeometry(db *StateDb, views []*view, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []StateEdge, edgeLabels []text.Label,
+	lay layout.CompoundResult, measurer text.TextMeasurer, size float64) *types.Geometry {
+	g := &types.Geometry{Width: lay.Width, Height: lay.Height, Title: text.LayoutLabel(db.Title, false, measurer, size, 4000, text.Bold).Plain()}
+	for i, c := range cnodes {
+		v := views[i]
+		n := types.GeoNode{Shape: geoShapes[v.kind], X: c.X, Y: c.Y, W: v.w, H: v.h, Label: v.label.Plain(), Group: c.IsGroup, Parent: c.Parent}
+		if v.node != nil {
+			n.ID = v.node.ID
+		}
+		if c.IsGroup {
+			n.W, n.H = c.W, c.H
+		}
+		if v.kind == K_Described {
+			var lines []string
+			for _, l := range v.lines {
+				lines = append(lines, l.Plain()...)
+			}
+			n.Sections = [][]string{lines}
+		}
+		g.Nodes = append(g.Nodes, n)
+	}
+	for i, ce := range cedges {
+		e := types.GeoEdge{From: ce.Src, To: ce.Dst, Route: append([]float64{}, ce.Route...), Start: "none", End: "arrow_point", Stroke: "normal",
+			Label: edgeLabels[i].Plain(), LabelX: ce.LabelX, LabelY: ce.LabelY}
+		if drawn[i].Pattern == "dashed" {
+			e.End, e.Stroke = "none", "dotted"
+		}
+		g.Edges = append(g.Edges, e)
+	}
+	return g
 }
 
 // endSide is svg.EndSide, and -1 off the ends of a route, as pele's reads of undefined give.

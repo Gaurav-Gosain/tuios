@@ -420,10 +420,29 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 	content := svg.LabelSvg(title, totalWidth/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil) +
 		`<g transform="translate(` + num(pad-minX+(width-maxX+minX)/2) + `,` + num(pad+titleHeight-minY) + `)">` + g.out + `</g>`
 
-	return types.Rendered{
+	rendered := types.Rendered{
 		SVG:    svg.SvgDocument("mindmap", totalWidth, totalHeight, size, options, svg.Accessible{}, content),
 		Width:  totalWidth,
 		Height: totalHeight,
 		Links:  []types.LinkInfo{},
 	}
+	if options.Geometry != nil {
+		geo := &types.Geometry{Width: totalWidth, Height: totalHeight, Title: title.Plain(), Mindmap: make([]types.GeoMindNode, n)}
+		for i, node := range nodes {
+			// The shape the source gives, not the one the root takes by default.
+			shape := ""
+			if node.typ >= 0 && node.typ < len(SHAPES) {
+				shape = SHAPES[node.typ]
+			}
+			p := -1
+			if i > 0 {
+				p = int(parent[i])
+			}
+			// The label unwrapped: a text drawing wraps it to the columns it has.
+			label := text.LayoutLabel(node.descr, true, measurer, size, 1e9, 0)
+			geo.Mindmap[i] = types.GeoMindNode{Label: label.Plain(), Shape: shape, Parent: p}
+		}
+		rendered.Geometry = geo
+	}
+	return rendered
 }

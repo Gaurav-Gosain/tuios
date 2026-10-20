@@ -635,7 +635,39 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	content = append(content, `<g class="pele-nodes">`, nodesOut.String(), `</g>`)
 	out := svg.SvgDocument("er", width, height, size, options, svg.Accessible{AccTitle: db.accTitle, AccDescr: db.accDescr}, content...)
 
-	return types.Rendered{SVG: out, Width: width, Height: height, Links: links}
+	rendered := types.Rendered{SVG: out, Width: width, Height: height, Links: links}
+	if options.Geometry != nil {
+		rendered.Geometry = erGeometry(graph, views, cnodes, cedges, drawn, edgeLabels, title, width, height)
+	}
+	return rendered
+}
+
+// erGeometry is the layout in SVG units, for drawing the diagram some other way.
+func erGeometry(graph ErGraph, views []*NodeView, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []*ErGraphEdge, edgeLabels []text.Label,
+	title text.Label, width, height float64) *types.Geometry {
+	g := &types.Geometry{Width: width, Height: height, Title: title.Plain()}
+	cell := func(l text.Label) string { return strings.Join(l.Plain(), " ") }
+	for i, c := range cnodes {
+		v := views[i]
+		n := types.GeoNode{ID: graph.nodes[i].id, Shape: "entity", X: c.X, Y: c.Y, W: v.w, H: v.h, Label: v.label.Plain(), Group: c.IsGroup, Parent: c.Parent}
+		if c.IsGroup {
+			n.Shape, n.W, n.H = "subgraph", c.W, c.H
+		}
+		for _, row := range v.rows {
+			n.Table = append(n.Table, [4]string{cell(row.cells[0]), cell(row.cells[1]), cell(row.cells[2]), cell(row.cells[3])})
+		}
+		g.Nodes = append(g.Nodes, n)
+	}
+	for i, ce := range cedges {
+		edge := drawn[i]
+		e := types.GeoEdge{From: ce.Src, To: ce.Dst, Route: append([]float64{}, ce.Route...), Start: edge.arrowTypeStart, End: edge.arrowTypeEnd, Stroke: "normal",
+			Label: edgeLabels[i].Plain(), LabelX: ce.LabelX, LabelY: ce.LabelY}
+		if edge.pattern == "dashed" {
+			e.Stroke = "dotted"
+		}
+		g.Edges = append(g.Edges, e)
+	}
+	return g
 }
 
 func straighten(route []float64) []float64 {

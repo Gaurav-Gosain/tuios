@@ -857,6 +857,12 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 	}
 
+	var geometry *types.Geometry
+	if options.Geometry != nil {
+		// Taken before the routes move by the offset below.
+		geometry = classGeometry(db, graph, views, cnodes, cedges, drawn, edgeLabels, hideEmpty, measurer, size, maxX-minX, maxY-minY)
+	}
+
 	var edgesOut, labelsOut strings.Builder
 	edgesOut.Grow(len(cedges) * 400)
 	for i, ce := range cedges {
@@ -944,7 +950,51 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	titled := svg.WithTitle(db.Title, measurer, size, pad, width, height, content...)
 	out := svg.SvgDocument("class", titled.Width, titled.Height, size, options, svg.Accessible{AccTitle: db.AccTitle, AccDescr: db.AccDescr}, titled.Content...)
 
-	return types.Rendered{SVG: out, Width: titled.Width, Height: titled.Height, Links: links}
+	return types.Rendered{SVG: out, Width: titled.Width, Height: titled.Height, Links: links, Geometry: geometry}
+}
+
+// classGeometry is the layout in SVG units, for drawing the diagram some other way.
+func classGeometry(db *ClassDb, graph ClassGraph, views []*View, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []*GraphEdge, edgeLabels []text.Label,
+	hideEmpty bool, measurer text.TextMeasurer, size, width, height float64) *types.Geometry {
+	g := &types.Geometry{Width: width, Height: height, Title: text.LayoutLabel(db.Title, false, measurer, size, 4000, text.Bold).Plain()}
+	lines := func(list []Line) []string {
+		out := make([]string, len(list))
+		for i, l := range list {
+			out[i] = l.text
+		}
+		return out
+	}
+	for i, c := range cnodes {
+		v := views[i]
+		node := graph.Nodes[i]
+		n := types.GeoNode{ID: node.ID, Shape: node.Shape, X: c.X, Y: c.Y, W: v.w, H: v.h, Label: v.label.Plain(), Group: c.IsGroup, Parent: c.Parent}
+		switch {
+		case c.IsGroup:
+			n.Shape, n.W, n.H = "namespace", c.W, c.H
+		case node.IsGroup:
+			n.Shape = "rect"
+		case node.ClassNode != nil:
+			n.Shape = "class"
+			n.Label = append(append([]string{}, v.annotations...), n.Label...)
+			if !hideEmpty || len(v.attributes) > 0 || len(v.methods) > 0 {
+				n.Sections = [][]string{lines(v.attributes), lines(v.methods)}
+			}
+		case node.Shape == "interface":
+			n.Shape = "text"
+		}
+		g.Nodes = append(g.Nodes, n)
+	}
+	for i, ce := range cedges {
+		edge := drawn[i]
+		e := types.GeoEdge{From: ce.Src, To: ce.Dst, Route: append([]float64{}, ce.Route...), Start: edge.ArrowTypeStart, End: edge.ArrowTypeEnd, Stroke: "normal",
+			Label: edgeLabels[i].Plain(), LabelX: ce.LabelX, LabelY: ce.LabelY,
+			StartText: text.DecodeEntities(edge.StartLabelRight), EndText: text.DecodeEntities(edge.EndLabelLeft)}
+		if edge.Pattern == "dashed" || edge.Pattern == "dotted" {
+			e.Stroke = "dotted"
+		}
+		g.Edges = append(g.Edges, e)
+	}
+	return g
 }
 
 // endSide is svg.EndSide, and -1 off the ends of a route, as pele's reads of undefined give.

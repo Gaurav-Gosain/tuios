@@ -18,6 +18,13 @@ type Geometry struct {
 	Messages []GeoMessage
 	Notes    []GeoBox
 	Blocks   []GeoBlock
+
+	// State, class and ER diagrams fill Nodes and Edges too, and Title.
+	Title []string
+	// Pie, mindmap and gantt.
+	Pie     *GeoPie
+	Mindmap []GeoMindNode
+	Gantt   *GeoGantt
 }
 
 type GeoNode struct {
@@ -28,6 +35,11 @@ type GeoNode struct {
 	Label      []string
 	Group      bool
 	Parent     int
+	// Sections are the compartments under the label: a class's attributes and
+	// methods, or a state's description.
+	Sections [][]string
+	// Table holds an ER entity's attributes: type, name, keys and comment.
+	Table [][4]string
 }
 
 type GeoEdge struct {
@@ -40,6 +52,8 @@ type GeoEdge struct {
 	Stroke         string
 	Label          []string
 	LabelX, LabelY float64
+	// StartText and EndText sit at the ends: a class relation's cardinality.
+	StartText, EndText string
 }
 
 type GeoActor struct {
@@ -80,4 +94,55 @@ type GeoBlock struct {
 	X0, X1, Top, Bottom float64
 	Dividers            []float64
 	DividerLabels       [][]string
+}
+
+// GeoPie is a pie chart's slices in the order pele draws them.
+type GeoPie struct {
+	Title  []string
+	Slices []GeoSlice
+}
+
+type GeoSlice struct {
+	Label string
+	// Value is the number as the source gives it, Percent the share as pele
+	// writes it on the slice, and Share the fraction of the whole.
+	Value, Percent string
+	Share          float64
+}
+
+// GeoMindNode is a mindmap node, in source order: the root first, every
+// node after its parent.
+type GeoMindNode struct {
+	Label  []string
+	Shape  string
+	Parent int
+}
+
+// GeoGantt is a gantt chart as lists: a text drawing lays it out again in cells.
+// Times are milliseconds since 1970.
+type GeoGantt struct {
+	Title       []string
+	Start, Stop float64
+	// Rows holds the section of each row.
+	Rows  []string
+	Tasks []GeoTask
+	Ticks []GeoTick
+	// Verts are the vertical markers.
+	Verts []GeoTick
+	// Today is the time of the today line, or NaN for none.
+	Today float64
+}
+
+type GeoTask struct {
+	Label string
+	Row   int
+	// Scheduled is false for a task that never resolved; it has no bar.
+	Scheduled                     bool
+	Start, End                    float64
+	Milestone, Crit, Done, Active bool
+}
+
+type GeoTick struct {
+	T     float64
+	Label string
 }
