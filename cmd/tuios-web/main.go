@@ -238,6 +238,11 @@ func runWebServer() error {
 	// anything is started, so the user gets the answer instead of a daemon
 	// and a half-open port. The password comes first: it is read and removed
 	// from the environment before the daemon starts, so no pane inherits it.
+	// sip reads the bind address without a zone, so it would not see that
+	// "::1%lo" is loopback and would skip its Host check. The zone means
+	// nothing on a loopback or an unspecified address, so drop it there.
+	webHost = netutil.CanonicalBindHost(webHost)
+
 	access, err := planWebAccess(os.Stderr, accessFlags())
 	if err != nil {
 		return err

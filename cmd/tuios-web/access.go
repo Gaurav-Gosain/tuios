@@ -321,14 +321,12 @@ func printNoAuthMenu(w io.Writer, f webAccessFlags) {
 }
 
 // isUnspecifiedHost reports whether host is an unspecified IP address, such
-// as 0.0.0.0 or ::, which listens on every interface, loopback included.
+// as 0.0.0.0, :: or ::%lo, which listens on every interface, loopback
+// included.
 //
 // The empty host also listens on every interface, but sip counts it as
 // loopback and checks the Host header for it, so it is not refused here.
-func isUnspecifiedHost(host string) bool {
-	ip := net.ParseIP(strings.Trim(host, "[]"))
-	return ip != nil && ip.IsUnspecified()
-}
+func isUnspecifiedHost(host string) bool { return netutil.IsUnspecifiedHost(host) }
 
 // whoCanReach names who can reach a bind address.
 func whoCanReach(host string) string {

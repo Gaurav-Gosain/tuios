@@ -18,6 +18,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/sip"
+	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 )
 
 // idleModel is the smallest program a session can run. These tests are about
@@ -257,7 +258,9 @@ func TestNetworkBindNeedsAPassword(t *testing.T) {
 // machine that points its own name at 127.0.0.1 gets a shell.
 func TestNoAuthRefusedOnWildcardBind(t *testing.T) {
 	t.Setenv(webPasswordEnv, "")
-	for _, host := range []string{"0.0.0.0", "::", "[::]", "::ffff:0.0.0.0"} {
+	// net.Listen accepts a zone and binds every interface for "::%lo", so the
+	// zone spellings must be refused too.
+	for _, host := range []string{"0.0.0.0", "::", "[::]", "::0", "0:0:0:0:0:0:0:0", "::ffff:0.0.0.0", "::%lo", "[::%lo]", "::%1"} {
 		var out bytes.Buffer
 		_, err := planWebAccess(&out, webAccessFlags{host: host, port: "7681", noAuth: true, tlsArgs: " --insecure"})
 		if !errors.Is(err, errNoAuthWildcard) {
@@ -291,6 +294,31 @@ func TestNoAuthRefusedOnWildcardBind(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "--no-auth") {
 		t.Errorf("the menu for 0.0.0.0 offers --no-auth:\n%s", out.String())
+	}
+}
+
+// TestBindHostZone: "::1%lo" binds loopback, but sip parses the bind address
+// without zones and would skip its Host check. runWebServer drops the zone
+// of a loopback or unspecified address before sip sees it, and the loopback
+// rules here must read the zone spelling as loopback.
+func TestBindHostZone(t *testing.T) {
+	for in, want := range map[string]string{
+		"::1%lo":         "::1",
+		"[::1%lo]":       "::1",
+		"::%lo":          "::",
+		"::ffff:0.0.0.0": "0.0.0.0",
+		"fe80::1%eth0":   "fe80::1%eth0",
+		"localhost":      "localhost",
+		"192.168.1.20":   "192.168.1.20",
+	} {
+		if got := netutil.CanonicalBindHost(in); got != want {
+			t.Errorf("CanonicalBindHost(%q) = %q, want %q", in, got, want)
+		}
+	}
+	for _, host := range []string{"::1%lo", "[::1%lo]", "::1"} {
+		if !isLoopbackHost(host) {
+			t.Errorf("%s is not read as loopback", host)
+		}
 	}
 }
 
