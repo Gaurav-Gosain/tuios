@@ -1465,7 +1465,9 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		HarnessPID: p.HarnessPID,
 		IfState:    ifState,
 
-		HarnessIsCaller: callerRunsHarness(cs, p.HarnessPID),
+		// Only a report with a session id records its harness pid, so only
+		// that one needs the ancestry walk.
+		HarnessIsCaller: p.AgentSessionID != "" && callerRunsHarness(cs, p.HarnessPID),
 
 		SessionStart: p.SessionStart,
 		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
