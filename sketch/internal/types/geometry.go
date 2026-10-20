@@ -54,6 +54,9 @@ type Geometry struct {
 
 	// Treemap.
 	Treemap *GeoTreemap
+
+	// Info.
+	Info *GeoInfo
 }
 
 type GeoNode struct {
@@ -399,4 +402,10 @@ type GeoTreeBox struct {
 	Value   string
 	Section bool
 	Depth   int
+}
+
+// GeoInfo is the info diagram: its title and its line of text.
+type GeoInfo struct {
+	Title []string
+	Text  string
 }

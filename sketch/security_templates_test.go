@@ -1016,3 +1016,16 @@ var treemapTemplates = []func(p string) string{
 		return "%%{init: {\"treemap\": {\"nodeWidth\": \"" + p + "\", \"valueFormat\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\"}}}%%\ntreemap\n\"a\": 1"
 	},
 }
+
+var infoTemplates = []func(p string) string{
+	func(p string) string { return "info\ntitle " + p },
+	func(p string) string { return "info showInfo title " + p },
+	func(p string) string { return "info\naccTitle: " + p + "\naccDescr: " + p },
+	func(p string) string { return "info\naccDescr {\n " + p + "\n }" },
+	func(p string) string { return "info %% " + p },
+	func(p string) string { return "info " + p },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\ninfo" },
+	func(p string) string {
+		return "%%{init: {\"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\ninfo"
+	},
+}

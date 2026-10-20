@@ -60,6 +60,7 @@ func TestNoTerminalControls(t *testing.T) {
 		"radar":                  "radar-beta\n  title t#27;]0x#7;\n  axis a[\"#27;[2J\"], b[\"#144;x\"]\n  curve c[\"#155;31m\"]{1, 2}",
 		"treemap":                "treemap-beta\n  title t#27;]0x#7;\n  \"#27;[2J\"\n    \"#155;31m\": 10\n    \"#144;x\": 5",
 		"treemap tree":           "treemap-beta\n  \"s#27;[2J\"\n    \"a very long name #155;31m that cannot fit in any box at all\": 10\n    \"#144;x\": 1",
+		"info":                   "info\n  title t#27;]0x#7;#155;31m",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {
