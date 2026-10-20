@@ -131,7 +131,7 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 	pitch := cardW + GAP
 	plotW := 0.0
 	if n > 0 {
-		plotW = float64(n)*pitch - GAP
+		plotW = float64(float64(n)*pitch) - GAP
 	}
 
 	lineH := js.Round(small * 1.5)
@@ -186,7 +186,7 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 		}
 		var label *text.Label
 		if tasks[i].section != "" {
-			l := common.FitLabel(tasks[i].section, measurer, small, float64(end-i)*pitch-GAP-2*PAD_X, text.Bold)
+			l := common.FitLabel(tasks[i].section, measurer, small, float64(float64(end-i)*pitch)-GAP-2*PAD_X, text.Bold)
 			label = &l
 			bandH = math.Max(bandH, math.Max(l.Height, lineH)+2*BAND_PAD)
 		}
@@ -216,9 +216,9 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 	if n > 0 {
 		var grid, scale strings.Builder
 		for score := 5; score >= 1; score-- {
-			y := chartTop + float64(5-score)*LEVEL
+			y := chartTop + float64(float64(5-score)*LEVEL)
 			svg.WriteStrings(&grid, "M", num(left-6), ",", num(y), "H", num(right))
-			svg.WriteStrings(&scale, `<text x="`, num(left-12), `" y="`, num(y+tiny*0.35), `">`, strconv.Itoa(score), `</text>`)
+			svg.WriteStrings(&scale, `<text x="`, num(left-12), `" y="`, num(y+float64(tiny*0.35)), `">`, strconv.Itoa(score), `</text>`)
 		}
 		svg.WriteStrings(&body, `<path class="pele-grid" d="`, grid.String(), `" fill="none" stroke="var(--_a)"/>`,
 			`<g class="pele-scale" font-size="`, js.Num(tiny), `" text-anchor="end" fill="var(--_m)">`, scale.String(), `</g>`)
@@ -226,14 +226,14 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 		var line, stems, faces strings.Builder
 		cards := make([]string, n)
 		for i, task := range tasks {
-			x := left + float64(i)*pitch
+			x := left + float64(float64(i)*pitch)
 			cx := x + cardW/2
 			score := task.score
 			level := 3.0
 			if !math.IsNaN(score) {
 				level = math.Min(5, math.Max(1, score))
 			}
-			y := chartTop + (5-level)*LEVEL
+			y := chartTop + float64((5-level)*LEVEL)
 			if i == 0 {
 				line.WriteString("M")
 			} else {
@@ -250,7 +250,7 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 				`<rect x="`, num(x), `" y="`, num(cardsY), `" width="`, num(cardW), `" height="`, num(cardH), `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`,
 				svg.LabelSvg(labels[i], cx, cardsY+PAD_Y+textH/2, ` font-size="`+js.Num(small)+`"`, nil))
 			for k, name := range people {
-				svg.WriteStrings(&card, `<circle class="pele-actor" cx="`, num(cx+(float64(k)-float64(len(people)-1)/2)*step), `" cy="`, num(cardsY+cardH-PAD_Y-DOT),
+				svg.WriteStrings(&card, `<circle class="pele-actor" cx="`, num(cx+float64((float64(k)-float64(len(people)-1)/2)*step)), `" cy="`, num(cardsY+cardH-PAD_Y-DOT),
 					`" r="`, strconv.Itoa(DOT), `" fill="`, svg.SeriesColor(actor[name]), `" stroke="var(--_s)">`,
 					`<title>`, svg.EscText(name), `</title></circle>`)
 			}
@@ -270,8 +270,8 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 				}
 				continue
 			}
-			x := left + float64(r.start)*pitch
-			w := float64(r.count)*pitch - GAP
+			x := left + float64(float64(r.start)*pitch)
+			w := float64(float64(r.count)*pitch) - GAP
 			svg.WriteStrings(&body, `<g class="pele-cluster pele-section" data-id="`, svg.EscText(js.Trim(tasks[r.start].section)), `">`,
 				`<rect x="`, num(x), `" y="`, num(top), `" width="`, num(w), `" height="`, num(bandH), `" rx="`, svg.RADIUS, `" fill="var(--_a)"/>`,
 				svg.LabelSvg(*r.label, x+w/2, top+bandH/2, ` font-size="`+js.Num(small)+`" font-weight="var(--_hw)"`, nil))
@@ -298,7 +298,7 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 		}
 	}
 
-	totalWidth := math.Ceil(width + 2*pad)
+	totalWidth := math.Ceil(width + float64(2*pad))
 	totalHeight := math.Ceil(math.Max(bottom, pad) + pad)
 	var geometry *types.Geometry
 	if options.Geometry != nil {
@@ -327,7 +327,7 @@ func verticalJourney(model *JourneyDb, options types.RenderOptions) types.Render
 	if options.MaxWidth != nil {
 		maxWidth = *options.MaxWidth
 	}
-	room := math.Max(140, maxWidth-2*pad)
+	room := math.Max(140, maxWidth-float64(2*pad))
 	title := common.FitLabel(model.title, measurer, size, room, text.Bold)
 	names := nonEmpty(journeyActors(model.tasks))
 	actors := make(map[string]int, len(names))
@@ -400,7 +400,7 @@ func verticalJourney(model *JourneyDb, options types.RenderOptions) types.Render
 		y += 16
 		width = math.Max(width, w)
 	}
-	totalWidth := math.Ceil(width + 2*pad)
+	totalWidth := math.Ceil(width + float64(2*pad))
 	last := 0.0
 	if len(model.tasks) > 0 {
 		last = 16

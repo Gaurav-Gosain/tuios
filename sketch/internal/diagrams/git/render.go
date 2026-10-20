@@ -169,7 +169,7 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		labelMain, labelCross := 0.0, 0.0
 		if label != nil && len(label.Lines) > 0 {
 			if rotate {
-				labelCross = 3 + HALF*(label.Width+label.Height)
+				labelCross = 3 + float64(HALF*(label.Width+label.Height))
 			} else {
 				if vertical {
 					labelMain = label.Height
@@ -495,7 +495,7 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 				if vertical {
 					ax, ay = x-DOT-3-k, y
 				}
-				reach := HALF*w + k
+				reach := float64(HALF*w) + k
 				if flip {
 					grow(ax-reach, ay-reach, ax+k, ay+k)
 				} else {
@@ -557,8 +557,8 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		titleHeight = title.Height + 16
 	}
 	inner := math.Max(maxX-minX, title.Width)
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(maxY - minY + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 	dx := pad - minX + (inner-(maxX-minX))/2
 	dy := pad + titleHeight - minY
 

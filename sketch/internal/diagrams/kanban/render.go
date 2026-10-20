@@ -117,9 +117,9 @@ func fitLabel(raw string, markdown bool, measurer text.TextMeasurer, size, max f
 // textBlock writes a label with every line starting at x, or ending there, and the first line's box starting at y.
 func textBlock(b *strings.Builder, label text.Label, x, y float64, attrs string, icons text.IconResolver, end bool) {
 	for i, line := range label.Lines {
-		cy := y + (float64(i)+0.5)*label.LineHeight
+		cy := y + float64((float64(i)+0.5)*label.LineHeight)
 		if len(line) == 1 && line[0].Icon == "" {
-			svg.WriteStrings(b, `<text`, svg.TextStyle(attrs, line[0].Style), ` x="`, svg.Num(x), `" y="`, svg.Num(cy+label.Size*0.35), `"`)
+			svg.WriteStrings(b, `<text`, svg.TextStyle(attrs, line[0].Style), ` x="`, svg.Num(x), `" y="`, svg.Num(cy+float64(label.Size*0.35)), `"`)
 			if end {
 				b.WriteString(` text-anchor="end"`)
 			}
@@ -172,10 +172,10 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 	// share the row between them.
 	room := math.Inf(1)
 	if options.MaxWidth != nil && *options.MaxWidth > 0 {
-		room = *options.MaxWidth - 2*pad
+		room = *options.MaxWidth - float64(2*pad)
 	}
 	count := len(model.sections)
-	fits := float64(count)*(ownWidth+COLUMN_GAP)-COLUMN_GAP <= room
+	fits := float64(float64(count)*(ownWidth+COLUMN_GAP))-COLUMN_GAP <= room
 	var perRow int
 	var columnWidth float64
 	if fits {
@@ -253,7 +253,7 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 	if title.Height > 0 {
 		titleHeight = title.Height + 16
 	}
-	boardWidth := math.Max(float64(min(len(sections), perRow))*(columnWidth+COLUMN_GAP)-COLUMN_GAP, 0)
+	boardWidth := math.Max(float64(float64(min(len(sections), perRow))*(columnWidth+COLUMN_GAP))-COLUMN_GAP, 0)
 	width := math.Max(boardWidth, title.Width)
 	left := pad + (width-boardWidth)/2
 	edge := columnWidth - COLUMN_PAD - 4
@@ -264,7 +264,7 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 		body.Reset()
 		svg.WriteStrings(&body, `<rect width="`, js.Num(columnWidth), `" height="`, num(rowHeights[row]), `" rx="`, svg.RADIUS, `" fill="var(--_s)"/>`)
 		textBlock(&body, titles[index], COLUMN_PAD+4, COLUMN_PAD, ` class="pele-cluster-label" font-weight="var(--_hw)"`, icons, false)
-		svg.WriteStrings(&body, `<text class="pele-count" x="`, js.Num(edge), `" y="`, num(COLUMN_PAD+line/2+small*0.35),
+		svg.WriteStrings(&body, `<text class="pele-count" x="`, js.Num(edge), `" y="`, num(COLUMN_PAD+line/2+float64(small*0.35)),
 			`" text-anchor="end" font-size="`, js.Num(small), `" fill="var(--_m)">`, strconv.Itoa(len(section.items)), `</text>`)
 		if has(section.icon) {
 			body.WriteString(common.IconSvg(section.icon, edge-countWidths[index]-ICON_GAP-glyph, COLUMN_PAD+(line-glyph)/2, glyph, icons))
@@ -313,12 +313,12 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 		}
 
 		svg.WriteStrings(&out, `<g class="pele-cluster pele-column`, svg.ClassNames(section.cssClasses), `" data-id="`, svg.EscText(section.id),
-			`" transform="translate(`, num(left+float64(index%perRow)*(columnWidth+COLUMN_GAP)), `,`, num(pad+titleHeight+rowTops[row]), `)">`,
+			`" transform="translate(`, num(left+float64(float64(index%perRow)*(columnWidth+COLUMN_GAP))), `,`, num(pad+titleHeight+rowTops[row]), `)">`,
 			body.String(), `</g>`)
 	}
 
-	totalWidth := math.Ceil(width + 2*pad)
-	totalHeight := math.Ceil(boardHeight + titleHeight + 2*pad)
+	totalWidth := math.Ceil(width + float64(2*pad))
+	totalHeight := math.Ceil(boardHeight + titleHeight + float64(2*pad))
 	var geometry *types.Geometry
 	if options.Geometry != nil {
 		board := &types.GeoKanban{Title: title.Plain()}
