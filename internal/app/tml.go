@@ -706,6 +706,9 @@ func (m *OS) tmlPalette() *loom.Palette {
 		"warning-tint": pal.WarningTint, "error-tint": pal.WarnTint,
 		loom.RoleCursor: pal.RowSel, loom.RolePill: pal.PillFg,
 	}
+	for k, c := range chartRoles(pal) {
+		roles[k] = c
+	}
 	for k, c := range roles {
 		if c == nil {
 			delete(roles, k)
@@ -716,6 +719,45 @@ func (m *OS) tmlPalette() *loom.Palette {
 		}
 	}
 	return loom.NewPalette(depth, roles)
+}
+
+// chartRoles gives the roles plot draws with that the chrome palette has no
+// name for: track, the empty part of a gauge and the land of a map, and the
+// heat ramp of a heatmap and a map's shades. Left to loom's fallbacks, heat2
+// and heat3 are both info, and at 16 colours the land, heat1 and three of
+// the shades share a slot, so a map's six tones read as three. Here all six
+// differ at every depth: at 16 colours by hue, above it as a ramp from the
+// panel through info to the bright accent.
+func chartRoles(pal overlay.Palette) map[string]color.Color {
+	if pal.Depth == overlay.Depth16 {
+		return map[string]color.Color{
+			loom.RoleTrack: overlay.Slot(8),
+			// Five hues, so no two shades can be the same colour in any
+			// palette: blue, cyan, green, yellow and bright magenta. Slot
+			// 12 is the accent and info, and 4 and 12 look alike in many
+			// palettes.
+			loom.RoleHeat1: overlay.Slot(4), loom.RoleHeat2: overlay.Slot(6),
+			loom.RoleHeat3: overlay.Slot(2), loom.RoleHeat4: overlay.Slot(3),
+			loom.RoleHeat5: overlay.Slot(13),
+		}
+	}
+	if pal.Panel == nil || pal.Info == nil || pal.AccentBright == nil || pal.FgMute == nil {
+		return nil
+	}
+	out := map[string]color.Color{
+		loom.RoleTrack: overlay.MixColors(pal.Panel, pal.FgMute, 0.35),
+		loom.RoleHeat1: overlay.MixColors(pal.Panel, pal.Info, 0.35),
+		loom.RoleHeat2: overlay.MixColors(pal.Panel, pal.Info, 0.65),
+		loom.RoleHeat3: pal.Info,
+		loom.RoleHeat4: overlay.MixColors(pal.Info, pal.AccentBright, 0.5),
+		loom.RoleHeat5: pal.AccentBright,
+	}
+	if pal.Depth == overlay.Depth256 {
+		for k, c := range out {
+			out[k] = overlay.To256(c)
+		}
+	}
+	return out
 }
 
 // TMLKey gives a key to the surface of a TML window. A popup closes on an
