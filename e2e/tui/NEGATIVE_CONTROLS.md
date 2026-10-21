@@ -7937,3 +7937,39 @@ Run on 2026-10-21.
 | The fix in place | passes, 3 of 3 |
 
 `TUIOS_E2E_FRAMES` saves `new-pane` and `after-close` frames.
+
+## Cockpit side tabs wait for the no-transcript reply
+
+`TestCockpitSideTabs` used to accept both `Thread / Checkpoints / Live`
+and the pending `Thread / Changes / Checkpoints / Live` row. In the latter
+case `]` selected Changes; the no-transcript reply removed that tab and the
+client selected Thread. This is the documented first-tab fallback, not a
+change to the product's selection policy.
+
+`TestCockpitSideTabsPendingTranscript` uses the same fixture and wait. It
+stops only its isolated daemon with SIGSTOP after the attached client's
+agent watch has the roster, then opens the cockpit. The real PTY must show
+Changes, initially unselected; `]` must select it. The first invocation of
+the actual settled-row wait records its decision before SIGCONT releases
+the real no-transcript reply. That decision must reject the pending row;
+the subsequent settled row must pass, select Thread, and allow navigation
+to Checkpoints and Live. Cleanup always resumes the isolated daemon.
+
+Run on 2026-10-21, on macOS arm64 and Linux arm64, with the unchanged product binary built
+from main `a10ac97d`:
+
+| Wiring cut | Result |
+| --- | --- |
+| In the `term.WaitFor` callback, replace `ready = !strings.Contains(line, "Changes")` with `ready = true`, retaining the Thread/Checkpoints/Live match | **caught**, 3 of 3 on each platform: `ASSERTION: the side-tab wait accepted the unresolved Changes row` |
+
+This cuts the settled-state gate at the wait's call site, restoring the old
+substring condition. The same fixture supplies both halves: the held
+four-tab row is rejected and the real three-tab row is accepted. Plain and
+styled PTY captures include `pending-transcript-tabs-100x30`,
+`pending-changes-selected-100x30`, and `settled-no-transcript-tabs-100x30`;
+the settled row and final Live view also have PNGs. Set
+`TUIOS_E2E_FRAMES` to keep them and run from `e2e/tui`:
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=30 -run '^TestCockpitSideTabs' -v .
+```

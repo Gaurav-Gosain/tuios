@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -815,6 +816,32 @@ func TestCockpitLiveBoxAfterDaemonRestart(t *testing.T) {
 // TestCockpitSideTabs is the side column's pieces as focus tabs on a screen
 // narrower than it: Checkpoints lists them, and Pane shows the live pane.
 func TestCockpitSideTabs(t *testing.T) {
+	testCockpitSideTabs(t, false)
+}
+
+// TestCockpitSideTabsPendingTranscript holds the real daemon before opening
+// the cockpit. The local client can draw and navigate while the first thread
+// read is pending. The settled-row wait must reject that frame, then accept
+// the recap's row after the daemon answers that there is no transcript.
+func TestCockpitSideTabsPendingTranscript(t *testing.T) {
+	testCockpitSideTabs(t, true)
+}
+
+// cockpitSideTabSelected reads the bold name in the actual tab row.
+func cockpitSideTabSelected(s tuitest.Screen, name string) bool {
+	_, rows := s.Size()
+	for y := range rows {
+		line := s.Line(y)
+		if strings.Contains(line, "Thread") && strings.Contains(line, "Checkpoints") {
+			if x := strings.Index(line, name); x >= 0 {
+				return s.Cell(len([]rune(line[:x])), y).Bold
+			}
+		}
+	}
+	return false
+}
+
+func testCockpitSideTabs(t *testing.T, pending bool) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
@@ -833,10 +860,72 @@ func TestCockpitSideTabs(t *testing.T) {
 		t.Fatalf("client never showed the pane: %v\n%s", err, term.Snapshot())
 	}
 	windowManagementMode(t, term)
+	var resume func()
+	if pending {
+		// The attached client's agent watch already has the roster. Stop only
+		// this fixture's daemon, so the no-transcript reply cannot race input.
+		waitText(t, term, "the agent in the rail", "worker")
+		pid := daemonPID(t, base)
+		resume = func() {
+			if err := syscall.Kill(pid, syscall.SIGCONT); err != nil {
+				t.Errorf("resume the fixture daemon: %v", err)
+			}
+		}
+		t.Cleanup(resume)
+		if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
+			t.Fatalf("stop the fixture daemon: %v", err)
+		}
+	}
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Live")
+	if pending {
+		waitText(t, term, "the pending transcript's tabs", "Thread", "Changes", "Checkpoints", "Live")
+		saveArtifact(t, term, artifactDir(t), "pending-transcript-tabs-100x30")
+		if !cockpitSideTabSelected(term.Screen(), "Thread") || cockpitSideTabSelected(term.Screen(), "Changes") {
+			t.Fatalf("the pending row did not start on Thread\n%s", term.Snapshot())
+		}
+		// A person can select Changes before the reply. Its disappearance
+		// intentionally falls back to Thread, the first available tab.
+		if err := term.SendKeys("]"); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return cockpitSideTabSelected(s, "Changes") }, uiTimeout); err != nil {
+			t.Fatalf("Changes was not selected while the read was pending: %v\n%s", err, term.Snapshot())
+		}
+		saveArtifact(t, term, artifactDir(t), "pending-changes-selected-100x30")
+	}
+	acceptedPending := false
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		ready := false
+		for _, line := range strings.Split(s.Text(), "\n") {
+			if strings.Contains(line, "Thread") && strings.Contains(line, "Checkpoints") && strings.Contains(line, "Live") {
+				// The same names also occur before the no-transcript reply,
+				// when ] would select Changes instead of Checkpoints.
+				ready = !strings.Contains(line, "Changes")
+				break
+			}
+		}
+		if resume != nil {
+			// Observe the actual wait's first decision on the held frame,
+			// then let the real reply provide the positive half.
+			acceptedPending = ready
+			resume()
+			resume = nil
+		}
+		return ready
+	}, uiTimeout); err != nil {
+		t.Fatalf("waiting for the settled side tabs: %v\n%s", err, term.Snapshot())
+	}
+	if acceptedPending {
+		t.Fatal("ASSERTION: the side-tab wait accepted the unresolved Changes row")
+	}
+	if pending {
+		if !cockpitSideTabSelected(term.Screen(), "Thread") {
+			t.Fatalf("the disappeared Changes tab did not fall back to Thread\n%s", term.Snapshot())
+		}
+		saveCockpitFrames(t, term, "settled-no-transcript-tabs-100x30")
+	}
 	if err := term.SendKeys("]"); err != nil {
 		t.Fatal(err)
 	}
