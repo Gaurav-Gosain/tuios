@@ -104,10 +104,18 @@ func main() {
 	land, country, small := rasterise(shapes, *w, *h, float64(*top), float64(*bottom))
 	data, codes := encode(land, country, small, *w, *h, *top, *bottom)
 	var z bytes.Buffer
-	zw, _ := flate.NewWriter(&z, flate.BestCompression)
-	zw.Write(data)
-	zw.Close()
-	if err := os.WriteFile(*out, z.Bytes(), 0o644); err != nil {
+	zw, err := flate.NewWriter(&z, flate.BestCompression)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if _, err := zw.Write(data); err != nil {
+		log.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.WriteFile(*out, z.Bytes(), 0o644); err != nil { //nolint:gosec // a data file the package embeds and git keeps
+
 		log.Fatal(err)
 	}
 	n := 0
@@ -395,7 +403,9 @@ func encode(land []bool, country []string, small map[int]string, w, h, top, bott
 	}
 	var b bytes.Buffer
 	b.WriteString("PLM1")
-	binary.Write(&b, binary.LittleEndian, [4]int16{int16(w), int16(h), int16(top), int16(bottom)})
+	for _, v := range [4]int16{int16(w), int16(h), int16(top), int16(bottom)} {
+		b.Write(binary.LittleEndian.AppendUint16(nil, uint16(v)))
+	}
 	b.WriteByte(uint8(len(codes)))
 	for _, c := range codes {
 		b.WriteString(c)
