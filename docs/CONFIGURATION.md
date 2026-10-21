@@ -1034,8 +1034,9 @@ dock_mode_icon_tiling = ""
   spaces.
 - While tiling is on, the pill also shows the next split direction, `V` or
   `H`. Set `appearance.dock_mode_split_letter = false` to show the tiling icon
-  alone. The pill then has the same width as the pill of the leader key, so
-  the workspace tabs do not move when you press the leader key.
+  alone. With the default icons, the pill then has the same width as the pill
+  of the leader key, so the workspace tabs do not move when you press the
+  leader key.
 
 To remove the whole mode pill, remove `"mode"` from the `left` list in the
 `[dock]` table. See [The dock's components](#the-docks-components).
