@@ -7946,3 +7946,13 @@ Run on 2026-10-21.
 | The fix in place | passes, 3 of 3 |
 
 `TUIOS_E2E_FRAMES` saves `new-pane` and `after-close` frames.
+## A fan joined from outside
+
+`TestFanRefusesJoiningAnotherGroup` in `internal/session` (a security boundary
+test): a pane of another session is refused `fan` with an existing fan's
+stem, while the fan's lead, a pane of the fan and the person may add
+attempts. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| fan refuses a stem that is another fan's group | the `checkFanJoin` result ignored | `TestFanRefusesJoiningAnotherGroup` ("fan into another pane's group": expected error, got a new session in `fan/retry`) | **caught** |

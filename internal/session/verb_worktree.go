@@ -583,6 +583,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	if err := worktree.ValidBranch(stem); err != nil {
 		return nil, invalidParam("name", err.Error())
 	}
+	if verr := d.checkFanJoin(cs, root, stem); verr != nil {
+		return nil, verr
+	}
 	branches := fanBranches(root, stem, p.Count)
 	if len(branches) < p.Count {
 		return nil, invalidParam("name", "could not find "+strconv.Itoa(p.Count)+" free branch names from "+stem)
@@ -678,4 +681,48 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string,
 	// took it. See prompt_gate.go.
 	status, note, at := d.typeFirstPrompt(sess, windowID, text)
 	sess.setPromptStatus(status, note, at)
+}
+
+// checkFanJoin refuses a fan that would join a group already in the
+// repository, unless the caller belongs to it. A session of a fan's group
+// is in reach of every session of that group (sessionInScope), so a pane
+// that could add one would reach the fan it was never part of. The person,
+// a call from outside every pane and a pane with admin may still add
+// attempts to a fan, as may a pane that reaches one of its sessions.
+func (d *Daemon) checkFanJoin(cs *connState, root, stem string) *verbError {
+	var members []string
+	for _, s := range d.manager.AllSessions() {
+		if wt := s.Worktree(); wt != nil && wt.Group == stem && canonRoot(wt.RepoRoot) == canonRoot(root) {
+			members = append(members, s.Name())
+		}
+	}
+	if len(members) == 0 {
+		return nil
+	}
+	own := ""
+	if sc := cs.scopeOrNil(); sc != nil && sc.own {
+		// A connection restricted to its own session.
+		own = d.sessionNameByID(sc.sessionID)
+	} else if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
+		own = pa.session
+	} else {
+		return nil
+	}
+	for _, m := range members {
+		if d.sessionInScope(own, m) {
+			return nil
+		}
+	}
+	return hintedVerbError(ErrVerbForbidden, "the fan "+stem+" already has sessions in this repository, and this pane is not part of it", &VerbHint{
+		Param:  "name",
+		Detail: "Nothing was made. Choose another name for a new fan. Only a pane of the fan, the pane that started it, or the person adds attempts to it.",
+	})
+}
+
+// scopeOrNil is the connection's restriction, nil for none.
+func (cs *connState) scopeOrNil() *connScope {
+	if cs == nil {
+		return nil
+	}
+	return cs.scope.Load()
 }

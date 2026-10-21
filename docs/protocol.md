@@ -3912,6 +3912,12 @@ what: `idle`, `done`, or `quiet` for `unknown` on a harness that cannot show
 idle. The harness the daemon started counts from the start, before detection
 has named the pane's harness.
 
+A `name` that is already a fan's group in the repository adds attempts to
+that fan, which then reach each other. Only the person, a call from outside
+every pane, a pane with `admin`, or a pane that reaches a session of that
+fan (its own attempts, or the pane that started it) may do that. Any other
+caller is `forbidden`, and nothing is made.
+
 An agent is one string, the way a person types it: a harness id or program
 name, or any program, with its arguments after it (`"codex --model o5"`). It
 is split into words the way a POSIX shell splits them, single and double
