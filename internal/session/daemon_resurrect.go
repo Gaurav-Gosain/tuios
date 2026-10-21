@@ -406,6 +406,11 @@ func restoredWorktree(saved *WorktreeInfo) *WorktreeInfo {
 		return nil
 	}
 	wt := *saved
+	// A record from before launched_from_id names its lead by name alone,
+	// which another session may hold now. It reaches nothing, so drop it.
+	if wt.LaunchedFromID == "" {
+		wt.LaunchedFrom = ""
+	}
 	if PromptWaiting(wt.PromptStatus) {
 		wt.PromptStatus = PromptNotSent
 		wt.PromptNote = "The daemon restarted before the prompt was typed. Send the prompt with send-text."

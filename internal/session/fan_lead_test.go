@@ -61,3 +61,49 @@ func TestFanLeadIsHeldByID(t *testing.T) {
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, cur })
 	wantForbidden(t, "compare-fan from a session that took the lead's name", callP(as(firstWindow(squat.Name())), t, "compare-fan", map[string]any{"session": attempt, "changes": false}))
 }
+
+// A record from before launched_from_id names its lead by name alone. After
+// a restart where the lead did not come back, a session that takes the name
+// must reach none of the attempts.
+func TestReview978LegacyRecord(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip()
+	}
+	d, sp, repo := worktreeFixture(t)
+	admin := dialVerb(t, sp)
+	// A record an older daemon wrote: the lead by name only.
+	mine := fakeFan(t, d, admin, repo, "fan/sub", 1, "repo-fan-x")
+	state := d.manager.GetSession(mine[0]).ResurrectionState()
+	if state.Worktree.LaunchedFromID != "" {
+		t.Fatal("not a legacy record")
+	}
+	// Before any restart, the name alone reaches nothing either.
+	early := makeSessionWithWindow(t, d, "repo-fan-x")
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, early.GetState().Windows[0].ID })
+	setStrict(d, "read", "fan")
+	if r := callP(dialVerb(t, sp), t, "compare-fan", map[string]any{"session": mine[0], "changes": false}); r["error"] == nil {
+		t.Errorf("a session named like the lead of an older record does compare-fan in %s", mine[0])
+	}
+	d2, sp2 := startTestDaemon(t)
+	if _, err := d2.restoreSession(state); err != nil {
+		t.Fatal(err)
+	}
+	if lf := d2.manager.GetSession(mine[0]).Worktree().LaunchedFrom; lf != "" {
+		t.Errorf("a restored record from before the ID still names its lead %q", lf)
+	}
+	squat := makeSessionWithWindow(t, d2, "repo-fan-x")
+	d2.setApprovalPeer(func(*connState) (bool, string) { return true, squat.GetState().Windows[0].ID })
+	setStrict(d2, "read", "fan")
+	c := dialVerb(t, sp2)
+	for verb, p := range map[string]map[string]any{
+		"compare-fan": {"session": mine[0], "changes": false},
+		"send-text":   {"session": mine[0], "window": d2.manager.GetSession(mine[0]).GetState().Windows[0].ID, "text": "x"},
+	} {
+		r := callP(c, t, verb, p)
+		if r["error"] == nil {
+			t.Errorf("a new session named like a dead lead from an older record does %s in %s", verb, mine[0])
+		} else {
+			t.Logf("%s -> %v", verb, r["error"])
+		}
+	}
+}

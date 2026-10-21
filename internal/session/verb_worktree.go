@@ -612,10 +612,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	readyTimeout := durationOr(p.ReadyTimeout, fanDefaultReadyTimeout)
 	// The session of the pane that asked, so a connection restricted to that
 	// session reaches the agents it started. See conn_scope.go.
-	launchedFrom := d.callerSession(cs)
-	launchedFromID := ""
-	if s := d.manager.GetSession(launchedFrom); s != nil {
-		launchedFromID = s.ID
+	launchedFrom, launchedFromID := "", ""
+	if s := d.callerSession(cs); s != nil {
+		launchedFrom, launchedFromID = s.Name(), s.ID
 	}
 
 	sessions := make([]map[string]any, 0, p.Count)

@@ -499,26 +499,33 @@ func (d *Daemon) sessionNameByID(id string) string {
 	return ""
 }
 
-// callerSession is the session of the pane the caller on cs runs in, "" when it
-// runs in none or cannot be placed.
-func (d *Daemon) callerSession(cs *connState) string {
+// callerSession is the session of the pane the caller on cs runs in, nil when
+// it runs in none or cannot be placed.
+//
+// A caller that needs both the name and the ID reads them from this one
+// session, so a rename between two lookups cannot pair one session's name with
+// another's ID.
+func (d *Daemon) callerSession(cs *connState) *Session {
 	if cs == nil {
-		return ""
+		return nil
 	}
 	if sc := cs.scope.Load(); sc != nil {
-		return d.sessionNameByID(sc.sessionID)
+		if sc.sessionID == "" {
+			return nil
+		}
+		return d.manager.GetSessionByID(sc.sessionID)
 	}
 	// A connection that presented its pane's token is in that pane.
 	if w := cs.paneBound.Load(); w != nil {
-		return d.sessionOfWindow(*w)
+		return d.sessionHoldingWindow(*w)
 	}
 	if cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
-		return ""
+		return nil
 	}
 	if _, win := d.peerPane(cs); win != "" {
-		return d.sessionOfWindow(win)
+		return d.sessionHoldingWindow(win)
 	}
-	return ""
+	return nil
 }
 
 // sessionInScope reports whether a connection whose pane is in session own may
@@ -548,16 +555,10 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 		return false
 	}
 	o := d.manager.GetSession(own)
-	// The session that started this one, by its ID: a name is free once its
-	// session ends, and another session could take it. A record from before
-	// the ID names its launcher alone, and the name is cleared when that
-	// session ends (forgetLauncher).
-	switch {
-	case tw.LaunchedFromID != "":
-		if o != nil && o.ID == tw.LaunchedFromID {
-			return true
-		}
-	case tw.LaunchedFrom != "" && tw.LaunchedFrom == own:
+	// The session that started this one, by its ID alone: a name is free
+	// once its session ends, and another session could take it. A record
+	// from before the ID names no launcher that reaches it.
+	if tw.LaunchedFromID != "" && o != nil && o.ID == tw.LaunchedFromID {
 		return true
 	}
 	if tw.Group == "" || !tw.Managed {
@@ -836,7 +837,7 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 func (d *Daemon) forgetLauncher(s *Session) {
 	for _, o := range d.manager.AllSessions() {
 		wt := o.Worktree()
-		if wt == nil || (wt.LaunchedFromID != s.ID && (wt.LaunchedFromID != "" || wt.LaunchedFrom != s.Name())) {
+		if wt == nil || wt.LaunchedFromID != s.ID {
 			continue
 		}
 		moved := *wt

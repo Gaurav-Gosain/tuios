@@ -7971,3 +7971,6 @@ none of them. Run on 2026-10-21.
 | --- | --- | --- | --- |
 | Reach checks the lead's session ID | the ID check skipped, so the name decides | `TestFanLeadIsHeldByID` ("compare-fan from a new session of the lead's name after a restart": expected error) | **caught** |
 | The attempts stop naming a lead that ended | the `forgetLauncher` call removed | `TestFanLeadIsHeldByID` ("the attempt still names its ended lead") | **caught** |
+| A record from before the ID reaches nothing by name | `sessionInScope` passes a record with no ID whose name matches | `TestReview978LegacyRecord` ("a session named like the lead of an older record does compare-fan") | **caught** |
+| A restore drops a lead named without an ID | the clearing in `restoredWorktree` removed | `TestReview978LegacyRecord` ("a restored record from before the ID still names its lead") | **caught** |
+| Both of the above | both cuts together, the review's repro | `TestReview978LegacyRecord` (after the restart, a session of the dead lead's name does compare-fan and send-text) | **caught** |

@@ -960,7 +960,10 @@ changes for everyone:
   a newer record and drops it.
   The record also holds that session's ID, and reach is checked by the ID, so
   a later session that takes the name reaches nothing. When that session ends,
-  the sessions it started stop naming it.
+  the sessions it started stop naming it. A record written before the ID names
+  its lead by name alone. That name reaches nothing, and a restore drops it,
+  so such a lead reaches its attempts again only by `fan --join` or as the
+  person.
 - On a restricted connection, every verb outside the table in
   `internal/session/conn_scope.go` answers `forbidden` with a hint naming
   `restrict-connection`, and under scope `own` a verb that names no session
