@@ -22,7 +22,8 @@
 //	  uint8 id (0 for a cell with no code, k for code k-1)
 //	the small countries: uvarint n, then n of uvarint cell (the step from
 //	  the cell before) and uint8 id. Each is a country that won no cell, at
-//	  the cell it covers most. The map tints that cell only for a value.
+//	  the free cell it covers most, else the nearest free cell. The map
+//	  tints that cell only for a value.
 //
 // The file is that, compressed with DEFLATE.
 package main
@@ -284,15 +285,15 @@ const (
 // rasterise returns, for each cell, whether it is land and the shape that
 // covers most of it.
 //
-// A country too small to win a cell gets one cell in small: the cell
-// where most of its samples fell, or the cell under the middle of its
-// largest ring when none did.
+// A country that wins no cell gets one cell in small: the free cell where
+// most of its samples fell, else the free cell nearest it. A country on
+// the map that gets no cell stops the run.
 func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, country []string, small map[int]string) {
 	land = make([]bool, w*h)
 	country = make([]string, w*h)
 	hits := map[int]int{}
-	// most is, per shape, the cell with the most samples and their count.
-	most := make([][2]int, len(shapes))
+	// cover is, per shape, its samples in each cell it touches.
+	cover := make([]map[int]int, len(shapes))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			clear(hits)
@@ -311,9 +312,10 @@ func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, coun
 				}
 			}
 			for i, n := range hits {
-				if n > most[i][1] {
-					most[i] = [2]int{y*w + x, n}
+				if cover[i] == nil {
+					cover[i] = map[int]int{}
 				}
+				cover[i][y*w+x] = n
 			}
 			if total < minHits {
 				continue
@@ -335,20 +337,76 @@ func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, coun
 		}
 	}
 	small = map[int]string{}
+	free := func(c int) bool { _, taken := small[c]; return c >= 0 && !taken }
 	for i, s := range shapes {
 		if s.code == "" || won[s.code] {
 			continue
 		}
-		cell := most[i][0]
-		if most[i][1] == 0 {
-			cell = s.middleCell(w, h, top, bottom)
+		// The cells it covers, most samples first, then the free cell
+		// nearest the best of them or the middle of its largest ring.
+		cells := make([]int, 0, len(cover[i]))
+		for c := range cover[i] {
+			cells = append(cells, c)
 		}
-		if _, taken := small[cell]; !taken && cell >= 0 {
-			small[cell] = s.code
-			won[s.code] = true
+		sort.Slice(cells, func(a, b int) bool {
+			na, nb := cover[i][cells[a]], cover[i][cells[b]]
+			return na > nb || na == nb && cells[a] < cells[b]
+		})
+		cell := -1
+		for _, c := range cells {
+			if free(c) {
+				cell = c
+				break
+			}
 		}
+		if cell < 0 {
+			start := s.middleCell(w, h, top, bottom)
+			if len(cells) > 0 {
+				start = cells[0]
+			}
+			cell = nearestFree(start, w, h, free)
+		}
+		if cell < 0 {
+			if s.maxY > bottom && s.minY < top {
+				log.Fatalf("%s is on the map but has no cell", s.code)
+			}
+			fmt.Printf("%s is off the map\n", s.code)
+			continue
+		}
+		small[cell] = s.code
+		won[s.code] = true
 	}
 	return land, country, small
+}
+
+// nearestFree returns the free cell nearest start, in rings of growing
+// size, or -1 when start is off the map or no cell within 8 is free.
+func nearestFree(start, w, h int, free func(int) bool) int {
+	if start < 0 {
+		return -1
+	}
+	x0, y0 := start%w, start/w
+	for r := 0; r <= 8; r++ {
+		for dy := -r; dy <= r; dy++ {
+			for dx := -r; dx <= r; dx++ {
+				if max(abs(dx), abs(dy)) != r {
+					continue
+				}
+				x, y := (x0+dx+w)%w, y0+dy
+				if y >= 0 && y < h && free(y*w+x) {
+					return y*w + x
+				}
+			}
+		}
+	}
+	return -1
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // middleCell returns the cell under the middle of the shape's largest ring,

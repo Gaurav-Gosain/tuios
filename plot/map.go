@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -63,6 +64,9 @@ func decodeWorld(raw []byte) *world {
 	}
 	wd := &world{w: int(hd[0]), h: int(hd[1]), top: float64(hd[2]), bottom: float64(hd[3]),
 		small: map[int]uint8{}, index: map[string]uint8{}}
+	if wd.w <= 0 || wd.h <= 0 || wd.w*wd.h > 1<<22 || wd.top <= wd.bottom {
+		bad()
+	}
 	n := int(raw[12])
 	p := 13
 	if len(raw) < p+2*n {
@@ -97,7 +101,7 @@ func decodeWorld(raw []byte) *world {
 		}
 		if run == 0 {
 			run = next()
-			if p >= len(raw) {
+			if run == 0 || p >= len(raw) || int(raw[p]) > n {
 				bad()
 			}
 			id = raw[p]
@@ -106,20 +110,27 @@ func decodeWorld(raw []byte) *world {
 		wd.cells[i] = id + 1
 		run--
 	}
+	if run != 0 {
+		bad()
+	}
 	cell := 0
 	for k := next(); k > 0; k-- {
-		cell += int(next())
-		if p >= len(raw) {
+		step := next()
+		if step >= uint64(size) || p >= len(raw) || raw[p] == 0 || int(raw[p]) > n {
+			bad()
+		}
+		cell += int(step)
+		if cell >= size {
 			bad()
 		}
 		wd.small[cell] = raw[p] + 1
 		p++
 	}
+	if p != len(raw) {
+		bad()
+	}
 	wd.smallBits = make([]uint64, (size+63)/64)
 	for c := range wd.small {
-		if c < 0 || c >= size {
-			bad()
-		}
 		wd.smallBits[c/64] |= 1 << (c % 64)
 	}
 	return wd
@@ -141,11 +152,13 @@ func decodeWorld(raw []byte) *world {
 // 1:50m Admin 0 Countries, version 5.1.1, which is in the public domain
 // (https://www.naturalearthdata.com/about/terms-of-use/), rasterised by
 // internal/worldgen into 720 by 288 cells of half a degree.
-// A country too small to cover a third of a half-degree cell takes the one
-// cell it covers most, and shows only when it has a value.
+// A country that is the larger part of no cell, such as Singapore, takes
+// the cell it covers most, or the nearest free cell, and shows only when it
+// has a value.
 type Map struct {
-	// Values are by ISO 3166-1 alpha-2 code, such as "DE" or "jp". A
-	// country with no value, NaN or an unknown code shows as plain land.
+	// Values are by ISO 3166-1 alpha-2 code, such as "DE" or "jp", in
+	// any case. When two keys name one country, the larger value counts.
+	// A country with no value, NaN or an unknown code shows as plain land.
 	Values map[string]float64
 	// Min and Max fix the range of the values. Both 0 means from 0 to the
 	// largest value.
@@ -156,7 +169,7 @@ type Map struct {
 	// to the largest.
 	Log bool
 	// Ramp is the shades, low to high, at most 64. Empty means Heat1 to
-	// Heat5: with Land, six tones.
+	// Heat5: with Land, six tones. In ASCII the marks repeat after six.
 	Ramp []Role
 	// Land colours the land of the countries with no value. None means
 	// Track.
@@ -234,12 +247,15 @@ func (mp Map) valueAt(t, lo, hi float64) float64 {
 // bounds returns the lowest value of each shade: the bottom of the range,
 // then the range split evenly on the map's scale, each rounded to two
 // digits so the legend reads 2.8k and not 2786. When rounding would merge
-// two bounds, they stay as they are.
+// two bounds, none is rounded.
 func (mp Map) bounds(lo, hi float64, n int) []float64 {
-	out := make([]float64, n)
 	exact := make([]float64, n)
-	for k := range out {
+	for k := range exact {
 		exact[k] = mp.valueAt(float64(k)/float64(n), lo, hi)
+	}
+	exact[0] = lo
+	out := make([]float64, n)
+	for k := range out {
 		out[k] = round2(exact[k])
 		if k == 0 {
 			out[k] = lo
@@ -252,9 +268,10 @@ func (mp Map) bounds(lo, hi float64, n int) []float64 {
 }
 
 // Legend returns one item per shade, low to high, each labelled with the
-// lowest value it shows, such as "≥ 12k". The first shade is labelled with
-// the bottom of the range.
-func (mp Map) Legend() []LegendItem {
+// lowest value it shows, such as "≥ 12k" (">= 12k" in ASCII). The first
+// shade is labelled with the bottom of the range. With no Format, two
+// bounds that Compact writes the same take four significant digits.
+func (mp Map) Legend(m Mode) []LegendItem {
 	lo, hi, ok := mp.rng()
 	if !ok {
 		return nil
@@ -263,13 +280,28 @@ func (mp Map) Legend() []LegendItem {
 	if f == nil {
 		f = Compact
 	}
+	bounds := mp.bounds(lo, hi, len(mp.ramp()))
+	labels := make([]string, len(bounds))
+	for k, b := range bounds {
+		labels[k] = f(b)
+	}
+	if mp.Format == nil {
+		for k := 1; k < len(labels); k++ {
+			if labels[k] == labels[k-1] {
+				for j, b := range bounds {
+					labels[j] = strconv.FormatFloat(b, 'g', 4, 64)
+				}
+				break
+			}
+		}
+	}
 	ramp := mp.ramp()
 	out := make([]LegendItem, len(ramp))
-	for k, b := range mp.bounds(lo, hi, len(ramp)) {
-		out[k] = LegendItem{Label: f(b), Role: ramp[k]}
+	for k, l := range labels {
 		if k > 0 {
-			out[k].Label = "≥ " + out[k].Label
+			l = block(m, "≥ ", ">= ") + l
 		}
+		out[k] = LegendItem{Label: l, Role: ramp[k]}
 	}
 	return out
 }
@@ -315,11 +347,17 @@ func (mp Map) layout(w, h int, m Mode) (pw, ph, cw, ch int) {
 	pw, ph = w*px, h*py
 	if !mp.Stretch {
 		rows := float64(pw) / float64(px) / ratio / aspect * float64(py)
+		// A box up to a tenth past the map's shape is filled. A larger one
+		// gets the true shape, centred.
 		if rows <= float64(ph) {
-			ph = max(1, min(ph, int(math.Round(rows*maxSlack))))
+			if float64(ph) > rows*maxSlack {
+				ph = max(1, int(math.Round(rows)))
+			}
 		} else {
 			cols := float64(ph) * aspect / float64(py) * ratio * float64(px)
-			pw = max(1, min(pw, int(math.Round(cols*maxSlack))))
+			if float64(pw) > cols*maxSlack {
+				pw = max(1, int(math.Round(cols)))
+			}
 		}
 	}
 	return pw, ph, (pw + px - 1) / px, (ph + py - 1) / py
@@ -364,7 +402,9 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 			for k+1 < len(bounds) && v >= bounds[k+1] {
 				k++
 			}
-			level[id] = int8(k)
+			// Codes are case-blind: when "de" and "DE" both have a value,
+			// the larger one counts.
+			level[id] = max(level[id], int8(k))
 		}
 	}
 

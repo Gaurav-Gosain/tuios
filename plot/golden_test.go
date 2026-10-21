@@ -206,6 +206,16 @@ var cases = []chartCase{
 		// Countries too small to win a cell show when they have a value.
 		return Map{Values: map[string]float64{"SG": 1, "MT": 1, "BH": 1, "FR": 1, "NO": 1}}.Draw(w, h, m)
 	}},
+	{"map-narrow-range", 44, 4, func(w, h int, m Mode) *Grid {
+		// A range so narrow that rounding would merge the bounds: the
+		// shades keep the exact bounds, and US at 100.3 is in shade 2.
+		mp := Map{Values: map[string]float64{"US": 100.3, "de": 1, "DE": 101}, Min: 100, Max: 101}
+		g := NewGrid(w, h)
+		_, rows := mp.Fit(w, h-1, m)
+		copy(g.Cells, mp.Draw(w, rows, m).Cells)
+		DrawLegend(g, 0, rows, mp.Legend(m), m)
+		return g
+	}},
 	{"map-stretch", 20, 4, func(w, h int, m Mode) *Grid {
 		return Map{Stretch: true}.Draw(w, h, m)
 	}},
@@ -380,7 +390,12 @@ func TestMapBudget(t *testing.T) {
 	if wd.w != 720 || wd.h != 288 {
 		t.Errorf("the map is %dx%d cells", wd.w, wd.h)
 	}
-	for _, c := range []string{"US", "FR", "NO", "SG", "MT", "XK", "TW"} {
+	// Every country with a code that Natural Earth 5.1.1 has between 84 N
+	// and 60 S: 236. A smaller count means worldgen lost one.
+	if len(wd.codes) != 236 {
+		t.Errorf("the map has %d countries, want 236", len(wd.codes))
+	}
+	for _, c := range []string{"US", "FR", "NO", "SG", "MT", "XK", "TW", "HK", "MF", "SX"} {
 		if _, ok := wd.index[c]; !ok {
 			t.Errorf("the map has no %s", c)
 		}

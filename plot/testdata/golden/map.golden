@@ -1,69 +1,69 @@
 === braille 44x10
-| ⢀⣀⣀⣀⢀⣀⣤⣤⡰⣾⣿⣟⣙⠛⢿⣿⣿⣿⡏   ⠐⣒⣀⡀ ⢠⣄⣀⣀⣤⣴⣶⣤⣄⣄⣀⣤⣀⣀⣀⣀|
-|⣉⣛⡿⠿⠛⢿⣿⣿⣿⣿⣯⣉⣸⣿⣅⠈⠛⠉ ⠈ ⣠⢐⣾⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠛⡿⠛⡋|
-|      ⢸⣿⣿⣿⣿⣿⣿⠟⠋⠁     ⣼⣟⡿⢿⢿⣿⣿⣻⣿⣿⣿⣿⣿⣿⣿⣿⢿⢛⡅    |
-|  ⢀⡀   ⠉⠻⣿⡟⡛⠏       ⣴⣿⣿⣿⣾⣶⣿⣿⣿⡿⣿⣿⣿⣿⣿⡿⠿ ⠁     |
-|         ⠈⠉⠓⢤⣦⣤⣀    ⠻⠿⠿⣿⣿⣿⣿⣿⠁ ⠈⠿⠁⠊⣟⠃⡈⠄      |
-|            ⢻⣿⣿⣿⣿⣶     ⢹⣿⣿⣿⠁      ⠙⠨⠙⣀⣐⣶⠄   |
-|             ⣹⣿⣿⡿⠃     ⠸⣿⣿⡏⠸       ⢰⣾⣿⣿⣿⣦   |
-|             ⣿⠟⠉        ⠉⠉          ⠉⠉⠙⠻⠏ ⢀⠄|
-|             ⠛                              |
+|                                            |
+|⡀⢀⣠⣄⣀⣀⣠⣴⣶⣶⣾⣿⢯⣙⡛⢿⣿⣿⣿⠏   ⢐⣂⣀⣀⢀⣠⣀⣠⣤⣤⣼⣶⣦⣤⣤⣀⣤⣄⣀⣀⣀|
+|⣀⠽⠿⠛⠛⠿⢿⣿⣿⣿⣯⣭⣸⣿⣦⡈⠉  ⠈ ⢤⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡛⠛⠽⠋⠍|
+|      ⠸⣿⣿⣿⣿⣿⣿⠋⠁      ⣾⣯⣟⢻⡻⣿⣿⣽⣿⣿⣿⣿⣿⣿⣿⣿⠻⡩⠆    |
+|  ⠠⠄    ⠉⠿⢭⣍⠃⠄      ⣾⣿⣿⣿⣿⣿⣿⣿⠿⠋⠻⣿⡿⡻⣿⡛⢋       |
+|           ⠈⣼⣿⣷⣶⣄⣀  ⠙⠛⠛⢿⣿⣿⣿⠟⠁  ⠉ ⠁⢯⢠⢆⠁⣀⣀    |
+|            ⠘⢿⣿⣿⣿⡟     ⢸⣿⣿⡿⢠       ⢉⣠⣶⣶⣿⣅   |
+|             ⣾⡿⠿⠃       ⠿⠟⠁        ⠈⠿⠟⠿⣿⡿  ⣀|
+|             ⠿                         ⠈⠁ ⠈ |
 |                                            |
 --- roles
-| aaaabbbbbbbbbbbbbbb   bbbb bbbbbbbbbbbbbbbb|
-|aaaaaaabbbbbbbbbbb b bcabbbbbbbbbbbbbbbbbbba|
-|      aaaaaaaabb     baabbbbbbbdbbbbbbbe    |
-|  aa   aaaaaa       bbbbbbbbbbddddbbb b     |
-|         bbbbbff    bbbbbbbbb ddddbbbb      |
-|            bfffff     bbbbb      bbbfffb   |
-|             bffff     bgggb       ffffff   |
-|             bbf        gg          fffff bb|
-|             b                              |
 |                                            |
-a=heat5 b=track c=fg d=heat3 e=warning f=heat2 g=heat1 (upper case is bold)
+|abbbbaaaaaaaaaaaaaaa   aaaaaaaaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbaaaaa  a acbaaaaaaaaaaaaaaaaaaab|
+|      bbbbbbbba      abbaaaaaaadaaaaaaae    |
+|  bb    abbbba      aaaaaaaaaaddddaaa       |
+|           aafffff  aaaaaaaaa  d daaaaaa    |
+|            afffff     aagaa       ffffff   |
+|             aaff       ggg        ffffff  a|
+|             a                         ff a |
+|                                            |
+a=track b=heat5 c=fg d=heat3 e=warning f=heat2 g=heat1 (upper case is bold)
 === blocks 44x10
-| ▄▄▄▄ ▄▄▄▄▀▀▀▀▀▀▀▀▀▀     ▄   ▄▄▄▄▄▄▄▄▄▄▄▄   |
-|▄▀▀▀▀▀▀▀▀▀▀▀▄▀▄ ▀    ▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀|
-|▀     ▀▀▀▀▀▀▀▀▀      ▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀     |
-|  ▄    ▀▀▀▀▀▀       ▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀  ▀    |
-|  ▀▀      ▀▀▄▄▄▄    ▀▀▀▀▀▀▀▀▀ ▀▀▀▀▀         |
-|            ▀▀▀▀▀▀     ▀▀▀▀▀      ▀▀▀▄▄▄    |
-|             ▀▀▀▀▀     ▀▀▀▀▀       ▄▀▀▀▀▀   |
-|             ▀▀▀▀       ▀▀         ▀▀▀▀▀▀   |
-|             ▀                              |
+|                                            |
+| ▄▄▄▄▄▄▄▄▄▀▀▀▀▀▀▀▀▀▀    ▄▄  ▄▄▄▄▄▄▀▄▄▄▄▄▄▄▄▄|
+|▄▀▀▀▀▀▀▀▀▀▀▄▀▀▄ ▀    ▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀|
+|      ▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄    |
+|  ▄▄    ▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀       |
+|            ▀▀▀▀▄▄  ▀▀▀▀▀▀▀▀   ▀ ▀▀▄▄       |
+|            ▀▀▀▀▀▀     ▀▀▀▀▄       ▄▄▀▀▀▄   |
+|             ▀▀▀▀       ▀▀▀        ▀▀▀▀▀▀   |
+|             ▀                         ▀▀   |
 |                                            |
 --- roles
-| aaaa bbbbbbbbbbbbbb     b   bbbbbbbbbbbb   |
-|aaaaabbbbbbbbbb b    bcbbbbbbbbbbbbbbbbbbbbb|
-|a     aaaaaaaab      baabbbbbbbbbbbbbbb     |
-|  a    aaaaaa       bbbbbbbbbbddbdbbb  e    |
-|  aa      bbbbff    bbbbbbbbb ddddb         |
-|            bfffff     bbbbb      bbbfff    |
-|             bffff     bbbbb       ffffff   |
-|             bbff       gg         ffffff   |
-|             b                              |
 |                                            |
-a=heat5 b=track c=fg d=heat3 e=warning f=heat2 g=heat1 (upper case is bold)
+| aaaabbbbbbbbbbbbbbb    bb  bbbbbbbbbbbbbbbb|
+|aaaaaabbbbbabbb b    bcbbbbbbbbbbbbbbbbbbbbb|
+|      aaaaaaaa       baabbbbbbbbbbbbbbbd    |
+|  aa    baaaa       bbbbbbbbbbeeeebbb       |
+|            bbffff  bbbbbbbb   e ebbb       |
+|            bfffff     bbbbb       ffffff   |
+|             bbff       ggg        ffffff   |
+|             b                         ff   |
+|                                            |
+a=heat5 b=track c=fg d=warning e=heat3 f=heat2 g=heat1 (upper case is bold)
 === ascii 44x10
-| %%%%  .. ..........            .....  .    |
-|%%%%%%%........ .     &%...................%|
-|%     %%%%%%%%       .%%...............     |
-|  %    %%%%%%       ..........oooo...  &    |
-|  %%         .++    ........  oooo.         |
-|            .+++++     ....        ..+++    |
-|             .++++     .***.       ++++++   |
-|             ..++       **         ++++++   |
-|             .                              |
+|                                            |
+| %%%%  .............    .      ....... ..   |
+|%%%%%%%%%%%%...       &%.................. %|
+|      %%%%%%%%       .%%.......o.......&    |
+|  %%     %%%%       ......... oooo...       |
+|            .+++++   .......   o o. .       |
+|             +++++     ..*.        ++++++   |
+|             ..++       ***        ++++++   |
+|             .                         ++   |
 |                                            |
 --- roles
-| aaaa  bb bbbbbbbbbb            bbbbb  b    |
-|aaaaaaabbbbbbbb b     cabbbbbbbbbbbbbbbbbbba|
-|a     aaaaaaaa       baabbbbbbbbbbbbbbb     |
-|  a    aaaaaa       bbbbbbbbbbddddbbb  e    |
-|  aa         bff    bbbbbbbb  ddddb         |
-|            bfffff     bbbb        bbfff    |
-|             bffff     bgggb       ffffff   |
-|             bbff       gg         ffffff   |
-|             b                              |
+|                                            |
+| aaaa  bbbbbbbbbbbbb    b      bbbbbbb bb   |
+|aaaaaaaaaaaabbb       cabbbbbbbbbbbbbbbbbb a|
+|      aaaaaaaa       baabbbbbbbdbbbbbbbe    |
+|  aa     aaaa       bbbbbbbbb ddddbbb       |
+|            bfffff   bbbbbbb   d db b       |
+|             fffff     bbgb        ffffff   |
+|             bbff       ggg        ffffff   |
+|             b                         ff   |
 |                                            |
 a=heat5 b=track c=fg d=heat3 e=warning f=heat2 g=heat1 (upper case is bold)

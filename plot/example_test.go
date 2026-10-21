@@ -88,15 +88,15 @@ func ExampleMap() {
 	}
 	g := mp.Draw(24, 5, plot.Braille)
 	fmt.Println(g.String())
-	for _, it := range mp.Legend() {
+	for _, it := range mp.Legend(plot.Braille) {
 		fmt.Println(it.Role, it.Label)
 	}
 	// Output:
-	// ⢤⣶⣶⣴⣶⣾⢟⣯⠻⠟⠋⢀⢠⣥⣤⣴⣴⣶⣶⣶⣶⡶⣤⠤
-	// ⠉  ⠸⢿⣿⣿⠛⠁  ⣸⣿⣛⣿⣿⣿⣿⣿⣿⠻⠗ ⠈
-	//  ⠈   ⠉⢢⣦⣤⣀ ⠻⢿⣿⣿⠏⠈⠋⢹⣣ ⡀
-	//       ⠈⣿⣿⠏  ⠐⣿⠏⠂   ⢠⣶⣶⠄
-	//        ⠋             ⠈
+	// ⣰⣶⢶⣴⣶⣾⣟⣏⠻⠟⠋⢀⣠⣴⣤⣴⣴⣶⣶⣶⣶⡶⢦⢤
+	//  ⢀ ⠘⠿⡿⠿⠋   ⣼⣿⣽⣿⣿⢿⣿⣿⡿⠻⠋
+	//       ⠱⣷⣶⣤ ⠙⠹⣿⣿⠁ ⠁⠘⠵⢀⠤
+	//        ⡿⠛⠁   ⠛⠁⠁   ⠘⠛⠻⠂
+	//
 	// heat1 0
 	// heat2 ≥ 82
 	// heat3 ≥ 160

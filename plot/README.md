@@ -124,7 +124,7 @@ mp := plot.Map{
 	Markers: []plot.Marker{{Lat: 52.37, Lon: 4.9}},
 }
 g := mp.Draw(100, 20, plot.Braille)
-legend := mp.Legend() // one item per shade: "120k", "≥ 610k", ...
+legend := mp.Legend(plot.Braille) // one item per shade: "120k", "≥ 610k", ...
 ```
 
 - Countries are ISO 3166-1 alpha-2 codes, such as `DE` or `jp`.
@@ -132,12 +132,14 @@ legend := mp.Legend() // one item per shade: "120k", "≥ 610k", ...
   to 60° S, as iptop draws it. The map keeps its shape and is centred.
   `Stretch` fills the grid. `Aspect` is the cell's height over its width.
 - The shades start at round values, so the legend reads `≥ 2.8k` and not
-  `≥ 2786`. With `Log` and no `Min` and `Max`, the range is from the
+  `≥ 2786`. In ASCII the legend writes `>=`. Codes are case-blind, and when
+  two keys name one country the larger value counts. With `Log` and no `Min` and `Max`, the range is from the
   smallest value above zero to the largest.
 - `Blocks` mode draws half blocks, two pixels to a cell. `ASCII` draws `.`
   for land, the legend's marks for the shades and `&` for a marker.
-- A country too small to cover a third of a cell, such as Singapore or
-  Malta, takes the cell it covers most. It shows only when it has a value.
+- A country that is the larger part of no cell, such as Singapore, takes
+  the cell it covers most, or the nearest free cell. It shows only when it
+  has a value.
 - The map data takes about 240 KB when the first map is drawn. A program
   that draws no map does not link the data.
 
