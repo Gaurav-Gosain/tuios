@@ -5,7 +5,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Dock editor layout constants.
@@ -45,7 +44,7 @@ var dockSideLabels = map[string]string{
 // components in draw order, with what is not placed underneath.
 func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	rows := m.dockEditorRows()
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 
 	if len(rows) > 0 {

@@ -270,7 +270,7 @@ func (m *OS) RenderTapeReview() string {
 		return ""
 	}
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	width := m.panelWidth(tapeReviewWidth)
 	rows := m.tapeReviewRows()

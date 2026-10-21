@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 const layoutPickerWidth = 58
@@ -14,7 +13,7 @@ const layoutPickerWidth = 58
 // renderLayoutPicker renders the layout save/load overlay on the shared grammar.
 func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 	if m.LayoutPickerMode == "save" {
-		pal := theme.UI()
+		pal := m.overlayUI()
 		bg := pal.Surface
 		width := m.panelWidth(layoutPickerWidth)
 		input := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Name  ") +

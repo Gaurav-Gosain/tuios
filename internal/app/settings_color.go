@@ -73,7 +73,7 @@ var colorSettings = []colorSetting{
 		Path:  "appearance.overlay_border_color",
 		Label: "Overlay frame color",
 		Desc:  "Colour of every overlay's frame: dialogs, framed panels and which-key",
-		Unset: "(focused border)",
+		Unset: "(overlay's own)",
 		apply: func(m *OS, v string) {
 			m.Settings.OverlayBorderColor = v
 			m.MarkAllDirty()
@@ -82,7 +82,10 @@ var colorSettings = []colorSetting{
 			if c := theme.ConfigColor(s.OverlayBorderColor); !isNilColor(c) {
 				return c
 			}
-			return theme.BorderFocusedWindow()
+			if s.PaneOverlays {
+				return theme.BorderFocusedWindow()
+			}
+			return theme.UI().FgMute
 		},
 	},
 	{

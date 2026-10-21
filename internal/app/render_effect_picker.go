@@ -8,7 +8,6 @@ import (
 	tfx "github.com/Gaurav-Gosain/tuiffects"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Effect picker layout constants, matching the theme and glyph pickers so the
@@ -54,7 +53,7 @@ func (m *OS) effectPickerLayout() (width, rows int, hints []overlay.Hint) {
 // full-screen layer under the panel, placed by renderOverlays.
 func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.effectPickerItems()
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 
 	if len(items) > 0 {

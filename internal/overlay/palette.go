@@ -96,6 +96,12 @@ type Palette struct {
 	// Surface is not a colour the terminal can tell from what is around it, or
 	// because the host asked for framed panels (see SetFramePanels).
 	Framed bool
+
+	// Frame is the ink of a dialog's or a framed panel's frame line, for a host
+	// that draws its overlays' frames like its own window borders. Nil keeps
+	// FgMute on a dialog and Edge on a panel. Derive leaves it alone: it is the
+	// host's, set per client on the palette it renders with.
+	Frame color.Color
 }
 
 // Derive fills p's derived tokens from its base tokens at the current depth
@@ -266,3 +272,12 @@ func nearestApart(c, surface color.Color) color.Color {
 // same step Derive gives the panel and the cursor row: To256(c), moved off
 // surface's own entry when the two land on it.
 func Apart256(c, surface color.Color) color.Color { return apart256(c, To256(surface)) }
+
+// frameInk is the colour a frame line is drawn in: the host's Frame, or
+// fallback when it set none.
+func (p Palette) frameInk(fallback color.Color) color.Color {
+	if p.Frame != nil {
+		return p.Frame
+	}
+	return fallback
+}
