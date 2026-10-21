@@ -8366,3 +8366,18 @@ Run on 2026-10-21.
 `TestPaletteTokenSearchesActions` and `TestUnbindingFromTheOverlayReachesTheConfigFile` reached the manager with `Enter` on an action row. That was the behaviour this changes, so they press `ctrl+e` now. With the fix every test matching `Palette|Keybind|Rebind|Unbind` passes (34 of 34).
 
 The footer hint is spelt `^e rebind`, the way the keybind manager spells `^r` and `^d`. Not covered end to end: an action run from the palette in terminal mode.
+## send_to_workspace keys
+
+`TestSendToWorkspaceKeyStaysHere` starts a session with three panes on workspace 1, writes no keybindings, and presses the shipped default for `send_to_workspace_2` (`ctrl+opt+2` on macOS, `ctrl+alt+2` elsewhere) as the CSI u sequence a Kitty keyboard terminal sends, first in terminal mode and then `ctrl+alt+3` in window mode. It reads the moved pane's workspace from `list-windows --json`, the workspace the daemon and the client show, and the focused pane. `TestSendToWorkspaceKeyYieldsATakenKey` binds `switch_workspace_2 = ["ctrl+alt+2"]` the way a config written before the default could, and wants `keybinds doctor` to list the yield, `ctrl+alt+2` to switch, and the free `ctrl+alt+3` to still move a pane. Each test saves the screen and `list-windows --json` under `artifactDir`.
+
+Run on 2026-10-21, macOS, each cut built into its own binary and the source put back after.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The action stays on this workspace | the `send_to_workspace_` handler calls `MoveWindowToWorkspaceAndFollow` | `TestSendToWorkspaceKeyStaysHere` ("ctrl+alt+2 in terminal mode: the session shows workspace 2, want it to stay on 1", "the client shows workspace 2", "focus stayed on ..., the pane that left") | **caught** |
+| The action moves the pane | the `send_to_workspace_` handler moves nothing | `TestSendToWorkspaceKeyStaysHere` ("ctrl+alt+2 in terminal mode: pane ... is on workspace 1, want 2"), `TestSendToWorkspaceKeyYieldsATakenKey` ("ctrl+alt+3, a free key: pane ... is on workspace 1, want 3") | **caught** |
+| The key works in terminal mode | `send_to_workspace_` taken out of `isTerminalSafeAction` | `TestSendToWorkspaceKeyStaysHere` ("ctrl+alt+2 in terminal mode: pane ... is on workspace 1, want 2") | **caught** |
+| The new default yields a key the user holds | `send_to_workspace_2` taken out of `yieldingDefaults` | `TestSendToWorkspaceKeyYieldsATakenKey` ("keybinds doctor lists [], want only send_to_workspace_2 taken by switch_workspace_2", "the session shows workspace 1, want 2") | **caught** |
+| The default key exists | the plain upstream build, before this change | `TestSendToWorkspaceKeyStaysHere` ("ctrl+alt+2 in terminal mode: pane ... is on workspace 1, want 2"), `TestSendToWorkspaceKeyYieldsATakenKey` ("keybinds doctor lists []") | **caught** |
+
+The fixed build passes both tests 3 of 3. Not covered end to end: a legacy terminal, which cannot send `ctrl+alt+N` for most digits, and the GUI default `ctrl+alt+N` in `[keybindings.gui]`, which no test presses.
