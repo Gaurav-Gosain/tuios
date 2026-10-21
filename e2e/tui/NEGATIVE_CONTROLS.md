@@ -8599,6 +8599,12 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 
 The two reply-forwarder rows were run on 2026-10-19 on macOS arm64 against pr/live-handoff-1. Without either wake (the head before the fix) both tests fail on every run, 3 of 3 each, as they did in CI shards 5 and 8. With both, the two tests and `TestKittyUploadReply` passed 3 runs of 3.
 
+vtWriter takes the emulator's replies after each chunk and wakes the forwarder only when there were some (`takeResponses`). A wake skipped while a reply is pending leaves it in `respPending` until something else wakes the forwarder, which a program waiting for its answer never does. Run on 2026-10-21 on macOS arm64 (Darwin 27, Go 1.26.10) against pr/live-handoff-1, cutting the change, rebuilding, and restoring the file, checked byte for byte with sha256.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| A reply taken after a chunk does not wake the forwarder | drop the `p.wakeResponses()` call from `PTY.takeResponses` | `TestKittyUploadReply/daemon` and `TestKittyUploadReplyTwoClients`, 2 runs of 2: "answers the guest got: map[]", every upload "got no answer" (the standalone half, with no daemon, passes) | **caught** |
+
 ### Refusals: hosted panes and a pane that does not read its input
 
 - `TestHandoffRefusedWhileHostedPaneRuns`: a pane opened with `open-pane`, as another machine's daemon opens one, is running when a handoff is asked for. The handoff must be refused with an error that names the panes run for another machine, the daemon must answer hello on its old image, and the hosted pane's process must still run. The positive half: after `close-pane` the same handoff goes through to a new image.
