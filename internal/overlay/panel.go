@@ -436,7 +436,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	// host recorded are where they are on an unframed panel.
 	if pal.Framed && sidePad() >= 1 {
 		tl, tr, bl, br, h, v := panelFrame(pal)
-		edge := Style(bg).Foreground(pal.Edge)
+		edge := Style(bg).Foreground(pal.frameInk(pal.Edge))
 		side := edge.Render(v)
 		inner := totalW - 2
 		innerPad := Style(bg).Render(strings.Repeat(" ", sidePad()-1))
@@ -495,7 +495,7 @@ func FrameBlock(rows []string, totalW int, bg color.Color, pal Palette) []string
 		return rows
 	}
 	tl, tr, bl, br, h, v := panelFrame(pal)
-	edge := Style(bg).Foreground(pal.Edge)
+	edge := Style(bg).Foreground(pal.frameInk(pal.Edge))
 	side := edge.Render(v)
 	out := make([]string, len(rows))
 	out[0] = edge.Render(tl + strings.Repeat(h, totalW-2) + tr)

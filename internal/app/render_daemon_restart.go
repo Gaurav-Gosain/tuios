@@ -6,7 +6,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // overlayKindRestart is the restart dialog's overlay kind.
@@ -19,7 +18,7 @@ const restartInnerWidth = 66
 // question, the steps while they run, or the failure. The plan's words are
 // restartplan.Lines, the ones `tuios restart-server` prints.
 func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(restartInnerWidth, m.GetRenderWidth())
 	r := &m.restart

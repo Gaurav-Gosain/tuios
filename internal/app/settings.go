@@ -394,6 +394,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.glyphs", m.glyphItem()),
 			opt("appearance.border_style"),
 			opt("appearance.frame_panels"),
+			opt("appearance.pane_overlays"),
 			opt("appearance.overlay_border_color"),
 			opt("appearance.window_title_position"),
 			opt("appearance.window_title_style"),

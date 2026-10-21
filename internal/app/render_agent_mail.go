@@ -11,7 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // agentMailWidth is the mail overlay's preferred inner width. Wider than the
@@ -132,7 +131,7 @@ func (m *OS) agentMailErrorLines(width int) []string {
 	if m.AgentMail.Error == "" {
 		return nil
 	}
-	pal := theme.UI()
+	pal := m.overlayUI()
 	var out []string
 	for _, l := range wrapPlain(m.AgentMail.Error, max(width, 1)) {
 		out = append(out, overlay.Style(pal.Surface).Foreground(pal.Warn).Render(l))
@@ -176,7 +175,7 @@ func (m *OS) renderAgentMailPicker() (string, overlay.Geometry, []overlayRowHit)
 // agent. The message starts a thread of its own.
 func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.AgentMail
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	width := m.panelWidth(agentMailWidth)
 	mute := overlay.Style(bg).Foreground(pal.FgMute)
@@ -221,7 +220,7 @@ func (m *OS) renderAgentMailCompose() (string, overlay.Geometry, []overlayRowHit
 // touched it, then the editor.
 func (m *OS) agentMailDraftLines(prompt string, width int) []string {
 	st := &m.AgentMail
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	if st.Sending {
 		prompt = "sending: "
@@ -341,7 +340,7 @@ func agentMailThreadLabel(id uint64) string {
 // line at the foot while one is being written.
 func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.AgentMail
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	width := m.panelWidth(agentMailWidth)
 	now := time.Now()

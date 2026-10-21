@@ -1,6 +1,9 @@
 package overlay
 
-import "sync/atomic"
+import (
+	"strings"
+	"sync/atomic"
+)
 
 // Chrome is the handful of characters the overlay family draws its own
 // furniture with. A host that lets the user choose a glyph set pushes one in;
@@ -92,3 +95,11 @@ func SetFramePanels(on bool) { framePanels.Store(on) }
 // FramePanels reports what SetFramePanels last recorded, so a host that
 // memoises a palette can key it on the answer.
 func FramePanels() bool { return framePanels.Load() }
+
+// FrameDrawn reports whether a dialog's frame draws anything. Under the hidden
+// border style it is blank, and a dialog's shaded fill is then its only edge,
+// so a host that fills its overlays with what is behind them keeps the shade.
+func FrameDrawn() bool {
+	tl, tr, bl, br, h, v := dialogFrame()
+	return strings.TrimSpace(tl+tr+bl+br+h+v) != ""
+}

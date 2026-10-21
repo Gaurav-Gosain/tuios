@@ -432,7 +432,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowCacheStats {
 		stats := GetGlobalStyleCache().GetStats()
 
-		pal := theme.UI()
+		pal := m.overlayUI()
 		bg := pal.Surface
 		labelStyle := overlay.Style(bg).Foreground(pal.FgDim).Render
 		valueStyle := overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render

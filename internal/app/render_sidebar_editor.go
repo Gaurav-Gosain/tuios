@@ -5,7 +5,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Rail layout editor panel size.
@@ -42,7 +41,7 @@ func (m *OS) sectionEditorLayout() (width, rows int, hints []overlay.Hint) {
 // underneath.
 func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	rows := m.sectionEditorRows()
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 
 	if len(rows) > 0 {

@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"tuios.dev/shot"
 )
 
@@ -106,7 +105,7 @@ func (m *OS) shotPreviewMetaLines() []string {
 // renderScreenshotPreview draws the panel and records the rows it drew.
 func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHit) {
 	p := &m.ShotPreview
-	pal := theme.UI()
+	pal := m.overlayUI()
 	width := m.panelWidth(shotPreviewWidth)
 	bodyCols, bodyRows := m.screenshotPreviewBody()
 	hints := m.shotPreviewHints()

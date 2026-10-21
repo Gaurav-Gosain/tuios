@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -33,7 +32,7 @@ const worktreeFieldLabelW = 9
 
 // renderWorktreePrompt draws the worktree dialog.
 func (m *OS) renderWorktreePrompt() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(worktreeDialogWidth, m.GetRenderWidth())
 

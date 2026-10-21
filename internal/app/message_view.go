@@ -11,7 +11,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The message view is the one place a message is read in full.
@@ -297,7 +296,7 @@ func (m *OS) renderMessageView(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	if !m.msgView.open {
 		return layers
 	}
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	width, lines, rows, maxScroll, hints := m.messageViewLayout()
 	m.msgView.scroll = max(0, min(m.msgView.scroll, maxScroll))
