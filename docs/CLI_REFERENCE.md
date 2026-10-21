@@ -5474,7 +5474,8 @@ the input path reads directly. The command says so instead of reporting success.
 You can do both from inside tuios as well. Open the keybind manager with the
 leader key then `k`, or from the command palette, and press `ctrl+d` on a
 binding to remove it or `ctrl+x` to take its key off every action. Typing `#`
-in the command palette searches actions rather than commands.
+in the command palette searches actions rather than commands: `Enter` runs the
+action and `ctrl+e` opens the keybind manager on it.
 
 ---
 

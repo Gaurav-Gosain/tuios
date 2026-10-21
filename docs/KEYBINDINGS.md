@@ -407,6 +407,8 @@ headers. The headers are not rows: the cursor steps over them. Once you type,
 the commands are ranked by how well they match, and each row names its
 category in a quiet column on the right.
 
+Typing `#` searches actions instead of commands: `#close` lists every action with "close" in its name, key or description, with the keys it is on today. `Enter` runs the action, after the palette has closed, so it acts on the pane and the mode underneath as its key would. `ctrl+e` opens the keybind manager on that action instead, to rebind or unbind it, and the footer shows the key while a `#` search is open. An action that only its own view reads, such as a rail, Inbox, mail or copy mode key, has nothing to act on from the palette, so `Enter` on it opens the keybind manager as `ctrl+e` does.
+
 The prefix menu (which-key) shows the keys after the leader in sections
 (Windows, Panes, Sessions, Modes, Menus, Tools, and Agents once an agent has
 run), laid out in as many columns as the screen holds. A key marked with `+`
