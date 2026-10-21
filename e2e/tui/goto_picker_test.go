@@ -13,7 +13,8 @@ import (
 // The go-to picker (goto_picker, prefix G), driven through a real client over
 // a real daemon: a fuzzy query finds a pane on another workspace of another
 // session and Enter lands there; selector terms narrow the rows; and with
-// nothing typed, Enter goes back to where the client was before.
+// nothing typed, Enter goes back to where the client was before, even with an
+// agent that needs you waiting in another session.
 //
 // How these could pass wrongly, written down first:
 //   - The jump could look right on screen and leave the daemon elsewhere. Each
@@ -34,6 +35,10 @@ import (
 //     session that was focused with the prefix key rather than the picker,
 //     so the place is the one the client was on, not the one the picker
 //     last left.
+//   - An agent that needs you could take the first row and Enter would go to
+//     it. The agent needy in ops is in needs_input for both flips back, its
+//     row is on screen when Enter is pressed, and the landing is read from
+//     the daemon, which would show ops.
 //
 // Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md).
 
@@ -128,6 +133,8 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 		{"new-window", "zebra-ledger", "-s", "work", "--workspace", "2", "--no-focus"},
 		{"new-window", "agentpane", "-s", "work", "--no-focus"},
 		{"set-agent-state", "working", "-s", "work", "-w", "agentpane", "--harness", "claude-code", "-m", "editing files"},
+		{"new-window", "needy", "-s", "ops", "--no-focus"},
+		{"set-agent-state", "needs_input", "-s", "ops", "-w", "needy", "-m", "approve the deploy"},
 	} {
 		if o, err := tuiosCLI(t, base, args...); err != nil {
 			t.Fatalf("%v: %v\n%s", args, err, o)
@@ -178,8 +185,11 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	sendKeys(t, term, tuitest.Esc)
 	waitLanded(t, term, base, "esc closed the picker", "work", 2, zebra)
 
-	// With nothing typed, Enter goes back to the place the client left.
+	// With nothing typed, Enter goes back to the place the client left, not to
+	// the agent that needs you, which is listed right after it.
+	needy := gotoRowText("agent", "ops › 1 › needy")
 	openGotoPicker(t, term)
+	gotoWaitRows(t, term, "the empty query does not list the agent that needs you", []string{needy}, nil)
 	saveArtifact(t, term, dir, "empty-query")
 	sendKeys(t, term, tuitest.Enter)
 	waitLanded(t, term, base, "enter on an empty query, back to home", "home", 1, homePane)
@@ -188,6 +198,7 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('b'), "n")
 	waitLanded(t, term, base, "the prefix n to homeb", "home", 1, homeB)
 	openGotoPicker(t, term)
+	gotoWaitRows(t, term, "the empty query after the key does not list the agent that needs you", []string{needy}, nil)
 	saveArtifact(t, term, dir, "empty-query-after-key")
 	sendKeys(t, term, tuitest.Enter)
 	waitLanded(t, term, base, "enter on an empty query, back to the first home pane", "home", 1, homePane)

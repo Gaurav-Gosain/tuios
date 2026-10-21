@@ -30,8 +30,9 @@ import (
 // commas are OR, terms are AND. A leading @, # or ! is kind:agent,
 // kind:session or kind:ws.
 //
-// With nothing typed the list is agents that need you, then the places the
-// client was on most recently, then every agent, session and workspace. Panes
+// With nothing typed the list is the place the client was on last, so Enter
+// goes back, then the agents that need you, then the other places the client
+// was on recently, then every agent, session and workspace. Panes
 // are listed once something is typed: there are many more of them than of
 // anything else, and the ones worth going to with nothing typed are the recent
 // ones, which are listed anyway.
@@ -557,29 +558,40 @@ type gotoRankKey struct {
 	at   int64
 }
 
-// gotoRank orders the rows with no fuzzy words to rank them: agents that need
-// you, the longest waiting first, then the recent places, the last one left
-// first, then the rest in the order gotoRows lists them.
+// gotoRank orders the rows with no fuzzy words to rank them: the place the
+// client left last, so Enter on an empty query goes back, then agents that
+// need you, the longest waiting first, then the other recent places, the most
+// recent first, then the rest in the order gotoRows lists them.
 func (m *OS) gotoRank(r gotoRow, i int) gotoRankKey {
-	if r.needsYou() {
-		return gotoRankKey{0, r.stateAt}
+	at := m.gotoRecentAt(r)
+	switch {
+	case at == 0:
+		return gotoRankKey{0, 0}
+	case r.needsYou():
+		return gotoRankKey{1, r.stateAt}
+	case at > 0:
+		return gotoRankKey{2, int64(at)}
 	}
-	if at := m.gotoRecentAt(r); at >= 0 {
-		return gotoRankKey{1, int64(at)}
-	}
-	return gotoRankKey{2, int64(i)}
+	return gotoRankKey{3, int64(i)}
 }
 
-// gotoRecentAt is where a row's pane is in the recent places, -1 when it is
-// not one or is where the client is now.
+// gotoRecentAt is where a row's pane is in the recent places, counting from 0
+// for the place left last, -1 when it is not one or is where the client is
+// now.
 func (m *OS) gotoRecentAt(r gotoRow) int {
 	if r.kind != gotoAgent && r.kind != gotoPane {
 		return -1
 	}
-	for i, p := range m.gotoPicker.recent {
-		if p.session == r.session && p.window == r.window && p.host == r.host && p != m.gotoPicker.here {
-			return i
+	g := &m.gotoPicker
+	at := 0
+	for _, p := range g.recent {
+		if p == g.here {
+			continue
 		}
+		if p.session == r.session && p.window == r.window && p.host == r.host {
+			return at
+		}
+		at++
 	}
 	return -1
 }

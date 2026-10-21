@@ -304,7 +304,7 @@ ws       payments › 2 · api-tests                            1 pane
 pane     payments › 1 › nvim
 ```
 
-With nothing typed, the list starts with the agents that need you, the one waiting longest first. Then come the places you were on most recently, the last one first, so `Ctrl+B G` and `enter` take you back to where you were. Then come every agent, session and workspace. Panes are listed once you type something. A session has many panes, and the ones you were just on are already in the recent places.
+With nothing typed, the first row is the place you were on last, so `Ctrl+B G` and `enter` take you back to where you were. The agents that need you come right after it, the one waiting longest first, then the other places you were on recently, the most recent first, then every agent, session and workspace. Panes are listed once you type something. A session has many panes, and the ones you were just on are already in the recent places.
 
 Typed words are a fuzzy search over the names a row shows: the session, the workspace, the pane, and for an agent its harness and its last message. A `key:value` term narrows the rows instead, and every term has to match. The terms are the selector the agents view takes (`harness:`, `state:`, `needs:you`, `session:`, `group:`, `host:`, `name:`), and three more:
 
