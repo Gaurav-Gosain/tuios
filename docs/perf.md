@@ -3173,6 +3173,26 @@ socket methods. On main at 66961010 the binaries measured 42,209,442 and
 40,960 and 34,672 bytes. It links no new package. This uses the plugin
 system allowance. The new budgets leave 4,198 and 4,162 bytes of room.
 
+The budgets went to 42,275,100 and 39,503,200 for the admin approval by the
+person, the hash of the files a plugin's commands name, the plugin reaper
+and the git cancel. On main at bfc9d0f2 the binaries measured 42,250,402
+and 39,482,338 bytes. With the change they measured 42,270,882 and
+39,499,010 (Go 1.26.10, a shallow clone, as CI builds it), so it adds
+20,480 and 16,672 bytes. No new package is linked. The new budgets leave
+4,218 and 4,190 bytes of room.
+
+Each plugin command now runs under a reaper, a tuios process that leads its
+session until nothing the command started is left. One reaper holds 2.7 MB
+of private memory, measured on Linux from a release build flushed to disk.
+Its program pages, about 17 MB, are the daemon's own binary and shared with
+it. The runner starts the reaper with `GODEBUG=disablethp=1`: with
+transparent huge pages set to `always`, the Go heap faults in as 2 MB pages,
+and a reaper then held 5 to 7 MB. The plugin command gets the GODEBUG it
+would have had. A reaper wakes only when a process it waits for ends: 0
+context switches in 8 idle seconds. The daemon runs no timer for it. On
+macOS a reaper whose command has ended while something it started still
+runs looks at its process group once a second.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
