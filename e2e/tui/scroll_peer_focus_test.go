@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -100,5 +101,124 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 	// at the far end is off screen on both clients now.
 	if strings.Contains(after, "CHARLIE") {
 		t.Errorf("the second client is still showing the far end of the strip:\n%s", after)
+	}
+}
+
+// stripOrder is the session's panes from the left end of the strip to the
+// right, read from where each pane is placed. Columns off the left edge have a
+// negative x, so the order holds for the whole strip and not only the part on
+// screen.
+func stripOrder(rects []winRect) []string {
+	sorted := slices.Clone(rects)
+	slices.SortStableFunc(sorted, func(a, b winRect) int { return a.X - b.X })
+	ids := make([]string, 0, len(sorted))
+	for _, r := range sorted {
+		ids = append(ids, r.ID)
+	}
+	return ids
+}
+
+// newPaneIn is the one pane in after that before does not name.
+func newPaneIn(t *testing.T, before []string, after []winRect) string {
+	t.Helper()
+	for _, r := range after {
+		if !slices.Contains(before, r.ID) {
+			return r.ID
+		}
+	}
+	t.Fatalf("no new pane among %v (was %v)", after, before)
+	return ""
+}
+
+// waitStripFocus waits until the session's focus is on want.
+func waitStripFocus(t *testing.T, base, want, when string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		if focusedWindowID(t, base, "strip") == want {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("%s: the focus is on %s, want %s", when, focusedWindowID(t, base, "strip"), want)
+}
+
+// TestScrollingNewColumnOpensBesideFocus is issue 952: in the scrolling layout
+// with a daemon, a new pane went to the end of the strip and not into a column
+// right after the focused one, which is where ScrollingLayout.AddColumn puts it
+// and where a client without a daemon put it. A split is a new pane too, so it
+// is checked the same way. Closing the focused column moves the focus one
+// column left, as it does without a daemon.
+//
+// NEGATIVE CONTROL: see NEGATIVE_CONTROLS.md, issue 952.
+func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
+	term, base := scrollingStrip(t, 3)
+	start := stripOrder(waitForSettledGeometry(t, base, 3))
+	// Names make the frames readable.
+	for i, id := range start {
+		focusAndName(t, base, id, []string{"ONE", "TWO", "THREE"}[i])
+	}
+	// The report's step: move the focus to the first column. alt+p steps one
+	// column left and scrolls the strip with it.
+	for range 2 {
+		if err := term.SendKeys(tuitest.Alt("p")); err != nil {
+			t.Fatalf("step the focus left: %v", err)
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+	waitStripFocus(t, base, start[0], "after stepping to the first column")
+	waitText(t, term, "the first column on screen", "ONE")
+
+	// The command the report's daemon log shows.
+	if out, err := tuiosCLI(t, base, "run-command", "NewWindow"); err != nil {
+		t.Fatalf("NewWindow: %v\n%s", err, out)
+	}
+	after := waitForSettledGeometry(t, base, 4)
+	added := newPaneIn(t, start, after)
+	waitStripFocus(t, base, added, "after the new pane opened")
+	focusAndName(t, base, added, "NEW")
+	waitText(t, term, "the new pane's name", "NEW")
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	railShot(t, term, "new-pane")
+	want := []string{start[0], added, start[1], start[2]}
+	if got := stripOrder(after); !slices.Equal(got, want) {
+		t.Fatalf("the new pane is not in the column after the focused one:\n got  %v\n want %v\n%s", got, want, term.Snapshot())
+	}
+
+	// A split of the focused pane opens beside it as well.
+	if out, err := tuiosCLI(t, base, "run-command", "Split", "vertical"); err != nil {
+		t.Fatalf("Split vertical: %v\n%s", err, out)
+	}
+	split := waitForSettledGeometry(t, base, 5)
+	splitPane := newPaneIn(t, want, split)
+	wantSplit := []string{start[0], added, splitPane, start[1], start[2]}
+	if got := stripOrder(split); !slices.Equal(got, wantSplit) {
+		t.Fatalf("the split pane is not in the column after the focused one:\n got  %v\n want %v\n%s", got, wantSplit, term.Snapshot())
+	}
+	waitStripFocus(t, base, splitPane, "after the split")
+
+	// Closing the focused column focuses the column on its left.
+	if out, err := tuiosCLI(t, base, "run-command", "CloseWindow"); err != nil {
+		t.Fatalf("CloseWindow: %v\n%s", err, out)
+	}
+	closed := waitForSettledGeometry(t, base, 4)
+	if got := stripOrder(closed); !slices.Equal(got, want) {
+		t.Fatalf("the strip after the close:\n got  %v\n want %v\n%s", got, want, term.Snapshot())
+	}
+	waitStripFocus(t, base, added, "after the focused column closed")
+	railShot(t, term, "after-close")
+}
+
+// focusAndName focuses a pane by id and gives it a name.
+func focusAndName(t *testing.T, base, id, name string) {
+	t.Helper()
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", "strip", id); err != nil {
+		t.Fatalf("focus %s: %v\n%s", id, err, out)
+	}
+	waitStripFocus(t, base, id, "after focusing "+name)
+	if out, err := tuiosCLI(t, base, "run-command", "RenameWindow", name); err != nil {
+		t.Fatalf("name %s: %v\n%s", name, err, out)
 	}
 }

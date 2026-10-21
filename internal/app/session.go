@@ -1655,6 +1655,12 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 				m.ScrollingOnWindowAdded(w)
 			}
 		}
+		// A split recorded for the BSP tree has no side in the strip: the
+		// new pane takes the column after the focused one, like any other.
+		// Clear it, or it would split some later pane after a switch to BSP.
+		if len(created) > 0 {
+			m.CancelPendingSplit()
+		}
 	} else {
 		// A pane closed on the daemon has to leave the tree here, the way the
 		// scrolling layout above is told. Leaving it in meant the tree held a leaf

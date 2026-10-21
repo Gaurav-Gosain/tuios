@@ -7918,3 +7918,20 @@ Run on 2026-10-21 against `origin/main`, which has no option: the `off` case
 fails with "the mode pill shows a split letter: true, want false". The
 `default` case passes on both builds, and it shows the two-cell move that the
 `off` case must not have.
+## Scrolling layout: a new column in a daemon session (#952)
+
+`TestScrollingNewColumnOpensBesideFocus` starts a daemon session in the
+scrolling layout with three columns, steps the focus to the first with alt+p,
+and runs `NewWindow`. It reads the strip order from `list-windows --json`. It
+then splits the new pane and closes the split, and checks the order and the
+focus after each step.
+
+Run on 2026-10-21.
+
+| Cut | Result |
+| --- | --- |
+| The fix removed (`scrollColumnsFromState` appends an unnamed pane at the end) | **caught**: "the new pane is not in the column after the focused one", the new pane last of four |
+| Only the closed-pane pass in `adoptScrollColumns` removed | **caught**: "after the focused column closed: the focus is on" the column to the right, want the one to the left |
+| The fix in place | passes, 3 of 3 |
+
+`TUIOS_E2E_FRAMES` saves `new-pane` and `after-close` frames.

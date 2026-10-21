@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -29,7 +30,7 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		// restore only says what the columns are.
 		if pending, ok := m.pendingScrollColumns[m.CurrentWorkspace]; ok {
 			delete(m.pendingScrollColumns, m.CurrentWorkspace)
-			sl.Columns = m.scrollColumnsFromState(m.CurrentWorkspace, pending)
+			sl.Columns = m.scrollColumnsFromState(m.CurrentWorkspace, pending, -1)
 		} else {
 			for _, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
@@ -833,10 +834,19 @@ func (m *OS) scrollColumnsToState(cols []layout.ScrollColumn) []session.Serializ
 // The session can name panes this client should not put in a column: one that
 // has closed, one on another workspace, one minimized or floating, or one
 // already placed by an earlier column. Those are left out, the way the strip
-// built from nothing leaves them out. A pane on the workspace that no column
-// names, which is one opened since the state was written, gets a column of its
-// own at the end, which is where a new pane goes.
-func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColumn) []layout.ScrollColumn {
+// built from nothing leaves them out.
+//
+// A pane on the workspace that no column names is one opened since the state
+// was written. It gets a column of its own right after the column that holds
+// the pane whose int ID is after. Callers pass the focused pane, so this is
+// where ScrollingLayout.AddColumn puts a new pane. With after in no column, it
+// goes at the end.
+//
+// The state a daemon sends with a pane it has just made is one such state. The
+// daemon never computes columns, so they are the ones a client last pushed and
+// do not name the new pane. Putting it at the end there sent every new pane in
+// a daemon session to the end of the strip (issue 952).
+func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColumn, after int) []layout.ScrollColumn {
 	tileable := func(w *terminal.Window) bool {
 		return w != nil && w.Workspace == ws && !w.Minimized && !w.IsFloating
 	}
@@ -869,13 +879,21 @@ func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColum
 			Active:     active,
 		})
 	}
+	at := len(out)
+	for i, c := range out {
+		if slices.Contains(c.WindowIDs, after) {
+			at = i + 1
+			break
+		}
+	}
 	for _, w := range m.Windows {
 		if !tileable(w) {
 			continue
 		}
 		if intID := m.GetWindowIntID(w.ID); !placed[intID] {
 			placed[intID] = true
-			out = append(out, layout.ScrollColumn{WindowIDs: []int{intID}})
+			out = slices.Insert(out, at, layout.ScrollColumn{WindowIDs: []int{intID}})
+			at++
 		}
 	}
 	return out
@@ -884,8 +902,13 @@ func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColum
 // adoptScrollColumns takes the session's columns for every workspace it names.
 //
 // A workspace with a strip already has its columns replaced in place, so the
-// strip keeps its offset and the focus stays on the pane it was on. A workspace
-// without one has the columns set aside for GetOrCreateScrollingLayout, which
+// strip keeps its offset and the focus stays on the pane it was on. The strip
+// is first told about the panes that left it, so a closed focused column hands
+// the focus to the column on its left, as a close without a daemon does. A
+// pane the session's columns do not name opens after the focused column. See
+// scrollColumnsFromState.
+//
+// A workspace without one has the columns set aside for GetOrCreateScrollingLayout, which
 // builds them the first time the strip is wanted, with the focus sync and the
 // reveal every new strip gets.
 func (m *OS) adoptScrollColumns(cols map[int][]session.SerializedScrollColumn) {
@@ -901,13 +924,24 @@ func (m *OS) adoptScrollColumns(cols map[int][]session.SerializedScrollColumn) {
 			m.pendingScrollColumns[ws] = c
 			continue
 		}
+		// The panes that closed, or that left the strip by a minimize, a float
+		// or a move to another workspace. RemoveWindow moves the focus the way
+		// ScrollingOnWindowRemoved does without a daemon.
+		for _, col := range slices.Clone(sl.Columns) {
+			for _, intID := range col.WindowIDs {
+				w := m.GetWindowByIntID(intID)
+				if w == nil || w.Workspace != ws || w.Minimized || w.IsFloating {
+					sl.RemoveWindow(intID)
+				}
+			}
+		}
 		focused := -1
 		if sl.FocusedCol >= 0 && sl.FocusedCol < len(sl.Columns) {
 			if col := sl.Columns[sl.FocusedCol]; col.Active >= 0 && col.Active < len(col.WindowIDs) {
 				focused = col.WindowIDs[col.Active]
 			}
 		}
-		sl.Columns = m.scrollColumnsFromState(ws, c)
+		sl.Columns = m.scrollColumnsFromState(ws, c, focused)
 		if focused < 0 || !sl.FocusColumnContaining(focused) {
 			sl.FocusedCol = clampInt(sl.FocusedCol, 0, max(len(sl.Columns)-1, 0))
 		}
