@@ -8668,3 +8668,16 @@ quit, built with `git archive`.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The dwell's quit killed whatever session the client had switched to during the dwell | The `worktreeRemoveQuitMsg` name check in `update.go` | The build with the check reverted | `TestQuitMenuDeleteFollowsASwitchDuringTheDwell` ("the dwell's quit did not follow the deleted session: child exited") | **caught** |
+
+## The worktree-delete review controls
+
+Two regressions found in review of the worktree-deletion PR. Run on
+2026-10-21, against working-tree builds with the fix reverted, built with
+`go build`: the note suppression short-circuited to `false &&` in the
+SessionKilledMsg handler; the detached-HEAD refusal removed from the verb and
+the dialog.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The kill's own "Killed session" note replaced the deletion note — the one record of where the stashed changes went — and made `TestSidebarCloseDeletesWorktree` flake at the already-gone and dirty steps | The `pendingWorktreeKill` suppression in `update.go` | Build with the suppression short-circuited | `TestSidebarCloseDeletesWorktree` ("the kill's own note replaced the deletion note"), deterministically on all three deletions | **caught** |
+| remove-worktree deleted a worktree whose detached HEAD held commits no branch has, without a word — the removal leaves those commits unreachable | The `OwnCommits` refusal in the verb, and the dialog's refusal line and toll | Build from before the fix | `TestSidebarCloseRefusesDetachedWorktree` ("the close dialog said nothing about the detached HEAD") | **caught** |

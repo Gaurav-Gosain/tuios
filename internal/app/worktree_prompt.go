@@ -259,25 +259,35 @@ func (m *OS) createWorktreeCmd(repoRoot, branch, sessionName string) tea.Cmd {
 		params["name"] = sessionName
 	}
 	return func() tea.Msg {
-		c, err := dial()
-		if err != nil {
-			return worktreeCreatedMsg{Err: fmt.Errorf("failed to reach the daemon: %w", err)}
-		}
-		defer func() { _ = c.Close() }()
-
-		raw, err := c.CallWithTimeout("new-worktree", params, 5*time.Minute)
-		if err != nil {
-			return worktreeCreatedMsg{Err: fmt.Errorf("failed to create the worktree: %w", err)}
-		}
 		var res struct {
 			Session string `json:"session"`
 			Path    string `json:"path"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
-			return worktreeCreatedMsg{Err: fmt.Errorf("failed to read the daemon's reply: %w", err)}
+		if err := callWorktreeVerb(dial, "new-worktree", "create the worktree", params, 5*time.Minute, &res); err != nil {
+			return worktreeCreatedMsg{Err: err}
 		}
 		return worktreeCreatedMsg{Session: res.Session, Path: res.Path}
 	}
+}
+
+// callWorktreeVerb runs one worktree verb over a fresh daemon connection and
+// decodes the JSON reply into res. fail names the action for the call's own
+// error; the reach and decode wraps are the same for every verb. Shared by the
+// create and delete commands, which differ only in verb, params and reply.
+func callWorktreeVerb(dial agentMailDial, verb, fail string, params map[string]any, timeout time.Duration, res any) error {
+	c, err := dial()
+	if err != nil {
+		return fmt.Errorf("failed to reach the daemon: %w", err)
+	}
+	defer func() { _ = c.Close() }()
+	raw, err := c.CallWithTimeout(verb, params, timeout)
+	if err != nil {
+		return fmt.Errorf("failed to %s: %w", fail, err)
+	}
+	if err := json.Unmarshal(raw, res); err != nil {
+		return fmt.Errorf("failed to read the daemon's reply: %w", err)
+	}
+	return nil
 }
 
 // worktreeCreatedMsg is a finished create on its way back to the loop.

@@ -157,8 +157,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			return o, nil
 		case app.DockSessionClose:
-			o.OpenSessionClose()
-			return o, nil
+			return o, o.OpenSessionClose()
 		case app.DockSessionNew:
 			o.OpenNewSessionPicker()
 			return o, nil

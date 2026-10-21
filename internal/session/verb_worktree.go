@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,11 @@ const (
 	// uncommitted changes and the caller did not say what to do with them.
 	// Nothing was removed. The remedy is stash or force, and the hint says so.
 	ErrVerbWorktreeDirty = "worktree_dirty"
+	// ErrVerbWorktreeDetached reports a removal refused because the worktree
+	// sits on a detached HEAD holding commits no branch, tag or remote has.
+	// Removing the worktree would leave those commits unreachable. Nothing was
+	// removed; force removes them anyway.
+	ErrVerbWorktreeDetached = "worktree_detached"
 	// ErrVerbGitFailed reports a git command that failed, with git's own
 	// message. It is final: the repository is as it was.
 	ErrVerbGitFailed = "git_failed"
@@ -313,6 +319,19 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			} else {
 				row["changes"] = -1
 			}
+			// What the close dialog says the delete row will take. Ignored is
+			// the part nothing saves; own_commits is the part the delete
+			// refuses. -1 is a failed read, not a count.
+			if n, err := worktree.Ignored(wt.Path); err == nil {
+				row["ignored"] = n
+			} else {
+				row["ignored"] = -1
+			}
+			if n, err := worktree.OwnCommits(wt.Path); err == nil {
+				row["own_commits"] = n
+			} else {
+				row["own_commits"] = -1
+			}
 			if wt.Base != "" {
 				if n, err := worktree.Ahead(wt.Path, wt.Base); err == nil {
 					row["ahead"] = n
@@ -357,6 +376,7 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 	}
 	// Resolved now, while the directory is there to resolve.
 	notesRoot := canonRoot(info.Path)
+	killed := false
 
 	out := map[string]any{
 		"type":        "worktree_removed",
@@ -385,6 +405,27 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 			})
 		}
 		out["changes"] = changes
+		if own, err := worktree.OwnCommits(info.Path); err == nil {
+			out["own_commits"] = own
+			if own > 0 && !p.Force {
+				return nil, hintedVerbError(ErrVerbWorktreeDetached,
+					fmt.Sprintf("%s sits on a detached HEAD holding %d %s no branch has. Nothing was removed.", info.Path, own, plural.Word(own, "commit", "commits")),
+					&VerbHint{
+						Param:  "force",
+						Detail: "Commit them onto a branch first, or pass force to remove the worktree and lose the commits.",
+					})
+			}
+		} else {
+			out["own_commits"] = -1
+		}
+		// Ignored files are counted, not saved: git never stashes them, and
+		// git worktree remove deletes them without --force. -1 is a count git
+		// would not give, so the caller can tell a failed read from a clean 0.
+		if ignored, err := worktree.Ignored(info.Path); err == nil {
+			out["ignored"] = ignored
+		} else {
+			out["ignored"] = -1
+		}
 		if changes > 0 && !p.Force && !p.Stash {
 			return nil, hintedVerbError(ErrVerbWorktreeDirty,
 				fmt.Sprintf("%s holds %d uncommitted %s. Nothing was removed.", info.Path, changes, plural.Word(changes, "change", "changes")),
@@ -404,6 +445,16 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 			out["stash_message"] = "tuios: " + info.Branch
 		}
 		discard := changes > 0 && !p.Stash
+		// On Windows the session's shells hold the worktree as their cwd, and
+		// git cannot remove a directory a process sits inside. The stash has
+		// already run, so the session goes first and the removal has the
+		// directory to itself. Everywhere else the session outlives the verb
+		// when it is asked to, so the client can show the note before it kills.
+		if runtime.GOOS == "windows" {
+			if err := d.manager.DeleteSession(sess.Name()); err == nil {
+				killed = true
+			}
+		}
 		if err := worktree.Remove(info.RepoRoot, info.Path, discard); err != nil {
 			return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
 				Detail: "git refused to remove the worktree. It is still there.",
@@ -417,8 +468,8 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 	// git runs in the main checkout, which is still there.
 	d.dropCheckpointsOf(info.RepoRoot, notesRoot)
 
-	out["session_killed"] = false
-	if !p.KeepSession {
+	out["session_killed"] = killed
+	if !killed && !p.KeepSession {
 		if err := d.manager.DeleteSession(sess.Name()); err == nil {
 			out["session_killed"] = true
 		}

@@ -178,10 +178,11 @@ func (m *OS) QuitMenuActivate(idx int) tea.Cmd {
 	case QuitKillGoNext:
 		return m.KillSessionGoNext(next)
 	case QuitDeleteWorktree:
-		// The worktreeRemovedMsg handler quits this client when the daemon
-		// confirms the deletion. A failed verb leaves the client alive with
-		// its error notification: the row said "and quit", not "and die".
-		return m.deleteWorktreeCmd(m.SessionName, true)
+		// One confirmation, one place that shows the toll: the row opens the
+		// close dialog, whose delete-worktree row does the deleting — the
+		// same answer any other close of this session gets. A dialog that is
+		// dismissed leaves the client running.
+		return m.OpenSessionClose()
 	case QuitKillAndQuit, QuitStandalone:
 		m.QuitSession()
 		return tea.Quit

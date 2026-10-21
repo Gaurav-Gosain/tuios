@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -195,7 +195,7 @@ func (m *OS) sessionCloseTarget() string {
 }
 
 // OpenSessionClose raises the close confirmation for the attached session.
-func (m *OS) OpenSessionClose() { m.OpenSessionCloseFor("") }
+func (m *OS) OpenSessionClose() tea.Cmd { return m.OpenSessionCloseFor("") }
 
 // OpenSessionCloseForWindow raises the confirmation for the one pane at i.
 // It is the path a tuios://window/<id>/close link takes: a program in any
@@ -220,14 +220,21 @@ func (m *OS) OpenSessionCloseForWindow(i int) {
 // The attached session resolves back to the empty target, so the path that
 // quits this client is chosen by what the session IS rather than by which
 // surface raised the dialog.
-func (m *OS) OpenSessionCloseFor(sessionID string) {
+func (m *OS) OpenSessionCloseFor(sessionID string) tea.Cmd {
 	if sessionID == m.sidebarCurrentSessionID() {
 		sessionID = ""
 	}
 	m.SessionCloseWindow = ""
 	m.SessionCloseTarget = sessionID
 	m.SessionCloseSelected = SessionCloseRowCancel
+	m.SessionCloseWorktreeToll = nil
 	m.ShowSessionClose = true
+	// The delete row's toll is a round trip away, so the fetch starts now and
+	// the dialog draws without the worktree line until the reply lands.
+	if m.sessionCloseRowCount() > SessionCloseRowDeleteWorktree {
+		return m.worktreeTollCmd(m.sessionCloseTarget())
+	}
+	return nil
 }
 
 // CloseSessionClose dismisses the confirmation, changing nothing.
@@ -237,6 +244,7 @@ func (m *OS) CloseSessionClose() {
 	m.SessionCloseWorkspace = 0
 	m.SessionCloseWindow = ""
 	m.SessionCloseSelected = SessionCloseRowCancel
+	m.SessionCloseWorktreeToll = nil
 }
 
 // SessionCloseMove moves the selection by delta, clamped to the rows.
@@ -260,6 +268,16 @@ func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
 	target := m.SessionCloseTarget
 	ws := m.SessionCloseWorkspace
 	win := m.SessionCloseWindow
+	// The dialog refuses the delete it knows would lose commits: a detached
+	// HEAD's own commits become unreachable when the worktree goes. It stays
+	// open, so the answer can change instead of the commits.
+	if idx == SessionCloseRowDeleteWorktree {
+		if t := m.SessionCloseWorktreeToll; t != nil && t.Loaded && t.Own > 0 {
+			m.ShowNotification(fmt.Sprintf("The worktree sits on a detached HEAD holding %s. Commit them onto a branch first.", countOf(t.Own, "own commit")),
+				"error", m.Settings.NotificationDuration*2)
+			return nil
+		}
+	}
 	m.CloseSessionClose()
 	switch idx {
 	case SessionCloseRowClose:
@@ -341,34 +359,126 @@ func (m *OS) deleteWorktreeCmd(name string, attached bool) tea.Cmd {
 	dial := m.verbDialer()
 	params := map[string]any{"session": name, "stash": true, "keep_session": true}
 	return func() tea.Msg {
-		c, err := dial()
-		if err != nil {
-			return worktreeRemovedMsg{Name: name, Attached: attached, Err: fmt.Errorf("failed to reach the daemon: %w", err)}
-		}
-		defer func() { _ = c.Close() }()
-
-		raw, err := c.CallWithTimeout("remove-worktree", params, 60*time.Second)
-		if err != nil {
-			return worktreeRemovedMsg{Name: name, Attached: attached, Err: fmt.Errorf("failed to remove the worktree: %w", err)}
-		}
 		var res struct {
 			Gone          bool   `json:"gone"`
 			Path          string `json:"path"`
 			Branch        string `json:"branch"`
 			Note          string `json:"note"`
 			Changes       int    `json:"changes"`
+			Ignored       int    `json:"ignored"`
 			Stashed       bool   `json:"stashed"`
 			SessionKilled bool   `json:"session_killed"`
 		}
-		if err := json.Unmarshal(raw, &res); err != nil {
-			return worktreeRemovedMsg{Name: name, Attached: attached, Err: fmt.Errorf("failed to read the daemon's reply: %w", err)}
+		if err := callWorktreeVerb(dial, "remove-worktree", "remove the worktree", params, 60*time.Second, &res); err != nil {
+			return worktreeRemovedMsg{Name: name, Attached: attached, Err: err}
 		}
 		return worktreeRemovedMsg{
 			Name: name, Attached: attached,
 			Gone: res.Gone, Path: res.Path, Branch: res.Branch, Note: res.Note,
-			Changes: res.Changes, Stashed: res.Stashed,
+			Changes: res.Changes, Ignored: res.Ignored, Stashed: res.Stashed,
+			SessionKilled: res.SessionKilled,
 		}
 	}
+}
+
+// callWorktreeVerb runs one worktree verb over a fresh daemon connection and
+// decodes the JSON reply into res. fail names the action for the call's own
+// error; the reach and decode wraps are the same for every verb. Shared by the
+// create and delete commands, which differ only in verb, params and reply.
+
+// worktreeToll is what the delete-worktree row would take from the worktree's
+// files, as list-worktrees with changes reports them. The counts come from a
+// round trip, so Loaded gates the dialog's line: it draws before the toll
+// lands and says nothing about the worktree until it has.
+type worktreeToll struct {
+	// Loaded says the counts below were read, whatever they were. A failed
+	// read stays unloaded: the dialog must not read a failed fetch as clean.
+	Loaded bool
+	// Changes is every tracked modification and untracked file, the part the
+	// delete row stashes.
+	Changes int
+	// Ignored is the part nothing saves: git never stashes ignored files and
+	// git worktree remove deletes them without --force.
+	Ignored int
+	// Own is the commits no branch, tag or remote holds. The delete refuses
+	// them: on a detached HEAD they become unreachable.
+	Own int
+	// Gone says the worktree's directory was already missing, so the delete
+	// has nothing to take and the dialog says so instead of counting.
+	Gone bool
+}
+
+// worktreeTollMsg is the fetched toll for the open close dialog. Name is the
+// session it was fetched for, so a reply for a dialog closed and reopened on
+// another session never lands on the wrong one.
+type worktreeTollMsg struct {
+	Name string
+	Toll worktreeToll
+}
+
+// worktreeTollCmd reads the toll for one session's worktree off the daemon's
+// listing, the one the CLI reads. It runs off the Update goroutine: the dialog
+// is already open and drawing while git counts. A failed read answers an
+// unloaded toll, which the dialog treats as no news yet, not as clean.
+func (m *OS) worktreeTollCmd(name string) tea.Cmd {
+	info := m.sessionWorktreeInfo(name)
+	if info == nil {
+		return nil
+	}
+	dial := m.verbDialer()
+	params := map[string]any{"repo": info.Repo, "changes": true}
+	return func() tea.Msg {
+		var res struct {
+			Worktrees []struct {
+				Session    string `json:"session"`
+				Changes    int    `json:"changes"`
+				Ignored    int    `json:"ignored"`
+				OwnCommits int    `json:"own_commits"`
+				Gone       bool   `json:"gone"`
+			} `json:"worktrees"`
+		}
+		if err := callWorktreeVerb(dial, "list-worktrees", "read the worktrees", params, 60*time.Second, &res); err != nil {
+			return worktreeTollMsg{Name: name}
+		}
+		for _, wt := range res.Worktrees {
+			if wt.Session != name {
+				continue
+			}
+			return worktreeTollMsg{Name: name, Toll: worktreeToll{
+				Loaded: true, Changes: wt.Changes, Ignored: wt.Ignored, Own: wt.OwnCommits, Gone: wt.Gone,
+			}}
+		}
+		return worktreeTollMsg{Name: name}
+	}
+}
+
+// worktreeTollLine is the sentence the dialog turns on when the delete row is
+// drawn: what the row does with the worktree's files. Empty while the toll is
+// unloaded, or when the dialog is not on a session.
+func (m *OS) worktreeTollLine() string {
+	t := m.SessionCloseWorktreeToll
+	if t == nil || !t.Loaded || m.sessionWorktreeInfo(m.sessionCloseTarget()) == nil {
+		return ""
+	}
+	if t.Gone {
+		return "The worktree's directory was already gone."
+	}
+	parts := make([]string, 0, 3)
+	if t.Changes > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s to git stash", t.Changes,
+			plural.Word(t.Changes, "change goes", "changes go")))
+	}
+	if t.Ignored > 0 {
+		parts = append(parts, countOf(t.Ignored, "ignored file")+" deleted unsaved")
+	}
+	if t.Own > 0 {
+		parts = append(parts, fmt.Sprintf("%s on a detached HEAD: the delete refuses %s",
+			countOf(t.Own, "own commit"), plural.Word(t.Own, "it", "them")))
+	}
+	if len(parts) == 0 {
+		return "The worktree is clean: nothing stashed, nothing lost."
+	}
+	return strings.Join(parts, "; ") + "."
 }
 
 // worktreeRemovedMsg is a finished removal on its way back to the loop.
@@ -391,8 +501,15 @@ type worktreeRemovedMsg struct {
 	Note string
 	// Changes is how many uncommitted changes the worktree held.
 	Changes int
+	// Ignored is how many ignored files the removal deleted unsaved: git
+	// never stashes them, and git worktree remove does not ask.
+	Ignored int
 	// Stashed says the changes were put in git stash rather than discarded.
 	Stashed bool
+	// SessionKilled says the daemon already killed the session, on Windows,
+	// where the removal cannot run while the session's shells hold the
+	// worktree as their cwd. There is nothing left for this client to kill.
+	SessionKilled bool
 	// Err is what went wrong, nil on success.
 	Err error
 }
@@ -420,7 +537,18 @@ func (m *OS) handleWorktreeRemoved(msg worktreeRemovedMsg) tea.Cmd {
 	default:
 		note = "Deleted worktree " + shortenHome(msg.Path) + ". Branch " + msg.Branch + " kept."
 	}
+	if !msg.Gone && msg.Ignored > 0 {
+		// The part nothing saves: git never stashes ignored files, and the
+		// removal deletes them without --force. Saying so is the whole point
+		// of the note.
+		note += " " + countOf(msg.Ignored, "ignored file") + " deleted."
+	}
 	m.ShowNotification(note, "info", m.Settings.NotificationDuration)
+	if msg.SessionKilled {
+		// The daemon killed the session for the removal (Windows), so there
+		// is nothing left to kill from here.
+		return nil
+	}
 	if msg.Attached {
 		// The note is the one record of where the stashed changes went, and
 		// quitting tears the alt screen down with it. Dwell for the
@@ -429,6 +557,13 @@ func (m *OS) handleWorktreeRemoved(msg worktreeRemovedMsg) tea.Cmd {
 		return tea.Tick(m.Settings.NotificationDuration, func(time.Time) tea.Msg {
 			return worktreeRemoveQuitMsg{Name: msg.Name}
 		})
+	}
+	// The kill's own "Killed session" note would replace the deletion note,
+	// which is the one record of where the stashed changes went. The same
+	// guards KillOtherSession applies tell whether it will post at all; when
+	// it does, the kill handler stays quiet once.
+	if msg.Name != "" && msg.Name != m.sidebarCurrentSessionID() && m.DaemonClient != nil {
+		m.pendingWorktreeKill = true
 	}
 	m.KillOtherSession(msg.Name)
 	return nil

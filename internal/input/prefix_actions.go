@@ -480,8 +480,7 @@ func handlePrefixDetach(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // It raises the same confirmation rather than closing outright, so the two
 // devices cannot disagree about how much warning the action carries.
 func handlePrefixCloseSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.OpenSessionClose()
-	return o, nil
+	return o, o.OpenSessionClose()
 }
 
 func handlePrefixExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

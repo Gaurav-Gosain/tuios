@@ -165,6 +165,10 @@ A worktree with uncommitted changes is refused. Nothing is removed. Run
 again with --stash to keep the changes in git stash, or with --force to
 discard them. --force is the only option that discards work.
 
+A worktree sitting on a detached HEAD that holds commits no branch has is
+refused too: removing it would leave those commits unreachable. --force
+removes them anyway.
+
 The branch is never deleted. Every commit made in the worktree stays in the
 repository.
 
@@ -651,6 +655,7 @@ type removedWorktree struct {
 	Branch        string `json:"branch"`
 	Path          string `json:"path"`
 	Changes       int    `json:"changes"`
+	Ignored       int    `json:"ignored"`
 	Stashed       bool   `json:"stashed"`
 	StashMessage  string `json:"stash_message"`
 	Discarded     bool   `json:"discarded"`
@@ -672,6 +677,11 @@ func (r removedWorktree) sentences() string {
 		fmt.Fprintf(&b, "%d uncommitted %s %s in git stash as '%s'.\n", r.Changes, plural.Word(r.Changes, "change", "changes"), plural.Word(r.Changes, "is", "are"), r.StashMessage)
 	case r.Discarded:
 		fmt.Fprintf(&b, "%d uncommitted %s %s discarded.\n", r.Changes, plural.Word(r.Changes, "change", "changes"), plural.Word(r.Changes, "was", "were"))
+	}
+	if r.Ignored > 0 {
+		// The part nothing saves: git never stashes ignored files, and the
+		// removal deleted them without --force.
+		fmt.Fprintf(&b, "%d ignored %s deleted, and git never stashes ignored files.\n", r.Ignored, plural.Word(r.Ignored, "file was", "files were"))
 	}
 	if r.SessionKilled {
 		fmt.Fprintf(&b, "Killed session '%s'.", r.Session)

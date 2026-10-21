@@ -444,6 +444,17 @@ type OS struct {
 	// name another pane. "" is no pane.
 	SessionCloseWindow   string
 	SessionCloseSelected int
+	// SessionCloseWorktreeToll is what the delete-worktree row would take, read
+	// by a round trip after the dialog opened. Nil, or Loaded false, is a toll
+	// that has not landed yet, and the dialog says nothing about the worktree
+	// until it has: a count it does not have is a count it must not invent.
+	SessionCloseWorktreeToll *worktreeToll
+	// pendingWorktreeKill makes the next SessionKilledMsg a silent one: the
+	// worktree-deletion note is on screen and is the one record of where the
+	// stashed changes went, so the kill's own "Killed session" note would
+	// replace it with less news. Set only when KillOtherSession will actually
+	// post, and read once, by the kill handler.
+	pendingWorktreeKill bool
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// pendingCopy is text a settled multi-click selection will put on the

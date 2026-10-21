@@ -124,8 +124,10 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 
 	// deleteRow right-clicks a worktree session's row, takes its kill row to
 	// raise the close confirmation, and answers it with the delete row. The
-	// dialog opens on Cancel, so two downs reach the third answer.
-	deleteRow := func(branch string) {
+	// dialog opens on Cancel, so two downs reach the third answer. The toll
+	// is what the dialog says the delete row will take; the row waits for
+	// it, because it is fetched from the daemon while the dialog is open.
+	deleteRow := func(branch, toll string) {
 		t.Helper()
 		col, row := findOnScreen(t, term, branch)
 		mouseClick(t, term, col, row, tuitest.MouseRight, 0)
@@ -136,6 +138,9 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 		if err := term.WaitForText("Delete worktree", uiTimeout); err != nil {
 			t.Fatalf("the %s close dialog offered no worktree delete: %v\n%s", branch, err, term.Snapshot())
+		}
+		if err := term.WaitForText(toll, uiTimeout); err != nil {
+			t.Fatalf("the %s close dialog said nothing about the worktree's toll: %v\n%s", branch, err, term.Snapshot())
 		}
 		if err := term.SendKeys(tuitest.Down, tuitest.Down, tuitest.Enter); err != nil {
 			t.Fatalf("take the delete row for %s: %v", branch, err)
@@ -157,15 +162,49 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 		}, uiTimeout); err != nil {
 			t.Fatalf("the sidebar never dropped the %s session: %v\n%s", branch, err, term.Snapshot())
 		}
+		// The kill confirmed itself on the rail, so if it posted its own note
+		// it is on screen now. It must never be: the deletion note is the one
+		// record of where the changes went, and the kill's note would
+		// replace it with less news.
+		if strings.Contains(term.Snapshot(), "Killed session") {
+			t.Errorf("the kill's own note replaced the deletion note after %s", branch)
+		}
+	}
+
+	// A worktree that only git-ignores a file: the dialog says the ignored
+	// file goes unsaved, and going through with it deletes the file — git
+	// worktree remove takes ignored files without --force, and nothing
+	// stashes them. The assertions are on the file and the repository's
+	// stash list, which stays empty for this branch.
+	one := filepath.Join(base, "worktrees", "repo", "feat-one")
+	if err := os.WriteFile(filepath.Join(one, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
+		t.Fatalf("ignore .env in feat/one: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", one, "add", ".gitignore").CombinedOutput(); err != nil {
+		t.Fatalf("add the .gitignore: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", one, "commit", "-q", "-m", "ignore .env").CombinedOutput(); err != nil {
+		t.Fatalf("commit the .gitignore: %v: %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(one, ".env"), []byte("SECRET=1\n"), 0o600); err != nil {
+		t.Fatalf("write the ignored file: %v", err)
 	}
 
 	// A clean worktree: the delete row removes the directory, keeps the
 	// branch, kills the session and says so.
-	deleteRow("feat/one")
+	deleteRow("feat/one", "ignored file deleted unsaved")
 	if err := term.WaitForText("Deleted worktree", uiTimeout); err != nil {
 		t.Fatalf("no notification said the worktree was deleted: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "close-worktree-deleted")
+	if _, err := os.Stat(filepath.Join(one, ".env")); !os.IsNotExist(err) {
+		t.Errorf("the ignored .env survived the delete row: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", repo, "stash", "list").CombinedOutput(); err != nil {
+		t.Errorf("read the stash: %v: %s", err, out)
+	} else if strings.Contains(string(out), "feat/one") {
+		t.Errorf("a worktree holding only ignored files landed in git stash anyway: %s", out)
+	}
 	if _, err := os.Stat(filepath.Join(base, "worktrees", "repo", "feat-one")); !os.IsNotExist(err) {
 		t.Errorf("the feat/one worktree directory survived the delete row: %v", err)
 	}
@@ -180,7 +219,7 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(base, "worktrees", "repo", "feat-two")); err != nil {
 		t.Fatalf("remove the feat/two directory: %v", err)
 	}
-	deleteRow("feat/two")
+	deleteRow("feat/two", "already gone")
 	if err := term.WaitForText("already gone", uiTimeout); err != nil {
 		t.Fatalf("the gone worktree's close did not say the directory was already gone: %v\n%s", err, term.Snapshot())
 	}
@@ -195,7 +234,7 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(worktreeThree, "dirty.txt"), []byte("uncommitted\n"), 0o644); err != nil {
 		t.Fatalf("dirty the feat/three worktree: %v", err)
 	}
-	deleteRow("feat/three")
+	deleteRow("feat/three", "goes to git stash")
 	if err := term.WaitForText("Deleted worktree", uiTimeout); err != nil {
 		t.Fatalf("no notification said the dirty worktree was deleted: %v\n%s", err, term.Snapshot())
 	}
@@ -206,6 +245,89 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 	sessionGone("feat/three", "repo-feat-three")
 
 	alive(t, term, "after deleting both worktrees")
+}
+
+// TestSidebarCloseRefusesDetachedWorktree covers the one thing the delete
+// row must not do: remove a worktree whose detached HEAD holds commits no
+// branch has, which the removal would leave unreachable. The dialog refuses
+// and stays open, the CLI verb refuses with the error, and nothing is
+// removed. Force is the way out, and the test does not take it.
+func TestSidebarCloseRefusesDetachedWorktree(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/detach", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new feat/detach: %v: %s", err, out)
+	}
+	wt := filepath.Join(base, "worktrees", "repo", "feat-detach")
+	if out, err := exec.Command("git", "-C", wt, "checkout", "-q", "--detach").CombinedOutput(); err != nil {
+		t.Fatalf("detach the worktree's HEAD: %v: %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "own.txt"), []byte("on the detached HEAD\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "own.txt"}, {"commit", "-q", "-m", "own"}} {
+		if out, err := exec.Command("git", append([]string{"-C", wt}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("commit on the detached HEAD: git %v: %v: %s", args, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "sidebar with the detached worktree row", "feat/detach")
+
+	col, row := findOnScreen(t, term, "feat/detach")
+	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
+	if err := term.WaitForText("Kill session", uiTimeout); err != nil {
+		t.Fatalf("the row's menu offered no kill: %v\n%s", err, term.Snapshot())
+	}
+	col, row = findOnScreen(t, term, "Kill session")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Delete worktree", uiTimeout); err != nil {
+		t.Fatalf("the close dialog offered no worktree delete: %v\n%s", err, term.Snapshot())
+	}
+	// The dialog names the refusal before the row is taken.
+	if err := term.WaitForText("detached HEAD", uiTimeout); err != nil {
+		t.Fatalf("the close dialog said nothing about the detached HEAD: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "close-worktree-detached-dialog")
+	if err := term.SendKeys(tuitest.Down, tuitest.Down, tuitest.Enter); err != nil {
+		t.Fatalf("take the delete row: %v", err)
+	}
+	// Refused: the dialog stays open, the directory and the session are
+	// still there.
+	if err := term.WaitForText("Delete worktree", uiTimeout); err != nil {
+		t.Fatalf("the refusal dismissed the dialog anyway: %v\n%s", err, term.Snapshot())
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Errorf("the refusal removed the worktree directory anyway: %v", err)
+	}
+	if hasName(sessionNames(t, base), "repo-feat-detach") == false {
+		t.Errorf("the refusal killed the session anyway")
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("dismiss the dialog: %v", err)
+	}
+
+	// The CLI verb refuses the same worktree, because the dialog and the
+	// command share the daemon's answer.
+	if out, err := tuiosCLI(t, base, "worktree", "rm", "repo-feat-detach"); err == nil {
+		t.Fatalf("the CLI removed a detached worktree with own commits: %s", out)
+	} else if !strings.Contains(out, "detached") {
+		t.Errorf("the CLI refusal said nothing about the detached HEAD: %v: %s", err, out)
+	}
+	alive(t, term, "after the refusals")
 }
 
 // TestSidebarKillQuitConfirmsOnWorktree gates the sidebar's instant
@@ -311,9 +433,9 @@ func TestSidebarKillQuitConfirmsOnWorktree(t *testing.T) {
 // TestQuitMenuDeletesWorktree drives the quit menu's delete row. In a daemon
 // session the quit key opens the menu rather than quitting, and a worktree
 // session's menu must offer to take the worktree with it; taking the row must
-// quit this client once the daemon confirms the deletion — a row that says
-// "and quit" cannot leave the UI behind. A plain session's menu must offer no
-// such row.
+// open the close confirmation — one confirmation, one place that shows the
+// toll — whose delete row deletes and quits this client once the daemon
+// confirms. A plain session's menu must offer no such row.
 func TestQuitMenuDeletesWorktree(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -356,6 +478,15 @@ func TestQuitMenuDeletesWorktree(t *testing.T) {
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("take the delete row: %v", err)
+	}
+	// The row opens the close confirmation — one confirmation, one place
+	// that shows the toll — whose delete row does the deleting. The dialog
+	// opens on Cancel, so two downs reach the delete row.
+	if err := term.WaitForText("Delete worktree too", uiTimeout); err != nil {
+		t.Fatalf("taking the quit menu's delete row opened no confirmation: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Down, tuitest.Down, tuitest.Enter); err != nil {
+		t.Fatalf("take the dialog's delete row: %v", err)
 	}
 
 	// The row deletes the worktree, shows the note for the notification
@@ -436,7 +567,8 @@ func TestQuitMenuDeleteFollowsASwitchDuringTheDwell(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 
 	// Take the quit menu's delete row: leader q, then four downs to the fifth
-	// row, then enter. The note comes back and the dwell starts.
+	// row, then enter. It opens the close confirmation, whose delete row —
+	// two downs down — deletes, shows the note and starts the dwell.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q: %v", err)
 	}
@@ -450,6 +582,12 @@ func TestQuitMenuDeleteFollowsASwitchDuringTheDwell(t *testing.T) {
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("take the delete row: %v", err)
+	}
+	if err := term.WaitForText("Delete worktree too", uiTimeout); err != nil {
+		t.Fatalf("taking the quit menu's delete row opened no confirmation: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Down, tuitest.Down, tuitest.Enter); err != nil {
+		t.Fatalf("take the dialog's delete row: %v", err)
 	}
 	if err := term.WaitForText("Deleted worktree", uiTimeout); err != nil {
 		t.Fatalf("no notification said the worktree was deleted: %v\n%s", err, term.Snapshot())

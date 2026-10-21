@@ -49,6 +49,18 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 		m.sessionCloseRow(SessionCloseRowClose, width, pal),
 	}
 	if rows > SessionCloseRowDeleteWorktree {
+		if line := m.worktreeTollLine(); line != "" {
+			// The delete row's own toll, warn-coloured when it names the
+			// refusal: commits a detached HEAD holds are the one thing on the
+			// line that the row will not do.
+			t := m.SessionCloseWorktreeToll
+			lineColor := pal.FgDim
+			if t != nil && t.Own > 0 {
+				lineColor = pal.Warn
+			}
+			body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
+				overlay.Style(bg).Foreground(lineColor).Render(overlay.Truncate(line, max(width-1, 1))), width, bg))
+		}
 		body = append(body, m.sessionCloseRow(SessionCloseRowDeleteWorktree, width, pal))
 	}
 

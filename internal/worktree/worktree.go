@@ -222,6 +222,37 @@ func Changes(path string) (int, error) {
 	return n, nil
 }
 
+// Ignored counts the files git ignores in a worktree. git worktree remove
+// deletes them without --force and Stash leaves them alone, so they are the
+// part of a removal that nothing saves. --ignored=matching lists every
+// ignored file instead of collapsing them into their directories, which is
+// the count a person deleting the worktree is owed.
+func Ignored(path string) (int, error) {
+	out, err := run(path, "status", "--porcelain", "--untracked-files=all", "--ignored=matching")
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.HasPrefix(line, "!! ") {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// OwnCommits counts the commits the worktree's HEAD holds that no branch,
+// tag or remote holds. On a branch they are the branch's own commits, and
+// keeping the branch keeps them; on a detached HEAD nothing holds them once
+// the worktree is gone.
+func OwnCommits(path string) (int, error) {
+	out, err := run(path, "rev-list", "--count", "HEAD", "--not", "--branches", "--tags", "--remotes")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(out))
+}
+
 // Ahead counts the commits on the worktree's HEAD that base does not have.
 func Ahead(path, base string) (int, error) {
 	out, err := run(path, "rev-list", "--count", base+"..HEAD")

@@ -1502,7 +1502,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ShowNotification("Kill failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
-		m.ShowNotification("Killed session: "+msg.Label, "success", m.Settings.NotificationDuration)
+		// A kill asked for by the worktree-deletion note stays quiet: the note
+		// on screen is the one record of where the stashed changes went, and
+		// this one would replace it with less news.
+		if m.pendingWorktreeKill {
+			m.pendingWorktreeKill = false
+		} else {
+			m.ShowNotification("Killed session: "+msg.Label, "success", m.Settings.NotificationDuration)
+		}
 		// The switcher lists a snapshot, so the row of a session that no longer
 		// exists would sit there until the overlay was reopened.
 		if m.ShowSessionSwitcher {
@@ -1597,6 +1604,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// session was the one it was attached to; both touch the model, which
 		// is why they run here.
 		return m, m.handleWorktreeRemoved(msg)
+
+	case worktreeTollMsg:
+		// The delete row's toll, fetched after the dialog opened. It only
+		// lands when the same dialog is still open on the same session: one
+		// closed and reopened on another session gets its own fetch.
+		if m.ShowSessionClose && m.SessionCloseWindow == "" && m.SessionCloseWorkspace == 0 &&
+			m.sessionCloseTarget() == msg.Name {
+			t := msg.Toll
+			m.SessionCloseWorktreeToll = &t
+		}
+		return m, nil
 
 	case worktreeRemoveQuitMsg:
 		// The dwell after an attached worktree deletion ran out. The user has

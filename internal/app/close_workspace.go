@@ -86,8 +86,11 @@ func (m *OS) OpenWorkspaceClose() {
 		m.ShowNotification(fmt.Sprintf("Workspace %d has no panes to close.", ws), "info", m.Settings.NotificationDuration)
 		return
 	}
-	m.OpenSessionClose()
+	// The workspace is set first, so the dialog opens as a workspace one: it
+	// carries no delete-worktree row, and the toll that row would need is
+	// never fetched.
 	m.SessionCloseWorkspace = ws
+	m.OpenSessionClose()
 }
 
 // CloseWorkspacePanes closes every pane close_workspace closes on ws. In a
