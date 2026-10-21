@@ -45,7 +45,7 @@ func (db *CynefinDb) setTransitions(transitions []TransitionAst) {
 	db.transitions = nil
 	for _, t := range transitions {
 		if t.from != t.to {
-			db.transitions = append(db.transitions, CynefinTransition{from: t.from, to: t.to, label: t.label})
+			db.transitions = append(db.transitions, CynefinTransition(t))
 		}
 	}
 }
