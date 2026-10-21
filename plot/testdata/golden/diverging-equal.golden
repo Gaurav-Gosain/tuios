@@ -1,0 +1,27 @@
+=== braille 11x3
+|▕████┊████▏|
+|   ▐█┊█▋   |
+|    ▐┊▋    |
+--- roles
+|aaaaabccccc|
+|   aabcc   |
+|    abc    |
+a=series1 b=dim c=series2 (upper case is bold)
+=== blocks 11x3
+|▕████┊████▏|
+|   ▐█┊█▋   |
+|    ▐┊▋    |
+--- roles
+|aaaaabccccc|
+|   aabcc   |
+|    abc    |
+a=series1 b=dim c=series2 (upper case is bold)
+=== ascii 11x3
+| ####|#### |
+|   ##|##   |
+|    #|#    |
+--- roles
+| aaaabcccc |
+|   aabcc   |
+|    abc    |
+a=series1 b=dim c=series2 (upper case is bold)

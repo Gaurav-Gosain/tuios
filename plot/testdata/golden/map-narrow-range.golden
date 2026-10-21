@@ -1,0 +1,33 @@
+=== braille 44x4
+|             ⠶⠶⢶⣾⣿⡏⠛⠁⣴⣶⣶⣶⣾⣷⡶⠒⠆              |
+|              ⠂⠈⠙⢫⣤⡀⠸⢿⣿⠟⠙⠙⠋⢀                |
+|                  ⠟⠁  ⠛⠁  ⠘⠛⠂               |
+|■ 100  ■ ≥ 100.2  ■ ≥ 100.4  ■ ≥ 100.6      |
+--- roles
+|             aaaaaabbcbbbbbbba              |
+|              aaaabbbbbbbbbb                |
+|                  bb  bb  bbb               |
+|d eee  a eeeeeee  f eeeeeee  g eeeeeee      |
+a=heat2 b=track c=heat5 d=heat1 e=mute f=heat3 g=heat4 (upper case is bold)
+=== blocks 44x4
+|             ▀▀▀▀▀▀▀▀▄▀▀▀▀▀▀▀▀              |
+|              ▀▀▀▀▄▄ ▀▀▀▀▀▀                 |
+|                  ▀▀  ▀    ▀▀               |
+|■ 100  ■ ≥ 100.2  ■ ≥ 100.4  ■ ≥ 100.6      |
+--- roles
+|             aabbbbbbcbbbbbbbb              |
+|              aaaabb bbbbbb                 |
+|                  bb  b    bb               |
+|d eee  a eeeeeee  f eeeeeee  g eeeeeee      |
+a=heat2 b=track c=heat5 d=heat1 e=mute f=heat3 g=heat4 (upper case is bold)
+=== ascii 44x4
+|             ++++++. %%......+              |
+|              ++++.  ... ..                 |
+|                  .   .    .                |
+|* 100  + >= 100.2  o >= 100.4  x >= 100.6   |
+--- roles
+|             aaaaaab ccbbbbbba              |
+|              aaaab  bbb bb                 |
+|                  b   b    b                |
+|d eee  a eeeeeeee  f eeeeeeee  g eeeeeeee   |
+a=heat2 b=track c=heat5 d=heat1 e=mute f=heat3 g=heat4 (upper case is bold)

@@ -7982,3 +7982,17 @@ the settled row and final Live view also have PNGs. Set
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=30 -run '^TestCockpitSideTabs' -v .
 ```
+## A fan joined from outside
+
+`TestFanRefusesJoiningAnotherGroup` and `TestFanNameIsHeldWhileItIsMade` in
+`internal/session` (security boundary tests). A taken fan name is refused
+for every caller unless the call names a session of the fan with `join` and
+reaches it. An outsider that makes a name first does not catch the person's
+later fan. Two calls with one new name at the same time make one fan. Run
+on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Joining a fan is explicit: a taken name is refused for every caller, the person included | the `fan_exists` refusal removed | `TestFanRefusesJoiningAnotherGroup` (the taken name is not refused) | **caught** |
+| A new name is held from the check until its sessions exist | the reservation left out of `taken` | `TestFanNameIsHeldWhileItIsMade` ("fan/raceb: the outsider's repo-fan-raceb-2 joined the person's repo-fan-raceb") | **caught** |
+| A name with a character that does not print is refused | the `fanStemPrintable` check skipped | `TestFanRefusesJoiningAnotherGroup` (a name with a zero-width space makes a fan) | **caught** |

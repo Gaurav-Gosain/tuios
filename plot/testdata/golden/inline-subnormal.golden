@@ -1,0 +1,21 @@
+=== braille 8x2
+|        |
+|   ┊████|
+--- roles
+|        |
+|   abbbb|
+a=dim b=series2 (upper case is bold)
+=== blocks 8x2
+|        |
+|   ┊████|
+--- roles
+|        |
+|   abbbb|
+a=dim b=series2 (upper case is bold)
+=== ascii 8x2
+|        |
+|   |####|
+--- roles
+|        |
+|   abbbb|
+a=dim b=series2 (upper case is bold)

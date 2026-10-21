@@ -1,0 +1,45 @@
+=== braille 30x6
+|⠄⣠⣤⣤⣴⣶⣴⣿⢯⡝⢻⡿⠿⠃⠄⣈⣿⣧⣄⣴⣤⣤⣶⣶⣦⣤⣴⣤⣤⣤|
+| ⠈ ⠈⢻⣿⣿⣿⣾⠿⠂   ⣸⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟ ⠁ |
+|     ⠙⠿⣉⠁⢀   ⢠⣿⣿⣿⣾⣿⡿⠛⣿⠿⣿⠟     |
+|        ⢼⣿⣶⣤  ⠉⠙⣿⣿⡟⠁   ⠲⠶⠁⢤⡀  |
+|        ⠈⣿⡿⠋    ⢿⡿⠑⠐    ⢰⣾⣿⡦  |
+|        ⠰⠏                 ⠁ ⠊|
+--- roles
+|aaaaaaaaaaaaaabbbbaaaaaaaaaaaa|
+| a aaaaaaaa   bbaaaaaaaaaaa a |
+|     aaaab   aaabaabaaaaa     |
+|        aaba  aaaaaa   baaaa  |
+|        aaaa    aaab    aaaa  |
+|        aa                 a a|
+a=track b=heat5 (upper case is bold)
+=== blocks 30x6
+| ▄▄▄▄▄▄▀▀▀▀▀▀▀▄▀▀▀▄▄▄▄▀▀▄▄▄▄▄▄|
+|    ▀▀▀▀▀▀    ▀▀▀▀▀▀▀▀▀▀▀▀▀   |
+|     ▀▀▀ ▄   ▄▀▀▀▀▀▀▀▀▀▀▀     |
+|        ▀▀▀▄  ▀▀▀▀▀    ▀  ▄   |
+|         ▀▀▀    ▀▀▀▀    ▄▀▀▄  |
+|         ▀                    |
+--- roles
+| aaaaaaaaaaaaabbbbaaaaaaaaaaaa|
+|    aaaaaa    bbaaaaaaaaaaa   |
+|     aaa b   aaabaabaaaaa     |
+|        aaba  aaaaa    b  a   |
+|         aaa    aaab    aaaa  |
+|         a                    |
+a=track b=heat5 (upper case is bold)
+=== ascii 30x6
+|  ........... %%%% ...........|
+|    ......    %%...........   |
+|      .. %    ..%..%.....     |
+|        ..%.   ....    %      |
+|         ...    .. %     ...  |
+|         .                    |
+--- roles
+|  aaaaaaaaaaa bbbb aaaaaaaaaaa|
+|    aaaaaa    bbaaaaaaaaaaa   |
+|      aa b    aabaabaaaaa     |
+|        aaba   aaaa    b      |
+|         aaa    aa b     aaa  |
+|         a                    |
+a=track b=heat5 (upper case is bold)

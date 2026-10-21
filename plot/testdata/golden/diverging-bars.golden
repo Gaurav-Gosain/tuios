@@ -1,0 +1,39 @@
+=== braille 15x5
+|▄▄▄▄▄▄▄┊▖▄▄▄▄▄▄|
+|     ▄▄┊▄      |
+|▄▄▄▄▄▄▗┊▖▄▄▄▄▄▄|
+|       ┊       |
+|▄▄▄▄▄▄▗┊▄▄▖▄▄▄▄|
+--- roles
+|aaaaaaabcdddddd|
+|     aabc      |
+|ddddddabcdddddd|
+|       b       |
+|ddddddabcccdddd|
+a=series3 b=dim c=series5 d=track (upper case is bold)
+=== blocks 15x5
+|▄▄▄▄▄▄▄┊▖▄▄▄▄▄▄|
+|     ▄▄┊▄      |
+|▄▄▄▄▄▄▗┊▖▄▄▄▄▄▄|
+|       ┊       |
+|▄▄▄▄▄▄▗┊▄▄▖▄▄▄▄|
+--- roles
+|aaaaaaabcdddddd|
+|     aabc      |
+|ddddddabcdddddd|
+|       b       |
+|ddddddabcccdddd|
+a=series3 b=dim c=series5 d=track (upper case is bold)
+=== ascii 15x5
+|=======|=------|
+|     ==|=      |
+|------=|=------|
+|       |       |
+|------=|===----|
+--- roles
+|aaaaaaabcdddddd|
+|     aabc      |
+|ddddddabcdddddd|
+|       b       |
+|ddddddabcccdddd|
+a=series3 b=dim c=series5 d=track (upper case is bold)

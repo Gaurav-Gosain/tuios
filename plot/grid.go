@@ -1,5 +1,6 @@
 // Package plot draws charts as terminal cells: bar, line, area, sparkline,
-// gauge and histogram.
+// gauge, histogram, heatmap, pie, mirrored bars, inline bars for table
+// cells, and a world map.
 //
 // A chart draws into a Grid of a given width and height. Each cell holds one
 // grapheme and a Role, the name of a theme colour such as "series1" or
@@ -11,11 +12,15 @@
 // printable ASCII only. Pick the best mode the terminal and its font can
 // show.
 //
+// A role made by Fade, such as "series1/2", is its base role faded toward
+// the ground. Charts grade marks by height with fades.
+//
 // Every chart is total. NaN and infinite values count as missing, empty data
 // draws an empty grid, and a grid is always exactly the size asked for.
 package plot
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -88,6 +93,37 @@ func SeriesRole(i int) Role {
 		k += len(series)
 	}
 	return series[k]
+}
+
+// MaxFade is the deepest step Fade takes a role toward the ground.
+const MaxFade = 3
+
+// Fade returns role r faded k steps toward the ground, k from 0 to MaxFade.
+// The name is the base role, a slash and the step, such as "series1/2".
+// Fade 0 is r itself. A chart grades a mark by height with fades, so the
+// tip of a column is brighter than its base.
+//
+// A host draws fade k as the colour of the base role mixed toward the
+// ground by about k fifths. At 16 colours it may draw fade 2 and 3 in the
+// normal ANSI slot of a bright base colour, or the base colour itself.
+// Faded splits the name, so a host that knows no fades can drop the step.
+func Fade(r Role, k int) Role {
+	base, _ := r.Faded()
+	k = max(0, min(MaxFade, k))
+	if k == 0 || base == None {
+		return base
+	}
+	return Role(string(base) + "/" + strconv.Itoa(k))
+}
+
+// Faded returns the base role and the fade step of a role from Fade. A role
+// with no step returns itself and 0.
+func (r Role) Faded() (base Role, k int) {
+	s := string(r)
+	if n := len(s); n >= 3 && s[n-2] == '/' && s[n-1] >= '1' && s[n-1] <= '0'+MaxFade {
+		return Role(s[:n-2]), int(s[n-1] - '0')
+	}
+	return r, 0
 }
 
 // Cell is one cell of a Grid. Text is one grapheme, or "" for a blank cell.

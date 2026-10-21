@@ -6,8 +6,10 @@
 // Flowcharts, sequence diagrams, state diagrams, class diagrams, ER diagrams,
 // pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant charts,
 // user journeys, kanban boards, git graphs, sankey diagrams, block diagrams,
-// architecture diagrams and requirement diagrams have a text drawing. Other
-// types give ErrUnsupported.
+// architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams,
+// radar charts, treemaps, info, treeView, ishikawa, cynefin, eventmodeling,
+// venn, wardley, railroad, swimlane, usecase and agentflow have a text
+// drawing. Other types give ErrUnsupported.
 package text
 
 import (
@@ -44,7 +46,7 @@ type Options struct {
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 	switch d.Type {
-	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement":
+	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley", "railroad", "swimlane", "usecase", "agentflow":
 	default:
 		return nil, ErrUnsupported
 	}
@@ -83,6 +85,34 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawMindmap(layout, opt)
 	case "gantt":
 		c, err = drawGantt(layout, opt)
+	case "usecase", "agentflow":
+		c, err = narrower(d, layout, opt, squeeze, drawFlowchart)
+	case "swimlane":
+		c, err = drawSwimlane(layout, opt, squeeze)
+	case "c4":
+		c, err = drawC4(d, layout, opt, ro, squeeze)
+	case "packet":
+		c, err = drawPacket(layout, opt)
+	case "radar":
+		c, err = drawRadar(layout, opt)
+	case "treemap":
+		c, err = drawTreemap(layout, opt)
+	case "info":
+		c, err = drawInfo(layout, opt)
+	case "treeView":
+		c, err = drawTreeView(layout, opt)
+	case "ishikawa":
+		c, err = drawIshikawa(layout, opt)
+	case "cynefin":
+		c, err = drawCynefin(layout, opt)
+	case "eventmodeling":
+		c, err = drawEventModel(layout, opt)
+	case "venn":
+		c, err = drawVenn(layout, opt)
+	case "wardley":
+		c, err = drawWardley(layout, opt)
+	case "railroad":
+		c, err = drawRailroad(layout, opt)
 	case "timeline":
 		c, err = drawTimeline(layout, opt)
 	case "xychart":

@@ -245,7 +245,7 @@ branch that already exists here is refused, so nothing is overwritten.`,
 // newFanCommand builds `tuios fan` and `tuios fan keep`.
 func newFanCommand() *cobra.Command {
 	var fanAgents, fanEnv, fanPrompts, fanGrants []string
-	var fanRepo, fanBase, fanName, fanHost string
+	var fanRepo, fanBase, fanName, fanHost, fanJoin string
 	var fanWait, fanJSON, fanClone bool
 	fanCmd := &cobra.Command{
 		Use:   "fan <count> <prompt>",
@@ -338,7 +338,7 @@ pull HOST:SESSION' brings its work here.`,
 			}
 			return runFan(fanOptions{
 				host: fanHost, count: count, agents: fanAgents, prompt: prompt, prompts: fanPrompts, env: env,
-				explicitEnv: len(fanEnv) > 0, repo: fanRepo, base: fanBase, name: fanName, clone: fanClone,
+				explicitEnv: len(fanEnv) > 0, repo: fanRepo, base: fanBase, name: fanName, join: fanJoin, clone: fanClone,
 				grants: fanGrants,
 			}, fanWait, fanJSON)
 		},
@@ -349,6 +349,7 @@ pull HOST:SESSION' brings its work here.`,
 	fanCmd.Flags().StringVar(&fanRepo, "repo", "", "A directory inside the repository (default: the current directory)")
 	fanCmd.Flags().StringVar(&fanBase, "base", "", "Ref every branch starts from (default: HEAD)")
 	fanCmd.Flags().StringVar(&fanName, "name", "", "Branch stem (default: fan/ and the first words of the prompt)")
+	fanCmd.Flags().StringVar(&fanJoin, "join", "", "Add the attempts to the fan of this session instead of starting a new fan")
 	fanCmd.Flags().BoolVar(&fanWait, "wait", false, "Return only when every prompt is sent or given up on")
 	fanCmd.Flags().BoolVar(&fanJSON, "json", false, "Output result as JSON")
 	fanCmd.Flags().StringVar(&fanHost, "host", "", "Run the fan-out on this machine from the [hosts] table")
@@ -748,6 +749,8 @@ type fanOptions struct {
 	// env is an error rather than a reason to send without it.
 	explicitEnv      bool
 	repo, base, name string
+	// join is a session of the fan to add attempts to.
+	join string
 	// grants is --grants, nil when it was not passed.
 	grants []string
 }
@@ -819,6 +822,9 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 	}
 	if o.name != "" {
 		params["name"] = o.name
+	}
+	if o.join != "" {
+		params["join"] = o.join
 	}
 	if len(o.grants) > 0 {
 		params["grants"] = o.grants

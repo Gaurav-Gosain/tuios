@@ -836,3 +836,699 @@ var requirementTemplates = []func(p string) string{
 		return "%%{init: {\"requirement\": {\"rect_fill\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nrequirementDiagram\n" + requirementBody
 	},
 }
+
+var c4Templates = []func(p string) string{
+	func(p string) string { return "C4Context\nPerson(" + p + ", \"L\")" },
+	func(p string) string { return "C4Context\nPerson(\"" + p + "\", \"L\")" },
+	func(p string) string { return "C4Context\nPerson(a, " + p + ", \"d\")" },
+	func(p string) string { return "C4Context\nPerson(a, \"" + p + "\")" },
+	func(p string) string { return "C4Context\nPerson_Ext(a, \"L\", \"" + p + "\")" },
+	func(p string) string {
+		return "C4Context\nSystem(a, \"L\", \"d\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\nSystemDb(a, \"L\", $link=\"" + p + "\")" },
+	func(p string) string {
+		return "C4Context\nSystemQueue_Ext(a, \"L\", $tags=\"" + p + "\", $sprite=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\nSystem(a, \"L\", $descr=\"" + p + "\", $techn=\"" + p + "\", $type=\"" + p + "\", $label=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\nSystem(a, \"L\", $bgColor=\"" + p + "\", $fontColor=\"" + p + "\", $borderColor=\"" + p + "\", $shape=\"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\nSystem(a, \"L\", $" + p + "=\"x\")" },
+	func(p string) string { return "C4Context\nSystem($" + p + "=\"x\", \"L\")" },
+	func(p string) string { return "C4Context\nSystem(a, $link=\"" + p + "\")" },
+	func(p string) string { return "C4Container\nContainer(a, \"" + p + "\", \"" + p + "\", \"" + p + "\")" },
+	func(p string) string {
+		return "C4Container\nContainerDb_Ext(a, \"L\", \"" + p + "\", \"d\", \"s\", \"t\", \"" + p + "\")"
+	},
+	func(p string) string { return "C4Component\nComponentQueue(a, \"L\", " + p + ", " + p + ")" },
+	func(p string) string { return "C4Context\nBoundary(" + p + ", \"L\") {\nSystem(a, \"A\")\n}" },
+	func(p string) string {
+		return "C4Context\nBoundary(b, \"" + p + "\", \"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Context\nEnterprise_Boundary(b, \"L\", \"" + p + "\", \"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Context\nSystem_Boundary(b, \"L\", $link=\"" + p + "\", $tags=\"" + p + "\", $type=\"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Container\nContainer_Boundary(b, \"L\", $bgColor=\"" + p + "\", $borderColor=\"" + p + "\", $fontColor=\"" + p + "\") {\nSystem(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Deployment\nDeployment_Node(n, \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\") {\nContainer(a, \"A\")\n}"
+	},
+	func(p string) string {
+		return "C4Deployment\nNode_L(n, \"L\", $descr=\"" + p + "\") {\nNode_R(m, \"M\", $link=\"" + p + "\")\n{\nContainer(a, \"A\")\n}\n}"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\n" + c4Two + "Rel(a, b, " + p + ")" },
+	func(p string) string {
+		return "C4Context\n" + c4Two + "BiRel(a, b, \"L\", \"t\", \"d\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel_Back(a, b, \"L\", $link=\"" + p + "\", $techn=\"" + p + "\", $descr=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\nSystem(" + p + ", \"A\")\nSystem(b, \"B\")\nRel(" + p + ", b, \"L\")"
+	},
+	func(p string) string { return "C4Context\nSystem(a, \"A\")\nRel(a, a, \"" + p + "\", \"" + p + "\")" },
+	func(p string) string { return "C4Dynamic\n" + c4Two + "RelIndex(" + p + ", a, b, \"" + p + "\")" },
+	func(p string) string { return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nRel(b, a, \"" + p + "\")" },
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nUpdateRelStyle(a, b, \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nUpdateRelStyle(a, b, $textColor=\"" + p + "\", $lineColor=\"" + p + "\", $offsetX=\"" + p + "\", $offsetY=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "Rel(a, b, \"L\")\nUpdateRelStyle(a, b, $offsetX=\"" + p + "\", $" + p + "=\"1\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateElementStyle(a, \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateElementStyle(a, $bgColor=\"" + p + "\", $fontColor=\"" + p + "\", $borderColor=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateElementStyle(a, $shape=\"" + p + "\", $techn=\"" + p + "\", $legendText=\"" + p + "\", $label=\"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateLayoutConfig(\"" + p + "\", \"" + p + "\")"
+	},
+	func(p string) string {
+		return "C4Context\n" + c4Two + "UpdateLayoutConfig($c4ShapeInRow=\"" + p + "\", $c4BoundaryInRow=\"" + p + "\")"
+	},
+	func(p string) string { return "C4Context\ntitle " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context\naccTitle: " + p + "\naccDescr: " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context\naccDescr {\n " + p + "\n }\n" + c4Two },
+	func(p string) string { return "C4Context\naccDescription " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context " + p + "\n" + c4Two },
+	func(p string) string { return "C4Context\n%% " + p + "\n" + c4Two },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  c4:\n    c4ShapeInRow: \"" + p + "\"\n    wrap: \"" + p + "\"\n---\nC4Context\n" + c4Two
+	},
+	func(p string) string {
+		return "%%{init: {\"c4\": {\"c4ShapeInRow\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\nC4Context\n" + c4Two
+	},
+}
+
+var packetTemplates = []func(p string) string{
+	func(p string) string { return "packet\n0-31: \"" + p + "\"" },
+	func(p string) string { return "packet\n0-31: '" + p + "'" },
+	func(p string) string { return "packet\n0: \"" + p + "\"\n1: \"" + p + "\"\n2-31: \"ok\"" },
+	func(p string) string { return "packet\n+8: \"" + p + "\"\n+200: \"" + p + "\"" },
+	func(p string) string { return "packet\ntitle " + p + "\n0-31: \"a\"" },
+	func(p string) string { return "packet title " + p },
+	func(p string) string { return "packet\naccTitle: " + p + "\naccDescr: " + p + "\n0-31: \"a\"" },
+	func(p string) string { return "packet\naccDescr {\n " + p + "\n }\n0-31: \"a\"" },
+	func(p string) string { return "packet\n0-31: \"a\" %% " + p },
+	func(p string) string { return "packet\n" + p + ": \"a\"" },
+	func(p string) string { return "packet\n0-" + p + ": \"a\"" },
+	func(p string) string { return "packet " + p + "\n0-31: \"a\"" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\npacket\n0-31: \"a\"" },
+	func(p string) string {
+		return "---\nconfig:\n  packet:\n    bitOrder: \"" + p + "\"\n    bitsPerRow: \"" + p + "\"\n    showBits: \"" + p + "\"\n    rowHeight: \"" + p + "\"\n---\npacket\n0-31: \"a\""
+	},
+	func(p string) string {
+		return "%%{init: {\"packet\": {\"bitWidth\": \"" + p + "\", \"paddingX\": \"" + p + "\"}, \"themeVariables\": {\"packet\": {\"blockFillColor\": \"" + p + "\"}}}}%%\npacket\n0-31: \"a\""
+	},
+}
+
+var radarTemplates = []func(p string) string{
+	func(p string) string { return "radar-beta\n axis a[\"" + p + "\"], b, c\n curve x{1,2,3}" },
+	func(p string) string { return "radar-beta\n axis a['" + p + "'], b, c\n curve x{1,2,3}" },
+	func(p string) string { return "radar-beta\n axis a, b, c\n curve x[\"" + p + "\"]{1,2,3}" },
+	func(p string) string { return "radar-beta\n axis a, b, c\n curve x['" + p + "']{ a: 1, b: 2, c: 3 }" },
+	func(p string) string { return "radar-beta\n axis " + p + ", b\n curve x{1,2}" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve " + p + "{1,2}" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{ " + p + ": 1, a: 1, b: 2 }" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{ " + p + ", 2 }" },
+	func(p string) string { return "radar-beta\n title " + p + "\n axis a, b\n curve x{1,2}" },
+	func(p string) string { return "radar-beta title " + p },
+	func(p string) string {
+		return "radar-beta\n accTitle: " + p + "\n accDescr: " + p + "\n axis a, b\n curve x{1,2}"
+	},
+	func(p string) string { return "radar-beta\n accDescr {\n " + p + "\n }\n axis a, b\n curve x{1,2}" },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{1,2}\n graticule " + p },
+	func(p string) string { return "radar-beta\n axis a, b\n curve x{1,2}\n max " + p + "\n ticks " + p },
+	func(p string) string { return "radar-beta\n axis a, b %% " + p + "\n curve x{1,2}" },
+	func(p string) string { return "radar-beta: " + p + "\n axis a, b" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\nradar-beta\n axis a, b\n curve x{1,2}" },
+	func(p string) string {
+		return "---\nconfig:\n  radar:\n    width: \"" + p + "\"\n    curveTension: \"" + p + "\"\n    marginLeft: \"" + p + "\"\n---\nradar-beta\n axis a, b\n curve x{1,2}"
+	},
+	func(p string) string {
+		return "%%{init: {\"radar\": {\"axisLabelFactor\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\", \"radar\": {\"axisColor\": \"" + p + "\"}}}}%%\nradar-beta\n axis a, b\n curve x{1,2}"
+	},
+}
+
+var treemapTemplates = []func(p string) string{
+	func(p string) string { return "treemap\n\"" + p + "\"\n  \"a\": 1" },
+	func(p string) string { return "treemap\n'" + p + "'\n  \"a\": 1" },
+	func(p string) string { return "treemap\n\"s\"\n  \"" + p + "\": 1\n  \"b\": 2" },
+	func(p string) string { return "treemap\n\"" + p + "\": 5" },
+	func(p string) string { return "treemap\n\"s\":::" + p + "\n  \"a\": 1" },
+	func(p string) string { return "treemap\n\"s\"\n  \"a\": 1:::" + p },
+	func(p string) string { return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 fill:" + p },
+	func(p string) string { return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 " + p + ":red" },
+	func(p string) string {
+		return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p
+	},
+	func(p string) string { return "treemap\n\"s\":::c1\n  \"a\": 1:::c1\nclassDef c1 " + p },
+	func(p string) string { return "treemap\n\"s\"\n  \"a\": 1\nclassDef " + p + " fill:red" },
+	func(p string) string { return "treemap\n\"s\"\n  \"a\": " + p },
+	func(p string) string { return "treemap\ntitle " + p + "\n\"a\": 1" },
+	func(p string) string { return "treemap title " + p },
+	func(p string) string { return "treemap\naccTitle: " + p + "\naccDescr: " + p + "\n\"a\": 1" },
+	func(p string) string { return "treemap\naccDescr {\n " + p + "\n }\n\"a\": 1" },
+	func(p string) string { return "treemap\n\"a\": 1 %% " + p },
+	func(p string) string { return "treemap-beta " + p + "\n\"a\": 1" },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\ntreemap\n\"a\": 1" },
+	func(p string) string {
+		return "---\nconfig:\n  treemap:\n    valueFormat: \"" + p + "\"\n    padding: \"" + p + "\"\n    showValues: \"" + p + "\"\n---\ntreemap\n\"s\"\n  \"a\": 1"
+	},
+	func(p string) string {
+		return "%%{init: {\"treemap\": {\"nodeWidth\": \"" + p + "\", \"valueFormat\": \"" + p + "\"}, \"themeVariables\": {\"cScale0\": \"" + p + "\"}}}%%\ntreemap\n\"a\": 1"
+	},
+}
+
+var infoTemplates = []func(p string) string{
+	func(p string) string { return "info\ntitle " + p },
+	func(p string) string { return "info showInfo title " + p },
+	func(p string) string { return "info\naccTitle: " + p + "\naccDescr: " + p },
+	func(p string) string { return "info\naccDescr {\n " + p + "\n }" },
+	func(p string) string { return "info %% " + p },
+	func(p string) string { return "info " + p },
+	func(p string) string { return "---\ntitle: \"" + p + "\"\n---\ninfo" },
+	func(p string) string {
+		return "%%{init: {\"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\ninfo"
+	},
+}
+
+var treeviewTemplates = []func(p string) string{
+	func(p string) string { return "treeView-beta\n  " + p },
+	func(p string) string { return "treeView-beta\n  " + p + "/\n    child" },
+	func(p string) string { return "treeView-beta\n  \"" + p + "\"" },
+	func(p string) string { return "treeView-beta\n  '" + p + "'" },
+	func(p string) string { return "treeView-beta\n  a ## " + p },
+	func(p string) string { return "treeView-beta\n  a :::" + p },
+	func(p string) string { return "treeView-beta\n  a :::highlight ## " + p },
+	func(p string) string { return "treeView-beta\n  a icon(" + p + ")" },
+	func(p string) string { return "treeView-beta\n  a icon(x:" + p + ")" },
+	func(p string) string { return "treeView-beta\ntitle " + p + "\n  a" },
+	func(p string) string { return "treeView-beta\naccTitle: " + p + "\naccDescr: " + p + "\n  a" },
+	func(p string) string { return "treeView-beta\naccDescr {\n " + p + "\n}\n  a" },
+	func(p string) string {
+		return "treeView-beta\n├── " + p + "\n│   └── " + p + " ## " + p + "\n└── x"
+	},
+	func(p string) string { return "---\ntitle: \"" + stripQuotes(p) + "\"\n---\ntreeView-beta\n  a" },
+	func(p string) string {
+		return "---\nconfig:\n  treeView:\n    showIcons: true\n    defaultIconPack: '" + stripApostrophes(p) + "'\n    filenameIcons:\n      a: '" + stripApostrophes(p) + "'\n    extensionIcons:\n      .b: '" + stripApostrophes(p) + "'\n---\ntreeView-beta\n  a\n  c.b\n  d icon(e)\n  " + p
+	},
+	func(p string) string {
+		return "---\nconfig:\n  treeView:\n    rowIndent: '" + stripApostrophes(p) + "'\n    paddingX: 1e999\n    paddingY: -5\n    lineThickness: .nan\n---\ntreeView-beta\n  a\n    b"
+	},
+}
+
+var ishikawaTemplates = []func(p string) string{
+	func(p string) string { return ishikawaHead + p },
+	func(p string) string { return ishikawaHead + "  " + p },
+	func(p string) string { return ishikawaHead + "  Effect\n    " + p },
+	func(p string) string { return ishikawaHead + "  Effect\n    Category\n      " + p },
+	func(p string) string { return ishikawaHead + "  Effect\n    Category\n      Cause\n        " + p },
+	func(p string) string {
+		return ishikawaHead + "  Effect\n    Category\n      Cause\n        Sub\n          " + p + "\n            " + p
+	},
+	func(p string) string {
+		return ishikawaHead + "  " + p + "\n    " + p + "\n      " + p + "\n    " + p + "\n      " + p + "\n        " + p
+	},
+	func(p string) string {
+		return ishikawaHead + "  Effect " + p + "\n    Category " + p + "\n      Cause " + p + " more"
+	},
+	func(p string) string { return ishikawaHead + "  Effect\n    A\n    B\n    " + p + "\n    C" },
+	func(p string) string { return ishikawaHead + "  Effect\n%% " + p + "\n    Category" },
+	func(p string) string { return ishikawaHead + "  Effect\n    Category %% " + p },
+	func(p string) string { return "ishikawa " + p },
+	func(p string) string { return "ishikawa-beta " + p + "\n  Cause" },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\n---\n" + ishikawaHead + "  Effect\n    Cause"
+	},
+	func(p string) string {
+		return "---\ntitle: " + p + "\nconfig:\n  ishikawa:\n    diagramPadding: \"" + p + "\"\n---\n" + ishikawaHead + "  Effect"
+	},
+	func(p string) string {
+		return "%%{init: {\"ishikawa\": {\"useMaxWidth\": \"" + p + "\"}, \"themeVariables\": {\"lineColor\": \"" + p + "\"}}}%%\n" + ishikawaHead + "  Effect\n    Cause"
+	},
+}
+
+var cynefinTemplates = []func(p string) string{
+	func(p string) string { return "cynefin-beta\ncomplex\n\"" + cynefinQuoted(p) + "\"" },
+	func(p string) string { return "cynefin-beta\ncomplex\n'" + cynefinSingle(p) + "'" },
+	func(p string) string {
+		return "cynefin-beta\nconfusion\n\"" + cynefinQuoted(p) + "\"\n\"" + cynefinQuoted(p) + "\"\n\"" + cynefinQuoted(p) + "\"\n\"" + cynefinQuoted(p) + "\""
+	},
+	func(p string) string { return "cynefin-beta\nclear\n\"a \\\"" + cynefinQuoted(p) + "\\\" \\\\ b\"" },
+	func(p string) string { return "cynefin-beta\ncomplex --> clear : \"" + cynefinQuoted(p) + "\"" },
+	func(p string) string { return "cynefin-beta\nconfusion --> chaotic : '" + cynefinSingle(p) + "'" },
+	func(p string) string { return "cynefin-beta\ntitle " + p + "\ncomplex" },
+	func(p string) string { return "cynefin-beta\naccTitle: " + p + "\naccDescr: " + p + "\ncomplex" },
+	func(p string) string { return "cynefin-beta\naccDescr {\n " + p + "\n}\ncomplex" },
+	func(p string) string { return "cynefin-beta\n" + p },
+	func(p string) string { return "cynefin-beta\ncomplex --> " + p },
+	func(p string) string {
+		return "---\ntitle: \"" + cynefinQuoted(p) + "\"\n---\ncynefin-beta\ncomplex\n\"a\""
+	},
+	func(p string) string {
+		return "---\nconfig:\n  cynefin:\n    width: '" + cynefinSingle(p) + "'\n    height: 1e999\n    seed: .nan\n    boundaryAmplitude: '" + cynefinSingle(p) + "'\n    showDomainDescriptions: '" + cynefinSingle(p) + "'\n---\ncynefin-beta\ncomplex\n\"a\"\nclear --> chaotic : \"b\""
+	},
+}
+
+var eventmodelingTemplates = []func(p string) string{
+	func(p string) string { return "eventmodeling\ntf 01 cmd A { " + emLine(p) + " }" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A \"" + emLine(p) + "\"" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A '" + emLine(p) + "'" },
+	func(p string) string { return "eventmodeling\ntf 01 rmo A `json`{ \"k\": \"" + emLine(p) + "\" }" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A [[D]]\ndata D {\n  " + p + "\n}\n" },
+	func(p string) string { return "eventmodeling\ntf 01 evt A\nnote 01 {\n  " + p + "\n}\n" },
+	func(p string) string {
+		return "eventmodeling\ntf 01 evt A\nnote 01 `html` {\n  <div>" + p + "</div>\n}\n"
+	},
+	func(p string) string { return "eventmodeling title " + emLine(p) + "\ntf 01 ui A" },
+	func(p string) string {
+		return "eventmodeling accTitle: " + emLine(p) + "\ntf 01 ui A accDescr: " + emLine(p)
+	},
+	func(p string) string { return "eventmodeling accDescr {\n " + p + "\n}\ntf 01 ui A" },
+	func(p string) string { return "eventmodeling\ntf 01 ui " + p },
+	func(p string) string { return "eventmodeling\ntf 01 ui A." + p },
+	func(p string) string { return "eventmodeling\ntf 01 evt A\ngwt 01 given evt " + p + " then evt B" },
+	func(p string) string { return "eventmodeling\n/* " + p + " */\ntf 01 ui A // " + emLine(p) + "\n" },
+	func(p string) string { return "---\ntitle: \"" + gitStrip(p) + "\"\n---\neventmodeling\ntf 01 ui A" },
+}
+
+var vennTemplates = []func(p string) string{
+	func(p string) string { return vennHead + p },
+	func(p string) string { return vennHead + "set " + p },
+	func(p string) string { return vennHead + "set \"" + p + "\"" },
+	func(p string) string { return vennHead + "set A[" + p + "]" },
+	func(p string) string { return vennHead + "set A[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A[\"" + p + "\"]:" + p },
+	func(p string) string { return vennHead + "set A:" + p },
+	func(p string) string { return vennHead + "set \"" + p + "\"\nset B\nunion \"" + p + "\",B" },
+	func(p string) string { return vennHead + "set A\nset B\nunion A,B[" + p + "]" },
+	func(p string) string { return vennHead + "set A\nset B\nunion A,B[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\nset B\nunion A,B:" + p },
+	func(p string) string { return vennHead + "set A\nset B\nset C\nunion A,B,C[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\nunion A," + p },
+	func(p string) string { return vennHead + "set A\n  text " + p },
+	func(p string) string { return vennHead + "set A\n  text \"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\n  text T[" + p + "]" },
+	func(p string) string { return vennHead + "set A\n  text T[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\n  text \"" + p + "\"[\"" + p + "\"]" },
+	func(p string) string { return vennHead + "set A\ntext A \"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\ntext A T[\"" + p + "\"]" },
+	func(p string) string {
+		return vennHead + "set A\nset B\nunion A,B\ntext A,B \"" + p + "\"[\"" + p + "\"]"
+	},
+	func(p string) string { return vennHead + "set A\ntext " + p + " T" },
+	func(p string) string { return vennHead + "set A\nstyle A fill:" + p },
+	func(p string) string { return vennHead + "set A\nstyle A fill:\"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\nstyle A " + p + ":red" },
+	func(p string) string {
+		return vennHead + "set A\nstyle A color:\"" + p + "\", stroke:\"" + p + "\", stroke-width:\"" + p + "\", fill-opacity:\"" + p + "\""
+	},
+	func(p string) string {
+		return vennHead + "set A\nset B\nunion A,B[\"x\"]\nstyle A,B fill:\"" + p + "\", color:\"" + p + "\""
+	},
+	func(p string) string { return vennHead + "set A\n  text T\nstyle T color:\"" + p + "\"" },
+	func(p string) string { return vennHead + "set A\nstyle " + p + " fill:red" },
+	func(p string) string { return vennHead + "set A\nstyle \"" + p + "\" fill:red" },
+	func(p string) string { return vennHead + "title " + p + "\nset A" },
+	func(p string) string { return vennHead + "title \"" + p + "\"\nset A" },
+	func(p string) string { return vennHead + "%% " + p + "\nset A" },
+	func(p string) string { return vennHead + "set A %% " + p },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  venn:\n    width: \"" + p + "\"\n    padding: \"" + p + "\"\n---\n" + vennHead + "set A"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\n" + vennHead + "set A\nset B" },
+	func(p string) string {
+		return "%%{init: {\"venn\": {\"useDebugLayout\": \"" + p + "\"}, \"themeVariables\": {\"venn1\": \"" + p + "\"}}}%%\n" + vennHead + "set A"
+	},
+	func(p string) string { return "venn-beta " + p + "\nset A" },
+}
+
+var wardleyTemplates = []func(p string) string{
+	func(p string) string { return "wardley-beta\ncomponent \"" + cynefinQuoted(p) + "\" [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\ncomponent '" + cynefinSingle(p) + "' [0.5, 0.5] (buy) (inertia)"
+	},
+	func(p string) string { return "wardley-beta\ncomponent " + p + " [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\nanchor \"" + cynefinQuoted(p) + "\" [0.9, 0.5]\ncomponent B [0.5, 0.5]\n\"" + cynefinQuoted(p) + "\" -> B"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent A [0.9, 0.1]\ncomponent B [0.5, 0.5]\nA -> B; " + p
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent A [0.9, 0.1]\ncomponent B [0.5, 0.5]\nA +'" + cynefinSingle(p) + "'> B"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent A [0.9, 0.1]\n\"" + cynefinQuoted(p) + "\" -> A\nA -> \"" + cynefinQuoted(p) + "\""
+	},
+	func(p string) string { return "wardley-beta\nnote \"" + cynefinQuoted(p) + "\" [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\nannotations [0.9, 0.1]\nannotation 1,[0.5, 0.5] \"" + cynefinQuoted(p) + "\""
+	},
+	func(p string) string { return "wardley-beta\nannotation 7,[0.5, 0.5] \"" + cynefinQuoted(p) + "\"" },
+	func(p string) string {
+		return "wardley-beta\naccelerator \"" + cynefinQuoted(p) + "\" [0.5, 0.5]\ndeaccelerator \"" + cynefinQuoted(p) + "\" [0.2, 0.2]"
+	},
+	func(p string) string {
+		return "wardley-beta\nevolution \"" + cynefinQuoted(p) + "\" -> \"" + cynefinQuoted(p) + "\"@0.5 / \"" + cynefinQuoted(p) + "\" -> C\ncomponent A [0.5, 0.5]"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent \"" + cynefinQuoted(p) + "\" [0.5, 0.5]\nevolve \"" + cynefinQuoted(p) + "\" 0.9"
+	},
+	func(p string) string {
+		return "wardley-beta\ncomponent \"" + cynefinQuoted(p) + "\" [0.5, 0.5]\npipeline \"" + cynefinQuoted(p) + "\" {\n component \"" + cynefinQuoted(p) + "\" [0.2]\n component B [0.8]\n}"
+	},
+	func(p string) string { return "wardley-beta\ntitle " + p + "\ncomponent A [0.5, 0.5]" },
+	func(p string) string {
+		return "wardley-beta\naccTitle: " + p + "\naccDescr: " + p + "\ncomponent A [0.5, 0.5]"
+	},
+	func(p string) string { return "wardley-beta\naccDescr {\n " + p + "\n}\ncomponent A [0.5, 0.5]" },
+	func(p string) string {
+		return "---\ntitle: \"" + cynefinQuoted(p) + "\"\nconfig:\n  wardley-beta:\n    width: '" + cynefinSingle(p) + "'\n    height: 1e999\n    showGrid: '" + cynefinSingle(p) + "'\n---\nwardley-beta\ncomponent A [0.5, 0.5]"
+	},
+}
+
+var railroadTemplates = []func(p string) string{
+	func(p string) string { return "railroad-beta\nr = terminal(\"" + railroadQuoted(p) + "\") ;" },
+	func(p string) string { return "railroad-beta\nr = terminal('" + railroadSingle(p) + "') ;" },
+	func(p string) string { return "railroad-beta\nr = nonterminal(\"" + railroadQuoted(p) + "\") ;" },
+	func(p string) string { return "railroad-beta\nr = special(\"" + railroadQuoted(p) + "\") ;" },
+	func(p string) string {
+		return "railroad-beta\nr = sequence(terminal(\"" + railroadQuoted(p) + "\"), choice(nonterminal(\"" + railroadQuoted(p) + "\"), optional(special(\"" + railroadQuoted(p) + "\")))) ;"
+	},
+	func(p string) string {
+		return "railroad-beta\nr = zeroOrMore(oneOrMore(terminal(\"" + railroadQuoted(p) + "\"))) ;"
+	},
+	func(p string) string { return "railroad-beta\nr = terminal(\"" + p + "\") ;" },
+	func(p string) string { return "railroad-beta\n" + p + " = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta\nr = " + p + " ;" },
+	func(p string) string { return "railroad-beta\nr = " + p + "(\"a\") ;" },
+	func(p string) string { return "railroad-beta\ntitle " + p + "\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta\ntitle \"" + p + "\"\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta title " + p },
+	func(p string) string {
+		return "railroad-beta\naccTitle: " + p + "\naccDescr: " + p + "\nr = terminal(\"a\") ;"
+	},
+	func(p string) string { return "railroad-beta\naccDescr {\n " + p + "\n }\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-beta\n/* " + p + " */\nr = terminal(\"a\") ; %% " + p },
+	func(p string) string { return "railroad-beta " + p + "\nr = terminal(\"a\") ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = \"" + railroadQuoted(p) + "\" ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = \"" + p + "\" ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = ? " + railroadNoSpecial(p) + " ? ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = ? " + p + " ? ;" },
+	func(p string) string {
+		return "railroad-ebnf-beta\nr = a - \"" + railroadQuoted(p) + "\" | [ \"" + railroadQuoted(p) + "\" ] | { ? " + railroadNoSpecial(p) + " ? }+ ;"
+	},
+	func(p string) string { return "railroad-ebnf-beta\nr = " + p + " ;" },
+	func(p string) string { return "railroad-ebnf-beta\n" + p + " ::= a ;" },
+	func(p string) string { return "railroad-ebnf-beta\nr = a (* " + p + " *) b /* " + p + " */ ;" },
+	func(p string) string {
+		return "railroad-ebnf-beta\ntitle " + p + "\naccTitle: " + p + "\naccDescr { " + p + " }\nr = a ;"
+	},
+	func(p string) string { return "railroad-abnf-beta\nr = \"" + railroadBare(p) + "\" ;" },
+	func(p string) string {
+		return "railroad-abnf-beta\nr = 2*3\"" + railroadBare(p) + "\" [ \"" + railroadBare(p) + "\" ] / *( \"" + railroadBare(p) + "\" ) ;"
+	},
+	func(p string) string { return "railroad-abnf-beta\nr = \"" + p + "\" ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = " + p + " ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = %x" + p + " ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = " + p + "*" + p + "a ;" },
+	func(p string) string { return "railroad-abnf-beta\n" + p + " = a ;" },
+	func(p string) string { return "railroad-abnf-beta\nr = a ; " + p + "\n ;\n" },
+	func(p string) string { return "railroad-abnf-beta\ntitle \"" + p + "\"\nr = a ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- \"" + railroadQuoted(p) + "\" ;" },
+	func(p string) string {
+		return "railroad-peg-beta\nR <- !\"" + railroadQuoted(p) + "\" &'x' ( \"" + railroadQuoted(p) + "\" )* . ;"
+	},
+	func(p string) string { return "railroad-peg-beta\nR <- \"" + p + "\" ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- " + p + " ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- !" + p + " ;" },
+	func(p string) string { return "railroad-peg-beta\n" + p + " <- a ;" },
+	func(p string) string { return "railroad-peg-beta\nR <- a # " + p + "\n ;" },
+	func(p string) string { return "railroad-peg-beta\ntitle " + p + "\naccDescr: " + p + "\nR <- a ;" },
+	func(p string) string {
+		return "---\ntitle: \"" + railroadQuoted(p) + "\"\n---\nrailroad-ebnf-beta\nr = a ;"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\nrailroad-ebnf-beta\nr = a ;" },
+	func(p string) string {
+		return "---\nconfig:\n  railroad:\n    arcRadius: \"" + railroadQuoted(p) + "\"\n    padding: \"" + railroadQuoted(p) + "\"\n    fontSize: \"" + railroadQuoted(p) + "\"\n    fontFamily: \"" + railroadQuoted(p) + "\"\n    terminalFill: \"" + railroadQuoted(p) + "\"\n    lineColor: \"" + railroadQuoted(p) + "\"\n    strokeWidth: \"" + railroadQuoted(p) + "\"\n    showMarkers: \"" + railroadQuoted(p) + "\"\n    markerRadius: \"" + railroadQuoted(p) + "\"\n---\nrailroad-ebnf-beta\nr = a \"b\" ? c ? ;"
+	},
+	func(p string) string {
+		return "%%{init: {\"railroad\": {\"arcRadius\": \"" + railroadQuoted(p) + "\", \"strokeWidth\": \"" + railroadQuoted(p) + "\"}, \"themeVariables\": {\"fontFamily\": \"" + railroadQuoted(p) + "\"}}}%%\nrailroad-ebnf-beta\nr = a+ ;"
+	},
+}
+
+var swimlaneTemplates = []func(p string) string{
+	func(p string) string { return "swimlane-beta TD\n  subgraph L[\"" + p + "\"]\n    a\n  end" },
+	func(p string) string {
+		return "swimlane-beta LR\n  subgraph L[\"" + p + "\"]\n    a[\"" + p + "\"] -- \"" + p + "\" --> b\n  end"
+	},
+	func(p string) string { return "swimlane-beta TD\n  subgraph " + p + "\n    a\n  end" },
+	func(p string) string { return "swimlane-beta " + p + "\n  a --> b" },
+	func(p string) string {
+		return "swimlane-beta TD\n  subgraph L\n    a\n  end\n  style L " + p + "\n  class L " + p
+	},
+	func(p string) string {
+		return "swimlane-beta LR\n  subgraph L\n    a\n  end\n  click a \"" + p + "\" \"" + p + "\"\n  L:::" + p
+	},
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  swimlane: \"" + p + "\"\n---\nswimlane-beta TD\n  a"
+	},
+	func(p string) string {
+		return "swimlane-beta RL\n  subgraph L[\"`**" + p + "**`\"]\n    a\n  end\n  accTitle: " + p + "\n  accDescr: " + p
+	},
+}
+
+var usecaseTemplates = []func(p string) string{
+	func(p string) string { return usecaseHead + p },
+	func(p string) string { return usecaseHead + "actor " + p },
+	func(p string) string { return usecaseHead + "actor A(" + p + ")" },
+	func(p string) string { return usecaseHead + "actor A(\"" + p + "\")" },
+	func(p string) string { return usecaseHead + "actor A('" + p + "')" },
+	func(p string) string { return usecaseHead + "actor A(\"`" + p + "`\")" },
+	func(p string) string { return usecaseHead + "actor \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "actor \"`" + p + "`\"" },
+	func(p string) string { return usecaseHead + "actor A <<" + p + ">>" },
+	func(p string) string { return usecaseHead + "actor A:::" + p },
+	func(p string) string { return usecaseHead + "actor A@{ icon: \"" + p + "\" }" },
+	func(p string) string { return usecaseHead + "actor A@{ type: \"" + p + "\" }" },
+	func(p string) string { return usecaseHead + "actor A@{ \"" + p + "\": true }" },
+	func(p string) string { return usecaseHead + "actor A, \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "U(" + p + ")" },
+	func(p string) string { return usecaseHead + "U[" + p + "]" },
+	func(p string) string { return usecaseHead + "U(\"" + p + "\")" },
+	func(p string) string { return usecaseHead + "U[\"`" + p + "`\"]" },
+	func(p string) string { return usecaseHead + "\"" + p + "\"" },
+	func(p string) string { return usecaseHead + "'" + p + "'" },
+	func(p string) string { return usecaseHead + "\"`" + p + "`\"" },
+	func(p string) string { return usecaseHead + "U(x) <<" + p + ">>:::" + p },
+	func(p string) string { return usecaseHead + "U(x)@{ business: true } <<" + p + ">>" },
+	func(p string) string { return usecaseHead + "A --> \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "\"" + p + "\" --> \"" + p + " \"" },
+	func(p string) string { return usecaseHead + "A -- " + p + " --> B" },
+	func(p string) string { return usecaseHead + "A -- \"" + p + "\" --> B" },
+	func(p string) string { return usecaseHead + "A -- \"`" + p + "`\" --> B" },
+	func(p string) string { return usecaseHead + "A <-- \"" + p + "\" -- B" },
+	func(p string) string { return usecaseHead + "A o-- \"" + p + "\" -- B\nA x-- '" + p + "' -- B" },
+	func(p string) string { return usecaseHead + "A -- \"" + p + "\" --o B\nA -- \"" + p + "\" --x B" },
+	func(p string) string { return usecaseHead + "A -- \"" + p + "\" --> A" },
+	func(p string) string { return usecaseHead + "A " + p + "@--> B" },
+	func(p string) string { return usecaseHead + "A e@--> B\ne@{ animation: \"" + p + "\" }" },
+	func(p string) string { return usecaseHead + "A ..> : include B\nA ..> : " + p + " B" },
+	func(p string) string { return usecaseHead + "A " + p + " B" },
+	func(p string) string { return usecaseHead + "systemBoundary " + p + "\nend" },
+	func(p string) string { return usecaseHead + "systemBoundary \"" + p + "\"\n  U\nend" },
+	func(p string) string { return usecaseHead + "systemBoundary S[" + p + "]\n  U\nend" },
+	func(p string) string {
+		return usecaseHead + "systemBoundary S(\"`" + p + "`\")@{ type: package }\n  U\nend"
+	},
+	func(p string) string {
+		return usecaseHead + "systemBoundary S[\"" + p + "\"]@{ type: package }:::" + p + "\n  actor \"" + p + "\"\n  \"" + p + " \"\nend"
+	},
+	func(p string) string { return usecaseHead + "systemBoundary S@{ type: \"" + p + "\" }\nend" },
+	func(p string) string { return usecaseHead + "U\nnote for U " + p },
+	func(p string) string { return usecaseHead + "U\nnote for U \"" + p + "\"" },
+	func(p string) string { return usecaseHead + "U\nnote for U \"`" + p + "`\"" },
+	func(p string) string { return usecaseHead + "U\nnote for " + p + " \"x\"" },
+	func(p string) string { return usecaseHead + "json P@{\"" + p + "\": \"" + p + "\"}" },
+	func(p string) string {
+		return usecaseHead + "json P@{\"a\": [\"" + p + "\", {\"" + p + "\": null}], \"b\": {\"" + p + "\": 1}}"
+	},
+	func(p string) string {
+		return usecaseHead + "json P@{\"k\": " + jsonText(p) + ", " + jsonText(p) + ": [" + jsonText(p) + "]}"
+	},
+	func(p string) string { return usecaseHead + "json " + p + "@{}" },
+	func(p string) string { return usecaseHead + "json P@{}:::" + p },
+	func(p string) string { return usecaseHead + "json P@" + p },
+	func(p string) string { return usecaseHead + "A\nclass A " + p },
+	func(p string) string { return usecaseHead + "A\nclass " + p + " c" },
+	func(p string) string { return usecaseHead + "A\nclassDef " + p + " fill:red\nclass A " + p },
+	func(p string) string { return usecaseHead + "A\nclassDef c fill:" + p + "\nclass A c" },
+	func(p string) string { return usecaseHead + "A\nclassDef c " + p + ":red\nclass A c" },
+	func(p string) string {
+		return usecaseHead + "A\nclassDef default fill:" + p + ",color:" + p + ",stroke:" + p
+	},
+	func(p string) string { return usecaseHead + "A\nstyle A fill:" + p },
+	func(p string) string { return usecaseHead + "A\nstyle A " + p + ":red" },
+	func(p string) string {
+		return usecaseHead + "actor A\nstyle A color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p
+	},
+	func(p string) string {
+		return usecaseHead + "A e@--> B\nstyle e stroke:" + p + ",stroke-width:" + p + "\nclass e " + p
+	},
+	func(p string) string {
+		return usecaseHead + "systemBoundary S\nend\nstyle S fill:" + p + "\nclass S " + p
+	},
+	func(p string) string { return usecaseHead + "json P@{}\nstyle P fill:" + p + ",stroke-width:" + p },
+	func(p string) string { return usecaseHead + "A\nstyle " + p + " fill:red" },
+	func(p string) string { return usecaseHead + "accTitle: " + p + "\naccDescr: " + p + "\nA" },
+	func(p string) string { return usecaseHead + "accDescr {\n " + p + "\n}\nA" },
+	func(p string) string { return usecaseHead + "direction " + p + "\nA" },
+	func(p string) string { return usecaseHead + "direction TB " + p + "\nA" },
+	func(p string) string { return usecaseHead + "%% " + p + "\nA" },
+	func(p string) string { return usecaseHead + "A@{ " + p + ": true }\nA" },
+	func(p string) string { return usecaseHead + "A\nA@{ business: \"" + p + "\" }" },
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  usecase:\n    nodeSpacing: \"" + p + "\"\n    rankSpacing: \"" + p + "\"\n---\n" + usecaseHead + "actor A\nA --> B"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\n" + usecaseHead + "A" },
+	func(p string) string {
+		return "%%{init: {\"usecase\": {\"nodeSpacing\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\n" + usecaseHead + "A"
+	},
+	func(p string) string { return "usecase-beta " + p + "\nA" },
+}
+
+var agentflowTemplates = []func(p string) string{
+	func(p string) string { return agentflowHead + "  " + p },
+	func(p string) string { return agentflowHead + "  " + p + " --> b" },
+	func(p string) string { return agentflowHead + "  a --> " + p },
+	func(p string) string { return agentflowHead + "  a[" + p + "]" },
+	func(p string) string { return agentflowHead + "  a[\"" + p + "\"]" },
+	func(p string) string { return agentflowHead + "  a[\"`" + p + "`\"]" },
+	func(p string) string { return agentflowHead + "  a(" + p + ")" },
+	func(p string) string { return agentflowHead + "  a{" + p + "}" },
+	func(p string) string { return agentflowHead + "  a{\"" + p + "\"}" },
+	func(p string) string { return agentflowHead + "  a{{" + p + "}}" },
+	func(p string) string { return agentflowHead + "  a[[" + p + "]]" },
+	func(p string) string { return agentflowHead + "  a[/" + p + "/]" },
+	func(p string) string { return agentflowHead + "  a[\\" + p + "\\]" },
+	func(p string) string { return agentflowHead + "  a(-" + p + "-)" },
+	func(p string) string { return agentflowHead + "  a>" + p + "]" },
+	func(p string) string { return agentflowHead + "  a((" + p + "))" },
+	func(p string) string { return agentflowHead + "  a([" + p + "])" },
+	func(p string) string { return agentflowHead + "  a[|" + p + ":" + p + "|x]" },
+	func(p string) string { return agentflowHead + "  a -- " + p + " --> b" },
+	func(p string) string { return agentflowHead + "  a -- \"" + p + "\" --> b" },
+	func(p string) string { return agentflowHead + "  a -->|" + p + "| b" },
+	func(p string) string { return agentflowHead + "  a -->|\"" + p + "\"| b" },
+	func(p string) string { return agentflowHead + "  a --x|\"" + p + "\"| a" },
+	func(p string) string { return agentflowHead + "  a " + p + "@--> b" },
+	func(p string) string {
+		return agentflowHead + "  a e1@--> b\n  e1@{ curve: \"" + p + "\", animate: \"" + p + "\", animation: \"" + p + "\", instruction: \"" + p + "\" }"
+	},
+	func(p string) string { return agentflowHead + "  a@{ label: \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ label: \"" + p + "\", labelType: \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ shape: " + p + " }" },
+	func(p string) string { return agentflowHead + "  a@{ shape: \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ \"" + p + "\": \"" + p + "\" }" },
+	func(p string) string { return agentflowHead + "  a@{ " + p + " }" },
+	func(p string) string { return agentflowHead + "  a@{\n    " + p + "\n  }" },
+	func(p string) string { return agentflowHead + "  a@{\n    label: |\n      " + p + "\n  }" },
+	func(p string) string {
+		return agentflowHead + "  a[\"A\"]@{ shape: tool, icon: \"" + p + "\", img: \"" + p + "\", form: \"" + p + "\", pos: \"" + p + "\", w: \"" + p + "\", h: \"" + p + "\" }"
+	},
+	func(p string) string {
+		return agentflowHead + "  a@{ shape: tool, class: \"" + p + "\", style: \"" + p + "\", view: \"" + p + "\" }"
+	},
+	func(p string) string { return agentflowHead + "  flow " + p + "\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  flow \"" + p + "\"\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  flow f[" + p + "]\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  flow f[\"" + p + "\"]\n  a --> f\n  end\n  f --> b" },
+	func(p string) string {
+		return agentflowHead + "  flow f[\"" + p + "\"]@{ view: collapsed, model: \"" + p + "\" }\n  a\n  end\n  a --> b"
+	},
+	func(p string) string {
+		return agentflowHead + "  flow f\n  a\n  end\n  f@{ view: \"" + p + "\", \"" + p + "\": 1 }"
+	},
+	func(p string) string {
+		return agentflowHead + "  flow f\n  a\n  end\n  style f fill:" + p + "\n  class f " + p
+	},
+	func(p string) string { return agentflowHead + "  flow f\n  direction " + p + "\n  a\n  end" },
+	func(p string) string { return agentflowHead + "  connector " + p },
+	func(p string) string { return agentflowHead + "  connector \"" + p + "\"" },
+	func(p string) string { return agentflowHead + "  connector c[" + p + "]" },
+	func(p string) string {
+		return agentflowHead + "  connector c[\"" + p + "\"]@{ protocol: \"" + p + "\", \"" + p + "\": \"" + p + "\" }\n  c --> a"
+	},
+	func(p string) string {
+		return agentflowHead + "  global\n  " + p + "\n  a[\"" + p + "\"]\n  end\n  flow f\n  a\n  end"
+	},
+	func(p string) string { return agentflowHead + "  a:::" + p },
+	func(p string) string { return agentflowHead + "  a:::" + p + " --> b:::" + p },
+	func(p string) string { return agentflowHead + "  a\n  class a " + p },
+	func(p string) string { return agentflowHead + "  a\n  class " + p + " x" },
+	func(p string) string { return agentflowHead + "  a\n  classDef " + p + " fill:red\n  class a " + p },
+	func(p string) string { return agentflowHead + "  a\n  classDef c fill:" + p + "\n  class a c" },
+	func(p string) string { return agentflowHead + "  a\n  classDef c " + p + ":red\n  class a c" },
+	func(p string) string {
+		return agentflowHead + "  a\n  classDef default fill:" + p + ",color:" + p + ",stroke:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  style a fill:" + p + "\n" },
+	func(p string) string { return agentflowHead + "  a\n  style a " + p + ":red\n" },
+	func(p string) string {
+		return agentflowHead + "  a\n  style a color:" + p + ",stroke:" + p + ",font-family:" + p + ",font-size:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  style " + p + " fill:red\n" },
+	func(p string) string {
+		return agentflowHead + "  a --> b\n  linkStyle 0 stroke:" + p + ",fill:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a --> b\n  linkStyle default " + p + ":" + p + "\n" },
+	func(p string) string { return agentflowHead + "  a --> b\n  linkStyle 0 interpolate " + p + "\n" },
+	func(p string) string {
+		return agentflowHead + "  a --> b\n  linkStyle default interpolate " + p + " stroke:" + p + "\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  click a \"" + p + "\"\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a href \"" + p + "\"\n" },
+	func(p string) string {
+		return agentflowHead + "  a\n  click a href \"" + p + "\" \"" + p + "\" _blank\n"
+	},
+	func(p string) string { return agentflowHead + "  a\n  click a \"https://example.com\" \"" + p + "\"\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a call " + p + "()\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a call cb(\"" + p + "\") \"" + p + "\"\n" },
+	func(p string) string { return agentflowHead + "  a\n  click a " + p + "\n" },
+	func(p string) string { return agentflowHead + "  a\n  click " + p + " href \"https://example.com\"\n" },
+	func(p string) string { return agentflowHead + "  a[\"" + p + "\"]:::internal-link" },
+	func(p string) string { return agentflowHead + "  " + p + ":::internal-link" },
+	func(p string) string { return agentflowHead + "  accTitle: " + p + "\n  accDescr: " + p + "\n  a" },
+	func(p string) string { return agentflowHead + "  accDescr {\n " + p + "\n }\n  a" },
+	func(p string) string { return "agentflow-beta " + p + "\n  a" },
+	func(p string) string { return agentflowHead + "  direction " + p + "\n  a" },
+	func(p string) string {
+		return agentflowHead + "  %% " + p + "\n  a %% " + p + "\n  b[x %% " + p + "\n y]"
+	},
+	func(p string) string {
+		return "---\ntitle: \"" + p + "\"\nconfig:\n  agentflow:\n    nodeSpacing: \"" + p + "\"\n    rankSpacing: \"" + p + "\"\n    wrappingWidth: \"" + p + "\"\n  flowchart:\n    curve: \"" + p + "\"\n    inheritDir: \"" + p + "\"\n---\n" + agentflowHead + "  a --> b"
+	},
+	func(p string) string { return "---\ntitle: " + p + "\n---\n" + agentflowHead + "  a" },
+	func(p string) string {
+		return "%%{init: {\"agentflow\": {\"nodeSpacing\": \"" + p + "\"}, \"flowchart\": {\"curve\": \"" + p + "\"}, \"themeVariables\": {\"fontFamily\": \"" + p + "\"}}}%%\n" + agentflowHead + "  a --> b"
+	},
+}

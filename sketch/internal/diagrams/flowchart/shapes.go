@@ -112,13 +112,14 @@ var canonical = func() map[string]string {
 	return c
 }()
 
-func isValidShape(name string) bool {
+// IsValidShape is whether name is a shape flowcharts draw, by any of its names.
+func IsValidShape(name string) bool {
 	_, ok := canonical[name]
 	return ok
 }
 
-// canonicalShape gives the documented name of a shape. "" is pele's undefined.
-func canonicalShape(name string) string {
+// CanonicalShape gives the documented name of a shape. "" is pele's undefined.
+func CanonicalShape(name string) string {
 	if name == "" {
 		return "rect"
 	}

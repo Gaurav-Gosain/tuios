@@ -16,9 +16,12 @@ sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
 It draws flowcharts, sequence diagrams, state diagrams, class diagrams, ER
 diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant
 charts, user journeys, kanban boards, git graphs, sankey diagrams, block
-diagrams, architecture diagrams and requirement diagrams. Each other diagram
-type gives an error with the code `unsupported-diagram` until its port is
-done.
+diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packets,
+radar charts, treemaps, info diagrams, tree views, ishikawa diagrams, Cynefin
+diagrams, event models, venn diagrams, wardley maps, railroad diagrams,
+swimlane diagrams, use case diagrams and agent flows: every type that pele
+draws. A type that pele does not draw gives an error with the code
+`unsupported-diagram`.
 
 The output matches the output of pele, except links. The test suite compares
 each diagram with an SVG that pele drew from the same source, byte for byte.
@@ -54,6 +57,21 @@ other than http, https, mailto or tel.
 | block | 30/30 |
 | architecture | 6/6 |
 | requirement | 9/9 |
+| c4 | 6/6 |
+| packet | 4/4 |
+| radar | 3/3 |
+| treemap | 8/8 |
+| info | 2/2 |
+| treeView | 13/13 |
+| ishikawa | 1/1 |
+| cynefin | 3/3 |
+| eventmodeling | 12/12 |
+| venn | 8/8 |
+| wardley | 19/19 |
+| railroad | 14/14 |
+| swimlane | 13/13 |
+| usecase | 24/24 |
+| agentflow | 12/12 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
@@ -79,12 +97,15 @@ v1.7.0 does.
 `tuios.dev/sketch/text` draws flowcharts, sequence diagrams, state diagrams,
 class diagrams, ER diagrams, pie charts, mindmaps, gantt charts, timelines, XY
 charts, quadrant charts, user journeys, kanban boards, git graphs, sankey
-diagrams, block diagrams, architecture diagrams and requirement diagrams with
-box-drawing characters, for a terminal that shows no pictures. For a graph it
-takes the layout that sketch works out for the SVG and maps it to cells. The
-labels stay real text. A pie chart is a bar for each slice, with its value.
-pele leaves a slice under 1% out of the pie, and shows values only with
-`showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
+diagrams, block diagrams, architecture diagrams, requirement diagrams, C4
+diagrams, packet diagrams, radar charts, treemaps, info diagrams, tree views,
+Ishikawa diagrams, Cynefin diagrams, event models, Venn diagrams, Wardley
+maps, railroad diagrams, swimlane diagrams, use case diagrams and agent flows
+with box-drawing characters, for a terminal that shows no pictures. For a
+graph it takes the layout that sketch works out for the SVG and maps it to
+cells. The labels stay real text. A pie chart is a bar for each slice, with
+its value. pele leaves a slice under 1% out of the pie, and shows values only
+with `showData`. A mindmap is a tree. A gantt chart is bars on a date axis. A
 timeline runs across, and runs down when it does not fit the columns. So does
 a user journey. An XY chart draws its bars and lines with tuios.dev/plot, and
 turns its categories into rows when they do not fit across. It writes point
@@ -95,8 +116,20 @@ runs down, one row for each commit, with the oldest commit at the top. A
 sankey diagram puts its nodes in columns of boxes joined by lines. When two
 lines would join, when they cross more than three times, or when the columns
 do not fit, it is a table of flows: source, target and value. Block,
-architecture and requirement diagrams are drawn as a flowchart is. A block
+architecture, requirement and C4 diagrams are drawn as a flowchart is. A block
 arrow shows an arrow character. A service without a title shows its icon name.
+A packet diagram is rows of bit fields. A radar chart is a table with one bar
+for each curve on each axis. A treemap is nested boxes, or an indented tree
+when the boxes are too small. An info diagram is its line of text. A tree view
+is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
+with its causes as bones, or an indented tree when it is narrow. A Cynefin
+diagram is a grid of its four domains. An event model is swimlanes in time
+order, or a list of frames when it is narrow. A Venn diagram is a table of its
+sets and their overlaps. A Wardley map is a grid of visibility by evolution,
+or a table when it is narrow. A railroad diagram is its tracks in cells, or
+its rules as EBNF text when they do not fit. Use case diagrams and agent flows
+are drawn as a flowchart is. A swimlane diagram is a flowchart with its lanes
+as bands.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

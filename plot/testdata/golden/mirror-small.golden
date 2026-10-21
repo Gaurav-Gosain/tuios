@@ -1,0 +1,33 @@
+=== braille 6x4
+|    ⡇⢸|
+|⣀⣀⣀⢀⡇⣸|
+|⠉⠉⠉⠉⠉⠉|
+|      |
+--- roles
+|    aa|
+|bbbccc|
+|bbbbbb|
+|      |
+a=series1 b=track c=series1/2 (upper case is bold)
+=== blocks 6x4
+|  █  █|
+|▁▂█▁▂█|
+|▔▔▔▔▔▔|
+|      |
+--- roles
+|  a  a|
+|bccbcc|
+|bbbbbb|
+|      |
+a=series1 b=track c=series1/2 (upper case is bold)
+=== ascii 6x4
+|  #  #|
+|.:#.:#|
+|......|
+|      |
+--- roles
+|  a  a|
+|bccbcc|
+|bbbbbb|
+|      |
+a=series1 b=track c=series1/2 (upper case is bold)

@@ -112,6 +112,113 @@ var cases = []chartCase{
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},
+	{"mirror", 40, 9, func(w, h int, m Mode) *Grid {
+		return Mirror{
+			Up:    Series{Name: "rx", Values: append([]float64{0, 0}, runSecs...)},
+			Down:  Series{Name: "tx", Values: []float64{1, 2, 0, 3, 9, 2, 1, math.NaN(), 4, 1, 1, 2, 30, 2, 1, 0, 1, 2}},
+			Peaks: true, Stats: true,
+		}.Draw(w, h, m)
+	}},
+	{"mirror-shared", 24, 6, func(w, h int, m Mode) *Grid {
+		return Mirror{
+			Up:     Series{Values: []float64{4, 8, 2, 6, 3, 9, 1, 5}, Role: Info},
+			Down:   Series{Values: []float64{2, 1, 3, 1, 2, 1, 4, 2}, Role: Warning},
+			UpRamp: []Role{Heat2, Heat4},
+			Shared: true, Peaks: true,
+		}.Draw(w, h, m)
+	}},
+	{"mirror-small", 6, 4, func(w, h int, m Mode) *Grid {
+		// A small value next to an empty one: in ASCII the small one is
+		// ":" and the empty baseline ".". All negative values give a peak
+		// that is negative, not 0.
+		return Mirror{Up: Series{Values: []float64{0, 1, 10, 0, 1, 10}}, Down: Series{Values: []float64{-3, -1, -2}}}.Draw(w, h, m)
+	}},
+	{"mirror-stats-negative", 30, 4, func(w, h int, m Mode) *Grid {
+		return Mirror{Up: Series{Values: []float64{-3, -1, -2}}, Stats: true}.Draw(w, h, m)
+	}},
+	{"mirror-short", 30, 3, func(w, h int, m Mode) *Grid {
+		// Too short for the peaks and the corners: only the columns.
+		return Mirror{
+			Up:    Series{Name: "in", Values: runSecs},
+			Down:  Series{Name: "out", Values: runSecs[:10]},
+			Peaks: true, Stats: true,
+		}.Draw(w, h, m)
+	}},
+	{"inline-bars", 12, 6, func(w, h int, m Mode) *Grid {
+		// One bar per row, as in a table: the same Max for every row.
+		g := NewGrid(w, h)
+		for i, v := range []float64{30, 12.4, 3.1, 0.84, 0, math.NaN()} {
+			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"diverging-bars", 15, 5, func(w, h int, m Mode) *Grid {
+		g := NewGrid(w, h)
+		for i, lr := range [][2]float64{{24, 1.1}, {6, 3.2}, {0.04, 0.22}, {0, 0}, {1.2, 9}} {
+			row := DivergingBar{Left: lr[0], Right: lr[1], Max: 24, LeftRole: Series3, RightRole: Series5, Track: i%2 == 0}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"inline-bars-blocks", 12, 6, func(w, h int, m Mode) *Grid {
+		// One bar per row, as in a table: the same Max for every row.
+		g := NewGrid(w, h)
+		for i, v := range []float64{30, 12.4, 3.1, 0.84, 0, math.NaN()} {
+			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0, Style: InlineBlocks}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"diverging-bars-blocks", 15, 5, func(w, h int, m Mode) *Grid {
+		g := NewGrid(w, h)
+		for i, lr := range [][2]float64{{24, 1.1}, {6, 3.2}, {0.04, 0.22}, {0, 0}, {1.2, 9}} {
+			row := DivergingBar{Left: lr[0], Right: lr[1], Max: 24, LeftRole: Series3, RightRole: Series5, Track: i%2 == 0, Style: InlineBlocks}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"diverging-equal", 11, 3, func(w, h int, m Mode) *Grid {
+		// Equal values draw equal sides, with and without a track.
+		g := NewGrid(w, h)
+		for i, f := range []float64{13.0 / 16, 5.0 / 16, 2.0 / 16} {
+			row := DivergingBar{Left: f, Right: f, Max: 1, Style: InlineBlocks}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"inline-subnormal", 8, 2, func(w, h int, m Mode) *Grid {
+		// A Max so small that half of it is 0: a value of 0 still draws
+		// nothing.
+		g := NewGrid(w, h)
+		copy(g.Cells[:w], InlineBar{Value: 0, Max: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
+		copy(g.Cells[w:], DivergingBar{Left: 0, Right: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
+		return g
+	}},
+	{"map", 44, 10, func(w, h int, m Mode) *Grid {
+		return Map{
+			Values:  map[string]float64{"US": 410, "de": 120, "BR": 6, "IN": 9, "AU": 2.5, "ZA": 0.4, "XX": 99, "RU": math.NaN()},
+			Markers: []Marker{{Lat: 52.37, Lon: 4.9}, {Lat: 35.68, Lon: 139.69, Role: Warning}, {Lat: -80, Lon: 0}},
+			Log:     true,
+		}.Draw(w, h, m)
+	}},
+	{"map-small", 30, 6, func(w, h int, m Mode) *Grid {
+		// Countries too small to win a cell show when they have a value.
+		return Map{Values: map[string]float64{"SG": 1, "MT": 1, "BH": 1, "FR": 1, "NO": 1}}.Draw(w, h, m)
+	}},
+	{"map-narrow-range", 44, 4, func(w, h int, m Mode) *Grid {
+		// A range so narrow that rounding would merge the bounds: the
+		// shades keep the exact bounds, and US at 100.3 is in shade 2.
+		mp := Map{Values: map[string]float64{"US": 100.3, "de": 1, "DE": 101}, Min: 100, Max: 101}
+		g := NewGrid(w, h)
+		_, rows := mp.Fit(w, h-1, m)
+		copy(g.Cells, mp.Draw(w, rows, m).Cells)
+		DrawLegend(g, 0, rows, mp.Legend(m), m)
+		return g
+	}},
+	{"map-stretch", 20, 4, func(w, h int, m Mode) *Grid {
+		return Map{Stretch: true}.Draw(w, h, m)
+	}},
 	{"empty", 10, 3, func(w, h int, m Mode) *Grid {
 		return Line{}.Draw(w, h, m)
 	}},
@@ -269,6 +376,29 @@ func TestFormat(t *testing.T) {
 	}
 	if got := Percent(1); got != "100%" {
 		t.Errorf("Percent(1) = %q", got)
+	}
+}
+
+// TestMapBudget holds the world map's embedded data under its budget, and
+// checks it decodes to the map the generator wrote: 720 by 288 cells with
+// the countries a reader is most likely to ask for.
+func TestMapBudget(t *testing.T) {
+	if n := len(worldBin); n > 12<<10 {
+		t.Errorf("world.bin is %d bytes, over the 12 KB budget", n)
+	}
+	wd := loadWorld()
+	if wd.w != 720 || wd.h != 288 {
+		t.Errorf("the map is %dx%d cells", wd.w, wd.h)
+	}
+	// Every country with a code that Natural Earth 5.1.1 has between 84 N
+	// and 60 S: 236. A smaller count means worldgen lost one.
+	if len(wd.codes) != 236 {
+		t.Errorf("the map has %d countries, want 236", len(wd.codes))
+	}
+	for _, c := range []string{"US", "FR", "NO", "SG", "MT", "XK", "TW", "HK", "MF", "SX"} {
+		if _, ok := wd.index[c]; !ok {
+			t.Errorf("the map has no %s", c)
+		}
 	}
 }
 

@@ -1,0 +1,33 @@
+=== braille 20x4
+| ⠶⢶⣶⣾⣻⣏⠟⠛⢀⣠⣶⣤⣶⣶⣾⣶⣶⠶⠶|
+|   ⠙⢟⡛⠁  ⣼⣿⣽⣿⠿⡿⣿⠟⠁  |
+|     ⠸⣿⣦ ⠉⢹⣿⢏  ⠐⢂⣰⡀ |
+|      ⠟⠁   ⠉    ⠈⠙⠃ |
+--- roles
+| aaaaaaaaaaaaaaaaaaa|
+|   aaaa  aaaaaaaaa  |
+|     aaa aaaa  aaaa |
+|      aa   a    aaa |
+a=track (upper case is bold)
+=== blocks 20x4
+| ▄▄▀▀▀▀▀▀ ▄▄▄▀▀▀▀▀▄ |
+|   ▀▀▀   ▀▀▀▀▀▀▀▀▀  |
+|     ▀▀▄  ▀▀▀    ▄  |
+|      ▀    ▀    ▀▀▀ |
+--- roles
+| aaaaaaaa aaaaaaaaa |
+|   aaa   aaaaaaaaa  |
+|     aaa  aaa    a  |
+|      a    a    aaa |
+a=track (upper case is bold)
+=== ascii 20x4
+|  ....... ......... |
+|   ...   ........   |
+|      ..  ...    .  |
+|      .             |
+--- roles
+|  aaaaaaa aaaaaaaaa |
+|   aaa   aaaaaaaa   |
+|      aa  aaa    a  |
+|      a             |
+a=track (upper case is bold)

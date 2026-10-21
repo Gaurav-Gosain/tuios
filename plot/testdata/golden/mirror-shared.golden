@@ -1,0 +1,45 @@
+=== braille 24x6
+|                    9 • |
+|                    ⢰⢀⢸ |
+|⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣼⣾⣸|
+|⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠋⠏⠋⡟|
+|                        |
+|                     4 •|
+--- roles
+|                    a b |
+|                    bbb |
+|ccccccccccccccccccccdddd|
+|cccccccccccccccccccceeee|
+|                        |
+|                     a f|
+a=dim b=heat4 c=track d=heat2 e=warning/2 f=warning (upper case is bold)
+=== blocks 24x6
+|                     • 9|
+|                 ▆ ▃ █ ▁|
+|▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▇█▄█▅█▂█|
+|▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▀▔▀▔▀▔█▀|
+|                        |
+|                    4 • |
+--- roles
+|                     a b|
+|                 a a a a|
+|ccccccccccccccccdddddddd|
+|cccccccccccccccceeeeeeee|
+|                        |
+|                    b f |
+a=heat4 b=dim c=track d=heat2 e=warning/2 f=warning (upper case is bold)
+=== ascii 24x6
+|                     * 9|
+|                 # : # :|
+|................######:#|
+|................#:#:#:##|
+|                        |
+|                    4 * |
+--- roles
+|                     a b|
+|                 a a a a|
+|ccccccccccccccccdddddddd|
+|cccccccccccccccceeeeeeee|
+|                        |
+|                    b f |
+a=heat4 b=dim c=track d=heat2 e=warning/2 f=warning (upper case is bold)

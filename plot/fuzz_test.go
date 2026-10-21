@@ -46,7 +46,7 @@ func FuzzCharts(f *testing.F) {
 			}
 		}
 		var g *Grid
-		switch kind % 12 {
+		switch kind % 16 {
 		case 0:
 			g = Bar{Values: vals, Labels: labels, Horizontal: true, Guide: true}.Draw(W, H, m)
 		case 1:
@@ -86,6 +86,40 @@ func FuzzCharts(f *testing.F) {
 			g = Pie{Values: vals, Labels: labels, Donut: kind%2 == 0, Aspect: float64(w%5) - 1}.Draw(W, H, m)
 		case 11:
 			g = Bar{Values: vals, Labels: labels, Axis: true}.Draw(W, H, m)
+		case 12:
+			// The name is in the series role, so it stays ASCII here.
+			name := ""
+			if len(labels) > 0 {
+				name = labels[0]
+			}
+			g = Mirror{Up: Series{Name: name, Values: vals}, Down: Series{Values: reverse(vals)},
+				Peaks: true, Stats: true, Shared: kind%2 == 0}.Draw(W, H, m)
+		case 13, 14:
+			a, b := 0.0, 0.0
+			if len(vals) > 0 {
+				a = vals[0]
+			}
+			if len(vals) > 1 {
+				b = vals[1]
+			}
+			if kind%16 == 13 {
+				g = InlineBar{Value: a, Max: b, Track: kind%2 == 0}.Draw(W, H, m)
+			} else {
+				g = DivergingBar{Left: a, Right: b, Max: float64(w % 3), Track: kind%2 == 0}.Draw(W, H, m)
+			}
+		case 15:
+			mp := Map{Values: map[string]float64{}, Log: kind%2 == 0, Stretch: w%2 == 0, Aspect: float64(h % 4)}
+			for i, v := range vals {
+				code := string(rune('A'+i%26)) + string(rune('A'+i/26%26))
+				mp.Values[code] = v
+				if i+1 < len(vals) {
+					mp.Markers = append(mp.Markers, Marker{Lat: v, Lon: vals[i+1]})
+				}
+			}
+			if len(vals) > 1 {
+				mp.Min, mp.Max = vals[0], vals[1]
+			}
+			g = mp.Draw(W, H, m)
 		}
 		checkGrid(t, g, W, H, m)
 		_ = g.String()

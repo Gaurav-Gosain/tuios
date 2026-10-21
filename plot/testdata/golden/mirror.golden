@@ -1,0 +1,63 @@
+=== braille 40x9
+|rx          peak 24.1 · avg 19.5 · Σ 624|
+|                                • 24.1  |
+|                         ⣦⣦⣼⣤⣤⣶⣤⣼⣦⣤⣴⣤⣤⣦⣄|
+|                         ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿|
+|⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠈⠋⠁⠉⠉⡏⠁⠉|
+|                                     ⡇  |
+|                                  30 •  |
+|tx             peak 30 · avg 3.65 · Σ 62|
+--- roles
+|AA          bbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                                a cccc  |
+|                         aaaaaaaaaaaaaaa|
+|                         ddddddddddddddd|
+|eeeeeeeeeeeeeeeeeeeeeeeeefffffffffffffff|
+|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeggggggggg|
+|                                     h  |
+|                                  cc h  |
+|HH             bbbbbbbbbbbbbbbbbbbbbbbbb|
+a=series1 b=mute c=dim d=series1/1 e=track f=series1/2 g=series2/2 h=series2 (upper case is bold)
+=== blocks 40x9
+|rx          peak 24.1 · avg 19.5 · Σ 624|
+|                         • 24.1         |
+|          ▅▅▆▄▄█▅▅▄▄▇▅▄▄▄█▆▅▄▄▄▅▄▅▃▄▆▅▄▂|
+|          ██████████████████████████████|
+|▁▁▁▁▁▁▁▁▁▁██████████████████████████████|
+|▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▀▔▔▔▔▔▔▔█▔▔▔▔▔|
+|                                  █     |
+|                                  • 30  |
+|tx             peak 30 · avg 3.65 · Σ 62|
+--- roles
+|AA          bbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                         a cccc         |
+|          aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|          dddddddddddddddddddddddddddddd|
+|eeeeeeeeeeffffffffffffffffffffffffffffff|
+|eeeeeeeeeeeeeeeeeeeeeeggeggggegggggggegg|
+|                                  h     |
+|                                  h cc  |
+|HH             bbbbbbbbbbbbbbbbbbbbbbbbb|
+a=series1 b=mute c=dim d=series1/1 e=track f=series1/2 g=series2/2 h=series2 (upper case is bold)
+=== ascii 40x9
+|rx          peak 24.1  avg 19.5  sum 624|
+|                         * 24.1         |
+|          ########################:####:|
+|          ##############################|
+|..........##############################|
+|......................::.:#::.::::#::.::|
+|                                  #     |
+|                                  * 30  |
+|tx             peak 30  avg 3.65  sum 62|
+--- roles
+|AA          bbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                         a cccc         |
+|          aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|          dddddddddddddddddddddddddddddd|
+|eeeeeeeeeeffffffffffffffffffffffffffffff|
+|eeeeeeeeeeeeeeeeeeeeeeggeggggegggggggegg|
+|                                  h     |
+|                                  h cc  |
+|HH             bbbbbbbbbbbbbbbbbbbbbbbbb|
+a=series1 b=mute c=dim d=series1/1 e=track f=series1/2 g=series2/2 h=series2 (upper case is bold)

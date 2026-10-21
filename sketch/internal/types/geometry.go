@@ -45,6 +45,39 @@ type Geometry struct {
 
 	// Sankey.
 	Sankey *GeoSankey
+
+	// Packet.
+	Packet *GeoPacket
+
+	// Radar.
+	Radar *GeoRadar
+
+	// Treemap.
+	Treemap *GeoTreemap
+
+	// Info.
+	Info *GeoInfo
+
+	// TreeView.
+	TreeView *GeoTreeView
+
+	// Ishikawa.
+	Ishikawa *GeoIshikawa
+
+	// Cynefin.
+	Cynefin *GeoCynefin
+
+	// Event modeling.
+	EventModel *GeoEventModel
+
+	// Venn.
+	Venn *GeoVenn
+
+	// Wardley.
+	Wardley *GeoWardley
+
+	// Railroad.
+	Railroad *GeoRailroad
 }
 
 type GeoNode struct {
@@ -335,4 +368,206 @@ type GeoFlow struct {
 	// SourceY and TargetY are the middle of the band where it leaves its source
 	// and where it enters its target, in SVG units.
 	SourceY, TargetY float64
+}
+
+// GeoPacket is a packet as lists: a text drawing lays it out again in cells.
+type GeoPacket struct {
+	Title []string
+	// BitsPerRow is the row length the fields were split at.
+	BitsPerRow int
+	// Descending numbers the bits of a row from the right.
+	Descending bool
+	ShowBits   bool
+	// Fields are the pieces of the fields in order, each within one row.
+	Fields []GeoField
+}
+
+type GeoField struct {
+	Row        int
+	Start, End float64
+	Label      string
+}
+
+// GeoRadar is a radar chart as lists: a text drawing shows each value as a bar.
+type GeoRadar struct {
+	Title []string
+	// Axes are the axis labels, in order around the chart.
+	Axes []string
+	// Curves are the curves drawn, each with a value for every axis.
+	Curves []GeoCurve
+	// Min and Max are the values at the centre and at the rim.
+	Min, Max float64
+}
+
+type GeoCurve struct {
+	Label  string
+	Values []float64
+}
+
+// GeoTreemap is a treemap as its placed boxes, and as the whole tree for a drawing that
+// has no room for the boxes.
+type GeoTreemap struct {
+	Title []string
+	// Width and Height are the size of the area the boxes fill.
+	Width, Height float64
+	// Boxes are the boxes with a size, parents before their children, in the area's coordinates.
+	Boxes []GeoTreeBox
+	// Tree is every node in order, with its depth; its places are not set.
+	Tree []GeoTreeBox
+}
+
+type GeoTreeBox struct {
+	X, Y, W, H float64
+	Label      string
+	// Value is the value as the diagram formats it, "" when values are hidden.
+	Value   string
+	Section bool
+	Depth   int
+}
+
+// GeoInfo is the info diagram: its title and its line of text.
+type GeoInfo struct {
+	Title []string
+	Text  string
+}
+
+// GeoTreeView is a file tree as its rows, in the order they are drawn.
+type GeoTreeView struct {
+	Title []string
+	Rows  []GeoTreeRow
+}
+
+type GeoTreeRow struct {
+	// Depth is 0 for a top-level entry; a row's children follow it one level deeper.
+	Depth       int
+	Name        string
+	Directory   bool
+	Icon        string
+	Description string
+	Highlight   bool
+}
+
+// GeoIshikawa is a fishbone as its outline: the effect, and each category with its causes.
+type GeoIshikawa struct {
+	Title      []string
+	Effect     string
+	Categories []GeoCategory
+}
+
+type GeoCategory struct {
+	Label string
+	// Causes are in outline order; Depth is 1 for a cause of the category itself.
+	Causes []GeoCause
+}
+
+type GeoCause struct {
+	Label string
+	Depth int
+}
+
+// GeoCynefin is a Cynefin diagram as lists: the domains in the order complex, complicated,
+// chaotic, clear and confusion, and the transitions between them.
+type GeoCynefin struct {
+	Title       []string
+	Domains     []GeoDomain
+	Transitions []GeoTransition
+}
+
+type GeoDomain struct {
+	Name string
+	// Model and Practice are the decision model and the kind of practice, "" when hidden.
+	Model, Practice string
+	Items           []string
+}
+
+type GeoTransition struct {
+	From, To, Label string
+}
+
+// GeoEventModel is an event model as lists: the lanes from top to bottom, the frames in time
+// order, the relations between them, and the notes and specifications.
+type GeoEventModel struct {
+	Title     []string
+	Lanes     []string
+	Boxes     []GeoFrame
+	Relations [][2]int
+	Notes     []GeoEventCard
+}
+
+type GeoFrame struct {
+	ID, Name, Kind string
+	// Lane is an index into Lanes.
+	Lane  int
+	Reset bool
+	Data  []string
+}
+
+type GeoEventCard struct {
+	Head  string
+	Lines []string
+}
+
+// GeoVenn is a venn diagram as its regions: each set, then each overlap the source states, with
+// the relative size it was given and what is written in it.
+type GeoVenn struct {
+	Title   []string
+	Regions []GeoVennRegion
+}
+
+type GeoVennRegion struct {
+	Sets  []string
+	Size  float64
+	Label string
+	Texts []string
+}
+
+// GeoWardley is a wardley map as lists. Evolution and visibility are percentages.
+type GeoWardley struct {
+	Title  []string
+	Stages []string
+	// Boundaries are the right edges of the stages, from 0 to 1, when the map sets them.
+	Boundaries []float64
+	Nodes      []GeoWardleyNode
+	Links      []GeoWardleyLink
+	// Trends are a node's index and the evolution it is heading for.
+	Trends [][2]float64
+	// Notes are the notes and the numbered annotations.
+	Notes []string
+}
+
+type GeoWardleyNode struct {
+	Label                 string
+	Evolution, Visibility float64
+	// Kind is anchor, component, pipeline or pipeline-component.
+	Kind     string
+	Strategy string
+	Inertia  bool
+}
+
+type GeoWardleyLink struct {
+	From, To int
+	Label    string
+	Dashed   bool
+	Flow     string
+}
+
+// GeoRailroad is a railroad diagram as its rules, each a tree.
+type GeoRailroad struct {
+	Title []string
+	Rules []GeoRule
+}
+
+type GeoRule struct {
+	Name string
+	Root *GeoRailNode
+}
+
+// GeoRailNode is a terminal, nonterminal or special with its Text, or a sequence, choice,
+// optional or repetition of its Kids. A repetition runs from Min to Max times; Max is +Inf
+// for no bound.
+type GeoRailNode struct {
+	Kind     string
+	Text     string
+	Kids     []*GeoRailNode
+	Min, Max float64
 }

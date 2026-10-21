@@ -207,6 +207,9 @@ type Daemon struct {
 	// prompt each window was answered on, so two clients answering the same
 	// prompt get one answer through and the other refused. See verb_respond.go.
 	responds respondSlots
+	// fanReserved holds the names of the fans being made now, so two calls
+	// cannot both take one as new. See reserveFan.
+	fanReserved fanReservations
 	// fanVerifies holds the verify-fan checks running now, one per fan
 	// session. See verb_fan_compare.go.
 	fanVerifies fanVerifyRuns

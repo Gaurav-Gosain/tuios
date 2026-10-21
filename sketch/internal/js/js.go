@@ -349,6 +349,7 @@ func Truthy(v any) bool {
 }
 
 // ParseIntPrefix is parseInt(s, radix): the leading digits after whitespace and a sign, or NaN.
+// The digits are ASCII, so their count is also their length in bytes.
 func ParseIntPrefix(s string, radix int) float64 {
 	s = TrimStart(s)
 	neg := false
@@ -371,6 +372,11 @@ func ParseIntPrefix(s string, radix int) float64 {
 	}
 	if n == 0 {
 		return math.NaN()
+	}
+	// V8 reads a decimal run of digits as a decimal literal, rounded once, where the sum above
+	// rounds at every digit past 2^53.
+	if radix == 10 && v >= 1<<53 {
+		v, _ = strconv.ParseFloat(s[:n], 64)
 	}
 	if neg {
 		return -v

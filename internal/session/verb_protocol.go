@@ -52,6 +52,7 @@ const (
 	ErrVerbInvalidParams   = "invalid_params"    // params failed to decode or a required field was missing
 	ErrVerbSessionNotFound = "session_not_found" // named session does not exist
 	ErrVerbSessionExists   = "session_exists"    // new-session was given a name the daemon already holds
+	ErrVerbFanExists       = "fan_exists"        // fan was given the name of a fan that exists, with no join
 	ErrVerbWindowNotFound  = "window_not_found"  // window target did not resolve
 	ErrVerbNoWindows       = "no_windows"        // session has no windows to act on
 	ErrVerbPTYNotFound     = "pty_not_found"     // the target window has no live PTY
@@ -666,7 +667,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "prompts", Type: "[]string", Description: "One prompt per session, in order. count defaults to how many there are and must equal it when given. Takes no prompt."},
 				{Name: "repo", Type: "string", Description: "A directory inside the repository. Required unless repo_url is passed."},
 				{Name: "base", Type: "string", Description: "Ref every branch starts from. Omit for HEAD of the main checkout."},
-				{Name: "name", Type: "string", Description: "Branch stem. The branches are the stem, then stem-2, stem-3 and so on. Omit for fan/ and the first words of the first prompt."},
+				{Name: "name", Type: "string", Description: "Branch stem, which names the fan. The branches are the stem, then stem-2, stem-3 and so on. A name that is already a fan in the repository is refused with fan_exists unless join is given. Omit for fan/ and the first words of the first prompt, which moves on to a free name. A name with a character that does not print is refused."},
+				{Name: "join", Type: "string", Description: "A session of an existing fan to add the attempts to. The caller must reach that session. Omit to start a new fan."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for each agent to be ready before giving up on its prompt.", Default: "600000"},
 				{Name: "env", Type: "object", Description: "Environment variables for every agent, name to value, on top of the daemon's. PATH in it is where the programs are looked up, so an agent the caller can run is found. The tuios CLI sends its PATH. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env at all. Not saved: a restored pane starts with the daemon's environment."},
 				grantsParam,

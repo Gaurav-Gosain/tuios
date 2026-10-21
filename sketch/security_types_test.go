@@ -1,7 +1,7 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement}-security.test.ts,
-// the inert part of tests/render/pie.test.ts and tests/support/corpus.ts at
+// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad,usecase,agentflow}-security.test.ts,
+// the inert parts of tests/render/pie.test.ts and tests/render/swimlane.test.ts, and tests/support/corpus.ts at
 // 8603bf3313add9143cd417015d4a6bd6c522dada. The template lists are in
 // security_templates_test.go, written by scripts/security-templates.py.
 
@@ -921,5 +921,453 @@ func TestRequirementOutputIsInert(t *testing.T) {
 		"__proto__ - contains -> constructor\nclassDef __proto__ fill:red\nclass __proto__,constructor __proto__,toString\n"+
 		"__proto__:::constructor\nstyle __proto__ fill:red\n", RenderOptions{}, false) {
 		t.Fatal("names like __proto__ did not render")
+	}
+}
+
+const c4Two = "System(a, \"A\")\nSystem(b, \"B\")\n"
+
+// TestC4OutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same source must only render.
+func TestC4OutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "c4")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, c4Templates, 700, RenderOptions{}, false)
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "C4Context\naccDescr: d\nSystem(a, \"A\")\nSystem(b, \"B\")\nRel(a, b, \"x\")", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile c4 options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "(", ")", ",", "\n", "{", "}", "$link=\"", "$bgColor=\"", "$offsetX=\"", "Rel(a, b, \"", "UpdateElementStyle(a, \""},
+		3, 4000, RenderOptions{}, false)
+	for _, url := range []string{"javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,x", "vbscript:x", "jav&#x09;ascript:alert(1)"} {
+		noLinks(t, "C4Context\nSystem(a, \"A\", $link=\""+url+"\")\nBoundary(b, \"B\", $link=\""+url+"\") {\nSystem(c, \"C\")\n}\nRel(a, c, \"x\", $link=\""+url+"\")", RenderOptions{})
+	}
+	out, err := Render("C4Context\nSystem(a, \"A\")\nSystem(b, \"B\")\nRel(a, b, \"x\")\n"+
+		"UpdateElementStyle(a, \"red;background:url(//evil.example/x)\", \"expression(alert(1))\", \"url(#x)\")\nUpdateRelStyle(a, b, \"red}\", \"blue<\")", RenderOptions{})
+	if err != nil || regexp.MustCompile(`url\(|expression|evil|red|blue`).MatchString(out.Data) {
+		t.Fatalf("colours that are more than a colour: %v\n%s", err, out.Data)
+	}
+	if !inertTry(t, "C4Context\nSystem(__proto__, \"A\", $__proto__=\"polluted\", $constructor=\"x\")\nSystem(constructor, \"B\", $tags=\"__proto__,constructor\", $shape=\"toString\")\n"+
+		"Rel(__proto__, constructor, \"x\")\nUpdateElementStyle(__proto__, $prototype=\"x\")\nUpdateRelStyle(__proto__, constructor, $__proto__=\"1\")", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+}
+
+func TestPacketOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "packet")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, packetTemplates, 150, RenderOptions{}, false)
+	out, err := Render("packet\n0-31: \"<b>&amp;</b> <script>x</script>\"", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, "&lt;b&gt;&amp;&lt;/b&gt; &lt;script&gt;x&lt;/script&gt;") {
+		t.Fatalf("packet label is not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "packet\naccTitle: t\n0-31: \"a\"", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile packet options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", ":", "-", "+", "\n", "title ", "0-7: \"", "+8: \""}, 3, 4000, RenderOptions{}, false)
+}
+
+func TestRadarOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "radar")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, radarTemplates, 200, RenderOptions{}, false)
+	out, err := Render("radar-beta\n axis a[\"<script>x</script>\"], b[\"\\\"q\\\" & co\"]\n curve c[\"<img src=x>\"]{1,2}", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") || !strings.Contains(out.Data, "&quot;q&quot; &amp; co") {
+		t.Fatalf("radar names are not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "radar-beta\n accTitle: t\n axis a, b\n curve x{1,2}", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile radar options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", "[", "]", "{", "}", ":", ",", "\n", "title ", "axis ", "curve c{1,2}", "max 3", "graticule polygon"},
+		3, 4000, RenderOptions{}, false)
+}
+
+// TestTreemapOutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same source must only render.
+func TestTreemapOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "treemap")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, treemapTemplates, 250, RenderOptions{}, false)
+	out, err := Render("treemap\n\"<script>x</script>\":::bad\n  \"<img src=x onerror=alert(1)>\": 1:::bad\nclassDef bad fill:url(javascript:alert(1)),stroke:red", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "url(") ||
+		!strings.Contains(out.Data, `style="rx:var(--_r);stroke:red;"`) {
+		t.Fatalf("treemap names or styles are not safe: %v\n%s", err, out.Data)
+	}
+	out, err = Render("---\nconfig:\n  treemap:\n    valueFormat: \"<b>\"\n---\ntreemap\n\"a\": 1234", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, ">1,234<") {
+		t.Fatalf("a value format wrote markup: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, "treemap\naccTitle: t\n\"a\": 1", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile treemap options %q: did not render", payload)
+		}
+	}
+	if !inertTry(t, "treemap\n\"__proto__\":::__proto__\n  \"constructor\": 1:::constructor\nclassDef __proto__ fill:red\n"+
+		"classDef constructor fill:blue\nclassDef toString polluted:1", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+	mutate(t, corpus, []string{"\"", "'", ":", ":::", ",", "\n", "\n  ", "title ", "\"a\": 1", "classDef c1 fill:", ":::c1"}, 3, 4000, RenderOptions{}, false)
+}
+
+func TestInfoOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "info")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, infoTemplates, 150, RenderOptions{}, false)
+	hostileOptions(t, "info\naccTitle: t")
+	mutate(t, append(corpus, "info\ntitle T\naccTitle: A\naccDescr: D\n", "---\ntitle: T\n---\ninfo showInfo\n"),
+		[]string{"\n", "title ", "accTitle: ", "accDescr {", "}", "showInfo"}, 3, 4000, RenderOptions{}, false)
+}
+
+func stripApostrophes(p string) string { return strings.ReplaceAll(p, "'", "") }
+
+func stripQuotes(p string) string { return strings.NewReplacer(`"`, "", `\`, "").Replace(p) }
+
+// TestTreeviewOutputIsInert leaves out pele's check for "function" and "[object" in the output:
+// Go has no prototypes, so names like __proto__ must only render.
+func TestTreeviewOutputIsInert(t *testing.T) {
+	hostile(t, treeviewTemplates, len(PAYLOADS)*8, RenderOptions{}, false)
+	for _, key := range []string{"__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"} {
+		src := "---\nconfig:\n  treeView:\n    showIcons: true\n    defaultIconPack: p\n---\ntreeView-beta\n  " + key + "\n  x." + key + "\n  y icon(" + key + ")\n"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", key)
+		}
+	}
+	corpus := corpusOf(t, "treeview")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{" :::", " icon(", " ## ", "\"", "'", "\n", "    ", "├── ", "/"}, 11, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 300 {
+		t.Fatalf("%d mutated treeView sources rendered, want more than 300", rendered)
+	}
+}
+
+const ishikawaHead = "ishikawa-beta\n"
+
+// TestIshikawaOutputIsInert leaves out pele's prototype check: Go has no prototypes, so the same
+// source must only render.
+func TestIshikawaOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "ishikawa")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, ishikawaTemplates, 450, RenderOptions{}, false)
+	out, err := Render(ishikawaHead+"  <img src=x onerror=alert(1)>\n    <script>a&b</script>\n      </text></g></svg><script>alert(1)</script>\n        \" onload=\"alert(1)\n", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, `onload="alert`) ||
+		!strings.Contains(out.Data, `data-id="&lt;img src=x onerror=alert(1)&gt;"`) || !strings.Contains(out.Data, `data-id="&lt;script&gt;a&amp;b&lt;/script&gt;"`) ||
+		!strings.Contains(out.Data, "&quot; onload=&quot;alert(1)") {
+		t.Fatalf("ishikawa text is not escaped: %v\n%s", err, out.Data)
+	}
+	hostileOptions(t, ishikawaHead+"  Effect\n    Category\n      Cause")
+	if !inertTry(t, ishikawaHead+"  __proto__\n    constructor\n      toString\n        hasOwnProperty\n    __proto__\n", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+	mutate(t, corpus, []string{"\n", "\n  ", "\n      ", "\t", " ", "%%", "<br>", "#35;", "ishikawa"}, 3, 4000, RenderOptions{}, false)
+}
+
+func cynefinQuoted(p string) string {
+	return strings.NewReplacer(`"`, "", `\`, "", "\n", "").Replace(p)
+}
+
+func cynefinSingle(p string) string {
+	return strings.NewReplacer(`'`, "", `\`, "", "\n", "").Replace(p)
+}
+
+func TestCynefinOutputIsInert(t *testing.T) {
+	hostile(t, cynefinTemplates, len(PAYLOADS)*8, RenderOptions{}, false)
+	for _, body := range []string{"width: 1\n    height: 1", "width: 10000\n    height: 10000", "seed: 1e300", "seed: -7", "boundaryAmplitude: 50", "boundaryAmplitude: -1"} {
+		src := "---\nconfig:\n  cynefin:\n    " + body + "\n---\ncynefin-beta\ncomplex\n\"a\"\ncomplex --> clear\n"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+	corpus := corpusOf(t, "cynefin")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{"\"", "'", "\n", " --> ", " : ", "complex", "confusion", "title "}, 13, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 100 {
+		t.Fatalf("%d mutated cynefin sources rendered, want more than 100", rendered)
+	}
+}
+
+func emLine(p string) string { return strings.NewReplacer("\n", " ", "\r", " ").Replace(p) }
+
+// TestEventmodelingOutputIsInert leaves out pele's check for "function" and "[object" in the output:
+// Go has no prototypes, so names like __proto__ must only render.
+func TestEventmodelingOutputIsInert(t *testing.T) {
+	hostile(t, eventmodelingTemplates, len(PAYLOADS)*8, RenderOptions{}, false)
+	for _, key := range []string{"__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"} {
+		src := "eventmodeling\ntf 01 cmd " + key + "." + key + " [[" + key + "]]\ntf 02 evt " + key + "\ndata " + key + " {\n x\n}\nentity " + key + "\ngwt 01 given evt " + key + " then evt " + key + "\n"
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", key)
+		}
+	}
+	corpus := corpusOf(t, "eventmodeling")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{"\"", "'", "\n", "{", "}", " ->> 01", "[[", "]]", "tf 09 evt Z", "note 01 {\n", "\n}\n"}, 19, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 100 {
+		t.Fatalf("%d mutated event models rendered, want more than 100", rendered)
+	}
+}
+
+const vennHead = "venn-beta\n"
+
+// TestVennOutputIsInert leaves out pele's prototype check: Go has no prototypes, so the same
+// source must only render.
+func TestVennOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "venn")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, vennTemplates, 400, RenderOptions{}, false)
+	out, err := Render(vennHead+"title <img src=x onerror=alert(1)>\nset \"<script>a&b</script>\"\n  text \"</text><script>alert(1)</script>\"\nset B[<svg onload=alert(1)>]\n"+
+		"style B fill:\"url(javascript:alert(1))\", stroke:\"red' onload='alert(1)\"", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<svg onload") ||
+		strings.Contains(out.Data, "javascript:") || !strings.Contains(out.Data, `data-id="&lt;script&gt;a&amp;b&lt;/script&gt;"`) ||
+		!strings.Contains(out.Data, "&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script&gt;") {
+		t.Fatalf("venn text is not escaped: %v\n%s", err, out.Data)
+	}
+	hostileOptions(t, vennHead+"set A\nset B\nunion A,B[\"x\"]")
+	if !inertTry(t, vennHead+"set __proto__\nset constructor\nunion __proto__,constructor[\"toString\"]\n  text hasOwnProperty[\"__proto__\"]\n"+
+		"style __proto__ __proto__:red, constructor:blue\nstyle hasOwnProperty color:red", RenderOptions{}, false) {
+		t.Fatal("names like __proto__ did not render")
+	}
+	mutate(t, corpus, []string{"\"", "[", "]", "[\"", "\"]", "\n", "\n  ", ",", ":", "set ", "union ", "text ", "style ", "title ", "fill:", "%%", ":5", ":-1", ":1e9"},
+		3, 4000, RenderOptions{}, false)
+}
+
+func TestWardleyOutputIsInert(t *testing.T) {
+	hostile(t, wardleyTemplates, len(PAYLOADS)*12, RenderOptions{}, false)
+	nines := strings.Repeat("9", 400)
+	for _, src := range []string{
+		"wardley-beta\nsize [" + nines + ", " + nines + "]\ncomponent A [0.5, 0.5]",
+		"wardley-beta\nsize [0, 0]\ncomponent A [0.5, 0.5]",
+		"wardley-beta\ncomponent A [0.5, 0.5] label [-" + nines + ", " + nines + "]",
+		"wardley-beta\nannotation " + nines + ",[0.5, 0.5] \"big\"\nannotations [1, 1]",
+		"wardley-beta\nevolution A@" + nines + ".0 -> B@0.0\ncomponent A [0.0, 1.0]",
+		"wardley-beta\ncomponent A [0.5, 0.5]\ncomponent B [0.5, 0.5]\nA -> B\nA +<> B\nevolve A 0.5",
+		"wardley-beta\ncomponent A [0.5, 0.5]\npipeline A {\n component B [0.5]\n component C [0.5]\n}\nevolve A 0.50",
+		"---\nconfig:\n  wardley-beta:\n    width: 1\n    height: 100000\n---\nwardley-beta\ncomponent A [0.5, 0.5]",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	corpus := corpusOf(t, "wardley")
+	rendered := 0
+	for _, src := range corpus {
+		if inertTry(t, src, RenderOptions{}, false) {
+			rendered++
+		}
+	}
+	rendered += mutate(t, corpus, []string{"\"", "'", "\n", " -> ", "; ", "+'", "component ", " [0.5, 0.5]", "note ", "(buy)"}, 17, 2000, RenderOptions{}, false)
+	if !testing.Short() && rendered <= 100 {
+		t.Fatalf("%d mutated wardley maps rendered, want more than 100", rendered)
+	}
+}
+
+func railroadQuoted(p string) string { return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(p) }
+
+func railroadBare(p string) string { return strings.ReplaceAll(p, `"`, "'") }
+
+func railroadNoSpecial(p string) string { return strings.NewReplacer("?", "", ";", "").Replace(p) }
+
+func railroadSingle(p string) string { return strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(p) }
+
+// TestRailroadOutputIsInert leaves out pele's prototype check, as the other types do, and
+// mutates the corpus of all four notations together where pele mutates each with its own
+// generated grammars.
+func TestRailroadOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "railroad")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, railroadTemplates, 700, RenderOptions{}, false)
+	out, err := Render("railroad-beta\ntitle <b onclick=alert(1)>T</b>\nr = sequence(terminal(\"<img src=x onerror=alert(1)>\"), nonterminal(\"\\\"><script>alert(1)</script>\"), "+
+		"special(\"</text></g></svg><script>a&b</script>\")) ;", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "onclick") ||
+		!strings.Contains(out.Data, "&lt;img src=x onerror=alert(1)&gt;") || !strings.Contains(out.Data, `data-id="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`) ||
+		!strings.Contains(out.Data, "a&amp;b") {
+		t.Fatalf("railroad text is not escaped: %v\n%s", err, out.Data)
+	}
+	src := "railroad-ebnf-beta\naccTitle: t\naccDescr: d\nr = a \"b\" ? c ? - d* ;"
+	for _, payload := range PAYLOADS {
+		for _, opt := range []RenderOptions{
+			{IDPrefix: types.Ptr(payload), FontFamily: payload},
+			{Config: Config{"railroad": map[string]any{"arcRadius": payload, "padding": payload, "fontSize": payload, "strokeWidth": payload, "markerRadius": payload, "showMarkers": payload}}},
+			{Config: Config{"railroad": payload}},
+		} {
+			if !inertTry(t, src, opt, false) {
+				t.Fatalf("hostile railroad options %q: did not render", payload)
+			}
+		}
+	}
+	for _, src := range []string{
+		"railroad-ebnf-beta\n__proto__ = constructor | toString hasOwnProperty ;\nconstructor = \"__proto__\" ;\n__proto__ = prototype ;",
+		"railroad-beta\nr = sequence(nonterminal(\"__proto__\"), terminal(\"constructor\"), special(\"__proto__\")) ;",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+	mutate(t, corpus, []string{"\n", " ", "(", ")", "\"", "'", ";", "|", "/", "[", "]", "{", "}", "?", "*", "+", "-", "=", "::=", "<-", "!", "&", ".",
+		"terminal(\"a\")", "sequence(", "choice(", "optional(", "zeroOrMore(", "2*3", "%x41", "(* c *)", "/* c */", "# c\n", "title ", "accDescr {"}, 3, 2400, RenderOptions{}, false)
+}
+
+var reLane = regexp.MustCompile(`<g class="pele-cluster pele-lane[^"]*" data-id="([^"]*)"><rect`)
+
+func TestSwimlaneOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "swimlane")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, swimlaneTemplates, 40, RenderOptions{}, true)
+	hostileOptions(t, "swimlane-beta LR\n  accTitle: t\n  subgraph L[\"Lane\"]\n    a --> b\n  end\n  subgraph M\n    c\n  end\n  b -- x --> c")
+	mutate(t, corpus, []string{"\"", "[", "]", "\n", "subgraph L\n", "end\n", " --> ", " -- x --> ", "direction LR\n", ":::", "style a fill:", "click a \"", "swimlane-beta LR\n"},
+		3, 4000, RenderOptions{}, true)
+	// Lane names that are object keys in JavaScript are plain names.
+	for _, name := range []string{"__proto__", "constructor", "toString", "hasOwnProperty"} {
+		out, err := Render("swimlane-beta TD\n  subgraph "+name+"\n    a --> b\n  end\n  subgraph other\n    c\n  end\n  b --> c", RenderOptions{})
+		if err != nil || len(reLane.FindAllString(out.Data, -1)) != 2 {
+			t.Fatalf("lane %s: %v\n%s", name, err, out.Data)
+		}
+	}
+}
+
+const usecaseHead = "usecase-beta\n"
+
+// TestUsecaseOutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same sources must only render.
+func TestUsecaseOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "usecase")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, usecaseTemplates, 600, RenderOptions{}, false)
+	out, err := Render(usecaseHead+"actor \"<img src=x onerror=alert(1)>\" <<</text><script>alert(1)</script >>\n'<script>a&b</script>'\n"+
+		"json P@{\"<b>\": \"</text><script>alert(1)</script>\"}\nnote for P2 \"<svg onload=alert(1)>\"\nP2", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<svg onload") ||
+		!strings.Contains(out.Data, "&lt;script&gt;a&amp;b&lt;/script&gt;") || !strings.Contains(out.Data, `data-id="_img_src_x_onerror_alert_1__"`) ||
+		!strings.Contains(out.Data, ">&lt;b&gt;</text>") || !strings.Contains(out.Data, "«&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script»") {
+		t.Fatalf("use case markup is not escaped: %v\n%s", err, out.Data)
+	}
+	out, err = Render(usecaseHead+"actor A@{ icon: '\"><script>alert(1)</script>' }", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<script") || !strings.Contains(out.Data, `data-icon="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`) {
+		t.Fatalf("an icon name is markup: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, usecaseHead+"accTitle: t\nactor A\nA -- \"l\" --> B\njson P@{\"a\":1}", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, false) {
+			t.Fatalf("hostile use case options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "'", "`", "\"`", "`\"", "{", "}", "[", "]", "(", ")", "\n", ":::", "<<", ">>", "@{", " --> ", " -- ", "style A fill:",
+		"classDef c ", "systemBoundary ", "end\n", "json P@", "note for A "}, 3, 4000, RenderOptions{}, false)
+	for _, src := range []string{
+		usecaseHead + "actor __proto__\n__proto__ constructor@--> toString\nconstructor@{ animate: true }\nnote for toString \"__proto__\"",
+		usecaseHead + "A\nclassDef __proto__ fill:red\nclass A __proto__\nstyle A fill:red\nA@{ business: true }",
+		usecaseHead + "systemBoundary __proto__[constructor]\n  hasOwnProperty\n  actor valueOf\nend\n__proto__@{ type: package }",
+		usecaseHead + "json __proto__@{\"__proto__\": {\"polluted\": true}, \"constructor\": {\"prototype\": {\"polluted\": true}}}\nA --> __proto__",
+	} {
+		if !inertTry(t, src, RenderOptions{}, false) {
+			t.Fatalf("%q did not render", src)
+		}
+	}
+	out, err = Render(usecaseHead+"json P@{\"__proto__\": {\"x\": 1}, \"constructor\": 2}", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, ">__proto__.x</text>") || !strings.Contains(out.Data, ">constructor</text>") {
+		t.Fatalf("a JSON key named __proto__: %v\n%s", err, out.Data)
+	}
+}
+
+const agentflowHead = "agentflow-beta TB\n"
+
+// TestAgentflowOutputIsInert leaves out pele's check that rendering leaves Object.prototype alone:
+// Go has no prototypes, so the same sources must only render.
+func TestAgentflowOutputIsInert(t *testing.T) {
+	corpus := corpusOf(t, "agentflow")
+	for _, src := range corpus {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", trimSrc(src))
+		}
+	}
+	hostile(t, agentflowTemplates, 900, RenderOptions{}, true)
+	out, err := Render(agentflowHead+"  a[\"<img src=x onerror=alert(1)>\"] -- \"</text><script>alert(1)</script>\" --> b[\"a&b\"]\n  flow f[\"<svg onload=alert(1)>\"]\n   c\n  end", RenderOptions{})
+	if err != nil || strings.Contains(out.Data, "<img") || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "<svg onload") || !strings.Contains(out.Data, "a&amp;b") {
+		t.Fatalf("agentflow markup is not escaped: %v\n%s", err, out.Data)
+	}
+	out, err = Render(agentflowHead+"  flow q&r\n  a\n  end\n  connector 'x&y'", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, `data-id="q&amp;r"`) || !strings.Contains(out.Data, `data-id="'x&amp;y'"`) {
+		t.Fatalf("agentflow ids are not escaped: %v\n%s", err, out.Data)
+	}
+	for _, payload := range PAYLOADS {
+		if !inertTry(t, agentflowHead+"  accTitle: t\n  flow f[\"F\"]\n  a --> b\n  end", RenderOptions{IDPrefix: types.Ptr(payload), FontFamily: payload}, true) {
+			t.Fatalf("hostile agentflow options %q: did not render", payload)
+		}
+	}
+	mutate(t, corpus, []string{"\"", "`", "{", "}", "[", "]", "(", ")", "|", "\n", ":::", "-->", "--x", "-.-", " -- ", "@{ ", "label: ",
+		"shape: ", "view: collapsed", "style a fill:", "classDef c ", "click a href \"", "flow ", "connector ", "global\n", "end\n", "%% "}, 3, 4000, RenderOptions{}, true)
+	for _, url := range []string{"javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,<script>alert(1)</script>", "vbscript:x"} {
+		noLinks(t, agentflowHead+"  a\n  click a href \""+url+"\"", RenderOptions{})
+	}
+	out, err = Render(agentflowHead+"  a[\"javascript:alert(1)\"]:::internal-link", RenderOptions{})
+	if err != nil || !strings.Contains(out.Data, `<a class="internal-link" data-href="javascript:alert(1)">`) ||
+		len(out.Links) != 1 || out.Links[0] != (LinkInfo{ID: "a", Href: "javascript:alert(1)", Internal: true}) {
+		t.Fatalf("an internal link to a script: %v %v\n%s", err, out.Links, out.Data)
+	}
+	for _, src := range []string{
+		agentflowHead + "  __proto__ --> constructor --> toString\n  flow __proto__[constructor]\n  hasOwnProperty\n  end\n  connector prototype[\"__proto__\"]",
+		agentflowHead + "  a\n  classDef __proto__ fill:red\n  class a __proto__\n  class __proto__ constructor\n  style __proto__ fill:red\n  a:::__proto__",
+		agentflowHead + "  a@{ __proto__: 1, constructor: 2, prototype: 3 }\n  a@{\n    __proto__:\n      polluted: true\n    constructor:\n      prototype:\n        polluted: true\n  }",
+		agentflowHead + "  a[|__proto__:polluted|x]\n  global\n  __proto__\n  end\n  flow f@{ __proto__: 1 }\n  __proto__\n  end",
+		agentflowHead + "  a@{ shape: constructor }",
+	} {
+		if !inertTry(t, src, RenderOptions{}, true) {
+			t.Fatalf("%q did not render", src)
+		}
 	}
 }
