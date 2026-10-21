@@ -1,0 +1,256 @@
+package app
+
+import (
+	"image/color"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
+)
+
+// The chrome tuios draws around a TML surface.
+//
+// A surface in a pane keeps the pane's frame. Its title bar shows the
+// document's title in the pill and the owner after it in a quiet colour,
+// "Test run  from shell". The title gives way first, so the owner is never
+// cut: the person can always tell which pane opened what they are about to
+// press.
+//
+// A surface in a popup is a dialog, not a pane: a hairline frame with the
+// title set into the top border, the owner at the right of it, and the keys
+// tuios answers for in the bottom border. The surface sits inside with room
+// around it. The dialog has no fill of its own: it is on the pane's ground,
+// as every surface is, and the frame and the scrim on the screen behind it
+// (see scrim.go) are what set it apart.
+//
+// The owner comes from the window's name, which the daemon writes as
+// "from OWNER · TITLE" (session.tmlWindowName). Neither part can hold the
+// separator, so the split is exact, and no document can write the owner.
+
+// tmlNameParts splits a TML window's name into the owner and the title.
+// ok is false for a name the daemon did not write in that form.
+func tmlNameParts(name string) (owner, title string, ok bool) {
+	rest, found := strings.CutPrefix(name, "from ")
+	if !found {
+		return "", "", false
+	}
+	owner, title, ok = strings.Cut(rest, " · ")
+	if !ok || owner == "" {
+		return "", "", false
+	}
+	return owner, title, true
+}
+
+// tmlWindowParts is tmlNameParts for a window, false for any window that
+// is not a TML window.
+func tmlWindowParts(w *terminal.Window) (owner, title string, ok bool) {
+	if w == nil || w.Kind != session.WindowKindTML {
+		return "", "", false
+	}
+	return tmlNameParts(w.CustomName)
+}
+
+// tmlRailLabel is the rail's label for a TML window: the title, then the
+// owner. A surface with no title shows the owner alone.
+func tmlRailLabel(w *terminal.Window) (string, bool) {
+	owner, title, ok := tmlWindowParts(w)
+	if !ok {
+		return "", false
+	}
+	if title == "" {
+		return "from " + owner, true
+	}
+	return title + " · " + owner, true
+}
+
+// isTMLPopup reports whether w is a popup that draws a TML surface as a
+// dialog.
+func (m *OS) isTMLPopup(w *terminal.Window) bool {
+	return w != nil && w.IsPopup && !w.Tiled && m.DrawsTML(w)
+}
+
+// tmlInset is where the surface sits in a TML window's content box: the
+// whole box for a pane, and inside a margin for a popup, two cells at the
+// sides and a row above and below when the popup has the rows for it.
+func (m *OS) tmlInset(w *terminal.Window) (dx, dy, iw, ih int) {
+	cw, ch := max(w.ContentWidth(), 1), max(w.ContentHeight(), 1)
+	if !m.isTMLPopup(w) {
+		return 0, 0, cw, ch
+	}
+	switch {
+	case cw >= 24:
+		dx = 2
+	case cw >= 8:
+		dx = 1
+	}
+	if ch >= 5 {
+		dy = 1
+	}
+	return dx, dy, cw - 2*dx, ch - 2*dy
+}
+
+// tmlPad puts the surface's lines into the content box with the margin of
+// tmlInset, on the pane's own ground.
+func tmlPad(body string, dx, dy, cw, ch int) string {
+	if dx == 0 && dy == 0 {
+		return body
+	}
+	side := strings.Repeat(" ", dx)
+	blank := strings.Repeat(" ", cw)
+	lines := strings.Split(body, "\n")
+	out := make([]string, 0, ch)
+	for range dy {
+		out = append(out, blank)
+	}
+	inner := cw - 2*dx
+	for _, l := range lines {
+		if len(out) >= ch-dy {
+			break
+		}
+		if w := ansi.StringWidth(l); w < inner {
+			l += strings.Repeat(" ", inner-w)
+		}
+		out = append(out, side+l+side)
+	}
+	for len(out) < ch {
+		out = append(out, blank)
+	}
+	return strings.Join(out, "\n")
+}
+
+// renderTMLDialogBox frames a TML popup's content as a dialog. content is
+// the content box, ContentWidth by ContentHeight.
+func (m *OS) renderTMLDialogBox(window *terminal.Window, content string) string {
+	pal := theme.UI()
+	// No fill: the pane's ground, which is the terminal's background or
+	// appearance.pane_background, painted by the compositor.
+	var bg color.Color = lipgloss.NoColor{}
+	w := window.ContentWidth()
+	tl, tr, bl, br, h, v, vr := "╭", "╮", "╰", "╯", "─", "│", "│"
+	bottomRule := "─"
+	if overlay.UseASCII() {
+		tl, tr, bl, br, h, v, vr, bottomRule = "+", "+", "+", "+", "-", "|", "|", "-"
+	}
+	frame := overlay.Style(bg).Foreground(pal.FgMute)
+	gap := overlay.Style(bg).Render(" ")
+	ruleOf := func(glyph string) func(int) string {
+		return func(n int) string {
+			if n <= 0 {
+				return ""
+			}
+			return frame.Render(strings.Repeat(glyph, n))
+		}
+	}
+	rule := ruleOf(h)
+
+	// Top border: the title at the left, the owner at the right. The title
+	// gives way to the owner, and the owner is cut only when the frame is
+	// too narrow for it whole.
+	owner, title, _ := tmlWindowParts(window)
+	if v := m.tmlViewOf(window); v != nil && v.title != "" {
+		title = v.title
+	}
+	ownerText := ""
+	if owner != "" {
+		ownerText = overlay.Truncate("from "+owner, max(w-4, 1))
+	}
+	ownerW := lipgloss.Width(ownerText)
+	titleRoom := w - 3
+	if ownerW > 0 {
+		titleRoom -= ownerW + 3
+	}
+	titleText := ""
+	if titleRoom >= 4 {
+		titleText = overlay.Truncate(title, titleRoom)
+	}
+	top := frame.Render(tl) + rule(1)
+	used := 1
+	if titleText != "" {
+		top += gap + overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).Bold(true).Render(titleText) + gap
+		used += lipgloss.Width(titleText) + 2
+	}
+	tail := 1
+	if ownerW > 0 {
+		tail += ownerW + 2
+	}
+	top += rule(w - used - tail)
+	if ownerW > 0 {
+		top += gap + overlay.Style(bg).Foreground(pal.FgDim).Render(ownerText) + gap
+	}
+	top += rule(1) + frame.Render(tr)
+
+	// Bottom border: the key tuios answers for in every popup.
+	hints := []overlay.Hint{{Key: "esc", Label: "close", Priority: overlay.HintEssential}}
+	strip, stripW := overlay.FitHintStrip(hints, max(w-3, 0), bg, pal)
+	bottomLine := ruleOf(bottomRule)
+	bottom := frame.Render(bl)
+	if stripW > 0 && w-stripW-3 >= 1 {
+		bottom += bottomLine(w-stripW-3) + gap + strip + gap + bottomLine(1)
+	} else {
+		bottom += bottomLine(w)
+	}
+	bottom += frame.Render(br)
+
+	left, right := frame.Render(v), frame.Render(vr)
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, window.Height)
+	out = append(out, top)
+	for i := range window.ContentHeight() {
+		l := ""
+		if i < len(lines) {
+			l = lines[i]
+		}
+		out = append(out, left+overlay.Fill(l, w, bg)+right)
+	}
+	out = append(out, bottom)
+	m.recordWindowButtons(window.ID, nil)
+	return strings.Join(out, "\n")
+}
+
+// tmlOwnerTag is what a TML pane's title bar shows after the title: the
+// owner, a step quieter than the title. Beside a pill, and beside a plain
+// title on the focused pane, that is the dim text colour. Beside a plain
+// title on another pane, which is already dim, it is the muted one. Empty
+// for any other window.
+func (m *OS) tmlOwnerTag(window *terminal.Window, s *config.Settings) (tag string, width int) {
+	owner, _, ok := tmlWindowParts(window)
+	if !ok {
+		return "", 0
+	}
+	text := " from " + owner + " "
+	pal := theme.UI()
+	fg := pal.FgDim
+	if s.WindowTitleStyle != "pill" && s.WindowTitleStyle != "" && m.GetFocusedWindow() != window {
+		fg = pal.FgMute
+	}
+	return lipgloss.NewStyle().Foreground(fg).Render(text), ansi.StringWidth(text)
+}
+
+// tmlScrimTargets lists the TML popups on the screen this frame, by layer
+// id. The scrim goes on under the first of them, as it does under a modal.
+func (m *OS) tmlScrimTargets() map[string]bool {
+	var out map[string]bool
+	for _, w := range m.Windows {
+		if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace || !m.isTMLPopup(w) {
+			continue
+		}
+		if out == nil {
+			out = map[string]bool{}
+		}
+		out[w.ID] = true
+	}
+	return out
+}
+
+// scrimmedChrome reports whether a layer is chrome the scrim of a TML popup
+// dims after it is drawn: the dock and the rails sit above the panes, so
+// they are drawn after the popup's layer and need a pass of their own.
+func scrimmedChrome(id string) bool {
+	return id == "dock" || id == sidebarLayerID || id == "sidebar-secondary"
+}

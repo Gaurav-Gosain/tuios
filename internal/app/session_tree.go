@@ -15,6 +15,9 @@ import (
 
 // windowRowTitle is the label a session-management surface shows for a window.
 func windowRowTitle(w *terminal.Window) string {
+	if label, ok := tmlRailLabel(w); ok {
+		return label
+	}
 	return railWindowLabel(w.CustomName, w.ForegroundCmd, w.Title())
 }
 

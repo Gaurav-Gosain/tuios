@@ -56,8 +56,8 @@ func tmlRunIn(t *testing.T, base, sess, win, line string) {
 // TestTMLOwnerComesFirstAndCannotBeForged opens surfaces from panes with
 // titles that try to pass for another owner, and from a pane whose program
 // named itself tuios with OSC 2. The window name starts with the real owner,
-// made of the window's own name or its id, and the title holds no second
-// separator. A popup a pane opened leaves the keys where they were.
+// the window's own name or else its id, and the title holds no second
+// separator. The popup's frame shows the owner beside the title. A popup a pane opened leaves the keys where they were.
 //
 // Negative controls, in NEGATIVE_CONTROLS.md: the old label, title first
 // (the forged owner leads); the owner from the pane's OSC title (the
@@ -112,8 +112,8 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 			agentID = w.WindowID
 		}
 	}
-	if agentID == "" || !strings.HasPrefix(label, "from pane "+agentID[:8]+" (agent) · ") {
-		t.Fatalf("the window name does not start with its real owner, id first: %q", label)
+	if agentID == "" || !strings.HasPrefix(label, "from agent · ") {
+		t.Fatalf("the window name does not start with its real owner: %q", label)
 	}
 	if strings.Count(label, "·") != 1 {
 		t.Fatalf("the title kept a separator that can draw a second owner: %q", label)
@@ -121,7 +121,7 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	if len([]rune(label)) > 90 {
 		t.Fatalf("the title was not cut to its width: %q (%d runes)", label, len([]rune(label)))
 	}
-	if !screenHas(term.Screen(), "from pane "+agentID[:8]+" (agent)") {
+	if !screenHas(term.Screen(), "from agent") {
 		t.Fatalf("the frame does not show the owner\n%s", term.Snapshot())
 	}
 	// One click on the popup's button only focuses the popup: the button

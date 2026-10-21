@@ -85,9 +85,10 @@ op that no longer matches is refused: read with `tml get`, then patch again.
   be typed there.
   A target that holds more than your pane is refused, as your own `send-text`
   would be.
-- The window name says who opened it, first: "from pane 3f2a91c0 (api) ·
-  Deploy", the pane's id and the name the person gave it. The document and
-  your program's name cannot change that.
+- The window name says who opened it, first: "from api · Deploy". The owner
+  is the name the person gave your pane, or "pane 3f2a91c0" when it has none.
+  The frame shows the title, then the owner. The document and your program's
+  name cannot change the owner.
 - A surface your pane opens does not take the focus. The person clicks it.
 - 100 patches a second per surface; past that, `rate_limited`. Put many
   operations in one patch.

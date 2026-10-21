@@ -293,7 +293,12 @@ func windowTitleText(window *terminal.Window, markState string, position int, ma
 	// Titles reach the badge as chrome, so launder the same decorative junk the
 	// sidebar and palette drop; our own state glyph is added below, untouched.
 	windowName := ""
-	if window.CustomName != "" {
+	if _, title, ok := tmlWindowParts(window); ok && s.WindowTitlePosition == "top" {
+		// A TML window's pill holds the document's title. The owner goes
+		// after the pill, where the title cannot push it out (tmlOwnerTag).
+		// Elsewhere the bar shows the whole name, owner first.
+		windowName = printableTitle(title)
+	} else if window.CustomName != "" {
 		windowName = printableTitle(window.CustomName)
 	} else if t := window.Title(); t != "" && !isDefaultTitle(t, window.ID) {
 		// Only show terminal-set title if it's not the default "Terminal <id>" format
@@ -423,6 +428,13 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 
 	markState := m.windowMarkState(window)
 	windowName := ""
+	// A TML window says who opened it after its title, and the title gives
+	// way first.
+	ownerTag, ownerW := "", 0
+	if titlePos == "top" {
+		ownerTag, ownerW = m.tmlOwnerTag(window, &m.Settings)
+		titleMaxWidth = max(titleMaxWidth-ownerW, 0)
+	}
 	if titlePos != "hidden" {
 		// The pane mark_pane marked carries a badge after its name. Its room
 		// is taken before the name is cut, so a long name gives up its tail
@@ -445,8 +457,9 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	// are the ones it drew on.
 	badge := ""
 	if titlePos == "top" && windowName != "" {
-		badge = windowTitleBadge(windowName, markState, color, &m.Settings)
+		badge = windowTitleBadge(windowName, markState, m.titleInk(window, color), &m.Settings)
 	}
+	badge += ownerTag
 	row := layoutBorderRow(badge, buttons, width, color, true, &m.Settings)
 	topBorder = row.text
 	m.recordWindowButtons(window.ID, placeWindowButtons(hits, window, row.pillStart))
@@ -465,7 +478,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	}
 
 	if titlePos == "bottom" && windowName != "" {
-		bottomBorder = renderTitleBadge(windowName, markState, width, color, false, &m.Settings)
+		bottomBorder = renderTitleBadge(windowName, markState, width, color, m.titleInk(window, color), false, &m.Settings)
 	} else if scrollIndicator != "" {
 		// Bottom border with scrollback position indicator on the right
 		indicatorStyle := lipgloss.NewStyle().Foreground(theme.ScrollIndicator()).Bold(true)
@@ -480,8 +493,21 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	return topBorder, bottomBorder
 }
 
-// renderTitleBadge renders a border with a centered title badge.
-func renderTitleBadge(windowName, agentState string, width int, color color.Color, isTop bool, s *config.Settings) string {
+// titleInk is the colour a title badge is drawn from. A pill or a tab is
+// filled with the border's colour. A plain title is text on the border row:
+// the border's colour on the focused pane, and the dim text colour on the
+// others, since an unfocused border is drawn to recede and a title in it
+// could not be read.
+func (m *OS) titleInk(window *terminal.Window, border color.Color) color.Color {
+	if m.Settings.WindowTitleStyle != "plain" || m.GetFocusedWindow() == window {
+		return border
+	}
+	return theme.UI().FgDim
+}
+
+// renderTitleBadge renders a border with a centered title badge. ink is the
+// colour the badge is drawn from; see titleInk.
+func renderTitleBadge(windowName, agentState string, width int, color, ink color.Color, isTop bool, s *config.Settings) string {
 	style := lipgloss.NewStyle()
 	borderStyle := style.Foreground(color)
 
@@ -491,7 +517,7 @@ func renderTitleBadge(windowName, agentState string, width int, color color.Colo
 		return borderStyle.Render(cornerLeft + strings.Repeat(borderChar, width) + cornerRight)
 	}
 
-	nameBadge := windowTitleBadge(windowName, agentState, color, s)
+	nameBadge := windowTitleBadge(windowName, agentState, ink, s)
 	badgeWidth := lipgloss.Width(nameBadge)
 	totalPadding := width - badgeWidth
 

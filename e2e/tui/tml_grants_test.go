@@ -166,7 +166,7 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 
 	// The window names who opened each surface.
 	listed, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
-	if err != nil || !strings.Contains(listed, " (agent) · Typer") || !strings.Contains(listed, "from tuios tml show · Typer") {
+	if err != nil || !strings.Contains(listed, "from agent · Typer") || !strings.Contains(listed, "from tuios tml show · Typer") {
 		t.Fatalf("the windows do not name their owners: %v\n%s", err, listed)
 	}
 

@@ -297,10 +297,11 @@ func (d *Daemon) tmlCallerKey(cs *connState) string {
 // tmlOwnerLabel names the caller on cs for the frame: its pane, a linked
 // machine, or the CLI.
 //
-// A pane is named by its window id, which no program chooses, and then by
-// the window's name in brackets when it has one: a name the person gave it,
-// or an admin action, which is the person's level. Never the pane's title or
-// the name of the program in it, which the program sets (OSC 2, argv[0]).
+// A pane is named by the window's name when it has one: a name the person
+// gave it, or an admin action, which is the person's level. A pane with no
+// name is named by its window id, which no program chooses. Never the pane's
+// title or the name of the program in it, which the program sets (OSC 2,
+// argv[0]).
 func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 	if cs.viaLink {
 		return "machine " + tmlLabelText(cmp.Or(cs.linkPeer, "unknown"), 24)
@@ -315,7 +316,7 @@ func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 			}
 		}
 		if name != "" {
-			return "pane " + shortID(ref.Window) + " (" + name + ")"
+			return name
 		}
 		return "pane " + shortID(ref.Window)
 	}

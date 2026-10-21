@@ -460,7 +460,7 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		doc.SetAttr("state", tml.Value{Kind: tml.KindObject, Raw: json.RawMessage(p.State)})
 	}
 	if v.surface == nil {
-		s, err := loom.New(doc, &loom.Options{Palette: m.tmlPalette(), Limits: ptr(tml.PersonLimits())})
+		s, err := loom.New(doc, &loom.Options{Palette: m.tmlPalette(), Ground: loom.GroundNone, Limits: ptr(tml.PersonLimits())})
 		if err != nil {
 			clientLog("TML surface %s: %v", p.Surface, err)
 			return false
@@ -580,6 +580,10 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		v.surface.SetPalette(m.tmlPalette())
 		v.palKey = key
 	}
+	// A popup's surface sits inside a margin; see tmlInset.
+	dx, dy, iw, ih := m.tmlInset(window)
+	fullW, fullH := cw, ch
+	cw, ch = max(iw, 1), max(ih, 1)
 	sh := ch
 	confirmText := ""
 	if v.confirm != nil {
@@ -605,6 +609,7 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 	if confirmText != "" && sh < ch {
 		out += "\n" + confirmText
 	}
+	out = tmlPad(out, dx, dy, fullW, fullH)
 	cacheRender(window, out, 0, 0, dim)
 	return out
 }
@@ -762,7 +767,8 @@ func (m *OS) TMLMouse(w *terminal.Window, ev uv.MouseEvent) {
 		return
 	}
 	mouse := ev.Mouse()
-	lm := loom.Mouse{X: mouse.X, Y: mouse.Y}
+	dx, dy, _, _ := m.tmlInset(w)
+	lm := loom.Mouse{X: mouse.X - dx, Y: mouse.Y - dy}
 	switch mouse.Button {
 	case uv.MouseLeft:
 		lm.Button = loom.MouseLeft

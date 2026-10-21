@@ -18,7 +18,8 @@ import (
 // its own bounds.
 
 // popupRect is the box a popup fills on this client: the size the caller asked
-// for, centred in the content region.
+// for, centred on the screen and kept inside the content region. Inside a
+// scratch box it is centred in the box.
 //
 // The content region is the box the session agreed the panes go in, beside a
 // reserved sidebar band and clear of the dock rows, and it is the same box
@@ -38,6 +39,19 @@ func (m *OS) popupRect(w *terminal.Window) (x, y, width, height int) {
 
 	x = leftMargin + (contentWidth-width)/2
 	y = topMargin + (contentHeight-height)/2
+	if _, _, inScratch := m.scratchRegion(); !inScratch {
+		// Centred on the screen, which is where the eye looks for a
+		// question, and then moved into the content region if it would
+		// cross the rail or the dock. A region beside a rail has its middle
+		// off the screen's, so centring on the region put every popup to
+		// one side.
+		if sw := m.GetRenderWidth(); sw > 0 {
+			x = clampInt((sw-width)/2, leftMargin, leftMargin+contentWidth-width)
+		}
+		if sh := m.GetRenderHeight(); sh > 0 {
+			y = clampInt((sh-height)/2, topMargin, topMargin+contentHeight-height)
+		}
+	}
 	return x, y, width, height
 }
 

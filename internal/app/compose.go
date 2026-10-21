@@ -307,6 +307,14 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 	// motion.go and shimmer.go.
 	now := time.Now()
 	scrimmed := m.Settings.ModalDim <= 0
+	// A TML popup is a dialog: the screen behind it is dimmed as it is
+	// behind a modal. Its layer is a pane's, and the dock and the rails are
+	// drawn after the panes, so they take the scrim as they are drawn.
+	var tmlPopups map[string]bool
+	if !scrimmed {
+		tmlPopups = m.tmlScrimTargets()
+	}
+	chromeScrim := false
 	fading := m.motion.fading > 0
 	shimmer := len(m.motion.rail) > 0
 
@@ -320,7 +328,15 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			if !at.Overlaps(view.clip) {
 				continue
 			}
+			if !scrimmed && tmlPopups[cl.layer.GetID()] {
+				m.drawImageSymbols(canvas)
+				m.applyScrim(canvas)
+				scrimmed, chromeScrim = true, true
+			}
 			m.drawPaneLayer(canvas, cl, at, view.clip, painted, &grounds)
+			if chromeScrim && tmlPopups[cl.layer.GetID()] {
+				m.scrimDialogGround(canvas, at.Intersect(view.clip))
+			}
 			if m.gradient.on && m.gradientLayer(cl.layer.GetID()) {
 				m.applyBorderGradient(canvas, at.Intersect(view.clip), image.Pt(view.dx, view.dy))
 			}
@@ -338,6 +354,11 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		if !cl.bounds.Overlaps(area) {
 			continue
 		}
+		if !scrimmed && tmlPopups[cl.layer.GetID()] {
+			m.drawImageSymbols(canvas)
+			m.applyScrim(canvas)
+			scrimmed, chromeScrim = true, true
+		}
 		if !scrimmed && scrimBehind(cl.layer.GetID()) {
 			// Image glyphs first, so the scrim fades them like text.
 			m.drawImageSymbols(canvas)
@@ -345,6 +366,12 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			scrimmed = true
 		}
 		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
+		if chromeScrim && scrimmedChrome(cl.layer.GetID()) {
+			m.applyScrimIn(canvas, cl.bounds)
+		}
+		if chromeScrim && tmlPopups[cl.layer.GetID()] {
+			m.scrimDialogGround(canvas, cl.bounds)
+		}
 		if m.gradient.on && m.gradientLayer(cl.layer.GetID()) {
 			m.applyBorderGradient(canvas, cl.bounds, image.Point{})
 		}
