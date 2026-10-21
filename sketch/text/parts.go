@@ -56,7 +56,10 @@ func wrap(s string, w int) []string {
 	var out []string
 	line := ""
 	for _, word := range strings.Fields(s) {
-		for width(word) > w {
+		// ww is the width of what is left of the word. It goes down by the
+		// width of each cut, so a long word is measured once, not once a cut.
+		ww := width(word)
+		for ww > w {
 			if line != "" {
 				out = append(out, line)
 				line = ""
@@ -71,10 +74,13 @@ func wrap(s string, w int) []string {
 			}
 			if cut == 0 {
 				// A wide character in one column: it goes on a line of its own.
-				_, cut = utf8.DecodeRuneInString(word)
+				var r rune
+				r, cut = utf8.DecodeRuneInString(word)
+				n = runeWidth(r)
 			}
 			out = append(out, word[:cut])
 			word = word[cut:]
+			ww -= n
 		}
 		switch {
 		case line == "":
