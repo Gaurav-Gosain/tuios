@@ -1084,8 +1084,8 @@ applies at once.
 `appearance.dock_workspace_tooltip` shows the workspace name above a pill
 when you hover it. The name shows when the pill cuts the name short. It also
 shows when `appearance.dock_workspace_tab_format` has no `{name}`, for
-example with number-only tabs. A workspace with no name shows no label,
-because its name is its number. The option is on by default.
+example with number-only tabs. A workspace with no name shows its number,
+but only when the tab format has no `{index}`. The option is on by default.
 
 ```toml
 [appearance]

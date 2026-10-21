@@ -232,9 +232,10 @@ func (m *OS) workspacePillClipped(n int) bool {
 
 // workspacePillHidesName reports whether the pill does not show workspace n's
 // whole name, which is when the hover label has something to say: the pill cut
-// the name short, or the tab format has no {name} and the workspace has a name
-// of its own. An unnamed workspace's name is its number, which an index-only
-// pill already shows.
+// the name short, or the tab format has no {name}. An unnamed workspace's name
+// is its number, so it has nothing to add when the format shows {index}. A
+// format with neither, such as "{icon}", shows no number at all, so the label
+// gives it.
 func (m *OS) workspacePillHidesName(n int) bool {
 	if m.workspacePillClipped(n) {
 		return true
@@ -243,7 +244,7 @@ func (m *OS) workspacePillHidesName(n int) bool {
 	if format == "" || strings.Contains(format, "{name}") {
 		return false
 	}
-	return printableTitle(m.WorkspaceNames[n]) != ""
+	return printableTitle(m.WorkspaceNames[n]) != "" || !strings.Contains(format, "{index}")
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a

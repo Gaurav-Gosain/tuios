@@ -7896,3 +7896,15 @@ Upstream main fails the new case: "the agents section still lists the pane after
 | A recorded pid re-recorded: the `old.pid == pid && old.timed` early return in `setAgentHarnessPID` disabled | `outside-same-pid` ("the agents section still lists the pane after its agent left it, with the shell running") | **caught** |
 
 The early returns in `callerRunsHarness` and in `verbSetAgentState` change no outcome, only skip an ancestry walk whose answer is not used, so they have no control.
+
+## Workspace name on hover with no {name} in the tab format (#927)
+
+`TestDockIndexTabShowsTheNameOnHover` sets
+`dock_workspace_tab_format = "{index}"`, names workspace 1, opens a pane on
+workspace 2 and hovers the "1" pill. It runs with `dock_workspace_tooltip` on
+and off.
+
+Run on 2026-10-21 against `origin/main`: the `tooltip on` case fails with
+"hovering an index-only pill never showed the workspace name". The
+`tooltip off` case passes there, which is right. A review run repeated the
+control with the same result, at truecolor and at 16 colours.
