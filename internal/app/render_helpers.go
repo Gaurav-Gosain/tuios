@@ -432,7 +432,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	// way first.
 	ownerTag, ownerW := "", 0
 	if titlePos == "top" {
-		ownerTag, ownerW = m.tmlOwnerTag(window, &m.Settings)
+		ownerTag, ownerW = m.tmlOwnerTag(window, &m.Settings, titleMaxWidth)
 		titleMaxWidth = max(titleMaxWidth-ownerW, 0)
 	}
 	if titlePos != "hidden" {

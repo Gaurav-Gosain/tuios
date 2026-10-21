@@ -307,12 +307,13 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 	// motion.go and shimmer.go.
 	now := time.Now()
 	scrimmed := m.Settings.ModalDim <= 0
-	// A TML popup is a dialog: the screen behind it is dimmed as it is
-	// behind a modal. Its layer is a pane's, and the dock and the rails are
-	// drawn after the panes, so they take the scrim as they are drawn.
-	var tmlPopups map[string]bool
+	// A TML popup that has the keys is a dialog: the screen behind it is
+	// dimmed as it is behind a modal. Its layer is a pane's, and the dock
+	// and the rails are drawn after the panes, so they take the scrim as
+	// they are drawn.
+	tmlPopup := ""
 	if !scrimmed {
-		tmlPopups = m.tmlScrimTargets()
+		tmlPopup = m.tmlScrimTarget()
 	}
 	chromeScrim := false
 	fading := m.motion.fading > 0
@@ -328,13 +329,13 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			if !at.Overlaps(view.clip) {
 				continue
 			}
-			if !scrimmed && tmlPopups[cl.layer.GetID()] {
+			if !scrimmed && (tmlPopup != "" && cl.layer.GetID() == tmlPopup) {
 				m.drawImageSymbols(canvas)
 				m.applyScrim(canvas)
 				scrimmed, chromeScrim = true, true
 			}
 			m.drawPaneLayer(canvas, cl, at, view.clip, painted, &grounds)
-			if chromeScrim && tmlPopups[cl.layer.GetID()] {
+			if chromeScrim && (tmlPopup != "" && cl.layer.GetID() == tmlPopup) {
 				m.scrimDialogGround(canvas, at.Intersect(view.clip))
 			}
 			if m.gradient.on && m.gradientLayer(cl.layer.GetID()) {
@@ -354,7 +355,7 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		if !cl.bounds.Overlaps(area) {
 			continue
 		}
-		if !scrimmed && tmlPopups[cl.layer.GetID()] {
+		if !scrimmed && (tmlPopup != "" && cl.layer.GetID() == tmlPopup) {
 			m.drawImageSymbols(canvas)
 			m.applyScrim(canvas)
 			scrimmed, chromeScrim = true, true
@@ -369,7 +370,7 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		if chromeScrim && scrimmedChrome(cl.layer.GetID()) {
 			m.applyScrimIn(canvas, cl.bounds)
 		}
-		if chromeScrim && tmlPopups[cl.layer.GetID()] {
+		if chromeScrim && (tmlPopup != "" && cl.layer.GetID() == tmlPopup) {
 			m.scrimDialogGround(canvas, cl.bounds)
 		}
 		if m.gradient.on && m.gradientLayer(cl.layer.GetID()) {

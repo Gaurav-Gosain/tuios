@@ -23,7 +23,7 @@ import (
 // press.
 //
 // A surface in a popup is a dialog, not a pane: a hairline frame with the
-// title set into the top border, the owner at the right of it, and the keys
+// owner and then the title set into the top border, and the keys
 // tuios answers for in the bottom border. The surface sits inside with room
 // around it. The dialog has no fill of its own: it is on the pane's ground,
 // as every surface is, and the frame and the scrim on the screen behind it
@@ -56,8 +56,9 @@ func tmlWindowParts(w *terminal.Window) (owner, title string, ok bool) {
 	return tmlNameParts(w.CustomName)
 }
 
-// tmlRailLabel is the rail's label for a TML window: the title, then the
-// owner. A surface with no title shows the owner alone.
+// tmlRailLabel is the rail's label for a TML window: the owner, then the
+// title. A rail row is cut at its end, so the owner goes first, where the
+// cut cannot reach it and a title cannot stand in for it.
 func tmlRailLabel(w *terminal.Window) (string, bool) {
 	owner, title, ok := tmlWindowParts(w)
 	if !ok {
@@ -66,7 +67,7 @@ func tmlRailLabel(w *terminal.Window) (string, bool) {
 	if title == "" {
 		return "from " + owner, true
 	}
-	return title + " · " + owner, true
+	return "from " + owner + " · " + title, true
 }
 
 // isTMLPopup reports whether w is a popup that draws a TML surface as a
@@ -149,41 +150,38 @@ func (m *OS) renderTMLDialogBox(window *terminal.Window, content string) string 
 	}
 	rule := ruleOf(h)
 
-	// Top border: the title at the left, the owner at the right. The title
-	// gives way to the owner, and the owner is cut only when the frame is
-	// too narrow for it whole.
+	// Top border: the owner first, then the title, as the window name has
+	// them. The owner is what the person must read first, so a title that
+	// tries to pass for another owner can only come after the real one. The
+	// title is the cleaned one from the window name, which cannot hold the
+	// separator, and it gives way to the owner.
 	owner, title, _ := tmlWindowParts(window)
-	if v := m.tmlViewOf(window); v != nil && v.title != "" {
-		title = v.title
-	}
 	ownerText := ""
 	if owner != "" {
 		ownerText = overlay.Truncate("from "+owner, max(w-4, 1))
 	}
 	ownerW := lipgloss.Width(ownerText)
-	titleRoom := w - 3
-	if ownerW > 0 {
-		titleRoom -= ownerW + 3
-	}
+	const sep = " · "
+	titleRoom := w - 3 - ownerW - len([]rune(sep))
 	titleText := ""
-	if titleRoom >= 4 {
+	if titleRoom >= 4 && title != "" {
 		titleText = overlay.Truncate(title, titleRoom)
 	}
-	top := frame.Render(tl) + rule(1)
-	used := 1
+	top := frame.Render(tl) + rule(1) + gap
+	used := 2
+	if ownerW > 0 {
+		top += overlay.Style(bg).Foreground(pal.FgDim).Render(ownerText)
+		used += ownerW
+	}
 	if titleText != "" {
-		top += gap + overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).Bold(true).Render(titleText) + gap
-		used += lipgloss.Width(titleText) + 2
+		if ownerW > 0 {
+			top += overlay.Style(bg).Foreground(pal.FgMute).Render(sep)
+			used += len([]rune(sep))
+		}
+		top += overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).Bold(true).Render(titleText)
+		used += lipgloss.Width(titleText)
 	}
-	tail := 1
-	if ownerW > 0 {
-		tail += ownerW + 2
-	}
-	top += rule(w - used - tail)
-	if ownerW > 0 {
-		top += gap + overlay.Style(bg).Foreground(pal.FgDim).Render(ownerText) + gap
-	}
-	top += rule(1) + frame.Render(tr)
+	top += gap + rule(w-used-1) + frame.Render(tr)
 
 	// Bottom border: the key tuios answers for in every popup.
 	hints := []overlay.Hint{{Key: "esc", Label: "close", Priority: overlay.HintEssential}}
@@ -218,12 +216,19 @@ func (m *OS) renderTMLDialogBox(window *terminal.Window, content string) string 
 // title on the focused pane, that is the dim text colour. Beside a plain
 // title on another pane, which is already dim, it is the muted one. Empty
 // for any other window.
-func (m *OS) tmlOwnerTag(window *terminal.Window, s *config.Settings) (tag string, width int) {
+//
+// room is the bar's room for the title and the tag. A tag wider than that is
+// cut to it, and the title then gets no room: on a narrow pane the owner
+// stays and the title goes.
+func (m *OS) tmlOwnerTag(window *terminal.Window, s *config.Settings, room int) (tag string, width int) {
 	owner, _, ok := tmlWindowParts(window)
-	if !ok {
+	if !ok || room < 4 {
 		return "", 0
 	}
 	text := " from " + owner + " "
+	if ansi.StringWidth(text) > room {
+		text = " " + overlay.Truncate("from "+owner, room-2) + " "
+	}
 	pal := theme.UI()
 	fg := pal.FgDim
 	if s.WindowTitleStyle != "pill" && s.WindowTitleStyle != "" && m.GetFocusedWindow() != window {
@@ -232,20 +237,17 @@ func (m *OS) tmlOwnerTag(window *terminal.Window, s *config.Settings) (tag strin
 	return lipgloss.NewStyle().Foreground(fg).Render(text), ansi.StringWidth(text)
 }
 
-// tmlScrimTargets lists the TML popups on the screen this frame, by layer
-// id. The scrim goes on under the first of them, as it does under a modal.
-func (m *OS) tmlScrimTargets() map[string]bool {
-	var out map[string]bool
-	for _, w := range m.Windows {
-		if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace || !m.isTMLPopup(w) {
-			continue
-		}
-		if out == nil {
-			out = map[string]bool{}
-		}
-		out[w.ID] = true
+// tmlScrimTarget is the layer id of the TML popup the screen is dimmed
+// behind this frame, or "". Only a popup that has the focus dims the
+// screen: it takes the keys, as a modal does. A popup a pane opened does
+// not take the focus, and dimming the pane that still gets every key would
+// say the opposite of what the keys do.
+func (m *OS) tmlScrimTarget() string {
+	w := m.GetFocusedWindow()
+	if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace || !m.isTMLPopup(w) {
+		return ""
 	}
-	return out
+	return w.ID
 }
 
 // scrimmedChrome reports whether a layer is chrome the scrim of a TML popup
