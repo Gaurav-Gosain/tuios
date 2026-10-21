@@ -880,6 +880,11 @@ type PTY struct {
 	respMu   sync.Mutex
 	respWake chan struct{}
 	vtDone   chan struct{}
+	// respPending holds the replies vtWriter took from the emulator for
+	// forwardTerminalResponses. respTake guards it and every take from the
+	// emulator, so the replies keep the order the emulator queued them in.
+	respTake    sync.Mutex
+	respPending []byte
 	// rawLog appends every byte the process writes, when TUIOS_PTY_LOG asks
 	// for it, and is nil otherwise. See pty_log.go.
 	rawLog *ptyLogger
@@ -5044,7 +5049,7 @@ func (p *PTY) vtWriter() {
 				p.vtResizes++
 			}
 			p.terminalMu.Unlock()
-			p.wakeResponses()
+			p.takeResponses()
 			continue
 		}
 		p.terminalMu.Lock()
@@ -5060,7 +5065,7 @@ func (p *PTY) vtWriter() {
 		p.vtSeq = chunk.seq
 		focusOn := p.terminal != nil && p.terminal.FocusReportingEnabled()
 		p.terminalMu.Unlock()
-		p.wakeResponses()
+		p.takeResponses()
 		p.noteFocusReporting(focusOn)
 		p.flushProgramStatus()
 	}
@@ -5202,10 +5207,12 @@ func (p *PTY) noteExit(code int) {
 // the program gets one copy.
 //
 // The emulator queues a reply while vtWriter writes to it, and when the cell
-// size or the colours it reports change (SetCellSize, setReportColors). Each
-// of them wakes this loop, and the replies are taken and written under
-// respMu. Taking them under the lock is what lets a quiesce flush them: once
-// it holds respMu, no reply is in this goroutine's hands. See pty_quiesce.go.
+// size or the colours it reports change (SetCellSize, setReportColors).
+// vtWriter takes the replies after each write and wakes this loop only when
+// there were some (takeResponses); the other two wake it to take their own.
+// The replies are taken and written under respMu. Taking them under the lock
+// is what lets a quiesce flush them: once it holds respMu, no reply is in this
+// goroutine's hands. See pty_quiesce.go.
 func (p *PTY) forwardTerminalResponses() {
 	if p.terminal == nil {
 		return
@@ -5226,11 +5233,36 @@ func (p *PTY) forwardTerminalResponses() {
 // holds respMu.
 func (p *PTY) sendResponsesLocked() {
 	for {
-		data := p.terminal.TakeResponses()
-		if data == nil || p.pty == nil {
+		p.respTake.Lock()
+		data := p.respPending
+		p.respPending = nil
+		if more := p.terminal.TakeResponses(); more != nil {
+			data = append(data, more...)
+		}
+		p.respTake.Unlock()
+		if len(data) == 0 || p.pty == nil {
 			return
 		}
 		_, _ = p.pty.Write(data)
+	}
+}
+
+// takeResponses moves the replies the emulator queued to respPending and
+// wakes forwardTerminalResponses when there were any. vtWriter calls it after
+// each write: a wake is a goroutine switch, and a flood of output that asks
+// for nothing would pay one per chunk.
+func (p *PTY) takeResponses() {
+	if p.terminal == nil {
+		return
+	}
+	p.respTake.Lock()
+	data := p.terminal.TakeResponses()
+	if data != nil {
+		p.respPending = append(p.respPending, data...)
+	}
+	p.respTake.Unlock()
+	if data != nil {
+		p.wakeResponses()
 	}
 }
 
