@@ -644,6 +644,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_tab_prev":     "Agents view: the focus's tab to the left",
 	"inbox_tab_next":     "Agents view: the focus's tab to the right",
 	"inbox_expand":       "Agents view: show every line of every card in the thread, or fold them again",
+	"inbox_compare":      "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
 
 	// The rail's agent rows. They act only while the cursor is on an agent
 	// row, and a key they share with a rail binding keeps its rail meaning on

@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,13 +65,55 @@ var frameAFan = []struct{ session, name, harness, message, diff string }{
 	{"repo-cache-3", "cache-3", "codex", "Read internal/cache/evict.go", "+97/-31"},
 }
 
+// frameAJudge is the judge's part of the fake agents: ready at once, and on
+// its task, the verdict of frame (g) through the real CLI.
+const frameAJudge = `  "$TUIOS_E2E_TUIOS" set-agent-state idle -w "$TUIOS_PANE_ID"
+  while IFS= read -r line; do
+    case "$line" in *"You judge"*)
+      "$TUIOS_E2E_TUIOS" set-agent-state working -w "$TUIOS_PANE_ID"
+      "$TUIOS_E2E_TUIOS" fan verdict repo-cache --pick repo-cache-2 \
+        --summary "Keep B. It is the smallest change, and the only attempt that passes the check." \
+        --reason "A takes a read lock on a plain Mutex, so the check fails." \
+        --reason "C adds a shard type the task did not ask for, and its cache keeps the Mutex." \
+        --reason "Take TestEvictUnderLoad from A. B has no test for eviction while Get runs." \
+        --note "repo-cache=Takes RLock on a Mutex." --note "repo-cache=Adds TestEvictUnderLoad." \
+        --note "repo-cache-2=Smallest change. Public API unchanged." --note "repo-cache-2=No test for eviction during Get." \
+        --note "repo-cache-3=Adds a shard type." --note "repo-cache-3=Leaves the cache on a Mutex." >> "$TUIOS_E2E_JUDGE_LOG" 2>&1
+      "$TUIOS_E2E_TUIOS" set-agent-state done -w "$TUIOS_PANE_ID"
+      ;;
+    esac
+  done`
+
+// frameALRU is the cache the fan's attempts change.
+const frameALRU = `package cache
+
+import "sync"
+
+// Cache is a least recently used cache.
+type Cache struct {
+	mu    sync.Mutex
+	items map[string]string
+}
+
+// Get returns the value of key.
+func (c *Cache) Get(key string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.items[key]
+}
+`
+
 // claudeAuthPane is what api-auth's pane prints: Claude Code at its
 // permission prompt, as the live box should show it.
 const claudeAuthPane = "\033[32m●\033[0m \033[1mUpdate(internal/auth/token.go)\033[0m\n  \033[2m└  Updated with 12 additions and 3\n     removals\033[0m\n\n\033[33m●\033[0m \033[1mBash(go test ./internal/auth/...\n       -run Token -count=1)\033[0m\n\n \033[33;1mBash command\033[0m\n Do you want to proceed?\n \033[36m❯ 1. Yes\033[0m\n   2. Yes, and do not ask again for\n      go test commands\n   3. No, and tell Claude what to do\n"
 
+// frameARig is the scenario's machine here: its isolation root and its
+// repository.
+type frameARig struct{ base, repo string }
+
 // startFrameA builds the scenario and opens the cockpit at cols x rows. It
 // returns the client.
-func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
+func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -104,8 +147,12 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 	files := map[string]string{"ssh": ssh.String(), "gh": gh.String()}
 	// Each fake keeps its own name as the pane's process, so the daemon
 	// sees the harness still running: the script is not replaced by sleep.
+	// One started in the repository's main checkout is the judge
+	// judge-fan starts: it says it is ready, and on its task it reports
+	// the verdict of DESIGN.md frame (g).
 	for _, a := range []string{"claude", "codex", "gemini", "opencode", "goose"} {
-		files[a] = "#!/bin/sh\nif [ -n \"$1\" ]; then cat \"$1\"; else echo " + a + " ready; fi\nwhile :; do sleep 900; done\n"
+		files[a] = "#!/bin/sh\nif [ \"$PWD\" = '" + repo + "' ]; then\n" + frameAJudge + "\nfi\n" +
+			"if [ -n \"$1\" ]; then cat \"$1\"; else echo " + a + " ready; fi\nwhile :; do sleep 900; done\n"
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(fakes, name), []byte(body), 0o755); err != nil {
@@ -113,6 +160,8 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 		}
 	}
 	t.Setenv("PATH", fakes+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TUIOS_E2E_TUIOS", tuiosBin)
+	t.Setenv("TUIOS_E2E_JUDGE_LOG", filepath.Join(fakes, "judge.log"))
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 	writeConfig(t, base, "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n\n"+
 		"[hosts.build]\naddr = \"someone@buildbox\"\ncommand = \""+tuiosBin+"\"\nconnect_timeout = 5\n\n"+
@@ -183,7 +232,20 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 	cli(base, "new-window", "scratch", "-s", "misc", "--", bin("claude-code"))
 	report(base, "misc", "scratch", "claude-code", "idle", "", nil)
 
-	// The fan of three. Each attempt reports idle, which is what fan waits
+	// The fan of three, on a cache the base already has.
+	if err := os.MkdirAll(filepath.Join(repo, "internal", "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "internal", "cache", "lru.go"), []byte(frameALRU), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Git ignores .env, which a keep deletes with a worktree.
+	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".env\n*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", ".")
+	testutil.Git(t, repo, "commit", "-q", "-m", "cache")
+	// Each attempt reports idle, which is what fan waits
 	// for before it types the task, then goes to work.
 	if out, err := tuiosCLIInDir(t, base, repo, env, "fan", "3", "--agent", "gemini,claude,codex", "--repo", repo, "--name", "cache",
 		"Make the LRU cache safe for concurrent reads"); err != nil {
@@ -283,7 +345,7 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 	}, 3*uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the cockpit never showed the agents of all three machines: %v\n%s", err, term.Snapshot())
 	}
-	return term
+	return term, frameARig{base: base, repo: repo}
 }
 
 // TestCockpitFrameA opens the cockpit on the scenario of frame (a). Every
@@ -297,7 +359,7 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 // the fan rows not gathered the fan check fails; with no load in the hello
 // the load check fails.
 func TestCockpitFrameA(t *testing.T) {
-	term := startFrameA(t, 200, 55)
+	term, _ := startFrameA(t, 200, 55)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return containsAll(s.Text(), "Running the auth tests.", "#884", "#881", "1 check", "fan of 3", "Machines")
 	}, uiTimeout); err != nil {
@@ -349,4 +411,246 @@ func TestCockpitFrameA(t *testing.T) {
 		t.Fatalf("ASSERTION: the header did not step the scope on to gpu: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after frame a")
+}
+
+// frameGDiffs are what each attempt of the fan wrote: A changes the most,
+// B the least, C adds a file of its own.
+var frameGDiffs = map[string]map[string]string{
+	"repo-cache": {
+		"internal/cache/lru.go":      strings.Replace(frameALRU, "\tc.mu.Lock()\n\tdefer c.mu.Unlock()", "\tc.mu.RLock()\n\tdefer c.mu.RUnlock()\n\tc.hits.Add(1)", 1),
+		"internal/cache/lru_test.go": "package cache\n\nimport \"testing\"\n\nfunc TestEvictUnderLoad(t *testing.T) {}\n",
+		"internal/cache/stats.go":    "package cache\n\n// Stats reads the hits.\nfunc (c *Cache) Stats() int { return 0 }\n",
+	},
+	"repo-cache-2": {
+		"internal/cache/lru.go": strings.Replace(frameALRU, "\tmu    sync.Mutex", "\tmu    sync.RWMutex", 1),
+	},
+	"repo-cache-3": {
+		".env":                    "SECRET=1\n",
+		"internal/cache/shard.go": "package cache\n\nimport \"sync\"\n\ntype shard struct {\n\tmu sync.RWMutex\n\titems map[string]string\n}\n",
+		"internal/cache/lru.go":   strings.Replace(frameALRU, "// Get returns the value of key.", "// Get returns the value of key, from its shard.", 1),
+	},
+}
+
+// TestCockpitFanCompare is frame (g): c on an attempt compares the fan's
+// three attempts side by side with their diffs, j starts the judge, whose
+// verdict picks B, and k twice keeps B and removes A and C, their branches
+// kept.
+//
+// Negative controls, recorded in NEGATIVE_CONTROLS.md: with the judge's
+// reach to the attempts cut, the verdict never shows; with keep-fan sent
+// without stash, A's and C's changes keep their worktrees and the removal
+// check fails.
+func TestCockpitFanCompare(t *testing.T) {
+	term, rig := startFrameA(t, 200, 55)
+	rows := worktreeRows(t, rig.base, "--group", "cache")
+	for _, r := range rows {
+		session, _ := r["session"].(string)
+		path, _ := r["path"].(string)
+		for name, body := range frameGDiffs[session] {
+			full := filepath.Join(path, name)
+			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, a := range frameAFan {
+		if out, err := tuiosCLI(t, rig.base, "set-agent-state", "done", "-s", a.session, "-w", a.name, "--harness", a.harness); err != nil {
+			t.Fatalf("report %s done: %v\n%s", a.name, err, out)
+		}
+	}
+	// One check, the person's: does the cache take a RWMutex? A and C fail,
+	// B passes, and the verdict says so.
+	out, _ := tuiosCLI(t, rig.base, "fan", "verify", "repo-cache", "--", "grep -q sync.RWMutex internal/cache/lru.go")
+	if !strings.Contains(out, "1 of 3 passed") {
+		t.Fatalf("fan verify did not pass B alone:\n%s", out)
+	}
+	row, col := findText(t, term, "cache-2")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "c compare") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: an attempt's row does not offer c to compare: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("c"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return containsAll(text, "fan of 3", "Ask a judge", "cache-2", "cache-3", "in 3 files", "First lines", "sync.RWMutex",
+			"internal/cache/lru.go", "failed", "passed")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the comparison does not show the three attempts with their diffs: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "frame-g-before-judge")
+
+	// j: the judge reads the attempts and picks B.
+	if err := term.SendKeys("j"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Keep B.", "recommended", "Smallest change. Public API unchanged.", "judge says B") && !fleetHasRow(s, "judge")
+	}, 3*uiTimeout); err != nil {
+		judgeLog, _ := os.ReadFile(os.Getenv("TUIOS_E2E_JUDGE_LOG"))
+		ls, _ := tuiosCLI(t, rig.base, "list-agents", "--all-sessions")
+		t.Fatalf("ASSERTION: the judge's verdict never showed: %v\njudge log:\n%s\nagents:\n%s\n%s", err, judgeLog, ls, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "frame-g-200x55")
+
+	// k once says what it does, k again keeps B.
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Press k again to keep B", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the first k did not say what a keep does: %v\n%s", err, term.Snapshot())
+	}
+	// C's .env is ignored by git: the warning names it before the keep.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "These files git ignores are deleted, not stashed:", "C: .env")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the first k did not name the ignored file a keep deletes: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "frame-g-keep")
+
+	// Another ignored file in C after the list was read: the second k reads
+	// again, says the list changed, and keeps nothing.
+	var cPath string
+	for _, r := range rows {
+		if r["session"] == "repo-cache-3" {
+			cPath, _ = r["path"].(string)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(cPath, "build.log"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "The attempts changed since the list was read", "C: .env, build.log")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a second k after a new ignored file did not warn again: %v\n%s", err, term.Snapshot())
+	}
+	if n := len(worktreeRows(t, rig.base, "--group", "cache")); n != 3 {
+		t.Fatalf("ASSERTION: a keep went ahead over a list that grew: %d attempts left", n)
+	}
+
+	// The daemon holds a keep to the names shown, not their count: one
+	// ignored file swapped for another, with the hash read before, is
+	// refused and keeps nothing.
+	shown := fanIgnoredHashes(t, rig.base, "repo-cache-2")
+	if err := os.Rename(filepath.Join(cPath, "build.log"), filepath.Join(cPath, "other.log")); err != nil {
+		t.Fatal(err)
+	}
+	keep, _ := json.Marshal(map[string]any{
+		"session": "repo-cache-2", "stash": true,
+		"siblings": []string{"repo-cache", "repo-cache-3"}, "ignored": shown,
+	})
+	if out, err := tuiosCLI(t, rig.base, "call", "keep-fan", string(keep)); err == nil || !strings.Contains(out, "are not the ones the caller showed") {
+		t.Fatalf("ASSERTION: keep-fan went ahead over an ignored file swapped for another: %v: %s", err, out)
+	}
+	if n := len(worktreeRows(t, rig.base, "--group", "cache")); n != 3 {
+		t.Fatalf("ASSERTION: a keep went ahead over a swapped ignored file: %d attempts left", n)
+	}
+
+	// A list git cannot read keeps nothing, and says why.
+	gitFile := filepath.Join(cPath, ".git")
+	if err := os.Rename(gitFile, gitFile+".off"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("tuios could not list the files git ignores, so nothing is kept.", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a list git could not read did not stop the keep: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Second)
+	if n := len(worktreeRows(t, rig.base, "--group", "cache")); n != 3 {
+		t.Fatalf("ASSERTION: a keep went ahead with a list git could not read: %d attempts left", n)
+	}
+	if err := os.Rename(gitFile+".off", gitFile); err != nil {
+		t.Fatal(err)
+	}
+	// k reads the list again; then k keeps.
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Press k again to keep B") && !strings.Contains(s.Text(), "could not list")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: k did not read the list again: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		left := worktreeRows(t, rig.base, "--group", "cache")
+		if len(left) == 1 && left[0]["session"] == "repo-cache-2" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: k k did not keep B alone: %v\n%s", left, term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	repo := rig.repo
+	branches := testutil.Git(t, repo, "branch", "--list", "cache*")
+	if !containsAll(branches, "cache", "cache-2", "cache-3") {
+		t.Fatalf("ASSERTION: the removed attempts lost their branches:\n%s", branches)
+	}
+	if stash := testutil.Git(t, repo, "stash", "list"); strings.Count(stash, "\n")+1 < 2 {
+		t.Fatalf("ASSERTION: the changes of A and C were not stashed:\n%s", stash)
+	}
+	alive(t, term, "after the fan comparison")
+}
+
+// fleetHasRow reports whether a row of the fleet column is named name: the
+// name is the first word after the row's marks.
+func fleetHasRow(s tuitest.Screen, name string) bool {
+	_, rows := s.Size()
+	for r := range rows {
+		line := []rune(s.Line(r))
+		fleet := strings.Fields(string(line[:min(len(line), 56)]))
+		for i, f := range fleet {
+			if i < 3 && f == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// fanIgnoredHashes reads, through compare-fan, the ignored_hash of every
+// attempt of session's fan but session itself.
+func fanIgnoredHashes(t *testing.T, base, session string) map[string]string {
+	t.Helper()
+	params, _ := json.Marshal(map[string]any{"session": session, "detail": true})
+	out, err := tuiosCLI(t, base, "call", "compare-fan", string(params))
+	if err != nil {
+		t.Fatalf("compare-fan: %v: %s", err, out)
+	}
+	var res struct {
+		Rows []struct {
+			Session     string `json:"session"`
+			IgnoredHash string `json:"ignored_hash"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("compare-fan output: %v: %s", err, out)
+	}
+	hashes := map[string]string{}
+	for _, r := range res.Rows {
+		if r.Session != session {
+			if r.IgnoredHash == "" {
+				t.Fatalf("compare-fan gave %s no ignored_hash: %s", r.Session, out)
+			}
+			hashes[r.Session] = r.IgnoredHash
+		}
+	}
+	return hashes
 }

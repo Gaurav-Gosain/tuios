@@ -363,24 +363,30 @@ func (m *OS) drawLastTurn(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, r
 			c.text(x, y, x+w, ckSeg{t: "+" + strconv.Itoa(len(files)-i) + " more", fg: pal.FgMute})
 			return y + 1
 		}
-		total := f.add + f.del
-		cells := min(5, max(1, total/12))
-		ac := (cells*f.add + total/2) / max(1, total)
-		bar := []ckSeg{{t: strings.Repeat("━", ac), fg: l.add}, {t: strings.Repeat("━", cells-ac), fg: l.del}, {t: strings.Repeat("━", 5-cells), fg: l.edgePanel}}
-		if l.ascii {
-			bar = []ckSeg{{t: strings.Repeat("+", ac), fg: l.add}, {t: strings.Repeat("-", cells-ac), fg: l.del}, {t: strings.Repeat(".", 5-cells), fg: l.edgePanel}}
-		}
-		r := c.textR(x+w, y, bar...)
-		counts := ckDiffCounts(l, f.add, f.del)
-		r = c.textR(r-1, y, counts[:len(counts)-1]...)
-		name := f.path
-		if room := r - 2 - x; ansi.StringWidth(name) > room {
-			name = overlay.Ellipsis() + ansi.TruncateLeft(name, ansi.StringWidth(name)-room+1, "")
-		}
-		c.text(x, y, r-1, ckSeg{t: name, fg: pal.FgDim})
+		drawFileStat(c, l, x, y, w, f.path, f.add, f.del)
 		y++
 	}
 	return y
+}
+
+// drawFileStat draws one changed file at y: its path, cut from the left to
+// fit, its counts and a bar of their proportion.
+func drawFileStat(c *ckCanvas, l ckLook, x, y, w int, path string, add, del int) {
+	total := add + del
+	cells := min(5, max(1, total/12))
+	ac := (cells*add + total/2) / max(1, total)
+	bar := []ckSeg{{t: strings.Repeat("━", ac), fg: l.add}, {t: strings.Repeat("━", cells-ac), fg: l.del}, {t: strings.Repeat("━", 5-cells), fg: l.edgePanel}}
+	if l.ascii {
+		bar = []ckSeg{{t: strings.Repeat("+", ac), fg: l.add}, {t: strings.Repeat("-", cells-ac), fg: l.del}, {t: strings.Repeat(".", 5-cells), fg: l.edgePanel}}
+	}
+	r := c.textR(x+w, y, bar...)
+	counts := ckDiffCounts(l, add, del)
+	r = c.textR(r-1, y, counts[:len(counts)-1]...)
+	name := path
+	if room := r - 2 - x; ansi.StringWidth(name) > room {
+		name = overlay.Ellipsis() + ansi.TruncateLeft(name, ansi.StringWidth(name)-room+1, "")
+	}
+	c.text(x, y, r-1, ckSeg{t: name, fg: l.pal.FgDim})
 }
 
 // drawCheckpoints draws the agent's checkpoints, newest first, as a timeline

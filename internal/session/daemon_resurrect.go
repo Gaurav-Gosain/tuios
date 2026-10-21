@@ -103,6 +103,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	if existing := d.manager.GetSession(state.Name); existing != nil {
 		return existing, nil, nil
 	}
+	// A fan's judge does not survive a restart: its pane comes back as a
+	// fresh shell, which must not keep the judge's reach.
+	if wt := state.Worktree; wt != nil && (wt.JudgeSession != "" || wt.JudgeWindow != "") {
+		w := *wt
+		w.JudgeSession, w.JudgeWindow = "", ""
+		state.Worktree = &w
+	}
 
 	// A session whose windows were all closed leaves a state file behind, and
 	// restoring it produced a session with nothing in it that no surface tells

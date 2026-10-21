@@ -131,7 +131,17 @@ func (d *Daemon) callerReachesSession(cs *connState, target string) bool {
 type fanCompareParams struct {
 	Session string `json:"session"`
 	Changes *bool  `json:"changes"`
+	// Detail asks for each attempt's files and its first changed lines.
+	Detail bool `json:"detail"`
 }
+
+// Bounds of compare-fan's detail, per attempt. The ignored files are listed
+// whole up to fanIgnoredMax entries, a folder git ignores whole being one.
+const (
+	fanDetailFiles = 8
+	fanDetailLines = 6
+	fanIgnoredMax  = 200
+)
 
 // fanCompareRow is one attempt as compare-fan reports it. The counts are nil
 // when they were not asked for or git could not give them.
@@ -154,6 +164,27 @@ type fanCompareRow struct {
 	Gone         bool            `json:"gone,omitempty"`
 	// Note says why the counts are missing when git failed.
 	Note string `json:"note,omitempty"`
+	// FileList and Lines are the attempt's files, most changed first, and
+	// its first changed lines, with detail.
+	FileList []worktree.FileStat `json:"file_list,omitempty"`
+	Lines    []worktree.DiffLine `json:"lines,omitempty"`
+	// Notes are the judge's notes on this attempt.
+	Notes []string `json:"notes,omitempty"`
+	// Ignored and IgnoredCount are the files git ignores in the worktree,
+	// which keep-fan deletes with it, with detail.
+	Ignored      []string `json:"ignored,omitempty"`
+	IgnoredCount int      `json:"ignored_count,omitempty"`
+	// IgnoredError says why the ignored files could not be listed, and
+	// IgnoredHash names the list, for keep-fan's ignored.
+	IgnoredError string `json:"ignored_error,omitempty"`
+	IgnoredHash  string `json:"ignored_hash,omitempty"`
+	// Cost is what the attempt's agent reported it cost, empty when it did
+	// not say.
+	Cost string `json:"cost,omitempty"`
+	// StartedAt and DoneAt are when the attempt's prompt was typed and when
+	// its agent last finished a turn, in Unix nanoseconds, 0 when unknown.
+	StartedAt int64 `json:"started_at,omitempty"`
+	DoneAt    int64 `json:"done_at,omitempty"`
 }
 
 // fanLastCommand is the newest command a shell in the session finished, from
@@ -177,8 +208,10 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	}
 	changes := p.Changes == nil || *p.Changes
 	var siblings []*Session
+	pa := cs.paneViewOrNil()
 	for _, s := range d.fanSiblings(info) {
-		if d.callerReachesSession(cs, s.Name()) {
+		// The fan's judge reads every attempt.
+		if d.callerReachesSession(cs, s.Name()) || d.judgeReaches(pa, s.Name()) {
 			siblings = append(siblings, s)
 		}
 	}
@@ -196,6 +229,19 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 			ctx, cancel := context.WithTimeout(d.ctx, fanGitTimeout)
 			defer cancel()
 			fanRowChanges(ctx, row, wt)
+			if p.Detail && row.BaseSHA != "" {
+				row.FileList, row.Lines, _ = worktree.WorkingDetail(ctx, wt.Path, row.BaseSHA, fanDetailFiles, fanDetailLines)
+			}
+			if p.Detail {
+				var err error
+				row.Ignored, row.IgnoredCount, err = worktree.IgnoredFiles(ctx, wt.Path, fanIgnoredMax)
+				if err != nil {
+					// A keep must not go ahead on a list that could not be read.
+					row.IgnoredError = err.Error()
+				} else {
+					row.IgnoredHash = worktree.IgnoredHash(row.Ignored, row.IgnoredCount)
+				}
+			}
 		}(&rows[i], s.Worktree())
 	}
 	wg.Wait()
@@ -210,15 +256,20 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 			base = "HEAD"
 		}
 	}
-	return map[string]any{
+	out := map[string]any{
 		"type":      "fan_compare",
 		"group":     info.Group,
 		"repo":      info.Repo,
 		"repo_root": info.RepoRoot,
 		"base":      base,
+		"prompt":    info.Prompt,
 		"rows":      rows,
 		"total":     len(rows),
-	}, nil
+	}
+	if v := info.Verdict; v != nil {
+		out["verdict"] = map[string]any{"pick": v.Pick, "summary": v.Summary, "reasons": v.Reasons, "by": v.By, "judge": v.Judge, "at": v.At}
+	}
+	return out, nil
 }
 
 // fanRow is one sibling's row without the git counts.
@@ -235,6 +286,10 @@ func (d *Daemon) fanRow(s *Session) fanCompareRow {
 		PromptStatus: wt.PromptStatus,
 		Verify:       d.fanVerifyReport(s, wt.Verify),
 		Gone:         wt.Gone,
+		StartedAt:    wt.PromptAt,
+	}
+	if wt.Verdict != nil {
+		row.Notes = wt.Verdict.Notes
 	}
 	st := s.GetState()
 	states := make([]string, 0, len(st.Windows))
@@ -243,6 +298,14 @@ func (d *Daemon) fanRow(s *Session) fanCompareRow {
 		states = append(states, string(w.AgentState))
 		if row.Harness == "" {
 			row.Harness = w.AgentHarness
+		}
+		for _, t := range w.AgentMeta {
+			if t.Key == "cost" && row.Cost == "" {
+				row.Cost = t.Value
+			}
+		}
+		if w.AgentState == AgentStateDone && w.AgentStateAt > row.DoneAt {
+			row.DoneAt = w.AgentStateAt
 		}
 		pty := s.GetPTY(w.PTYID)
 		if pty == nil {
@@ -669,6 +732,16 @@ type keepFanParams struct {
 	Merge     bool   `json:"merge"`
 	MergeMode string `json:"merge_mode"`
 	Into      string `json:"into"`
+	// Group and RepoRoot, when given, are the fan the caller means: a
+	// session renamed since the caller read it is refused, not kept.
+	Group    string `json:"group"`
+	RepoRoot string `json:"repo_root"`
+	// Siblings, when given, are the attempts the caller means to remove,
+	// and Ignored the ignored_hash of the list it showed for each. A fan
+	// whose other attempts differ, or whose ignored files changed, is
+	// refused whole.
+	Siblings []string          `json:"siblings"`
+	Ignored  map[string]string `json:"ignored"`
 }
 
 // verbKeepFan answers keep-fan: every sibling of the kept session is removed
@@ -693,6 +766,12 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 			Verb:    "remove-worktree",
 			Command: "tuios worktree rm " + kept.Name(),
 			Detail:  "Nothing was removed. remove-worktree removes one worktree.",
+		})
+	}
+	if (p.Group != "" && p.Group != info.Group) || (p.RepoRoot != "" && canonRoot(p.RepoRoot) != canonRoot(info.RepoRoot)) {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+kept.Name()+" is not an attempt of the fan named by group and repo_root", &VerbHint{
+			Param:  "session",
+			Detail: "Nothing was removed. The session may have been renamed. Read the fan again with compare-fan.",
 		})
 	}
 	if !p.Merge && (p.MergeMode != "" || p.Into != "") {
@@ -724,6 +803,9 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 			return nil, verr
 		}
 		merged = res
+	}
+	if verr := d.checkKeepAsShown(kept, info, p.Siblings, p.Ignored); verr != nil {
+		return nil, verr
 	}
 	removed := []map[string]any{}
 	left := 0
@@ -766,4 +848,61 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		out["merge"] = merged
 	}
 	return out, nil
+}
+
+// checkKeepAsShown refuses a keep when the fan is not what the caller showed:
+// another set of attempts to remove, or more files git ignores in one of
+// them, which the removal would delete unseen. Nothing given checks nothing.
+func (d *Daemon) checkKeepAsShown(kept *Session, info *WorktreeInfo, siblings []string, ignored map[string]string) *verbError {
+	if siblings == nil && ignored == nil {
+		return nil
+	}
+	var others []string
+	for _, s := range d.fanSiblings(info) {
+		if s != kept {
+			others = append(others, s.Name())
+		}
+	}
+	if siblings != nil {
+		a, b := slices.Clone(others), slices.Clone(siblings)
+		slices.Sort(a)
+		slices.Sort(b)
+		if !slices.Equal(a, b) {
+			return hintedVerbError(ErrVerbInvalidParams, "the fan's other attempts are not the ones the caller showed", &VerbHint{
+				Param: "siblings", Available: others,
+				Detail: "Nothing was removed. Read the fan again with compare-fan.",
+			})
+		}
+	}
+	for _, name := range others {
+		want, ok := ignored[name]
+		if !ok {
+			if ignored == nil {
+				continue
+			}
+			// The caller named lists, and not this attempt's: it showed
+			// nothing of it.
+			return hintedVerbError(ErrVerbInvalidParams, "ignored names no list for "+name+", which a keep removes", &VerbHint{
+				Param: "ignored", Detail: "Nothing was removed. Send the ignored_hash of every attempt to remove.",
+			})
+		}
+		s := d.manager.GetSession(name)
+		wt := s.Worktree()
+		if wt == nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(d.ctx, fanGitTimeout)
+		names, n, err := worktree.IgnoredFiles(ctx, wt.Path, fanIgnoredMax)
+		cancel()
+		if err != nil {
+			return newVerbError(ErrVerbCommandFailed, "could not list the files git ignores in "+name+", so nothing was removed: "+err.Error())
+		}
+		if worktree.IgnoredHash(names, n) != want {
+			return hintedVerbError(ErrVerbInvalidParams, "the files git ignores in "+name+" are not the ones the caller showed", &VerbHint{
+				Param:  "ignored",
+				Detail: "Nothing was removed. Read the fan again with compare-fan, and show the files a keep deletes.",
+			})
+		}
+	}
+	return nil
 }

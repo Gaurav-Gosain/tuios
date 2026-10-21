@@ -4568,6 +4568,24 @@ and:
   for.
 - `gone` when the worktree directory no longer exists.
 
+- `cost`: the cost the attempt's agent reported with `set-agent-meta`, when
+  it did. `started_at`: when its prompt was typed. `done_at`: when its agent
+  last finished a turn. Both are unix nanoseconds, omitted when unknown.
+- `notes`: the judge's notes on this attempt, from `set-fan-verdict`.
+- With `detail`, `file_list` (at most 8 files, most changed first: `path`,
+  `added`, `removed`) and `lines` (the first 6 changed lines: `op`, `line`,
+  `text`, the text at most 200 bytes). Two more git calls per sibling, in the
+  same 10 seconds.
+
+- With `detail`, also `ignored` (at most 200 entries, a folder git ignores
+  whole being one) and `ignored_count`: the files git ignores in the
+  worktree, which `keep-fan` deletes with it and git stash does not keep.
+  `ignored_error` says why they could not be listed. `ignored_hash` names the
+  list for `keep-fan`.
+
+The result also carries `prompt`, the task the fan gave, and `verdict` when a
+judge reported one: `pick`, `summary`, `reasons`, `by`, `judge` and `at`.
+
 A pane without `admin`, or a connection restricted to its own session, gets
 rows only for the sessions it could name itself: its own session, its fan
 group, and the sessions a fan run from it started. Over a link it needs `list`,
@@ -4650,6 +4668,15 @@ not part of a fan is `invalid_params`.
 Only the person or a caller with `admin` may call it: a pane without `admin`
 and any restricted connection are refused. Over a link it needs `write`.
 
+Files git ignores (`.env`, build output) are deleted with a worktree and are
+not stashed. `compare-fan` with `detail` lists them. `group` and `repo_root`,
+when given, name the fan the caller read: a session that is no longer an
+attempt of it, after a rename, is `invalid_params` and nothing is removed.
+`siblings` and `ignored` name what the caller showed: the attempts to remove,
+and for each the `ignored_hash` compare-fan gave for its ignored files. When
+the other attempts differ, or one's ignored files changed in any way, the
+keep is refused whole.
+
 Params: `session` (required), `stash`, `force`, `merge`, `merge_mode`,
 `into`. With `merge`, the kept attempt's branch is first merged into its
 base, as [ship-merge](#ship-merge) does, with `merge_mode` and `into` as its
@@ -4667,6 +4694,77 @@ is refused fails the call before any sibling is removed.
    "changes": 0, "stashed": false, "discarded": false, "session_killed": true, "branch_kept": true},
   {"session": "api-fan-retry-3", "removed": false, "code": "worktree_dirty",
    "note": "/home/u/.local/share/tuios/worktrees/api/fan-retry-3 holds 1 uncommitted change. Nothing was removed."}]}}
+```
+
+### set-fan-verdict
+
+Record a judge's pick among the attempts of a fan. Name any session of the
+fan, the attempt picked as `pick`, and the verdict as `summary` (required, at
+most 400 bytes). `reasons` holds at most 6 sentences, and `notes` maps an
+attempt's session to at most 4 sentences about it. The verdict is written on
+every attempt's worktree record, each with its own notes, and reaches clients
+with the ordinary state push. A later call replaces it. Nothing is kept or
+removed.
+
+Only two callers record a verdict: the judge pane that `judge-fan` started for
+the fan, and a call from outside every pane. Any other pane, a pane of an
+attempt included, is `forbidden`, whatever its grants. The daemon records
+which of the two it was as `by` (`judge` or `you`), and for the judge its
+pane's harness as `judge`. No parameter names the judge. The judge's pane
+needs no grant beyond `read`. Any other pane needs `fan`, and is then refused
+by the rule above. Over a link it is refused: a verdict is recorded on the fan's
+own machine.
+
+A pick or a note that names a session outside the fan is `invalid_params`,
+with the attempts in the hint.
+
+```json
+{"verb": "set-fan-verdict", "params": {"session": "api-fan-retry", "pick": "api-fan-retry-2",
+ "summary": "Keep B. It is the smallest change and passes the tests.",
+ "reasons": ["A reads hits without the lock."], "notes": {"api-fan-retry": ["Adds a test for eviction."]}}}
+```
+
+```json
+{"result": {"type": "fan_verdict", "group": "fan/retry", "pick": "api-fan-retry-2", "by": "judge",
+ "attempts": ["api-fan-retry", "api-fan-retry-2"]}}
+```
+
+### judge-fan
+
+Start an agent that judges the attempts of a fan. It runs in a new session
+named after the fan with `-judge` (with `-2` to `-9` when that name is taken),
+in the repository's main checkout, as a window named `judge`, with the grant
+`read` alone: it cannot start a fan, an agent or a command anywhere. Only the
+person or a pane with `admin` starts a judge.
+
+Once start-agent made the session and the pane, every attempt's record names
+them by the session's ID and the pane's window ID (`judge_session`,
+`judge_window`), never by a name. That pane alone reaches the attempts, and
+only with these verbs: `compare-fan`, `review-diff`, `list-checkpoints`,
+`checkpoint-diff`, `capture-pane`, `list-windows`, `get-agent-state` and
+`set-fan-verdict`. So the judge reads the attempts' screens and scrollback
+as well as their diffs. It cannot type into their panes, run a command in
+their sessions or start an agent there, and it does not read their command
+history, mail, environment, stash or approvals. Another pane
+of the judge's session reaches nothing of the attempts. The record is cleared
+when the judge's session ends. A session of that name that another caller
+made first is refused: nothing is recorded, and the agent started in it is
+closed.
+
+The first prompt is typed after the record is written. It names the attempts
+by letter, asks the judge to change no file, and tells it to read them with
+`tuios fan compare`, whose rows give each attempt's folder, and `git diff` in
+each folder, and report with `tuios fan verdict`. The judge runs as a program in the main checkout with
+the person's rights to files: tuios holds what it does through tuios, not
+what it does to files.
+
+`agent` is the judge's agent, as `start-agent` takes it; omitted, it is the
+agent the first attempt ran. `env` and `ready_timeout` are `start-agent`'s.
+The call answers as `start-agent` does, with `judge_session` and `group`.
+Over a link it needs `open` and `write`.
+
+```json
+{"verb": "judge-fan", "params": {"session": "api-fan-retry"}}
 ```
 
 ### bundle-worktree

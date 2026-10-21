@@ -1593,8 +1593,11 @@ const (
 	ActionInboxShowSnoozed = "inbox_show_snoozed"
 	ActionInboxDenyReason  = "inbox_deny_reason"
 	ActionInboxNewAgent    = "inbox_new_agent"
-	ActionInboxDetailDown  = "inbox_detail_down"
-	ActionInboxDetailUp    = "inbox_detail_up"
+	// ActionInboxCompare opens the comparison of the attempts of the fan
+	// under the cursor.
+	ActionInboxCompare    = "inbox_compare"
+	ActionInboxDetailDown = "inbox_detail_down"
+	ActionInboxDetailUp   = "inbox_detail_up"
 	// The approval card's keys, the keys that open and close the focus on a
 	// narrow screen, help, and the bulk marks.
 	ActionInboxAllow       = "inbox_allow"
@@ -1676,6 +1679,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxShowSnoozed: {"S"},
 		ActionInboxDenyReason:  {"R"},
 		ActionInboxNewAgent:    {"n"},
+		ActionInboxCompare:     {"c"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},
 		ActionInboxAllow:       {"a"},
@@ -3563,6 +3567,8 @@ var yieldingDefaults = map[string]bool{
 	"inbox_tab_prev":     true,
 	"inbox_tab_next":     true,
 	"inbox_expand":       true,
+	// c, new with the fan comparison.
+	"inbox_compare": true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables

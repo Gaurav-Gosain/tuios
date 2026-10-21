@@ -806,6 +806,7 @@ tuios fan keep [<host>:]<session> [--stash | --force] [--merge [--squash | --ff-
 tuios fan compare [[<host>:]<session>] [--no-changes] [--json]
 tuios fan verify [<host>:]<session> [--timeout <duration>] [--no-wait] [--json] -- <command>...
 tuios fan diff <session-a> <session-b> [--stat]
+tuios fan verdict [<host>:]<session> --pick <session> --summary <text> [--reason <text>]... [--note <session>=<text>]... [--json]
 ```
 
 **Flags:**
@@ -829,6 +830,17 @@ tuios fan verify api-fan-add-retry-backoff-http -- go test ./...
 tuios fan diff api-fan-add-retry-backoff-http api-fan-add-retry-backoff-http-2
 tuios fan keep api-fan-add-retry-backoff-http-2 --stash
 ```
+
+`tuios fan verdict` records a judge's pick among the attempts: the attempt
+it recommends, the verdict, its reasons and a note on each attempt. The
+agents view shows it on the fan's row and in the comparison (`c` on an
+attempt), where `k` keeps the recommended attempt. In that comparison, `j`
+starts a judge: an agent in a session of its own that reads the attempts and
+reports with this command. Only that judge's pane, or a call from outside
+every pane, records a verdict. The judge can read the attempts and nothing
+more: tuios refuses it typing into their panes, commands in their sessions and
+agents there. It runs in the main checkout as a program with your rights to
+files, and its prompt asks it to change none.
 
 The branches are a stem, then `stem-2`, `stem-3`. The stem is `fan/` and the
 first words of the prompt, or `--name`. Each prompt is typed once its agent

@@ -404,7 +404,7 @@ its siblings there.`,
 	keepCmd.Flags().BoolVar(&keepFFOnly, "ff-only", false, "With --merge: only fast-forward")
 	keepCmd.Flags().StringVar(&keepInto, "into", "", "With --merge: the branch to merge into (default: the base the session was made from)")
 
-	fanCmd.AddCommand(keepCmd, newFanCompareCommand(), newFanDiffCommand(), newFanVerifyCommand())
+	fanCmd.AddCommand(keepCmd, newFanCompareCommand(), newFanDiffCommand(), newFanVerifyCommand(), newFanVerdictCommand())
 	return fanCmd
 }
 

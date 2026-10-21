@@ -39,6 +39,12 @@ type WorktreeRef struct {
 	// Prompt is the first line of the task a fan gave the session, empty
 	// when no fan made it.
 	Prompt string
+	// Pick is the session a judge picked among the fan's attempts, and
+	// VerdictAt when, 0 with no verdict. JudgeWindow is the pane of the
+	// judge started for the fan, empty when none runs.
+	Pick        string
+	VerdictAt   int64
+	JudgeWindow string
 }
 
 // GroupByRepo returns the session list with every worktree session gathered

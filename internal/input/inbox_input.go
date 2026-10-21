@@ -36,6 +36,10 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CockpitSpawnOpen() {
 		return o, o.CockpitSpawnKey(msg)
 	}
+	// The comparison of a fan's attempts takes every key while it is up.
+	if o.CockpitCompareOpen() {
+		return o, o.CockpitCompareKey(msg.String())
+	}
 	// A risky allow's first press waits for the same key again; any other
 	// key resets it.
 	o.InboxKeyPressed(msg.String())

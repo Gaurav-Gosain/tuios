@@ -756,17 +756,24 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 			return nil, deny(verb + " needs the read grant")
 		}
 		reach = func(target string) string {
-			if d.sessionInScope(pa.session, target) {
+			// The judge of a fan reads its attempts, and only reads them.
+			if d.sessionInScope(pa.session, target) || judgeReadVerbs[verb] && d.judgeReaches(pa, target) {
 				return ""
 			}
 			return "session " + echoName(target) + " is not the pane's own session or in its fan group, and reading it needs the admin grant"
 		}
 	case scopeLaunch:
-		if !pa.grants.Has(GrantFan) {
+		// A fan's judge holds read alone, and records its verdict on the
+		// attempts it judges: set-fan-verdict passes on judgeReaches alone.
+		verdict := verb == "set-fan-verdict"
+		if !pa.grants.Has(GrantFan) && !verdict {
 			return nil, deny(verb + " starts agents, which needs the fan grant")
 		}
 		reach = func(target string) string {
-			if d.sessionInScope(pa.session, target) {
+			if verdict && d.judgeReaches(pa, target) {
+				return ""
+			}
+			if pa.grants.Has(GrantFan) && d.sessionInScope(pa.session, target) {
 				return ""
 			}
 			return "session " + echoName(target) + " is not the pane's own session or in its fan group, and starting agents there needs the admin grant"

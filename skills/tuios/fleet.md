@@ -128,6 +128,14 @@ are quoted one by one; one word is a shell line, for `&&` and pipes. The
 window holds no grants. It closes on a pass and stays open on a failure so the
 output can be read, until the next check closes it. The counts run from where
 each attempt left the base, so they hold still when main moves on.
+
+A judge reports its pick with `tuios fan verdict SESSION --pick ATTEMPT
+--summary TEXT`, with `--reason TEXT` and `--note ATTEMPT=TEXT` as often as
+needed (`set-fan-verdict`). Only the judge pane `judge-fan` started, or a
+call from outside every pane, records a verdict: a pane of an attempt is
+refused. The judge can read the attempts and nothing more. The person keeps
+an attempt from the agents view or with `tuios fan keep`, which deletes the
+files git ignores in the other worktrees.
 `fan verify` waits and exits 1 when any failed; `--no-wait` returns at once and
 `fan compare` shows the results. From a pane, `verify-fan` needs the `fan`
 grant and `compare-fan` needs `read`, and both reach only your own fan group.
