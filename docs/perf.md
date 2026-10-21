@@ -4370,3 +4370,42 @@ the machine, so neither test reads a clock.
 - `js.Hypot` keeps JavaScript's compensated sum, which costs about 2%. A plain
   `math.Hypot` can differ in the last bit and move a route.
 - The tuios binary grows by 20 KB (see "Binary size budget").
+
+## 2026-10 the pane read path in live handoff part 1
+
+Part 1 of the live handoff (`docs/design/live-handoff.md`) changes a pane's
+read path in two places. The reader polls the master and a wake pipe before
+each read, outside `readMu`, so a quiesce never waits on a quiet program. And
+the reply forwarder no longer blocks in a read of the emulator's replies: the
+emulator's writer takes the replies after each chunk and wakes the forwarder
+only when the chunk queued one. Both cost CPU under a flood.
+
+### Numbers
+
+Apple M5 Pro, macOS, Go 1.26.10, `nice -n 10`, with other work on the machine.
+A scratch benchmark, not committed, cats a 64 MiB file of 100-column lines
+through a pane of a real daemon into one attached `TUIClient`, on the rig of
+`wire_e2e_bench_test.go` (`newE2ERig`), three files a run at `-test.cpu 4`.
+CPU is getrusage of the test process, which holds the daemon and the client.
+Test binaries of main at `8373529`, of the branch, and of the branch with the
+forwarder woken after every chunk ran in alternating order, 14 runs each, at a
+load average of 8 to 10. The figures are medians.
+
+| 64 MiB through a pane | main | branch | branch, wake on every chunk |
+|---|---:|---:|---:|
+| throughput | 103.8 MB/s | 80.5 MB/s (-22%) | 80.3 MB/s (-23%) |
+| CPU per MB | 19.8 ms | 24.3 ms (+23%) | 29.4 ms (+48%) |
+| client batches per file | 635 | 804 | 818 |
+
+A second set of 14 runs each, at a load average of 11 to 18, kept the order:
+79.5, 53.9 and 55.4 MB/s, and 25.0, 32.6 and 38.3 ms per MB.
+
+The wake on every chunk ran the forwarder and had it take `respMu` even when
+the chunk queued no reply. Waking it only for a reply saves about 5 ms per MB,
+a sixth of the CPU, and leaves throughput where it was. A build with the wake
+removed outright, which never sends a reply, measured 87.3 MB/s and 22.5 ms
+per MB in the same rotation, so the skip gets most of what the wake cost. In
+an earlier rotation, a build without the poll before each read used 1 to 1.5
+ms per MB less: the poll is one more syscall per read. The rest of the gap to
+main is not split here. The client receives about a quarter more batches per
+file, so the branch's reads are smaller.
