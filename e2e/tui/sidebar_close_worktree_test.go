@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
@@ -206,6 +207,7 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 
 	alive(t, term, "after deleting both worktrees")
 }
+
 // TestSidebarKillQuitConfirmsOnWorktree gates the sidebar's instant
 // kill-and-quit on the session being a worktree. Taking a worktree session
 // down takes a directory with it, so the row must raise the same close
@@ -303,5 +305,176 @@ func TestSidebarKillQuitConfirmsOnWorktree(t *testing.T) {
 		return !hasName(names, "plain") && hasName(names, "repo-feat-one")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the plain session survived its kill-and-quit, or took the worktree session with it: %v", err)
+	}
+}
+
+// TestQuitMenuDeletesWorktree drives the quit menu's delete row. In a daemon
+// session the quit key opens the menu rather than quitting, and a worktree
+// session's menu must offer to take the worktree with it; taking the row must
+// quit this client once the daemon confirms the deletion — a row that says
+// "and quit" cannot leave the UI behind. A plain session's menu must offer no
+// such row.
+func TestQuitMenuDeletesWorktree(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new feat/one: %v: %s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "repo-feat-one"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+
+	// leader q opens the quit menu; the worktree session's menu carries the
+	// delete row after the kill-and-quit row.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
+		t.Fatalf("send leader q: %v", err)
+	}
+	if err := term.WaitForText("Kill session and quit", uiTimeout); err != nil {
+		t.Fatalf("quit menu never appeared: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitForText("Delete worktree and quit", uiTimeout); err != nil {
+		t.Fatalf("the worktree session's quit menu offered no worktree delete: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "quit-menu-delete-row")
+
+	// The menu opens on Detach, so four downs reach the fifth row.
+	for i := 0; i < 4; i++ {
+		if err := term.SendKeys(tuitest.Down); err != nil {
+			t.Fatalf("move down to the delete row: %v", err)
+		}
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("take the delete row: %v", err)
+	}
+
+	// The row deletes the worktree, shows the note for the notification
+	// duration — readable, which is the whole point of the client-side kill —
+	// and then quits. The exit is the client's own deliberate quit: exit code
+	// 0, never the "session killed" report a daemon-side kill would produce.
+	if err := term.WaitForText("Deleted worktree", uiTimeout); err != nil {
+		t.Fatalf("no notification said the worktree was deleted: %v\n%s", err, term.Snapshot())
+	}
+	code, err := term.WaitExit(uiTimeout)
+	if err != nil {
+		t.Fatalf("the delete row did not quit the client: %v\n%s", err, term.Snapshot())
+	}
+	if code != 0 {
+		t.Errorf("the quit-menu delete exited %d, want the clean exit of a deliberate quit", code)
+	}
+
+	if _, err := os.Stat(filepath.Join(base, "worktrees", "repo", "feat-one")); !os.IsNotExist(err) {
+		t.Errorf("the feat/one worktree directory survived the quit-menu delete row: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", repo, "show-ref", "--verify", "refs/heads/feat/one").CombinedOutput(); err != nil {
+		t.Errorf("the feat/one branch did not survive the quit-menu delete row: %v: %s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !hasName(sessionNames(t, base), "repo-feat-one")
+	}, uiTimeout); err != nil {
+		t.Errorf("the repo-feat-one session survived the quit-menu delete row: %v", err)
+	}
+
+	// A plain session's quit menu must offer no worktree delete.
+	second := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := second.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("second client never attached: %v\n%s", err, second.Snapshot())
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+	if err := second.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
+		t.Fatalf("send leader q on the plain session: %v", err)
+	}
+	if err := second.WaitForText("Kill and quit", uiTimeout); err != nil {
+		t.Fatalf("the plain session's quit menu never appeared: %v\n%s", err, second.Snapshot())
+	}
+	if text := second.Screen().Text(); strings.Contains(text, "Delete worktree") {
+		t.Fatalf("the plain session's quit menu offered a worktree delete\n%s", text)
+	}
+	if err := second.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("cancel the plain session's quit menu: %v", err)
+	}
+	alive(t, second, "after cancelling the plain session's quit menu")
+}
+
+// TestQuitMenuDeleteFollowsASwitchDuringTheDwell pins who the quit fires at:
+// the deletion leaves the session alive for the notification's duration, and
+// the user has that whole window to switch to another session. The quit must
+// follow the deleted session by name — the one this client sits in when the
+// dwell runs out must survive it.
+func TestQuitMenuDeleteFollowsASwitchDuringTheDwell(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new feat/one: %v: %s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "repo-feat-one"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	toggleSidebarViaPalette(t, term)
+
+	// Take the quit menu's delete row: leader q, then four downs to the fifth
+	// row, then enter. The note comes back and the dwell starts.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
+		t.Fatalf("send leader q: %v", err)
+	}
+	if err := term.WaitForText("Delete worktree and quit", uiTimeout); err != nil {
+		t.Fatalf("the worktree session's quit menu offered no worktree delete: %v\n%s", err, term.Snapshot())
+	}
+	for i := 0; i < 4; i++ {
+		if err := term.SendKeys(tuitest.Down); err != nil {
+			t.Fatalf("move down to the delete row: %v", err)
+		}
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("take the delete row: %v", err)
+	}
+	if err := term.WaitForText("Deleted worktree", uiTimeout); err != nil {
+		t.Fatalf("no notification said the worktree was deleted: %v\n%s", err, term.Snapshot())
+	}
+
+	// The dwell is interactive time: switch to the plain session while the
+	// deleted one is still running.
+	col, row := findOnScreen(t, term, "plain")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		names := sessionNames(t, base)
+		return hasName(names, "plain") && !hasName(names, "repo-feat-one")
+	}, uiTimeout+6*time.Second); err != nil {
+		t.Fatalf("the dwell's quit did not follow the deleted session: %v\n%s", err, term.Snapshot())
+	}
+
+	// The client lives on in the session it switched to — alive is the
+	// assertion the pre-fix build fails, because its quit killed plain and
+	// took this client with it.
+	alive(t, term, "after the dwell's quit fired in another session")
+
+	if _, err := os.Stat(filepath.Join(base, "worktrees", "repo", "feat-one")); !os.IsNotExist(err) {
+		t.Errorf("the feat/one worktree directory survived the delete row: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", repo, "show-ref", "--verify", "refs/heads/feat/one").CombinedOutput(); err != nil {
+		t.Errorf("the feat/one branch did not survive the delete row: %v: %s", err, out)
 	}
 }

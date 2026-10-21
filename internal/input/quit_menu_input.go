@@ -9,7 +9,8 @@ import (
 // up, so every key stops here.
 //
 // The accelerators address rows by what they do, not by position: d detaches,
-// s opens the switcher, x runs the kill row. A second q runs the first row,
+// s opens the switcher, x runs the kill row, w deletes a worktree session's
+// worktree and quits. A second q runs the first row,
 // which in a daemon session is Detach, so "qq" muscle memory detaches a
 // session rather than killing it.
 func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -33,6 +34,8 @@ func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return runQuitMenuKind(o, app.QuitSwitchSession)
 	case "x":
 		return runQuitMenuKind(o, app.QuitKillGoNext, app.QuitKillAndQuit)
+	case "w":
+		return runQuitMenuKind(o, app.QuitDeleteWorktree)
 	}
 	return o, nil
 }

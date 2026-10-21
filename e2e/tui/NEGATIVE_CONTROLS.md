@@ -8655,3 +8655,16 @@ against c9f3e252 (dialog row in, gate absent), built with `git archive`.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | Kill-and-quit on a worktree session quit outright, leaving the worktree behind | The `sessionMenu` gate routing the row to `prefix_close_session` | The build before the gate | `TestSidebarKillQuitConfirmsOnWorktree` ("kill-and-quit on a worktree session did not confirm") | **caught** |
+
+## The dwell's quit follows the deleted session, not the client
+
+`TestQuitMenuDeleteFollowsASwitchDuringTheDwell` takes the quit menu's
+delete row and, inside the dwell before the client quits, switches to
+another session; the dwell's quit must kill the deleted session by name and
+leave the client in the one it switched to. Run on 2026-10-21, against a
+build of the fix's own commit with the name check reverted to an untargeted
+quit, built with `git archive`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The dwell's quit killed whatever session the client had switched to during the dwell | The `worktreeRemoveQuitMsg` name check in `update.go` | The build with the check reverted | `TestQuitMenuDeleteFollowsASwitchDuringTheDwell` ("the dwell's quit did not follow the deleted session: child exited") | **caught** |
