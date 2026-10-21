@@ -53,3 +53,26 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 		t.Fatalf("reply-approval = %v (sent %v)", p, sent)
 	}
 }
+
+// TestCockpitTabStepBeforeTheTranscriptAnswer: ] pressed before the daemon
+// says whether it has a transcript for the pane lands where it will stay.
+// The Changes tab used to be drawn until the daemon said there was no file,
+// so a ] in that window picked Changes, and the tab then went away and left
+// the focus on Thread instead of Checkpoints.
+func TestCockpitTabStepBeforeTheTranscriptAnswer(t *testing.T) {
+	m, _ := replyOS(t)
+	m.Windows[1].AgentState, m.Windows[1].AgentHarness = "working", "codex"
+	m.Width, m.Height = 100, 30
+	m.OpenInbox("")
+	e, ok := m.cockpitAgent()
+	if !ok || e.WindowID != "w-2" {
+		t.Fatalf("the agent is not selected: %+v", e)
+	}
+	_ = m.InboxThreadFetch()
+	m.CockpitTab(1)
+	m.Update(threadPageMsg{key: agentKey(e), err: &session.VerbCallError{Code: session.ErrVerbNoTranscript}})
+	r, _ := m.cockpitSelected()
+	if got, tabs := m.cockpitTab(), m.cockpitTabs(e, r); got != "Checkpoints" {
+		t.Fatalf("] before the answer left the focus on %q, tabs %v", got, tabs)
+	}
+}
