@@ -5,11 +5,18 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// PaletteCategoryKeybind tags the palette rows that lead into the keybind
-// manager.
+// PaletteCategoryKeybind tags the palette rows that run an action or lead
+// into the keybind manager.
 const PaletteCategoryKeybind = "Keybind"
+
+// PaletteRebindKey opens the keybind manager on the action under the cursor,
+// which is what enter did on these rows before it ran the action. ctrl+ and a
+// letter, like the session switcher's ctrl+r, because a printable key is part
+// of the query and tab reads as completion.
+const PaletteRebindKey = "ctrl+e"
 
 // PaletteKeybindToken is the leading character that turns the palette into a
 // search over actions rather than over commands: "#close" lists every action
@@ -27,9 +34,16 @@ const PaletteKeybindToken = "#"
 //
 // Per action rather than per binding: an action on three keys in two scopes is
 // still one thing the user wants to change, and three rows saying the same
-// words would only make the list harder to read. The row opens the manager
-// filtered to that action, where every one of its bindings is listed and can be
-// rebound or unbound separately.
+// words would only make the list harder to read.
+//
+// Enter runs the action, after the palette has closed, so it acts on the pane
+// and the mode underneath the way its key would. PaletteRebindKey opens the
+// manager filtered to that action instead, where every one of its bindings is
+// listed and can be rebound or unbound separately. An action that only a view
+// of its own reads (the rail, the Inbox, mail, copy mode, the lists) has
+// nothing to act on from here, and some of them act on a cursor the person
+// cannot see, such as the rail's file delete, so enter on its row opens the
+// manager as the rebind key does.
 //
 // The registry is read directly rather than through buildKeybindReport: the
 // palette has no use for the pane facts, and building them would put a /proc
@@ -45,6 +59,8 @@ func getKeybindPaletteItems(m *OS) []CommandPaletteItem {
 		// unbound is true only when no scope binds the action at all. An action
 		// unbound in one scope and bound in another is bound.
 		unbound bool
+		// runs is true when a scope the palette runs from binds the action.
+		runs bool
 	}
 	byAction := map[string]*entry{}
 	var order []string
@@ -55,6 +71,7 @@ func getKeybindPaletteItems(m *OS) []CommandPaletteItem {
 			byAction[b.Action] = e
 			order = append(order, b.Action)
 		}
+		e.runs = e.runs || paletteRunsScope(b.Scope)
 		if b.Unbound {
 			continue
 		}
@@ -74,25 +91,66 @@ func getKeybindPaletteItems(m *OS) []CommandPaletteItem {
 		if e.unbound {
 			shortcut = "unbound"
 		}
-		action := e.action
+		action, runs := e.action, e.runs
 		items = append(items, CommandPaletteItem{
 			// The action name is in the row so the fuzzy filter finds it: a user
 			// who read config.toml searches for "prefix_close_window", not for
 			// "Close current window".
 			Name:     e.desc + "  " + action,
 			Shortcut: shortcut,
+			Bind:     action,
 			Category: PaletteCategoryKeybind,
 			Keybind:  true,
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				// Filtered by the action name, which is unique and which the
-				// manager's filter matches against, so the overlay opens on that
-				// action's bindings and nothing else.
+				if runs {
+					if cmd, handled := m.runPaletteAction(action); handled {
+						return m, cmd
+					}
+				}
+				m.ShowNotification(action+" runs only in its own view. Its keys are listed here.", "info", m.Settings.NotificationDuration)
 				m.OpenKeybindManagerWith(action)
 				return m, nil
 			},
 		})
 	}
 	return items
+}
+
+// paletteRunsScope reports whether an action bound in scope can run from the
+// palette: the scopes window and terminal mode read, the leader and its
+// sub-prefixes, and the global keys.
+func paletteRunsScope(scope string) bool {
+	switch scope {
+	case config.ScopeGlobal, config.ScopeWindowMode, config.ScopeTerminalMode, config.ScopePrefix:
+		return true
+	}
+	return strings.HasPrefix(scope, config.ScopePrefix+".")
+}
+
+// runPaletteAction runs an action by name through the same dispatcher its key
+// goes through. handled is false when nothing here knows the action.
+func (m *OS) runPaletteAction(name string) (cmd tea.Cmd, handled bool) {
+	r := actionRunner.Load()
+	if r == nil {
+		return nil, false
+	}
+	handled, cmd = (*r)(name, m)
+	m.MarkAllDirty()
+	return cmd, handled
+}
+
+// RebindPaletteSelection opens the keybind manager filtered to the action on
+// the selected row, and does nothing on a row that is not an action. The name
+// is unique and the manager's filter matches against it, so the overlay opens
+// on that action's bindings and nothing else.
+func (m *OS) RebindPaletteSelection() {
+	filtered := m.filteredPaletteItems()
+	if m.CommandPaletteSelected < 0 || m.CommandPaletteSelected >= len(filtered) || !filtered[m.CommandPaletteSelected].Keybind {
+		return
+	}
+	action := filtered[m.CommandPaletteSelected].Bind
+	m.CloseCommandPalette()
+	m.OpenKeybindManagerWith(action)
 }
 
 // containsFold reports whether keys already holds s, ignoring case.

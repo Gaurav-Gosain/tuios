@@ -135,7 +135,8 @@ type CommandPaletteItem struct {
 	// for a session the pane its state was rolled up from, which draws a
 	// pane at rest as waiting.
 	AgentSubagents int
-	// Keybind marks a row that names one action to rebind. Those rows are
+	// Keybind marks a row that names one action, which enter runs and
+	// PaletteRebindKey rebinds. Those rows are
 	// reached only behind the "#" token and are hidden from every other query,
 	// which is what keeps a few hundred of them out of a list of twenty
 	// commands. See splitPaletteKeybinds.

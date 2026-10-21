@@ -41,11 +41,18 @@ const paletteStateHint = 2
 // paletteFooter is the palette's footer for this client: the "@ state" hint
 // waits until an agent has been seen, since the filter it announces lists
 // agent panes and there are none. Typing "@" works either way.
+//
+// A "#" search also shows the rebind key, after "run", since the rows it lists
+// are actions and the key does nothing on any other row.
 func (m *OS) paletteFooter() []overlay.Hint {
-	if m.agentsSeen() {
-		return paletteHints
+	hints := paletteHints
+	if !m.agentsSeen() {
+		hints = slices.Delete(slices.Clone(hints), paletteStateHint, paletteStateHint+1)
 	}
-	return slices.Delete(slices.Clone(paletteHints), paletteStateHint, paletteStateHint+1)
+	if keybinds, _ := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds && !m.fileSearch {
+		hints = slices.Insert(slices.Clone(hints), paletteStateHint, overlay.Hint{Key: PaletteRebindKey, Label: "rebind"})
+	}
+	return hints
 }
 
 // paletteLayout returns the palette's fitted inner width and visible row count.

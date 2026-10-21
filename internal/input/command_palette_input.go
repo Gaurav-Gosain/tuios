@@ -21,6 +21,10 @@ func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	case "enter":
 		return o, o.ActivateCommandPalette()
 
+	case app.PaletteRebindKey:
+		o.RebindPaletteSelection()
+		return o, nil
+
 	default:
 		if changed, _ := editFilterQuery(msg, &o.CommandPaletteQuery, true); changed {
 			o.CommandPaletteSelected = 0
