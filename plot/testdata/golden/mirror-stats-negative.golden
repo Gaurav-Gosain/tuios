@@ -1,0 +1,33 @@
+=== braille 30x4
+|       peak -1 · avg -2 · Σ -6|
+|⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀|
+|⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉|
+|                              |
+--- roles
+|       aaaaaaaaaaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                              |
+a=mute b=track (upper case is bold)
+=== blocks 30x4
+|       peak -1 · avg -2 · Σ -6|
+|▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁|
+|▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔|
+|                              |
+--- roles
+|       aaaaaaaaaaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                              |
+a=mute b=track (upper case is bold)
+=== ascii 30x4
+|       peak -1  avg -2  sum -6|
+|..............................|
+|..............................|
+|                              |
+--- roles
+|       aaaaaaaaaaaaaaaaaaaaaaa|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                              |
+a=mute b=track (upper case is bold)

@@ -127,6 +127,15 @@ var cases = []chartCase{
 			Shared: true, Peaks: true,
 		}.Draw(w, h, m)
 	}},
+	{"mirror-small", 6, 4, func(w, h int, m Mode) *Grid {
+		// A small value next to an empty one: in ASCII the small one is
+		// ":" and the empty baseline ".". All negative values give a peak
+		// that is negative, not 0.
+		return Mirror{Up: Series{Values: []float64{0, 1, 10, 0, 1, 10}}, Down: Series{Values: []float64{-3, -1, -2}}}.Draw(w, h, m)
+	}},
+	{"mirror-stats-negative", 30, 4, func(w, h int, m Mode) *Grid {
+		return Mirror{Up: Series{Values: []float64{-3, -1, -2}}, Stats: true}.Draw(w, h, m)
+	}},
 	{"mirror-short", 30, 3, func(w, h int, m Mode) *Grid {
 		// Too short for the peaks and the corners: only the columns.
 		return Mirror{

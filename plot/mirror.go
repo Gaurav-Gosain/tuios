@@ -2,45 +2,14 @@ package plot
 
 import (
 	"math"
-	"strconv"
 	"strings"
 )
-
-// MaxFade is the deepest step Fade takes a role toward the ground.
-const MaxFade = 3
-
-// Fade returns role r faded k steps toward the ground, k from 0 to MaxFade.
-// The name is the base role, a slash and the step, such as "series1/2".
-// Fade 0 is r itself. A chart grades a mark by height with fades, so the
-// tip of a column is brighter than its base.
-//
-// A host draws fade k as the colour of the base role mixed toward the
-// ground by about k fifths. At 16 colours it may draw fade 2 and 3 in the
-// normal ANSI slot of a bright base colour, or the base colour itself.
-// Faded splits the name, so a host that knows no fades can drop the step.
-func Fade(r Role, k int) Role {
-	base, _ := r.Faded()
-	k = max(0, min(MaxFade, k))
-	if k == 0 || base == None {
-		return base
-	}
-	return Role(string(base) + "/" + strconv.Itoa(k))
-}
-
-// Faded returns the base role and the fade step of a role from Fade. A role
-// with no step returns itself and 0.
-func (r Role) Faded() (base Role, k int) {
-	s := string(r)
-	if n := len(s); n >= 3 && s[n-2] == '/' && s[n-1] >= '1' && s[n-1] <= '0'+MaxFade {
-		return Role(s[:n-2]), int(s[n-1] - '0')
-	}
-	return r, 0
-}
 
 // Mirror is two series around one baseline: Up rises above it and Down
 // hangs below it, such as download and upload, tokens in and out, or reads
 // and writes. Each value is one column of dots, graded in colour by height,
-// and the newest value is at the right edge, as a monitor scrolls.
+// and the newest value is at the right edge, as a monitor scrolls. A value
+// at or below 0 draws no column.
 //
 // The idea and the look come from iptop by franlol
 // (https://github.com/franlol/iptop, MIT).
@@ -62,8 +31,8 @@ type Mirror struct {
 	// Peaks marks the highest value of each half with a dot and the value:
 	// above Up and below Down.
 	Peaks bool
-	// Stats writes "peak · avg · Σ" of the values drawn at the right of
-	// each half's corner row: the top row for Up, the bottom row for Down.
+	// Stats writes "peak · avg · Σ" of the finite values in view at the
+	// right of each half's corner row: the top row for Up, the bottom row for Down.
 	// The parts that do not fit are left out from the right.
 	Stats bool
 	// Format writes the values of the peaks and the stats. Nil means
@@ -116,7 +85,8 @@ func peakOf(vals []float64) (float64, int) {
 
 // Draw draws the chart into a w by h grid. From the top: Up's corner row,
 // Up's peak, Up, Down, Down's peak and Down's corner row. When the grid is
-// short, the peak rows go first, then the corner rows.
+// short, the peak rows go first, then the corner rows. Down needs a row of
+// its own: in a grid one row high, only Up draws.
 func (mr Mirror) Draw(w, h int, m Mode) *Grid {
 	g := NewGrid(w, h)
 	if g.W == 0 || g.H == 0 || len(mr.Up.Values) == 0 && len(mr.Down.Values) == 0 {
@@ -270,9 +240,11 @@ func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 			case lv <= 0:
 				continue
 			case m == ASCII:
+				// A partial cell is ":", so a small value reads apart from
+				// the "." of an empty baseline.
 				glyph = "#"
 				if lv < 4 {
-					glyph = "."
+					glyph = ":"
 				}
 			case lv >= 8:
 				glyph = "█"
@@ -335,10 +307,9 @@ func (mr Mirror) corner(g *Grid, y int, name string, hf half, m Mode) {
 	if !mr.Stats {
 		return
 	}
-	peak, sum, n := 0.0, 0.0, 0
+	sum, n := 0.0, 0
 	for _, v := range hf.vals {
 		if finite(v) {
-			peak = math.Max(peak, v)
 			sum += v
 			n++
 		}
@@ -346,6 +317,7 @@ func (mr Mirror) corner(g *Grid, y int, name string, hf half, m Mode) {
 	if n == 0 {
 		return
 	}
+	peak, _ := peakOf(hf.vals)
 	f := mr.format()
 	sep, total := " · ", "Σ "
 	if m == ASCII {
