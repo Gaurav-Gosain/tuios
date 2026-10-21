@@ -1,7 +1,7 @@
 === truecolor 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                                │|
-|│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
+|│  412 passed   3 failed   9 skipped                             │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
 |│                                  ▅▅▅▅▅▅                        │|
@@ -16,7 +16,7 @@
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addfffdeeeeeedddgdeeeeeedddhdeeeeeeedddddddddddddaaaaaaaadcccccdda|
+|addfffdeeeeeedddgdeeeeeedddhdeeeeeeeddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
 |addddddddddddddddddddddddddddddddddiiiiiidddddddddddddddddddddddda|
@@ -24,8 +24,8 @@
 |addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddjjjjjjjdddddddddddddddjjjjddddddddddddddddddddddddddkkkkdidda|
-|addlmnnnnnnnnnnnnnnnnmmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodda|
+|addddjjjjjjjdddddddddddddddjjjjddddddddddddddddddddddddddhhhhdidda|
+|addklmmmmmmmmmmmmmmmmllllllnnnnnnnnnnnnnnlllllllllllllllllnnnnndda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
@@ -38,15 +38,14 @@ g: fg=error bg=panel bold
 h: fg=dim bg=panel bold
 i: fg=accent-bright bg=panel
 j: fg=mute bg=panel
-k: fg=mute bg=panel bold
-l: fg=accent bg=surface
-m: bg=surface
-n: fg=dim bg=surface
-o: fg=fg bg=surface bold
+k: fg=accent bg=surface
+l: bg=surface
+m: fg=dim bg=surface
+n: fg=fg bg=surface bold
 === 256 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                                │|
-|│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
+|│  412 passed   3 failed   9 skipped                             │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
 |│                                  ▅▅▅▅▅▅                        │|
@@ -61,7 +60,7 @@ o: fg=fg bg=surface bold
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addfffdeeeeeedddgdeeeeeedddhdeeeeeeedddddddddddddaaaaaaaadcccccdda|
+|addfffdeeeeeedddgdeeeeeedddhdeeeeeeeddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
 |addddddddddddddddddddddddddddddddddiiiiiidddddddddddddddddddddddda|
@@ -69,8 +68,8 @@ o: fg=fg bg=surface bold
 |addiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiiddiiiiiidddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addjdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddjjjjjjjdddddddddddddddjjjjddddddddddddddddddddddddddkkkkdidda|
-|addlmnnnnnnnnnnnnnnnnmmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodda|
+|addddjjjjjjjdddddddddddddddjjjjddddddddddddddddddddddddddhhhhdidda|
+|addklmmmmmmmmmmmmmmmmllllllnnnnnnnnnnnnnnlllllllllllllllllnnnnndda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
@@ -83,15 +82,14 @@ g: fg=error bg=panel bold
 h: fg=dim bg=panel bold
 i: fg=accent-bright bg=panel
 j: fg=mute bg=panel
-k: fg=mute bg=panel bold
-l: fg=accent bg=surface
-m: bg=surface
-n: fg=dim bg=surface
-o: fg=fg bg=surface bold
+k: fg=accent bg=surface
+l: bg=surface
+m: fg=dim bg=surface
+n: fg=fg bg=surface bold
 === 16 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                                │|
-|│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
+|│  412 passed   3 failed   9 skipped                             │|
 |│                                                                │|
 |│  Seconds per run, last 7                                       │|
 |│                                  ▅▅▅▅▅▅                        │|
@@ -106,7 +104,7 @@ o: fg=fg bg=surface bold
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
 |a                                                                a|
-|a  eee dddddd   f dddddd   g ddddddd             aaaaaaaa ccccc  a|
+|a  eee dddddd   f dddddd   g ddddddd                             a|
 |a                                                                a|
 |a  gggggggbgggbggggbggggbg                                       a|
 |a                                  hhhhhh                        a|
@@ -114,8 +112,8 @@ o: fg=fg bg=surface bold
 |a  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh  hhhhhh        a|
 |a                                                                a|
 |a  i ccccccccbbf                                                 a|
-|a    iiiiiii               iiii                          jjjj h  a|
-|a  akllllllllllllllllkkkkkkmmmmmmmmmmmmmmkkkkkkkkkkkkkkkkkmmmmm  a|
+|a    iiiiiii               iiii                          gggg h  a|
+|a  ajkkkkkkkkkkkkkkkkjjjjjjlllllllllllllljjjjjjjjjjjjjjjjjlllll  a|
 |a                                                                a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
@@ -127,14 +125,13 @@ f: fg=error bold
 g: fg=dim bold
 h: fg=accent-bright
 i: fg=mute
-j: fg=mute bold
-k: reverse
-l: fg=dim reverse
-m: fg=dim bold reverse
+j: reverse
+k: fg=dim reverse
+l: fg=dim bold reverse
 === ascii 66x14
 |+- go test ./... ---------------------- from claude in api-auth -+|
 ||                                                                ||
-||  412 passed   3 failed   9 skipped             [######] 99.3%  ||
+||  412 passed   3 failed   9 skipped                             ||
 ||                                                                ||
 ||  Seconds per run, last 7                                       ||
 ||                                  ######                        ||
@@ -149,7 +146,7 @@ m: fg=dim bold reverse
 --- styles
 |  aaaaaaaaaaaaaaa                                                 |
 |                                                                  |
-|   aaa          a          a                              aaaaa   |
+|   aaa          a          a                                      |
 |                                                                  |
 |   aaaaaaaaaaaaaaaaaaaaaaa                                        |
 |                                                                  |

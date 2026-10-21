@@ -25,6 +25,8 @@ type Options struct {
 	// palette's depth is ASCII.
 	Charts *plot.Mode
 	// Ground is the role under the whole surface. Empty means panel.
+	// GroundNone paints no ground: the surface sits on the host's own,
+	// such as a terminal pane's background.
 	Ground string
 	// Limits bound the document and its patches. Nil means
 	// tml.DefaultLimits.
@@ -338,6 +340,10 @@ func (s *Surface) Render(w, h int) *Buffer {
 	s.full = false
 	return s.out
 }
+
+// GroundNone is the Ground that paints none. It names no role, so its
+// colour is always nil.
+const GroundNone = "none"
 
 func (s *Surface) ground() string {
 	if s.opts.Ground != "" {

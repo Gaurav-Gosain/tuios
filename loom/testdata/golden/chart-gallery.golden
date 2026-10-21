@@ -6,14 +6,14 @@
 |│  ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██      ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█      ▎                           ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁      ████████████████████████████████████████████████████▌░░░░░░░░░░░░░░░░░░░░ disk 72%  │|
 |│                                                                                                                                                                                                      │|
 |│  Time by package ─────────────────────────────────────────────────────────────────  seconds    Suite time, last 30 runs                                              ■ passed  ■ failed  ■ this run  │|
-|│  internal/session    ██████████████████████████████████████████████████████████████████ 6.2    26┤                                                                                                   │|
-|│  internal/app        ███████████████████████████████████████████████████▏ · · · · · · · 4.8      │                                                                                                   │|
-|│  vt                  █████████████████████████████████· · · · · · · · · · · · · · · · · 3.1      │               ▃▃                            ▆▆                                                    │|
-|│  internal/tape       ██████████████▉· · · · · · · · · · · · · · · · · · · · · · · · · · 1.4      │               ██             ▂▂             ██                                                    │|
-|│  internal/config     █████████▋ · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.9      │      ▅▅       ██             ██             ██                               ▂▂                   │|
-|│  internal/terminal   ████████▌· · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.8    21┤▂▂    ██       ██             ██ ▄▄          ██ ▇▇             ▃▃             ██                   │|
-|│  internal/federation ██████▍· · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.6      │██ ▆▆ ██    ▁▁ ██ ██ ▄▄       ██ ██       ▃▃ ██ ██ ▇▇ ▂▂       ██    ▅▅       ██ ▄▄ ▃▃             │|
-|│  progstatus          ███▎ · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.3      │██ ██ ██ ▅▅ ██ ██ ██ ██ ▄▄ ▇▇ ██ ██ ██ ▄▄ ██ ██ ██ ██ ██ ▃▃ ▆▆ ██ ▅▅ ██ ▂▂ ██ ██ ██ ██             │|
+|│  internal/session    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    26┤                                                                                                   │|
+|│  internal/app        ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 4.8      │                                                                                                   │|
+|│  vt                  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1      │               ▃▃                            ▆▆                                                    │|
+|│  internal/tape       ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4      │               ██             ▂▂             ██                                                    │|
+|│  internal/config     ▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9      │      ▅▅       ██             ██             ██                               ▂▂                   │|
+|│  internal/terminal   ▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.8    21┤▂▂    ██       ██             ██ ▄▄          ██ ▇▇             ▃▃             ██                   │|
+|│  internal/federation ▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.6      │██ ▆▆ ██    ▁▁ ██ ██ ▄▄       ██ ██       ▃▃ ██ ██ ▇▇ ▂▂       ██    ▅▅       ██ ▄▄ ▃▃             │|
+|│  progstatus          ▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.3      │██ ██ ██ ▅▅ ██ ██ ██ ██ ▄▄ ▇▇ ██ ██ ██ ▄▄ ██ ██ ██ ██ ██ ▃▃ ▆▆ ██ ▅▅ ██ ▂▂ ██ ██ ██ ██             │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██             │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ▇▇          │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██          │|
@@ -63,13 +63,13 @@
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addccccbccbcccccccdvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddwwwwwwwddddxxxxxbxxxxxbxxxxbxxbxxxxddddddddddddddddddddddddddddddddddddddddddddddrdwwwwwwddydwwwwwwddzdwwwwdwwwdda|
 |addjjjjjjjjjjjjjjjjddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydAAAddddwwvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjjjjjjjjjjddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydvdvdvdvdvdvdvdAAAddddddvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjddddddddddddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvdddddddddddddddyyddddddddddddddddddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjjjjjjjjjjjdddddddyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvdddddddddddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjjjjjjjjjjjjjdddddyyyyyyyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvddddddrrdddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddyyddddddddddddddddddda|
-|addjjjjjjjjjjjjjjjjjdddyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddwwvrrddddrrdddddddyydddddddddddddrrdrrddddddddddyydrrdddddddddddddrrdddddddddddddyyddddddddddddddddddda|
-|addjjjjjjjjjjjjjjjjjjjdyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvrrdrrdrrddddrrdyydrrdrrdddddddrrdrrdddddddrrdyydrrdrrdrrdddddddrrddddrrdddddddyydrrdrrddddddddddddda|
-|addjjjjjjjjjjddddddddddyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrddddddddddddda|
+|addjjjjjjjjjjjjddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyllllllllllllllldAAAddddddvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjddddddddddddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyllllllllllllllllllllllllllllllllldAAAddddddvdddddddddddddddyyddddddddddddddddddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjjjjjjjjjjjdddddddyyyyyyyyyyyyyyyllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvdddddddddddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjjjjjjjjjjjjjdddddyyyyyyyyyylllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvddddddrrdddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddyyddddddddddddddddddda|
+|addjjjjjjjjjjjjjjjjjdddyyyyyyyyyllllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddwwvrrddddrrdddddddyydddddddddddddrrdrrddddddddddyydrrdddddddddddddrrdddddddddddddyyddddddddddddddddddda|
+|addjjjjjjjjjjjjjjjjjjjdyyyyyyyllllllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvrrdrrdrrddddrrdyydrrdrrdddddddrrdrrdddddddrrdyydrrdrrdrrdddddddrrddddrrdddddddyydrrdrrddddddddddddda|
+|addjjjjjjjjjjddddddddddyyyllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrddddddddddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrddddddddddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdzzdddddddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdzzdddddddddda|
@@ -152,14 +152,14 @@ z: fg=accent-bright bg=panel
 |│  ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██      ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█      ▎                           ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁      ████████████████████████████████████████████████████▌░░░░░░░░░░░░░░░░░░░░ disk 72%  │|
 |│                                                                                                                                                                                                      │|
 |│  Time by package ─────────────────────────────────────────────────────────────────  seconds    Suite time, last 30 runs                                              ■ passed  ■ failed  ■ this run  │|
-|│  internal/session    ██████████████████████████████████████████████████████████████████ 6.2    26┤                                                                                                   │|
-|│  internal/app        ███████████████████████████████████████████████████▏ · · · · · · · 4.8      │                                                                                                   │|
-|│  vt                  █████████████████████████████████· · · · · · · · · · · · · · · · · 3.1      │               ▃▃                            ▆▆                                                    │|
-|│  internal/tape       ██████████████▉· · · · · · · · · · · · · · · · · · · · · · · · · · 1.4      │               ██             ▂▂             ██                                                    │|
-|│  internal/config     █████████▋ · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.9      │      ▅▅       ██             ██             ██                               ▂▂                   │|
-|│  internal/terminal   ████████▌· · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.8    21┤▂▂    ██       ██             ██ ▄▄          ██ ▇▇             ▃▃             ██                   │|
-|│  internal/federation ██████▍· · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.6      │██ ▆▆ ██    ▁▁ ██ ██ ▄▄       ██ ██       ▃▃ ██ ██ ▇▇ ▂▂       ██    ▅▅       ██ ▄▄ ▃▃             │|
-|│  progstatus          ███▎ · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · 0.3      │██ ██ ██ ▅▅ ██ ██ ██ ██ ▄▄ ▇▇ ██ ██ ██ ▄▄ ██ ██ ██ ██ ██ ▃▃ ▆▆ ██ ▅▅ ██ ▂▂ ██ ██ ██ ██             │|
+|│  internal/session    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    26┤                                                                                                   │|
+|│  internal/app        ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 4.8      │                                                                                                   │|
+|│  vt                  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1      │               ▃▃                            ▆▆                                                    │|
+|│  internal/tape       ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4      │               ██             ▂▂             ██                                                    │|
+|│  internal/config     ▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9      │      ▅▅       ██             ██             ██                               ▂▂                   │|
+|│  internal/terminal   ▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.8    21┤▂▂    ██       ██             ██ ▄▄          ██ ▇▇             ▃▃             ██                   │|
+|│  internal/federation ▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.6      │██ ▆▆ ██    ▁▁ ██ ██ ▄▄       ██ ██       ▃▃ ██ ██ ▇▇ ▂▂       ██    ▅▅       ██ ▄▄ ▃▃             │|
+|│  progstatus          ▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.3      │██ ██ ██ ▅▅ ██ ██ ██ ██ ▄▄ ▇▇ ██ ██ ██ ▄▄ ██ ██ ██ ██ ██ ▃▃ ▆▆ ██ ▅▅ ██ ▂▂ ██ ██ ██ ██             │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██             │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ▇▇          │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██          │|
@@ -209,13 +209,13 @@ z: fg=accent-bright bg=panel
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |addccccbccbcccccccdvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddwwwwwwwddddxxxxxbxxxxxbxxxxbxxbxxxxddddddddddddddddddddddddddddddddddddddddddddddrdwwwwwwddydwwwwwwddzdwwwwdwwwdda|
 |addjjjjjjjjjjjjjjjjddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydAAAddddwwvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjjjjjjjjjjddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyydvdvdvdvdvdvdvdAAAddddddvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjddddddddddddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvdddddddddddddddyyddddddddddddddddddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjjjjjjjjjjjdddddddyyyyyyyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvdddddddddddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addjjjjjjjjjjjjjjjdddddyyyyyyyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvddddddrrdddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddyyddddddddddddddddddda|
-|addjjjjjjjjjjjjjjjjjdddyyyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddwwvrrddddrrdddddddyydddddddddddddrrdrrddddddddddyydrrdddddddddddddrrdddddddddddddyyddddddddddddddddddda|
-|addjjjjjjjjjjjjjjjjjjjdyyyyyyyvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvrrdrrdrrddddrrdyydrrdrrdddddddrrdrrdddddddrrdyydrrdrrdrrdddddddrrddddrrdddddddyydrrdrrddddddddddddda|
-|addjjjjjjjjjjddddddddddyyyydvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdvdAAAddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrddddddddddddda|
+|addjjjjjjjjjjjjddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyllllllllllllllldAAAddddddvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjddddddddddddddddddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyllllllllllllllllllllllllllllllllldAAAddddddvdddddddddddddddyyddddddddddddddddddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjjjjjjjjjjjdddddddyyyyyyyyyyyyyyyllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvdddddddddddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addjjjjjjjjjjjjjjjdddddyyyyyyyyyylllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvddddddrrdddddddyydddddddddddddrrdddddddddddddyydddddddddddddddddddddddddddddddyyddddddddddddddddddda|
+|addjjjjjjjjjjjjjjjjjdddyyyyyyyyyllllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddwwvrrddddrrdddddddyydddddddddddddrrdrrddddddddddyydrrdddddddddddddrrdddddddddddddyyddddddddddddddddddda|
+|addjjjjjjjjjjjjjjjjjjjdyyyyyyyllllllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvrrdrrdrrddddrrdyydrrdrrdddddddrrdrrdddddddrrdyydrrdrrdrrdddddddrrddddrrdddddddyydrrdrrddddddddddddda|
+|addjjjjjjjjjjddddddddddyyyllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllldAAAddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrddddddddddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrddddddddddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdzzdddddddddda|
 |addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdrrdrrdrrdrrdrrdrrdrrdrrdyydrrdrrdzzdddddddddda|
@@ -297,14 +297,14 @@ z: fg=accent-bright bg=panel
 |│  ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██      ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█      ▎                           ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁      ████████████████████████████████████████████████████▌░░░░░░░░░░░░░░░░░░░░ disk 72%  │|
 |│                                                                                                                                                                                                      │|
 |│  Time by package ─────────────────────────────────────────────────────────────────  seconds    Suite time, last 30 runs                                              ■ passed  ■ failed  ■ this run  │|
-|│  internal/session    ██████████████████████████████████████████████████████████████████ 6.2    26┤                                                                                                   │|
-|│  internal/app        ███████████████████████████████████████████████████▏               4.8      │                                                                                                   │|
-|│  vt                  █████████████████████████████████                                  3.1      │               ▃▃                            ▆▆                                                    │|
-|│  internal/tape       ██████████████▉                                                    1.4      │               ██             ▂▂             ██                                                    │|
-|│  internal/config     █████████▋                                                         0.9      │      ▅▅       ██             ██             ██                               ▂▂                   │|
-|│  internal/terminal   ████████▌                                                          0.8    21┤▂▂    ██       ██             ██ ▄▄          ██ ▇▇             ▃▃             ██                   │|
-|│  internal/federation ██████▍                                                            0.6      │██ ▆▆ ██    ▁▁ ██ ██ ▄▄       ██ ██       ▃▃ ██ ██ ▇▇ ▂▂       ██    ▅▅       ██ ▄▄ ▃▃             │|
-|│  progstatus          ███▎                                                               0.3      │██ ██ ██ ▅▅ ██ ██ ██ ██ ▄▄ ▇▇ ██ ██ ██ ▄▄ ██ ██ ██ ██ ██ ▃▃ ▆▆ ██ ▅▅ ██ ▂▂ ██ ██ ██ ██             │|
+|│  internal/session    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    26┤                                                                                                   │|
+|│  internal/app        ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                4.8      │                                                                                                   │|
+|│  vt                  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                  3.1      │               ▃▃                            ▆▆                                                    │|
+|│  internal/tape       ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                                    1.4      │               ██             ▂▂             ██                                                    │|
+|│  internal/config     ▄▄▄▄▄▄▄▄▄▖                                                         0.9      │      ▅▅       ██             ██             ██                               ▂▂                   │|
+|│  internal/terminal   ▄▄▄▄▄▄▄▄▖                                                          0.8    21┤▂▂    ██       ██             ██ ▄▄          ██ ▇▇             ▃▃             ██                   │|
+|│  internal/federation ▄▄▄▄▄▄▖                                                            0.6      │██ ▆▆ ██    ▁▁ ██ ██ ▄▄       ██ ██       ▃▃ ██ ██ ▇▇ ▂▂       ██    ▅▅       ██ ▄▄ ▃▃             │|
+|│  progstatus          ▄▄▄                                                                0.3      │██ ██ ██ ▅▅ ██ ██ ██ ██ ▄▄ ▇▇ ██ ██ ██ ▄▄ ██ ██ ██ ██ ██ ▃▃ ▆▆ ██ ▅▅ ██ ▂▂ ██ ██ ██ ██             │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██             │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ▇▇          │|
 |│                                                                                                  │██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██          │|
@@ -354,13 +354,13 @@ z: fg=accent-bright bg=panel
 |a                                                                                                                                                                                                      a|
 |a  ccccbccbccccccc hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh  hhhhhhh    kkkkkbkkkkkbkkkkbkkbkkkk                                              l hhhhhh  f hhhhhh  o hhhh hhh  a|
 |a  eeeeeeeeeeeeeeee    ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ggg    hhh                                                                                                   a|
-|a  eeeeeeeeeeee        ffffffffffffffffffffffffffffffffffffffffffffffffffff               ggg      h                                                                                                   a|
+|a  eeeeeeeeeeee        fffffffffffffffffffffffffffffffffffffffffffffffffff                ggg      h                                                                                                   a|
 |a  ee                  fffffffffffffffffffffffffffffffff                                  ggg      h               ff                            ff                                                    a|
 |a  eeeeeeeeeeeee       fffffffffffffff                                                    ggg      h               ff             ll             ff                                                    a|
 |a  eeeeeeeeeeeeeee     ffffffffff                                                         ggg      h      ll       ff             ll             ff                               ff                   a|
 |a  eeeeeeeeeeeeeeeee   fffffffff                                                          ggg    hhhll    ll       ff             ll ll          ff ll             ll             ff                   a|
 |a  eeeeeeeeeeeeeeeeeee fffffff                                                            ggg      hll ll ll    ll ff ll ll       ll ll       ll ff ll ll ll       ll    ll       ff ll ll             a|
-|a  eeeeeeeeee          ffff                                                               ggg      hll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ll ff ll ll             a|
+|a  eeeeeeeeee          fff                                                                ggg      hll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ll ff ll ll             a|
 |a                                                                                                  hll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ll ff ll ll             a|
 |a                                                                                                  hll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ll ff ll ll oo          a|
 |a                                                                                                  hll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ff ll ll ll ll ll ll ll ll ll ll ff ll ll oo          a|

@@ -7,11 +7,11 @@
 |│ 412 passed   5 failed                   ━━━━━━━━━━━━━━ 98.8% │|
 |│                                                              │|
 |│ Time by package ───────────────────────────────────  seconds │|
-|│ internal/session ███████████████████████████████████████ 6.2 │|
-|│ internal/app     ██████████████████████████████▎· · · ·  4.8 │|
-|│ vt               ███████████████████▌ · · · · · · · · ·  3.1 │|
-|│ internal/tape    ████████▊· · · · · · · · · · · · · · ·  1.4 │|
-|│ internal/config  █████▋ · · · · · · · · · · · · · · · ·  0.9 │|
+|│ internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2 │|
+|│ internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁ 4.8 │|
+|│ vt               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1 │|
+|│ internal/tape    ▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4 │|
+|│ internal/config  ▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9 │|
 |│                                                              │|
 |│ ▾ Failures  5                                                │|
 |│   PACKAGE               TEST                     TIME ▼      │|
@@ -35,31 +35,32 @@
 |adcccccccddddffffffffdfddddfffddddddddddddddddddddddddddddddddda|
 |adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adhhhdeeeeeedddideeeeeedddddddddddddddddddjjjjjjjjjjjjjjdcccccda|
+|adhhhdeeeeeedddideeeeeedddddddddddddddddddjjjjjjjjjjjjjkdcccccda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdgggggggggggggggggggggggggggggggggggddfffffffda|
-|adeeeeeeeeeeeeeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdlllda|
-|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgdgdgdgddlllda|
-|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkdgdgdgdgdgdgdgdgdgddlllda|
-|adeeeeeeeeeeeeeddddkkkkkkkkkgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
-|adeeeeeeeeeeeeeeeddkkkkkkdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
+|adeeeeeeeeeeeeeeeedllllllllllllllllllllllllllllllllllllllldmmmda|
+|adeeeeeeeeeeeedddddllllllllllllllllllllllllllllllkkkkkkkkkdmmmda|
+|adeedddddddddddddddllllllllllllllllllllkkkkkkkkkkkkkkkkkkkdmmmda|
+|adeeeeeeeeeeeeeddddlllllllllkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdmmmda|
+|adeeeeeeeeeeeeeeeddllllllkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdmmmda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddmmmmdndddddda|
-|adopqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrpppppda|
-|adddeeeeeeeeeeeeeeeeddddddllllllllllllllllddddddddddllllldddddda|
-|adddeeeeeeeeeeeeddddddddddllllllllllllldddddddddddddllllldddddda|
-|adddeeeeeeeeeeeeddddddddddllllllllllllllllllldddddddllllldddddda|
-|adddeeddddddddddddddddddddllllllllllllllllllllddddddllllldddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddnnnndodddddda|
+|adpqrrrrrrrrrrrrrrrrqqqqqqssssssssssssssqqqqqqqqqqqqsssssqqqqqda|
+|adddeeeeeeeeeeeeeeeeddddddmmmmmmmmmmmmmmmmddddddddddmmmmmdddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmdddddddddddddmmmmmdddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmmmmmmmdddddddmmmmmdddddda|
+|adddeeddddddddddddddddddddmmmmmmmmmmmmmmmmmmmmddddddmmmmmdddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adstsuvvvvvuvvvvvvuddwxwpyyyypyyypddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddzdffffdzzzdffffdzzzdfffffda|
+|adtutvwwwwwvwwwwwwvddxyxqzzzzqzzzqddddddddddddddddddddddddddddda|
+|addddddddddddddddddddddddddddddddddddAdffffdAAAdffffdAAAdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+A: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -70,22 +71,22 @@ g: fg=edge bg=panel
 h: fg=success bg=panel bold
 i: fg=error bg=panel bold
 j: fg=success bg=panel
-k: fg=error bg=panel
-l: fg=fg bg=panel
-m: fg=mute bg=panel bold
-n: fg=accent-bright bg=panel
-o: fg=accent bg=surface
-p: bg=surface
-q: fg=dim bg=surface
-r: fg=fg bg=surface bold
-s: bg=accent bold
-t: fg=fg bg=accent bold
-u: bg=accent
-v: fg=fg bg=accent
-w: bg=card bold
-x: fg=accent-bright bg=card bold
-y: fg=fg bg=surface
-z: fg=accent-bright bg=panel bold
+k: fg=track bg=panel
+l: fg=error bg=panel
+m: fg=fg bg=panel
+n: fg=dim bg=panel bold
+o: fg=accent-bright bg=panel
+p: fg=accent bg=surface
+q: bg=surface
+r: fg=dim bg=surface
+s: fg=fg bg=surface bold
+t: bg=accent bold
+u: fg=fg bg=accent bold
+v: bg=accent
+w: fg=fg bg=accent
+x: bg=surface bold
+y: fg=accent-bright bg=surface bold
+z: fg=fg bg=surface
 === 256 64x30
 |╭─ Test run ───────────────────────── from claude in api-auth ─╮|
 |│                                                              │|
@@ -95,11 +96,11 @@ z: fg=accent-bright bg=panel bold
 |│ 412 passed   5 failed                   ━━━━━━━━━━━━━━ 98.8% │|
 |│                                                              │|
 |│ Time by package ───────────────────────────────────  seconds │|
-|│ internal/session ███████████████████████████████████████ 6.2 │|
-|│ internal/app     ██████████████████████████████▎· · · ·  4.8 │|
-|│ vt               ███████████████████▌ · · · · · · · · ·  3.1 │|
-|│ internal/tape    ████████▊· · · · · · · · · · · · · · ·  1.4 │|
-|│ internal/config  █████▋ · · · · · · · · · · · · · · · ·  0.9 │|
+|│ internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2 │|
+|│ internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁ 4.8 │|
+|│ vt               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1 │|
+|│ internal/tape    ▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4 │|
+|│ internal/config  ▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9 │|
 |│                                                              │|
 |│ ▾ Failures  5                                                │|
 |│   PACKAGE               TEST                     TIME ▼      │|
@@ -123,31 +124,32 @@ z: fg=accent-bright bg=panel bold
 |adcccccccddddffffffffdfddddfffddddddddddddddddddddddddddddddddda|
 |adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adhhhdeeeeeedddideeeeeedddddddddddddddddddjjjjjjjjjjjjjjdcccccda|
+|adhhhdeeeeeedddideeeeeedddddddddddddddddddjjjjjjjjjjjjjkdcccccda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdgggggggggggggggggggggggggggggggggggddfffffffda|
-|adeeeeeeeeeeeeeeeedkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdlllda|
-|adeeeeeeeeeeeedddddkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgdgdgdgddlllda|
-|adeedddddddddddddddkkkkkkkkkkkkkkkkkkkkdgdgdgdgdgdgdgdgdgddlllda|
-|adeeeeeeeeeeeeeddddkkkkkkkkkgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
-|adeeeeeeeeeeeeeeeddkkkkkkdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgddlllda|
+|adeeeeeeeeeeeeeeeedllllllllllllllllllllllllllllllllllllllldmmmda|
+|adeeeeeeeeeeeedddddllllllllllllllllllllllllllllllkkkkkkkkkdmmmda|
+|adeedddddddddddddddllllllllllllllllllllkkkkkkkkkkkkkkkkkkkdmmmda|
+|adeeeeeeeeeeeeeddddlllllllllkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdmmmda|
+|adeeeeeeeeeeeeeeeddllllllkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkdmmmda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddmmmmdndddddda|
-|adopqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrpppppda|
-|adddeeeeeeeeeeeeeeeeddddddllllllllllllllllddddddddddllllldddddda|
-|adddeeeeeeeeeeeeddddddddddllllllllllllldddddddddddddllllldddddda|
-|adddeeeeeeeeeeeeddddddddddllllllllllllllllllldddddddllllldddddda|
-|adddeeddddddddddddddddddddllllllllllllllllllllddddddllllldddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddnnnndodddddda|
+|adpqrrrrrrrrrrrrrrrrqqqqqqssssssssssssssqqqqqqqqqqqqsssssqqqqqda|
+|adddeeeeeeeeeeeeeeeeddddddmmmmmmmmmmmmmmmmddddddddddmmmmmdddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmdddddddddddddmmmmmdddddda|
+|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmmmmmmmdddddddmmmmmdddddda|
+|adddeeddddddddddddddddddddmmmmmmmmmmmmmmmmmmmmddddddmmmmmdddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adstsuvvvvvuvvvvvvuddwxwpyyyypyyypddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddzdffffdzzzdffffdzzzdfffffda|
+|adtutvwwwwwvwwwwwwvddxyxqzzzzqzzzqddddddddddddddddddddddddddddda|
+|addddddddddddddddddddddddddddddddddddAdffffdAAAdffffdAAAdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+A: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
@@ -158,22 +160,22 @@ g: fg=edge bg=panel
 h: fg=success bg=panel bold
 i: fg=error bg=panel bold
 j: fg=success bg=panel
-k: fg=error bg=panel
-l: fg=fg bg=panel
-m: fg=mute bg=panel bold
-n: fg=accent-bright bg=panel
-o: fg=accent bg=surface
-p: bg=surface
-q: fg=dim bg=surface
-r: fg=fg bg=surface bold
-s: bg=accent bold
-t: fg=fg bg=accent bold
-u: bg=accent
-v: fg=fg bg=accent
-w: bg=edge bold
-x: fg=accent-bright bg=edge bold
-y: fg=fg bg=surface
-z: fg=accent-bright bg=panel bold
+k: fg=success-tint bg=panel
+l: fg=error bg=panel
+m: fg=fg bg=panel
+n: fg=dim bg=panel bold
+o: fg=accent-bright bg=panel
+p: fg=accent bg=surface
+q: bg=surface
+r: fg=dim bg=surface
+s: fg=fg bg=surface bold
+t: bg=accent bold
+u: fg=fg bg=accent bold
+v: bg=accent
+w: fg=fg bg=accent
+x: bg=surface bold
+y: fg=accent-bright bg=surface bold
+z: fg=fg bg=surface
 === 16 64x30
 |╭─ Test run ───────────────────────── from claude in api-auth ─╮|
 |│                                                              │|
@@ -183,11 +185,11 @@ z: fg=accent-bright bg=panel bold
 |│ 412 passed   5 failed                   ━━━━━━━━━━━━━━ 98.8% │|
 |│                                                              │|
 |│ Time by package ───────────────────────────────────  seconds │|
-|│ internal/session ███████████████████████████████████████ 6.2 │|
-|│ internal/app     ██████████████████████████████▎         4.8 │|
-|│ vt               ███████████████████▌                    3.1 │|
-|│ internal/tape    ████████▊                               1.4 │|
-|│ internal/config  █████▋                                  0.9 │|
+|│ internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2 │|
+|│ internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄          4.8 │|
+|│ vt               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖                    3.1 │|
+|│ internal/tape    ▄▄▄▄▄▄▄▄▄                               1.4 │|
+|│ internal/config  ▄▄▄▄▄▖                                  0.9 │|
 |│                                                              │|
 |│ ▾ Failures  5                                                │|
 |│   PACKAGE               TEST                     TIME ▼      │|
@@ -211,11 +213,11 @@ z: fg=accent-bright bg=panel bold
 |a ccccccc    eeeeeeee e    eee                                 a|
 |a aaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
 |a                                                              a|
-|a fff dddddd   g dddddd                   hhhhhhhhhhhhhh ccccc a|
+|a fff dddddd   g dddddd                   hhhhhhhhhhhhhe ccccc a|
 |a                                                              a|
 |a ccccbccbccccccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  eeeeeee a|
 |a dddddddddddddddd iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii jjj a|
-|a dddddddddddd     iiiiiiiiiiiiiiiiiiiiiiiiiiiiiii         jjj a|
+|a dddddddddddd     iiiiiiiiiiiiiiiiiiiiiiiiiiiiii          jjj a|
 |a dd               iiiiiiiiiiiiiiiiiiii                    jjj a|
 |a ddddddddddddd    iiiiiiiii                               jjj a|
 |a ddddddddddddddd  iiiiii                                  jjj a|
@@ -246,7 +248,7 @@ g: fg=error bold
 h: fg=success
 i: fg=error
 j: fg=fg
-k: fg=mute bold
+k: fg=dim bold
 l: fg=accent-bright
 m: reverse
 n: fg=dim reverse

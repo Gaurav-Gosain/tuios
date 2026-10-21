@@ -7,11 +7,11 @@
 |│ 412 passed   5 failed   9 skipped   18.4s                                   ━━━━━━━━━━━━━━ 98.8% │|
 |│                                                                                                  │|
 |│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
-|│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
-|│ internal/app     ██████████████████████████▍· · · · 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
-|│ vt               █████████████████· · · · · · · · · 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
-|│ internal/tape    ███████▋ · · · · · · · · · · · · · 1.4                                          │|
-|│ internal/config  ████▉· · · · · · · · · · · · · · · 0.9                                          │|
+|│ internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
+|│ internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁ 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4                                          │|
+|│ internal/config  ▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9                                          │|
 |│                                                                                                  │|
 |│ ▾ Failures  5                                                                                    │|
 |│   PACKAGE               TEST                     TIME ▼                                          │|
@@ -35,24 +35,24 @@
 |adcccccccddddffffffffdfddddfffdddddddddddddddddddddddddddffdffffdfffffdfdfffffdfdfffffffffffffffffda|
 |adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adhhhdeeeeeedddideeeeeedddjdeeeeeeedddcccccdddddddddddddddddddddddddddddddddddkkkkkkkkkkkkkkdcccccda|
+|adhhhdeeeeeedddideeeeeedddjdeeeeeeedddcccccdddddddddddddddddddddddddddddddddddkkkkkkkkkkkkkldcccccda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggda|
-|adeeeeeeeeeeeeeeeedlllllllllllllllllllllllllllllllllldmmmddddeeeedddnnnnnnnnnnnnnnnnnnnnnnndcccccdda|
-|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgdgdgdgdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
-|adeedddddddddddddddlllllllllllllllllgdgdgdgdgdgdgdgdgdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
-|adeeeeeeeeeeeeeddddlllllllldgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adeeeeeeeeeeeeeeeddlllllgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeedmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmdnnnddddeeeedddooooooooooooooooooooooodcccccdda|
+|adeeeeeeeeeeeedddddmmmmmmmmmmmmmmmmmmmmmmmmmmmllllllldnnnddddeeeeeddpppppppppppppppppppppppdcdddddda|
+|adeedddddddddddddddmmmmmmmmmmmmmmmmmllllllllllllllllldnnnddddeeeeeddqqqqqqqqqqqqqqqqqqqqqqqdcccdddda|
+|adeeeeeeeeeeeeeddddmmmmmmmmlllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeddmmmmmllllllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddqqqqdpdddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddjjjjdqdddddddddddddddddddddddddddddddddddddddddda|
 |adrsttttttttttttttttssssssuuuuuuuuuuuuuussssssssssssuuuuusssssssssssssssssssssssssssssssssssssssssda|
-|adddeeeeeeeeeeeeeeeeddddddmmmmmmmmmmmmmmmmddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmdddddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmmmmmmmdddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adddeeddddddddddddddddddddmmmmmmmmmmmmmmmmmmmmddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeeeeeddddddnnnnnnnnnnnnnnnnddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnndddddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnnnnnnnndddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
+|adddeeddddddddddddddddddddnnnnnnnnnnnnnnnnnnnnddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adnnnnnnnnnnnnnnnnnndmmmmmdmmmmdmmmdmmmmmdmmmmmmdooooodoododoodooodoooodoodoooooddddddddddddddddddda|
+|adoooooooooooooooooodnnnnndnnnndnnndnnnnndnnnnnndpppppdppdpdppdpppdppppdppdpppppddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -60,7 +60,7 @@
 |advwvxyyyyyxyyyyyyxddzAzsBBBBsBBBsddzAzsBBBBsBBsBBBBBBsddddddddddddddddddCdffffdCCCdffffdCCCdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=accent-bright bg=card bold
+A: fg=accent-bright bg=surface bold
 B: fg=fg bg=surface
 C: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
@@ -74,12 +74,12 @@ h: fg=success bg=panel bold
 i: fg=error bg=panel bold
 j: fg=dim bg=panel bold
 k: fg=success bg=panel
-l: fg=error bg=panel
-m: fg=fg bg=panel
-n: fg=info bg=panel
-o: fg=warning bg=panel
-p: fg=accent-bright bg=panel
-q: fg=mute bg=panel bold
+l: fg=track bg=panel
+m: fg=error bg=panel
+n: fg=fg bg=panel
+o: fg=info bg=panel
+p: fg=warning bg=panel
+q: fg=accent-bright bg=panel
 r: fg=accent bg=surface
 s: bg=surface
 t: fg=dim bg=surface
@@ -88,7 +88,7 @@ v: bg=accent bold
 w: fg=fg bg=accent bold
 x: bg=accent
 y: fg=fg bg=accent
-z: bg=card bold
+z: bg=surface bold
 === 256 100x30
 |╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                  │|
@@ -98,11 +98,11 @@ z: bg=card bold
 |│ 412 passed   5 failed   9 skipped   18.4s                                   ━━━━━━━━━━━━━━ 98.8% │|
 |│                                                                                                  │|
 |│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
-|│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
-|│ internal/app     ██████████████████████████▍· · · · 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
-|│ vt               █████████████████· · · · · · · · · 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
-|│ internal/tape    ███████▋ · · · · · · · · · · · · · 1.4                                          │|
-|│ internal/config  ████▉· · · · · · · · · · · · · · · 0.9                                          │|
+|│ internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
+|│ internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁ 4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4                                          │|
+|│ internal/config  ▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9                                          │|
 |│                                                                                                  │|
 |│ ▾ Failures  5                                                                                    │|
 |│   PACKAGE               TEST                     TIME ▼                                          │|
@@ -126,24 +126,24 @@ z: bg=card bold
 |adcccccccddddffffffffdfddddfffdddddddddddddddddddddddddddffdffffdfffffdfdfffffdfdfffffffffffffffffda|
 |adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adhhhdeeeeeedddideeeeeedddjdeeeeeeedddcccccdddddddddddddddddddddddddddddddddddkkkkkkkkkkkkkkdcccccda|
+|adhhhdeeeeeedddideeeeeedddjdeeeeeeedddcccccdddddddddddddddddddddddddddddddddddkkkkkkkkkkkkkldcccccda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggda|
-|adeeeeeeeeeeeeeeeedlllllllllllllllllllllllllllllllllldmmmddddeeeedddnnnnnnnnnnnnnnnnnnnnnnndcccccdda|
-|adeeeeeeeeeeeedddddlllllllllllllllllllllllllllgdgdgdgdmmmddddeeeeeddooooooooooooooooooooooodcdddddda|
-|adeedddddddddddddddlllllllllllllllllgdgdgdgdgdgdgdgdgdmmmddddeeeeeddpppppppppppppppppppppppdcccdddda|
-|adeeeeeeeeeeeeeddddlllllllldgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adeeeeeeeeeeeeeeeddlllllgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeedmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmdnnnddddeeeedddooooooooooooooooooooooodcccccdda|
+|adeeeeeeeeeeeedddddmmmmmmmmmmmmmmmmmmmmmmmmmmmllllllldnnnddddeeeeeddpppppppppppppppppppppppdcdddddda|
+|adeedddddddddddddddmmmmmmmmmmmmmmmmmllllllllllllllllldnnnddddeeeeeddqqqqqqqqqqqqqqqqqqqqqqqdcccdddda|
+|adeeeeeeeeeeeeeddddmmmmmmmmlllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeeeeeddmmmmmllllllllllllllllllllllllllllldnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adfdccccccccbbidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddqqqqdpdddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddjjjjdqdddddddddddddddddddddddddddddddddddddddddda|
 |adrsttttttttttttttttssssssuuuuuuuuuuuuuussssssssssssuuuuusssssssssssssssssssssssssssssssssssssssssda|
-|adddeeeeeeeeeeeeeeeeddddddmmmmmmmmmmmmmmmmddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmdddddddddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeeddddddddddmmmmmmmmmmmmmmmmmmmdddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
-|adddeeddddddddddddddddddddmmmmmmmmmmmmmmmmmmmmddddddmmmmmdddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeeeeeddddddnnnnnnnnnnnnnnnnddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnndddddddddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddnnnnnnnnnnnnnnnnnnndddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
+|adddeeddddddddddddddddddddnnnnnnnnnnnnnnnnnnnnddddddnnnnndddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adnnnnnnnnnnnnnnnnnndmmmmmdmmmmdmmmdmmmmmdmmmmmmdooooodoododoodooodoooodoodoooooddddddddddddddddddda|
+|adoooooooooooooooooodnnnnndnnnndnnndnnnnndnnnnnndpppppdppdpdppdpppdppppdppdpppppddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
@@ -151,7 +151,7 @@ z: bg=card bold
 |advwvxyyyyyxyyyyyyxddzAzsBBBBsBBBsddzAzsBBBBsBBsBBBBBBsddddddddddddddddddCdffffdCCCdffffdCCCdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=accent-bright bg=edge bold
+A: fg=accent-bright bg=surface bold
 B: fg=fg bg=surface
 C: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
@@ -165,12 +165,12 @@ h: fg=success bg=panel bold
 i: fg=error bg=panel bold
 j: fg=dim bg=panel bold
 k: fg=success bg=panel
-l: fg=error bg=panel
-m: fg=fg bg=panel
-n: fg=info bg=panel
-o: fg=warning bg=panel
-p: fg=accent-bright bg=panel
-q: fg=mute bg=panel bold
+l: fg=success-tint bg=panel
+m: fg=error bg=panel
+n: fg=fg bg=panel
+o: fg=info bg=panel
+p: fg=warning bg=panel
+q: fg=accent-bright bg=panel
 r: fg=accent bg=surface
 s: bg=surface
 t: fg=dim bg=surface
@@ -179,7 +179,7 @@ v: bg=accent bold
 w: fg=fg bg=accent bold
 x: bg=accent
 y: fg=fg bg=accent
-z: bg=edge bold
+z: bg=surface bold
 === 16 100x30
 |╭─ Test run ───────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                  │|
@@ -189,11 +189,11 @@ z: bg=edge bold
 |│ 412 passed   5 failed   9 skipped   18.4s                                   ━━━━━━━━━━━━━━ 98.8% │|
 |│                                                                                                  │|
 |│ Time by package ──────────────────────────────  seconds    Suite time, last 30 runs ──────────── │|
-|│ internal/session ██████████████████████████████████ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
-|│ internal/app     ██████████████████████████▍        4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
-|│ vt               █████████████████                  3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
-|│ internal/tape    ███████▋                           1.4                                          │|
-|│ internal/config  ████▉                              0.9                                          │|
+|│ internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    wall   ▄▃▅▂█▃▂▂▆▃▂▃█▄▂▁▃▂▃▂▅▃▁ 18.4s  │|
+|│ internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖        4.8    flaky  ▁▁▃▁▆▃▁▁▃▂▁▁█▂▁▁▂▁▁▁▆▃▅ 3      │|
+|│ vt               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                  3.1    alloc  ▆▆▇▆█▇▇▆▇▇▅▅▆▅▄▄▄▃▃▂▂▁▁ 35M    │|
+|│ internal/tape    ▄▄▄▄▄▄▄▖                           1.4                                          │|
+|│ internal/config  ▄▄▄▄▄                              0.9                                          │|
 |│                                                                                                  │|
 |│ ▾ Failures  5                                                                                    │|
 |│   PACKAGE               TEST                     TIME ▼                                          │|
@@ -217,7 +217,7 @@ z: bg=edge bold
 |a ccccccc    eeeeeeee e    eee                           ee eeee eeeee e eeeee e eeeeeeeeeeeeeeeee a|
 |a aaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
 |a                                                                                                  a|
-|a fff dddddd   g dddddd   h ddddddd   ccccc                                   iiiiiiiiiiiiii ccccc a|
+|a fff dddddd   g dddddd   h ddddddd   ccccc                                   iiiiiiiiiiiiie ccccc a|
 |a                                                                                                  a|
 |a ccccbccbccccccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeee  eeeeeee    cccccbcccccbccccbccbcccc eeeeeeeeeeee a|
 |a dddddddddddddddd jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj kkk    dddd   lllllllllllllllllllllll ccccc  a|
@@ -227,8 +227,8 @@ z: bg=edge bold
 |a ddddddddddddddd  jjjjj                              kkk                                          a|
 |a                                                                                                  a|
 |a e ccccccccbbg                                                                                    a|
-|a   eeeeeee               eeee                     oooo n                                          a|
-|a apqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrppppppppppppppppppppppppppppppppppppppppp a|
+|a   eeeeeee               eeee                     hhhh n                                          a|
+|a aoppppppppppppppppooooooqqqqqqqqqqqqqqooooooooooooqqqqqooooooooooooooooooooooooooooooooooooooooo a|
 |a   dddddddddddddddd      kkkkkkkkkkkkkkkk          kkkkk                                          a|
 |a   dddddddddddd          kkkkkkkkkkkkk             kkkkk                                          a|
 |a   dddddddddddd          kkkkkkkkkkkkkkkkkkk       kkkkk                                          a|
@@ -239,7 +239,7 @@ z: bg=edge bold
 |a                                                                                                  a|
 |a                                                                                                  a|
 |a                                                                                                  a|
-|a stsstttttstttttts  eu kkkk kkke  eu kkkk kk kkkkkke                    u eeee uuu eeee uuu eeeee a|
+|a rsrrsssssrssssssr  et kkkk kkke  et kkkk kk kkkkkke                    t eeee ttt eeee ttt eeeee a|
 |a                                                                                                  a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
@@ -256,13 +256,12 @@ k: fg=fg
 l: fg=info
 m: fg=warning
 n: fg=accent-bright
-o: fg=mute bold
-p: reverse
-q: fg=dim reverse
-r: fg=dim bold reverse
-s: bold reverse
-t: fg=accent bold reverse
-u: fg=accent-bright bold
+o: reverse
+p: fg=dim reverse
+q: fg=dim bold reverse
+r: bold reverse
+s: fg=accent bold reverse
+t: fg=accent-bright bold
 === ascii 100x30
 |+- Test run ------------------------------------------------------------- from claude in api-auth -+|
 ||                                                                                                  ||
