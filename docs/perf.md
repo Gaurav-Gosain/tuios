@@ -4374,11 +4374,20 @@ the machine, so neither test reads a clock.
 ## 2026-10 the pane read path in live handoff part 1
 
 Part 1 of the live handoff (`docs/design/live-handoff.md`) changes a pane's
-read path in two places. The reader polls the master and a wake pipe before
-each read, outside `readMu`, so a quiesce never waits on a quiet program. And
-the reply forwarder no longer blocks in a read of the emulator's replies: the
-emulator's writer takes the replies after each chunk and wakes the forwarder
-only when the chunk queued one. Both cost CPU under a flood.
+read path in two places. The reader waits for output on the master and a wake
+pipe before each read, outside `readMu`, so a quiesce never waits on a quiet
+program. And the reply forwarder no longer blocks in a read of the emulator's
+replies: the emulator wakes it through `OnResponse` each time it queues one.
+The design, the platforms and the alternatives are in
+`docs/design/pane-read-path.md`.
+
+On macOS a read takes at most about 1 KiB, whatever the buffer: 98.4% of the
+reads in a flood are 1024 to 2047 bytes, on main and on the branch alike. So
+the reader waits once per KiB, and the wait is the cost. A `poll(2)` there
+builds and tears down a kqueue on every call (631 ns with output ready, against
+186 ns for `kevent(2)` on a kqueue registered once). Each pane keeps a kqueue
+of its own on macOS and the BSDs, and Linux keeps the poll, which costs a flood
+there about a third of a millisecond of CPU per MB.
 
 ### Numbers
 
@@ -4387,25 +4396,32 @@ A scratch benchmark, not committed, cats a 64 MiB file of 100-column lines
 through a pane of a real daemon into one attached `TUIClient`, on the rig of
 `wire_e2e_bench_test.go` (`newE2ERig`), three files a run at `-test.cpu 4`.
 CPU is getrusage of the test process, which holds the daemon and the client.
-Test binaries of main at `8373529`, of the branch, and of the branch with the
-forwarder woken after every chunk ran in alternating order, 14 runs each, at a
-load average of 8 to 10. The figures are medians.
+Test binaries of main at `8373529`, of the branch with a poll per read, and of
+the branch with the kqueue per pane ran in alternating order, 14 runs each, at
+a load average of 4.7 to 6.1. Figures are medians, interquartile range in
+brackets.
 
-| 64 MiB through a pane | main | branch | branch, wake on every chunk |
+| 64 MiB through a pane | main | poll per read | kqueue per pane |
 |---|---:|---:|---:|
-| throughput | 103.8 MB/s | 80.5 MB/s (-22%) | 80.3 MB/s (-23%) |
-| CPU per MB | 19.8 ms | 24.3 ms (+23%) | 29.4 ms (+48%) |
-| client batches per file | 635 | 804 | 818 |
+| throughput, MB/s | 109.8 (107.6-110.9) | 101.5 (97.6-103.4) | 108.3 (105.7-110.2) |
+| CPU per MB, ms | 18.4 (18.2-18.9) | 19.7 (19.4-20.6) | 18.5 (18.2-18.8) |
+| client batches per file | 604 | 656 | 621 |
 
-A second set of 14 runs each, at a load average of 11 to 18, kept the order:
-79.5, 53.9 and 55.4 MB/s, and 25.0, 32.6 and 38.3 ms per MB.
+A second rotation at a load average of 6.7 to 10.4 kept the order: 109.6,
+99.3 and 108.1 MB/s, and 18.8, 20.2 and 18.5 ms per MB. A build with no wait
+at all, which cannot quiesce, measured 108.3 MB/s and 19.0 ms per MB against
+main's 107.1 and 19.2 in its own rotation, so the whole difference was the
+wait. In a CPU profile of the poll build, `unix.Poll` is 21% of the samples,
+the sleep and wake included that main pays inside `read`. The client batches
+follow the reader's speed: the reads are the same size on every build.
 
-The wake on every chunk ran the forwarder and had it take `respMu` even when
-the chunk queued no reply. Waking it only for a reply saves about 5 ms per MB,
-a sixth of the CPU, and leaves throughput where it was. A build with the wake
-removed outright, which never sends a reply, measured 87.3 MB/s and 22.5 ms
-per MB in the same rotation, so the skip gets most of what the wake cost. In
-an earlier rotation, a build without the poll before each read used 1 to 1.5
-ms per MB less: the poll is one more syscall per read. The rest of the gap to
-main is not split here. The client receives about a quarter more batches per
-file, so the branch's reads are smaller.
+### Measured and deliberately not changed
+
+- A flood asks the emulator for no replies, so `OnResponse` never fires and
+  the forwarder costs it nothing. Waking the forwarder after every chunk cost
+  about 5 ms per MB.
+- Go's runtime poller on a non-blocking master saves nothing on macOS, where
+  the queue is empty after each read, and would move every write of the
+  program's input to a polled file. Reading again without a wait after a full
+  read never applies, since a read never fills the buffer. See
+  `docs/design/pane-read-path.md`.
