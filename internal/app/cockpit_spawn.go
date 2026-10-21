@@ -308,8 +308,10 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		name = name[:i]
 	}
 	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: working[""], up: true}
-	if l := m.LocalLoad; l.Cores > 0 && m.AttachedHost == "" {
-		// The load the daemon reported, on every system.
+	// The local row is the machine of the client's own daemon, where an
+	// agent with no host starts, attached to another machine or not. Its
+	// load is the one that daemon reported, on every system.
+	if l := m.LocalLoad; l.Cores > 0 {
 		local.cores, local.load, local.loadOK = l.Cores, l.Load1, true
 	} else {
 		local.load, local.loadOK = spawnLoadAvg()
