@@ -3209,6 +3209,13 @@ types it did not draw, each with a text drawing. The build before it measured
 The change measured 42,688,674 and 39,851,042, so it adds 323,584 and 267,968
 bytes. No dependency was added. The new budgets leave 4,198 bytes of room.
 
+The budgets went to 43,049,224 and 40,158,968 when sketch began to draw user
+journeys, kanban boards, git graphs and sankey diagrams, as pictures and as
+text. The build before it measured 42,688,674 and 39,851,042 bytes (Go
+1.26.10, a clean clone, as CI builds it). The change measured 43,045,026 and
+40,154,770, so it adds 356,352 and 303,728 bytes. No dependency was added. The
+new budgets leave 4,198 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
