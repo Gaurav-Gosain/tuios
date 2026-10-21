@@ -75,6 +75,56 @@ func TestPaletteRunsTheActionItFinds(t *testing.T) {
 	alive(t, term, "after running and rebinding from the palette")
 }
 
+// TestPaletteViewOnlyActionSaysSoInFull. Enter on an action that works only in
+// its own view, such as the rail's file_delete_forever, opens the keybind
+// manager with a notice saying why. The notice is read in the dock at the
+// suite's terminal size and must fit there whole: one cut off with an ellipsis
+// says less than nothing about why enter did not run the action.
+//
+// Negative control: put back the two-sentence notice ("... runs only in its own
+// view. Its keys are listed here.") and this fails on the ellipsis the dock
+// cuts it with.
+func TestPaletteViewOnlyActionSaysSoInFull(t *testing.T) {
+	term, _ := attachClientBase(t)
+	dir := artifactDir(t)
+
+	if err := term.SendKeys(legacyCtrlP); err != nil {
+		t.Fatalf("open palette: %v", err)
+	}
+	waitPaletteOpen(t, term, "before the action search")
+	if err := term.Type("#file_delete_forever"); err != nil {
+		t.Fatalf("type the token query: %v", err)
+	}
+	if err := term.WaitForText("file_delete_forever", uiTimeout); err != nil {
+		t.Fatalf("the action search found no file_delete_forever row: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("enter on the action row: %v", err)
+	}
+	if err := term.WaitForText(keybindTitle, uiTimeout); err != nil {
+		t.Fatalf("enter on a view-only action did not open the keybind manager: %v\n%s", err, term.Snapshot())
+	}
+	var line string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		for _, l := range strings.Split(s.Text(), "\n") {
+			if strings.Contains(l, "file_delete_forever") && strings.Contains(l, "own view") {
+				line = l
+				return true
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		t.Fatalf("no notice says file_delete_forever works only in its own view: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "view-only-notice")
+	if strings.Contains(line, "…") {
+		t.Fatalf("the notice is cut off in the dock: %q\n%s", strings.TrimSpace(line), term.Snapshot())
+	}
+	if !strings.Contains(line, "file_delete_forever works only in its own view.") {
+		t.Fatalf("the notice reads %q, want \"file_delete_forever works only in its own view.\"", strings.TrimSpace(line))
+	}
+}
+
 // waitSessionWindows waits for the daemon to list want windows in session.
 func waitSessionWindows(t *testing.T, base, session string, want int, what string) {
 	t.Helper()
