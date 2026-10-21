@@ -880,11 +880,6 @@ type PTY struct {
 	respMu   sync.Mutex
 	respWake chan struct{}
 	vtDone   chan struct{}
-	// respPending holds the replies vtWriter took from the emulator for
-	// forwardTerminalResponses. respTake guards it and every take from the
-	// emulator, so the replies keep the order the emulator queued them in.
-	respTake    sync.Mutex
-	respPending []byte
 	// rawLog appends every byte the process writes, when TUIOS_PTY_LOG asks
 	// for it, and is nil otherwise. See pty_log.go.
 	rawLog *ptyLogger
@@ -2639,8 +2634,12 @@ func (pty *PTY) startPTY() {
 
 	// Start terminal response forwarder. The daemon's emulator generates query responses
 	// (DA, CPR, etc.) which must be sent to the PTY for applications to receive.
-	// Client emulators DRAIN their responses to prevent duplicates. Woken once
-	// for anything the emulator queued before it started.
+	// Client emulators DRAIN their responses to prevent duplicates. The
+	// emulator wakes it for each reply it queues, and it is woken once here
+	// for anything queued before.
+	if pty.terminal != nil {
+		pty.terminal.OnResponse(pty.wakeResponses)
+	}
 	go pty.forwardTerminalResponses()
 	pty.wakeResponses()
 
@@ -4383,9 +4382,6 @@ func (p *PTY) SetCellSize(cellWidth, cellHeight int) {
 	defer p.terminalMu.Unlock()
 	if p.terminal != nil && cellWidth > 0 && cellHeight > 0 {
 		p.terminal.SetCellSize(cellWidth, cellHeight)
-		// A new cell under mode 2048 queues a size report here, outside any
-		// write of the program's output.
-		p.wakeResponses()
 	}
 }
 
@@ -5049,7 +5045,6 @@ func (p *PTY) vtWriter() {
 				p.vtResizes++
 			}
 			p.terminalMu.Unlock()
-			p.takeResponses()
 			continue
 		}
 		p.terminalMu.Lock()
@@ -5065,7 +5060,6 @@ func (p *PTY) vtWriter() {
 		p.vtSeq = chunk.seq
 		focusOn := p.terminal != nil && p.terminal.FocusReportingEnabled()
 		p.terminalMu.Unlock()
-		p.takeResponses()
 		p.noteFocusReporting(focusOn)
 		p.flushProgramStatus()
 	}
@@ -5206,11 +5200,11 @@ func (p *PTY) noteExit(code int) {
 // (DA1, CPR and the rest) to the program. Client emulators drain theirs, so
 // the program gets one copy.
 //
-// The emulator queues a reply while vtWriter writes to it, and when the cell
-// size or the colours it reports change (SetCellSize, setReportColors).
-// vtWriter takes the replies after each write and wakes this loop only when
-// there were some (takeResponses); the other two wake it to take their own.
-// The replies are taken and written under respMu. Taking them under the lock
+// The emulator queues a reply while vtWriter writes to it, and from elsewhere:
+// when the cell size or the colours it reports change, and when a kitty file
+// upload's check ends, on a goroutine of its own. Every reply wakes this loop
+// through OnResponse, set in startPTY, so a flood that asks for nothing costs
+// it nothing. The replies are taken and written under respMu. Taking them under the lock
 // is what lets a quiesce flush them: once it holds respMu, no reply is in this
 // goroutine's hands. See pty_quiesce.go.
 func (p *PTY) forwardTerminalResponses() {
@@ -5233,36 +5227,11 @@ func (p *PTY) forwardTerminalResponses() {
 // holds respMu.
 func (p *PTY) sendResponsesLocked() {
 	for {
-		p.respTake.Lock()
-		data := p.respPending
-		p.respPending = nil
-		if more := p.terminal.TakeResponses(); more != nil {
-			data = append(data, more...)
-		}
-		p.respTake.Unlock()
+		data := p.terminal.TakeResponses()
 		if len(data) == 0 || p.pty == nil {
 			return
 		}
 		_, _ = p.pty.Write(data)
-	}
-}
-
-// takeResponses moves the replies the emulator queued to respPending and
-// wakes forwardTerminalResponses when there were any. vtWriter calls it after
-// each write: a wake is a goroutine switch, and a flood of output that asks
-// for nothing would pay one per chunk.
-func (p *PTY) takeResponses() {
-	if p.terminal == nil {
-		return
-	}
-	p.respTake.Lock()
-	data := p.terminal.TakeResponses()
-	if data != nil {
-		p.respPending = append(p.respPending, data...)
-	}
-	p.respTake.Unlock()
-	if data != nil {
-		p.wakeResponses()
 	}
 }
 

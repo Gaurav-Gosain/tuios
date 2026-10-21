@@ -75,9 +75,6 @@ func (s *Session) applyReportColors(bgHex, fgHex, palHex string) {
 // setReportColors gives this pane's emulator the pair and the palette, under
 // the lock that guards it.
 func (p *PTY) setReportColors(fg, bg color.Color, pal [16]color.Color) {
-	// A switch between dark and light queues the mode 2031 report here,
-	// outside any write of the program's output.
-	defer p.wakeResponses()
 	p.terminalMu.Lock()
 	defer p.terminalMu.Unlock()
 	if p.terminal != nil {
