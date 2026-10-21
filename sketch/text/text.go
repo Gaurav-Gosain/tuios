@@ -70,6 +70,7 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 	var c *canvas
 	switch d.Type {
 	case "flowchart", "block", "architecture", "requirement":
+		c, err = drawFlowchart(layout, opt, squeeze)
 	case "state":
 		c, err = drawState(layout, opt)
 	case "class":
@@ -82,7 +83,6 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawMindmap(layout, opt)
 	case "gantt":
 		c, err = drawGantt(layout, opt)
-		c, err = drawFlowchart(layout, opt, squeeze)
 	case "timeline":
 		c, err = drawTimeline(layout, opt)
 	case "xychart":
