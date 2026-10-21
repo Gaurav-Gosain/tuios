@@ -1591,6 +1591,28 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// or says what failed; both touch the model, which is why they run here.
 		return m, m.handleWorktreeCreated(msg)
 
+	case worktreeRemovedMsg:
+		// A worktree removal that finished on its own goroutine. The handler
+		// says what became of it and quits this client when the deleted
+		// session was the one it was attached to; both touch the model, which
+		// is why they run here.
+		return m, m.handleWorktreeRemoved(msg)
+
+	case worktreeRemoveQuitMsg:
+		// The dwell after an attached worktree deletion ran out. The user has
+		// had the whole dwell to switch to another session, so the quit follows
+		// the deleted session by name: still here means QuitSession — the one
+		// quit path, with QuitRequested making the daemon's session-ended
+		// announcement read as the deliberate exit it is — and gone from here
+		// means the ordinary other-session kill, which cannot touch what this
+		// client is in now.
+		if m.SessionName == msg.Name {
+			m.QuitSession()
+			return m, tea.Quit
+		}
+		m.KillOtherSession(msg.Name)
+		return m, nil
+
 	case tapeDebounceMsg:
 		// The focused cwd held still long enough; evaluate it for a project tape.
 		m.handleTapeDebounce(msg.gen)

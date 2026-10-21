@@ -8627,3 +8627,20 @@ Each control cuts one change from the fix, rebuilds, runs the test twice, and re
 ```sh
 go test -count=1 -run '^TestReadGateNeverReportsOutputAfterAFailedWait$' ./internal/session/
 ```
+## Deleting a worktree from the close-confirmation dialog
+
+`TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on
+a worktree session and asserts the daemon removed the directory, kept the
+branch and killed the session; it also covers a worktree whose directory was
+already gone. Run on 2026-10-20, against the commit before the dialog row was
+added (50972f48), built with `git archive`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| Selecting the close dialog's delete row removed nothing | The whole wiring: the third row, its draw, and the `SessionCloseRowDeleteWorktree` branch of `SessionCloseActivate` | The build before the feature | `TestSidebarCloseDeletesWorktree` ("the feat/one close dialog offered no worktree delete") | **caught** |
+
+The pre-feature run was recorded after the green run on the fixed build. The
+first red run against the intermediate tree (dialog row present, activation
+absent, c9f3e252) failed one step later, at "no notification said the
+worktree was deleted" — the row was offered and did nothing, which is the
+other half of the control.
