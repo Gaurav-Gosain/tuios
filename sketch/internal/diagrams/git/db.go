@@ -210,7 +210,7 @@ func (b *gitBuilder) branch(br BranchDB) {
 	if b.head != nil {
 		b.branches[br.name] = b.head.id
 	}
-	b.orders = append(b.orders, lane{br.name, br.order})
+	b.orders = append(b.orders, lane(br))
 	b.checkout(br.name)
 }
 

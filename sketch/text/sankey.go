@@ -321,10 +321,21 @@ func assignLanes(gs []*flowSeg) (lanes, crossings int) {
 }
 
 // countCrossings counts where a horizontal part of one segment meets the lane
-// of another. Meeting at a corner counts too: the lines would join there.
+// of another. Meeting at a corner counts too: the lines would join there. Two
+// segments whose horizontal parts share a row join along it, and the drawing
+// would read as other flows, so a join counts as more crossings than a drawing
+// may have. The count stops once it is past maxCrossings.
 func countCrossings(gs []*flowSeg) int {
+	rows := make(map[int]*flowSeg, 2*len(gs))
+	for _, g := range gs {
+		for _, r := range [2]int{g.rs, g.rt} {
+			if other, ok := rows[r]; ok && other != g {
+				return maxCrossings + 1
+			}
+			rows[r] = g
+		}
+	}
 	n := 0
-	const straight = math.MaxInt
 	for _, a := range gs {
 		if a.lane < 0 {
 			continue
@@ -334,19 +345,20 @@ func countCrossings(gs []*flowSeg) int {
 			if a == b {
 				continue
 			}
-			bl := b.lane
-			if bl < 0 {
-				bl = straight
+			if b.lane < 0 {
 				if b.rs >= lo && b.rs <= hi {
 					n++
 				}
-				continue
+			} else {
+				if b.rs >= lo && b.rs <= hi && a.lane < b.lane {
+					n++
+				}
+				if b.rt >= lo && b.rt <= hi && a.lane > b.lane {
+					n++
+				}
 			}
-			if b.rs >= lo && b.rs <= hi && a.lane < bl {
-				n++
-			}
-			if b.rt >= lo && b.rt <= hi && a.lane > bl {
-				n++
+			if n > maxCrossings {
+				return n
 			}
 		}
 	}

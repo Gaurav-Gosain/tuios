@@ -7,7 +7,6 @@
 // pie charts, mindmaps, gantt charts, timelines, XY charts, quadrant charts,
 // user journeys, kanban boards, git graphs and sankey diagrams have a text
 // drawing. Other types give ErrUnsupported.
-// ErrUnsupported.
 package text
 
 import (

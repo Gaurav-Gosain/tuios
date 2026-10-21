@@ -186,8 +186,6 @@ func classByte(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c == '-'
 }
 
-var series = [8]string{"#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2", "#eeca3b", "#b279a2", "#9d755d"}
-
 // SeriesColor is the color for the nth data series in a chart, cycling through eight tokens.
 func SeriesColor(index int) string {
 	return seriesVars[((index%8)+8)%8]
