@@ -231,8 +231,8 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 			}
 			styles = append(styles, "stroke-width:"+*strokeWidth)
 		}
-		cx := left + point.x*w
-		cy := top + (1-point.y)*h
+		cx := left + float64(point.x*w)
+		cy := top + float64((1-point.y)*h)
 		reach := r
 		if hasStrokeWidth {
 			reach += math.Min(js.ParseIntPrefix(*strokeWidth, 10), 400) / 2
@@ -262,7 +262,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	for _, d := range dots {
 		cx, cy, t := d.cx, d.cy, d.text
 		halfW := t.Width / 2
-		halfH := t.Size*0.6 + (t.Height-t.LineHeight)/2
+		halfH := float64(t.Size*0.6) + (t.Height-t.LineHeight)/2
 		away := d.reach + textPad
 		spots := [8]float64{cx, cy + away + halfH, cx, cy - away - halfH, cx + away + halfW, cy, cx - away - halfW, cy}
 		tx := cx

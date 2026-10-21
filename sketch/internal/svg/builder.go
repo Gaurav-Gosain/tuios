@@ -140,7 +140,7 @@ func LabelSvg(label text.Label, cx, cy float64, attrs string, icons IconResolver
 		return ""
 	}
 	lh := label.LineHeight
-	shift := label.Size * 0.35
+	shift := float64(label.Size * 0.35)
 	y := cy - label.Height/2 + lh/2 + shift
 
 	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Style == 0 {

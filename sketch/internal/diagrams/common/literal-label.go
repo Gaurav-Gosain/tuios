@@ -160,7 +160,7 @@ func LeftLabelSvg(label text.Label, x, top float64, attrs string) string {
 	open := "<text" + svg.TextStyle(attrs, shared)
 	var body strings.Builder
 	for i, spans := range label.Lines {
-		cy := top + (float64(i)+0.5)*label.LineHeight
+		cy := top + float64((float64(i)+0.5)*label.LineHeight)
 		hasIcon := false
 		for _, span := range spans {
 			if span.Icon != "" {
@@ -187,7 +187,7 @@ func LeftLabelSvg(label text.Label, x, top float64, attrs string) string {
 			}
 		}
 		if t != "" {
-			body.WriteString(open + ` x="` + svg.Num(x) + `" y="` + svg.Num(cy+label.Size*0.35) + `" text-anchor="start" xml:space="preserve">` + t + `</text>`)
+			body.WriteString(open + ` x="` + svg.Num(x) + `" y="` + svg.Num(cy+float64(label.Size*0.35)) + `" text-anchor="start" xml:space="preserve">` + t + `</text>`)
 		}
 	}
 	return body.String()

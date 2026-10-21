@@ -181,7 +181,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 			bodyW += AXIS + TAIL
 		}
 	} else if slots > 0 {
-		bodyW = float64(slots)*pitch - GAP
+		bodyW = float64(float64(slots)*pitch) - GAP
 		if drawn {
 			bodyW += TAIL + svg.ARROW
 		}
@@ -292,7 +292,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 			if group.section < 0 {
 				continue
 			}
-			label := sectionLabel(group, float64(max(len(group.periods), 1))*pitch-GAP)
+			label := sectionLabel(group, float64(float64(max(len(group.periods), 1))*pitch)-GAP)
 			headerH = math.Max(headerH, chipHeight(label))
 			sectionLabels[g] = &label
 			groupLabels[g] = label
@@ -317,14 +317,14 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 		slot := 0
 		for g, group := range groups {
 			span := max(len(group.periods), 1)
-			gx := left + float64(slot)*pitch
+			gx := left + float64(float64(slot)*pitch)
 			open(group)
 			if label := sectionLabels[g]; label != nil {
-				header(group, *label, gx, top, float64(span)*pitch-GAP, headerH)
+				header(group, *label, gx, top, float64(float64(span)*pitch)-GAP, headerH)
 			}
 			for k, i := range group.periods {
 				color := colorOf(group, i)
-				x := gx + float64(k)*pitch
+				x := gx + float64(float64(k)*pitch)
 				cx := x + colW/2
 				var d, cards strings.Builder
 				end := axisY
