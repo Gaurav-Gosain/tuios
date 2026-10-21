@@ -29,4 +29,4 @@ replace tuios.dev/sketch v0.1.2-0.20261021152429-d60c774a4079 => ./sketch
 
 replace tuios.dev/loom v0.1.1-0.20261021135526-b956b69e576d => ./loom
 
-replace tuios.dev/plot v0.1.1-0.20261021135445-d7bf6a253369 => ./plot
+replace tuios.dev/plot v0.1.1-0.20261021160114-2dff95403328 => ./plot
