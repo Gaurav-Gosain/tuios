@@ -285,17 +285,21 @@ func rrPlace(c *canvas, root *rrBox, x0, y0 int) {
 			}
 		case rrChoice:
 			kx := x + 2
+			prev := y
 			for i, kid := range b.kids {
 				ky := y + b.branchOffset[i]
 				if i == 0 {
 					c.hline(x, kx, y, light, roleLine)
 					c.hline(kx+kid.w-1, right, y, light, roleLine)
 				} else {
-					c.vline(x+1, y, ky, light, roleLine)
+					// From the branch above, not from the top: the strokes are the same, and
+					// many branches cost linear time.
+					c.vline(x+1, prev, ky, light, roleLine)
 					c.hline(x+1, kx, ky, light, roleLine)
 					c.hline(kx+kid.w-1, right-1, ky, light, roleLine)
-					c.vline(right-1, y, ky, light, roleLine)
+					c.vline(right-1, prev, ky, light, roleLine)
 				}
+				prev = ky
 				stack = append(stack, item{kid, kx, ky})
 			}
 		case rrBypass:

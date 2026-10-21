@@ -1,6 +1,7 @@
 package text
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -75,8 +76,8 @@ func drawTime(t *testing.T, src string, cols int) time.Duration {
 // TestLongLabelsStayLinear draws the labels of the newer types at sketch's
 // default source limit. cut trimmed a label one rune at a time and measured it
 // again each time, and wrapCells measured its line and the rest of a cut word
-// again each time: 7 s and 1.3 GB for a 50,000-character radar axis or treemap
-// label at 80 columns. The bound is the same ratio as above, at the default
+// again each time: 7 s and 1.3 GB for a 50,000-character radar axis, treemap or
+// Wardley label at 80 columns. Railroad choices were quadratic the same way. The bound is the same ratio as above, at the default
 // limit, so a regression stays within a few seconds and 1.5 GB.
 func TestLongLabelsStayLinear(t *testing.T) {
 	if testing.Short() {
@@ -90,8 +91,18 @@ func TestLongLabelsStayLinear(t *testing.T) {
 		src  func(n int) string
 		cols int
 	}{
-		"radar axis":    {func(n int) string { return "radar-beta\n axis a[\"" + words(n) + "\"], b, c\n curve c{1,2,3}" }, 80},
-		"treemap label": {func(n int) string { return "treemap-beta\n\"" + word(n) + "\": 5" }, 80},
+		"radar axis":        {func(n int) string { return "radar-beta\n axis a[\"" + words(n) + "\"], b, c\n curve c{1,2,3}" }, 80},
+		"treemap label":     {func(n int) string { return "treemap-beta\n\"" + word(n) + "\": 5" }, 80},
+		"wardley component": {func(n int) string { return "wardley-beta\ncomponent " + word(n) + " [0.5, 0.5]" }, 0},
+		"cynefin item":      {func(n int) string { return "cynefin-beta\n complex\n  \"" + words(n) + "\"" }, 0},
+		"event model frame": {func(n int) string { return "eventmodeling\ntf 01 ui " + word(n) }, 80},
+		"railroad choices": {func(n int) string {
+			alts := make([]string, n/6)
+			for i := range alts {
+				alts[i] = "\"" + strconv.Itoa(i) + "\""
+			}
+			return "railroad-ebnf-beta\nr = " + strings.Join(alts, " | ") + " ;"
+		}, 80},
 	} {
 		t.Run(name, func(t *testing.T) {
 			small := drawTime(t, tc.src(n/8), tc.cols)

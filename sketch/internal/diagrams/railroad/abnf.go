@@ -239,7 +239,7 @@ func abnfAlternation(r *common.Reader) *astNode {
 }
 
 func parseAbnf(src string) *Grammar {
-	return parseGrammar(src, ABNF_TOKENS(), AB_title, func(text string) string { return text[1 : len(text)-1] }, func(r *common.Reader) *astRule {
+	return parseGrammar(src, ABNF_TOKENS(), AB_title, abnfTitle, func(r *common.Reader) *astRule {
 		name := r.Expect(AB_name)
 		r.Expect(AB_equals)
 		definition := abnfAlternation(r)
@@ -286,3 +286,11 @@ func abnfNode(part *astNode, kids []*RailroadNode) *RailroadNode {
 }
 
 func abnfRules(ast *Grammar) []RailroadRule { return toRules(ast, abnfNode) }
+
+// abnfTitle is text.slice(1, -1): a lone quote, as in `title "`, gives "".
+func abnfTitle(text string) string {
+	if len(text) < 2 {
+		return ""
+	}
+	return text[1 : len(text)-1]
+}
