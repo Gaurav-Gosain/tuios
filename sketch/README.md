@@ -18,9 +18,10 @@ diagrams, pie charts, mindmaps, gantt charts, XY charts, timelines, quadrant
 charts, user journeys, kanban boards, git graphs, sankey diagrams, block
 diagrams, architecture diagrams, requirement diagrams, C4 diagrams, packets,
 radar charts, treemaps, info diagrams, tree views, ishikawa diagrams, Cynefin
-diagrams, event models, venn diagrams, wardley maps and railroad diagrams.
-Each other diagram type gives an error with the code `unsupported-diagram`
-until its port is done.
+diagrams, event models, venn diagrams, wardley maps, railroad diagrams,
+swimlane diagrams, use case diagrams and agent flows: every type that pele
+draws. A type that pele does not draw gives an error with the code
+`unsupported-diagram`.
 
 The output matches the output of pele, except links. The test suite compares
 each diagram with an SVG that pele drew from the same source, byte for byte.
@@ -68,6 +69,9 @@ other than http, https, mailto or tel.
 | venn | 8/8 |
 | wardley | 19/19 |
 | railroad | 14/14 |
+| swimlane | 13/13 |
+| usecase | 24/24 |
+| agentflow | 12/12 |
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
