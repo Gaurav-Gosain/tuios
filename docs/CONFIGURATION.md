@@ -838,7 +838,8 @@ moving anything.
 `Alt+N` with a number past the last workspace that holds a pane opens the
 next one: with three workspaces, `Alt+5` opens workspace 4. When the
 workspace on screen is empty, it is the new one, and `Alt+N` to an unused
-number stays on it. A pane put directly on a higher number, with
+number stays on it. With no pane in any workspace, the workspace on screen
+counts as one, so `Alt+2` from the splash goes to workspace 2. A pane put directly on a higher number, with
 `tuios new-window --workspace 7` or `send_to_workspace_7`, keeps that number
 until the numbers below it close up.
 

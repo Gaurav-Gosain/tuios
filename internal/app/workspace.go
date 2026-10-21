@@ -71,6 +71,11 @@ func (m *OS) newWorkspaceSlot(workspace int) int {
 			last = ws
 		}
 	}
+	// With no pane anywhere the workspace on screen counts, as the dock counts
+	// it, so opt+2 from the splash goes to 2.
+	if last == 0 {
+		last = m.dockWorkspace()
+	}
 	return min(workspace, last+1)
 }
 

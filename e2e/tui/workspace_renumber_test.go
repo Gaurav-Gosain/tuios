@@ -506,6 +506,31 @@ func TestWorkspaceSwitchFromAnEmptyOneStaysOnIt(t *testing.T) {
 	alive(t, term, "after switching from an empty workspace")
 }
 
+// TestWorkspaceSwitchFromTheSplashGoesThere presses opt+2 in a session with
+// no pane: the workspace on screen counts while no workspace holds a pane, as
+// the dock counts it, so the switch goes to 2 rather than staying on the
+// splash of 1.
+//
+// Negative control: see NEGATIVE_CONTROLS.md.
+func TestWorkspaceSwitchFromTheSplashGoesThere(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, renumberConfig)
+	killDaemon(t, base)
+
+	term := startIn(t, base, startOpts{args: []string{"new", renumberSession}})
+	if err := term.WaitForText(welcomeHint, bootTimeout); err != nil {
+		t.Fatalf("tuios never booted: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the first frame never settled: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("press alt+2: %v", err)
+	}
+	waitWorkspace(t, base, renumberSession, 2)
+	alive(t, term, "after switching from the splash")
+}
+
 // renumberExitSetup is renumberSetup with REVW's two panes running a command
 // that exits once release is created, one of them with close_on_exit: the
 // daemon closes that one, and the attached client closes the other when its

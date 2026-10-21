@@ -8488,3 +8488,15 @@ Run on 2026-10-20, each against a build of the final tree with the fix line or l
 | A workspace with a pane on its way counted as empty, so `Alt+2 Alt+3` ended on 2 | yes | the `paneRequests` check cut from `newWorkspaceSlot` | `TestEmptyWorkspaceFastSwitches` ("Alt+2 Alt+3: workspace 3 has 0 panes, want 1") | **caught** |
 
 The fixed build passes the three new tests and the targeted run (`TestWorkspace`, `TestHerdr`, `TestEmptyWorkspace`, `TestXpanes`, `TestDockWorkspace`, `TestCloseWorkspace`, `TestLiveness`, the pane-move, attach, option-key, subscribe, Inbox and agent-state tests: 101 passed). The Collie herdr fixture keeps `tab_not_found` for `tab.close` on a tab whose last pane closed: herdr 0.9.5 removes a tab with its last pane (`Workspace::close_pane` in `src/workspace.rs`), so an emptied workspace keeps no name and no tab.
+
+### Opt+N from the splash with no pane anywhere
+
+With no pane in any workspace, `newWorkspaceSlot` found no last workspace and kept `Alt+2` on the splash of workspace 1. The dock counts the workspace on screen even when it is empty (`occupiedWorkspaceNumbers`), so while no workspace holds a pane the switch now counts it too, and `Alt+2` goes to 2. `TestUnreadableKeyKeepsTheRestOfTheFile`, `TestDoctorMatchesTheAppWithBadKeys` and `TestReloadWithABadKeyAppliesTheRest` press a configured workspace key from the splash and failed with "is on workspace 1, want 2". The new test is `TestWorkspaceSwitchFromTheSplashGoesThere` in `workspace_renumber_test.go`.
+
+Run on 2026-10-21 on macOS, against a build with the fix line cut, built to a separate path, the source restored afterwards.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| `Alt+N` from the splash stayed on 1 | yes | the `last == 0` fallback in `newWorkspaceSlot` disabled | `TestWorkspaceSwitchFromTheSplashGoesThere` ("is on workspace 1, want 2"), `TestReloadWithABadKeyAppliesTheRest` ("e2e-reload-bad-key is on workspace 1, want 2") | **caught** |
+
+`TestWorkspaceSwitchFromAnEmptyOneStaysOnIt` passes on the cut build too, as it should: there, workspaces 1 to 3 hold panes. The fixed build passes the four tests above, every `TestWorkspace*`, `TestHerdrTab*` and `TestEmptyWorkspace*` test (33 in all).
