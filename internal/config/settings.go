@@ -328,8 +328,9 @@ type Settings struct {
 	// the historic rendering.
 	DockWorkspaceTabFormat string
 
-	// DockWorkspaceTooltip pops the whole name of a workspace whose pill had to cut
-	// it short. Off, a long name stays truncated with no way to read the rest.
+	// DockWorkspaceTooltip pops the whole name of a workspace whose pill does not
+	// show it: the pill had to cut it short, or the tab format has no {name}.
+	// Off, the name stays cut or hidden with no way to read it from the dock.
 	DockWorkspaceTooltip bool
 
 	// DockWorkspaceLabelMax caps a workspace pill's label in cells. 0 draws the

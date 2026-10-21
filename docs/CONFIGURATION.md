@@ -1079,6 +1079,20 @@ whatever room is left, so the workspaces always have something to click. You
 can also set it on the settings page, in the Appearance section. The change
 applies at once.
 
+## Workspace name on hover
+
+`appearance.dock_workspace_tooltip` shows the workspace name above a pill
+when you hover it. The name shows when the pill cuts the name short. It also
+shows when `appearance.dock_workspace_tab_format` has no `{name}`, for
+example with number-only tabs. A workspace with no name shows no label,
+because its name is its number. The option is on by default.
+
+```toml
+[appearance]
+dock_workspace_tab_format = "{index}"
+dock_workspace_tooltip = true
+```
+
 ## Compact dock
 
 The dock has two rows by default: a rule and the row of pills.

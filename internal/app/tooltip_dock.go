@@ -71,12 +71,12 @@ func (m *OS) renderDockSessionTooltip() *lipgloss.Layer {
 }
 
 // dockWorkspaceTooltipTrack arms the label for the workspace pill under the
-// pointer. A pill whose name fits arms nothing: it is already saying all of it,
-// so a label would repeat the screen and hold the maintenance tick open across
-// the delay for no reason. The "+" tab resolves to no workspace and is skipped
-// with it.
+// pointer. A pill that shows the whole name arms nothing: it is already saying
+// all of it, so a label would repeat the screen and hold the maintenance tick
+// open across the delay for no reason. The "+" tab resolves to no workspace and
+// is skipped with it.
 func (m *OS) dockWorkspaceTooltipTrack(ws int) {
-	if ws <= 0 || !m.workspacePillClipped(ws) {
+	if ws <= 0 || !m.workspacePillHidesName(ws) {
 		if m.Tooltip.Source == tooltipDockWorkspace {
 			m.tooltipClear()
 		}
@@ -85,7 +85,8 @@ func (m *OS) dockWorkspaceTooltipTrack(ws int) {
 	m.tooltipTrack(tooltipDockWorkspace, ws)
 }
 
-// renderDockWorkspaceTooltip says the hovered pill's name in full.
+// renderDockWorkspaceTooltip says the hovered pill's name in full: the rest of
+// a cut name, or the name a tab format without {name} leaves out.
 //
 // It is placed exactly as the session controls' label is, one row off the bar,
 // anchored to the pill's recorded first column so it opens under the name it is
@@ -154,7 +155,7 @@ func (m *OS) dockHoverChangesAt(x, y int) bool {
 	src, key := tooltipNone, 0
 	if a != DockSessionNone {
 		src, key = tooltipDockSession, int(a)
-	} else if ws := m.DockWorkspacePillAt(x, y); ws > 0 && m.workspacePillClipped(ws) {
+	} else if ws := m.DockWorkspacePillAt(x, y); ws > 0 && m.workspacePillHidesName(ws) {
 		src, key = tooltipDockWorkspace, ws
 	}
 	switch {

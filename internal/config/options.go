@@ -655,7 +655,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.dock_workspace_tooltip", Type: OptionBool, Section: "dock",
-		Description: "Pop a truncated workspace name in full on hover",
+		Description: "Show the workspace name on hover when the pill cuts the name or does not show it",
 		Default:     "true",
 	},
 	{

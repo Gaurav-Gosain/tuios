@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -162,6 +164,89 @@ func TestDockWorkspaceLabelCapAndFormats(t *testing.T) {
 				}
 			}
 			tc.expect(t, dockRow(term.Screen()))
+		})
+	}
+}
+
+// TestDockIndexTabShowsTheNameOnHover is issue 927: with a tab format that has
+// no {name}, the pill shows only the number, and hovering it showed nothing.
+// The hover label now says the workspace's name, and only while
+// appearance.dock_workspace_tooltip is on.
+func TestDockIndexTabShowsTheNameOnHover(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		tooltip bool
+	}{
+		{"tooltip on", true},
+		{"tooltip off", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			cfg := "[appearance]\ndock_workspace_tab_format = \"{index}\"\n"
+			if !tc.tooltip {
+				cfg += "dock_workspace_tooltip = false\n"
+			}
+			writeConfig(t, base, cfg)
+			if out, err := tuiosCLI(t, base, "new", "dockidx", "--detach"); err != nil {
+				t.Fatalf("create session: %v: %s", err, out)
+			}
+			term := attachIn(t, base, "dockidx", startOpts{cols: 100, rows: 24})
+
+			// Name workspace 1, then open a pane on workspace 2, so the strip
+			// shows two pills.
+			if err := term.SendKeys(tuitest.Ctrl('b'), "w"); err != nil {
+				t.Fatalf("open the workspace prefix: %v", err)
+			}
+			if err := term.SendKeys("r"); err != nil {
+				t.Fatalf("open the workspace rename: %v", err)
+			}
+			if err := term.WaitFor(renameDialogUp, uiTimeout); err != nil {
+				t.Fatalf("the workspace rename dialog never opened: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys("buildbox", tuitest.Enter); err != nil {
+				t.Fatalf("type the name: %v", err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return !renameDialogUp(s) }, uiTimeout); err != nil {
+				t.Fatalf("the rename dialog never closed: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+				t.Fatalf("switch to workspace 2: %v", err)
+			}
+			newWindow(t, term)
+
+			// The pill for workspace 1 is the first "1" between spaces on the
+			// dock row.
+			var col, row int
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				row = dockRowIndex(s)
+				line := s.Line(row)
+				at := strings.Index(line, " 1 ")
+				// A column, not a byte offset: the mode pill's icon is
+				// several bytes wide and one cell wide.
+				col = utf8.RuneCountInString(line[:max(at, 0)])
+				return at >= 0 && strings.Contains(line, " 2 ")
+			}, uiTimeout); err != nil {
+				t.Fatalf("the dock never showed both workspace pills: %v\n%s", err, term.Snapshot())
+			}
+			if strings.Contains(term.Screen().Text(), "buildbox") {
+				t.Fatalf("the name is on screen before any hover, so the hover cannot be read:\n%s", term.Snapshot())
+			}
+			sendMouse(t, term, "hover the workspace 1 pill", tuitest.MouseEvent{
+				Col: col + 1, Row: row, Button: tuitest.MouseNone, Action: tuitest.MouseMove,
+			})
+
+			err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Contains(s.Text(), "buildbox")
+			}, 3*time.Second)
+			dir := artifactDir(t)
+			saveArtifact(t, term, dir, "hover")
+			savePNG(t, term.Screen(), hostPalette(t, ""), dir, "hover")
+			switch {
+			case tc.tooltip && err != nil:
+				t.Fatalf("hovering an index-only pill never showed the workspace name: %v\n%s", err, term.Snapshot())
+			case !tc.tooltip && err == nil:
+				t.Fatalf("the name showed on hover with dock_workspace_tooltip off:\n%s", term.Snapshot())
+			}
 		})
 	}
 }

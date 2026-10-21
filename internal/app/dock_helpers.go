@@ -230,6 +230,22 @@ func (m *OS) workspacePillClipped(n int) bool {
 	return lipgloss.Width(m.workspaceTabText(&tabs, n)) > limit
 }
 
+// workspacePillHidesName reports whether the pill does not show workspace n's
+// whole name, which is when the hover label has something to say: the pill cut
+// the name short, or the tab format has no {name} and the workspace has a name
+// of its own. An unnamed workspace's name is its number, which an index-only
+// pill already shows.
+func (m *OS) workspacePillHidesName(n int) bool {
+	if m.workspacePillClipped(n) {
+		return true
+	}
+	format := m.Settings.DockWorkspaceTabFormat
+	if format == "" || strings.Contains(format, "{name}") {
+		return false
+	}
+	return printableTitle(m.WorkspaceNames[n]) != ""
+}
+
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a
 // window, plus the current one even when it is empty. It answers which, in
 // numeric order, and occupiedWorkspaces answers where.
