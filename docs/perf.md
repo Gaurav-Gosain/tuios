@@ -3257,6 +3257,14 @@ builds it). The change measured 44,855,458 and 41,728,034, so it adds 888,832
 and 779,456 bytes. No dependency was added. The new budgets leave 4,198 bytes
 of room.
 
+The budgets went to 45,715,720 and 42,492,680 when sketch began to draw use
+case diagrams, agent flows and swimlane diagrams, the last of the pele diagram
+types, as pictures and as text. The build before it measured 44,855,458 and
+41,728,034 bytes (Go 1.26.10, as CI builds it). The change measured 45,711,522
+and 42,488,482, so it adds 856,064 and 760,448 bytes. No dependency was added.
+The binary stays under the 50 MB ceiling. The new budgets leave 4,198 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
