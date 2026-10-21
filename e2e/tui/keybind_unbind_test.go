@@ -41,7 +41,8 @@ func TestPaletteReachesTheKeybindManager(t *testing.T) {
 
 // TestPaletteTokenSearchesActions. Typing "#" turns the palette into a search
 // over actions, which is what makes rebinding a specific one reachable without
-// scrolling a list of a few hundred.
+// scrolling a list of a few hundred. Enter runs the row's action (see
+// TestPaletteRunsTheActionItFinds), and ctrl+e opens the manager on it.
 //
 // Negative control: drop the "#" branch from FilterCommandPalette and this
 // fails: "#toggle_zoom" matches no command name and the palette shows nothing.
@@ -58,8 +59,8 @@ func TestPaletteTokenSearchesActions(t *testing.T) {
 	if err := term.WaitForText("toggle_zoom", uiTimeout); err != nil {
 		t.Fatalf("the token search found no toggle_zoom row: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys(tuitest.Enter); err != nil {
-		t.Fatalf("activate the action row: %v", err)
+	if err := term.SendKeys(tuitest.Ctrl('e')); err != nil {
+		t.Fatalf("rebind the action row: %v", err)
 	}
 	if err := term.WaitForText(keybindTitle, uiTimeout); err != nil {
 		t.Fatalf("the action row did not open the manager: %v\n%s", err, term.Snapshot())
@@ -99,7 +100,7 @@ func TestUnbindingFromTheOverlayReachesTheConfigFile(t *testing.T) {
 	if err := term.WaitForText("toggle_zoom", uiTimeout); err != nil {
 		t.Fatalf("no toggle_zoom row: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys(tuitest.Enter); err != nil {
+	if err := term.SendKeys(tuitest.Ctrl('e')); err != nil {
 		t.Fatalf("open the manager: %v", err)
 	}
 	if err := term.WaitForText(keybindTitle, uiTimeout); err != nil {
