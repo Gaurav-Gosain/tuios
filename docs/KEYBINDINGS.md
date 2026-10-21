@@ -923,7 +923,8 @@ restart_daemon = ["alt+r"]
 
 ## Move a pane to another workspace
 
-Three default keys go to workspace N or send the focused pane there. They work in window mode and in terminal mode.
+Three default key sets go to workspace N or send the focused pane there. They
+work in window mode and in terminal mode.
 
 | Action | macOS | Linux and other | What it does |
 | --- | --- | --- | --- |
@@ -931,14 +932,23 @@ Three default keys go to workspace N or send the focused pane there. They work i
 | `move_and_follow_1` to `move_and_follow_9` | `opt+shift+N` | `alt+shift+N` | Sends the focused pane to workspace N and shows workspace N. |
 | `send_to_workspace_1` to `send_to_workspace_9` | `ctrl+opt+N` | `ctrl+alt+N` | Sends the focused pane to workspace N and stays on this workspace. Focus goes to another pane here. |
 
-A legacy terminal sends `ctrl+alt+N` as `alt+N` or as a control character for most digits, so `send_to_workspace_N` needs a terminal that reports Ctrl and Alt with a digit: one with the Kitty keyboard protocol, such as Ghostty, kitty, WezTerm and foot, or xterm's modifyOtherKeys. In another terminal, bind the action to a key the terminal can send:
+`send_to_workspace_N` needs a terminal that reports Ctrl and Alt with a digit.
+A legacy terminal sends `ctrl+alt+N` as `alt+N`, or as a control character for
+most digits. The Kitty keyboard protocol reports the key, and so does xterm's
+modifyOtherKeys. Ghostty, kitty, WezTerm and foot speak the Kitty protocol. In
+another terminal, bind the action to a key the terminal can send:
 
 ```toml
 [keybindings.workspaces]
 send_to_workspace_2 = ["alt+w"]
 ```
 
-When your `config.toml` already binds `ctrl+alt+N` to another action in window mode, that binding keeps the key and `send_to_workspace_N` has no key. `tuios keybinds doctor` lists it.
+Your `config.toml` may already bind `ctrl+alt+N` to another action in window
+mode. Then that binding keeps the key, and `send_to_workspace_N` has none.
+`tuios keybinds doctor` lists it.
+
+Windows sends AltGr as Ctrl+Alt. A character typed with AltGr, such as `€` on a
+UK keyboard, still reaches the pane and does not move it.
 
 ## Cycle through workspaces
 
