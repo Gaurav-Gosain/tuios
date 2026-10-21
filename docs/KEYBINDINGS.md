@@ -921,6 +921,25 @@ restart_daemon = ["alt+r"]
 `tuios restart-server` does the same from a shell. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-restart-server).
 
+## Move a pane to another workspace
+
+Three default keys go to workspace N or send the focused pane there. They work in window mode and in terminal mode.
+
+| Action | macOS | Linux and other | What it does |
+| --- | --- | --- | --- |
+| `switch_workspace_1` to `switch_workspace_9` | `opt+N` | `alt+N` | Shows workspace N. |
+| `move_and_follow_1` to `move_and_follow_9` | `opt+shift+N` | `alt+shift+N` | Sends the focused pane to workspace N and shows workspace N. |
+| `send_to_workspace_1` to `send_to_workspace_9` | `ctrl+opt+N` | `ctrl+alt+N` | Sends the focused pane to workspace N and stays on this workspace. Focus goes to another pane here. |
+
+A legacy terminal sends `ctrl+alt+N` as `alt+N` or as a control character for most digits, so `send_to_workspace_N` needs a terminal that reports Ctrl and Alt with a digit: one with the Kitty keyboard protocol, such as Ghostty, kitty, WezTerm and foot, or xterm's modifyOtherKeys. In another terminal, bind the action to a key the terminal can send:
+
+```toml
+[keybindings.workspaces]
+send_to_workspace_2 = ["alt+w"]
+```
+
+When your `config.toml` already binds `ctrl+alt+N` to another action in window mode, that binding keeps the key and `send_to_workspace_N` has no key. `tuios keybinds doctor` lists it.
+
 ## Cycle through workspaces
 
 The `next_workspace` and `prev_workspace` actions go to the next or the
@@ -952,7 +971,6 @@ section where you want them.
 | `last_session` | Goes back to the session you were on before this one, as tmux `switch-client -l` does. |
 | `send_prefix` | Sends the leader key to the program in the focused pane, as pressing the leader two times in terminal mode does. Use it for screen's `C-a a`, or for a tmux in the pane. |
 | `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. |
-| `send_to_workspace_1` to `send_to_workspace_9` | Sends the focused pane to that workspace. |
 | `cycle_layout` | Cycles BSP, master-stack and scrolling. |
 | `reload_config` | Reads `config.toml` again, as the "Reload config" palette row does. |
 | `toggle_mouse` | Stops asking the terminal for mouse reports, so the terminal selects text itself. Run it again to turn the mouse back on. The setting lasts until you quit. |
