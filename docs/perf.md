@@ -3230,6 +3230,14 @@ before it measured 43,516,066 and 40,558,706 bytes. The change measured
 on each, the code itself is far smaller. No dependency
 was added. The new budgets leave 4,198 bytes of room.
 
+The budgets went to 43,565,320 and 40,612,744 when TML surfaces got their new
+chrome: the popup dialog and its scrim, the owner tag, thin bars in plot,
+and charts and path columns in loom that give way before text. The build
+before it measured 43,520,162 and 40,575,394 bytes (Go 1.26.10, as CI builds
+it). The change measured 43,561,122 and 40,608,546, so it adds 40,960 and
+33,152 bytes. No dependency was added. The new budgets leave 4,198 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
