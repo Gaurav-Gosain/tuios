@@ -24,6 +24,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -306,6 +307,13 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	if err := checkNativeAsks(p, in.o); err != nil {
 		return err
 	}
+	if slices.Contains(e.Grants, "admin") {
+		// Ask before anything is built. It is asked again before the
+		// approval is written.
+		if err := confirmPerson(); err != nil {
+			return err
+		}
+	}
 	hash := herdrplugin.TrustHash(e.Source, p, e.Grants)
 	changed := e.Approved != "" && e.Approved != hash
 	rel := ""
@@ -383,8 +391,12 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		}
 	}
 	if slices.Contains(e.Grants, "admin") {
-		// checkNativeAsks made sure the person typed --grant admin.
-		if err := herdrplugin.ApproveAdmin(in.dirs.AdminApprovalsPath(), e.ID, e.Approved); err != nil {
+		// checkNativeAsks made sure the person typed --grant admin. The
+		// daemon confirms that the person runs this command.
+		if err := confirmPerson(); err != nil {
+			return err
+		}
+		if err := herdrplugin.ApproveAdmin(in.dirs.AdminApprovalsPath(), p, e.Approved); err != nil {
 			return err
 		}
 	}
@@ -818,6 +830,25 @@ func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
 	}
 	if slices.Contains(p.Grants, "admin") && !slices.Contains(o.grants, "admin") {
 		return fmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", p.PluginID)
+	}
+	return nil
+}
+
+// confirmPerson asks the daemon whether the person runs this command: the
+// kernel check attach-presence makes, which refuses a pane, a plugin's
+// process and a process that only stripped its pane variables. Only the
+// person may approve the admin grant.
+func confirmPerson() error {
+	if err := ensureDaemon(); err != nil {
+		return err
+	}
+	client, err := session.DialVerbClientAs(version)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	if _, err := client.CallWithTimeout("attach-presence", nil, 5*time.Second); err != nil {
+		return fmt.Errorf("only you, from a terminal outside tuios, can give a plugin the admin grant. The daemon said: %w", err)
 	}
 	return nil
 }

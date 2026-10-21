@@ -211,7 +211,7 @@ func Discover(d Dirs, enabled []string) []Entry {
 				if lock != nil {
 					p.Held = slices.Clone(lock.Grants)
 				}
-				if slices.Contains(p.Held, "admin") && !adminApproved(d.AdminApprovalsPath(), p.PluginID, lock.Approved) {
+				if slices.Contains(p.Held, "admin") && !adminApproved(d.AdminApprovalsPath(), p, lock.Approved) {
 					p.Held = []string{}
 					e.Err = errf("plugin_admin_not_approved", "%s holds the admin grant only when you approve it on this machine. Run tuios plugins install again with --grant admin, from a terminal outside tuios", p.PluginID)
 				}

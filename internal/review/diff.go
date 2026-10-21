@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 
@@ -430,10 +431,18 @@ func gitEnv(extra []string) []string {
 	return append(env, extra...)
 }
 
+// gitWaitDelay is how long git's output is read after ctx ends.
+const gitWaitDelay = 2 * time.Second
+
 // git runs one git command in dir, bounded by ctx, and returns its stdout. A
 // failure carries git's own message.
 func git(ctx context.Context, dir string, extra []string, args ...string) (string, error) {
 	cmd := childproc.CommandContext(ctx, "git", args...)
+	// A child of git, such as git-remote-https on a remote that stopped
+	// answering, keeps the output pipes open after the context kills git.
+	// Without a delay, Run would wait for that child and the timeout would
+	// not hold.
+	cmd.WaitDelay = gitWaitDelay
 	cmd.Dir = dir
 	cmd.Env = gitEnv(extra)
 	var stdout, stderr bytes.Buffer

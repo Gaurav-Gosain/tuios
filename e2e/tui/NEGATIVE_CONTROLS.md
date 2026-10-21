@@ -7838,6 +7838,27 @@ too: a process a plugin leaves behind, with its parent gone and its
 `TUIOS_*` variables cut, was taken for the person and could disable a
 plugin.
 
+### After the second review of #956
+
+`TestNativePluginGrants` now also changes `probe.sh` of an approved `admin`
+plugin and changes it back, makes the approval folder writable by the group
+and private again, and runs `tuios plugins install --grant admin` from a
+pane with `TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` cut. Three unit tests come
+with it: `TestOwnerForgetsAnEmptiedGroup` (`internal/herdrplugin`, Linux,
+runs itself as pid 1 of a new pid namespace and skips where user namespaces
+are not allowed), `TestGitTimeoutHoldsWithAHungChild` (`internal/review`)
+and `TestHerdrVerbMethodsRunTheGrantCheck` (`internal/session`). Run on
+2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The daemon confirms the person before an approval | `confirmPerson` returns nil | `TestNativePluginGrants` ("a pane approved admin with its pane variables cut", "a pane wrote the admin approval") | **caught** |
+| The approval covers the files the commands name | `adminApproved` ignores the code hash | `TestNativePluginGrants` ("after probe.sh changed: plugins info lacks plugin_admin_not_approved") | **caught** |
+| The approval folder must be private | `readApprovals` checks only the file | `TestNativePluginGrants` ("with the approval folder writable by the group") | **caught** |
+| Kept entries go when their group empties | `setOwner` starts no sweep | `TestOwnerForgetsAnEmptiedGroup` ("the entry of session 7 outlived its process group", "a stranger's daemon (pid 8, session 7) is counted as plugin e2e.admin") | **caught** |
+| A git child cannot hold the timeout | no `WaitDelay` in `review.git` | `TestGitTimeoutHoldsWithAHungChild` ("Git returned after 20.0s") | **caught** |
+| A herdrVerbs label means the grant check runs | `ping` and `plugin.list` labelled `herdrVerbs` | `TestHerdrVerbMethodsRunTheGrantCheck` ("its handler herdrPing never reaches admitVerb, callVerb or checkGrants") | **caught** |
+
 `TestHerdrMethodsNameTheirCheck` in `internal/session` is a security
 boundary test: every herdr socket method names its check in `herdrChecks`,
 and a method with none is refused at run time.

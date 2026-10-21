@@ -87,6 +87,9 @@ type Runner struct {
 	// in its process group is still its plugin's. native counts the native plugins among them.
 	owners map[int]owner
 	native atomic.Int32
+	// sweeping is set while sweep runs: while an exited leader's entry is
+	// kept.
+	sweeping bool
 	// OnPID, when set, is told each process the runner starts and ends, so
 	// the daemon can tell a plugin's process from a person's.
 	OnPID func(pid int, running bool)
@@ -396,6 +399,43 @@ func (r *Runner) setOwner(sid int, o owner) {
 	r.owners[sid] = o
 	if o.plugin.Format == FormatTuios {
 		r.native.Add(1)
+	}
+	if o.exited && !r.sweeping {
+		r.sweeping = true
+		go r.sweep()
+	}
+}
+
+// sweepEvery is how often sweep looks at the kept entries.
+const sweepEvery = 250 * time.Millisecond
+
+// sweep drops each kept entry within sweepEvery of its process group
+// emptying. The kernel does not hand out a pid while a process group or
+// session uses it as its id, so the leader's pid can come back only after
+// the group is gone, and then only after the kernel has walked through the
+// other free pids. A stranger would have to get that pid, start a session
+// and leave a child in it inside that quarter second. Dropping entries only
+// on a lookup left them in place for as long as nobody asked. sweep runs
+// only while an entry is kept, and stops when none is.
+func (r *Runner) sweep() {
+	t := time.NewTicker(sweepEvery)
+	defer t.Stop()
+	for range t.C {
+		r.mu.Lock()
+		kept := false
+		for sid, o := range r.owners {
+			if o.exited {
+				r.setOwner(sid, o)
+				_, still := r.owners[sid]
+				kept = kept || still
+			}
+		}
+		if !kept {
+			r.sweeping = false
+			r.mu.Unlock()
+			return
+		}
+		r.mu.Unlock()
 	}
 }
 

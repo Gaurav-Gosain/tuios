@@ -954,11 +954,20 @@ process that moves to another process group, after the command ends. This
 check stops mistakes and misled tools. It does not stop a program that
 tries to escape. No plugin process can act as the person.
 
-A native plugin holds `admin` only when you approved it on this machine:
-`tuios plugins install --grant admin` records the approval in the state
-folder, for that exact manifest. `plugins.lock` alone never gives `admin`.
-A plugin installed from a folder is checked against its approved manifest
-too. After you change its manifest, install it again.
+A native plugin holds `admin` only when you approved it on this machine.
+`tuios plugins install --grant admin` asks the daemon to confirm that you,
+not a pane or a plugin, run it. Then it records the approval in the state
+folder. The approval covers the manifest and the files its commands name,
+such as `bin/status` or `probe.sh`. When one of them changes, the plugin
+loses `admin` until you approve it again. tuios reads the approval only
+when you own the file and its folder and nobody else can write them.
+`plugins.lock` alone never gives `admin`. A plugin installed from a folder
+is checked against its approved manifest too. After you change its
+manifest, install it again.
+
+The approval stops a lock file from another machine, a hand edit and a
+changed plugin. It does not stop a program that runs as you: such a program
+can write the approval file itself, as it can write `config.toml`.
 On Windows and the BSDs, the kernel does not tell tuios which process
 calls. There tuios does not run the commands of a native plugin yet.
 
