@@ -569,10 +569,7 @@ func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 			return ""
 		}
 		e := list[r.agent]
-		if g := m.ckWorktreeOf(e).group; g != "" {
-			return e.Host + "\x00" + g
-		}
-		return ""
+		return ckFanKey(e.Host, m.ckWorktreeOf(e))
 	}
 	count := map[string]int{}
 	for _, r := range items {
@@ -637,12 +634,12 @@ func ckFanOrder(a, b string) int {
 	return na - nb
 }
 
-// ckFanSize is how many sessions of this machine belong to the fan f.
+// ckFanSize is how many sessions belong to the fan f, by ckFanKey.
 func (m *OS) ckFanSize(f string) int {
 	n := 0
 	for k, w := range m.Inbox.ck.branches {
 		host, _, _ := strings.Cut(k, "\x00")
-		if w.group != "" && host+"\x00"+w.group == f {
+		if ckFanKey(host, w) == f {
 			n++
 		}
 	}

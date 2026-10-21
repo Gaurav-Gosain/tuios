@@ -232,7 +232,7 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 	}
 
 	// api-auth: its transcript, then the approval it waits on.
-	fixture, err := os.ReadFile(filepath.Join("testdata", "transcript", "cockpit-auth.jsonl"))
+	fixture, err := os.ReadFile(filepath.Join("testdata", "transcript", "cockpit-frame-a.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,9 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 	report(base, "auth", "api-auth", "claude-code", "", "", frameAWorktrees[0].meta)
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "auth"}, cols: cols, rows: rows, shippedLooks: true,
-		env: append([]string{"TERM=xterm-256color", "COLORTERM=truecolor"}, env...)})
+		// HOME at the test's folder, so a frame names its folders from ~
+		// and never the machine's own.
+		env: append([]string{"TERM=xterm-256color", "COLORTERM=truecolor", "HOME=" + base}, env...)})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Do you want to proceed?") }, bootTimeout); err != nil {
 		t.Fatalf("client never showed api-auth's pane: %v\n%s", err, term.Snapshot())
 	}

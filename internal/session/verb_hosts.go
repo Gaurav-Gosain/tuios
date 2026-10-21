@@ -122,12 +122,29 @@ type remoteAgentPane struct {
 }
 
 // Bounds of a host's agent panes as a listing passes them on: about 600 bytes
-// a pane at most, and 32 panes a session.
+// a pane at most, 32 panes a session and 256 a host.
 const (
 	remoteAgentPanesMax = 32
+	remoteAgentHostMax  = 256
 	remoteAgentMetaMax  = 8
 	remoteAgentTextMax  = 160
+	remoteAgentIDMax    = 64
 )
+
+// plausibleWindowID reports whether id can be a window ID: letters, digits
+// and hyphens, at most remoteAgentIDMax bytes. A host chooses the IDs of its
+// panes, and the agents view draws one when a pane has no title.
+func plausibleWindowID(id string) bool {
+	if id == "" || len(id) > remoteAgentIDMax {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
 
 // agentPanes are the agent panes among a host's window summaries, bounded.
 func agentPanes(windows []WindowSummary) []remoteAgentPane {
@@ -139,13 +156,13 @@ func agentPanes(windows []WindowSummary) []remoteAgentPane {
 		return strings.ToValidUTF8(s[:remoteAgentTextMax], "")
 	}
 	for _, w := range windows {
-		if w.AgentState == "" {
+		if w.AgentState == "" || !plausibleWindowID(w.ID) {
 			continue
 		}
 		if len(out) == remoteAgentPanesMax {
 			break
 		}
-		p := remoteAgentPane{ID: clip(w.ID), Title: clip(w.Title), State: clip(w.AgentState), StateAt: w.AgentStateAt,
+		p := remoteAgentPane{ID: w.ID, Title: clip(w.Title), State: clip(w.AgentState), StateAt: w.AgentStateAt,
 			Harness: clip(w.AgentHarness), Message: clip(w.AgentMessage), Kind: clip(w.AgentKind), Subagents: max(w.Subagents, 0)}
 		for _, t := range w.AgentMeta {
 			if len(p.Meta) == remoteAgentMetaMax {
@@ -410,12 +427,19 @@ func decodeHostSessions(raw json.RawMessage) ([]remoteSessionListRow, error) {
 }
 
 // sessionRowsOut is a host's rows as a listing sends them, each rolled up to
-// its most urgent agent state.
+// its most urgent agent state, with at most remoteAgentHostMax agent panes
+// over all of them.
 func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
 	rows := make([]remoteSessionRow, 0, len(in))
+	left := remoteAgentHostMax
 	for _, r := range in {
 		r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
-		r.remoteSessionRow.Agents = agentPanes(r.Windows)
+		agents := agentPanes(r.Windows)
+		if len(agents) > left {
+			agents = agents[:left]
+		}
+		left -= len(agents)
+		r.remoteSessionRow.Agents = agents
 		rows = append(rows, r.remoteSessionRow)
 	}
 	return rows

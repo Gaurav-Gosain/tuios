@@ -35,12 +35,13 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 		return nil
 	}
 	ref := &sessiontree.WorktreeRef{
-		Repo:   info.Repo,
-		Branch: info.Branch,
-		Group:  info.Group,
-		Gone:   info.Gone,
-		PR:     info.PR.Badge(),
-		Path:   info.Path,
+		Repo:     info.Repo,
+		Branch:   info.Branch,
+		Group:    info.Group,
+		Gone:     info.Gone,
+		PR:       info.PR.Badge(),
+		Path:     info.Path,
+		RepoRoot: info.RepoRoot,
 	}
 	if info.PR != nil {
 		ref.PRFailed = info.PR.Failed

@@ -472,9 +472,9 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	switch h := m.ckScope(); h {
 	case "":
 	case federation.LocalHostName:
-		label = ckLocalName()
+		label = m.ckMachine("")
 	default:
-		label = printableTitle(h)
+		label = ckHostLabel(h)
 	}
 	segs := []ckSeg{{t: label + " ", fg: pal.FgDim}, {t: l.g(ckGlyphOpen), fg: pal.FgMute}}
 	if mx := sx - 3 - ckWidth(segs...); mx > x {
@@ -579,18 +579,24 @@ func (m *OS) ckMachines() []ckMachineRow {
 		if h.Name == federation.LocalHostName {
 			continue
 		}
-		out = append(out, ckMachineRow{host: h.Name, name: printableTitle(h.Name), agents: ck.machines[h.Name],
+		if h.Name == m.AttachedHost {
+			// The machine the client is attached to is the local row.
+			continue
+		}
+		out = append(out, ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
 			up: h.Status == string(federation.StatusUp), status: h.Status})
 	}
 	if len(out) == 0 {
 		return nil
 	}
-	if now := time.Now(); now.Sub(ck.loadAt) >= ckLoadEvery {
+	local := ckMachineRow{name: m.ckMachine(""), agents: ck.machines[""], up: true}
+	// This machine's load, read here only when the agents of the local row
+	// run here: attached to another machine, they run there.
+	if now := time.Now(); m.AttachedHost == "" && now.Sub(ck.loadAt) >= ckLoadEvery {
 		ck.loadAt = now
 		ck.load, ck.loadOK = spawnLoadAvg()
 	}
-	local := ckMachineRow{name: ckLocalName(), agents: ck.machines[""], up: true}
-	if ck.loadOK {
+	if ck.loadOK && m.AttachedHost == "" {
 		local.load, local.loadOK = ck.load/float64(max(runtime.NumCPU(), 1)), true
 	}
 	return append([]ckMachineRow{local}, out...)
@@ -619,7 +625,7 @@ func (m *OS) drawMachines(c *ckCanvas, l ckLook, ms []ckMachineRow, w, y, top in
 		if mr.agents != 1 {
 			agents += "s"
 		}
-		c.text(2, yy, right, ckSeg{t: l.g(ckGlyphHost), fg: pal.FgMute}, ckSeg{t: "  " + ckPad(ckTrunc(mr.name, 9), 10), fg: nameInk},
+		c.text(2, yy, right, ckSeg{t: l.g(ckGlyphHost), fg: pal.FgMute}, ckSeg{t: "  " + ckPad(ckTruncMid(mr.name, 9), 10), fg: nameInk},
 			ckSeg{t: agents, fg: pal.FgDim})
 		link := "local"
 		if mr.host != "" {
@@ -918,7 +924,8 @@ func (m *OS) ckRowFacts(r ckRow, e sidebarAgentEntry) (name, harness, place, wai
 	if r.agent >= 0 {
 		name = printableTitle(e.Title)
 		if name == "" {
-			name = shortWindowLabel(e.WindowID)
+			// The ID of a pane on another machine is the host's choice.
+			name = printableTitle(shortWindowLabel(e.WindowID))
 		}
 		harness = ckHarness(e.Harness)
 		place = m.ckPlace(e)
@@ -960,7 +967,7 @@ func (m *OS) ckPlace(e sidebarAgentEntry) string {
 	if !m.ckManyMachines() {
 		return printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
 	}
-	return m.cockpitLook().g(ckGlyphHost) + " " + ckMachine(e.Host)
+	return m.cockpitLook().g(ckGlyphHost) + " " + m.ckMachine(e.Host)
 }
 
 // ckManyMachines reports whether a host other than this machine is
@@ -974,13 +981,42 @@ func (m *OS) ckManyMachines() bool {
 	return false
 }
 
-// ckMachine names a machine: the host's name, or this machine's own name
-// for "".
-func ckMachine(host string) string {
+// ckMachine names a machine: the host's name, or for "" the machine the
+// client is attached to, this one unless it is attached to a host.
+func (m *OS) ckMachine(host string) string {
+	if host == "" {
+		host = m.AttachedHost
+	}
 	if host != "" {
-		return printableTitle(host)
+		return ckHostLabel(host)
 	}
 	return ckLocalName()
+}
+
+// ckHostLabel is a host's name as the agents view draws it: printable, at
+// most ckHostLabelMax cells, cut in the middle so names that differ at the
+// end stay apart. A name with nothing printable is written escaped.
+func ckHostLabel(name string) string {
+	label := printableTitle(name)
+	if strings.TrimSpace(label) == "" {
+		label = strings.Trim(strconv.QuoteToASCII(name), `"`)
+	}
+	return ckTruncMid(label, ckHostLabelMax)
+}
+
+// ckHostLabelMax bounds a host's name in the agents view.
+const ckHostLabelMax = 24
+
+// ckTruncMid cuts s to n cells in the middle, with an ellipsis, keeping more
+// of the start than of the end: "build-se…r-01".
+func ckTruncMid(s string, n int) string {
+	if ansi.StringWidth(s) <= n || n < 5 {
+		return ckTrunc(s, n)
+	}
+	tail := (n - 1) / 2
+	head := n - 1 - tail
+	end := ansi.TruncateLeft(s, ansi.StringWidth(s)-tail, "")
+	return ansi.Truncate(s, head, "") + overlay.Ellipsis() + end
 }
 
 // ckLocalName is this machine's short host name, read once.
@@ -1147,8 +1183,17 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 
 // ckWorktree is what the cockpit shows of an agent's worktree session.
 type ckWorktree struct {
-	branch, group, path, prompt string
-	failed                      int
+	branch, group, path, prompt, repo string
+	failed                            int
+}
+
+// ckFanKey names a fan: its machine, its repository and its group, "" for
+// a session that is not an attempt of one.
+func ckFanKey(host string, w ckWorktree) string {
+	if w.group == "" {
+		return ""
+	}
+	return host + "\x00" + w.repo + "\x00" + w.group
 }
 
 // ckBranch is the branch of the agent's worktree session, empty when it is
@@ -1169,7 +1214,7 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 	for _, s := range m.BuildSessionTree().Sessions {
 		if w := s.Worktree; w != nil && w.Branch != "" {
 			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group,
-				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed}
+				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot}
 		}
 	}
 	return out
@@ -1451,30 +1496,59 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		c.text(hx, y, right, ckSeg{t: " · " + model, fg: pal.FgMute})
 	}
 	m.drawStatePill(c, l, r, e, right, y)
-	// The second line: branch, machine, folder, diff, context and cost.
-	meta := []ckSeg{}
+	// The second line: branch, machine, folder, diff, context and cost. A
+	// line too long for the focus cuts the folder from the left first, then
+	// drops whole fields from the right: a field is never cut in half.
+	var groups [][]ckSeg
 	wt := m.ckWorktreeOf(e)
 	if wt.branch != "" {
-		meta = append(meta, ckSeg{t: l.g(ckGlyphBranch) + " " + wt.branch + "   ", fg: pal.FgDim})
+		groups = append(groups, []ckSeg{{t: l.g(ckGlyphBranch) + " " + wt.branch, fg: pal.FgDim}})
 	}
 	if r.agent >= 0 || place != "" {
-		meta = append(meta, ckSeg{t: place + "   ", fg: pal.FgDim})
+		groups = append(groups, []ckSeg{{t: place, fg: pal.FgDim}})
 	}
+	pathAt := -1
 	if wt.path != "" {
-		meta = append(meta, ckSeg{t: ckHomePath(wt.path) + "   ", fg: pal.FgMute})
+		pathAt = len(groups)
+		groups = append(groups, []ckSeg{{t: ckHomePath(wt.path), fg: pal.FgMute}})
 	}
 	if d := ckDiffSegs(l, e); d != nil {
-		meta = append(append(meta, d...), ckSeg{t: "   "})
+		groups = append(groups, d)
 	}
 	for _, k := range []string{"context", "cost"} {
 		if v := ckMeta(e, k); v != "" {
 			if k == "context" {
 				v = "ctx " + v
 			}
-			meta = append(meta, ckSeg{t: v + "   ", fg: pal.FgMute})
+			groups = append(groups, []ckSeg{{t: v, fg: pal.FgMute}})
 		}
 	}
-	c.text(x, y+1, right, meta...)
+	const gap = 3
+	width := func() int {
+		n := 0
+		for i, g := range groups {
+			if i > 0 {
+				n += gap
+			}
+			n += ckWidth(g...)
+		}
+		return n
+	}
+	if over := width() - w; over > 0 && pathAt >= 0 {
+		p := groups[pathAt][0].t
+		keep := max(ansi.StringWidth(p)-over-1, 8)
+		groups[pathAt][0].t = overlay.Ellipsis() + ansi.TruncateLeft(p, ansi.StringWidth(p)-keep, "")
+	}
+	for len(groups) > 1 && width() > w {
+		groups = groups[:len(groups)-1]
+	}
+	mx := x
+	for i, g := range groups {
+		if i > 0 {
+			mx += gap
+		}
+		mx = c.text(mx, y+1, right, g...)
+	}
 	// Under 30 rows the header gives its gaps to the body.
 	rule := y + 3
 	if c.h < 30 {
@@ -1710,9 +1784,9 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			p := m.ckWorktreeOf(e).path
 			switch {
 			case m.ckManyMachines() && p != "":
-				where = ckMachine(e.Host) + ":" + ckHomePath(p)
+				where = m.ckMachine(e.Host) + ":" + ckHomePath(p)
 			case m.ckManyMachines() && e.Host == "":
-				where = ckMachine("") + ":" + where
+				where = m.ckMachine("") + ":" + where
 			case p != "":
 				where = ckHomePath(p)
 			}

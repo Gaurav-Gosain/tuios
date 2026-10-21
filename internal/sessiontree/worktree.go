@@ -32,8 +32,10 @@ type WorktreeRef struct {
 	PR string
 	// PRFailed is how many of the pull request's checks failed.
 	PRFailed int
-	// Path is the worktree's directory on its machine.
-	Path string
+	// Path is the worktree's directory on its machine, and RepoRoot its
+	// repository's main checkout. A fan is one group in one repository.
+	Path     string
+	RepoRoot string
 	// Prompt is the first line of the task a fan gave the session, empty
 	// when no fan made it.
 	Prompt string
