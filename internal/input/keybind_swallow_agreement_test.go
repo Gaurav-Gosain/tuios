@@ -125,3 +125,29 @@ func TestFateAgreesWithTheSwallowList(t *testing.T) {
 		t.Error("an unbound key is forwarded; Fate must not claim otherwise")
 	}
 }
+
+// Windows reports AltGr as Ctrl+Alt, so a character typed with AltGr arrives as
+// a Ctrl+Alt chord carrying its text and the US key at its position. Read by
+// position, UK AltGr+4 ("€") was ctrl+alt+4 and moved the pane to workspace 4.
+// Those keys are typing and must reach the pane; the chord pressed with no
+// text still moves it.
+func TestAltGrTextReachesThePane(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  tea.KeyPressMsg
+		want bool
+	}{
+		{"UK AltGr+4 types €", tea.KeyPressMsg{Code: '€', BaseCode: '4', Text: "€", Mod: tea.ModCtrl | tea.ModAlt}, false},
+		{"German AltGr+2 types ²", tea.KeyPressMsg{Code: '²', BaseCode: '2', Text: "²", Mod: tea.ModCtrl | tea.ModAlt}, false},
+		{"Swiss AltGr+5 types §", tea.KeyPressMsg{Code: '§', BaseCode: '5', Text: "§", Mod: tea.ModCtrl | tea.ModAlt}, false},
+		{"ctrl+alt+4 with no text", tea.KeyPressMsg{Code: '4', Mod: tea.ModCtrl | tea.ModAlt}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			o := osWithBindings(t, func(*config.KeybindingsConfig) {})
+			if got := handleTerminalModeBinds(tc.msg, o); got != tc.want {
+				t.Errorf("handleTerminalModeBinds took the key: %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

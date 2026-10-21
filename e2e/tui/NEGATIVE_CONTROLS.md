@@ -8381,3 +8381,15 @@ Run on 2026-10-21, macOS, each cut built into its own binary and the source put 
 | The default key exists | the plain upstream build, before this change | `TestSendToWorkspaceKeyStaysHere` ("ctrl+alt+2 in terminal mode: pane ... is on workspace 1, want 2"), `TestSendToWorkspaceKeyYieldsATakenKey` ("keybinds doctor lists []") | **caught** |
 
 The fixed build passes both tests 3 of 3. Not covered end to end: a legacy terminal, which cannot send `ctrl+alt+N` for most digits, and the GUI default `ctrl+alt+N` in `[keybindings.gui]`, which no test presses.
+
+### AltGr text on Windows
+
+Windows reports AltGr as Ctrl+Alt, and the layout fallback in `usesBaseLayout` read a non-Latin character by the US key at its position, so UK AltGr+4 (`€`) was `ctrl+alt+4` and moved the pane. The terminal is Windows, which the e2e suite does not drive, so `TestAltGrTextReachesThePane` in `internal/input/keybind_swallow_agreement_test.go` holds it, next to the swallow agreement test. It hands `handleTerminalModeBinds` the key the Windows console decoder builds for AltGr (the character as `Code` and `Text`, the digit as `BaseCode`, Ctrl and Alt) for `€` on 4, `²` on 2 and `§` on 5, under the default keybindings, and wants each to reach the pane. A fourth row, `ctrl+alt+4` with no text, must still be taken.
+
+Run on 2026-10-21, macOS.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A Ctrl+Alt key with text keeps the key it produced | drop the `msg.Text != ""` early return from `usesBaseLayout` | `TestAltGrTextReachesThePane` (`€`, `²` and `§`: "handleTerminalModeBinds took the key: true, want false") | **caught** |
+
+The `ctrl+alt+4` row passes on both builds; it is the positive control. `TestSendToWorkspaceKeyStaysHere` and `TestSendToWorkspaceKeyYieldsATakenKey` pass on the fixed build: a Kitty terminal sends `ctrl+alt+N` with no text.

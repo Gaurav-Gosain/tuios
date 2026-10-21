@@ -50,8 +50,17 @@ func baseLayoutKey(msg tea.KeyPressMsg) (string, bool) {
 // leader. The labels on a Latin keyboard are what its user binds, so only a
 // script no binding is spelled in (Cyrillic, Greek, Hebrew, Arabic and the
 // rest) goes by position.
+//
+// Windows reports AltGr as Ctrl+Alt, so a character typed with AltGr arrives
+// as a Ctrl+Alt chord that carries text. UK AltGr+4 types "€", German AltGr+2
+// types "²" and Swiss AltGr+5 types "§"; read by position they would be
+// ctrl+alt+4, 2 and 5 and move the pane to another workspace. A Ctrl+Alt key
+// with text is typing, so it keeps the key it produced.
 func usesBaseLayout(msg tea.KeyPressMsg) bool {
 	if msg.BaseCode == 0 || msg.BaseCode == msg.Code {
+		return false
+	}
+	if msg.Mod&(tea.ModCtrl|tea.ModAlt) == tea.ModCtrl|tea.ModAlt && msg.Text != "" {
 		return false
 	}
 	return msg.Code >= 0x80 && unicode.IsPrint(msg.Code) && !unicode.Is(unicode.Latin, msg.Code)
