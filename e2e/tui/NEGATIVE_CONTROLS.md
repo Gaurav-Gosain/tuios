@@ -8512,3 +8512,16 @@ Run on 2026-10-21 on macOS, against a build with the fix line cut, built to a se
 | `new_workspace` from the empty workspace on screen did nothing | yes | `handleNewWorkspace` returns early again when `o.CurrentWorkspace != ws` | `TestNewWorkspaceStaysOnTheEmptyWorkspaceOnScreen` ("left panes by workspace map[1:1], want one on 1 and one on 2") | **caught** |
 
 `TestTmuxStyleActionsRunWhenBound` passes on the cut build too: from workspace 1 the switch lands on its target. The fixed build passes 37 tests: every `TestNewWorkspace*`, `TestTmuxStyle*`, `TestWorkspace*` and `TestEmptyWorkspace*` test, and `TestReloadWithABadKeyAppliesTheRest`.
+
+### A shell exit is a person's close
+
+Typing `exit` in the last shell of a workspace ended the pane's process without a close, so `notePaneExitedAlone` recorded it as exiting on its own and the dock kept a gap (1, 3). A pane's own shell is now told apart by how it was spawned: `PTY.ownShell` is set for a pane started with no command, without `close_on_exit`, on this machine. Its exit is recorded as a shell's, and `notePaneMovesLocked` counts it as a person's close unless an agent was live in the pane at the last change (`agentWasLive`), since an agent run with `exec` ends the shell's process when it finishes. A pane given a command (a `tuios xpanes` run, `start-agent`, a fan) or `close_on_exit` still exits on its own and leaves the gap. The new test is `TestWorkspaceShellExitClosesUp` in `workspace_renumber_test.go`.
+
+Run on 2026-10-21 on macOS, each against a build with one line changed, built to a separate path, the source restored afterwards.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| `exit` in the last shell of workspace 2 left the dock at 1, 3 | yes | `notePaneMovesLocked` treats a shell's exit as on its own again (`if true \|\| !shell \|\| was.agent`) | `TestWorkspaceShellExitClosesUp` ("the dock never drew [1·EDIT 2·DPLY]") | **caught** |
+| A command pane's exit closed up the numbers | n/a, the spawn fact itself | `ownShell` set for every pane (`true \|\| len(sp.command) == 0 ...`) | `TestWorkspaceSelfExitLeavesTheNumbers` ("the daemon has workspace 3 named \"\", want \"DPLY\" (names map[1:EDIT 2:DPLY])") | **caught** |
+
+`TestWorkspaceSelfExitLeavesTheNumbers` passes on the first build and `TestWorkspaceShellExitClosesUp` on the second, as they should: each build breaks only the side the other test covers. The fixed build passes both.

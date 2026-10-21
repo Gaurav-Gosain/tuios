@@ -711,6 +711,58 @@ func TestWorkspaceSelfExitLeavesTheNumbers(t *testing.T) {
 	alive(t, term, "after panes exited and a pane was closed")
 }
 
+// TestWorkspaceShellExitClosesUp types exit in the only pane of workspace 2,
+// a shell, with workspaces 1 to 3 in use. A person typed it, so it is a
+// person's close: the numbers close up and DPLY becomes 2, where the panes
+// that exit on their own in TestWorkspaceSelfExitLeavesTheNumbers leave a gap.
+//
+// Negative control: see NEGATIVE_CONTROLS.md.
+func TestWorkspaceShellExitClosesUp(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, renumberConfig)
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", renumberSession, "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", renumberSession, "--workspace", "2", "--no-focus"); err != nil {
+		t.Fatalf("new-window on 2: %v: %s", err, out)
+	}
+	for range renumberPanes["DPLY"] {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", renumberSession, "--workspace", "3", "--no-focus"); err != nil {
+			t.Fatalf("new-window on 3: %v: %s", err, out)
+		}
+	}
+	for num, name := range map[string]string{"1": "EDIT", "2": "SHEL", "3": "DPLY"} {
+		if out, err := tuiosCLI(t, base, "set-workspace-name", num, name, "--session", renumberSession); err != nil {
+			t.Fatalf("name workspace %s: %v: %s", num, err, out)
+		}
+	}
+	term := attachIn(t, base, renumberSession, startOpts{})
+	waitPills(t, term, "1·EDIT", "2·SHEL", "3·DPLY")
+
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("press alt+2: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		m := renumberDockStatus(s)
+		return m != nil && m[0] == "2:1"
+	}, uiTimeout); err != nil {
+		t.Fatalf("alt+2 did not reach SHEL: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	if err := term.SendKeys("exit", tuitest.Enter); err != nil {
+		t.Fatalf("type exit: %v", err)
+	}
+	waitPaneCount(t, base, renumberPanes["EDIT"]+renumberPanes["DPLY"])
+	waitPills(t, term, "1·EDIT", "2·DPLY")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "3·") }, uiTimeout); err != nil {
+		t.Fatalf("typing exit in the last shell of workspace 2 left a gap, want DPLY on 2: %v\n%s", err, term.Snapshot())
+	}
+	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "DPLY"})
+	wantPanesOn(t, base, map[int]string{1: "EDIT", 2: "DPLY"})
+	alive(t, term, "after typing exit in the last shell of a workspace")
+}
+
 // attentionWorkspace is the workspace list-attention gives the item of the
 // pane named window, or 0 when it lists none.
 func attentionWorkspace(t *testing.T, base, window string) int {

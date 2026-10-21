@@ -832,7 +832,7 @@ and 3 leaves 1 and 2. A pane whose program exits on its own (a command
 window with `close_on_exit`, a `tuios xpanes` run, an agent finishing)
 leaves the numbers alone, so a script or agent that holds a workspace number
 still names the same workspace. Its place stays empty until your next close
-or move closes it up. An empty workspace you only looked at goes without
+or move closes it up. Typing `exit` in a pane's shell is a close. An empty workspace you only looked at goes without
 moving anything.
 
 `Alt+N` with a number past the last workspace that holds a pane opens the

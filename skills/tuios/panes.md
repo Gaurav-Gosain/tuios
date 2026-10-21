@@ -38,7 +38,8 @@ the tiling mode and any workspace names. A workspace's number is its position:
 moving one, with the move keys, by dragging its dock pill or with
 `set-workspace-order`, renumbers it, and `select-workspace 2` then means
 whatever workspace is second now. Closing a pane or a workspace closes up
-the numbers above an empty place. A pane whose program exits on its own
+the numbers above an empty place, and so does `exit` typed in a pane's own
+shell. A pane whose program exits on its own (a command, `close_on_exit`)
 renumbers nothing, so a number you read stays good until a close or a move.
 
 ## Opening a pane and running work in it

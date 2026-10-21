@@ -1033,7 +1033,14 @@ type PTY struct {
 	// exitedAlone is told, before onExit, when the process exits without
 	// the PTY having been closed and the window will not be kept open. See
 	// Session.notePaneExitedAlone.
-	exitedAlone func(ptyID string)
+	exitedAlone func(ptyID string, shell bool)
+	// ownShell is set when the pane runs the daemon's own shell on this
+	// machine: it was started with no command and without close_on_exit.
+	// That process ends when a person types exit, which is a person's close.
+	// A pane given a command (an xpanes run, an agent, a fan) and one that
+	// closes on exit end on their own, and a pane on another machine can end
+	// with its link.
+	ownShell bool
 
 	// emit, when set, raises a control-plane event (output activity, bell, mode
 	// change, process exit) already tagged with this PTY's window and PTY ID. It
@@ -1315,9 +1322,10 @@ type Session struct {
 	selfEmptied    map[int]bool
 	gaps           map[int]bool
 	closeUpPending bool
-	// exitedAlone is the PTYs whose process exited on its own, guarded by
-	// exitedAloneMu rather than stateMu, because the exit is heard on the
-	// PTY's goroutine. See notePaneExitedAlone.
+	// exitedAlone is the PTYs whose process exited without being closed,
+	// each true when it was the pane's own shell, guarded by exitedAloneMu
+	// rather than stateMu, because the exit is heard on the PTY's goroutine.
+	// See notePaneExitedAlone.
 	exitedAloneMu sync.Mutex
 	exitedAlone   map[string]bool
 	// tabKeys is the state's WorkspaceTabKeys as last written, readable
@@ -2237,6 +2245,8 @@ type ptySpawn struct {
 	// keepOpen writes the exit status into the pane when its process exits.
 	// See keep_open.go.
 	keepOpen bool
+	// closeOnExit is new-window's close_on_exit. See PTY.ownShell.
+	closeOnExit bool
 }
 
 // createPTY starts a pane's process. sp.command, when non-empty, is an argv
@@ -2415,6 +2425,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		vtWriteChan:  make(chan vtChunk, 256),
 		onExit:       sp.onExit,
 		exitedAlone:  s.notePaneExitedAlone,
+		ownShell:     len(sp.command) == 0 && !sp.closeOnExit && sp.host == "",
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
 		spawnedAt:    time.Now(),
@@ -5050,7 +5061,7 @@ func (p *PTY) noteExit(code int) {
 	}
 
 	if p.exitedAlone != nil && p.ctx.Err() == nil && p.keepOpen == nil {
-		p.exitedAlone(p.ID)
+		p.exitedAlone(p.ID, p.ownShell)
 	}
 
 	// Notify callback (used by daemon to inform clients)

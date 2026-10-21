@@ -252,6 +252,11 @@ type NewWindowOptions struct {
 	// unexported: only new-window sets it, and the caller's onExit must not
 	// close the window for it to mean anything.
 	keepOpen bool
+	// closeOnExit is new-window's close_on_exit: the daemon closes the
+	// window when its process exits. It is unexported, like keepOpen: the
+	// caller's onExit does the closing, and this only tells the PTY that its
+	// exit is not a person's close (see PTY.ownShell).
+	closeOnExit bool
 	// Env is KEY=VALUE pairs the process gets on top of the daemon's own
 	// environment, from a caller that passed its own (fan, start-agent). The
 	// TUIOS_ variables are set after it, so it cannot change them. It is not
@@ -411,7 +416,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	pty, err := s.createPTY(ptyWidth, ptyHeight, ptySpawn{
 		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
 		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants, keepOpen: opts.keepOpen,
-		workspace: opts.Workspace, noStartDir: noStartDir,
+		workspace: opts.Workspace, noStartDir: noStartDir, closeOnExit: opts.closeOnExit,
 	})
 	if err != nil {
 		return WindowState{}, err

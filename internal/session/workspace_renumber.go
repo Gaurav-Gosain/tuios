@@ -280,7 +280,8 @@ func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 	s.selfEmptied = RenumberWorkspaceMap(s.selfEmptied, newOf)
 	s.gaps = RenumberWorkspaceMap(s.gaps, newOf)
 	for id, at := range s.panesAt {
-		s.panesAt[id] = paneAt{ws: to(at.ws), pty: at.pty}
+		at.ws = to(at.ws)
+		s.panesAt[id] = at
 	}
 }
 
@@ -291,7 +292,8 @@ func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 //     that has held a pane stops existing it loses its name.
 //   - Its place closes up, every workspace above it moving down one, only
 //     when a person made the change: closed a pane (by key, menu, verb or
-//     herdr), moved one off the workspace, closed the workspace or moved one.
+//     herdr, or by typing exit in its shell), moved one off the workspace,
+//     closed the workspace or moved one.
 //     Closing workspace 2 of three leaves 1 and 2.
 //   - A workspace whose last pane exited on its own (close_on_exit, an xpanes
 //     run, an agent finishing) leaves a gap instead, and nothing renumbers:
@@ -381,17 +383,22 @@ func (s *Session) noteWorkspacesLocked() bool {
 	return true
 }
 
-// paneAt is where a pane was at the last change: its workspace and its PTY.
+// paneAt is where a pane was at the last change: its workspace, its PTY, and
+// whether an agent was live in it.
 type paneAt struct {
-	ws  int
-	pty string
+	ws    int
+	pty   string
+	agent bool
 }
 
 // notePaneMovesLocked compares the panes with where they were at the last
 // change, records each workspace that lost its last pane as emptied on its own
 // or by a person, and reports whether a person took a pane off a workspace: a
 // pane that is gone without its process having exited on its own, or one that
-// moved. It returns where the panes are now. The caller holds stateMu.
+// moved. A pane's own shell that exited counts as a person's close, since a
+// person typed exit, unless an agent was live in it at the last change: an
+// agent run with exec ends the shell's process when it finishes. It returns
+// where the panes are now. The caller holds stateMu.
 func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	st := s.state
 	now := make(map[string]paneAt, len(st.Windows))
@@ -399,7 +406,7 @@ func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	for i := range st.Windows {
 		if w := &st.Windows[i]; !w.Scratch {
 			ws := max(w.Workspace, 1)
-			now[w.ID] = paneAt{ws: ws, pty: w.PTYID}
+			now[w.ID] = paneAt{ws: ws, pty: w.PTYID, agent: agentWasLive(*w)}
 			held[ws] = true
 		}
 	}
@@ -409,12 +416,14 @@ func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	for id, was := range s.panesAt {
 		if cur, ok := now[id]; ok && cur.ws == was.ws {
 			continue
-		} else if !ok && was.pty != "" && s.exitedAlone[was.pty] {
+		} else if shell, exited := s.exitedAlone[was.pty]; !ok && was.pty != "" && exited {
 			delete(s.exitedAlone, was.pty)
-			if _, seen := left[was.ws]; !seen {
-				left[was.ws] = false
+			if !shell || was.agent {
+				if _, seen := left[was.ws]; !seen {
+					left[was.ws] = false
+				}
+				continue
 			}
-			continue
 		}
 		left[was.ws] = true
 		byPerson = true
@@ -437,16 +446,18 @@ func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	return now, byPerson
 }
 
-// notePaneExitedAlone records that the process of a PTY exited on its own, so
-// the workspace its window leaves does not close up its place. It runs on the
-// PTY's exit goroutine, before the daemon tells anyone the pane closed.
-func (s *Session) notePaneExitedAlone(ptyID string) {
+// notePaneExitedAlone records that the process of a PTY exited without being
+// closed, and whether it was the pane's own shell. A pane whose process ended
+// on its own leaves its workspace's place for the next change a person makes;
+// see notePaneMovesLocked for the shell. It runs on the PTY's exit goroutine,
+// before the daemon tells anyone the pane closed.
+func (s *Session) notePaneExitedAlone(ptyID string, shell bool) {
 	s.exitedAloneMu.Lock()
 	defer s.exitedAloneMu.Unlock()
 	if s.exitedAlone == nil {
 		s.exitedAlone = make(map[string]bool)
 	}
-	s.exitedAlone[ptyID] = true
+	s.exitedAlone[ptyID] = shell
 }
 
 // existingWorkspaces is the workspaces that exist: each one holding a pane,
