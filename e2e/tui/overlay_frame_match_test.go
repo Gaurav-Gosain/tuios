@@ -17,15 +17,18 @@ var (
 	matchOverlay = tuitest.Color{Kind: tuitest.ColorRGB, R: 0x00, G: 0xc0, B: 0xff}
 )
 
-// TestOverlayFramesMatchPaneBorders checks that a framed overlay looks like a
-// pane window: its frame drawn in the colour the focused pane's border is
-// drawn in, and the frame and everything inside it on the pane's ground, so
-// there is no shaded band between the frame line and the overlay's content.
+// TestOverlayFramesMatchPaneBorders checks that with appearance.pane_overlays
+// on a framed overlay looks like a pane window: its frame drawn in the colour
+// the focused pane's border is drawn in, and the frame and everything inside it
+// on the pane's ground, so there is no shaded band between the frame line and
+// the overlay's content.
 //
 //   - panel: the command palette, framed by frame_panels.
 //   - dialog: the rename dialog.
 //   - overlay-border-color: both again with overlay_border_color set, whose
 //     colour the frames take while the focused pane's border keeps its own.
+//   - overlay-border-color-alone: overlay_border_color without pane_overlays
+//     colours the rename dialog's frame and leaves the dialog on its shade.
 //
 // For each, the four corners, a cell of the top edge and a cell of the left
 // edge must carry the frame ink and pane_background as their ground, and so
@@ -45,6 +48,7 @@ var (
 func TestOverlayFramesMatchPaneBorders(t *testing.T) {
 	art := artifactDir(t)
 	const appearance = "frame_panels = true\n" +
+		"pane_overlays = true\n" +
 		"border_focused_color = \"#ff8800\"\n" +
 		"pane_background = \"#203040\"\n"
 
@@ -82,6 +86,18 @@ func TestOverlayFramesMatchPaneBorders(t *testing.T) {
 		wantFrameColours(t, term, art, "frame-colour-rename", "the rename dialog", box, matchOverlay, renameInterior)
 		closeRename(t, term)
 		alive(t, term, "after the frame colour check")
+	})
+
+	t.Run("overlay-border-color-alone", func(t *testing.T) {
+		term := startOverlayBorders(t, "pane_background = \"#203040\"\noverlay_border_color = \"#00c0ff\"\n", truecolor)
+		enableTiling(t, term)
+		box := openRenameFrame(t, term)
+		saveArtifact(t, term, art, "frame-colour-alone-rename")
+		want := stockTrueColor
+		want.frameFg = matchOverlay
+		wantStockDialog(t, term, art, "frame-colour-alone-rename", box, want)
+		closeRename(t, term)
+		alive(t, term, "after the lone frame colour check")
 	})
 }
 
