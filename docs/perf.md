@@ -3223,6 +3223,13 @@ clone, as CI builds it). The change measured 43,516,066 and 40,558,706, so it
 adds 471,040 and 403,936 bytes. No dependency was added. The new budgets leave
 4,198 bytes of room.
 
+The budgets went to 43,524,360 and 40,579,592 when the scrolling layout began
+to put a pane made by the daemon after the focused column (#952). The build
+before it measured 43,516,066 and 40,558,706 bytes. The change measured
+43,520,162 and 40,575,394, so it adds 4,096 and 16,688 bytes: about one page
+on each, the code itself is far smaller. No dependency
+was added. The new budgets leave 4,198 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
