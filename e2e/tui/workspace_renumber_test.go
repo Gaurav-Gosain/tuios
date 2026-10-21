@@ -506,13 +506,13 @@ func TestWorkspaceSwitchFromAnEmptyOneStaysOnIt(t *testing.T) {
 	alive(t, term, "after switching from an empty workspace")
 }
 
-// TestWorkspaceSwitchFromTheSplashGoesThere presses opt+2 in a session with
-// no pane: the workspace on screen counts while no workspace holds a pane, as
-// the dock counts it, so the switch goes to 2 rather than staying on the
-// splash of 1.
+// TestWorkspaceSwitchFromTheSplashStaysOnIt presses opt+2 in a session with
+// no pane, then n: the splash of workspace 1 is the empty workspace on screen,
+// so the switch stays on 1 and the new pane opens there. A pane opened on 2
+// would never close up into 1.
 //
 // Negative control: see NEGATIVE_CONTROLS.md.
-func TestWorkspaceSwitchFromTheSplashGoesThere(t *testing.T) {
+func TestWorkspaceSwitchFromTheSplashStaysOnIt(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, renumberConfig)
 	killDaemon(t, base)
@@ -527,8 +527,16 @@ func TestWorkspaceSwitchFromTheSplashGoesThere(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
-	waitWorkspace(t, base, renumberSession, 2)
-	alive(t, term, "after switching from the splash")
+	// Keys are handled in order, so the pane n opens shows where opt+2 left
+	// the session.
+	newWindow(t, term)
+	if ws := currentWorkspace(t, base, renumberSession); ws != 1 {
+		t.Fatalf("opt+2 from the splash went to workspace %d, want it to stay on 1\n%s", ws, term.Snapshot())
+	}
+	if n := panesOn(t, base, renumberSession, 1); n != 1 {
+		t.Fatalf("workspace 1 holds %d panes after opt+2 and n from the splash, want 1\n%s", n, term.Snapshot())
+	}
+	alive(t, term, "after opt+2 from the splash")
 }
 
 // renumberExitSetup is renumberSetup with REVW's two panes running a command
