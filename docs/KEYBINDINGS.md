@@ -298,10 +298,10 @@ See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-list-windows).
 Each row starts with its kind, then says where the place is:
 
 ```
-agent    claude · payments › 1 › api      needs you: approve Bash ●
-session  payments [space: surge]                            3 panes
-ws       payments › 2 · api-tests                            1 pane
-pane     payments › 1 › nvim
+agent      claude · payments › 1 › api    needs you: approve Bash ●
+session    payments [space: surge]                          3 panes
+workspace  payments › 2 · api-tests                          1 pane
+pane       payments › 1 › nvim
 ```
 
 With nothing typed, the first row is the place you were on last, so `Ctrl+B G` and `enter` take you back to where you were. The agents that need you come right after it, the one waiting longest first, then the other places you were on recently, the most recent first, then every agent, session and workspace. Panes are listed once you type something. A session has many panes, and the ones you were just on are already in the recent places.
@@ -310,11 +310,11 @@ Typed words are a fuzzy search over the names a row shows: the session, the work
 
 | Term | Keeps |
 |---|---|
-| `kind:agent`, `kind:session`, `kind:ws`, `kind:pane` | Rows of that kind |
+| `kind:agent`, `kind:session`, `kind:workspace` (or `kind:ws`), `kind:pane` | Rows of that kind |
 | `space:NAME` | Rows of the sessions filed under that space |
 | `ws:N` | Agents, workspaces and panes on that workspace, by number or name |
 
-A value is a glob, and commas between values mean any of them, as in `kind:session,ws`. A term that does not fit a row leaves it out: `harness:` keeps only agents, and `ws:` leaves out the sessions. `@`, `#` or `!` at the start of the query is `kind:agent`, `kind:session` or `kind:ws`. For example, `#space:surge` lists the sessions in the surge space, and `@needs:you` lists the agents that need you.
+A value is a glob, and commas between values mean any of them, as in `kind:session,workspace`. A term that does not fit a row leaves it out: `harness:` keeps only agents, and `ws:` leaves out the sessions. `@`, `#` or `!` at the start of the query is `kind:agent`, `kind:session` or `kind:workspace`. For example, `#space:surge` lists the sessions in the surge space, and `@needs:you` lists the agents that need you.
 
 | Key | What it does |
 |---|---|

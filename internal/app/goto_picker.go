@@ -28,7 +28,7 @@ import (
 // a fuzzy search. The picker adds three keys that name places rather than
 // panes, kind:, space: and ws:, with the selector's syntax: a value is a glob,
 // commas are OR, terms are AND. A leading @, # or ! is kind:agent,
-// kind:session or kind:ws.
+// kind:session or kind:workspace.
 //
 // With nothing typed the list is the place the client was on last, so Enter
 // goes back, then the agents that need you, then the other places the client
@@ -48,16 +48,16 @@ const (
 )
 
 // gotoKindNames are the values kind: takes, by kind, the first being the one
-// a row's tag shows.
+// a row's tag shows. ws is kept as a short alias for typing.
 var gotoKindNames = map[gotoKind][]string{
 	gotoAgent:     {"agent", "agents"},
 	gotoSession:   {"session", "sessions"},
-	gotoWorkspace: {"ws", "workspace", "workspaces"},
+	gotoWorkspace: {"workspace", "workspaces", "ws"},
 	gotoPane:      {"pane", "panes", "window"},
 }
 
 // gotoSigils are the leading characters that stand for a kind: term.
-var gotoSigils = map[byte]string{'@': "agent", '#': "session", '!': "ws"}
+var gotoSigils = map[byte]string{'@': "agent", '#': "session", '!': "workspace"}
 
 // The keys the picker reads itself. Every other key goes to the selector.
 const (
@@ -387,7 +387,7 @@ func parseGotoQuery(q string) (gotoQuery, error) {
 			if key == gotoKeyKind {
 				k, ok := gotoKindOf(v)
 				if !ok {
-					return out, errors.New("kind " + strconv.Quote(v) + " is not a kind. The kinds are agent, session, ws, pane")
+					return out, errors.New("kind " + strconv.Quote(v) + " is not a kind. The kinds are agent, session, workspace, pane")
 				}
 				v = gotoKindNames[k][0]
 			} else if _, err := path.Match(v, ""); err != nil {

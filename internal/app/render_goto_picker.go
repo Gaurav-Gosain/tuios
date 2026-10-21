@@ -11,7 +11,7 @@ import (
 const (
 	gotoPickerWidth = 80
 	// gotoTagWidth is the kind tag's column: the longest tag and two spaces.
-	gotoTagWidth = len("session") + 2
+	gotoTagWidth = len("workspace") + 2
 )
 
 // renderGotoPicker renders the go-to picker on the shared list overlay.
@@ -39,7 +39,7 @@ func (m *OS) renderGotoPicker() (string, overlay.Geometry, []overlayRowHit) {
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "go"},
-			{Key: "@ # !", Label: "agent session ws"},
+			{Key: "@ # !", Label: "agent session workspace"},
 			{Key: "esc", Label: "close"},
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {

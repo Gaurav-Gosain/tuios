@@ -45,7 +45,7 @@ import (
 // gotoRowText is a row as the picker draws it: the kind tag in its column,
 // then the place.
 func gotoRowText(kind, label string) string {
-	return kind + strings.Repeat(" ", len("session")+2-len(kind)) + label
+	return kind + strings.Repeat(" ", len("workspace")+2-len(kind)) + label
 }
 
 // gotoKindRow matches a row of a kind with any label: the tag sits right
@@ -86,13 +86,13 @@ func gotoWaitRows(t *testing.T, term *tuitest.Terminal, what string, present, ab
 
 // gotoKindNames are the kind tags, which gotoWaitRows takes as "any row of
 // this kind".
-var gotoKindNames = map[string]bool{"agent": true, "session": true, "ws": true, "pane": true}
+var gotoKindNames = map[string]bool{"agent": true, "session": true, "workspace": true, "pane": true}
 
 // openGotoPicker presses the leader and G and waits for the panel.
 func openGotoPicker(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "G")
-	waitScreen(t, term, "the go-to picker never showed", "Go to", "agent session ws")
+	waitScreen(t, term, "the go-to picker never showed", "Go to", "agent session workspace")
 }
 
 // gotoQuery clears the picker's query and types q.
@@ -170,17 +170,17 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	gotoQuery(t, term, "kind:session space:surge")
 	gotoWaitRows(t, term, "kind:session space:surge",
 		[]string{gotoRowText("session", "home [space: surge]"), gotoRowText("session", "ops [space: surge]")},
-		[]string{gotoRowText("session", "work"), "ws"})
+		[]string{gotoRowText("session", "work"), "workspace"})
 	saveArtifact(t, term, dir, "kind-session-space")
 	gotoQuery(t, term, "kind:ws session:work")
 	gotoWaitRows(t, term, "kind:ws session:work",
-		[]string{gotoRowText("ws", "work › 1"), gotoRowText("ws", "work › 2")},
-		[]string{gotoRowText("ws", "home › 1"), "pane", "session"})
+		[]string{gotoRowText("workspace", "work › 1"), gotoRowText("workspace", "work › 2")},
+		[]string{gotoRowText("workspace", "home › 1"), "pane", "session"})
 	saveArtifact(t, term, dir, "kind-ws-session")
 	gotoQuery(t, term, "@harness:claude")
 	gotoWaitRows(t, term, "@harness:claude",
 		[]string{gotoRowText("agent", "claude · work › 1 › agentpane"), "editing files"},
-		[]string{"session", "pane", "ws"})
+		[]string{"session", "pane", "workspace"})
 	saveArtifact(t, term, dir, "agent-sigil")
 	sendKeys(t, term, tuitest.Esc)
 	waitLanded(t, term, base, "esc closed the picker", "work", 2, zebra)
