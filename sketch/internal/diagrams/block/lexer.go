@@ -471,11 +471,9 @@ func tokenize(src string) Tokens {
 			pop()
 			return put(T_BLOCK_ARROW_END, "]>", ws(p+1))
 		}
-		from := p
+		from := ws(p)
 		if c == 44 {
 			from = ws(p + 1)
-		} else {
-			from = ws(p)
 		}
 		for _, dir := range DIRECTIONS {
 			if startsWith(dir, from) {
