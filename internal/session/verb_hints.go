@@ -80,6 +80,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbInvalidParams, "A parameter was missing, malformed, or outside its accepted set. The hint names the parameter."},
 	{ErrVerbSessionNotFound, "The named session does not exist. The hint lists the sessions that do."},
 	{ErrVerbSessionExists, "new-session was given a name the daemon already holds. Choose another name or omit it to have one generated."},
+	{ErrVerbFanExists, "fan was given the name of a fan that exists in the repository. Choose another name, or pass join with a session of that fan to add attempts to it on purpose."},
 	{ErrVerbWindowNotFound, "The window target did not resolve. The hint lists the addressable windows."},
 	{ErrVerbNoWindows, "The session exists but holds no windows to act on."},
 	{ErrVerbPTYNotFound, "The target window has no live PTY. Its shell has already exited."},

@@ -7948,11 +7948,15 @@ Run on 2026-10-21.
 `TUIOS_E2E_FRAMES` saves `new-pane` and `after-close` frames.
 ## A fan joined from outside
 
-`TestFanRefusesJoiningAnotherGroup` in `internal/session` (a security boundary
-test): a pane of another session is refused `fan` with an existing fan's
-stem, while the fan's lead, a pane of the fan and the person may add
-attempts. Run on 2026-10-21.
+`TestFanRefusesJoiningAnotherGroup` and `TestFanNameIsHeldWhileItIsMade` in
+`internal/session` (security boundary tests). A taken fan name is refused
+for every caller unless the call names a session of the fan with `join` and
+reaches it. An outsider that makes a name first does not catch the person's
+later fan. Two calls with one new name at the same time make one fan. Run
+on 2026-10-21.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| fan refuses a stem that is another fan's group | the `checkFanJoin` result ignored | `TestFanRefusesJoiningAnotherGroup` ("fan into another pane's group": expected error, got a new session in `fan/retry`) | **caught** |
+| Joining a fan is explicit: a taken name is refused for every caller, the person included | the `fan_exists` refusal removed | `TestFanRefusesJoiningAnotherGroup` (the taken name is not refused) | **caught** |
+| A new name is held from the check until its sessions exist | the reservation left out of `taken` | `TestFanNameIsHeldWhileItIsMade` ("fan/raceb: the outsider's repo-fan-raceb-2 joined the person's repo-fan-raceb") | **caught** |
+| A name with a character that does not print is refused | the `fanStemPrintable` check skipped | `TestFanRefusesJoiningAnotherGroup` (a name with a zero-width space makes a fan) | **caught** |

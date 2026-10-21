@@ -8,7 +8,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -490,6 +492,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		Prompts      []string          `json:"prompts"`
 		Base         string            `json:"base"`
 		Name         string            `json:"name"`
+		Join         string            `json:"join"`
 		ReadyTimeout int               `json:"ready_timeout"`
 		Env          map[string]string `json:"env"`
 		Grants       []string          `json:"grants"`
@@ -577,15 +580,31 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		}
 	}
 	stem := strings.TrimSpace(p.Name)
-	if stem == "" {
+	if join := strings.TrimSpace(p.Join); join != "" && stem == "" {
+		// The fan to join names itself.
+		if s := d.manager.GetSession(join); s != nil {
+			if wt := s.Worktree(); wt != nil {
+				stem = wt.Group
+			}
+		}
+	}
+	named := stem != ""
+	if !named {
 		stem = fanStem(promptFor(0))
+	}
+	if verr := fanStemPrintable(stem); verr != nil {
+		return nil, verr
 	}
 	if err := worktree.ValidBranch(stem); err != nil {
 		return nil, invalidParam("name", err.Error())
 	}
-	if verr := d.checkFanJoin(cs, root, stem); verr != nil {
+	stem, release, verr := d.reserveFan(cs, root, stem, named, strings.TrimSpace(p.Join))
+	if verr != nil {
 		return nil, verr
 	}
+	// The name is held from the check until the call's sessions exist, so
+	// two calls cannot both take it as new.
+	defer release()
 	branches := fanBranches(root, stem, p.Count)
 	if len(branches) < p.Count {
 		return nil, invalidParam("name", "could not find "+strconv.Itoa(p.Count)+" free branch names from "+stem)
@@ -683,46 +702,102 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string,
 	sess.setPromptStatus(status, note, at)
 }
 
-// checkFanJoin refuses a fan that would join a group already in the
-// repository, unless the caller belongs to it. A session of a fan's group
-// is in reach of every session of that group (sessionInScope), so a pane
-// that could add one would reach the fan it was never part of. The person,
-// a call from outside every pane and a pane with admin may still add
-// attempts to a fan, as may a pane that reaches one of its sessions.
-func (d *Daemon) checkFanJoin(cs *connState, root, stem string) *verbError {
-	var members []string
-	for _, s := range d.manager.AllSessions() {
-		if wt := s.Worktree(); wt != nil && wt.Group == stem && canonRoot(wt.RepoRoot) == canonRoot(root) {
-			members = append(members, s.Name())
-		}
-	}
-	if len(members) == 0 {
-		return nil
-	}
-	own := ""
-	if sc := cs.scopeOrNil(); sc != nil && sc.own {
-		// A connection restricted to its own session.
-		own = d.sessionNameByID(sc.sessionID)
-	} else if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
-		own = pa.session
-	} else {
-		return nil
-	}
-	for _, m := range members {
-		if d.sessionInScope(own, m) {
-			return nil
-		}
-	}
-	return hintedVerbError(ErrVerbForbidden, "the fan "+stem+" already has sessions in this repository, and this pane is not part of it", &VerbHint{
-		Param:  "name",
-		Detail: "Nothing was made. Choose another name for a new fan. Only a pane of the fan, the pane that started it, or the person adds attempts to it.",
-	})
+// fanReservations hold the names of the fans being made now, by canonical
+// repository root and stem, from the check until the sessions exist.
+type fanReservations struct {
+	mu    sync.Mutex
+	names map[string]bool
 }
 
-// scopeOrNil is the connection's restriction, nil for none.
-func (cs *connState) scopeOrNil() *connScope {
-	if cs == nil {
-		return nil
+// fanMembers are the sessions of the fan stem in the repository at root.
+func (d *Daemon) fanMembers(root, stem string) []*Session {
+	var out []*Session
+	for _, s := range d.manager.AllSessions() {
+		if wt := s.Worktree(); wt != nil && wt.Group == stem && canonRoot(wt.RepoRoot) == canonRoot(root) {
+			out = append(out, s)
+		}
 	}
-	return cs.scope.Load()
+	return out
+}
+
+// reserveFan decides the fan a call makes or joins, and holds its name until
+// release. A fan's sessions reach each other (sessionInScope), so joining
+// one is never implicit:
+//
+//   - A name that is no fan yet starts a new fan.
+//   - A name that is already a fan, or is being made by another call now,
+//     is refused for every caller, the person included, unless the call
+//     names a session of that fan with join and the caller reaches it.
+//   - A name the caller did not give, the one fan makes from the prompt, is
+//     moved on to a free one: name-2, name-3.
+//
+// join with no fan of that name is refused too, so a join never starts one.
+func (d *Daemon) reserveFan(cs *connState, root, stem string, named bool, join string) (string, func(), *verbError) {
+	r := &d.fanReserved
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.names == nil {
+		r.names = map[string]bool{}
+	}
+	key := func(st string) string { return canonRoot(root) + "\x00" + st }
+	taken := func(st string) bool { return r.names[key(st)] || len(d.fanMembers(root, st)) > 0 }
+	switch {
+	case join != "":
+		members := d.fanMembers(root, stem)
+		var names []string
+		in := false
+		for _, m := range members {
+			names = append(names, m.Name())
+			if m.Name() == join {
+				in = true
+			}
+		}
+		if !in {
+			return "", nil, hintedVerbError(ErrVerbInvalidParams, "join names "+echoName(join)+", which is not a session of the fan "+echoName(stem)+" in this repository", &VerbHint{
+				Param: "join", Available: names,
+				Detail: "Nothing was made. join takes a session of the fan to add attempts to.",
+			})
+		}
+		if !d.callerReachesSession(cs, join) {
+			return "", nil, newVerbError(ErrVerbForbidden, "the caller cannot reach "+echoName(join)+", so it cannot add attempts to its fan")
+		}
+		// Joining an existing fan holds no reservation: the fan exists.
+		return stem, func() {}, nil
+	case taken(stem) && named:
+		var names []string
+		for _, m := range d.fanMembers(root, stem) {
+			names = append(names, m.Name())
+		}
+		return "", nil, hintedVerbError(ErrVerbFanExists, "a fan named "+echoName(stem)+" already exists in this repository", &VerbHint{
+			Param: "name", Available: names,
+			Detail: "Nothing was made. Choose another name for a new fan. To add attempts to this fan on purpose, pass join with one of its sessions (tuios fan --join SESSION).",
+		})
+	case taken(stem):
+		base := stem
+		for i := 2; taken(stem); i++ {
+			if i > 99 {
+				return "", nil, invalidParam("name", "no free fan name from "+base)
+			}
+			stem = base + "-" + strconv.Itoa(i)
+		}
+	}
+	k := key(stem)
+	r.names[k] = true
+	return stem, func() {
+		r.mu.Lock()
+		delete(r.names, k)
+		r.mu.Unlock()
+	}, nil
+}
+
+// fanStemPrintable refuses a fan name with a character that does not print
+// or takes no room: a space, a control or format character such as a
+// zero-width space. Such a name reads on screen as another fan's.
+func fanStemPrintable(stem string) *verbError {
+	for _, r := range stem {
+		if !unicode.IsGraphic(r) || unicode.IsSpace(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Mn, r) {
+			return invalidParam("name", fmt.Sprintf("the fan name %s holds a character that does not print (U+%04X): nothing was made", strconv.QuoteToASCII(stem), r))
+		}
+	}
+	return nil
 }

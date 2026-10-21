@@ -813,7 +813,9 @@ tuios fan diff <session-a> <session-b> [--stat]
 - `--prompt <prompt>`: One session's prompt, repeated once per session, in place of the prompt argument. The count is then how many there are
 - `--env NAME` or `--env NAME=VALUE`: Pass your value of a variable, or set one, for every agent. Repeatable. `PATH` is always sent, so the agents are found where your shell finds them
 - `--grants <grant>[,<grant>...]`: What every agent may do through tuios, as for `start-agent`
-- `--repo <dir>`, `--base <ref>`, `--name <stem>`, `--wait`, `--json`
+- `--name <stem>`: The fan's name, which its branches start with. A name that is already a fan in the repository is refused. Omitted, the name comes from the prompt and moves on to a free one
+- `--join <session>`: Add the attempts to the fan of this session, on purpose, instead of starting a new fan. Your pane must reach that session
+- `--repo <dir>`, `--base <ref>`, `--wait`, `--json`
 
 **Examples:**
 ```bash

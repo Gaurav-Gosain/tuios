@@ -1582,6 +1582,7 @@ catalog.
 | `invalid_params` | The params failed to decode, or a required field was missing. |
 | `session_not_found` | The named session does not exist (or no sessions exist). |
 | `session_exists` | new-session was given a name the daemon already holds. |
+| `fan_exists` | fan was given the name of a fan that exists in the repository, with no `join`. The hint lists the fan's sessions. |
 | `window_not_found` | The window target did not resolve to a window. |
 | `no_windows` | The session has no windows to act on. |
 | `pty_not_found` | The target window has no live PTY. |
@@ -3912,11 +3913,15 @@ what: `idle`, `done`, or `quiet` for `unknown` on a harness that cannot show
 idle. The harness the daemon started counts from the start, before detection
 has named the pane's harness.
 
-A `name` that is already a fan's group in the repository adds attempts to
-that fan, which then reach each other. Only the person, a call from outside
-every pane, a pane with `admin`, or a pane that reaches a session of that
-fan (its own attempts, or the pane that started it) may do that. Any other
-caller is `forbidden`, and nothing is made.
+A fan's sessions reach each other, so joining one is never implicit. A
+`name` that is already a fan in the repository, or is being made by another
+call at that moment, is `fan_exists` for every caller, the person included,
+and nothing is made. To add attempts to a fan on purpose, pass `join` with a
+session of that fan (`name` may then be omitted): the caller must reach that
+session, which the person, a pane with `admin`, the fan's own panes and the
+pane that started it do. Without `name`, the name fan makes from the prompt
+moves on to a free one (`-2`, `-3`). A name with a character that does not
+print, such as a zero-width space, is refused.
 
 An agent is one string, the way a person types it: a harness id or program
 name, or any program, with its arguments after it (`"codex --model o5"`). It
