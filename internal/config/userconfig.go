@@ -1879,46 +1879,64 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 		// macOS users think in terms of Option key
 		// The KeyNormalizer expands opt+1 to [opt+1, alt+1]
 		base = map[string][]string{
-			"switch_workspace_1": {"opt+1"},
-			"switch_workspace_2": {"opt+2"},
-			"switch_workspace_3": {"opt+3"},
-			"switch_workspace_4": {"opt+4"},
-			"switch_workspace_5": {"opt+5"},
-			"switch_workspace_6": {"opt+6"},
-			"switch_workspace_7": {"opt+7"},
-			"switch_workspace_8": {"opt+8"},
-			"switch_workspace_9": {"opt+9"},
-			"move_and_follow_1":  {"opt+shift+1"},
-			"move_and_follow_2":  {"opt+shift+2"},
-			"move_and_follow_3":  {"opt+shift+3"},
-			"move_and_follow_4":  {"opt+shift+4"},
-			"move_and_follow_5":  {"opt+shift+5"},
-			"move_and_follow_6":  {"opt+shift+6"},
-			"move_and_follow_7":  {"opt+shift+7"},
-			"move_and_follow_8":  {"opt+shift+8"},
-			"move_and_follow_9":  {"opt+shift+9"},
+			"switch_workspace_1":  {"opt+1"},
+			"switch_workspace_2":  {"opt+2"},
+			"switch_workspace_3":  {"opt+3"},
+			"switch_workspace_4":  {"opt+4"},
+			"switch_workspace_5":  {"opt+5"},
+			"switch_workspace_6":  {"opt+6"},
+			"switch_workspace_7":  {"opt+7"},
+			"switch_workspace_8":  {"opt+8"},
+			"switch_workspace_9":  {"opt+9"},
+			"move_and_follow_1":   {"opt+shift+1"},
+			"move_and_follow_2":   {"opt+shift+2"},
+			"move_and_follow_3":   {"opt+shift+3"},
+			"move_and_follow_4":   {"opt+shift+4"},
+			"move_and_follow_5":   {"opt+shift+5"},
+			"move_and_follow_6":   {"opt+shift+6"},
+			"move_and_follow_7":   {"opt+shift+7"},
+			"move_and_follow_8":   {"opt+shift+8"},
+			"move_and_follow_9":   {"opt+shift+9"},
+			"send_to_workspace_1": {"ctrl+opt+1"},
+			"send_to_workspace_2": {"ctrl+opt+2"},
+			"send_to_workspace_3": {"ctrl+opt+3"},
+			"send_to_workspace_4": {"ctrl+opt+4"},
+			"send_to_workspace_5": {"ctrl+opt+5"},
+			"send_to_workspace_6": {"ctrl+opt+6"},
+			"send_to_workspace_7": {"ctrl+opt+7"},
+			"send_to_workspace_8": {"ctrl+opt+8"},
+			"send_to_workspace_9": {"ctrl+opt+9"},
 		}
 	} else {
 		// Linux and other platforms use alt
 		base = map[string][]string{
-			"switch_workspace_1": {"alt+1"},
-			"switch_workspace_2": {"alt+2"},
-			"switch_workspace_3": {"alt+3"},
-			"switch_workspace_4": {"alt+4"},
-			"switch_workspace_5": {"alt+5"},
-			"switch_workspace_6": {"alt+6"},
-			"switch_workspace_7": {"alt+7"},
-			"switch_workspace_8": {"alt+8"},
-			"switch_workspace_9": {"alt+9"},
-			"move_and_follow_1":  {"alt+shift+1"},
-			"move_and_follow_2":  {"alt+shift+2"},
-			"move_and_follow_3":  {"alt+shift+3"},
-			"move_and_follow_4":  {"alt+shift+4"},
-			"move_and_follow_5":  {"alt+shift+5"},
-			"move_and_follow_6":  {"alt+shift+6"},
-			"move_and_follow_7":  {"alt+shift+7"},
-			"move_and_follow_8":  {"alt+shift+8"},
-			"move_and_follow_9":  {"alt+shift+9"},
+			"switch_workspace_1":  {"alt+1"},
+			"switch_workspace_2":  {"alt+2"},
+			"switch_workspace_3":  {"alt+3"},
+			"switch_workspace_4":  {"alt+4"},
+			"switch_workspace_5":  {"alt+5"},
+			"switch_workspace_6":  {"alt+6"},
+			"switch_workspace_7":  {"alt+7"},
+			"switch_workspace_8":  {"alt+8"},
+			"switch_workspace_9":  {"alt+9"},
+			"move_and_follow_1":   {"alt+shift+1"},
+			"move_and_follow_2":   {"alt+shift+2"},
+			"move_and_follow_3":   {"alt+shift+3"},
+			"move_and_follow_4":   {"alt+shift+4"},
+			"move_and_follow_5":   {"alt+shift+5"},
+			"move_and_follow_6":   {"alt+shift+6"},
+			"move_and_follow_7":   {"alt+shift+7"},
+			"move_and_follow_8":   {"alt+shift+8"},
+			"move_and_follow_9":   {"alt+shift+9"},
+			"send_to_workspace_1": {"ctrl+alt+1"},
+			"send_to_workspace_2": {"ctrl+alt+2"},
+			"send_to_workspace_3": {"ctrl+alt+3"},
+			"send_to_workspace_4": {"ctrl+alt+4"},
+			"send_to_workspace_5": {"ctrl+alt+5"},
+			"send_to_workspace_6": {"ctrl+alt+6"},
+			"send_to_workspace_7": {"ctrl+alt+7"},
+			"send_to_workspace_8": {"ctrl+alt+8"},
+			"send_to_workspace_9": {"ctrl+alt+9"},
 		}
 	}
 
@@ -3440,7 +3458,13 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 
 	// Fill in missing keys with defaults
 	fillMapDefaults(cfg.Keybindings.WindowManagement, defaultCfg.Keybindings.WindowManagement)
+	// The workspaces table is part of the window-mode keymap as well, so a new
+	// workspace default yields the same way a new layout default does.
+	workspaceYield := yieldTakenDefaults("workspaces", windowModeTables(cfg), defaultCfg.Keybindings.Workspaces)
 	fillMapDefaults(cfg.Keybindings.Workspaces, defaultCfg.Keybindings.Workspaces)
+	for _, y := range workspaceYield {
+		delete(cfg.Keybindings.Workspaces, y.Action)
+	}
 	// The layout table is one of several that make up the window-mode keymap,
 	// and it wins a key over window_management. So a new layout default yields
 	// to the user's own binding for its key in any of those tables.
@@ -3459,6 +3483,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	for _, y := range cfg.YieldedDefaults {
 		delete(cfg.Keybindings.PrefixMode, y.Action)
 	}
+	cfg.YieldedDefaults = append(cfg.YieldedDefaults, workspaceYield...)
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, layoutYield...)
 	presetYield = append(presetYield, fillPrefix("window_prefix", cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)...)
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
@@ -3572,6 +3597,17 @@ var yieldingDefaults = map[string]bool{
 	"inbox_tab_prev":     true,
 	"inbox_tab_next":     true,
 	"inbox_expand":       true,
+	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
+	// send_to_workspace_N.
+	"send_to_workspace_1": true,
+	"send_to_workspace_2": true,
+	"send_to_workspace_3": true,
+	"send_to_workspace_4": true,
+	"send_to_workspace_5": true,
+	"send_to_workspace_6": true,
+	"send_to_workspace_7": true,
+	"send_to_workspace_8": true,
+	"send_to_workspace_9": true,
 	// c, new with the fan comparison.
 	"inbox_compare": true,
 }

@@ -32,9 +32,12 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 	})
 
 	report := o.KeybindRegistry.Report(config.PaneFacts{})
+	// The report lists a key once, in the spelling of the first action that
+	// binds it, so the two sides are compared in canonical form: the default
+	// send_to_workspace_2 also holds ctrl+alt+2, spelt ctrl+opt+2 on macOS.
 	swallowed := map[string]bool{}
 	for _, s := range report.Swallowed {
-		swallowed[strings.ToLower(s.Key)] = true
+		swallowed[config.CanonicalKey(s.Key)] = true
 	}
 
 	cases := []struct {
@@ -64,7 +67,7 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 			kb.WindowManagement["close_window"] = []string{"alt+q"}
 		})
 		router := handleTerminalModeBinds(tc.msg, fresh)
-		if got := swallowed[tc.key]; got != router {
+		if got := swallowed[config.CanonicalKey(tc.key)]; got != router {
 			t.Errorf("key %q: the report says the pane loses it (%v), the router says (%v)",
 				tc.key, got, router)
 		}

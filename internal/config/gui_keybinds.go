@@ -93,6 +93,7 @@ func getDefaultGUIKeybinds() map[string][]string {
 	for n := '1'; n <= '9'; n++ {
 		kb["switch_workspace_"+string(n)] = []string{"alt+" + string(n)}
 		kb["move_and_follow_"+string(n)] = []string{"ctrl+shift+alt+" + string(n)}
+		kb["send_to_workspace_"+string(n)] = []string{"ctrl+alt+" + string(n)}
 	}
 	return kb
 }

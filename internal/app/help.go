@@ -357,6 +357,19 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 		}
 	}
 
+	for i := 1; i <= 9; i++ {
+		action := fmt.Sprintf("send_to_workspace_%d", i)
+		keys := registry.GetKeys(action)
+		if len(keys) > 0 {
+			bindings = append(bindings, HelpBinding{
+				Action:      action,
+				Keys:        keys,
+				Description: fmt.Sprintf("Send the focused pane to workspace %d", i),
+				Category:    "Workspaces",
+			})
+		}
+	}
+
 	// Renaming a workspace is a chord rather than a plain key, so its row is
 	// built from the same whole-chord hint the pill menu shows.
 	if chord := contextMenuHint(registry, "workspace_prefix_rename", s); chord != "" {
