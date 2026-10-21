@@ -25,7 +25,6 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// frame with unicode glyphs in the rail and only corrected itself on the
 	// next redraw.
 	syncOverlaySettings(&m.Settings)
-	m.syncOverlayFrame()
 
 	// Reuse the canvas across frames. Allocating a fresh one each frame was the
 	// single largest source of allocations (a full-screen cell buffer per frame).

@@ -153,7 +153,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	filtered := m.filteredPaletteItems()
 	grouped := paletteGrouped(m.CommandPaletteQuery) && !m.fileSearch
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 
 	width, visible, hints := m.paletteLayout()

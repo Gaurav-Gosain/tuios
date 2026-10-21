@@ -179,18 +179,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	w := max(d.Width, MinDialogWidth)
 	tl, tr, bl, br, h, v := dialogFrame()
 
-	// A dialog with a drawn frame reads as a pane window: the frame and the
-	// whole dialog, its title and hints in the frame line included, go onto
-	// the host's ground. A blank frame, the hidden style's, leaves the dialog
-	// on its canvas, which is then the only edge it has.
-	measure := bg
-	ground, m, grounded := framedGround()
-	grounded = grounded && drawn(tl, tr, bl, br, h, v)
-	if grounded && m != nil {
-		measure = m
-	}
-
-	frame := Style(bg).Foreground(frameInk(pal.FgMute))
+	frame := Style(bg).Foreground(pal.frameInk(pal.FgMute))
 	rule := func(n int) string { return frame.Render(strings.Repeat(h, max(n, 0))) }
 
 	// Top border: the title sits in it rather than on a row of its own, which
@@ -199,7 +188,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	if title := Truncate(d.Title, max(w-3, 1)); title != "" {
 		top += rule(1) +
 			Style(bg).Render(" ") +
-			Style(bg).Foreground(Readable(pal.Accent, measure)).Bold(true).Render(title) +
+			Style(bg).Foreground(Readable(pal.Accent, bg)).Bold(true).Render(title) +
 			Style(bg).Render(" ") +
 			rule(w-lipgloss.Width(title)-3)
 	} else {
@@ -215,7 +204,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	var strip string
 	var stripW int
 	if len(d.Hints) > 0 {
-		strip, stripW = renderHintsOn(fitted, dialogSep, bg, measure, pal)
+		strip, stripW = renderHints(fitted, dialogSep, bg, pal)
 	}
 	bottom := frame.Render(bl)
 	if stripW > 0 {
@@ -251,11 +240,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 		}
 	}
 
-	out := strings.Join(lines, "\n")
-	if grounded {
-		out = onGround(out, bg, ground)
-	}
-	return out, Geometry{
+	return strings.Join(lines, "\n"), Geometry{
 		Width:      w + 2,
 		Height:     len(lines),
 		InnerWidth: w,

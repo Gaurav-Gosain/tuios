@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The file action dialogs.
@@ -62,7 +61,7 @@ func (m *OS) renderFileDialog() (string, overlay.Geometry, []overlayRowHit) {
 // both: they ask the same question about a different starting point, and the
 // rule for what the answer may say is the same rule.
 func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(fileDialogWidth, m.GetRenderWidth())
 
@@ -139,7 +138,7 @@ func (m *OS) filePromptNote() string {
 // happens to it, and the two answers. Cancel is drawn first and is where the
 // dialog opens, so enter on a dialog nobody has touched removes nothing.
 func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(fileDialogWidth, m.GetRenderWidth())
 	m.filePrompt.Selected = clampInt(m.filePrompt.Selected, 0, fileConfirmRowCount-1)

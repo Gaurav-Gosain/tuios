@@ -495,7 +495,7 @@ func (m *OS) renderWhichKey() (string, int, int) {
 	}
 	cols, more := m.whichKeyLayout(title, groups, maxRows)
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	keyStyle := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true)
 	descStyle := overlay.Style(bg).Foreground(pal.FgDim)

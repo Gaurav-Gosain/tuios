@@ -174,7 +174,7 @@ func accentChip(c color.RGBA, n int, cursor bool, pal overlay.Palette) string {
 // The keyboard reaches every control with tab and the arrows; the mouse reaches
 // every cell of them through the rects recorded here.
 func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	p := m.accentPlan()
 	m.accentHits = m.accentHits[:0]
 
