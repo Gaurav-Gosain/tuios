@@ -2,14 +2,18 @@ package app
 
 import (
 	"image/color"
+	"os"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -139,6 +143,8 @@ var (
 	ckGlyphMarked  = ckGlyph{"\uf14a", "•", "*"}
 	ckGlyphResume  = ckGlyph{"\uf01e", "»", ">"}
 	ckGlyphImage   = ckGlyph{"\U000f02e9", "[img]", "[img]"}
+	ckGlyphPR      = ckGlyph{"\uf407", "PR", "PR"}
+	ckGlyphFan     = ckGlyph{"\uf192", "+", "+"}
 )
 
 // g picks the form the terminal can draw.
@@ -458,6 +464,23 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		c.text(sx+1, y, sx+sw, ckSeg{t: "/  ", fg: pal.FgMute}, ckSeg{t: words, fg: pal.FgMute})
 	}
 	ck.hits = append(ck.hits, ckHit{x0: sx, y0: top + y, x1: sx + sw, y1: top + y + 1, kind: ckHitAction, action: "search"})
+	// The machine scope, when there is more than one machine.
+	if len(m.FederationHosts) == 0 || len(m.ckMachines()) < 2 {
+		return
+	}
+	label := "All machines"
+	switch h := m.ckScope(); h {
+	case "":
+	case federation.LocalHostName:
+		label = ckLocalName()
+	default:
+		label = printableTitle(h)
+	}
+	segs := []ckSeg{{t: label + " ", fg: pal.FgDim}, {t: l.g(ckGlyphOpen), fg: pal.FgMute}}
+	if mx := sx - 3 - ckWidth(segs...); mx > x {
+		c.text(mx, y, sx-3, segs...)
+		ck.hits = append(ck.hits, ckHit{x0: mx, y0: top + y, x1: sx - 3, y1: top + y + 1, kind: ckHitAction, action: "scope"})
+	}
 }
 
 // drawFleet draws the fleet column: the groups, then the machines.
@@ -468,6 +491,13 @@ func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 	c.fill(0, y0, w, y1-y0, l.panel)
 	ck.fleetW = w
 	listTop, listBot := y0+1, y1
+	// The machines sit at the foot of the column when there is more than
+	// this one, and the list has room above them.
+	if ms := m.ckMachines(); len(ms) > 1 && y1-y0 >= len(ms)+12 {
+		my := y1 - len(ms) - 2
+		m.drawMachines(c, l, ms, w, my, top)
+		listBot = my - 1
+	}
 	colH := max(listBot-listTop, 1)
 	oneLine := w < 48
 	if !oneLine {
@@ -526,6 +556,157 @@ func (m *OS) drawFleet(c *ckCanvas, l ckLook, w, y0, y1, top int) {
 	}
 }
 
+// ckMachineRow is one machine at the foot of the fleet.
+type ckMachineRow struct {
+	host, name string
+	agents     int
+	// load is the one-minute load over the cores, when known.
+	load   float64
+	loadOK bool
+	up     bool
+	status string
+}
+
+// ckLoadEvery is how often a frame reads this machine's load again.
+const ckLoadEvery = 15 * time.Second
+
+// ckMachines lists this machine, then every host, with its agents and load.
+// It is empty when no host is configured.
+func (m *OS) ckMachines() []ckMachineRow {
+	ck := &m.Inbox.ck
+	var out []ckMachineRow
+	for _, h := range m.FederationHosts {
+		if h.Name == federation.LocalHostName {
+			continue
+		}
+		out = append(out, ckMachineRow{host: h.Name, name: printableTitle(h.Name), agents: ck.machines[h.Name],
+			up: h.Status == string(federation.StatusUp), status: h.Status})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	if now := time.Now(); now.Sub(ck.loadAt) >= ckLoadEvery {
+		ck.loadAt = now
+		ck.load, ck.loadOK = spawnLoadAvg()
+	}
+	local := ckMachineRow{name: ckLocalName(), agents: ck.machines[""], up: true}
+	if ck.loadOK {
+		local.load, local.loadOK = ck.load/float64(max(runtime.NumCPU(), 1)), true
+	}
+	return append([]ckMachineRow{local}, out...)
+}
+
+// drawMachines draws the machines block at y: a heading, then one row per
+// machine with its agents, its load and its link. A click on a machine
+// shows its agents alone.
+func (m *OS) drawMachines(c *ckCanvas, l ckLook, ms []ckMachineRow, w, y, top int) {
+	ck := &m.Inbox.ck
+	pal := l.pal
+	right := w - 2
+	end := c.text(2, y, right, ckSeg{t: "Machines", fg: pal.FgDim, attrs: ckBold}, ckSeg{t: "  " + strconv.Itoa(len(ms)), fg: pal.FgMute})
+	c.hline(end+2, y, right-end-2, hzGlyph(), l.edgePanel)
+	scope := m.ckScope()
+	for i, mr := range ms {
+		yy := y + 1 + i
+		nameInk := pal.Fg
+		if !mr.up {
+			nameInk = pal.FgDim
+		}
+		if mr.host == scope && scope != "" || mr.host == "" && scope == federation.LocalHostName {
+			nameInk = pal.AccentBright
+		}
+		agents := strconv.Itoa(mr.agents) + " agent"
+		if mr.agents != 1 {
+			agents += "s"
+		}
+		c.text(2, yy, right, ckSeg{t: l.g(ckGlyphHost), fg: pal.FgMute}, ckSeg{t: "  " + ckPad(ckTrunc(mr.name, 9), 10), fg: nameInk},
+			ckSeg{t: agents, fg: pal.FgDim})
+		link := "local"
+		if mr.host != "" {
+			link = "link up"
+			if !mr.up {
+				link = "link " + strings.ReplaceAll(printableTitle(mr.status), "_", " ")
+			}
+		}
+		lx := c.textR(right, yy, ckSeg{t: link, fg: pal.FgMute})
+		if mr.loadOK && lx-2 > 34 {
+			load := min(max(mr.load, 0), 1)
+			filled := int(load*8 + 0.5)
+			barInk := pal.Busy
+			if load >= 0.7 {
+				barInk = pal.Warning
+			}
+			on, off := "■", "■"
+			if l.ascii {
+				on, off = "#", "."
+			}
+			c.text(26, yy, lx-2, ckSeg{t: strings.Repeat(on, filled), fg: barInk}, ckSeg{t: strings.Repeat(off, 8-filled), fg: l.edgePanel},
+				ckSeg{t: " " + ckPadLeft(strconv.Itoa(int(load*100+0.5))+"%", 4), fg: pal.FgMute})
+		}
+		target := mr.host
+		if target == "" {
+			target = federation.LocalHostName
+		}
+		ck.hits = append(ck.hits, ckHit{x0: 0, y0: top + yy, x1: w, y1: top + yy + 1, kind: ckHitAction, action: "scope:" + target})
+	}
+}
+
+// ckPadLeft right-aligns s in n cells.
+func ckPadLeft(s string, n int) string {
+	if d := n - ansi.StringWidth(s); d > 0 {
+		return strings.Repeat(" ", d) + s
+	}
+	return s
+}
+
+// ckScope is the machine the fleet is narrowed to by host:NAME, empty when
+// it shows every machine.
+func (m *OS) ckScope() string {
+	sel := m.Inbox.Select
+	if h, ok := strings.CutPrefix(sel, "host:"); ok && !strings.ContainsAny(h, " *?[") {
+		return h
+	}
+	return ""
+}
+
+// CockpitScope narrows the fleet to one machine, by host:NAME, or shows
+// every machine again for "". Any other selector is replaced; the search
+// stays.
+func (m *OS) CockpitScope(host string) {
+	st := &m.Inbox
+	if host == "" {
+		st.Select, st.selector = "", nil
+	} else {
+		home, _ := os.UserHomeDir()
+		sel, err := session.ParseSelector("host:"+host, home)
+		if err != nil {
+			return
+		}
+		st.Select, st.selector = sel.String(), sel
+	}
+	st.ck.scroll, st.ck.follow = 0, true
+	m.cockpitTouchRows()
+}
+
+// cockpitNextScope steps the machine scope: every machine, this one, then
+// each host, then every machine again.
+func (m *OS) cockpitNextScope() {
+	order := []string{"", federation.LocalHostName}
+	for _, h := range m.FederationHosts {
+		if h.Name != federation.LocalHostName {
+			order = append(order, h.Name)
+		}
+	}
+	cur := m.ckScope()
+	next := ""
+	for i, h := range order {
+		if h == cur {
+			next = order[(i+1)%len(order)]
+		}
+	}
+	m.CockpitScope(next)
+}
+
 // drawFleetRow draws one row of the fleet at x, y, w cells wide.
 func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, y, w, top int) {
 	ck := &m.Inbox.ck
@@ -561,14 +742,7 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		c.text(x+5, y, right, ckSeg{t: words, fg: pal.FgMute})
 		return
 	case ckRowChild:
-		tree := "├ "
-		if r.last {
-			tree = "└ "
-		}
-		if l.ascii {
-			tree = "| "
-		}
-		g, ink := l.g(ckGlyphWorking), pal.Busy
+		g, ink := l.g(ckGlyphWorking), overlay.MixColors(pal.Busy, l.panel, 0.3)
 		if !r.child.Running() {
 			g, ink = l.g(ckGlyphReview), pal.FgMute
 		}
@@ -576,8 +750,17 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		if what == "" {
 			what = r.child.Description
 		}
-		c.text(x+5, y, right, ckSeg{t: tree, fg: l.edgePanel}, ckSeg{t: g + " ", fg: ink},
+		c.text(x+4, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + " ", fg: ink},
 			ckSeg{t: printableTitle(firstNonEmptyStr(r.child.Type, "agent")), fg: pal.FgDim}, ckSeg{t: "  " + printableTitle(what), fg: pal.FgMute})
+		return
+	case ckRowFan:
+		e := ck.agents[r.agent]
+		wt := m.ckWorktreeOf(e)
+		c.text(x+2, y, right, ckSeg{t: l.g(ckGlyphFan), fg: pal.AccentBright}, ckSeg{t: "  " + wt.group, fg: pal.Fg, attrs: ckBold},
+			ckSeg{t: "  fan of " + strconv.Itoa(r.count), fg: pal.FgDim})
+		if r.lines > 1 {
+			c.text(x+5, y+1, right, ckSeg{t: ckTrunc(wt.prompt, right-x-5), fg: pal.FgMute})
+		}
 		return
 	}
 
@@ -624,6 +807,19 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		wait = ""
 	}
 	ink := func(c color.Color) color.Color { return overlay.Readable(c, ground) }
+	if r.attempt {
+		// One attempt of a fan, under the fan's row: its tree mark, state,
+		// name, agent and machine, and its diff at the end.
+		ax := c.text(x+2, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g, fg: gInk})
+		ax = c.text(ax+1, y, right, ckSeg{t: ckPad(ckTrunc(name, 11), 12), fg: ink(nameInk)})
+		rx := right
+		if diff := ckDiffSegs(l, e); diff != nil {
+			rx = c.textR(right, y, diff...) - 2
+		}
+		ax = c.text(ax, y, rx, ckSeg{t: ckPad(harness, 9), fg: ink(pal.FgDim)})
+		c.text(ax, y, rx, ckSeg{t: ckTrunc(place, rx-ax), fg: ink(pal.FgMute)})
+		return
+	}
 	nameW := 15
 	if w < 50 {
 		nameW = 13
@@ -660,6 +856,47 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		}
 		c.text(lx, y+1, rx2, ckSeg{t: ckTrunc(rest, rx2-lx), fg: ink(pal.FgDim)})
 	}
+}
+
+// ckRuleWords is the short form of an always rule for a button: what the
+// rule allows, "go test" for "Bash(go test:*) in .claude/settings.json".
+func ckRuleWords(rule string) string {
+	rule = printableTitle(rule)
+	head, _, _ := strings.Cut(rule, " in ")
+	if i := strings.IndexByte(head, '('); i > 0 && strings.HasSuffix(head, ")") {
+		inner := strings.TrimSuffix(strings.TrimSuffix(head[i+1:len(head)-1], "*"), ":")
+		if inner = strings.TrimSpace(inner); inner != "" {
+			return inner
+		}
+		return head[:i]
+	}
+	return head
+}
+
+// ckHomePath writes a path under the home folder from ~.
+func ckHomePath(p string) string {
+	if home := ckHome(); home != "" && (p == home || strings.HasPrefix(p, home+"/")) {
+		return "~" + p[len(home):]
+	}
+	return p
+}
+
+// ckHome is the home folder, read once.
+var ckHome = sync.OnceValue(func() string {
+	home, _ := os.UserHomeDir()
+	return home
+})
+
+// ckTree is the tree mark of a row under another: the last one closes the
+// branch.
+func ckTree(l ckLook, last bool) string {
+	switch {
+	case l.ascii:
+		return "| "
+	case last:
+		return "└ "
+	}
+	return "├ "
 }
 
 // ckOn is the state of a button and a pill: at 16 colours, reverse video.
@@ -717,15 +954,46 @@ func ckHarness(h string) string {
 	return printableTitle(h)
 }
 
-// ckPlace is where an agent runs, as its row says it: the session, with the
-// machine in front for an agent on another one ("build:api").
+// ckPlace is where an agent runs, as its row says it: the machine, with its
+// mark ("󰒋 build"), when there is more than one machine, else the session.
 func (m *OS) ckPlace(e sidebarAgentEntry) string {
-	s := printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
-	if e.Host != "" {
-		return m.cockpitLook().g(ckGlyphHost) + " " + printableTitle(e.Host) + ":" + s
+	if !m.ckManyMachines() {
+		return printableTitle(firstNonEmptyStr(e.SessionLabel, e.SessionID))
 	}
-	return s
+	return m.cockpitLook().g(ckGlyphHost) + " " + ckMachine(e.Host)
 }
+
+// ckManyMachines reports whether a host other than this machine is
+// configured.
+func (m *OS) ckManyMachines() bool {
+	for _, h := range m.FederationHosts {
+		if h.Name != federation.LocalHostName {
+			return true
+		}
+	}
+	return false
+}
+
+// ckMachine names a machine: the host's name, or this machine's own name
+// for "".
+func ckMachine(host string) string {
+	if host != "" {
+		return printableTitle(host)
+	}
+	return ckLocalName()
+}
+
+// ckLocalName is this machine's short host name, read once.
+var ckLocalName = sync.OnceValue(func() string {
+	name, _ := os.Hostname()
+	if i := strings.IndexByte(name, '.'); i > 0 {
+		name = name[:i]
+	}
+	if name = printableTitle(name); name == "" {
+		name = "this machine"
+	}
+	return name
+})
 
 // ckMeta is the value of a meta key the agent reported, empty when none.
 func ckMeta(e sidebarAgentEntry, key string) string {
@@ -800,9 +1068,10 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 	case sidebarAttention(e.State):
 		return capitalize(agentRowStateWords(e)), printableTitle(e.Message), pal.Attention, right
 	}
-	br := m.ckBranch(e)
-	if e.PR != "" {
-		right = []ckSeg{{t: printableTitle(e.PR), fg: pal.FgDim}}
+	wt := m.ckWorktreeOf(e)
+	br := wt.branch
+	if pr := ckPRSegs(l, e.PR, wt.failed); pr != nil {
+		right = pr
 	}
 	if br != "" {
 		return "", l.g(ckGlyphBranch) + " " + br, ink, right
@@ -811,6 +1080,40 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		return "", printableTitle(r.item.Summary), ink, right
 	}
 	return "", printableTitle(e.Message), ink, right
+}
+
+// ckPRSegs is a pull request as a row's second line ends: its number, then
+// its checks by mark, from the rail's short form ("PR #12 open fail").
+// failed is how many checks failed, 0 when unknown.
+func ckPRSegs(l ckLook, badge string, failed int) []ckSeg {
+	f := strings.Fields(badge)
+	if len(f) < 3 || f[0] != "PR" {
+		return nil
+	}
+	pal := l.pal
+	segs := []ckSeg{{t: l.g(ckGlyphPR) + " " + printableTitle(f[1]), fg: pal.FgDim}}
+	if f[2] != "open" {
+		return append(segs, ckSeg{t: " " + printableTitle(f[2]), fg: pal.FgMute})
+	}
+	if len(f) < 4 {
+		return segs
+	}
+	switch f[3] {
+	case "pass":
+		segs = append(segs, ckSeg{t: " " + l.g(ckGlyphReview), fg: pal.Success})
+	case "fail":
+		words := " checks fail"
+		switch {
+		case failed == 1:
+			words = " 1 check"
+		case failed > 1:
+			words = " " + strconv.Itoa(failed) + " checks"
+		}
+		segs = append(segs, ckSeg{t: " " + l.g(ckGlyphFailed) + words, fg: pal.Warn})
+	case "pending":
+		segs = append(segs, ckSeg{t: " " + l.g(ckGlyphWorking), fg: pal.Busy})
+	}
+	return segs
 }
 
 // ckItemVerb splits an item into the verb of what it asks and its text:
@@ -842,19 +1145,31 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 	return capitalize(inboxKindWords(it)), sum
 }
 
+// ckWorktree is what the cockpit shows of an agent's worktree session.
+type ckWorktree struct {
+	branch, group, path, prompt string
+	failed                      int
+}
+
 // ckBranch is the branch of the agent's worktree session, empty when it is
 // not in one.
 func (m *OS) ckBranch(e sidebarAgentEntry) string {
+	return m.ckWorktreeOf(e).branch
+}
+
+// ckWorktreeOf is the agent's worktree session, zero when it is not in one.
+func (m *OS) ckWorktreeOf(e sidebarAgentEntry) ckWorktree {
 	return m.Inbox.ck.branches[e.Host+"\x00"+e.SessionID]
 }
 
-// ckBranches reads every worktree session's branch once per rebuild of the
+// ckBranches reads every worktree session's record once per rebuild of the
 // rows, so a row does not walk the session tree.
-func (m *OS) ckBranches() map[string]string {
-	out := map[string]string{}
+func (m *OS) ckBranches() map[string]ckWorktree {
+	out := map[string]ckWorktree{}
 	for _, s := range m.BuildSessionTree().Sessions {
-		if s.Worktree != nil && s.Worktree.Branch != "" {
-			out[s.Host+"\x00"+s.ID] = printableTitle(s.Worktree.Branch)
+		if w := s.Worktree; w != nil && w.Branch != "" {
+			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group,
+				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed}
 		}
 	}
 	return out
@@ -1136,11 +1451,18 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 		c.text(hx, y, right, ckSeg{t: " · " + model, fg: pal.FgMute})
 	}
 	m.drawStatePill(c, l, r, e, right, y)
+	// The second line: branch, machine, folder, diff, context and cost.
 	meta := []ckSeg{}
-	if br := m.ckBranch(e); br != "" {
-		meta = append(meta, ckSeg{t: l.g(ckGlyphBranch) + " " + br + "   ", fg: pal.FgDim})
+	wt := m.ckWorktreeOf(e)
+	if wt.branch != "" {
+		meta = append(meta, ckSeg{t: l.g(ckGlyphBranch) + " " + wt.branch + "   ", fg: pal.FgDim})
 	}
-	meta = append(meta, ckSeg{t: place + "   ", fg: pal.FgMute})
+	if r.agent >= 0 || place != "" {
+		meta = append(meta, ckSeg{t: place + "   ", fg: pal.FgDim})
+	}
+	if wt.path != "" {
+		meta = append(meta, ckSeg{t: ckHomePath(wt.path) + "   ", fg: pal.FgMute})
+	}
 	if d := ckDiffSegs(l, e); d != nil {
 		meta = append(append(meta, d...), ckSeg{t: "   "})
 	}
@@ -1151,9 +1473,6 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			}
 			meta = append(meta, ckSeg{t: v + "   ", fg: pal.FgMute})
 		}
-	}
-	if r.agent >= 0 && e.StateAt > 0 {
-		meta = append(meta, ckSeg{t: sidebarStateWords(e.State) + " " + inboxWait(e.StateAt, now), fg: pal.FgMute})
 	}
 	c.text(x, y+1, right, meta...)
 	// Under 30 rows the header gives its gaps to the body.
@@ -1170,7 +1489,13 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			if i == m.cockpitTabIndex() {
 				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.Fg, attrs: ckBold})
 			} else {
-				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.FgMute})
+				// A count beside an idle tab is quieter than its name.
+				name, count, _ := strings.Cut(tab, " ")
+				segs := []ckSeg{{t: name, fg: pal.FgMute}}
+				if count != "" {
+					segs = append(segs, ckSeg{t: " " + count, fg: overlay.Shown(overlay.MixColors(pal.FgMute, l.canvas, 0.25))})
+				}
+				tx = c.text(tx, ty, right, segs...)
 			}
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + ty, x1: tx, y1: top + ty + 1, kind: ckHitTab, group: i})
 			if i == m.cockpitTabIndex() {
@@ -1228,7 +1553,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			m.drawCheckpoints(c, l, e, x, bodyTop, w, max((room-1)/2, 1))
 		}
 		return
-	case "Live":
+	case "Pane":
 		if room := cardTop - 1 - bodyTop; room >= 3 {
 			m.drawLiveBox(c, l, e, x, bodyTop, w, room)
 		}
@@ -1269,15 +1594,12 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 	if r.agent < 0 || e.Host != "" {
 		return nil
 	}
-	// Narrower than the side column, its pieces are tabs.
-	var side []string
-	if m.GetRenderWidth() < ckWide {
-		side = []string{"Checkpoints", "Live"}
+	checkpoints := "Checkpoints"
+	if cp := m.Inbox.ck.cps[agentKey(e)]; cp != nil && len(cp.list) > 0 {
+		checkpoints += " " + strconv.Itoa(len(cp.list))
 	}
+	side := []string{checkpoints, "Pane"}
 	if !m.threadReadsTranscript(e) {
-		if side == nil {
-			return nil
-		}
 		return append([]string{"Thread"}, side...)
 	}
 	n := 0
@@ -1302,7 +1624,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 // ckApprovalLines are a held approval's command, wrapped for the inset, and
 // the lines under it: where it runs, what always adds, the risk rules that
 // matched, and the second press a risky allow waits for.
-func (m *OS) ckApprovalLines(it session.AttentionItem, width int, now time.Time) (inset, detail []string) {
+func (m *OS) ckApprovalLines(it session.AttentionItem, where string, width int, now time.Time) (inset, detail []string) {
 	tool, text := risk.ParseSummary(it.Summary)
 	if tool == "" {
 		text = it.Summary
@@ -1310,11 +1632,10 @@ func (m *OS) ckApprovalLines(it session.AttentionItem, width int, now time.Time)
 		text = tool + "  " + text
 	}
 	inset = wrapPlain(printableTitle(text), max(width-6, 8))
-	detail = append(detail, "  in "+m.inboxWhere(it))
+	detail = append(detail, "  in "+where)
 	if slices.Contains(it.Options, session.ApprovalAlways) && len(it.AlwaysScope) > 0 {
-		detail = append(detail, "  Always also allows from now on:")
 		for _, rule := range it.AlwaysScope {
-			detail = append(detail, wrapPlain("    "+printableTitle(rule), width)...)
+			detail = append(detail, wrapPlain("  Always also allows "+printableTitle(rule), width)...)
 		}
 	}
 	detail = append(detail, inboxRiskLines(it, width)...)
@@ -1381,7 +1702,22 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	// approval or question shown cut is never counted as read.
 	cut := false
 	if plain {
-		inset, detail = m.ckApprovalLines(it, inner, now)
+		where := m.inboxWhere(it)
+		if r.agent >= 0 {
+			// Where it runs, as the focus header says it: the machine and
+			// the folder.
+			e := st.ck.agents[r.agent]
+			p := m.ckWorktreeOf(e).path
+			switch {
+			case m.ckManyMachines() && p != "":
+				where = ckMachine(e.Host) + ":" + ckHomePath(p)
+			case m.ckManyMachines() && e.Host == "":
+				where = ckMachine("") + ":" + where
+			case p != "":
+				where = ckHomePath(p)
+			}
+		}
+		inset, detail = m.ckApprovalLines(it, where, inner, now)
 		cut = len(inset) > 4
 		if cut {
 			inset = append(inset[:3], overlay.Ellipsis())
@@ -1415,7 +1751,7 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 		if it.Kind == session.AttentionPlan {
 			labels = [4]string{"Approve", "Approve, accept edits", "Keep planning", "Keep planning, say why"}
 		} else if len(it.AlwaysScope) > 0 {
-			labels[1] = "Always for " + ckTrunc(printableTitle(it.AlwaysScope[0]), 20)
+			labels[1] = "Always for " + ckTrunc(ckRuleWords(it.AlwaysScope[0]), 20)
 		}
 		for i, d := range [3]string{session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny} {
 			if !slices.Contains(it.Options, d) {
@@ -1434,7 +1770,8 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 	size := func() int {
 		h := base + len(detail)
 		if len(inset) > 0 {
-			h += len(inset) + 1
+			// The lines under the inset follow it at once.
+			h += len(inset)
 		}
 		if len(btns) > 0 {
 			h += 2
@@ -1532,9 +1869,6 @@ func (m *OS) drawItemCard(c *ckCanvas, l ckLook, r ckRow, x, w, y0, y1, top int,
 			}
 		}
 		c.text(x+4, yy, x+w-4, ckSeg{t: lead, fg: pal.FgMute}, ckSeg{t: s, fg: pal.Fg})
-		yy++
-	}
-	if len(inset) > 0 {
 		yy++
 	}
 	for _, s := range detail {

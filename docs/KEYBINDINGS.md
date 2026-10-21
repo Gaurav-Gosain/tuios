@@ -1244,7 +1244,7 @@ Inside it:
 | `y` `p` `m` | Resume, pass held mail on, open the mailbox |
 | `x` `*` | Mark an agent, or every agent shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
-| `[` `]` | Switch the focus tabs: Thread, Changes, and under 170 columns Checkpoints and Live |
+| `[` `]` | Switch the focus tabs: Thread, Changes, Checkpoints and Pane |
 | `J` `K` | Scroll the thread, or a long plan waiting for a yes |
 | `e` | Show every line of every card in the thread |
 | `v` | Review the agent's changes |

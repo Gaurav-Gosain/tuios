@@ -7974,3 +7974,14 @@ none of them. Run on 2026-10-21.
 | A record from before the ID reaches nothing by name | `sessionInScope` passes a record with no ID whose name matches | `TestReview978LegacyRecord` ("a session named like the lead of an older record does compare-fan") | **caught** |
 | A restore drops a lead named without an ID | the clearing in `restoredWorktree` removed | `TestReview978LegacyRecord` ("a restored record from before the ID still names its lead") | **caught** |
 | Both of the above | both cuts together, the review's repro | `TestReview978LegacyRecord` (after the restart, a session of the dead lead's name does compare-fan and send-text) | **caught** |
+
+## The cockpit of frame (a)
+
+`TestCockpitFrameA` builds frame (a) of the cockpit design: twelve agents on
+three machines, a held approval, three branches with pull requests, a fan of
+three and two subagents. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A host's session listing carries its agent panes | the build before this change, where a remote session carries its rolled-up state alone | `TestCockpitFrameA` ("the cockpit never showed the agents of all three machines") | **caught** |
+| The attempts of a fan sit under one row for the fan | `buildCockpitRows` uses the group's rows without `ckGatherFans` | `TestCockpitFrameA` ("the fleet lacks the pull requests, the fan or the machines") | **caught** |

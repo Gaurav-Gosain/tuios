@@ -152,12 +152,12 @@ func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
-	waitText(t, term, "the approval on the Thread tab", "Allow Bash?", "Allow once", "Checkpoints", "Live")
+	waitText(t, term, "the approval on the Thread tab", "Allow Bash?", "Allow once", "Checkpoints", "Pane")
 	// ] steps the tabs: Thread, Changes, Checkpoints, Live. Each tab's own
 	// body says it is drawn, and the card is under it.
 	for _, tab := range []struct{ name, body string }{
 		{"Checkpoints", "Checkpoints need the pane in a git work tree."},
-		{"Live", "╭"},
+		{"Pane", "╭"},
 	} {
 		found := false
 		for range 4 {

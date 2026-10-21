@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -33,13 +34,26 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 	if info == nil {
 		return nil
 	}
-	return &sessiontree.WorktreeRef{
+	ref := &sessiontree.WorktreeRef{
 		Repo:   info.Repo,
 		Branch: info.Branch,
 		Group:  info.Group,
 		Gone:   info.Gone,
 		PR:     info.PR.Badge(),
+		Path:   info.Path,
 	}
+	if info.PR != nil {
+		ref.PRFailed = info.PR.Failed
+	}
+	if info.Group != "" {
+		// The first line, bounded: a row shows one line of it.
+		line, _, _ := strings.Cut(strings.TrimSpace(info.Prompt), "\n")
+		if len(line) > 200 {
+			line = strings.ToValidUTF8(line[:200], "")
+		}
+		ref.Prompt = line
+	}
+	return ref
 }
 
 // sidebarSessionRows is the sessions section's own row list: the attached

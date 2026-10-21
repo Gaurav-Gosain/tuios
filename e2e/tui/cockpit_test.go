@@ -721,7 +721,15 @@ func TestCockpitSideColumn(t *testing.T) {
 		t.Fatalf("ASSERTION: the side column lacks the live pane, the last turn or the checkpoints: %v\n%s", err, term.Snapshot())
 	}
 	s := term.Screen()
-	if !strings.Contains(string([]rune(s.Line(rowWith(s, "Checkpoints")))[154:]), " 2") {
+	// The side column's heading, not the focus tab of the same name.
+	cpRow := -1
+	for r := range 55 {
+		if line := []rune(s.Line(r)); len(line) > 154 && strings.Contains(string(line[154:]), "Checkpoints") {
+			cpRow = r
+			break
+		}
+	}
+	if cpRow < 0 || !strings.Contains(string([]rune(s.Line(cpRow))[154:]), " 2") {
 		t.Fatalf("ASSERTION: the checkpoint count is not the two the CLI lists\n%s", term.Snapshot())
 	}
 	// The pane prints while the view is open: the box follows.
@@ -836,7 +844,7 @@ func TestCockpitSideTabs(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Live")
+	waitText(t, term, "the tabs", "Thread", "Checkpoints", "Pane")
 	if err := term.SendKeys("]"); err != nil {
 		t.Fatal(err)
 	}

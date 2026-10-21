@@ -76,6 +76,7 @@ const (
 	ckRowMore
 	ckRowGap
 	ckRowNote
+	ckRowFan
 )
 
 // ckRow is one row of the fleet.
@@ -91,6 +92,8 @@ type ckRow struct {
 	hasItem bool
 	child   sessiontree.Subagent
 	last    bool
+	// attempt marks an agent row drawn as one attempt under its fan's row.
+	attempt bool
 	note    string
 	key     string
 	// lines is how many lines the row takes.
@@ -123,10 +126,18 @@ type cockpitState struct {
 	colH    int
 	oneLine bool
 	agents  []sidebarAgentEntry
-	// branches are the worktree sessions' branches, by host and session,
+	// branches are the worktree sessions' records, by host and session,
 	// read for the rail signature branchesAt.
-	branches   map[string]string
+	branches   map[string]ckWorktree
 	branchesAt uint64
+	// machines counts the agents on each machine, by host, "" for this
+	// one, from the last list no selector or search narrowed.
+	machines map[string]int
+	// load is this machine's one-minute load, read at most every
+	// ckLoadEvery while frames are drawn, never on a timer of its own.
+	load   float64
+	loadOK bool
+	loadAt time.Time
 	// tall is how many lines the fleet takes with two-line rows, whatever
 	// it is drawn with, so the choice of one-line rows does not feed back
 	// into itself.
@@ -303,6 +314,12 @@ func (m *OS) cockpitRows() []ckRow {
 	if sig := m.Inbox.agents.listAt.sig; ck.branches == nil || ck.branchesAt != sig {
 		ck.branches, ck.branchesAt = m.ckBranches(), sig
 	}
+	if m.Inbox.Select == "" && m.Inbox.agents.query == "" {
+		ck.machines = map[string]int{}
+		for _, e := range list {
+			ck.machines[e.Host]++
+		}
+	}
 	ck.rows, ck.rowsAt = m.buildCockpitRows(list, now), key
 	m.cockpitClamp()
 	return ck.rows
@@ -400,7 +417,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	var rows []ckRow
 	ck.tall = 0
 	for g := range ckGroups {
-		items := groups[g]
+		items := m.ckGatherFans(groups[g], list)
 		itemsOnly := ck.needsOnly || kindFilter
 		if len(items) == 0 || itemsOnly && g != ckNeeds && g != ckSnoozed && g != ckReview {
 			continue
@@ -432,23 +449,33 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if r.selectable() {
 				shown++
 			}
+			if r.kind == ckRowFan {
+				r.lines = 1
+				if m.ckWorktreeOf(list[r.agent]).prompt != "" {
+					r.lines = 2
+				}
+				ck.tall += r.lines
+				if ck.oneLine {
+					r.lines = 1
+				}
+				rows = append(rows, r)
+				continue
+			}
 			r.lines = 2
 			var e sidebarAgentEntry
 			if r.agent >= 0 {
 				e = list[r.agent]
 			}
-			if g == ckIdle || g == ckEarlier || g == ckSnoozed || !m.ckHasLine2(r, e) {
+			if g == ckIdle || g == ckEarlier || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
 				r.lines = 1
 			}
 			ck.tall += r.lines
 			if ck.oneLine {
 				r.lines = 1
 			}
-			if r.kind == ckRowNote {
-				r.lines = 1
-			}
+
 			rows = append(rows, r)
-			if r.kind == ckRowAgent && !r.hasItem && !ck.oneLine {
+			if r.kind == ckRowAgent && !r.hasItem && !r.attempt && !ck.oneLine {
 				rows = append(rows, ckChildRows(list[r.agent], g)...)
 			}
 		}
@@ -529,6 +556,97 @@ func (m *OS) cockpitSettleHold(now time.Time) {
 func (m *OS) ckItemMatches(it session.AttentionItem) bool {
 	q := m.Inbox.agents.query
 	return q == "" || fuzzy.Match(q, inboxWho(it)+" "+m.inboxWhere(it)+" "+it.Summary)
+}
+
+// ckGatherFans puts the attempts of a fan together under one row for the
+// fan, at the place of its first attempt: the agents of one group whose
+// worktree sessions share a fan's name on one machine. A fan with one attempt
+// in the group stays a plain row. An attempt with an item to answer is never
+// moved under a fan row: its item stays where the person sees it.
+func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
+	fanOf := func(r ckRow) string {
+		if r.kind != ckRowAgent || r.hasItem || r.agent < 0 {
+			return ""
+		}
+		e := list[r.agent]
+		if g := m.ckWorktreeOf(e).group; g != "" {
+			return e.Host + "\x00" + g
+		}
+		return ""
+	}
+	count := map[string]int{}
+	for _, r := range items {
+		if f := fanOf(r); f != "" {
+			count[f]++
+		}
+	}
+	gathered := false
+	for _, n := range count {
+		if n > 1 {
+			gathered = true
+		}
+	}
+	if !gathered {
+		return items
+	}
+	out := make([]ckRow, 0, len(items)+len(count))
+	done := map[string]bool{}
+	for _, r := range items {
+		f := fanOf(r)
+		if f == "" || count[f] < 2 {
+			out = append(out, r)
+			continue
+		}
+		if done[f] {
+			continue
+		}
+		done[f] = true
+		var tries []ckRow
+		for _, a := range items {
+			if fanOf(a) == f {
+				a.attempt = true
+				tries = append(tries, a)
+			}
+		}
+		slices.SortStableFunc(tries, func(a, b ckRow) int {
+			return ckFanOrder(list[a.agent].SessionID, list[b.agent].SessionID)
+		})
+		tries[len(tries)-1].last = true
+		out = append(out, ckRow{kind: ckRowFan, group: r.group, agent: tries[0].agent, count: m.ckFanSize(f), key: "f:" + f})
+		out = append(out, tries...)
+	}
+	return out
+}
+
+// ckFanOrder sorts a fan's sessions the way fan numbers them: the stem,
+// then -2, -3 and on.
+func ckFanOrder(a, b string) int {
+	num := func(s string) (string, int) {
+		if i := strings.LastIndexByte(s, '-'); i > 0 {
+			if n, err := strconv.Atoi(s[i+1:]); err == nil && n > 1 {
+				return s[:i], n
+			}
+		}
+		return s, 1
+	}
+	sa, na := num(a)
+	sb, nb := num(b)
+	if sa != sb {
+		return strings.Compare(a, b)
+	}
+	return na - nb
+}
+
+// ckFanSize is how many sessions of this machine belong to the fan f.
+func (m *OS) ckFanSize(f string) int {
+	n := 0
+	for k, w := range m.Inbox.ck.branches {
+		host, _, _ := strings.Cut(k, "\x00")
+		if w.group != "" && host+"\x00"+w.group == f {
+			n++
+		}
+	}
+	return n
 }
 
 // ckChildRows are an agent's subagents, one line each under its row.
@@ -902,6 +1020,8 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		return m.CockpitNewAgent()
 	case "search":
 		m.InboxStartSelect()
+	case "scope":
+		m.cockpitNextScope()
 	case "needs":
 		m.CockpitCycleFilter()
 	case "a", "A", "r":
@@ -926,6 +1046,13 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		cmd, _ := m.InboxReview()
 		return cmd
 	default:
+		if h, ok := strings.CutPrefix(action, "scope:"); ok {
+			if h == m.ckScope() {
+				h = ""
+			}
+			m.CockpitScope(h)
+			return nil
+		}
 		if i, ok := strings.CutPrefix(action, "image:"); ok {
 			n, _ := strconv.Atoi(i)
 			return m.cockpitOpenImage(n)

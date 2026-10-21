@@ -96,7 +96,7 @@ type ckLivePrimeMsg struct {
 // cockpitLiveVisible reports whether the live box is on screen: the side
 // column at ckWide columns and wider, or the Pane tab.
 func (m *OS) cockpitLiveVisible() bool {
-	return m.ShowInbox && (m.GetRenderWidth() >= ckWide || m.cockpitTab() == "Live")
+	return m.ShowInbox && (m.GetRenderWidth() >= ckWide || m.cockpitTab() == "Pane")
 }
 
 // cockpitLiveFollow makes the selected agent's pane the live pane while the
