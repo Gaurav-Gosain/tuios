@@ -4068,26 +4068,30 @@ the one that owns the pane. These filters keep those events off the pane:
   its hooks. Claude Code's background sessions do: Claude Code's own daemon
   starts them on its own terminal, with the environment of the pane that asked
   for them. The daemon refuses a report with `foreign_pane` when its
-  `harness_pid` is a process whose own environment names the pane in
-  `TUIOS_PANE_ID`, which is not the pane's process, not on the pane's
-  terminal and not descended from it, and which has a harness daemon among
-  its ancestors: Claude Code's daemon (`claude daemon`) or the pty host it
-  runs each background session on (`claude --bg-pty-host`). A daemon is known
-  by its program name and an argument it runs with, so the same program in a
-  pane is not one. Leaving the pane is not enough to be refused. A tmux,
-  screen or zellij server, the conmon helper of a rootless container
-  (distrobox, toolbox, podman, docker) and `systemd-run --pty` all run what
-  they hold outside the pane, on terminals of their own, with the pane's
-  environment, and a harness under one of them is taken for the pane that
-  shows it. The caller's pid, which the kernel
-  gives, checks the `harness_pid` a report claims: a hook runs under its
-  harness, so a claim that is neither the caller nor one of its ancestors is
-  not believed, and the caller is checked in its place. The pane's state, its
-  row and its activity stay as they were. A pane chosen with `--window` by a
-  harness whose environment names another pane, or none, is the caller's
-  choice and is taken. A report with no `harness_pid`, a call over a link, a pane on another
-  machine, a harness that has already exited and a platform with no process
-  reader (Windows) are not checked.
+  `harness_pid` is a process that:
+  - names the pane in `TUIOS_PANE_ID` in its own environment,
+  - is not the pane's process, not on the pane's terminal and not descended
+    from it,
+  - and has a harness daemon among its ancestors: Claude Code's daemon
+    (`claude daemon`) or the pty host it runs each background session on
+    (`claude --bg-pty-host`).
+
+  A daemon is known by its program name and an argument it runs with, so the
+  same program in a pane is not one. Leaving the pane is not enough to be
+  refused. A tmux, screen or zellij server, the conmon helper of a rootless
+  container (distrobox, toolbox, podman, docker) and `systemd-run --pty` all
+  run what they hold outside the pane, on terminals of their own, with the
+  pane's environment, and a harness under one of them is taken for the pane
+  that shows it.
+
+  The caller's pid, which the kernel gives, checks the `harness_pid` a report
+  claims: a hook runs under its harness, so a claim that is neither the caller
+  nor one of its ancestors is not believed, and the caller is checked in its
+  place. The pane's state, its row and its activity stay as they were. A pane
+  chosen with `--window` by a harness whose environment names another pane, or
+  none, is the caller's choice and is taken. A report with no `harness_pid`, a
+  call over a link, a pane on another machine, a harness that has already
+  exited and a platform with no process reader (Windows) are not checked.
 
 ### Session identity
 

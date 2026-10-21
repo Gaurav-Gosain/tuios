@@ -8280,7 +8280,6 @@ second look with `tuios look pick`. Run on 2026-10-22.
 | --- | --- | --- | --- |
 | Enter applies the look under the cursor | the picker's Enter chooses row 0 | `TestLookPickAppliesAGalleryLook` (Alpha goes in, so the take-over question for Beta's border never comes) | **caught** |
 ## A hook report lands only on the pane its harness runs in
-### A hook report lands only on the pane its harness runs in
 
 `TestAgentReportOnlyFromTheHarnessInThePane` (in
 `harness_integrations_test.go`) runs the real Claude Code hook under a
