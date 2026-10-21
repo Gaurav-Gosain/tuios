@@ -8589,27 +8589,32 @@ Each control is a build that cuts one line, run on 2026-10-17 on macOS arm64 (Da
 | `monitorExit` is a plain wait | drop the `peekExit` call and `p.reap.enter()`/`leave()` from `monitorExit` | `TestExitDuringQuiesceKeepsStatus`: "the pane that exited during the handoff reads -1, want 7" | **caught** |
 | Close-on-exec left on the masters | drop `r.fds = append(r.fds, rec.FD)` in `writeManifest` | `TestSelfExecAdoptsPanes`: "the daemon never answered from a new image within 20s: ... a stale socket is left over" (the new image found no master to adopt) | **caught** |
 | No `syscall.ForkLock` around the exposed span | drop `syscall.ForkLock.Lock()` and its unlock from `execHandoff` | `TestSelfExecAdoptsPanes/fork_in_the_exposed_window`: "start-server after kill-server failed, so something kept the start lock" | **caught** |
-| A cell size change does not wake the reply forwarder | drop `p.wakeResponses()` from `PTY.SetCellSize` | `TestPaneCellFollowsOneClient`, 2 runs of 2: "client a left: the guest's 2048 reports [[22 78 352 624] [17 58 272 464]] never came to a 12x24 cell" (the report waits in the emulator until the program next prints) | **caught** |
-| A colour change does not wake the reply forwarder | drop `defer p.wakeResponses()` from `setReportColors` | `TestOmarchyThemeSwitchIsFollowed`, 2 runs of 2: "after the switch to Catppuccin Latte the program that turned on mode 2031 was not told light" | **caught** |
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
-  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes|TestPaneCellFollowsOneClient|TestOmarchyThemeSwitchIsFollowed|TestHandoffRefusedWhileHostedPaneRuns|TestHandoffRefusedByPaneNotReadingInput)$' .
+  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestQuiesceAfterBurstDoesNotWait|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes|TestPaneCellFollowsOneClient|TestOmarchyThemeSwitchIsFollowed|TestKittyUploadReply|TestKittyUploadReplyTwoClients|TestHandoffRefusedWhileHostedPaneRuns|TestHandoffRefusedByPaneNotReadingInput)$' .
 ```
 
-The two reply-forwarder rows were run on 2026-10-19 on macOS arm64 against pr/live-handoff-1. Without either wake (the head before the fix) both tests fail on every run, 3 of 3 each, as they did in CI shards 5 and 8. With both, the two tests and `TestKittyUploadReply` passed 3 runs of 3.
+### The reply forwarder and the read gate's wait
 
-vtWriter takes the emulator's replies after each chunk and wakes the forwarder only when there were some (`takeResponses`). A wake skipped while a reply is pending leaves it in `respPending` until something else wakes the forwarder, which a program waiting for its answer never does. Run on 2026-10-21 on macOS arm64 (Darwin 27, Go 1.26.10) against pr/live-handoff-1, cutting the change, rebuilding, and restoring the file, checked byte for byte with sha256.
+- The reply forwarder sends the emulator's replies only when woken, and the emulator wakes it through `OnResponse` each time it queues one. `TestPaneCellFollowsOneClient` (a mode 2048 report queued by a cell size change), `TestOmarchyThemeSwitchIsFollowed` (a mode 2031 report queued by a colour scheme switch) and `TestKittyUploadReply`/`TestKittyUploadReplyTwoClients` (kitty upload answers, those for a file queued from a goroutine once the file has been looked at) each need a reply that no output of the program follows.
+- `TestQuiesceAfterBurstDoesNotWait`: a pane prints 8 MiB as fast as `yes` can, then nothing. Twenty quiesces of it must return without error well inside the 10 s quiesce deadline, with `read_while_quiesced` 0. A reader whose wait reported output when there was none would be blocked in read holding `readMu`, and the quiesce would wait on the quiet program.
+
+Each control cuts one change, rebuilds, runs the tests, and restores the file, checked byte for byte with sha256. Run on 2026-10-21 against pr/live-handoff-1, on macOS arm64 (Darwin 27, Go 1.26.10) and, for the Linux row, in Docker (Linux 6.8 arm64, Alpine) with binaries cross-built on the Mac.
 
 | Control | How | Test that fails | Verdict |
 | --- | --- | --- | --- |
-| A reply taken after a chunk does not wake the forwarder | drop the `p.wakeResponses()` call from `PTY.takeResponses` | `TestKittyUploadReply/daemon` and `TestKittyUploadReplyTwoClients`, 2 runs of 2: "answers the guest got: map[]", every upload "got no answer" (the standalone half, with no daemon, passes) | **caught** |
+| `OnResponse` is never set | drop `pty.terminal.OnResponse(pty.wakeResponses)` and its `if` from `startPTY` | `TestKittyUploadReply/daemon` and `TestKittyUploadReplyTwoClients`, 2 runs of 2: every upload "got no answer" (the standalone half, with no daemon, passes); `TestPaneCellFollowsOneClient` and `TestOmarchyThemeSwitchIsFollowed`, 2 runs of 2 | **caught** |
+| The kqueue wait reports output without waiting (macOS) | `return false, nil` at the top of the waiter in `newGateWaiter`, `pty_gate_kqueue.go` | `TestQuiesceAfterBurstDoesNotWait`, 2 runs of 2: "quiescing the pane that went quiet after a burst failed after 20.002s: call test-quiesce did not return within 20s" | **caught** |
+| The poll wait reports output without waiting (Linux) | `return false, nil` at the top of `pollGate`, `pty_gate_poll.go` | `TestQuiesceAfterBurstDoesNotWait`, 2 runs of 2, the same failure after 20.002s and 20.029s | **caught** |
+
+With the changes in place, on macOS `TestQuiesceAfterBurstDoesNotWait` passed 3 runs of 3 (17 to 23 ms for the twenty quiesces) and the four reply tests 3 runs of 3; on Linux `TestQuiesceAfterBurstDoesNotWait` and `TestQuiesceLosesNoBytes` passed 3 runs of 3 (2 ms).
 
 ### Refusals: hosted panes and a pane that does not read its input
 
 - `TestHandoffRefusedWhileHostedPaneRuns`: a pane opened with `open-pane`, as another machine's daemon opens one, is running when a handoff is asked for. The handoff must be refused with an error that names the panes run for another machine, the daemon must answer hello on its old image, and the hosted pane's process must still run. The positive half: after `close-pane` the same handoff goes through to a new image.
 - `TestHandoffRefusedByPaneNotReadingInput`: a pane in raw mode sends 6000 DA1 queries and never reads its input, so the replies fill the terminal's input queue and the write of the next one blocks. The handoff must answer within twice the 10 s quiesce deadline, refused with an error saying the program is not reading its input, and the daemon must answer hello on its old image. The positive half: after the stuck window is closed the handoff goes through to a new image.
-- `TestReadGateNeverReportsOutputAfterAFailedPoll` (`internal/session/pty_gate_unix_test.go`, a kept unit test: a deterministic hang regression, since a real poll cannot be made to fail on two valid descriptors): with the gate's poll failing with ENOMEM, `wait` must report neither output nor a wake. Its positive half: an EINTR is retried and the output already on the master is reported.
+- `TestReadGateNeverReportsOutputAfterAFailedWait` (`internal/session/pty_gate_unix_test.go`, a kept unit test: a deterministic hang regression, since a real wait cannot be made to fail on two valid descriptors): with the gate's wait failing with ENOMEM, whether or not it also says the wake pipe is readable, `wait` must report neither output nor a wake. Its positive half: an EINTR is retried and the output already on the master is reported.
 
 Each control cuts one change from the fix, rebuilds, runs the test twice, and restores the file, checked byte for byte with sha256. Run on 2026-10-20 on macOS arm64 (Darwin 27, Go 1.26.9) against pr/live-handoff-1.
 
@@ -8617,8 +8622,8 @@ Each control cuts one change from the fix, rebuilds, runs the test twice, and re
 | --- | --- | --- | --- |
 | Hosted panes are not refused | drop the `shutHostedPanes` check and its undo from `handoffRun.prepare` | `TestHandoffRefusedWhileHostedPaneRuns`, 2 runs of 2: "the handoff went ahead with a hosted pane open, which closes its terminal at the exec" (the artifact records the hosted process gone after it) | **caught** |
 | The reply flush ignores the deadline | flush under `respMu` inline in `Quiesce`, as before the fix | `TestHandoffRefusedByPaneNotReadingInput`, 2 runs of 2: "the handoff hung on the pane that does not read its input: call test-handoff did not return within 20s" | **caught** |
-| A failed poll reads as output | drop `pollErr = err` from `readGate.wait` | `TestReadGateNeverReportsOutputAfterAFailedPoll`, 2 runs of 2: "the gate reported output after poll failed with ENOMEM, so the reader would block in read holding readMu" | **caught** |
+| A failed wait reads as an answer | skip the `if waitErr != nil` return in `readGate.wait` (run on 2026-10-21, Go 1.26.10) | `TestReadGateNeverReportsOutputAfterAFailedWait`, 2 runs of 2: "the gate reported output after the wait failed with ENOMEM, so the reader would block in read holding readMu" and "the gate reported a wake after the wait failed with ENOMEM, so the reader would stop for good" | **caught** |
 
 ```sh
-go test -count=1 -run '^TestReadGateNeverReportsOutputAfterAFailedPoll$' ./internal/session/
+go test -count=1 -run '^TestReadGateNeverReportsOutputAfterAFailedWait$' ./internal/session/
 ```
