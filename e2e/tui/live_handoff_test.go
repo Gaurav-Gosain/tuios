@@ -288,6 +288,43 @@ func mustScrollback(t *testing.T, base, session, window string) []string {
 	return lines
 }
 
+// TestQuiesceAfterBurstDoesNotWait quiesces a pane whose program printed a
+// burst of output as fast as it could and then went quiet for good. Each
+// quiesce must return at once.
+//
+// After a burst the reader has just taken read after read with output always
+// waiting, so a reader that skipped the wait for output while output kept
+// coming would be blocked in read for this one, holding readMu, and the
+// quiesce would wait on a program that prints nothing more. The wait the
+// reader parks in must report the master readable only when it is. Twenty
+// cycles, each of which takes readMu, must all finish well inside one quiesce
+// deadline (10s).
+func TestQuiesceAfterBurstDoesNotWait(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const session = "e2e-burst"
+	const marker = "sleep 600.4646"
+	t.Cleanup(func() { _ = exec.Command("pkill", "-f", marker).Run() })
+	newCommandWindow(t, base, session, "anchor", false, "sh", "-c", "exec "+marker+"1")
+	burst := newCommandWindow(t, base, session, "burst", false, "sh", "-c",
+		`yes 0123456789abcdefghijklmnopqrstuvwxyz | head -c 8388608; printf '\nburst-done\n'; exec `+marker+`2`)
+	waitHandoffPane(t, base, session, burst, regexp.MustCompile(`^burst-done`), 60*time.Second)
+
+	started := time.Now()
+	res, err := callVerbWithin(t, base, 20*time.Second, "test-quiesce", map[string]any{"session": session, "window": burst, "cycles": 20})
+	took := time.Since(started)
+	writeHandoffArtifact(t, map[string]any{"burst_bytes": 8388608, "cycles": 20, "quiesce_ms": took.Milliseconds(), "error": fmt.Sprint(err)})
+	if err != nil {
+		t.Fatalf("ASSERTION: quiescing the pane that went quiet after a burst failed after %s: %v", took.Round(time.Millisecond), err)
+	}
+	if read, _ := res["read_while_quiesced"].(float64); read != 0 {
+		t.Errorf("ASSERTION: the pane's reader took %d bytes while it was quiesced", int64(read))
+	}
+	if took > 5*time.Second {
+		t.Errorf("ASSERTION: twenty quiesces of a quiet pane took %s", took.Round(time.Millisecond))
+	}
+}
+
 // TestExitDuringQuiesceKeepsStatus hands the panes to a new image while one of
 // them exits: the pane exits with status 7 after the manifest is written and
 // before the exec, with no output waiting to be read. The new image must
