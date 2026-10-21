@@ -43,14 +43,15 @@ const paletteStateHint = 2
 // agent panes and there are none. Typing "@" works either way.
 //
 // A "#" search also shows the rebind key, after "run", since the rows it lists
-// are actions and the key does nothing on any other row.
+// are actions and the key does nothing on any other row. It is spelt "^e", the
+// way the keybind manager's footer spells its keys.
 func (m *OS) paletteFooter() []overlay.Hint {
 	hints := paletteHints
 	if !m.agentsSeen() {
 		hints = slices.Delete(slices.Clone(hints), paletteStateHint, paletteStateHint+1)
 	}
 	if keybinds, _ := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds && !m.fileSearch {
-		hints = slices.Insert(slices.Clone(hints), paletteStateHint, overlay.Hint{Key: PaletteRebindKey, Label: "rebind"})
+		hints = slices.Insert(slices.Clone(hints), paletteStateHint, overlay.Hint{Key: overlay.ShortKey(PaletteRebindKey), Label: "rebind"})
 	}
 	return hints
 }

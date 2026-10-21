@@ -107,7 +107,7 @@ func getKeybindPaletteItems(m *OS) []CommandPaletteItem {
 						return m, cmd
 					}
 				}
-				m.ShowNotification(action+" runs only in its own view. Its keys are listed here.", "info", m.Settings.NotificationDuration)
+				m.ShowNotification(action+" works only in its own view.", "info", m.Settings.NotificationDuration)
 				m.OpenKeybindManagerWith(action)
 				return m, nil
 			},
