@@ -63,13 +63,14 @@ func distribute(avail int, items []item) []int {
 	return out
 }
 
-// dropNarrowCharts gives a row's charts that ended under their minimum no
-// width at all, and hands the cells to the children before them that were
+// dropNarrowCharts gives a row's charts that were squeezed under their
+// minimum no width at all, and hands the cells to the children that were
 // cut, so a gauge squeezed to a stub goes and the text beside it is whole.
-func (s *Surface) dropNarrowCharts(kids []*box, out []int) {
+// A chart that asked for fewer cells than the minimum and got them stays.
+func (s *Surface) dropNarrowCharts(kids []*box, items []item, out []int) {
 	freed := 0
 	for i, k := range kids {
-		if elasticKind(k.kind) && out[i] > 0 && out[i] < minChartWidthOf(k.kind) {
+		if elasticKind(k.kind) && out[i] > 0 && out[i] < min(minChartWidthOf(k.kind), items[i].base) {
 			freed += out[i]
 			out[i] = 0
 		}
@@ -379,7 +380,7 @@ func (s *Surface) rowWidths(kids []*box, gap, inner int) []int {
 		items[i] = it
 	}
 	out := distribute(avail, items)
-	s.dropNarrowCharts(kids, out)
+	s.dropNarrowCharts(kids, items, out)
 	return out
 }
 

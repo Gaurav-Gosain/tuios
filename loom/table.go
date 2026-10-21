@@ -3,6 +3,7 @@ package loom
 import (
 	"strconv"
 	"strings"
+	"unicode"
 
 	"tuios.dev/tml"
 )
@@ -34,9 +35,9 @@ type tableCol struct {
 	size     size
 	format   *tml.Expr
 	sortable bool
-	// path says the sampled cells are slash paths (some hold a slash and
-	// none a space), which a narrow column cuts from the left, keeping the
-	// last segment: "…/session".
+	// path says the sampled cells are slash paths (some read as a path and
+	// none holds a space), which a narrow column cuts from the left, keeping
+	// the last segment: "…/session".
 	path bool
 	// tailW is the widest cut cell of a path column, "…/session".
 	tailW int
@@ -175,7 +176,7 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 		for r := 0; r < min(len(w.rows), 100); r++ {
 			text := s.tableCell(w, col, w.rows[r])
 			natural[i] = max(natural[i], width(text))
-			slash = slash || strings.Contains(text, "/")
+			slash = slash || isPathLike(text)
 			spaced = spaced || strings.Contains(text, " ")
 			tail[i] = max(tail[i], width(pathTail(text)))
 		}
@@ -225,6 +226,24 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 		}
 	}
 	return distribute(avail, items)
+}
+
+// isPathLike reports whether text reads as a slash path: it holds a slash
+// and a segment with a letter in it. A ratio or a date, 412/417 or
+// 2026/10/21, does not, and cutting it from the left would change what it
+// says.
+func isPathLike(text string) bool {
+	if !strings.Contains(text, "/") {
+		return false
+	}
+	for _, seg := range strings.Split(text, "/") {
+		for _, r := range seg {
+			if unicode.IsLetter(r) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // pathTail is the last segment of a slash path, with a mark that more came

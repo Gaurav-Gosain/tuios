@@ -18,12 +18,13 @@ c: bg=success-tint bold
 d: fg=success bg=success-tint bold
 e: fg=warning bg=success-tint bold
 === 16 22x1
-| feat/tml ↑2 ●3       |
+| feat/tml ↑2 ●3 ▁▄▂▇▃█|
 --- styles
-| aaaaaaaa bb cc       |
+| aaaaaaaa bb cc dddddd|
 a: fg=accent
 b: fg=success bold
 c: fg=warning bold
+d: fg=dim
 === ascii 22x1
 | feat/tml [↑2] [●3]   |
 --- styles
