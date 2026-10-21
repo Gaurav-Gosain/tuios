@@ -252,6 +252,64 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
+	// Issue 931: while tiling is on, the pill shows the next split, V or H,
+	// after the icon, and is two cells wider than the leader's pill, so the
+	// tabs after it move each time the leader is pressed. With
+	// dock_mode_split_letter = false the pill shows the icon alone and the
+	// tabs stay where they are. The default case is the positive half: it
+	// shows the letter and the move the measure has to catch.
+	t.Run("split-letter", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			cfg    string
+			letter bool
+		}{
+			{"default", "", true},
+			{"off", "dock_mode_split_letter = false\n", false},
+		} {
+			term := startDockModeIcons(t, tc.cfg)
+			if err := term.SendKeys("t"); err != nil {
+				t.Fatalf("%s: toggle tiling: %v", tc.name, err)
+			}
+			if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
+				t.Fatalf("%s: tiling never turned on: %v\n%s", tc.name, err, term.Snapshot())
+			}
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("%s: the screen never settled: %v", tc.name, err)
+			}
+			s := term.Screen()
+			row := dockStatusRow(s)
+			line := s.Line(row)
+			tiled := cellColumnOf(s, row, "1:0")
+			pill := line[:strings.Index(line, "1:0")]
+			if got := strings.Contains(pill, " V ") || strings.Contains(pill, " H "); got != tc.letter {
+				t.Fatalf("%s: the mode pill shows a split letter: %v, want %v\n%s", tc.name, got, tc.letter, line)
+			}
+			saveArtifact(t, term, artifactDir(t), "split-letter-"+tc.name)
+			savePNG(t, s, hostPalette(t, ""), artifactDir(t), "split-letter-"+tc.name)
+
+			if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
+				t.Fatalf("%s: press the leader: %v", tc.name, err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				r := dockStatusRow(s)
+				return r >= 0 && strings.Contains(s.Line(r), prefixPillIcon)
+			}, uiTimeout); err != nil {
+				t.Fatalf("%s: the armed leader never showed on the pill: %v\n%s", tc.name, err, term.Snapshot())
+			}
+			armed := term.Screen()
+			armedCol := cellColumnOf(armed, dockStatusRow(armed), "1:0")
+			savePNG(t, armed, hostPalette(t, ""), artifactDir(t), "split-letter-"+tc.name+"-leader")
+			if moved := armedCol != tiled; moved != tc.letter {
+				t.Fatalf("%s: the readout moved from column %d to %d when the leader was pressed, want a move: %v\n%s",
+					tc.name, tiled, armedCol, tc.letter, armed.Line(dockStatusRow(armed)))
+			}
+			if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+				t.Fatalf("%s: cancel the leader: %v", tc.name, err)
+			}
+		}
+	})
+
 	t.Run("too-wide", func(t *testing.T) {
 		term := startDockModeIcons(t, "dock_mode_icon_window = \"123456789\"\n")
 		s := term.Screen()

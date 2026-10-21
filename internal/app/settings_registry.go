@@ -93,6 +93,7 @@ var settingLabels = map[string]string{
 	"appearance.kitty_placeholders":       "Kitty placeholders",
 	"appearance.image_symbols":            "Images as text",
 	"appearance.dock_pill_caps":           "Pill caps",
+	"appearance.dock_mode_split_letter":   "Split letter",
 	"appearance.dock_prefix_indicator":    "Prefix indicator",
 	"appearance.dock_compact":             "Compact dock",
 	"appearance.dock_workspace_tabs":      "Workspace tabs",

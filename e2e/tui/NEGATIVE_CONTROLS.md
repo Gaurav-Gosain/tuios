@@ -7908,3 +7908,13 @@ Run on 2026-10-21 against `origin/main`: the `tooltip on` case fails with
 "hovering an index-only pill never showed the workspace name". The
 `tooltip off` case passes there, which is right. A review run repeated the
 control with the same result, at truecolor and at 16 colours.
+## The split letter in the mode pill (#931)
+
+`TestDockModeIconsFollowTheConfig/split-letter` turns tiling on and presses the
+leader key, with and without `dock_mode_split_letter = false`. It reads the
+column of the workspace readout before and after the leader.
+
+Run on 2026-10-21 against `origin/main`, which has no option: the `off` case
+fails with "the mode pill shows a split letter: true, want false". The
+`default` case passes on both builds, and it shows the two-cell move that the
+`off` case must not have.

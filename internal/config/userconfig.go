@@ -396,6 +396,7 @@ type AppearanceConfig struct {
 	DockWorkspaceLabelMax  *int     `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
 	DockPrefixIndicator    string   `toml:"dock_prefix_indicator"`     // Where an armed leader shows: pill (default) or badge
 	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Rounded caps on every dock pill (default: true; false draws flat pills)
+	DockModeSplitLetter    *bool    `toml:"dock_mode_split_letter"`    // V or H after the tiling icon in the mode pill (default: true)
 	DockModeIconWindow     *string  `toml:"dock_mode_icon_window"`     // Mode pill icon in window mode; "" draws none (default: the glyph set's)
 	DockModeIconTerminal   *string  `toml:"dock_mode_icon_terminal"`   // Mode pill icon in terminal mode; "" draws none (default: the glyph set's)
 	DockModeIconTiling     *string  `toml:"dock_mode_icon_tiling"`     // Mode pill icon while tiling is on; "" draws none (default: the glyph set's)
@@ -2575,6 +2576,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.DockPillCaps != nil {
 		s.DockPillCaps = *cfg.Appearance.DockPillCaps
+	}
+	if cfg.Appearance.DockModeSplitLetter != nil {
+		s.DockModeSplitLetter = *cfg.Appearance.DockModeSplitLetter
 	}
 	// A typo or an empty value lands on the default, and a key removed from
 	// the file goes back to it on reload.

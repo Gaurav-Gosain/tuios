@@ -342,6 +342,12 @@ type Settings struct {
 	// flat filled cell, for anyone who reads a row of caps as a row of beads.
 	DockPillCaps bool
 
+	// DockModeSplitLetter shows the next split's direction, V or H, after the
+	// tiling icon in the mode pill. On by default. Off, the pill is the icon
+	// alone, as wide as the leader's pill, so pressing the leader no longer
+	// moves the workspace tabs.
+	DockModeSplitLetter bool
+
 	// DockPrefixIndicator is where an armed leader shows: "pill" colours the
 	// dock's mode pill, "badge" draws the floating PREFIX badge. The badge is
 	// drawn either way when the dock is hidden or has no mode pill.
@@ -868,6 +874,7 @@ func DefaultSettings() Settings {
 		DockWorkspaceTooltip:        true,
 		DockWorkspaceLabelMax:       12,
 		DockPillCaps:                true,
+		DockModeSplitLetter:         true,
 		DockPrefixIndicator:         DefaultDockPrefixIndicator,
 		BorderGradientAngle:         DefaultBorderGradientAngle,
 		HideWindowButtons:           false,

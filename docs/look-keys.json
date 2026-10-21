@@ -137,6 +137,12 @@
       "default": "default"
     },
     {
+      "path": "appearance.dock_mode_split_letter",
+      "type": "bool",
+      "description": "Show V or H after the tiling icon in the mode pill. The letter is the direction of the next split",
+      "default": "true"
+    },
+    {
       "path": "appearance.dock_pill_caps",
       "type": "bool",
       "description": "Draw rounded caps on every dock pill: the mode chip, the workspace tabs and the minimized windows. Off draws flat pills",

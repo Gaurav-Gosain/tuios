@@ -689,6 +689,11 @@ var optionSpecs = []Option{
 		Default:     DockModeIconDefault, DefaultClears: true, Icon: true,
 	},
 	{
+		Path: "appearance.dock_mode_split_letter", Type: OptionBool, Section: "dock",
+		Description: "Show V or H after the tiling icon in the mode pill. The letter is the direction of the next split",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.dock_compact", Type: OptionBool, Section: "dock",
 		Description: "Draw the dock as one row with no rule. The panes get one more row",
 		Default:     "false",

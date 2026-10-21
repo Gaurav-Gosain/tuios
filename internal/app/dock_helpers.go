@@ -721,8 +721,8 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		IsTiling: m.AutoTiling,
 	}
 
-	// Get next split direction if tiling is active
-	if m.AutoTiling {
+	// Get next split direction if tiling is active and the pill shows it.
+	if m.AutoTiling && m.Settings.DockModeSplitLetter {
 		modeInfo.NextSplit = m.nextSplitIndicator(focusedWindow)
 	}
 
