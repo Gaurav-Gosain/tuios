@@ -130,8 +130,12 @@ func (m *OS) GotoPickerOpen() bool { return m.gotoPicker.open }
 // GotoPickerQuery is what is typed in the picker.
 func (m *OS) GotoPickerQuery() string { return m.gotoPicker.query }
 
-// OpenGotoPicker is the goto_picker action.
+// OpenGotoPicker is the goto_picker action. Learn mode has one session, so
+// it shows the note the session switcher and the navigator show.
 func (m *OS) OpenGotoPicker() {
+	if m.learnOff(learnNoteSessions) {
+		return
+	}
 	m.noteGotoPlace()
 	g := &m.gotoPicker
 	g.open = true
