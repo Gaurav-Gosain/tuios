@@ -320,6 +320,7 @@ A value is a glob, and commas between values mean any of them, as in `kind:sessi
 |---|---|
 | The list keys | Move. See [Lists and panels](#lists-and-panels) |
 | `enter` | Go there: the session, then the workspace, then the pane |
+| `@`, `#`, `!` first | Filter to agents, sessions or workspaces. The picker's hint shows them as `@ # ! filter` |
 | `ctrl+u` | Clear the query |
 | `esc` | Close the picker |
 

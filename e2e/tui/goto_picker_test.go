@@ -92,7 +92,7 @@ var gotoKindNames = map[string]bool{"agent": true, "session": true, "workspace":
 func openGotoPicker(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "G")
-	waitScreen(t, term, "the go-to picker never showed", "Go to", "agent session workspace")
+	waitScreen(t, term, "the go-to picker never showed", "Go to", "@ # ! filter")
 }
 
 // gotoQuery clears the picker's query and types q.

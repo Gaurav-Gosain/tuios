@@ -39,7 +39,7 @@ func (m *OS) renderGotoPicker() (string, overlay.Geometry, []overlayRowHit) {
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
 			{Key: overlay.EnterGlyph, Label: "go"},
-			{Key: "@ # !", Label: "agent session workspace"},
+			{Key: "@ # !", Label: "filter"},
 			{Key: "esc", Label: "close"},
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
