@@ -7924,7 +7924,8 @@ fails with "the mode pill shows a split letter: true, want false". The
 scrolling layout with three columns, steps the focus to the first with alt+p,
 and runs `NewWindow`. It reads the strip order from `list-windows --json`. It
 then splits the new pane and closes the split, and checks the order and the
-focus after each step.
+focus after each step. Last, it focuses the first column, switches to BSP and opens
+a pane, which must split the focused pane and not the target of the old split.
 
 Run on 2026-10-21.
 
@@ -7932,6 +7933,7 @@ Run on 2026-10-21.
 | --- | --- |
 | The fix removed (`scrollColumnsFromState` appends an unnamed pane at the end) | **caught**: "the new pane is not in the column after the focused one", the new pane last of four |
 | Only the closed-pane pass in `adoptScrollColumns` removed | **caught**: "after the focused column closed: the focus is on" the column to the right, want the one to the left |
+| Only the `CancelPendingSplit` call in the scrolling branch of `adoptSyncedWindows` removed | **caught**: "the pane after the switch to BSP split NEW, the target of the old split, not the focused ONE" |
 | The fix in place | passes, 3 of 3 |
 
 `TUIOS_E2E_FRAMES` saves `new-pane` and `after-close` frames.

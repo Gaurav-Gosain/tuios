@@ -209,6 +209,39 @@ func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 	}
 	waitStripFocus(t, base, added, "after the focused column closed")
 	railShot(t, term, "after-close")
+
+	// The split above went through the path a BSP split takes, which records
+	// the split's pane and side for the sync that brings the new pane. The
+	// strip has no use for them, and left recorded they split NEW on the next
+	// pane after a switch to BSP, whatever had the focus then. Focus ONE,
+	// switch to BSP and open a pane: it has to split ONE and leave NEW alone.
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", "strip", start[0]); err != nil {
+		t.Fatalf("focus ONE: %v\n%s", err, out)
+	}
+	waitStripFocus(t, base, start[0], "after focusing ONE")
+	runPaletteRow(t, term, "bsp tiling", "Layout: BSP tiling", "Layout: BSP tiling")
+	waitPaletteClosed(t, term, "after switching to BSP")
+	tiled := waitForSettledGeometry(t, base, 4)
+	if out, err := tuiosCLI(t, base, "run-command", "NewWindow"); err != nil {
+		t.Fatalf("NewWindow in BSP: %v\n%s", err, out)
+	}
+	bsp := waitForSettledGeometry(t, base, 5)
+	rectOf := func(rects []winRect, id string) winRect {
+		for _, r := range rects {
+			if r.ID == id {
+				return r
+			}
+		}
+		t.Fatalf("no pane %s in %v", id, rects)
+		return winRect{}
+	}
+	if before, after := rectOf(tiled, added), rectOf(bsp, added); before != after {
+		t.Errorf("the pane after the switch to BSP split NEW, the target of the old split, not the focused ONE: NEW went from %+v to %+v", before, after)
+	}
+	if before, after := rectOf(tiled, start[0]), rectOf(bsp, start[0]); before == after {
+		t.Errorf("the pane after the switch to BSP did not split the focused ONE: ONE stayed at %+v", before)
+	}
+	railShot(t, term, "bsp-new-pane")
 }
 
 // focusAndName focuses a pane by id and gives it a name.
