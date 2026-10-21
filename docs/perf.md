@@ -3193,6 +3193,15 @@ context switches in 8 idle seconds. The daemon runs no timer for it. On
 macOS a reaper whose command has ended while something it started still
 runs looks at its process group once a second.
 
+The budgets went to 42,369,200 (linux/amd64) and 39,587,200 (darwin/arm64)
+when tuios.dev/sketch began to draw state, class, ER, pie, mindmap and gantt
+diagrams as text. The renderers of those types also keep their geometry when
+a caller asks for it. No dependency was added. The build before it measured
+42,270,882 and 39,499,010 bytes (Go 1.26.10, a clean clone, as CI builds it).
+The change measured 42,365,090 and 39,583,074, so it adds 94,208 and 84,064
+bytes. The binary stays under the 45 MB ceiling. The new budgets leave 4,110
+and 4,126 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
