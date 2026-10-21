@@ -1160,6 +1160,28 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 	alive(t, term, "after the goose panes")
 }
 
+// fakeClaudePID is the pid of the fakeclaude running scenario, the process
+// the hook names as its harness.
+func fakeClaudePID(t *testing.T, scenario string) int {
+	t.Helper()
+	out, err := exec.Command("ps", "-axo", "pid=,command=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		pid, cmd, _ := strings.Cut(strings.TrimSpace(line), " ")
+		if strings.HasPrefix(strings.TrimSpace(cmd), "claude ") && strings.Contains(cmd, scenario) {
+			n, err := strconv.Atoi(pid)
+			if err != nil {
+				t.Fatalf("pid %q: %v", pid, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("no fakeclaude runs %s:\n%s", scenario, out)
+	return 0
+}
+
 // TestHookClaimLapsesWithTheHarness runs a stand-in claude in a pane through
 // the real Claude Code hook, under a client with the rail open and the pane
 // focused. The stand-in is a program named claude (testdata/fakeclaude), so
@@ -1206,28 +1228,6 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 // kept or dropped the row.
 //
 // Negative controls: NEGATIVE_CONTROLS.md, "Agent row after exit".
-// fakeClaudePID is the pid of the fakeclaude running scenario, the process
-// the hook names as its harness.
-func fakeClaudePID(t *testing.T, scenario string) int {
-	t.Helper()
-	out, err := exec.Command("ps", "-axo", "pid=,command=").Output()
-	if err != nil {
-		t.Fatalf("ps: %v", err)
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		pid, cmd, _ := strings.Cut(strings.TrimSpace(line), " ")
-		if strings.HasPrefix(strings.TrimSpace(cmd), "claude ") && strings.Contains(cmd, scenario) {
-			n, err := strconv.Atoi(pid)
-			if err != nil {
-				t.Fatalf("pid %q: %v", pid, err)
-			}
-			return n
-		}
-	}
-	t.Fatalf("no fakeclaude runs %s:\n%s", scenario, out)
-	return 0
-}
-
 func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 	const cols, rows, width = 120, 36, 28
 	const railCol = cols - width
