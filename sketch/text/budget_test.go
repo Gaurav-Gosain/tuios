@@ -71,3 +71,34 @@ func drawTime(t *testing.T, src string, cols int) time.Duration {
 	}
 	return max(best, time.Millisecond)
 }
+
+// TestLongLabelsStayLinear draws the labels of the newer types at sketch's
+// default source limit. cut trimmed a label one rune at a time and measured it
+// again each time, and wrapCells measured its line and the rest of a cut word
+// again each time: 7 s and 1.3 GB for a 50,000-character radar axis or treemap
+// label at 80 columns. The bound is the same ratio as above, at the default
+// limit, so a regression stays within a few seconds and 1.5 GB.
+func TestLongLabelsStayLinear(t *testing.T) {
+	if testing.Short() {
+		t.Skip("draws labels of 50k characters")
+	}
+	const n = 50_000
+	const ratio = 24
+	word := func(n int) string { return strings.Repeat("x", n) }
+	words := func(n int) string { return strings.Repeat("word ", n/5) }
+	for name, tc := range map[string]struct {
+		src  func(n int) string
+		cols int
+	}{
+		"radar axis":    {func(n int) string { return "radar-beta\n axis a[\"" + words(n) + "\"], b, c\n curve c{1,2,3}" }, 80},
+		"treemap label": {func(n int) string { return "treemap-beta\n\"" + word(n) + "\": 5" }, 80},
+	} {
+		t.Run(name, func(t *testing.T) {
+			small := drawTime(t, tc.src(n/8), tc.cols)
+			large := drawTime(t, tc.src(n), tc.cols)
+			if large > small*ratio {
+				t.Errorf("%d characters: %v, %d characters: %v; want at most %d times as long", n/8, small, n, large, ratio)
+			}
+		})
+	}
+}

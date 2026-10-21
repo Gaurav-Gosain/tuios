@@ -21,24 +21,28 @@ func wrapCells(s string, w, most int) []string {
 		return nil
 	}
 	var lines []string
-	line := ""
+	var line strings.Builder
+	lw := 0
 	flush := func() {
-		lines = append(lines, line)
-		line = ""
+		lines = append(lines, line.String())
+		line.Reset()
+		lw = 0
 	}
 	for _, word := range strings.Fields(s) {
-		for width(word) > 0 {
-			if line != "" && width(line)+1+width(word) <= w {
-				line += " " + word
-				word = ""
+		ww := width(word)
+		for ww > 0 {
+			if lw > 0 && lw+1+ww <= w {
+				line.WriteByte(' ')
+				line.WriteString(word)
+				lw += 1 + ww
 				break
 			}
-			if line != "" {
+			if lw > 0 {
 				flush()
 			}
-			if width(word) <= w {
-				line = word
-				word = ""
+			if ww <= w {
+				line.WriteString(word)
+				lw = ww
 				break
 			}
 			// Cut the word at w cells.
@@ -53,12 +57,13 @@ func wrapCells(s string, w, most int) []string {
 			if cut == 0 {
 				return lines
 			}
-			line = word[:cut]
+			line.WriteString(word[:cut])
 			word = word[cut:]
+			ww -= n
 			flush()
 		}
 	}
-	if line != "" {
+	if lw > 0 {
 		flush()
 	}
 	if len(lines) > most {

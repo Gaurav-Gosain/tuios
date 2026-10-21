@@ -32,17 +32,7 @@ func gaugeBar(f float64, n int) string {
 
 // cut shortens s to at most w cells, ending in … when it had to.
 func cut(s string, w int) string {
-	if width(s) <= w {
-		return s
-	}
-	if w < 1 {
-		return ""
-	}
-	r := []rune(s)
-	for len(r) > 0 && width(string(r))+1 > w {
-		r = r[:len(r)-1]
-	}
-	return string(r) + "…"
+	return fit(s, w)
 }
 
 func number(v float64) string {
