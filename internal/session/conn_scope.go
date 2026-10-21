@@ -547,13 +547,22 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 	if tw == nil {
 		return false
 	}
-	if tw.LaunchedFrom == own {
+	o := d.manager.GetSession(own)
+	// The session that started this one, by its ID: a name is free once its
+	// session ends, and another session could take it. A record from before
+	// the ID names its launcher alone, and the name is cleared when that
+	// session ends (forgetLauncher).
+	switch {
+	case tw.LaunchedFromID != "":
+		if o != nil && o.ID == tw.LaunchedFromID {
+			return true
+		}
+	case tw.LaunchedFrom != "" && tw.LaunchedFrom == own:
 		return true
 	}
 	if tw.Group == "" || !tw.Managed {
 		return false
 	}
-	o := d.manager.GetSession(own)
 	if o == nil {
 		return false
 	}
@@ -819,4 +828,19 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 		return nil, newVerbError(ErrVerbInternal, "could not encode params")
 	}
 	return out, nil
+}
+
+// forgetLauncher clears the launcher of every session that names s as the
+// session that started it. It runs when s ends, so a later session that
+// takes its name reaches none of them.
+func (d *Daemon) forgetLauncher(s *Session) {
+	for _, o := range d.manager.AllSessions() {
+		wt := o.Worktree()
+		if wt == nil || (wt.LaunchedFromID != s.ID && (wt.LaunchedFromID != "" || wt.LaunchedFrom != s.Name())) {
+			continue
+		}
+		moved := *wt
+		moved.LaunchedFrom, moved.LaunchedFromID = "", ""
+		_ = o.SetWorktree(&moved)
+	}
 }

@@ -7960,3 +7960,14 @@ on 2026-10-21.
 | Joining a fan is explicit: a taken name is refused for every caller, the person included | the `fan_exists` refusal removed | `TestFanRefusesJoiningAnotherGroup` (the taken name is not refused) | **caught** |
 | A new name is held from the check until its sessions exist | the reservation left out of `taken` | `TestFanNameIsHeldWhileItIsMade` ("fan/raceb: the outsider's repo-fan-raceb-2 joined the person's repo-fan-raceb") | **caught** |
 | A name with a character that does not print is refused | the `fanStemPrintable` check skipped | `TestFanRefusesJoiningAnotherGroup` (a name with a zero-width space makes a fan) | **caught** |
+## A fan's lead by its session ID
+
+`TestFanLeadIsHeldByID` in `internal/session` (a security boundary test): the
+session that ran `fan` reaches its attempts by that session's ID. After a
+restart without it, and after it ends, a session that takes its name reaches
+none of them. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Reach checks the lead's session ID | the ID check skipped, so the name decides | `TestFanLeadIsHeldByID` ("compare-fan from a new session of the lead's name after a restart": expected error) | **caught** |
+| The attempts stop naming a lead that ended | the `forgetLauncher` call removed | `TestFanLeadIsHeldByID` ("the attempt still names its ended lead") | **caught** |

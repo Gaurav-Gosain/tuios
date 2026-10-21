@@ -958,6 +958,9 @@ changes for everyone:
   `launched_from` for such a session. Rows of any other session are unchanged.
   The field is additive on the saved session record, so an older daemon reads
   a newer record and drops it.
+  The record also holds that session's ID, and reach is checked by the ID, so
+  a later session that takes the name reaches nothing. When that session ends,
+  the sessions it started stop naming it.
 - On a restricted connection, every verb outside the table in
   `internal/session/conn_scope.go` answers `forbidden` with a hint naming
   `restrict-connection`, and under scope `own` a verb that names no session
