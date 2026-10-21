@@ -15,22 +15,22 @@ type InlineBar struct {
 	Max   float64 // 0 means 1
 	Role  Role    // the filled part; Series1 when empty
 	// Track shows the empty part in the Track role: as a lower half block
-	// for BarThin, as the background for BarBlocks.
+	// for InlineThin, as the background for InlineBlocks.
 	Track bool
-	Style BarStyle
+	Style InlineStyle
 }
 
-// BarStyle is how an inline bar draws.
-type BarStyle uint8
+// InlineStyle is how InlineBar and DivergingBar draw.
+type InlineStyle uint8
 
 // The bar styles.
 const (
-	// BarThin is a lower half block, exact to half a cell. It is half as
+	// InlineThin is a lower half block, exact to half a cell. It is half as
 	// tall as the row, so the bars of a table stay apart: ▄▄▄▄▖
-	BarThin BarStyle = iota
-	// BarBlocks fills the row with eighth blocks, exact to an eighth of a
+	InlineThin InlineStyle = iota
+	// InlineBlocks fills the row with eighth blocks, exact to an eighth of a
 	// cell: ████▊
-	BarBlocks
+	InlineBlocks
 )
 
 // Fraction returns Value / Max, clamped to [0, 1]. A missing or negative
@@ -40,7 +40,7 @@ func (b InlineBar) Fraction() float64 {
 	if top <= 0 || !finite(top) {
 		top = 1
 	}
-	return unit(b.Value, 0, top)
+	return share(b.Value, top)
 }
 
 // Draw draws the bar into a w by h grid, on the middle row.
@@ -54,7 +54,7 @@ func (b InlineBar) Draw(w, h int, m Mode) *Grid {
 		role = Series1
 	}
 	y := (g.H - 1) / 2
-	if b.Style == BarThin {
+	if b.Style == InlineThin {
 		lineRight(g, y, 0, g.W, b.Fraction(), role, b.Track, m)
 	} else {
 		fillRight(g, y, 0, g.W, b.Fraction(), role, b.Track, m)
@@ -80,7 +80,7 @@ type DivergingBar struct {
 	LeftRole, RightRole Role
 	// Track shows the empty part, as for InlineBar.
 	Track bool
-	Style BarStyle
+	Style InlineStyle
 }
 
 // Fractions returns Left / Max and Right / Max, each clamped to [0, 1].
@@ -97,7 +97,7 @@ func (d DivergingBar) Fractions() (left, right float64) {
 	if top <= 0 {
 		return 0, 0
 	}
-	return unit(d.Left, 0, top), unit(d.Right, 0, top)
+	return share(d.Left, top), share(d.Right, top)
 }
 
 // Draw draws the bar into a w by h grid, on the middle row. The centre
@@ -119,7 +119,7 @@ func (d DivergingBar) Draw(w, h int, m Mode) *Grid {
 	left, right := d.Fractions()
 	lw := (g.W - 1) / 2
 	centre := block(m, "┊", "|")
-	if d.Style == BarThin {
+	if d.Style == InlineThin {
 		lineLeft(g, y, 0, lw, left, lr, d.Track, m)
 		lineRight(g, y, lw+1, g.W-lw-1, right, rr, d.Track, m)
 		g.set(lw, y, centre, Dim)
@@ -197,7 +197,7 @@ func fillRight(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) 
 // Block elements anchored at the right come only in an eighth and a half,
 // so on a track the partial cell is a left block in the track's colour on
 // a ground of the role, which is exact to an eighth. Without a track it is
-// the nearest of the two.
+// the nearest of the eighth, the half and the full block.
 func fillLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 	if n <= 0 {
 		return
@@ -215,9 +215,9 @@ func fillLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 			g.set(x, y, "█", role)
 		case lv > 0 && track:
 			g.setBg(x, y, eighthsRight[8-lv], Track, role)
-		case lv > 4:
+		case lv > 5:
 			g.set(x, y, "█", role)
-		case lv > 1:
+		case lv > 2:
 			g.set(x, y, "▐", role)
 		case lv > 0:
 			g.set(x, y, "▕", role)
@@ -225,6 +225,15 @@ func fillLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 			g.setBg(x, y, " ", None, Track)
 		}
 	}
+}
+
+// share returns v / top clamped to [0, 1], and 0 for a missing value. It
+// divides directly, so a tiny top such as 5e-324 still gives 0 for 0.
+func share(v, top float64) float64 {
+	if !finite(v) || v <= 0 || top <= 0 {
+		return 0
+	}
+	return math.Min(v/top, 1)
 }
 
 // cellsOf returns f of n units, rounded, and at least 1 when f is above 0,

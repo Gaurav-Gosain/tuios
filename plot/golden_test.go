@@ -165,7 +165,7 @@ var cases = []chartCase{
 		// One bar per row, as in a table: the same Max for every row.
 		g := NewGrid(w, h)
 		for i, v := range []float64{30, 12.4, 3.1, 0.84, 0, math.NaN()} {
-			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0, Style: BarBlocks}.Draw(w, 1, m)
+			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0, Style: InlineBlocks}.Draw(w, 1, m)
 			copy(g.Cells[i*w:(i+1)*w], row.Cells)
 		}
 		return g
@@ -173,9 +173,26 @@ var cases = []chartCase{
 	{"diverging-bars-blocks", 15, 5, func(w, h int, m Mode) *Grid {
 		g := NewGrid(w, h)
 		for i, lr := range [][2]float64{{24, 1.1}, {6, 3.2}, {0.04, 0.22}, {0, 0}, {1.2, 9}} {
-			row := DivergingBar{Left: lr[0], Right: lr[1], Max: 24, LeftRole: Series3, RightRole: Series5, Track: i%2 == 0, Style: BarBlocks}.Draw(w, 1, m)
+			row := DivergingBar{Left: lr[0], Right: lr[1], Max: 24, LeftRole: Series3, RightRole: Series5, Track: i%2 == 0, Style: InlineBlocks}.Draw(w, 1, m)
 			copy(g.Cells[i*w:(i+1)*w], row.Cells)
 		}
+		return g
+	}},
+	{"diverging-equal", 11, 3, func(w, h int, m Mode) *Grid {
+		// Equal values draw equal sides, with and without a track.
+		g := NewGrid(w, h)
+		for i, f := range []float64{13.0 / 16, 5.0 / 16, 2.0 / 16} {
+			row := DivergingBar{Left: f, Right: f, Max: 1, Style: InlineBlocks}.Draw(w, 1, m)
+			copy(g.Cells[i*w:(i+1)*w], row.Cells)
+		}
+		return g
+	}},
+	{"inline-subnormal", 8, 2, func(w, h int, m Mode) *Grid {
+		// A Max so small that half of it is 0: a value of 0 still draws
+		// nothing.
+		g := NewGrid(w, h)
+		copy(g.Cells[:w], InlineBar{Value: 0, Max: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
+		copy(g.Cells[w:], DivergingBar{Left: 0, Right: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
 		return g
 	}},
 	{"empty", 10, 3, func(w, h int, m Mode) *Grid {
