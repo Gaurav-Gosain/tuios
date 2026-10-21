@@ -23,10 +23,10 @@ replace tuios.dev/shot v0.2.0 => ./shot
 
 replace tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb => ./vt
 
-replace tuios.dev/sketch v0.1.2-0.20261020184059-c9a2ad8595cd => ./sketch
-
 replace tuios.dev/plot v0.1.0 => ./plot
 
 replace tuios.dev/tml v0.1.1-0.20261019164123-bf9b29e8d0d8 => ./tml
 
 replace tuios.dev/loom v0.1.1-0.20261020192006-0884f277fb70 => ./loom
+
+replace tuios.dev/sketch v0.1.2-0.20261021021015-621802c70f2e => ./sketch
