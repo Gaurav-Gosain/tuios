@@ -834,21 +834,31 @@ func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
 	return nil
 }
 
-// confirmPerson asks the daemon whether the person runs this command: the
-// kernel check attach-presence makes, which refuses a pane, a plugin's
-// process and a process that only stripped its pane variables. Only the
-// person may approve the admin grant.
+// confirmPerson asks each daemon of this user that runs whether the
+// caller is outside its panes and plugins: the kernel check that
+// attach-presence and plugin.enable make. Every daemon that answers must
+// agree, so a pane cannot pick a daemon that does not know it, and no
+// daemon is started for the question, since a new one has no panes and
+// proves nothing. This stops a pane or a plugin that runs the command, also
+// with its pane variables cut or under --server. It does not stop a process
+// that leaves its pane (setsid, ssh to this machine), one that points
+// XDG_RUNTIME_DIR somewhere else, or one that writes the approval file
+// itself: anything that runs as the user can. See approval.go.
 func confirmPerson() error {
-	if err := ensureDaemon(); err != nil {
-		return err
+	socks := liveDaemonSockets()
+	if len(socks) == 0 {
+		return errors.New("tuios asks its daemon to confirm that you run this command, and no daemon runs. Start tuios, then run the command again")
 	}
-	client, err := session.DialVerbClientAs(version)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close() }()
-	if _, err := client.CallWithTimeout("attach-presence", nil, 5*time.Second); err != nil {
-		return fmt.Errorf("only you, from a terminal outside tuios, can give a plugin the admin grant. The daemon said: %w", err)
+	for _, sock := range socks {
+		client, err := session.DialVerbClientAt(sock, version)
+		if err != nil {
+			return fmt.Errorf("tuios could not ask the daemon at %s to confirm that you run this command: %w", sock, err)
+		}
+		_, err = client.CallWithTimeout("attach-presence", nil, 5*time.Second)
+		_ = client.Close()
+		if err != nil {
+			return fmt.Errorf("only you, from a terminal outside tuios, can give a plugin the admin grant. The daemon said: %w", err)
+		}
 	}
 	return nil
 }

@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -82,14 +84,16 @@ type Runner struct {
 	stopped  bool
 	wg       sync.WaitGroup
 	// owners are the plugins whose commands lead each process session, by
-	// the session id, which is the leader's pid. An entry stays after the
-	// leader exits while leftBehind holds, so what a command leaves behind
-	// in its process group is still its plugin's. native counts the native plugins among them.
-	owners map[int]owner
+	// the session id, which is the leader's pid. With a reaper the leader
+	// is the reaper, which lives until nothing the command started is left,
+	// so what a command leaves behind is still its plugin's. native counts
+	// the native plugins among them.
+	owners map[int]*Plugin
 	native atomic.Int32
-	// sweeping is set while sweep runs: while an exited leader's entry is
-	// kept.
-	sweeping bool
+	// Reaper, when set, is the argv that runs a command under a reaper:
+	// the tuios binary and ReaperArg (reaper.go). Without it the command
+	// leads its own session, and its entry goes when it exits.
+	Reaper []string
 	// OnPID, when set, is told each process the runner starts and ends, so
 	// the daemon can tell a plugin's process from a person's.
 	OnPID func(pid int, running bool)
@@ -97,7 +101,7 @@ type Runner struct {
 
 // NewRunner returns an empty runner.
 func NewRunner() *Runner {
-	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}, owners: map[int]owner{}}
+	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}, owners: map[int]*Plugin{}}
 }
 
 // ResolveProgram finds a command's program as herdr does: a relative path
@@ -163,8 +167,12 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		return refuse(perr.Code, perr.Msg)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	argv := append([]string{program}, j.Command[1:]...)
+	if len(r.Reaper) > 0 {
+		argv = append(slices.Clone(r.Reaper), argv...)
+	}
 	//tuios:allow-exec detach sets CREATE_NO_WINDOW with the flags the job needs
-	cmd := exec.Command(program, j.Command[1:]...) //nolint:gosec // an enabled plugin's own manifest names the command
+	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // an enabled plugin's own manifest names the command
 	cmd.Dir = j.Plugin.PluginRoot
 	cmd.Env = append(cleanEnv(os.Environ()), j.Env...)
 	cmd.Stdin = nil
@@ -176,7 +184,24 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	// and frees its slot.
 	cmd.WaitDelay = waitDelay
 	detach(cmd)
-	if err := cmd.Start(); err != nil {
+	// The reaper says on fd 3 when the command itself exits.
+	var status, statusW *os.File
+	if len(r.Reaper) > 0 {
+		var err error
+		if status, statusW, err = os.Pipe(); err != nil {
+			cancel()
+			return refuse("plugin_command_failed", err.Error())
+		}
+		cmd.ExtraFiles = []*os.File{statusW}
+	}
+	err := cmd.Start()
+	if statusW != nil {
+		_ = statusW.Close()
+	}
+	if err != nil {
+		if status != nil {
+			_ = status.Close()
+		}
 		cancel()
 		return refuse("plugin_command_failed", err.Error())
 	}
@@ -196,7 +221,7 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	r.procs[j.Plugin.PluginID][cmd] = group
 	// Still under r.mu, which Owner takes: the command cannot be asked
 	// about before it is entered here.
-	r.setOwner(cmd.Process.Pid, owner{plugin: j.Plugin})
+	r.setOwner(cmd.Process.Pid, j.Plugin)
 	r.pushLocked(e)
 	r.wg.Add(1)
 	onPID := r.OnPID
@@ -204,6 +229,19 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	if onPID != nil {
 		onPID(cmd.Process.Pid, true)
 	}
+
+	// The session's leader is reaped in a goroutine of its own. The owner
+	// entry goes before the pid is free again (waitExited), so it never
+	// names a process that got the pid later.
+	pid := cmd.Process.Pid
+	reaped := make(chan error, 1)
+	go func() {
+		waitExited(pid)
+		r.mu.Lock()
+		r.dropOwner(pid)
+		r.mu.Unlock()
+		reaped <- cmd.Wait()
+	}()
 
 	go func() {
 		defer r.wg.Done()
@@ -217,44 +255,107 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 				}
 			}()
 		}
-		werr := cmd.Wait()
-		// Stop the timeout before anything else: once Wait has reaped the
-		// command, its process group id may name another group.
-		cancel()
-		if onPID != nil {
-			onPID(cmd.Process.Pid, false)
+		code, text, done, failed := -1, "", false, false
+		var werr error
+		if status != nil {
+			// The command exits first. What it left keeps the reaper and
+			// the output open, as it did the command's: read the output a
+			// moment longer, then end the run and free its slot.
+			b, _ := io.ReadAll(status)
+			_ = status.Close()
+			if c, t, ok := strings.Cut(strings.TrimSpace(string(b)), "\t"); ok {
+				code, _ = strconv.Atoi(c)
+				text = t
+				select {
+				case werr = <-reaped:
+					done = true
+				case <-time.After(waitDelay):
+				}
+			}
 		}
+		if text == "" {
+			werr, done = <-reaped, true
+			code = cmd.ProcessState.ExitCode()
+			if werr != nil {
+				text, failed = werr.Error(), true
+			}
+		}
+		// Stop the timeout before anything else: once the leader is
+		// reaped, its process group id may name another group.
+		cancel()
 		end := time.Now().UnixMilli()
 		out, errOut := stdout.String(), stderr.String()
 		r.mu.Lock()
-		defer r.mu.Unlock()
 		r.inFlight--
 		r.perPlug[j.Plugin.PluginID]--
-		delete(r.procs[j.Plugin.PluginID], cmd)
-		r.setOwner(cmd.Process.Pid, owner{plugin: j.Plugin, exited: true})
-		group.release()
 		for i := range r.logs {
 			if r.logs[i].LogID != e.LogID {
 				continue
 			}
 			l := &r.logs[i]
 			l.FinishedMS, l.Stdout, l.Stderr = &end, &out, &errOut
-			code := cmd.ProcessState.ExitCode()
 			if code >= 0 {
 				l.ExitCode = &code
 			}
 			l.Status = StatusSucceeded
-			if werr != nil {
+			if code != 0 || failed {
 				l.Status = StatusFailed
 				if code < 0 {
-					msg := werr.Error()
+					msg := text
 					l.Error = &msg
 				}
 			}
 		}
+		r.mu.Unlock()
+		if !done {
+			werr = <-reaped
+		}
+		_ = werr
+		if onPID != nil {
+			onPID(pid, false)
+		}
+		r.mu.Lock()
+		delete(r.procs[j.Plugin.PluginID], cmd)
+		group.release()
+		r.mu.Unlock()
 	}()
 	return e, nil
 }
+
+// setOwner enters the plugin of session sid. r.mu is held.
+func (r *Runner) setOwner(sid int, p *Plugin) {
+	r.dropOwner(sid)
+	r.owners[sid] = p
+	if p.Format == FormatTuios {
+		r.native.Add(1)
+	}
+}
+
+// dropOwner forgets session sid. r.mu is held.
+func (r *Runner) dropOwner(sid int) {
+	if p, ok := r.owners[sid]; ok {
+		delete(r.owners, sid)
+		if p.Format == FormatTuios {
+			r.native.Add(-1)
+		}
+	}
+}
+
+// Owner is the plugin whose command leads process session sid, or nil. The
+// caller reads sid from the kernel (procinfo.SessionID). A process that
+// starts a session of its own leaves its plugin.
+func (r *Runner) Owner(sid int) *Plugin {
+	if sid <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.owners[sid]
+}
+
+// NativeRunning reports whether a native plugin's processes may be running,
+// so a call has to be checked against its grants.
+func (r *Runner) NativeRunning() bool { return r.native.Load() > 0 }
 
 func (r *Runner) pushLocked(e LogEntry) {
 	r.logs = append(r.logs, e)
@@ -368,97 +469,3 @@ func (b *capBuffer) String() string {
 }
 
 var _ io.Writer = (*capBuffer)(nil)
-
-// owner is the plugin of one process session.
-type owner struct {
-	plugin *Plugin
-	// exited is set once the leader is reaped. The entry then holds only
-	// while leftBehind says the session is still the plugin's.
-	exited bool
-}
-
-// leftBehind reports whether session sid, whose leader the runner reaped,
-// still holds what the leader left: its process group has a member, and no
-// process has the leader's pid. The kernel does not hand out a pid while a
-// group or session uses it as its id, so a live process with that pid
-// means the group died, the pid was given out again, and the new process
-// started a session of its own. That session is not the plugin's.
-func leftBehind(sid int) bool { return groupAlive(sid) && !procAlive(sid) }
-
-// setOwner enters or updates the owner of session sid, or drops it once
-// the leader exited and nothing it left is in its group. r.mu is held.
-func (r *Runner) setOwner(sid int, o owner) {
-	old, had := r.owners[sid]
-	if had && old.plugin.Format == FormatTuios {
-		r.native.Add(-1)
-	}
-	if o.exited && !leftBehind(sid) {
-		delete(r.owners, sid)
-		return
-	}
-	r.owners[sid] = o
-	if o.plugin.Format == FormatTuios {
-		r.native.Add(1)
-	}
-	if o.exited && !r.sweeping {
-		r.sweeping = true
-		go r.sweep()
-	}
-}
-
-// sweepEvery is how often sweep looks at the kept entries.
-const sweepEvery = 250 * time.Millisecond
-
-// sweep drops each kept entry within sweepEvery of its process group
-// emptying. The kernel does not hand out a pid while a process group or
-// session uses it as its id, so the leader's pid can come back only after
-// the group is gone, and then only after the kernel has walked through the
-// other free pids. A stranger would have to get that pid, start a session
-// and leave a child in it inside that quarter second. Dropping entries only
-// on a lookup left them in place for as long as nobody asked. sweep runs
-// only while an entry is kept, and stops when none is.
-func (r *Runner) sweep() {
-	t := time.NewTicker(sweepEvery)
-	defer t.Stop()
-	for range t.C {
-		r.mu.Lock()
-		kept := false
-		for sid, o := range r.owners {
-			if o.exited {
-				r.setOwner(sid, o)
-				_, still := r.owners[sid]
-				kept = kept || still
-			}
-		}
-		if !kept {
-			r.sweeping = false
-			r.mu.Unlock()
-			return
-		}
-		r.mu.Unlock()
-	}
-}
-
-// Owner is the plugin whose command leads process session sid, or nil. The
-// caller reads sid from the kernel (procinfo.SessionID). A process that
-// starts a session of its own leaves its plugin.
-func (r *Runner) Owner(sid int) *Plugin {
-	if sid <= 0 {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	o, ok := r.owners[sid]
-	if !ok {
-		return nil
-	}
-	if o.exited && !leftBehind(sid) {
-		r.setOwner(sid, o)
-		return nil
-	}
-	return o.plugin
-}
-
-// NativeRunning reports whether a native plugin's processes may be running,
-// so a call has to be checked against its grants.
-func (r *Runner) NativeRunning() bool { return r.native.Load() > 0 }

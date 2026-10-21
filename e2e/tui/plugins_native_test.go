@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -241,31 +242,36 @@ func TestNativePluginGrants(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "approver", "--detach"); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
-	paneOut := filepath.Join(t.TempDir(), "pane-approve")
-	line := "env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID '" + tuiosBin + "' plugins install '" + adminDir + "' --yes --no-enable --grant admin >'" + paneOut + ".out' 2>&1; echo $? >'" + paneOut + ".code'"
-	if out, err := tuiosCLI(t, base, "send-text", "-s", "approver", line+"\n"); err != nil {
-		t.Fatalf("send-text: %v\n%s", err, out)
-	}
-	deadline := time.Now().Add(2 * uiTimeout)
-	for {
-		if b, _ := os.ReadFile(paneOut + ".code"); strings.Contains(string(b), "\n") {
-			if strings.TrimSpace(string(b)) == "0" {
-				t.Errorf("a pane approved admin with its pane variables cut")
+	// The same with --server, which names a daemon that does not know the
+	// pane: every daemon that runs is asked.
+	t.Cleanup(func() { _, _ = tuiosCLI(t, base, "--server", "zz", "kill-server") })
+	for i, extra := range []string{"", "--server zz "} {
+		paneOut := filepath.Join(t.TempDir(), "pane-approve")
+		line := "env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID '" + tuiosBin + "' " + extra + "plugins install '" + adminDir + "' --yes --no-enable --grant admin >'" + paneOut + ".out' 2>&1; echo $? >'" + paneOut + ".code'"
+		if out, err := tuiosCLI(t, base, "send-text", "-s", "approver", line+"\n"); err != nil {
+			t.Fatalf("send-text: %v\n%s", err, out)
+		}
+		deadline := time.Now().Add(2 * uiTimeout)
+		for {
+			if b, _ := os.ReadFile(paneOut + ".code"); strings.Contains(string(b), "\n") {
+				if strings.TrimSpace(string(b)) == "0" {
+					t.Errorf("a pane approved admin with its pane variables cut %s", extra)
+				}
+				break
 			}
-			break
+			if time.Now().After(deadline) {
+				t.Fatalf("the install in the pane never finished (%s)", extra)
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the install in the pane never finished")
+		paneText, _ := os.ReadFile(paneOut + ".out")
+		_ = os.WriteFile(filepath.Join(art, "pane-approve-"+strconv.Itoa(i)+".txt"), paneText, 0o644)
+		if !strings.Contains(string(paneText), "only you, from a terminal outside tuios") {
+			t.Errorf("the refusal in the pane (%s):\n%s", extra, paneText)
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	paneText, _ := os.ReadFile(paneOut + ".out")
-	_ = os.WriteFile(filepath.Join(art, "pane-approve.txt"), paneText, 0o644)
-	if !strings.Contains(string(paneText), "only you, from a terminal outside tuios") {
-		t.Errorf("the refusal in the pane:\n%s", paneText)
-	}
-	if _, err := os.Stat(approvals); err == nil {
-		t.Errorf("a pane wrote the admin approval")
+		if _, err := os.Stat(approvals); err == nil {
+			t.Errorf("a pane wrote the admin approval (%s)", extra)
+		}
 	}
 	adminState("after the pane tried to approve", "plugin_admin_not_approved")
 	// A hand-written grant in plugins.lock does not widen a local plugin:

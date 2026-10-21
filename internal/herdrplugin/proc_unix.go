@@ -31,15 +31,3 @@ func (g *procGroup) kill() {
 // release does nothing. After Wait the group id may name another group, so
 // the runner does not kill it later, and what the command left runs on.
 func (g *procGroup) release() {}
-
-// groupAlive reports whether process group pgid still has a member.
-func groupAlive(pgid int) bool {
-	err := syscall.Kill(-pgid, 0)
-	return err == nil || err == syscall.EPERM
-}
-
-// procAlive reports whether a process with pid exists.
-func procAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
-}

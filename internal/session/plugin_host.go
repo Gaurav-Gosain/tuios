@@ -94,9 +94,16 @@ type pluginPane struct {
 	root string
 }
 
+// PluginReaper is the argv that runs a plugin command under a reaper, set
+// by the tuios binary (herdrplugin.Runner.Reaper). Nil runs commands
+// without one, as in tests.
+var PluginReaper []string
+
 func newPluginHost(d *Daemon, cfg config.PluginsConfig) *pluginHost {
+	runner := herdrplugin.NewRunner()
+	runner.Reaper = PluginReaper
 	return &pluginHost{
-		d: d, runner: herdrplugin.NewRunner(),
+		d: d, runner: runner,
 		enabled: slices.Clone(cfg.Enabled), dirs: slices.Clone(cfg.Dirs),
 		startedUp: map[string]bool{}, roots: map[string]string{}, panes: map[string]pluginPane{}, burst: map[string]int{},
 	}

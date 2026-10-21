@@ -443,6 +443,7 @@ func git(ctx context.Context, dir string, extra []string, args ...string) (strin
 	// Without a delay, Run would wait for that child and the timeout would
 	// not hold.
 	cmd.WaitDelay = gitWaitDelay
+	cmd.Cancel = killTree(cmd)
 	cmd.Dir = dir
 	cmd.Env = gitEnv(extra)
 	var stdout, stderr bytes.Buffer

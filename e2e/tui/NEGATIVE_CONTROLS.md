@@ -7838,26 +7838,41 @@ too: a process a plugin leaves behind, with its parent gone and its
 `TUIOS_*` variables cut, was taken for the person and could disable a
 plugin.
 
-### After the second review of #956
+### After the second review of #956, and the review of #959
 
 `TestNativePluginGrants` now also changes `probe.sh` of an approved `admin`
 plugin and changes it back, makes the approval folder writable by the group
 and private again, and runs `tuios plugins install --grant admin` from a
-pane with `TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` cut. Three unit tests come
-with it: `TestOwnerForgetsAnEmptiedGroup` (`internal/herdrplugin`, Linux,
-runs itself as pid 1 of a new pid namespace and skips where user namespaces
-are not allowed), `TestGitTimeoutHoldsWithAHungChild` (`internal/review`)
-and `TestHerdrVerbMethodsRunTheGrantCheck` (`internal/session`). Run on
-2026-10-21.
+pane with `TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` cut, once plain and once
+with `--server zz`. Its plugins run under the reaper. Three unit tests come
+with it:
+
+- `TestOwnerForgetsAnEmptiedGroup` (`internal/herdrplugin`, Linux) runs
+  itself as pid 1 of a new pid namespace. Under CI it fails instead of
+  skipping, and it needs the inner run's `--- PASS`. The workflow allows
+  user namespaces first.
+- `TestGitTimeoutHoldsWithAHungChild` (`internal/review`).
+- `TestHerdrVerbMethodsRefuseAPluginWithNoGrants` (`internal/session`)
+  calls every `herdrVerbs` method from a real process of a native plugin
+  with no grants, against a workspace the person made.
+
+Run on 2026-10-21.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
+| Every running daemon confirms the person, and none is started for it | `liveDaemonSockets` starts a daemon and returns only the one `--server` names (the review's 959-1) | `TestNativePluginGrants` ("a pane approved admin with its pane variables cut --server zz", "a pane wrote the admin approval (--server zz)") | **caught** |
 | The daemon confirms the person before an approval | `confirmPerson` returns nil | `TestNativePluginGrants` ("a pane approved admin with its pane variables cut", "a pane wrote the admin approval") | **caught** |
 | The approval covers the files the commands name | `adminApproved` ignores the code hash | `TestNativePluginGrants` ("after probe.sh changed: plugins info lacks plugin_admin_not_approved") | **caught** |
 | The approval folder must be private | `readApprovals` checks only the file | `TestNativePluginGrants` ("with the approval folder writable by the group") | **caught** |
-| Kept entries go when their group empties | `setOwner` starts no sweep | `TestOwnerForgetsAnEmptiedGroup` ("the entry of session 7 outlived its process group", "a stranger's daemon (pid 8, session 7) is counted as plugin e2e.admin") | **caught** |
-| A git child cannot hold the timeout | no `WaitDelay` in `review.git` | `TestGitTimeoutHoldsWithAHungChild` ("Git returned after 20.0s") | **caught** |
-| A herdrVerbs label means the grant check runs | `ping` and `plugin.list` labelled `herdrVerbs` | `TestHerdrVerbMethodsRunTheGrantCheck` ("its handler herdrPing never reaches admitVerb, callVerb or checkGrants") | **caught** |
+| The owner entry goes when the reaper exits | the `dropOwner` call before the reaper is reaped | `TestOwnerForgetsAnEmptiedGroup` ("the entry of session 7 outlived the reaper", "a stranger's daemon (pid 8, session 7) is counted as plugin e2e.admin") | **caught** |
+| git's children are killed with it | no `Cancel` in `review.git` | `TestGitTimeoutHoldsWithAHungChild` ("git's child ... still runs after Git returned") | **caught** |
+| A git child cannot hold the timeout | no `WaitDelay` and no `Cancel` in `review.git` | `TestGitTimeoutHoldsWithAHungChild` ("Git returned after 20.0s") | **caught** |
+| A herdrVerbs method runs the grant check | `herdrPaneRename` answers without calling `set-window` (the review's control C) | `TestHerdrVerbMethodsRefuseAPluginWithNoGrants` ("pane.rename from a plugin with no grants answered {\"type\":\"pane_info\"}, want forbidden") | **caught** |
+
+The review's control B, the `set-window` call removed and the rest kept, is
+refused by the pane lookup that follows, so the plugin is told forbidden and
+nothing changes. The test passes there, which is right: no check was
+skipped on the path the call takes.
 
 `TestHerdrMethodsNameTheirCheck` in `internal/session` is a security
 boundary test: every herdr socket method names its check in `herdrChecks`,

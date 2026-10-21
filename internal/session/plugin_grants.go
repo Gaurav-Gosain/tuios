@@ -12,17 +12,17 @@ import (
 // The runner starts each plugin command in a process session of its own, and
 // enters the session in its owner table before the command can connect
 // (herdrplugin.Runner.Owner). A caller is a plugin's when the kernel's record
-// of its pid is in such a session. Children inherit the session, so a daemon
-// a startup command forks, or a process it leaves behind with its
-// environment cleaned, is still the plugin's: while the command runs, and
-// after it ends while the process stays in the command's process group.
-// Nothing the process sends or sets in its environment changes the answer.
-// A process that starts a session of its own leaves the plugin, and so does
-// one that moves to another process group once the command has ended. It is
-// then placed as any other process. This scopes mistakes and tools talked
-// into misuse, not a program set on escaping. Where the kernel gives no peer
-// pid (Windows, the BSDs) no call is placed in a plugin, and the runner does
-// not start a native plugin's commands.
+// of its pid is in such a session. The session's leader is the reaper
+// (herdrplugin/reaper.go), which stays until nothing the command started is
+// left, so a daemon a startup command forks, or a process it leaves behind
+// with its environment cleaned, is still the plugin's, and the session id
+// cannot name another process while the entry exists. Nothing the process
+// sends or sets in its environment changes the answer. A process that
+// starts a session of its own leaves the plugin and is placed as any other
+// process. This scopes mistakes and tools talked into misuse, not a program
+// set on escaping. Where the kernel gives no peer pid (Windows, the BSDs) no
+// call is placed in a plugin, and the runner does not start a native
+// plugin's commands.
 //
 // A herdr plugin holds the default grants, as before. A native plugin holds
 // the grants the person approved at install (Plugin.Held), and none when it

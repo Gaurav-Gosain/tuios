@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -48,6 +49,12 @@ var (
 )
 
 func main() {
+	// A plugin command's reaper does nothing else (internal/herdrplugin,
+	// reaper.go).
+	if len(os.Args) > 1 && os.Args[1] == herdrplugin.ReaperArg {
+		os.Exit(herdrplugin.RunReaper(os.Args[2:]))
+	}
+	session.PluginReaper = pluginReaper()
 	// A `go install ...@vX` build has no ldflags; its module version stands in
 	// for them before anything below reads the stamps.
 	applyModuleVersion()

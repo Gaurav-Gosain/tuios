@@ -20,16 +20,19 @@ import (
 // trust hash of its manifest and the content hash of the files its commands
 // name (CodeHash). A change to any of them needs a new approval.
 //
-// Who may write it: tuios plugins install --grant admin asks the daemon to
-// confirm that the caller is the person (attach-presence, the kernel check
-// plugin.enable uses) before it writes, so a pane, a plugin process or a
-// process with its pane variables stripped is refused there.
+// Who may write it: tuios plugins install --grant admin first asks every
+// daemon of the user that runs whether the caller is outside its panes and
+// plugins (confirmPerson in cmd/tuios). That refuses a pane or a plugin
+// process that runs the command, also with its pane variables cut or with
+// --server naming another daemon.
 //
-// What it does not protect against: any program that runs as the user can
-// write this file itself, as it can write config.toml. The owner and mode
-// checks below stop other users, not the user's own programs. The file must
-// be owned by the user, not writable by others, in a folder of the user's
-// that others cannot write.
+// What it does not protect against: a process that leaves its pane with
+// setsid, one that comes back in over ssh, one that points XDG_RUNTIME_DIR
+// at a folder with no daemon, and anything that writes this file directly.
+// Every program that runs as the user can do the last, as it can write
+// config.toml. The owner and mode checks below stop other users, not the
+// user's own programs: the file must be owned by the user and not writable
+// by others, in a folder of the user's that others cannot write.
 
 // AdminApprovalsName is the approvals file in tuios's plugins state folder.
 // The % keeps it apart from a plugin's state folder (PathComponent).
@@ -95,7 +98,13 @@ func ApproveAdmin(path string, p *Plugin, approved string) error {
 // CodeHash is sha256 over the files in the plugin folder that p's commands
 // name: each argument of a startup, action, event or pane command that is a
 // relative path to a file in the folder, such as bin/status or probe.sh.
-// What those files load in turn is not covered.
+//
+// Not covered: what those files load (a sourced lib.sh, a Python module,
+// node_modules), an argument that is not a plain file name (sh -c
+// "./probe.sh --flag", go run ., python -m pkg), programs on PATH, config
+// and data files, and files written at run time. The hash is checked when
+// tuios reads the plugins, before a command starts. A command that already
+// runs keeps running when one of its files changes.
 func CodeHash(p *Plugin) string {
 	var argvs [][]string
 	for _, c := range p.Startup {

@@ -16,6 +16,10 @@ import (
 const helperEnv = "TUIOS_HERDRPLUGIN_HELPER"
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == ReaperArg {
+		// The test binary stands in for tuios as a reaper.
+		os.Exit(RunReaper(os.Args[2:]))
+	}
 	switch os.Getenv(helperEnv) {
 	case "":
 		os.Exit(testutil.RunIsolated(m))

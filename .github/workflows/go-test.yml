@@ -106,6 +106,13 @@ jobs:
           done
           exit $status
 
+      - name: Allow user namespaces
+        # TestOwnerForgetsAnEmptiedGroup (internal/herdrplugin) reuses a pid on
+        # purpose, which needs a pid namespace of its own. Ubuntu 24.04 lets
+        # AppArmor refuse unprivileged user namespaces, and the test fails
+        # under CI rather than skip.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Test
         # No -race here. internal/app takes over ten minutes under the detector
         # on a developer machine and longer on a runner, and a job that times
@@ -240,6 +247,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+
+      - name: Allow user namespaces
+        # TestOwnerForgetsAnEmptiedGroup (internal/herdrplugin) reuses a pid on
+        # purpose, which needs a pid namespace of its own. Ubuntu 24.04 lets
+        # AppArmor refuse unprivileged user namespaces, and the test fails
+        # under CI rather than skip.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Test with the race detector
         run: go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... -race -count=1 -timeout 80m

@@ -20,9 +20,3 @@ func (g *procGroup) kill() {
 }
 
 func (g *procGroup) release() {}
-
-// groupAlive is false where there is no process group to ask about.
-func groupAlive(int) bool { return false }
-
-// procAlive is not asked here: groupAlive is false.
-func procAlive(int) bool { return false }

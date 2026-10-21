@@ -946,28 +946,45 @@ the default grants of `[agents.permissions]`. A pane that a native plugin
 opens holds no more than the plugin.
 
 tuios knows a plugin's process by its process session, which the kernel
-records. A process that the plugin starts is the plugin's too, also after
-its parent exits and with its environment changed. After the plugin's
-command ends, this holds while the process stays in the command's process
-group. A process that starts a new session leaves the plugin. So does a
-process that moves to another process group, after the command ends. This
-check stops mistakes and misled tools. It does not stop a program that
-tries to escape. No plugin process can act as the person.
+records. tuios runs each plugin command under a small tuios process, the
+reaper, which leads the session and stays until nothing the command started
+is left. A process that the plugin starts is the plugin's too, also after
+its parent exits and with its environment changed. A process that starts a
+new session leaves the plugin. This check stops mistakes and misled tools.
+It does not stop a program that tries to escape. No plugin process can act
+as the person.
 
 A native plugin holds `admin` only when you approved it on this machine.
-`tuios plugins install --grant admin` asks the daemon to confirm that you,
-not a pane or a plugin, run it. Then it records the approval in the state
-folder. The approval covers the manifest and the files its commands name,
-such as `bin/status` or `probe.sh`. When one of them changes, the plugin
-loses `admin` until you approve it again. tuios reads the approval only
-when you own the file and its folder and nobody else can write them.
+`tuios plugins install --grant admin` asks each tuios daemon that runs
+whether the command runs outside its panes and plugins. It does not start a
+daemon to ask. Then it records the approval in the state folder.
 `plugins.lock` alone never gives `admin`. A plugin installed from a folder
 is checked against its approved manifest too. After you change its
 manifest, install it again.
 
-The approval stops a lock file from another machine, a hand edit and a
-changed plugin. It does not stop a program that runs as you: such a program
-can write the approval file itself, as it can write `config.toml`.
+The approval covers the manifest and the files that the plugin's commands
+name as arguments, such as `bin/status` or `probe.sh`. When one of them
+changes, the plugin loses `admin` at its next start, until you approve it
+again. The approval does not cover:
+
+- files that those files load, such as a sourced `lib.sh`, a Python module
+  or `node_modules`;
+- an argument that is not a plain file name, such as
+  `sh -c "./probe.sh --flag"`, `go run .` or `python -m pkg`;
+- programs on your `PATH`, config and data files, and files written while
+  the plugin runs;
+- a command that already runs when one of its files changes.
+
+tuios reads the approval only when you own the file and its folder, and
+nobody else can write them.
+
+The approval stops a lock file from another machine, a hand edit, a changed
+plugin, and a pane or plugin that runs `tuios plugins install --grant admin`,
+also with its pane variables cut or with `--server`. It does not stop a
+process that leaves its pane with `setsid`, a command run over `ssh`, a
+process that points `XDG_RUNTIME_DIR` somewhere else, or a program that
+writes the approval file itself. Any program that runs as you can do the
+last, as it can write `config.toml`.
 On Windows and the BSDs, the kernel does not tell tuios which process
 calls. There tuios does not run the commands of a native plugin yet.
 
