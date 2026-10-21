@@ -137,6 +137,12 @@ func (m *OS) applyInboxAgentsTick(msg inboxAgentsTickMsg) tea.Cmd {
 	}
 	m.tickStats.AgentsTicks++
 	a.tickStop = nil
+	// The machines block shows each machine's load, which no push carries:
+	// the minute tick that moves the ages on reads the hosts again, while
+	// the view is open and has hosts. No timer of its own.
+	if m.ShowInbox && m.ckManyMachines() {
+		return tea.Batch(m.InboxAgentsTick(), refreshFederationCmd())
+	}
 	return m.InboxAgentsTick()
 }
 

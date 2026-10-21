@@ -134,6 +134,7 @@ Result:
   "sessions": 2,
   "link_policy": true,
   "pane_grants": true,
+  "load": {"cores": 8, "load1": 0.84, "mem_pct": 41.5, "agents_working": 3},
   "os": "linux"
 }}
 ```
@@ -148,6 +149,12 @@ for a link, and refuses when it is set. It is absent from an older daemon.
 platform where the daemon cannot read the peer's pid, the `tuios` CLI reads it
 and then presents `$TUIOS_PANE_ID` and `$TUIOS_PANE_TOKEN` on every
 connection it opens from a pane. It is absent from an older daemon.
+
+`load` is the machine's load: `cores`, `load1` (the one-minute load
+average), `mem_pct` (memory in use, Linux only) and `agents_working`. The
+daemon reads the system at most every 5 seconds. A linked daemon reads it off
+the hello its heartbeat sends, so `list-hosts` can report each host's load
+with no call of its own. It is absent from an older daemon.
 
 `os` is the operating system the daemon runs on, as Go names it: `linux`,
 `darwin`, `windows`. A client attached from another machine reads it to start
@@ -180,6 +187,12 @@ is an answer, and each entry says which.
 `agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
 `harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
 The agents view draws them as rows.
+
+**list-hosts reports each host's load.** A host row gains `cores`, `load1`,
+`mem_pct`, `agents_working`, `load_at` and `rtt_ms`, from the last hello on the
+link: the handshake, then the heartbeat. A link that carries traffic is not
+pinged, so its heartbeat now pings once the load is older than a minute. The
+fields are absent until a hello from the host carried a load.
 
 **send-agent-message takes a message in parts.** `text` is no longer
 required when `parts` is given. `parts` is the form `queue-prompt` takes. A

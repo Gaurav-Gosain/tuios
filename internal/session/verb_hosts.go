@@ -282,7 +282,9 @@ func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbErro
 	// events_push says this daemon pushes every change to a host it streams:
 	// host-changed on subscribe, and MsgHostsChanged to attached clients. A
 	// client that sees it polls only the hosts whose events are not live.
-	out := map[string]any{"type": "host_list", "events_push": true}
+	// load is this machine's own, so a client draws its machine from the
+	// daemon on every system, as it draws the hosts.
+	out := map[string]any{"type": "host_list", "events_push": true, "load": machineLoad(d.manager.ListSessions())}
 	if problems := d.configProblems(); len(problems) > 0 {
 		out["config_problems"] = problems
 	}

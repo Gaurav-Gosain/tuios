@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -121,9 +123,13 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 		return filepath.Join(fakes, strings.TrimSuffix(harness, "-code"))
 	}
 
+	// Each machine's daemon reports a known load, the design frame's: a
+	// test machine's own load would read as an alarm or as nothing.
+	loads := map[string]float64{base: 0.21, build: 0.38, gpu: 0.72}
 	cli := func(b string, args ...string) {
 		t.Helper()
-		if out, err := tuiosCLIInDir(t, b, workDirIn(t, b), env, args...); err != nil {
+		load := "TUIOS_LOAD1=" + strconv.FormatFloat(loads[b]*float64(runtime.NumCPU()), 'f', 2, 64)
+		if out, err := tuiosCLIInDir(t, b, workDirIn(t, b), append(env, load), args...); err != nil {
 			t.Fatalf("tuios %v: %v\n%s", args, err, out)
 		}
 	}
@@ -288,7 +294,8 @@ func startFrameA(t *testing.T, cols, rows int) *tuitest.Terminal {
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: on a build where a
 // host's listing carries no agent panes the remote rows check fails; with
-// the fan rows not gathered the fan check fails.
+// the fan rows not gathered the fan check fails; with no load in the hello
+// the load check fails.
 func TestCockpitFrameA(t *testing.T) {
 	term := startFrameA(t, 200, 55)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -310,6 +317,17 @@ func TestCockpitFrameA(t *testing.T) {
 		if fleetRowWith(s, want) < 0 {
 			t.Fatalf("ASSERTION: the machines block lacks %q\n%s", want, term.Snapshot())
 		}
+	}
+	// Each host's load and round trip ride on its link's hello.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := fleetRowWith(s, "build     2 agents")
+		if r < 0 {
+			return false
+		}
+		line := []rune(s.Line(r))
+		return len(line) > 56 && strings.Contains(string(line[:56]), "%") && strings.Contains(string(line[:56]), " ms")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the machines block does not show build's load and round trip: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "frame-a-200x55")
 

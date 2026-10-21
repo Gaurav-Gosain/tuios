@@ -1286,6 +1286,9 @@ type OS struct {
 	// never writes it; it is refreshed by a Cmd, never inside Update. See
 	// sidebar_hosts.go.
 	FederationHosts []FederationHost
+	// LocalLoad is the load of the machine the client's daemon runs on, as
+	// the last host listing carried it: Cores is 0 until one did.
+	LocalLoad federation.Load
 	// federationGen counts snapshots, so the rail's render cache can tell one
 	// from the next without comparing them.
 	federationGen uint64

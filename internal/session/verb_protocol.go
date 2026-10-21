@@ -774,7 +774,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up. queued is how many messages this daemon holds for the host until its link is back."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up. queued is how many messages this daemon holds for the host until its link is back. cores, load1, mem_pct and agents_working are the host's load from the last hello on the link, at load_at (Unix seconds), and rtt_ms is that hello's round trip in milliseconds; all are absent until a hello from the host carried a load."},
 				{Name: "total", Type: "int", Description: "How many hosts are configured."},
 				{Name: "events_push", Type: "bool", Description: "Always true from a daemon that pushes host changes: host-changed on subscribe, and a hosts-changed push to attached clients."},
 				{Name: "config_problems", Type: "[]string", Description: "Config entries that were dropped, with the reason for each. Omitted when there are none."},
@@ -2992,6 +2992,7 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		LogBasic("Client %s identified as %s %s (protocol %d)", cs.clientID, p.Client, p.Version, p.Protocol)
 	}
 
+	infos := d.manager.ListSessions()
 	return map[string]any{
 		"type":           "hello",
 		"protocol":       VerbProtocolVersion,
@@ -2999,7 +3000,10 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"daemon_version": d.version,
 		"pid":            os.Getpid(),
 		"instance":       d.instance,
-		"sessions":       len(d.manager.ListSessions()),
+		"sessions":       len(infos),
+		// load is this machine's load, which a linked daemon reads off the
+		// hello its heartbeat sends anyway. See machine_load.go.
+		"load": machineLoad(infos),
 		// link_policy says this daemon holds links to a policy, so a proxy
 		// must reach it on a link socket and never on this one. See
 		// DialForLink in link_dial.go.

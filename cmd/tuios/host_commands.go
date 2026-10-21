@@ -26,23 +26,26 @@ import (
 
 // hostReport is one row of the list-hosts result.
 type hostReport struct {
-	Host          string `json:"host"`
-	Addr          string `json:"addr"`
-	Status        string `json:"status"`
-	Reason        string `json:"reason"`
-	Detail        string `json:"detail"`
-	DaemonVersion string `json:"daemon_version"`
-	Protocol      int    `json:"protocol"`
-	MinProtocol   int    `json:"min_protocol"`
-	Sessions      int    `json:"sessions"`
-	LastOK        int64  `json:"last_ok"`
-	LastTry       int64  `json:"last_try"`
-	Drops         int    `json:"drops"`
-	DropReason    string `json:"drop_reason"`
-	Stalls        int    `json:"stalls"`
-	Events        string `json:"events"`
-	EventsNote    string `json:"events_note"`
-	Queued        int    `json:"queued"`
+	Host          string  `json:"host"`
+	Addr          string  `json:"addr"`
+	Status        string  `json:"status"`
+	Reason        string  `json:"reason"`
+	Detail        string  `json:"detail"`
+	DaemonVersion string  `json:"daemon_version"`
+	Protocol      int     `json:"protocol"`
+	MinProtocol   int     `json:"min_protocol"`
+	Sessions      int     `json:"sessions"`
+	LastOK        int64   `json:"last_ok"`
+	LastTry       int64   `json:"last_try"`
+	Drops         int     `json:"drops"`
+	DropReason    string  `json:"drop_reason"`
+	Stalls        int     `json:"stalls"`
+	Events        string  `json:"events"`
+	EventsNote    string  `json:"events_note"`
+	Queued        int     `json:"queued"`
+	Cores         int     `json:"cores"`
+	Load1         float64 `json:"load1"`
+	RTTMillis     int64   `json:"rtt_ms"`
 }
 
 // runListHosts prints the configured hosts and the state of each link.
@@ -95,6 +98,13 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		if h.Status == string(federation.StatusUp) {
 			sessions = strconv.Itoa(h.Sessions)
 		}
+		load := "-"
+		if h.Cores > 0 {
+			load = strconv.FormatFloat(h.Load1, 'f', 2, 64) + " on " + strconv.Itoa(h.Cores) + " cores"
+			if h.RTTMillis > 0 {
+				load += ", " + strconv.FormatInt(h.RTTMillis, 10) + " ms"
+			}
+		}
 		rows = append(rows, []string{
 			h.Host,
 			h.Addr,
@@ -102,6 +112,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			version,
 			protocol,
 			sessions,
+			load,
 			formatTimeAgo(h.LastOK),
 		})
 	}
@@ -109,7 +120,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 	t := table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-		Headers("HOST", "ADDRESS", "STATUS", "VERSION", "PROTO", "SESSIONS", "LAST OK").
+		Headers("HOST", "ADDRESS", "STATUS", "VERSION", "PROTO", "SESSIONS", "LOAD", "LAST OK").
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle().Padding(0, 1)

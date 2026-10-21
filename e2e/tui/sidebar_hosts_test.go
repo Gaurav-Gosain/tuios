@@ -1,8 +1,10 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -258,5 +260,38 @@ func TestHostsCommandReportsALinkEndToEnd(t *testing.T) {
 	// The listing says what a person does next with an up host.
 	if !strings.Contains(out, "tuios attach --host") {
 		t.Errorf("the listing does not say how to attach a session on a host:\n%s", out)
+	}
+	// The link's hello carries the host's load: its cores, its one-minute
+	// load and the round trip, in the table and in the JSON.
+	if !strings.Contains(out, "LOAD") || !strings.Contains(out, " cores") {
+		t.Errorf("ASSERTION: the listing does not show the host's load:\n%s", out)
+	}
+	out, err = tuiosCLI(t, base, "hosts", "--json")
+	if err != nil {
+		t.Fatalf("tuios hosts --json: %v\n%s", err, out)
+	}
+	var res struct {
+		Hosts []struct {
+			Host      string   `json:"host"`
+			Cores     int      `json:"cores"`
+			Load1     *float64 `json:"load1"`
+			RTTMillis int64    `json:"rtt_ms"`
+			LoadAt    int64    `json:"load_at"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("tuios hosts --json did not print JSON: %v\n%s", err, out)
+	}
+	for _, h := range res.Hosts {
+		switch h.Host {
+		case "build":
+			if h.Cores != runtime.NumCPU() || h.RTTMillis <= 0 || h.LoadAt == 0 {
+				t.Errorf("ASSERTION: build reports cores %d (want %d), rtt_ms %d, load_at %d:\n%s", h.Cores, runtime.NumCPU(), h.RTTMillis, h.LoadAt, out)
+			}
+		case "offline":
+			if h.Cores != 0 || h.Load1 != nil {
+				t.Errorf("ASSERTION: the unreachable host reports a load:\n%s", out)
+			}
+		}
 	}
 }

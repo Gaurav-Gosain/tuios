@@ -3,7 +3,6 @@ package app
 import (
 	"image/color"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -565,41 +564,52 @@ type ckMachineRow struct {
 	loadOK bool
 	up     bool
 	status string
+	// rtt is the round trip of the link's last hello, in milliseconds.
+	rtt int64
 }
-
-// ckLoadEvery is how often a frame reads this machine's load again.
-const ckLoadEvery = 15 * time.Second
 
 // ckMachines lists this machine, then every host, with its agents and load.
 // It is empty when no host is configured.
 func (m *OS) ckMachines() []ckMachineRow {
 	ck := &m.Inbox.ck
 	var out []ckMachineRow
+	var attached ckMachineRow
 	for _, h := range m.FederationHosts {
 		if h.Name == federation.LocalHostName {
 			continue
 		}
+		mr := ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
+			up: h.Status == string(federation.StatusUp), status: h.Status, rtt: h.RTTMillis}
+		mr.load, mr.loadOK = ckLoadShare(h.Load1, h.Cores)
 		if h.Name == m.AttachedHost {
 			// The machine the client is attached to is the local row.
+			attached = mr
 			continue
 		}
-		out = append(out, ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
-			up: h.Status == string(federation.StatusUp), status: h.Status})
+		out = append(out, mr)
 	}
 	if len(out) == 0 {
 		return nil
 	}
+	// The local row is the machine the agents with no host run on: this
+	// one, with the load its daemon reports, or the machine the client is
+	// attached to, with the load of that host's link.
 	local := ckMachineRow{name: m.ckMachine(""), agents: ck.machines[""], up: true}
-	// This machine's load, read here only when the agents of the local row
-	// run here: attached to another machine, they run there.
-	if now := time.Now(); m.AttachedHost == "" && now.Sub(ck.loadAt) >= ckLoadEvery {
-		ck.loadAt = now
-		ck.load, ck.loadOK = spawnLoadAvg()
-	}
-	if ck.loadOK && m.AttachedHost == "" {
-		local.load, local.loadOK = ck.load/float64(max(runtime.NumCPU(), 1)), true
+	if m.AttachedHost != "" {
+		local.load, local.loadOK, local.rtt = attached.load, attached.loadOK, attached.rtt
+	} else {
+		local.load, local.loadOK = ckLoadShare(m.LocalLoad.Load1, m.LocalLoad.Cores)
 	}
 	return append([]ckMachineRow{local}, out...)
+}
+
+// ckLoadShare is a load over the cores, held to 0..1, and whether it is
+// known.
+func ckLoadShare(load1 float64, cores int) (float64, bool) {
+	if cores <= 0 {
+		return 0, false
+	}
+	return min(max(load1/float64(cores), 0), 1), true
 }
 
 // drawMachines draws the machines block at y: a heading, then one row per
@@ -630,6 +640,9 @@ func (m *OS) drawMachines(c *ckCanvas, l ckLook, ms []ckMachineRow, w, y, top in
 		link := "local"
 		if mr.host != "" {
 			link = "link up"
+			if mr.rtt > 0 {
+				link = strconv.FormatInt(mr.rtt, 10) + " ms"
+			}
 			if !mr.up {
 				link = "link " + strings.ReplaceAll(printableTitle(mr.status), "_", " ")
 			}

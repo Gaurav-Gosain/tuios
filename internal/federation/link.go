@@ -65,6 +65,35 @@ type Handshake struct {
 	// Instance names the far daemon's run. See HostReport.Instance.
 	Instance string `json:"instance"`
 	Sessions int    `json:"sessions"`
+	// Load is the far machine's load as its hello said it, nil from a
+	// daemon too old to say.
+	Load *Load `json:"load,omitempty"`
+}
+
+// Load is how busy a machine is, as its daemon's hello says it.
+type Load struct {
+	// Cores is how many CPUs the machine has.
+	Cores int `json:"cores"`
+	// Load1 is the one-minute load average.
+	Load1 float64 `json:"load1"`
+	// MemPct is how much of the memory is in use, 0 to 100, 0 when unknown.
+	MemPct float64 `json:"mem_pct,omitempty"`
+	// Working is how many agents on the machine are working.
+	Working int `json:"agents_working"`
+}
+
+// bounded is l with every value held to what a machine can report: the far
+// daemon is untrusted.
+func (l Load) bounded() Load {
+	l.Cores = min(max(l.Cores, 0), 1<<16)
+	l.Load1 = min(max(l.Load1, 0), 1<<20)
+	l.MemPct = min(max(l.MemPct, 0), 100)
+	l.Working = min(max(l.Working, 0), 1<<16)
+	if l.Load1 != l.Load1 || l.MemPct != l.MemPct {
+		// NaN.
+		l.Load1, l.MemPct = 0, 0
+	}
+	return l
 }
 
 // link is one host's supervised connection. Exactly one supervisor goroutine
@@ -86,8 +115,13 @@ type link struct {
 	// trust. See SignInURLAllowed.
 	approvalRefused bool
 	shake           Handshake
-	lastOK          time.Time
-	lastTry         time.Time
+	// load is the far machine's load from its last hello, at loadAt, and
+	// rtt the round trip of that hello. Zero until a hello carried one.
+	load    Load
+	loadAt  time.Time
+	rtt     time.Duration
+	lastOK  time.Time
+	lastTry time.Time
 
 	// drops counts the times a link that was up went down, and dropReason is
 	// the plain sentence for the last of them. They are reported so a person
@@ -196,6 +230,26 @@ func (l *link) set(status Status, reason, detail string) {
 	}
 }
 
+// noteHello keeps the load a hello carried and the hello's round trip. A
+// hello with no load leaves the last one as it was.
+func (l *link) noteHello(load *Load, rtt time.Duration) {
+	if load == nil {
+		return
+	}
+	l.mu.Lock()
+	l.load, l.loadAt, l.rtt = load.bounded(), time.Now(), rtt
+	l.mu.Unlock()
+}
+
+// loadStale reports whether the load is older than loadMaxAge, so the
+// heartbeat pings a busy link for a new one.
+func (l *link) loadStale() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	// A daemon whose hello carries no load is not asked again for one.
+	return !l.loadAt.IsZero() && time.Since(l.loadAt) > loadMaxAge
+}
+
 // report snapshots the link for a listing.
 func (l *link) report() HostReport {
 	l.mu.Lock()
@@ -218,6 +272,11 @@ func (l *link) report() HostReport {
 		Drops:           l.drops,
 		DropReason:      l.dropReason,
 		Stalls:          l.stalls,
+	}
+	if !l.loadAt.IsZero() {
+		r.Cores, r.Load1, r.MemPct, r.AgentsWorking = l.load.Cores, l.load.Load1, l.load.MemPct, l.load.Working
+		r.LoadAt = l.loadAt.Unix()
+		r.RTTMillis = max(l.rtt.Milliseconds(), 1)
 	}
 	if !l.lastOK.IsZero() {
 		r.LastOK = l.lastOK.Unix()
@@ -513,7 +572,9 @@ preamble:
 	c := newCaller(ctrl)
 
 	shakeCtx, cancelShake := context.WithTimeout(ctx, l.opts.CallTimeout)
+	shakeAt := time.Now()
 	shake, verr := handshake(shakeCtx, c, l.opts)
+	shakeRTT := time.Since(shakeAt)
 	cancelShake()
 	if verr != nil {
 		l.mu.Lock()
@@ -525,6 +586,8 @@ preamble:
 		return false
 	}
 
+	// The load of a daemon this one can use, not of one it refused.
+	l.noteHello(shake.Load, shakeRTT)
 	l.mu.Lock()
 	l.shake = shake
 	l.ctrl = c

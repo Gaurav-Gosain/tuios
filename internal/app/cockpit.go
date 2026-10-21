@@ -133,11 +133,6 @@ type cockpitState struct {
 	// machines counts the agents on each machine, by host, "" for this
 	// one, from the last list no selector or search narrowed.
 	machines map[string]int
-	// load is this machine's one-minute load, read at most every
-	// ckLoadEvery while frames are drawn, never on a timer of its own.
-	load   float64
-	loadOK bool
-	loadAt time.Time
 	// tall is how many lines the fleet takes with two-line rows, whatever
 	// it is drawn with, so the choice of one-line rows does not feed back
 	// into itself.

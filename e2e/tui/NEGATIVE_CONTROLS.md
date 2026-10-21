@@ -7985,3 +7985,12 @@ three and two subagents. Run on 2026-10-21.
 | --- | --- | --- | --- |
 | A host's session listing carries its agent panes | the build before this change, where a remote session carries its rolled-up state alone | `TestCockpitFrameA` ("the cockpit never showed the agents of all three machines") | **caught** |
 | The attempts of a fan sit under one row for the fan | `buildCockpitRows` uses the group's rows without `ckGatherFans` | `TestCockpitFrameA` ("the fleet lacks the pull requests, the fan or the machines") | **caught** |
+
+## Machine load in the link heartbeat
+
+The hello a link's heartbeat sends carries the far machine's load, and
+`list-hosts` reports it. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The daemon's hello carries its load | `verbHello` sends the load under another name | `TestHostsCommandReportsALinkEndToEnd` ("the listing does not show the host's load", "build reports cores 0"), `TestCockpitFrameA` ("the machines block does not show build's load and round trip") | **caught** |
