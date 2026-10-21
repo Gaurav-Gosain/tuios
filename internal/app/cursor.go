@@ -67,6 +67,12 @@ func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 	if window == nil || window.Terminal == nil {
 		return nil, false
 	}
+	// A TML window shows its surface, not its PTY: the guest's cursor sits
+	// in a screen nobody sees, so it would point at nothing. A surface draws
+	// its own caret in a field.
+	if m.DrawsTML(window) {
+		return nil, false
+	}
 
 	// Hide during copy mode, scrollback, or when VT hides cursor.
 	// IsCursorHidden, CursorPosition and CursorStyle read emulator state that
