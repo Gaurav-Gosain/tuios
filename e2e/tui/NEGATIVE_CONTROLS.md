@@ -8644,3 +8644,14 @@ first red run against the intermediate tree (dialog row present, activation
 absent, c9f3e252) failed one step later, at "no notification said the
 worktree was deleted" — the row was offered and did nothing, which is the
 other half of the control.
+
+## Kill-and-quit confirms on a worktree session
+
+`TestSidebarKillQuitConfirmsOnWorktree` asserts that the attached session
+row menu's "Kill session and quit" raises the close confirmation on a
+worktree session and stays instant on a plain one. Run on 2026-10-21,
+against c9f3e252 (dialog row in, gate absent), built with `git archive`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| Kill-and-quit on a worktree session quit outright, leaving the worktree behind | The `sessionMenu` gate routing the row to `prefix_close_session` | The build before the gate | `TestSidebarKillQuitConfirmsOnWorktree` ("kill-and-quit on a worktree session did not confirm") | **caught** |

@@ -371,6 +371,11 @@ func (m *OS) desktopMenu() (string, []ContextMenuItem) {
 // Detaching stays attached-only for the same reason it always was: there is
 // nothing to detach from a session this client is not in. The accent belongs to
 // the row's own session and is offered on every one of them.
+//
+// Kill-and-quit on a worktree session takes a directory with it, so it goes
+// through the close confirmation — the one dialog that offers to delete the
+// worktree too — instead of killing outright. A plain session's row keeps its
+// instant quit: there is nothing on disk to ask about.
 func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	if sessionID == "" {
 		sessionID = m.SessionName
@@ -381,7 +386,11 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	kill := []ContextMenuItem{m.item(glyphClose, "Kill session", "kill_session", false)}
 	if attached {
 		killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !hasOthers)
-		killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", false)
+		killQuitAction := "kill_session_quit"
+		if m.sessionWorktreeInfo(m.SessionName) != nil {
+			killQuitAction = "prefix_close_session"
+		}
+		killQuit := m.item(glyphClose, "Kill session and quit", killQuitAction, false)
 		kill = []ContextMenuItem{killNext, killQuit}
 	}
 	for i := range kill {

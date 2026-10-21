@@ -206,3 +206,102 @@ func TestSidebarCloseDeletesWorktree(t *testing.T) {
 
 	alive(t, term, "after deleting both worktrees")
 }
+// TestSidebarKillQuitConfirmsOnWorktree gates the sidebar's instant
+// kill-and-quit on the session being a worktree. Taking a worktree session
+// down takes a directory with it, so the row must raise the same close
+// confirmation the dock control raises; on a plain session it must stay
+// instant, which is the behaviour everything else about the row assumes.
+func TestSidebarKillQuitConfirmsOnWorktree(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new feat/one: %v: %s", err, out)
+	}
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+
+	// Attached to the worktree session itself: the row whose kill-and-quit
+	// must learn to ask first.
+	term := startIn(t, base, startOpts{args: []string{"attach", "repo-feat-one"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "sidebar with the worktree row", sidebarHeader, "feat/one")
+
+	col, row := findOnScreen(t, term, "feat/one")
+	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
+	if err := term.WaitForText("Kill session and quit", uiTimeout); err != nil {
+		t.Fatalf("the attached row's menu offered no kill-and-quit: %v\n%s", err, term.Snapshot())
+	}
+	col, row = findOnScreen(t, term, "Kill session and quit")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+
+	// The confirmation names the session it is about to take down, and the
+	// client is still alive behind it.
+	if err := term.WaitForText("Close repo-feat-one?", uiTimeout); err != nil {
+		t.Fatalf("kill-and-quit on a worktree session did not confirm: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "with the confirmation up")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("cancel the confirmation: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Close repo-feat-one?")
+	}, uiTimeout); err != nil {
+		t.Fatalf("esc never dismissed the confirmation: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return hasName(sessionNames(t, base), "repo-feat-one")
+	}, uiTimeout); err != nil {
+		t.Fatalf("cancelling the confirmation killed the session: %v", err)
+	}
+	alive(t, term, "after cancelling the confirmation")
+
+	// A plain session's kill-and-quit stays instant: no dialog, the client
+	// quits, and the session is gone with it.
+	second := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := second.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("second client never attached: %v\n%s", err, second.Snapshot())
+	}
+	windowManagementMode(t, second)
+	toggleSidebarViaPalette(t, second)
+	waitForAll(t, second, uiTimeout, "sidebar with the plain row", sidebarHeader, "plain")
+
+	col, row = findOnScreen(t, second, "plain")
+	mouseClick(t, second, col, row, tuitest.MouseRight, 0)
+	if err := second.WaitForText("Kill session and quit", uiTimeout); err != nil {
+		t.Fatalf("the plain row's menu offered no kill-and-quit: %v\n%s", err, second.Snapshot())
+	}
+	col, row = findOnScreen(t, second, "Kill session and quit")
+	mousePress(t, second, col, row, tuitest.MouseLeft, 0)
+	// The press is the answer: a plain session's row quits the client on it,
+	// so the release the gesture still owes goes nowhere once the process is
+	// gone. Sent best-effort, exactly as a physical button lifts.
+	_ = second.SendMouse(tuitest.MouseEvent{
+		Col: col, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MouseRelease,
+	})
+
+	// Instant means instant: the client is gone before anything could be
+	// confirmed, and a confirmation would have kept it alive. WaitExit is the
+	// one way to wait for the process itself; ExitCode inside a WaitFor on the
+	// same terminal deadlocks on the terminal's own mutex.
+	if _, err := second.WaitExit(uiTimeout); err != nil {
+		t.Fatalf("kill-and-quit on a plain session did not quit instantly: %v\n%s", err, second.Snapshot())
+	}
+	if err := second.WaitFor(func(s tuitest.Screen) bool {
+		names := sessionNames(t, base)
+		return !hasName(names, "plain") && hasName(names, "repo-feat-one")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the plain session survived its kill-and-quit, or took the worktree session with it: %v", err)
+	}
+}
