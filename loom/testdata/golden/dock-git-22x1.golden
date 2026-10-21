@@ -1,24 +1,22 @@
 === truecolor 22x1
-| feat…  ↑…  ●3  ▁▄▂▇▃█|
+| feat/tml  ↑2   ●3    |
 --- styles
-|abbbbbacddaeffeagggggg|
+|abbbbbbbbacddcaeffeaaa|
 a: bg=panel
 b: fg=accent bg=panel
 c: bg=success-tint bold
 d: fg=success bg=success-tint bold
 e: bg=warning-tint bold
 f: fg=warning bg=warning-tint bold
-g: fg=dim bg=panel
 === 256 22x1
-| feat…  ↑…  ●3  ▁▄▂▇▃█|
+| feat/tml  ↑2   ●3    |
 --- styles
-|abbbbbacddaceecaffffff|
+|abbbbbbbbacddcaceecaaa|
 a: bg=panel
 b: fg=accent bg=panel
 c: bg=success-tint bold
 d: fg=success bg=success-tint bold
 e: fg=warning bg=success-tint bold
-f: fg=dim bg=panel
 === 16 22x1
 | feat/tml ↑2 ●3 ▁▄▂▇▃█|
 --- styles
@@ -28,7 +26,7 @@ b: fg=success bold
 c: fg=warning bold
 d: fg=dim
 === ascii 22x1
-| feat~ [↑~ [●3] _~.*-#|
+| feat/tml [↑2] [●3]   |
 --- styles
-|       aaa aaaa       |
+|          aaaa aaaa   |
 a: bold

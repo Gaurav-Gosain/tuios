@@ -11,8 +11,8 @@ b: fg=fg bg=accent bold
 c: bg=accent
 d: fg=fg bg=accent
 e: bg=panel
-f: bg=card bold
-g: fg=accent-bright bg=card bold
+f: bg=surface bold
+g: fg=accent-bright bg=surface bold
 h: bg=surface
 i: fg=fg bg=surface
 j: bg=error-tint bold
@@ -39,8 +39,8 @@ b: fg=fg bg=accent bold
 c: bg=accent
 d: fg=fg bg=accent
 e: bg=panel
-f: bg=edge bold
-g: fg=accent-bright bg=edge bold
+f: bg=surface bold
+g: fg=accent-bright bg=surface bold
 h: bg=surface
 i: fg=fg bg=surface
 j: bg=success-tint bold

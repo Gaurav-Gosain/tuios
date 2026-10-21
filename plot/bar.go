@@ -28,6 +28,11 @@ type Bar struct {
 	Format func(float64) string
 	// Guide fills the rest of a horizontal bar's row with a dotted line.
 	Guide bool
+	// Thin draws each horizontal bar half a row high, in the lower half of
+	// its row, so the rows stay apart and every bar reads as its own. It is
+	// exact to half a cell. With Guide, the rest of the row is a hairline
+	// track in the track role instead of dots.
+	Thin bool
 	// Axis draws tick labels at the left of columns, a base line, and the
 	// first, middle and last label under it.
 	Axis bool
@@ -123,9 +128,11 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		}
 		valueW = max(valueW, width(format(b.Values[i])))
 	}
-	// The values never clip: the labels give way first, then the bars.
+	// The values never clip. The labels take their width next, up to half
+	// the row, and the bars take what is left: a bar still reads shorter,
+	// where a cut label no longer says what it measures.
 	valueW = min(valueW, max(g.W-4, 0))
-	labelW = min(labelW, max((g.W-valueW-2)*2/5, 0))
+	labelW = min(labelW, g.W/2, max(g.W-valueW-4, 0))
 	x0 := 0
 	if labelW > 0 {
 		x0 = labelW + 1
@@ -146,6 +153,13 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 			units = int(math.Round(unit(math.Max(v, base), base, top) * float64(cells*8)))
 		}
 		x := x0
+		if b.Thin && m != ASCII {
+			b.drawThin(g, i, x0, cells, v, base, top)
+			if valueW > 0 {
+				g.TextRight(g.W, i, truncate(format(v), valueW, ellipsis(m)), Fg, false)
+			}
+			continue
+		}
 		for ; units >= 8; units -= 8 {
 			g.set(x, i, block(m, "█", "#"), b.role(i))
 			x++
@@ -169,6 +183,37 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		}
 		if valueW > 0 {
 			g.TextRight(g.W, i, truncate(format(v), valueW, ellipsis(m)), Fg, false)
+		}
+	}
+}
+
+// drawThin draws row i as a thin bar: lower half blocks, a lower left
+// quadrant for a half cell, and a hairline track after it when Guide is
+// on. A value
+// above the base always shows at least a half cell.
+func (b Bar) drawThin(g *Grid, i, x0, cells int, v, base, top float64) {
+	halves := 0
+	if finite(v) {
+		halves = int(math.Round(unit(math.Max(v, base), base, top) * float64(cells*2)))
+		if halves == 0 && v > base {
+			halves = 1
+		}
+	}
+	role := b.role(i)
+	x := x0
+	for ; halves >= 2 && x < x0+cells; halves -= 2 {
+		g.set(x, i, "▄", role)
+		x++
+	}
+	if halves == 1 && x < x0+cells {
+		g.set(x, i, "▖", role)
+		x++
+	}
+	if b.Guide {
+		// The track is a hairline on the bar's base, so it guides the eye
+		// to the value without drawing a second bar.
+		for ; x < x0+cells; x++ {
+			g.set(x, i, "▁", Track)
 		}
 	}
 }
@@ -401,7 +446,8 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	default:
 		label = Percent(f)
 	}
-	label = truncate(label, max(g.W/2, 0), "")
+	// The label keeps its cells while the gauge has a few for the bar.
+	label = truncate(label, max(g.W/2, g.W-3, 0), "")
 	cells := g.W
 	if label != "" {
 		cells -= width(label) + 1
@@ -433,6 +479,11 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	}
 	if gg.Style == GaugeLine {
 		n := int(math.Round(f * float64(cells)))
+		// A gauge short of full leaves a cell of track, so 98.8% does not
+		// read as done.
+		if f < 1 && n >= cells && cells > 1 {
+			n = cells - 1
+		}
 		for i := 0; i < cells; i++ {
 			if i < n {
 				g.set(i, y, "━", role)

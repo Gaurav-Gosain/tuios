@@ -9,14 +9,14 @@
 |│ ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██    ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█    ▎                         ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁    target 99.5%                             │|
 |│                                                                                                                                                  │|
 |│ Time by package ────────────────────────────────────────────────────  seconds    Suite time, last 30 runs ────────────────────────────────────── │|
-|│ internal/session    █████████████████████████████████████████████████████ 6.2    26┤                                                             │|
-|│ internal/app        █████████████████████████████████████████· · · · · ·  4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
-|│ vt                  ██████████████████████████▌· · · · · · · · · · · · ·  3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
-|│ internal/tape       ████████████ · · · · · · · · · · · · · · · · · · · ·  1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
-|│ internal/config     ███████▊ · · · · · · · · · · · · · · · · · · · · · ·  0.9    18┤                                                          ⠈⠢ │|
-|│ internal/terminal   ██████▉· · · · · · · · · · · · · · · · · · · · · · ·  0.8      └──────────────────────────────────────────────────────────── │|
-|│ internal/federation █████▏ · · · · · · · · · · · · · · · · · · · · · · ·  0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
-|│ progstatus          ██▋· · · · · · · · · · · · · · · · · · · · · · · · ·  0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
+|│ internal/session    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    26┤                                                             │|
+|│ internal/app        ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁ 4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
+|│ vt                  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
+|│ internal/tape       ▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
+|│ internal/config     ▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9    18┤                                                          ⠈⠢ │|
+|│ internal/terminal   ▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.8      └──────────────────────────────────────────────────────────── │|
+|│ internal/federation ▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
+|│ progstatus          ▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
 |│                                                                                  alloc  ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁                    35M    │|
 |│                                                                                                                                                  │|
 |│ ▾ Failures  5                                                                                                                                    │|
@@ -40,42 +40,42 @@
 |adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adhijjjjjjiiiiiiiiiiiiiiiiddkijjjjjjiiiiiiiiiiiiiiiiddjijjjjjjjiiiiiiiiiiiiiiiddlijjjjijjjjiiiiiiiiiiiiiddeeeedeeeedddddddddddddddddfffdffdfffdfffda|
-|adhimmminnniiiiiiiiiiiiiiiddkioinniiiiiiiiiiiiiiiiiiddjipiiiiiiiiiiiiiiiiiiiiiddliqqqqqinnnnniiiiiiiiiiiddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrdcccccda|
-|adhihhhhhhhhhhhhhhhhhhhhiiddkikkkkkkkkkkkkkkkkkkkkiiddjiiiiiiiiiiiiiiiiiiiiiiiddlissssssssssssssssssssiiddffffffdfffffddddddddddddddddddddddddddddda|
+|adhimmminnniiiiiiiiiiiiiiiddkioinniiiiiiiiiiiiiiiiiiddjipiiiiiiiiiiiiiiiiiiiiiddliqqqqqinnnnniiiiiiiiiiiddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsdcccccda|
+|adhihhhhhhhhhhhhhhhhhhhhiiddkikkkkkkkkkkkkkkkkkkkkiiddjiiiiiiiiiiiiiiiiiiiiiiiddlittttttttttttttttttttiiddffffffdfffffddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdggggggggggggggggggggggggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggggggggggggggggggggggggggggda|
-|adeeeeeeeeeeeeeeeeddddtttttttttttttttttttttttttttttttttttttttttttttttttttttduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adeeeeeeeeeeeeddddddddtttttttttttttttttttttttttttttttttttttttttgdgdgdgdgdgdduuuddddddgddddddddddvvddddddddvdddddddddvvddddddddddddddddddddddddddddda|
-|adeeddddddddddddddddddtttttttttttttttttttttttttttgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgvddvvvdddvdvvddddddvvvvddddddvvdvvvddddddddvddddddddvvvdddddda|
-|adeeeeeeeeeeeeedddddddttttttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgvvvddvvvvdddvvvvvvvvdddvvvvvvvddddvvvvvvvvvvvvvvvvvvvddvvvvdda|
-|adeeeeeeeeeeeeeeedddddttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvvda|
-|adeeeeeeeeeeeeeeeeedddtttttttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
-|adeeeeeeeeeeeeeeeeeeedttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeedddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddddddddddddddddddddcccccdda|
-|adeeeeeeeeeeddddddddddtttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeeeddwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwddddddddddddddddddddcdddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeddxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxddddddddddddddddddddcccdddda|
+|adeeeeeeeeeeeeeeeedddduuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuudvvvddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeedddddddduuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuussssssssssssdvvvddddddgddddddddddwwddddddddwdddddddddwwddddddddddddddddddddddddddddda|
+|adeedddddddddddddddddduuuuuuuuuuuuuuuuuuuuuuuuuuussssssssssssssssssssssssssdvvvddddffgwddwwwdddwdwwddddddwwwwddddddwwdwwwddddddddwddddddddwwwdddddda|
+|adeeeeeeeeeeeeeddddddduuuuuuuuuuuusssssssssssssssssssssssssssssssssssssssssdvvvddddddgwwwddwwwwdddwwwwwwwwdddwwwwwwwddddwwwwwwwwwwwwwwwwwwwddwwwwdda|
+|adeeeeeeeeeeeeeeeddddduuuuuuuusssssssssssssssssssssssssssssssssssssssssssssdvvvddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwda|
+|adeeeeeeeeeeeeeeeeeddduuuuuuussssssssssssssssssssssssssssssssssssssssssssssdvvvddddddgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
+|adeeeeeeeeeeeeeeeeeeeduuuuussssssssssssssssssssssssssssssssssssssssssssssssdvvvddddeeeedddwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwddddddddddddddddddddcccccdda|
+|adeeeeeeeeeedddddddddduuussssssssssssssssssssssssssssssssssssssssssssssssssdvvvddddeeeeeddxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxddddddddddddddddddddcdddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyddddddddddddddddddddcccdddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adfdccccccccbbydddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddzzzzdxddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adAijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqBqqqqBqqqBqqqqqBqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
-|adddeeeeeeeeeeeeeeeedddddduuuuuuuuuuuuuuuudddddddddduuuuudduuuuuuuuduuuduuuduuuuduudddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeedddddddddduuuuuuuuuuuuuddddddddddddduuuuudduuuuuduuduuuduuduuuduuuuduuuuduuuddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeedddddddddduuuuuuuuuuuuuuuuuuuddddddduuuuudduuuuuduuuduuuuduuddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddeedddddddddddddddddddduuuuuuuuuuuuuuuuuuuudddddduuuuudduuududuuuuduuuduuuuuduuddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adfdccccccccbbzdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddAAAAdyddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adBijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqCqqqqCqqqCqqqqqCqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
+|adddeeeeeeeeeeeeeeeeddddddvvvvvvvvvvvvvvvvddddddddddvvvvvddvvvvvvvvdvvvdvvvdvvvvdvvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvdddddddddddddvvvvvddvvvvvdvvdvvvdvvdvvvdvvvvdvvvvdvvvddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvvvvvvvdddddddvvvvvddvvvvvdvvvdvvvvdvvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddeeddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvddddddvvvvvddvvvdvdvvvvdvvvdvvvvvdvvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|advvvvvvvvvvvvvvvvvvduuuuuduuuuduuuduuuuuduuuuuudwwwwwdwwdwdwwdwwwdwwwwdwwdwwwwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adwwwwwwwwwwwwwwwwwwdvvvvvdvvvvdvvvdvvvvvdvvvvvvdxxxxxdxxdxdxxdxxxdxxxxdxxdxxxxxddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adCDCEFFFFFEFFFFFFEddGHGillllillliddGHGillllillilllllliddGHGillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddIdffffdIIIdffffdIIIdfffffda|
+|adDEDFGGGGGFGGGGGGFddCHCillllillliddCHCillllillilllllliddCHCillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddIdffffdIIIdffffdIIIdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=accent bg=surface
-B: bg=surface bold
-C: bg=accent bold
-D: fg=fg bg=accent bold
-E: bg=accent
-F: fg=fg bg=accent
-G: bg=card bold
-H: fg=accent-bright bg=card bold
+A: fg=dim bg=panel bold
+B: fg=accent bg=surface
+C: bg=surface bold
+D: bg=accent bold
+E: fg=fg bg=accent bold
+F: bg=accent
+G: fg=fg bg=accent
+H: fg=accent-bright bg=surface bold
 I: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
@@ -95,14 +95,14 @@ o: fg=error bg=surface bold
 p: fg=dim bg=surface bold
 q: fg=fg bg=surface bold
 r: fg=success bg=panel
-s: fg=info bg=surface
-t: fg=error bg=panel
-u: fg=fg bg=panel
-v: fg=info bg=panel
-w: fg=warning bg=panel
-x: fg=accent-bright bg=panel
-y: fg=error bg=panel bold
-z: fg=mute bg=panel bold
+s: fg=track bg=panel
+t: fg=info bg=surface
+u: fg=error bg=panel
+v: fg=fg bg=panel
+w: fg=info bg=panel
+x: fg=warning bg=panel
+y: fg=accent-bright bg=panel
+z: fg=error bg=panel bold
 === 256 148x34
 |╭─ Test run ───────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                                                                  │|
@@ -114,14 +114,14 @@ z: fg=mute bg=panel bold
 |│ ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██    ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█    ▎                         ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁    target 99.5%                             │|
 |│                                                                                                                                                  │|
 |│ Time by package ────────────────────────────────────────────────────  seconds    Suite time, last 30 runs ────────────────────────────────────── │|
-|│ internal/session    █████████████████████████████████████████████████████ 6.2    26┤                                                             │|
-|│ internal/app        █████████████████████████████████████████· · · · · ·  4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
-|│ vt                  ██████████████████████████▌· · · · · · · · · · · · ·  3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
-|│ internal/tape       ████████████ · · · · · · · · · · · · · · · · · · · ·  1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
-|│ internal/config     ███████▊ · · · · · · · · · · · · · · · · · · · · · ·  0.9    18┤                                                          ⠈⠢ │|
-|│ internal/terminal   ██████▉· · · · · · · · · · · · · · · · · · · · · · ·  0.8      └──────────────────────────────────────────────────────────── │|
-|│ internal/federation █████▏ · · · · · · · · · · · · · · · · · · · · · · ·  0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
-|│ progstatus          ██▋· · · · · · · · · · · · · · · · · · · · · · · · ·  0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
+|│ internal/session    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    26┤                                                             │|
+|│ internal/app        ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁ 4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
+|│ vt                  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
+|│ internal/tape       ▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
+|│ internal/config     ▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9    18┤                                                          ⠈⠢ │|
+|│ internal/terminal   ▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.8      └──────────────────────────────────────────────────────────── │|
+|│ internal/federation ▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
+|│ progstatus          ▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
 |│                                                                                  alloc  ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁                    35M    │|
 |│                                                                                                                                                  │|
 |│ ▾ Failures  5                                                                                                                                    │|
@@ -145,42 +145,42 @@ z: fg=mute bg=panel bold
 |adaaaaaaagggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adhijjjjjjiiiiiiiiiiiiiiiiddkijjjjjjiiiiiiiiiiiiiiiiddjijjjjjjjiiiiiiiiiiiiiiiddlijjjjijjjjiiiiiiiiiiiiiddeeeedeeeedddddddddddddddddfffdffdfffdfffda|
-|adhimmminnniiiiiiiiiiiiiiiddkioinniiiiiiiiiiiiiiiiiiddjipiiiiiiiiiiiiiiiiiiiiiddliqqqqqinnnnniiiiiiiiiiiddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrdcccccda|
-|adhihhhhhhhhhhhhhhhhhhhhiiddkikkkkkkkkkkkkkkkkkkkkiiddjiiiiiiiiiiiiiiiiiiiiiiiddlissssssssssssssssssssiiddffffffdfffffddddddddddddddddddddddddddddda|
+|adhimmminnniiiiiiiiiiiiiiiddkioinniiiiiiiiiiiiiiiiiiddjipiiiiiiiiiiiiiiiiiiiiiddliqqqqqinnnnniiiiiiiiiiiddrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsdcccccda|
+|adhihhhhhhhhhhhhhhhhhhhhiiddkikkkkkkkkkkkkkkkkkkkkiiddjiiiiiiiiiiiiiiiiiiiiiiiddlittttttttttttttttttttiiddffffffdfffffddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adccccbccbcccccccdggggggggggggggggggggggggggggggggggggggggggggggggggggddfffffffddddcccccbcccccbccccbccbccccdggggggggggggggggggggggggggggggggggggggda|
-|adeeeeeeeeeeeeeeeeddddtttttttttttttttttttttttttttttttttttttttttttttttttttttduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adeeeeeeeeeeeeddddddddtttttttttttttttttttttttttttttttttttttttttgdgdgdgdgdgdduuuddddddgddddddddddvvddddddddvdddddddddvvddddddddddddddddddddddddddddda|
-|adeeddddddddddddddddddtttttttttttttttttttttttttttgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgvddvvvdddvdvvddddddvvvvddddddvvdvvvddddddddvddddddddvvvdddddda|
-|adeeeeeeeeeeeeedddddddttttttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgvvvddvvvvdddvvvvvvvvdddvvvvvvvddddvvvvvvvvvvvvvvvvvvvddvvvvdda|
-|adeeeeeeeeeeeeeeedddddttttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddvvda|
-|adeeeeeeeeeeeeeeeeedddtttttttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddddgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
-|adeeeeeeeeeeeeeeeeeeedttttttdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeedddvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvddddddddddddddddddddcccccdda|
-|adeeeeeeeeeeddddddddddtttgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdgdduuuddddeeeeeddwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwddddddddddddddddddddcdddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeddxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxddddddddddddddddddddcccdddda|
+|adeeeeeeeeeeeeeeeedddduuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuudvvvddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adeeeeeeeeeeeedddddddduuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuussssssssssssdvvvddddddgddddddddddwwddddddddwdddddddddwwddddddddddddddddddddddddddddda|
+|adeedddddddddddddddddduuuuuuuuuuuuuuuuuuuuuuuuuuussssssssssssssssssssssssssdvvvddddffgwddwwwdddwdwwddddddwwwwddddddwwdwwwddddddddwddddddddwwwdddddda|
+|adeeeeeeeeeeeeeddddddduuuuuuuuuuuusssssssssssssssssssssssssssssssssssssssssdvvvddddddgwwwddwwwwdddwwwwwwwwdddwwwwwwwddddwwwwwwwwwwwwwwwwwwwddwwwwdda|
+|adeeeeeeeeeeeeeeeddddduuuuuuuusssssssssssssssssssssssssssssssssssssssssssssdvvvddddffgddddddddddddddddddddddddddddddddddddddddddddddddddddddddddwwda|
+|adeeeeeeeeeeeeeeeeeddduuuuuuussssssssssssssssssssssssssssssssssssssssssssssdvvvddddddgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggda|
+|adeeeeeeeeeeeeeeeeeeeduuuuussssssssssssssssssssssssssssssssssssssssssssssssdvvvddddeeeedddwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwddddddddddddddddddddcccccdda|
+|adeeeeeeeeeedddddddddduuussssssssssssssssssssssssssssssssssssssssssssssssssdvvvddddeeeeeddxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxddddddddddddddddddddcdddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeeeeeddyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyddddddddddddddddddddcccdddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adfdccccccccbbydddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddfffffffdddddddddddddddffffdddddddddddddddddddddzzzzdxddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adAijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqBqqqqBqqqBqqqqqBqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
-|adddeeeeeeeeeeeeeeeedddddduuuuuuuuuuuuuuuudddddddddduuuuudduuuuuuuuduuuduuuduuuuduudddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeedddddddddduuuuuuuuuuuuuddddddddddddduuuuudduuuuuduuduuuduuduuuduuuuduuuuduuuddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddeeeeeeeeeeeedddddddddduuuuuuuuuuuuuuuuuuuddddddduuuuudduuuuuduuuduuuuduuddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adddeedddddddddddddddddddduuuuuuuuuuuuuuuuuuuudddddduuuuudduuududuuuuduuuduuuuuduuddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adfdccccccccbbzdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddfffffffdddddddddddddddffffdddddddddddddddddddddAAAAdyddfffffdfffffdffffdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adBijjjjjjjjjjjjjjjjiiiiiiqqqqqqqqqqqqqqiiiiiiiiiiiiqqqqqiiqqqqqCqqqqCqqqCqqqqqCqqqqqqiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiida|
+|adddeeeeeeeeeeeeeeeeddddddvvvvvvvvvvvvvvvvddddddddddvvvvvddvvvvvvvvdvvvdvvvdvvvvdvvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvdddddddddddddvvvvvddvvvvvdvvdvvvdvvdvvvdvvvvdvvvvdvvvddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddeeeeeeeeeeeeddddddddddvvvvvvvvvvvvvvvvvvvdddddddvvvvvddvvvvvdvvvdvvvvdvvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddeeddddddddddddddddddddvvvvvvvvvvvvvvvvvvvvddddddvvvvvddvvvdvdvvvvdvvvdvvvvvdvvddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|advvvvvvvvvvvvvvvvvvduuuuuduuuuduuuduuuuuduuuuuudwwwwwdwwdwdwwdwwwdwwwwdwwdwwwwwddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adwwwwwwwwwwwwwwwwwwdvvvvvdvvvvdvvvdvvvvvdvvvvvvdxxxxxdxxdxdxxdxxxdxxxxdxxdxxxxxddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|adCDCEFFFFFEFFFFFFEddGHGillllillliddGHGillllillilllllliddGHGillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddIdffffdIIIdffffdIIIdfffffda|
+|adDEDFGGGGGFGGGGGGFddCHCillllillliddCHCillllillilllllliddCHCillllilllllidddddddddddddddddddddddddddddddddddddddddddddddddIdffffdIIIdffffdIIIdfffffda|
 |adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-A: fg=accent bg=surface
-B: bg=surface bold
-C: bg=accent bold
-D: fg=fg bg=accent bold
-E: bg=accent
-F: fg=fg bg=accent
-G: bg=edge bold
-H: fg=accent-bright bg=edge bold
+A: fg=dim bg=panel bold
+B: fg=accent bg=surface
+C: bg=surface bold
+D: bg=accent bold
+E: fg=fg bg=accent bold
+F: bg=accent
+G: fg=fg bg=accent
+H: fg=accent-bright bg=surface bold
 I: fg=accent-bright bg=panel bold
 a: fg=accent bg=panel
 b: bg=panel bold
@@ -200,14 +200,14 @@ o: fg=error bg=surface bold
 p: fg=dim bg=surface bold
 q: fg=fg bg=surface bold
 r: fg=success bg=panel
-s: fg=info bg=surface
-t: fg=error bg=panel
-u: fg=fg bg=panel
-v: fg=info bg=panel
-w: fg=warning bg=panel
-x: fg=accent-bright bg=panel
-y: fg=error bg=panel bold
-z: fg=mute bg=panel bold
+s: fg=success-tint bg=panel
+t: fg=info bg=surface
+u: fg=error bg=panel
+v: fg=fg bg=panel
+w: fg=info bg=panel
+x: fg=warning bg=panel
+y: fg=accent-bright bg=panel
+z: fg=error bg=panel bold
 === 16 148x34
 |╭─ Test run ───────────────────────────────────────────────────────────────────────────────────────────────────────────── from claude in api-auth ─╮|
 |│                                                                                                                                                  │|
@@ -219,14 +219,14 @@ z: fg=mute bg=panel bold
 |│ ▎ ▁▂▂▃▂▃▄▃▄▅▄▅▆▆▇▇▇▇██    ▎ ▂▁▄▁▁▂▁▅▁▁▂▁▁▄▁▁▂▁▄█    ▎                         ▎ ▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁    target 99.5%                             │|
 |│                                                                                                                                                  │|
 |│ Time by package ────────────────────────────────────────────────────  seconds    Suite time, last 30 runs ────────────────────────────────────── │|
-|│ internal/session    █████████████████████████████████████████████████████ 6.2    26┤                                                             │|
-|│ internal/app        █████████████████████████████████████████             4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
-|│ vt                  ██████████████████████████▌                           3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
-|│ internal/tape       ████████████                                          1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
-|│ internal/config     ███████▊                                              0.9    18┤                                                          ⠈⠢ │|
-|│ internal/terminal   ██████▉                                               0.8      └──────────────────────────────────────────────────────────── │|
-|│ internal/federation █████▏                                                0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
-|│ progstatus          ██▋                                                   0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
+|│ internal/session    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2    26┤                                                             │|
+|│ internal/app        ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄             4.8      │          ⡤⡀        ⢀         ⢠⢢                             │|
+|│ vt                  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖                           3.1    22┤⡀  ⡠⠢⡀   ⡜ ⠑⡄      ⢀⠎⠑⢄      ⢠⠃ ⠑⢄⡀        ⡀        ⢀⠤⣀      │|
+|│ internal/tape       ▄▄▄▄▄▄▄▄▄▄▄▄                                          1.4      │⠈⠉⠉  ⠘⠤⠤⠜   ⠈⠉⠒⠢⣀⡠⠤⠃   ⠉⠢⠤⢄⠤⠔⠁    ⠈⠉⠒⠢⢄⣀⡠⠤⠊⠈⠒⠤⠔⠒⠤⣀⡠⠔⠁  ⠑⠒⠒⢄  │|
+|│ internal/config     ▄▄▄▄▄▄▄▖                                              0.9    18┤                                                          ⠈⠢ │|
+|│ internal/terminal   ▄▄▄▄▄▄▄                                               0.8      └──────────────────────────────────────────────────────────── │|
+|│ internal/federation ▄▄▄▄▄                                                 0.6    wall   ▄▄▆▃▃█▄▄▃▃▇▅▃▃▄█▅▄▃▂▃▅▃▄▂▃▅▄▄▁                    18.4s  │|
+|│ progstatus          ▄▄▖                                                   0.3    flaky  ▁▁▃▁▁▆▃▁▁▁▃▃▁▁▁█▃▁▁▁▁▃▁▁▁▁▆▃▃▆                    3      │|
 |│                                                                                  alloc  ▆▆▇▆▆█▇▇▆▆▇▇▆▅▅▆▅▅▅▅▅▄▄▄▃▃▃▂▂▁                    35M    │|
 |│                                                                                                                                                  │|
 |│ ▾ Failures  5                                                                                                                                    │|
@@ -250,7 +250,7 @@ z: fg=mute bg=panel bold
 |a aaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
 |a                                                                                                                                                  a|
 |a f dddddd                  g dddddd                  d ddddddd                 h dddd dddd               dddd dddd                 eee ee eee eee a|
-|a f iii eee                 g j ee                    d k                       h ccccc eeeee             ffffffffffffffffffffffffffffffffff ccccc a|
+|a f iii eee                 g j ee                    d k                       h ccccc eeeee             fffffffffffffffffffffffffffffffffe ccccc a|
 |a f ffffffffffffffffffff    g gggggggggggggggggggg    d                         h llllllllllllllllllll    eeeeee eeeee                             a|
 |a                                                                                                                                                  a|
 |a ccccbccbccccccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  eeeeeee    cccccbcccccbccccbccbcccc eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
@@ -260,13 +260,13 @@ z: fg=mute bg=panel bold
 |a ddddddddddddd       gggggggggggg                                          hhh      elll  llll   llllllll   lllllll    lllllllllllllllllll  llll  a|
 |a ddddddddddddddd     gggggggg                                              hhh    eee                                                          ll a|
 |a ddddddddddddddddd   ggggggg                                               hhh      eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee a|
-|a ddddddddddddddddddd gggggg                                                hhh    dddd   llllllllllllllllllllllllllllll                    ccccc  a|
+|a ddddddddddddddddddd ggggg                                                 hhh    dddd   llllllllllllllllllllllllllllll                    ccccc  a|
 |a dddddddddd          ggg                                                   hhh    ddddd  mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm                    c      a|
 |a                                                                                  ddddd  nnnnnnnnnnnnnnnnnnnnnnnnnnnnnn                    ccc    a|
 |a                                                                                                                                                  a|
 |a e ccccccccbbj                                                                                                                                    a|
-|a   eeeeeee               eeee                     oooo n  eeeee eeeee eeee                                                                        a|
-|a apqqqqqqqqqqqqqqqqpppppprrrrrrrrrrrrrrpppppppppppprrrrrpprrrrrsrrrrsrrrsrrrrrsrrrrrrpppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp a|
+|a   eeeeeee               eeee                     kkkk n  eeeee eeeee eeee                                                                        a|
+|a aoppppppppppppppppooooooqqqqqqqqqqqqqqooooooooooooqqqqqooqqqqqrqqqqrqqqrqqqqqrqqqqqqoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo a|
 |a   dddddddddddddddd      hhhhhhhhhhhhhhhh          hhhhh  hhhhhhhh hhh hhh hhhh hh                                                                a|
 |a   dddddddddddd          hhhhhhhhhhhhh             hhhhh  hhhhh hh hhh hh hhh hhhh hhhh hhh                                                       a|
 |a   dddddddddddd          hhhhhhhhhhhhhhhhhhh       hhhhh  hhhhh hhh hhhh hh                                                                       a|
@@ -275,7 +275,7 @@ z: fg=mute bg=panel bold
 |a llllllllllllllllll hhhhh hhhh hhh hhhhh hhhhhh mmmmm mm m mm mmm mmmm mm mmmmm                                                                   a|
 |a                                                                                                                                                  a|
 |a                                                                                                                                                  a|
-|a stsstttttstttttts  eu hhhh hhhe  eu hhhh hh hhhhhhe  eu hhhh hhhhhe                                                    u eeee uuu eeee uuu eeeee a|
+|a rsrrsssssrssssssr  et hhhh hhhe  et hhhh hh hhhhhhe  et hhhh hhhhhe                                                    t eeee ttt eeee ttt eeeee a|
 |a                                                                                                                                                  a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
@@ -292,13 +292,12 @@ k: fg=dim bold
 l: fg=info
 m: fg=warning
 n: fg=accent-bright
-o: fg=mute bold
-p: reverse
-q: fg=dim reverse
-r: fg=dim bold reverse
-s: bold reverse
-t: fg=accent bold reverse
-u: fg=accent-bright bold
+o: reverse
+p: fg=dim reverse
+q: fg=dim bold reverse
+r: bold reverse
+s: fg=accent bold reverse
+t: fg=accent-bright bold
 === ascii 148x34
 |+- Test run ------------------------------------------------------------------------------------------------------------- from claude in api-auth -+|
 ||                                                                                                                                                  ||

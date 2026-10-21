@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -297,10 +298,12 @@ func (d *Daemon) tmlCallerKey(cs *connState) string {
 // tmlOwnerLabel names the caller on cs for the frame: its pane, a linked
 // machine, or the CLI.
 //
-// A pane is named by its window id, which no program chooses, and then by
-// the window's name in brackets when it has one: a name the person gave it,
-// or an admin action, which is the person's level. Never the pane's title or
-// the name of the program in it, which the program sets (OSC 2, argv[0]).
+// A pane with a name is named by it alone when no other window has the same
+// name and the name cannot pass for an id label (tmlNameIsOwnersAlone).
+// Otherwise it is named by its window id, which no program chooses, with the
+// name in brackets. A pane with no name is named by its id. Never the pane's
+// title or the name of the program in it, which the program sets (OSC 2,
+// argv[0]).
 func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 	if cs.viaLink {
 		return "machine " + tmlLabelText(cmp.Or(cs.linkPeer, "unknown"), 24)
@@ -314,15 +317,40 @@ func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 				}
 			}
 		}
-		if name != "" {
-			return "pane " + shortID(ref.Window) + " (" + name + ")"
+		switch {
+		case name == "":
+			return "pane " + shortID(ref.Window)
+		case d.tmlNameIsOwnersAlone(ref.Window, name):
+			return name
 		}
-		return "pane " + shortID(ref.Window)
+		return "pane " + shortID(ref.Window) + " (" + name + ")"
 	}
 	if d.paneAuthority(cs) != nil {
 		return "a pane tuios cannot place"
 	}
 	return "tuios tml show"
+}
+
+// tmlIDLabel matches the label of a pane with no name, "pane 3f2a91c0".
+var tmlIDLabel = regexp.MustCompile(`^pane [0-9a-f]{8}$`)
+
+// tmlNameIsOwnersAlone reports whether a pane's name may stand alone as the
+// owner of its surfaces: no other window in this daemon has that name, and
+// it cannot pass for the label of another pane that has none. A name is not
+// always the person's: a pane with the fan grant names the agents it starts
+// (start-agent --name), so a name alone could copy another pane's.
+func (d *Daemon) tmlNameIsOwnersAlone(windowID, name string) bool {
+	if tmlIDLabel.MatchString(name) {
+		return false
+	}
+	for _, sess := range d.manager.AllSessions() {
+		for _, w := range sess.GetState().Windows {
+			if w.ID != windowID && tmlLabelText(w.CustomName, 24) == name {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // tmlTitleWidth bounds the document's part of a TML window's name.

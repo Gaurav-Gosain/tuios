@@ -13,6 +13,9 @@ type item struct {
 	base, weight int
 	lo, hi       int // min and max; hi < 0 means none
 	shrink       bool
+	// elastic gives way first when space is short: a chart, which still
+	// says what it says narrower, before text, which a cut loses.
+	elastic bool
 }
 
 // distribute shares avail cells among items and returns each one's size.
@@ -52,11 +55,52 @@ func distribute(avail int, items []item) []int {
 			break
 		}
 	}
-	// Shrink what may shrink, in proportion to its size.
+	// Shrink what may shrink, in proportion to its size: the elastic
+	// items first, then the rest.
+	for pass := 0; pass < 2 && free < 0; pass++ {
+		free = shrinkItems(items, out, free, pass == 0)
+	}
+	return out
+}
+
+// dropNarrowCharts gives a row's charts that were squeezed under their
+// minimum no width at all, and hands the cells to the children that were
+// cut, so a gauge squeezed to a stub goes and the text beside it is whole.
+// A chart that asked for fewer cells than the minimum and got them stays.
+func (s *Surface) dropNarrowCharts(kids []*box, items []item, out []int) {
+	freed := 0
+	for i, k := range kids {
+		if elasticKind(k.kind) && out[i] > 0 && out[i] < min(minChartWidthOf(k.kind), items[i].base) {
+			freed += out[i]
+			out[i] = 0
+		}
+	}
+	for i, k := range kids {
+		if freed == 0 {
+			break
+		}
+		if k.kind == "spacer" || elasticKind(k.kind) {
+			continue
+		}
+		if fixed := k.width.resolve(0); fixed >= 0 || k.width.kind == sizeFill {
+			continue
+		}
+		want, _ := s.measure(k, out[i]+freed)
+		if add := min(max(want-out[i], 0), freed); add > 0 {
+			out[i] += add
+			freed -= add
+		}
+	}
+}
+
+// shrinkItems takes -free cells back from the items that may shrink, only
+// the elastic ones when elastic is set, and returns what is still free.
+func shrinkItems(items []item, out []int, free int, elastic bool) int {
+	may := func(it item) bool { return it.shrink && (!elastic || it.elastic) }
 	for round := 0; free < 0 && round < 4; round++ {
 		total := 0
 		for i, it := range items {
-			if it.shrink && out[i] > it.lo {
+			if may(it) && out[i] > it.lo {
 				total += out[i] - max(it.lo, 0)
 			}
 		}
@@ -65,7 +109,7 @@ func distribute(avail int, items []item) []int {
 		}
 		need := -free
 		for i, it := range items {
-			if !it.shrink || out[i] <= it.lo {
+			if !may(it) || out[i] <= it.lo {
 				continue
 			}
 			room := out[i] - max(it.lo, 0)
@@ -77,7 +121,32 @@ func distribute(avail int, items []item) []int {
 			}
 		}
 	}
-	return out
+	return free
+}
+
+// minChartWidth is as narrow as a chart in a row gets before the text
+// beside it gives way.
+const minChartWidth = 8
+
+// minGaugeWidth is that for a gauge: ten cells of bar and its label, so a
+// gauge squeezed by its neighbours still reads as a share.
+const minGaugeWidth = 16
+
+func minChartWidthOf(kind string) int {
+	if kind == "gauge" || kind == "progress" {
+		return minGaugeWidth
+	}
+	return minChartWidth
+}
+
+// elasticKind reports whether a box of this kind is a chart, which gives
+// way before text in a row that is short of space.
+func elasticKind(kind string) bool {
+	switch kind {
+	case "gauge", "progress", "sparkline", "bar", "line", "area", "histogram":
+		return true
+	}
+	return false
 }
 
 func clampSize(v, lo, hi int) int {
@@ -293,6 +362,11 @@ func (s *Surface) rowWidths(kids []*box, gap, inner int) []int {
 		switch fixed := k.width.resolve(avail); {
 		case fixed >= 0:
 			it.base = fixed
+			if elasticKind(k.kind) {
+				// A chart's width is a wish: it narrows before the text
+				// beside it is cut, and below its minimum it is not drawn.
+				it.shrink, it.elastic = true, true
+			}
 		case k.width.kind == sizeFill:
 			it.weight = max(it.weight, k.width.n)
 		case k.kind == "spacer":
@@ -300,10 +374,14 @@ func (s *Surface) rowWidths(kids []*box, gap, inner int) []int {
 		default:
 			it.base, _ = s.measure(k, avail)
 			it.shrink = true
+			it.elastic = elasticKind(k.kind)
+
 		}
 		items[i] = it
 	}
-	return distribute(avail, items)
+	out := distribute(avail, items)
+	s.dropNarrowCharts(kids, items, out)
+	return out
 }
 
 func (s *Surface) measureGrid(b *box, inner int) (int, int) {
@@ -493,7 +571,7 @@ func (s *Surface) colHeights(kids []*box, widths []int, in Rect, gap int) []int 
 
 func shrinks(b *box) bool {
 	switch b.kind {
-	case "table", "list", "scroll", "code", "markdown", "diff", "mermaid", "text", "card", "tabs", "tab", "col":
+	case "table", "list", "scroll", "code", "markdown", "diff", "mermaid", "text", "card", "tabs", "tab", "col", "stack":
 		return true
 	}
 	return false

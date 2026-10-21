@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be
 	github.com/charmbracelet/x/ansi v0.11.8
 	golang.org/x/image v0.45.0
-	tuios.dev/plot v0.1.0
+	tuios.dev/plot v0.1.1-0.20261021135445-d7bf6a253369
 	tuios.dev/shot v0.2.0
 	tuios.dev/tml v0.1.0
 )

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,8 +57,8 @@ func tmlRunIn(t *testing.T, base, sess, win, line string) {
 // TestTMLOwnerComesFirstAndCannotBeForged opens surfaces from panes with
 // titles that try to pass for another owner, and from a pane whose program
 // named itself tuios with OSC 2. The window name starts with the real owner,
-// made of the window's own name or its id, and the title holds no second
-// separator. A popup a pane opened leaves the keys where they were.
+// the window's own name or else its id, and the title holds no second
+// separator. The popup's frame shows the owner beside the title. A popup a pane opened leaves the keys where they were.
 //
 // Negative controls, in NEGATIVE_CONTROLS.md: the old label, title first
 // (the forged owner leads); the owner from the pane's OSC title (the
@@ -112,8 +113,8 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 			agentID = w.WindowID
 		}
 	}
-	if agentID == "" || !strings.HasPrefix(label, "from pane "+agentID[:8]+" (agent) · ") {
-		t.Fatalf("the window name does not start with its real owner, id first: %q", label)
+	if agentID == "" || !strings.HasPrefix(label, "from agent · ") {
+		t.Fatalf("the window name does not start with its real owner: %q", label)
 	}
 	if strings.Count(label, "·") != 1 {
 		t.Fatalf("the title kept a separator that can draw a second owner: %q", label)
@@ -121,8 +122,19 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	if len([]rune(label)) > 90 {
 		t.Fatalf("the title was not cut to its width: %q (%d runes)", label, len([]rune(label)))
 	}
-	if !screenHas(term.Screen(), "from pane "+agentID[:8]+" (agent)") {
-		t.Fatalf("the frame does not show the owner\n%s", term.Snapshot())
+	// The popup's frame reads the real owner first, then the cleaned title,
+	// which holds no second separator. A title drawn first would let
+	// "from tuios tml show" be read as the owner.
+	frameRow := ""
+	for _, line := range strings.Split(term.Screen().Text(), "\n") {
+		if strings.Contains(line, "Deploy prod?") {
+			frameRow = line
+			break
+		}
+	}
+	const wantFrame = "╭─ from agent · Deploy prod? - from tuios"
+	if !strings.Contains(frameRow, wantFrame) || strings.Count(frameRow, "·") != 1 {
+		t.Fatalf("the frame does not read the owner first: %q, want it to contain %q and one separator\n%s", frameRow, wantFrame, term.Snapshot())
 	}
 	// One click on the popup's button only focuses the popup: the button
 	// is not pressed, and the popup stays.
@@ -516,4 +528,66 @@ func TestTMLQuestionWaitsForRoom(t *testing.T) {
 	if err := term.SendKeys("n"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestTMLOwnerNameMustBeUnique opens surfaces from a pane whose name another
+// pane also has, and from a pane named like the label of a pane with no
+// name. A pane with the fan grant names the agents it starts, so neither
+// name can stand alone as the owner: both surfaces read their pane's id, with
+// the name in brackets. A pane with a name of its own still reads the name
+// alone.
+//
+// Negative control, in NEGATIVE_CONTROLS.md: tmlNameIsOwnersAlone always
+// true (the copied names read "from api" and "from pane 0123abcd").
+func TestTMLOwnerNameMustBeUnique(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const sess = "e2e-tmlname"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("new: %v %s", err, out)
+	}
+	newWin := func(args ...string) string {
+		out, err := tuiosCLI(t, base, append(append([]string{"new-window", "-s", sess}, args...), "--json")...)
+		if err != nil {
+			t.Fatalf("new-window %v: %v\n%s", args, err, out)
+		}
+		var w struct {
+			WindowID string `json:"window_id"`
+		}
+		_ = json.Unmarshal([]byte(out), &w)
+		return w.WindowID
+	}
+	newWin("api")
+	copied := newWin("api", "--grants", "write")
+	idLike := newWin("pane 0123abcd", "--grants", "write")
+	own := newWin("deployer", "--grants", "write")
+	term := startIn(t, base, startOpts{cols: 140, rows: 36, args: []string{"attach", sess}})
+	waitWindowCount(t, term, 5, "five panes")
+	for win, title := range map[string]string{copied: "Copied", idLike: "IdLike", own: "Own"} {
+		doc := writeTMLDoc(t, base, title+".tml", `<tml version="1" title="`+title+`"><col pad="1"><text>`+title+`</text></col></tml>`)
+		tmlRunIn(t, base, sess, win, fmt.Sprintf("%s tml show %s --pane > /dev/null 2>&1", tuiosBin, doc))
+	}
+	want := map[string]string{
+		"Copied": "from pane " + copied[:8] + " (api) · Copied",
+		"IdLike": "from pane " + idLike[:8] + " (pane 0123abcd) · IdLike",
+		"Own":    "from deployer · Own",
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		names := tmlWindowNames(t, base, sess)
+		missing := ""
+		for title, label := range want {
+			if !slices.Contains(names, label) {
+				missing = title + ": want " + label
+			}
+		}
+		if missing == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s\nwindow names: %q", missing, names)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	saveTMLFrame(t, term, "1-owner-names")
 }

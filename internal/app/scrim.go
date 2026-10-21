@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"image/color"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -139,6 +140,15 @@ func scrimBehind(id string) bool {
 // applyScrim darkens every cell on the canvas by the configured modal dim. It
 // runs once per frame at most, before the first modal layer is drawn.
 func (m *OS) applyScrim(canvas *frameCanvas) {
+	m.applyScrimIn(canvas, canvas.Bounds())
+}
+
+// applyScrimIn is applyScrim on the cells of one rectangle of the canvas.
+func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle) {
+	area = area.Intersect(canvas.Bounds())
+	if area.Empty() {
+		return
+	}
 	dim := m.Settings.ModalDim
 	if dim <= 0 {
 		return
@@ -152,8 +162,8 @@ func (m *OS) applyScrim(canvas *frameCanvas) {
 		s.run.have = false
 	}
 	const level = config.SpotlightLevels - 1
-	for _, line := range canvas.Lines {
-		for x := range line {
+	for _, line := range canvas.Lines[area.Min.Y:area.Max.Y] {
+		for x := area.Min.X; x < min(area.Max.X, len(line)); x++ {
 			cell := &line[x]
 			// A zero cell is the tail of a wide glyph; styling it would draw
 			// it as a cell of its own. A kitty placeholder's foreground is the
@@ -200,4 +210,47 @@ func (m *OS) scrimToward() color.Color {
 		return m.host.bg
 	}
 	return nil
+}
+
+// scrimDialogGround dims the ground of a TML dialog to the ground of the
+// screen behind it, and leaves its text, its frame and any ground of its
+// own, such as a button's, as drawn. The dialog has no fill: the scrim on
+// the screen behind it, the frame, and its text at full strength are what
+// set it apart. Left undimmed, its ground read as a lighter box, and the
+// half of each edge cell outside the frame line as a band.
+//
+// The dialog's ground is the one its top-left corner cell is on, which is
+// frame and never a button.
+func (m *OS) scrimDialogGround(canvas *frameCanvas, r image.Rectangle) {
+	r = r.Intersect(canvas.Bounds())
+	if r.Empty() || m.Settings.ModalDim <= 0 || theme.Depth() == overlay.Depth16 {
+		return
+	}
+	corner := canvas.Lines[r.Min.Y]
+	if r.Min.X >= len(corner) {
+		return
+	}
+	ground := corner[r.Min.X].Style.Bg
+	s := &m.motion.scrim
+	const level = config.SpotlightLevels - 1
+	for _, line := range canvas.Lines[r.Min.Y:r.Max.Y] {
+		for x := r.Min.X; x < min(r.Max.X, len(line)); x++ {
+			cell := &line[x]
+			if cell.Content == "" || vt.IsKittyPlaceholder(cell.Content) || !sameGround(cell.Style.Bg, ground) {
+				continue
+			}
+			fg, attrs := cell.Style.Fg, cell.Style.Attrs
+			s.dimCell(cell, level)
+			cell.Style.Fg, cell.Style.Attrs = fg, attrs
+		}
+	}
+}
+
+// sameGround is sameColor for cell grounds, which may be nil or an
+// interface holding a nil pointer.
+func sameGround(a, b color.Color) bool {
+	if isNilColor(a) || isNilColor(b) {
+		return isNilColor(a) && isNilColor(b)
+	}
+	return sameColor(a, b)
 }

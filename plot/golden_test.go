@@ -31,6 +31,10 @@ var cases = []chartCase{
 			Roles:  []Role{Error, Error, Error, Series2, Series2},
 			Format: func(v float64) string { return Compact(v) + "s" }}.Draw(w, h, m)
 	}},
+	{"bar-h-thin", 40, 5, func(w, h int, m Mode) *Grid {
+		return Bar{Values: pkgSecs, Labels: pkgNames, Horizontal: true, Guide: true, Thin: true,
+			Role: Error, Format: func(v float64) string { return Compact(v) + "s" }}.Draw(w, h, m)
+	}},
 	{"bar-v", 21, 4, func(w, h int, m Mode) *Grid {
 		return Bar{Values: []float64{41, 39, 44, 40, 52, 47, 38}}.Draw(w, h, m)
 	}},

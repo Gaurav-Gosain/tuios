@@ -43,8 +43,8 @@ l: bg=accent bold
 m: fg=fg bg=accent bold
 n: bg=accent
 o: fg=fg bg=accent
-p: bg=card bold
-q: fg=accent-bright bg=card bold
+p: bg=surface bold
+q: fg=accent-bright bg=surface bold
 r: bg=surface
 s: fg=fg bg=surface
 === 256 59x14
@@ -92,8 +92,8 @@ l: bg=accent bold
 m: fg=fg bg=accent bold
 n: bg=accent
 o: fg=fg bg=accent
-p: bg=edge bold
-q: fg=accent-bright bg=edge bold
+p: bg=surface bold
+q: fg=accent-bright bg=surface bold
 r: bg=surface
 s: fg=fg bg=surface
 === 16 59x14

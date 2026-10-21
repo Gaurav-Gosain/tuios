@@ -582,6 +582,10 @@ func rendersBorderless(window *terminal.Window) bool {
 // path so both produce identical output.
 func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool, borderColorObj color.Color) string {
 	content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
+	if m.isTMLPopup(window) {
+		// A TML popup is a dialog, with a frame of its own. See tml_chrome.go.
+		return m.renderTMLDialogBox(window, fitToContentBox(content, window.ContentWidth(), window.ContentHeight()))
+	}
 	preShaped := !preShapedDisabled &&
 		window.RenderedCols == window.ContentWidth() &&
 		window.RenderedRows == window.ContentHeight()

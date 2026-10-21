@@ -468,7 +468,9 @@ func (w *buttonWidget) spans(s *Surface) line {
 		}
 		return append(l, span{text: w.label, st: style{fg: ink}}, span{text: "]", st: style{fg: "mute"}})
 	}
-	keyBg, keyFg, labelBg, labelFg := "card", "accent-bright", "surface", "fg"
+	// The key and the label share one ground, so the button reads as one
+	// object; the key is told apart by its colour and weight.
+	keyBg, keyFg, labelBg, labelFg := "surface", "accent-bright", "surface", "fg"
 	switch {
 	case w.disabled:
 		keyBg, keyFg, labelBg, labelFg = "surface", "mute", "surface", "mute"

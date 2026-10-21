@@ -338,7 +338,9 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	case "bar":
 		// Columns get an axis when they have the room for one.
 		axis := !w.horiz && r.Dy() >= 4 && r.Dx() >= 16
-		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Roles: w.roles, Horizontal: w.horiz, Guide: s.pal.grounded(), Axis: axis}
+		// Rows of bars are thin, so each bar stands apart from the next,
+		// with a quiet track where the palette has grounds to set it on.
+		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Roles: w.roles, Horizontal: w.horiz, Thin: w.horiz, Guide: s.pal.grounded(), Axis: axis}
 		g = bar.Draw(r.Dx(), r.Dy(), s.mode)
 	case "line", "area":
 		// An area has no axis attribute; it gets one when it has the room,

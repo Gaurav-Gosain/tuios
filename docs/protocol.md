@@ -2504,11 +2504,14 @@ the surfaces its pane opened, and needs the `write` grant for `tml-open`,
 `forbidden`. A caller in no pane, the person's own commands and hooks, may act
 on any surface. A surface takes at most 100 patches and replaces a second, and
 one more fails with `rate_limited`. The window's name is the owner, then the
-title, such as `from pane 3f2a91c0 (api) · Deploy`, which the document cannot
-change: the owner is the opening pane's window id, then its name in brackets
-when the person or an admin action gave it one, never the pane's title or the
-program's name; the title drops the separator dot and brackets and is cut to
-48 runes. A surface a pane opened does not take the focus: the person clicks
+title, such as `from api · Deploy`, which the document cannot change. The
+owner is the opening pane's name when no other window has that name and it
+does not read like `pane 3f2a91c0`. Otherwise it is the window id with the
+name in brackets, `pane 3f2a91c0 (api)`, or the id alone when the pane has no
+name. It is never the pane's title or the program's name. The title drops the
+separator dot and brackets and is cut to 48 runes. A client cuts the title,
+never the owner: a popup's frame and the rail read the owner first, and a
+pane's title bar shows the title, then the owner. A surface a pane opened does not take the focus: the person clicks
 it or focuses it, and the first click on a TML window only focuses it. One
 `tml-input` carries at most 4 pane actions. A surface the person
 opened takes the focus. The pane that opened a surface reads it with

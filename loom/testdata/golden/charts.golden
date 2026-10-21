@@ -1,9 +1,9 @@
 === truecolor 52x50
 |                                                    |
 |  Seconds by package                                |
-|  vt           ███████████████████████████████   4  |
-|  internal/app ███████████████████▍ · · · · ·  2.5  |
-|  tml          ███████▊ · · · · · · · · · · ·    1  |
+|  vt           ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   4  |
+|  internal/app ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁ 2.5  |
+|  tml          ▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁   1  |
 |                                                    |
 |  55┤                        ▅▅▅▅▅                  |
 |    │▃▃▃▃▃ ▁▁▁▁▁ ▅▅▅▅▅ ▂▂▂▂▂ █████ █████            |
@@ -53,40 +53,40 @@
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aabbbbbbbcbbcbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aaddaaaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaafaa|
-|aaddddddddddddaeeeeeeeeeeeeeeeeeeeeagagagagagaafffaa|
-|aadddaaaaaaaaaaeeeeeeeeagagagagagagagagagagagaaaafaa|
+|aaddddddddddddaeeeeeeeeeeeeeeeeeeeegggggggggggafffaa|
+|aadddaaaaaaaaaaeeeeeeeegggggggggggggggggggggggaaafaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahhgaaaaaaaaaaaaaaaaaaaaaaaaiiiiiaaaaaaaaaaaaaaaaaa|
-|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaaaaaaaa|
-|aahhgiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
-|aaaagggggggggggggggggggggggggggggggggggggggggggggaaa|
+|aahhiaaaaaaaaaaaaaaaaaaaaaaaajjjjjaaaaaaaaaaaaaaaaaa|
+|aaaaijjjjjajjjjjajjjjjajjjjjajjjjjajjjjjaaaaaaaaaaaa|
+|aahhijjjjjajjjjjajjjjjajjjjjajjjjjajjjjjajjjjjaaaaaa|
+|aaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaaiahhhaa|
-|aahhgaaaaaaaiiiiiiiiiiiiaaaaaiiiiiiiiiiiiiiiiiiiiiaa|
-|aaaagiiiiiiiiaaaaaaaaaaiiiiiiaaaaaaaaaaaaaaaaaaaaaaa|
-|aahhgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
-|aaaaggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaajahhhaa|
+|aahhiaaaaaaajjjjjjjjjjjjaaaaajjjjjjjjjjjjjjjjjjjjjaa|
+|aaaaijjjjjjjjaaaaaaaaaajjjjjjaaaaaaaaaaaaaaaaaaaaaaa|
+|aahhieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
+|aaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaa|
 |aaaaahaaaaaaaaaaaaaaaaaaaaahaaaaaaaaaaaaaaaaaaaaahaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahhhgaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaajjjjjjjjaaaaa|
-|aaaaagjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
-|aaaahgjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
-|aaaaagggggggggggggggggggggggggggggggggggggggggggggaa|
+|aahhhiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaakkkkkkkkaaaaa|
+|aaaaaikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa|
+|aaaahikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa|
+|aaaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddddaiiiiiiiakkaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddddajjjjjjjallaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahgeeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aaageeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahgeeeeaeeeeaeeeeaaaaaaaaaaaeeeeaaaaaaeeeeaaaaaaaaa|
-|aaagggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aahieeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaieeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahieeeeaeeeeaeeeeaaaaaaaaaaaeeeeaaaaaaeeeeaaaaaaaaa|
+|aaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaa|
 |aaaahaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaahhaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallmmeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallnnmmaaaaaaaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
-|aaaaaahhaahhaaaaaaaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
-|aaaaaalllmmmiiinnneeeaaaaaaiiiaaaaaaeeeaaiadddadddaa|
-|aaaaaahaaaaaahaaaaaahaaaaaaiiiaaaaaaeeeaajaddadddaaa|
-|aaaaaaaaaaaaaaaaaaaaaaaaaaaaiipeeeeeeeaaaaaaaaaaaaaa|
+|aadddammnneeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddammoonnaaaaaaaaaaaaaaaaaakkkeeeaaaaaaaaaaaaaaaa|
+|aaaaaahhaahhaaaaaaaaaaaaaaaajjpkkeeeeeaaaeaddadddaaa|
+|aaaaaammmnnnjjjoooeeeaaaaaajjjaaaaaaeeeaajadddadddaa|
+|aaaaaahaaaaaahaaaaaahaaaaaajjjaaaaaaeeeaakaddadddaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaajjqeeeeeeeaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -106,22 +106,23 @@ c: bg=panel bold
 d: fg=dim bg=panel
 e: fg=accent-bright bg=panel
 f: fg=fg bg=panel
-g: fg=edge bg=panel
+g: fg=track bg=panel
 h: fg=mute bg=panel
-i: fg=info bg=panel
-j: fg=series3 bg=panel
-k: fg=fg bg=panel bold
-l: fg=heat1 bg=panel
-m: fg=heat2 bg=panel
-n: fg=heat4 bg=panel
-o: fg=series3 bg=info
-p: fg=info bg=accent-bright
+i: fg=edge bg=panel
+j: fg=info bg=panel
+k: fg=series3 bg=panel
+l: fg=fg bg=panel bold
+m: fg=heat1 bg=panel
+n: fg=heat2 bg=panel
+o: fg=heat4 bg=panel
+p: fg=series3 bg=info
+q: fg=info bg=accent-bright
 === 256 52x50
 |                                                    |
 |  Seconds by package                                |
-|  vt           ███████████████████████████████   4  |
-|  internal/app ███████████████████▍ · · · · ·  2.5  |
-|  tml          ███████▊ · · · · · · · · · · ·    1  |
+|  vt           ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   4  |
+|  internal/app ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖▁▁▁▁▁▁▁▁▁▁▁ 2.5  |
+|  tml          ▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁   1  |
 |                                                    |
 |  55┤                        ▅▅▅▅▅                  |
 |    │▃▃▃▃▃ ▁▁▁▁▁ ▅▅▅▅▅ ▂▂▂▂▂ █████ █████            |
@@ -171,40 +172,40 @@ p: fg=info bg=accent-bright
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aabbbbbbbcbbcbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aaddaaaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaafaa|
-|aaddddddddddddaeeeeeeeeeeeeeeeeeeeeagagagagagaafffaa|
-|aadddaaaaaaaaaaeeeeeeeeagagagagagagagagagagagaaaafaa|
+|aaddddddddddddaeeeeeeeeeeeeeeeeeeeegggggggggggafffaa|
+|aadddaaaaaaaaaaeeeeeeeegggggggggggggggggggggggaaafaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahhgaaaaaaaaaaaaaaaaaaaaaaaaiiiiiaaaaaaaaaaaaaaaaaa|
-|aaaagiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaaaaaaaa|
-|aahhgiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaiiiiiaaaaaa|
-|aaaagggggggggggggggggggggggggggggggggggggggggggggaaa|
+|aahhiaaaaaaaaaaaaaaaaaaaaaaaajjjjjaaaaaaaaaaaaaaaaaa|
+|aaaaijjjjjajjjjjajjjjjajjjjjajjjjjajjjjjaaaaaaaaaaaa|
+|aahhijjjjjajjjjjajjjjjajjjjjajjjjjajjjjjajjjjjaaaaaa|
+|aaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaaiahhhaa|
-|aahhgaaaaaaaiiiiiiiiiiiiaaaaaiiiiiiiiiiiiiiiiiiiiiaa|
-|aaaagiiiiiiiiaaaaaaaaaaiiiiiiaaaaaaaaaaaaaaaaaaaaaaa|
-|aahhgeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
-|aaaaggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aabbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeahhaajahhhaa|
+|aahhiaaaaaaajjjjjjjjjjjjaaaaajjjjjjjjjjjjjjjjjjjjjaa|
+|aaaaijjjjjjjjaaaaaaaaaajjjjjjaaaaaaaaaaaaaaaaaaaaaaa|
+|aahhieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaa|
+|aaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaa|
 |aaaaahaaaaaaaaaaaaaaaaaaaaahaaaaaaaaaaaaaaaaaaaaahaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahhhgaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaajjjjjjjjaaaaa|
-|aaaaagjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
-|aaaahgjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjaa|
-|aaaaagggggggggggggggggggggggggggggggggggggggggggggaa|
+|aahhhiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaakkkkkkkkaaaaa|
+|aaaaaikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa|
+|aaaahikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa|
+|aaaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddddaiiiiiiiakkaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddddajjjjjjjallaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahgeeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aaageeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aahgeeeeaeeeeaeeeeaaaaaaaaaaaeeeeaaaaaaeeeeaaaaaaaaa|
-|aaagggggggggggggggggggggggggggggggggggggggggggggggaa|
+|aahieeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaieeeeaeeeeaeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aahieeeeaeeeeaeeeeaaaaaaaaaaaeeeeaaaaaaeeeeaaaaaaaaa|
+|aaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiaa|
 |aaaahaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaahhaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallmmeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-|aadddallnnmmaaaaaaaaaaaaaaaaaajjjeeeaaaaaaaaaaaaaaaa|
-|aaaaaahhaahhaaaaaaaaaaaaaaaaiiojjeeeeeaaaeaddadddaaa|
-|aaaaaalllmmmiiinnneeeaaaaaaiiiaaaaaaeeeaaiadddadddaa|
-|aaaaaahaaaaaahaaaaaahaaaaaaiiiaaaaaaeeeaajaddadddaaa|
-|aaaaaaaaaaaaaaaaaaaaaaaaaaaaiipeeeeeeeaaaaaaaaaaaaaa|
+|aadddaggmmeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aadddaggnnmmaaaaaaaaaaaaaaaaaakkkeeeaaaaaaaaaaaaaaaa|
+|aaaaaahhaahhaaaaaaaaaaaaaaaajjokkeeeeeaaaeaddadddaaa|
+|aaaaaagggmmmjjjnnneeeaaaaaajjjaaaaaaeeeaajadddadddaa|
+|aaaaaahaaaaaahaaaaaahaaaaaajjjaaaaaaeeeaakaddadddaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaajjpeeeeeeeaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -224,12 +225,12 @@ c: bg=panel bold
 d: fg=dim bg=panel
 e: fg=accent-bright bg=panel
 f: fg=fg bg=panel
-g: fg=edge bg=panel
+g: fg=success-tint bg=panel
 h: fg=mute bg=panel
-i: fg=info bg=panel
-j: fg=series3 bg=panel
-k: fg=fg bg=panel bold
-l: fg=success-tint bg=panel
+i: fg=edge bg=panel
+j: fg=info bg=panel
+k: fg=series3 bg=panel
+l: fg=fg bg=panel bold
 m: fg=accent-tint bg=panel
 n: fg=heat4 bg=panel
 o: fg=series3 bg=info
@@ -237,9 +238,9 @@ p: fg=info bg=accent-bright
 === 16 52x50
 |                                                    |
 |  Seconds by package                                |
-|  vt           ███████████████████████████████   4  |
-|  internal/app ███████████████████▍            2.5  |
-|  tml          ███████▊                          1  |
+|  vt           ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   4  |
+|  internal/app ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖            2.5  |
+|  tml          ▄▄▄▄▄▄▄▄                          1  |
 |                                                    |
 |  55┤                        ▅▅▅▅▅                  |
 |    │▃▃▃▃▃ ▁▁▁▁▁ ▅▅▅▅▅ ▂▂▂▂▂ █████ █████            |

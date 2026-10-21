@@ -1,0 +1,39 @@
+=== braille 40x5
+|internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2s|
+|internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁ 4.8s|
+|vt               ▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁ 3.1s|
+|internal/tape    ▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4s|
+|internal/config  ▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9s|
+--- roles
+|aaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbb cccc|
+|aaaaaaaaaaaa     bbbbbbbbbbbbbbdddd cccc|
+|aa               bbbbbbbbbddddddddd cccc|
+|aaaaaaaaaaaaa    bbbbdddddddddddddd cccc|
+|aaaaaaaaaaaaaaa  bbbddddddddddddddd cccc|
+a=dim b=error c=fg d=track (upper case is bold)
+=== blocks 40x5
+|internal/session ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ 6.2s|
+|internal/app     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▁▁▁ 4.8s|
+|vt               ▄▄▄▄▄▄▄▄▄▁▁▁▁▁▁▁▁▁ 3.1s|
+|internal/tape    ▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.4s|
+|internal/config  ▄▄▖▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.9s|
+--- roles
+|aaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbb cccc|
+|aaaaaaaaaaaa     bbbbbbbbbbbbbbdddd cccc|
+|aa               bbbbbbbbbddddddddd cccc|
+|aaaaaaaaaaaaa    bbbbdddddddddddddd cccc|
+|aaaaaaaaaaaaaaa  bbbddddddddddddddd cccc|
+a=dim b=error c=fg d=track (upper case is bold)
+=== ascii 40x5
+|internal/session ################## 6.2s|
+|internal/app     ##############     4.8s|
+|vt               #########          3.1s|
+|internal/tape    ####               1.4s|
+|internal/config  ###                0.9s|
+--- roles
+|aaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbb cccc|
+|aaaaaaaaaaaa     bbbbbbbbbbbbbb     cccc|
+|aa               bbbbbbbbb          cccc|
+|aaaaaaaaaaaaa    bbbb               cccc|
+|aaaaaaaaaaaaaaa  bbb                cccc|
+a=dim b=error c=fg (upper case is bold)

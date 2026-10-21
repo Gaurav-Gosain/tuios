@@ -3,6 +3,7 @@ package loom
 import (
 	"strconv"
 	"strings"
+	"unicode"
 
 	"tuios.dev/tml"
 )
@@ -34,6 +35,12 @@ type tableCol struct {
 	size     size
 	format   *tml.Expr
 	sortable bool
+	// path says the sampled cells are slash paths (some read as a path and
+	// none holds a space), which a narrow column cuts from the left, keeping
+	// the last segment: "…/session".
+	path bool
+	// tailW is the widest cut cell of a path column, "…/session".
+	tailW int
 }
 
 func (s *Surface) buildTable(b *box, vars map[string]any) widget {
@@ -143,6 +150,11 @@ func (s *Surface) tableCell(w *tableWidget, col *tableCol, row any) string {
 // columnWidths shares the width among the columns: fixed and percent
 // widths, then auto columns at their widest text in the first rows, then
 // fill weights.
+//
+// When the columns do not fit, they give way in steps, each only as far as
+// it must: a column wider than anything in it first gives back the room it
+// does not use; then a column of paths gives way down to its last segments,
+// which say the most; then every column in proportion.
 func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 	// Sampling the rows has its own budget, so a wide table cannot starve
 	// the rows on the screen.
@@ -152,8 +164,24 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 	n := len(w.cols)
 	avail := max(total-w.margin()-2*max(n-1, 0), 0)
 	items := make([]item, n)
+	natural := make([]int, n)
+	tail := make([]int, n)
 	for i := range w.cols {
 		col := &w.cols[i]
+		natural[i] = width(col.title)
+		if col.field == w.sort.Field && w.sort.Field != "" {
+			natural[i] += 2 // a space and the arrow
+		}
+		slash, spaced := false, false
+		for r := 0; r < min(len(w.rows), 100); r++ {
+			text := s.tableCell(w, col, w.rows[r])
+			natural[i] = max(natural[i], width(text))
+			slash = slash || isPathLike(text)
+			spaced = spaced || strings.Contains(text, " ")
+			tail[i] = max(tail[i], width(pathTail(text)))
+		}
+		col.path = slash && !spaced
+		col.tailW = tail[i]
 		it := item{hi: -1}
 		switch fixed := col.size.resolve(avail); {
 		case fixed >= 0:
@@ -175,7 +203,78 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 		}
 		items[i] = it
 	}
+	sum := func() int {
+		t := 0
+		for _, it := range items {
+			t += clampSize(it.base, it.lo, it.hi)
+		}
+		return t
+	}
+	// Room a column does not use.
+	for i := range items {
+		if over := sum() - avail; over > 0 && items[i].base > natural[i] {
+			items[i].base -= min(over, items[i].base-natural[i])
+		}
+	}
+	// A path column down to its last segments.
+	for i, col := range w.cols {
+		if over := sum() - avail; over > 0 && col.path {
+			floor := max(min(tail[i]-2, items[i].base), items[i].lo)
+			items[i].base -= min(over, max(items[i].base-floor, 0))
+			// Its last segment stays whole while other columns can give.
+			items[i].lo = floor
+		}
+	}
 	return distribute(avail, items)
+}
+
+// isPathLike reports whether text reads as a slash path: it holds a slash
+// and a segment with a letter in it. A ratio or a date, 412/417 or
+// 2026/10/21, does not, and cutting it from the left would change what it
+// says.
+func isPathLike(text string) bool {
+	if !strings.Contains(text, "/") {
+		return false
+	}
+	for _, seg := range strings.Split(text, "/") {
+		for _, r := range seg {
+			if unicode.IsLetter(r) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pathTail is the last segment of a slash path, with a mark that more came
+// before it: "…/session".
+func pathTail(p string) string {
+	i := strings.LastIndex(p, "/")
+	if i < 0 {
+		return p
+	}
+	return "…" + p[i:]
+}
+
+// cutPath shortens a slash path to n cells from the left, keeping as many
+// whole last segments as fit, then the last one cut at its end.
+func cutPath(p string, n int, ellipsis string) string {
+	if width(p) <= n {
+		return p
+	}
+	parts := strings.Split(p, "/")
+	out := parts[len(parts)-1]
+	for i := len(parts) - 2; i >= 0; i-- {
+		next := parts[i] + "/" + out
+		if width(ellipsis)+1+width(next) > n {
+			break
+		}
+		out = next
+	}
+	if t := ellipsis + "/" + out; width(t) <= n {
+		return t
+	}
+	return truncate(out, n, ellipsis)
 }
 
 func (w *tableWidget) place(s *Surface, b *box, in Rect) {
@@ -219,12 +318,17 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		st := style{fg: "mute"}
 		l := line{{text: t, st: st}}
 		if col.field == w.sort.Field && w.sort.Field != "" {
-			l[0].st = st.with(attrBold)
+			// The sorted column's title is a step brighter than the rest,
+			// and the title gives way to the arrow, which says the order.
 			arrow := g.sortUp
 			if w.sort.Desc {
 				arrow = g.sortDown
 			}
-			l = append(l, span{text: " " + arrow, st: style{fg: "accent-bright"}})
+			mark := " " + arrow
+			if room := w.widths[i] - width(mark); width(t) > room {
+				t = truncate(t, max(room, 0), g.ellipsis)
+			}
+			l = line{{text: t, st: style{fg: "dim", attrs: attrBold}}, {text: mark, st: style{fg: "accent-bright"}}}
 		}
 		c.drawLine(w.xs[i], r.Min.Y, w.widths[i], l, col.align)
 	}
@@ -259,7 +363,18 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 					st = style{fg: "dim", attrs: attrReverse | st.attrs}
 				}
 			}
-			c.drawLine(w.xs[i], y, w.widths[i], plainLine(s.tableCell(w, col, w.rows[ri]), st), col.align)
+			text := s.tableCell(w, col, w.rows[ri])
+			if col.path && width(text) > w.widths[i] {
+				// One form for the whole column: the last segments
+				// after a mark, or, when even the widest of those does
+				// not fit, the last segment alone.
+				if w.widths[i] >= col.tailW {
+					text = cutPath(text, w.widths[i], g.ellipsis)
+				} else {
+					text = truncate(text[strings.LastIndex(text, "/")+1:], w.widths[i], g.ellipsis)
+				}
+			}
+			c.drawLine(w.xs[i], y, w.widths[i], plainLine(text, st), col.align)
 		}
 	}
 }

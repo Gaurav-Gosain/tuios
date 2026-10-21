@@ -7676,6 +7676,15 @@ The test reads the daemon's peak memory (VmHWM), not its resident set at the end
 | The new-window yes keyed on the command cut to 40 cells | "b asked no question" (the second command ran on the first yes) | **caught** |
 | The first click on a pane's popup presses its button | "the first click on a pane's popup pressed its button" | **caught** |
 
+### The owner first on the popup's frame, and a name that is not unique
+
+The frame step of `TestTMLOwnerComesFirstAndCannotBeForged` and `TestTMLOwnerNameMustBeUnique` in `tml_label_test.go`. Run on 2026-10-21 on Linux, each control built and put back before the next.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The popup's frame draws the title before the owner | "the frame does not read the owner first" ("╭─ Deploy prod? - from tuios… · from agent ╮") | **caught** |
+| `tmlNameIsOwnersAlone` always true, so a copied name stands alone | "IdLike: want from pane 8bc5c232 (pane 0123abcd) · IdLike" | **caught** |
+
 ### The question whole or not at all, and the window name in the yes
 
 `TestTMLQuestionWaitsForRoom` and the name step of `TestTMLNewWindowYesCoversOneCommand` in `tml_label_test.go`. Run on 2026-10-20, the same way.
