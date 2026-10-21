@@ -7867,6 +7867,7 @@ Run on 2026-10-21.
 | The owner entry goes when the reaper exits | the `dropOwner` call before the reaper is reaped | `TestOwnerForgetsAnEmptiedGroup` ("the entry of session 7 outlived the reaper", "a stranger's daemon (pid 8, session 7) is counted as plugin e2e.admin") | **caught** |
 | git's children are killed with it | no `Cancel` in `review.git` | `TestGitTimeoutHoldsWithAHungChild` ("git's child ... still runs after Git returned") | **caught** |
 | A git child cannot hold the timeout | no `WaitDelay` and no `Cancel` in `review.git` | `TestGitTimeoutHoldsWithAHungChild` ("Git returned after 20.0s") | **caught** |
+| The plugin command gets its own GODEBUG, not the reaper's `disablethp=1` | the reaper starts the command with its own environment | `TestReaperKeepsTheCommandsGodebug` ("the command saw GODEBUG \"set:disablethp=1\", want \"unset\"", and the same for each case) | **caught** |
 | A herdrVerbs method runs the grant check | `herdrPaneRename` answers without calling `set-window` (the review's control C) | `TestHerdrVerbMethodsRefuseAPluginWithNoGrants` ("pane.rename from a plugin with no grants answered {\"type\":\"pane_info\"}, want forbidden") | **caught** |
 
 The review's control B, the `set-window` call removed and the rest kept, is

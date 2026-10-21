@@ -175,6 +175,9 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // an enabled plugin's own manifest names the command
 	cmd.Dir = j.Plugin.PluginRoot
 	cmd.Env = append(cleanEnv(os.Environ()), j.Env...)
+	if len(r.Reaper) > 0 {
+		cmd.Env = reaperEnv(cmd.Env)
+	}
 	cmd.Stdin = nil
 	var stdout, stderr capBuffer
 	stdout.cap, stderr.cap = OutputCap, OutputCap

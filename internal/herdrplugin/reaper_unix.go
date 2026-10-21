@@ -21,6 +21,7 @@ func RunReaper(argv []string) int {
 	//tuios:allow-exec the reaper runs the plugin command it was given
 	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // the runner resolved the plugin's own command
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, os.Stdout, os.Stderr
+	cmd.Env = commandEnv(os.Environ())
 	if err := cmd.Start(); err != nil {
 		if status != nil {
 			fmt.Fprintf(status, "127\t%s\n", err)
