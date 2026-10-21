@@ -504,6 +504,8 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	// Lines are drawn over the bars wherever they were declared, as a bar would hide part of one
 	// under it. A series keeps the color of its place in the source.
 	var series, lines, outside, pointLabels strings.Builder
+	// Not part of pele: the point labels as plain text, by series and value, for the text drawing.
+	var pointText [][]string
 	bar := 0
 	for index, plot := range plots {
 		color := svg.SeriesColor(index)
@@ -640,6 +642,15 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 				raw = plot.pointLabels[i]
 			}
 			l := label(raw, tiny, 4000)
+			if l.Height > 0 && options.Geometry != nil {
+				if pointText == nil {
+					pointText = make([][]string, len(plots))
+				}
+				if pointText[index] == nil {
+					pointText[index] = make([]string, n)
+				}
+				pointText[index][i] = plainLabel(l)
+			}
 			if l.Height > 0 {
 				half := l.Width / 2
 				if horizontal {
@@ -720,7 +731,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		geometry = &types.Geometry{Width: width, Height: height,
 			XY: geometryOf(model, title, names, valueMarksOf(horizontal, leftMarks, bottomMarks),
 				categoryMarksOf(horizontal, band, leftMarks, bottomMarks, categories, slot),
-				leftTitle, bottomTitle, horizontal, count, base, place, scale)}
+				leftTitle, bottomTitle, horizontal, count, base, place, scale, showValues, pointText)}
 	}
 	return types.Rendered{
 		Geometry: geometry,
@@ -770,7 +781,7 @@ func categoryMarksOf(horizontal, band bool, leftMarks, bottomMarks []Mark, categ
 
 func geometryOf(model *XyChartDb, title text.Label, names []string, ticks, marks []types.GeoMark,
 	leftTitle, bottomTitle text.Label, horizontal bool, count int, base float64,
-	place func(i, n int) float64, scale func(float64) float64) *types.GeoXY {
+	place func(i, n int) float64, scale func(float64) float64, showValues bool, pointText [][]string) *types.GeoXY {
 	g := &types.GeoXY{Title: title.Plain(), Horizontal: horizontal, Ticks: ticks, Marks: marks, Slots: count, Base: base}
 	g.Band = model.xAxis.typ == "band"
 	g.ValueTitle, g.CategoryTitle = plainLabel(leftTitle), plainLabel(bottomTitle)
@@ -791,7 +802,13 @@ func geometryOf(model *XyChartDb, title text.Label, names []string, ticks, marks
 				gap = true
 				continue
 			}
-			s.Points = append(s.Points, types.GeoPoint{At: place(i, n), Value: scale(value), Gap: gap})
+			p := types.GeoPoint{At: place(i, n), Value: scale(value), Gap: gap}
+			if s.Bar && showValues {
+				p.Label = js.Num(value)
+			} else if index < len(pointText) && i < len(pointText[index]) {
+				p.Label = pointText[index][i]
+			}
+			s.Points = append(s.Points, p)
 			gap = false
 		}
 		g.Series = append(g.Series, s)

@@ -65,8 +65,9 @@ for each slice, with its value. pele leaves a slice under 1% out of the pie,
 and shows values only with `showData`. A mindmap is a tree. A gantt chart is
 bars on a date axis. A timeline runs across, and runs down when it does not
 fit the columns. An XY chart draws its bars and lines with tuios.dev/plot, and
-turns its categories into rows when they do not fit across. A quadrant chart
-is a box in four parts, with its points as dots.
+turns its categories into rows when they do not fit across. It writes point
+labels and bar values where they cover nothing, and leaves out a label that
+has no room. A quadrant chart is a box in four parts, with its points as dots.
 
 ```go
 d, _ := sketch.Parse(src, sketch.ParseOptions{})

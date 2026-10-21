@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,13 @@ func FuzzDraw(f *testing.F) {
 		}
 		for _, s := range sources {
 			f.Add(s, 120)
+		}
+	}
+	// The pinned sources, labels of XY points and bars among them.
+	pinned, _ := filepath.Glob("testdata/pinned/*.mmd")
+	for _, path := range pinned {
+		if data, err := os.ReadFile(path); err == nil {
+			f.Add(string(data), 60)
 		}
 	}
 	f.Fuzz(func(t *testing.T, src string, cols int) {

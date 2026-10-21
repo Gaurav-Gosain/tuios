@@ -218,6 +218,9 @@ type GeoPoint struct {
 	At, Value float64
 	// Gap is set when a value is missing before this one, which breaks a line.
 	Gap bool
+	// Label is the text the SVG writes at the point: the label of a line
+	// point, or the value of a bar when showDataLabel is on. "" for none.
+	Label string
 }
 
 // GeoQuadrant is a quadrant chart as lists: a text drawing lays it out again in cells.

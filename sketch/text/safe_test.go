@@ -46,6 +46,8 @@ func TestNoTerminalControls(t *testing.T) {
 		"timeline period":        "timeline\n  title t#27;]2;x#7;\n  section s#155;31m\n  #27;[2J : e\n  2002 : a#144;b",
 		"xychart labels":         "xychart-beta\n  title \"t#27;]2;x#7;\"\n  x-axis \"x#155;31m\" [\"a#27;[2J\", b]\n  y-axis \"y#144;\"\n  bar \"s#127;\" [1, 2]\n  line \"l#27;c\" [2, 1]",
 		"quadrant labels":        "quadrantChart\n  title \"t#27;]2;x#7;\"\n  x-axis \"l#155;31m\" --> \"h#27;[2J\"\n  y-axis \"b#144;\" --> \"t#127;\"\n  quadrant-1 \"q#27;c\"\n  \"p#27;]52;c;x#7;\": [0.3, 0.6]",
+		"xychart point label":    "xychart-beta\n  x-axis [a, b, c]\n  y-axis 0 --> 4\n  line [2 \"p#27;]2;x#7;\", 2, 2]",
+		"xychart across label":   "xychart-beta horizontal\n  x-axis [a, b]\n  line [1 \"p#155;31m\", 2]",
 	}
 	for name, src := range sources {
 		t.Run(name, func(t *testing.T) {

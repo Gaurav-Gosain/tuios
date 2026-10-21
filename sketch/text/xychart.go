@@ -192,7 +192,17 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 	for _, m := range g.Marks {
 		label = max(label, width(m.Label))
 	}
-	slotW := min(max(label+2, least, 4), 12)
+	// Point labels of a line ask for wider slots too, and the label of the
+	// last point for room past the plot.
+	point := 0
+	for _, s := range g.Series {
+		for _, p := range s.Points {
+			if !s.Bar {
+				point = max(point, min(width(p.Label), 16))
+			}
+		}
+	}
+	slotW := min(max(label+2, point+2, least, 4), 12)
 	if opt.Cols > 0 {
 		avail := opt.Cols - px0 - 1
 		slotW = min(max(slotW, 8), avail/g.Slots)
@@ -202,6 +212,12 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 	}
 	pw := g.Slots * slotW
 	wd := widen(px0+pw+1, g, opt)
+	if point > 0 {
+		wd = max(wd, px0+pw+point/2+1)
+		if opt.Cols > 0 {
+			wd = max(min(wd, opt.Cols), px0+pw+1)
+		}
+	}
 
 	var title []string
 	for _, line := range g.Title {
@@ -380,7 +396,91 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 			}
 		}
 	}
+
+	// Labels last, where they cover nothing: the value above the end of
+	// each bar, and the label of a line point next to the point: above it,
+	// beside it or below it.
+	// A label with no room is left out. Labels may use the free row above the
+	// plot, not the axis or the rows below it.
+	k = 0
+	for _, s := range g.Series {
+		if !s.Bar {
+			continue
+		}
+		for _, p := range s.Points {
+			if p.Label == "" {
+				continue
+			}
+			i := min(max(int(p.At*float64(g.Slots)), 0), g.Slots-1)
+			x0 := center(i) - group/2 + k*thick
+			// The row past the end of the bar, up from the base or down from it.
+			step := -1
+			y := top + xyRows - rb - 1
+			if p.Value < g.Base {
+				step, y = 1, top+xyRows-rb
+			}
+			for y >= top && y < axisY && c.bar(x0, y) {
+				y += step
+			}
+			if y >= top-1 && y < axisY {
+				c.label(p.Label, top-1, axisY, [2]int{x0 + (thick-width(p.Label))/2, y})
+			}
+		}
+		k++
+	}
+	for _, s := range g.Series {
+		if s.Bar {
+			continue
+		}
+		for _, p := range s.Points {
+			if p.Label == "" || !(p.Value >= 0 && p.Value <= 1) {
+				continue
+			}
+			x := col(p.At)
+			dots := xyRows * 4
+			y := top + (dots-1-int(math.Round(p.Value*float64(dots-1))))/4
+			lw := width(p.Label)
+			mid := min(max(x-lw/2, px0), wd-lw)
+			c.label(p.Label, top-1, axisY, [2]int{mid, y - 1}, [2]int{x + 1, y - 1}, [2]int{x - lw, y - 1},
+				[2]int{x + 2, y}, [2]int{x - 1 - lw, y}, [2]int{mid, y + 1})
+		}
+	}
 	return c, nil
+}
+
+// bar reports whether the cell at x, y holds a block of a bar.
+func (c *canvas) bar(x, y int) bool {
+	p := c.at(x, y)
+	return p != nil && barGlyph(p.r)
+}
+
+// blank reports whether the cells from x to x+w-1 of row y are in the canvas
+// and empty: no character, no stroke, no braille dots.
+func (c *canvas) blank(x, y, w int) bool {
+	for i := x; i < x+w; i++ {
+		p := c.at(i, y)
+		if p == nil || p.wide || p.mask != 0 || (p.r != 0 && p.r != ' ' && p.r != 0x2800) {
+			return false
+		}
+	}
+	return true
+}
+
+// label writes s at the first spot, from rows y0 to y1-1, where it covers
+// nothing and has a free cell or the edge on each side, so that it does not
+// run into other text. It reports whether s has a place.
+func (c *canvas) label(s string, y0, y1 int, spots ...[2]int) bool {
+	w := width(s)
+	edge := func(x, y int) bool { return c.at(x, y) == nil || c.blank(x, y, 1) }
+	for _, sp := range spots {
+		x, y := sp[0], sp[1]
+		if y < y0 || y >= y1 || !c.blank(x, y, w) || !edge(x-1, y) || !edge(x+w, y) {
+			continue
+		}
+		c.text(x, y, s, roleText)
+		return true
+	}
+	return false
 }
 
 // widen gives a chart w cells wide room for its title and legend on one line,
@@ -579,6 +679,51 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 			}
 			x := px0 + min(int(math.Round(p.Value*float64(pw-1))), pw-1)
 			c.put(x, rowOf(p.At)+bars, '●', seriesRole(si))
+		}
+	}
+
+	// Labels last, where they cover nothing: the value past the end of each
+	// bar, and the label of a line point beside its dot. A label with no room
+	// is left out.
+	k = 0
+	for _, s := range g.Series {
+		if !s.Bar {
+			continue
+		}
+		for _, p := range s.Points {
+			if p.Label == "" {
+				continue
+			}
+			i := min(max(int(p.At*float64(g.Slots)), 0), g.Slots-1)
+			ry := top + i*(rows+sep) + k
+			lw := width(p.Label)
+			if p.Value < g.Base {
+				x := px0 + cb - 1
+				for x >= px0 && c.bar(x, ry) {
+					x--
+				}
+				c.label(p.Label, top, axisY, [2]int{x - lw, ry})
+			} else {
+				x := px0 + cb
+				for x < px0+pw && c.bar(x, ry) {
+					x++
+				}
+				c.label(p.Label, top, axisY, [2]int{x + 1, ry})
+			}
+		}
+		k++
+	}
+	for _, s := range g.Series {
+		if s.Bar {
+			continue
+		}
+		for _, p := range s.Points {
+			if p.Label == "" || !(p.Value >= 0 && p.Value <= 1) {
+				continue
+			}
+			x := px0 + min(int(math.Round(p.Value*float64(pw-1))), pw-1)
+			y := rowOf(p.At) + bars
+			c.label(p.Label, top, axisY, [2]int{x + 2, y}, [2]int{x - 1 - width(p.Label), y})
 		}
 	}
 	return c, nil
