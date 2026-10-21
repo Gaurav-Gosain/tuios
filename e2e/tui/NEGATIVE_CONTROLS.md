@@ -8500,3 +8500,15 @@ Run on 2026-10-21 on macOS, against a build with the fix line cut, built to a se
 | `Alt+N` from the splash stayed on 1 | yes | the `last == 0` fallback in `newWorkspaceSlot` disabled | `TestWorkspaceSwitchFromTheSplashGoesThere` ("is on workspace 1, want 2"), `TestReloadWithABadKeyAppliesTheRest` ("e2e-reload-bad-key is on workspace 1, want 2") | **caught** |
 
 `TestWorkspaceSwitchFromAnEmptyOneStaysOnIt` passes on the cut build too, as it should: there, workspaces 1 to 3 hold panes. The fixed build passes the four tests above, every `TestWorkspace*`, `TestHerdrTab*` and `TestEmptyWorkspace*` test (33 in all).
+
+### new_workspace from the empty workspace on screen
+
+`new_workspace` and the dock's `+` go to the lowest workspace with no pane that is not the one on screen. From an empty workspace past the last one in use, `SwitchToWorkspace` stays on it, since it is already the new one, so the dock never reads 1, 3. `handleNewWorkspace` then saw the switch land short of its target and opened no pane, so the key did nothing. It now opens the pane wherever the switch landed, as long as that workspace is empty. `TestNewWorkspaceSkipsTheEmptyWorkspaceOnScreen` expected the key to go on to 3. It is now `TestNewWorkspaceStaysOnTheEmptyWorkspaceOnScreen` in `tmux_style_actions_test.go`, which expects the view to stay on 2 with a pane there.
+
+Run on 2026-10-21 on macOS, against a build with the fix line cut, built to a separate path, the source restored afterwards.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| `new_workspace` from the empty workspace on screen did nothing | yes | `handleNewWorkspace` returns early again when `o.CurrentWorkspace != ws` | `TestNewWorkspaceStaysOnTheEmptyWorkspaceOnScreen` ("left panes by workspace map[1:1], want one on 1 and one on 2") | **caught** |
+
+`TestTmuxStyleActionsRunWhenBound` passes on the cut build too: from workspace 1 the switch lands on its target. The fixed build passes 37 tests: every `TestNewWorkspace*`, `TestTmuxStyle*`, `TestWorkspace*` and `TestEmptyWorkspace*` test, and `TestReloadWithABadKeyAppliesTheRest`.

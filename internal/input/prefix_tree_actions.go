@@ -112,7 +112,10 @@ func handleNewWorkspace(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.SwitchToWorkspace(ws)
-	if o.CurrentWorkspace != ws || (o.UserConfig != nil && o.UserConfig.Workspaces.NewWindowWhenEmpty) {
+	// The switch can land short of ws: from an empty workspace past the last
+	// one in use, that empty workspace is the new one and the switch stays on
+	// it. The pane opens wherever it landed, as long as that is empty.
+	if o.GetWorkspaceWindowCount(o.CurrentWorkspace) > 0 || (o.UserConfig != nil && o.UserConfig.Workspaces.NewWindowWhenEmpty) {
 		return o, nil
 	}
 	return handleNewWindow(msg, o)

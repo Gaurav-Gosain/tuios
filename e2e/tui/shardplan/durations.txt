@@ -736,7 +736,7 @@ TestNewStartsInTheCallersDirectory 0.2
 TestNewWindowInheritsTheOSC7Folder 0.3
 TestNewWindowOnNewWorkspaceGetsPaneSize 1.6
 TestNewWindowPrefersTheShellsProcessFolder 0.2
-TestNewWorkspaceSkipsTheEmptyWorkspaceOnScreen 1.2
+TestNewWorkspaceStaysOnTheEmptyWorkspaceOnScreen 1.2
 TestNextFinishedWalksUnseenTurns 2.8
 TestNoReleaseForEnterWithoutAllKeys 0.9
 TestNonLatinKeyTypesIntoPane 0.6

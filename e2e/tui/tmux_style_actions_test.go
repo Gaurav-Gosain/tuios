@@ -92,19 +92,17 @@ break_pane = ["alt+b"]
 	waitWorkspace(t, base, "tmuxish", moved.Workspace)
 }
 
-// TestNewWorkspaceSkipsTheEmptyWorkspaceOnScreen: new_workspace goes where the
-// dock's + button goes, which is never the workspace already on screen. With
-// the pane on workspace 1 and the view on the empty workspace 2, the key goes
-// to 3. Counting the workspace on screen as free would leave the view on 2 and
-// open a pane there.
+// TestNewWorkspaceStaysOnTheEmptyWorkspaceOnScreen: with the pane on
+// workspace 1 and the view on the empty workspace 2, new_workspace stays on 2
+// and opens its pane there. Workspaces are numbered by position, and the empty
+// workspace on screen past the last one in use is already the new one: going
+// on to 3 would leave the dock at 1, 3.
 //
 // The positive half is TestTmuxStyleActionsRunWhenBound: from workspace 1,
 // which has a pane, the same key goes to 2, the lowest free one.
 //
-// Negative control: replace `i != m.dockWorkspace() &&` in nextFreeWorkspace
-// (internal/app/dock_helpers.go) with nothing. The key from the empty
-// workspace 2 stays on 2.
-func TestNewWorkspaceSkipsTheEmptyWorkspaceOnScreen(t *testing.T) {
+// Negative control: see NEGATIVE_CONTROLS.md.
+func TestNewWorkspaceStaysOnTheEmptyWorkspaceOnScreen(t *testing.T) {
 	term, base := panesSession(t, "skipper", `
 [keybindings.workspaces]
 new_workspace = ["alt+n"]
@@ -118,7 +116,22 @@ new_workspace = ["alt+n"]
 	if err := term.SendKeys(tuitest.Alt('n')); err != nil {
 		t.Fatalf("press alt+n: %v", err)
 	}
-	waitWorkspace(t, base, "skipper", 3)
+	byWorkspace := map[int]int{}
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		byWorkspace = map[int]int{}
+		for _, p := range listPanes(t, base, "skipper") {
+			byWorkspace[p.Workspace]++
+		}
+		if byWorkspace[2] == 1 {
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	if byWorkspace[1] != 1 || byWorkspace[2] != 1 || len(byWorkspace) != 2 {
+		t.Fatalf("ASSERTION: new_workspace from the empty workspace 2 left panes by workspace %v, want one on 1 and one on 2", byWorkspace)
+	}
+	waitWorkspace(t, base, "skipper", 2)
 }
 
 // TestSendPrefixAndLastSession: send_prefix hands the leader to the program in
