@@ -176,6 +176,11 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**list-host-sessions rows carry agents.** A remote session row gains
+`agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
+`harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
+The agents view draws them as rows.
+
 **send-agent-message takes a message in parts.** `text` is no longer
 required when `parts` is given. `parts` is the form `queue-prompt` takes. A
 message that fits 8 KiB and holds no image has its blocks put in place. Any
