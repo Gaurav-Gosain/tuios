@@ -3238,6 +3238,13 @@ it). The change measured 43,561,122 and 40,608,546, so it adds 40,960 and
 33,152 bytes. No dependency was added. The new budgets leave 4,198 bytes of
 room.
 
+The budgets went to 43,970,824 and 40,952,776 when sketch began to draw C4
+diagrams, packet diagrams, radar charts and treemaps, as pictures and as text.
+The build before it measured 43,561,122 and 40,608,546 bytes (Go 1.26.10, as
+CI builds it). The change measured 43,966,626 and 40,948,578, so it adds
+405,504 and 340,032 bytes. No dependency was added. The new budgets leave
+4,198 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
