@@ -123,12 +123,12 @@ and prints the right command rather than overwriting it.
 
 <table>
   <tr>
-    <td width="50%"><a href="https://tuios.dev/docs/layout-modes"><img src="https://tuios.dev/shots/overview-800.webp" width="400" alt="tuios with four tiled panes: a git diff, a Go file, test output and a build. The sidebar lists the session, its files and four agents with their states."></a><br><b>Panes and the rail.</b> Tiled panes, and every agent's state at a glance.</td>
-    <td width="50%"><a href="https://tuios.dev/docs/agent-inbox"><img src="https://tuios.dev/shots/inbox-800.webp" width="400" alt="The tuios Inbox listing an approval marked risky, a question and an errored agent, with the reason the approval is risky."></a><br><b>The Inbox.</b> Everything your agents wait on, in one list.</td>
+    <td width="50%"><a href="https://tuios.dev/docs/layout-modes"><img src="https://tuios.dev/shots/overview.webp" width="400" alt="tuios with four tiled panes: a git diff, a Go file, test output and a build. The sidebar lists the session, its files and four agents with their states."></a><br><b>Panes and the rail.</b> Tiled panes, and every agent's state at a glance.</td>
+    <td width="50%"><a href="https://tuios.dev/docs/agent-inbox"><img src="https://tuios.dev/shots/inbox.webp" width="400" alt="The tuios Inbox listing an approval marked risky, a question and an errored agent, with the reason the approval is risky."></a><br><b>The Inbox.</b> Everything your agents wait on, in one list.</td>
   </tr>
   <tr>
-    <td width="50%"><a href="https://tuios.dev/docs/agent-inbox#reviewing-an-agents-changes"><img src="https://tuios.dev/shots/review-800.webp" width="400" alt="The tuios review view: a file list on the left and a highlighted diff on the right, with keys for notes, hunks and files."></a><br><b>Review.</b> Read an agent's changes and send notes back to it.</td>
-    <td width="50%"><a href="https://tuios.dev/docs/configuration"><img src="https://tuios.dev/shots/settings-800.webp" width="400" alt="The tuios settings page searched for theme. The Theme row carries a dot because it differs from the default."></a><br><b>Settings.</b> Every option on one page, applied at once.</td>
+    <td width="50%"><a href="https://tuios.dev/docs/agent-inbox#reviewing-an-agents-changes"><img src="https://tuios.dev/shots/review.webp" width="400" alt="The tuios review view: a file list on the left and a highlighted diff on the right, with keys for notes, hunks and files."></a><br><b>Review.</b> Read an agent's changes and send notes back to it.</td>
+    <td width="50%"><a href="https://tuios.dev/docs/configuration"><img src="https://tuios.dev/shots/settings.webp" width="400" alt="The tuios settings page searched for theme. The Theme row carries a dot because it differs from the default."></a><br><b>Settings.</b> Every option on one page, applied at once.</td>
   </tr>
 </table>
 
