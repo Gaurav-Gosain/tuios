@@ -1,0 +1,87 @@
+=== braille 40x13
+|                                        |
+|                  speed                 |
+|               ⡀⠄⠁⡀⡠⢲⠄⠁⠂⠄               |
+|            ⡀⠄⠁⡀⢀⡠⠊⠄⠇⢣⠁⠂⠄⡁⠂⠄            |
+|  weight ⡀⠄⠁⡀⠄⢀⠔⠁⠂⢁⢠⢲⡀⠱⡀⡀ ⠂⠄⡁⠂⣄ power   |
+|         ⠡⠁⢃⠂⡴⠁⣀⡠⠈⡔⠁⠇⢣⠁⠱⣀⡁⠦⠂⠎⠁⡂         |
+|          ⠅ ⢂⡇ ⠈⠄⠘⡅⠂⠅⠢⠹⡀⡇ ⠅⠠⠁⡐          |
+|          ⠈⠄⠐⡇⠡ ⠨ ⠘⢆⡀⠣⢀⠱⡀⠌⠠⠁⢀⠂          |
+|           ⠨ ⡇⡀⠅⠠⠉⠈⠈⠈⠢⣀⠠⠱⡀⠌⢀⠂           |
+|            ⠡⡇⢢⡈⡁⡁⣀⡠⠤⠔⠒⠑⢄⠱⡀⡐            |
+|        cost⠈⠧⠒⠒⠉⠉⠠⠠⠠⠠⠠⠠⠠⠉⠳⠄range       |
+|                                        |
+|                                        |
+--- roles
+|                                        |
+|                  aaaaa                 |
+|               bbbbccbbbb               |
+|            bbbbcccbbcbbbbbb            |
+|  aaaaaa bbbbbcccbbddbccb bbbbb aaaaa   |
+|         bbbbccbbbddbdbccbbbbbb         |
+|          b bc bbddbbbddc bbbb          |
+|          bbbcb b dddbbddbbbbb          |
+|           b cbbbbbbdddbddbbb           |
+|            bcbbbbcccccddddb            |
+|        aaaabcccccbbbbbbbdddaaaaa       |
+|                                        |
+|                                        |
+a=fg b=mute c=series1 d=series2 (upper case is bold)
+=== blocks 40x13
+|                                        |
+|                  speed                 |
+|               · · •••· ·               |
+|           · ·   ••··•·   · ·           |
+|  weight ··  · ••· ·••••· · · · power   |
+|           ··••···••·•· ••· ·           |
+|          ·  •  ·•• · •••    ·          |
+|            ·•·   •• ··••··             |
+|            ·•  ··· ••• •  ·            |
+|             •·····•••••••              |
+|        cost •••••• · · ·•••range       |
+|                                        |
+|                                        |
+--- roles
+|                                        |
+|                  aaaaa                 |
+|               b b cccb b               |
+|           b b   ccbbcb   b b           |
+|  aaaaaa bb  b ccb bddccb b b b aaaaa   |
+|           bbccbbbddbdb ccb b           |
+|          b  c  bdd b ddc    b          |
+|            bcb   dd bbdcbb             |
+|            bc  bbb ddd d  b            |
+|             cbbbbbccccddd              |
+|        aaaa cccccc b b bdddaaaaa       |
+|                                        |
+|                                        |
+a=fg b=mute c=series1 d=series2 (upper case is bold)
+=== ascii 40x13
+|                                        |
+|                  speed                 |
+|               . . ***. .               |
+|           . .   **..*.   . .           |
+|  weight ..  . **. .++**. . . . power   |
+|           ..**...++.+. **. .           |
+|          .  *  .++ . ++*    .          |
+|            .*.   ++ ..+*..             |
+|            .*  ... +++ +  .            |
+|             *.....****+++              |
+|        cost ****** . . .+++range       |
+|                                        |
+|                                        |
+--- roles
+|                                        |
+|                  aaaaa                 |
+|               b b cccb b               |
+|           b b   ccbbcb   b b           |
+|  aaaaaa bb  b ccb bddccb b b b aaaaa   |
+|           bbccbbbddbdb ccb b           |
+|          b  c  bdd b ddc    b          |
+|            bcb   dd bbdcbb             |
+|            bc  bbb ddd d  b            |
+|             cbbbbbccccddd              |
+|        aaaa cccccc b b bdddaaaaa       |
+|                                        |
+|                                        |
+a=fg b=mute c=series1 d=series2 (upper case is bold)

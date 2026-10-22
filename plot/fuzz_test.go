@@ -46,7 +46,7 @@ func FuzzCharts(f *testing.F) {
 			}
 		}
 		var g *Grid
-		switch kind % 16 {
+		switch kind % 17 {
 		case 0:
 			g = Bar{Values: vals, Labels: labels, Horizontal: true, Guide: true}.Draw(W, H, m)
 		case 1:
@@ -120,6 +120,8 @@ func FuzzCharts(f *testing.F) {
 				mp.Min, mp.Max = vals[0], vals[1]
 			}
 			g = mp.Draw(W, H, m)
+		case 16:
+			g = Radar{Axes: labels, Series: []Series{{Values: vals}, {Values: reverse(vals)}}, Min: float64(w % 3), Rings: int(h % 7), Polygon: kind%2 == 0, Aspect: float64(w%5) - 1}.Draw(W, H, m)
 		}
 		checkGrid(t, g, W, H, m)
 		_ = g.String()

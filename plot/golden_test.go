@@ -112,6 +112,9 @@ var cases = []chartCase{
 	{"pie-seven", 40, 8, func(w, h int, m Mode) *Grid {
 		return Pie{Values: []float64{412, 236, 188, 164, 121, 74, 52}, Labels: []string{"e2e", "ghostty", "unit", "fuzz", "release", "wasm", "lint"}}.Draw(w, h, m)
 	}},
+	{"radar", 40, 13, func(w, h int, m Mode) *Grid {
+		return Radar{Axes: []string{"speed", "power", "range", "cost", "weight"}, Series: []Series{{Name: "car", Values: []float64{4, 2, 3, 5, 3}}, {Name: "bike", Values: []float64{2, 1, 5, 1, 1}}}, Max: 5, Rings: 5, Polygon: true}.Draw(w, h, m)
+	}},
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},
