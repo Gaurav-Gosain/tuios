@@ -101,10 +101,7 @@ func lineStarts(src []byte) []int {
 }
 
 func posFromLines(starts []int, off int) Pos {
-	i := sort.Search(len(starts), func(i int) bool { return starts[i] > off }) - 1
-	if i < 0 {
-		i = 0
-	}
+	i := max(sort.Search(len(starts), func(i int) bool { return starts[i] > off })-1, 0)
 	return Pos{Line: i + 1, Col: off - starts[i] + 1, Offset: off}
 }
 

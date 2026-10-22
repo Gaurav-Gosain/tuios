@@ -1,6 +1,7 @@
 package loom
 
 import (
+	"slices"
 	"strconv"
 
 	"tuios.dev/tml"
@@ -448,12 +449,7 @@ func needsPaint(b *box) bool {
 	if b.dirty || b.rect != b.prev {
 		return true
 	}
-	for _, k := range b.kids {
-		if needsPaint(k) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(b.kids, needsPaint)
 }
 
 // paint draws b when it changed or force is set, and otherwise looks for

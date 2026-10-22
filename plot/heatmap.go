@@ -150,7 +150,7 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 		// middle and the high value under it.
 		sw := 3
 		for i, r := range heat {
-			for k := 0; k < sw; k++ {
+			for k := range sw {
 				if m == ASCII {
 					g.set(x0+sw*i+k, y, asciiShades[i], r)
 				} else {

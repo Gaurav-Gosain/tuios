@@ -4,10 +4,9 @@ package agentflow
 
 import (
 	"strings"
-
-	"tuios.dev/sketch/internal/js"
 	"unicode/utf8"
 
+	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
 )
 

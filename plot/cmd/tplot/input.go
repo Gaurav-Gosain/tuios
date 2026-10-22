@@ -40,7 +40,7 @@ func (t *table) guess() string {
 // pick keeps the series that list names, by name or by number from 1.
 func (t *table) pick(list string) error {
 	var out []series
-	for _, want := range strings.Split(list, ",") {
+	for want := range strings.SplitSeq(list, ",") {
 		want = strings.TrimSpace(want)
 		found := false
 		for i, s := range t.series {
@@ -117,7 +117,7 @@ func readTable(data []byte, format, name string, noHeader bool) (*table, error) 
 			records = append(records, rec)
 		}
 	case "numbers":
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if f := strings.Fields(line); len(f) > 0 {
 				records = append(records, f)
 			}
@@ -134,8 +134,8 @@ func readTable(data []byte, format, name string, noHeader bool) (*table, error) 
 }
 
 func firstLine(b []byte) []byte {
-	if i := bytes.IndexByte(b, '\n'); i >= 0 {
-		return b[:i]
+	if before, _, ok := bytes.Cut(b, []byte{'\n'}); ok {
+		return before
 	}
 	return b
 }

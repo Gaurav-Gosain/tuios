@@ -2,6 +2,7 @@ package loom
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"tuios.dev/plot"
@@ -255,8 +256,8 @@ func (w *chartWidget) measure(s *Surface, _ *box, maxW int) (int, int) {
 
 // last is the last value of a sparkline as text.
 func (w *chartWidget) last() string {
-	for i := len(w.values) - 1; i >= 0; i-- {
-		if v := w.values[i]; !math.IsNaN(v) && !math.IsInf(v, 0) {
+	for _, v := range slices.Backward(w.values) {
+		if !math.IsNaN(v) && !math.IsInf(v, 0) {
 			return plot.Compact(v)
 		}
 	}

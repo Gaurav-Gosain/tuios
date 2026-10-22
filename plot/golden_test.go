@@ -87,7 +87,7 @@ var cases = []chartCase{
 	}},
 	{"histogram", 24, 5, func(w, h int, m Mode) *Grid {
 		var vals []float64
-		for i := 0; i < 200; i++ {
+		for i := range 200 {
 			vals = append(vals, 10+20*math.Exp(-float64((i%40-12)*(i%40-12))/60)+float64(i%7))
 		}
 		return Histogram{Values: vals, Bins: 12, Format: func(v float64) string { return Compact(v) + "ms" }}.Draw(w, h, m)
@@ -98,7 +98,7 @@ var cases = []chartCase{
 	}},
 	{"heatmap-half", 16, 3, func(w, h int, m Mode) *Grid {
 		var rows [][]float64
-		for r := 0; r < 6; r++ {
+		for r := range 6 {
 			rows = append(rows, []float64{float64(r), float64(r * 2), float64(10 - r)})
 		}
 		return Heatmap{Values: rows}.Draw(w, h, m)
@@ -329,7 +329,8 @@ func dump(g *Grid) string {
 	}
 	sort.Strings(legend)
 	if len(legend) > 0 {
-		b.WriteString(strings.Join(legend, " ") + " (upper case is bold)\n")
+		b.WriteString(strings.Join(legend, " "))
+		b.WriteString(" (upper case is bold)\n")
 	}
 	return b.String()
 }

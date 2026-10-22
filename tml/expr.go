@@ -2,6 +2,7 @@ package tml
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -51,7 +52,7 @@ type SyntaxError struct {
 
 func (e *SyntaxError) Error() string { return fmt.Sprintf("at %d: %s", e.Offset, e.Message) }
 
-type exprNode interface{}
+type exprNode any
 
 type (
 	litNode struct{ v any }
@@ -322,12 +323,7 @@ func (p *exprParser) binary(level int) (exprNode, error) {
 }
 
 func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 func (p *exprParser) unary() (exprNode, error) {
@@ -505,10 +501,8 @@ func staticPath(n exprNode) (root, ptr string, dyn, ok bool) {
 
 func collectDeps(n exprNode, out *[]Dep) {
 	add := func(d Dep) {
-		for _, e := range *out {
-			if e == d {
-				return
-			}
+		if slices.Contains(*out, d) {
+			return
 		}
 		*out = append(*out, d)
 	}

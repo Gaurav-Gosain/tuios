@@ -1,6 +1,9 @@
 package plot
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // Radar is a radar chart: a spoke for each axis, from twelve o'clock
 // clockwise, rings at even steps from the centre to the rim, and each
@@ -76,7 +79,7 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 	rings = min(rings, 20)
 	labels := make([]string, n)
 	labelW := 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		labels[i] = truncate(r.Axes[i], 20, ellipsis(m))
 		labelW = max(labelW, width(labels[i]))
 	}
@@ -141,7 +144,7 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 	for t := 1; t <= rings; t++ {
 		f := float64(t) / float64(rings)
 		if r.Polygon {
-			for i := 0; i < n; i++ {
+			for i := range n {
 				x0, y0 := at(angle(i), f)
 				x1, y1 := at(angle(i+1), f)
 				stroke(grid, x0, y0, x1, y1, 2)
@@ -155,7 +158,7 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 		}
 	}
 	ox, oy := at(0, 0)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		x, y := at(angle(i), 1)
 		stroke(grid, ox, oy, x, y, 2)
 	}
@@ -171,7 +174,7 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 			}
 			return 0
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			x0, y0 := at(angle(i), val(i))
 			x1, y1 := at(angle(i+1), val((i+1)%n))
 			stroke(l, x0, y0, x1, y1, 1)
@@ -203,18 +206,18 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 			if c := g.At(x, y); c.Text != "" {
 				continue
 			}
-			for l := len(layers) - 1; l >= 0; l-- {
-				bits := layers[l].dots[y*g.W+x]
+			for l, layer := range slices.Backward(layers) {
+				bits := layer.dots[y*g.W+x]
 				if bits == 0 {
 					continue
 				}
 				switch {
 				case m == Braille:
-					g.set(x, y, string(rune(0x2800+int(bits))), layers[l].role)
+					g.set(x, y, string(rune(0x2800+int(bits))), layer.role)
 				case l == grid:
-					g.set(x, y, block(m, "·", "."), layers[l].role)
+					g.set(x, y, block(m, "·", "."), layer.role)
 				default:
-					g.set(x, y, block(m, "•", asciiMarks[(l-1)%len(asciiMarks)]), layers[l].role)
+					g.set(x, y, block(m, "•", asciiMarks[(l-1)%len(asciiMarks)]), layer.role)
 				}
 				break
 			}

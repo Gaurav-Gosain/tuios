@@ -2,6 +2,7 @@ package loom
 
 import (
 	"image"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -354,11 +355,11 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 		if m.Button == WheelUp {
 			key = "up"
 		}
-		for i := len(path) - 1; i >= 0; i-- {
-			switch path[i].w.(type) {
+		for _, p := range slices.Backward(path) {
+			switch p.w.(type) {
 			case *tableWidget, *scrollWidget:
 				for range 3 {
-					s.scrollBy(path[i], key)
+					s.scrollBy(p, key)
 				}
 				return Result{View: true}, nil
 			}
@@ -373,8 +374,7 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 		// as an effect, never as an OSC 8 link the outer terminal follows.
 		return Result{Effects: []Effect{{Action: "link", Name: href, Value: href, HasValue: true}}}, nil
 	}
-	for i := len(path) - 1; i >= 0; i-- {
-		b := path[i]
+	for _, b := range slices.Backward(path) {
 		if b.kind == "split" && s.onDivider(b, pt) {
 			s.drag = b
 			return Result{}, nil
@@ -485,11 +485,11 @@ func (s *Surface) hit(b *box, pt image.Point, path []*box) []*box {
 		return path
 	}
 	var top []*box
-	for i := len(b.kids) - 1; i >= 0; i-- {
-		if !pt.In(b.kids[i].rect) {
+	for _, v := range slices.Backward(b.kids) {
+		if !pt.In(v.rect) {
 			continue
 		}
-		sub := s.hit(b.kids[i], pt, path)
+		sub := s.hit(v, pt, path)
 		if b.kind != "stack" {
 			return sub
 		}
@@ -498,10 +498,8 @@ func (s *Surface) hit(b *box, pt image.Point, path []*box) []*box {
 		if top == nil {
 			top = sub
 		}
-		for _, x := range sub[len(path):] {
-			if s.clickable(x) {
-				return sub
-			}
+		if slices.ContainsFunc(sub[len(path):], s.clickable) {
+			return sub
 		}
 	}
 	if top != nil {

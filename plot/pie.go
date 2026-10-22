@@ -2,6 +2,7 @@ package plot
 
 import (
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 )
@@ -73,8 +74,8 @@ func (p Pie) role(i int) Role {
 
 // lastShare is the index of the last slice with a positive value, or -1.
 func (p Pie) lastShare() int {
-	for i := len(p.Values) - 1; i >= 0; i-- {
-		if v := p.Values[i]; finite(v) && v > 0 {
+	for i, v := range slices.Backward(p.Values) {
+		if finite(v) && v > 0 {
 			return i
 		}
 	}
@@ -256,8 +257,8 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 			count[i] = 0
 		}
 		on := 0
-		for sy := 0; sy < ss; sy++ {
-			for sx := 0; sx < ss; sx++ {
+		for sy := range ss {
+			for sx := range ss {
 				x := float64(px) + (float64(sx)+0.5)/ss
 				y := (float64(py) + (float64(sy)+0.5)/ss) * ph
 				if k := slice(x, y); k >= 0 {
@@ -278,8 +279,8 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		return best
 	}
 	y0 := (g.H - nr) / 2
-	for y := 0; y < nr; y++ {
-		for x := 0; x < nc; x++ {
+	for y := range nr {
+		for x := range nc {
 			up, down := pixel(x, 2*y), pixel(x, 2*y+1)
 			if m == ASCII {
 				k := up

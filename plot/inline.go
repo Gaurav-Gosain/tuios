@@ -153,7 +153,7 @@ func lineSide(g *Grid, y, n int, f float64, role Role, track bool, m Mode, x fun
 		return
 	}
 	units := cellsOf(f, n*2)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		lv := units - i*2
 		switch {
 		case lv >= 2:
@@ -178,7 +178,7 @@ func fillRight(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) 
 		return
 	}
 	units := cellsOf(f, n*8)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		lv := units - i*8
 		switch {
 		case lv >= 8:
@@ -207,7 +207,7 @@ func fillLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 		return
 	}
 	units := cellsOf(f, n*8)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		x := x0 + n - 1 - i
 		lv := units - i*8
 		switch {
@@ -249,7 +249,7 @@ func cellsOf(f float64, n int) int {
 // fillASCII fills k of n cells with #, from the right when fromRight, and
 // the rest with . on a track.
 func fillASCII(g *Grid, y, x0, n, k int, fromRight bool, role Role, track bool) {
-	for i := 0; i < n; i++ {
+	for i := range n {
 		x := x0 + i
 		if fromRight {
 			x = x0 + n - 1 - i

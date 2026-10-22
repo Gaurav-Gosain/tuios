@@ -2,6 +2,7 @@ package loom
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -81,9 +82,7 @@ func runActions(doc *tml.Node, store *tml.Store, view *View, source string, acti
 		env = &e
 	}
 	vars := map[string]any{}
-	for k, v := range env.Vars {
-		vars[k] = v
-	}
+	maps.Copy(vars, env.Vars)
 	evalArg := func(a tml.Action, i int) (any, error) {
 		vars["state"] = store.State()
 		e := *env

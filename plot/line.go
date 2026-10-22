@@ -252,7 +252,7 @@ func line(x0, y0, x1, y1 int, plot func(x, y int)) {
 		sy = -1
 	}
 	e := dx + dy
-	for n := 0; n < 1<<16; n++ {
+	for range 1 << 16 {
 		plot(x0, y0)
 		if x0 == x1 && y0 == y1 {
 			return

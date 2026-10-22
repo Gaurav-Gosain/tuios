@@ -2,6 +2,7 @@ package plot
 
 import (
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -289,8 +290,8 @@ func (t Treemap) Draw(w, h int, m Mode) *Grid {
 			frame(i)
 		}
 	}
-	for i := len(t.Boxes) - 1; i >= 0; i-- {
-		if t.Boxes[i].Depth > 0 {
+	for i, v := range slices.Backward(t.Boxes) {
+		if v.Depth > 0 {
 			frame(i)
 		}
 	}

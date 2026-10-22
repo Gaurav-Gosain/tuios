@@ -667,7 +667,7 @@ func (w *fieldWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 			f = max(0, min(1, (w.num-w.lo)/(w.hi-w.lo)))
 		}
 		pos := int(f * float64(track-1))
-		for i := 0; i < track; i++ {
+		for i := range track {
 			glyph, st := g.heavy, style{fg: "track"}
 			if i < pos {
 				st.fg = "accent"
