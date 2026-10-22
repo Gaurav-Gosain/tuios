@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -210,7 +211,11 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 			fmt.Fprintf(w, "tuios removed these keys from %s and saved your values: %s.\n", f.Path, strings.Join(f.Keys, ", "))
 		}
 		for _, file := range config.ShadowFiles(to.Kept) {
-			fmt.Fprintf(w, "tuios cannot change %s. These keys stay there: %s.\n", file, config.ShadowKeys(to.Kept, file))
+			why := "tuios cannot change %s."
+			if i := slices.IndexFunc(to.Kept, func(s config.LookShadow) bool { return s.File == file }); to.Kept[i].Include {
+				why = "tuios does not change %s, because another file includes it."
+			}
+			fmt.Fprintf(w, why+" These keys stay there: %s.\n", file, config.ShadowKeys(to.Kept, file))
 		}
 	}
 	fmt.Fprintln(w, "The look is applied. A running tuios shows it now.")
@@ -232,12 +237,21 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	if err != nil {
 		return err
 	}
-	if plan.Current == nil {
+	if plan.Current == nil && plan.Restore == nil && plan.SavedErr == nil {
 		fmt.Fprintln(w, "No look is applied.")
 		return nil
 	}
 	printLookPlan(w, plan)
-	ok, err := prompt.confirm(w, "Remove this look?")
+	question := "Remove this look?"
+	if plan.Current == nil {
+		question = "Put back the saved values?"
+	}
+	if plan.SavedErr != nil {
+		fmt.Fprintf(w, "%v.\n", plan.SavedErr)
+		fmt.Fprintf(w, "tuios can remove the look without them. It moves the file to %s.\n\n", homeShort(plan.BrokenPath))
+		question = "Remove the look without the saved values?"
+	}
+	ok, err := prompt.confirm(w, question)
 	if err != nil {
 		return err
 	}
@@ -248,10 +262,15 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	if err := plan.Apply(); err != nil {
 		return err
 	}
-	if r := plan.Restore; r != nil && len(r.Kept) > 0 {
-		fmt.Fprintf(w, "tuios keeps your saved values in %s.\n", homeShort(config.LookSavedPath(plan.Main)))
+	switch r := plan.Restore; {
+	case r != nil && len(r.Kept) > 0:
+		fmt.Fprintf(w, "tuios keeps the values it cannot put back in %s.\n", homeShort(config.LookSavedPath(plan.Main)))
+		fmt.Fprintln(w, `The look stays. Fix the files above, then run "tuios look remove" again.`)
+	case plan.Current == nil:
+		fmt.Fprintln(w, "tuios put back the saved values.")
+	default:
+		fmt.Fprintln(w, "The look is removed.")
 	}
-	fmt.Fprintln(w, "The look is removed.")
 	return nil
 }
 
@@ -365,8 +384,8 @@ func printLookPlan(w io.Writer, p *config.LookPlan) {
 		if len(r.Files) > 0 {
 			fmt.Fprintln(w)
 		}
-		for i, f := range r.Files {
-			if r.Exact[i] {
+		for _, f := range r.Files {
+			if f.Exact {
 				fmt.Fprintf(w, "Puts back %s as it was before the take-over.\n", f.Path)
 			} else {
 				fmt.Fprintf(w, "Puts back these keys in %s: %s.\n", f.Path, strings.Join(f.Keys, ", "))
@@ -380,11 +399,14 @@ func printLookPlan(w io.Writer, p *config.LookPlan) {
 			_ = tw.Flush()
 		}
 		if len(r.Kept) > 0 {
-			fmt.Fprintln(w, "\ntuios cannot put back these keys:")
+			fmt.Fprintln(w, "\ntuios cannot write these keys back into their file. They stay saved:")
 			for _, s := range r.Kept {
 				fmt.Fprintf(tw, "  %s\t%s\n", s.Path, s.File)
 			}
 			_ = tw.Flush()
+		}
+		for _, file := range config.ShadowFiles(r.Gone) {
+			fmt.Fprintf(w, "\nYou deleted %s, so tuios does not make it again. It does not put back: %s.\n", file, config.ShadowKeys(r.Gone, file))
 		}
 	}
 	fmt.Fprintln(w)

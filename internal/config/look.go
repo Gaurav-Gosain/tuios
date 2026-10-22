@@ -785,6 +785,9 @@ type LookChange struct {
 type LookShadow struct {
 	Path string
 	File string // the file that sets it, as a person reads it
+	// Include is true when another file includes File. A take-over does
+	// not change such a file.
+	Include bool
 }
 
 // LookPlan is what an apply or a remove will do.
@@ -798,11 +801,27 @@ type LookPlan struct {
 	// TakeOver, when set, makes Apply remove the shadowed keys and save
 	// their values (see look_takeover.go).
 	TakeOver *LookTakeOver
-	// Restore is what a remove puts back from an earlier take-over, or nil.
+	// Restore is what the plan puts back from an earlier take-over, or nil.
+	// A remove puts back every saved key. An apply puts back the saved keys
+	// the new look does not set.
 	Restore *LookRestore
+	// SavedErr is set when config.d/look.saved.json cannot be read. Only a
+	// remove plans past it, and then puts nothing back.
+	SavedErr error
+	// BrokenPath is where a remove moves a backup it cannot read.
+	BrokenPath string
 
 	lc   *LayeredConfig
 	next *LayeredConfig // the files as the plan leaves them
+	// disk is each config file as the plan read it. Apply checks it again
+	// before it writes, so a change made while tuios asked is never lost.
+	disk map[string]diskFile
+}
+
+// diskFile is a file as a plan read it.
+type diskFile struct {
+	data    []byte
+	existed bool
 }
 
 // PlanLook works out what applying lk to the config at mainPath changes. It
@@ -827,8 +846,37 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &LookPlan{Main: lc.Main, Look: lk, Source: source, Current: cur, lc: lc}
-	if lk == nil && cur == nil {
+	p := &LookPlan{Main: lc.Main, Look: lk, Source: source, Current: cur, lc: lc, disk: map[string]diskFile{}}
+	for _, l := range lc.Layers {
+		p.disk[l.Path] = diskFile{data: l.Data, existed: !(l.Kind == LayerMain && lc.MainMissing)}
+	}
+	// The saved values of a take-over come back on a remove, and on an apply
+	// for each key the new look does not set.
+	var skip func(string) bool
+	if lk != nil {
+		sets := map[string]bool{}
+		for _, s := range lk.Settings {
+			sets[s.Path] = true
+		}
+		skip = func(key string) bool { return sets[key] }
+	}
+	p.Restore, err = planRestore(lc.Main, skip)
+	if err != nil {
+		var broken *lookSavedError
+		if lk != nil || !errors.As(err, &broken) {
+			return nil, err
+		}
+		p.SavedErr, p.Restore = err, nil
+		p.BrokenPath = lookSavedBrokenPath(lc.Main)
+	}
+	if p.Restore != nil {
+		for _, f := range p.Restore.Files {
+			if _, ok := p.disk[f.abs]; !ok {
+				p.disk[f.abs] = diskFile{data: f.disk, existed: true}
+			}
+		}
+	}
+	if lk == nil && cur == nil && p.Restore == nil && p.SavedErr == nil {
 		return p, nil
 	}
 	if !fileWritable(LookPath(lc.Main)) {
@@ -871,19 +919,14 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		if l.isLook() {
 			continue
 		}
-		if lookLayer != nil && !placed && (l.Kind == LayerMain || l.Kind == LayerDropIn && l.Path > lookPath) {
+		if lookLayer != nil && !placed && (l.Kind == LayerMain || lc.dropInOf(l).Path > lookPath) {
 			next.Layers = append(next.Layers, *lookLayer)
 			placed = true
 		}
 		next.Layers = append(next.Layers, l)
 	}
-	if lk == nil {
-		if p.Restore, err = planRestore(lc.Main); err != nil {
-			return nil, err
-		}
-		if err := p.Restore.restoreLayers(next); err != nil {
-			return nil, err
-		}
+	if err := p.Restore.restoreLayers(next); err != nil {
+		return nil, err
 	}
 	if p.Changes, err = lookChanges(lc, next); err != nil {
 		return nil, err
@@ -901,6 +944,27 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		}
 	}
 	return p, nil
+}
+
+// dropInOf is the config.d file whose include list brought l in, through
+// any number of includes, or l itself. A file config.toml includes has no
+// such file, and the zero layer comes back. The files a config.d file
+// includes merge just before it, so they sit where it sits in the order.
+func (lc *LayeredConfig) dropInOf(l ConfigLayer) ConfigLayer {
+	for range len(lc.Layers) {
+		if l.Kind == LayerDropIn {
+			return l
+		}
+		if l.Kind != LayerInclude {
+			return ConfigLayer{}
+		}
+		i := slices.IndexFunc(lc.Layers, func(o ConfigLayer) bool { return o.Path == l.From })
+		if i < 0 {
+			return ConfigLayer{}
+		}
+		l = lc.Layers[i]
+	}
+	return ConfigLayer{}
 }
 
 // lookChanges lists the options whose value in force differs between two
@@ -962,10 +1026,17 @@ func (p *LookPlan) Apply() error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
+	writes, saved, err := p.configWrites()
+	if err != nil {
+		return err
+	}
 	if err := atomicfile.Write(path, data, 0o600, true); err != nil {
 		return fmt.Errorf("failed to write %s: %w", path, err)
 	}
-	if err := p.TakeOver.write(p.Main); err != nil {
+	if err := writeLookSaved(p.Main, saved); err != nil {
+		return err
+	}
+	if err := writeConfigFiles(writes); err != nil {
 		return err
 	}
 	if c := p.Current; c != nil {
@@ -982,13 +1053,32 @@ func (p *LookPlan) Apply() error {
 // remove puts back the values a take-over saved, then deletes the look file,
 // so the config the watcher reloads no longer names the assets, then the
 // assets.
+//
+// A saved key that tuios cannot put back keeps the look in place, so the
+// person can fix the file and remove the look again. A backup tuios cannot
+// read is moved aside, never deleted.
 func (p *LookPlan) remove() error {
-	c := p.Current
-	if c == nil {
-		return nil
+	if p.SavedErr != nil {
+		saved := LookSavedPath(p.Main)
+		if err := os.Rename(saved, p.BrokenPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
 	}
-	if err := p.Restore.write(p.Main); err != nil {
+	writes, saved, err := p.configWrites()
+	if err != nil {
 		return err
+	}
+	if p.Restore != nil {
+		if err := writeLookSaved(p.Main, saved); err != nil {
+			return err
+		}
+	}
+	if err := writeConfigFiles(writes); err != nil {
+		return err
+	}
+	c := p.Current
+	if c == nil || p.Restore != nil && len(p.Restore.Kept) > 0 {
+		return nil
 	}
 	if err := os.Remove(c.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

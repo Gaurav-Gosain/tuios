@@ -302,8 +302,8 @@ tuios look keys --json
   `config.d/look.saved.json`. The comments and the order of the files stay.
 - `--take-over` answers yes. `--yes` alone answers no, so a script keeps its
   config. Use `--yes --take-over` for both.
-- A file that tuios cannot write keeps its keys. tuios names the file and the
-  keys.
+- A file that tuios cannot write keeps its keys, and so does a file that
+  another file includes. tuios names the file and the keys.
 - A new look replaces the look in use.
 - A config folder that tuios cannot write stops the command.
 
@@ -316,6 +316,19 @@ it puts your saved values back:
   does not set.
 - A key that you set again after the take-over keeps your newer value. tuios
   names it.
+- A file that you deleted stays deleted. tuios names the keys it does not put
+  back.
+- When tuios cannot write a key back, the look stays and the key stays saved.
+  Fix the file, then run `tuios look remove` again.
+- When `config.d/look.saved.json` cannot be read, tuios asks before it removes
+  the look without the saved values. It moves the file aside and does not
+  delete it.
+- When `config.d/look.toml` is gone, `tuios look remove` still puts the saved
+  values back.
+
+A new look applied over a take-over puts back the saved keys that the new look
+does not set. tuios reads each file again before it writes it. If a file
+changed while tuios asked its questions, tuios stops and changes nothing.
 
 ---
 

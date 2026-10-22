@@ -187,3 +187,146 @@ border_unfocused_color = "#553300"
 	saveSyncArtifact(t, "look-take-over.txt", transcript.String())
 	alive(t, term, "after the look came and went")
 }
+
+// lookCase is a scratch config for one case of TestLookTakeOverKeepsLaterEdits:
+// its root, a look file per name, and a runner for the CLI.
+type lookCase struct {
+	t     *testing.T
+	base  string
+	looks map[string]string
+}
+
+func newLookCase(t *testing.T, main string, looks map[string]string) *lookCase {
+	t.Helper()
+	base := t.TempDir()
+	useShippedLooks(base)
+	writeConfig(t, base, main)
+	c := &lookCase{t: t, base: base, looks: map[string]string{}}
+	for name, body := range looks {
+		path := filepath.Join(base, name+".look.toml")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("write the look %s: %v", name, err)
+		}
+		c.looks[name] = path
+	}
+	return c
+}
+
+// run runs tuios and fails the test when it fails.
+func (c *lookCase) run(args ...string) string {
+	c.t.Helper()
+	out, err := tuiosCLI(c.t, c.base, args...)
+	if err != nil {
+		c.t.Fatalf("tuios %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return out
+}
+
+func (c *lookCase) main() string { return readFileString(c.t, configPathIn(c.base)) }
+
+func (c *lookCase) dropIn(name string) string {
+	return filepath.Join(configDirIn(c.base), "config.d", name)
+}
+
+// TestLookTakeOverKeepsLaterEdits holds the take-over to the rule that it
+// never loses what the person wrote: an edit made after one take-over and
+// before the next, an edit made while tuios asks, a look file deleted by
+// hand, and a second look applied over the first.
+func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
+	const amber = "look = 1\nname = \"Amber\"\n\n[appearance]\ntheme = \"nord\"\nborder_style = \"rounded\"\nborder_focused_color = \"#ffb000\"\n"
+
+	// A take-over that leaves a file empty, then a second take-over after
+	// the person wrote the file again. The remove must keep what they wrote
+	// second: the newer value and the key that is not a look key.
+	t.Run("second take-over after an edit", func(t *testing.T) {
+		c := newLookCase(t, "[appearance]\ngap = 0\n", map[string]string{"amber": amber})
+		only := c.dropIn("zz-only.toml")
+		if err := os.MkdirAll(filepath.Dir(only), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(only, []byte("[appearance]\nborder_focused_color = \"#ff0000\"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c.run("look", "apply", c.looks["amber"], "--yes", "--take-over")
+		if got := readFileString(t, only); got != "" {
+			t.Fatalf("the take-over did not leave zz-only.toml empty, so this cannot test it:\n%q", got)
+		}
+		edited := "[appearance]\nborder_focused_color = \"#00ff00\"\n\n[startup]\ntiled = true\n"
+		if err := os.WriteFile(only, []byte(edited), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c.run("look", "apply", c.looks["amber"], "--yes", "--take-over")
+		out := c.run("look", "remove", "--yes")
+		got := readFileString(t, only)
+		if !strings.Contains(got, "tiled = true") {
+			t.Fatalf("ASSERTION: the remove wrote back the copy from before the first take-over and lost startup.tiled:\n%s\n%s", got, out)
+		}
+		if !strings.Contains(got, `"#00ff00"`) || strings.Contains(got, `"#ff0000"`) {
+			t.Fatalf("ASSERTION: the remove put back the older border_focused_color, not the one set again:\n%s\n%s", got, out)
+		}
+	})
+
+	// An edit made while tuios asks its question stops the command, and the
+	// edit stays.
+	t.Run("edit during the question", func(t *testing.T) {
+		c := newLookCase(t, "[appearance]\ntheme = \"dracula\"\n", map[string]string{"amber": amber})
+		cli := startIn(t, c.base, startOpts{cols: 120, rows: 40, shippedLooks: true, animations: true,
+			args: []string{"look", "apply", c.looks["amber"], "--take-over"}})
+		if err := cli.WaitForText("Apply this look? [y/N]", uiTimeout); err != nil {
+			t.Fatalf("the question is not on screen: %v\n%s", err, cli.Snapshot())
+		}
+		edited := "# edited while tuios asked\n[appearance]\ntheme = \"dracula\"\ngap = 2\n"
+		saveConfigLikeAnEditor(t, c.base, edited)
+		if err := cli.Type("y\r"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.WaitForText("changed while tuios asked", uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the take-over did not stop on the edit: %v\n%s", err, cli.Snapshot())
+		}
+		if got := c.main(); got != edited {
+			t.Fatalf("ASSERTION: the take-over wrote over the edit made while it asked:\n%s", got)
+		}
+		if _, err := os.Stat(c.dropIn("look.toml")); err == nil {
+			t.Fatal("ASSERTION: the stopped take-over still applied the look")
+		}
+	})
+
+	// The person deleted look.toml by hand. The remove must still put the
+	// saved values back.
+	t.Run("look file deleted by hand", func(t *testing.T) {
+		mainBody := "# mine\n[appearance]\ntheme = \"dracula\" # keep\nborder_style = \"double\"\n"
+		c := newLookCase(t, mainBody, map[string]string{"amber": amber})
+		c.run("look", "apply", c.looks["amber"], "--yes", "--take-over")
+		if strings.Contains(c.main(), "theme =") {
+			t.Fatalf("the take-over kept the theme, so this cannot test it:\n%s", c.main())
+		}
+		if err := os.Remove(c.dropIn("look.toml")); err != nil {
+			t.Fatal(err)
+		}
+		out := c.run("look", "remove", "--yes")
+		if got := c.main(); got != mainBody {
+			t.Fatalf("ASSERTION: with look.toml gone, the remove did not put config.toml back:\n%s\n--- output\n%s", got, out)
+		}
+		if _, err := os.Stat(c.dropIn("look.saved.json")); err == nil {
+			t.Fatal("ASSERTION: the remove left the saved values behind")
+		}
+	})
+
+	// Look B over look A's take-over: the keys A took and B does not set
+	// come back to the person.
+	t.Run("second look over a take-over", func(t *testing.T) {
+		const plain = "look = 1\nname = \"Plain\"\n\n[appearance]\nborder_style = \"thick\"\n"
+		c := newLookCase(t, "[appearance]\ntheme = \"dracula\"\nborder_style = \"double\"\n",
+			map[string]string{"amber": amber, "plain": plain})
+		c.run("look", "apply", c.looks["amber"], "--yes", "--take-over")
+		c.run("look", "apply", c.looks["plain"], "--yes", "--take-over")
+		out, err := tuiosCLI(t, c.base, "config", "origin", "appearance.theme")
+		if err != nil || !originLine(out, "appearance.theme", "config.toml") || !strings.Contains(c.main(), `theme = "dracula"`) {
+			t.Fatalf("ASSERTION: the second look did not give the theme back to config.toml: %v\n%s\n--- config.toml\n%s", err, out, c.main())
+		}
+		c.run("look", "remove", "--yes")
+		if got := c.main(); !strings.Contains(got, `border_style = "double"`) || !strings.Contains(got, `theme = "dracula"`) {
+			t.Fatalf("ASSERTION: the remove of the second look did not put border_style back:\n%s", got)
+		}
+	})
+}
