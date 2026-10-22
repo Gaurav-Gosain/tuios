@@ -161,8 +161,11 @@ type HostReport struct {
 	Load1         float64 `json:"load1,omitempty"`
 	MemPct        float64 `json:"mem_pct,omitempty"`
 	AgentsWorking int     `json:"agents_working,omitempty"`
-	LoadAt        int64   `json:"load_at,omitempty"`
-	RTTMillis     int64   `json:"rtt_ms,omitempty"`
+	// LoadOK is the far machine's Load.LoadOK: false when it could not read
+	// Load1.
+	LoadOK    *bool `json:"load_ok,omitempty"`
+	LoadAt    int64 `json:"load_at,omitempty"`
+	RTTMillis int64 `json:"rtt_ms,omitempty"`
 	// Stalls counts streams this link dropped because nothing was reading
 	// them. It is the one number that separates a slow client from a dead
 	// machine, which would otherwise both read as a lost link.
@@ -571,4 +574,9 @@ func (m *Manager) CallAll(ctx context.Context, verb string, params any) []Answer
 	}
 	wg.Wait()
 	return out
+}
+
+// LoadKnown reports whether r holds a load to rank the machine by.
+func (r HostReport) LoadKnown() bool {
+	return Load{Cores: r.Cores, LoadOK: r.LoadOK}.Known()
 }

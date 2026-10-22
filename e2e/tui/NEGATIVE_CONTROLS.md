@@ -7979,6 +7979,15 @@ form. Run on 2026-10-21 and 2026-10-22.
 | The fan ID is saved | `fan_id` left out of the saved JSON | `TestReview984RestoreAcrossRestart`, `TestReview984RestoreSquatFirst` (the pane's fan reaches the person's restored sessions) | **caught**. The tests pass the saved state through JSON, as the state file holds it. Without that step the cut passed |
 | The new-agent form refuses a name a fan does not take | the `FanNameChar` check in `spawnStart` skipped | `TestCockpitSpawnSheet` (waiting for the refused branch) | **caught** |
 
+### Fan follow-ups: one name check, and a load that was not read
+
+Review round 4 of #984 and #986. Run on 2026-10-22.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The form and the daemon check a name by git's branch rules, HEAD and a leading / too | the `HEAD` and leading `/` rules taken out of `FanNameRefOK` | `TestFanNameRefOKAnswersAsGit` (`FanNameRefOK("HEAD") = true, git says false`, and the same for `/x`) | **caught** |
+| A load the daemon could not read ranks as unknown | the sheet's local row takes `loadOK` true for any load with cores | `TestSpawnRankTakesOnlyALoadTheDaemonRead` ("a load the daemon could not read ranks as known") | **caught** |
+
 ## A fan's lead by its session ID
 
 `TestFanLeadIsHeldByID` in `internal/session` (a security boundary test): the

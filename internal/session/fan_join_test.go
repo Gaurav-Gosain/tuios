@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"runtime"
 	"slices"
 	"sync"
@@ -330,6 +331,25 @@ func TestFanNameIsHeldWhileItIsMade(t *testing.T) {
 		}
 		if len(p) == 1 && len(o) == 1 && r.d.sessionInScope(o[0], p[0]) {
 			t.Fatalf("%s: the outsider's %s joined the person's %s", stem, o[0], p[0])
+		}
+	}
+}
+
+// The cockpit's new-agent form checks a fan name with FanNameRefOK in its
+// update loop, where it cannot run git. Within the characters a fan name
+// may have, it must answer as git check-ref-format --branch does.
+func TestFanNameRefOKAnswersAsGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	for _, n := range []string{
+		"fan/retry", "Fix/ABC", "feat/a.b_c", "a", "HEAD", "head", "HEAD/x", "x/HEAD", "-x", "x-", "/x", "x/",
+		"fan//x", "fan/.x", ".x", "x.", "x.lock", "x.lock/y", "x..y", "x/./y", "x/../y", "a.b.c", "_", "x_/y",
+		"refs/heads/x", "x.locked",
+	} {
+		git := exec.Command("git", "check-ref-format", "--branch", n).Run() == nil
+		if got := FanNameRefOK(n); got != git {
+			t.Errorf("FanNameRefOK(%q) = %v, git says %v", n, got, git)
 		}
 	}
 }

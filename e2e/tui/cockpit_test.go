@@ -976,15 +976,31 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the typed branch", "docs/readme")
-	// A branch name a fan does not take is refused before start, in words.
-	if err := term.SendKeys(tuitest.Ctrl('u'), "fix+retry", tuitest.Enter); err != nil {
-		t.Fatal(err)
+	// A branch name a fan does not take is refused before start, in words:
+	// a name git does not take, then a character outside the set. An empty
+	// field follows the task again, so each bad name is the typed one with
+	// an ending, which backspace takes off again.
+	for _, c := range []struct{ end, says string }{
+		{".lock", "Git does not accept this branch name."},
+		{"+x", "A branch name can have only the letters A to Z"},
+	} {
+		if err := term.SendKeys(tuitest.End, c.end, tuitest.Enter); err != nil {
+			t.Fatal(err)
+		}
+		waitText(t, term, "the refused branch ending "+c.end, c.says)
+		keys := []any{tuitest.End}
+		for range len(c.end) {
+			keys = append(keys, tuitest.Backspace)
+		}
+		if err := term.SendKeys(keys...); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), "docs/readme") && !strings.Contains(s.Text(), "docs/readme"+c.end)
+		}, uiTimeout); err != nil {
+			t.Fatalf("the ending %s did not come off: %v\n%s", c.end, err, term.Snapshot())
+		}
 	}
-	waitText(t, term, "the refused branch", "A branch name can have only the letters A to Z")
-	if err := term.SendKeys(tuitest.Ctrl('u'), "docs/readme"); err != nil {
-		t.Fatal(err)
-	}
-	waitText(t, term, "the typed branch again", "docs/readme")
 	for range 4 {
 		if err := term.SendKeys(tuitest.Key("\x1b[Z")); err != nil {
 			t.Fatal(err)

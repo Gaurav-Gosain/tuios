@@ -326,7 +326,7 @@ func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Tim
 func (m *OS) ckFanJudge() bool {
 	cp := m.Inbox.ck.cmp
 	for _, w := range m.Inbox.ck.branches {
-		if w.group == cp.res.Group && w.repo == cp.res.RepoRoot && w.judgeWindow != "" {
+		if w.group == cp.res.Group && w.fanID == cp.res.FanID && w.repo == cp.res.RepoRoot && w.judgeWindow != "" {
 			return true
 		}
 	}

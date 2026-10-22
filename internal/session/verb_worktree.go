@@ -845,7 +845,33 @@ func fanStemPlain(stem string) *verbError {
 			return invalidParam("name", fmt.Sprintf("the fan name %s has the character U+%04X. A fan name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -. Nothing was made.", strconv.QuoteToASCII(stem), r))
 		}
 	}
+	if stem != "" && !FanNameRefOK(stem) {
+		return invalidParam("name", "git does not accept "+strconv.QuoteToASCII(stem)+" as a branch name. Nothing was made.")
+	}
 	return nil
+}
+
+// FanNameRefOK reports whether git takes name as a branch, by the rules of
+// git check-ref-format --branch, without running git, so the cockpit's
+// new-agent form can check a name in its update loop. The daemon checks the
+// same, and git checks again when it makes the branch.
+func FanNameRefOK(name string) bool {
+	if name == "" || name == "@" || name == "HEAD" || strings.HasPrefix(name, "-") || strings.HasPrefix(name, "/") ||
+		strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.Contains(name, "..") ||
+		strings.Contains(name, "//") || strings.Contains(name, "@{") {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(" ~^:?*[\\", r) {
+			return false
+		}
+	}
+	for part := range strings.SplitSeq(name, "/") {
+		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return true
 }
 
 // FanNameChar reports whether a fan name may hold r: A-Z, a-z, 0-9 or

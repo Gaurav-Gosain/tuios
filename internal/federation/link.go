@@ -80,7 +80,15 @@ type Load struct {
 	MemPct float64 `json:"mem_pct,omitempty"`
 	// Working is how many agents on the machine are working.
 	Working int `json:"agents_working"`
+	// LoadOK says whether the machine could read Load1. False when it could
+	// not, as on a system tuios reads no load on: Load1 is then 0 and means
+	// nothing. Absent from a daemon from before the field, which sent a
+	// load it read.
+	LoadOK *bool `json:"load_ok,omitempty"`
 }
+
+// Known reports whether l holds a load to rank a machine by.
+func (l Load) Known() bool { return l.Cores > 0 && (l.LoadOK == nil || *l.LoadOK) }
 
 // bounded is l with every value held to what a machine can report: the far
 // daemon is untrusted.
@@ -275,6 +283,7 @@ func (l *link) report() HostReport {
 	}
 	if !l.loadAt.IsZero() {
 		r.Cores, r.Load1, r.MemPct, r.AgentsWorking = l.load.Cores, l.load.Load1, l.load.MemPct, l.load.Working
+		r.LoadOK = l.load.LoadOK
 		r.LoadAt = l.loadAt.Unix()
 		r.RTTMillis = max(l.rtt.Milliseconds(), 1)
 	}

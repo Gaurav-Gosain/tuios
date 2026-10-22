@@ -586,7 +586,9 @@ func (m *OS) ckMachines() []ckMachineRow {
 		}
 		mr := ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
 			up: h.Status == string(federation.StatusUp), status: h.Status, rtt: h.RTTMillis}
-		mr.load, mr.loadOK = ckLoadShare(h.Load1, h.Cores)
+		if h.LoadOK {
+			mr.load, mr.loadOK = ckLoadShare(h.Load1, h.Cores)
+		}
 		if h.Name == m.AttachedHost {
 			// The machine the client is attached to is the local row.
 			attached = mr
@@ -604,7 +606,9 @@ func (m *OS) ckMachines() []ckMachineRow {
 	if m.AttachedHost != "" {
 		local.load, local.loadOK, local.rtt = attached.load, attached.loadOK, attached.rtt
 	} else {
-		local.load, local.loadOK = ckLoadShare(m.LocalLoad.Load1, m.LocalLoad.Cores)
+		if m.LocalLoad.Known() {
+			local.load, local.loadOK = ckLoadShare(m.LocalLoad.Load1, m.LocalLoad.Cores)
+		}
 	}
 	return append([]ckMachineRow{local}, out...)
 }

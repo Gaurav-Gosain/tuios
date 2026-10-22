@@ -41,7 +41,8 @@ func machineLoad(infos []SessionInfo) federation.Load {
 			c.load1, c.loadOK = v, true
 		}
 	}
-	l := federation.Load{Cores: runtime.NumCPU(), Load1: c.load1, MemPct: c.memPct}
+	ok := c.loadOK
+	l := federation.Load{Cores: runtime.NumCPU(), Load1: c.load1, MemPct: c.memPct, LoadOK: &ok}
 	c.Unlock()
 	for _, s := range infos {
 		for _, w := range s.Windows {

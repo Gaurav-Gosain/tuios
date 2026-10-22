@@ -80,8 +80,10 @@ type FederationHost struct {
 	// Cores and Load1 are the machine's CPUs and one-minute load from the
 	// last hello on its link, and RTTMillis that hello's round trip. Cores is
 	// 0 until a hello carried a load.
-	Cores     int
-	Load1     float64
+	Cores int
+	Load1 float64
+	// LoadOK says Load1 was read: false when the machine reads no load.
+	LoadOK    bool
 	RTTMillis int64
 }
 
@@ -260,7 +262,7 @@ func refreshFederationCmd() tea.Cmd {
 			}
 			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host], ApprovalURL: signIn[h.Host], ApprovalRefused: signInRefused[h.Host]}
 			if r := loads[h.Host]; r.Cores > 0 {
-				fh.Cores, fh.Load1, fh.RTTMillis = r.Cores, r.Load1, r.RTTMillis
+				fh.Cores, fh.Load1, fh.RTTMillis, fh.LoadOK = r.Cores, r.Load1, r.RTTMillis, r.LoadKnown()
 			}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{

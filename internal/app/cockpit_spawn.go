@@ -307,12 +307,27 @@ func (m *OS) spawnRank(s *spawnSheet) {
 	if i := strings.IndexByte(name, '.'); i > 0 {
 		name = name[:i]
 	}
-	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: working[""], up: true}
+	// While attached, the tree's own sessions are the far machine's, and
+	// this machine's come in under the local host name.
+	hostWorking := func(host string) int {
+		switch {
+		case m.AttachedHost == "":
+			return working[host]
+		case host == "":
+			return working[federation.LocalHostName]
+		case host == m.AttachedHost:
+			return working[""]
+		}
+		return working[host]
+	}
+	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: hostWorking(""), up: true}
 	// The local row is the machine of the client's own daemon, where an
 	// agent with no host starts, attached to another machine or not. Its
 	// load is the one that daemon reported, on every system.
 	if l := m.LocalLoad; l.Cores > 0 {
-		local.cores, local.load, local.loadOK = l.Cores, l.Load1, true
+		// A load the daemon could not read ranks as unknown, not as idle.
+		local.cores = l.Cores
+		local.load, local.loadOK = l.Load1, l.Known()
 	} else {
 		local.load, local.loadOK = spawnLoadAvg()
 	}
@@ -321,11 +336,11 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		if h.Name == federation.LocalHostName {
 			continue
 		}
-		sm := spawnMachine{host: h.Name, name: h.Name, working: working[h.Name], up: h.Status == string(federation.StatusUp)}
+		sm := spawnMachine{host: h.Name, name: h.Name, working: hostWorking(h.Name), up: h.Status == string(federation.StatusUp)}
 		if h.Cores > 0 {
 			// The load the link's last hello carried, so the sheet ranks
 			// the machine with no call of its own.
-			sm.cores, sm.load, sm.loadOK = h.Cores, h.Load1, true
+			sm.cores, sm.load, sm.loadOK = h.Cores, h.Load1, h.LoadOK
 		}
 		ms = append(ms, sm)
 	}
@@ -905,27 +920,6 @@ func spawnShellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// spawnRefOK reports whether git would take name as a branch, by the rules
-// of git check-ref-format, checked here so the update loop never runs git.
-// The daemon checks again with git.
-func spawnRefOK(name string) bool {
-	if name == "" || name == "@" || strings.HasPrefix(name, "-") || strings.HasSuffix(name, "/") ||
-		strings.HasSuffix(name, ".") || strings.Contains(name, "..") || strings.Contains(name, "//") || strings.Contains(name, "@{") {
-		return false
-	}
-	for _, r := range name {
-		if r < 0x20 || r == 0x7f || strings.ContainsRune(" ~^:?*[\\", r) {
-			return false
-		}
-	}
-	for _, part := range strings.Split(name, "/") {
-		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
-			return false
-		}
-	}
-	return true
-}
-
 // spawnStart checks the sheet and starts the agents. The sheet closes at once
 // and is kept as the draft until the daemon says the start worked, so a
 // refused start loses nothing.
@@ -963,7 +957,7 @@ func (m *OS) spawnStart() tea.Cmd {
 		return fail(spBranch, "Write a branch name.")
 	case s.worktree && strings.IndexFunc(branch, func(r rune) bool { return !session.FanNameChar(r) }) >= 0:
 		return fail(spBranch, "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -.")
-	case s.worktree && !spawnRefOK(branch):
+	case s.worktree && !session.FanNameRefOK(branch):
 		return fail(spBranch, "Git does not accept this branch name.")
 	case s.worktree && strings.HasPrefix(base, "-"):
 		return fail(spBase, "A base cannot start with -.")

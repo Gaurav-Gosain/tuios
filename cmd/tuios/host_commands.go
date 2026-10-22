@@ -45,6 +45,7 @@ type hostReport struct {
 	Queued        int     `json:"queued"`
 	Cores         int     `json:"cores"`
 	Load1         float64 `json:"load1"`
+	LoadOK        *bool   `json:"load_ok"`
 	RTTMillis     int64   `json:"rtt_ms"`
 }
 
@@ -101,6 +102,9 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		load := "-"
 		if h.Cores > 0 {
 			load = strconv.FormatFloat(h.Load1, 'f', 2, 64) + " on " + strconv.Itoa(h.Cores) + " cores"
+			if h.LoadOK != nil && !*h.LoadOK {
+				load = "not known, " + strconv.Itoa(h.Cores) + " cores"
+			}
 			if h.RTTMillis > 0 {
 				load += ", " + strconv.FormatInt(h.RTTMillis, 10) + " ms"
 			}

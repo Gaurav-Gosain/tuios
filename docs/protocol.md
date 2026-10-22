@@ -151,8 +151,11 @@ and then presents `$TUIOS_PANE_ID` and `$TUIOS_PANE_TOKEN` on every
 connection it opens from a pane. It is absent from an older daemon.
 
 `load` is the machine's load: `cores`, `load1` (the one-minute load
-average), `mem_pct` (memory in use, Linux only) and `agents_working`. The
-daemon reads the system at most every 5 seconds. A linked daemon reads it off
+average), `mem_pct` (memory in use, Linux only), `agents_working` and
+`load_ok`. `load_ok` is false when the daemon could not read the load, as on
+Windows and FreeBSD: `load1` is then 0 and means nothing. It is absent from a
+daemon from before the field, whose `load1` was read. The daemon reads the
+system at most every 5 seconds. A linked daemon reads it off
 the hello its heartbeat sends, so `list-hosts` can report each host's load
 with no call of its own. It is absent from an older daemon.
 
@@ -189,7 +192,7 @@ is an answer, and each entry says which.
 The agents view draws them as rows.
 
 **list-hosts reports each host's load.** A host row gains `cores`, `load1`,
-`mem_pct`, `agents_working`, `load_at` and `rtt_ms`, from the last hello on the
+`mem_pct`, `agents_working`, `load_ok`, `load_at` and `rtt_ms`, from the last hello on the
 link: the handshake, then the heartbeat. A link that carries traffic is not
 pinged, so its heartbeat now pings once the load is older than a minute. The
 fields are absent until a hello from the host carried a load.
