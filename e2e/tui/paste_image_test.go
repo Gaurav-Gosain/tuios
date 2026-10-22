@@ -48,6 +48,19 @@ func fakeClipboardEnv(t *testing.T, img []byte) []string {
 	}
 }
 
+// paneBorderRows is the screen without the rows that hold no pane border. The
+// toast row is one of them: a remote paste shows the file's name there, in
+// "Copied tuios-paste-...", before the path is pasted into the pane.
+func paneBorderRows(screen string) string {
+	var rows []string
+	for line := range strings.Lines(screen) {
+		if strings.Contains(line, "│") {
+			rows = append(rows, line)
+		}
+	}
+	return strings.Join(rows, "")
+}
+
 // unwrapped is the screen with its lines joined, and the panes' side borders
 // and the padding taken out, so a path the pane wrapped reads whole. Where a
 // path breaks depends on the length of the runtime folder, which the suite
@@ -56,9 +69,13 @@ func unwrapped(screen string) string {
 	return strings.NewReplacer("\n", "", "│", "", " ", "").Replace(screen)
 }
 
-// showsPastedPath reports whether a pasted image's path is on the screen.
+// showsPastedPath reports whether a pasted image's path is in a pane, to the
+// end of its name. A wait that also read the toast row sent the Enter before
+// the path was pasted, and the shell ran wc on its input.
 func showsPastedPath(screen string) bool {
-	return contains(unwrapped(screen), "tuios-paste-")
+	flat := unwrapped(paneBorderRows(screen))
+	i := strings.Index(flat, "tuios-paste-")
+	return i >= 0 && strings.Contains(flat[i:], ".png")
 }
 
 // showsPastedFile reports whether the path of the one image pasted on base's
@@ -75,7 +92,7 @@ func showsPastedFile(t *testing.T, screen, base string) bool {
 	if len(files) != 1 {
 		return false
 	}
-	return contains(unwrapped(screen), strings.TrimPrefix(filepath.Base(files[0]), "tuios-paste-"))
+	return contains(unwrapped(paneBorderRows(screen)), strings.TrimPrefix(filepath.Base(files[0]), "tuios-paste-"))
 }
 
 // pastedFiles lists the pasted images under a machine's runtime directory.

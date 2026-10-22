@@ -9,8 +9,6 @@
 # Remove a line in the change that fixes the test.
 
 # e2e/tui
-TestPasteBuffersKeepYanksAndPasteThem            # failed on #940 and on main after #983
-TestAnImagePastedIntoAnSSHShellGoesToThatMachine # the tmux subtest, shard 2 (#978)
 
 # go test ./...
 TestFloatedPaneStaysFloatedEverywhere            # internal/app, failed on #940 (plot only)

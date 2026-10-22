@@ -7619,6 +7619,20 @@ Upstream main fails both new cases with the pane at `none`: `host-pid` ("a host 
 | The shell test dropped from the exit lapse: `&& fg == ""` removed, leaving `info.atShell()` alone | `protocol-pane` ("a protocol pane lost its state when a harness under it exited, with the pane program still running: the pane is {State:none ...}") | **caught** |
 
 Not covered end to end: an agent actually in another pid namespace. `host-pid` stands in for it with a pid the reporter does not descend from, which is what the daemon sees of one. Nor a platform that does not give the peer's pid, where no harness pid is timed and a report claim stays until it is cleared.
+
+## Two paste tests that pressed Enter before the paste landed
+
+`TestPasteBuffersKeepYanksAndPasteThem` sent Enter once the buffer chooser closed. The chooser closes before the paste lands, because the client reads the buffer from the daemon first. On CI the Enter ran `echo CHOSEN-` alone, and the buffer went to the next prompt. The test now waits for `echo CHOSEN-pbalpha42` on the line before it sends Enter.
+
+`TestAnImagePastedIntoAnSSHShellGoesToThatMachine/tmux_over_ssh_with_a_tty` sent Enter once `tuios-paste-` was on the screen. A remote paste first shows the file's name in the dock, in "Copied tuios-paste-...", so the Enter ran `wc -c` with no argument, and the path went to its input. The test now reads only the rows with a pane border, and waits for the path to its `.png`. Run on 2026-10-22.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The chooser's paste is late, and the test's Enter overtakes it | n/a, injected: a slow daemon | `pasteBufferNamed` sleeps 1 s before `show-buffer`, with the old test | `TestPasteBuffersKeepYanksAndPasteThem`, 3 of 3 runs ("the chooser did not paste the older buffer") | **caught**, the flake |
+| The image path is late, and the test reads the dock's "Copied tuios-paste-..." as the path | n/a, injected: a slow drop | `deliverImageCmd` sleeps 1.5 s after `paste-image` answers, with the old test | `TestAnImagePastedIntoAnSSHShellGoesToThatMachine`, 3 of 3 runs, in the five subtests that paste on the far machine ("the shell never printed the image's size") | **caught**, the flake |
+
+The fixed tests pass 3 of 3 runs on the delayed build, and 25 of 25 runs on main.
+
 ## TML surfaces in popups and panes
 
 The tests are `TestTMLShowPopup` and `TestTMLShowPaneAndClose` in `tml_test.go`, and the `tml surface` case of `TestIdleCostStaysLow`. Each control is a text replacement in the branch's checkout, built and put back before the next. Run on 2026-10-20 on Linux.

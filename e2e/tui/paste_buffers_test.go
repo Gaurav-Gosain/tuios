@@ -213,6 +213,12 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Paste buffers") }, uiTimeout); err != nil {
 		t.Fatalf("the chooser did not close after enter\n%s", term.Snapshot())
 	}
+	// The chooser closes before the paste lands: the client reads the
+	// buffer from the daemon first. An Enter sent before the text is on the
+	// line runs "echo CHOSEN-" alone, and the text goes to the next prompt.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "echo CHOSEN-pbalpha42") }, uiTimeout); err != nil {
+		t.Fatalf("the chooser did not put the older buffer on the line: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
