@@ -467,6 +467,15 @@ func TestCockpitFanCompare(t *testing.T) {
 	if !strings.Contains(out, "1 of 3 passed") {
 		t.Fatalf("fan verify did not pass B alone:\n%s", out)
 	}
+	// The done reports move the fan from Working to Ready for review. The
+	// row is clicked where it ends up: on a slow runner the click once
+	// landed on the row the fan had left.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		ready, fan, working := fleetRowWith(s, "Ready for review"), fleetRowWith(s, "fan of 3"), fleetRowWith(s, "Working")
+		return ready >= 0 && fan > ready && (working < 0 || fan < working) && fleetRowWith(s, "cache-2") == fan+3
+	}, uiTimeout); err != nil {
+		t.Fatalf("the fan never moved to Ready for review: %v\n%s", err, term.Snapshot())
+	}
 	row, col := findText(t, term, "cache-2")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "c compare") }, uiTimeout); err != nil {

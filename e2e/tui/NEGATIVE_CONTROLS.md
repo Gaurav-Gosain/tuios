@@ -8063,6 +8063,7 @@ holds the judge's reach (a security boundary test). Run on 2026-10-21.
 | The second k reads the attempts again | the second k keeps at once | `TestCockpitFanCompare` ("a second k after a new ignored file did not warn again") | **caught** |
 | A list git could not read keeps nothing | the view ignores `ignored_error` | `TestCockpitFanCompare` ("a list git could not read did not stop the keep") | **caught** |
 | Keep stashes the other attempts' changes | the view sends keep-fan with `stash` false | `TestCockpitFanCompare` ("k k did not keep B alone": A and C stay, dirty) | **caught** |
+| The click on an attempt waits for the fan's final row (a flake fix) | the click goes where `cache-2` was before the done reports moved the fan, which is what a slow runner did | `TestCockpitFanCompare` ("an attempt's row does not offer c to compare", the failure seen in CI). Before the done reports, the wait's condition is false; 20 runs with the wait pass | **caught** |
 | The judge reads only the verbs judging needs | `judgeReadVerbs` dropped from the read reach in `paneAuthority`, so the judge reaches every read verb | `TestFanJudgeReach` ("command-history on an attempt from the judge": the judge reads the attempt's history) | **caught** |
 | keep-fan holds the ignored files to the names shown | the `IgnoredHash` compare in `checkKeepAsShown` removed | `TestCockpitFanCompare` ("keep-fan went ahead over an ignored file swapped for another": a count would match too) | **caught** |
 
