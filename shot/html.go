@@ -171,7 +171,9 @@ func writeHTMLSpan(b *strings.Builder, g *Grid, c Cell, text string) {
 		close = "</a>"
 	}
 	if len(css) == 0 {
-		b.WriteString(open + escaped + close)
+		b.WriteString(open)
+		b.WriteString(escaped)
+		b.WriteString(close)
 		return
 	}
 	fmt.Fprintf(b, `%s<span style="%s">%s</span>%s`, open, strings.Join(css, ";"), escaped, close)

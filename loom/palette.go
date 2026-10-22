@@ -310,10 +310,10 @@ func nearest256(c color.RGBA) uint8 {
 			best, bestD = i, d
 		}
 	}
-	for i := 0; i < 216; i++ {
+	for i := range 216 {
 		try(16+i, color.RGBA{levels[i/36], levels[i/6%6], levels[i%6], 255})
 	}
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		v := uint8(8 + 10*i)
 		try(232+i, color.RGBA{v, v, v, 255})
 	}

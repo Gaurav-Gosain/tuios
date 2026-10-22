@@ -149,12 +149,12 @@ func Parse(body []byte, seqLen int) (Report, bool) {
 		hasID, hasTitle, hasMsg                    bool
 	)
 	for pair := range strings.SplitSeq(string(body), ":") {
-		eq := strings.IndexByte(pair, '=')
-		if eq < 0 {
+		before, after, ok := strings.Cut(pair, "=")
+		if !ok {
 			continue // no "=": malformed, skipped
 		}
-		key := trimBlank(pair[:eq])
-		value := trimBlank(pair[eq+1:])
+		key := trimBlank(before)
+		value := trimBlank(after)
 		if len(key) > MaxKey {
 			return r, false // a limit: the whole report goes
 		}

@@ -236,7 +236,7 @@ func isPathLike(text string) bool {
 	if !strings.Contains(text, "/") {
 		return false
 	}
-	for _, seg := range strings.Split(text, "/") {
+	for seg := range strings.SplitSeq(text, "/") {
 		for _, r := range seg {
 			if unicode.IsLetter(r) {
 				return true

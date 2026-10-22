@@ -402,14 +402,16 @@ func (v *validator) expr(e *Expr, at string, pos Pos, sc scope) {
 // exists.
 func (v *validator) available(toks []string) []string {
 	var cur any = v.state
-	prefix := "state"
+	var prefix strings.Builder
+	prefix.WriteString("state")
 	for _, t := range toks[:len(toks)-1] {
 		next, err := get(cur, []string{t})
 		if err != nil {
 			break
 		}
 		cur = next
-		prefix += "." + t
+		prefix.WriteString(".")
+		prefix.WriteString(t)
 	}
 	m, ok := cur.(map[string]any)
 	if !ok {
@@ -417,7 +419,7 @@ func (v *validator) available(toks []string) []string {
 	}
 	out := make([]string, 0, len(m))
 	for k := range m {
-		out = append(out, prefix+"."+k)
+		out = append(out, prefix.String()+"."+k)
 	}
 	sort.Strings(out)
 	if len(out) > 20 {
@@ -452,9 +454,12 @@ func pointerToPath(ptr string) string {
 	b.WriteString("state")
 	for _, t := range toks {
 		if _, err := strconv.Atoi(t); err == nil {
-			b.WriteString("[" + t + "]")
+			b.WriteString("[")
+			b.WriteString(t)
+			b.WriteString("]")
 		} else {
-			b.WriteString("." + t)
+			b.WriteString(".")
+			b.WriteString(t)
 		}
 	}
 	return b.String()
@@ -545,7 +550,7 @@ func isField(s string) bool {
 	if s == "" {
 		return false
 	}
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		part = strings.TrimLeft(part, " \t")
 		if part == "" || !isLetter(part[0]) ||
 			!allBytes(part, func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' || c == '.' }) {
@@ -721,8 +726,8 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 			v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s must be cells (12), a percentage (50%%), fill or fill:2, not %q.", a.Name, text)}, a.Pos)
 			return
 		}
-		if strings.HasSuffix(text, "%") {
-			if p, _ := strconv.Atoi(strings.TrimSuffix(text, "%")); p > 100 {
+		if before, ok := strings.CutSuffix(text, "%"); ok {
+			if p, _ := strconv.Atoi(before); p > 100 {
 				v.bad(a, at, "%s cannot be more than 100%%.", a.Name)
 			}
 		}
@@ -844,8 +849,8 @@ func (v *validator) dataAttr(a Attr, spec AttrSpec, at string, sc scope) {
 		return
 	}
 	text := val.Text()
-	if strings.HasPrefix(strings.TrimSpace(text), "{") {
-		inner := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(text), "{"), "}")
+	if after, ok := strings.CutPrefix(strings.TrimSpace(text), "{"); ok {
+		inner := strings.TrimSuffix(after, "}")
 		v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf("%s takes a path without braces.", a.Name), DidYouMean: inner}, a.Pos)
 		return
 	}
@@ -923,10 +928,8 @@ func checkFilePath(p string) error {
 	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~") || strings.Contains(p, "\\") || (len(p) > 1 && p[1] == ':') {
 		return fmt.Errorf("a file: path is relative to the owner's files folder; %q is not", p)
 	}
-	for _, seg := range strings.Split(p, "/") {
-		if seg == ".." {
-			return fmt.Errorf("a file: path cannot hold .. segments")
-		}
+	if slices.Contains(strings.Split(p, "/"), "..") {
+		return fmt.Errorf("a file: path cannot hold .. segments")
 	}
 	return nil
 }

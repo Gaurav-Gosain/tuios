@@ -3,6 +3,7 @@ package tml
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -138,9 +139,9 @@ func suggest(s string, candidates []string) string {
 	}
 	if strings.ContainsAny(ls, "-_.:") {
 		parts := strings.FieldsFunc(ls, func(r rune) bool { return strings.ContainsRune("-_.:", r) })
-		for i := len(parts) - 1; i >= 0; i-- {
+		for _, part := range slices.Backward(parts) {
 			for _, c := range candidates {
-				if c == parts[i] {
+				if c == part {
 					return c
 				}
 			}

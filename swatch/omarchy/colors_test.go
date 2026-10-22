@@ -53,7 +53,10 @@ func tsv(c map[string]string) string {
 	slices.Sort(keys)
 	var b strings.Builder
 	for _, k := range keys {
-		b.WriteString(k + "\t" + c[k] + "\n")
+		b.WriteString(k)
+		b.WriteString("\t")
+		b.WriteString(c[k])
+		b.WriteString("\n")
 	}
 	return b.String()
 }

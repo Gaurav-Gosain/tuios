@@ -72,7 +72,7 @@ func decodeWorld(raw []byte) *world {
 	if len(raw) < p+2*n {
 		bad()
 	}
-	for k := 0; k < n; k++ {
+	for k := range n {
 		c := string(raw[p : p+2])
 		wd.codes = append(wd.codes, c)
 		wd.index[c] = uint8(k + 2)
@@ -95,7 +95,7 @@ func decodeWorld(raw []byte) *world {
 		p += k
 		return v
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if bits[i/8]&(1<<(i%8)) == 0 {
 			continue
 		}
@@ -453,15 +453,15 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 		return ramp[k]
 	}
 
-	for cy := 0; cy < ch; cy++ {
-		for cx := 0; cx < cw; cx++ {
+	for cy := range ch {
+		for cx := range cw {
 			x, y := x0+cx, y0+cy
 			switch m {
 			case Braille:
 				var bits uint8
 				best, mark := -1, None
-				for dy := 0; dy < 4; dy++ {
-					for dx := 0; dx < 2; dx++ {
+				for dy := range 4 {
+					for dx := range 2 {
 						i, j := cx*2+dx, cy*4+dy
 						if i >= pw || j >= ph {
 							continue
@@ -486,7 +486,7 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 				g.set(x, y, string(rune(0x2800+int(bits))), role)
 			case Blocks:
 				var roles [2]Role
-				for dy := 0; dy < 2; dy++ {
+				for dy := range 2 {
 					j := cy*2 + dy
 					if j >= ph {
 						continue

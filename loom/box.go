@@ -164,7 +164,7 @@ type widget interface {
 // parsePad reads one, two or four cell counts.
 func parsePad(s string) [4]int {
 	var n []int
-	for _, f := range strings.Fields(s) {
+	for f := range strings.FieldsSeq(s) {
 		v, err := strconv.Atoi(f)
 		if err != nil || v < 0 {
 			v = 0

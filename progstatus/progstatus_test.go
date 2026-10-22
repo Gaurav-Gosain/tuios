@@ -141,7 +141,8 @@ func longID(n int) string {
 	// Segments of 30 bytes and a slash, then one last segment for the rest.
 	var b strings.Builder
 	for n-b.Len() > 31 {
-		b.WriteString(strings.Repeat("x", 30) + "/")
+		b.WriteString(strings.Repeat("x", 30))
+		b.WriteString("/")
 	}
 	b.WriteString(strings.Repeat("y", n-b.Len()))
 	return b.String()

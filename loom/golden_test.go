@@ -170,9 +170,9 @@ func checkFits(t testing.TB, buf *Buffer, w, h int) {
 	if buf.Width() != w || buf.Height() != h {
 		t.Fatalf("buffer is %dx%d, want %dx%d", buf.Width(), buf.Height(), w, h)
 	}
-	for y := 0; y < h; y++ {
+	for y := range h {
 		total := 0
-		for x := 0; x < w; x++ {
+		for x := range w {
 			c := buf.b.CellAt(x, y)
 			if c.Width == 0 {
 				continue

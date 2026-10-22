@@ -177,7 +177,7 @@ func readShapes(b []byte) ([]shape, error) {
 			if p0+16*points > len(rec) {
 				return nil, fmt.Errorf("a record is short")
 			}
-			for k := 0; k < parts; k++ {
+			for k := range parts {
 				start := int(binary.LittleEndian.Uint32(rec[44+4*k:]))
 				end := points
 				if k+1 < parts {
@@ -226,7 +226,7 @@ func readDBF(b []byte) ([]map[string]string, error) {
 		return nil, fmt.Errorf("the fields take %d bytes of a %d byte record", total, recLen)
 	}
 	out := make([]map[string]string, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		rec := b[headLen+i*recLen:]
 		if len(rec) < recLen {
 			return nil, fmt.Errorf("record %d is short", i)
@@ -294,13 +294,13 @@ func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, coun
 	hits := map[int]int{}
 	// cover is, per shape, its samples in each cell it touches.
 	cover := make([]map[int]int, len(shapes))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			clear(hits)
 			total := 0
-			for sy := 0; sy < sub; sy++ {
+			for sy := range sub {
 				lat := top - (float64(y)+(float64(sy)+0.5)/sub)/float64(h)*(top-bottom)
-				for sx := 0; sx < sub; sx++ {
+				for sx := range sub {
 					lon := -180 + (float64(x)+(float64(sx)+0.5)/sub)/float64(w)*360
 					for i := range shapes {
 						if shapes[i].inside(lon, lat) {

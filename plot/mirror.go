@@ -204,10 +204,10 @@ func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 			for dx := range hs {
 				hs[dx] = hf.level(cx*2+dx-hf.offset, rows*4)
 			}
-			for b := 0; b < rows; b++ {
+			for b := range rows {
 				var bits uint8
 				for dx, hgt := range hs {
-					for dy := 0; dy < 4; dy++ {
+					for dy := range 4 {
 						// d is the dot's distance from the baseline.
 						d := b*4 + 3 - dy
 						if hf.down {
@@ -230,7 +230,7 @@ func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 			continue
 		}
 		units := hf.level(cx-hf.offset, rows*8)
-		for b := 0; b < rows; b++ {
+		for b := range rows {
 			lv := units - b*8
 			glyph := ""
 			switch {

@@ -1,6 +1,7 @@
 package loom
 
 import (
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -143,9 +144,7 @@ func withAlias(scope map[string]string, alias, base string) map[string]string {
 		alias = "item"
 	}
 	out := make(map[string]string, len(scope)+1)
-	for k, v := range scope {
-		out[k] = v
-	}
+	maps.Copy(out, scope)
 	out[alias] = base
 	return out
 }
@@ -170,10 +169,8 @@ func resolveDep(dep tml.Dep, scope map[string]string) (string, bool) {
 }
 
 func appendUnique(list []string, s string) []string {
-	for _, x := range list {
-		if x == s {
-			return list
-		}
+	if slices.Contains(list, s) {
+		return list
 	}
 	return append(list, s)
 }
@@ -234,9 +231,7 @@ const formKey = "\nform"
 
 func withFormPaths(scope map[string]string, paths []string) map[string]string {
 	out := make(map[string]string, len(scope)+1)
-	for k, v := range scope {
-		out[k] = v
-	}
+	maps.Copy(out, scope)
 	out[formKey] = strings.Join(paths, "\n")
 	return out
 }

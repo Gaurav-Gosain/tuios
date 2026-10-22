@@ -108,11 +108,11 @@ func (c *canvas) put(x, y int, g string, w int, st style) {
 	cell := uv.Cell{Content: g, Width: w, Style: c.resolve(st, line.At(x))}
 	if c.links != nil {
 		if st.link != "" {
-			for k := 0; k < w; k++ {
+			for k := range w {
 				c.links[image.Point{x + k, y}] = st.link
 			}
 		} else {
-			for k := 0; k < w; k++ {
+			for k := range w {
 				delete(c.links, image.Point{x + k, y})
 			}
 		}
@@ -163,7 +163,7 @@ func (c *canvas) textRight(right, y int, s string, st style) int {
 
 // hline draws n copies of a one-cell glyph.
 func (c *canvas) hline(x, y, n int, g string, st style) {
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c.put(x+i, y, g, 1, st)
 	}
 }

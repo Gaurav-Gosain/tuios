@@ -122,7 +122,7 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 	n := min(len(b.Values), g.H)
 	format := b.format()
 	labelW, valueW := 0, 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i < len(b.Labels) {
 			labelW = max(labelW, width(b.Labels[i]))
 		}
@@ -143,7 +143,7 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 	}
 	cells = max(cells, 0)
 	base, top := b.rng()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i < len(b.Labels) && labelW > 0 {
 			g.Text(0, i, truncate(b.Labels[i], labelW, ellipsis(m)), Dim, false)
 		}
@@ -467,7 +467,7 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 		}
 		n := int(math.Round(f * float64(inner)))
 		g.set(0, y, "[", Edge)
-		for i := 0; i < inner; i++ {
+		for i := range inner {
 			if i < n {
 				g.set(1+i, y, "#", role)
 			} else {
@@ -594,7 +594,7 @@ func (hg Histogram) Draw(w, h int, m Mode) *Grid {
 			if role == None {
 				role = Series1
 			}
-			for k := 0; k < colW; k++ {
+			for k := range colW {
 				// Wide bins keep a one-cell gap, so they read apart.
 				if colW > 2 && k == colW-1 {
 					continue

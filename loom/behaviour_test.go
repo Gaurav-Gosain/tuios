@@ -88,8 +88,8 @@ func sameAsFresh(t testing.TB, s *Surface, w, h int) {
 	f.store = st
 	f.view = cloneView(s.view)
 	want := f.Render(w, h)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			a, b := got.b.CellAt(x, y), want.b.CellAt(x, y)
 			if a.Content != b.Content || a.Width != b.Width || !a.Style.Equal(&b.Style) {
 				t.Fatalf("cell %d,%d: incremental %q %+v, fresh %q %+v\nincremental:\n%s\nfresh:\n%s", x, y,
@@ -290,7 +290,7 @@ func TestScrollAndSplit(t *testing.T) {
 
 	before := strings.Index(rows(buf)[0], "right")
 	div := 0
-	for x := 0; x < w; x++ {
+	for x := range w {
 		if s.onDivider(s.root.kids[0], image.Point{X: x}) {
 			div = x
 		}
@@ -499,7 +499,7 @@ func TestLinkNeedsConfirm(t *testing.T) {
 	src := `<tml version="1"><text>see <a href="https://tuios.dev">the site</a></text></tml>`
 	s := mustSurface(t, src)
 	buf := s.Render(30, 1)
-	for x := 0; x < 30; x++ {
+	for x := range 30 {
 		if c := buf.b.CellAt(x, 0); c.Link.URL != "" {
 			t.Fatalf("cell %d carries an OSC 8 link", x)
 		}

@@ -3,6 +3,7 @@ package tml
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 )
 
 // maxMult caps the product of nested each counts.
@@ -86,9 +87,7 @@ func dataAttr(component, attr string) bool {
 
 func withElems(elems map[string][]any, name string, es []any) map[string][]any {
 	out := make(map[string][]any, len(elems)+1)
-	for k, v := range elems {
-		out[k] = v
-	}
+	maps.Copy(out, elems)
 	out[name] = es
 	return out
 }
