@@ -278,10 +278,41 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 	}
 
 	// Each end gets a cell of its own along its side, in the layout's order.
+	// Edges that arrive on one side with the same head, the same stroke and
+	// no text beside it share one end, so they join into one arrow instead of
+	// a row of heads side by side.
 	placed := map[[2]int]point{}
 	for key, list := range ends {
 		node, sd := key[0], key[1]
 		b := boxes[node]
+		var joined []int
+		var joinedAt float64
+		head, stroke := "", ""
+		same := true
+		for _, e := range list {
+			if !e.last || e.text > 0 {
+				continue
+			}
+			end, st := l.Edges[e.edge].End, l.Edges[e.edge].Stroke
+			if head != "" && (end != head || st != stroke) {
+				same = false
+			}
+			head, stroke = end, st
+			joined = append(joined, e.edge)
+			joinedAt += e.at
+		}
+		if len(joined) > 1 && same && head != "" {
+			joinedAt /= float64(len(joined))
+			rest := list[:0:0]
+			for _, e := range list {
+				if !e.last || e.text > 0 {
+					rest = append(rest, e)
+				}
+			}
+			list = append(rest, graphEnd{edge: joined[0], last: true, at: joinedAt})
+		} else {
+			joined = nil
+		}
 		slices.SortStableFunc(list, func(a, b graphEnd) int {
 			switch {
 			case a.at < b.at:
@@ -323,6 +354,11 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 				idx = 1
 			}
 			placed[[2]int{e.edge, idx}] = at
+			if e.last && len(joined) > 0 && e.edge == joined[0] {
+				for _, other := range joined[1:] {
+					placed[[2]int{other, 1}] = at
+				}
+			}
 		}
 	}
 

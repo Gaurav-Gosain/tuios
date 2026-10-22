@@ -1,0 +1,27 @@
+flowchart TB
+  key([Key press]) --> mode{Mode?}
+  mode -->|Terminal| pty[/Write to the PTY/]
+  mode -->|Prefix| prefix{{Leader key}}
+  mode -->|Window| wm[[Window action]]
+
+  subgraph pane [Inside the pane]
+    pty --> vt[VT emulator]
+    vt --> grid[(Cell grid)]
+  end
+
+  prefix -->|c| new[New pane]
+  prefix -->|"["| copy[Copy mode]
+  prefix -->|w| ws[Workspace]
+  wm & new & copy & ws --> layout[Layout]
+  grid & layout ==> frame((Frame))
+
+  classDef input fill:#3b82f62e,stroke:#3b82f6,stroke-width:2px
+  classDef inner fill:#22c55e2e,stroke:#22c55e,stroke-width:2px
+  classDef action fill:#a855f72e,stroke:#a855f7,stroke-width:2px
+  classDef out fill:#f973162e,stroke:#f97316,stroke-width:2px
+  class key,mode input
+  class pty,vt,grid inner
+  class prefix,wm,new,copy,ws,layout action
+  class frame out
+  style pane fill:#22c55e0d,stroke:#22c55e,stroke-dasharray:6 4
+  linkStyle 13,14 stroke:#f97316,stroke-width:3px
