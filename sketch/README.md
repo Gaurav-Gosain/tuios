@@ -143,7 +143,8 @@ each curve a polygon in its series colour. Without colour, or in 40 columns or
 fewer, it is a table with one bar for each curve on each axis. A treemap is nested boxes, or an indented tree
 when the boxes are too small. An info diagram is its line of text. A tree view
 is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
-with its causes as bones, or an indented tree when it is narrow. A Cynefin
+with its causes as bones, each category in its own colour. Its causes wrap
+to fit the columns, and it is an indented tree when it is narrower still. A Cynefin
 diagram is a grid of its four domains. An event model is swimlanes in time
 order, or a list of frames when it is narrow. A Venn diagram is a table of its
 sets and their overlaps. A Wardley map is a grid of visibility by evolution,

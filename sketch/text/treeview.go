@@ -19,6 +19,8 @@ type treeLine struct {
 	role   uint8
 	// desc is a description that follows the text on the same line.
 	desc string
+	// depth is the depth of the row the line is part of.
+	depth int
 }
 
 func drawTreeView(l *sketch.Layout, opt Options) (*canvas, error) {
@@ -142,7 +144,7 @@ func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned boo
 			role = roleBox
 		}
 		if cols <= 0 {
-			line := treeLine{prefix: prefix, text: name, role: role}
+			line := treeLine{prefix: prefix, text: name, role: role, depth: row.Depth}
 			if row.Description != "" {
 				line.desc = "  " + row.Description
 			}
@@ -160,11 +162,11 @@ func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned boo
 			if k > 0 {
 				p = under
 			}
-			out = append(out, treeLine{prefix: p, text: part, role: role})
+			out = append(out, treeLine{prefix: p, text: part, role: role, depth: row.Depth})
 		}
 		if row.Description != "" {
 			for _, part := range wrapCells(row.Description, max(1, cols-width(under)), 1000) {
-				out = append(out, treeLine{prefix: under, text: part, role: roleNote})
+				out = append(out, treeLine{prefix: under, text: part, role: roleNote, depth: row.Depth})
 			}
 		}
 	}
