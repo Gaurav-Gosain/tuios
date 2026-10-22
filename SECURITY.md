@@ -16,17 +16,17 @@ As there is no stable release yet, users are encouraged to always update to the 
 ## Reporting a Vulnerability
 
 If you discover a potential security issue in **TUIOS**, please **do not open a public issue**.  
-Instead, report it privately by emailing:
+Report it privately through GitHub instead:
 
-**[me@gaurav.zip](mailto:me@gaurav.zip?subject=TUIOS%3A%20Potential%20Security%20Issue)**
+**[Report a vulnerability](https://github.com/Gaurav-Gosain/tuios/security/advisories/new)**
+
+Only the maintainer and you can see the report.
 
 When reporting, please include:
 - A clear description of the vulnerability.
 - Steps to reproduce (if applicable).
 - Affected platform and installation method (e.g., Docker, Homebrew, Nix, etc.).
 - The commit hash or version tag you tested on.
-
-If you prefer, you may encrypt your message using GPG (optional).
 
 ---
 
