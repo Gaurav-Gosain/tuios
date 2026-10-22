@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// table is the data as plot sees it: the labels of the rows, from the first
+// table is the data as tplot sees it: the labels of the rows, from the first
 // text column, and a series per number column.
 type table struct {
 	labels []string

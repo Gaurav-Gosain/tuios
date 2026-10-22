@@ -30,17 +30,17 @@ vt      █████████          3.1
 
 ## Command line
 
-`plot` draws a chart from CSV, TSV, JSON or plain numbers. It reads a file or
+`tplot` draws a chart from CSV, TSV, JSON or plain numbers. It reads a file or
 standard input.
 
 ```sh
-go install tuios.dev/plot/cmd/plot@latest
+go install tuios.dev/plot/cmd/tplot@latest
 ```
 
 ```sh
-printf 'session,6.2\napp,4.8\nvt,3.1\n' | plot
-seq 1 50 | awk '{print sin($1/5)}' | plot --kind line
-echo '{"US": 410, "DE": 120, "SG": 14}' | plot --kind map --log
+printf 'session,6.2\napp,4.8\nvt,3.1\n' | tplot
+seq 1 50 | awk '{print sin($1/5)}' | tplot --kind line
+echo '{"US": 410, "DE": 120, "SG": 14}' | tplot --kind map --log
 ```
 
 - A text column gives the labels. Each column of numbers is a series. A first
@@ -52,7 +52,7 @@ echo '{"US": 410, "DE": 120, "SG": 14}' | plot --kind map --log
   `heatmap`, `pie`, `donut`, `gauge` and `map`.
 - Colours are the 16 ANSI colours, so the chart takes your terminal's theme.
   Without colour, charts that need colour to tell parts apart use ASCII marks.
-- `plot -h` lists every flag.
+- `tplot -h` lists every flag.
 
 ## Modes
 

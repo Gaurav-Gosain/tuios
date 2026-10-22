@@ -1,7 +1,7 @@
-// Command plot draws a chart in the terminal from CSV, TSV or JSON data.
+// Command tplot draws a chart in the terminal from CSV, TSV or JSON data.
 //
-//	go install tuios.dev/plot/cmd/plot@latest
-//	printf 'session,6.2\napp,4.8\nvt,3.1\n' | plot
+//	go install tuios.dev/plot/cmd/tplot@latest
+//	printf 'session,6.2\napp,4.8\nvt,3.1\n' | tplot
 //
 // It reads standard input or a file, picks a chart for the shape of the data
 // unless --kind names one, and writes the chart as text with ANSI colours.
@@ -21,10 +21,10 @@ import (
 	"tuios.dev/plot"
 )
 
-const usage = `Usage: plot [flags] [FILE]
+const usage = `Usage: tplot [flags] [FILE]
 
 Draw a chart from CSV, TSV or JSON data. FILE is a data file, or - for
-standard input. Without FILE, plot reads standard input.
+standard input. Without FILE, tplot reads standard input.
 
 Data:
   CSV or TSV    A row per point. A text column gives the labels. Each number
@@ -51,11 +51,11 @@ Flags:
 
 const examples = `
 Examples:
-  printf 'session,6.2\napp,4.8\nvt,3.1\n' | plot
-  seq 1 50 | awk '{print sin($1/5)}' | plot --kind line
-  plot --kind pie shares.csv
-  echo '{"US": 410, "DE": 120, "SG": 14}' | plot --kind map --log
-  curl -s api.example.com/stats | plot --kind column --title Requests
+  printf 'session,6.2\napp,4.8\nvt,3.1\n' | tplot
+  seq 1 50 | awk '{print sin($1/5)}' | tplot --kind line
+  tplot --kind pie shares.csv
+  echo '{"US": 410, "DE": 120, "SG": 14}' | tplot --kind map --log
+  curl -s api.example.com/stats | tplot --kind column --title Requests
 `
 
 type options struct {
@@ -84,14 +84,14 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		fmt.Fprintln(os.Stderr, "plot:", err)
+		fmt.Fprintln(os.Stderr, "tplot:", err)
 		os.Exit(1)
 	}
 }
 
 func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) error {
 	var o options
-	fs := flag.NewFlagSet("plot", flag.ContinueOnError)
+	fs := flag.NewFlagSet("tplot", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
 		fmt.Fprint(stderr, usage)
@@ -127,7 +127,7 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) erro
 		args = args[1:]
 	}
 	if *showVersion {
-		fmt.Fprintln(stdout, "plot", versionString())
+		fmt.Fprintln(stdout, "tplot", versionString())
 		return nil
 	}
 	if len(files) > 1 {
@@ -206,7 +206,7 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) erro
 	return err
 }
 
-// maxInput bounds what plot reads: far more data than a terminal can show.
+// maxInput bounds what tplot reads: far more data than a terminal can show.
 const maxInput = 64 << 20
 
 func parseMode(s string) (plot.Mode, error) {
