@@ -289,6 +289,16 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 		if _, err := os.Stat(c.dropIn("look.toml")); err == nil {
 			t.Fatal("ASSERTION: the stopped take-over still applied the look")
 		}
+		// A stopped command leaves nothing: no temporary file and no saved
+		// values.
+		for _, dir := range []string{configDirIn(c.base), filepath.Dir(c.dropIn("x"))} {
+			entries, _ := os.ReadDir(dir)
+			for _, e := range entries {
+				if strings.HasSuffix(e.Name(), ".tmp") || e.Name() == "look.saved.json" {
+					t.Fatalf("ASSERTION: the stopped take-over left %s in %s", e.Name(), dir)
+				}
+			}
+		}
 	})
 
 	// The person deleted look.toml by hand. The remove must still put the

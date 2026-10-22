@@ -12,8 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 )
 
 // Take-over.
@@ -35,9 +33,9 @@ import (
 // A look applied over another puts back the saved keys the new look does not
 // set: the old look took them, and the new one has no value for them.
 //
-// Every file is read again just before tuios writes it. A file that changed
-// since the plan read it stops the command, so an edit made while tuios asked
-// its questions is never lost.
+// Every file is read again just before tuios renames the new file over it
+// (see commitFiles). A file that changed since the plan read it stops the
+// command, so an edit made while tuios asked its questions is not lost.
 
 // LookSavedName is the file in config.d that holds the values a take-over
 // removed.
@@ -120,32 +118,6 @@ func readLookSaved(mainPath string) (*lookSaved, error) {
 		}
 	}
 	return &s, nil
-}
-
-// writeLookSaved writes s, or deletes the saved file when s holds nothing.
-// A nil s leaves the file as it is.
-func writeLookSaved(mainPath string, s *lookSaved) error {
-	if s == nil {
-		return nil
-	}
-	path := LookSavedPath(mainPath)
-	if len(s.Files) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	if err := atomicfile.Write(path, append(data, '\n'), 0o600, true); err != nil {
-		return fmt.Errorf("failed to write %s: %w", path, err)
-	}
-	return nil
 }
 
 // LookTakeOver is what a take-over changes.
@@ -481,18 +453,16 @@ type fileWrite struct {
 }
 
 // configWrites lists the config files the plan writes, and the saved file
-// after it, and checks that no file changed since the plan read it. A
-// take-over writes over the restore of the same file: it was planned on top
-// of it.
-func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved, error) {
+// after it. A take-over writes over the restore of the same file: it was
+// planned on top of it.
+func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved) {
 	var out []fileWrite
 	add := func(f LookTakeOverFile) {
-		w := fileWrite{abs: f.abs, shown: f.Path, out: f.out, disk: p.disk[f.abs]}
 		if i := slices.IndexFunc(out, func(o fileWrite) bool { return o.abs == f.abs }); i >= 0 {
 			out[i].out = f.out
 			return
 		}
-		out = append(out, w)
+		out = append(out, fileWrite{abs: f.abs, shown: f.Path, out: f.out, disk: p.disk[f.abs]})
 	}
 	var saved *lookSaved
 	if p.Restore != nil {
@@ -507,24 +477,160 @@ func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved, error) {
 		}
 		saved = p.TakeOver.saved
 	}
-	for _, w := range out {
+	// config.toml goes last: it wins over every other file, so the config
+	// the watcher reloads in between never holds it without the rest.
+	main := absPath(p.Main)
+	slices.SortStableFunc(out, func(a, b fileWrite) int {
+		switch {
+		case a.abs == main && b.abs != main:
+			return 1
+		case b.abs == main && a.abs != main:
+			return -1
+		}
+		return 0
+	})
+	return out, saved
+}
+
+// stagedWrite is one file written in full to a temporary file beside its
+// target and synced, waiting for its rename.
+type stagedWrite struct {
+	target, tmp string
+	data        []byte
+	config      bool
+}
+
+// stageFile writes data to a temporary file beside path and syncs it. A config
+// file is written through a symlink to its target and keeps its mode, as
+// writeConfigBytes does.
+func stageFile(path string, data []byte, config bool) (stagedWrite, error) {
+	target, mode := path, os.FileMode(0o600)
+	if config {
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			target = resolved
+		}
+		if info, err := os.Stat(target); err == nil {
+			mode = info.Mode().Perm()
+		}
+	}
+	dir := filepath.Dir(target)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return stagedWrite{}, err
+	}
+	f, err := os.CreateTemp(dir, "."+filepath.Base(target)+".*.tmp")
+	if err != nil {
+		return stagedWrite{}, fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	err = f.Chmod(mode)
+	if err == nil {
+		_, err = f.Write(data)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(f.Name())
+		return stagedWrite{}, fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return stagedWrite{target: target, tmp: f.Name(), data: data, config: config}, nil
+}
+
+// commitFiles writes the files of a plan: look.toml when look is not nil, the
+// saved values, and the config files, config.toml last.
+//
+// It works in three steps, so that a file the person changed while tuios
+// asked is never written over. First every file goes to a temporary file
+// beside its target, synced. Then each config file is read again and
+// compared with what the plan read; a change stops the command, the
+// temporary files go, and nothing on disk has changed. Then the temporary
+// files are renamed over their targets, config.toml last, and the folders
+// synced. before runs between the check and the renames.
+//
+// tuios has no lock that other writers of the config take, so an edit by
+// hand that lands in the few microseconds between the check and the rename
+// of its file can still be lost.
+func (p *LookPlan) commitFiles(look []byte, before func() error) error {
+	writes, saved := p.configWrites()
+	var staged []stagedWrite
+	drop := func() {
+		for _, s := range staged {
+			_ = os.Remove(s.tmp)
+		}
+	}
+	add := func(path string, data []byte, config bool) error {
+		s, err := stageFile(path, data, config)
+		if err != nil {
+			drop()
+			return err
+		}
+		staged = append(staged, s)
+		return nil
+	}
+	if look != nil {
+		if err := add(LookPath(p.Main), look, false); err != nil {
+			return err
+		}
+	}
+	deleteSaved := saved != nil && len(saved.Files) == 0
+	if saved != nil && !deleteSaved {
+		data, err := json.MarshalIndent(saved, "", "  ")
+		if err != nil {
+			drop()
+			return err
+		}
+		if err := add(LookSavedPath(p.Main), append(data, '\n'), false); err != nil {
+			return err
+		}
+	}
+	for _, w := range writes {
+		if err := add(w.abs, w.out, true); err != nil {
+			return err
+		}
+	}
+	for _, w := range writes {
 		data, err := os.ReadFile(w.abs) //nolint:gosec // a file of the user's config
 		existed := err == nil
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, err
+			drop()
+			return err
 		}
 		if existed != w.disk.existed || !bytes.Equal(data, w.disk.data) {
-			return nil, nil, fmt.Errorf("%s changed while tuios asked. tuios did not change the look. Run the command again", w.shown)
+			drop()
+			return fmt.Errorf("%s changed while tuios asked. tuios did not change the look. Run the command again", w.shown)
 		}
 	}
-	return out, saved, nil
-}
-
-// writeConfigFiles writes each file of a plan.
-func writeConfigFiles(writes []fileWrite) error {
-	for _, w := range writes {
-		if err := writeConfigBytes(w.out, w.abs); err != nil {
+	if before != nil {
+		if err := before(); err != nil {
+			drop()
 			return err
+		}
+	}
+	dirs := map[string]bool{}
+	for i, s := range staged {
+		if s.config {
+			noteSelfWrite(s.data)
+		}
+		if err := os.Rename(s.tmp, s.target); err != nil {
+			for _, rest := range staged[i:] {
+				_ = os.Remove(rest.tmp)
+			}
+			return fmt.Errorf("failed to write %s: %w", s.target, err)
+		}
+		dirs[filepath.Dir(s.target)] = true
+	}
+	// The saved values go only once every file they came from is back.
+	if deleteSaved {
+		if err := os.Remove(LookSavedPath(p.Main)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	for dir := range dirs {
+		if df, err := os.Open(dir); err == nil { //nolint:gosec // a folder of the user's config
+			_ = df.Sync()
+			_ = df.Close()
 		}
 	}
 	return nil

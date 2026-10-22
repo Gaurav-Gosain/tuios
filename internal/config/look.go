@@ -14,7 +14,6 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -1008,35 +1007,27 @@ func (p *LookPlan) Apply() error {
 		return p.remove()
 	}
 	lk := p.Look
-	if lk.Theme != nil {
-		if _, err := theme.WriteLookAsset(false, lk.Theme.ID, lk.Theme.Data); err != nil {
-			return err
-		}
-	}
-	if lk.Glyphs != nil {
-		if _, err := theme.WriteLookAsset(true, lk.Glyphs.ID, lk.Glyphs.Data); err != nil {
-			return err
-		}
-	}
 	data, err := lk.render(p.Source)
 	if err != nil {
 		return err
 	}
-	path := LookPath(p.Main)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
+	// The theme and glyph set go in after the check and before the renames,
+	// so a stopped command leaves nothing, and the config the watcher
+	// reloads names files that are there.
+	assets := func() error {
+		if lk.Theme != nil {
+			if _, err := theme.WriteLookAsset(false, lk.Theme.ID, lk.Theme.Data); err != nil {
+				return err
+			}
+		}
+		if lk.Glyphs != nil {
+			if _, err := theme.WriteLookAsset(true, lk.Glyphs.ID, lk.Glyphs.Data); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	writes, saved, err := p.configWrites()
-	if err != nil {
-		return err
-	}
-	if err := atomicfile.Write(path, data, 0o600, true); err != nil {
-		return fmt.Errorf("failed to write %s: %w", path, err)
-	}
-	if err := writeLookSaved(p.Main, saved); err != nil {
-		return err
-	}
-	if err := writeConfigFiles(writes); err != nil {
+	if err := p.commitFiles(data, assets); err != nil {
 		return err
 	}
 	if c := p.Current; c != nil {
@@ -1058,22 +1049,16 @@ func (p *LookPlan) Apply() error {
 // person can fix the file and remove the look again. A backup tuios cannot
 // read is moved aside, never deleted.
 func (p *LookPlan) remove() error {
+	var moveBroken func() error
 	if p.SavedErr != nil {
-		saved := LookSavedPath(p.Main)
-		if err := os.Rename(saved, p.BrokenPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
+		moveBroken = func() error {
+			if err := os.Rename(LookSavedPath(p.Main), p.BrokenPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			return nil
 		}
 	}
-	writes, saved, err := p.configWrites()
-	if err != nil {
-		return err
-	}
-	if p.Restore != nil {
-		if err := writeLookSaved(p.Main, saved); err != nil {
-			return err
-		}
-	}
-	if err := writeConfigFiles(writes); err != nil {
+	if err := p.commitFiles(nil, moveBroken); err != nil {
 		return err
 	}
 	c := p.Current
