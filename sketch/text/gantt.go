@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 
+	"tuios.dev/plot"
 	"tuios.dev/sketch"
 	"tuios.dev/sketch/internal/types"
 )
@@ -257,11 +258,13 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 			c.put(x0+col((t.Start+t.End)/2), y, '◆', role)
 			continue
 		}
-		// A bar covers every cell it reaches into, and at least one.
-		a := col(t.Start)
-		b := min(max(int(math.Ceil(at(t.End)))-1, a), plotW-1)
-		for x := a; x <= b; x++ {
-			c.put(x0+x, y, glyph, role)
+		// A bar is tuios.dev/plot's span: it covers every cell it reaches
+		// into, and at least one.
+		bar := plot.Span{Start: t.Start, End: t.End, Min: g.Start, Max: g.Stop, Fill: string(glyph)}.Draw(plotW, plot.Blocks)
+		for x := 0; x < bar.W; x++ {
+			if cell := bar.At(x, 0); cell.Text != "" {
+				c.put(x0+x, y, glyph, role)
+			}
 		}
 	}
 
