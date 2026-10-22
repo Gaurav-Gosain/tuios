@@ -1,21 +1,21 @@
 module github.com/Gaurav-Gosain/tuios
 
-go 1.26.6
+go 1.26.8
 
 toolchain go1.26.10
 
 require (
-	charm.land/bubbletea/v2 v2.0.8
+	charm.land/bubbletea/v2 v2.0.10
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/ssh v0.4.3
 	charm.land/tone v0.1.0
-	charm.land/wish/v2 v2.0.3
+	charm.land/wish/v2 v2.0.5
 	github.com/Gaurav-Gosain/sip v0.9.4
 	github.com/Gaurav-Gosain/tuiffects v0.7.1
 	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/charmbracelet/colorprofile v0.4.3
-	github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be
+	github.com/charmbracelet/ultraviolet v0.0.0-20260906173415-0277a179edd9
 	github.com/charmbracelet/x/xpty v0.1.4
 	github.com/epilande/go-devicons v0.0.0-20250505162540-0661cab71a28
 	github.com/fsnotify/fsnotify v1.10.1
@@ -36,14 +36,14 @@ require (
 require (
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/dunglas/httpsfv v1.1.1 // indirect
-	github.com/mattn/go-runewidth v0.0.28 // indirect
-	github.com/pires/go-proxyproto v0.12.0 // indirect
+	github.com/mattn/go-runewidth v0.0.30 // indirect
+	github.com/pires/go-proxyproto v0.15.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
 )
 
 require (
-	charm.land/log/v2 v2.0.0 // indirect
+	charm.land/log/v2 v2.0.1 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/keygen v0.5.4 // indirect
@@ -74,10 +74,10 @@ require (
 	github.com/quic-go/webtransport-go v0.13.0 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
-	github.com/xo/terminfo v1.0.0 // indirect
+	github.com/xo/terminfo v1.2.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.57.0
-	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
+	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0
 	golang.org/x/text v0.42.0

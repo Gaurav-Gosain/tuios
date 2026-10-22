@@ -166,7 +166,8 @@ func TestKeyboardEnhancementsAreRequested(t *testing.T) {
 	waitBoot(t, term)
 
 	// Disambiguate (1), alternate keys (4), all keys (8), associated text (16).
-	waitForRequest(t, term, out, 0, kittyWindowModeFlags)
+	// The first request pushes the flags, so the host gets its own back on exit.
+	waitForRequest(t, term, out, 0, kittyWindowModePush)
 
 	newWindow(t, term)
 	mark := len(out.String())
@@ -176,6 +177,8 @@ func TestKeyboardEnhancementsAreRequested(t *testing.T) {
 }
 
 const (
+	// kittyWindowModePush is the first host request, made at start.
+	kittyWindowModePush = "\x1b[>29u"
 	// kittyWindowModeFlags is the host request while tuios reads keys itself.
 	kittyWindowModeFlags = "\x1b[=29;1u"
 	// kittyPaneFlags is the host request while a pane has the keyboard.
