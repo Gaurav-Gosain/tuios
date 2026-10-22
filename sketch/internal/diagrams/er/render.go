@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/er/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/er/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package er
 
@@ -84,12 +84,20 @@ func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolv
 	if len(lines) == 0 {
 		return ""
 	}
-	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Style == 0 {
+	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Math == nil && lines[0][0].Style == 0 {
 		return `<text` + attrs + ` x="` + num(x) + `" y="` + num(y) + `">` + svg.Esc(lines[0][0].Text) + `</text>`
 	}
 	shared := svg.SharedStyle(label)
+	shift := float64(label.Size * 0.35)
+	top := y - shift - label.LineHeight/2
 	var body, extra strings.Builder
-	for _, line := range lines {
+	for i, line := range lines {
+		middle := top + text.LineMiddle(label, i)
+		if text.HasMath(line) {
+			extra.WriteString(svg.LabelSvg(text.LabelLine(label, i), x+label.Widths[i]/2, middle, attrs, icons))
+			continue
+		}
+		y = middle + shift
 		hasIcon := false
 		for _, span := range line {
 			if span.Icon != "" {
@@ -105,7 +113,7 @@ func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolv
 				if icons != nil {
 					inner = icons(span.Icon)
 				}
-				extra.WriteString(`<svg class="pele-icon" data-icon="` + svg.EscText(span.Icon) + `" x="` + num(sx) + `" y="` + num(y-label.Size*0.35-side/2) +
+				extra.WriteString(`<svg class="pele-icon" data-icon="` + svg.EscText(span.Icon) + `" x="` + num(sx) + `" y="` + num(y-float64(label.Size*0.35)-side/2) +
 					`" width="` + num(side) + `" height="` + num(side) + `" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + inner + `</svg>`)
 			} else if span.Text != "" {
 				pos := ""
@@ -117,7 +125,6 @@ func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolv
 			}
 			sx += span.Width
 		}
-		y += label.LineHeight
 	}
 	return `<text` + svg.TextStyle(attrs, shared) + ` xml:space="preserve">` + body.String() + `</text>` + extra.String()
 }
@@ -407,7 +414,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		layoutWidth = math.Max(layoutWidth, c.X+c.W/2+MARKER_LENGTH+LOOP*0.75+10+reach)
 	}
 
-	title := text.LayoutLabel(db.title, false, measurer, size, 4000, text.Bold)
+	title := svg.TitleLabel(db.title, measurer, size, 4000)
 	titleHeight := 0.0
 	if title.Height > 0 {
 		titleHeight = title.Height + 12

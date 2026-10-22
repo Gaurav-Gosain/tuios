@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/kanban/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/kanban/index.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 // Package kanban draws Mermaid's kanban board: columns of cards, each card with an
 // optional ticket, assignee, priority and icon.
@@ -9,6 +9,7 @@ import "tuios.dev/sketch/internal/types"
 // Kanban is the kanban diagram type.
 var Kanban = &types.Diagram{
 	Type: "kanban",
+	Math: true,
 	Parse: func(source string, _ types.Config, title *string, _ int, _ types.ParseLimits) any {
 		db := &KanbanDb{}
 		db.title = types.Or(title, "")

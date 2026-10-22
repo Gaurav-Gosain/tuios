@@ -1,0 +1,44 @@
+[
+ {
+  "src": "flowchart LR\n  A[\"$$x^2$$\"] -->|\"$$y_1$$\"| B[\"Total $$\\frac{a}{b}$$ items<br/>last line\"]"
+ },
+ {
+  "src": "flowchart TD\n  subgraph S[\"$$\\sum_i x_i$$\"]\n    A[\"`**bold** $$a_1$$ and $$b$$ *c*`\"]\n  end\n  X --> A"
+ },
+ {
+  "src": "swimlane-beta LR\n  subgraph L[\"$$\\lambda$$\"]\n    A[\"$$a$$\"] --> B\n  end"
+ },
+ {
+  "src": "sequenceDiagram\n  participant A as $$\\alpha$$\n  A->>B: Solve $$x^2$$\n  Note over A: $$\\int x$$\n  B->>B: $$y$$ again"
+ },
+ {
+  "src": "stateDiagram-v2\n  state \"$$a$$\" as s1\n  s1 : $$b$$\n  [*] --> s1 : $$c$$\n  note right of s1 : $$d$$\n  state \"$$e$$\" as C {\n    x --> y\n  }"
+ },
+ {
+  "src": "classDiagram\n  class A {\n    <<$$a$$>>\n    +$$m$$ int\n  }\n  note for A \"$$b$$\"\n  A \"$$c$$\" --> \"1\" B : $$d$$\n  class C[\"$$e$$\"]"
+ },
+ {
+  "src": "erDiagram\n  p[\"$$a$$\"] {\n    string name \"$$b$$<br/>after\"\n  }\n  p ||--o{ q : \"$$c$$\""
+ },
+ {
+  "src": "mindmap\n  root((\"$$a$$\"))\n    $$b$$\n    child[\"$$t$$<br/>after\"]"
+ },
+ {
+  "src": "kanban\n  todo[\"$$a$$\"]\n    t1[\"$$b$$ and a longer card text that wraps\"]@{ ticket: \"$$T$$\", assigned: \"$$p$$\" }"
+ },
+ {
+  "src": "block-beta\n  a[\"$$a$$\"] b[\"$$b$$\"]\n  a -- \"$$c$$\" --> b"
+ },
+ {
+  "src": "requirementDiagram\n  requirement \"$$a$$\" {\n    id: \"$$b$$\"\n    text: \"$$c$$<br/>after\"\n  }\n  element e1 {\n    type: \"$$d$$\"\n    docref: \"$$e$$\"\n  }"
+ },
+ {
+  "src": "usecase-beta\n  actor C(\"$$a$$\")\n  systemBoundary \"$$b$$\"\n    U(\"$$c$$\")\n  end\n  C --> U\n  json Payload@{\"$$x$$\":1,\"other\":2}"
+ },
+ {
+  "src": "---\ntitle: $$t$$ title\n---\nflowchart LR\n  A[\"$$a$$$$b$$ $$ $$ $$\nc$$\"]"
+ },
+ {
+  "src": "pie\n  \"$$x$$\" : 3\n  \"y\" : 2"
+ }
+]

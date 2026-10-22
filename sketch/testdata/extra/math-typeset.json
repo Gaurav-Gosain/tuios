@@ -1,0 +1,88 @@
+[
+ {
+  "src": "flowchart LR\n  A[\"$$x^2$$\"] -->|\"$$y_1$$\"| B[\"Total $$\\frac{a}{b}$$ items<br/>last line\"]",
+  "math": true
+ },
+ {
+  "src": "flowchart TD\n  X --> A\n  subgraph S[\"$$\\sum_i x_i$$\"]\n    A[\"`**bold** $$a_1$$ and $$none$$ *c*`\"]\n  end",
+  "math": true
+ },
+ {
+  "src": "flowchart TD\n  A[\"some words before $$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa$$ and after it\"]\n  A --> B[\"$$h:x$$ html\"]",
+  "math": true
+ },
+ {
+  "src": "flowchart LR\n  A[\"$$a$$ and $$b$$<br/>$$c<br/>d$$\"]\n  B[\"<span title=$$a$$>hello</span> $$b$$ $$c$$\"]\n  C[\"$$nan$$ fallback\"]",
+  "math": true
+ },
+ {
+  "src": "flowchart LR\n  A[\"Hide $$x$$\"]\n  style A opacity:0.5,letter-spacing:6px\n  B[\"$$x$$\"]\n  classDef red color:#c00\n  class B red",
+  "math": true
+ },
+ {
+  "src": "swimlane-beta LR\n  subgraph L[\"$$\\lambda$$\"]\n    A[\"$$a$$\"] --> B\n  end\n  style L color:#c00",
+  "math": true
+ },
+ {
+  "src": "sequenceDiagram\n  participant A as $$\\alpha$$\n  A->>B: Solve $$x^2$$\n  Note over A: $$\\int x$$\n  B->>B: $$\\frac{tall}{y}$$\n  box Group $$g$$\n    participant C\n  end",
+  "math": true
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: averyveryverylongwordthatmustbreak $$\\frac{x}{y}$$ more\n  B->>A: ok",
+  "math": true,
+  "maxWidth": 220
+ },
+ {
+  "src": "stateDiagram-v2\n  state \"$$a$$\" as s1\n  s1 : $$b$$<br/>after\n  [*] --> s1 : $$c$$\n  note right of s1 : $$d$$\n  state \"$$e$$\" as C {\n    x --> y\n  }",
+  "math": true
+ },
+ {
+  "src": "classDiagram\n  class A {\n    <<$$a$$>>\n    +$$m$$ int\n  }\n  note for A \"$$b$$<br/>after\"\n  A \"$$c$$\" --> \"1\" B : $$d$$\n  class C[\"$$e$$\"]\n  C \"$$\\frac{x}{y}$$\" --> \"$$tall$$\" A",
+  "math": true
+ },
+ {
+  "src": "classDiagram\n  direction LR\n  A \"$$\\frac{p}{q}$$\" --> \"$$none$$\" B\n  class B {\n    <<$$h:i$$>>\n  }",
+  "math": true
+ },
+ {
+  "src": "erDiagram\n  p[\"$$a$$\"] {\n    string name \"$$\\frac{t}{u}$$<br/>after\"\n  }\n  p ||--o{ q : \"$$c$$\"",
+  "math": true
+ },
+ {
+  "src": "mindmap\n  root((\"$$a$$\"))\n    $$b$$\n    child[\"$$\\frac{t}{u}$$<br/>after\"]",
+  "math": true
+ },
+ {
+  "src": "kanban\n  todo[Todo]\n    a[\"$$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx$$\"]\n    t1[\"$$\\frac{t}{u}$$<br/>after\"]@{ ticket: \"$$T$$\", assigned: \"$$p$$\" }\n  done[\"$$d$$\"]\n    b[Other]",
+  "math": true
+ },
+ {
+  "src": "kanban\n  todo[Todo]\n    a[\"$$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx$$\"]\n  done[Done]\n    b[Other]",
+  "math": true,
+  "maxWidth": 240
+ },
+ {
+  "src": "block-beta\n  a[\"$$a$$\"] b[\"$$\\frac{b}{c}$$\"]\n  a -- \"$$c$$\" --> b",
+  "math": true
+ },
+ {
+  "src": "requirementDiagram\n  requirement \"$$a$$\" {\n    id: \"$$b$$\"\n    text: \"$$\\frac{t}{u}$$<br/>after\"\n  }\n  element e1 {\n    type: \"$$d$$\"\n    docref: \"$$e$$\"\n  }",
+  "math": true
+ },
+ {
+  "src": "usecase-beta\n  actor C(\"$$a$$\")\n  systemBoundary \"$$b$$\"\n    U(\"`$$\\frac{t}{u}$$\nafter`\")\n  end\n  C --> U\n  json Payload@{\"$$\\frac{x}{y}$$\":1,\"other\":2}",
+  "math": true
+ },
+ {
+  "src": "---\ntitle: $$t$$ title\n---\nflowchart LR\n  A[\"$$a$$$$b$$ $$ $$ $$\nc$$\"]",
+  "math": true
+ },
+ {
+  "src": "pie\n  \"$$x$$\" : 3\n  \"y\" : 2",
+  "math": true
+ },
+ {
+  "src": "timeline\n  2020 : $$x$$",
+  "math": true
+ }
+]

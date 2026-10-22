@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/class/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/class/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package class
 
@@ -56,12 +56,18 @@ type View struct {
 	w           float64
 	h           float64
 	loops       int
-	annotations []string
+	annotations []annotation
 	attributes  []Line
 	methods     []Line
 	titleH      float64
 	attributesH float64
 	fontSize    float64
+}
+
+// annotation is pele's `string | Label`: the text, and the label when it holds typeset math.
+type annotation struct {
+	text  string
+	label *text.Label
 }
 
 type End struct {
@@ -148,6 +154,28 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		measurer = text.DefaultMeasurer(options.FontFamily, "")
 	}
 	pad := types.Or(options.Padding, 8)
+	// Keep annotations and cardinalities literal unless math is typeset.
+	mathText := func(raw string, fontSize float64) *text.Label {
+		if !strings.Contains(raw, "$$") {
+			return nil
+		}
+		label := text.LayoutLabel(raw, false, measurer, fontSize, 4000, 0)
+		for _, line := range label.Lines {
+			if text.HasMath(line) {
+				return &label
+			}
+		}
+		return nil
+	}
+	cardWidth := func(raw string) float64 {
+		if raw == "" {
+			return 0
+		}
+		if m := mathText(raw, tiny); m != nil {
+			return m.Width
+		}
+		return measurer.Width(text.DecodeEntities(raw), tiny, 0)
+	}
 	rootDir := layout.Direction(db.Direction)
 	if turned {
 		rootDir = "TB"
@@ -276,9 +304,9 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			labelStyle |= text.Italic
 		}
 		label := text.LayoutLabel(cls.Label+generic, false, measurer, fontSize, 4000, labelStyle)
-		var annotations []string
+		var annotations []annotation
 		for _, a := range cls.Annotations {
-			annotations = append(annotations, "«"+js.Trim(text.DecodeEntities(a))+"»")
+			annotations = append(annotations, annotation{"«" + js.Trim(text.DecodeEntities(a)) + "»", mathText("«"+js.Trim(a)+"»", tiny)})
 		}
 		var attributes, methods []Line
 		for _, m := range cls.Members {
@@ -288,8 +316,15 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			methods = append(methods, memberLine(m, measurer, memberSize))
 		}
 		inner := label.Width
+		annotationsH := 0.0
 		for _, a := range annotations {
-			inner = math.Max(inner, measurer.Width(a, tiny, 0))
+			if a.label == nil {
+				inner = math.Max(inner, measurer.Width(a.text, tiny, 0))
+				annotationsH += tinyHeight
+			} else {
+				inner = math.Max(inner, a.label.Width)
+				annotationsH += math.Max(tinyHeight, a.label.Height)
+			}
 		}
 		for _, line := range attributes {
 			inner = math.Max(inner, line.width)
@@ -307,7 +342,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			}
 			return EMPTY_SECTION
 		}
-		titleH := 2*TITLE_PAD + float64(len(annotations))*tinyHeight + math.Max(label.Height, js.Round(fontSize*1.5))
+		titleH := 2*TITLE_PAD + annotationsH + math.Max(label.Height, js.Round(fontSize*1.5))
 		attributesH := section(len(attributes))
 		return &View{
 			node:        node,
@@ -388,14 +423,8 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			continue
 		}
 		label := text.LayoutLabel(edge.Label, true, measurer, small, 200, 0)
-		startW := 0.0
-		if edge.StartLabelRight != "" {
-			startW = measurer.Width(text.DecodeEntities(edge.StartLabelRight), tiny, 0)
-		}
-		endW := 0.0
-		if edge.EndLabelLeft != "" {
-			endW = measurer.Width(text.DecodeEntities(edge.EndLabelLeft), tiny, 0)
-		}
+		startW := cardWidth(edge.StartLabelRight)
+		endW := cardWidth(edge.EndLabelLeft)
 		labelW := 0.0
 		if label.Width > 0 {
 			labelW = label.Width + 12
@@ -451,10 +480,27 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	if lettered {
 		rankSep = RANK_SEP + 16
 	}
+	// Cardinalities at both ends of a vertical edge need room for their height between the ranks.
+	tallCards := 0.0
+	if rootDir == "TB" || rootDir == "BT" {
+		cardHeight := func(raw string) float64 {
+			if raw == "" {
+				return 0
+			}
+			h := 0.0
+			if m := mathText(raw, tiny); m != nil {
+				h = m.Height
+			}
+			return math.Max(tinyHeight, h)
+		}
+		for _, edge := range drawn {
+			tallCards = math.Max(tallCards, cardHeight(edge.StartLabelRight)+cardHeight(edge.EndLabelLeft)-float64(2*tinyHeight))
+		}
+	}
 	lay := layout.CompoundLayout(cnodes, cedges, rootDir, layout.LayeredOptions{
 		NodeSep: numberOption(conf, "nodeSpacing", NODE_SEP),
 		EdgeSep: EDGE_SEP,
-		RankSep: numberOption(conf, "rankSpacing", rankSep),
+		RankSep: numberOption(conf, "rankSpacing", rankSep) + tallCards,
 		PortSep: 20,
 		Apart:   true,
 	})
@@ -467,6 +513,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	var sideKeys []int
 	type cardItem struct {
 		text string
+		math *text.Label
 		x, y float64
 	}
 	var cards []cardItem
@@ -660,6 +707,11 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		if raw == "" {
 			return
 		}
+		m := mathText(raw, tiny)
+		h := tinyHeight
+		if m != nil {
+			h = math.Max(tinyHeight, m.Height)
+		}
 		cx := x
 		cy := y
 		if side&1 != 0 {
@@ -669,9 +721,9 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 				cx += 5 + width/2
 			}
 			if after {
-				cy += 7 + tinyHeight/2
+				cy += 7 + h/2
 			} else {
-				cy -= 7 + tinyHeight/2
+				cy -= 7 + h/2
 			}
 		} else {
 			if after {
@@ -680,16 +732,16 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 				cx -= 9 + width/2
 			}
 			if side == 0 {
-				cy -= 3 + tinyHeight/2
+				cy -= 3 + h/2
 			} else {
-				cy += 3 + tinyHeight/2
+				cy += 3 + h/2
 			}
 		}
-		cards = append(cards, cardItem{text: text.DecodeEntities(raw), x: cx, y: cy})
+		cards = append(cards, cardItem{text: text.DecodeEntities(raw), math: m, x: cx, y: cy})
 		minX = math.Min(minX, cx-width/2)
 		maxX = math.Max(maxX, cx+width/2)
-		minY = math.Min(minY, cy-tinyHeight/2)
-		maxY = math.Max(maxY, cy+tinyHeight/2)
+		minY = math.Min(minY, cy-h/2)
+		maxY = math.Max(maxY, cy+h/2)
 	}
 	loopSeen := map[int]int{}
 	loopAt := make([]int, len(cedges))
@@ -759,8 +811,14 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 		y := top + TITLE_PAD
 		for _, annotation := range view.annotations {
-			body.WriteString(`<text class="pele-annotation" x="0" y="` + num(y+tinyHeight/2+tiny*0.35) + `" text-anchor="middle" font-size="` + js.Num(tiny) + `" fill="var(--_m)">` + svg.Esc(annotation) + `</text>`)
-			y += tinyHeight
+			if annotation.label == nil {
+				body.WriteString(`<text class="pele-annotation" x="0" y="` + num(y+tinyHeight/2+float64(tiny*0.35)) + `" text-anchor="middle" font-size="` + js.Num(tiny) + `" fill="var(--_m)">` + svg.Esc(annotation.text) + `</text>`)
+				y += tinyHeight
+			} else {
+				h := math.Max(tinyHeight, annotation.label.Height)
+				body.WriteString(svg.LabelSvg(*annotation.label, 0, y+h/2, ` class="pele-annotation" font-size="`+js.Num(tiny)+`" fill="var(--_m)"`, options.Icons))
+				y += h
+			}
 		}
 		titleSize := ""
 		if view.fontSize != size {
@@ -928,7 +986,11 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 
 	var cardsOut strings.Builder
 	for _, item := range cards {
-		cardsOut.WriteString(`<text class="pele-cardinality" x="` + num(item.x+ox) + `" y="` + num(item.y+oy+tiny*0.35) + `" text-anchor="middle">` + svg.Esc(item.text) + `</text>`)
+		if item.math != nil {
+			cardsOut.WriteString(svg.LabelSvg(*item.math, item.x+ox, item.y+oy, ` class="pele-cardinality"`, options.Icons))
+		} else {
+			cardsOut.WriteString(`<text class="pele-cardinality" x="` + num(item.x+ox) + `" y="` + num(item.y+oy+float64(tiny*0.35)) + `" text-anchor="middle">` + svg.Esc(item.text) + `</text>`)
+		}
 	}
 
 	content := make([]string, 0, 32)
@@ -957,7 +1019,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 // classGeometry is the layout in SVG units, for drawing the diagram some other way.
 func classGeometry(db *ClassDb, graph ClassGraph, views []*View, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []*GraphEdge, edgeLabels []text.Label,
 	hideEmpty bool, measurer text.TextMeasurer, size, width, height float64) *types.Geometry {
-	g := &types.Geometry{Width: width, Height: height, Title: text.LayoutLabel(db.Title, false, measurer, size, 4000, text.Bold).Plain()}
+	g := &types.Geometry{Width: width, Height: height, Title: svg.TitleLabel(db.Title, measurer, size, 4000).Plain()}
 	lines := func(list []Line) []string {
 		out := make([]string, len(list))
 		for i, l := range list {
@@ -976,7 +1038,11 @@ func classGeometry(db *ClassDb, graph ClassGraph, views []*View, cnodes []*layou
 			n.Shape = "rect"
 		case node.ClassNode != nil:
 			n.Shape = "class"
-			n.Label = append(append([]string{}, v.annotations...), n.Label...)
+			annotations := make([]string, len(v.annotations))
+			for k, a := range v.annotations {
+				annotations[k] = a.text
+			}
+			n.Label = append(annotations, n.Label...)
 			if !hideEmpty || len(v.attributes) > 0 || len(v.methods) > 0 {
 				n.Sections = [][]string{lines(v.attributes), lines(v.methods)}
 			}

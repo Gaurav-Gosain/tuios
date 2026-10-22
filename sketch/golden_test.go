@@ -3,13 +3,17 @@ package sketch
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 	_ "time/tzdata"
+
+	"tuios.dev/sketch/internal/js"
 )
 
 // done lists the corpus files whose goldens must all match. A type joins it
@@ -173,6 +177,27 @@ func TestGolden(t *testing.T) {
 	t.Logf("golden matches by type (types not ported yet are left out):\n%s  all            %3d/%3d", report.String(), passed, total)
 }
 
+// goldenMath is fakeMath of testdata/extra/gen.mjs, the math resolver of the
+// extra cases that set "math".
+func goldenMath(tex string, size float64) (MathMarkup, bool) {
+	if strings.Contains(tex, "none") {
+		return MathMarkup{}, false
+	}
+	if strings.Contains(tex, "nan") {
+		return MathMarkup{Width: math.NaN(), Height: 10}, true
+	}
+	n := js.Len(tex)
+	width := float64(float64(n)*7) + size/2
+	height := size + 4
+	if strings.Contains(tex, `\frac`) || strings.Contains(tex, "tall") {
+		height = float64(size * 2.5)
+	}
+	if strings.HasPrefix(tex, "h:") {
+		return MathMarkup{Markup: `<span class="m">` + strconv.Itoa(n) + `</span>`, HTML: true, Width: width, Height: height}, true
+	}
+	return MathMarkup{Markup: `<path d="M0,0H` + strconv.Itoa(n) + `"/>`, Width: width, Height: height}, true
+}
+
 // TestGoldenExtra renders the cases under testdata/extra, which pele's corpus does
 // not cover, such as Chinese and Japanese labels that wrap between characters. Each
 // SVG was written by pele (testdata/extra/gen.mjs) and must match byte for byte.
@@ -191,6 +216,7 @@ func TestGoldenExtra(t *testing.T) {
 		var cases []struct {
 			Src      string  `json:"src"`
 			MaxWidth float64 `json:"maxWidth"`
+			Math     bool    `json:"math"`
 		}
 		if err := json.Unmarshal(data, &cases); err != nil {
 			t.Fatalf("%s: %v", f, err)
@@ -204,6 +230,9 @@ func TestGoldenExtra(t *testing.T) {
 			opts := RenderOptions{Now: goldenNow, Location: goldenZone}
 			if c.MaxWidth > 0 {
 				opts.MaxWidth = &c.MaxWidth
+			}
+			if c.Math {
+				opts.Math = goldenMath
 			}
 			out, err := Render(c.Src, opts)
 			n++

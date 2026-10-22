@@ -1,4 +1,4 @@
-// Ported from pele src/svg/builder.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/svg/builder.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 // Package svg writes the SVG that every diagram type shares: text, shapes,
 // edges, clusters and the root element.
@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/lazyre"
 	"tuios.dev/sketch/internal/text"
 )
 
@@ -140,41 +141,60 @@ func LabelSvg(label text.Label, cx, cy float64, attrs string, icons IconResolver
 		return ""
 	}
 	lh := label.LineHeight
+	heights := label.Heights
 	shift := float64(label.Size * 0.35)
-	y := cy - label.Height/2 + lh/2 + shift
+	top := cy - label.Height/2
 
-	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Style == 0 {
+	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Math == nil && lines[0][0].Style == 0 {
 		text := Esc(lines[0][0].Text)
 		var b strings.Builder
 		b.Grow(len(attrs) + len(text) + 72)
 		WriteStrings(&b, `<text`, attrs, ` x="`)
 		WriteNum(&b, cx)
 		b.WriteString(`" y="`)
-		WriteNum(&b, y)
+		WriteNum(&b, top+lh/2+shift)
 		WriteStrings(&b, `" text-anchor="middle">`, text, `</text>`)
 		return b.String()
 	}
 
 	shared := SharedStyle(label)
+	given := attrs
+	var look *mathLook
 	attrs = TextStyle(attrs, shared)
 	var body, extra strings.Builder
 	for i, line := range lines {
-		hasIcon := false
+		h := lh
+		if heights != nil {
+			h = heights[i]
+		}
+		mid := top + h/2
+		y := mid + shift
+		placed := false
 		for _, span := range line {
-			if span.Icon != "" {
-				hasIcon = true
+			if span.Icon != "" || span.Math != nil {
+				placed = true
 			}
 		}
-		if hasIcon {
+		if placed {
 			x := cx - label.Widths[i]/2
 			for _, span := range line {
-				if span.Icon != "" {
+				if span.Math != nil {
+					box := `x="` + Num(x) + `" y="` + Num(mid-span.Math.Height/2) + `" width="` + Num(span.Math.Width) + `" height="` + Num(span.Math.Height) + `"`
+					if look == nil {
+						look = lookOfMath(given)
+					}
+					if !look.haloed {
+						extra.WriteString(mathSvg(span.Math, box, label.Size, look.attrs))
+					} else {
+						extra.WriteString(`<rect ` + box + ` rx="2" fill="` + look.halo + `"/>`)
+					}
+				} else if span.Icon != "" {
 					side := label.Size * 1.1
 					inner := ""
 					if icons != nil {
 						inner = icons(span.Icon)
 					}
-					extra.WriteString(`<svg class="pele-icon" data-icon="` + EscText(span.Icon) + `" x="` + Num(x) + `" y="` + Num(y-shift-side/2) +
+					extra.WriteString(`<svg class="pele-icon" data-icon="` + EscText(span.Icon) + `" x="` + Num(x) + `" y="` + Num(mid-side/2) +
 						`" width="` + Num(side) + `" height="` + Num(side) + `" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + inner + `</svg>`)
 				} else if span.Text != "" {
 					body.WriteString(`<tspan x="` + Num(x) + `" y="` + Num(y) + `" text-anchor="start"` + SpanStyle(span.Style&^shared) + `>` + Esc(span.Text) + `</tspan>`)
@@ -193,9 +213,71 @@ func LabelSvg(label text.Label, cx, cy float64, attrs string, icons IconResolver
 				body.WriteString(`<tspan x="` + Num(cx) + `" y="` + Num(y) + `"> </tspan>`)
 			}
 		}
-		y += lh
+		top += h
 	}
 	return `<text` + attrs + ` text-anchor="middle" xml:space="preserve">` + body.String() + `</text>` + extra.String()
+}
+
+var (
+	reFill         = lazyre.New(` fill="([^"]*)"`)
+	reStroke       = lazyre.New(` stroke="([^"]*)"`)
+	reStyle        = lazyre.New(` style="([^"]*)"`)
+	reStyleFill    = lazyre.New(`(?:^|;)[` + js.S + `]*fill:([^;]*)`)
+	reStyleOpacity = lazyre.New(`(?:^|;)[` + js.S + `]*opacity:([^;]*)`)
+)
+
+// Copy only color and opacity to preserve measured math dimensions.
+// Use a solid patch for the cluster title's outline to hide edges behind math.
+type mathLook struct {
+	attrs string
+	// haloed is pele's `halo !== undefined`.
+	haloed bool
+	halo   string
+}
+
+// group is RE.exec(s)?.[1], and whether it matched.
+func group(re *lazyre.Regexp, s string) (string, bool) {
+	m := re.FindStringSubmatch(s)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
+func lookOfMath(attrs string) *mathLook {
+	style, _ := group(reStyle, attrs)
+	fill, ok := group(reStyleFill, style)
+	if !ok {
+		fill, _ = group(reFill, attrs)
+	}
+	fill = js.Trim(fill)
+	if fill == "none" {
+		halo, ok := group(reStroke, attrs)
+		if !ok {
+			halo = "none"
+		}
+		return &mathLook{haloed: true, halo: halo}
+	}
+	out := ""
+	if fill != "" {
+		out = ` color="` + fill + `"`
+	}
+	if opacity, ok := group(reStyleOpacity, style); ok {
+		if opacity = js.Trim(opacity); opacity != "" {
+			out += ` opacity="` + opacity + `"`
+		}
+	}
+	return &mathLook{attrs: out}
+}
+
+// Resolver markup is trusted.
+func mathSvg(math *text.MathMarkup, box string, size float64, attrs string) string {
+	if !math.HTML {
+		return `<svg class="pele-math" ` + box + ` overflow="visible"` + attrs + `>` + math.Markup + `</svg>`
+	}
+	return `<foreignObject class="pele-math" ` + box + ` overflow="visible"` + attrs + `>` +
+		`<div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:` + Num(size) + `px;line-height:normal;white-space:nowrap">` + math.Markup + `</div>` +
+		`</foreignObject>`
 }
 
 const (

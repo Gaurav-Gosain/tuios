@@ -1,4 +1,4 @@
-// Ported from pele src/types.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/types.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // Optional options are pointers where pele tells `undefined` from a value.
 
@@ -25,6 +25,12 @@ type YamlValue = any
 type Config = map[string]any
 
 type IconResolver = text.IconResolver
+
+// MathMarkup is typeset math. Dimensions are in pixels. HTML requires the typesetter's CSS.
+type MathMarkup = text.MathMarkup
+
+// MathResolver typesets TeX. TeX excludes the $$ delimiters; font size is in pixels.
+type MathResolver = text.MathResolver
 
 type RenderOptions struct {
 	Measurer text.TextMeasurer
@@ -55,7 +61,10 @@ type RenderOptions struct {
 	// Link `rel` attribute. Defaults to `noopener`; an empty string omits it.
 	LinkRel *string
 	Icons   IconResolver
-	Config  Config
+	// Math typesets $$...$$ in the labels of the types that take it. nil leaves the TeX
+	// source as text. Its markup is written into the SVG unchanged: the host must trust it.
+	Math   MathResolver
+	Config Config
 	// The time gantt charts treat as now. The zero time means the current time.
 	Now time.Time
 	// The time zone gantt charts read dates in. It is not part of pele, which reads them in
@@ -98,6 +107,8 @@ type Diagram struct {
 	// A diagram that reports source positions is given the text with its `%%` comment lines kept.
 	// `lineOffset` is the number of front matter lines that were removed before that text.
 	KeepComments bool
+	// Enables $$...$$ in labels.
+	Math bool
 	// Parse and Render report a problem with the text by panicking with a *PeleError,
 	// as pele throws one. The API recovers it.
 	Parse  func(source string, config Config, title *string, lineOffset int, limits ParseLimits) any

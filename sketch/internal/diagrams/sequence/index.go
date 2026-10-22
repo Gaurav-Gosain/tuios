@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/sequence/index.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package sequence
 
@@ -6,6 +6,7 @@ import "tuios.dev/sketch/internal/types"
 
 var Sequence = &types.Diagram{
 	Type: "sequence",
+	Math: true,
 	Parse: func(source string, config types.Config, title *string, _ int, _ types.ParseLimits) any {
 		seq, _ := config["sequence"].(map[string]any)
 		opts := SeqDbOptions{}

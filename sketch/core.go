@@ -1,4 +1,4 @@
-// Ported from pele src/core.ts and src/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/core.ts and src/index.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // mount() and enableZoom() are browser only and are not ported. pele throws a
 // PeleError; the port panics with one inside and returns it as an error here.
@@ -35,6 +35,19 @@ const (
 
 // RenderOptions are pele's render options. A nil pointer is an option left unset.
 type RenderOptions = types.RenderOptions
+
+// MathMarkup is a typeset $$...$$ expression that a MathResolver gives: SVG
+// (or HTML) markup and its size in pixels.
+type MathMarkup = types.MathMarkup
+
+// MathResolver typesets the TeX of a $$...$$ label (without the delimiters) at
+// a font size in pixels, and reports false when it has nothing for it. Then,
+// and when RenderOptions.Math is nil, the label shows the $$...$$ source as
+// text. sketch has no typesetter of its own.
+//
+// The markup is written into the SVG unchanged, as pele does: a resolver must
+// give markup the host trusts.
+type MathResolver = types.MathResolver
 
 // TextMeasurer gives the width of text. The default is a table of Arial
 // advances, which gives the same output as pele.
@@ -246,6 +259,9 @@ func render(p parsed, options RenderOptions) SVG {
 		m = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	options.Measurer = text.WithIcons(m, icons)
+	if p.diagram.Math {
+		options.Measurer = text.WithMath(options.Measurer, options.Math)
+	}
 	rendered := renderModel(p, options)
 	outputLimit := options.OutputLimit
 	if outputLimit <= 0 {

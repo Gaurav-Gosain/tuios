@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/requirement/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/requirement/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package requirement
 
@@ -68,7 +68,7 @@ func restyle(label text.Label, bits int, measurer text.TextMeasurer) text.Label 
 		for j, span := range line {
 			style := span.Style | bits
 			w := span.Width
-			if span.Icon == "" {
+			if span.Icon == "" && span.Math == nil {
 				w = measurer.Width(span.Text, label.Size, style)
 			}
 			total += w
@@ -91,10 +91,15 @@ func restyle(label text.Label, bits int, measurer text.TextMeasurer) text.Label 
 
 // startText writes a measured label with its lines starting at x, the first line's box starting at top.
 func startText(b *strings.Builder, label text.Label, x, top float64, attrs string) {
-	y := top + label.LineHeight/2 + float64(label.Size*0.35)
 	shared := svg.SharedStyle(label)
-	var body strings.Builder
-	for _, line := range label.Lines {
+	var body, mathOut strings.Builder
+	for i, line := range label.Lines {
+		middle := top + text.LineMiddle(label, i)
+		if text.HasMath(line) {
+			mathOut.WriteString(svg.LabelSvg(text.LabelLine(label, i), x+label.Widths[i]/2, middle, attrs, nil))
+			continue
+		}
+		y := middle + float64(label.Size*0.35)
 		first := true
 		for _, span := range line {
 			if span.Icon != "" || span.Text == "" {
@@ -111,11 +116,11 @@ func startText(b *strings.Builder, label text.Label, x, top float64, attrs strin
 			svg.WriteStrings(&body, svg.SpanStyle(span.Style&^shared), `>`, svg.Esc(span.Text), `</tspan>`)
 			first = false
 		}
-		y += label.LineHeight
 	}
 	if body.Len() > 0 {
 		svg.WriteStrings(b, `<text`, svg.TextStyle(attrs, shared), ` text-anchor="start" xml:space="preserve">`, body.String(), `</text>`)
 	}
+	b.WriteString(mathOut.String())
 }
 
 // containsMarker is the containment mark: a circled plus whose rim touches (x, y), where (dx, dy) points at the node.
@@ -397,7 +402,7 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 
 	spreadEnds(cnodes, cedges, views)
 
-	title := text.LayoutLabel(model.title, false, measurer, size, 4000, text.Bold)
+	title := svg.TitleLabel(model.title, measurer, size, 4000)
 	titleHeight := 0.0
 	if title.Height > 0 {
 		titleHeight = title.Height + 12

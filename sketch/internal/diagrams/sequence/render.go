@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/sequence/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package sequence
 
@@ -1147,11 +1147,16 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 
 	minY := 0.0
 	titleOut := ""
-	titleRoom := wrapW
+	room := common.TitleRoom(options)
+	titleMax := math.Inf(1)
 	if tight {
-		titleRoom = common.TitleRoom(options)
+		titleMax = room
 	}
-	title := textLabel(db.Title, size, false, titleRoom, text.Bold)
+	plainTitle := svg.TitleLabel(db.Title, measurer, size, titleMax)
+	title := plainTitle
+	if tight {
+		title = common.BreakLabel(plainTitle, measurer, math.Max(120, room))
+	}
 	if minX > maxX {
 		extend(0, math.Max(title.Width, 40))
 	}

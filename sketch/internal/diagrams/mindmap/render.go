@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/mindmap/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/mindmap/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // pele's closures over the layout arrays are methods of a struct here.
 
@@ -43,10 +43,9 @@ func leftLabel(label text.Label, left, cy float64, icons types.IconResolver) str
 		return svg.LabelSvg(label, left+label.Width/2, cy, ` class="pele-label"`, icons)
 	}
 	out := ""
+	top := cy - label.Height/2
 	for k := range label.Lines {
-		width := label.Widths[k]
-		line := text.Label{Lines: label.Lines[k : k+1], Widths: []float64{width}, Width: width, Height: label.LineHeight, Size: label.Size, LineHeight: label.LineHeight}
-		out += svg.LabelSvg(line, left+width/2, cy+(float64(k)-float64(len(label.Lines)-1)/2)*label.LineHeight, ` class="pele-label"`, icons)
+		out += svg.LabelSvg(text.LabelLine(label, k), left+label.Widths[k]/2, top+text.LineMiddle(label, k), ` class="pele-label"`, icons)
 	}
 	return out
 }
@@ -409,7 +408,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		}
 	}
 
-	title := text.LayoutLabel(model.title, false, measurer, size, common.TitleRoom(options), text.Bold)
+	title := svg.TitleLabel(model.title, measurer, size, common.TitleRoom(options))
 	titleHeight := 0.0
 	if title.Height > 0 {
 		titleHeight = title.Height + 16

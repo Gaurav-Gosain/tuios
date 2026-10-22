@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/kanban/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/kanban/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package kanban
 
@@ -78,7 +78,7 @@ func fitLabel(raw string, markdown bool, measurer text.TextMeasurer, size, max f
 			continue
 		}
 		for _, span := range label.Lines[i] {
-			if span.Icon != "" {
+			if span.Icon != "" || span.Math != nil {
 				if width > 0 && width+span.Width > max {
 					commit()
 				}
@@ -111,14 +111,17 @@ func fitLabel(raw string, markdown bool, measurer text.TextMeasurer, size, max f
 	label.Widths = widths
 	label.Width = widest
 	label.Height = float64(len(lines)) * label.LineHeight
+	if label.Heights != nil {
+		return text.WithHeights(label)
+	}
 	return label
 }
 
 // textBlock writes a label with every line starting at x, or ending there, and the first line's box starting at y.
 func textBlock(b *strings.Builder, label text.Label, x, y float64, attrs string, icons text.IconResolver, end bool) {
 	for i, line := range label.Lines {
-		cy := y + float64((float64(i)+0.5)*label.LineHeight)
-		if len(line) == 1 && line[0].Icon == "" {
+		cy := y + text.LineMiddle(label, i)
+		if len(line) == 1 && line[0].Icon == "" && line[0].Math == nil {
 			svg.WriteStrings(b, `<text`, svg.TextStyle(attrs, line[0].Style), ` x="`, svg.Num(x), `" y="`, svg.Num(cy+float64(label.Size*0.35)), `"`)
 			if end {
 				b.WriteString(` text-anchor="end"`)
@@ -126,16 +129,11 @@ func textBlock(b *strings.Builder, label text.Label, x, y float64, attrs string,
 			svg.WriteStrings(b, `>`, svg.Esc(line[0].Text), `</text>`)
 		} else {
 			width := label.Widths[i]
-			one := label
-			one.Lines = [][]text.Span{line}
-			one.Widths = []float64{width}
-			one.Width = width
-			one.Height = label.LineHeight
 			dx := width
 			if end {
 				dx = -width
 			}
-			b.WriteString(svg.LabelSvg(one, x+dx/2, cy, attrs, icons))
+			b.WriteString(svg.LabelSvg(text.LabelLine(label, i), x+dx/2, cy, attrs, icons))
 		}
 	}
 }
@@ -164,10 +162,44 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 	icons := options.Icons
 	has := func(name string) bool { return name != "" && text.IconMarkup(measurer, name) != "" }
 	conf, _ := config["kanban"].(map[string]any)
+	glyph := float64(small * 1.25)
+	// Math can't break across lines, so columns widen to hold the widest expression.
+	mathWidth := 0.0
+	holds := func(raw string, fontSize, reserved float64) {
+		if raw == "" || !strings.Contains(raw, "$$") {
+			return
+		}
+		for _, spans := range text.LayoutLabel(raw, true, measurer, fontSize, math.Inf(1), 0).Lines {
+			for _, span := range spans {
+				if span.Math != nil {
+					mathWidth = math.Max(mathWidth, span.Math.Width+reserved)
+				}
+			}
+		}
+	}
+	for _, section := range model.sections {
+		count := measurer.Width(strconv.Itoa(len(section.items)), small, 0)
+		reserved := 2*COLUMN_PAD + 8 + count + 12
+		if has(section.icon) {
+			reserved += glyph + ICON_GAP
+		}
+		holds(section.label, size, reserved)
+		for _, item := range section.items {
+			reserved := float64(2 * (COLUMN_PAD + CARD_PAD))
+			iconRoom := 0.0
+			if has(item.icon) {
+				iconRoom = glyph + ICON_GAP
+			}
+			holds(item.label, small, reserved+iconRoom)
+			holds(item.ticket, small, reserved)
+			holds(item.assigned, small, reserved)
+		}
+	}
 	ownWidth := 200.0
 	if sectionWidth, ok := conf["sectionWidth"].(float64); ok && sectionWidth > 0 {
 		ownWidth = math.Min(math.Max(sectionWidth, 80), 2000)
 	}
+	ownWidth = math.Max(ownWidth, math.Ceil(mathWidth))
 	// A board wider than the width the host has is folded into rows of columns, which then
 	// share the row between them.
 	room := math.Inf(1)
@@ -183,12 +215,11 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 		columnWidth = ownWidth
 	} else {
 		perRow = int(math.Max(1, math.Floor((room+COLUMN_GAP)/(ownWidth+COLUMN_GAP))))
-		columnWidth = math.Max(math.Min(ownWidth, room), math.Min(math.Floor((room+COLUMN_GAP)/float64(perRow))-COLUMN_GAP, ownWidth*2))
+		columnWidth = math.Max(math.Max(math.Min(ownWidth, room), math.Min(math.Floor((room+COLUMN_GAP)/float64(perRow))-COLUMN_GAP, ownWidth*2)), math.Ceil(mathWidth))
 	}
 	baseUrl, _ := conf["ticketBaseUrl"].(string)
 	cardWidth := columnWidth - 2*COLUMN_PAD
 	textWidth := cardWidth - 2*CARD_PAD
-	glyph := small * 1.25
 	links := []types.LinkInfo{}
 
 	sections := model.sections
@@ -248,7 +279,7 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 		boardHeight = rowTops[len(rowTops)-1] + rowHeights[len(rowHeights)-1]
 	}
 
-	title := text.LayoutLabel(model.title, false, measurer, size, common.TitleRoom(options), text.Bold)
+	title := svg.TitleLabel(model.title, measurer, size, common.TitleRoom(options))
 	titleHeight := 0.0
 	if title.Height > 0 {
 		titleHeight = title.Height + 16

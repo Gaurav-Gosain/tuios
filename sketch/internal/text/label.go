@@ -1,4 +1,7 @@
-// Ported from pele src/text/label.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/text/label.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+//
+// pele keeps the expressions of the label being laid out in module state
+// (`marks`). The port passes them down as an argument.
 
 package text
 
@@ -15,7 +18,9 @@ type Span struct {
 	Text  string
 	Style int
 	// Icon is the icon's name, or "" for a span of text.
-	Icon  string
+	Icon string
+	// Math is the typeset expression the span draws, or nil.
+	Math  *MathMarkup
 	Width float64
 }
 
@@ -26,6 +31,8 @@ type Label struct {
 	Height     float64
 	Size       float64
 	LineHeight float64
+	// Present only when math needs extra line height.
+	Heights []float64
 }
 
 const LINE_HEIGHT = 1.5
@@ -54,6 +61,85 @@ func hasCJK(text string) bool {
 		}
 	}
 	return false
+}
+
+// Unique placeholders protect TeX from markup parsing and keep expressions aligned when tags are removed.
+const (
+	MARK      = 0xe000
+	MAX_MARKS = 0x1900
+)
+
+type marks struct {
+	tex  []string
+	math []*MathMarkup
+}
+
+// isMark is /[\ue000-\uf8ff]/ for one character. The range is in the BMP, so a
+// rune compares as the UTF-16 unit it is in JavaScript.
+func isMark(r rune) bool { return r >= 0xe000 && r <= 0xf8ff }
+
+// hasMark is RE_MARK.test(text).
+func hasMark(text string) bool {
+	for _, r := range text {
+		if isMark(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// isLineEnd is a character `.` does not match in a JavaScript regular expression.
+func isLineEnd(r rune) bool { return r == '\n' || r == '\r' || r == 0x2028 || r == 0x2029 }
+
+// mathEnd is where the lazy `(.+?)\$\$` of RE_MATH (/\$\$(.+?)\$\$/g) stops for
+// TeX starting at from: the index of the closing $$, or -1.
+func mathEnd(raw string, from int) int {
+	p := from
+	for first := true; ; first = false {
+		if !first && strings.HasPrefix(raw[p:], "$$") {
+			return p
+		}
+		if p >= len(raw) {
+			return -1
+		}
+		r, size := utf8.DecodeRuneInString(raw[p:])
+		if isLineEnd(r) {
+			return -1
+		}
+		p += size
+	}
+}
+
+// markMath is raw.replace(RE_MATH, ...): each $$tex$$ becomes a placeholder
+// character, up to MAX_MARKS of them. It gives raw itself when there is none.
+func markMath(raw string, found *marks) string {
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(raw); {
+		k := strings.Index(raw[i:], "$$")
+		if k < 0 {
+			break
+		}
+		start := i + k
+		end := mathEnd(raw, start+2)
+		if end < 0 {
+			i = start + 1
+			continue
+		}
+		i = end + 2
+		if len(found.tex) == MAX_MARKS {
+			continue
+		}
+		found.tex = append(found.tex, raw[start+2:end])
+		b.WriteString(raw[last:start])
+		b.WriteRune(rune(MARK + len(found.tex) - 1))
+		last = i
+	}
+	if last == 0 {
+		return raw
+	}
+	b.WriteString(raw[last:])
+	return b.String()
 }
 
 var EMPTY = Label{}
@@ -102,28 +188,73 @@ func dedent(text string) string {
 	return strings.Join(lines, "\n")
 }
 
-func pushText(line *[]Span, text string, style int) {
+func plain(line []Span) bool {
+	if len(line) == 0 {
+		return false
+	}
+	last := line[len(line)-1]
+	return last.Icon == "" && last.Math == nil
+}
+
+func pushText(line *[]Span, text string, style int, found *marks) {
 	if text == "" {
 		return
 	}
+	if found != nil && hasMark(text) {
+		// pele pushes each piece of text between expressions, and the TeX of each
+		// expression without markup, on its own, and each joins the span before it.
+		// Go would copy the span's text for each piece, so the pieces are joined
+		// here first. Every boundary has a $$ on one side, so no entity spans one
+		// and decoding the joined text gives what decoding each piece does.
+		var pending strings.Builder
+		from := 0
+		for i, r := range text {
+			if !isMark(r) {
+				continue
+			}
+			pending.WriteString(text[from:i])
+			from = i + utf8.RuneLen(r)
+			at := int(r) - MARK
+			if markup := found.math[at]; markup != nil {
+				if pending.Len() > 0 {
+					pushPlain(line, pending.String(), style)
+					pending.Reset()
+				}
+				*line = append(*line, Span{Style: style, Math: markup, Width: markup.Width})
+			} else {
+				pending.WriteString("$$")
+				pending.WriteString(found.tex[at])
+				pending.WriteString("$$")
+			}
+		}
+		pending.WriteString(text[from:])
+		if pending.Len() > 0 {
+			pushPlain(line, pending.String(), style)
+		}
+		return
+	}
+	pushPlain(line, text, style)
+}
+
+func pushPlain(line *[]Span, text string, style int) {
 	decoded := DecodeEntities(text)
 	l := *line
-	if len(l) > 0 && l[len(l)-1].Style == style && l[len(l)-1].Icon == "" {
+	if plain(l) && l[len(l)-1].Style == style {
 		l[len(l)-1].Text += decoded
 	} else {
 		*line = append(l, Span{Text: decoded, Style: style})
 	}
 }
 
-func pushIcons(line *[]Span, text string, style int, m TextMeasurer) {
+func pushIcons(line *[]Span, text string, style int, m TextMeasurer, found *marks) {
 	if !strings.Contains(text, ":fa-") {
-		pushText(line, text, style)
+		pushText(line, text, style, found)
 		return
 	}
 	last := 0
 	for _, loc := range reIcon.FindAllStringSubmatchIndex(text, -1) {
 		icon := text[loc[2]:loc[3]] + ":fa-" + text[loc[4]:loc[5]]
-		pushText(line, text[last:loc[0]], style)
+		pushText(line, text[last:loc[0]], style, found)
 		last = loc[1]
 		if IconMarkup(m, icon) != "" {
 			*line = append(*line, Span{Style: style, Icon: icon})
@@ -132,12 +263,12 @@ func pushIcons(line *[]Span, text string, style int, m TextMeasurer) {
 			last++
 		} else if last == len(text) {
 			l := *line
-			if len(l) > 0 && l[len(l)-1].Icon == "" {
+			if plain(l) {
 				l[len(l)-1].Text = js.TrimEnd(l[len(l)-1].Text)
 			}
 		}
 	}
-	pushText(line, text[last:], style)
+	pushText(line, text[last:], style, found)
 }
 
 func isWordRune(r rune) bool {
@@ -145,14 +276,14 @@ func isWordRune(r rune) bool {
 }
 
 // Splits inline HTML and, for markdown labels, emphasis markers into styled spans.
-func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int, m TextMeasurer) int {
+func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int, m TextMeasurer, found *marks) int {
 	style := htmlStyle
 	marked := 0
 	var text strings.Builder
 	i := 0
 	n := len(source)
 	flush := func() {
-		pushIcons(line, text.String(), style, m)
+		pushIcons(line, text.String(), style, m, found)
 		text.Reset()
 	}
 	for i < n {
@@ -230,6 +361,8 @@ func measureSpans(line []Span, measurer TextMeasurer, size float64) float64 {
 		span := &line[k]
 		if span.Icon != "" {
 			span.Width = size * 1.25
+		} else if span.Math != nil {
+			span.Width = span.Math.Width
 		} else {
 			span.Width = measurer.Width(span.Text, size, span.Style)
 		}
@@ -242,7 +375,7 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 	var current []Span
 	width := 0.0
 	commit := func() {
-		if len(current) > 0 && current[len(current)-1].Icon == "" {
+		if plain(current) {
 			last := &current[len(current)-1]
 			trimmed := js.TrimEnd(last.Text)
 			if trimmed != last.Text {
@@ -258,8 +391,11 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 		width = 0
 	}
 	for _, span := range line {
-		if span.Icon != "" {
+		if span.Icon != "" || span.Math != nil {
 			w := float64(size * 1.25)
+			if span.Math != nil {
+				w = span.Math.Width
+			}
 			if width > 0 && width+w > max {
 				commit()
 			}
@@ -275,7 +411,7 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 				commit()
 				part = js.TrimStart(part)
 			}
-			if len(current) > 0 && current[len(current)-1].Style == span.Style && current[len(current)-1].Icon == "" {
+			if plain(current) && current[len(current)-1].Style == span.Style {
 				last := &current[len(current)-1]
 				last.Text += part
 				last.Width = measurer.Width(last.Text, size, last.Style)
@@ -301,6 +437,18 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 		return EMPTY
 	}
 	lineHeight := js.Round(size * LINE_HEIGHT)
+
+	if strings.Contains(raw, "$$") && mathActive(measurer) && !hasMark(raw) {
+		found := &marks{}
+		marked := markMath(raw, found)
+		if len(found.tex) > 0 {
+			found.math = make([]*MathMarkup, len(found.tex))
+			for i, tex := range found.tex {
+				found.math[i] = typeset(measurer, DecodeEntities(tex), size)
+			}
+			return WithHeights(layoutLines(marked, markdown, measurer, size, maxWidth, base, lineHeight, found))
+		}
+	}
 
 	if !hasMarkup(raw) && !strings.Contains(raw, "&") && !strings.Contains(raw, "ﬂ") {
 		text := js.Trim(raw)
@@ -335,7 +483,12 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 		}
 		return Label{Lines: lines, Widths: widths, Width: widest, Height: float64(len(lines)) * lineHeight, Size: size, LineHeight: lineHeight}
 	}
+	return layoutLines(raw, markdown, measurer, size, maxWidth, base, lineHeight, nil)
+}
 
+// layoutLines is pele's layoutMarkup and layoutLines in one: found, when not
+// nil, holds the expressions raw has placeholders for.
+func layoutLines(raw string, markdown bool, measurer TextMeasurer, size, maxWidth float64, base int, lineHeight float64, found *marks) Label {
 	var source string
 	if markdown {
 		source = js.Trim(dedent(reCRLF.ReplaceAllString(raw, "\n")))
@@ -349,7 +502,7 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	htmlStyle := base
 	for _, part := range reBreak.Split(source, -1) {
 		var line []Span
-		htmlStyle = inline(&line, js.Trim(part), markdown, base, htmlStyle, measurer)
+		htmlStyle = inline(&line, js.Trim(part), markdown, base, htmlStyle, measurer, found)
 
 		w := measureSpans(line, measurer, size)
 		if w > maxWidth {
@@ -365,6 +518,80 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 		}
 	}
 	return Label{Lines: lines, Widths: widths, Width: width, Height: float64(len(lines)) * lineHeight, Size: size, LineHeight: lineHeight}
+}
+
+// WithHeights gives each line of a label holding math the height that math needs.
+func WithHeights(label Label) Label {
+	var heights []float64
+	for i, line := range label.Lines {
+		h := label.LineHeight
+		for _, span := range line {
+			if span.Math != nil {
+				h = math.Max(h, math.Ceil(span.Math.Height+label.Size/4))
+			}
+		}
+		if h != label.LineHeight && heights == nil {
+			heights = make([]float64, len(label.Lines))
+			for k := range heights {
+				heights[k] = label.LineHeight
+			}
+		}
+		if heights != nil {
+			heights[i] = h
+		}
+	}
+	if heights == nil {
+		if label.Heights == nil {
+			return label
+		}
+		label.Heights = nil
+		label.Height = float64(len(label.Lines)) * label.LineHeight
+		return label
+	}
+	height := 0.0
+	for _, h := range heights {
+		height += h
+	}
+	label.Heights = heights
+	label.Height = height
+	return label
+}
+
+// HasMath reports whether a line holds a typeset expression.
+func HasMath(line []Span) bool {
+	for _, span := range line {
+		if span.Math != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// LineMiddle is the middle of line i, from the top of the label.
+func LineMiddle(label Label, i int) float64 {
+	if label.Heights == nil {
+		return float64((float64(i) + 0.5) * label.LineHeight)
+	}
+	top := 0.0
+	for k := 0; k < i; k++ {
+		top += label.Heights[k]
+	}
+	return top + label.Heights[i]/2
+}
+
+// LabelLine is line i of a label as a label of its own.
+func LabelLine(label Label, i int) Label {
+	width := label.Widths[i]
+	height := label.LineHeight
+	if label.Heights != nil {
+		height = label.Heights[i]
+	}
+	// The line shares the label's slices: nothing writes to them.
+	line := Label{Lines: label.Lines[i : i+1], Widths: label.Widths[i : i+1], Width: width, Height: height, Size: label.Size, LineHeight: label.LineHeight}
+	if height != label.LineHeight {
+		line.Heights = []float64{height}
+	}
+	return line
 }
 
 // hasMarkup is /[<\\\n*_]|fa[bklrs]?:fa-/: whether raw may hold a break, a tag, an

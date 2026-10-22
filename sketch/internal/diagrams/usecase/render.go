@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/usecase/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package usecase
 
@@ -410,7 +410,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 					view.rows = append(view.rows, [2]text.Label{key, value})
 					view.keyW = math.Max(view.keyW, key.Width)
 					valueW = math.Max(valueW, value.Width)
-					view.h += math.Max(value.Height, js.Round(small*1.5)) + ROW_PAD
+					view.h += math.Max(math.Max(key.Height, value.Height), js.Round(small*1.5)) + ROW_PAD
 				}
 				// The root of an empty object has a value and no key, and then there is no key column.
 				if view.keyW > 0 {
@@ -527,7 +527,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 		PortSep: 20,
 	})
 
-	title := text.LayoutLabel(types.Or(model.title, ""), false, measurer, size, 4000, text.Bold)
+	title := svg.TitleLabel(types.Or(model.title, ""), measurer, size, 4000)
 	titleHeight := 0.0
 	if title.Height > 0 {
 		titleHeight = title.Height + 12
@@ -598,7 +598,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 			}
 			for _, row := range view.rows {
 				key, value := row[0], row[1]
-				rowH := math.Max(value.Height, js.Round(small*1.5)) + ROW_PAD
+				rowH := math.Max(math.Max(key.Height, value.Height), js.Round(small*1.5)) + ROW_PAD
 				cells.WriteString(svg.LabelSvg(key, x0+CELL_PAD+key.Width/2, y+rowH/2, ` class="pele-json-key" fill="var(--_m)"`, icons))
 				cells.WriteString(leftLabel(value, x0+view.keyW+CELL_PAD, y+rowH/2, ` class="pele-json-value"`+textAttrs, icons))
 				y += rowH
@@ -833,11 +833,7 @@ func leftLabel(label text.Label, x, cy float64, attrs string, icons text.IconRes
 	}
 	var out strings.Builder
 	for i := range label.Lines {
-		line := label
-		line.Lines = label.Lines[i : i+1]
-		line.Widths = label.Widths[i : i+1]
-		line.Height = label.LineHeight
-		out.WriteString(svg.LabelSvg(line, x+label.Widths[i]/2, cy-label.Height/2+float64((float64(i)+0.5)*label.LineHeight), attrs, icons))
+		out.WriteString(svg.LabelSvg(text.LabelLine(label, i), x+label.Widths[i]/2, cy-label.Height/2+text.LineMiddle(label, i), attrs, icons))
 	}
 	return out.String()
 }

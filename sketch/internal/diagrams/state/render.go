@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/state/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/state/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package state
 
@@ -975,7 +975,7 @@ var geoShapes = [...]string{K_State: "state", K_Described: "state", K_Start: "st
 // stateGeometry is the layout in SVG units, before the padding, for drawing the diagram some other way.
 func stateGeometry(db *StateDb, views []*view, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []StateEdge, edgeLabels []text.Label,
 	lay layout.CompoundResult, measurer text.TextMeasurer, size float64) *types.Geometry {
-	g := &types.Geometry{Width: lay.Width, Height: lay.Height, Title: text.LayoutLabel(db.Title, false, measurer, size, 4000, text.Bold).Plain()}
+	g := &types.Geometry{Width: lay.Width, Height: lay.Height, Title: svg.TitleLabel(db.Title, measurer, size, 4000).Plain()}
 	for i, c := range cnodes {
 		v := views[i]
 		n := types.GeoNode{Shape: geoShapes[v.kind], X: c.X, Y: c.Y, W: v.w, H: v.h, Label: v.label.Plain(), Group: c.IsGroup, Parent: c.Parent}

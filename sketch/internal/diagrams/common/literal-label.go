@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/common/literal-label.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/common/literal-label.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package common
 
@@ -98,7 +98,7 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 			width = 0
 		}
 		for _, span := range label.Lines[i] {
-			if span.Icon != "" {
+			if span.Icon != "" || span.Math != nil {
 				if len(current) > 0 && width+span.Width > room {
 					commit()
 				}
@@ -112,7 +112,7 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 				if len(current) > 0 {
 					last = &current[len(current)-1]
 				}
-				joined := last != nil && last.Icon == "" && last.Style == span.Style
+				joined := last != nil && last.Icon == "" && last.Math == nil && last.Style == span.Style
 				var nextWidth float64
 				if joined {
 					nextWidth = measurer.Width(last.Text+char, label.Size, span.Style)
@@ -128,7 +128,7 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 					last = nil
 					added = measurer.Width(char, label.Size, span.Style)
 				}
-				if last != nil && last.Icon == "" && last.Style == span.Style {
+				if last != nil && last.Icon == "" && last.Math == nil && last.Style == span.Style {
 					last.Text += char
 					last.Width += added
 				} else {
@@ -150,6 +150,9 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 	out.Widths = widths
 	out.Width = width
 	out.Height = float64(len(lines)) * label.LineHeight
+	if label.Heights != nil {
+		return text.WithHeights(out)
+	}
 	return out
 }
 

@@ -1,4 +1,4 @@
-// Ported from pele src/svg/title.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/svg/title.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package svg
 
@@ -7,6 +7,11 @@ import (
 
 	"tuios.dev/sketch/internal/text"
 )
+
+// TitleLabel lays out a diagram title. Mermaid draws diagram titles as text, whatever they hold.
+func TitleLabel(title string, measurer text.TextMeasurer, size, maxWidth float64) text.Label {
+	return text.LayoutLabel(title, false, text.WithoutMath(measurer), size, maxWidth, text.Bold)
+}
 
 type Titled struct {
 	Width  float64
@@ -17,7 +22,7 @@ type Titled struct {
 
 // WithTitle puts a diagram title above content that was laid out without one.
 func WithTitle(title string, measurer text.TextMeasurer, size, pad, width, height float64, content ...string) Titled {
-	label := text.LayoutLabel(title, false, measurer, size, 4000, text.Bold)
+	label := TitleLabel(title, measurer, size, 4000)
 	if label.Height == 0 {
 		return Titled{width, height, content}
 	}

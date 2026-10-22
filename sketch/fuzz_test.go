@@ -46,6 +46,12 @@ func FuzzRender(f *testing.F) {
 			f.Add(c.Src)
 		}
 	}
+	// $$...$$ labels, which FuzzRender also draws with a resolver.
+	for _, typ := range mathTypes {
+		for _, template := range typ.templates {
+			f.Add(template("a $$" + PAYLOADS[1] + "$$ $$x^2$$ $$none$$"))
+		}
+	}
 	for _, template := range gitTemplates {
 		f.Add(template(`"`+PAYLOADS[1]+`"`, PAYLOADS[1]))
 		f.Add(template(`"a&b"`, "a&b"))
@@ -69,6 +75,20 @@ func FuzzRender(f *testing.F) {
 		}
 		if problem := inertProblem(out.Data); problem != "" {
 			t.Fatalf("output is not inert: %s", problem)
+		}
+		if !strings.Contains(src, "$$") {
+			return
+		}
+		start = time.Now()
+		out, err = Render(src, RenderOptions{Math: fuzzMath})
+		if d := time.Since(start); d > 5*time.Second {
+			t.Fatalf("render with math took %v", d)
+		}
+		if err != nil {
+			t.Fatalf("with math: %v", err)
+		}
+		if problem := mathInertProblem(out.Data); problem != "" {
+			t.Fatalf("output with math is not inert: %s", problem)
 		}
 	})
 }

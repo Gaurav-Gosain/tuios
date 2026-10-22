@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/swimlane/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/swimlane/index.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 // Package swimlane draws swimlane diagrams: flowcharts whose top-level subgraphs are
 // lanes that run the length of the diagram.
@@ -108,6 +108,7 @@ func (variant) DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedSt
 // with the same syntax and the same model.
 var Swimlane = &types.Diagram{
 	Type:  "swimlane",
+	Math:  true,
 	Parse: flowchart.Flowchart.Parse,
 	Render: func(model any, config types.Config, options types.RenderOptions) types.Rendered {
 		return flowchart.RenderFlowchart(model.(*flowchart.FlowDb), config, options, variant{})

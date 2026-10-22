@@ -9,7 +9,8 @@
 // architecture diagrams, requirement diagrams, C4 diagrams, packet diagrams,
 // radar charts, treemaps, info, treeView, ishikawa, cynefin, eventmodeling,
 // venn, wardley, railroad, swimlane, usecase and agentflow have a text
-// drawing. Other types give ErrUnsupported.
+// drawing. Other types give ErrUnsupported. A $$...$$ math label shows its TeX
+// source: text drawings never pass a math resolver.
 package text
 
 import (

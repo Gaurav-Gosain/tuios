@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/flowchart/index.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package flowchart
 
@@ -6,6 +6,7 @@ import "tuios.dev/sketch/internal/types"
 
 var Flowchart = &types.Diagram{
 	Type: "flowchart",
+	Math: true,
 	Parse: func(source string, config types.Config, title *string, _ int, limits types.ParseLimits) any {
 		flow, _ := config["flowchart"].(map[string]any)
 		inherit, _ := flow["inheritDir"].(bool)

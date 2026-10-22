@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/block/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/block/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package block
 
@@ -740,7 +740,7 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	if tight {
 		titleRoom = common.TitleRoom(options)
 	}
-	title := text.LayoutLabel(model.title, false, measurer, size, titleRoom, text.Bold)
+	title := svg.TitleLabel(model.title, measurer, size, titleRoom)
 	titleHeight := 0.0
 	if title.Height > 0 {
 		titleHeight = title.Height + 12

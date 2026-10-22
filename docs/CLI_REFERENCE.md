@@ -4780,6 +4780,8 @@ theme:
 Text in a theme colour that lands on a fill the diagram sets itself changes to
 the theme's text or background colour, where that reads better.
 
+tuios does not typeset math. A label with `$$...$$` shows its TeX source as text.
+
 **Live view:**
 ```bash
 tuios mermaid FILE --watch [--split]
