@@ -109,6 +109,9 @@ var cases = []chartCase{
 	{"pie", 24, 5, func(w, h int, m Mode) *Grid {
 		return Pie{Values: []float64{3, 1, math.NaN(), -2}, Labels: []string{"a", "b", "c", "d"}}.Draw(w, h, m)
 	}},
+	{"pie-seven", 40, 8, func(w, h int, m Mode) *Grid {
+		return Pie{Values: []float64{412, 236, 188, 164, 121, 74, 52}, Labels: []string{"e2e", "ghostty", "unit", "fuzz", "release", "wasm", "lint"}}.Draw(w, h, m)
+	}},
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},

@@ -1,0 +1,57 @@
+=== braille 40x8
+|    ▄▄▒▒███▄▄      █ e2e     33%        |
+|  ▄█▀██▒██████▄    █ ghostty 19%        |
+|▄██████▒████████▄  █ unit    15%        |
+|████▀▀▀▀█████████  █ fuzz    13%        |
+|█████▀▀██▀▀██████  █ release 10%        |
+|▀█▀██████████▀▀█▀  █ wasm     6%        |
+|  ▀███████████▀    ▒ lint     4%        |
+|    ▀▀█▀███▀▀                           |
+--- roles
+|    aabbccccc      c ddd     ddd        |
+|  eeaaabccccccc    b ddddddd ddd        |
+|feeeeeabccccccccc  g dddd    ddd        |
+|ffffeeeaccccccccc  f dddd    ddd        |
+|fffffffgbcccccccc  e ddddddd ddd        |
+|fffgggggbbbbbcccc  a dddd     dd        |
+|  ggggggbbbbbbb    b dddd     dd        |
+|    ggggbbbbb                           |
+a=series6 b=series2 c=series1 d=dim e=series5 f=series4 g=series3 (upper case is bold)
+=== blocks 40x8
+|    ▄▄▒▒███▄▄      █ e2e     33%        |
+|  ▄█▀██▒██████▄    █ ghostty 19%        |
+|▄██████▒████████▄  █ unit    15%        |
+|████▀▀▀▀█████████  █ fuzz    13%        |
+|█████▀▀██▀▀██████  █ release 10%        |
+|▀█▀██████████▀▀█▀  █ wasm     6%        |
+|  ▀███████████▀    ▒ lint     4%        |
+|    ▀▀█▀███▀▀                           |
+--- roles
+|    aabbccccc      c ddd     ddd        |
+|  eeaaabccccccc    b ddddddd ddd        |
+|feeeeeabccccccccc  g dddd    ddd        |
+|ffffeeeaccccccccc  f dddd    ddd        |
+|fffffffgbcccccccc  e ddddddd ddd        |
+|fffgggggbbbbbcccc  a dddd     dd        |
+|  ggggggbbbbbbb    b dddd     dd        |
+|    ggggbbbbb                           |
+a=series6 b=series2 c=series1 d=dim e=series5 f=series4 g=series3 (upper case is bold)
+=== ascii 40x8
+|    @@*******      * e2e     33%        |
+|  %%@@@********    + ghostty 19%        |
+|x%%%%%@**********  o unit    15%        |
+|xxxx%%%@*********  x fuzz    13%        |
+|xxxxxxxo+********  % release 10%        |
+|xxxooooo+++++****  @ wasm     6%        |
+|  oooooo+++++++    * lint     4%        |
+|    oooo+++++                           |
+--- roles
+|    aabbccccc      c ddd     ddd        |
+|  eeaaabccccccc    b ddddddd ddd        |
+|feeeeeabccccccccc  g dddd    ddd        |
+|ffffeeeaccccccccc  f dddd    ddd        |
+|fffffffgbcccccccc  e ddddddd ddd        |
+|fffgggggbbbbbcccc  a dddd     dd        |
+|  ggggggbbbbbbb    b dddd     dd        |
+|    ggggbbbbb                           |
+a=series6 b=series2 c=series1 d=dim e=series5 f=series4 g=series3 (upper case is bold)
