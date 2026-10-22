@@ -255,9 +255,15 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	inbox(config.ActionMailReply, "Mailbox: reply in the open thread")
 	inbox(config.ActionMailFocusPane, "Mailbox: go to the pane that last wrote")
 	inbox(config.ActionMailNew, "Mailbox: write a new message to an agent")
-	// The review overlay's own keys, which are not bindings, like the
+	// The review overlay's hunk and file motions, read from
+	// [keybindings.review], so a rebound key shows as it is bound.
+	review := func(action, desc string) { add(registry.GetReviewKeys(action), desc) }
+	review(config.ActionReviewNextHunk, "Review: next hunk")
+	review(config.ActionReviewPrevHunk, "Review: previous hunk")
+	review(config.ActionReviewNextFile, "Review: next file")
+	review(config.ActionReviewPrevFile, "Review: previous file")
+	// The overlay's other keys are its own and not bindings, like the
 	// scrollback browser's. See review_input.go.
-	add([]string{"] [", "} {"}, "Review: next or previous hunk, next or previous file")
 	add([]string{"c", "C"}, "Review: a note on the line, or on the whole hunk")
 	add([]string{"e", "x"}, "Review: edit or resolve the note under the cursor")
 	add([]string{"S"}, "Review: send the unsent notes to the agent, typed when it is at rest")

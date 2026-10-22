@@ -3,17 +3,19 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // handleReviewInput handles a key while the review overlay is open. It owns
 // every key, in either mode, wherever it was opened from: a key meant for the
 // diff must not reach a pane, the Inbox or the rail underneath.
 //
-// The keys are the overlay's own, not bindings, like the scrollback browser's:
+// The keys are the overlay's own, not bindings, like the scrollback browser's,
+// except the hunk and file motions, which [keybindings.review] binds:
 //
 //	j k, arrows      move by line (through the files with the list focused)
-//	] [              next and previous hunk
-//	} {              next and previous file
+//	] [              next and previous hunk (review_next_hunk, review_prev_hunk)
+//	} {              next and previous file (review_next_file, review_prev_file)
 //	tab              the file list or the diff
 //	enter            in the file list: open that file
 //	c, C             a note on the line, or on the whole hunk
@@ -76,6 +78,22 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
+	if action := lookupAction(o, msg, overlayKeys(o).GetReviewAction); action != "" {
+		switch action {
+		case config.ActionReviewNextHunk:
+			o.ReviewHunk(1)
+		case config.ActionReviewPrevHunk:
+			o.ReviewHunk(-1)
+		case config.ActionReviewNextFile:
+			o.ReviewFile(1)
+		case config.ActionReviewPrevFile:
+			o.ReviewFile(-1)
+		default:
+			return o, nil
+		}
+		o.NoteAction(action)
+		return o, nil
+	}
 	switch key {
 	case "j", "down":
 		o.ReviewMove(1)
@@ -89,14 +107,6 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ReviewEdge(false)
 	case "G", "end":
 		o.ReviewEdge(true)
-	case "]":
-		o.ReviewHunk(1)
-	case "[":
-		o.ReviewHunk(-1)
-	case "}":
-		o.ReviewFile(1)
-	case "{":
-		o.ReviewFile(-1)
 	case "tab":
 		o.ReviewToggleFocus()
 	case "enter":
