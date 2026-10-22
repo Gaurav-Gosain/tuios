@@ -179,7 +179,7 @@ func TestNativePluginApproval(t *testing.T) {
 	for name, text := range map[string]string{
 		"prompt":  "A plugin never answers a prompt",
 		"respond": "a plugin cannot answer a prompt",
-		"regrant": "needs the admin grant",
+		"regrant": "set-pane-grants is refused for plugin e2e.writer",
 		"read":    "list-sessions needs the read grant",
 		"approve": "plugin.approve is for the person",
 	} {

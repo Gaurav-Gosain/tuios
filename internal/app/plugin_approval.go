@@ -300,6 +300,7 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 	case len(st.asks) > 1:
 		note = fmt.Sprintf("%d plugins wait for your answer.", len(st.asks))
 	}
+	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
 	for _, wrapped := range wrapPlain(note, max(width-2, 1)) {
 		body = append(body, dialogBodyLine(wrapped, width, ink, bg))
 	}

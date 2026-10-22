@@ -116,8 +116,9 @@ func pluginAsksReader(cs *connState) bool {
 func (d *Daemon) sendPluginAsks(cs *connState) {
 	if d.plugins != nil {
 		// A manifest can change on disk with nothing else to tell the
-		// clients. The listing is cached, so this reads little.
-		d.notePluginAsks(pluginAsksOf(d.plugins.entries(false)))
+		// clients, so an attach reads the plugins again. It reads files
+		// only, once per attach.
+		d.notePluginAsks(pluginAsksOf(d.plugins.entries(true)))
 	}
 	d.pluginAsksMu.Lock()
 	asks := d.pluginAsks

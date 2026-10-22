@@ -649,7 +649,7 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 	if pa.plugin != "" {
 		return hintedVerbError(ErrVerbForbidden, verb+" is refused for plugin "+pa.plugin+": "+why, &VerbHint{
 			Detail: "The plugin holds " + pa.grants.String() + ". Nothing was done. A plugin asks for grants in [permissions] of tuios-plugin.toml. " +
-				"It holds them when the person approves them at tuios plugins install, and none when it was not installed.",
+				"It holds them only after the person allows the plugin on this machine, in the approval dialog or with tuios plugins approve.",
 		})
 	}
 	if pa.linkTable != "" {
