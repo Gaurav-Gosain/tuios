@@ -408,8 +408,7 @@ func TestReachabilityTableCoversEveryBindingSection(t *testing.T) {
 		covered[sec.name] = true
 	}
 	typ := reflect.TypeFor[config.KeybindingsConfig]()
-	for i := range typ.NumField() {
-		f := typ.Field(i)
+	for f := range typ.Fields() {
 		if f.Type.Kind() != reflect.Map {
 			continue
 		}

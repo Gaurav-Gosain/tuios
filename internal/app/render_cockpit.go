@@ -1773,8 +1773,7 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 		return append([]string{"Thread"}, side...)
 	}
 	n := 0
-	for i := len(t.entries) - 1; i >= 0; i-- {
-		en := t.entries[i]
+	for _, en := range slices.Backward(t.entries) {
 		if en.Kind == "text" && en.Role == "user" {
 			break
 		}

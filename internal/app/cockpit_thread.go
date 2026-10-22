@@ -330,8 +330,8 @@ func ckAddItem(items []ckItem, it ckItem, blank string) []ckItem {
 // ckLastTodos is the index of the newest todo list, which is the one drawn
 // whole.
 func (m *OS) ckLastTodos(entries []threadEntry) int {
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].Kind == "todos" {
+	for i, en := range slices.Backward(entries) {
+		if en.Kind == "todos" {
 			return i
 		}
 	}

@@ -47,8 +47,8 @@ func (q *queueRecorder) count(verb string) int {
 
 // lastText is the text of the last queue-prompt.
 func (q *queueRecorder) lastText() string {
-	for i := len(q.verbs) - 1; i >= 0; i-- {
-		if q.verbs[i] == "queue-prompt" {
+	for i, v := range slices.Backward(q.verbs) {
+		if v == "queue-prompt" {
 			s, _ := q.calls[i]["text"].(string)
 			return s
 		}

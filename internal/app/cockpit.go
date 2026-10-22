@@ -709,7 +709,7 @@ func (m *OS) cockpitClamp() {
 // ckNearest is the selectable row nearest idx, -1 when there is none.
 func ckNearest(rows []ckRow, idx int) int {
 	idx = min(max(idx, 0), len(rows)-1)
-	for d := 0; d < len(rows); d++ {
+	for d := range rows {
 		for _, j := range [2]int{idx + d, idx - d} {
 			if j >= 0 && j < len(rows) && rows[j].selectable() {
 				return j

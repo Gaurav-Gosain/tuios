@@ -64,7 +64,10 @@ func (b Box) Render(bg color.Color, pal Palette) []string {
 		var s strings.Builder
 		s.WriteString(edge.Render(lc))
 		if lw > 0 {
-			s.WriteString(rule(1) + pad + left + pad)
+			s.WriteString(rule(1))
+			s.WriteString(pad)
+			s.WriteString(left)
+			s.WriteString(pad)
 		}
 		fill := w - used
 		if rw > 0 {
@@ -72,7 +75,10 @@ func (b Box) Render(bg color.Color, pal Palette) []string {
 		}
 		s.WriteString(rule(fill))
 		if rw > 0 {
-			s.WriteString(pad + right + pad + rule(1))
+			s.WriteString(pad)
+			s.WriteString(right)
+			s.WriteString(pad)
+			s.WriteString(rule(1))
 		}
 		s.WriteString(edge.Render(rc))
 		return s.String()

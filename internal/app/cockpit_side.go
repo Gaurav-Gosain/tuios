@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -301,8 +302,7 @@ func (m *OS) cockpitLastTurn(e sidebarAgentEntry) []ckTurnFile {
 	}
 	var out []ckTurnFile
 	at := map[string]int{}
-	for i := len(t.entries) - 1; i >= 0; i-- {
-		en := t.entries[i]
+	for _, en := range slices.Backward(t.entries) {
 		if en.Kind == "text" && en.Role == "user" {
 			break
 		}

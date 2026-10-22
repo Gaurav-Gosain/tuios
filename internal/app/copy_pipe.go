@@ -199,8 +199,7 @@ func runCopyPipe(argv []string, dir, input string, timeout time.Duration) (strin
 	case stdout.over:
 		return "", errCopyPipeTooLarge
 	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
+	if exit, ok := errors.AsType[*exec.ExitError](err); ok {
 		return "", &copyPipeExitError{code: exit.ExitCode(), stderr: firstTextLine(stderr.buf.String())}
 	}
 	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {

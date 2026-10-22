@@ -1,6 +1,7 @@
 package overlay
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -154,8 +155,7 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 	if fits {
 		// Put back what fits in the room left, the last dropped first: it is
 		// the one of highest priority, or the earliest listed of its priority.
-		for j := len(dropped) - 1; j >= 0; j-- {
-			i := dropped[j]
+		for _, i := range slices.Backward(dropped) {
 			kept[i] = true
 			if hintsWidth(pick().Hints, sep, false) > width {
 				kept[i] = false
@@ -176,7 +176,7 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 		}
 	}
 	// Tier 5.
-	for n := len(f.Hints) - 1; n >= 0; n-- {
+	for n := range slices.Backward(f.Hints) {
 		if hintsWidth(f.Hints[:n], sep, true) <= width {
 			return fittedHints{Hints: f.Hints[:n], Index: f.Index[:n], Truncated: true}
 		}

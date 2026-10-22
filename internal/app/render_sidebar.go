@@ -1795,13 +1795,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// The band above the pinned block belongs to the section over it, so the
 	// wheel keeps working on the gap the block floats in.
 	if drawn > 1 && pinned != sidebarSectionCount {
-		for i := len(plans) - 1; i >= 0; i-- {
-			if plans[i].Spacer || planRows[i] == 0 || plans[i].Section == pinned {
+		for i, plan := range slices.Backward(plans) {
+			if plan.Spacer || planRows[i] == 0 || plan.Section == pinned {
 				continue
 			}
-			above := place[plans[i].Section]
+			above := place[plan.Section]
 			above.y1 = max(above.y1, place[pinned].y0)
-			place[plans[i].Section] = above
+			place[plan.Section] = above
 			break
 		}
 	}
@@ -3262,8 +3262,8 @@ func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Sty
 	// tokens give way from the end of the line.
 	s := &m.railFit
 	s.tokens = s.tokens[:0]
-	for i := len(head) - 1; i >= 0; i-- {
-		s.tokens = append(s.tokens, railToken{Cost: lipgloss.Width(head[i].Text) + sepW})
+	for _, h := range slices.Backward(head) {
+		s.tokens = append(s.tokens, railToken{Cost: lipgloss.Width(h.Text) + sepW})
 	}
 	keep, room := railRowFitInto(s.keep, 0, 0, s.tokens, avail+sepW)
 	s.keep = keep

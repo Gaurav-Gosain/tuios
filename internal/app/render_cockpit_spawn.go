@@ -168,7 +168,7 @@ func (m *OS) drawSpawnSheet(c *ckCanvas, l ckLook, top int) {
 			text, ink = "What should the agent do?", pal.FgMute
 		}
 		var rows []string
-		for _, para := range strings.Split(text, "\n") {
+		for para := range strings.SplitSeq(text, "\n") {
 			rows = append(rows, strings.Split(ansi.Wordwrap(para, w-6, ""), "\n")...)
 		}
 		for i, r := range rows[:min(len(rows), p.taskH)] {

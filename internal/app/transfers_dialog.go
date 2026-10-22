@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path"
@@ -371,9 +372,7 @@ func (m *OS) verbOnHostCaller() func(host, verb string, params map[string]any) (
 		call := m.transfers.call
 		return func(host, verb string, params map[string]any) (json.RawMessage, error) {
 			p := map[string]any{"host": host}
-			for k, v := range params {
-				p[k] = v
-			}
+			maps.Copy(p, params)
 			return call(verb, p, transferCallTimeout)
 		}
 	}

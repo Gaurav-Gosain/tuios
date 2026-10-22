@@ -29,7 +29,7 @@ func (m *OS) SetSharedBordersSetting(v bool) {
 	m.SharedBorders = v
 	m.Settings.SharedBorders = v
 	m.lastConfigSharedBorders = v
-	m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(v) })
+	m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = new(v) })
 	m.applyAppearanceLive(true)
 }
 

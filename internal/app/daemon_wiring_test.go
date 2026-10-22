@@ -22,8 +22,7 @@ func daemonClientHandlers(t *testing.T) []string {
 	t.Helper()
 	typ := reflect.TypeFor[*session.TUIClient]()
 	var names []string
-	for i := range typ.NumMethod() {
-		m := typ.Method(i)
+	for m := range typ.Methods() {
 		if !strings.HasPrefix(m.Name, "On") || m.Type.NumIn() != 2 {
 			continue
 		}

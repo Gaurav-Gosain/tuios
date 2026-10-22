@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -59,9 +60,9 @@ func (q *queueFake) call(verb string, params map[string]any, _ time.Duration) (j
 
 // last is the last call of verb.
 func (q *queueFake) last(verb string) (map[string]any, bool) {
-	for i := len(q.calls) - 1; i >= 0; i-- {
-		if q.calls[i].verb == verb {
-			return q.calls[i].params, true
+	for _, v := range slices.Backward(q.calls) {
+		if v.verb == verb {
+			return v.params, true
 		}
 	}
 	return nil, false

@@ -575,7 +575,8 @@ func writeMarkerAtOrigin(t vt.Terminal, mark string) {
 	if modes[declrmm] {
 		seq.WriteString("\x1b[s") // DECSLRM with no parameters: the full width
 	}
-	seq.WriteString("\x1b[H\x1b[2J" + mark)
+	seq.WriteString("\x1b[H\x1b[2J")
+	seq.WriteString(mark)
 	if modes[declrmm] && !region.Empty() {
 		fmt.Fprintf(&seq, "\x1b[%d;%ds", region.Min.X+1, region.Max.X)
 	}

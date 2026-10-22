@@ -145,7 +145,6 @@ func (m *OS) handleFileSearch(msg fileSearchMsg) {
 	m.fileSearchErr = msg.Err
 	items := make([]CommandPaletteItem, 0, len(msg.Paths))
 	for _, path := range msg.Paths {
-		path := path
 		rel, _ := filepath.Rel(msg.Root, path)
 		items = append(items, CommandPaletteItem{
 			Name: rel, Category: "Files",

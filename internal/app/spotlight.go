@@ -209,7 +209,7 @@ func (m *OS) ToggleSpotlight() tea.Cmd {
 func (m *OS) SetSpotlight(on bool) {
 	m.spotlight.on = on
 	if m.UserConfig != nil {
-		m.UserConfig.Spotlight.Enabled = boolPtr(on)
+		m.UserConfig.Spotlight.Enabled = new(on)
 	}
 }
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -203,8 +204,8 @@ func (m *OS) sectionEditorRowsFresh() []bool {
 // fromEnd is set.
 func firstRestable(rows []bool, fromEnd bool) int {
 	if fromEnd {
-		for i := len(rows) - 1; i >= 0; i-- {
-			if rows[i] {
+		for i, row := range slices.Backward(rows) {
+			if row {
 				return i
 			}
 		}

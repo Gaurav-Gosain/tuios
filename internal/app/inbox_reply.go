@@ -820,9 +820,9 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 		// The newest one still waiting. One being typed cannot be taken
 		// back.
 		id := ""
-		for i := len(list.Entries) - 1; i >= 0; i-- {
-			if list.Entries[i].State != "delivering" {
-				id = list.Entries[i].ID
+		for _, v := range slices.Backward(list.Entries) {
+			if v.State != "delivering" {
+				id = v.ID
 				break
 			}
 		}

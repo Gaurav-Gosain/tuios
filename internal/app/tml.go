@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -130,9 +131,7 @@ func (m *OS) tmlActionSession(a tmlPaneAction) string {
 // why it cannot.
 func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
 	params := map[string]any{}
-	for k, v := range a.Params {
-		params[k] = v
-	}
+	maps.Copy(params, a.Params)
 	// The session is sent by name, never empty, so the daemon does not
 	// pick one: the yes is for the session the question named.
 	params["session"] = m.tmlActionSession(a)
@@ -261,7 +260,7 @@ func (m *OS) tmlQuestion(a tmlPaneAction, w int) []string {
 func tmlWrapWords(text string, w int) []string {
 	var lines []string
 	line := ""
-	for _, word := range strings.Fields(text) {
+	for word := range strings.FieldsSeq(text) {
 		if line != "" && ansi.StringWidth(line)+1+ansi.StringWidth(word) > w {
 			lines = append(lines, line)
 			line = ""
@@ -460,7 +459,7 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		doc.SetAttr("state", tml.Value{Kind: tml.KindObject, Raw: json.RawMessage(p.State)})
 	}
 	if v.surface == nil {
-		s, err := loom.New(doc, &loom.Options{Palette: m.tmlPalette(), Ground: loom.GroundNone, Limits: ptr(tml.PersonLimits())})
+		s, err := loom.New(doc, &loom.Options{Palette: m.tmlPalette(), Ground: loom.GroundNone, Limits: new(tml.PersonLimits())})
 		if err != nil {
 			clientLog("TML surface %s: %v", p.Surface, err)
 			return false
@@ -477,8 +476,6 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 	m.markTMLDirty(p.Surface)
 	return true
 }
-
-func ptr[T any](v T) *T { return &v }
 
 // DrawsTML reports whether this client draws w as a TML surface: a window of
 // kind tml, on a client of this machine's daemon. A client attached through
@@ -706,9 +703,7 @@ func (m *OS) tmlPalette() *loom.Palette {
 		"warning-tint": pal.WarningTint, "error-tint": pal.WarnTint,
 		loom.RoleCursor: pal.RowSel, loom.RolePill: pal.PillFg,
 	}
-	for k, c := range chartRoles(pal) {
-		roles[k] = c
-	}
+	maps.Copy(roles, chartRoles(pal))
 	for k, c := range roles {
 		if c == nil {
 			delete(roles, k)

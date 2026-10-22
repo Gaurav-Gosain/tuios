@@ -134,7 +134,9 @@ func (m *OS) hostProgramStatusFlush() tea.Cmd {
 		if m.hostPS.sent[id] == body {
 			continue
 		}
-		out.WriteString("\x1b]7501;" + body + "\x1b\\")
+		out.WriteString("\x1b]7501;")
+		out.WriteString(body)
+		out.WriteString("\x1b\\")
 	}
 	for id := range m.hostPS.sent {
 		if _, ok := want[id]; !ok {

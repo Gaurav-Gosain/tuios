@@ -789,8 +789,8 @@ func (m *OS) ReviewHunk(dir int) {
 		r.file, r.scroll = r.file-1, 0
 		prev := m.reviewRows(m.reviewRowsWidth())
 		r.cursor = 0
-		for i := len(prev) - 1; i >= 0; i-- {
-			if prev[i].kind == reviewRowHunk {
+		for i, p := range slices.Backward(prev) {
+			if p.kind == reviewRowHunk {
 				r.cursor = i
 				break
 			}

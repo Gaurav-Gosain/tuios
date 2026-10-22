@@ -426,7 +426,11 @@ func TestPiPFastPathMatchesTheCompositor(t *testing.T) {
 	// Coloured runs that cross the box's columns, and a wide glyph on them.
 	var body strings.Builder
 	for range 40 {
-		body.WriteString("\x1b[31;1m" + strings.Repeat("r", 77) + "\x1b[32m世界" + strings.Repeat("g", 30) + "\x1b[m\r\n")
+		body.WriteString("\x1b[31;1m")
+		body.WriteString(strings.Repeat("r", 77))
+		body.WriteString("\x1b[32m世界")
+		body.WriteString(strings.Repeat("g", 30))
+		body.WriteString("\x1b[m\r\n")
 	}
 	a.WriteOutput([]byte(body.String()))
 	if err := m.PinPiP(b.ID); err != nil {

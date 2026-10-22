@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -364,18 +365,18 @@ func sidebarBudgetLines(avail int, plans []sidebarSectionPlan, rows, rowH []int)
 	// its own floors has no lines to spend on being empty, and a gap is the one
 	// thing on it that says nothing at all.
 	order := make([]int, 0, len(plans))
-	for i := len(plans) - 1; i >= 0; i-- {
-		if plans[i].Spacer {
+	for i, plan := range slices.Backward(plans) {
+		if plan.Spacer {
 			order = append(order, i)
 		}
 	}
-	for i := len(plans) - 1; i >= 0; i-- {
-		if !plans[i].Spacer && plans[i].Share > 0 {
+	for i, plan := range slices.Backward(plans) {
+		if !plan.Spacer && plan.Share > 0 {
 			order = append(order, i)
 		}
 	}
-	for i := len(plans) - 1; i >= 0; i-- {
-		if !plans[i].Spacer && plans[i].Share <= 0 {
+	for i, plan := range slices.Backward(plans) {
+		if !plan.Spacer && plan.Share <= 0 {
 			order = append(order, i)
 		}
 	}

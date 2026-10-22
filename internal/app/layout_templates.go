@@ -358,8 +358,12 @@ func FilterLayoutTemplates(templates []LayoutTemplate, query string) []LayoutTem
 // version-controlled, and executed in CI/headless environments.
 func GenerateTapeScript(tmpl LayoutTemplate) string {
 	var sb strings.Builder
-	sb.WriteString("# Auto-generated layout script: " + tmpl.Name + "\n")
-	sb.WriteString("# Created: " + tmpl.CreatedAt.Format(time.RFC3339) + "\n\n")
+	sb.WriteString("# Auto-generated layout script: ")
+	sb.WriteString(tmpl.Name)
+	sb.WriteString("\n")
+	sb.WriteString("# Created: ")
+	sb.WriteString(tmpl.CreatedAt.Format(time.RFC3339))
+	sb.WriteString("\n\n")
 
 	if tmpl.AutoTiling {
 		sb.WriteString("EnableTiling\n")

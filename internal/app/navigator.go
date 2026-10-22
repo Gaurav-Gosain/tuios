@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -392,9 +393,7 @@ func (m *OS) navigatorCurrentSession() navSession {
 		name = "local"
 	}
 	s := navSession{Name: name, Title: name, Current: true, WorkspaceNames: map[int]string{}, Shell: m.navClientShell()}
-	for ws, n := range m.WorkspaceNames {
-		s.WorkspaceNames[ws] = n
-	}
+	maps.Copy(s.WorkspaceNames, m.WorkspaceNames)
 	for i, w := range m.Windows {
 		if w == nil || isScratch(w) {
 			continue
@@ -447,7 +446,7 @@ func navScreenText(w *terminal.Window, n int) []string {
 	var b strings.Builder
 	for y := range height {
 		b.Reset()
-		for x := 0; x < width; x++ {
+		for x := range width {
 			c := w.Terminal.CellAt(x, y)
 			switch {
 			case c == nil:
@@ -938,8 +937,8 @@ func (m *OS) navigatorSearchRows() []navRow {
 			if r, ok := mt.Find(q, fields); ok {
 				best, found = 2*r.Score+1, true
 			}
-			for i := len(p.lower) - 1; i >= 0; i-- {
-				if !strings.Contains(p.lower[i], lq) {
+			for i, line := range slices.Backward(p.lower) {
+				if !strings.Contains(line, lq) {
 					continue
 				}
 				// Each whole occurrence is scored as the run it is.
@@ -950,7 +949,7 @@ func (m *OS) navigatorSearchRows() []navRow {
 				// case. A line the matcher still refuses scores nothing
 				// and is kept.
 				score := 0
-				line := p.lower[i]
+
 				for at := 0; at <= len(line)-len(lq); {
 					k := strings.Index(line[at:], lq)
 					if k < 0 {

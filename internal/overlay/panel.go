@@ -269,7 +269,8 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 		}
 		r := Rect{}
 		if live {
-			b.WriteString(arrowStyle.Render(glyph) + Style(bg).Render(" "))
+			b.WriteString(arrowStyle.Render(glyph))
+			b.WriteString(Style(bg).Render(" "))
 			r = Rect{X0: x, Y0: originY, X1: x + tabArrowWidth, Y1: originY + 1}
 		} else {
 			b.WriteString(Style(bg).Render(strings.Repeat(" ", tabArrowWidth)))

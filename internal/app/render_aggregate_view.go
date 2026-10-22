@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -160,8 +161,8 @@ func aggregateShortCWD(cwd string) string {
 	// path with a hash in it that is a row of noise where the context should be.
 	segs := strings.Split(cwd, string(filepath.Separator))
 	tail := ""
-	for i := len(segs) - 1; i >= 0; i-- {
-		next := string(filepath.Separator) + segs[i] + tail
+	for _, seg := range slices.Backward(segs) {
+		next := string(filepath.Separator) + seg + tail
 		if lipgloss.Width(next)+1 > aggregateViewCWDMax {
 			break
 		}

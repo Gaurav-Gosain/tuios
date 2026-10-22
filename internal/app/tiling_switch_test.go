@@ -163,8 +163,7 @@ func tilingDoors(t *testing.T) []tilingDoor {
 	}
 	osType := reflect.TypeFor[*OS]()
 	tapeDoors := 0
-	for i := range osType.NumMethod() {
-		method := osType.Method(i)
+	for method := range osType.Methods() {
 		if !strings.HasSuffix(method.Name, "Tiling") || method.Type.NumIn() != 1 || method.Type.NumOut() != 1 {
 			continue
 		}

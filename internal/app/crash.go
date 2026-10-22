@@ -214,7 +214,11 @@ func (r *CrashReport) Markdown(stackLines int) string {
 	b.WriteString("| | |\n|---|---|\n")
 	fmt.Fprintf(&b, "| Time | %s |\n", r.When.Format(time.RFC3339))
 	for _, f := range r.Facts {
-		b.WriteString("| " + f.Label + " | " + f.Value + " |\n")
+		b.WriteString("| ")
+		b.WriteString(f.Label)
+		b.WriteString(" | ")
+		b.WriteString(f.Value)
+		b.WriteString(" |\n")
 	}
 	b.WriteString("\n### Stack trace\n\n```\n")
 	stack, trimmed := clipStack(r.Stack, stackLines)
@@ -227,7 +231,9 @@ func (r *CrashReport) Markdown(stackLines int) string {
 	}
 	b.WriteString("```\n")
 	if trimmed > 0 && r.LogPath != "" {
-		b.WriteString("\nThe whole trace is in `" + r.LogPath + "` on the machine that ran tuios.\n")
+		b.WriteString("\nThe whole trace is in `")
+		b.WriteString(r.LogPath)
+		b.WriteString("` on the machine that ran tuios.\n")
 	}
 	return b.String()
 }
@@ -291,11 +297,17 @@ func (r *CrashReport) shortBody() string {
 	b.WriteString("The report is too large for a prefilled issue. ")
 	b.WriteString("Press c in the crash overlay to copy it, then paste it here.\n\n")
 	if r.LogPath != "" {
-		b.WriteString("Crash log: `" + r.LogPath + "`\n\n")
+		b.WriteString("Crash log: `")
+		b.WriteString(r.LogPath)
+		b.WriteString("`\n\n")
 	}
 	b.WriteString("### Details\n\n| | |\n|---|---|\n")
 	for _, f := range r.Facts {
-		b.WriteString("| " + f.Label + " | " + f.Value + " |\n")
+		b.WriteString("| ")
+		b.WriteString(f.Label)
+		b.WriteString(" | ")
+		b.WriteString(f.Value)
+		b.WriteString(" |\n")
 	}
 	return b.String()
 }

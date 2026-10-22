@@ -89,7 +89,9 @@ func TestPaletteWindowJumpLeavesTheRail(t *testing.T) {
 func paletteNames(items []CommandPaletteItem) string {
 	var b strings.Builder
 	for _, it := range items {
-		b.WriteString("  " + it.Name + "\n")
+		b.WriteString("  ")
+		b.WriteString(it.Name)
+		b.WriteString("\n")
 	}
 	return b.String()
 }

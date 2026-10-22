@@ -2,6 +2,7 @@ package input
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -176,8 +177,7 @@ func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 		return nil, false
 	}
 	var lines []int
-	for i := len(c.Matches) - 1; i >= 0; i-- {
-		m := c.Matches[i]
+	for _, m := range slices.Backward(c.Matches) {
 		if m.Line < sbLen && (len(lines) == 0 || lines[len(lines)-1] != m.Line) {
 			lines = append(lines, m.Line)
 		}
@@ -266,8 +266,8 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 		}
 	}
 	cm.SearchMatches = make([]terminal.SearchMatch, 0, total)
-	for i := len(lines) - 1; i >= 0; i-- {
-		cm.SearchMatches = append(cm.SearchMatches, lines[i]...)
+	for _, line := range slices.Backward(lines) {
+		cm.SearchMatches = append(cm.SearchMatches, line...)
 	}
 
 	// Update cache
@@ -328,8 +328,7 @@ func searchFrom(matches []terminal.SearchMatch, absY, x int, backward bool) (idx
 		return -1, false
 	}
 	if backward {
-		for i := len(matches) - 1; i >= 0; i-- {
-			m := matches[i]
+		for i, m := range slices.Backward(matches) {
 			if m.Line < absY || (m.Line == absY && m.StartX < x) {
 				return i, false
 			}

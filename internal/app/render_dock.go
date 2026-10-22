@@ -213,7 +213,8 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 			return
 		}
 		if live {
-			b.WriteString(arrow.Render(glyph) + " ")
+			b.WriteString(arrow.Render(glyph))
+			b.WriteString(" ")
 			m.dockWorkspaceArrowHits = append(m.dockWorkspaceArrowHits, dockWorkspaceArrowHit{
 				X0: x, X1: x + dockWorkspaceArrowWidth, Y: y, Delta: delta,
 			})

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -72,12 +73,7 @@ func (mc *MultiCopy) Has(id string) bool {
 	if mc == nil {
 		return false
 	}
-	for _, v := range mc.IDs {
-		if v == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(mc.IDs, id)
 }
 
 // multiCopyCandidates is the panes multi copy mode would take: the multifocus

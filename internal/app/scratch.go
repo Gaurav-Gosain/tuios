@@ -308,10 +308,7 @@ func (m *OS) leaveScratchView() {
 	if !m.InScratchView() {
 		return
 	}
-	base := m.scratchBase
-	if base < 1 {
-		base = 1
-	}
+	base := max(m.scratchBase, 1)
 	back := -1
 	for j, o := range m.Windows {
 		if m.scratchReturnID != "" && o.ID == m.scratchReturnID && o.Workspace == base && !o.Minimized {

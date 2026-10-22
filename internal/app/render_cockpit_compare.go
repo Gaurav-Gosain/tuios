@@ -151,7 +151,7 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 		// At most ckWarnRows rows, scrolled with up and down.
 		show := min(len(lines), ckWarnRows)
 		cp.warnScroll = min(cp.warnScroll, len(lines)-show)
-		for i := 0; i < show; i++ {
+		for i := range show {
 			seg := lines[cp.warnScroll+i]
 			if i == show-1 && cp.warnScroll+show < len(lines) {
 				seg = ckSeg{t: strconv.Itoa(len(lines)-cp.warnScroll-show) + " more lines: down shows them", fg: pal.FgMute}

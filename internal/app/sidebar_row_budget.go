@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -130,8 +131,7 @@ func railRowFitInto(buf []bool, nameW, keepW int, tokens []railToken, avail int)
 		inset = inset || tokens[i].Right
 	}
 	// The tokens that are facts of their own, against the name's keep.
-	for i := len(tokens) - 1; i >= 0; i-- {
-		tk := tokens[i]
+	for i, tk := range slices.Backward(tokens) {
 		if tk.Cost <= 0 || tk.Whole {
 			continue
 		}
@@ -141,8 +141,7 @@ func railRowFitInto(buf []bool, nameW, keepW int, tokens []railToken, avail int)
 	}
 	// Then the tokens that are context for the name, against all of it. The
 	// first one that does not fit ends the walk.
-	for i := len(tokens) - 1; i >= 0; i-- {
-		tk := tokens[i]
+	for i, tk := range slices.Backward(tokens) {
 		if tk.Cost <= 0 || !tk.Whole {
 			continue
 		}

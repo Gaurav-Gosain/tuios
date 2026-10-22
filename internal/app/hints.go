@@ -366,12 +366,7 @@ func (m *OS) hintsHidden(w *terminal.Window) func(hintCell) bool {
 		if !p.In(region) {
 			return true
 		}
-		for _, r := range covers {
-			if p.In(r) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(covers, p.In)
 	}
 }
 

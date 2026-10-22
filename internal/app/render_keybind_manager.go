@@ -486,8 +486,12 @@ func (m *OS) keybindDetail(selected int) string {
 			"ctrl+d takes the dead binding off " + b.Action + "."
 	}
 	var detail strings.Builder
-	detail.WriteString(b.Desc + ". Bound in [" + b.Section + "]. ctrl+d unbinds it; ctrl+x takes " +
-		b.Key + " off every action.")
+	detail.WriteString(b.Desc)
+	detail.WriteString(". Bound in [")
+	detail.WriteString(b.Section)
+	detail.WriteString("]. ctrl+d unbinds it; ctrl+x takes ")
+	detail.WriteString(b.Key)
+	detail.WriteString(" off every action.")
 	for _, s := range rep.Swallowed {
 		if config.SameKey(s.Key, b.Key) {
 			detail.WriteString(" Terminal mode takes this key, so the program in the pane never sees it.")
@@ -495,7 +499,8 @@ func (m *OS) keybindDetail(selected int) string {
 		}
 	}
 	if v := config.AmbiguityVerdict(b.Key, rep.Pane.HostDisambiguates); v != "" {
-		detail.WriteString(" " + v)
+		detail.WriteString(" ")
+		detail.WriteString(v)
 	}
 	return detail.String()
 }

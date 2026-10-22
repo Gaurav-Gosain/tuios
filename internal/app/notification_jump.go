@@ -40,11 +40,11 @@ type notifHitZones struct {
 // walks down from the top of the queue, so repeat presses of the keyboard twin
 // go deeper as each one is dismissed.
 func (m *OS) notifTargetedIndex() int {
-	for i := len(m.Notifications) - 1; i >= 0; i-- {
+	for i, v := range slices.Backward(m.Notifications) {
 		// A clipboard ask is allowed only by a click on it. The jump key is
 		// pressed from habit, and one stray press must not hand a background
 		// pane the clipboard.
-		if t := m.Notifications[i].Target; t != nil && t.ClipboardAsk == 0 {
+		if t := v.Target; t != nil && t.ClipboardAsk == 0 {
 			return i
 		}
 	}

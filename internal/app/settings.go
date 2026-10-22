@@ -331,7 +331,7 @@ func (m *OS) ToggleShowKeys() tea.Cmd {
 // the command-palette entry so both stay in sync and survive a restart.
 func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 	m.Settings.FocusFollowsMouse = !m.Settings.FocusFollowsMouse
-	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(m.Settings.FocusFollowsMouse) })
+	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = new(m.Settings.FocusFollowsMouse) })
 	return m.persistSettings()
 }
 
@@ -344,9 +344,6 @@ var fpsOptions = []string{fpsAutoLabel, "30", "60", "90", "120", "144", "165", "
 
 // fpsAutoLabel is how the row spells max_fps = "auto".
 const fpsAutoLabel = "Auto"
-
-// boolPtr returns a pointer to b, for the *bool config fields.
-func boolPtr(b bool) *bool { return &b }
 
 // enumItem builds an enum setting bound to a string config global via getters
 // and a setter that updates the global, mirrors to the persisted config, and
