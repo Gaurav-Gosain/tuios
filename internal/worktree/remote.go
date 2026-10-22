@@ -146,6 +146,8 @@ func originFromConfig(path string) string {
 		value = strings.Trim(value, `"`)
 		return value
 	}
+	// A read error leaves the origin unknown, as a config without one does.
+	_ = sc.Err()
 	return ""
 }
 

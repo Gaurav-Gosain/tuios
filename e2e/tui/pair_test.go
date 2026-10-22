@@ -191,6 +191,8 @@ func startPairFromHere(t *testing.T, base string, stdin io.Reader, env []string,
 		for sc.Scan() {
 			run.lines <- sc.Text()
 		}
+		// A read error ends the lines as EOF does, and next reports it.
+		_ = sc.Err()
 		close(run.lines)
 		run.done <- cmd.Wait()
 	}()

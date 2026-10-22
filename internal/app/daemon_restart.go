@@ -6,7 +6,9 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image/color"
+	"io"
 	"os/exec"
 	"runtime"
 	"slices"
@@ -281,7 +283,17 @@ func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 			ch <- restartStepMsg{gen: gen, rep: rep}
 		}
 	}
-	ch <- restartEndMsg{gen: gen, err: cmd.Wait(), stderr: stderr.String()}
+	scanErr := sc.Err()
+	if scanErr != nil {
+		// A line over the scanner's limit stops the scan. Read the rest, so
+		// the command does not block on a full pipe and Wait can return.
+		_, _ = io.Copy(io.Discard, out)
+	}
+	err = cmd.Wait()
+	if err == nil && scanErr != nil {
+		err = fmt.Errorf("read restart-server output: %w", scanErr)
+	}
+	ch <- restartEndMsg{gen: gen, err: err, stderr: stderr.String()}
 }
 
 // listenRestart waits for the next step.

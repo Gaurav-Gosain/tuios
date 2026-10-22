@@ -45,6 +45,9 @@ func newPeer(t *testing.T) (io.Reader, io.Writer, *peer) {
 			p.raw <- line
 			p.msgs <- m
 		}
+		// The pipe closes when the test ends. next fails on its own timeout
+		// if the client stops writing for any other reason.
+		_ = sc.Err()
 	}()
 	return fromAgentR, toAgentW, p
 }

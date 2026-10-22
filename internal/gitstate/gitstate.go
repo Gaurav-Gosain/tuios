@@ -289,6 +289,8 @@ func resolveRef(gitdir, commondir, ref string) string {
 			return sha
 		}
 	}
+	// A read error leaves the ref unknown, the same as a ref that is not there.
+	_ = sc.Err()
 	return ""
 }
 
@@ -327,6 +329,10 @@ func upstreamOf(commondir, branch string) string {
 		case "merge":
 			merge = strings.TrimSpace(value)
 		}
+	}
+	if sc.Err() != nil {
+		// Half a section can pair a remote with the wrong merge ref.
+		return ""
 	}
 	if remote == "" || merge == "" {
 		return ""

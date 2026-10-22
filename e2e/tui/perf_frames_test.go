@@ -299,6 +299,8 @@ func readGuestLog(path string) map[int]int64 {
 			out[seq] = ns
 		}
 	}
+	// A read error keeps the frames read before it, as a missing file does.
+	_ = sc.Err()
 	return out
 }
 

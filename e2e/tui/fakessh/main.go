@@ -56,4 +56,6 @@ func main() {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, os.Stdout, os.Stderr
 		_ = cmd.Run()
 	}
+	// The session ends with stdin, whether it closed or failed.
+	_ = sc.Err()
 }

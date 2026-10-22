@@ -41,5 +41,7 @@ func readCPUTicks() (cpuTicks, bool) {
 		}
 		return t, true
 	}
+	// No "cpu" line, or a read error before it: no sample this time.
+	_ = scanner.Err()
 	return cpuTicks{}, false
 }

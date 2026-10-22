@@ -186,6 +186,8 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 		for sc.Scan() {
 			lines <- sc.Text()
 		}
+		// A read error ends the stream as EOF does, and waitEvent reports it.
+		_ = sc.Err()
 		close(lines)
 	}()
 	var stream strings.Builder

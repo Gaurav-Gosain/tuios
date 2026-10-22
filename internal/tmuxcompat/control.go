@@ -282,6 +282,9 @@ func streamLines(r io.Reader) <-chan string {
 		for sc.Scan() {
 			ch <- sc.Text()
 		}
+		// A read error or a line over 1 MiB ends control mode, as the end
+		// of input does. There is no client left to tell.
+		_ = sc.Err()
 	}()
 	return ch
 }

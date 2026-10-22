@@ -62,6 +62,8 @@ func startControl(t *testing.T, h *harness, events bool, args ...string) *contro
 		for sc.Scan() {
 			c.lines <- sc.Text()
 		}
+		// A read error ends the lines as EOF does, and next reports it.
+		_ = sc.Err()
 		close(c.lines)
 	}()
 	go func() {

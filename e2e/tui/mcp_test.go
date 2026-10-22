@@ -62,6 +62,9 @@ func TestMCPServerInAPaneIsHeldToItsSession(t *testing.T) {
 			byID[id] = m
 		}
 	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("read the tuios mcp output: %v", err)
+	}
 	text := func(id float64) (string, bool) {
 		res, _ := byID[id]["result"].(map[string]any)
 		if res == nil {

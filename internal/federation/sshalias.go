@@ -94,6 +94,9 @@ func SSHConfigAliases(r io.Reader) []string {
 			}
 		}
 	}
+	// A read error keeps the aliases read before it. They are suggestions,
+	// and a partial list is more use than none.
+	_ = sc.Err()
 	sort.Strings(out)
 	return out
 }

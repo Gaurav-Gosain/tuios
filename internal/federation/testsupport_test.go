@@ -87,6 +87,8 @@ func serveStub(conn net.Conn, handle func(string, json.RawMessage) (any, *Remote
 			return
 		}
 	}
+	// The stub serves until the connection ends, for any reason.
+	_ = sc.Err()
 }
 
 // dial opens a connection to the stub.
