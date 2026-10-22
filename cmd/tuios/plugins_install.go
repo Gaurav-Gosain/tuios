@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"cmp"
 	"context"
 	"errors"
@@ -326,7 +327,7 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 			return errors.New("there is no terminal to ask in. Run the command in a terminal")
 		}
 	}
-	ok, err := lookPrompt{yes: in.o.yes && !changed, tty: tty, in: os.Stdin}.confirm(out, "Continue?")
+	ok, err := lookPrompt{yes: in.o.yes && !changed, tty: tty, in: bufio.NewReader(os.Stdin)}.confirm(out, "Continue?")
 	if err != nil {
 		return err
 	}

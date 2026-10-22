@@ -58,10 +58,11 @@ import (
 // # Where it goes
 //
 // The look is written to config.d/look.toml, its own layer (see include.go).
-// config.toml is never edited, so `tuios look remove` deletes that one file and
-// the installed assets, and the config is what it was. config.toml still wins
-// over config.d, so a key config.toml sets hides the same key in the look. The
-// plan names those keys. A settings change of a key the look sets goes to
+// `tuios look remove` deletes that one file and the installed assets, and the
+// config is what it was. config.toml still wins over config.d, so a key
+// config.toml sets hides the same key in the look. The plan names those keys,
+// and a take-over (look_takeover.go) removes them and saves their values for
+// the remove to put back. A settings change of a key the look sets goes to
 // config.toml, never to look.toml (see layerWriter.target), so a later look
 // apply or remove does not undo it.
 
@@ -794,6 +795,14 @@ type LookPlan struct {
 	Current  *InstalledLook // the look installed now, or nil
 	Changes  []LookChange
 	Shadowed []LookShadow
+	// TakeOver, when set, makes Apply remove the shadowed keys and save
+	// their values (see look_takeover.go).
+	TakeOver *LookTakeOver
+	// Restore is what a remove puts back from an earlier take-over, or nil.
+	Restore *LookRestore
+
+	lc   *LayeredConfig
+	next *LayeredConfig // the files as the plan leaves them
 }
 
 // PlanLook works out what applying lk to the config at mainPath changes. It
@@ -818,7 +827,7 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &LookPlan{Main: lc.Main, Look: lk, Source: source, Current: cur}
+	p := &LookPlan{Main: lc.Main, Look: lk, Source: source, Current: cur, lc: lc}
 	if lk == nil && cur == nil {
 		return p, nil
 	}
@@ -868,27 +877,18 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		}
 		next.Layers = append(next.Layers, l)
 	}
-	before, err := parseLayered(lc)
-	if err != nil {
-		return nil, err
-	}
-	after, err := parseLayered(next)
-	if err != nil {
-		return nil, err
-	}
-	for _, opt := range Options() {
-		from, _ := GetOptionValue(before, opt.Path)
-		to, _ := GetOptionValue(after, opt.Path)
-		if from != to {
-			p.Changes = append(p.Changes, LookChange{Path: opt.Path, From: from, To: to})
+	if lk == nil {
+		if p.Restore, err = planRestore(lc.Main); err != nil {
+			return nil, err
+		}
+		if err := p.Restore.restoreLayers(next); err != nil {
+			return nil, err
 		}
 	}
-	for _, path := range lookSortedKeys(lookFileKeys) {
-		from, to := lookFileValueText(before, path), lookFileValueText(after, path)
-		if from != to {
-			p.Changes = append(p.Changes, LookChange{Path: path, From: from, To: to})
-		}
+	if p.Changes, err = lookChanges(lc, next); err != nil {
+		return nil, err
 	}
+	p.next = next
 	if lk != nil {
 		for _, s := range lk.Settings {
 			key := strings.Split(s.Path, ".")
@@ -901,6 +901,34 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		}
 	}
 	return p, nil
+}
+
+// lookChanges lists the options whose value in force differs between two
+// sets of files.
+func lookChanges(from, to *LayeredConfig) ([]LookChange, error) {
+	before, err := parseLayered(from)
+	if err != nil {
+		return nil, err
+	}
+	after, err := parseLayered(to)
+	if err != nil {
+		return nil, err
+	}
+	var out []LookChange
+	for _, opt := range Options() {
+		a, _ := GetOptionValue(before, opt.Path)
+		b, _ := GetOptionValue(after, opt.Path)
+		if a != b {
+			out = append(out, LookChange{Path: opt.Path, From: a, To: b})
+		}
+	}
+	for _, path := range lookSortedKeys(lookFileKeys) {
+		a, b := lookFileValueText(before, path), lookFileValueText(after, path)
+		if a != b {
+			out = append(out, LookChange{Path: path, From: a, To: b})
+		}
+	}
+	return out, nil
 }
 
 // isLook reports whether the layer is the look file.
@@ -937,6 +965,9 @@ func (p *LookPlan) Apply() error {
 	if err := atomicfile.Write(path, data, 0o600, true); err != nil {
 		return fmt.Errorf("failed to write %s: %w", path, err)
 	}
+	if err := p.TakeOver.write(p.Main); err != nil {
+		return err
+	}
 	if c := p.Current; c != nil {
 		if c.Theme != "" && (lk.Theme == nil || lk.Theme.ID != c.Theme) {
 			_ = theme.RemoveLookAsset(false, c.Theme)
@@ -948,12 +979,16 @@ func (p *LookPlan) Apply() error {
 	return nil
 }
 
-// remove deletes the look file first, so the config the watcher reloads no
-// longer names the assets, then the assets.
+// remove puts back the values a take-over saved, then deletes the look file,
+// so the config the watcher reloads no longer names the assets, then the
+// assets.
 func (p *LookPlan) remove() error {
 	c := p.Current
 	if c == nil {
 		return nil
+	}
+	if err := p.Restore.write(p.Main); err != nil {
+		return err
 	}
 	if err := os.Remove(c.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

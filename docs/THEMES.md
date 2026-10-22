@@ -431,12 +431,17 @@ close = "x"
 - A look file is 64 KiB at most. A theme or a glyph set in it is 32 KiB at
   most.
 
-tuios writes the look to `config.d/look.toml` and does not change
-`config.toml`. `config.toml` wins over `config.d`, so a key that
-`config.toml` sets hides the same key in the look. `tuios look apply` names
-those keys. When you change a look key in the settings, tuios writes the
-change to `config.toml`. The next `tuios look apply` or `tuios look remove`
-then keeps your change.
+tuios writes the look to `config.d/look.toml`. `config.toml` wins over
+`config.d`, so a key that `config.toml` sets hides the same key in the look.
+`tuios look apply` names those keys and asks if the look can set them. A yes
+is a take-over: tuios removes the keys from `config.toml`, and from a later
+`config.d` file, and saves your values. `--take-over` answers yes.
+`tuios look remove` puts your values back. A file that you did not change
+since goes back byte for byte.
+
+When you change a look key in the settings, tuios writes the change to
+`config.toml`. The next `tuios look apply` or `tuios look remove` then keeps
+your change.
 
 tuios does not replace or delete a file of your own. If `config.d/look.toml`
 is a file that tuios did not write, `tuios look` stops. It also stops if a

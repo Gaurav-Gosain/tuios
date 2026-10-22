@@ -33,12 +33,13 @@ func newLookCommand() *cobra.Command {
 		Long: `A look is a small TOML file that sets how tuios looks: theme, glyph set,
 borders, gaps, dock and rail style. The tuios.dev gallery shares looks.
 
-tuios writes a look to config.d/look.toml, its own file. It does not change
-config.toml. "tuios look remove" deletes the look and the theme it installed.
-A look may set only look keys. "tuios look keys" lists them.`,
+tuios writes a look to config.d/look.toml, its own file. config.toml wins over
+it, so a key you set in config.toml hides the look's value. A take-over lets
+the look set those keys. tuios saves your values, and "tuios look remove" puts
+them back. A look may set only look keys. "tuios look keys" lists them.`,
 	}
 
-	var applyYes bool
+	var applyYes, applyTakeOver bool
 	applyCmd := &cobra.Command{
 		Use:   "apply <source>",
 		Short: "Apply a look from the gallery, an https URL or a file",
@@ -47,26 +48,37 @@ or a local file. Each look on tuios.dev/gallery shows the command with its id.
 
 tuios shows the changes and asks first. Use --yes to skip the question. A run
 with no terminal needs --yes. tuios leaves out every key that a look cannot set
-and names it. A running tuios reloads the config, so you do not restart.`,
+and names it. A running tuios reloads the config, so you do not restart.
+
+A key that config.toml or a later config.d file sets hides the look's value.
+tuios names these keys and asks a second question: let the look set them? A yes
+removes the keys from those files and saves your values. "tuios look remove"
+puts them back. Use --take-over to answer yes. --yes alone answers no.`,
 		Example: `  tuios look apply tuios.dev/r/<id>
   tuios look apply https://example.com/my.look.toml
-  tuios look apply ./my.look.toml --yes`,
+  tuios look apply ./my.look.toml --yes
+  tuios look apply ./my.look.toml --yes --take-over`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runLookApply(cmd.OutOrStdout(), args[0], lookPrompt{yes: applyYes, tty: term.IsTerminal(int(os.Stdin.Fd())), in: os.Stdin})
+			return runLookApply(cmd.OutOrStdout(), args[0], newLookPrompt(applyYes, applyTakeOver))
 		},
 	}
 	applyCmd.Flags().BoolVar(&applyYes, "yes", false, "Apply the look without the question")
+	applyCmd.Flags().BoolVar(&applyTakeOver, "take-over", false, "Let the look set the keys a later file sets, and save your values")
 
 	var removeYes bool
 	removeCmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Remove the look and the theme it installed",
 		Long: `Remove the look. tuios deletes config.d/look.toml and the theme and glyph set
-that the look installed. Your config is then as it was before the look.`,
+that the look installed. Your config is then as it was before the look.
+
+After a take-over, tuios puts back the values it saved. A file that you did not
+change since goes back byte for byte. A key that you set again after the
+take-over keeps your newer value, and tuios names it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runLookRemove(cmd.OutOrStdout(), lookPrompt{yes: removeYes, tty: term.IsTerminal(int(os.Stdin.Fd())), in: os.Stdin})
+			return runLookRemove(cmd.OutOrStdout(), newLookPrompt(removeYes, false))
 		},
 	}
 	removeCmd.Flags().BoolVar(&removeYes, "yes", false, "Remove the look without the question")
@@ -108,9 +120,29 @@ that the look installed. Your config is then as it was before the look.`,
 
 // lookPrompt is how a command asks before it writes.
 type lookPrompt struct {
-	yes bool
-	tty bool
-	in  io.Reader
+	yes      bool
+	takeOver bool
+	tty      bool
+	// in is one reader for every question, so an answer typed ahead is not
+	// lost in the buffer of an earlier question.
+	in *bufio.Reader
+}
+
+// newLookPrompt asks on the terminal of stdin.
+func newLookPrompt(yes, takeOver bool) lookPrompt {
+	return lookPrompt{yes: yes, takeOver: takeOver, tty: term.IsTerminal(int(os.Stdin.Fd())), in: bufio.NewReader(os.Stdin)}
+}
+
+// confirmTakeOver asks whether the look may set the shadowed keys. --take-over
+// is a yes. --yes alone is a no, so a script that ran before keeps its config.
+func (p lookPrompt) confirmTakeOver(w io.Writer) (bool, error) {
+	switch {
+	case p.takeOver:
+		return true, nil
+	case p.yes || !p.tty:
+		return false, nil
+	}
+	return lookPrompt{tty: true, in: p.in}.confirm(w, "Let the look set these keys? Your values are saved and come back when you remove the look.")
 }
 
 // confirm asks question and reports a yes. Without a terminal it needs --yes.
@@ -122,7 +154,7 @@ func (p lookPrompt) confirm(w io.Writer, question string) (bool, error) {
 		return false, errors.New("no terminal to ask in. Run the command again with --yes")
 	}
 	fmt.Fprintf(w, "%s [y/N] ", question)
-	line, _ := bufio.NewReader(p.in).ReadString('\n')
+	line, _ := p.in.ReadString('\n')
 	answer := strings.ToLower(strings.TrimSpace(line))
 	return answer == "y" || answer == "yes", nil
 }
@@ -154,11 +186,39 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 		fmt.Fprintln(w, "tuios did not change the look.")
 		return nil
 	}
+	if len(plan.Shadowed) > 0 {
+		take, err := prompt.confirmTakeOver(w)
+		if err != nil {
+			return err
+		}
+		if take {
+			if plan.TakeOver, err = plan.PlanTakeOver(); err != nil {
+				return err
+			}
+		}
+	}
 	if err := plan.Apply(); err != nil {
 		return err
 	}
+	if to := plan.TakeOver; to != nil {
+		if len(to.Changes) > 0 {
+			fmt.Fprintln(w, "\nThe take-over changes these settings too:")
+			printLookChanges(w, to.Changes)
+			fmt.Fprintln(w)
+		}
+		for _, f := range to.Files {
+			fmt.Fprintf(w, "tuios removed these keys from %s and saved your values: %s.\n", f.Path, strings.Join(f.Keys, ", "))
+		}
+		for _, file := range config.ShadowFiles(to.Kept) {
+			fmt.Fprintf(w, "tuios cannot change %s. These keys stay there: %s.\n", file, config.ShadowKeys(to.Kept, file))
+		}
+	}
 	fmt.Fprintln(w, "The look is applied. A running tuios shows it now.")
-	fmt.Fprintln(w, `Run "tuios look remove" to remove it.`)
+	if plan.TakeOver != nil && len(plan.TakeOver.Files) > 0 {
+		fmt.Fprintln(w, `Run "tuios look remove" to remove it and put your values back.`)
+	} else {
+		fmt.Fprintln(w, `Run "tuios look remove" to remove it.`)
+	}
 	return nil
 }
 
@@ -187,6 +247,9 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	}
 	if err := plan.Apply(); err != nil {
 		return err
+	}
+	if r := plan.Restore; r != nil && len(r.Kept) > 0 {
+		fmt.Fprintf(w, "tuios keeps your saved values in %s.\n", homeShort(config.LookSavedPath(plan.Main)))
 	}
 	fmt.Fprintln(w, "The look is removed.")
 	return nil
@@ -260,10 +323,7 @@ func printLookPlan(w io.Writer, p *config.LookPlan) {
 		fmt.Fprintln(w, "No setting changes.")
 	} else {
 		fmt.Fprintln(w, "Changes:")
-		for _, c := range p.Changes {
-			fmt.Fprintf(tw, "  %s\t%s\t->\t%s\n", c.Path, lookShown(c.From), lookShown(c.To))
-		}
-		_ = tw.Flush()
+		printLookChanges(w, p.Changes)
 	}
 
 	if lk := p.Look; lk != nil {
@@ -299,9 +359,45 @@ func printLookPlan(w io.Writer, p *config.LookPlan) {
 			fmt.Fprintf(tw, "  %s\t%s\n", s.Path, s.File)
 		}
 		_ = tw.Flush()
-		fmt.Fprintln(w, "Remove a key from that file to use the look's value.")
+		fmt.Fprintln(w, "To use the look's values, let the look set these keys or use --take-over.")
+	}
+	if r := p.Restore; r != nil {
+		if len(r.Files) > 0 {
+			fmt.Fprintln(w)
+		}
+		for i, f := range r.Files {
+			if r.Exact[i] {
+				fmt.Fprintf(w, "Puts back %s as it was before the take-over.\n", f.Path)
+			} else {
+				fmt.Fprintf(w, "Puts back these keys in %s: %s.\n", f.Path, strings.Join(f.Keys, ", "))
+			}
+		}
+		if len(r.Newer) > 0 {
+			fmt.Fprintln(w, "\nYou changed these keys after the take-over. tuios keeps your newer values:")
+			for _, s := range r.Newer {
+				fmt.Fprintf(tw, "  %s\t%s\n", s.Path, s.File)
+			}
+			_ = tw.Flush()
+		}
+		if len(r.Kept) > 0 {
+			fmt.Fprintln(w, "\ntuios cannot put back these keys:")
+			for _, s := range r.Kept {
+				fmt.Fprintf(tw, "  %s\t%s\n", s.Path, s.File)
+			}
+			_ = tw.Flush()
+		}
 	}
 	fmt.Fprintln(w)
+}
+
+// printLookChanges prints one line per change: the key, the old value and
+// the new value.
+func printLookChanges(w io.Writer, changes []config.LookChange) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, c := range changes {
+		fmt.Fprintf(tw, "  %s\t%s\t->\t%s\n", c.Path, lookShown(c.From), lookShown(c.To))
+	}
+	_ = tw.Flush()
 }
 
 // lookShown is a value for the change list. An empty value is shown as such.
