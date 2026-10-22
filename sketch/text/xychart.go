@@ -61,6 +61,18 @@ func canvasRole(r plot.Role) uint8 {
 	return roleLine
 }
 
+// strokeOf is the strokes of each light box-drawing glyph.
+var strokeOf = func() map[rune]uint8 {
+	m := map[rune]uint8{}
+	for mask := len(joins) - 1; mask > 0; mask-- {
+		if _, ok := m[joins[mask]]; !ok {
+			m[joins[mask]] = uint8(mask)
+		}
+	}
+	m['│'], m['─'] = up|down, left|right
+	return m
+}()
+
 // paste copies a grid of tuios.dev/plot into the canvas from x0, y0: each
 // cell's text, its role and its ground.
 func (c *canvas) paste(g *plot.Grid, x0, y0 int) {
@@ -70,11 +82,18 @@ func (c *canvas) paste(g *plot.Grid, x0, y0 int) {
 			if cell.Text == "" || cell.Text == " " {
 				continue
 			}
+			r := []rune(cell.Text)[0]
+			if mask, ok := strokeOf[r]; ok && cell.Bg == plot.None {
+				// A line as strokes, so it joins the canvas's own lines and
+				// rows of plain vertical lines still close up.
+				c.stroke(x0+x, y0+y, mask, light, canvasRole(cell.Role))
+				continue
+			}
 			bg := uint8(roleNone)
 			if cell.Bg != plot.None {
 				bg = canvasRole(cell.Bg)
 			}
-			c.putBg(x0+x, y0+y, []rune(cell.Text)[0], canvasRole(cell.Role), bg)
+			c.putBg(x0+x, y0+y, r, canvasRole(cell.Role), bg)
 		}
 	}
 }

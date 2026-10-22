@@ -84,13 +84,17 @@ func radarPolar(r *types.GeoRadar, opt Options) (*canvas, error) {
 	w := total(rows)
 	series := make([]plot.Series, len(r.Curves))
 	for k, curve := range r.Curves {
-		series[k] = plot.Series{Name: curve.Label, Values: curve.Values, Role: plot.SeriesRole(k)}
+		series[k] = plot.Series{Name: safeString(curve.Label), Values: curve.Values, Role: plot.SeriesRole(k)}
 	}
 	ticks := r.Ticks
 	if ticks <= 0 {
 		ticks = 1
 	}
-	g := plot.Radar{Axes: r.Axes, Series: series, Min: r.Min, Max: r.Max, Rings: ticks, Polygon: r.Polygon, Aspect: pieAspect}.Draw(w, rows+2, plot.Braille)
+	axes := make([]string, len(r.Axes))
+	for i, a := range r.Axes {
+		axes[i] = safeString(a)
+	}
+	g := plot.Radar{Axes: axes, Series: series, Min: r.Min, Max: r.Max, Rings: ticks, Polygon: r.Polygon, Aspect: pieAspect}.Draw(w, rows+2, plot.Braille)
 	legend := radarLegend(r, w)
 	h := g.H + 1 + len(legend)
 	c, err := newCanvas(w, h)

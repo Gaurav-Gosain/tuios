@@ -597,6 +597,12 @@ func safeRune(r rune) rune {
 	return r
 }
 
+// safeString is s with each character safeRune maps changed: for text
+// handed to tuios.dev/plot, which leaves a control out instead.
+func safeString(s string) string {
+	return strings.Map(safeRune, s)
+}
+
 // width is the cells a string takes.
 func width(s string) int {
 	n := 0
