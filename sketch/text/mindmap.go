@@ -3,15 +3,18 @@ package text
 import "tuios.dev/sketch"
 
 // Mindmaps: a tree with the root at the top and each branch drawn with box
-// characters, as tree(1) draws folders. A node keeps the brackets its source
-// gives it: [square], (rounded), ((circle)), )cloud(, ))bang(( and {{hexagon}}.
+// characters, as tree(1) draws folders. Each branch from the root takes a
+// series colour, as pele's do, for its lines and its brackets. A node keeps
+// the brackets of its shape: [square], (rounded), ((circle)) and
+// {{hexagon}}. A cloud and a bang are rounded: their source brackets,
+// )cloud( and ))bang((, read as a typo in text.
 
 var mindBrackets = map[string][2]string{
 	"rect":    {"[", "]"},
 	"rounded": {"(", ")"},
 	"circle":  {"((", "))"},
-	"cloud":   {")", "("},
-	"bang":    {"))", "(("},
+	"cloud":   {"(", ")"},
+	"bang":    {"(", ")"},
 	"hex":     {"{{", "}}"},
 }
 
@@ -45,6 +48,10 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 		role   uint8
 		open   string
 		close  string
+		// branch is the child of the root the node is under, -1 for the
+		// root, and top says the line is the first of that child.
+		branch int
+		top    bool
 	}
 	var lines []line
 	// The walk is iterative: a deep chain of nodes must not grow the stack.
@@ -52,8 +59,9 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 		node   int
 		indent string
 		last   bool
+		branch int
 	}
-	stack := []item{{0, "", true}}
+	stack := []item{{0, "", true, -1}}
 	for len(stack) > 0 {
 		it := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -87,9 +95,11 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 			pad += " "
 		}
 		for k, s := range text {
-			ln := line{prefix: rest + pad, text: s, role: role}
+			ln := line{prefix: rest + pad, text: s, role: role, branch: it.branch, top: depth[it.node] == 1}
 			if k == 0 {
 				ln.prefix, ln.open = head, br[0]
+			} else {
+				ln.top = false
 			}
 			if k == len(text)-1 {
 				ln.close = br[1]
@@ -102,7 +112,11 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 			inner = ""
 		}
 		for k := len(kids) - 1; k >= 0; k-- {
-			stack = append(stack, item{kids[k], inner, k == len(kids)-1})
+			branch := it.branch
+			if it.node == 0 {
+				branch = k
+			}
+			stack = append(stack, item{kids[k], inner, k == len(kids)-1, branch})
 		}
 	}
 	w := 1
@@ -117,13 +131,26 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 		return nil, err
 	}
 	for y, ln := range lines {
-		c.text(0, y, ln.prefix, roleLine)
+		// The first four cells of a prefix are the root's lines, but for
+		// the head of a child of the root. The rest are the branch's.
+		branch := uint8(roleBox)
+		if ln.branch >= 0 {
+			branch = seriesRole(ln.branch)
+		}
+		trunk := uint8(roleLine)
+		if ln.top {
+			trunk = branch
+		}
+		head := []rune(ln.prefix)
+		cut := min(len(head), 4)
+		c.text(0, y, string(head[:cut]), trunk)
+		c.text(cut, y, string(head[cut:]), branch)
 		x := width(ln.prefix)
-		c.text(x, y, ln.open, roleBox)
+		c.text(x, y, ln.open, branch)
 		x += width(ln.open)
 		c.text(x, y, ln.text, ln.role)
 		x += width(ln.text)
-		c.text(x, y, ln.close, roleBox)
+		c.text(x, y, ln.close, branch)
 	}
 	return withTitle(c, l.Title, opt.Cols)
 }

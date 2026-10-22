@@ -153,6 +153,23 @@ func scoreDots(level float64) string {
 }
 
 func journeyDown(j *types.GeoJourney, opt Options) (*canvas, error) {
+	// pele wraps a label to the width of a box across. Down the page there
+	// is room for a longer line, up to 40 cells, so each label is wrapped
+	// again.
+	room := 40
+	if opt.Cols > 0 {
+		room = min(room, opt.Cols-10)
+	}
+	tasks := make([]types.GeoStep, len(j.Tasks))
+	for i, t := range j.Tasks {
+		if room >= 12 && len(t.Label) > 1 {
+			t.Label = wrap(strings.Join(t.Label, " "), room)
+		}
+		tasks[i] = t
+	}
+	jj := *j
+	jj.Tasks = tasks
+	j = &jj
 	boxW := 6
 	lines := make([][]string, len(j.Tasks))
 	for i, t := range j.Tasks {

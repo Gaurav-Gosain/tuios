@@ -10,7 +10,9 @@ import (
 // A git graph is drawn the way git log --graph draws one: the history runs
 // down, oldest first, each branch is a column with its name at the top, and
 // each commit is a row with its id and tags right of the lanes. A line across
-// a commit's row joins it to a parent on another branch.
+// a commit's row joins it to a parent on another branch. Each branch takes
+// a series colour, as pele's do: its lane, its name, its commits and the
+// lines that join it to other branches.
 
 var commitMarks = map[string]rune{
 	"normal":      '●',
@@ -85,16 +87,16 @@ func drawGit(l *sketch.Layout, opt Options) (*canvas, error) {
 	bottom := top + len(order)
 	for k, name := range g.Lanes {
 		y := titleH + k
-		c.vline(2*k, y, max(bottom, y), dotted, roleLine)
+		c.vline(2*k, y, max(bottom, y), dotted, seriesRole(k))
 		if name != "" {
-			c.hline(2*k, 2*k+1, y, dotted, roleLine)
-			c.text(2*k+2, y, name, roleHead)
+			c.hline(2*k, 2*k+1, y, dotted, seriesRole(k))
+			c.text(2*k+2, y, name, seriesRole(k))
 		}
 	}
 	for i, commit := range g.Commits {
 		for _, p := range commit.Parents {
 			if parent := g.Commits[p]; parent.Lane != commit.Lane {
-				c.hline(2*parent.Lane, 2*commit.Lane, row[i], light, roleLine)
+				c.hline(2*parent.Lane, 2*commit.Lane, row[i], light, seriesRole(commit.Lane))
 			}
 		}
 	}
@@ -103,7 +105,7 @@ func drawGit(l *sketch.Layout, opt Options) (*canvas, error) {
 		if !ok {
 			mark = '●'
 		}
-		c.put(2*commit.Lane, row[i], mark, roleBox)
+		c.put(2*commit.Lane, row[i], mark, seriesRole(commit.Lane))
 		c.text(graphW+2, row[i], texts[i], roleText)
 	}
 	return c, nil
