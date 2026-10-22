@@ -39,7 +39,9 @@ const MaxCells = 4_000_000
 type Options struct {
 	// Cols bounds the width in cells. 0 means no bound.
 	Cols int
-	// Color writes ANSI colours (16 colours, SGR 30 to 37 and 90 to 97) for
+	// Color writes ANSI colours (16 colours: SGR 30 to 37 and 90 to 97 for
+	// the text, and 40 to 47 and 100 to 107 for the ground of a cell that
+	// shows two colours, such as a half block between two pie slices) for
 	// boxes, lines and notes. Without it the lines are plain text.
 	Color bool
 }
@@ -191,6 +193,19 @@ var roleSGR = [...]string{
 	roleSeries + 5: "35",
 }
 
+// bgSGR is the ground colour of a series role: the same hue as its
+// text colour.
+func bgSGR(role uint8) string {
+	if role < roleSeries || int(role) >= len(roleSGR) {
+		return ""
+	}
+	fg := roleSGR[role]
+	if fg[0] == '9' {
+		return "10" + fg[1:]
+	}
+	return "4" + fg[1:]
+}
+
 // Directions of the strokes in a cell, for joining lines.
 const (
 	up    = 1
@@ -209,6 +224,9 @@ const (
 type cell struct {
 	r    rune
 	role uint8
+	// bg is the role whose colour fills the ground of the cell, roleNone
+	// for the terminal's own. Only series roles have a ground colour.
+	bg uint8
 	// mask holds the strokes of lines drawn through the cell; r is worked out
 	// from it when the cell holds no other character.
 	mask   uint8
@@ -260,8 +278,17 @@ func (c *canvas) put(x, y int, r rune, role uint8) {
 	}
 	p.r = safeRune(r)
 	p.role = role
+	p.bg = roleNone
 	p.mask = 0
 	p.wide = false
+}
+
+// putBg writes a character in the colour of role on the ground of bg.
+func (c *canvas) putBg(x, y int, r rune, role, bg uint8) {
+	c.put(x, y, r, role)
+	if p := c.at(x, y); p != nil {
+		p.bg = bg
+	}
 }
 
 // clear empties a cell, strokes included.
@@ -481,24 +508,35 @@ func (c *canvas) lines(color bool) []string {
 			continue
 		}
 		var b strings.Builder
-		role := uint8(255)
+		// The SGR state written so far: a role and a ground, 255 at the
+		// start of the line.
+		role, bg := uint8(255), uint8(255)
+		open := false
 		for x := 0; x < c.w; x++ {
 			p := &c.cells[y*c.w+x]
 			if p.wide {
 				continue
 			}
-			if color && p.role != role {
-				if role != 255 && roleSGR[role] != "" {
+			if color && (p.role != role || p.bg != bg) {
+				if open {
 					b.WriteString("\x1b[m")
 				}
-				if roleSGR[p.role] != "" {
-					b.WriteString("\x1b[" + roleSGR[p.role] + "m")
+				codes := roleSGR[p.role]
+				if g := bgSGR(p.bg); g != "" {
+					if codes != "" {
+						codes += ";"
+					}
+					codes += g
 				}
-				role = p.role
+				open = codes != ""
+				if open {
+					b.WriteString("\x1b[" + codes + "m")
+				}
+				role, bg = p.role, p.bg
 			}
 			b.WriteRune(p.glyph())
 		}
-		if color && role != 255 && roleSGR[role] != "" {
+		if open {
 			b.WriteString("\x1b[m")
 		}
 		line := b.String()

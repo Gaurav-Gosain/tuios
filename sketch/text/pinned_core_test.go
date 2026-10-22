@@ -64,10 +64,11 @@ func TestPinnedCore(t *testing.T) {
     └─────────────┘
 `},
 		{"pie", "pie title Pets\n  \"Dogs\" : 3\n  \"Cats\" : 1", 60, `
-                         Pets
+                       Pets
 
-Dogs  ████████████████████████████████████████  75%  3
-Cats  █████████████▍                            25%  1
+Dogs  ████████████████████████████████████████  75%
+
+Cats  █████████████▍                            25%
 `},
 		{"mindmap", "mindmap\n  root((Root))\n    A\n      B\n    [C]", 80, `
 ((Root))

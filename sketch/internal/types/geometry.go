@@ -153,6 +153,8 @@ type GeoBlock struct {
 type GeoPie struct {
 	Title  []string
 	Slices []GeoSlice
+	// ShowData says the source asked for the values beside the labels.
+	ShowData bool
 }
 
 type GeoSlice struct {

@@ -280,7 +280,7 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 		Links:  []types.LinkInfo{},
 	}
 	if options.Geometry != nil {
-		pie := &types.GeoPie{Title: title.Plain()}
+		pie := &types.GeoPie{Title: title.Plain(), ShowData: model.showData}
 		for _, label := range entries {
 			share := 0.0
 			if sum > 0 {

@@ -1,0 +1,19 @@
+    Where a week of CI minutes goes     
+                                        
+E2E suite      ███████████████  32%  412
+                                        
+Ghostty        ████████▋        18%  236
+backend                                 
+                                        
+Unit tests     ██████▉          15%  188
+                                        
+Fuzz, nightly  ██████           13%  164
+                                        
+Release        ████▍             9%  121
+builds                                  
+                                        
+WebAssembly    ██▊               6%   74
+                                        
+Lint and vet   █▉                4%   52
+                                        
+Docs site      █▍                3%   38
