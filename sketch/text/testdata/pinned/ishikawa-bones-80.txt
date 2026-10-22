@@ -1,0 +1,10 @@
+                   Test                 Timing
+  Terminal         ├ Shared HOME        ├ Fixed sleeps
+  ├ Wrong TERM     ├ Leftover           ├ Reply hook
+  ├ Small window   │   daemon           │   race
+━━┻━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━▶ Flaky E2E test
+                   Code                 Machine
+                   ├ Unbuffered         ├ Busy CI runner
+                   │   channel          └ Slow disk
+                   └ Missing
+                       condition wait

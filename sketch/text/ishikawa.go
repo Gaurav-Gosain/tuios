@@ -17,6 +17,8 @@ import (
 type fishBlock struct {
 	lines []treeLine
 	w     int
+	// names is the count of lines of the category's name, at the top.
+	names int
 }
 
 func drawIshikawa(l *sketch.Layout, opt Options) (*canvas, error) {
@@ -31,8 +33,9 @@ func drawIshikawa(l *sketch.Layout, opt Options) (*canvas, error) {
 }
 
 // fishCauses are a category's causes as tree lines that hang off a bone at column 0. above keeps
-// the bone running past the last cause, down to the spine.
-func fishCauses(causes []types.GeoCause, above bool) []treeLine {
+// the bone running past the last cause, down to the spine. With cols set, a cause wider than
+// cols wraps.
+func fishCauses(causes []types.GeoCause, above bool, cols int) []treeLine {
 	// The category is the root, at depth 0, and its line is dropped: the name is drawn apart.
 	rows := make([]types.GeoTreeRow, 0, len(causes)+2)
 	rows = append(rows, types.GeoTreeRow{})
@@ -44,34 +47,59 @@ func fishCauses(causes []types.GeoCause, above bool) []treeLine {
 		rows = append(rows, types.GeoTreeRow{Depth: 1})
 	}
 	last, _ := treeLast(rows)
-	lines := treeLines(rows, last, 2, 0, false)[1:]
+	lines := treeLines(rows, last, 2, cols, false)[1:]
 	if above {
 		lines = lines[:len(lines)-1]
 	}
 	for i := range lines {
-		if rows[i+1].Depth > 1 {
+		if lines[i].depth > 1 {
 			lines[i].role = roleNote
 		}
 	}
 	return lines
 }
 
+// ishikawaBones draws the fishbone. Each category takes a series colour for
+// its name and its bone. When the bones do not fit the columns, the causes
+// wrap to the room there is; with less than 10 cells a bone, it gives up.
 func ishikawaBones(ik *types.GeoIshikawa, opt Options) *canvas {
+	if c := fishbone(ik, opt, 0); c != nil {
+		return c
+	}
+	n := len(ik.Categories)
+	if opt.Cols <= 0 || n == 0 {
+		return nil
+	}
+	pairs := (n + 1) / 2
+	// Two cells of tail, the columns of the pairs three cells apart, then
+	// the head and the effect.
+	room := (opt.Cols-2-2-width(ik.Effect)-3)/pairs - 3
+	if room < 10 {
+		return nil
+	}
+	return fishbone(ik, opt, room)
+}
+
+func fishbone(ik *types.GeoIshikawa, opt Options, room int) *canvas {
 	n := len(ik.Categories)
 	pairs := (n + 1) / 2
 	blocks := make([]fishBlock, n)
 	for i, cat := range ik.Categories {
 		above := i%2 == 0
 		var lines []treeLine
-		name := treeLine{text: cat.Label, role: roleTitle}
-		causes := fishCauses(cat.Causes, above)
-		lines = append(lines, name)
-		lines = append(lines, causes...)
+		names := []string{cat.Label}
+		if room > 0 {
+			names = wrapCells(cat.Label, room, 1000)
+		}
+		for _, name := range names {
+			lines = append(lines, treeLine{text: name, role: seriesRole(i)})
+		}
+		lines = append(lines, fishCauses(cat.Causes, above, room)...)
 		w := 0
 		for _, line := range lines {
 			w = max(w, width(line.prefix)+width(line.text))
 		}
-		blocks[i] = fishBlock{lines, w}
+		blocks[i] = fishBlock{lines, w, len(names)}
 	}
 	upH, downH := 0, 0
 	for i, b := range blocks {
@@ -120,30 +148,31 @@ func ishikawaBones(ik *types.GeoIshikawa, opt Options) *canvas {
 	c.text(spineEnd+2, spine, effect, roleTitle)
 	for i, b := range blocks {
 		bx := colX[i/2]
+		bone := seriesRole(i)
 		if i%2 == 0 {
 			top := spine - len(b.lines)
 			for k, line := range b.lines {
 				c.text(bx+width(line.prefix), top+k, line.text, line.role)
 				if line.prefix != "" {
-					c.text(bx, top+k, line.prefix, roleLine)
+					c.text(bx, top+k, line.prefix, bone)
 				}
 			}
 			// The bone runs from under the name to the spine.
-			for y := top + 1; y < spine; y++ {
+			for y := top + b.names; y < spine; y++ {
 				if p := c.at(bx, y); p != nil && p.r == 0 {
-					c.vline(bx, y, y+1, light, roleLine)
+					c.vline(bx, y, y+1, light, bone)
 				}
 			}
-			c.stroke(bx, spine, up, light, roleLine)
+			c.stroke(bx, spine, up, light, bone)
 		} else {
 			top := spine + 1
 			for k, line := range b.lines {
 				c.text(bx+width(line.prefix), top+k, line.text, line.role)
 				if line.prefix != "" {
-					c.text(bx, top+k, line.prefix, roleLine)
+					c.text(bx, top+k, line.prefix, bone)
 				}
 			}
-			c.stroke(bx, spine, down, light, roleLine)
+			c.stroke(bx, spine, down, light, bone)
 		}
 	}
 	return c
