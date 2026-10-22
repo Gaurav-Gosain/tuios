@@ -1,4 +1,4 @@
-// Ported from pele src/layout/lanes.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/layout/lanes.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package layout
 
@@ -163,7 +163,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 	lnodes := make([]*LNode, len(real))
 	nodeBlock := make([]LNode, len(real))
 	for k, i := range real {
-		nodeBlock[k] = LNode{W: cross(nodes[i]), H: along(nodes[i]), Kind: KindNode}
+		nodeBlock[k] = LNode{W: cross(nodes[i]), H: along(nodes[i]), Kind: KindNode, Hint: math.NaN(), Key: math.NaN()}
 		lnodes[k] = &nodeBlock[k]
 	}
 	ledges := make([]*LEdge, 0, len(edges))

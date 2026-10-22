@@ -1,4 +1,4 @@
-// Ported from pele src/layout/layered.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/layout/layered.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 // Package layout holds pele's own graph layouts: layered (Sugiyama style),
 // compound (clusters on top of layered) and lanes.
@@ -54,6 +54,10 @@ type LNode struct {
 	H    float64
 	Kind Kind
 	Pin  float64
+	// Port's cross-flow destination; NaN if unknown. Fully hinted port ranks keep this order.
+	Hint float64
+	// Initial cross-flow position; NaN if unknown. Used only when every node in a rank has one.
+	Key float64
 	// How much of the side that edges meet may be shared out between them; 0 keeps them all at its middle.
 	Span float64
 	X    float64
@@ -94,15 +98,29 @@ type LayeredOptions struct {
 	// head the same way sits half of this nearer their tails, so that each label is midway along
 	// the line that shows, and the curves either side of it have the same room to turn in.
 	HeadRoom float64
+	// Keep each group contiguous within ranks. `Of` maps nodes to groups; `Parent` maps groups
+	// to parents. Both use -1 for none.
+	Groups *Groups
+	// Compute cross-flow positions in `x` without full routing.
+	OrderOnly bool
+}
+
+// Groups is LayeredOptions.groups.
+type Groups struct {
+	Of     []int
+	Parent []int
 }
 
 type LayeredResult struct {
 	Width  float64
 	Height float64
+	// With `orderOnly`: final crossings and crossings before grouping or reordering.
+	Crossings int
+	Declared  int
 }
 
 func Lnode(w, h float64, kind Kind) *LNode {
-	return &LNode{W: w, H: h, Kind: kind}
+	return &LNode{W: w, H: h, Kind: kind, Hint: math.NaN(), Key: math.NaN()}
 }
 
 func Ledge(tail, head, minlen int, labelW, labelH float64) *LEdge {
@@ -405,6 +423,13 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	}
 	firstSeg := fillInt(m, -1)
 	lastSeg := fillInt(m, -1)
+	KEY := make([]float64, n)
+	for i := range KEY {
+		KEY[i] = math.NaN()
+	}
+	for i := 0; i < real; i++ {
+		KEY[i] = nodes[i].Key
+	}
 	offsets := false
 	{
 		next := real
@@ -465,6 +490,7 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 				d := next
 				next++
 				RANK[d] = r
+				KEY[d] = KEY[a] + float64((KEY[b]-KEY[a])*float64(r-ra))/float64(rb-ra)
 				if r == labelRank {
 					W[d] = e.LabelW
 					H[d] = e.LabelH
@@ -505,6 +531,48 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			}
 			lastSeg[ei] = ce
 			ce++
+		}
+	}
+
+	// Bends belong to the innermost group containing both edge endpoints.
+	var GRP []int
+	if opt.Groups != nil {
+		of, parent := opt.Groups.Of, opt.Groups.Parent
+		GRP = make([]int, n)
+		for i := 0; i < real; i++ {
+			GRP[i] = of[i]
+		}
+		depth := func(gr int) int {
+			d := 0
+			for ; gr >= 0; gr = parent[gr] {
+				d++
+			}
+			return d
+		}
+		lca := func(x, y int) int {
+			dx := depth(x)
+			dy := depth(y)
+			for ; dx > dy; dx-- {
+				x = parent[x]
+			}
+			for ; dy > dx; dy-- {
+				y = parent[y]
+			}
+			for x != y {
+				x = parent[x]
+				y = parent[y]
+			}
+			return x
+		}
+		for ei := 0; ei < m; ei++ {
+			if firstDummy[ei] < 0 {
+				continue
+			}
+			e := edges[ei]
+			gr := lca(of[e.Tail], of[e.Head])
+			for d, end := firstDummy[ei], firstDummy[ei]+span[ei]-1; d < end; d++ {
+				GRP[d] = gr
+			}
 		}
 	}
 
@@ -576,6 +644,30 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		}
 	}
 
+	sortRank := func(r int, key func(v int) float64) bool {
+		s := layerStart[r]
+		e := layerStart[r+1]
+		if e-s < 2 {
+			return false
+		}
+		for i := s; i < e; i++ {
+			if math.IsNaN(key(order[i])) {
+				return false
+			}
+		}
+		layer := slices.Clone(order[s:e])
+		index := make(map[int]int, len(layer))
+		for i, v := range layer {
+			index[v] = i
+		}
+		sortBy(layer, func(a, b int) float64 { return or(key(a)-key(b), float64(index[a]-index[b])) })
+		copy(order[s:], layer)
+		return true
+	}
+	for r := 0; r <= maxRank; r++ {
+		sortRank(r, func(v int) float64 { return KEY[v] })
+	}
+
 	pinned := false
 	for i := 0; i < real; i++ {
 		if nodes[i].Pin != 0 {
@@ -599,6 +691,19 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			copy(order[layerStart[r]:], layer)
 		}
 	}
+	// Preserve port order to avoid crossings outside the group.
+	fixed := make([]uint8, maxRank+1)
+	hint := func(v int) float64 {
+		if v < real && (nodes[v].Kind == KindStartPort || nodes[v].Kind == KindEndPort) {
+			return nodes[v].Hint
+		}
+		return math.NaN()
+	}
+	for _, r := range [2]int{0, maxRank} {
+		if sortRank(r, hint) {
+			fixed[r] = 1
+		}
+	}
 	setPositions := func() {
 		for r := 0; r <= maxRank; r++ {
 			s := layerStart[r]
@@ -609,11 +714,39 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	}
 	setPositions()
 
-	g := &Graph{n, real, maxRank, W, KIND, RANK, EF, ET, EFD, ETD, succStart, succE, predStart, predE, layerStart, order, pos, offsets}
+	g := &Graph{n, real, maxRank, W, KIND, RANK, EF, ET, EFD, ETD, succStart, succE, predStart, predE, layerStart, order, pos, offsets, fixed, GRP, nil}
+	if opt.Groups != nil {
+		g.groupParent = opt.Groups.Parent
+	}
 
+	crossings := 0
+	declared := 0
 	if segments > 0 && maxRank > 0 {
-		reduceCrossings(g, nodes)
+		crossings, declared = reduceCrossings(g, nodes)
 		setPositions()
+	}
+	if opt.OrderOnly {
+		// Points are (rank, cross-flow position) pairs.
+		at := position(g, opt)
+		for i := 0; i < real; i++ {
+			nodes[i].X = at[i]
+		}
+		for ei := 0; ei < m; ei++ {
+			e := edges[ei]
+			a, b := e.Tail, e.Head
+			if e.Reversed {
+				a, b = e.Head, e.Tail
+			}
+			pts := []float64{float64(RANK[a]), at[a]}
+			if direct[ei] == 0 && firstDummy[ei] >= 0 {
+				for d, end := firstDummy[ei], firstDummy[ei]+span[ei]-1; d < end; d++ {
+					pts = append(pts, float64(RANK[d]), at[d])
+				}
+			}
+			pts = append(pts, float64(RANK[b]), at[b])
+			e.Points = pts
+		}
+		return LayeredResult{Crossings: crossings, Declared: declared}
 	}
 
 	if EFK != nil && ETK != nil {
@@ -1022,6 +1155,10 @@ type Graph struct {
 	order      []int
 	pos        []int
 	offsets    bool
+	// Ranks whose order must remain fixed.
+	fixed       []uint8
+	GRP         []int
+	groupParent []int
 }
 
 // Orient reverses the edges that close a cycle, found by depth-first search in declaration order.
@@ -2030,8 +2167,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		return rows
 	}
 
-	// The least distance between a and b as plain curves across a gap that leaves them `height`
-	// to turn in: between points along each and the other drawn as a run of short lines.
 	sample := func(k int, h float64, out []float64) {
 		c := Ease(to[k]-from[k], h)
 		for i := 0; i <= SAMPLES; i++ {
@@ -2043,8 +2178,9 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	}
 	lineA := make([]float64, 2*SAMPLES+2)
 	lineB := make([]float64, 2*SAMPLES+2)
-	reach := func(points, line []float64) float64 {
-		least := inf
+	reaches := func(points, line []float64, limit float64) bool {
+		// Allow rounding error in the cheap distance check before calling Math.hypot.
+		bound := float64(limit*limit) * (1 + 1e-9)
 		for i := 0; i <= SAMPLES; i++ {
 			px := points[2*i]
 			py := points[2*i+1]
@@ -2052,19 +2188,20 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 				dx := line[2*j+2] - line[2*j]
 				dy := line[2*j+3] - line[2*j+1]
 				t := math.Max(0, math.Min(1, (float64((px-line[2*j])*dx)+float64((py-line[2*j+1])*dy))/or(float64(dx*dx)+float64(dy*dy), 1)))
-				d := js.Hypot(px-line[2*j]-float64(t*dx), py-line[2*j+1]-float64(t*dy))
-				if d < least {
-					least = d
+				ex := px - line[2*j] - float64(t*dx)
+				ey := py - line[2*j+1] - float64(t*dy)
+				if float64(ex*ex)+float64(ey*ey) < bound && js.Hypot(ex, ey) < limit {
+					return true
 				}
 			}
 		}
-		return least
+		return false
 	}
-	nearest := func(a, b int, height float64) float64 {
+	near := func(a, b int, height float64, limit float64) bool {
 		h := math.Max(height/2, height-2*LEVEL_LEAD)
 		sample(a, h, lineA)
 		sample(b, h, lineB)
-		return math.Min(reach(lineA, lineB), reach(lineB, lineA))
+		return reaches(lineA, lineB, limit) || reaches(lineB, lineA, limit)
 	}
 
 	for _, r := range byRankKeys {
@@ -2107,7 +2244,7 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 			if wide[a] == 1 || wide[b] == 1 {
 				limit = LEVEL_CLEAR
 			}
-			if nearest(a, b, room[r]) < limit {
+			if near(a, b, room[r], limit) {
 				level[a] = true
 				level[b] = true
 			}
@@ -2310,20 +2447,57 @@ func pastLabels(g *Graph, xs []float64, firstDummy []int, span []int, clear floa
 	}
 }
 
-func reduceCrossings(g *Graph, nodes []*LNode) {
+// Returns [final crossings, crossings before grouping or reordering].
+func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 	n, real, maxRank, W, EF, ET, EFD, ETD := g.n, g.real, g.maxRank, g.W, g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, layerStart, order, pos, offsets := g.succStart, g.succE, g.predStart, g.predE, g.layerStart, g.order, g.pos, g.offsets
+	fixed, GRP, groupParent := g.fixed, g.GRP, g.groupParent
 	widest := 0
 	for r := 0; r <= maxRank; r++ {
 		widest = max(widest, layerStart[r+1]-layerStart[r])
 	}
 	if widest < 2 {
-		return
+		return 0, 0
 	}
 	// With offsets, edges that reach one node at different offsets take separate places along it.
 	var place []int
 	if offsets {
 		place = make([]int, len(EF))
+	}
+	// Local offset indices and counts do not depend on node order.
+	var placeIn, places []int
+	var mixed []uint8
+	leaving := succE
+	if place != nil {
+		placeIn = make([]int, len(EF))
+		places = make([]int, n)
+		mixed = make([]uint8, n)
+		leaving = slices.Clone(succE)
+		arriving := slices.Clone(predE)
+		byOffset := func(list []int, from, to int, dx []float64) bool {
+			for k := from + 1; k < to; k++ {
+				if dx[list[k]] == dx[list[from]] {
+					continue
+				}
+				sortBy(list[from:to], func(a, b int) float64 { return dx[a] - dx[b] })
+				return true
+			}
+			return false
+		}
+		for v := 0; v < n; v++ {
+			places[v] = 1
+			if byOffset(arriving, predStart[v], predStart[v+1], ETD) {
+				for k := predStart[v] + 1; k < predStart[v+1]; k++ {
+					if ETD[arriving[k]] != ETD[arriving[k-1]] {
+						places[v]++
+					}
+					placeIn[arriving[k]] = places[v] - 1
+				}
+			}
+			if byOffset(leaving, succStart[v], succStart[v+1], EFD) {
+				mixed[v] = 1
+			}
+		}
 	}
 	size := 1
 	limit := widest
@@ -2341,33 +2515,15 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 		for r := 0; r < maxRank; r++ {
 			southLen := layerStart[r+2] - layerStart[r+1]
 			if place != nil {
-				places := 0
+				next := 0
 				for i := layerStart[r+1]; i < layerStart[r+2]; i++ {
-					from := predStart[order[i]]
-					to := predStart[order[i]+1]
-					mixed := false
-					for k := from + 1; k < to; k++ {
-						if ETD[predE[k]] != ETD[predE[from]] {
-							mixed = true
-						}
+					v := order[i]
+					for k := predStart[v]; k < predStart[v+1]; k++ {
+						place[predE[k]] = next + placeIn[predE[k]]
 					}
-					if mixed {
-						ids := slices.Clone(predE[from:to])
-						sortBy(ids, func(a, b int) float64 { return ETD[a] - ETD[b] })
-						for k := 0; k < len(ids); k++ {
-							if k > 0 && ETD[ids[k]] != ETD[ids[k-1]] {
-								places++
-							}
-							place[ids[k]] = places
-						}
-					} else {
-						for k := from; k < to; k++ {
-							place[predE[k]] = places
-						}
-					}
-					places++
+					next += places[v]
 				}
-				southLen = places
+				southLen = next
 			}
 			if southLen < 2 {
 				continue
@@ -2380,7 +2536,7 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 				t0 := t
 				for k := from; k < to; k++ {
 					if place != nil {
-						targets[t] = place[succE[k]]
+						targets[t] = place[leaving[k]]
 					} else {
 						targets[t] = pos[ET[succE[k]]]
 					}
@@ -2390,19 +2546,17 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 				if d < 2 {
 					continue
 				}
-				mixed := false
-				if place != nil {
-					for k := from + 1; k < to; k++ {
-						if EFD[succE[k]] != EFD[succE[from]] {
-							mixed = true
+				if place != nil && mixed[v] != 0 {
+					// Sort equal-offset edges by destination to avoid counting shared endpoints as crossings.
+					for a := t0 + 1; a < t; a++ {
+						item := targets[a]
+						dx := EFD[leaving[from+a-t0]]
+						b := a - 1
+						for b >= t0 && EFD[leaving[from+b-t0]] == dx && targets[b] > item {
+							targets[b+1] = targets[b]
+							b--
 						}
-					}
-				}
-				if place != nil && mixed {
-					ids := slices.Clone(succE[from:to])
-					sortBy(ids, func(a, b int) float64 { return or(EFD[a]-EFD[b], float64(place[a]-place[b])) })
-					for k := 0; k < d; k++ {
-						targets[t0+k] = place[ids[k]]
+						targets[b+1] = item
 					}
 				} else if d <= 12 {
 					for a := t0 + 1; a < t; a++ {
@@ -2441,14 +2595,109 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 		return total
 	}
 
-	best := count()
-	if best == 0 {
-		return
-	}
-	bestOrder := slices.Clone(order)
+	declared := count()
 	bary := make([]float64, n)
 	moving := make([]int, widest)
 	spare := make([]int, widest)
+
+	// Keep groups contiguous, ordering each by its mean key.
+	groups := len(groupParent)
+	depth := make([]int, groups)
+	for gr := 0; gr < groups; gr++ {
+		for p := gr; p >= 0; p = groupParent[p] {
+			depth[gr]++
+		}
+	}
+	groupSum := make([]float64, groups)
+	groupCount := make([]int, groups)
+	groupFirst := make([]int, groups)
+	arrange := func(r int, key []float64) {
+		s := layerStart[r]
+		e := layerStart[r+1]
+		for i := s; i < e; i++ {
+			for gr := GRP[order[i]]; gr >= 0; gr = groupParent[gr] {
+				groupSum[gr] = 0
+				groupCount[gr] = 0
+			}
+		}
+		for i := s; i < e; i++ {
+			v := order[i]
+			for gr := GRP[v]; gr >= 0; gr = groupParent[gr] {
+				if groupCount[gr] == 0 {
+					groupFirst[gr] = i
+				}
+				groupSum[gr] += key[v]
+				groupCount[gr]++
+			}
+		}
+		// Compare siblings in their nearest common group; group items use n + group ID.
+		value := func(item int) float64 {
+			if item >= n {
+				return groupSum[item-n] / float64(groupCount[item-n])
+			}
+			return key[item]
+		}
+		first := func(item int) int {
+			if item >= n {
+				return groupFirst[item-n]
+			}
+			return s + pos[item]
+		}
+		compare := func(a, b int) float64 {
+			ia := a
+			ib := b
+			ca := GRP[a]
+			cb := GRP[b]
+			da := 0
+			if ca >= 0 {
+				da = depth[ca]
+			}
+			db := 0
+			if cb >= 0 {
+				db = depth[cb]
+			}
+			for ; da > db; da-- {
+				ia = n + ca
+				ca = groupParent[ca]
+			}
+			for ; db > da; db-- {
+				ib = n + cb
+				cb = groupParent[cb]
+			}
+			for ca != cb {
+				ia = n + ca
+				ca = groupParent[ca]
+				ib = n + cb
+				cb = groupParent[cb]
+			}
+			return or(value(ia)-value(ib), float64(first(ia)-first(ib)))
+		}
+		// pos is read by the comparator and not changed until the row is sorted, so the row is
+		// sorted in place rather than in a copy.
+		sortBy(order[s:e], compare)
+		for i := s; i < e; i++ {
+			pos[order[i]] = i - s
+		}
+	}
+	if GRP != nil {
+		at := make([]float64, n)
+		for r := 0; r <= maxRank; r++ {
+			for i := layerStart[r]; i < layerStart[r+1]; i++ {
+				at[order[i]] = float64(i - layerStart[r])
+			}
+			arrange(r, at)
+		}
+	}
+	best := declared
+	if GRP != nil {
+		best = count()
+	}
+	if best == 0 {
+		return 0, declared
+	}
+	bestOrder := slices.Clone(order)
+	// Require improvements over both the grouped and ungrouped starting orders.
+	start := min(best, declared)
 
 	sweep := func(down bool, biasRight bool) {
 		start, list, other, otherDx := succStart, succE, ET, ETD
@@ -2459,6 +2708,9 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 			r := maxRank - step
 			if down {
 				r = step
+			}
+			if fixed[r] != 0 {
+				continue
 			}
 			s := layerStart[r]
 			e := layerStart[r+1]
@@ -2478,6 +2730,15 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 				from := start[v]
 				to := start[v+1]
 				if from == to {
+					if GRP != nil {
+						// Preserve relative position when there are no neighbours in the adjacent rank.
+						across := layerStart[r+2] - layerStart[r+1]
+						if down {
+							across = layerStart[r] - layerStart[r-1]
+						}
+						bary[v] = float64((i-s)*across) / float64(e-s)
+						continue
+					}
 					bary[v] = -1
 					continue
 				}
@@ -2492,6 +2753,10 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 				bary[v] = sum / float64(to-from)
 				moving[movable] = v
 				movable++
+			}
+			if GRP != nil {
+				arrange(r, bary)
+				continue
 			}
 			if movable < 2 {
 				continue
@@ -2535,12 +2800,101 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 		}
 	}
 
+	// Adjacent swaps can remove crossings missed by barycenter sweeps.
+	pinOf := func(v int) float64 {
+		if v < real {
+			return nodes[v].Pin
+		}
+		return 0
+	}
+	at := func(e int, up bool) float64 {
+		u := ET[e]
+		dx := ETD[e]
+		if up {
+			u = EF[e]
+			dx = EFD[e]
+		}
+		if offsets && W[u] > 0 {
+			return float64(pos[u]) + dx/W[u]
+		}
+		return float64(pos[u])
+	}
+	// Crossings between a and b, assuming a is left of b.
+	//
+	// sketch sorts the places of b's edges once and counts those below each of a's by binary
+	// search, rather than comparing every pair: the same count in O(d log d) instead of O(d²).
+	var sorted []float64
+	below := func(x float64) int {
+		lo, hi := 0, len(sorted)
+		for lo < hi {
+			mid := int(uint(lo+hi) >> 1)
+			if sorted[mid] < x {
+				lo = mid + 1
+			} else {
+				hi = mid
+			}
+		}
+		return lo
+	}
+	between := func(a, b int) int {
+		c := 0
+		if predStart[a] < predStart[a+1] && predStart[b] < predStart[b+1] {
+			sorted = sorted[:0]
+			for j := predStart[b]; j < predStart[b+1]; j++ {
+				sorted = append(sorted, at(predE[j], true))
+			}
+			slices.Sort(sorted)
+			for k := predStart[a]; k < predStart[a+1]; k++ {
+				c += below(at(predE[k], true))
+			}
+		}
+		if succStart[a] < succStart[a+1] && succStart[b] < succStart[b+1] {
+			sorted = sorted[:0]
+			for j := succStart[b]; j < succStart[b+1]; j++ {
+				sorted = append(sorted, at(succE[j], false))
+			}
+			slices.Sort(sorted)
+			for k := succStart[a]; k < succStart[a+1]; k++ {
+				c += below(at(succE[k], false))
+			}
+		}
+		return c
+	}
+	transpose := func() {
+		for pass := 0; pass < 8; pass++ {
+			improved := false
+			for r := 0; r <= maxRank; r++ {
+				if fixed[r] != 0 {
+					continue
+				}
+				s := layerStart[r]
+				for i := s; i+1 < layerStart[r+1]; i++ {
+					a := order[i]
+					b := order[i+1]
+					if pinOf(a) != pinOf(b) || (GRP != nil && GRP[a] != GRP[b]) {
+						continue
+					}
+					if between(b, a) >= between(a, b) {
+						continue
+					}
+					order[i] = b
+					order[i+1] = a
+					pos[b] = i - s
+					pos[a] = i + 1 - s
+					improved = true
+				}
+			}
+			if !improved {
+				break
+			}
+		}
+	}
+
 	// The sweeps are run twice from the same start, going down first and going up first. They
 	// often end with as few crossings either way but a different order, and then the one that
 	// keeps more of the nodes in the order they were given is the less surprising.
 	// Only for graphs small enough to be read node by node: a second run costs as much as the first.
 	initial := slices.Clone(order)
-	start := best
 	small := n <= 600
 	chosen := bestOrder
 	chosenOut := math.MaxInt
@@ -2568,6 +2922,15 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 			}
 		}
 		copy(order, foundOrder)
+		if small && found > 0 {
+			settlePositions()
+			transpose()
+			c := count()
+			if c < found {
+				found = c
+				copy(foundOrder, order)
+			}
+		}
 		out := 0
 		if small {
 			out = outOfOrder()
@@ -2581,18 +2944,22 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 	copy(order, chosen)
 	settlePositions()
 	copy(bestOrder, chosen)
+	// The retained grouped order may exceed the ungrouped threshold; recount it.
+	if GRP != nil {
+		best = count()
+	}
 
 	// A drawing and its mirror image cross as often too. Of those two, likewise.
 	if !small {
-		return
+		return best, declared
 	}
 	for i := 0; i < real; i++ {
 		if nodes[i].Pin != 0 {
-			return
+			return best, declared
 		}
 	}
-	if chosenOut == 0 {
-		return
+	if chosenOut == 0 || fixed[0] != 0 || fixed[maxRank] != 0 {
+		return best, declared
 	}
 	for r := 0; r <= maxRank; r++ {
 		slices.Reverse(order[layerStart[r]:layerStart[r+1]])
@@ -2601,6 +2968,7 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 	if count() > best || outOfOrder() >= chosenOut {
 		copy(order, bestOrder)
 	}
+	return best, declared
 }
 
 // Half the room a node, bend or port takes across the flow, with its share of the gap beside it.

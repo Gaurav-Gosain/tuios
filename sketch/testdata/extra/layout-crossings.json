@@ -1,0 +1,32 @@
+[
+ {
+  "src": "flowchart TD\n  subgraph A [Ingest]\n    a1 --> a2 --> a3 --> a4\n  end\n  subgraph B [Enrich]\n    b1 --> b2 --> b3 --> b4\n  end\n  subgraph S [Store]\n    db[(Database)]\n  end\n  a1 & a2 & a3 & a4 --> db\n  b1 & b2 & b3 & b4 --> db\n"
+ },
+ {
+  "src": "flowchart LR\n  subgraph A [Ingest]\n    a1 --> a2 --> a3 --> a4\n  end\n  subgraph B [Enrich]\n    b1 --> b2 --> b3 --> b4\n  end\n  subgraph S [Store]\n    db[(Database)]\n  end\n  a1 & a2 & a3 & a4 --> db\n  b1 & b2 & b3 & b4 --> db\n"
+ },
+ {
+  "src": "%%{init: {\"flowchart\": {\"curve\": \"step\"}}}%%\nflowchart TD\n  subgraph A [Ingest]\n    a1 --> a2 --> a3 --> a4\n  end\n  subgraph B [Enrich]\n    b1 --> b2 --> b3 --> b4\n  end\n  subgraph S [Store]\n    db[(Database)]\n  end\n  a1 & a2 & a3 & a4 --> db\n  b1 & b2 & b3 & b4 --> db\n"
+ },
+ {
+  "src": "%%{init: {\"flowchart\": {\"curve\": \"linear\"}}}%%\nflowchart TD\n  subgraph A [Ingest]\n    a1 --> a2 --> a3 --> a4\n  end\n  subgraph B [Enrich]\n    b1 --> b2 --> b3 --> b4\n  end\n  subgraph S [Store]\n    db[(Database)]\n  end\n  a1 & a2 & a3 & a4 --> db\n  b1 & b2 & b3 & b4 --> db\n"
+ },
+ {
+  "src": "flowchart LR\n  subgraph one\n    a0 & a1 & a2 & a3 & a4\n  end\n  subgraph two\n    b0 & b1 & b2 & b3 & b4\n  end\n  subgraph three\n    c0 & c1 & c2 & c3 & c4\n  end\n  a0 --> b4\n  a1 --> b2\n  a2 --> b0\n  a3 --> b3\n  a4 --> b1\n  b0 --> c1\n  b1 --> c3\n  b2 --> c0\n  b3 --> c4\n  b4 --> c2\n"
+ },
+ {
+  "src": "flowchart BT\n  n0\n  n1[Load]\n  n2{x}\n  n3[Load]\n  n4[Save]\n  n5[Retry<br>later]\n  n6\n  n7(db)\n  n8{Retry<br>later}\n  n0 --> n4\n  n7 --> n2\n  n8 --o n2\n  n7 --> n3\n  n7 -->|Retry<br>later| n0\n  n1 <--> n2\n  n6 <--> n6\n  n5 ==>|Load| n3\n  n8 --> n4\n  n0 --o|a| n7\n  n4 <--> n7\n  n0 --> n5\n  n6 --> n0\n  n0 --o n3\n  n2 ---|Load| n7\n  n1 --> n1\n  n2 --> n2\n  n6 -->|Check the long name here| n7\n  n7 -->|x| n7\n  n7 <-->|a| n1\n  n2 --- n7\n  n8 --> n4\n"
+ },
+ {
+  "src": "stateDiagram-v2\n  state G0 {\n    s0 --> s3\n    s5 --> s4\n    s5 --> [*]\n  }\n  state G1 {\n  }\n  s5 --> s1\n  s4 --> G1\n  G1 --> s4\n"
+ },
+ {
+  "src": "classDiagram\n  namespace Core {\n    class Order\n    class Item\n  }\n  namespace Billing {\n    class Invoice\n    class Payment\n  }\n  Order --> Payment\n  Item --> Invoice\n  Order --> Invoice\n  Item --> Payment\n  Invoice --> Payment\n"
+ },
+ {
+  "src": "usecase-beta\nactor Shopper\nactor Clerk\nsystemBoundary Shop\n  Browse(\"Browse\")\n  Buy(\"Buy\")\nend\nsystemBoundary Back\n  Ship(\"Ship\")\n  Refund(\"Refund\")\nend\nShopper --> Ship\nShopper --> Browse\nClerk --> Buy\nClerk --> Refund\nShopper --> Refund\n"
+ },
+ {
+  "src": "flowchart TB\n  subgraph outer\n    subgraph left\n      l1 --> l2\n    end\n    subgraph right\n      r1 --> r2\n    end\n  end\n  start --> r1\n  start --> l1\n  l2 --> finish\n  r2 --> finish\n  r1 --> l2\n"
+ }
+]
