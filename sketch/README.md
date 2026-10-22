@@ -78,6 +78,23 @@ cover, such as Chinese and Japanese labels that wrap. They match too.
 The cases of `math-typeset.json` are drawn with a fixed math resolver, the
 same one in `gen.mjs` and in `golden_test.go`.
 
+## Command
+
+`sketch` draws the diagrams of a file from the command line. It has no other
+part of tuios in it.
+
+```sh
+go install tuios.dev/sketch/cmd/sketch@latest
+
+sketch flow.mmd                 # a text drawing in the terminal
+sketch README.md                # each mermaid block of a Markdown file
+sketch flow.mmd -o flow.png     # a picture: .svg or .png
+cat flow.mmd | sketch - > flow.svg
+sketch flow.mmd -f kitty -theme nord
+```
+
+`sketch -h` lists the flags. `sketch -themes` lists the themes.
+
 ## Use
 
 ```go
