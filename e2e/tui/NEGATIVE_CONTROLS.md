@@ -8137,3 +8137,18 @@ Run on 2026-10-22, one change each, one run each:
 The last control passed at first: the test's token caller also carried
 `TUIOS_SOCKET`, which places it as automation by itself. The case with the
 socket variable cut was added, and the control then failed it.
+
+### Keys a tape presses (re-review of #1006)
+
+`TestNativePluginApproval` now runs `tuios tape exec` with
+`Press a l l o w Enter`, and `tuios send-keys` with the same keys, while
+the dialog is open. Neither may allow the plugin, and the dialog must stay
+open. The other ways keys reach the input handler without the person:
+`send-keys` (RemoteKeyMsg, held by `ProcessingRemoteKeys`) and a tape's
+`Press` (PressKeys, held by `pressingTapeKeys`). A tape's `Type` and
+`send-text` write to a pane, and `Action` runs an action by name, which the
+dialog does not take.
+
+| Claim | Control | Test that failed | Result |
+|---|---|---|---|
+| Keys a tape presses do not answer the dialog | the `pressingTapeKeys` check cut | `TestNativePluginApproval` ("a tape's Press of allow and Enter let the plugin run") | **caught** |
