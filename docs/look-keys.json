@@ -285,7 +285,7 @@
     {
       "path": "appearance.popup_dim",
       "type": "int",
-      "description": "How much the screen behind a focused plain popup is darkened, as a percent. 0 is off; popup --dim overrides it. TML popups inherit modal_dim. Scratch panes are unchanged.",
+      "description": "How much the screen behind a focused plain popup is darkened, as a percent. 0 is off; popup --dim overrides it.",
       "default": "0",
       "max": 90
     },

@@ -2426,9 +2426,8 @@ none.
 
 Params: `command` (required argv), `session` (optional), `width` and `height`
 (optional, cells such as `"60"` or a share of the pane region such as `"60%"`,
-default `"80%"` and `"60%"`), `name`, `cwd` and `workspace` (all optional),
-`dim` (optional integer, `0` to `90`), `wait`, `capture_stdout` and `timeout`
-(optional, below), and `scratch` and
+default `"80%"` and `"60%"`), `name`, `cwd`, `workspace` and `dim` (all optional),
+`wait`, `capture_stdout` and `timeout` (optional, below), and `scratch` and
 `scratch_name` (optional). `scratch` starts a scratch group, the layout a key
 shows and hides, with its first pane. The pane is not a popup: it is a tiled
 window on the group's own workspace, numbered from 1000 up, which is never
@@ -2442,21 +2441,9 @@ no group is on fails. `list-windows` marks each pane of a group with
 `"scratch": true` and its `"scratch_name"`. Every group survives a daemon
 restart, hidden, each pane with a new shell and its saved history.
 
-`dim` overrides `appearance.popup_dim` for this popup. Omission or null follows
-the client's current config (default `0`, off); explicit `0` disables dimming.
-The daemon owns the override and retains it across client pushes. Window state
-carries it as `popup_dim`, a JSON integer when present, omitted when inherited.
-The gob wire uses a pointer to a percentage struct so explicit zero survives
-its pointer flattening. Each client adopts the same override on sync and
-reattach. Saved state carries the metadata too; ordinary popups are still
-skipped on resurrection. Scratch panes do not use this dim.
-
-Only the focused, non-minimized popup on the current workspace dims the
-screen. One scrim goes behind it, including the dock and rails, and leaves
-the popup lit. Focusing another pane removes it. Without an explicit override,
-a TML popup uses `appearance.modal_dim` and a plain popup uses
-`appearance.popup_dim`. Built-in modal panels keep using `modal_dim`; neither
-the popup nor the screen is dimmed twice.
+`dim` is `0` to `90`. Omitted, it inherits `appearance.popup_dim`
+(`appearance.modal_dim` for a TML popup); explicit `0` turns it off. Dimming
+applies only while the popup has focus.
 
 The popup's command starts at the size the popup has on the screen: the size
 the caller asked for, in the session's pane region.

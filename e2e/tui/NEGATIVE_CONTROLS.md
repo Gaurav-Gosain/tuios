@@ -8406,31 +8406,25 @@ The `ctrl+alt+4` row passes on both builds; it is the positive control. `TestSen
 | The positive half | this branch | none: the outside call and the second pane's call are refused with `session_not_found` and the hook sets the pane to working | **guard** |
 ## Focused popup dimming (#979, after #976)
 
-`TestPopupDimsTheScreenBehind` opens the same popup with the option off, at
-30%, with `--dim 60`, and with `--dim 0`. It reads pane, dock and rail cells
-and checks that the popup's text and ground stay unchanged. It then focuses
-the pane behind the popup and the popup again. Dark and light grounds run at
-16, 256 and truecolor. Every off step has the same dimmed fixture beside it.
-Run on 2026-10-22 with Go 1.26.10, based on 3fe004a5.
+## Focused popup dimming (#979)
 
-Each cut below is a Go build overlay at the call site, leaving the shade
-function intact. The dark/truecolor case fails on each cut after its
-`default-off` step passes; all six cases pass with the wiring in place.
+`TestPopupDimsTheScreenBehind` covers option on/off, overrides, focus away/back,
+and pane/dock/rail dimming with the popup lit, at six theme/depth combinations.
+On 2026-10-22 (Go 1.26.10), all pass. Each dark/truecolor call-site control
+passed `default-off`, then failed: cutting both popup gates or the
+`scrimmedChrome` gate in `composeLayersIn` gave `option-30: pane, rail or dock
+cells did not reach dim=true`; omitting `PopupDim: p.Dim` at creation gave
+`--dim 60 kept the option's 30 percent`; retaining the target after focus moved
+away gave `focus-away: pane, rail or dock cells did not reach dim=false`.
 
-| Wiring cut | Observed failure |
-| --- | --- |
-| Both popup gates in `composeLayersIn` disabled | `option-30: pane, rail or dock cells did not reach dim=true` |
-| `PopupDim: p.Dim` left out of the daemon's popup creation | `--dim 60 kept the option's 30 percent` |
-| The post-draw `scrimmedChrome` call gate disabled | `option-30: pane, rail or dock cells did not reach dim=true` |
-| Target selection keeps a popup after focus moves to the pane behind it | `focus-away: pane, rail or dock cells did not reach dim=false` |
-
-`TestPopupScrimNeedsTheCanvas` also checks a lone fullscreen popup, with no
-rail: dim off takes the fast path, dim on needs the canvas for the dock.
-Removing the `popupScrimTarget` guard in `fullscreenFastWindow` fails with
-`the dimmed fullscreen popup skipped the dock's scrim`; its dim-off half
-still passes. The target and wire tests hold TML inheritance, explicit zero
-through gob and JSON, old-client retention, and the state fingerprint.
+Cutting the fullscreen guard fails `TestPopupScrimNeedsTheCanvas` in
+`internal/app/popup_test.go`: `the dimmed fullscreen popup skipped the dock's
+scrim`, after dim-off passes. Cutting retention or fingerprint wiring fails
+`TestPopupDimWireAndRetention` in `internal/session/popup_test.go` at explicit
+zero or the shared fingerprint, respectively. Dropping the TML branch in
+`popupScrimTarget` fails `TestPopupScrimPercent/tml` with `dim = 40, want 30`.
+All pass with the wiring restored.
 
 Repeat from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test
 -count=1 -run '^TestPopupDimsTheScreenBehind$' -v .`. `TUIOS_E2E_FRAMES` saves
-plain and styled text and a PNG for each option, override and focus step.
+plain/styled text and PNGs for each option, override and focus step.

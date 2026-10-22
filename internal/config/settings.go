@@ -92,7 +92,8 @@ type Settings struct {
 	// ModalDim is the percent the screen behind a modal overlay is darkened
 	// by. Zero turns it off. Set via appearance.modal_dim.
 	ModalDim int
-	// PopupDim dims behind focused plain popups unless their caller overrides it.
+	// PopupDim is the percent the screen behind a focused plain popup is darkened
+	// by. Zero turns it off. Set via appearance.popup_dim.
 	PopupDim int
 
 	// AlwaysConfirmQuit controls whether the quit confirmation dialog is shown

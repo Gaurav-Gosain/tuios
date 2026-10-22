@@ -1570,12 +1570,8 @@ Neither size flag has a short form: `-w` selects a window everywhere else, and
 
 A size larger than the pane region is cut down to the region.
 
-Dimming reaches the full screen behind the popup, including the dock and rail.
-Dimming applies only while the popup has focus; focusing a pane behind it
-restores the screen. The popup stays lit. A TML popup inherits
-`appearance.modal_dim` instead, unless it has an explicit override. Built-in
-modal panels keep using `modal_dim`. The scrim never stacks. Scratch panes
-are unchanged.
+Dimming applies only while the popup has focus and leaves the popup lit.
+A TML popup inherits `appearance.modal_dim` unless overridden.
 
 **Lifetime:**
 
@@ -1950,7 +1946,7 @@ name alone. Some of them:
 | `dim_foreground` | `true`, `false` | Let `dim_unfocused` dim the text of a pane you are not in as well as its background (default `true`). `false` keeps the text at full strength and dims only the background |
 | `dim_multifocus` | `true`, `false` | Dim the panes in the multifocus set like other panes you are not in (default `false`) |
 | `modal_dim` | `0` to `90` | Percent the screen behind a modal panel is dimmed (default `30`, `0` is off). On a light ground the screen fades toward its own background instead of darkening |
-| `popup_dim` | `0` to `90` | Percent the screen behind a focused plain popup is dimmed (default `0`, off). `popup --dim` overrides it, including explicit `0`. Uses the same light-ground and 16-color behavior as `modal_dim` |
+| `popup_dim` | `0` to `90` | Percent the screen behind a focused plain popup is dimmed (default `0`, off). `popup --dim` overrides it |
 | `animations_enabled` | `true`, `false` | Deprecated on/off switch: `false` sets `motion` to `none`, `true` to `full` |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn. On the left, the pill order is close, zoom, minimize, so close sits at the outer corner |

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -140,5 +141,53 @@ func TestAPopupIsNotSizedByPercent(t *testing.T) {
 	if popup.X != before.x || popup.Y != before.y || popup.Width != before.w || popup.Height != before.h {
 		t.Fatalf("percent resize moved the focused popup: box (%d,%d %dx%d) -> (%d,%d %dx%d)",
 			before.x, before.y, before.w, before.h, popup.X, popup.Y, popup.Width, popup.Height)
+	}
+}
+
+// A plain popup follows popup_dim and a TML popup modal_dim, and an explicit
+// override wins over both, zero included.
+func TestPopupScrimPercent(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		tml      bool
+		override *config.PopupDim
+		want     int
+	}{
+		{"plain", false, nil, 40},
+		{"tml", true, nil, 30},
+		{"override", true, &config.PopupDim{Percent: 60}, 60},
+		{"explicit zero", false, &config.PopupDim{}, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m, w := popupOS(t, "50%", "50%")
+			m.Settings.PopupDim, m.Settings.ModalDim = 40, 30
+			m.DaemonClient = &session.TUIClient{}
+			if c.tml {
+				w.Kind = session.WindowKindTML
+			}
+			w.PopupDim = c.override
+			if _, dim := m.popupScrimTarget(); dim != c.want {
+				t.Fatalf("dim = %d, want %d", dim, c.want)
+			}
+		})
+	}
+}
+
+// A lone popup can fill the pane region. Its dock still needs the canvas
+// scrim, while the same popup with dim off can take the fullscreen shortcut.
+func TestPopupScrimNeedsTheCanvas(t *testing.T) {
+	m := keystrokeOS(t, 1, 120, 40)
+	m.Settings.SidebarEnabled = false
+	m.Settings.DockbarPosition = "bottom"
+	w := m.Windows[0]
+	w.IsPopup, w.IsFloating = true, true
+	w.X, w.Y, w.Width, w.Height = 0, m.GetTopMargin(), m.GetRenderWidth(), m.GetUsableHeight()
+	m.Settings.PopupDim = 0
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Fatal("the undimmed fullscreen popup did not take the fast path")
+	}
+	m.Settings.PopupDim = 30
+	if _, ok := m.fullscreenFastWindow(); ok {
+		t.Fatal("the dimmed fullscreen popup skipped the dock's scrim")
 	}
 }

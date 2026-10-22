@@ -87,9 +87,10 @@ const (
 	// screen behind is gone rather than dimmed.
 	ModalDimMax = 90
 
-	// PopupDimDefault leaves the background unchanged unless requested.
+	// PopupDimDefault is how far the screen behind a popup is darkened when
+	// nothing sets it. Zero leaves the screen unchanged.
 	PopupDimDefault = 0
-	// PopupDimMax keeps the background readable, like ModalDimMax.
+	// PopupDimMax caps it for the same reason as ModalDimMax.
 	PopupDimMax = 90
 )
 

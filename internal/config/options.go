@@ -310,7 +310,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.popup_dim", Type: OptionInt, Section: "appearance",
-		Description: "How much the screen behind a focused plain popup is darkened, as a percent. 0 is off; popup --dim overrides it. TML popups inherit modal_dim. Scratch panes are unchanged.",
+		Description: "How much the screen behind a focused plain popup is darkened, as a percent. 0 is off; popup --dim overrides it.",
 		Default:     strconv.Itoa(PopupDimDefault), Min: 0, Max: PopupDimMax,
 		Percent: true,
 	},

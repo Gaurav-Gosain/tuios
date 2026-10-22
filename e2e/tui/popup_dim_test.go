@@ -7,10 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The option, flag and explicit zero must reach the real client through gob.
-// The scrim can miss the dock or rail, shade the popup, use the wrong percent,
-// or stay on the pane that has taken focus. Each off step is the positive half
-// of the dim checks. The markers are assembled by the shell, not its echo.
+// The option and overrides must survive gob; pane, dock and rail dim while
+// the popup stays lit. Focusing away and back must remove and restore the dim.
 func TestPopupDimsTheScreenBehind(t *testing.T) {
 	for _, look := range chromeLooks {
 		for _, depth := range chromeDepths {
@@ -93,10 +91,7 @@ format = "DIMDOCK"
 		}
 		for x := range len("POPUPLITx") {
 			c := s.Cell(col+x, row)
-			if own == nil {
-				continue
-			}
-			if c != own[x] {
+			if own != nil && c != own[x] {
 				t.Fatalf("%s: popup cell %d changed: %+v then %+v", label, x, own[x], c)
 			}
 		}

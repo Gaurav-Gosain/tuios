@@ -358,8 +358,8 @@ type AppearanceConfig struct {
 	PreferredShell           string                  `toml:"preferred_shell"`              // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled        *bool                   `toml:"animations_enabled,omitempty"` // Deprecated: folded into motion on load (false is none)
 	Motion                   string                  `toml:"motion"`                       // How much moves: none, basic (window slides, copy sweep), full (also fades and the working shimmer) (default: full)
-	PopupDim                 *int                    `toml:"popup_dim"`                    // Percent the screen behind a popup is darkened; 0 is off (default: 0)
 	ModalDim                 *int                    `toml:"modal_dim"`                    // Percent the screen behind a modal overlay is darkened; 0 is off (default: 30)
+	PopupDim                 *int                    `toml:"popup_dim"`                    // Percent the screen behind a popup is darkened; 0 is off (default: 0)
 	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
