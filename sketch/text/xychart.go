@@ -132,9 +132,8 @@ func barParts(vals []float64, base float64) (up, down []float64) {
 	return up, down
 }
 
-// The eighth blocks plot draws, and the blocks that hang down or stand to the
-// left that a bar on the other side of the base takes instead.
-var eighthUp = map[string]int{"▁": 1, "▂": 2, "▃": 3, "▄": 4, "▅": 5, "▆": 6, "▇": 7, "█": 8}
+// The eighth blocks plot draws across, and the blocks that stand to the left
+// that a bar on the other side of the base takes instead.
 var eighthRight = map[string]int{"▏": 1, "▎": 2, "▍": 3, "▌": 4, "▋": 5, "▊": 6, "▉": 7, "█": 8}
 
 // barGlyph reports whether r is a block a bar is drawn with.
