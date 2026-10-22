@@ -8111,3 +8111,29 @@ Run on 2026-10-22, one change each, one run each:
 The title-wrap control alone, with `ShownName` still cutting the name, was
 not caught: the cut to 64 characters already keeps the dialog on screen.
 
+
+### After the second review of #1006
+
+New test `TestPluginStopHoldsItsProcesses`: a plugin starts two children
+with its token cut from their environment. Each connects, then one calls
+`setpgid` and the other `setsid`. After a disable, the `setpgid` child must
+be gone, and the `setsid` child's open connection must still be refused as
+the plugin. New cases: `ask-agent` and `run` at panes that come to a prompt
+during the paste, Up then Enter in the dialog, keys sent through the client,
+and a token caller with no `TUIOS_SOCKET`.
+
+Run on 2026-10-22, one change each, one run each:
+
+| Claim | Control | Test that failed | Result |
+|---|---|---|---|
+| A connection the kernel placed in a plugin stays the plugin's | the bind at accept in `pinPeer` cut | `TestPluginStopHoldsItsProcesses` ("a connection of the stopped plugin was not held to it") | **caught** |
+| Stopping a plugin kills its whole session | `procGroup.kill` kills the group only | `TestPluginStopHoldsItsProcesses` ("the child that called setpgid outlived the disable") | **caught** |
+| Deny takes a second Enter or click | Deny answers at once | `TestPluginApprovalTakesOnlyTheTypedWord` ("one click on Deny answered") | **caught** |
+| Keys sent through the client do not reach the dialog | the `ProcessingRemoteKeys` check cut | `TestPluginApprovalTakesOnlyTheTypedWord` ("keys sent through the client allowed the plugin") | **caught** |
+| `ask-agent` checks the target before its submit key | the ask-agent submit guard returns nil | `TestNativePluginApproval` ("askrace exited 0"; "the submit key of ask-agent answered the prompt") | **caught** |
+| `run` checks the target before its submit key | the run submit guard returns nil | `TestNativePluginApproval` ("the submit key of run answered the prompt") | **caught** |
+| A plugin's connection is never the person | `pluginBound` cut from `mayActAsHuman` | `TestPluginTokenHoldsTheCaller` ("disable over the herdr socket with the token and no TUIOS_SOCKET: <nil>") | **caught** |
+
+The last control passed at first: the test's token caller also carried
+`TUIOS_SOCKET`, which places it as automation by itself. The case with the
+socket variable cut was added, and the control then failed it.
