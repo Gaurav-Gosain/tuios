@@ -1,0 +1,4 @@
+flowchart LR
+  push[git push] --> ci{CI passes?}
+  ci -->|yes| tag[Tag a release] --> ship([Ship it])
+  ci -->|no| fix[Fix the build]

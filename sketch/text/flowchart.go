@@ -18,8 +18,12 @@ func (r rect) union(o rect) rect {
 type point struct{ x, y int }
 
 // Shapes drawn with rounded corners, and shapes drawn as a diamond.
-var roundShapes = map[string]bool{"rounded": true, "stadium": true, "circle": true, "dbl-circ": true, "ellipse": true, "cyl": true, "lin-cyl": true, "h-cyl": true, "delay": true, "cloud": true}
 var pointShapes = map[string]bool{"diam": true, "hex": true}
+
+// slantShapes have slanted sides, and need a cell more on each side for
+// each row past the first. cylShapes have a rim under their top edge.
+var slantShapes = map[string]bool{"lean-r": true, "lean-l": true, "trap-b": true, "trap-t": true}
+var cylShapes = map[string]bool{"cyl": true, "lin-cyl": true}
 var dotShapes = map[string]bool{"sm-circ": true, "f-circ": true, "fr-circ": true, "cross-circ": true}
 
 // graphKind is what a diagram type changes in the drawing of a graph of
@@ -72,14 +76,12 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 		if kind.size != nil && (dotShapes[n.Shape] || n.Shape == "fork") {
 			continue
 		}
-		need := float64(widest(n.Label) + 4)
-		if pointShapes[n.Shape] {
-			need += 2
-		}
+		dw, dh := shapeRoom(n.Shape, len(n.Label), len(n.Label)+2)
+		need := float64(widest(n.Label) + 4 + dw)
 		if n.Group {
 			need = float64(widest(n.Label) + 6)
 		}
-		tall := float64(len(n.Label) + 2)
+		tall := float64(len(n.Label) + 2 + dh)
 		if w, h, ok := kind.sizeOf(n); ok {
 			need, tall = float64(w), float64(h)
 		}
@@ -190,12 +192,11 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		if kind.tight {
 			w = widest(n.Label) + 4
 		}
-		if pointShapes[n.Shape] {
-			w = max(w, widest(n.Label)+6)
-		}
 		// As tall as the text needs, or as the ends on a side need: a taller
-		// box only spreads the drawing.
-		h := len(n.Label) + 2
+		// box only spreads the drawing. A shape takes the room its outline
+		// needs past that: see shapeRoom.
+		_, dh := shapeRoom(n.Shape, len(n.Label), len(n.Label)+2)
+		h := len(n.Label) + 2 + dh
 		sized := false
 		if kw, kh, ok := kind.sizeOf(&l.Nodes[i]); ok {
 			w, h, sized = max(col(n.W), kw), kh, true
@@ -207,6 +208,14 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			if list := ends[[2]int{i, sd}]; span(list, false) > len(list) {
 				w = max(w, span(list, false)+2)
 			}
+		}
+		if !sized {
+			if h%2 == 0 && (pointShapes[n.Shape] || n.Shape == "odd") {
+				// A point is on one middle row.
+				h++
+			}
+			dw, _ := shapeRoom(n.Shape, len(n.Label), h)
+			w = max(w, widest(n.Label)+4+dw)
 		}
 		if !sized && (dotShapes[n.Shape] || n.Shape == "fork") {
 			w, h = 3, 1
@@ -287,6 +296,11 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		if sd == 1 || sd == 3 {
 			lo, hi = b.y0+1, b.y1-1
 			scale = row
+			if pointShapes[l.Nodes[node].Shape] {
+				// Edges meet a hexagon or a decision at its point.
+				lo = (b.y0 + b.y1) / 2
+				hi = lo
+			}
 		}
 		prev := lo - 1
 		gap := 1
@@ -654,33 +668,14 @@ func drawNode(c *canvas, b rect, shape string, label []string) {
 		return
 	case shape == "text":
 	default:
-		tl, tr, bl, br := '┌', '┐', '└', '┘'
-		sideL, sideR := '│', '│'
-		if roundShapes[shape] {
-			tl, tr, bl, br = '╭', '╮', '╰', '╯'
-		}
-		if pointShapes[shape] {
-			tl, tr, bl, br = '╱', '╲', '╲', '╱'
-		}
-		for x := b.x0 + 1; x < b.x1; x++ {
-			c.put(x, b.y0, '─', roleBox)
-			c.put(x, b.y1, '─', roleBox)
-		}
-		for y := b.y0 + 1; y < b.y1; y++ {
-			l, r := sideL, sideR
-			if pointShapes[shape] && y == (b.y0+b.y1)/2 {
-				l, r = '<', '>'
-			}
-			c.put(b.x0, y, l, roleBox)
-			c.put(b.x1, y, r, roleBox)
-		}
-		c.put(b.x0, b.y0, tl, roleBox)
-		c.put(b.x1, b.y0, tr, roleBox)
-		c.put(b.x0, b.y1, bl, roleBox)
-		c.put(b.x1, b.y1, br, roleBox)
+		outline(c, b, shape)
 	}
-	h := b.y1 - b.y0 + 1
-	top := b.y0 + (h-len(label))/2
+	y0, h := b.y0, b.y1-b.y0+1
+	if cylShapes[shape] && h >= 4 {
+		// The text goes under the rim.
+		y0, h = b.y0+1, h-1
+	}
+	top := y0 + (h-len(label))/2
 	for k, line := range label {
 		w := width(line)
 		x := b.x0 + (b.x1-b.x0+1-w)/2

@@ -18,9 +18,11 @@ func TestAgentflowText(t *testing.T) {
  └───────────┼──────────┘
              │
              ▼
-       ╱───────────╲
-       <   Done?   >
-       ╲───────────╱
+        ╱▔▔▔▔▔▔▔▔▔╲
+       ╱           ╲
+       ▏   Done?   ▕
+       ╲           ╱
+        ╲▁▁▁▁▁▁▁▁▁╱
 `)
 	fitsCorpus(t, "agentflow", 80)
 }

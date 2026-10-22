@@ -48,12 +48,10 @@ func drawSwimlane(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error) 
 		}
 		// The box drawFlowchart draws, and the room a frame keeps around it:
 		// two cells each side, two rows above and one below.
-		w := float64(widest(n.Label) + 4)
-		if pointShapes[n.Shape] {
-			w += 2
-		}
+		dw, dh := shapeRoom(n.Shape, len(n.Label), len(n.Label)+2)
+		w := float64(widest(n.Label) + 4 + dw)
 		w = math.Max(w/sx, n.W) / 2
-		h := math.Max(float64(len(n.Label)+2)/sy, n.H) / 2
+		h := math.Max(float64(len(n.Label)+2+dh)/sy, n.H) / 2
 		grow(n.X-w-2/sx, n.Y-h-2/sy, n.X+w+2/sx, n.Y+h+1/sy)
 	}
 	moved := *l
