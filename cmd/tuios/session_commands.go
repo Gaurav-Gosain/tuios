@@ -540,11 +540,12 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// that fills it is what wedges the loop. finish runs once the cleanup
 	// below is done, so a Ctrl+C during it cannot leave the terminal raw. See
 	// armSignalQuit.
-	finish := armSignalQuit(p)
+	runReturned, finish := armSignalQuit(p)
 
 	// See withoutHardTabs: tmux drops the background under a tab.
 	restoreTabs := withoutHardTabs()
 	finalModel, err := p.Run()
+	runReturned()
 	restoreTabs()
 
 	reason := app.ExitNormal

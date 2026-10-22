@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -55,12 +56,17 @@ func signalExitCode(sig os.Signal) int {
 // same policy, and a forced exit restores the terminal first.
 //
 // Call it before Program.Run: it records the terminal's state before Bubble
-// Tea puts it in raw mode, which is what a forced exit restores.
-func armSignalQuit(p *tea.Program) (finish func()) {
+// Tea puts it in raw mode, which is what a forced exit restores. Call
+// runReturned as soon as Program.Run returns: Bubble Tea's exit has then popped
+// the kitty keyboard flags and left the alternate screen, so a forced exit
+// during the cleanup must not do either again.
+func armSignalQuit(p *tea.Program) (runReturned, finish func()) {
 	restore := captureTerminalState()
-	return armSignalQuitWith(p, signalQuitGrace, func(code int) {
-		forceExit(restore, code)
+	var returned atomic.Bool
+	finish = armSignalQuitWith(p, signalQuitGrace, func(code int) {
+		forceExit(restore, returned.Load(), code)
 	})
+	return func() { returned.Store(true) }, finish
 }
 
 // armSignalQuitWith is armSignalQuit with the grace and the exit passed in, so
@@ -162,14 +168,30 @@ func captureTerminalState() (restore func()) {
 // modifyOtherKeys and the alternate screen.
 const forcedExitPrefix = "\x1b[<1u\x1b[>4m\x1b[?1049l"
 
-func forceExit(restoreTerminal func(), code int) {
+// forcedExitAfterRunPrefix is the prefix once Program.Run has returned. Bubble
+// Tea's exit already popped the flags and left the alternate screen, so a
+// second pop would take the host's own entry off the main screen's stack.
+// modifyOtherKeys has no stack, and resetting it again is harmless.
+const forcedExitAfterRunPrefix = "\x1b[>4m"
+
+// forcedExitReset is what a forced exit writes, led by CAN. runReturned says
+// whether Bubble Tea's own exit has run.
+func forcedExitReset(runReturned bool) string {
+	prefix := forcedExitPrefix
+	if runReturned {
+		prefix = forcedExitAfterRunPrefix
+	}
+	return "\x18" + prefix + terminal.ResetSequence
+}
+
+func forceExit(restoreTerminal func(), runReturned bool, code int) {
 	restoreTerminal()
 	wrote := make(chan struct{})
 	go func() {
-		// Bubble Tea's own exit never ran, so this also leaves the alternate
+		// Unless Bubble Tea's own exit ran, this also leaves the alternate
 		// screen and turns off the keyboard modes it set. ResetSequence
 		// carries no RIS, which would do both by clearing everything.
-		_, _ = os.Stdout.WriteString("\x18" + forcedExitPrefix + terminal.ResetSequence)
+		_, _ = os.Stdout.WriteString(forcedExitReset(runReturned))
 		close(wrote)
 	}()
 	select {

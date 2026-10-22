@@ -84,9 +84,10 @@ func runTapeInteractive(tapeFile string) error {
 
 	// A quit the event loop cannot carry out still has to end the process;
 	// finish runs once the cleanup below is done. See armSignalQuit.
-	finish := armSignalQuit(p)
+	runReturned, finish := armSignalQuit(p)
 
 	finalModel, err := p.Run()
+	runReturned()
 
 	failure := ""
 	if finalOS, ok := finalModel.(*app.OS); ok {
