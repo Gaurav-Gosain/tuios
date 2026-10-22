@@ -357,16 +357,30 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		if !s.Bar {
 			continue
 		}
-		role := seriesRole(si)
+		role := plot.SeriesRole(si)
 		up, down := barParts(slotValues(g, s), g.Base)
+		// tuios.dev/plot's columns, a column a slot, measured from the middle
+		// of the base row: up from it, and down from it, drawn up and turned.
+		upG := plot.Bar{Values: up, Min: 0, Max: 1, Role: role, Half: true}.Draw(g.Slots, xyRows-rb+1, plot.Braille)
+		var downG *plot.Grid
+		if rb > 0 {
+			downG = plot.Bar{Values: down, Min: 0, Max: 1, Role: role, Half: true}.Draw(g.Slots, rb+1, plot.Braille)
+		}
 		for i := 0; i < g.Slots; i++ {
 			x0 := center(i) - group/2 + k*thick
 			for dx := 0; dx < thick; dx++ {
-				if v := up[i]; !math.IsNaN(v) {
-					c.column(x0+dx, baseY, int(math.Round(v*float64((xyRows-rb)*8))), -1, top, role)
+				for r := 0; r < upG.H; r++ {
+					if cell := upG.At(i, r); cell.Text != "" && cell.Text != " " {
+						c.put(x0+dx, baseY-(upG.H-1-r), []rune(cell.Text)[0], canvasRole(cell.Role))
+					}
 				}
-				if v := down[i]; !math.IsNaN(v) {
-					c.column(x0+dx, baseY, int(math.Round(v*float64(rb*8))), 1, axisY, role)
+				if downG == nil {
+					continue
+				}
+				for r := 0; r < downG.H; r++ {
+					if cell := downG.At(i, r); cell.Text != "" && cell.Text != " " {
+						c.put(x0+dx, baseY+(downG.H-1-r), turnedDown([]rune(cell.Text)[0]), canvasRole(cell.Role))
+					}
 				}
 			}
 		}
@@ -484,52 +498,31 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 	return c, nil
 }
 
-// column draws a bar n eighths of a cell long from the middle of row y0, up
-// (step -1) or down (step 1), no further than row end. The first cell is a
-// half block. A bar under a quarter of a cell draws nothing.
-func (c *canvas) column(x, y0, n, step, end int, role uint8) {
-	if n < 2 {
-		return
+// turnedDown is the block a bar that hangs down from its base shows for the
+// block plot draws for a bar that stands up: the same length from the
+// other end of the cell.
+func turnedDown(r rune) rune {
+	switch {
+	case r == '▀':
+		return '▄'
+	case r >= '▁' && r <= '█':
+		return hanging(int(r - '▀'))
 	}
-	first := '▀'
-	if step > 0 {
-		first = '▄'
-	}
-	c.put(x, y0, first, role)
-	n -= 4
-	for y := y0 + step; n > 0 && (y-end)*step <= 0; y += step {
-		lv := min(n, 8)
-		r := rune(0x2580 + lv) // ▁ to █
-		if step > 0 {
-			r = hanging(lv)
-		}
-		c.put(x, y, r, role)
-		n -= 8
-	}
+	return r
 }
 
-// across draws a bar n eighths of a cell long from the middle of column x0,
-// right (step 1) or left (step -1), no further than column end. The first
-// cell is a half block. A bar under a quarter of a cell draws nothing.
-func (c *canvas) across(x0, y, n, step, end int, role uint8) {
-	if n < 2 {
-		return
+// turnedLeft is the block a bar that runs left from its base shows for the
+// block plot draws for a bar that runs right.
+func turnedLeft(r rune) rune {
+	switch {
+	case r == '▐':
+		return '▌'
+	case r == '█':
+		return '█'
+	case r >= '▉' && r <= '▏':
+		return leftward(int('▐' - r))
 	}
-	first := '▐'
-	if step < 0 {
-		first = '▌'
-	}
-	c.put(x0, y, first, role)
-	n -= 4
-	for x := x0 + step; n > 0 && (x-end)*step <= 0; x += step {
-		lv := min(n, 8)
-		r := rune(0x2590 - lv) // ▏ to █
-		if step < 0 {
-			r = leftward(lv)
-		}
-		c.put(x, y, r, role)
-		n -= 8
-	}
+	return r
 }
 
 // bar reports whether the cell at x, y holds a block of a bar.
@@ -725,15 +718,31 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 		if !s.Bar {
 			continue
 		}
-		role := seriesRole(si)
+		role := plot.SeriesRole(si)
 		up, down := barParts(slotValues(g, s), g.Base)
+		// tuios.dev/plot's bars across, a row a slot, measured from the middle
+		// of the base column: right from it, and left from it, drawn right and
+		// turned.
+		none := func(float64) string { return "" }
+		rightG := plot.Bar{Values: up, Min: 0, Max: 1, Role: role, Horizontal: true, Format: none, Half: true}.Draw(pw-cb+1, g.Slots, plot.Braille)
+		var leftG *plot.Grid
+		if cb > 0 {
+			leftG = plot.Bar{Values: down, Min: 0, Max: 1, Role: role, Horizontal: true, Format: none, Half: true}.Draw(cb+1, g.Slots, plot.Braille)
+		}
 		for i := 0; i < g.Slots; i++ {
 			ry := top + i*(rows+sep) + k
-			if v := up[i]; !math.IsNaN(v) {
-				c.across(baseX, ry, int(math.Round(v*float64((pw-cb)*8))), 1, axisX+pw, role)
+			for x := 0; x < rightG.W; x++ {
+				if cell := rightG.At(x, i); cell.Text != "" && cell.Text != " " {
+					c.put(baseX+x, ry, []rune(cell.Text)[0], canvasRole(cell.Role))
+				}
 			}
-			if v := down[i]; !math.IsNaN(v) {
-				c.across(baseX, ry, int(math.Round(v*float64(cb*8))), -1, axisX, role)
+			if leftG == nil {
+				continue
+			}
+			for x := 0; x < leftG.W; x++ {
+				if cell := leftG.At(x, i); cell.Text != "" && cell.Text != " " {
+					c.put(baseX-x, ry, turnedLeft([]rune(cell.Text)[0]), canvasRole(cell.Role))
+				}
 			}
 		}
 		k++
