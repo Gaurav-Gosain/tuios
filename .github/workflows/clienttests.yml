@@ -22,12 +22,14 @@ on:
       - "tml/**"
       - "plot/**"
       - "loom/**"
+      - "sketch/**"
       - "cmd/tuios-web/**"
       - "internal/app/**"
       - "internal/input/**"
       - "internal/config/**"
       - "clienttests/**"
       - ".github/workflows/clienttests.yml"
+      - ".github/actions/setup-go/**"
   push:
     branches: [main]
     paths: *clienttests-paths
@@ -39,10 +41,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request supersedes the run in
-# progress.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, the nightly, a manual run) gets a group of
+  # its own and is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -54,9 +57,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
+          cache-id: web
 
       # One build for the four servers. Without TUIOS_WEB_BIN each server
       # compiles tuios-web with go run, which costs about a minute.

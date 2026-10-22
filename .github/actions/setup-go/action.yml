@@ -1,0 +1,68 @@
+name: Set up Go with a shared build cache
+description: >
+  actions/setup-go, with the module and build cache restored from main and
+  saved only outside pull requests.
+
+# Why not setup-go's own cache: it saves from every run whose exact key is
+# missing, pull requests included, and a pull request's cache is usable only by
+# that pull request. Pull requests that bump a library pin change go.sum, so
+# they missed and saved about 200 MB each. That filled the repository's 10 GB
+# cache, evicted main's entries, and made the next pull requests miss too.
+#
+# Here a pull request only restores. Main (and the nightly and manual runs)
+# saves one entry per job kind, go.sum and day, so the cache follows main
+# within a day. A pull request whose go.sum differs restores the newest entry
+# of its job kind through the key prefix instead of starting cold.
+
+inputs:
+  go-version-file:
+    description: The go.mod whose go line names the Go version to install.
+    required: true
+  cache-id:
+    description: >
+      The job kind. Jobs that build different things (another GOOS, a build
+      tag, another module) need different ids, or the first one to save wins.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        cache: false
+
+    # Outside the checkout, so no go.mod asks for another toolchain. The
+    # library jobs set GOTOOLCHAIN=local with an older Go than the root needs.
+    - id: paths
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      run: |
+        echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+        echo "day=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+    # Restore and save: every event except a pull request.
+    - if: github.event_name != 'pull_request'
+      uses: actions/cache@v6
+      with:
+        path: |
+          ${{ steps.paths.outputs.gocache }}
+          ${{ steps.paths.outputs.gomodcache }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.goversion }}-${{ inputs.cache-id }}-${{ hashFiles('**/go.sum') }}-${{ steps.paths.outputs.day }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.goversion }}-${{ inputs.cache-id }}-${{ hashFiles('**/go.sum') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.goversion }}-${{ inputs.cache-id }}-
+
+    # Restore only: a pull request.
+    - if: github.event_name == 'pull_request'
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          ${{ steps.paths.outputs.gocache }}
+          ${{ steps.paths.outputs.gomodcache }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.goversion }}-${{ inputs.cache-id }}-${{ hashFiles('**/go.sum') }}-${{ steps.paths.outputs.day }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.goversion }}-${{ inputs.cache-id }}-${{ hashFiles('**/go.sum') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.goversion }}-${{ inputs.cache-id }}-

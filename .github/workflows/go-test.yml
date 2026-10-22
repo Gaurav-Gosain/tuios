@@ -17,12 +17,13 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request supersedes the run in
-# progress. The event is part of the group so that a push to main cannot cancel
-# the nightly race build, which is what happened when the group was the ref
-# alone.
+# A push to main once cancelled the nightly race build, when the group was the
+# ref alone. Runs outside pull requests now get a group of their own.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, the nightly, a manual run) gets a group of
+  # its own and is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -45,15 +46,10 @@ jobs:
           # commit go.mod pins (scripts/library-pins.sh), so it needs history.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          # setup-go keys its module and build cache on this file alone, and
-          # the first job to save a key keeps it. This job owns the plain go.sum
-          # key, so its native build cache is the one the release reuses. The
-          # other workflows add their own file to the path to get a key of
-          # their own instead of racing for this one.
-          cache-dependency-path: go.sum
+          cache-id: unit
 
       - name: Formatting
         run: |
@@ -122,7 +118,16 @@ jobs:
         # -count=1 because the test cache replays a pass across a change the
         # cache key does not see, which is how a mutation sweep can come back
         # green on code that no longer exists.
-        run: go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... -count=1 -timeout 20m
+        #
+        # A failure of tests listed in .github/flaky-tests.txt, and only of
+        # those, gets one retry of those tests. Anything else fails the job.
+        run: |
+          set -o pipefail
+          pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/..."
+          # $pkgs is split on purpose: one argument per pattern.
+          # shellcheck disable=SC2086
+          go test $pkgs -count=1 -timeout 20m 2>&1 | tee "$RUNNER_TEMP/unit.log" ||
+            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $pkgs
 
   windows:
     name: go test (windows)
@@ -140,12 +145,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            .github/workflows/go-test.yml
+          cache-id: tests
 
       - name: Test
         run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/
@@ -185,12 +188,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            .github/workflows/go-test.yml
+          cache-id: tests
 
       - name: Test
         run: go test -count=1 -timeout 10m ./internal/transcriptview/
@@ -220,12 +221,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            .github/workflows/go-test.yml
+          cache-id: sketch${{ matrix.goamd64 }}
 
       - name: Test sketch
         env:
@@ -243,10 +242,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-id: race
 
       - name: Allow user namespaces
         # TestOwnerForgetsAnEmptiedGroup (internal/herdrplugin) reuses a pid on

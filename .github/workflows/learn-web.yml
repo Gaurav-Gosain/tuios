@@ -22,10 +22,12 @@ on:
       - "tml/**"
       - "plot/**"
       - "loom/**"
+      - "sketch/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"
       - ".github/workflows/learn-web.yml"
+      - ".github/actions/setup-go/**"
   pull_request:
     paths: *learn-web-paths
   workflow_dispatch:
@@ -33,10 +35,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request supersedes the run in
-# progress.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, the nightly, a manual run) gets a group of
+  # its own and is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -49,14 +52,10 @@ jobs:
           # build.sh names the version with git describe.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          # The workflow file is in the key so the js/wasm build cache is kept
-          # apart from the native one the unit tests save under go.sum alone.
-          cache-dependency-path: |
-            go.sum
-            .github/workflows/learn-web.yml
+          cache-id: wasm
 
       - name: Tools for compressing the wasm and the fonts
         run: |

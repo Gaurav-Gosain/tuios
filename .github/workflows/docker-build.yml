@@ -32,6 +32,7 @@ on:
       - tml/**
       - plot/**
       - loom/**
+      - sketch/**
       - cmd/**
       - .github/workflows/docker-build.yml
   pull_request:
@@ -49,6 +50,7 @@ on:
       - tml/**
       - plot/**
       - loom/**
+      - sketch/**
       - cmd/**
       - .github/workflows/docker-build.yml
   workflow_dispatch:
@@ -56,10 +58,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request supersedes the run in
-# progress.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, the nightly, a manual run) gets a group of
+  # its own and is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -86,7 +89,10 @@ jobs:
           load: true
           tags: tuios:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Only main writes the layer cache. Pull requests wrote layers that
+          # only they could read, 1.7 GB of them on 2026-10-22, and those pushed
+          # main's Go caches out of the repository's 10 GB.
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max' || '' }}
 
       # The build succeeding is not the assertion. The bug this file exists for
       # was a binary that was never built rather than a build that failed, so

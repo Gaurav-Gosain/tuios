@@ -16,7 +16,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, the nightly, a manual run) gets a group of
+  # its own and is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -30,12 +33,10 @@ jobs:
           # A pin names a commit or a library tag, so the check needs history.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            .github/workflows/libraries.yml
+          cache-id: pins
 
       # Each pinned version holds the same files as its folder, go.work
       # replaces it with that folder, tuios builds without go.work, and go.work
@@ -63,10 +64,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: ${{ matrix.dir }}/go.mod
-          cache-dependency-path: ${{ matrix.dir }}/go.*
+          cache-id: lib-${{ matrix.dir }}
 
       - name: Tidy
         run: go mod tidy -diff

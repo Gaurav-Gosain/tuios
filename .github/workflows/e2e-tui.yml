@@ -13,10 +13,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request supersedes the run in
-# progress.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A pull request's group is its ref, so a newer push cancels the run in
+  # progress. Every other run (main, the nightly, a manual run) gets a group of
+  # its own and is never cancelled or replaced while it waits.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 # The shard count and the time each shard may take. shardplan packs the tests
@@ -36,12 +37,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: e2e/tui/go.mod
-          cache-dependency-path: |
-            go.sum
-            e2e/tui/go.sum
+          cache-id: e2e-plan
 
       - name: Check that every shard fits its time
         working-directory: e2e/tui
@@ -83,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           # The nested e2e module asks for a newer Go than the root module, and
           # this job needs both: it builds cmd/tuios from the root and then runs
@@ -93,9 +92,7 @@ jobs:
           # toolchain when the tests ran, which setup-go now prevents by pinning
           # GOTOOLCHAIN to what it installed.
           go-version-file: e2e/tui/go.mod
-          cache-dependency-path: |
-            go.sum
-            e2e/tui/go.sum
+          cache-id: e2e
 
       - name: Build the binary under test
         run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
@@ -135,13 +132,19 @@ jobs:
           fi
           echo "$names" | wc -l | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
           start=$SECONDS
-          go test -count=1 -timeout 18m -v -run "^($(echo "$names" | paste -sd'|' -))$" ./...
+          # A failure of tests listed in .github/flaky-tests.txt, and only of
+          # those, gets one retry of those tests. Anything else fails the shard.
+          status=0
+          go test -count=1 -timeout 18m -v -run "^($(echo "$names" | paste -sd'|' -))$" ./... 2>&1 | tee "$RUNNER_TEMP/e2e.log" || status=$?
           # A shard that ran over the limit still passes, but says so, so the
           # drift shows before it reaches the timeout.
           took=$((SECONDS - start))
           limit=$(( ${E2E_SHARD_LIMIT%m} * 60 ))
           if [ "$took" -gt "$limit" ]; then
             echo "::warning title=Slow e2e shard::Shard $SHARD ran ${took}s, over the $E2E_SHARD_LIMIT limit. Refresh e2e/tui/shardplan/durations.txt or add a shard."
+          fi
+          if [ "$status" -ne 0 ]; then
+            ../../scripts/retry-flaky.sh "$RUNNER_TEMP/e2e.log" ./...
           fi
 
       - name: Reap any surviving daemons
