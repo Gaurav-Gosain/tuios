@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"image/color"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1939,8 +1940,8 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 					val /= 10
 				}
 				// Reverse digits
-				for i := len(digits) - 1; i >= 0; i-- {
-					fullData = append(fullData, digits[i])
+				for _, digit := range slices.Backward(digits) {
+					fullData = append(fullData, digit)
 				}
 			}
 		}

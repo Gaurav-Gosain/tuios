@@ -105,7 +105,7 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 			x += count
 			return
 		}
-		for dy := 0; dy < 6; dy++ {
+		for dy := range 6 {
 			if bits&(1<<dy) == 0 {
 				continue
 			}

@@ -99,7 +99,9 @@ func replay(st *State) []byte {
 		case st.Modes[47]:
 			alt = "47"
 		}
-		b.WriteString("\x1b[?" + alt + "h")
+		b.WriteString("\x1b[?")
+		b.WriteString(alt)
+		b.WriteString("h")
 		w.rows(st.Screen, wrapFlags(st.ScreenWraps, len(st.Screen)), true)
 	}
 
@@ -119,7 +121,11 @@ func replay(st *State) []byte {
 	if m := st.Margins; len(m) == 4 && m[3] > 0 {
 		// DECSTBM homes the cursor, so it goes before the cursor is placed.
 		top = m[1]
-		b.WriteString("\x1b[" + strconv.Itoa(m[1]+1) + ";" + strconv.Itoa(m[1]+m[3]) + "r")
+		b.WriteString("\x1b[")
+		b.WriteString(strconv.Itoa(m[1] + 1))
+		b.WriteString(";")
+		b.WriteString(strconv.Itoa(m[1] + m[3]))
+		b.WriteString("r")
 	}
 
 	// Origin mode homes the cursor too, and from here on a cursor position
@@ -147,22 +153,29 @@ func replay(st *State) []byte {
 	// screen's was pushed before the switch.
 	w.kittyStack(st.KittyKbdStack)
 	if st.ModifyOtherKeysKnown && st.ModifyOtherKeys > 0 {
-		b.WriteString("\x1b[>4;" + strconv.Itoa(st.ModifyOtherKeys) + "m")
+		b.WriteString("\x1b[>4;")
+		b.WriteString(strconv.Itoa(st.ModifyOtherKeys))
+		b.WriteString("m")
 	}
 	if st.CursorShape > 0 {
-		b.WriteString("\x1b[" + strconv.Itoa(st.CursorShape) + " q")
+		b.WriteString("\x1b[")
+		b.WriteString(strconv.Itoa(st.CursorShape))
+		b.WriteString(" q")
 	}
 	if st.Pen != nil {
 		w.pen(*st.Pen)
 	}
 	if st.TitlesKnown {
-		b.WriteString("\x1b]2;" + st.Title + "\x1b\\")
+		b.WriteString("\x1b]2;")
+		b.WriteString(st.Title)
+		b.WriteString("\x1b\\")
 	}
 	// After everything printed above, which insert mode would push along
 	// the row.
 	for _, m := range []int{4, 20} {
 		if on, ok := st.ANSIModes[m]; ok {
-			b.WriteString("\x1b[" + strconv.Itoa(m))
+			b.WriteString("\x1b[")
+			b.WriteString(strconv.Itoa(m))
 			if on {
 				b.WriteByte('h')
 			} else {
@@ -256,7 +269,11 @@ func blankCell(c CellState) bool {
 
 // cup moves the cursor to column x, row y, counted from zero.
 func (w *vtWriter) cup(x, y int) {
-	w.b.WriteString("\x1b[" + strconv.Itoa(y+1) + ";" + strconv.Itoa(x+1) + "H")
+	w.b.WriteString("\x1b[")
+	w.b.WriteString(strconv.Itoa(y + 1))
+	w.b.WriteString(";")
+	w.b.WriteString(strconv.Itoa(x + 1))
+	w.b.WriteString("H")
 }
 
 // resetPen puts the pen back to the default and closes an open link.
@@ -274,7 +291,11 @@ func (w *vtWriter) resetPen() {
 // pen sets the pen to s: one SGR from a reset, and the link when it changed.
 func (w *vtWriter) pen(s StyleState) {
 	if s.LinkURL != w.cur.LinkURL || s.LinkParams != w.cur.LinkParams {
-		w.b.WriteString("\x1b]8;" + s.LinkParams + ";" + s.LinkURL + "\x1b\\")
+		w.b.WriteString("\x1b]8;")
+		w.b.WriteString(s.LinkParams)
+		w.b.WriteString(";")
+		w.b.WriteString(s.LinkURL)
+		w.b.WriteString("\x1b\\")
 	}
 	w.b.WriteString("\x1b[0")
 	attrs := []struct {
@@ -287,14 +308,16 @@ func (w *vtWriter) pen(s StyleState) {
 	}
 	for _, a := range attrs {
 		if s.Attrs&a.bit != 0 {
-			w.b.WriteString(";" + a.code)
+			w.b.WriteString(";")
+			w.b.WriteString(a.code)
 		}
 	}
 	switch {
 	case s.Underline == 1:
 		w.b.WriteString(";4")
 	case s.Underline > 1:
-		w.b.WriteString(";4:" + strconv.Itoa(int(s.Underline)))
+		w.b.WriteString(";4:")
+		w.b.WriteString(strconv.Itoa(int(s.Underline)))
 	}
 	sgrColor(w.b, s.FgColor, 30, 90, "38")
 	sgrColor(w.b, s.BgColor, 40, 100, "48")
@@ -320,23 +343,31 @@ func sgrColor(b *bytes.Buffer, wire string, base, bright int, ext string) {
 		}
 		switch {
 		case wire[0] == 'a' && base >= 0 && n < 8:
-			b.WriteString(";" + strconv.Itoa(base+n))
+			b.WriteString(";")
+			b.WriteString(strconv.Itoa(base + n))
 		case wire[0] == 'a' && bright >= 0 && n < 16:
-			b.WriteString(";" + strconv.Itoa(bright+n-8))
+			b.WriteString(";")
+			b.WriteString(strconv.Itoa(bright + n - 8))
 		default:
-			b.WriteString(";" + ext + ";5;" + strconv.Itoa(n))
+			b.WriteString(";")
+			b.WriteString(ext)
+			b.WriteString(";5;")
+			b.WriteString(strconv.Itoa(n))
 		}
 	case '#':
 		if len(wire) != 7 {
 			return
 		}
-		b.WriteString(";" + ext + ";2")
+		b.WriteString(";")
+		b.WriteString(ext)
+		b.WriteString(";2")
 		for i := range 3 {
 			hi, lo := hexNibble(wire[1+2*i]), hexNibble(wire[2+2*i])
 			if hi < 0 || lo < 0 {
 				return
 			}
-			b.WriteString(";" + strconv.Itoa(hi<<4|lo))
+			b.WriteString(";")
+			b.WriteString(strconv.Itoa(hi<<4 | lo))
 		}
 	}
 }
@@ -349,10 +380,14 @@ func (w *vtWriter) kittyStack(stack []int) {
 	// guest's.
 	for i, flags := range stack {
 		if i == 0 {
-			w.b.WriteString("\x1b[=" + strconv.Itoa(flags) + ";1u")
+			w.b.WriteString("\x1b[=")
+			w.b.WriteString(strconv.Itoa(flags))
+			w.b.WriteString(";1u")
 			continue
 		}
-		w.b.WriteString("\x1b[>" + strconv.Itoa(flags) + "u")
+		w.b.WriteString("\x1b[>")
+		w.b.WriteString(strconv.Itoa(flags))
+		w.b.WriteString("u")
 	}
 }
 
@@ -366,7 +401,9 @@ func charsets(b *bytes.Buffer, cs []int) {
 	intro := [4]string{"(", ")", "*", "+"}
 	for i := range 4 {
 		if c := cs[i]; c != 0 && c != 'B' && c > ' ' && c < 0x7f {
-			b.WriteString("\x1b" + intro[i] + string(rune(c)))
+			b.WriteString("\x1b")
+			b.WriteString(intro[i])
+			b.WriteString(string(rune(c)))
 		}
 	}
 	switch cs[4] {
@@ -412,7 +449,8 @@ func decModes(b *bytes.Buffer, modes map[int]bool) {
 			if !ok || on != want {
 				continue
 			}
-			b.WriteString("\x1b[?" + strconv.Itoa(m))
+			b.WriteString("\x1b[?")
+			b.WriteString(strconv.Itoa(m))
 			if on {
 				b.WriteByte('h')
 			} else {

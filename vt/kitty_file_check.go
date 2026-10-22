@@ -56,8 +56,7 @@ func kittyOpenError(err error) string {
 // kittyErrText is an error's text without the path, which a reply has no
 // room for and the guest already knows.
 func kittyErrText(err error) string {
-	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) {
+	if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
 		err = pathErr.Err
 	}
 	return strings.Map(func(r rune) rune {

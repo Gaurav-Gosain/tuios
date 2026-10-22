@@ -92,7 +92,9 @@ func TestConform_TitleStack(t *testing.T) {
 		emu, tl, _ := newTitleEmulator(t)
 		var in strings.Builder
 		for i := range 11 {
-			in.WriteString("\x1b]2;" + string(rune('a'+i)) + "\x07\x1b[22;2t")
+			in.WriteString("\x1b]2;")
+			in.WriteString(string(rune('a' + i)))
+			in.WriteString("\x07\x1b[22;2t")
 		}
 		in.WriteString("\x1b]2;end\x07")
 		in.WriteString(strings.Repeat("\x1b[23;2t", 11))
