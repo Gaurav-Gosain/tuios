@@ -8393,3 +8393,13 @@ Run on 2026-10-21, macOS.
 | A Ctrl+Alt key with text keeps the key it produced | drop the `msg.Text != ""` early return from `usesBaseLayout` | `TestAltGrTextReachesThePane` (`€`, `²` and `§`: "handleTerminalModeBinds took the key: true, want false") | **caught** |
 
 The `ctrl+alt+4` row passes on both builds; it is the positive control. `TestSendToWorkspaceKeyStaysHere` and `TestSendToWorkspaceKeyYieldsATakenKey` pass on the fixed build: a Kitty terminal sends `ctrl+alt+N` with no text.
+## A pane whose session name is gone
+
+`TestHookFromPaneWhoseSessionNameIsGone` renames alpha to omega, lets a new alpha take the name and kills it, so the pane's TUIOS_SESSION (alpha) names no session under any name. A call from outside the pane naming alpha and the pane must be refused, and the real `tuios agent-hook claude-code` run inside the pane must set the pane in omega to working. Run on 2026-10-22, macOS.
+
+| Control | Build | Where the test fails | Verdict |
+| --- | --- | --- | --- |
+| No fix | main before this change | "the hook did not reach the pane after its session name was gone: state \"none\"" | **caught** |
+| The `followOwnPane` call cut from `admitVerb` | mutant of this branch | "the hook did not reach the pane after its session name was gone: state \"none\"" | **caught** |
+| The placement check cut from `followOwnPane` (any caller is followed) | mutant of this branch | "a call from outside the pane naming the gone session was not refused: <nil>" | **caught** |
+| The positive half | this branch | none: the outside call is refused with `session_not_found` and the hook sets the pane to working | **guard** |
