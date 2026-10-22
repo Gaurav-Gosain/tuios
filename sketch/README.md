@@ -105,6 +105,11 @@ shows the `$$...$$` source as text. Diagram titles always show text. The
 markup goes into the SVG as it is, as pele writes it: give only markup you
 trust. `sketch/text` draws the source.
 
+The resolver gets the TeX as the diagram's author wrote it, with entities
+decoded. Treat it as untrusted input. Escape it in any markup you build from
+it, and do not enable commands that make links or run scripts, such as KaTeX's
+`trust: true` or MathJax without its `ui/safe` extension.
+
 ## Text
 
 `tuios.dev/sketch/text` draws flowcharts, sequence diagrams, state diagrams,

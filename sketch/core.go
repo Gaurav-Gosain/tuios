@@ -46,7 +46,10 @@ type MathMarkup = types.MathMarkup
 // text. sketch has no typesetter of its own.
 //
 // The markup is written into the SVG unchanged, as pele does: a resolver must
-// give markup the host trusts.
+// give markup the host trusts. The resolver gets the TeX as the diagram's
+// author wrote it, with entities decoded. Treat it as untrusted input: escape
+// it in any markup you build from it, and do not enable commands that make
+// links or run scripts, such as KaTeX's trust option.
 type MathResolver = types.MathResolver
 
 // TextMeasurer gives the width of text. The default is a table of Arial

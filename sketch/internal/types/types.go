@@ -63,6 +63,7 @@ type RenderOptions struct {
 	Icons   IconResolver
 	// Math typesets $$...$$ in the labels of the types that take it. nil leaves the TeX
 	// source as text. Its markup is written into the SVG unchanged: the host must trust it.
+	// The TeX it gets is the diagram author's, with entities decoded: untrusted input.
 	Math   MathResolver
 	Config Config
 	// The time gantt charts treat as now. The zero time means the current time.
