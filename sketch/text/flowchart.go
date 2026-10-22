@@ -454,16 +454,28 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		c.vline(b.x1, b.y0, b.y1, weight, roleFrame)
 	}
 
-	// Edges.
+	// Edges. An edge from an actor of a use case diagram takes the actor's
+	// series colour, so each actor's edges can be told apart where they run
+	// side by side.
+	actor := map[int]uint8{}
+	for i, n := range l.Nodes {
+		if n.Shape == "actor" {
+			actor[i] = seriesRole(len(actor))
+		}
+	}
 	toward := [4]uint8{down, left, up, right}
 	outward := [4]uint8{up, right, down, left}
 	for _, p := range paths {
 		if p.invisible || p.self {
 			continue
 		}
+		role := uint8(roleLine)
+		if r, ok := actor[p.from]; ok {
+			role = r
+		}
 		// The first cell joins the box it leaves. A group's frame is a line, so
 		// it gets a junction where the edge leaves it.
-		c.stroke(p.pts[0].x+dx, p.pts[0].y+dy, toward[p.startSide], p.weight, roleLine)
+		c.stroke(p.pts[0].x+dx, p.pts[0].y+dy, toward[p.startSide], p.weight, role)
 		if l.Nodes[p.from].Group {
 			in := [4]point{{0, 1}, {-1, 0}, {0, -1}, {1, 0}}[p.startSide]
 			c.stroke(p.pts[0].x+dx+in.x, p.pts[0].y+dy+in.y, outward[p.startSide], light, roleFrame)
@@ -473,9 +485,9 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			b := point{p.pts[k].x + dx, p.pts[k].y + dy}
 			switch {
 			case a.x == b.x:
-				c.vline(a.x, a.y, b.y, p.weight, roleLine)
+				c.vline(a.x, a.y, b.y, p.weight, role)
 			case a.y == b.y:
-				c.hline(a.x, b.x, a.y, p.weight, roleLine)
+				c.hline(a.x, b.x, a.y, p.weight, role)
 			case p.axes[k] == 0:
 				mid := (a.y + b.y) / 2
 				if k == len(p.pts)-1 {
@@ -484,9 +496,9 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 						mid = b.y + 1
 					}
 				}
-				c.vline(a.x, a.y, mid, p.weight, roleLine)
-				c.hline(a.x, b.x, mid, p.weight, roleLine)
-				c.vline(b.x, mid, b.y, p.weight, roleLine)
+				c.vline(a.x, a.y, mid, p.weight, role)
+				c.hline(a.x, b.x, mid, p.weight, role)
+				c.vline(b.x, mid, b.y, p.weight, role)
 			default:
 				mid := (a.x + b.x) / 2
 				if k == len(p.pts)-1 {
@@ -495,9 +507,9 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 						mid = b.x + 1
 					}
 				}
-				c.hline(a.x, mid, a.y, p.weight, roleLine)
-				c.vline(mid, a.y, b.y, p.weight, roleLine)
-				c.hline(mid, b.x, b.y, p.weight, roleLine)
+				c.hline(a.x, mid, a.y, p.weight, role)
+				c.vline(mid, a.y, b.y, p.weight, role)
+				c.hline(mid, b.x, b.y, p.weight, role)
 			}
 		}
 	}
@@ -509,6 +521,18 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		}
 		if kind.node == nil || !kind.node(c, move(boxes[i]), &l.Nodes[i]) {
 			drawNode(c, move(boxes[i]), n.Shape, n.Label)
+		}
+		if r, ok := actor[i]; ok {
+			// The stick figure in the actor's colour.
+			b := move(boxes[i])
+			top := b.y0 + (b.y1-b.y0+1-len(n.Label))/2
+			for y := top; y < top+3; y++ {
+				for x := b.x0; x <= b.x1; x++ {
+					if q := c.at(x, y); q != nil && q.r != 0 && q.r != ' ' {
+						q.role = r
+					}
+				}
+			}
 		}
 	}
 	// Group titles, on the top line.
@@ -702,7 +726,7 @@ func drawNode(c *canvas, b rect, shape string, label []string) {
 			c.put(x, b.y0, '━', roleBox)
 		}
 		return
-	case shape == "text":
+	case shape == "text", shape == "actor":
 	default:
 		outline(c, b, shape)
 	}

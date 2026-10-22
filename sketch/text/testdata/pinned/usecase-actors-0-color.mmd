@@ -1,0 +1,19 @@
+usecase-beta
+direction LR
+actor Dev("Developer")
+actor Agent("Coding agent")
+systemBoundary tuios["tuios"]
+  Split("Split and tile panes")
+  Start("Start an agent")
+  Approve("Approve a command")
+  Review("Review the diff")
+  Ask("Ask for approval")
+  Push("Push a branch")
+end
+Dev --> Split
+Dev --> Start
+Dev --> Approve
+Dev --> Review
+Agent --> Ask
+Agent --> Push
+Approve ..> : include Ask

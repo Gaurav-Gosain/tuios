@@ -881,7 +881,7 @@ func geometry(views []View, cnodes []*layout.CNode, width, height float64) *type
 		case kActor:
 			// A stick figure in text, with no box. The room a box would take around the
 			// name is added, so that the actor does not set a coarser scale than a box does.
-			n.Shape = "text"
+			n.Shape = "actor"
 			n.W += 32
 			n.Label = append(append([]string{" o ", "/|\\", "/ \\"}, stereotype...), view.label.Plain()...)
 		case kEllipse:
