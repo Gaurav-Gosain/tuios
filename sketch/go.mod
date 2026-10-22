@@ -6,7 +6,7 @@ require (
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
-	tuios.dev/plot v0.1.1-0.20261022133612-8ebab24dc8d1
+	tuios.dev/plot v0.1.1-0.20261022164610-c5cbbfb3b774
 )
 
 require (
