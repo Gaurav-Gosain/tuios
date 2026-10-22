@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/google/uuid"
@@ -551,13 +552,14 @@ func (d *Daemon) awaitPlacement(sess *Session, windowID, ptyID string, limit tim
 // about it.
 func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session   string   `json:"session"`
-		Name      string   `json:"name"`
-		Cwd       string   `json:"cwd"`
-		Width     string   `json:"width"`
-		Height    string   `json:"height"`
-		Command   []string `json:"command"`
-		Workspace int      `json:"workspace"`
+		Session   string           `json:"session"`
+		Name      string           `json:"name"`
+		Cwd       string           `json:"cwd"`
+		Width     string           `json:"width"`
+		Height    string           `json:"height"`
+		Dim       *config.PopupDim `json:"dim"`
+		Command   []string         `json:"command"`
+		Workspace int              `json:"workspace"`
 		// Wait keeps the call open until the command exits; CaptureStdout
 		// returns what it printed to standard output. See popup_wait.go.
 		Wait          bool `json:"wait"`
@@ -598,6 +600,9 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 	}
 	if err := ValidatePopupSize(p.Height); err != nil {
 		return nil, invalidParam("height", err.Error())
+	}
+	if p.Dim != nil && (p.Dim.Percent < 0 || p.Dim.Percent > config.PopupDimMax) {
+		return nil, invalidParam("dim", "dim must be an integer from 0 to 90")
 	}
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
@@ -666,6 +671,7 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 		Popup:       true,
 		PopupWidth:  p.Width,
 		PopupHeight: p.Height,
+		PopupDim:    p.Dim,
 		Scratch:     p.Scratch,
 		ScratchName: p.ScratchName,
 	}

@@ -309,6 +309,12 @@ var optionSpecs = []Option{
 		Percent: true,
 	},
 	{
+		Path: "appearance.popup_dim", Type: OptionInt, Section: "appearance",
+		Description: "How much the screen behind a focused plain popup is darkened, as a percent. 0 is off; popup --dim overrides it. TML popups inherit modal_dim. Scratch panes are unchanged.",
+		Default:     strconv.Itoa(PopupDimDefault), Min: 0, Max: PopupDimMax,
+		Percent: true,
+	},
+	{
 		Path: "appearance.animations_enabled", Type: OptionBool, Section: "appearance",
 		Description: "Animate UI transitions instead of applying them instantly",
 		Default:     "true",

@@ -139,19 +139,18 @@ func scrimBehind(id string) bool {
 	return ok && modalOverlays[i].scrim
 }
 
-// applyScrim darkens every cell on the canvas by the configured modal dim. It
-// runs once per frame at most, before the first modal layer is drawn.
-func (m *OS) applyScrim(canvas *frameCanvas) {
-	m.applyScrimIn(canvas, canvas.Bounds())
+// applyScrim darkens every cell on the canvas by dim percent. It runs once
+// per frame at most, before the popup or first modal layer is drawn.
+func (m *OS) applyScrim(canvas *frameCanvas, dim int) {
+	m.applyScrimIn(canvas, canvas.Bounds(), dim)
 }
 
 // applyScrimIn is applyScrim on the cells of one rectangle of the canvas.
-func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle) {
+func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle, dim int) {
 	area = area.Intersect(canvas.Bounds())
 	if area.Empty() {
 		return
 	}
-	dim := m.Settings.ModalDim
 	if dim <= 0 {
 		return
 	}
@@ -223,9 +222,9 @@ func (m *OS) scrimToward() color.Color {
 //
 // The dialog's ground is the one its top-left corner cell is on, which is
 // frame and never a button.
-func (m *OS) scrimDialogGround(canvas *frameCanvas, r image.Rectangle) {
+func (m *OS) scrimDialogGround(canvas *frameCanvas, r image.Rectangle, dim int) {
 	r = r.Intersect(canvas.Bounds())
-	if r.Empty() || m.Settings.ModalDim <= 0 || theme.Depth() == overlay.Depth16 {
+	if r.Empty() || dim <= 0 || theme.Depth() == overlay.Depth16 {
 		return
 	}
 	corner := canvas.Lines[r.Min.Y]

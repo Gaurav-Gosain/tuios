@@ -25,6 +25,30 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
+## Popup dimming
+
+`appearance.popup_dim` is the percent the screen behind a popup is dimmed:
+`0` to `90`, default `0` (off). It is available in Settings beside
+`appearance.modal_dim`, in `tuios list-options`, and in looks.
+
+```toml
+[appearance]
+popup_dim = 30
+```
+
+`tuios popup --dim 50 -- fzf` overrides the config for that popup.
+Omit `--dim` to follow the current config; explicit `--dim 0` disables it even
+when the config is nonzero. The override survives state sync, peers and
+reattach. A daemon restart still drops ordinary popups, as before.
+
+Only the focused popup dims the screen, including pane borders, the dock and
+rail. The popup stays lit. Focusing a pane behind it removes the dim; focusing
+the popup again restores it. TML popups inherit `appearance.modal_dim` unless
+explicitly overridden; built-in modal panels keep using `modal_dim`. One
+scrim is applied, so popups and panels never dim the screen twice.
+Light themes fade toward their background; 16-color terminals use faint text.
+Scratch panes keep their existing behavior and do not use `popup_dim`.
+
 ## Split the config into several files
 
 You can keep part of the config in other files. Use this to share one

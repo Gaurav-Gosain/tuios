@@ -433,6 +433,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.dim_foreground"),
 			opt("appearance.dim_multifocus"),
 			opt("appearance.modal_dim"),
+			opt("appearance.popup_dim"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
 			opt("appearance.links"),

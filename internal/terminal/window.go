@@ -343,6 +343,8 @@ type Window struct {
 	ScratchName string
 	PopupWidth  string
 	PopupHeight string
+	// PopupDim is nil to inherit the popup or modal dim, or an explicit override.
+	PopupDim *config.PopupDim
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
 	CellPixelWidth  int
 	CellPixelHeight int

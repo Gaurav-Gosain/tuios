@@ -86,6 +86,11 @@ const (
 	// ModalDimMax caps it for the reason DimUnfocusedMax does: past this the
 	// screen behind is gone rather than dimmed.
 	ModalDimMax = 90
+
+	// PopupDimDefault leaves the background unchanged unless requested.
+	PopupDimDefault = 0
+	// PopupDimMax keeps the background readable, like ModalDimMax.
+	PopupDimMax = 90
 )
 
 // migrateAnimationsEnabled folds the old on/off appearance.animations_enabled

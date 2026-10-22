@@ -245,6 +245,9 @@ type WindowState struct {
 	// PopupDefaultWidth or PopupDefaultHeight.
 	PopupWidth  string `json:"popup_width,omitempty"`
 	PopupHeight string `json:"popup_height,omitempty"`
+	// PopupDim is daemon-owned: nil inherits the client's popup or modal dim;
+	// a present zero disables it. The struct pointer preserves zero over gob.
+	PopupDim *config.PopupDim `json:"popup_dim,omitempty"`
 	// Scratch marks the session's scratch terminal: the one shell the
 	// toggle_scratch key shows as a popup and hides again. A hidden scratch
 	// terminal is Minimized, and every list a user reads leaves it out, the

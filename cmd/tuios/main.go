@@ -1244,6 +1244,7 @@ window as one line with its uri.`,
 	var popupSession string
 	var popupWidth string
 	var popupHeight string
+	var popupDim int
 	var popupName string
 	var popupCwd string
 	var popupWorkspace int
@@ -1271,7 +1272,10 @@ command prints. Not on Windows.
 
 --width and --height take cells or a percentage of the pane region. A size
 larger than the region is cut down to the region. Neither has a short form: -w
-selects a window everywhere else, and -h is help.`,
+selects a window everywhere else, and -h is help.
+
+--dim takes a percent from 0 to 90 and overrides appearance.popup_dim for this
+popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 		Example: `  # Pick a file in a centred popup and use the answer
   file=$(tuios popup --capture-stdout -- fzf)
 
@@ -1290,11 +1294,19 @@ selects a window everywhere else, and -h is help.`,
   # Watch something, then press q to close it
   tuios popup --width 90% --height 80% -- htop
 
+  # Dim the background while choosing
+  tuios popup --dim 30 -- gum choose one two three
+
   # Capture the popup's id for scripting
   tuios popup --json -- fzf | jq -r .window_id`,
 		Args: cobra.ArbitraryArgs,
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var dim *config.PopupDim
+			if cmd.Flags().Changed("dim") {
+				dim = &config.PopupDim{Percent: popupDim}
+			}
 			return runPopup(popupOptions{
+				dim:       dim,
 				session:   popupSession,
 				name:      popupName,
 				cwd:       popupCwd,
@@ -1318,6 +1330,7 @@ selects a window everywhere else, and -h is help.`,
 	// would reach for already mean something else here.
 	popupCmd.Flags().StringVar(&popupWidth, "width", "", "Popup width in cells or percent (default: 80%)")
 	popupCmd.Flags().StringVar(&popupHeight, "height", "", "Popup height in cells or percent (default: 60%)")
+	popupCmd.Flags().IntVar(&popupDim, "dim", 0, "Dim the background by 0 to 90 percent (default: appearance.popup_dim; 0 disables)")
 	popupCmd.Flags().StringVar(&popupName, "name", "", "Name for the popup")
 	popupCmd.Flags().StringVar(&popupCwd, "cwd", "", "Directory to run the command in (default: the daemon's)")
 	popupCmd.Flags().IntVar(&popupWorkspace, "workspace", 0, "Workspace to open the popup on (default: the current one)")

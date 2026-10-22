@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
@@ -233,6 +234,8 @@ type NewWindowOptions struct {
 	// See WindowState.PopupWidth. They mean nothing unless Popup is set.
 	PopupWidth  string
 	PopupHeight string
+	// PopupDim is the optional daemon-owned dim override, including zero.
+	PopupDim *config.PopupDim
 	// Scratch marks the popup as the session's scratch terminal. See
 	// WindowState.Scratch. It means nothing unless Popup is set.
 	Scratch bool
@@ -512,6 +515,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			IsFloating:  opts.Popup,
 			PopupWidth:  opts.PopupWidth,
 			PopupHeight: opts.PopupHeight,
+			PopupDim:    opts.PopupDim,
 			Scratch:     scratch,
 			ScratchName: scratchName,
 			Kind:        opts.Kind,

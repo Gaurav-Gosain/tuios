@@ -283,6 +283,13 @@
       "max": 6
     },
     {
+      "path": "appearance.popup_dim",
+      "type": "int",
+      "description": "How much the screen behind a focused plain popup is darkened, as a percent. 0 is off; popup --dim overrides it. TML popups inherit modal_dim. Scratch panes are unchanged.",
+      "default": "0",
+      "max": 90
+    },
+    {
       "path": "appearance.scroll_column_width",
       "type": "int",
       "description": "Width of a column in the scrolling layout, as a percent of the screen",

@@ -1080,6 +1080,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "command", Type: "[]string", Required: true, Description: "Argv to run in the popup. No shell parses it, so nothing needs quoting. The popup closes when the program exits."},
 				{Name: "width", Type: "string", Description: "Popup width, in cells (\"60\") or as a share of the pane region (\"60%\").", Default: PopupDefaultWidth},
 				{Name: "height", Type: "string", Description: "Popup height, in cells (\"20\") or as a share of the pane region (\"50%\").", Default: PopupDefaultHeight},
+				{Name: "dim", Type: "int", Description: "Percent to dim the screen behind this popup, 0 to 90. Omit to inherit appearance.popup_dim (default 0); explicit 0 disables it. Scratch panes are unchanged."},
 				{Name: "name", Type: "string", Description: "Name for the popup. Omit to use the program's title."},
 				{Name: "cwd", Type: "string", Description: "Directory to run the command in. Omit to inherit the daemon's."},
 				{Name: "workspace", Type: "int", Description: "Workspace to open the popup on. Omit for the current one."},

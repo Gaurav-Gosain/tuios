@@ -1556,6 +1556,7 @@ tuios popup [flags] -- <command> [args...]
 - `-s, --session <name>`: Target session (default: most recently active)
 - `--width <size>`: Width in cells (`60`) or percent (`60%`). Default `80%`
 - `--height <size>`: Height in cells (`20`) or percent (`50%`). Default `60%`
+- `--dim <percent>`: Dim the screen behind this popup by `0` to `90` percent. Omit to inherit `appearance.popup_dim` (default `0`); explicit `--dim 0` turns it off
 
 Neither size flag has a short form: `-w` selects a window everywhere else, and
 `-h` is help.
@@ -1568,6 +1569,13 @@ Neither size flag has a short form: `-w` selects a window everywhere else, and
 - `--json`: Output result as JSON
 
 A size larger than the pane region is cut down to the region.
+
+Dimming reaches the full screen behind the popup, including the dock and rail.
+Dimming applies only while the popup has focus; focusing a pane behind it
+restores the screen. The popup stays lit. A TML popup inherits
+`appearance.modal_dim` instead, unless it has an explicit override. Built-in
+modal panels keep using `modal_dim`. The scrim never stacks. Scratch panes
+are unchanged.
 
 **Lifetime:**
 
@@ -1602,6 +1610,9 @@ tuios popup --width 60 --height 20 -- gum choose one two three
 
 # Watch something, then press q to close it
 tuios popup --width 90% --height 80% -- htop
+
+# Dim the background while choosing
+tuios popup --dim 30 -- gum choose one two three
 
 # Capture the popup's id for scripting
 tuios popup --json -- fzf | jq -r .window_id
@@ -1939,6 +1950,7 @@ name alone. Some of them:
 | `dim_foreground` | `true`, `false` | Let `dim_unfocused` dim the text of a pane you are not in as well as its background (default `true`). `false` keeps the text at full strength and dims only the background |
 | `dim_multifocus` | `true`, `false` | Dim the panes in the multifocus set like other panes you are not in (default `false`) |
 | `modal_dim` | `0` to `90` | Percent the screen behind a modal panel is dimmed (default `30`, `0` is off). On a light ground the screen fades toward its own background instead of darkening |
+| `popup_dim` | `0` to `90` | Percent the screen behind a focused plain popup is dimmed (default `0`, off). `popup --dim` overrides it, including explicit `0`. Uses the same light-ground and 16-color behavior as `modal_dim` |
 | `animations_enabled` | `true`, `false` | Deprecated on/off switch: `false` sets `motion` to `none`, `true` to `full` |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn. On the left, the pill order is close, zoom, minimize, so close sits at the outer corner |

@@ -153,6 +153,10 @@ func StateFingerprint(s *SessionState) uint64 {
 		flag(w.Popup)
 		str(w.PopupWidth)
 		str(w.PopupHeight)
+		flag(w.PopupDim != nil)
+		if w.PopupDim != nil {
+			num(w.PopupDim.Percent)
+		}
 		flag(w.Scratch)
 		str(w.ScratchName)
 		str(w.ForegroundCmd)

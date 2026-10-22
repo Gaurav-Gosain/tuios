@@ -943,6 +943,10 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	window := visible[0]
+	// A fullscreen popup still dims the dock. That pass needs the canvas.
+	if _, dim := m.popupScrimTarget(); dim > 0 {
+		return nil, false
+	}
 	if window.IsBeingManipulated {
 		return nil, false
 	}

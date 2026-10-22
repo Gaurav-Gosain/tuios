@@ -99,6 +99,7 @@ var lookKeys = []string{
 	"appearance.dim_foreground",
 	"appearance.dim_multifocus",
 	"appearance.modal_dim",
+	"appearance.popup_dim",
 	"appearance.session_colors",
 	// Borders and the window frame.
 	"appearance.border_style",

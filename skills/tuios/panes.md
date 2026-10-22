@@ -386,11 +386,18 @@ needs a client attached.
 
 ```sh
 tuios popup -s work --width 60 --height 20 -- gum choose one two three
+tuios popup -s work --dim 30 -- gum choose one two three
 file=$(tuios popup -s work --capture-stdout -- fzf)
 tuios popup -s work --wait -- gum confirm "Deploy?" && ./deploy.sh
 ```
 
-`--width` and `--height` take cells or a percent. `--wait` returns the command's
+`--width` and `--height` take cells or a percent. `--dim` takes an integer from
+0 to 90 and overrides `appearance.popup_dim` (default 0/off); omission inherits
+the config and explicit `--dim 0` disables dimming. The full screen behind the
+popup dims once, including dock and rail; the popup and higher layers stay lit.
+Only the focused popup dims the screen; focusing a pane behind removes it.
+TML popups inherit `appearance.modal_dim` unless overridden, and built-in
+panels keep using `modal_dim`. The scrim never stacks. Scratch panes are unchanged. `--wait` returns the command's
 status; `--capture-stdout` prints its standard output. A popup closed by hand
 exits 130. Capture is not on Windows.
 

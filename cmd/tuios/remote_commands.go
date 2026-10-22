@@ -3071,6 +3071,7 @@ func printPopupResult(w io.Writer, raw json.RawMessage) error {
 // popupOptions is the `tuios popup` command line, gathered so the runner reads
 // as one thing rather than as seven positional arguments.
 type popupOptions struct {
+	dim       *config.PopupDim
 	session   string
 	name      string
 	cwd       string
@@ -3092,6 +3093,9 @@ type popupOptions struct {
 // The command is refused here as well as in the daemon so the message names the
 // flag the user typed rather than the parameter the wire carries.
 func runPopup(o popupOptions) error {
+	if o.dim != nil && (o.dim.Percent < 0 || o.dim.Percent > config.PopupDimMax) {
+		return fmt.Errorf("--dim must be an integer from 0 to 90")
+	}
 	if len(o.command) == 0 {
 		return fmt.Errorf("popup needs a command to run, e.g. tuios popup -- fzf")
 	}
@@ -3108,6 +3112,9 @@ func runPopup(o popupOptions) error {
 	// Only the parameters the user named are sent. The daemon refuses a params
 	// key a verb does not declare and fills its own defaults for the rest, so
 	// sending an empty width would ask for a size nobody chose.
+	if o.dim != nil {
+		params["dim"] = o.dim
+	}
 	if o.width != "" {
 		params["width"] = o.width
 	}

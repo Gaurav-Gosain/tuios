@@ -343,6 +343,13 @@ cells a program coloured itself unless a theme is set.
 `appearance.dim_foreground = false` keeps the text of an unfocused pane at full
 strength and dims only its background.
 
+`appearance.popup_dim` (0 to 90, default 0/off) dims the full screen behind
+a focused plain popup, including the dock and rail. `tuios popup --dim 30 -- fzf`
+overrides it for one popup; `--dim 0` explicitly disables it, and omission follows
+the config. Focusing a pane behind the popup removes the dim. TML popups
+inherit `appearance.modal_dim` unless overridden. Built-in panels keep using
+`modal_dim`, and the scrim never stacks. Scratch panes are unchanged.
+
 `appearance.modal_dim` (0 to 90, default 30) darkens the screen behind an open
 panel such as the command palette; 0 turns it off. `appearance.motion` is
 `none`, `basic` (window slides and the copy sweep) or `full` (the default: also the panel

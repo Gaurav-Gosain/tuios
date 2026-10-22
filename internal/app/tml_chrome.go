@@ -237,20 +237,28 @@ func (m *OS) tmlOwnerTag(window *terminal.Window, s *config.Settings, room int) 
 	return lipgloss.NewStyle().Foreground(fg).Render(text), ansi.StringWidth(text)
 }
 
-// tmlScrimTarget is the layer id of the TML popup the screen is dimmed
-// behind this frame, or "". Only a popup that has the focus dims the
-// screen: it takes the keys, as a modal does. A popup a pane opened does
-// not take the focus, and dimming the pane that still gets every key would
-// say the opposite of what the keys do.
-func (m *OS) tmlScrimTarget() string {
+// popupScrimTarget is the layer id and percent of the popup the screen is
+// dimmed behind this frame. Only the focused popup dims the screen: it takes
+// the keys, as a modal does. TML keeps the modal dim unless overridden.
+func (m *OS) popupScrimTarget() (string, int) {
 	w := m.GetFocusedWindow()
-	if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace || !m.isTMLPopup(w) {
-		return ""
+	if w == nil || w.Minimized || w.Workspace != m.CurrentWorkspace || !w.IsPopup || w.Tiled {
+		return "", 0
 	}
-	return w.ID
+	dim := m.Settings.PopupDim
+	if w.PopupDim != nil {
+		dim = w.PopupDim.Percent
+	} else if m.isTMLPopup(w) {
+		dim = m.Settings.ModalDim
+	}
+	dim = min(max(dim, 0), config.PopupDimMax)
+	if dim == 0 {
+		return "", 0
+	}
+	return w.ID, dim
 }
 
-// scrimmedChrome reports whether a layer is chrome the scrim of a TML popup
+// scrimmedChrome reports whether a layer is chrome the scrim of a popup
 // dims after it is drawn: the dock and the rails sit above the panes, so
 // they are drawn after the popup's layer and need a pass of their own.
 func scrimmedChrome(id string) bool {
