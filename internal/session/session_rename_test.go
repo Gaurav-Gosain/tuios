@@ -312,3 +312,27 @@ func TestStaleDaemonErrorNamesTheRestart(t *testing.T) {
 		t.Error("a verb this tuios does not know either was blamed on the daemon")
 	}
 }
+
+// TestFollowOwnPaneLeavesKillAndNewSession holds a security boundary: a pane's
+// own call naming a session that is gone goes to the pane's session, but
+// kill-session must never be turned into a kill of the caller's own session,
+// and new-session must make the session it names. The guard case shows the
+// same call is followed for an ordinary verb.
+func TestFollowOwnPaneLeavesKillAndNewSession(t *testing.T) {
+	d := NewDaemon(&DaemonConfig{})
+	t.Cleanup(d.manager.Shutdown)
+	sess := makeSessionWithWindow(t, d, "omega")
+	win := sess.GetState().Windows[0].ID
+	cs := &connState{}
+	cs.paneBound.Store(&win)
+	params := []byte(`{"session":"alpha","window":"` + win + `"}`)
+
+	if got := string(d.followOwnPane(cs, "set-agent-state", params)); !strings.Contains(got, `"session":"omega"`) {
+		t.Fatalf("guard: set-agent-state from the pane was not followed to omega: %s", got)
+	}
+	for _, verb := range []string{"kill-session", "new-session"} {
+		if got := string(d.followOwnPane(cs, verb, params)); got != string(params) {
+			t.Errorf("%s was rewritten to %s", verb, got)
+		}
+	}
+}

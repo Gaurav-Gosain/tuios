@@ -128,30 +128,38 @@ func (d *Daemon) followRenamedSession(verb string, params json.RawMessage) json.
 // A session name that resolves is never rewritten here, so a call naming a
 // session that exists, the pane's or another, is checked as it is sent. A
 // placement read from the caller's environment does not count, since a
-// process can set that itself.
-func (d *Daemon) followOwnPane(cs *connState, params json.RawMessage) json.RawMessage {
-	if cs == nil || cs.viaLink || cs.paneOnly || len(params) == 0 {
+// process can set that itself. The verbs in renameNotFollowed are left as
+// sent, as followRenamedSession leaves them.
+func (d *Daemon) followOwnPane(cs *connState, verb string, params json.RawMessage) json.RawMessage {
+	if renameNotFollowed[verb] || cs == nil || cs.viaLink || cs.paneOnly || len(params) == 0 {
 		return params
 	}
+	var named struct {
+		Session string `json:"session"`
+		Window  string `json:"window"`
+	}
+	if json.Unmarshal(params, &named) != nil || named.Session == "" || named.Window == "" {
+		return params
+	}
+	if s, _ := d.manager.ResolveSession(named.Session); s != nil {
+		return params
+	}
+	holder := d.sessionHoldingWindow(named.Window)
+	if holder == nil {
+		return params
+	}
+	if placed, via := d.placePaneWindow(cs); placed != named.Window || (via != "token" && via != "pid") {
+		return params
+	}
+	// The struct decode matches keys without regard to case, so the rewrite
+	// goes ahead only when the exact keys hold the values checked above.
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(params, &m); err != nil {
 		return params
 	}
 	var session, window string
-	if raw, ok := m["session"]; !ok || json.Unmarshal(raw, &session) != nil || session == "" {
-		return params
-	}
-	if raw, ok := m["window"]; !ok || json.Unmarshal(raw, &window) != nil || window == "" {
-		return params
-	}
-	if s, _ := d.manager.ResolveSession(session); s != nil {
-		return params
-	}
-	holder := d.sessionHoldingWindow(window)
-	if holder == nil {
-		return params
-	}
-	if placed, via := d.placePaneWindow(cs); placed != window || (via != "token" && via != "pid") {
+	if json.Unmarshal(m["session"], &session) != nil || session != named.Session ||
+		json.Unmarshal(m["window"], &window) != nil || window != named.Window {
 		return params
 	}
 	m["session"], _ = json.Marshal(holder.Name())
