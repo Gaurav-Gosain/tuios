@@ -157,8 +157,9 @@ architecture, requirement and C4 diagrams are drawn as a flowchart is. A block
 arrow shows an arrow character. A service without a title shows its icon name.
 A packet diagram is rows of bit fields. A radar chart is drawn in braille dots,
 each curve a polygon in its series colour. Without colour, or in 40 columns or
-fewer, it is a table with one bar for each curve on each axis. A treemap is nested boxes, or an indented tree
-when the boxes are too small. An info diagram is its line of text. A tree view
+fewer, it is a table with one bar for each curve on each axis. A treemap is nested boxes, a colour for each
+branch of the root, with labels shortened when the columns are few, or an
+indented tree when the boxes are too small to draw. An info diagram is its line of text. A tree view
 is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
 with its causes as bones, each category in its own colour. Its causes wrap
 to fit the columns, and it is an indented tree when it is narrower still. A Cynefin
