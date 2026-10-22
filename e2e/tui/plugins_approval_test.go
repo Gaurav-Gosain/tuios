@@ -396,6 +396,11 @@ sleep 120
 			t.Errorf("%s with the token: %v, want ok=%v and %q\n%s", c.why, err, c.ok, c.want, out)
 		}
 	}
+	// With TUIOS_SOCKET cut too, nothing but the token says it is not
+	// the person.
+	if out, err := tuiosCLIEnv(t, base, env[:2], "plugins", "disable", "e2e.tok"); err == nil || !strings.Contains(out, "for the person") {
+		t.Errorf("disable over the herdr socket with the token and no TUIOS_SOCKET: %v\n%s", err, out)
+	}
 	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.victim"); !strings.Contains(info, "waiting for approval") {
 		t.Errorf("the victim left the waiting state:\n%s", info)
 	}
