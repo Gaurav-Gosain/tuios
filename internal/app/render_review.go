@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
@@ -1057,6 +1058,21 @@ func (m *OS) reviewPromptLine(label, draft string, hints []overlay.Hint, width i
 	return line + keys + reviewSpaces(1, pal.Surface)
 }
 
+// reviewKey is the first key the config binds a review action to, for its
+// hint, or "" when it binds the action to nothing.
+func (m *OS) reviewKey(action string) string {
+	reg := m.KeybindRegistry
+	if reg == nil {
+		reg = defaultInboxKeys()
+	}
+	for _, k := range reg.GetReviewKeys(action) {
+		if k = strings.TrimSpace(k); k != "" {
+			return k
+		}
+	}
+	return ""
+}
+
 // reviewKeyHints are the review's keys that do something where the cursor
 // is, most wanted first. The footer shows as many as fit, and always esc.
 func (m *OS) reviewKeyHints() []overlay.Hint {
@@ -1079,8 +1095,12 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 	if n := r.unsentNotes(); n > 0 && !against {
 		add("S", "send "+reviewCount(n, "note"))
 	}
-	add("]", "next hunk")
-	add("}", "next file")
+	if key := m.reviewKey(config.ActionReviewNextHunk); key != "" {
+		add(key, "next hunk")
+	}
+	if key := m.reviewKey(config.ActionReviewNextFile); key != "" {
+		add(key, "next file")
+	}
 	if e := r.currentFile(); e != nil && reviewSplitFits(e.file, m.reviewRowsWidth()) {
 		if m.reviewSplitOn(m.reviewRowsWidth()) {
 			add("s", "unified")

@@ -1007,6 +1007,9 @@ type KeybindingsConfig struct {
 	// visual selection. Copy mode's vim motions are fixed keys and are not
 	// here. See getDefaultCopyModeKeybinds.
 	CopyMode map[string][]string `toml:"copy_mode"`
+	// Review binds are live while the review overlay is open and no note is
+	// being typed: its hunk and file motions. See getDefaultReviewKeybinds.
+	Review map[string][]string `toml:"review"`
 	// GUI binds are read only by a native GUI client (tuios-gpui), through
 	// the GUI bridge's keybinds event. They are desktop chords that need no
 	// leader, such as ctrl+shift+t. The terminal client never looks them up,
@@ -1464,6 +1467,7 @@ func DefaultConfig() *UserConfig {
 			Mail:          getDefaultMailKeybinds(),
 			Transfers:     getDefaultTransfersKeybinds(),
 			CopyMode:      getDefaultCopyModeKeybinds(),
+			Review:        getDefaultReviewKeybinds(),
 			GUI:           getDefaultGUIKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
@@ -3424,6 +3428,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.CopyMode == nil {
 		cfg.Keybindings.CopyMode = make(map[string][]string)
 	}
+	if cfg.Keybindings.Review == nil {
+		cfg.Keybindings.Review = make(map[string][]string)
+	}
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
@@ -3515,6 +3522,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.Transfers, defaultCfg.Keybindings.Transfers)
 	// Copy mode's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
+	// The review overlay's section is newer than every config written before it.
+	fillMapDefaults(cfg.Keybindings.Review, defaultCfg.Keybindings.Review)
 	// The GUI section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.GUI, defaultCfg.Keybindings.GUI)
 
@@ -3742,6 +3751,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.Mail, d.Mail},
 		{c.Transfers, d.Transfers},
 		{c.CopyMode, d.CopyMode},
+		{c.Review, d.Review},
 		{c.GUI, d.GUI},
 		{c.Global, d.Global},
 		{c.Script, d.Script},

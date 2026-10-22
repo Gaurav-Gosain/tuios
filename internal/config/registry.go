@@ -55,7 +55,7 @@ type sectionMaps struct {
 	debugPrefix, tapePrefix, layoutPrefix, tuiosPrefix    map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
-	transfers, lists                                      map[string]string
+	transfers, lists, review                              map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -124,6 +124,7 @@ func (r *KeybindRegistry) buildMappings() {
 		mail:            r.sectionKeyMap(kb.Mail),
 		transfers:       r.sectionKeyMap(kb.Transfers),
 		copyMode:        r.sectionKeyMap(kb.CopyMode),
+		review:          r.sectionKeyMap(kb.Review),
 	}
 }
 
@@ -377,6 +378,18 @@ func (r *KeybindRegistry) GetTransfersAction(key string) string {
 	return r.lookupKey(key, r.sections.transfers)
 }
 
+// GetReviewAction returns the action a key runs in the review overlay, or ""
+// for a key the section does not bind. The overlay reads its other keys itself.
+func (r *KeybindRegistry) GetReviewAction(key string) string {
+	return r.lookupKey(key, r.sections.review)
+}
+
+// GetReviewKeys is GetKeys for the review overlay, for its key hints and the
+// help overlay.
+func (r *KeybindRegistry) GetReviewKeys(action string) []string {
+	return r.config.Keybindings.Review[action]
+}
+
 // GetTransfersKeys is GetKeys for the Copies panel, for its key hints and the
 // help overlay.
 func (r *KeybindRegistry) GetTransfersKeys(action string) []string {
@@ -543,7 +556,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview:
 		return true
 	case ScopeGUI:
 		// Only the GUI reads these keys. A terminal's help that listed
@@ -846,6 +859,10 @@ var ActionDescriptions = map[string]string{
 	ActionCopyModeSearchBackward: "Enter copy mode and search backward",
 	ActionCopyModeLineStart:      "Copy mode: go to the start of the line",
 	ActionCopyModeLineEnd:        "Copy mode: go to the end of the line",
+	ActionReviewNextHunk:         "Review: next hunk, going on into the next file",
+	ActionReviewPrevHunk:         "Review: previous hunk, going back into the previous file",
+	ActionReviewNextFile:         "Review: next file",
+	ActionReviewPrevFile:         "Review: previous file",
 
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",

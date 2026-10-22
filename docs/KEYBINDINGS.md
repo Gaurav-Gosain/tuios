@@ -1478,15 +1478,16 @@ the lines they are on. The code is coloured by its file type in the
 active theme's colours, added and removed lines sit on green and red grounds,
 and the words that changed in a changed line are marked. It owns every key
 while it is open, in either mode.
-The keys are the overlay's own, not bindings, like the scrollback browser's:
+The keys are the overlay's own, not bindings, like the scrollback browser's,
+except the hunk and file motions, which are in `[keybindings.review]`:
 
 | Keys | What it does |
 | --- | --- |
 | `j` / `k`, arrows | Move by line; with the file list focused, move through the files |
 | `space`, `pgdown`, `ctrl+d` / `pgup`, `ctrl+u` | Move by a page |
 | `g` / `G` | First or last line |
-| `]` / `[` | Next or previous hunk, going on into the next or previous file |
-| `}` / `{` | Next or previous file |
+| `]` / `[` | Next or previous hunk, going on into the next or previous file (`review_next_hunk`, `review_prev_hunk`) |
+| `}` / `{` | Next or previous file (`review_next_file`, `review_prev_file`) |
 | `s` | One column, or the old and new sides next to each other where the diff column is wide enough (about 120 columns of screen) |
 | `h` / `l`, `left` / `right` | Scroll the code sideways |
 | `tab` | Focus the file list or the diff |
@@ -1504,6 +1505,21 @@ The keys are the overlay's own, not bindings, like the scrollback browser's:
 
 In the note line and the other one-line prompts every printable key is text,
 a paste is typed as one line, `enter` saves and `esc` drops.
+
+`]`, `[`, `}` and `{` need Option on some layouts, AZERTY among them, where
+Option is often the Alt key that tuios reads. To move them, bind other keys in
+the `review` section. A key bound there wins over the overlay's own key, so
+pick one the table above does not use:
+
+```toml
+[keybindings.review]
+review_next_hunk = ["n"]
+review_prev_hunk = ["p"]
+review_next_file = ["N"]
+review_prev_file = ["P"]
+```
+
+The footer and the help overlay show the keys as they are bound.
 
 The compare view lists the attempts of the fan, with what each changed
 against the fan's base and its last check:

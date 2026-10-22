@@ -783,6 +783,7 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"mail", kb.Mail},
 		{"transfers", kb.Transfers},
 		{"copy_mode", kb.CopyMode},
+		{"review", kb.Review},
 		{"global", kb.Global},
 		{"script", kb.Script},
 		{"lists", kb.Lists},
