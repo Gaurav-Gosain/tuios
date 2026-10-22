@@ -1603,6 +1603,10 @@ type OS struct {
 	// pluginApproval is the dialog that asks the person about a native
 	// plugin that waits for approval. See plugin_approval.go.
 	pluginApproval pluginApprovalState
+	// pressingTapeKeys is true while a tape's Press runs keys through the
+	// input handler (PressKeys). Those keys are not the person's: the
+	// plugin approval dialog ignores them.
+	pressingTapeKeys bool
 	// fileClip is what a copy or a cut in the files section captured, waiting
 	// for a paste. It holds paths and no bytes, so it costs nothing to carry.
 	fileClip fileClipboard

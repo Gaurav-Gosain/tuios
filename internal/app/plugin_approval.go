@@ -170,9 +170,9 @@ func (m *OS) PluginApprovalSelect(idx int) {
 // as Tab and Enter or Up, Up and Enter, cannot. The cursor does not wrap.
 func (m *OS) PluginApprovalKey(key, text string) tea.Cmd {
 	st := &m.pluginApproval
-	if st.open == nil || !m.pluginApprovalSettled() || m.ProcessingRemoteKeys {
+	if st.open == nil || !m.pluginApprovalSettled() || m.ProcessingRemoteKeys || m.pressingTapeKeys {
 		// Keys a script or a pane sent through the client (send-keys, a
-		// tape) are not the person's, and answer nothing.
+		// tape's Press) are not the person's, and answer nothing.
 		return nil
 	}
 	if key != "enter" {

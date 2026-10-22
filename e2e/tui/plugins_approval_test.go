@@ -271,6 +271,23 @@ func TestNativePluginApproval(t *testing.T) {
 	}
 	saveArtifact(t, term, art, "dialog-keys")
 	notRun("Up, Up, Enter, Tab, Enter")
+	// Keys that a tape presses, or that send-keys sends through the
+	// client, are not the person's.
+	tapePath := filepath.Join(t.TempDir(), "allow.tape")
+	if err := os.WriteFile(tapePath, []byte("Press a l l o w Enter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "tape", "exec", "-s", "work", tapePath); err != nil {
+		t.Logf("tape exec: %v\n%s", err, out)
+	}
+	notRun("a tape's Press of allow and Enter")
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "work", "a l l o w Enter"); err != nil {
+		t.Logf("send-keys: %v\n%s", err, out)
+	}
+	notRun("send-keys of allow and Enter")
+	if !strings.Contains(term.Screen().Text(), "Allow the plugin Writer probe?") {
+		t.Fatalf("the dialog closed under keys that were not the person's:\n%s", term.Snapshot())
+	}
 	keys(term, "\x1b")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Allow the plugin") }, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the dialog: %v\n%s", err, term.Snapshot())

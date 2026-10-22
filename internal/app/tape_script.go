@@ -78,6 +78,11 @@ func (m *OS) PressKeys(keys []string) error {
 	wasScript := m.ScriptMode
 	m.ScriptMode = false
 	defer func() { m.ScriptMode = wasScript }()
+	// A tape is not the person: what it presses must not answer a
+	// question only the person may answer (plugin_approval.go).
+	wasPressing := m.pressingTapeKeys
+	m.pressingTapeKeys = true
+	defer func() { m.pressingTapeKeys = wasPressing }()
 	for _, msg := range msgs {
 		_, cmd := handler(msg, m)
 		m.queueScriptCmd(cmd)
