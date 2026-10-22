@@ -201,35 +201,34 @@ func pushText(line *[]Span, text string, style int, found *marks) {
 		return
 	}
 	if found != nil && hasMark(text) {
-		// pele pushes each piece of text between expressions, and the TeX of each
-		// expression without markup, on its own, and each joins the span before it.
-		// Go would copy the span's text for each piece, so the pieces are joined
-		// here first. Every boundary has a $$ on one side, so no entity spans one
-		// and decoding the joined text gives what decoding each piece does.
+		// pele decodes each piece of text between expressions, and the TeX of each
+		// expression it could not typeset, on its own, and each joins the span
+		// before it. Go would copy the span's text for each piece, so the decoded
+		// pieces are joined here first. A Mermaid placeholder (ﬂ°…¶ß) can span a
+		// $$ boundary, so the pieces are decoded one by one, not joined and then
+		// decoded.
 		var pending strings.Builder
 		from := 0
 		for i, r := range text {
 			if !isMark(r) {
 				continue
 			}
-			pending.WriteString(text[from:i])
+			pending.WriteString(DecodeEntities(text[from:i]))
 			from = i + utf8.RuneLen(r)
 			at := int(r) - MARK
 			if markup := found.math[at]; markup != nil {
 				if pending.Len() > 0 {
-					pushPlain(line, pending.String(), style)
+					pushDecoded(line, pending.String(), style)
 					pending.Reset()
 				}
 				*line = append(*line, Span{Style: style, Math: markup, Width: markup.Width})
 			} else {
-				pending.WriteString("$$")
-				pending.WriteString(found.tex[at])
-				pending.WriteString("$$")
+				pending.WriteString(DecodeEntities("$$" + found.tex[at] + "$$"))
 			}
 		}
-		pending.WriteString(text[from:])
+		pending.WriteString(DecodeEntities(text[from:]))
 		if pending.Len() > 0 {
-			pushPlain(line, pending.String(), style)
+			pushDecoded(line, pending.String(), style)
 		}
 		return
 	}
@@ -237,7 +236,10 @@ func pushText(line *[]Span, text string, style int, found *marks) {
 }
 
 func pushPlain(line *[]Span, text string, style int) {
-	decoded := DecodeEntities(text)
+	pushDecoded(line, DecodeEntities(text), style)
+}
+
+func pushDecoded(line *[]Span, decoded string, style int) {
 	l := *line
 	if plain(l) && l[len(l)-1].Style == style {
 		l[len(l)-1].Text += decoded
