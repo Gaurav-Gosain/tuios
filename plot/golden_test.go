@@ -115,6 +115,9 @@ var cases = []chartCase{
 	{"radar", 40, 13, func(w, h int, m Mode) *Grid {
 		return Radar{Axes: []string{"speed", "power", "range", "cost", "weight"}, Series: []Series{{Name: "car", Values: []float64{4, 2, 3, 5, 3}}, {Name: "bike", Values: []float64{2, 1, 5, 1, 1}}}, Max: 5, Rings: 5, Polygon: true}.Draw(w, h, m)
 	}},
+	{"span", 20, 1, func(w, h int, m Mode) *Grid {
+		return Span{Start: 3, End: 7.5, Min: 0, Max: 10, Fill: "▒", Role: Info}.Draw(w, m)
+	}},
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},

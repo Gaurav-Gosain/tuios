@@ -1,0 +1,15 @@
+=== braille 20x1
+|      ▒▒▒▒▒▒▒▒▒     |
+--- roles
+|      aaaaaaaaa     |
+a=info (upper case is bold)
+=== blocks 20x1
+|      ▒▒▒▒▒▒▒▒▒     |
+--- roles
+|      aaaaaaaaa     |
+a=info (upper case is bold)
+=== ascii 20x1
+|      #########     |
+--- roles
+|      aaaaaaaaa     |
+a=info (upper case is bold)
