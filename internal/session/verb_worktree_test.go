@@ -170,6 +170,51 @@ func TestARemovedWorktreeDirectoryIsListedGoneAndTheSessionIsKept(t *testing.T) 
 	}
 }
 
+// TestRemoveWorktreeRefusesANestedRepository pins the data-loss boundary the
+// counts cannot show: git worktree remove happily deletes ignored paths
+// without --force, and when one of them holds a git repository of its own —
+// here a clone with a commit nothing pushed — the verb refuses unless force
+// is passed, because no stash can save a nested repository's history.
+func TestRemoveWorktreeRefusesANestedRepository(t *testing.T) {
+	_, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	res := newWorktreeCall(t, c, repo, "nested", nil)
+	path := res["path"].(string)
+	// An ignored directory holding a clone with an unpushed commit. git
+	// status --ignored=matching reports it as one entry, and the removal
+	// would delete it without a word.
+	os.WriteFile(filepath.Join(repo, ".git", "info", "exclude"), []byte(".wt/\n"), 0o644)
+	nested := filepath.Join(path, ".wt", "clone")
+	testutil.Git(t, path, "clone", "-q", repo, nested)
+	// A commit nothing pushes: exactly the history a removal would strand.
+	os.WriteFile(filepath.Join(nested, "a"), []byte("unsaved\n"), 0o644)
+	testutil.Git(t, nested, "add", "a")
+	testutil.Git(t, nested, "commit", "-qm", "unpushed")
+	if err := os.MkdirAll(filepath.Join(path, "node_modules", "left-pad"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 50 {
+		if err := os.WriteFile(filepath.Join(path, "node_modules", "left-pad", fmt.Sprintf("f%d.js", i)), []byte("y"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resp := c.call(t, `{"id":2,"verb":"remove-worktree","params":{"session":"repo-nested","keep_session":true}}`)
+	if code := errCode(t, resp); code != ErrVerbWorktreeNested {
+		t.Errorf("code = %q, want %q", code, ErrVerbWorktreeNested)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the refusal removed the worktree: %v", err)
+	}
+	// force goes ahead and takes the nested repository with it.
+	result(t, c.call(t, `{"id":3,"verb":"remove-worktree","params":{"session":"repo-nested","force":true,"keep_session":true}}`))
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("force left the worktree: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(nested, ".git")); !os.IsNotExist(err) {
+		t.Errorf("force left the nested repository: %v", err)
+	}
+}
+
 func TestRemoveWorktreeWithForceDiscardsAndKeepsTheBranch(t *testing.T) {
 	_, sp, repo := worktreeFixture(t)
 	c := dialVerb(t, sp)

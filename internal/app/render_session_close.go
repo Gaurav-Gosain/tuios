@@ -48,6 +48,9 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 		m.sessionCloseRow(SessionCloseRowCancel, width, pal),
 		m.sessionCloseRow(SessionCloseRowClose, width, pal),
 	}
+	// The worktree toll line sits between the Close row and the delete row,
+	// so the delete row's rect moves down one when it is drawn.
+	tollLineDrawn := false
 	if rows > SessionCloseRowDeleteWorktree {
 		if line := m.worktreeTollLine(); line != "" {
 			// The delete row's own toll, warn-coloured when it names the
@@ -60,6 +63,7 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 			}
 			body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
 				overlay.Style(bg).Foreground(lineColor).Render(overlay.Truncate(line, max(width-1, 1))), width, bg))
+			tollLineDrawn = true
 		}
 		body = append(body, m.sessionCloseRow(SessionCloseRowDeleteWorktree, width, pal))
 	}
@@ -79,6 +83,9 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	hits := make([]overlayRowHit, 0, rows)
 	for i := range rows {
 		y := geo.BodyY + 3 + i
+		if tollLineDrawn && i == SessionCloseRowDeleteWorktree {
+			y++
+		}
 		hits = append(hits, overlayRowHit{
 			Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.Width, Y1: y + 1},
 			Idx:  i,

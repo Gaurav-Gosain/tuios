@@ -222,11 +222,10 @@ func Changes(path string) (int, error) {
 	return n, nil
 }
 
-// Ignored counts the files git ignores in a worktree. git worktree remove
-// deletes them without --force and Stash leaves them alone, so they are the
-// part of a removal that nothing saves. --ignored=matching lists every
-// ignored file instead of collapsing them into their directories, which is
-// the count a person deleting the worktree is owed.
+// Ignored scans the paths a removal would take unsaved: git never stashes
+// them, and git worktree remove deletes them without --force. --ignored=matching
+// reports a matched directory as one entry however many files sit in it, so the
+// entry is walked to count the files a person deleting the worktree is owed.
 func Ignored(path string) (int, error) {
 	out, err := run(path, "status", "--porcelain", "--untracked-files=all", "--ignored=matching")
 	if err != nil {
@@ -235,10 +234,85 @@ func Ignored(path string) (int, error) {
 	n := 0
 	for line := range strings.SplitSeq(out, "\n") {
 		if strings.HasPrefix(line, "!! ") {
-			n++
+			c, err := countFiles(filepath.Join(path, strings.TrimPrefix(line, "!! ")))
+			if err != nil {
+				return 0, err
+			}
+			n += c
 		}
 	}
 	return n, nil
+}
+
+// NestedRepo reports the first ignored or untracked path in a worktree that
+// holds a git repository — a .git of its own — whose history no stash and no
+// count can save: git worktree remove deletes it with everything around it.
+// Empty when there is none. Untracked paths are in the scan because --stash
+// saves their files but not a nested repository's .git.
+func NestedRepo(path string) (string, error) {
+	out, err := run(path, "status", "--porcelain", "--untracked-files=all", "--ignored=matching")
+	if err != nil {
+		return "", err
+	}
+	for line := range strings.SplitSeq(out, "\n") {
+		entry, ok := strings.CutPrefix(line, "!! ")
+		if !ok {
+			entry, ok = strings.CutPrefix(line, "?? ")
+		}
+		if !ok {
+			continue
+		}
+		nested, err := findNestedRepo(filepath.Join(path, entry))
+		if err != nil {
+			return "", err
+		}
+		if nested {
+			return entry, nil
+		}
+	}
+	return "", nil
+}
+
+// countFiles counts the files under dir, descending into nothing named .git:
+// a nested repository's internals are not the worktree's files, and the
+// removal deletes them either way.
+//
+// ponytail: walks every ignored and untracked directory in full; the removal
+// reads and deletes them all anyway, so a lazy walk is the same order of cost.
+func countFiles(dir string) (int, error) {
+	n := 0
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		n++
+		return nil
+	})
+	return n, err
+}
+
+// findNestedRepo reports whether dir holds a .git anywhere below it, stopping
+// at the first one. A .git directory is a repository; a .git file (a linked
+// worktree's) points at one just as well.
+func findNestedRepo(dir string) (bool, error) {
+	found := false
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return err
+		}
+		if d.Name() == ".git" {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found, err
 }
 
 // OwnCommits counts the commits the worktree's HEAD holds that no branch,

@@ -16,7 +16,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `no_shell_integration`, `not_at_prompt`, `confirm_required`, `no_transcript`,
 `unsupported_harness`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
-`unknown_pane`, `not_worktree`, `worktree_dirty`, `worktree_detached`, `git_failed`, `fan_exists`,
+`unknown_pane`, `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `fan_exists`,
 `repo_not_found`, `not_repo`, `no_notes`, `hunk_changed`, `index_changed`,
 `whole_file_only`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
@@ -71,7 +71,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `host_unreachable` | The host is not answering: its link is down or does not answer. Nothing was queued except mail. `tuios hosts` says why. |
 | `host_refused` | The link is up and cannot take another connection. Close one. |
 | `unknown_pane` | A pane id on the far machine is gone. Drop it. |
-| `not_worktree`, `worktree_dirty`, `worktree_detached`, `git_failed`, `repo_not_found` | From the worktree verbs and `start-agent`. A dirty worktree is left alone until you pass `--stash` or `--force`. A worktree on a detached HEAD holding commits no branch has is refused — removing it would lose those commits; commit them onto a branch, or pass `--force` to lose them. `repo_not_found` means that machine has no checkout of the origin: pass `--clone`. |
+| `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `repo_not_found` | From the worktree verbs and `start-agent`. A dirty worktree is left alone until you pass `--stash` or `--force`. A worktree on a detached HEAD holding commits no branch has is refused — removing it would lose those commits; commit them onto a branch, or pass `--force` to lose them. A worktree holding a nested git repository in an ignored or untracked path is refused — removing it would delete that repository with its history, and no stash can save it; remove the nested repository first, or pass `--force` to lose it. `repo_not_found` means that machine has no checkout of the origin: pass `--clone`. |
 | `fan_exists` | From `fan`: a fan by that name is in that repository. Nothing was started. Pick another name, or pass `--join` with a session of that fan to add attempts to it. |
 | `no_file`, `file_exists`, `no_permission` | From the file verbs and `transfer-start`: the path is not there, the destination is there and the call did not say what to do with it, or the user the daemon runs as may not touch it. Nothing was changed. For `file_exists`, ask the person, then pass `conflict`. |
 | `hash_mismatch` | A copy's bytes did not match the original's sha256. The copy was removed, and the transfer copies that file once more by itself. A second mismatch fails the transfer: the disk or the file may be changing. `tuios cp` exits 6. |

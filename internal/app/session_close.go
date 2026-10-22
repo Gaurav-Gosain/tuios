@@ -475,6 +475,11 @@ func (m *OS) worktreeTollLine() string {
 		parts = append(parts, fmt.Sprintf("%s on a detached HEAD: the delete refuses %s",
 			countOf(t.Own, "own commit"), plural.Word(t.Own, "it", "them")))
 	}
+	// A -1 is a count git would not give, not a zero: silence here would read
+	// as the clean line below, which promises nothing is lost.
+	if t.Changes < 0 || t.Ignored < 0 || t.Own < 0 {
+		parts = append(parts, "some counts could not be read")
+	}
 	if len(parts) == 0 {
 		return "The worktree is clean: nothing stashed, nothing lost."
 	}

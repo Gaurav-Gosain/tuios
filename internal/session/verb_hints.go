@@ -111,6 +111,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNotWorktree, "The session is not in a git worktree, so there is nothing to remove or diff."},
 	{ErrVerbWorktreeDirty, "remove-worktree refused: the worktree holds uncommitted changes and neither stash nor force was passed. Nothing was removed."},
 	{ErrVerbWorktreeDetached, "remove-worktree refused: the worktree sits on a detached HEAD holding commits no branch has. Nothing was removed."},
+	{ErrVerbWorktreeNested, "remove-worktree refused: an ignored or untracked path in the worktree holds a nested git repository, whose history no stash can save. Nothing was removed."},
 	{ErrVerbGitFailed, "A git command failed. The message is git's own. The repository is as it was."},
 	{ErrVerbRepoNotFound, "No checkout on this machine has the origin repo_url names, and clone was not passed. Pass clone to clone it, repos_root to look somewhere else, or repo to name the directory."},
 	{ErrVerbNotRepo, "No git repository is under the pane or session named, so there is nothing to review. Nothing was read."},

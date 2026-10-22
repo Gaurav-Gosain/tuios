@@ -1499,6 +1499,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionKilledMsg:
 		cmd := ListenForSessionKill(m.sessionKillChan())
 		if msg.Err != nil {
+			// A kill the worktree-deletion note asked for failed: the failed
+			// kill announces itself, so the next kill's note must not be
+			// silenced on its behalf.
+			m.pendingWorktreeKill = false
 			m.ShowNotification("Kill failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
