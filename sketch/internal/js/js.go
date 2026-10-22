@@ -292,7 +292,7 @@ func Hypot(values ...float64) float64 {
 	sum, compensation := 0.0, 0.0
 	for _, v := range values {
 		n := math.Abs(v) / max
-		summand := n*n - compensation
+		summand := float64(n*n) - compensation
 		preliminary := sum + summand
 		compensation = (preliminary - sum) - summand
 		sum = preliminary

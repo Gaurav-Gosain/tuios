@@ -82,7 +82,7 @@ func timeWithinDay(t float64) float64 {
 }
 
 func dayFromYear(y float64) float64 {
-	return 365*(y-1970) + math.Floor((y-1969)/4) - math.Floor((y-1901)/100) + math.Floor((y-1601)/400)
+	return float64(365*(y-1970)) + math.Floor((y-1969)/4) - math.Floor((y-1901)/100) + math.Floor((y-1601)/400)
 }
 
 func timeFromYear(y float64) float64 { return msPerDay * dayFromYear(y) }
@@ -139,7 +139,7 @@ func makeTime(h, m, s, ms float64) float64 {
 			return math.NaN()
 		}
 	}
-	return toInteger(h)*msPerHour + toInteger(m)*msPerMinute + toInteger(s)*msPerSecond + toInteger(ms)
+	return float64(toInteger(h)*msPerHour) + float64(toInteger(m)*msPerMinute) + float64(toInteger(s)*msPerSecond) + toInteger(ms)
 }
 
 // makeDay is MakeDay with V8's bounds on the year and the month.
@@ -169,7 +169,7 @@ func makeDate(d, t float64) float64 {
 	if math.IsNaN(d) || math.IsInf(d, 0) || math.IsNaN(t) || math.IsInf(t, 0) {
 		return math.NaN()
 	}
-	return d*msPerDay + t
+	return float64(d*msPerDay) + t
 }
 
 // offsetAt is the zone's offset from UTC in milliseconds at a time value.

@@ -429,7 +429,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		}
 		for k := 0; k < len(lanes); k++ {
 			lane := nodes[lanes[k]]
-			breadth[k] = math.Max(0, lane.MinW-2*pad[k])
+			breadth[k] = math.Max(0, lane.MinW-float64(2*pad[k]))
 			if lane.PadTop > head {
 				head = lane.PadTop
 			}
@@ -444,7 +444,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		}
 		laneStart := arena.float(laneCount + 1)
 		for k := 0; k < laneCount; k++ {
-			laneStart[k+1] = laneStart[k] + breadth[k] + 2*pad[k]
+			laneStart[k+1] = laneStart[k] + breadth[k] + float64(2*pad[k])
 		}
 
 		// Across the flow: each lane's items start centered, then line up with their neighbours in
@@ -677,7 +677,7 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			if math.IsInf(box[g*4], 1) {
 				continue
 			}
-			w := math.Max(box[g*4+2]-box[g*4]+2*c.PadX, c.MinW)
+			w := math.Max(box[g*4+2]-box[g*4]+float64(2*c.PadX), c.MinW)
 			c.X = (box[g*4] + box[g*4+2]) / 2
 			c.W = w
 			c.Y = (box[g*4+1] - c.PadTop + box[g*4+3] + c.PadBottom) / 2

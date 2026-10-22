@@ -576,7 +576,7 @@ func parseDate(s string, loc *time.Location) float64 {
 		}
 		date = utc(date, loc)
 	} else {
-		date -= float64(offset) * 1000
+		date -= float64(float64(offset) * 1000)
 		if date < -maxTime || date > maxTime {
 			return math.NaN()
 		}
