@@ -179,6 +179,10 @@ const LEAN_CLEAR = 40
 // pair of edges against each other would take too long.
 const MAX_WEIGHED = 400
 
+// Reuse curve-sampling buffers across layouts. (sketch keeps the two buffers in assignTracks
+// instead: layouts may run on several goroutines at once.)
+const SAMPLES = 16
+
 type End = uint8
 
 const (
@@ -228,6 +232,63 @@ func sortRangeInt(list []int, from, to int, key []int) {
 	}
 }
 
+// Avoid the comparator overhead of built-in sort.
+func sortByBary(list []int, count int, bary []float64, pos []int, right bool, spare []int) {
+	before := func(a, b int) bool {
+		if right {
+			return bary[a] < bary[b] || (bary[a] == bary[b] && pos[a] > pos[b])
+		}
+		return bary[a] < bary[b] || (bary[a] == bary[b] && pos[a] < pos[b])
+	}
+	const RUN = 8
+	for s := 0; s < count; s += RUN {
+		for i, end := s+1, min(count, s+RUN); i < end; i++ {
+			item := list[i]
+			j := i - 1
+			for j >= s && before(item, list[j]) {
+				list[j+1] = list[j]
+				j--
+			}
+			list[j+1] = item
+		}
+	}
+	from := list
+	to := spare
+	for width := RUN; width < count; width *= 2 {
+		for s := 0; s < count; s += 2 * width {
+			mid := min(count, s+width)
+			end := min(count, s+2*width)
+			i := s
+			j := mid
+			k := s
+			for i < mid && j < end {
+				if before(from[j], from[i]) {
+					to[k] = from[j]
+					j++
+				} else {
+					to[k] = from[i]
+					i++
+				}
+				k++
+			}
+			for i < mid {
+				to[k] = from[i]
+				k++
+				i++
+			}
+			for j < end {
+				to[k] = from[j]
+				k++
+				j++
+			}
+		}
+		from, to = to, from
+	}
+	if count > 0 && &from[0] != &list[0] {
+		copy(list[:count], from[:count])
+	}
+}
+
 func fillInt(n, v int) []int {
 	s := make([]int, n)
 	if v != 0 {
@@ -244,6 +305,13 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		return LayeredResult{}
 	}
 	m := len(edges)
+	if real == 1 && m == 0 && nodes[0].Kind == KindNode {
+		node := nodes[0]
+		node.Rank = 0
+		node.X = node.W / 2
+		node.Y = node.H / 2
+		return LayeredResult{Width: node.W, Height: node.H}
+	}
 
 	// Every edge gets a middle rank of its own when labels or parallel edges need the room.
 	step := 1
@@ -1153,8 +1221,8 @@ func Rank(nodes []*LNode, edges []*LEdge, step int) {
 }
 
 // The ends of edges that may move along one side of a node (0 the side its edges arrive at, 1 the
-// other), in the order of the nodes at their other ends, so that no two cross. `room` receives
-// the least distance between each end and the one before it, and the result is their sum.
+// other), ordered by their opposite nodes to avoid crossings. `ids` and `room` must start empty.
+// `ids` receives the ends; `room` receives their minimum gaps. Returns the sum of the gaps.
 // When there is too little room for a full pitch between each pair, the edges that leave side by
 // side move closer together, since they have no arrowheads to keep apart. With less room still,
 // neighbours that run the same way share a place, which keeps an arrowhead apart from an edge
@@ -1165,7 +1233,6 @@ func sideEnds(g *Graph, v int, side int, span float64, kinds []End, ids *[]int, 
 		start, list, other = g.predStart, g.predE, g.EF
 	}
 	pos := g.pos
-	*ids = (*ids)[:0]
 	for k := start[v]; k < start[v+1]; k++ {
 		if kinds[list[k]] != EndHeld {
 			*ids = append(*ids, list[k])
@@ -1234,6 +1301,8 @@ func spread(g *Graph, nodes []*LNode, EFK, ETK []End) {
 			if side == 0 {
 				kinds = ETK
 			}
+			ids = ids[:0]
+			room = room[:0]
 			total := sideEnds(g, v, side, span, kinds, &ids, &room)
 			if total == 0 {
 				continue
@@ -1428,11 +1497,6 @@ func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt Laye
 func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]int, empty []uint8) {
 	real, W, EF, ET, EFD, ETD := g.real, g.W, g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, pos := g.succStart, g.succE, g.predStart, g.predE, g.pos
-	var ids []int
-	var room []float64
-	var all []int
-	var sum []float64
-	var count []float64
 	// Where the end of segment `e` on node `v` should be, from the middle of its side. The edge is
 	// followed up from the segment (side 0) or down, past the bends in ranks that hold nothing
 	// else, to where it next comes to a point that is held in place or to another node's side.
@@ -1475,103 +1539,134 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 		place := (float64(xs[v]*width) + float64(middle*span)) / (width + span)
 		return math.Max(lo, math.Min(hi, place)) - xs[v]
 	}
+	// End order and spacing stay fixed across passes; held ends divide free ends into runs.
+	// (sketch keeps every side's ids, room and all in three shared slices.)
+	type sideRun struct {
+		v      int
+		side   int
+		span   float64
+		ids    int
+		room   int
+		all    int
+		idsEnd int
+		allEnd int
+	}
+	var sides []sideRun
+	var idsAt, allAt []int
+	var roomAt []float64
+	var ids []int
+	var room []float64
+	for v := 0; v < real; v++ {
+		span := math.Min(nodes[v].Span, W[v])
+		if span <= 0 || nodes[v].Kind != KindNode {
+			continue
+		}
+		for side := 0; side < 2; side++ {
+			kinds, other, start, list := EFK, ET, succStart, succE
+			if side == 0 {
+				kinds, other, start, list = ETK, EF, predStart, predE
+			}
+			ids = ids[:0]
+			room = room[:0]
+			sideEnds(g, v, side, span, kinds, &ids, &room)
+			if len(ids) == 0 {
+				continue
+			}
+			if len(ids) == 1 {
+				room = append(room[:0], 0)
+			}
+			run := sideRun{v: v, side: side, span: span, ids: len(idsAt), room: len(roomAt), all: len(allAt)}
+			idsAt = append(idsAt, ids...)
+			roomAt = append(roomAt, room...)
+			for k := start[v]; k < start[v+1]; k++ {
+				allAt = append(allAt, list[k])
+			}
+			run.idsEnd = len(idsAt)
+			run.allEnd = len(allAt)
+			sortBy(allAt[run.all:run.allEnd], func(a, b int) float64 { return or(float64(pos[other[a]]-pos[other[b]]), float64(a-b)) })
+			sides = append(sides, run)
+		}
+	}
 	// The ends of an edge follow each other, so the nodes are gone over until none moves: a few
 	// times at most, in practice.
+	var sum []float64
+	var count []float64
 	moved := true
 	for pass := 0; moved && pass < 6; pass++ {
 		moved = false
-		for v := 0; v < real; v++ {
-			span := math.Min(nodes[v].Span, W[v])
-			if span <= 0 || nodes[v].Kind != KindNode {
-				continue
+		for _, sr := range sides {
+			v, side, span := sr.v, sr.side, sr.span
+			ids := idsAt[sr.ids:sr.idsEnd]
+			room := roomAt[sr.room:]
+			all := allAt[sr.all:sr.allEnd]
+			kinds, dx := EFK, EFD
+			if side == 0 {
+				kinds, dx = ETK, ETD
 			}
-			for side := 0; side < 2; side++ {
-				kinds, dx, other, start, list := EFK, EFD, ET, succStart, succE
-				if side == 0 {
-					kinds, dx, other, start, list = ETK, ETD, EF, predStart, predE
-				}
-				sideEnds(g, v, side, span, kinds, &ids, &room)
-				if len(ids) == 0 {
+			k := 0
+			lo := -span / 2
+			for i := 0; i <= len(all); i++ {
+				held := i < len(all) && kinds[all[i]] == EndHeld
+				if i < len(all) && !held {
 					continue
 				}
-				if len(ids) == 1 {
-					if len(room) < 1 {
-						room = append(room[:0], 0)
-					}
-					room[0] = 0
+				// Free ends since the last held end occupy ids[k..k + size).
+				size := 0
+				for j := i - 1; j >= 0 && kinds[all[j]] != EndHeld; j-- {
+					size++
 				}
-				// Every end on the side in order, the held ones among them, which divide the rest into runs.
-				all = all[:0]
-				for k := start[v]; k < start[v+1]; k++ {
-					all = append(all, list[k])
+				hi := span / 2
+				if held {
+					hi = dx[all[i]] - PORT_PITCH
 				}
-				sortBy(all, func(a, b int) float64 { return or(float64(pos[other[a]]-pos[other[b]]), float64(a-b)) })
-				k := 0
-				lo := -span / 2
-				for i := 0; i <= len(all); i++ {
-					held := i < len(all) && kinds[all[i]] == EndHeld
-					if i < len(all) && !held {
-						continue
+				if size > 0 {
+					// Isotonic fitting preserves order and spacing by pooling neighbours that are too close.
+					sum = sum[:0]
+					count = count[:0]
+					before := 0.0
+					for j := 0; j < size; j++ {
+						if j > 0 {
+							before += room[k+j]
+						}
+						sum = append(sum, wanted(ids[k+j], side, v, span, pass > 0)-before)
+						count = append(count, 1)
+						// Keep ends together when spacing forced them to share a place.
+						together := j > 0 && room[k+j] == 0
+						for len(sum) > 1 && (together || sum[len(sum)-2]/count[len(count)-2] > sum[len(sum)-1]/count[len(count)-1]) {
+							together = false
+							top := sum[len(sum)-1]
+							sum = sum[:len(sum)-1]
+							pooled := count[len(count)-1]
+							count = count[:len(count)-1]
+							sum[len(sum)-1] += top
+							count[len(count)-1] += pooled
+						}
 					}
-					// The run of free ends before this point is ids[k..], as many as were passed since the last held end.
-					size := 0
-					for j := i - 1; j >= 0 && kinds[all[j]] != EndHeld; j-- {
-						size++
-					}
-					hi := span / 2
-					if held {
-						hi = dx[all[i]] - PORT_PITCH
-					}
-					if size > 0 {
-						// The places nearest the wanted ones that keep the order and the room between
-						// neighbours: an isotonic fit, by pooling neighbours that would otherwise be too close.
-						sum = sum[:0]
-						count = count[:0]
-						before := 0.0
-						for j := 0; j < size; j++ {
+					total := before
+					j := 0
+					before = 0
+					for b := 0; b < len(sum); b++ {
+						// Center the run if it cannot fit between held ends.
+						var level float64
+						if hi-total < lo {
+							level = (lo + hi - total) / 2
+						} else {
+							level = math.Max(lo, math.Min(hi-total, sum[b]/count[b]))
+						}
+						for c := 0; c < int(count[b]); c, j = c+1, j+1 {
 							if j > 0 {
 								before += room[k+j]
 							}
-							sum = append(sum, wanted(ids[k+j], side, v, span, pass > 0)-before)
-							count = append(count, 1)
-							// Ends that share a place for want of room stay together.
-							together := j > 0 && room[k+j] == 0
-							for len(sum) > 1 && (together || sum[len(sum)-2]/count[len(count)-2] > sum[len(sum)-1]/count[len(count)-1]) {
-								together = false
-								top := sum[len(sum)-1]
-								sum = sum[:len(sum)-1]
-								pooled := count[len(count)-1]
-								count = count[:len(count)-1]
-								sum[len(sum)-1] += top
-								count[len(count)-1] += pooled
+							if math.Abs(dx[ids[k+j]]-level-before) > 0.01 {
+								moved = true
 							}
+							dx[ids[k+j]] = level + before
 						}
-						total := before
-						j := 0
-						before = 0
-						for b := 0; b < len(sum); b++ {
-							// With too little room between two held ends, the run sits in the middle of what there is.
-							var level float64
-							if hi-total < lo {
-								level = (lo + hi - total) / 2
-							} else {
-								level = math.Max(lo, math.Min(hi-total, sum[b]/count[b]))
-							}
-							for c := 0; c < int(count[b]); c, j = c+1, j+1 {
-								if j > 0 {
-									before += room[k+j]
-								}
-								if math.Abs(dx[ids[k+j]]-level-before) > 0.01 {
-									moved = true
-								}
-								dx[ids[k+j]] = level + before
-							}
-						}
-						k += size
 					}
-					if held {
-						lo = dx[all[i]] + PORT_PITCH
-					}
+					k += size
+				}
+				if held {
+					lo = dx[all[i]] + PORT_PITCH
 				}
 			}
 		}
@@ -1709,28 +1804,6 @@ func emptyRanks(g *Graph) []uint8 {
 	return nil
 }
 
-// orderedSet is a Set that keeps insertion order.
-type orderedSet struct {
-	items []int
-	has   map[int]bool
-}
-
-func newOrderedSet(items []int) *orderedSet {
-	s := &orderedSet{has: map[int]bool{}}
-	for _, k := range items {
-		s.add(k)
-	}
-	return s
-}
-
-func (s *orderedSet) add(k int) *orderedSet {
-	if !s.has[k] {
-		s.has[k] = true
-		s.items = append(s.items, k)
-	}
-	return s
-}
-
 // Gives every piece that does not run straight down a track across its gap, and counts the
 // tracks of each gap. Two pieces in one gap share a track only where they cannot be mistaken
 // for each other: where they do not overlap, or where they leave from or arrive at the same
@@ -1758,6 +1831,9 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		byRank[rank[k]] = append(byRank[rank[k]], k)
 	}
 	track, levels := pieces.track, pieces.levels
+	if len(byRankKeys) == 0 {
+		return
+	}
 	// The pieces are compared pair by pair, so where each begins and ends across the flow is worked out once.
 	LO := make([]float64, total)
 	HI := make([]float64, total)
@@ -1781,6 +1857,24 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	}
 	// How often a and b cross with a on the higher track: a's way down through b, and b's way down to itself through a.
 	crossings := func(a, b int) int { return within(to[a], b) + within(from[b], a) }
+	// Returns pairs of list indices, smaller first. Omitted pairs cannot meet or clash.
+	nearPairs := func(list []int) []int {
+		byLo := make([]int, len(list))
+		for i := range byLo {
+			byLo[i] = i
+		}
+		sortBy(byLo, func(a, b int) float64 { return LO[list[a]] - LO[list[b]] })
+		var pairs []int
+		for x := 0; x < len(byLo); x++ {
+			i := byLo[x]
+			reach := HI[list[i]] + 4*IN_LINE
+			for y := x + 1; y < len(byLo) && LO[list[byLo[y]]] <= reach; y++ {
+				j := byLo[y]
+				pairs = append(pairs, min(i, j), max(i, j))
+			}
+		}
+		return pairs
+	}
 
 	// Gives the pieces of one gap in `list` their tracks, and each the number of tracks that the
 	// pieces it has to do with take between them, counting its own from the first of those.
@@ -1805,39 +1899,59 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 			}
 			return i
 		}
-		sequence := list
-		if count <= MAX_WEIGHED {
+		weighed := count <= MAX_WEIGHED
+		// Avoid storing quadratically many pairs in dense gaps.
+		var pairs []int
+		var clashes [][]int
+		if weighed {
+			pairs = nearPairs(list)
+			clashes = make([][]int, count)
+		}
+		for p := 0; p < len(pairs); p += 2 {
+			i := pairs[p]
+			j := pairs[p+1]
+			if !clash(list[i], list[j]) {
+				continue
+			}
+			clashes[i] = append(clashes[i], j)
+			clashes[j] = append(clashes[j], i)
+		}
+		sequence := make([]int, count)
+		for i := range sequence {
+			sequence[i] = i
+		}
+		if weighed {
 			// above[j] lists the pieces that should be above list[j]. The order follows as many of
 			// these as it can: a piece is placed once all that should be above it are, and when
 			// none is free, the one with the fewest still waiting.
 			waiting := make([]int, count)
 			after := make([][]int, count)
 			above = make([][]int, count)
-			for i := 0; i < count; i++ {
-				for j := i + 1; j < count; j++ {
-					a := list[i]
-					b := list[j]
-					if !meet(a, b) {
-						continue
-					}
-					fi := find(i)
-					group[fi] = find(j)
-					ab := crossings(a, b)
-					ba := crossings(b, a)
-					if ab == ba {
-						continue
-					}
-					first, second := j, i
-					if ab < ba {
-						first, second = i, j
-					}
-					above[second] = append(above[second], first)
-					after[first] = append(after[first], second)
-					waiting[second]++
+			for p := 0; p < len(pairs); p += 2 {
+				i := pairs[p]
+				j := pairs[p+1]
+				a := list[i]
+				b := list[j]
+				if !meet(a, b) {
+					continue
 				}
+				fi := find(i)
+				group[fi] = find(j)
+				ab := crossings(a, b)
+				ba := crossings(b, a)
+				if ab == ba {
+					continue
+				}
+				first, second := j, i
+				if ab < ba {
+					first, second = i, j
+				}
+				above[second] = append(above[second], first)
+				after[first] = append(after[first], second)
+				waiting[second]++
 			}
 			placed := make([]uint8, count)
-			result := make([]int, 0, count)
+			sequence = sequence[:0]
 			for done := 0; done < count; done++ {
 				pick := -1
 				for i := 0; i < count; i++ {
@@ -1852,72 +1966,72 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 					}
 				}
 				placed[pick] = 1
-				result = append(result, pick)
+				sequence = append(sequence, pick)
 				for _, j := range after[pick] {
 					waiting[j]--
 				}
 			}
-			sequence = make([]int, count)
-			for i, r := range result {
-				sequence[i] = list[r]
-			}
 		}
-		// Each piece takes the first track below those it should be under that has room for it.
-		place := map[int]int{}
-		for i, k := range list {
-			place[k] = i
+		// taken is the Set of tracks the placed pieces that clash with this one hold: taken[t]
+		// is the step of the last piece that found track t taken. Every track is below count.
+		var taken []int
+		if weighed {
+			taken = make([]int, count+1)
 		}
-		var rows [][]int
-		for _, k := range sequence {
+		var onTrack [][]int
+		rows := 0
+		for stepAt, at := range sequence {
+			k := list[at]
 			t := 0
 			if above != nil {
-				for _, i := range above[place[k]] {
+				for _, i := range above[at] {
 					if track[list[i]] >= t {
 						t = track[list[i]] + 1
 					}
 				}
 			}
-			for ; ; t++ {
-				for len(rows) <= t {
-					rows = append(rows, nil)
-				}
-				free := true
-				for _, other := range rows[t] {
-					if clash(k, other) {
-						free = false
+			if weighed {
+				for _, i := range clashes[at] {
+					if tk := track[list[i]]; tk >= 0 {
+						taken[tk] = stepAt + 1
 					}
 				}
-				if free {
-					rows[t] = append(rows[t], k)
-					break
+				for taken[t] == stepAt+1 {
+					t++
 				}
+			} else {
+				for t < len(onTrack) && slices.ContainsFunc(onTrack[t], func(other int) bool { return clash(k, other) }) {
+					t++
+				}
+				for len(onTrack) <= t {
+					onTrack = append(onTrack, nil)
+				}
+				onTrack[t] = append(onTrack[t], k)
 			}
 			track[k] = t
-		}
-		first := map[int]int{}
-		lastOf := map[int]int{}
-		for i, k := range list {
-			root := find(i)
-			if f, ok := first[root]; !ok || track[k] < f {
-				first[root] = track[k]
-			}
-			if l, ok := lastOf[root]; !ok || track[k] > l {
-				lastOf[root] = track[k]
+			if t >= rows {
+				rows = t + 1
 			}
 		}
-		for i, k := range list {
+		first := fillInt(count, rows)
+		last := fillInt(count, -1)
+		for i := 0; i < count; i++ {
 			root := find(i)
-			levels[k] = lastOf[root] - first[root] + 1
+			first[root] = min(first[root], track[list[i]])
+			last[root] = max(last[root], track[list[i]])
+		}
+		for i := 0; i < count; i++ {
+			root := find(i)
+			levels[list[i]] = last[root] - first[root] + 1
 			if curved {
-				track[k] -= first[root]
+				track[list[i]] -= first[root]
 			}
 		}
-		return len(rows)
+		return rows
 	}
 
 	// The least distance between a and b as plain curves across a gap that leaves them `height`
 	// to turn in: between points along each and the other drawn as a run of short lines.
-	const SAMPLES = 16
 	sample := func(k int, h float64, out []float64) {
 		c := Ease(to[k]-from[k], h)
 		for i := 0; i <= SAMPLES; i++ {
@@ -1978,37 +2092,40 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 				many = append(many, k)
 			}
 		}
-		level := newOrderedSet(many)
-		for i := 0; i < len(all); i++ {
-			for j := i + 1; j < len(all); j++ {
-				a := all[i]
-				b := all[j]
-				if (level.has[a] && level.has[b]) || !clash(a, b) || (from[a] < to[a]) != (from[b] < to[b]) {
-					continue
-				}
-				limit := float64(LEVEL_TOUCH)
-				if wide[a] == 1 || wide[b] == 1 {
-					limit = LEVEL_CLEAR
-				}
-				if nearest(a, b, room[r]) < limit {
-					level.add(a).add(b)
-				}
+		level := make(map[int]bool, len(many))
+		for _, k := range many {
+			level[k] = true
+		}
+		pairs := nearPairs(all)
+		for p := 0; p < len(pairs); p += 2 {
+			a := all[pairs[p]]
+			b := all[pairs[p+1]]
+			if (level[a] && level[b]) || !clash(a, b) || (from[a] < to[a]) != (from[b] < to[b]) {
+				continue
+			}
+			limit := float64(LEVEL_TOUCH)
+			if wide[a] == 1 || wide[b] == 1 {
+				limit = LEVEL_CLEAR
+			}
+			if nearest(a, b, room[r]) < limit {
+				level[a] = true
+				level[b] = true
 			}
 		}
 		for _, k := range far {
 			track[k] = -1
 			levels[k] = 0
 		}
-		if len(level.items) == 0 {
+		if len(level) == 0 {
 			continue
 		}
 		crossing := 0
 		alongside := 0
-		turning := slices.Clone(level.items)
-		for i := 0; i < len(turning); i++ {
-			for j := i + 1; j < len(turning); j++ {
-				a := turning[i]
-				b := turning[j]
+		beside := map[int]bool{}
+		for p := 0; p < len(pairs); p += 2 {
+			a := all[pairs[p]]
+			b := all[pairs[p+1]]
+			if level[a] && level[b] {
 				if !overlap(a, b) {
 					continue
 				}
@@ -2017,6 +2134,9 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 				} else if !mates(a, b) {
 					alongside++
 				}
+			} else if (level[a] || level[b]) && meet(a, b) {
+				beside[a] = true
+				beside[b] = true
 			}
 		}
 		if crossing > alongside {
@@ -2029,17 +2149,9 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		}
 		// With them go the short pieces that could cross one of them, so that each has its place
 		// among the levels and crosses none.
-		beside := func(k int) bool {
-			for _, j := range level.items {
-				if meet(k, j) {
-					return true
-				}
-			}
-			return false
-		}
 		var members []int
 		for _, k := range all {
-			if level.has[k] || (wide[k] != 1 && beside(k)) {
+			if level[k] || (wide[k] != 1 && beside[k]) {
 				members = append(members, k)
 			}
 		}
@@ -2205,6 +2317,9 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 	for r := 0; r <= maxRank; r++ {
 		widest = max(widest, layerStart[r+1]-layerStart[r])
 	}
+	if widest < 2 {
+		return
+	}
 	// With offsets, edges that reach one node at different offsets take separate places along it.
 	var place []int
 	if offsets {
@@ -2333,8 +2448,7 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 	bestOrder := slices.Clone(order)
 	bary := make([]float64, n)
 	moving := make([]int, widest)
-	leftBias := func(a, b int) float64 { return or(bary[a]-bary[b], float64(pos[a]-pos[b])) }
-	rightBias := func(a, b int) float64 { return or(bary[a]-bary[b], float64(pos[b]-pos[a])) }
+	spare := make([]int, widest)
 
 	sweep := func(down bool, biasRight bool) {
 		start, list, other, otherDx := succStart, succE, ET, ETD
@@ -2382,11 +2496,7 @@ func reduceCrossings(g *Graph, nodes []*LNode) {
 			if movable < 2 {
 				continue
 			}
-			if biasRight {
-				sortBy(moving[:movable], rightBias)
-			} else {
-				sortBy(moving[:movable], leftBias)
-			}
+			sortByBary(moving, movable, bary, pos, biasRight, spare)
 			k := 0
 			for i := s; i < e; i++ {
 				if bary[order[i]] != -1 {
