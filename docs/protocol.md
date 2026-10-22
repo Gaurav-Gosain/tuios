@@ -1606,7 +1606,7 @@ catalog.
 | `invalid_params` | The params failed to decode, or a required field was missing. |
 | `session_not_found` | The named session does not exist (or no sessions exist). |
 | `session_exists` | new-session was given a name the daemon already holds. |
-| `fan_exists` | fan was given the name of a fan that exists in the repository, with no `join`. The hint lists the fan's sessions. |
+| `fan_exists` | fan was given the name of a fan that exists in the repository, with no `join`. The hint lists the fan's sessions that the caller reaches. |
 | `window_not_found` | The window target did not resolve to a window. |
 | `no_windows` | The session has no windows to act on. |
 | `pty_not_found` | The target window has no live PTY. |
@@ -3944,8 +3944,19 @@ and nothing is made. To add attempts to a fan on purpose, pass `join` with a
 session of that fan (`name` may then be omitted): the caller must reach that
 session, which the person, a pane with `admin`, the fan's own panes and the
 pane that started it do. Without `name`, the name fan makes from the prompt
-moves on to a free one (`-2`, `-3`). A name with a character that does not
-print, such as a zero-width space, is refused.
+moves on to a free one (`-2`, `-3`). A name can have only the letters A to Z
+and a to z, the digits 0 to 9, and `/ . _ -`. Any other character is refused,
+and the error names it. A refusal lists the fan's sessions only to a caller
+that reaches them.
+
+Each new fan gets a random `fan_id`. Its sessions save it, and a `join` copies
+it. A fan's sessions are the ones with the same `group`, repository and
+`fan_id`, so reach, `compare-fan`, `keep-fan` and `review-diff --against` go
+by it. A fan made under a name while a fan of that name was saved and not
+running, which `disable_auto_restore` allows, stays a fan of its own when
+the saved one comes back, in any order and across restarts. Two records
+from before the field have no `fan_id` and match by name. `list-worktrees`
+rows, the `fan` reply and `compare-fan` carry `fan_id`.
 
 An agent is one string, the way a person types it: a harness id or program
 name, or any program, with its arguments after it (`"codex --model o5"`). It
@@ -4669,9 +4680,10 @@ Only the person or a caller with `admin` may call it: a pane without `admin`
 and any restricted connection are refused. Over a link it needs `write`.
 
 Files git ignores (`.env`, build output) are deleted with a worktree and are
-not stashed. `compare-fan` with `detail` lists them. `group` and `repo_root`,
-when given, name the fan the caller read: a session that is no longer an
-attempt of it, after a rename, is `invalid_params` and nothing is removed.
+not stashed. `compare-fan` with `detail` lists them. `group`, `repo_root` and
+`fan_id`, when given, name the fan the caller read: a session that is no
+longer an attempt of it, after a rename, is `invalid_params` and nothing is
+removed.
 `siblings` and `ignored` name what the caller showed: the attempts to remove,
 and for each the `ignored_hash` compare-fan gave for its ignored files. When
 the other attempts differ, or one's ignored files changed in any way, the

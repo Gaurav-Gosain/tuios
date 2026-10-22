@@ -7960,6 +7960,25 @@ on 2026-10-21.
 | Joining a fan is explicit: a taken name is refused for every caller, the person included | the `fan_exists` refusal removed | `TestFanRefusesJoiningAnotherGroup` (the taken name is not refused) | **caught** |
 | A new name is held from the check until its sessions exist | the reservation left out of `taken` | `TestFanNameIsHeldWhileItIsMade` ("fan/raceb: the outsider's repo-fan-raceb-2 joined the person's repo-fan-raceb") | **caught** |
 | A name with a character that does not print is refused | the `fanStemPrintable` check skipped | `TestFanRefusesJoiningAnotherGroup` (a name with a zero-width space makes a fan) | **caught** |
+
+### Plain fan names, refusals and restored fans
+
+The follow-up to the review of #972. `TestFanRefusesJoiningAnotherGroup`
+now also checks the name characters and what a refusal lists, and
+`TestRestoredFanStaysItsOwnFan`, `TestReview984RestoreAcrossRestart` and
+`TestReview984RestoreSquatFirst` (security boundary tests) check that a fan
+is told by its saved fan ID. `TestCockpitSpawnSheet` checks the new-agent
+form. Run on 2026-10-21 and 2026-10-22.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A fan name keeps to A-Z, a-z, 0-9 and / . _ - | `FanNameChar` takes every character above ASCII but the three the old check refused | `TestFanRefusesJoiningAnotherGroup` (the name with a Hangul filler makes a fan) | **caught** |
+| A refusal lists the fan's sessions only to a caller that reaches them | `reachedNames` keeps every name | `TestFanRefusesJoiningAnotherGroup` ("the fan_exists refusal listed the fan's sessions to an outsider") | **caught** |
+| A fan's sessions are the ones with its fan ID | `sameFan` compares the group and repository alone | `TestRestoredFanStaysItsOwnFan`, `TestReview984RestoreAcrossRestart` and `TestReview984RestoreSquatFirst` ("the pane's fan reaches the person's restored repo-fan-saved") | **caught** |
+| A join copies the fan ID | join gives the new session a new ID | `TestFanRefusesJoiningAnotherGroup` ("the group has 2 sessions, want 5"), `TestRestoredFanStaysItsOwnFan` | **caught** |
+| The fan ID is saved | `fan_id` left out of the saved JSON | `TestReview984RestoreAcrossRestart`, `TestReview984RestoreSquatFirst` (the pane's fan reaches the person's restored sessions) | **caught**. The tests pass the saved state through JSON, as the state file holds it. Without that step the cut passed |
+| The new-agent form refuses a name a fan does not take | the `FanNameChar` check in `spawnStart` skipped | `TestCockpitSpawnSheet` (waiting for the refused branch) | **caught** |
+
 ## A fan's lead by its session ID
 
 `TestFanLeadIsHeldByID` in `internal/session` (a security boundary test): the

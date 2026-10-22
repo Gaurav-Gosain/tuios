@@ -63,6 +63,7 @@ type ckCompare struct {
 // ckCompareResult is compare-fan's answer.
 type ckCompareResult struct {
 	Group    string         `json:"group"`
+	FanID    string         `json:"fan_id"`
 	Repo     string         `json:"repo"`
 	RepoRoot string         `json:"repo_root"`
 	Base     string         `json:"base"`
@@ -261,7 +262,7 @@ func (m *OS) cockpitCompareStale() tea.Cmd {
 	}
 	newest := int64(0)
 	for _, w := range m.Inbox.ck.branches {
-		if w.group == cp.res.Group && w.repo == cp.res.RepoRoot {
+		if w.group == cp.res.Group && w.fanID == cp.res.FanID && w.repo == cp.res.RepoRoot {
 			newest = max(newest, w.verdictAt)
 		}
 	}
@@ -439,12 +440,12 @@ func (m *OS) ckKeepNow() tea.Cmd {
 	}
 	cp.armed, cp.busy, cp.note = "", "keep", ""
 	gen, call, kept := cp.gen, m.inboxCaller(), a.Session
-	group, root := cp.res.Group, cp.res.RepoRoot
+	group, root, fanID := cp.res.Group, cp.res.RepoRoot, cp.res.FanID
 	letter := ckLetter(cp.focus)
 	return func() tea.Msg {
 		// The fan is named too, so a session renamed since the read is not
 		// kept in its place.
-		raw, err := call("keep-fan", map[string]any{"session": kept, "stash": true, "group": group, "repo_root": root,
+		raw, err := call("keep-fan", map[string]any{"session": kept, "stash": true, "group": group, "repo_root": root, "fan_id": fanID,
 			"siblings": siblings, "ignored": ignored}, ckCompareTimeout)
 		if err != nil {
 			return ckFanActMsg{gen: gen, verb: "keep", err: err}

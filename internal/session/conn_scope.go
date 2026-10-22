@@ -574,7 +574,7 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 		return false
 	}
 	ow := o.Worktree()
-	return ow != nil && ow.Managed && ow.Group == tw.Group && ow.RepoRoot == tw.RepoRoot
+	return ow != nil && ow.Managed && sameFan(ow, tw)
 }
 
 // scopeSessionNames lists the sessions own reaches, sorted.

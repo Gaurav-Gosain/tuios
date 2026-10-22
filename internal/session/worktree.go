@@ -34,6 +34,11 @@ type WorktreeInfo struct {
 	// Group names the fan-out this session belongs to: the branch stem the
 	// siblings share. Empty for a worktree made on its own.
 	Group string `json:"group,omitempty"`
+	// FanID tells this fan apart from another of the same name, such as one
+	// made while this one was saved and not running. A fan's sessions share
+	// it, and reach and the fan verbs go by it. Empty on a record from before
+	// the field: such records match each other by name.
+	FanID string `json:"fan_id,omitempty"`
 	// LaunchedFrom names the session whose pane ran the fan that made this
 	// one, when a pane of this daemon ran it. A connection restricted to its
 	// own session reaches the sessions its session launched. Empty when the

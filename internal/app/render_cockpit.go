@@ -1207,7 +1207,9 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 // ckWorktree is what the cockpit shows of an agent's worktree session.
 type ckWorktree struct {
 	branch, group, path, prompt, repo string
-	failed                            int
+	// fanID tells two fans of one name apart.
+	fanID  string
+	failed int
 	// pick is the session a judge picked, at verdictAt; judgeWindow is the
 	// pane of the judge started for the fan.
 	pick, judgeWindow string
@@ -1222,7 +1224,7 @@ func ckFanKey(host string, w ckWorktree) string {
 	if w.group == "" {
 		return ""
 	}
-	return host + "\x00" + w.repo + "\x00" + w.group
+	return host + "\x00" + w.repo + "\x00" + w.group + "\x00" + w.fanID
 }
 
 // ckJudgeWindows are the panes of the fans' judges, by host and window.
@@ -1281,7 +1283,7 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 	out := map[string]ckWorktree{}
 	for _, s := range m.BuildSessionTree().Sessions {
 		if w := s.Worktree; w != nil && w.Branch != "" {
-			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group,
+			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group, fanID: w.FanID,
 				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot,
 				pick: w.Pick, judgeWindow: w.JudgeWindow, verdictAt: w.VerdictAt, name: s.ID}
 		}

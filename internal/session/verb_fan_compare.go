@@ -80,7 +80,7 @@ func (d *Daemon) fanSiblings(info *WorktreeInfo) []*Session {
 	var out []*Session
 	for _, s := range d.manager.AllSessions() {
 		wt := s.Worktree()
-		if wt != nil && wt.Group == info.Group && wt.RepoRoot == info.RepoRoot {
+		if sameFan(wt, info) {
 			out = append(out, s)
 		}
 	}
@@ -259,6 +259,7 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	out := map[string]any{
 		"type":      "fan_compare",
 		"group":     info.Group,
+		"fan_id":    info.FanID,
 		"repo":      info.Repo,
 		"repo_root": info.RepoRoot,
 		"base":      base,
@@ -736,6 +737,9 @@ type keepFanParams struct {
 	// session renamed since the caller read it is refused, not kept.
 	Group    string `json:"group"`
 	RepoRoot string `json:"repo_root"`
+	// FanID, when given, is the fan_id compare-fan gave: a fan of the same
+	// name made since is refused, not kept.
+	FanID *string `json:"fan_id"`
 	// Siblings, when given, are the attempts the caller means to remove,
 	// and Ignored the ignored_hash of the list it showed for each. A fan
 	// whose other attempts differ, or whose ignored files changed, is
@@ -768,7 +772,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 			Detail:  "Nothing was removed. remove-worktree removes one worktree.",
 		})
 	}
-	if (p.Group != "" && p.Group != info.Group) || (p.RepoRoot != "" && canonRoot(p.RepoRoot) != canonRoot(info.RepoRoot)) {
+	if (p.Group != "" && p.Group != info.Group) || (p.RepoRoot != "" && canonRoot(p.RepoRoot) != canonRoot(info.RepoRoot)) || (p.FanID != nil && *p.FanID != info.FanID) {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+kept.Name()+" is not an attempt of the fan named by group and repo_root", &VerbHint{
 			Param:  "session",
 			Detail: "Nothing was removed. The session may have been renamed. Read the fan again with compare-fan.",

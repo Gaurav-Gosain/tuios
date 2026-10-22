@@ -21,6 +21,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -958,6 +959,8 @@ func (m *OS) spawnStart() tea.Cmd {
 		return fail(spWhere, spawnNoWorktree(s))
 	case s.worktree && branch == "":
 		return fail(spBranch, "Write a branch name.")
+	case s.worktree && strings.IndexFunc(branch, func(r rune) bool { return !session.FanNameChar(r) }) >= 0:
+		return fail(spBranch, "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -.")
 	case s.worktree && !spawnRefOK(branch):
 		return fail(spBranch, "Git does not accept this branch name.")
 	case s.worktree && strings.HasPrefix(base, "-"):

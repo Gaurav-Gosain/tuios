@@ -284,6 +284,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "into", Type: "string", Description: "With merge: the branch to merge into. Omit for the base the attempt was made from."},
 				{Name: "group", Type: "string", Description: "The fan's group, as compare-fan gave it. When given, a session of another fan is refused."},
 				{Name: "repo_root", Type: "string", Description: "The fan's repository, as compare-fan gave it. When given, a session of another repository is refused."},
+				{Name: "fan_id", Type: "string", Description: "The fan's ID, as compare-fan gave it. When given, a session of another fan of the same name is refused."},
 				{Name: "siblings", Type: "[]string", Description: "The attempts the caller showed it would remove. When given, a fan whose other attempts differ is refused whole."},
 				{Name: "ignored", Type: "object", Description: "Per attempt to remove, the ignored_hash compare-fan gave for the list the caller showed. When given, an attempt whose ignored files changed, or that has no entry, is refused, and nothing is removed."},
 			},
