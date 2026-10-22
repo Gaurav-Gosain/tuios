@@ -399,6 +399,10 @@ type GeoRadar struct {
 	Curves []GeoCurve
 	// Min and Max are the values at the centre and at the rim.
 	Min, Max float64
+	// Ticks is the count of graticule rings, and Polygon says they are
+	// polygons through the axes instead of circles.
+	Ticks   int
+	Polygon bool
 }
 
 type GeoCurve struct {

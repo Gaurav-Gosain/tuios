@@ -253,7 +253,7 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 		Links:  []types.LinkInfo{},
 	}
 	if options.Geometry != nil {
-		geo := &types.GeoRadar{Title: title.Plain(), Min: min, Max: max}
+		geo := &types.GeoRadar{Title: title.Plain(), Min: min, Max: max, Ticks: radarTicks(ticks), Polygon: graticule != "circle"}
 		for _, axis := range axes {
 			geo.Axes = append(geo.Axes, axis.label)
 		}
@@ -265,4 +265,13 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 		rendered.Geometry = &types.Geometry{Width: totalWidth, Height: totalHeight, Radar: geo}
 	}
 	return rendered
+}
+
+// radarTicks is the count of graticule rings for a text drawing: the ticks
+// option, from 0 to 20.
+func radarTicks(ticks float64) int {
+	if !(ticks >= 1) {
+		return 0
+	}
+	return int(math.Min(ticks, 20))
 }
