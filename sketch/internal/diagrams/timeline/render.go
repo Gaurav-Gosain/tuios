@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/timeline/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/timeline/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package timeline
 
@@ -35,7 +35,8 @@ type Group struct {
 }
 
 func box(b *strings.Builder, x, y, w, h float64, attrs string) {
-	svg.WriteStrings(b, `<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(w), `" height="`, svg.Num(h), `" rx="`, svg.RADIUS, `"`, attrs, `/>`)
+	svg.WriteStrings(b, `<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(w), `" height="`, svg.Num(h), `"`, svg.Rounded(attrs), `/>`)
+
 }
 
 func renderTimeline(model *TimelineDb, config types.Config, options types.RenderOptions) types.Rendered {
@@ -267,6 +268,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 				dot(axisX, cy, color)
 				svg.WriteStrings(&body, cards.String(), "</g>")
 				y = math.Max(y+h, ey-EVENT_GAP) + GAP
+
 			}
 			if len(group.periods) == 0 {
 				y += GAP - SECTION_GAP - 4

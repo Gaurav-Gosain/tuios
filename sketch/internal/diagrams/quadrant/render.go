@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/quadrant/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/quadrant/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package quadrant
 
@@ -156,7 +156,8 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		}
 		taken = append(taken, cx-t.Width/2, cy-t.Height/2, cx+t.Width/2, cy+t.Height/2)
 		svg.WriteStrings(&quadrants, `<g class="pele-quadrant" data-id="`, strconv.Itoa(k+1), `">`,
-			`<rect x="`, num(x), `" y="`, num(y), `" width="`, num(tileW), `" height="`, num(tileH), `" rx="`, svg.RADIUS, `"/>`,
+			`<rect x="`, num(x), `" y="`, num(y), `" width="`, num(tileW), `" height="`, num(tileH), `"`, svg.ROUNDED, `/>`,
+
 			svg.LabelSvg(t, cx, cy, ` class="pele-label" fill="var(--_fg)" stroke="none"`, nil), "</g>")
 	}
 

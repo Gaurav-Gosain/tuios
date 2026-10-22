@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/packet/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/packet/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package packet
 
@@ -185,7 +185,8 @@ func draw(model *PacketModel, config types.Config, options types.RenderOptions, 
 			}
 			w := float64(count*bitWidth) - gap
 			svg.WriteStrings(&fields, `<g class="pele-node" data-id="`, js.Num(block.start), `-`, js.Num(block.end), `">`,
-				`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(w), `" height="`, svg.Num(rowHeight), `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`)
+				`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(w), `" height="`, svg.Num(rowHeight), `" fill="var(--_s)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
+
 			if down {
 				fields.WriteString(svg.LabelSvg(labels[index][b], x+w/2, y+rowHeight/2, "", nil))
 			} else if t := fit(block.label, w-6); t.ok && t.f.Size <= rowHeight {

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treeview/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/treeview/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package treeview
 
@@ -271,7 +271,8 @@ func draw(model *TreeViewModel, config types.Config, options types.RenderOptions
 		if row.highlighted {
 			x := inset + row.x - HIGHLIGHT_OVERHANG
 			svg.WriteStrings(&body, `<rect class="pele-tree-highlight" x="`, svg.Num(x), `" y="`, svg.Num(top+row.top+1), `" width="`,
-				svg.Num(totalWidth-inset+HIGHLIGHT_OVERHANG-x), `" height="`, svg.Num(row.height-2), `" rx="`, svg.RADIUS, `" fill="var(--_c)" fill-opacity="0.14"/>`)
+				svg.Num(totalWidth-inset+HIGHLIGHT_OVERHANG-x), `" height="`, svg.Num(row.height-2), `" fill="var(--_c)" fill-opacity="0.14"`, svg.ROUNDED, `/>`)
+
 		}
 		if row.icon != "" {
 			name := ""

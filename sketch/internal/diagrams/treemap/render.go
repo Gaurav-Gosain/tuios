@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treemap/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/treemap/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package treemap
 
@@ -119,8 +119,8 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 				tint = ""
 			}
 			svg.WriteStrings(&sections, `<g class="pele-node pele-section`, svg.ClassNames(node.classSelector), `" data-id="`, svg.EscText(node.name), `">`,
-				`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" rx="`, svg.RADIUS, `" fill="`, color, `"`,
-				tint, ` stroke="`, color, `"`, style.Shape, `/>`, t.String(), `</g>`)
+				`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="`, color, `"`,
+				svg.Rounded(tint+` stroke="`+color+`"`+style.Shape), `/>`, t.String(), `</g>`)
 			continue
 		}
 
@@ -146,8 +146,9 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 			}
 		}
 		svg.WriteStrings(&leaves, `<g class="pele-node pele-leaf`, svg.ClassNames(node.classSelector), `" data-id="`, svg.EscText(node.name), `">`,
-			`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" rx="`, svg.RADIUS, `" fill="`, color, `"`,
-			style.Shape, `/>`, t.String(), `</g>`)
+			`<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="`, color, `"`,
+			svg.Rounded(style.Shape), `/>`, t.String(), `</g>`)
+
 	}
 
 	totalWidth := math.Ceil(math.Max(width, title.Width) + float64(2*pad))

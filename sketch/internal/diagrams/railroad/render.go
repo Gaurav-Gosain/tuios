@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/railroad/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/railroad/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package railroad
 
@@ -479,10 +479,11 @@ func draw(model *RailroadDb, config types.Config, options types.RenderOptions, t
 					svg.WriteStrings(&nodes, `<g class="pele-node pele-terminal">`, shape, ` rx="`, svg.Num(boxTop), `" fill="var(--_s)" stroke="var(--_b)"`, stroke, `/>`,
 						label, ` font-family="`, svg.FONT_MONO, `">`, svg.Esc(t), `</text></g>`)
 				case KindNonTerminal:
-					svg.WriteStrings(&nodes, `<g class="pele-node pele-nonterminal" data-id="`, svg.EscText(box.id), `">`, shape, ` rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"`, stroke, `/>`,
+					svg.WriteStrings(&nodes, `<g class="pele-node pele-nonterminal" data-id="`, svg.EscText(box.id), `">`, shape, ` fill="var(--_bg)" stroke="var(--_b)"`, stroke, svg.ROUNDED, `/>`,
 						label, `>`, svg.Esc(t), `</text></g>`)
 				default:
-					svg.WriteStrings(&nodes, `<g class="pele-node pele-special">`, shape, ` rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)" stroke-dasharray="4 3"`, stroke, `/>`,
+					svg.WriteStrings(&nodes, `<g class="pele-node pele-special">`, shape, ` fill="var(--_bg)" stroke="var(--_b)" stroke-dasharray="4 3"`, stroke, svg.ROUNDED, `/>`,
+
 						label, ` font-style="italic"><tspan fill="var(--_m)">? </tspan>`, svg.Esc(t[2:len(t)-2]), `<tspan fill="var(--_m)"> ?</tspan></text></g>`)
 				}
 			}

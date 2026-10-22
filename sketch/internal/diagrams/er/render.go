@@ -447,7 +447,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			y := c.Y - c.H/2
 			titleX := svg.ClusterTitleX(c, view.label.Width, crossings, GROUP_PAD)
 			clusters.WriteString(`<g class="pele-cluster` + classes + `" data-id="` + svg.EscText(node.id) + `">` +
-				`<rect x="` + num(x) + `" y="` + num(y) + `" width="` + num(c.W) + `" height="` + num(c.H) + `" rx="` + svg.RADIUS + `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + view.style.Shape + `/>` +
+				`<rect x="` + num(x) + `" y="` + num(y) + `" width="` + num(c.W) + `" height="` + num(c.H) + `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + svg.Rounded(view.style.Shape) + `/>` +
 				svg.LabelSvg(view.label, titleX, y+8+view.label.Height/2, ` class="pele-cluster-label" fill="var(--_m)"`+view.style.Text, icons) +
 				`</g>`)
 			continue
@@ -458,7 +458,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		x0 := -w / 2
 		y0 := -h / 2
 		txt := view.style.Text
-		shape := `x="` + num(x0) + `" y="` + num(y0) + `" width="` + num(w) + `" height="` + num(h) + `" rx="` + svg.RADIUS + `"`
+		shape := `x="` + num(x0) + `" y="` + num(y0) + `" width="` + num(w) + `" height="` + num(h) + `"`
 		nameY := 0.0
 		if len(view.rows) > 0 {
 			nameY = y0 + view.headH/2
@@ -483,7 +483,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 
 		var body string
 		if len(view.rows) == 0 {
-			body = `<rect ` + shape + BOX_ATTRS + view.style.Shape + `/>` + name
+			body = `<rect ` + shape + svg.Rounded(BOX_ATTRS+view.style.Shape) + `/>` + name
 		} else {
 			rowLine := js.Round(view.rowSize * 1.5)
 			lineColor := "var(--_b)"
@@ -497,7 +497,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 					span := `x="` + num(x0) + `" width="` + num(w) + `"`
 					if r == len(view.rows)-1 {
 						// The last row follows the box's rounded bottom corners: a rounded rect, squared off on top.
-						stripes.WriteString(`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h) + `" rx="` + svg.RADIUS + `"/>` +
+						stripes.WriteString(`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h) + `"` + svg.ROUNDED + `/>` +
 							`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h/2) + `"/>`)
 					} else {
 						stripes.WriteString(`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h) + `"/>`)
@@ -515,12 +515,13 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			if strings.Contains(view.style.Shape, "fill:") {
 				opacity = ` opacity="0.6"`
 			}
-			body = `<rect ` + shape + BOX_ATTRS + view.style.Shape + `/>` +
+			body = `<rect ` + shape + svg.Rounded(BOX_ATTRS+view.style.Shape) + `/>` +
 				// Over a fill the diagram chose, the shading is a tint of that fill. The opacity is on the
 				// group because the two parts of the last row overlap.
 				`<g class="pele-er-stripes" fill="var(--_bg)"` + opacity + `>` + stripes.String() + `</g>` +
 				`<path class="pele-er-divider" d="M` + num(x0) + `,` + dividerY + `H` + num(x0+w) + `" stroke="` + lineColor + `"/>` +
-				`<rect ` + shape + ` fill="none" stroke="var(--_b)"` + view.style.Line + `/>` +
+				`<rect ` + shape + ` fill="none" stroke="var(--_b)"` + svg.Rounded(view.style.Line) + `/>` +
+
 				name +
 				`<g class="pele-er-attributes" font-size="` + js.Num(view.rowSize) + `">` + cells.String() + `</g>`
 		}

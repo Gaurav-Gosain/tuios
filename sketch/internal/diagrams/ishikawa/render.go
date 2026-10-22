@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/ishikawa/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/ishikawa/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package ishikawa
 
@@ -254,7 +254,8 @@ func draw(model *IshikawaDb, _ types.Config, options types.RenderOptions, down b
 				`<path class="pele-ishikawa-bones" d="`, d.String(), `" fill="none" stroke="var(--_l)"/>`)
 			svg.WriteMarker(&groups, "arrow_point", ax, 0, SLANT/LENGTH, -sign/LENGTH, "var(--_l)")
 			svg.WriteStrings(&groups, `<rect x="`, svg.Num(endX-category.boxW/2), `" y="`, svg.Num(boxY-category.boxH/2), `" width="`, svg.Num(category.boxW),
-				`" height="`, svg.Num(category.boxH), `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`,
+				`" height="`, svg.Num(category.boxH), `" fill="var(--_s)" stroke="var(--_b)"`, svg.ROUNDED, `/>`,
+
 				svg.LabelSvg(category.label, endX, boxY, ` class="pele-label"`, nil))
 			if texts.Len() > 0 {
 				svg.WriteStrings(&groups, `<g class="pele-ishikawa-causes" font-size="`, js.Num(small), `">`, texts.String(), `</g>`)

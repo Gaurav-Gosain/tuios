@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/c4/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/c4/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package c4
 
@@ -373,8 +373,9 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 				dash = ""
 			}
 			svg.WriteStrings(&clusters, `<g class="pele-cluster pele-c4-`, kind, `" data-id="`, svg.EscText(boundary.alias), `">`,
-				`<rect x="`, svg.Num(group.x), `" y="`, svg.Num(group.y), `" width="`, svg.Num(group.w), `" height="`, svg.Num(group.h), `" rx="`, svg.RADIUS, `" fill="none" stroke="var(--_b)"`,
-				dash, style.Shape, `/>`,
+				`<rect x="`, svg.Num(group.x), `" y="`, svg.Num(group.y), `" width="`, svg.Num(group.w), `" height="`, svg.Num(group.h), `" fill="none" stroke="var(--_b)"`,
+				dash, svg.Rounded(style.Shape), `/>`,
+
 				link(t, boundary.link, boundary.alias, &links, options),
 				`</g>`)
 		}

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/cynefin/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/cynefin/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package cynefin
 
@@ -280,13 +280,14 @@ func renderCynefin(model *CynefinModel, config types.Config, options types.Rende
 				svg.WriteStrings(out, `" data-id="`, svg.EscText(item.text), `"`)
 			}
 			svg.WriteStrings(out, `><rect x="`, svg.Num(b.cx-item.w/2), `" y="`, svg.Num(y), `" width="`, svg.Num(item.w), `" height="`, svg.Num(item.h),
-				`" rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"`)
+				`" fill="var(--_bg)" stroke="var(--_b)"`)
 			attrs := ` class="pele-label" font-size="` + itemText + `"`
 			if item.overflow {
 				out.WriteString(` stroke-dasharray="3 2"`)
 				attrs += ` fill="var(--_m)"`
 			}
-			svg.WriteStrings(out, `/>`, svg.LabelSvg(item.label, b.cx, y+item.h/2, attrs, icons), `</g>`)
+			svg.WriteStrings(out, svg.ROUNDED, `/>`, svg.LabelSvg(item.label, b.cx, y+item.h/2, attrs, icons), `</g>`)
+
 			y += item.h
 		}
 		out.WriteString(`</g>`)

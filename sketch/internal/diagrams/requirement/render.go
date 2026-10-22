@@ -430,7 +430,8 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 		svg.WriteNum(&nodesOut, w)
 		nodesOut.WriteString(`" height="`)
 		svg.WriteNum(&nodesOut, h)
-		svg.WriteStrings(&nodesOut, `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"`, style.Shape, `/>`,
+		svg.WriteStrings(&nodesOut, `" fill="var(--_s)" stroke="var(--_b)"`, svg.Rounded(style.Shape), `/>`,
+
 			svg.LabelSvg(view.kind, 0, top+PAD_Y+view.kind.Height/2, ` class="pele-stereotype" font-size="`+js.Num(view.kind.Size)+`" fill="var(--_m)"`+style.Text, nil),
 			svg.LabelSvg(view.name, 0, top+PAD_Y+view.kind.Height+view.name.Height/2, ` class="pele-label" font-size="`+js.Num(view.name.Size)+`" font-weight="var(--_hw)"`+style.Text, nil))
 		if len(view.rows) > 0 {

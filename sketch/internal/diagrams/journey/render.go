@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/journey/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/journey/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package journey
 
@@ -247,7 +247,7 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 			people := nonEmpty(task.people)
 			step := math.Min(DOT_STEP, (cardW-2*PAD_X-2*DOT)/float64(max(len(people)-1, 1)))
 			svg.WriteStrings(&card, `<g class="pele-node pele-task" data-id="`, svg.EscText(js.Trim(task.task)), `">`,
-				`<rect x="`, num(x), `" y="`, num(cardsY), `" width="`, num(cardW), `" height="`, num(cardH), `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`,
+				`<rect x="`, num(x), `" y="`, num(cardsY), `" width="`, num(cardW), `" height="`, num(cardH), `" fill="var(--_s)" stroke="var(--_b)"`, svg.ROUNDED, `/>`,
 				svg.LabelSvg(labels[i], cx, cardsY+PAD_Y+textH/2, ` font-size="`+js.Num(small)+`"`, nil))
 			for k, name := range people {
 				svg.WriteStrings(&card, `<circle class="pele-actor" cx="`, num(cx+float64((float64(k)-float64(len(people)-1)/2)*step)), `" cy="`, num(cardsY+cardH-PAD_Y-DOT),
@@ -273,7 +273,7 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 			x := left + float64(float64(r.start)*pitch)
 			w := float64(float64(r.count)*pitch) - GAP
 			svg.WriteStrings(&body, `<g class="pele-cluster pele-section" data-id="`, svg.EscText(js.Trim(tasks[r.start].section)), `">`,
-				`<rect x="`, num(x), `" y="`, num(top), `" width="`, num(w), `" height="`, num(bandH), `" rx="`, svg.RADIUS, `" fill="var(--_a)"/>`,
+				`<rect x="`, num(x), `" y="`, num(top), `" width="`, num(w), `" height="`, num(bandH), `" fill="var(--_a)"`, svg.ROUNDED, `/>`,
 				svg.LabelSvg(*r.label, x+w/2, top+bandH/2, ` font-size="`+js.Num(small)+`" font-weight="var(--_hw)"`, nil))
 			for _, card := range cards[r.start : r.start+r.count] {
 				body.WriteString(card)
@@ -377,7 +377,8 @@ func verticalJourney(model *JourneyDb, options types.RenderOptions) types.Render
 		}
 		w := math.Max(room, label.Width+72)
 		svg.WriteStrings(&body, `<g class="pele-node pele-journey-step" data-id="`, strconv.Itoa(index), `"><rect x="`, num(pad), `" y="`, num(y),
-			`" width="`, num(w), `" height="`, num(h), `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`)
+			`" width="`, num(w), `" height="`, num(h), `" fill="var(--_s)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
+
 		body.WriteString(svg.LabelSvg(label, pad+PAD_X+label.Width/2, y+PAD_Y+label.Height/2, ` class="pele-label"`, nil))
 		cx := pad + w - 28
 		face(&body, cx, y+PAD_Y+FACE, mood(task.score))

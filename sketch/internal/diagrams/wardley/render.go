@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/wardley/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/wardley/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package wardley
 
@@ -231,7 +231,7 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		grow(left-PIPELINE_PAD, top, right+PIPELINE_PAD, top+4*R)
 		svg.WriteStrings(&pipelines, `<g class="pele-wardley-pipeline" data-id="`, svg.EscText(pipeline.nodeID), `">`,
 			`<rect x="`, svg.Num(left-PIPELINE_PAD), `" y="`, svg.Num(top), `" width="`, svg.Num(right-left+2*PIPELINE_PAD), `" height="`, svg.Num(4*R),
-			`" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`)
+			`" fill="var(--_s)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
 		if len(parts) > 1 {
 			svg.WriteStrings(&pipelines, `<path d="M`, svg.Num(left), ",", svg.Num(y), "H", svg.Num(right), `" stroke="`, LINE, `" stroke-dasharray="4 4"/>`)
 		}
@@ -531,7 +531,7 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		}
 		grow(bx, by, bx+width, by+height)
 		svg.WriteStrings(&annotations, `<g class="pele-wardley-annotations"><rect x="`, svg.Num(bx), `" y="`, svg.Num(by), `" width="`, svg.Num(width), `" height="`, svg.Num(height),
-			`" rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"/>`)
+			`" fill="var(--_bg)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
 		y := by + 7
 		for _, line := range lines {
 			annotations.WriteString(startLabel(line, bx+10, y+line.LineHeight/2+float64(small*0.35), ` font-size="`+smallText+`"`))

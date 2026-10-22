@@ -266,7 +266,7 @@ func figure(view *View, icons text.IconResolver) string {
 		if icons != nil {
 			icon = icons(node.icon)
 		}
-		out = `<rect x="-22" y="-26" width="44" height="44" rx="` + svg.RADIUS + `"` + SHAPE_ATTRS + shape + `/>` +
+		out = `<rect x="-22" y="-26" width="44" height="44"` + svg.Rounded(SHAPE_ATTRS+shape) + `/>` +
 			`<svg class="pele-icon" data-icon="` + svg.EscText(node.icon) + `" x="-14" y="-18" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
 			icon + `</svg>`
 	default:
@@ -571,7 +571,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 					`<rect x="` + svg.Num(x) + `" y="` + svg.Num(y+tabH) + `" width="` + svg.Num(c.W) + `" height="` + svg.Num(c.H-tabH) + `"` + box + `/>` +
 					svg.LabelSvg(view.label, x+tabW/2, y+tabH/2, titleAttrs, icons)
 			} else {
-				body = `<rect x="` + svg.Num(x) + `" y="` + svg.Num(y) + `" width="` + svg.Num(c.W) + `" height="` + svg.Num(c.H) + `" rx="` + svg.RADIUS + `"` + box + `/>` +
+				body = `<rect x="` + svg.Num(x) + `" y="` + svg.Num(y) + `" width="` + svg.Num(c.W) + `" height="` + svg.Num(c.H) + `"` + svg.Rounded(box) + `/>` +
 					svg.LabelSvg(view.label, titleX(c, view.label.Width, crossings), y+8+view.label.Height/2, titleAttrs, icons)
 			}
 			svg.WriteStrings(&clusters, `<g class="pele-cluster pele-boundary`, classes, `" data-id="`, id, `">`, body, `</g>`)
@@ -603,7 +603,7 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 				cells.WriteString(leftLabel(value, x0+view.keyW+CELL_PAD, y+rowH/2, ` class="pele-json-value"`+textAttrs, icons))
 				y += rowH
 			}
-			body = `<rect x="` + svg.Num(x0) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"` + SHAPE_ATTRS + shape + `/>` +
+			body = `<rect x="` + svg.Num(x0) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `"` + svg.Rounded(SHAPE_ATTRS+shape) + `/>` +
 				`<path class="pele-json-lines" d="` + lines + `" fill="none" stroke="var(--_b)"` + view.style.Line + `/>` +
 				svg.LabelSvg(view.label, 0, -h/2+view.headH/2, ` class="pele-label" font-weight="var(--_hw)"`+textAttrs, icons) +
 				`<g font-size="` + js.Num(small) + `">` + cells.String() + `</g>`
@@ -633,8 +633,9 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 					`<path d="M` + svg.Num(r-FOLD) + `,` + svg.Num(-b) + `V` + svg.Num(FOLD-b) + `H` + svg.Num(r) + `" fill="none" stroke="var(--_b)" stroke-linejoin="round"` + view.style.Line + `/>`
 			default:
 				kind = "pele-usecase"
-				outline = `<rect x="` + svg.Num(-w/2) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"` + SHAPE_ATTRS + shape + `/>`
+				outline = `<rect x="` + svg.Num(-w/2) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `"` + svg.Rounded(SHAPE_ATTRS+shape) + `/>`
 			}
+
 			noteSize := ""
 			if node.shape == "note" {
 				noteSize = ` font-size="` + js.Num(small) + `"`

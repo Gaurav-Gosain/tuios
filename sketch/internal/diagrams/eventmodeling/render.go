@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/eventmodeling/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/eventmodeling/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package eventmodeling
 
@@ -207,7 +207,7 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 		band.y = y
 		band.h += 2 * LANE_PAD
 		svg.WriteStrings(&lanes, `<g class="pele-cluster pele-em-lane" data-id="`, svg.EscText(band.lane.label), `">`,
-			`<rect x="`, svg.Num(left), `" y="`, svg.Num(y), `" width="`, svg.Num(laneWidth), `" height="`, svg.Num(band.h), `" rx="`, svg.RADIUS, `" fill="var(--_s)"/>`,
+			`<rect x="`, svg.Num(left), `" y="`, svg.Num(y), `" width="`, svg.Num(laneWidth), `" height="`, svg.Num(band.h), `" fill="var(--_s)"`, svg.ROUNDED, `/>`,
 			svg.LabelSvg(band.label, left+LANE_PAD+band.label.Width/2, y+band.h/2, ` class="pele-cluster-label" font-size="`+smallText+`" font-weight="var(--_hw)" fill="var(--_m)"`, nil),
 			`</g>`)
 		y += band.h + LANE_GAP
@@ -223,16 +223,16 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 		band := bandOf(item.box.lane)
 		item.x += left + labelColumn
 		item.y = band.y + (band.h-item.h)/2
-		frame := `x="` + svg.Num(item.x) + `" y="` + svg.Num(item.y) + `" width="` + svg.Num(item.w) + `" height="` + svg.Num(item.h) + `" rx="` + svg.RADIUS + `"`
+		frame := `x="` + svg.Num(item.x) + `" y="` + svg.Num(item.y) + `" width="` + svg.Num(item.w) + `" height="` + svg.Num(item.h) + `"`
 		reset := ""
 		if item.box.reset {
 			reset = " pele-em-reset"
 		}
 		svg.WriteStrings(&nodes, `<g class="pele-node pele-em-`, item.box.kind, reset, `" data-id="`, svg.EscText(item.box.id), `">`)
 		if s, ok := series(item.box.kind); ok {
-			svg.WriteStrings(&nodes, `<rect `, frame, ` fill="var(--_bg)"/><rect `, frame, ` fill="`, svg.SeriesColor(s), `" fill-opacity="0.22" stroke="`, svg.SeriesColor(s), `"/>`)
+			svg.WriteStrings(&nodes, `<rect `, frame, ` fill="var(--_bg)"`, svg.ROUNDED, `/><rect `, frame, ` fill="`, svg.SeriesColor(s), `" fill-opacity="0.22" stroke="`, svg.SeriesColor(s), `"`, svg.ROUNDED, `/>`)
 		} else {
-			svg.WriteStrings(&nodes, `<rect `, frame, ` fill="var(--_bg)" stroke="var(--_b)"/>`)
+			svg.WriteStrings(&nodes, `<rect `, frame, ` fill="var(--_bg)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
 		}
 		nameY := item.y + BOX_PAD_Y + item.name.Height/2
 		nodes.WriteString(svg.LabelSvg(item.name, item.x+item.w/2, nameY, ` class="pele-label" font-size="`+nameText+`" font-weight="var(--_hw)"`, nil))
@@ -321,7 +321,7 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 		}
 		anyCard = true
 		svg.WriteStrings(&cards, `<g class="pele-em-`, kind, `" data-id="`, svg.EscText(frame), `">`,
-			`<rect x="`, svg.Num(left), `" y="`, svg.Num(cy), `" width="`, svg.Num(w), `" height="`, svg.Num(h), `" rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"/>`,
+			`<rect x="`, svg.Num(left), `" y="`, svg.Num(cy), `" width="`, svg.Num(w), `" height="`, svg.Num(h), `" fill="var(--_bg)" stroke="var(--_b)"`, svg.ROUNDED, `/>`,
 			svg.LabelSvg(head, left+BOX_PAD_X+head.Width/2, cy+BOX_PAD_Y+head.Height/2, ` font-size="`+smallText+`" font-weight="var(--_hw)"`, nil))
 		writeLines(&cards, rows, left+BOX_PAD_X, cy+BOX_PAD_Y+head.Height+smallStep/2+float64(small*0.35), smallStep, ` font-size="`+smallText+`"`)
 		cards.WriteString(`</g>`)
@@ -489,16 +489,16 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 			h += data.Height + 6
 		}
 		cy := y + headH
-		frame := `x="` + svg.Num(pad) + `" y="` + svg.Num(cy) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"`
+		frame := `x="` + svg.Num(pad) + `" y="` + svg.Num(cy) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `"`
 		reset := ""
 		if box.reset {
 			reset = " pele-em-reset"
 		}
 		svg.WriteStrings(&nodes, `<g class="pele-cluster pele-em-lane" data-id="`, svg.EscText(box.lane.label), `">`,
 			common.LeftLabelSvg(lane, pad+BOX_PAD_X, y, ` class="pele-cluster-label" font-size="`+smallText+`" font-weight="var(--_hw)" fill="var(--_m)"`),
-			`<g class="pele-node pele-em-`, box.kind, reset, `" data-id="`, svg.EscText(box.id), `"><rect `, frame, ` fill="var(--_bg)" stroke="var(--_b)"/>`)
+			`<g class="pele-node pele-em-`, box.kind, reset, `" data-id="`, svg.EscText(box.id), `"><rect `, frame, ` fill="var(--_bg)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
 		if s, ok := series(box.kind); ok {
-			svg.WriteStrings(&nodes, `<rect `, frame, ` fill="`, svg.SeriesColor(s), `" fill-opacity="0.22" stroke="`, svg.SeriesColor(s), `"/>`)
+			svg.WriteStrings(&nodes, `<rect `, frame, ` fill="`, svg.SeriesColor(s), `" fill-opacity="0.22" stroke="`, svg.SeriesColor(s), `"`, svg.ROUNDED, `/>`)
 		}
 		svg.WriteStrings(&nodes, svg.LabelSvg(name, pad+BOX_PAD_X+name.Width/2, cy+BOX_PAD_Y+name.Height/2, ` class="pele-label" font-size="`+smallText+`" font-weight="var(--_hw)"`, nil),
 			`<text class="pele-em-frame" x="`, svg.Num(pad+w-BOX_PAD_X), `" y="`, svg.Num(cy+BOX_PAD_Y+small), `" text-anchor="end" font-size="`, monoText, `" fill="var(--_m)">`, svg.Esc(box.id), `</text>`)
@@ -557,7 +557,7 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 		body := literal(raw, small, 0)
 		w := math.Max(cardWidth, math.Max(head.Width+2*BOX_PAD_X, body.Width+2*BOX_PAD_X))
 		h := 2*BOX_PAD_Y + head.Height + body.Height
-		svg.WriteStrings(&cards, `<g class="pele-em-`, kind, `" data-id="`, svg.EscText(frame), `"><rect x="`, svg.Num(pad), `" y="`, svg.Num(y), `" width="`, svg.Num(w), `" height="`, svg.Num(h), `" rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"/>`,
+		svg.WriteStrings(&cards, `<g class="pele-em-`, kind, `" data-id="`, svg.EscText(frame), `"><rect x="`, svg.Num(pad), `" y="`, svg.Num(y), `" width="`, svg.Num(w), `" height="`, svg.Num(h), `" fill="var(--_bg)" stroke="var(--_b)"`, svg.ROUNDED, `/>`,
 			svg.LabelSvg(head, pad+BOX_PAD_X+head.Width/2, y+BOX_PAD_Y+head.Height/2, ` font-size="`+smallText+`" font-weight="var(--_hw)"`, nil))
 		writeLines(&cards, joined(body), pad+BOX_PAD_X, y+BOX_PAD_Y+head.Height+body.LineHeight/2+float64(small*0.35), body.LineHeight, ` font-size="`+smallText+`"`)
 		cards.WriteString(`</g>`)

@@ -747,7 +747,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		memberSize := js.Round(view.fontSize * 0.875)
 		lineHeight := js.Round(memberSize * 1.5)
 		var body strings.Builder
-		body.WriteString(`<rect x="` + num(left) + `" y="` + num(top) + `" width="` + num(w) + `" height="` + num(h) + `" rx="` + svg.RADIUS + `" fill="var(--_s)" stroke="var(--_b)"` + style.Shape + `/>`)
+		body.WriteString(`<rect x="` + num(left) + `" y="` + num(top) + `" width="` + num(w) + `" height="` + num(h) + `" fill="var(--_s)" stroke="var(--_b)"` + svg.Rounded(style.Shape) + `/>`)
 		first := top + view.titleH
 		second := first + view.attributesH
 		if h > view.titleH {
@@ -832,7 +832,8 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 				struckTitles.WriteString(svg.StruckTitle(view.label, titleX+ox, titleY, titleAttrs, id, parents, i, nil))
 			}
 			clusters.WriteString(`<g class="pele-cluster pele-namespace" data-id="` + id + `">` +
-				`<rect x="` + num(x-w/2) + `" y="` + num(y-h/2) + `" width="` + num(w) + `" height="` + num(h) + `" rx="` + svg.RADIUS + `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"/>`)
+				`<rect x="` + num(x-w/2) + `" y="` + num(y-h/2) + `" width="` + num(w) + `" height="` + num(h) + `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + svg.ROUNDED + `/>`)
+
 			if !struck {
 				clusters.WriteString(svg.LabelSvg(view.label, titleX+ox, titleY, titleAttrs, nil))
 			}

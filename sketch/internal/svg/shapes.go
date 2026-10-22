@@ -1,4 +1,4 @@
-// Ported from pele src/svg/shapes.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/svg/shapes.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package svg
 
@@ -132,12 +132,10 @@ func rect(w, h float64, a string, rx string) string {
 	return `<rect x="` + Num(-w/2) + `" y="` + Num(-h/2) + `" width="` + Num(w) + `" height="` + Num(h) + `"` + rx + a + `/>`
 }
 
-const shapeRounded = ` rx="` + RADIUS + `"`
-
 func sideOdd(side int) bool { return side&1 != 0 }
 
 var shapes = map[string]*shapeDef{
-	"rect": {size: box, span: flat, draw: func(w, h float64, a, _ string) string { return rect(w, h, a, shapeRounded) }},
+	"rect": {size: box, span: flat, draw: func(w, h float64, a, _ string) string { return rect(w, h, Rounded(a), "") }},
 	"rounded": {
 		size: box,
 		span: flat,
@@ -167,7 +165,7 @@ var shapes = map[string]*shapeDef{
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 16, th + 2*PAD_Y, 0} },
 		draw: func(w, h float64, a, line string) string {
 			x := w/2 - 8
-			return rect(w, h, a, shapeRounded) +
+			return rect(w, h, Rounded(a), "") +
 				`<path d="M` + Num(-x) + `,` + Num(-h/2) + `V` + Num(h/2) + `M` + Num(x) + `,` + Num(-h/2) + `V` + Num(h/2) + `" fill="none"` + line + `/>`
 		},
 	},
@@ -374,7 +372,7 @@ var shapes = map[string]*shapeDef{
 		span: flat,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 8, th + 2*PAD_Y, 0} },
 		draw: func(w, h float64, a, line string) string {
-			return rect(w, h, a, shapeRounded) +
+			return rect(w, h, Rounded(a), "") +
 				`<path d="M` + Num(-w/2+8) + `,` + Num(-h/2) + `V` + Num(h/2) + `" fill="none"` + line + `/>`
 		},
 	},
@@ -382,7 +380,7 @@ var shapes = map[string]*shapeDef{
 		span: flat,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X, th + 2*PAD_Y + 8, 4} },
 		draw: func(w, h float64, a, line string) string {
-			return rect(w, h, a, shapeRounded) +
+			return rect(w, h, Rounded(a), "") +
 				`<path d="M` + Num(-w/2) + `,` + Num(-h/2+8) + `H` + Num(w/2) + `" fill="none"` + line + `/>`
 		},
 	},
@@ -390,7 +388,7 @@ var shapes = map[string]*shapeDef{
 		span: flat,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 8, th + 2*PAD_Y + 8, 4} },
 		draw: func(w, h float64, a, line string) string {
-			return rect(w, h, a, shapeRounded) +
+			return rect(w, h, Rounded(a), "") +
 				`<path d="M` + Num(-w/2+8) + `,` + Num(-h/2) + `V` + Num(h/2) + `M` + Num(-w/2) + `,` + Num(-h/2+8) + `H` + Num(w/2) + `" fill="none"` + line + `/>`
 		},
 	},
@@ -505,7 +503,7 @@ var shapes = map[string]*shapeDef{
 			for i := 0; i < 3; i++ {
 				x := -w/2 + float64(float64(2-i)*4)
 				y := -h/2 + float64(float64(i)*4)
-				out += `<rect x="` + Num(x) + `" y="` + Num(y) + `" width="` + Num(bw) + `" height="` + Num(bh) + `"` + shapeRounded + a + `/>`
+				out += `<rect x="` + Num(x) + `" y="` + Num(y) + `" width="` + Num(bw) + `" height="` + Num(bh) + `"` + Rounded(a) + `/>`
 			}
 			return out
 		},
@@ -574,7 +572,7 @@ var shapes = map[string]*shapeDef{
 		span: flat,
 		size: func(tw, th float64) ShapeSize { return ShapeSize{math.Max(tw+2*PAD_X, 72), th + 2*PAD_Y + 12, 6} },
 		draw: func(w, h float64, a, line string) string {
-			return rect(w, h, a, shapeRounded) +
+			return rect(w, h, Rounded(a), "") +
 				`<path d="M` + Num(-w/2) + `,` + Num(-h/2+12) + `H` + Num(w/2) + `M` + Num(-w/2+7) + `,` + Num(-h/2+4) + `l3,2.5l-3,2.5M` +
 				Num(-w/2+13) + `,` + Num(-h/2+9) + `h4" fill="none"` + line + `/>`
 		},
@@ -587,7 +585,7 @@ var shapes = map[string]*shapeDef{
 			for i := 0; i < 3; i++ {
 				dots += `<circle cx="` + Num(-w/2+8+float64(float64(i)*7)) + `" cy="` + Num(-h/2+6) + `" r="1.5" fill="none"` + line + `/>`
 			}
-			return rect(w, h, a, shapeRounded) + `<path d="M` + Num(-w/2) + `,` + Num(-h/2+12) + `H` + Num(w/2) + `" fill="none"` + line + `/>` + dots
+			return rect(w, h, Rounded(a), "") + `<path d="M` + Num(-w/2) + `,` + Num(-h/2+12) + `H` + Num(w/2) + `" fill="none"` + line + `/>` + dots
 		},
 	},
 	"person": {
@@ -739,7 +737,7 @@ var shapes = map[string]*shapeDef{
 		size: box,
 		span: flat,
 		draw: func(w, h float64, a, line string) string {
-			return rect(w, h, a, shapeRounded) +
+			return rect(w, h, Rounded(a), "") +
 				`<path d="M` + Num(w/2-12) + `,` + Num(h/2) + `L` + Num(w/2) + `,` + Num(h/2-12) + `" fill="none"` + line + `/>`
 		},
 	},
@@ -770,8 +768,8 @@ var shapes = map[string]*shapeDef{
 	"collapsedGroup": {
 		size: func(tw, th float64) ShapeSize { return ShapeSize{tw + 2*PAD_X + 8, th + 2*PAD_Y + 8, -2} },
 		draw: func(w, h float64, a, _ string) string {
-			return `<rect x="` + Num(-w/2+6) + `" y="` + Num(-h/2+8) + `" width="` + Num(w-12) + `" height="` + Num(h-8) + `"` + shapeRounded + a + `/>` +
-				`<rect x="` + Num(-w/2) + `" y="` + Num(-h/2) + `" width="` + Num(w) + `" height="` + Num(h-4) + `"` + shapeRounded + a + `/>`
+			return `<rect x="` + Num(-w/2+6) + `" y="` + Num(-h/2+8) + `" width="` + Num(w-12) + `" height="` + Num(h-8) + `"` + Rounded(a) + `/>` +
+				`<rect x="` + Num(-w/2) + `" y="` + Num(-h/2) + `" width="` + Num(w) + `" height="` + Num(h-4) + `"` + Rounded(a) + `/>`
 		},
 	},
 }

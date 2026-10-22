@@ -1,4 +1,4 @@
-// Ported from pele src/svg/theme.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/svg/theme.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package svg
 
@@ -20,6 +20,20 @@ const ROOT_STYLE = "--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:
 
 const FONT_MONO = "var(--_fm)"
 const RADIUS = "var(--pele-radius,4px)"
+
+// Use CSS for rx variables to support older browsers. Put the default first so
+// diagram styles can override it.
+const ROUNDED = ` style="rx:var(--_r)"`
+
+// Rounded returns the attributes of a rectangle with the corner radius
+// in their style, or in a style of its own.
+func Rounded(attrs string) string {
+	at := strings.Index(attrs, ` style="`)
+	if at < 0 {
+		return attrs + ROUNDED
+	}
+	return attrs[:at+8] + "rx:var(--_r);" + attrs[at+8:]
+}
 
 // The color of what a diagram marks as critical. It is not one of the series colors, as a theme
 // may put those in any order.

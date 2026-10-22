@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/actors.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/sequence/actors.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package sequence
 
@@ -97,8 +97,8 @@ func drawActor(kind string, cx, top float64, size ActorSize, label text.Label, i
 	if kind == "collections" {
 		bw := w - STACK
 		bh := h - STACK
-		back := `<rect x="` + svg.Num(left+STACK) + `" y="` + svg.Num(top) + `" width="` + svg.Num(bw) + `" height="` + svg.Num(bh) + `" rx="` + svg.RADIUS + `"` + SHAPE + `/>`
-		front := `<rect x="` + svg.Num(left) + `" y="` + svg.Num(top+STACK) + `" width="` + svg.Num(bw) + `" height="` + svg.Num(bh) + `" rx="` + svg.RADIUS + `"` + SHAPE + `/>`
+		back := `<rect x="` + svg.Num(left+STACK) + `" y="` + svg.Num(top) + `" width="` + svg.Num(bw) + `" height="` + svg.Num(bh) + `"` + SHAPE + svg.ROUNDED + `/>`
+		front := `<rect x="` + svg.Num(left) + `" y="` + svg.Num(top+STACK) + `" width="` + svg.Num(bw) + `" height="` + svg.Num(bh) + `"` + SHAPE + svg.ROUNDED + `/>`
 		return back + front + svg.LabelSvg(label, left+bw/2, top+STACK+bh/2, txt, icons)
 	}
 	if kind == "queue" {
@@ -110,6 +110,6 @@ func drawActor(kind string, cx, top float64, size ActorSize, label text.Label, i
 			`<path d="M` + r + `,` + svg.Num(top) + `A6,` + ry + ` 0 0 0 ` + r + `,` + b + `"` + LINE + `/>` +
 			svg.LabelSvg(label, cx-CAP/2, top+h/2, txt, icons)
 	}
-	return `<rect x="` + svg.Num(left) + `" y="` + svg.Num(top) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"` + SHAPE + `/>` +
+	return `<rect x="` + svg.Num(left) + `" y="` + svg.Num(top) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `"` + SHAPE + svg.ROUNDED + `/>` +
 		svg.LabelSvg(label, cx, top+h/2, txt, icons)
 }

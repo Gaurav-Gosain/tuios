@@ -407,7 +407,8 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			}
 			clusters.WriteString(`<g class="pele-cluster` + classes + `" data-id="` + id + `">` +
 				`<rect x="` + svg.Num(x-c.W/2) + `" y="` + svg.Num(y-c.H/2) + `" width="` + svg.Num(c.W) + `" height="` + svg.Num(c.H) +
-				`" rx="` + svg.RADIUS + `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + view.style.Shape + `/>`)
+				`" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"` + svg.Rounded(view.style.Shape) + `/>`)
+
 			if !struck {
 				clusters.WriteString(svg.LabelSvg(view.label, titleX, titleY, titleAttrs, icons))
 			}

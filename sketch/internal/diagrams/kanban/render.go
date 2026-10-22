@@ -262,7 +262,7 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 	for index, section := range sections {
 		row := index / perRow
 		body.Reset()
-		svg.WriteStrings(&body, `<rect width="`, js.Num(columnWidth), `" height="`, num(rowHeights[row]), `" rx="`, svg.RADIUS, `" fill="var(--_s)"/>`)
+		svg.WriteStrings(&body, `<rect width="`, js.Num(columnWidth), `" height="`, num(rowHeights[row]), `" fill="var(--_s)"`, svg.ROUNDED, `/>`)
 		textBlock(&body, titles[index], COLUMN_PAD+4, COLUMN_PAD, ` class="pele-cluster-label" font-weight="var(--_hw)"`, icons, false)
 		svg.WriteStrings(&body, `<text class="pele-count" x="`, js.Num(edge), `" y="`, num(COLUMN_PAD+line/2+float64(small*0.35)),
 			`" text-anchor="end" font-size="`, js.Num(small), `" fill="var(--_m)">`, strconv.Itoa(len(section.items)), `</text>`)
@@ -276,7 +276,8 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 			priority := priorityKey(item.priority)
 			color, colored := PRIORITY(priority)
 			var inner strings.Builder
-			svg.WriteStrings(&inner, `<rect width="`, js.Num(cardWidth), `" height="`, num(card.height), `" rx="`, svg.RADIUS, `" fill="var(--_bg)" stroke="var(--_b)"/>`)
+			svg.WriteStrings(&inner, `<rect width="`, js.Num(cardWidth), `" height="`, num(card.height), `" fill="var(--_bg)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
+
 			if colored {
 				svg.WriteStrings(&inner, `<path class="pele-priority" d="M2.5,5V`, num(card.height-5), `" fill="none" `, color, ` stroke-width="3" stroke-linecap="round"/>`)
 			}

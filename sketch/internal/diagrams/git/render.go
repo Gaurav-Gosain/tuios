@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/git/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/git/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package git
 
@@ -328,7 +328,8 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 			svg.WriteStrings(&branches, `" stroke="`, color, `" stroke-dasharray="2 4"/>`)
 			if len(name.Lines) > 0 {
 				grow(cx-w/2, cy-h/2, cx+w/2, cy+h/2)
-				svg.WriteStrings(&branches, `<rect x="`, num(cx-w/2), `" y="`, num(cy-h/2), `" width="`, num(w), `" height="`, num(h), `" rx="`, svg.RADIUS, `" fill="`, color, `"/>`,
+				svg.WriteStrings(&branches, `<rect x="`, num(cx-w/2), `" y="`, num(cy-h/2), `" width="`, num(w), `" height="`, num(h), `" fill="`, color, `"`, svg.ROUNDED, `/>`,
+
 					svg.LabelSvg(name, cx, cy, ` class="pele-label" fill="var(--_bg)"`, nil))
 			}
 			branches.WriteString("</g>")

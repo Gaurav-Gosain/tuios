@@ -773,7 +773,8 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			svg.WriteNum(&clusters, v.w)
 			clusters.WriteString(`" height="`)
 			svg.WriteNum(&clusters, v.h)
-			svg.WriteStrings(&clusters, `" rx="`, svg.RADIUS, `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"`, v.style.Shape, `/>`,
+			svg.WriteStrings(&clusters, `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"`, svg.Rounded(v.style.Shape), `/>`,
+
 				svg.LabelSvg(v.label, v.x, top+(v.head+gap)/2+2, ` class="pele-cluster-label" fill="var(--_m)"`+v.style.Text, icons),
 				`</g>`)
 			continue

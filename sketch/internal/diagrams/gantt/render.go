@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/gantt/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/gantt/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // pele's `text` is textSetting here, as the package text is imported. Dates are read in
 // options.Location, or in the host's zone when it is nil.
@@ -528,7 +528,8 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 				r := barHeight / 2
 				shape = `<path d="M` + num(cx) + `,` + num(cy-r) + `L` + num(cx+r) + `,` + num(cy) + `L` + num(cx) + `,` + num(cy+r) + `L` + num(cx-r) + `,` + num(cy) + `Z" ` + paint + ` ` + stroke + ` stroke-linejoin="round"/>`
 			} else {
-				shape = `<rect x="` + num(bar.x0) + `" y="` + num(cy-barHeight/2) + `" width="` + num(bar.x1-bar.x0) + `" height="` + num(barHeight) + `" rx="` + svg.RADIUS + `" ` + paint + ` ` + stroke + `/>`
+				shape = `<rect x="` + num(bar.x0) + `" y="` + num(cy-barHeight/2) + `" width="` + num(bar.x1-bar.x0) + `" height="` + num(barHeight) + `" ` + paint + ` ` + stroke + svg.ROUNDED + `/>`
+
 			}
 			if bar.inside {
 				if state == "" {

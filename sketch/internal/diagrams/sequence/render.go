@@ -821,15 +821,15 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				if fill == "" {
 					opacity = ` fill-opacity="0.5"`
 				}
-				rectsOut = append(rectsOut, `<rect class="pele-rect" x="`+x+`" y="`+svg.Num(fr.top)+`" width="`+w+`" height="`+svg.Num(bottom-fr.top)+`" rx="`+svg.RADIUS+`"`+opacity+fill+`/>`)
+				rectsOut = append(rectsOut, `<rect class="pele-rect" x="`+x+`" y="`+svg.Num(fr.top)+`" width="`+w+`" height="`+svg.Num(bottom-fr.top)+`"`+svg.Rounded(opacity+fill)+`/>`)
 			} else {
-				inner := `<rect x="` + x + `" y="` + svg.Num(fr.top) + `" width="` + w + `" height="` + svg.Num(bottom-fr.top) + `" rx="` + svg.RADIUS + `" fill="none"/>`
+				inner := `<rect x="` + x + `" y="` + svg.Num(fr.top) + `" width="` + w + `" height="` + svg.Num(bottom-fr.top) + `" fill="none"` + svg.ROUNDED + `/>`
 				for k, dy := range fr.dividerY {
 					label := fr.dividerLabels[k]
 					inner += `<path d="M` + x + `,` + svg.Num(dy) + `H` + svg.Num(fr.x1) + `"` + DASH + `/>` +
 						backed(label, fr.x0+8+label.Width/2, dy+2+label.Height/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
 				}
-				inner += `<rect x="` + x + `" y="` + svg.Num(fr.top) + `" width="` + svg.Num(fr.tabW) + `" height="20" rx="` + svg.RADIUS + `" fill="var(--_s)"/>` +
+				inner += `<rect x="` + x + `" y="` + svg.Num(fr.top) + `" width="` + svg.Num(fr.tabW) + `" height="20" fill="var(--_s)"` + svg.ROUNDED + `/>` +
 					`<text class="pele-frame-kind" x="` + svg.Num(fr.x0+fr.tabW/2) + `" y="` + svg.Num(fr.top+TAB_H/2+tiny*0.35) +
 					`" text-anchor="middle" font-size="` + js.Num(tiny) + `" font-weight="var(--_hw)" fill="var(--_m)" stroke="none">` + fr.kind + `</text>` +
 					backed(fr.title, fr.x0+fr.tabW+8+fr.title.Width/2, fr.top+math.Max(TAB_H, fr.title.Height)/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
@@ -865,7 +865,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			}
 			extend(x, x+v.w)
 			notesOut.WriteString(`<g class="pele-note" data-id="i` + svg.EscText(m.ID) + `">` +
-				`<rect x="` + svg.Num(x) + `" y="` + svg.Num(top) + `" width="` + svg.Num(v.w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"/>` +
+				`<rect x="` + svg.Num(x) + `" y="` + svg.Num(top) + `" width="` + svg.Num(v.w) + `" height="` + svg.Num(h) + `"` + svg.ROUNDED + `/>` +
 				svg.LabelSvg(v.label, x+v.w/2, top+h/2, ` class="pele-label" stroke="none" fill="var(--_fg)"`, icons) +
 				`</g>`)
 			if geo {
@@ -971,6 +971,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				}
 				lineY = bottom
 			} else {
+
 				dir := -1.0
 				if b.x > a.x {
 					dir = 1
@@ -1134,7 +1135,8 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			opacity = ` fill-opacity="0.5"`
 		}
 		boxesOut.WriteString(`<g class="pele-cluster pele-box"` + dataID + `>` +
-			`<rect x="` + svg.Num(x0) + `" y="0" width="` + svg.Num(x1-x0) + `" height="` + svg.Num(bottom+boxPad) + `" rx="` + svg.RADIUS + `" fill="var(--_a)" stroke="var(--_b)"` + opacity + fill + `/>` +
+			`<rect x="` + svg.Num(x0) + `" y="0" width="` + svg.Num(x1-x0) + `" height="` + svg.Num(bottom+boxPad) + `" fill="var(--_a)" stroke="var(--_b)"` + svg.Rounded(opacity+fill) + `/>` +
+
 			svg.LabelSvg(run.title, (x0+x1)/2, boxPad/2+2+run.title.Height/2, ` class="pele-cluster-label" fill="var(--_m)"`, icons) +
 			`</g>`)
 	}

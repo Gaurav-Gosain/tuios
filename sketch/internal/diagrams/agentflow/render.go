@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/agentflow/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package agentflow
 
@@ -488,7 +488,7 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 		if c.IsGroup {
 			titleX := svg.ClusterTitleX(c, view.label.Width, crossings, GROUP_PAD)
 			svg.WriteStrings(&clusters, `<g class="pele-cluster pele-flow`, classes, `" data-id="`, id, `"><rect x="`, svg.Num(x-c.W/2), `" y="`, svg.Num(y-c.H/2),
-				`" width="`, svg.Num(c.W), `" height="`, svg.Num(c.H), `" rx="`, svg.RADIUS, `"`, tinted.of(slot, "0.06", view.style), view.style.Shape, `/>`,
+				`" width="`, svg.Num(c.W), `" height="`, svg.Num(c.H), `"`, svg.Rounded(tinted.of(slot, "0.06", view.style)+view.style.Shape), `/>`,
 				svg.LabelSvg(view.label, titleX, y-c.H/2+8+view.label.Height/2, ` class="pele-cluster-label" fill="var(--_m)"`+view.style.Text, icons), `</g>`)
 			continue
 		}
@@ -501,8 +501,9 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			color := svg.SeriesColor(slot)
 			line := h/2 - DOTS - 2
 			dots := line + (DOTS+2)/2
-			shape = `<rect x="` + svg.Num(-w/2) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `" rx="` + svg.RADIUS + `"` +
-				tinted.of(slot, "0.06", view.style) + view.style.Shape + `/>` +
+			shape = `<rect x="` + svg.Num(-w/2) + `" y="` + svg.Num(-h/2) + `" width="` + svg.Num(w) + `" height="` + svg.Num(h) + `"` +
+				svg.Rounded(tinted.of(slot, "0.06", view.style)+view.style.Shape) + `/>` +
+
 				`<path d="M` + svg.Num(-w/2+10) + `,` + svg.Num(line) + `H` + svg.Num(w/2-10) + `" fill="none" stroke="` + color + `" stroke-dasharray="3 3"` + view.style.Line + `/>` +
 				`<path class="pele-collapsed-mark" d="` + dot(-9, dots) + dot(0, dots) + dot(9, dots) + `" fill="` + color + `" stroke="none"/>`
 		} else {

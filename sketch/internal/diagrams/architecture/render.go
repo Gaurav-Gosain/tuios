@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/architecture/render.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/architecture/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package architecture
 
@@ -761,7 +761,7 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		svg.WriteNum(&clusters, w)
 		clusters.WriteString(`" height="`)
 		svg.WriteNum(&clusters, bottom(g)-y)
-		svg.WriteStrings(&clusters, `" rx="`, svg.RADIUS, `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"/>`)
+		svg.WriteStrings(&clusters, `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
 		if headW[g] > 0 {
 			// The title starts at the left, or after the edges that come down through that corner.
 			band := y + headH[g] + 12
@@ -819,7 +819,8 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		svg.WriteNum(&nodesOut, iconSize)
 		nodesOut.WriteString(`" height="`)
 		svg.WriteNum(&nodesOut, iconSize)
-		svg.WriteStrings(&nodesOut, `" rx="`, svg.RADIUS, `" fill="var(--_s)" stroke="var(--_b)"/>`)
+		svg.WriteStrings(&nodesOut, `" fill="var(--_s)" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
+
 		if node.icon != "" {
 			iconSlot(&nodesOut, node.icon, -glyph/2, (iconSize-glyph)/2, glyph, icons)
 		} else if node.iconText != "" {
