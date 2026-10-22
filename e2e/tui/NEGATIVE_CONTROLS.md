@@ -8058,3 +8058,24 @@ holds the judge's reach (a security boundary test). Run on 2026-10-21.
 A session that takes the judge's old name after its session ended reaches
 nothing: the record names a session ID, which no new session has. The test
 keeps that case as a regression.
+
+## Plugin approval
+
+`TestNativePluginApproval` links a native plugin that asks for `write` and
+enables it. It must wait and run nothing. A pane runs `tuios plugins approve`
+with its pane variables cut and must be refused. A client attaches at
+truecolor, the dialog shows, and esc keeps the plugin waiting. A second
+client at 16 colours allows it. The plugin's startup then types into an
+ordinary shell pane (it must work), types into a pane on `needs_input`, and
+calls `respond`, `set-pane-grants`, `list-sessions` and `plugin.approve`
+(each must be refused). A changed grant in the manifest must ask again.
+
+Run on 2026-10-22, each control against the PR head with one change, one
+run each:
+
+| Claim | Control | Test that failed | Result |
+|---|---|---|---|
+| A plugin with `write` types into an ordinary pane that holds more | the plugin branch in `typingRefusal` cut, so the pane rule holds it | `TestNativePluginApproval` ("ordinary exited 1, want 0"; "the shell pane does not show what the plugin typed") | **caught** |
+| The prompt rule holds a plugin | the `needs_input` check skipped for plugins | `TestNativePluginApproval` ("prompt exited 0, want x") | **caught** |
+| A plugin with no approval does not run | `applyApproval` lets a plugin with no approval through | `TestNativePluginApproval` ("plugins list does not say the plugin waits") | **caught** |
+| Only the person answers | `herdrPluginTrust` cut from `plugin.approve` | `TestNativePluginApproval` ("a pane answered for the person (exit 0)") | **caught** |
