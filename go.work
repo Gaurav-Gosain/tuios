@@ -25,7 +25,7 @@ replace tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb => ./vt
 
 replace tuios.dev/tml v0.1.1-0.20261019164123-bf9b29e8d0d8 => ./tml
 
-replace tuios.dev/sketch v0.1.2-0.20261022094123-77fa8e1e2a8a => ./sketch
+replace tuios.dev/sketch v0.1.2-0.20261022094139-52c6decba7cf => ./sketch
 
 replace tuios.dev/plot v0.1.1-0.20261021163928-0b9f16190301 => ./plot
 
