@@ -218,6 +218,20 @@ async function newPane(page, cdp) {
 }
 
 /**
+ * Load the page again after the board showed the splash while a pane was
+ * still open. About one run in 20 on this machine, the client drew the splash
+ * while the daemon still held a pane on the same workspace, and the pane came
+ * back with the next new one. Closing panes did not help, because the client
+ * did not know the pane was there. A new page attaches again and reads every
+ * pane from the daemon. The log keeps the screen, because the desync itself
+ * looks like a product bug.
+ */
+async function rebuildAfterDesync(page, drawn) {
+  console.log(`the board showed the splash with a pane still open; ${drawn} panes after one new:\n${await snapshot(page)}`);
+  await boot(page);
+}
+
+/**
  * Put the board where a test needs it: nothing open, floating layout, one pane.
  *
  * The daemon session outlives a page load and every test in this file shares
@@ -229,14 +243,11 @@ async function newPane(page, cdp) {
  * board that came up tiled is cleared and made again after the toggle.
  */
 async function resetToOneFloatingPane(page, cdp) {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     await clearBoard(page, cdp);
     const drawn = await newPane(page, cdp);
     if (drawn !== 1) {
-      // Seen once in 20 local runs: the splash held for the settle while a
-      // pane stayed open, and the new pane made two. The gestures need one,
-      // so the board is made again, and the log says it happened.
-      console.log(`the board showed the splash with a pane still open; ${drawn} panes after one new:\n${await snapshot(page)}`);
+      await rebuildAfterDesync(page, drawn);
       continue;
     }
     if (await paneIsFloating(page)) return;
@@ -593,10 +604,17 @@ test.describe('a finger on tuios itself', () => {
     // Each step waits for the board to show it, not for a fixed time: on a
     // slow runner the second pane was still being laid out when the corners
     // were read.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // A board that came up with the wrong number of panes is made again,
+    // and so is one that came up floating, after the toggle.
+    for (let attempt = 0; attempt < 6; attempt++) {
       await clearBoard(page, cdp);
-      await newPane(page, cdp);
-      if ((await newPane(page, cdp)) !== 2) continue;
+      let drawn = await newPane(page, cdp);
+      if (drawn === 1) drawn = await newPane(page, cdp);
+      if (drawn !== 2 && drawn !== 1) {
+        await rebuildAfterDesync(page, drawn);
+        continue;
+      }
+      if (drawn !== 2) continue;
       if (tiled(await corners())) break;
       await toggleTiling(page);
     }

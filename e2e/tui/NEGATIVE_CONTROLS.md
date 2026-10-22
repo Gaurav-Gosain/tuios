@@ -7745,7 +7745,9 @@ Not covered end to end: the keys typed while the pointer is held past the edge. 
 |---|---|---|---|---|
 | A slow runner draws a new pane after the fixed wait ends | n/a, injected: a slow runner | a `tuios-web` whose new-pane handlers sleep 3 s, with the old spec | `:361` (the tap test), `:448` ("the drag did not move the pane down") and `:480` ("two tiled panes should draw two corners on the box edge"), the CI messages | **caught**, the flake |
 
-The fixed spec passes 4 of 4 runs on the slow build, and 19 of 20 runs of the whole suite plus 30 of 30 runs of the finger tests on a plain build. The one failure was the reset finding two panes after one new pane: the splash held through the settle while a pane stayed open. The reset now makes the board again when that happens and logs it. Whether the splash with a pane open is a product bug is not settled.
+The final spec passes 2 of 2 runs on the slow build and 25 of 25 runs of the whole suite on a plain build, with no browser or `tuios-web` left running. A build whose every third new pane opens two drives the recovery path: 3 of 3 runs pass, each after 3 page reloads. On the plain build the reset met the desync below in 3 of the 25 runs and recovered each time.
+
+The desync is not settled. About one run in 20, the client drew the splash while the daemon still held a pane on the same workspace: `list-windows` listed two panes after one new pane. Closing panes does not clear it, because the client does not know the pane is there. The reset now reloads the page, which attaches again and reads every pane from the daemon, and logs the screen. The original CI frames, where a pane from the previous test survived the reset, look the same.
 
 ## tuios plugins install
 
