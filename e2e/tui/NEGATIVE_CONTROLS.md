@@ -7737,6 +7737,16 @@ Run on 2026-10-20 on Linux. The control is the build of `origin/main` at e5334a8
 | The rejoin removed: `FilterMouseMotion` without its `rejoinSplitMouse` call (`origin/main`) | `standalone`, `daemon` ("the pane never landed on the left half at full height") | **caught** |
 
 Not covered end to end: the keys typed while the pointer is held past the edge. A drag ignores them in this fixture, and a check that the screen held still passed on both builds, so it was removed. The release is what this fixture catches. Not covered either: negative y, the wheel, a report split between two reads, and a report too long for the hold. A throwaway probe checked them: each is rejoined or dropped whole, and keys held for a report that never ends are typed in order.
+## The touch suite read the board on fixed timers
+
+`touch.spec.mjs:397` (a long press opens the pane menu), `:448` (drag a floating pane) and `:480` (drag a tiled pane) failed on CI with no menu, an unmoved pane, or panes not yet tiled. The board helpers waited a fixed 1.4 s after a close, 2.5 s after a new pane and 1.5 s after the tiling chord, and read the screen once. A CI run of the suite 25 times with the screen dumped at each step failed once: the first new pane came up tiled, the tiling chord had not been drawn when the board was read, and the second pane came up tiled too. In the failures of #733, #955 and #987 the reset had left two panes, and the gestures reached the one the test did not read. The helpers now wait for the board: a close waits for a pane to go, a new pane waits until it is drawn, every reading waits until the buffer stops changing, and the reset checks there is exactly one pane. The gestures wait for the menu, the move or the tiles instead of a fixed time. Run on 2026-10-22.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A slow runner draws a new pane after the fixed wait ends | n/a, injected: a slow runner | a `tuios-web` whose new-pane handlers sleep 3 s, with the old spec | `:361` (the tap test), `:448` ("the drag did not move the pane down") and `:480` ("two tiled panes should draw two corners on the box edge"), the CI messages | **caught**, the flake |
+
+The fixed spec passes 4 of 4 runs on the slow build, and 19 of 20 runs of the whole suite plus 30 of 30 runs of the finger tests on a plain build. The one failure was the reset finding two panes after one new pane: the splash held through the settle while a pane stayed open. The reset now makes the board again when that happens and logs it. Whether the splash with a pane open is a product bug is not settled.
+
 ## tuios plugins install
 
 `TestPluginsInstallFromGit` installs a probe plugin from a bare repository
