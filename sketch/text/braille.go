@@ -2,11 +2,15 @@ package text
 
 // dotGrid is a drawing in braille dots, two dots across and four down in a
 // cell, in layers. A cell shows one colour, so where layers meet in a cell
-// the last layer added shows its dots and the others give way.
+// the last layer added gives the colour. Its dots alone show, unless merge
+// is set.
 type dotGrid struct {
 	w, h   int // in cells
 	layers [][]uint8
 	roles  []uint8
+	// merge shows the dots of every layer in a shared cell, in the colour
+	// of the last: a line keeps its shape where another crosses it.
+	merge bool
 }
 
 func newDotGrid(w, h int) *dotGrid {
@@ -71,8 +75,15 @@ func (d *dotGrid) paint(c *canvas, x0, y0 int) {
 			if p == nil || p.r != 0 || p.mask != 0 || p.wide {
 				continue
 			}
+			var all uint8
+			for l := range d.layers {
+				all |= d.layers[l][y*d.w+x]
+			}
 			for l := len(d.layers) - 1; l >= 0; l-- {
 				if bits := d.layers[l][y*d.w+x]; bits != 0 {
+					if d.merge {
+						bits = all
+					}
 					c.put(x0+x, y0+y, 0x2800+rune(bits), d.roles[l])
 					break
 				}
