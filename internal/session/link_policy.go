@@ -266,13 +266,15 @@ var verbCapabilities = map[string][]string{
 	// not, as bundle-worktree does. verify-fan opens a window and runs a
 	// command in it, so it needs open and write. mark-attention is the
 	// person's act, like dismiss-attention.
-	"compare-fan":    {config.LinkAllowList},
-	"agent-activity": {config.LinkAllowList},
-	"list-queued":    {config.LinkAllowList},
-	"get-approval":   {config.LinkAllowList},
-	"review-diff":    {config.LinkAllowWrite},
-	"review-note":    {config.LinkAllowWrite},
-	"send-review":    {config.LinkAllowWrite},
+	"compare-fan":     {config.LinkAllowList},
+	"agent-activity":  {config.LinkAllowList},
+	"list-queued":     {config.LinkAllowList},
+	"get-approval":    {config.LinkAllowList},
+	"review-diff":     {config.LinkAllowWrite},
+	"review-note":     {config.LinkAllowWrite},
+	"set-fan-verdict": {config.LinkAllowWrite},
+	"judge-fan":       {config.LinkAllowOpen, config.LinkAllowWrite},
+	"send-review":     {config.LinkAllowWrite},
 	// review-stage writes the index, as a commit does.
 	"review-stage":   {config.LinkAllowWrite},
 	"queue-prompt":   {config.LinkAllowWrite},

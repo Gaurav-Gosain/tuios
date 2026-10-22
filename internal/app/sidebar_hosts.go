@@ -77,6 +77,12 @@ type FederationHost struct {
 	// ApprovalRefused says the banner named a sign-in address that is not a
 	// Tailscale login origin, so there is no page to open.
 	ApprovalRefused bool
+	// Cores and Load1 are the machine's CPUs and one-minute load from the
+	// last hello on its link, and RTTMillis that hello's round trip. Cores is
+	// 0 until a hello carried a load.
+	Cores     int
+	Load1     float64
+	RTTMillis int64
 }
 
 // FederationSession is one session on another machine, as that machine
@@ -124,6 +130,8 @@ type FederationHostsMsg struct {
 	// live. The rail then waits for the push instead of polling. A host whose
 	// tuios is too old to stream, or a daemon too old to push, keeps the poll.
 	Pushed bool
+	// Local is the load of the daemon's own machine, from list-hosts.
+	Local federation.Load
 }
 
 // FederationRefreshTickMsg re-arms the poll.
@@ -232,10 +240,13 @@ func refreshFederationCmd() tea.Cmd {
 		queued := map[string]int{}
 		signIn := map[string]string{}
 		signInRefused := map[string]bool{}
-		reports, pushes := hostStatusReports(client)
+		reports, pushes, local := hostStatusReports(client)
+		msg.Local = local
+		loads := map[string]federation.HostReport{}
 		msg.Pushed = pushes
 		for _, h := range reports {
 			lastOK[h.Host] = h.LastOK
+			loads[h.Host] = h
 			queued[h.Host] = h.Queued
 			signIn[h.Host] = h.ApprovalURL
 			signInRefused[h.Host] = h.ApprovalRefused
@@ -248,6 +259,9 @@ func refreshFederationCmd() tea.Cmd {
 				msg.Configured++
 			}
 			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host], ApprovalURL: signIn[h.Host], ApprovalRefused: signInRefused[h.Host]}
+			if r := loads[h.Host]; r.Cores > 0 {
+				fh.Cores, fh.Load1, fh.RTTMillis = r.Cores, r.Load1, r.RTTMillis
+			}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{
 					Name:        s.Name,
@@ -269,19 +283,24 @@ func refreshFederationCmd() tea.Cmd {
 // session listing does not carry, and whether the daemon pushes host changes. A
 // failure here costs the rail a relative time and its push, and it polls as it
 // always did.
-func hostStatusReports(client *session.VerbClient) ([]federation.HostReport, bool) {
+func hostStatusReports(client *session.VerbClient) ([]federation.HostReport, bool, federation.Load) {
 	raw, err := client.Call("list-hosts", nil)
 	if err != nil {
-		return nil, false
+		return nil, false, federation.Load{}
 	}
 	var res struct {
 		Hosts      []federation.HostReport `json:"hosts"`
 		EventsPush bool                    `json:"events_push"`
+		Load       *federation.Load        `json:"load"`
 	}
 	if json.Unmarshal(raw, &res) != nil {
-		return nil, false
+		return nil, false, federation.Load{}
 	}
-	return res.Hosts, res.EventsPush
+	var load federation.Load
+	if res.Load != nil {
+		load = *res.Load
+	}
+	return res.Hosts, res.EventsPush, load
 }
 
 // applyFederationSnapshot stores a snapshot the poll returned. It runs on the
@@ -290,6 +309,7 @@ func (m *OS) applyFederationSnapshot(msg FederationHostsMsg) {
 	m.federationPolling = msg.Configured > 0
 	m.federationPushed = msg.Pushed
 	m.FederationHosts = msg.Snapshot.Hosts
+	m.LocalLoad = msg.Local
 	m.federationGen++
 }
 

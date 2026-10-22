@@ -511,3 +511,67 @@ func waitFanVerify(t *verbTarget, anySession string, sessions []string) ([]fanCo
 		time.Sleep(500 * time.Millisecond)
 	}
 }
+
+// newFanVerdictCommand is tuios fan verdict: how a judge reports its pick.
+func newFanVerdictCommand() *cobra.Command {
+	var pick, summary string
+	var reasons, notes []string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "verdict <session>",
+		Short: "Record a judge's pick among the attempts of a fan-out",
+		Long: `Record which attempt of a fan-out a judge recommends, and why. The agents
+view shows the verdict on the fan's row and in its comparison, where the
+person keeps an attempt. Nothing is kept or removed here: 'tuios fan keep'
+does that.
+
+Name any session of the fan-out, the attempt to pick with --pick, and the
+verdict with --summary. Give each reason with --reason, and a note on one
+attempt with --note SESSION=TEXT. Each flag can repeat. A new verdict
+replaces the last one.
+
+Only the judge tuios started for the fan ('j' in the agents view), or a
+call from outside every pane, records a verdict. A pane of an attempt is
+refused.`,
+		Example: `  tuios fan verdict api-fan-retry --pick api-fan-retry-2 \
+    --summary "Keep B. It is the smallest change and passes the tests." \
+    --reason "A reads hits without the lock." \
+    --note "api-fan-retry=Adds a test for eviction."`,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeWorktreeSessions,
+		RunE: func(_ *cobra.Command, args []string) error {
+			byAttempt := map[string][]string{}
+			for _, n := range notes {
+				s, text, ok := strings.Cut(n, "=")
+				if !ok || s == "" {
+					return fmt.Errorf("--note %q is not SESSION=TEXT", n)
+				}
+				byAttempt[s] = append(byAttempt[s], text)
+			}
+			host, name := splitHostSession(args[0])
+			t, err := dialHost(host)
+			if err != nil {
+				return err
+			}
+			defer t.Close()
+			params := map[string]any{"session": name, "pick": pick, "summary": summary, "reasons": reasons, "notes": byAttempt}
+			raw, err := t.client.Call("set-fan-verdict", params)
+			if err != nil {
+				return reportVerbError(t.explain("set-fan-verdict", err), jsonOut)
+			}
+			if jsonOut {
+				return printVerbResultOn(t, raw, true)
+			}
+			fmt.Printf("The verdict picks %s. It is on every attempt of the fan-out.\n", pick)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&pick, "pick", "", "The session of the attempt the judge recommends (required)")
+	cmd.Flags().StringVar(&summary, "summary", "", "The verdict in a sentence or two (required)")
+	cmd.Flags().StringArrayVar(&reasons, "reason", nil, "One reason. Repeatable")
+	cmd.Flags().StringArrayVar(&notes, "note", nil, "A note on one attempt, as SESSION=TEXT. Repeatable")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON")
+	_ = cmd.MarkFlagRequired("pick")
+	_ = cmd.MarkFlagRequired("summary")
+	return cmd
+}

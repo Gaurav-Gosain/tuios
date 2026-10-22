@@ -1237,6 +1237,7 @@ Inside it:
 | `r`, `i`, `tab` | With no approval waiting: write a reply to the agent, or to the mail |
 | `space` | Read an approval's or a question's prompt and answer it here |
 | `n` | Open the New agent sheet. See below |
+| `c` | On an attempt of a fan: compare the attempts. See below |
 | `f` | Show only what needs you, then each kind of item, then every agent |
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
@@ -1257,6 +1258,20 @@ A bulk key acts only on the marked agents the list shows. An agent in a
 folded group, or one a search hides, is left out, and closing the view clears
 the marks. An approval whose command does not fit on the card is not answered
 here: the card says so, and `enter` answers it in the pane.
+
+`c` on an attempt of a fan compares every attempt side by side: its agent,
+how long it took, its diff, its check from `tuios fan verify`, its first
+changed lines and its files. `j` asks a judge: an agent that reads the
+attempts and reports which one to keep. Through tuios it can only read the
+attempts: their diffs, screens and scrollback. Its verdict shows on top, with its reasons, and its
+pick is marked recommended. `1` to `9` and the arrows pick an attempt, and
+`k` twice keeps it: the other worktrees are removed, their changes go to git
+stash and their branches stay. The first `k` names every file git ignores in
+the other worktrees, such as `.env`: they are deleted, not stashed. `up` and
+`down` scroll that list. The second `k` reads the attempts again and keeps
+only when nothing changed. When the list grew, or could not be read, it says
+so and keeps nothing. `enter` goes
+to the attempt's pane, `r` reads the attempts again and `esc` goes back.
 
 The New agent sheet starts an agent with a task. Write the task, then pick
 the agent, the model, where it works and the machine. `tab` and `shift+tab`
@@ -1328,7 +1343,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
-`inbox_tab_next`, `inbox_expand`),
+`inbox_tab_next`, `inbox_expand`, `inbox_compare`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,
@@ -1408,6 +1423,7 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | `S` | agents view | Show or hide snoozed items |
 | `R` | agents view | Reject a held approval, or keep a plan planning, with a reason you type (`r` and `3` stay the plain reject) |
 | `n` | agents view | Start a new agent |
+| `c` | agents view | Compare the attempts of the fan under the cursor |
 | `J`, `K`, `ctrl+d`, `ctrl+u` | agents view | Scroll the card, such as a long plan |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze what needs you in the pane: the agents view opens on it with the four lengths |

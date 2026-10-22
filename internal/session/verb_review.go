@@ -324,7 +324,7 @@ func (d *Daemon) reviewSibling(cs *connState, sess *Session, repo reviewRepo, na
 	if verr != nil {
 		return nil, verr
 	}
-	if sib == sess || info.Group != repo.info.Group || info.RepoRoot != repo.info.RepoRoot {
+	if sib == sess || !sameFan(info, repo.info) {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+sib.Name()+" is not another attempt of fan "+repo.info.Group, &VerbHint{
 			Param:   "against",
 			Command: "tuios fan compare " + sess.Name(),

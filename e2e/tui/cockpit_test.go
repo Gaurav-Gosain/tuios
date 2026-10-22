@@ -1052,6 +1052,15 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the typed branch", "docs/readme")
+	// A branch name a fan does not take is refused before start, in words.
+	if err := term.SendKeys(tuitest.Ctrl('u'), "fix+retry", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the refused branch", "A branch name can have only the letters A to Z")
+	if err := term.SendKeys(tuitest.Ctrl('u'), "docs/readme"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the typed branch again", "docs/readme")
 	for range 4 {
 		if err := term.SendKeys(tuitest.Key("\x1b[Z")); err != nil {
 			t.Fatal(err)

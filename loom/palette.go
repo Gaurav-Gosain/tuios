@@ -3,6 +3,8 @@ package loom
 import (
 	"image/color"
 	"math"
+	"strings"
+	"sync"
 
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/plot"
@@ -78,6 +80,10 @@ func roleIndex(name string) int {
 type Palette struct {
 	Depth  Depth
 	colors []color.Color
+	// fades holds the faded roles, such as "series1/2", built on the first
+	// lookup of one, so a palette that draws no fade spends nothing on them.
+	fades     map[string]color.Color
+	fadesOnce sync.Once
 }
 
 // NewPalette returns a palette at depth d with the given colours by role. A
@@ -110,7 +116,54 @@ func NewPalette(d Depth, roles map[string]color.Color) *Palette {
 	return p
 }
 
-// Color returns the colour of a role, or nil.
+// makeFades derives every faded role plot can name, such as "series1/2":
+// the base colour mixed toward the ground by a fifth for each step, at
+// truecolor and 256 colours. At 16 colours a fade of 2 or 3 takes the
+// normal slot of a bright base colour, so the bands of a chart still differ;
+// fade 1, and a base that is not a bright slot, keep the base colour.
+func (p *Palette) makeFades() map[string]color.Color {
+	ground := p.colors[roleIndex("panel")]
+	if ground == nil {
+		ground = p.colors[roleIndex("canvas")]
+	}
+	out := map[string]color.Color{}
+	for i, name := range roleNames {
+		base := p.colors[i]
+		if base == nil {
+			continue
+		}
+		for k := 1; k <= plot.MaxFade; k++ {
+			out[string(plot.Fade(plot.Role(name), k))] = fade(p.Depth, base, ground, k)
+		}
+	}
+	return out
+}
+
+// fade is base faded k steps toward ground at depth d.
+func fade(d Depth, base, ground color.Color, k int) color.Color {
+	if d == Color16 {
+		if b, ok := base.(ansi.BasicColor); ok && k >= 2 && b >= 9 && b <= 14 {
+			return b - 8
+		}
+		return base
+	}
+	if ground == nil {
+		return base
+	}
+	c := mixRGB(toRGBA(base), toRGBA(ground), 0.2*float64(k))
+	if d == Color256 {
+		return ansi.IndexedColor(nearest256(c))
+	}
+	return c
+}
+
+func toRGBA(c color.Color) color.RGBA {
+	r, g, b, _ := c.RGBA()
+	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
+}
+
+// Color returns the colour of a role, or nil. A faded role from plot.Fade,
+// such as "series1/2", is its base colour faded toward the ground.
 func (p *Palette) Color(role string) color.Color {
 	if p == nil {
 		return nil
@@ -118,7 +171,11 @@ func (p *Palette) Color(role string) color.Color {
 	if i := roleIndex(role); i >= 0 {
 		return p.colors[i]
 	}
-	return nil
+	if !strings.Contains(role, "/") {
+		return nil
+	}
+	p.fadesOnce.Do(func() { p.fades = p.makeFades() })
+	return p.fades[role]
 }
 
 // grounded reports whether the palette paints grounds. At 16 colours and in

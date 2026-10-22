@@ -199,13 +199,16 @@ func agentWorkVerbs() map[string]verbEntry {
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Any session of the fan. Omit for the most recently active session."},
 				{Name: "changes", Type: "bool", Description: "Count the changed files and lines of each attempt, a few git calls per sibling.", Default: "true"},
+				{Name: "detail", Type: "bool", Description: "With changes, also list each attempt's files (file_list, at most 8, most changed first) and its first changed lines (lines, at most 6). Two more git calls per sibling.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "group", Type: "string", Description: "The fan's group."},
 				{Name: "repo", Type: "string", Description: "The repository the fan is of."},
 				{Name: "repo_root", Type: "string", Description: "The repository's main checkout."},
 				{Name: "base", Type: "string", Description: "The base the attempts were made from: the fan's base, or the main checkout's branch for a fan made from HEAD."},
-				{Name: "rows", Type: "[]object", Description: "One per sibling: session, branch, path, agent, harness, state, files, added, removed, ahead, dirty, base_sha, prompt_status, verify, last_command (cmdline, exit, at, window), gone, and note when git could not count."},
+				{Name: "rows", Type: "[]object", Description: "One per sibling: session, branch, path, agent, harness, state, files, added, removed, ahead, dirty, base_sha, prompt_status, verify, last_command (cmdline, exit, at, window), gone, and note when git could not count. Also cost, the cost its agent reported, started_at and done_at, notes from the verdict, and file_list and lines with detail."},
+				{Name: "prompt", Type: "string", Description: "The task the fan gave the attempts."},
+				{Name: "verdict", Type: "object", Description: "The judge's pick, when set-fan-verdict recorded one: pick, summary, reasons, judge and at."},
 				{Name: "total", Type: "int", Description: "How many rows."},
 			},
 			examples: []string{
@@ -232,8 +235,46 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbVerifyFan,
 		},
+		"set-fan-verdict": {
+			description: "Record a judge's pick among the attempts of a fan: the attempt it recommends, the verdict, its reasons and notes on each attempt. Only the judge pane judge-fan started for the fan, or a call from outside every pane, records one: a pane of an attempt is refused. The daemon records which of the two it was as by. It is written on every attempt, and compare-fan and the agents view show it. A later call replaces it. Nothing is kept or removed: keep-fan does that.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Required: true, Description: "Any session of the fan."},
+				{Name: "pick", Type: "string", Required: true, Description: "The session of the attempt the judge recommends."},
+				{Name: "summary", Type: "string", Required: true, Description: "The verdict in a sentence or two, at most 400 bytes."},
+				{Name: "reasons", Type: "[]string", Description: "The reasons, one sentence each, at most 6."},
+				{Name: "notes", Type: "object", Description: "Notes per attempt: session name to a list of sentences, at most 4 each."},
+			},
+			returns: []verbParam{
+				{Name: "group", Type: "string", Description: "The fan's group."},
+				{Name: "pick", Type: "string", Description: "The attempt picked."},
+				{Name: "by", Type: "string", Description: "judge for the judge's pane, you for a call from outside every pane."},
+				{Name: "attempts", Type: "[]string", Description: "Every attempt the verdict was written on."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-fan-verdict","params":{"session":"api-fan-retry","pick":"api-fan-retry-2","summary":"Keep B. It is the smallest change and passes the tests.","reasons":["A reads hits without the lock."],"notes":{"api-fan-retry":["Adds a test for eviction."]}}}`,
+			},
+			handler: (*Daemon).verbSetFanVerdict,
+		},
+		"judge-fan": {
+			description: "Start an agent that judges the attempts of a fan. It runs in a new session of its own, named after the fan with -judge, in the repository's main checkout, with the read grant alone. Once its pane exists, the attempts name that pane, and that pane alone reads them: it cannot type into them, run commands in their sessions or start agents there. Its first prompt, typed then, asks it to read the attempts and report its pick with set-fan-verdict. Only the person or a pane with admin starts a judge. The record is cleared when the judge's session ends. It answers once the agent is ready, as start-agent does.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Required: true, Description: "Any session of the fan."},
+				{Name: "agent", Type: "string", Description: "The judge's agent, as start-agent takes it. Omit for the agent the first attempt ran."},
+				{Name: "env", Type: "object", Description: "Environment variables for the judge, as start-agent takes them."},
+				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the judge to be ready.", Default: "120000"},
+			},
+			returns: []verbParam{
+				{Name: "judge_session", Type: "string", Description: "The judge's session."},
+				{Name: "group", Type: "string", Description: "The fan's group."},
+				{Name: "window_id", Type: "string", Description: "The judge's pane, with the rest of what start-agent returns."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"judge-fan","params":{"session":"api-fan-retry"}}`,
+			},
+			handler: (*Daemon).verbJudgeFan,
+		},
 		"keep-fan": {
-			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Branches are never deleted. With merge, the kept attempt's branch is first merged into its base, as ship-merge does.",
+			description: "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Files git ignores are deleted with a worktree and never stashed: compare-fan with detail lists them. Branches are never deleted. With merge, the kept attempt's branch is first merged into its base, as ship-merge does.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Required: true, Description: "The attempt to keep."},
 				{Name: "stash", Type: "bool", Description: "Stash a sibling's uncommitted changes before removing it.", Default: "false"},
@@ -241,6 +282,11 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "merge", Type: "bool", Description: "First merge the kept attempt's branch into its base in the main checkout, as ship-merge does. A merge that conflicts or is refused stops the call before any sibling is removed.", Default: "false"},
 				{Name: "merge_mode", Type: "string", Description: "With merge: merge, squash or ff-only, as ship-merge takes mode.", Accepted: shipMergeModes, Default: "merge"},
 				{Name: "into", Type: "string", Description: "With merge: the branch to merge into. Omit for the base the attempt was made from."},
+				{Name: "group", Type: "string", Description: "The fan's group, as compare-fan gave it. When given, a session of another fan is refused."},
+				{Name: "repo_root", Type: "string", Description: "The fan's repository, as compare-fan gave it. When given, a session of another repository is refused."},
+				{Name: "fan_id", Type: "string", Description: "The fan's ID, as compare-fan gave it. When given, a session of another fan of the same name is refused."},
+				{Name: "siblings", Type: "[]string", Description: "The attempts the caller showed it would remove. When given, a fan whose other attempts differ is refused whole."},
+				{Name: "ignored", Type: "object", Description: "Per attempt to remove, the ignored_hash compare-fan gave for the list the caller showed. When given, an attempt whose ignored files changed, or that has no entry, is refused, and nothing is removed."},
 			},
 			returns: []verbParam{
 				{Name: "kept", Type: "string", Description: "The session kept."},

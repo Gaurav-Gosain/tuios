@@ -21,6 +21,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -307,16 +308,31 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		name = name[:i]
 	}
 	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: working[""], up: true}
-	local.load, local.loadOK = spawnLoadAvg()
+	if l := m.LocalLoad; l.Cores > 0 && m.AttachedHost == "" {
+		// The load the daemon reported, on every system.
+		local.cores, local.load, local.loadOK = l.Cores, l.Load1, true
+	} else {
+		local.load, local.loadOK = spawnLoadAvg()
+	}
 	ms := []spawnMachine{local}
 	for _, h := range m.FederationHosts {
 		if h.Name == federation.LocalHostName {
 			continue
 		}
-		ms = append(ms, spawnMachine{host: h.Name, name: h.Name, working: working[h.Name], up: h.Status == string(federation.StatusUp)})
+		sm := spawnMachine{host: h.Name, name: h.Name, working: working[h.Name], up: h.Status == string(federation.StatusUp)}
+		if h.Cores > 0 {
+			// The load the link's last hello carried, so the sheet ranks
+			// the machine with no call of its own.
+			sm.cores, sm.load, sm.loadOK = h.Cores, h.Load1, true
+		}
+		ms = append(ms, sm)
 	}
+	// Spare cores: the cores, held to spawnCoresMax so a host cannot win by
+	// claiming more, times the share of them the load leaves free.
 	score := func(x spawnMachine) float64 {
-		return float64(x.cores) - x.load - 0.5*float64(x.working)
+		cores := float64(min(max(x.cores, 1), spawnCoresMax))
+		free := 1 - min(max(x.load/float64(max(x.cores, 1)), 0), 1)
+		return cores*free - 0.5*float64(x.working)
 	}
 	slices.SortStableFunc(ms, func(a, b spawnMachine) int {
 		first := func(x, _ bool) int {
@@ -342,6 +358,9 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		}
 	}
 }
+
+// spawnCoresMax bounds the cores a machine is ranked by.
+const spawnCoresMax = 256
 
 // spawnLoadAvg is this machine's one-minute load, where the system says it.
 func spawnLoadAvg() (float64, bool) {
@@ -940,6 +959,8 @@ func (m *OS) spawnStart() tea.Cmd {
 		return fail(spWhere, spawnNoWorktree(s))
 	case s.worktree && branch == "":
 		return fail(spBranch, "Write a branch name.")
+	case s.worktree && strings.IndexFunc(branch, func(r rune) bool { return !session.FanNameChar(r) }) >= 0:
+		return fail(spBranch, "A branch name can have only the letters A to Z and a to z, the digits 0 to 9, and / . _ -.")
 	case s.worktree && !spawnRefOK(branch):
 		return fail(spBranch, "Git does not accept this branch name.")
 	case s.worktree && strings.HasPrefix(base, "-"):

@@ -23,6 +23,9 @@ type WorktreeRef struct {
 	// made on its own. Carried for the surfaces that report it; the grouping
 	// below is by repository, because that is the row a person looks for.
 	Group string
+	// FanID tells two fans of one name apart. Empty for a remote session
+	// and for a record from before the field.
+	FanID string
 	// Gone says the worktree directory no longer exists. The session is still
 	// listed, because a shell whose directory was removed under it still runs.
 	Gone bool
@@ -39,6 +42,12 @@ type WorktreeRef struct {
 	// Prompt is the first line of the task a fan gave the session, empty
 	// when no fan made it.
 	Prompt string
+	// Pick is the session a judge picked among the fan's attempts, and
+	// VerdictAt when, 0 with no verdict. JudgeWindow is the pane of the
+	// judge started for the fan, empty when none runs.
+	Pick        string
+	VerdictAt   int64
+	JudgeWindow string
 }
 
 // GroupByRepo returns the session list with every worktree session gathered

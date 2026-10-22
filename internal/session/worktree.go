@@ -34,6 +34,11 @@ type WorktreeInfo struct {
 	// Group names the fan-out this session belongs to: the branch stem the
 	// siblings share. Empty for a worktree made on its own.
 	Group string `json:"group,omitempty"`
+	// FanID tells this fan apart from another of the same name, such as one
+	// made while this one was saved and not running. A fan's sessions share
+	// it, and reach and the fan verbs go by it. Empty on a record from before
+	// the field: such records match each other by name.
+	FanID string `json:"fan_id,omitempty"`
 	// LaunchedFrom names the session whose pane ran the fan that made this
 	// one, when a pane of this daemon ran it. A connection restricted to its
 	// own session reaches the sessions its session launched. Empty when the
@@ -78,6 +83,37 @@ type WorktreeInfo struct {
 	// by the poll in pr_poll.go. Saved with the session. Additive: an older
 	// client drops it. Replaced whole, never edited in place, like Verify.
 	PR *ghpr.PR `json:"pr,omitempty"`
+	// Verdict is a judge's pick among the attempts of this session's fan,
+	// set by set-fan-verdict on every sibling, each with its own notes. Nil
+	// until a judge reports. Replaced whole, like Verify.
+	Verdict *FanVerdict `json:"verdict,omitempty"`
+	// JudgeSession and JudgeWindow are the session ID and the pane of the
+	// agent judge-fan started to judge this fan. That pane, and no other,
+	// reads this session (judgeReaches). Cleared when the judge's session
+	// ends.
+	JudgeSession string `json:"judge_session,omitempty"`
+	JudgeWindow  string `json:"judge_window,omitempty"`
+}
+
+// FanVerdict is what a judge said about the attempts of a fan: the one it
+// picks, why, and notes on this attempt.
+type FanVerdict struct {
+	// Pick is the session of the attempt the judge recommends.
+	Pick string `json:"pick"`
+	// Summary is the verdict in one or two sentences.
+	Summary string `json:"summary"`
+	// Reasons are the reasons, one sentence each.
+	Reasons []string `json:"reasons,omitempty"`
+	// Notes are the judge's notes on this attempt.
+	Notes []string `json:"notes,omitempty"`
+	// By says who recorded it: "judge" for the judge's pane, "you" for a
+	// call from outside every pane. Set by the daemon, never by the caller.
+	By string `json:"by"`
+	// Judge is the harness of the judge's pane, empty when the person
+	// recorded the verdict or the pane named none.
+	Judge string `json:"judge,omitempty"`
+	// At is when the verdict was set, in Unix nanoseconds.
+	At int64 `json:"at"`
 }
 
 // FanVerify is one verify-fan check in one fan sibling: the command, and what

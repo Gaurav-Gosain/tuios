@@ -306,6 +306,12 @@ var verbScopes = map[string]scopeKind{
 	"list-queued":    scopeRead,
 	"get-approval":   scopeRead,
 	"review-note":    scopeWrite,
+	// set-fan-verdict writes a judge's pick on the fan's attempts. It needs
+	// the fan grant, and the handler takes it only from the fan's judge pane
+	// or from outside every pane.
+	"set-fan-verdict": scopeLaunch,
+	// judge-fan starts an agent, which is a launch.
+	"judge-fan":      scopeLaunch,
 	"send-review":    scopeWrite,
 	"queue-prompt":   scopeWrite,
 	"cancel-queued":  scopeWrite,
@@ -568,7 +574,7 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 		return false
 	}
 	ow := o.Worktree()
-	return ow != nil && ow.Managed && ow.Group == tw.Group && ow.RepoRoot == tw.RepoRoot
+	return ow != nil && ow.Managed && sameFan(ow, tw)
 }
 
 // scopeSessionNames lists the sessions own reaches, sorted.

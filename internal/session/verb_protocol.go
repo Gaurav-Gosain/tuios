@@ -667,7 +667,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "prompts", Type: "[]string", Description: "One prompt per session, in order. count defaults to how many there are and must equal it when given. Takes no prompt."},
 				{Name: "repo", Type: "string", Description: "A directory inside the repository. Required unless repo_url is passed."},
 				{Name: "base", Type: "string", Description: "Ref every branch starts from. Omit for HEAD of the main checkout."},
-				{Name: "name", Type: "string", Description: "Branch stem, which names the fan. The branches are the stem, then stem-2, stem-3 and so on. A name that is already a fan in the repository is refused with fan_exists unless join is given. Omit for fan/ and the first words of the first prompt, which moves on to a free name. A name with a character that does not print is refused."},
+				{Name: "name", Type: "string", Description: "Branch stem, which names the fan. The branches are the stem, then stem-2, stem-3 and so on. A name that is already a fan in the repository is refused with fan_exists unless join is given. Omit for fan/ and the first words of the first prompt, which moves on to a free name. A name can have only A-Z, a-z, 0-9 and / . _ -. Any other character is refused."},
 				{Name: "join", Type: "string", Description: "A session of an existing fan to add the attempts to. The caller must reach that session. Omit to start a new fan."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for each agent to be ready before giving up on its prompt.", Default: "600000"},
 				{Name: "env", Type: "object", Description: "Environment variables for every agent, name to value, on top of the daemon's. PATH in it is where the programs are looked up, so an agent the caller can run is found. The tuios CLI sends its PATH. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env at all. Not saved: a restored pane starts with the daemon's environment."},
@@ -774,7 +774,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up. queued is how many messages this daemon holds for the host until its link is back."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up. queued is how many messages this daemon holds for the host until its link is back. cores, load1, mem_pct and agents_working are the host's load from the last hello on the link, at load_at (Unix seconds), and rtt_ms is that hello's round trip in milliseconds; all are absent until a hello from the host carried a load."},
 				{Name: "total", Type: "int", Description: "How many hosts are configured."},
 				{Name: "events_push", Type: "bool", Description: "Always true from a daemon that pushes host changes: host-changed on subscribe, and a hosts-changed push to attached clients."},
 				{Name: "config_problems", Type: "[]string", Description: "Config entries that were dropped, with the reason for each. Omitted when there are none."},
@@ -2992,6 +2992,7 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		LogBasic("Client %s identified as %s %s (protocol %d)", cs.clientID, p.Client, p.Version, p.Protocol)
 	}
 
+	infos := d.manager.ListSessions()
 	return map[string]any{
 		"type":           "hello",
 		"protocol":       VerbProtocolVersion,
@@ -2999,7 +3000,10 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"daemon_version": d.version,
 		"pid":            os.Getpid(),
 		"instance":       d.instance,
-		"sessions":       len(d.manager.ListSessions()),
+		"sessions":       len(infos),
+		// load is this machine's load, which a linked daemon reads off the
+		// hello its heartbeat sends anyway. See machine_load.go.
+		"load": machineLoad(infos),
 		// link_policy says this daemon holds links to a policy, so a proxy
 		// must reach it on a link socket and never on this one. See
 		// DialForLink in link_dial.go.

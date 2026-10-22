@@ -1300,6 +1300,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.stash.forget(s.ID)
 	// And the sessions it started no longer name it.
 	d.forgetLauncher(s)
+	// And the attempts it judged no longer name it.
+	d.forgetFanJudge(s.ID)
 	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
 		SessionName: s.Name(),
 		Reason:      "the session was terminated",

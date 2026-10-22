@@ -133,11 +133,6 @@ type cockpitState struct {
 	// machines counts the agents on each machine, by host, "" for this
 	// one, from the last list no selector or search narrowed.
 	machines map[string]int
-	// load is this machine's one-minute load, read at most every
-	// ckLoadEvery while frames are drawn, never on a timer of its own.
-	load   float64
-	loadOK bool
-	loadAt time.Time
 	// tall is how many lines the fleet takes with two-line rows, whatever
 	// it is drawn with, so the choice of one-line rows does not feed back
 	// into itself.
@@ -231,6 +226,9 @@ type cockpitState struct {
 	spawnBg   []uv.Line
 	spawnBgAt ckFrameKey
 	spawnFade map[color.Color]color.Color
+	// cmp is the open comparison of a fan's attempts, nil when it is not up.
+	// See cockpit_compare.go.
+	cmp *ckCompare
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -342,6 +340,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		}
 	}
 	searching := st.agents.query != "" || st.Select != ""
+	judges := m.ckJudgeWindows()
 	for _, r := range m.inboxRows() {
 		if r.item == nil {
 			if r.note != "" && len(groups[ckNeeds]) > 0 {
@@ -350,6 +349,10 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			continue
 		}
 		it := *r.item
+		if it.Kind == session.AttentionFinished && judges[it.Host+"\x00"+it.Window] {
+			// A judge's finished turn is told of on its fan's row.
+			continue
+		}
 		g := ckNeeds
 		switch {
 		case it.SnoozedUntil != 0:
@@ -389,7 +392,8 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	// list, and the f filter keeps the agents that need you.
 	kindFilter := st.Filter != ""
 	for i, e := range list {
-		if used[i] || kindFilter {
+		if used[i] || kindFilter || judges[e.Host+"\x00"+e.WindowID] {
+			// A fan's judge is told of on the fan's row, not as a row.
 			continue
 		}
 		g := ckIdle
@@ -565,7 +569,9 @@ func (m *OS) ckItemMatches(it session.AttentionItem) bool {
 // moved under a fan row: its item stays where the person sees it.
 func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 	fanOf := func(r ckRow) string {
-		if r.kind != ckRowAgent || r.hasItem || r.agent < 0 {
+		// A finished turn's item is the attempt's own state, so it joins the
+		// fan; any other item stays where the person answers it.
+		if r.kind != ckRowAgent || r.agent < 0 || r.hasItem && r.item.Kind != session.AttentionFinished {
 			return ""
 		}
 		e := list[r.agent]
@@ -983,6 +989,10 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		case ckHitMore:
 			m.CockpitToggleGroup(h.group, true)
 		case ckHitRow:
+			if ck.cmp != nil {
+				// A row of the fleet leaves the comparison for its agent.
+				m.CockpitCompareClose()
+			}
 			now := time.Now()
 			double := ck.lastClickKey == h.key && now.Sub(ck.lastClick) <= ckDoubleClick
 			ck.lastClick, ck.lastClickKey = now, h.key
@@ -1043,6 +1053,9 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		cmd, _ := m.InboxReview()
 		return cmd
 	default:
+		if strings.HasPrefix(action, "cmp:") {
+			return m.ckCompareAction(action)
+		}
 		if h, ok := strings.CutPrefix(action, "scope:"); ok {
 			if h == m.ckScope() {
 				h = ""
@@ -1275,6 +1288,8 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	case config.ActionInboxNewAgent:
 		return m.CockpitNewAgent(), true
+	case config.ActionInboxCompare:
+		return m.CockpitCompare(), true
 	case config.ActionInboxWrite:
 		return m.cockpitReply(), true
 	case config.ActionInboxFilter:

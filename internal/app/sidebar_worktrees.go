@@ -38,6 +38,7 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 		Repo:     info.Repo,
 		Branch:   info.Branch,
 		Group:    info.Group,
+		FanID:    info.FanID,
 		Gone:     info.Gone,
 		PR:       info.PR.Badge(),
 		Path:     info.Path,
@@ -53,6 +54,10 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 			line = strings.ToValidUTF8(line[:200], "")
 		}
 		ref.Prompt = line
+		ref.JudgeWindow = info.JudgeWindow
+		if v := info.Verdict; v != nil {
+			ref.Pick, ref.VerdictAt = v.Pick, v.At
+		}
 	}
 	return ref
 }

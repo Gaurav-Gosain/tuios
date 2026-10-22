@@ -982,6 +982,11 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if side := m.CockpitSideWanted(); side != nil {
 		agents = tea.Batch(agents, side)
 	}
+	// A verdict the open fan comparison does not show yet is read now. A
+	// nil check when the comparison is closed.
+	if cmp := m.cockpitCompareStale(); cmp != nil {
+		agents = tea.Batch(agents, cmp)
+	}
 	// The restart dialog's plan, on the same beat: the palette, a menu, the
 	// settings and the notice can each open the dialog. See daemon_restart.go.
 	if plan := m.restartPlanCmd(); plan != nil {
@@ -1145,6 +1150,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ckCheckpointsMsg:
 		m.applyCheckpoints(msg)
 		return m, nil
+	case ckCompareMsg:
+		return m, m.applyCompare(msg)
+	case ckFanActMsg:
+		return m, m.applyFanAct(msg)
 	case ckLivePrimeMsg:
 		m.applyLivePrime(msg)
 		return m, nil

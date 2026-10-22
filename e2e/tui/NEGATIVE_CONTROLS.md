@@ -8008,6 +8008,24 @@ on 2026-10-21.
 | A new name is held from the check until its sessions exist | the reservation left out of `taken` | `TestFanNameIsHeldWhileItIsMade` ("fan/raceb: the outsider's repo-fan-raceb-2 joined the person's repo-fan-raceb") | **caught** |
 | A name with a character that does not print is refused | the `fanStemPrintable` check skipped | `TestFanRefusesJoiningAnotherGroup` (a name with a zero-width space makes a fan) | **caught** |
 
+### Plain fan names, refusals and restored fans
+
+The follow-up to the review of #972. `TestFanRefusesJoiningAnotherGroup`
+now also checks the name characters and what a refusal lists, and
+`TestRestoredFanStaysItsOwnFan`, `TestReview984RestoreAcrossRestart` and
+`TestReview984RestoreSquatFirst` (security boundary tests) check that a fan
+is told by its saved fan ID. `TestCockpitSpawnSheet` checks the new-agent
+form. Run on 2026-10-21 and 2026-10-22.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A fan name keeps to A-Z, a-z, 0-9 and / . _ - | `FanNameChar` takes every character above ASCII but the three the old check refused | `TestFanRefusesJoiningAnotherGroup` (the name with a Hangul filler makes a fan) | **caught** |
+| A refusal lists the fan's sessions only to a caller that reaches them | `reachedNames` keeps every name | `TestFanRefusesJoiningAnotherGroup` ("the fan_exists refusal listed the fan's sessions to an outsider") | **caught** |
+| A fan's sessions are the ones with its fan ID | `sameFan` compares the group and repository alone | `TestRestoredFanStaysItsOwnFan`, `TestReview984RestoreAcrossRestart` and `TestReview984RestoreSquatFirst` ("the pane's fan reaches the person's restored repo-fan-saved") | **caught** |
+| A join copies the fan ID | join gives the new session a new ID | `TestFanRefusesJoiningAnotherGroup` ("the group has 2 sessions, want 5"), `TestRestoredFanStaysItsOwnFan` | **caught** |
+| The fan ID is saved | `fan_id` left out of the saved JSON | `TestReview984RestoreAcrossRestart`, `TestReview984RestoreSquatFirst` (the pane's fan reaches the person's restored sessions) | **caught**. The tests pass the saved state through JSON, as the state file holds it. Without that step the cut passed |
+| The new-agent form refuses a name a fan does not take | the `FanNameChar` check in `spawnStart` skipped | `TestCockpitSpawnSheet` (waiting for the refused branch) | **caught** |
+
 ## A fan's lead by its session ID
 
 `TestFanLeadIsHeldByID` in `internal/session` (a security boundary test): the
@@ -8033,3 +8051,38 @@ three and two subagents. Run on 2026-10-21.
 | --- | --- | --- | --- |
 | A host's session listing carries its agent panes | the build before this change, where a remote session carries its rolled-up state alone | `TestCockpitFrameA` ("the cockpit never showed the agents of all three machines") | **caught** |
 | The attempts of a fan sit under one row for the fan | `buildCockpitRows` uses the group's rows without `ckGatherFans` | `TestCockpitFrameA` ("the fleet lacks the pull requests, the fan or the machines") | **caught** |
+
+## Machine load in the link heartbeat
+
+The hello a link's heartbeat sends carries the far machine's load, and
+`list-hosts` reports it. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The daemon's hello carries its load | `verbHello` sends the load under another name | `TestHostsCommandReportsALinkEndToEnd` ("the listing does not show the host's load", "build reports cores 0"), `TestCockpitFrameA` ("the machines block does not show build's load and round trip") | **caught** |
+
+## Fan comparison and judge
+
+`TestCockpitFanCompare` opens the comparison of frame (g) on the fan of frame
+(a), runs one check with `tuios fan verify`, starts the judge stub with `j`,
+and keeps its pick with `k` twice. `TestFanJudgeReach` in `internal/session`
+holds the judge's reach (a security boundary test). Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Only the judge's pane reaches the attempts | `judgeReaches` compares the session ID alone, so any pane of the judge's session reaches them | `TestFanJudgeReach` ("compare-fan from another pane of the judge's session": expected error) | **caught** |
+| Only the judge pane or the person records a verdict | the handler's `judgeReaches` check removed | `TestFanJudgeReach` ("set-fan-verdict from an attempt": expected error) | **caught** |
+| judge-fan records the judge only once start-agent made it | the record written before start-agent | `TestFanJudgeReach` ("a failed judge-fan left a judge on repo-fan-retry") | **caught** |
+| The record goes when the judge's session ends | the `forgetFanJudge` call removed from `onSessionDeleted` | `TestFanJudgeReach` ("repo-fan-retry still names the ended judge") | **caught** |
+| The first k names the ignored files a keep deletes | compare-fan sends no `ignored` list | `TestCockpitFanCompare` ("the first k did not name the ignored file a keep deletes") | **caught** |
+| The judge holds read alone | `fanJudgeGrants` back to `read,fan` | `TestFanJudgeReach` ("fan into the attempts' group from the judge": the judge joins the fan by its stem) | **caught** |
+| A restart clears the judge record | the clearing in `restoreSessionOffers` removed | `TestFanJudgeReach` ("repo-fan-retry names a judge after a restart") | **caught** |
+| The second k reads the attempts again | the second k keeps at once | `TestCockpitFanCompare` ("a second k after a new ignored file did not warn again") | **caught** |
+| A list git could not read keeps nothing | the view ignores `ignored_error` | `TestCockpitFanCompare` ("a list git could not read did not stop the keep") | **caught** |
+| Keep stashes the other attempts' changes | the view sends keep-fan with `stash` false | `TestCockpitFanCompare` ("k k did not keep B alone": A and C stay, dirty) | **caught** |
+| The judge reads only the verbs judging needs | `judgeReadVerbs` dropped from the read reach in `paneAuthority`, so the judge reaches every read verb | `TestFanJudgeReach` ("command-history on an attempt from the judge": the judge reads the attempt's history) | **caught** |
+| keep-fan holds the ignored files to the names shown | the `IgnoredHash` compare in `checkKeepAsShown` removed | `TestCockpitFanCompare` ("keep-fan went ahead over an ignored file swapped for another": a count would match too) | **caught** |
+
+A session that takes the judge's old name after its session ended reaches
+nothing: the record names a session ID, which no new session has. The test
+keeps that case as a regression.

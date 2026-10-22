@@ -35,6 +35,7 @@ type worktreeRow struct {
 	Path         string   `json:"path"`
 	Base         string   `json:"base"`
 	Group        string   `json:"group"`
+	FanID        string   `json:"fan_id"`
 	Managed      bool     `json:"managed"`
 	Gone         bool     `json:"gone"`
 	State        string   `json:"state"`
@@ -404,7 +405,7 @@ its siblings there.`,
 	keepCmd.Flags().BoolVar(&keepFFOnly, "ff-only", false, "With --merge: only fast-forward")
 	keepCmd.Flags().StringVar(&keepInto, "into", "", "With --merge: the branch to merge into (default: the base the session was made from)")
 
-	fanCmd.AddCommand(keepCmd, newFanCompareCommand(), newFanDiffCommand(), newFanVerifyCommand())
+	fanCmd.AddCommand(keepCmd, newFanCompareCommand(), newFanDiffCommand(), newFanVerifyCommand(), newFanVerdictCommand())
 	return fanCmd
 }
 
@@ -1072,7 +1073,7 @@ func runFanKeepLoop(host, winner string, stash, force, jsonOutput bool) error {
 	var outcomes []fanKeepOutcome
 	left := 0
 	for _, r := range rows {
-		if r.Group != kept.Group || r.Repo != kept.Repo || r.Session == winner {
+		if r.Group != kept.Group || r.FanID != kept.FanID || r.Repo != kept.Repo || r.Session == winner {
 			continue
 		}
 		raw, err := client.CallWithTimeout("remove-worktree", map[string]any{

@@ -2,6 +2,7 @@ package federation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -45,6 +46,10 @@ const (
 	// sleepJump is how far the wall clock must run ahead of the monotonic
 	// clock across one tick for the tick to count as a wake from sleep.
 	sleepJump = 5 * time.Second
+	// loadMaxAge is how old the far machine's load may get. A link that
+	// carries traffic is not pinged, so it is pinged for the load once its
+	// load is older than this: one small round trip a minute at most.
+	loadMaxAge = 4 * heartbeatInterval
 )
 
 // sleepWatch finds a wake from sleep between two calls of slept.
@@ -116,7 +121,7 @@ func (l *link) heartbeat(ctx context.Context, m *mux, closed <-chan struct{}, te
 			t.Stop()
 		}
 		woke := clock.slept()
-		if !asked && !woke && misses == 0 {
+		if !asked && !woke && misses == 0 && !l.loadStale() {
 			// A frame in the last interval proves the pipe. The next
 			// check is one interval after that frame, so a pipe that goes
 			// quiet is pinged heartbeatInterval later, not up to twice
@@ -127,7 +132,9 @@ func (l *link) heartbeat(ctx context.Context, m *mux, closed <-chan struct{}, te
 			}
 		}
 		start := time.Now().UnixNano()
-		if p.ping(ctx, m) || m.readSince(start) {
+		ok, load, rtt := p.ping(ctx, m)
+		l.noteHello(load, rtt)
+		if ok || m.readSince(start) {
 			misses = 0
 			t.Reset(heartbeatInterval)
 			continue
@@ -172,46 +179,60 @@ type pinger struct {
 }
 
 // ping sends one hello on the heartbeat's stream and reports whether an
-// answer came within heartbeatTimeout. The hello names no client, so the far
-// daemon does not log it.
-func (p *pinger) ping(ctx context.Context, m *mux) bool {
-	done := make(chan bool, 1)
+// answer came within heartbeatTimeout, with the load the answer carried and
+// its round trip. The hello names no client, so the far daemon does not log
+// it.
+func (p *pinger) ping(ctx context.Context, m *mux) (bool, *Load, time.Duration) {
+	type answer struct {
+		ok   bool
+		load *Load
+		rtt  time.Duration
+	}
+	done := make(chan answer, 1)
 	go func() {
 		if !p.mu.TryLock() {
 			// The last ping is still stuck. That is a miss too.
-			done <- false
+			done <- answer{}
 			return
 		}
 		defer p.mu.Unlock()
 		if p.c == nil {
 			s, err := m.Open()
 			if err != nil {
-				done <- false
+				done <- answer{}
 				return
 			}
 			p.c = newCaller(s)
 		}
 		callCtx, cancel := context.WithTimeout(ctx, heartbeatTimeout)
 		defer cancel()
-		_, err := p.c.call(callCtx, "hello", nil)
+		at := time.Now()
+		raw, err := p.c.call(callCtx, "hello", nil)
 		var remote *RemoteError
 		if err == nil || errors.As(err, &remote) {
-			done <- true
+			a := answer{ok: true, rtt: time.Since(at)}
+			var shake struct {
+				Load *Load `json:"load"`
+			}
+			if err == nil && json.Unmarshal(raw, &shake) == nil {
+				a.load = shake.Load
+			}
+			done <- a
 			return
 		}
 		// A stream that missed an answer cannot be used again: the late
 		// answer would be read as the next one.
 		_ = p.c.rw.Close()
 		p.c = nil
-		done <- false
+		done <- answer{}
 	}()
 	t := time.NewTimer(heartbeatTimeout + time.Second)
 	defer t.Stop()
 	select {
-	case ok := <-done:
-		return ok
+	case a := <-done:
+		return a.ok, a.load, a.rtt
 	case <-t.C:
-		return false
+		return false, nil, 0
 	}
 }
 

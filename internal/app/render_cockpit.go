@@ -3,7 +3,6 @@ package app
 import (
 	"image/color"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -350,6 +349,12 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	if !strip && (c.w >= ckOneColumn || !st.threads.open) {
 		m.drawFleet(c, l, fleetW, colTop, colBot, top)
 	}
+	// The comparison of a fan takes the focus and the side column.
+	if ck.cmp != nil && c.w >= ckOneColumn && !strip {
+		m.drawCompare(c, l, focusX, colTop+1, c.w-2-focusX, colBot, top, now)
+		m.drawCockpitHints(c, l, hintsY, now)
+		return
+	}
 	// At 170 columns and wider the side column sits beside the focus.
 	if focusW > 0 && c.w >= ckWide {
 		if e, ok := m.cockpitAgent(); ok {
@@ -565,41 +570,52 @@ type ckMachineRow struct {
 	loadOK bool
 	up     bool
 	status string
+	// rtt is the round trip of the link's last hello, in milliseconds.
+	rtt int64
 }
-
-// ckLoadEvery is how often a frame reads this machine's load again.
-const ckLoadEvery = 15 * time.Second
 
 // ckMachines lists this machine, then every host, with its agents and load.
 // It is empty when no host is configured.
 func (m *OS) ckMachines() []ckMachineRow {
 	ck := &m.Inbox.ck
 	var out []ckMachineRow
+	var attached ckMachineRow
 	for _, h := range m.FederationHosts {
 		if h.Name == federation.LocalHostName {
 			continue
 		}
+		mr := ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
+			up: h.Status == string(federation.StatusUp), status: h.Status, rtt: h.RTTMillis}
+		mr.load, mr.loadOK = ckLoadShare(h.Load1, h.Cores)
 		if h.Name == m.AttachedHost {
 			// The machine the client is attached to is the local row.
+			attached = mr
 			continue
 		}
-		out = append(out, ckMachineRow{host: h.Name, name: ckHostLabel(h.Name), agents: ck.machines[h.Name],
-			up: h.Status == string(federation.StatusUp), status: h.Status})
+		out = append(out, mr)
 	}
 	if len(out) == 0 {
 		return nil
 	}
+	// The local row is the machine the agents with no host run on: this
+	// one, with the load its daemon reports, or the machine the client is
+	// attached to, with the load of that host's link.
 	local := ckMachineRow{name: m.ckMachine(""), agents: ck.machines[""], up: true}
-	// This machine's load, read here only when the agents of the local row
-	// run here: attached to another machine, they run there.
-	if now := time.Now(); m.AttachedHost == "" && now.Sub(ck.loadAt) >= ckLoadEvery {
-		ck.loadAt = now
-		ck.load, ck.loadOK = spawnLoadAvg()
-	}
-	if ck.loadOK && m.AttachedHost == "" {
-		local.load, local.loadOK = ck.load/float64(max(runtime.NumCPU(), 1)), true
+	if m.AttachedHost != "" {
+		local.load, local.loadOK, local.rtt = attached.load, attached.loadOK, attached.rtt
+	} else {
+		local.load, local.loadOK = ckLoadShare(m.LocalLoad.Load1, m.LocalLoad.Cores)
 	}
 	return append([]ckMachineRow{local}, out...)
+}
+
+// ckLoadShare is a load over the cores, held to 0..1, and whether it is
+// known.
+func ckLoadShare(load1 float64, cores int) (float64, bool) {
+	if cores <= 0 {
+		return 0, false
+	}
+	return min(max(load1/float64(cores), 0), 1), true
 }
 
 // drawMachines draws the machines block at y: a heading, then one row per
@@ -630,6 +646,9 @@ func (m *OS) drawMachines(c *ckCanvas, l ckLook, ms []ckMachineRow, w, y, top in
 		link := "local"
 		if mr.host != "" {
 			link = "link up"
+			if mr.rtt > 0 {
+				link = strconv.FormatInt(mr.rtt, 10) + " ms"
+			}
 			if !mr.up {
 				link = "link " + strings.ReplaceAll(printableTitle(mr.status), "_", " ")
 			}
@@ -762,7 +781,11 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	case ckRowFan:
 		e := ck.agents[r.agent]
 		wt := m.ckWorktreeOf(e)
-		c.text(x+2, y, right, ckSeg{t: l.g(ckGlyphFan), fg: pal.AccentBright}, ckSeg{t: "  " + wt.group, fg: pal.Fg, attrs: ckBold},
+		nr := right
+		if note := m.ckFanNote(e.Host, wt); note != "" {
+			nr = c.textR(right, y, ckSeg{t: note, fg: pal.FgMute}) - 2
+		}
+		c.text(x+2, y, nr, ckSeg{t: l.g(ckGlyphFan), fg: pal.AccentBright}, ckSeg{t: "  " + wt.group, fg: pal.Fg, attrs: ckBold},
 			ckSeg{t: "  fan of " + strconv.Itoa(r.count), fg: pal.FgDim})
 		if r.lines > 1 {
 			c.text(x+5, y+1, right, ckSeg{t: ckTrunc(wt.prompt, right-x-5), fg: pal.FgMute})
@@ -1184,7 +1207,15 @@ func ckItemVerb(it session.AttentionItem) (verb, rest string) {
 // ckWorktree is what the cockpit shows of an agent's worktree session.
 type ckWorktree struct {
 	branch, group, path, prompt, repo string
-	failed                            int
+	// fanID tells two fans of one name apart.
+	fanID  string
+	failed int
+	// pick is the session a judge picked, at verdictAt; judgeWindow is the
+	// pane of the judge started for the fan.
+	pick, judgeWindow string
+	verdictAt         int64
+	// name is the session's name.
+	name string
 }
 
 // ckFanKey names a fan: its machine, its repository and its group, "" for
@@ -1193,7 +1224,46 @@ func ckFanKey(host string, w ckWorktree) string {
 	if w.group == "" {
 		return ""
 	}
-	return host + "\x00" + w.repo + "\x00" + w.group
+	return host + "\x00" + w.repo + "\x00" + w.group + "\x00" + w.fanID
+}
+
+// ckJudgeWindows are the panes of the fans' judges, by host and window.
+func (m *OS) ckJudgeWindows() map[string]bool {
+	var out map[string]bool
+	for k, w := range m.Inbox.ck.branches {
+		if w.judgeWindow == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]bool{}
+		}
+		h, _, _ := strings.Cut(k, "\x00")
+		out[h+"\x00"+w.judgeWindow] = true
+	}
+	return out
+}
+
+// ckFanNote is what a fan's row says at its end: the judge's pick by its
+// letter, that a judge is reading, or nothing.
+func (m *OS) ckFanNote(host string, wt ckWorktree) string {
+	if wt.pick == "" {
+		if wt.judgeWindow != "" {
+			return "judge is reading"
+		}
+		return ""
+	}
+	key := ckFanKey(host, wt)
+	var names []string
+	for k, w := range m.Inbox.ck.branches {
+		if h, _, _ := strings.Cut(k, "\x00"); ckFanKey(h, w) == key {
+			names = append(names, w.name)
+		}
+	}
+	slices.SortFunc(names, ckFanOrder)
+	if i := slices.Index(names, wt.pick); i >= 0 {
+		return "judge says " + ckLetter(i)
+	}
+	return ""
 }
 
 // ckBranch is the branch of the agent's worktree session, empty when it is
@@ -1213,8 +1283,9 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 	out := map[string]ckWorktree{}
 	for _, s := range m.BuildSessionTree().Sessions {
 		if w := s.Worktree; w != nil && w.Branch != "" {
-			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group,
-				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot}
+			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group, fanID: w.FanID,
+				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot,
+				pick: w.Pick, judgeWindow: w.JudgeWindow, verdictAt: w.VerdictAt, name: s.ID}
 		}
 	}
 	return out
@@ -1359,6 +1430,9 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 			right += " on " + strconv.Itoa(len(hosts)) + " machines"
 		}
 	}
+	if m.Inbox.ck.cmp != nil {
+		right = "Keeping one removes the other worktrees. Their branches stay."
+	}
 	room := c.w - 4
 	if right != "" {
 		room -= ansi.StringWidth(right) + 3
@@ -1390,6 +1464,17 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	st := &m.Inbox
 	switch {
+	case st.ck.cmp != nil:
+		n := "1"
+		if res := st.ck.cmp.res; res != nil && len(res.Rows) > 1 {
+			n = "1-" + strconv.Itoa(min(len(res.Rows), 9))
+		}
+		hints := []overlay.Hint{{Key: "k", Label: "keep"}, {Key: "j", Label: "judge"}, {Key: n, Label: "focus"},
+			{Key: overlay.EnterKey(), Label: "open pane"}, {Key: "r", Label: "read again"}, {Key: "esc", Label: "back"}}
+		if st.ck.cmp.armed != "" {
+			hints = append([]overlay.Hint{{Key: "up down", Label: "scroll the list"}}, hints...)
+		}
+		return hints
 	case st.selectEditing:
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "apply"}, {Key: "esc", Label: "cancel"}}
 	case m.InboxSnoozePicking():
@@ -1465,6 +1550,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 		}
 		if r.hasItem && r.item.Kind == session.AttentionMail {
 			hints = append(hints, m.keyHints(config.ActionInboxMailbox, "mailbox")...)
+		}
+		if m.ckFanSession() != "" {
+			hints = append(hints, m.keyHints(config.ActionInboxCompare, "compare")...)
 		}
 	}
 	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxReview, "review",
