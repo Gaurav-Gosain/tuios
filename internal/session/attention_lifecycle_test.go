@@ -111,7 +111,7 @@ func TestMarkAttentionRefusesAPaneWithACopiedNonce(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	makeSessionWithWindow(t, d, "work")
 	tui := attachTUI(t, sp, "work")
-	raw := []byte(fmt.Sprintf(`{"id":"1","action":"wake","human_nonce":%q}`, tui.HumanNonce()))
+	raw := fmt.Appendf(nil, `{"id":"1","action":"wake","human_nonce":%q}`, tui.HumanNonce())
 	_, verr := d.verbMarkAttention(&connState{paneOnly: true}, raw)
 	if verr == nil || verr.Code != ErrVerbNotHuman {
 		t.Fatalf("a pane with the person's nonce answered %v, want %s", verr, ErrVerbNotHuman)

@@ -82,8 +82,7 @@ func BenchmarkKeyWindowModeTab(b *testing.B) {
 	o, _ := benchOS(b, app.WindowManagementMode)
 	msg := tea.KeyPressMsg{Code: tea.KeyTab}
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		HandleInput(msg, o)
 	}
 }
@@ -95,8 +94,7 @@ func BenchmarkKeyPrefixChord(b *testing.B) {
 	// prefix_next_window is bound in the prefix section by default.
 	next := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		HandleInput(leader, o)
 		HandleInput(next, o)
 	}

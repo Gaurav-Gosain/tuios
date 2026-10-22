@@ -85,6 +85,13 @@ type LoadError struct {
 
 func (e LoadError) Error() string { return e.Err.Error() }
 
+// Unwrap returns the error that stopped the manifest from loading.
+func (e LoadError) Unwrap() error { return e.Err }
+
+// LoadError is an error as a value, the form Load returns. errors.As needs a
+// *LoadError target for it, not a **LoadError.
+var _ error = LoadError{}
+
 // Load builds the registry from the manifests compiled into the binary, then
 // lets any manifest in dirs replace a bundled one with the same id.
 //

@@ -461,7 +461,7 @@ func TestADropNamesEachFileSafely(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(fmt.Sprintf("file %d\n", i)), 0o644); err != nil {
+		if err := os.WriteFile(p, fmt.Appendf(nil, "file %d\n", i), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		paths = append(paths, p)

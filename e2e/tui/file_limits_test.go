@@ -332,7 +332,7 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	// the cap.
 	parts := len(partsIn(t, farHome))
 	var partErr error
-	for i := 0; i < 80 && partErr == nil; i++ {
+	for i := range 80 {
 		id := "b" + strings.Repeat("0", 2-len(itoa(i))) + itoa(i)
 		if _, err := writeStream(dialHostVerbs(t, base), "~/p.bin", id, 0, nil); err != nil {
 			partErr = err

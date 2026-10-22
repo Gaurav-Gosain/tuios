@@ -309,13 +309,18 @@ func (b *guiBridge) saveLog(name string) {
 	}
 }
 
+// waitUnpaused returns at once, or when pauseReading lets go of the gate.
+func (b *guiBridge) waitUnpaused() {
+	b.gate.Lock()
+	defer b.gate.Unlock()
+}
+
 // read decodes the bridge's frames until its output closes.
 func (b *guiBridge) read(r io.Reader) {
 	br := bufio.NewReaderSize(r, 256<<10)
 	var hdr [5]byte
 	for {
-		b.gate.Lock()
-		b.gate.Unlock() //nolint:staticcheck // a pause point, held by pauseReading
+		b.waitUnpaused()
 		if _, err := io.ReadFull(br, hdr[:]); err != nil {
 			break
 		}

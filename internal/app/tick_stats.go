@@ -47,8 +47,8 @@ func (m *OS) DumpTickStats() {
 		return
 	}
 	st := m.tickStats
-	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d agentsTicks=%d cockpit=%d\n",
-		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps, st.AgentsTicks, st.Cockpit)), 0o600)
+	_ = os.WriteFile(path, fmt.Appendf(nil, "ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d agentsTicks=%d cockpit=%d\n",
+		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps, st.AgentsTicks, st.Cockpit), 0o600)
 }
 
 // tickStatsDumpMsg asks Update to write the tick counters now. See

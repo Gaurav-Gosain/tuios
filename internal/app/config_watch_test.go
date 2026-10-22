@@ -112,7 +112,7 @@ func TestConfigEditReachesEverySession(t *testing.T) {
 		}
 		heard := make(chan tea.Msg, 8)
 		runCmd(cmd, heard)
-		if err := os.WriteFile(path, []byte(fmt.Sprintf("[appearance]\nscroll_lines = %d\n", 8+i)), 0o600); err != nil {
+		if err := os.WriteFile(path, fmt.Appendf(nil, "[appearance]\nscroll_lines = %d\n", 8+i), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.After(5 * time.Second)

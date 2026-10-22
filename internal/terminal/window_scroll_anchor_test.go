@@ -67,7 +67,7 @@ func anchorWindow(t *testing.T, id string) *Window {
 func printLines(t *testing.T, w *Window, prefix string, n int) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
-		w.WriteOutput([]byte(fmt.Sprintf("%s-%d\r\n", prefix, i)))
+		w.WriteOutput(fmt.Appendf(nil, "%s-%d\r\n", prefix, i))
 	}
 }
 

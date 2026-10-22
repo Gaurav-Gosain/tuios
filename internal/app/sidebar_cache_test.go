@@ -27,8 +27,7 @@ func BenchmarkSidebarPanelLinesCached(b *testing.B) {
 	m.sidebarPanelLines() // prime the cache
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		m.sidebarPanelLines()
 	}
 }

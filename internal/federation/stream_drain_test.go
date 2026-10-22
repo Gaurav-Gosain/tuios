@@ -26,7 +26,7 @@ func TestStreamReadsEverythingDeliveredBeforeTheLinkCloses(t *testing.T) {
 
 		var want []byte
 		for i := range chunks {
-			chunk := []byte(fmt.Sprintf("chunk %d of round %d;", i, round))
+			chunk := fmt.Appendf(nil, "chunk %d of round %d;", i, round)
 			want = append(want, chunk...)
 			s.deliver(chunk)
 		}

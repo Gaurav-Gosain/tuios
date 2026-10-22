@@ -452,13 +452,17 @@ func startLinkAs(t *testing.T, base, as string) *phoneLink {
 func (l *phoneLink) pause()  { l.gate.Lock() }
 func (l *phoneLink) resume() { l.gate.Unlock() }
 
+// waitResume returns at once, or after resume when the link is paused.
+func (l *phoneLink) waitResume() {
+	l.gate.Lock()
+	defer l.gate.Unlock()
+}
+
 // readLoop hands each data frame to its stream.
 func (l *phoneLink) readLoop(br *bufio.Reader) {
 	var head [9]byte
 	for {
-		l.gate.Lock()
-		//nolint:staticcheck // an empty critical section: wait out a pause
-		l.gate.Unlock()
+		l.waitResume()
 		if _, err := io.ReadFull(br, head[:]); err != nil {
 			l.smu.Lock()
 			for _, s := range l.stream {
