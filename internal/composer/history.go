@@ -2,10 +2,9 @@ package composer
 
 import (
 	"strconv"
-
-	tea "charm.land/bubbletea/v2"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 

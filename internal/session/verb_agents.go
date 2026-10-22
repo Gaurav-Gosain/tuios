@@ -2,7 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"maps"
 	"slices"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 

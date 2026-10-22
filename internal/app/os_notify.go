@@ -1,10 +1,10 @@
 package app
 
 import (
-	"charm.land/lipgloss/v2"
 	"fmt"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"

@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )

@@ -3,7 +3,6 @@ package app
 import (
 	"encoding/json"
 	"errors"
-	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"os"
 	"sort"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"

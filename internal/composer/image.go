@@ -5,12 +5,13 @@ import (
 	"crypto/sha256"
 	"errors"
 	"image"
+	"strconv"
+
 	// The decoders read only an image's header here, for its size. They are
 	// in the binary already, for the launcher's icons and file previews.
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"strconv"
 )
 
 // Image bounds. They match the daemon's: one pasted image is at most

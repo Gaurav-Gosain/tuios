@@ -1,10 +1,11 @@
 package tuie2e
 
 import (
-	"github.com/Gaurav-Gosain/tuitest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // TestQueuedMessageIsTypedWhenTheAgentRests drives the delivery queue against

@@ -1,14 +1,14 @@
 package app
 
 import (
-	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/composer"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"os"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The Inbox's selector filter: / opens a line where a selector is typed, the

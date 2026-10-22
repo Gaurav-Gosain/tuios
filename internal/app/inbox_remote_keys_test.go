@@ -2,12 +2,12 @@ package app
 
 import (
 	"encoding/json"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )

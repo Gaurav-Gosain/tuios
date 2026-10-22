@@ -1,8 +1,9 @@
 package config
 
-import "slices"
-
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Ambiguity is a pair of key names that a terminal sends as the same byte, so
 // binding one of them binds both.

@@ -2,12 +2,13 @@ package session
 
 import (
 	"encoding/json"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"os/exec"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // herdrFixture is a daemon with one session and two panes, and a caller the

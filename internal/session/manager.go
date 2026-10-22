@@ -2,7 +2,6 @@ package session
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"sort"
 	"sync"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
+	"github.com/google/uuid"
 )
 
 // Manager manages all persistent sessions for a user.
