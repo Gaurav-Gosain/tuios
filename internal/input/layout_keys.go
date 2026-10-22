@@ -64,6 +64,33 @@ func producedKey(msg tea.KeyPressMsg) tea.KeyPressMsg {
 	return msg
 }
 
+// withoutChordText is msg without the text a terminal attached to a modifier
+// chord, for matching against bindings.
+//
+// Under the Kitty protocol's associated-text flag, Windows Terminal sends the
+// character the key types along with an Alt chord: Alt+2 arrives as code 2,
+// Alt, and text "2". Kitty and Ghostty send no text there. Bubble Tea spells a
+// key by its text when it has one, so that Alt+2 read as a plain "2". tuios
+// asks for associated text whenever it reads keys itself (window mode, a
+// prefix, the rail, an overlay), so in window mode Alt+2 selected window 2
+// instead of switching workspace, while terminal mode, which does not ask for
+// the text, switched as it should.
+//
+// Ctrl+Alt keeps its text. Windows reports AltGr as Ctrl+Alt, and a character
+// typed with AltGr (€, ², §) is text, not the chord. The pane still gets the
+// key with its text; this only changes how a binding reads it.
+func withoutChordText(msg tea.KeyPressMsg) tea.KeyPressMsg {
+	if msg.Text == "" {
+		return msg
+	}
+	mods := msg.Mod &^ (lockMods | tea.ModShift)
+	if mods == 0 || mods&(tea.ModCtrl|tea.ModAlt) == tea.ModCtrl|tea.ModAlt {
+		return msg
+	}
+	msg.Text = ""
+	return msg
+}
+
 // readKey is msg as tuios reads it: spelled by the key the layout produced.
 // Bubble Tea spells a chord from its base-layout key when the terminal sent
 // one, so on any Latin layout other than US a Ctrl or Alt chord read as the
@@ -94,6 +121,7 @@ func isLayoutTextWithoutBase(msg tea.KeyPressMsg) bool {
 // a non-ASCII character, so the base-layout key is the only one that can mean
 // anything. Do not use it where the key is typed as text.
 func commandKey(msg tea.KeyPressMsg) string {
+	msg = withoutChordText(msg)
 	key := producedKey(msg).String()
 	if isASCII(key) {
 		return key

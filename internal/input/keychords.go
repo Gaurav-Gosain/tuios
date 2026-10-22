@@ -48,6 +48,7 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 	// has one. The key produced is tried first, spelled without it, and the
 	// base-layout key last and only where usesBaseLayout allows it. Otherwise
 	// German Ctrl+Z matched only ctrl+y, and an unbound AZERTY "a" ran quit.
+	msg = withoutChordText(msg)
 	orig := msg
 	msg = producedKey(msg)
 	key := msg.String()
