@@ -21,8 +21,6 @@ replace tuios.dev/swatch v0.1.0 => ./swatch
 
 replace tuios.dev/shot v0.2.0 => ./shot
 
-replace tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb => ./vt
-
 replace tuios.dev/tml v0.1.1-0.20261019164123-bf9b29e8d0d8 => ./tml
 
 replace tuios.dev/sketch v0.1.2-0.20261022094139-52c6decba7cf => ./sketch
@@ -30,3 +28,5 @@ replace tuios.dev/sketch v0.1.2-0.20261022094139-52c6decba7cf => ./sketch
 replace tuios.dev/plot v0.1.1-0.20261021163928-0b9f16190301 => ./plot
 
 replace tuios.dev/loom v0.1.1-0.20261022020155-6cec4d0909b6 => ./loom
+
+replace tuios.dev/vt v0.3.1-0.20261022121312-2fc45f056158 => ./vt
