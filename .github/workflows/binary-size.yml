@@ -2,8 +2,10 @@ name: Binary size
 
 # Builds the tuios binary the way the release does (CGO_ENABLED=0, -trimpath,
 # -ldflags "-s -w") for linux/amd64 and darwin/arm64, prints its size, and
-# fails when it grows past the budget in scripts/binary-size.sh. docs/perf.md,
-# "Binary size budget", says how the budget was set and how to raise it.
+# fails when it is over the ceiling in scripts/binary-size.sh. On a pull
+# request it also compares each size with main's last measured size, in the
+# job summary and in one comment on the pull request. docs/perf.md, "Binary
+# size budget", says how the ceiling was set.
 
 on:
   push:
@@ -29,11 +31,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux/amd64, darwin/arm64]
+        include:
+          - target: linux/amd64
+            id: linux-amd64
+          - target: darwin/arm64
+            id: darwin-arm64
     steps:
       - uses: actions/checkout@v7
 
-      # The budget was measured on the Go version go.mod names. A different
+      # The ceiling is measured on the Go version go.mod names. A different
       # toolchain links a different runtime, so the job builds with that one.
       - uses: ./.github/actions/setup-go
         with:
@@ -41,5 +47,100 @@ jobs:
           cache-id: size-${{ matrix.target }}
 
       - name: Build and check the size
-        run: scripts/binary-size.sh ${{ matrix.target }} | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          SIZE_OUT: ${{ runner.temp }}/size/${{ matrix.id }}.txt
+        run: |
+          mkdir -p "$(dirname "$SIZE_OUT")"
+          scripts/binary-size.sh ${{ matrix.target }} | tee -a "$GITHUB_STEP_SUMMARY"
         shell: bash
+
+      # Main's artifacts are the sizes a pull request is compared with.
+      - name: Keep the size
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-size-${{ matrix.id }}
+          path: ${{ runner.temp }}/size/
+          if-no-files-found: ignore
+          retention-days: 90
+
+  report:
+    name: binary size report
+    needs: size
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Read main's size artifacts.
+      actions: read
+      # Post or update the one size comment on this pull request.
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Sizes of this change
+        uses: actions/download-artifact@v7
+        with:
+          pattern: binary-size-*
+          path: ${{ runner.temp }}/now
+
+      # The newest green push run on main that still has its artifacts. Any
+      # failure here leaves the main column as "not measured" and the job goes
+      # on: the comparison is information, the ceiling is the gate.
+      - name: Sizes of main
+        id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/main"
+          runs=$(gh run list -R "$REPO" --workflow binary-size.yml --branch main --event push \
+            --status success --limit 10 --json databaseId,headSha \
+            --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            if gh run download "$id" -R "$REPO" -p 'binary-size-*' -D "$RUNNER_TEMP/main" 2>/dev/null &&
+              [ -n "$(find "$RUNNER_TEMP/main" -type f)" ]; then
+              echo "label=main at ${sha:0:12} ($GITHUB_SERVER_URL/$REPO/actions/runs/$id)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            rm -rf "$RUNNER_TEMP/main" && mkdir -p "$RUNNER_TEMP/main"
+          done <<< "$runs"
+          echo "No size of main was found. The main column stays empty."
+          echo "label=no run of main" >> "$GITHUB_OUTPUT"
+
+      - name: Compare
+        run: |
+          {
+            echo "<!-- tuios-binary-size -->"
+            echo "### Binary size"
+            echo
+            scripts/binary-size-report.sh "$RUNNER_TEMP/now" "$RUNNER_TEMP/main" "$LABEL"
+            echo
+            echo "State the size cost in the pull request body. CI fails only above the ceiling."
+          } > "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          LABEL: ${{ steps.main.outputs.label }}
+
+      # One comment per pull request, edited on each run. A pull request from
+      # a fork gets a read-only token, so this step may fail there. The summary
+      # above still holds the table.
+      - name: Post or update the size comment
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          body=$(jq -Rs '{body: .}' < "$RUNNER_TEMP/report.md")
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- tuios-binary-size -->"))) | .id' | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" --input - <<< "$body" > /dev/null
+            echo "Updated comment $id."
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" --input - <<< "$body" > /dev/null
+            echo "Posted a new comment."
+          fi

@@ -21,8 +21,8 @@ visible consumer, idle CPU under ~0.5%.
   ~nothing to the wire (render count bounded). `TUIOS_STATS_FILE` makes the
   process dump its tick counters on clean exit.
 - `scripts/binary-size.sh`: builds the stripped release binary for
-  linux/amd64 and darwin/arm64 and fails over the budget. See "Binary size
-  budget" below.
+  linux/amd64 and darwin/arm64 and fails over the 50 MB ceiling. See "Binary
+  size budget" below.
 
 ## Numbers
 
@@ -2158,7 +2158,22 @@ of the bytes), which is upstream.
 request and push to main. It builds tuios the way the release does
 (`CGO_ENABLED=0`, `-trimpath`, `-ldflags "-s -w"`) for linux/amd64 and
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
-a binary is over its budget.
+a binary is over the ceiling.
+
+Since 2026-10-22 the ceiling is the only limit: 50,000,000 bytes for each
+target. There are no per-target budgets to raise. On a pull request, the job
+compares each size with main's last measured size. It writes the size, the
+change against main and the room under the ceiling to the job summary, and to
+one comment on the pull request that each run updates.
+
+Each pull request states its size cost in its body: the change in bytes for
+each target, from that comment or from a local run of `scripts/binary-size.sh`
+on main and on the branch. If the cost is large, say what grew and why it is
+worth the bytes.
+
+The per-target budgets below are history. Every pull request had to edit them,
+so every landing made the open pull requests rebase on a conflict in
+`scripts/binary-size.sh`.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
@@ -3285,12 +3300,11 @@ text drawings. The build before it measured 46,141,602 and 42,841,586 bytes
 so it adds 32,768 and 17,168 bytes. No dependency was added. The new budgets
 leave 4,198 bytes of room.
 
-To raise a budget, do it on purpose in its own commit: run
-`scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
-little above the printed size in the `budget` function of that script, and say
-in the commit message what grew and why it is worth the bytes. A Go version
-bump that grows the runtime is a reason; a dependency added for one helper
-function is usually not, and is better replaced.
+To raise the ceiling, do it on purpose in its own commit: change `ceiling` in
+`scripts/binary-size.sh`, record the new value and the reason here, and say in
+the commit message what grew and why it is worth the bytes. A Go version bump
+that grows the runtime is a reason. A dependency added for one helper function
+is usually not, and is better replaced.
 
 ## 2026-09 chrome colour depth and OKLab blending
 

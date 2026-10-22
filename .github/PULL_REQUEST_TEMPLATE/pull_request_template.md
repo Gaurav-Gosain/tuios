@@ -42,6 +42,17 @@ Include steps to test this on different platforms/install methods:
 
 ---
 
+## Binary size cost
+
+The change in bytes for linux/amd64 and darwin/arm64. Copy it from the
+binary size comment CI posts, or measure with `scripts/binary-size.sh` on main
+and on this branch. CI fails only above the 50 MB ceiling.
+
+- linux/amd64: `<+N bytes>`
+- darwin/arm64: `<+N bytes>`
+
+---
+
 ## Negative controls
 
 A test that has never been seen to fail is not evidence. For each test you
