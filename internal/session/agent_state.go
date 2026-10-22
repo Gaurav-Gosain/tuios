@@ -851,10 +851,17 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 		clearAgentNote(w)
 		w.AgentHarness = claim.prior.harness
 		w.AgentStateAt = time.Now().UnixNano()
+		// auto and sawProcess are the blocker's, not the displaced claim's:
+		// both are facts about the pane rather than about who held it, and the
+		// detector may have seen the agent while the prompt was up. The
+		// prompt is often painted over by the agent's own exit, so a claim
+		// handed back without sawProcess kept the pane at its prior state for
+		// as long as the pane lived.
 		s.setAgentClaim(w.ID, agentClaim{
 			source:       claim.prior.source,
 			harness:      claim.prior.harness,
 			auto:         claim.auto,
+			sawProcess:   claim.sawProcess,
 			herdrAt:      claim.prior.herdrAt,
 			herdrAnchors: claim.prior.herdrAnchors,
 			screenWins:   claim.prior.screenWins,

@@ -274,18 +274,22 @@ func (s *Session) agentClaimFor(windowID string) agentClaim {
 // is still the best answer anyone has; it just stops being defended.
 //
 // The auto bit survives, because it is a lifecycle fact about the detector
-// rather than a precedence one: the pane still clears when the agent exits. A
-// window carrying it goes back to AgentSourceDetect rather than to the zero
-// claim, because the zero claim's empty source ranks as a report, and handing a
-// window back at the highest rank is the opposite of yielding it.
+// rather than a precedence one: the pane still clears when the agent exits. So
+// does sawProcess, for the same reason: it is what lets the detector clear a
+// claim it does not own once the agent has left, and a tier is often yielded in
+// the moment the agent exits, as a screen look that finds its idle box painted
+// over by the shell. A window carrying either goes back to AgentSourceDetect
+// rather than to the zero claim, because the zero claim's empty source ranks as
+// a report, and handing a window back at the highest rank is the opposite of
+// yielding it.
 func (s *Session) yieldAgentClaim(windowID string, source AgentSource) bool {
 	yielded := false
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	if claim, held := s.agentClaims[windowID]; held && claim.source == source {
-		if claim.auto {
+		if claim.auto || claim.sawProcess {
 			s.agentClaims[windowID] = agentClaim{
-				source: AgentSourceDetect, harness: claim.harness, auto: true,
+				source: AgentSourceDetect, harness: claim.harness, auto: claim.auto, sawProcess: claim.sawProcess,
 			}
 		} else {
 			delete(s.agentClaims, windowID)
