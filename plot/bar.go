@@ -36,6 +36,11 @@ type Bar struct {
 	// Axis draws tick labels at the left of columns, a base line, and the
 	// first, middle and last label under it.
 	Axis bool
+	// Half measures each bar from the middle of its first cell, where an
+	// axis line drawn through the middle of a row or a column meets it, to
+	// the middle of the last cell: the first cell of a bar is a half block.
+	// It is for a host that draws its own axis.
+	Half bool
 }
 
 func (b Bar) role(i int) Role {
@@ -150,9 +155,19 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		v := b.Values[i]
 		units := 0
 		if finite(v) {
-			units = int(math.Round(unit(math.Max(v, base), base, top) * float64(cells*8)))
+			scale := cells * 8
+			if b.Half {
+				scale = max(cells-1, 0) * 8
+			}
+			units = int(math.Round(unit(math.Max(v, base), base, top) * float64(scale)))
 		}
 		x := x0
+		if b.Half && m != ASCII && finite(v) && v > base && cells > 0 {
+			// The half block is the first half cell of the length.
+			g.set(x, i, "▐", b.role(i))
+			x++
+			units = max(units-4, 0)
+		}
 		if b.Thin && m != ASCII {
 			b.drawThin(g, i, x0, cells, v, base, top)
 			if valueW > 0 {
@@ -261,8 +276,12 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 		}
 		units := 0
 		if finite(v) {
-			units = int(math.Round(unit(v, lo, hi) * float64(rows*8)))
-			if v > lo && units == 0 {
+			scale := rows * 8
+			if b.Half {
+				scale = (rows - 1) * 8
+			}
+			units = int(math.Round(unit(v, lo, hi) * float64(scale)))
+			if v > lo && units == 0 && !b.Half {
 				units = 1 // a value above the base always shows
 			}
 		}
@@ -277,8 +296,21 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 		if mk, ok := markOf[role]; ok && m == ASCII {
 			full = mk
 		}
-		for r := 0; r < rows; r++ {
-			lv := units - r*8
+		first := 0
+		if b.Half && m != ASCII {
+			// The half block is the first half cell of the length.
+			units = max(units-4, 0)
+			// The first row is the upper half of the cell the axis runs
+			// through.
+			if finite(v) && v > lo {
+				for k := 0; k < colW && x+k < g.W; k++ {
+					g.set(x+k, rows-1, "▀", role)
+				}
+			}
+			first = 1
+		}
+		for r := first; r < rows; r++ {
+			lv := units - (r-first)*8
 			glyph := ""
 			switch {
 			case lv >= 8:

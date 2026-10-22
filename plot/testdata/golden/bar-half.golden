@@ -1,0 +1,39 @@
+=== braille 12x5
+|▄▄          |
+|██       ▄▄ |
+|██ ▄▄    ██ |
+|██ ██    ██ |
+|▀▀ ▀▀ ▀▀ ▀▀ |
+--- roles
+|aa          |
+|aa       aa |
+|aa aa    aa |
+|aa aa    aa |
+|aa aa aa aa |
+a=series1 (upper case is bold)
+=== blocks 12x5
+|▄▄          |
+|██       ▄▄ |
+|██ ▄▄    ██ |
+|██ ██    ██ |
+|▀▀ ▀▀ ▀▀ ▀▀ |
+--- roles
+|aa          |
+|aa       aa |
+|aa aa    aa |
+|aa aa    aa |
+|aa aa aa aa |
+a=series1 (upper case is bold)
+=== ascii 12x5
+|            |
+|##          |
+|##       ## |
+|## ##    ## |
+|## ## __ ## |
+--- roles
+|            |
+|aa          |
+|aa       aa |
+|aa aa    aa |
+|aa aa aa aa |
+a=series1 (upper case is bold)

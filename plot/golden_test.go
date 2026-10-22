@@ -124,6 +124,12 @@ var cases = []chartCase{
 			{Label: "daemon", Children: []TreeItem{{Label: "session", Value: 30}, {Label: "cli", Value: 10}}},
 		}, nil).Draw(w, h, m)
 	}},
+	{"bar-half", 12, 5, func(w, h int, m Mode) *Grid {
+		return Bar{Values: []float64{1, 0.5, 0.1, 0.75}, Min: 0, Max: 1, Half: true}.Draw(w, h, m)
+	}},
+	{"bar-h-half", 12, 4, func(w, h int, m Mode) *Grid {
+		return Bar{Values: []float64{1, 0.5, 0.1, 0.75}, Min: 0, Max: 1, Half: true, Horizontal: true, Format: func(float64) string { return "" }}.Draw(w, h, m)
+	}},
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},
