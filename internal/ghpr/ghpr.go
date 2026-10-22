@@ -153,8 +153,7 @@ func run(ctx context.Context, dir string, args ...string) (string, error) {
 // repository at dir.
 func CheckAuth(ctx context.Context, dir string) error {
 	_, err := run(ctx, dir, "auth", "status")
-	var ge *Error
-	if errors.As(err, &ge) {
+	if ge, ok := errors.AsType[*Error](err); ok {
 		ge.Auth = true
 	}
 	return err

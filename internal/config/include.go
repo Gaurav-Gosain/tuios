@@ -522,9 +522,9 @@ func (lc *LayeredConfig) mainLayer() *ConfigLayer {
 // that sets it. key is a dotted path such as appearance.theme. ok is false when
 // no file sets it, which means the value is the built-in default.
 func (lc *LayeredConfig) Origin(key []string) (string, bool) {
-	for i := len(lc.Layers) - 1; i >= 0; i-- {
-		if _, ok := lookupPath(lc.Layers[i].Values, key); ok {
-			return lc.Layers[i].Path, true
+	for _, v := range slices.Backward(lc.Layers) {
+		if _, ok := lookupPath(v.Values, key); ok {
+			return v.Path, true
 		}
 	}
 	return "", false
@@ -550,15 +550,15 @@ func (lc *LayeredConfig) Origins() []KeyOrigin {
 	out := make([]KeyOrigin, 0, len(leaves))
 	for _, p := range leaves {
 		ko := KeyOrigin{Key: displayKey(p)}
-		for i := len(lc.Layers) - 1; i >= 0; i-- {
-			if _, ok := lookupPath(lc.Layers[i].Values, p); !ok {
+		for _, v := range slices.Backward(lc.Layers) {
+			if _, ok := lookupPath(v.Values, p); !ok {
 				continue
 			}
 			if ko.File == "" {
-				ko.File = lc.Layers[i].Path
+				ko.File = v.Path
 				continue
 			}
-			ko.Hidden = append(ko.Hidden, lc.Layers[i].Path)
+			ko.Hidden = append(ko.Hidden, v.Path)
 		}
 		if ko.File == "" {
 			continue
@@ -605,7 +605,9 @@ func displayKey(p []string) string {
 			if id == "" {
 				id = key
 			}
-			b.WriteString("[" + id + "]")
+			b.WriteString("[")
+			b.WriteString(id)
+			b.WriteString("]")
 			continue
 		}
 		if i > 0 {

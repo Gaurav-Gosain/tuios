@@ -39,7 +39,8 @@ func benchCorpus(n int) []string {
 		case 0:
 			b.WriteString(strconv.Itoa(rng.IntN(90) + 10))
 		case 1:
-			b.WriteString("-" + stems[rng.IntN(len(stems))])
+			b.WriteString("-")
+			b.WriteString(stems[rng.IntN(len(stems))])
 		case 2:
 			b.WriteString("ctl")
 		}

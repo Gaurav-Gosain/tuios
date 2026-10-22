@@ -97,7 +97,7 @@ func TestOpenCodeServiceRules(t *testing.T) {
 			t.Fatalf("the read took %v, past its budget", took)
 		}
 		data, _ := os.ReadFile(pids)
-		for _, pid := range strings.Fields(string(data)) {
+		for pid := range strings.FieldsSeq(string(data)) {
 			deadline := time.Now().Add(2 * time.Second)
 			for {
 				if _, err := os.Stat("/proc/" + pid); err != nil {

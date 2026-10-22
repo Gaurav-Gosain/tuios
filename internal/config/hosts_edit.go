@@ -325,26 +325,40 @@ func samePath(a, b []string) bool {
 // table rather than a table full of zeroes.
 func renderHostBlock(name string, h HostConfig) string {
 	var b strings.Builder
-	b.WriteString("[hosts." + tomlKey(name) + "]\n")
-	b.WriteString("addr = " + tomlString(h.Addr) + "\n")
+	b.WriteString("[hosts.")
+	b.WriteString(tomlKey(name))
+	b.WriteString("]\n")
+	b.WriteString("addr = ")
+	b.WriteString(tomlString(h.Addr))
+	b.WriteString("\n")
 	if h.Command != "" {
-		b.WriteString("command = " + tomlString(h.Command) + "\n")
+		b.WriteString("command = ")
+		b.WriteString(tomlString(h.Command))
+		b.WriteString("\n")
 	}
 	if h.ConnectTimeout > 0 {
-		b.WriteString("connect_timeout = " + strconv.Itoa(h.ConnectTimeout) + "\n")
+		b.WriteString("connect_timeout = ")
+		b.WriteString(strconv.Itoa(h.ConnectTimeout))
+		b.WriteString("\n")
 	}
 	if len(h.SSHOptions) > 0 {
 		parts := make([]string, 0, len(h.SSHOptions))
 		for _, o := range h.SSHOptions {
 			parts = append(parts, tomlString(o))
 		}
-		b.WriteString("ssh_options = [" + strings.Join(parts, ", ") + "]\n")
+		b.WriteString("ssh_options = [")
+		b.WriteString(strings.Join(parts, ", "))
+		b.WriteString("]\n")
 	}
 	if h.ReposRoot != "" {
-		b.WriteString("repos_root = " + tomlString(h.ReposRoot) + "\n")
+		b.WriteString("repos_root = ")
+		b.WriteString(tomlString(h.ReposRoot))
+		b.WriteString("\n")
 	}
 	if h.TailscaleLogin != "" {
-		b.WriteString("tailscale_login = " + tomlString(h.TailscaleLogin) + "\n")
+		b.WriteString("tailscale_login = ")
+		b.WriteString(tomlString(h.TailscaleLogin))
+		b.WriteString("\n")
 	}
 	// The policy for the machine linking in is carried through a rewrite of
 	// the address, so `tuios hosts add` on a known name does not drop it.
@@ -353,13 +367,19 @@ func renderHostBlock(name string, h HostConfig) string {
 		for _, c := range h.Allow {
 			parts = append(parts, tomlString(c))
 		}
-		b.WriteString("allow = [" + strings.Join(parts, ", ") + "]\n")
+		b.WriteString("allow = [")
+		b.WriteString(strings.Join(parts, ", "))
+		b.WriteString("]\n")
 	}
 	if h.HoldMail != nil {
-		b.WriteString("hold_mail = " + strconv.FormatBool(*h.HoldMail) + "\n")
+		b.WriteString("hold_mail = ")
+		b.WriteString(strconv.FormatBool(*h.HoldMail))
+		b.WriteString("\n")
 	}
 	if h.HostedGrace != "" {
-		b.WriteString("hosted_grace = " + tomlString(h.HostedGrace) + "\n")
+		b.WriteString("hosted_grace = ")
+		b.WriteString(tomlString(h.HostedGrace))
+		b.WriteString("\n")
 	}
 	return b.String()
 }
@@ -472,12 +492,16 @@ func AddLinkPolicyInFile(path, name string, allow []string) (WriteNote, error) {
 		return note, ErrHostTableExists
 	}
 	var b strings.Builder
-	b.WriteString("[hosts." + tomlKey(name) + "]\n")
+	b.WriteString("[hosts.")
+	b.WriteString(tomlKey(name))
+	b.WriteString("]\n")
 	parts := make([]string, 0, len(allow))
 	for _, c := range allow {
 		parts = append(parts, tomlString(c))
 	}
-	b.WriteString("allow = [" + strings.Join(parts, ", ") + "]\n")
+	b.WriteString("allow = [")
+	b.WriteString(strings.Join(parts, ", "))
+	b.WriteString("]\n")
 	out := trimTrailingBlank(lines)
 	if len(out) > 0 {
 		out = append(out, "")

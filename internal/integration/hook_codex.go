@@ -84,7 +84,7 @@ func translateCodex(in Input, p fields) Decision {
 		r := identity(Report{State: "working", IfState: claudeClearsBlock}, p)
 		if a := toolActivity(ActivityToolDone, p); a != nil {
 			if code, ok := exitCode(p); ok {
-				a.OK = boolPtr(code == 0)
+				a.OK = new(code == 0)
 			}
 			r.Activity = a
 		}

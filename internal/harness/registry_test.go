@@ -138,7 +138,10 @@ comm = ["finetool"]
 	}
 	var joined strings.Builder
 	for _, e := range errs {
-		joined.WriteString(e.Source + ": " + e.Err.Error() + "\n")
+		joined.WriteString(e.Source)
+		joined.WriteString(": ")
+		joined.WriteString(e.Err.Error())
+		joined.WriteString("\n")
 	}
 	for _, want := range []string{"schema_version", "generic name", "matches nothing", "unknown state"} {
 		if !strings.Contains(joined.String(), want) {

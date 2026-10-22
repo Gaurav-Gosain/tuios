@@ -134,7 +134,8 @@ func (l *screenLog) replay(cols int) string {
 			continue
 		}
 		for _, line := range blk.lay(cols) {
-			b.WriteString(line + "\r\n")
+			b.WriteString(line)
+			b.WriteString("\r\n")
 		}
 	}
 	return b.String()

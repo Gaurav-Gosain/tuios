@@ -116,7 +116,8 @@ func (t *TTY) Lay(lay func(cols int) []string) {
 	t.log.layout(lay)
 	var b strings.Builder
 	for _, l := range lay(cols) {
-		b.WriteString(l + "\r\n")
+		b.WriteString(l)
+		b.WriteString("\r\n")
 	}
 	t.write(b.String())
 }

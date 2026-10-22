@@ -145,8 +145,7 @@ func runVerb(out *frameWriter, version, nonce string, c Command) {
 	defer func() { _ = client.Close() }()
 	raw, err := client.CallWithTimeout(c.Verb, params, verbTimeout)
 	if err != nil {
-		var ve *session.VerbCallError
-		if errors.As(err, &ve) {
+		if ve, ok := errors.AsType[*session.VerbCallError](err); ok {
 			res.Code, res.Error = ve.Code, ve.Message
 		} else {
 			res.Error = err.Error()

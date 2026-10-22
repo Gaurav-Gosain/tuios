@@ -75,7 +75,7 @@ func TestMermaidTextFallbacks(t *testing.T) {
 	wide := "flowchart LR\n  A[" + strings.Repeat("x", 60) + "] --> B\n"
 	out, errOut := run("wide.mmd", wide, 20)
 	widest := 0
-	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
 		widest = max(widest, utf8.RuneCountInString(line))
 	}
 	if widest <= 20 || !strings.Contains(out, strings.Repeat("x", 60)) || strings.Contains(out, "flowchart LR") {

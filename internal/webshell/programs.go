@@ -229,7 +229,15 @@ func cmdTop(t *TTY, _ []string) int {
 	return fullscreen(t, func(cols, rows, tick int) string {
 		var b strings.Builder
 		up := time.Since(started).Round(time.Second)
-		b.WriteString(bold + "top" + reset + dim + " - up " + up.String() + ", 1 user, load average: 0.42 0.37 0.31" + reset + "\x1b[K\r\n")
+		b.WriteString(bold)
+		b.WriteString("top")
+		b.WriteString(reset)
+		b.WriteString(dim)
+		b.WriteString(" - up ")
+		b.WriteString(up.String())
+		b.WriteString(", 1 user, load average: 0.42 0.37 0.31")
+		b.WriteString(reset)
+		b.WriteString("\x1b[K\r\n")
 		// Each bar is its width plus 13 cells of label, brackets and percent,
 		// and two sit on a row with a two-cell gap.
 		barW := max((cols-28)/2, 4)
@@ -244,8 +252,12 @@ func cmdTop(t *TTY, _ []string) int {
 			b.WriteString("\x1b[K\r\n")
 		}
 		mem := 42 + 6*math.Sin(float64(tick)/11)
-		b.WriteString(bar("Mem", mem, barW*2+15) + "\x1b[K\r\n\x1b[K\r\n")
-		b.WriteString("\x1b[30;42m" + padRight("  PID USER      CPU%  MEM%  COMMAND", cols) + reset + "\r\n")
+		b.WriteString(bar("Mem", mem, barW*2+15))
+		b.WriteString("\x1b[K\r\n\x1b[K\r\n")
+		b.WriteString("\x1b[30;42m")
+		b.WriteString(padRight("  PID USER      CPU%  MEM%  COMMAND", cols))
+		b.WriteString(reset)
+		b.WriteString("\r\n")
 		for i := range procs {
 			procs[i].cpu = max(0, procs[i].cpu+(rand.Float64()-0.5)*4)
 		}

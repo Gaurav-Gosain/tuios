@@ -546,7 +546,9 @@ func globRegexp(glob string) string {
 			if strings.HasPrefix(class, "!") {
 				class = "^" + class[1:]
 			}
-			b.WriteString("[" + strings.ReplaceAll(class, `\`, `\\`) + "]")
+			b.WriteString("[")
+			b.WriteString(strings.ReplaceAll(class, `\`, `\\`))
+			b.WriteString("]")
 			i += end + 1
 		default:
 			b.WriteString(regexp.QuoteMeta(glob[i : i+1]))

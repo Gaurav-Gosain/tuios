@@ -277,7 +277,8 @@ func checkpointMessage(n int, root string, m CheckpointMeta) string {
 		subject += ": " + label
 	}
 	var b strings.Builder
-	b.WriteString(subject + "\n\n")
+	b.WriteString(subject)
+	b.WriteString("\n\n")
 	fmt.Fprintf(&b, "Kind: %s\n", m.Kind)
 	fmt.Fprintf(&b, "Pane: %s\n", m.Pane)
 	if m.Session != "" {

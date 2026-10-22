@@ -241,8 +241,7 @@ func TestStartSSHServerRefusesABindWithNoKeys(t *testing.T) {
 	for _, host := range []string{"0.0.0.0", "127.0.0.1"} {
 		t.Run(host, func(t *testing.T) {
 			port := freePort(t)
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			errCh := make(chan error, 1)
 			go func() {

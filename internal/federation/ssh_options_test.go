@@ -132,7 +132,7 @@ func TestSSHReadsTheRefusedSpellingsAsCommands(t *testing.T) {
 	// The command-running keys as ssh sets them with no options at all.
 	commandKeys := func(out string) map[string]string {
 		keys := map[string]string{}
-		for _, line := range strings.Split(out, "\n") {
+		for line := range strings.SplitSeq(out, "\n") {
 			for _, key := range []string{"proxycommand", "localcommand", "permitlocalcommand", "knownhostscommand", "pkcs11provider", "securitykeyprovider"} {
 				if strings.HasPrefix(line, key+" ") {
 					keys[key] = line

@@ -673,7 +673,9 @@ func (f *follower) draw(final bool) {
 		fmt.Fprintf(&b, "\r\x1b[%dA", f.drawn)
 	}
 	for _, l := range lines {
-		b.WriteString("\x1b[2K" + l + "\n")
+		b.WriteString("\x1b[2K")
+		b.WriteString(l)
+		b.WriteString("\n")
 	}
 	for i := len(lines); i < f.drawn; i++ {
 		b.WriteString("\x1b[2K\n")

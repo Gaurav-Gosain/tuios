@@ -147,11 +147,9 @@ func (s *Shim) waitFor(name string, args []string) (string, []string, error) {
 		if _, err := os.Stat(locked); err != nil {
 			return OutcomeError, nil, fmt.Errorf("channel %s not locked", channel)
 		}
-		for _, l := range sockets(dir, 'l') {
-			if wake(l) {
-				// The lock passes to that locker and stays taken.
-				return OutcomeOK, nil, nil
-			}
+		if slices.ContainsFunc(sockets(dir, 'l'), wake) {
+			// The lock passes to that locker and stays taken.
+			return OutcomeOK, nil, nil
 		}
 		_ = os.Remove(locked)
 		return OutcomeOK, nil, nil

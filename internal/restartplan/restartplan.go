@@ -218,11 +218,15 @@ func Text(lines []Line) string {
 	for _, l := range lines {
 		switch l.Kind {
 		case KindRow:
-			b.WriteString(l.Label + strings.Repeat(" ", max(RowLabelWidth-len(l.Label), 1)) + l.Text)
+			b.WriteString(l.Label)
+			b.WriteString(strings.Repeat(" ", max(RowLabelWidth-len(l.Label), 1)))
+			b.WriteString(l.Text)
 		case KindHeading:
-			b.WriteString(l.Text + ":")
+			b.WriteString(l.Text)
+			b.WriteString(":")
 		case KindStop, KindBack:
-			b.WriteString("  " + l.Text)
+			b.WriteString("  ")
+			b.WriteString(l.Text)
 		case KindBlank:
 		default:
 			b.WriteString(l.Text)
@@ -238,16 +242,34 @@ func Text(lines []Line) string {
 // command refuses when the plan it reads now has another one.
 func Digest(r *Report) string {
 	var b strings.Builder
-	b.WriteString(r.Binary + "\x00" + r.Version + "\x00")
+	b.WriteString(r.Binary)
+	b.WriteString("\x00")
+	b.WriteString(r.Version)
+	b.WriteString("\x00")
 	if d := r.Daemon; d != nil {
-		b.WriteString(d.State + "\x00" + d.Version + "\x00" + strconv.FormatBool(d.Unread) + "\x00")
+		b.WriteString(d.State)
+		b.WriteString("\x00")
+		b.WriteString(d.Version)
+		b.WriteString("\x00")
+		b.WriteString(strconv.FormatBool(d.Unread))
+		b.WriteString("\x00")
 		for _, s := range d.Sessions {
-			b.WriteString("s\x00" + s.Name + "\x00")
+			b.WriteString("s\x00")
+			b.WriteString(s.Name)
+			b.WriteString("\x00")
 			for _, p := range s.Busy {
-				b.WriteString("b\x00" + p.Window + "\x00" + p.Program + "\x00")
+				b.WriteString("b\x00")
+				b.WriteString(p.Window)
+				b.WriteString("\x00")
+				b.WriteString(p.Program)
+				b.WriteString("\x00")
 			}
 			for _, a := range s.Resume {
-				b.WriteString("r\x00" + a.Window + "\x00" + a.Harness + "\x00")
+				b.WriteString("r\x00")
+				b.WriteString(a.Window)
+				b.WriteString("\x00")
+				b.WriteString(a.Harness)
+				b.WriteString("\x00")
 			}
 		}
 	}

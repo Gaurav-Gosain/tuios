@@ -225,7 +225,9 @@ func agentLogDetail(e agentLogEntry) string {
 	var b strings.Builder
 	switch {
 	case e.Tool != "" && e.Target != "":
-		b.WriteString(plainLine(e.Tool) + ": " + plainLine(e.Target))
+		b.WriteString(plainLine(e.Tool))
+		b.WriteString(": ")
+		b.WriteString(plainLine(e.Target))
 	case e.Tool != "":
 		b.WriteString(plainLine(e.Tool))
 	case e.Target != "":

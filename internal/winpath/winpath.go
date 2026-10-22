@@ -153,7 +153,7 @@ func isLetter(s string) bool {
 // is: msys-2.0.dll in usr\bin for MSYS2 and Git for Windows, cygwin1.dll in
 // bin for Cygwin. Git Bash also sets EXEPATH to its root.
 func FindMounts(pathList, exepath, tmp string, exists func(string) bool) Mounts {
-	for _, entry := range strings.Split(pathList, ";") {
+	for entry := range strings.SplitSeq(pathList, ";") {
 		entry = strings.TrimRight(strings.ReplaceAll(entry, "/", `\`), `\`)
 		lower := strings.ToLower(entry)
 		switch {

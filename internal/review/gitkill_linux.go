@@ -34,7 +34,7 @@ func descendants(pid, depth int) []int {
 		if err != nil {
 			continue
 		}
-		for _, f := range strings.Fields(string(data)) {
+		for f := range strings.FieldsSeq(string(data)) {
 			if child, err := strconv.Atoi(f); err == nil {
 				out = append(out, child)
 				out = append(out, descendants(child, depth+1)...)

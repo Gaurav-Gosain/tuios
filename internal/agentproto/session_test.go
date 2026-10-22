@@ -285,8 +285,7 @@ func TestSessionQueuesAPromptUntilReady(t *testing.T) {
 	in, keys := io.Pipe()
 	rep := newFakeReporter()
 	s := &Session{Agent: slow, Events: NewEvents(), In: in, Out: &screen{}, Reporter: rep}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go s.Run(ctx)
 	_, _ = io.WriteString(keys, "early\r")
 	select {

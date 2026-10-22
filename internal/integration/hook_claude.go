@@ -160,13 +160,13 @@ func translateClaude(in Input, p fields) Decision {
 		switch event {
 		case "PostToolUse":
 			if a := toolActivity(ActivityToolDone, p); a != nil {
-				a.OK = boolPtr(true)
+				a.OK = new(true)
 				r.Activity = a
 			}
 		case "PostToolUseFailure":
 			if a := toolActivity(ActivityToolFailed, p); a != nil {
 				// orca's Claude reader takes error, then message.
-				a.OK = boolPtr(false)
+				a.OK = new(false)
 				a.Text = activityText(p.first("error", "message"))
 				r.Activity = a
 			}
@@ -346,9 +346,9 @@ func claudeSubagentTool(event string, p fields) Decision {
 			claudeSpawnHint(a, p)
 		}
 	case "PostToolUse":
-		a.OK = boolPtr(true)
+		a.OK = new(true)
 	case "PostToolUseFailure":
-		a.OK = boolPtr(false)
+		a.OK = new(false)
 	}
 	return send(ClaudeCode, event, Report{SessionID: p.str("session_id"), Activity: a})
 }

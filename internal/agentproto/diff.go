@@ -46,10 +46,14 @@ func renderDiffs(diffs []Diff) string {
 		shown = shown[:maxDiffLines]
 	}
 	for _, l := range shown {
-		b.WriteString(colourDiffLine(l) + "\n")
+		b.WriteString(colourDiffLine(l))
+		b.WriteString("\n")
 	}
 	if more := len(lines) - len(shown); more > 0 {
-		b.WriteString(sgrDim + fmt.Sprintf("(%d more diff lines)", more) + sgrReset + "\n")
+		b.WriteString(sgrDim)
+		fmt.Fprintf(&b, "(%d more diff lines)", more)
+		b.WriteString(sgrReset)
+		b.WriteString("\n")
 	}
 	return b.String()
 }

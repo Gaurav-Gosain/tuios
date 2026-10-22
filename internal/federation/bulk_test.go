@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"io"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -190,7 +190,7 @@ func TestABulkCopyLeavesTypingFast(t *testing.T) {
 		t.Fatalf("the copy did not finish")
 	}
 
-	sort.Slice(waits, func(i, j int) bool { return waits[i] < waits[j] })
+	slices.Sort(waits)
 	worst := waits[len(waits)-1]
 	median := waits[len(waits)/2]
 	t.Logf("%d echoes during the copy: median %v, worst %v, window %d KiB", len(waits), median, worst, copyStream.WindowSize()>>10)

@@ -140,9 +140,11 @@ func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
 				b.WriteString(cell)
 			case i == 3 || i == 4:
 				// Counts line up on the right.
-				b.WriteString(strings.Repeat(" ", widths[i]-len(cell)) + cell)
+				b.WriteString(strings.Repeat(" ", widths[i]-len(cell)))
+				b.WriteString(cell)
 			default:
-				b.WriteString(cell + strings.Repeat(" ", widths[i]-len(cell)))
+				b.WriteString(cell)
+				b.WriteString(strings.Repeat(" ", widths[i]-len(cell)))
 			}
 		}
 		b.WriteString("\n")

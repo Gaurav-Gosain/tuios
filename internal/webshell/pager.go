@@ -262,7 +262,10 @@ func (v *viewer) draw() {
 		b.WriteString("\x1b[K")
 		if i < len(v.lines) {
 			if v.vim {
-				b.WriteString(yellow + padLeft(strconv.Itoa(i+1), gutter-1) + " " + reset)
+				b.WriteString(yellow)
+				b.WriteString(padLeft(strconv.Itoa(i+1), gutter-1))
+				b.WriteString(" ")
+				b.WriteString(reset)
 			}
 			b.WriteString(highlight(lang, clip(v.lines[i], cols-gutter), v.search))
 		} else if v.vim {
@@ -273,9 +276,12 @@ func (v *viewer) draw() {
 	b.WriteString("\x1b[K")
 	switch {
 	case v.cmdOn:
-		b.WriteString(string(v.cmd) + "\x1b[?25h")
+		b.WriteString(string(v.cmd))
+		b.WriteString("\x1b[?25h")
 	case v.msg != "":
-		b.WriteString(yellow + clip(v.msg, cols) + reset)
+		b.WriteString(yellow)
+		b.WriteString(clip(v.msg, cols))
+		b.WriteString(reset)
 	case v.vim:
 		pos := "Top"
 		if v.top > 0 {
@@ -287,13 +293,20 @@ func (v *viewer) draw() {
 		left := "\"" + v.name + "\" [readonly] " + strconv.Itoa(len(v.lines)) + "L"
 		right := dim + ":q quits" + reset + "  " + strconv.Itoa(v.top+1) + ",1  " + pos
 		gap := max(cols-utf8.RuneCountInString(left)-visibleLen(right), 1)
-		b.WriteString(left + strings.Repeat(" ", gap) + right)
+		b.WriteString(left)
+		b.WriteString(strings.Repeat(" ", gap))
+		b.WriteString(right)
 	default:
 		label := v.name
 		if v.top+body >= len(v.lines) {
 			label += " (END)"
 		}
-		b.WriteString("\x1b[7m " + clip(label, cols-2) + " \x1b[0m" + dim + "  q quits, / searches" + reset)
+		b.WriteString("\x1b[7m ")
+		b.WriteString(clip(label, cols-2))
+		b.WriteString(" \x1b[0m")
+		b.WriteString(dim)
+		b.WriteString("  q quits, / searches")
+		b.WriteString(reset)
 	}
 	if !v.cmdOn {
 		b.WriteString("\x1b[?25l")
@@ -373,7 +386,9 @@ func highlightGo(line string) string {
 		c := line[i]
 		switch {
 		case c == '/' && i+1 < len(line) && line[i+1] == '/':
-			b.WriteString(dim + line[i:] + reset)
+			b.WriteString(dim)
+			b.WriteString(line[i:])
+			b.WriteString(reset)
 			return b.String()
 		case c == '"' || c == '`':
 			j := i + 1
@@ -384,7 +399,9 @@ func highlightGo(line string) string {
 				j++
 			}
 			j = min(j+1, len(line))
-			b.WriteString(green + line[i:j] + reset)
+			b.WriteString(green)
+			b.WriteString(line[i:j])
+			b.WriteString(reset)
 			i = j
 		case isWordByte(c):
 			j := i
@@ -393,9 +410,13 @@ func highlightGo(line string) string {
 			}
 			word := line[i:j]
 			if goKeywords[word] {
-				b.WriteString(purple + word + reset)
+				b.WriteString(purple)
+				b.WriteString(word)
+				b.WriteString(reset)
 			} else if j < len(line) && line[j] == '(' {
-				b.WriteString(blue + word + reset)
+				b.WriteString(blue)
+				b.WriteString(word)
+				b.WriteString(reset)
 			} else {
 				b.WriteString(word)
 			}

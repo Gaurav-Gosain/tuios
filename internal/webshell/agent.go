@@ -138,10 +138,14 @@ func cmdAgent(s *shell, args []string, _ string) int {
 		lines := editBox(cols, sel)
 		var b strings.Builder
 		if drawn > 0 {
-			b.WriteString("\x1b[" + strconv.Itoa(drawn) + "A\r")
+			b.WriteString("\x1b[")
+			b.WriteString(strconv.Itoa(drawn))
+			b.WriteString("A\r")
 		}
 		for _, l := range lines {
-			b.WriteString("\x1b[K" + l + "\r\n")
+			b.WriteString("\x1b[K")
+			b.WriteString(l)
+			b.WriteString("\r\n")
 		}
 		drawn = len(lines)
 		t.write(b.String())

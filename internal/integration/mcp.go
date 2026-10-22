@@ -410,8 +410,12 @@ func mcpTOMLBlock(tuios string, write bool) string {
 	var b strings.Builder
 	b.WriteString(mcpTOMLBegin + "\n")
 	b.WriteString("[mcp_servers." + MCPServerName + "]\n")
-	b.WriteString("command = " + tomlString(tuios) + "\n")
-	b.WriteString("args = [" + strings.Join(quoted, ", ") + "]\n")
+	b.WriteString("command = ")
+	b.WriteString(tomlString(tuios))
+	b.WriteString("\n")
+	b.WriteString("args = [")
+	b.WriteString(strings.Join(quoted, ", "))
+	b.WriteString("]\n")
 	b.WriteString(mcpTOMLEnd + "\n")
 	return b.String()
 }

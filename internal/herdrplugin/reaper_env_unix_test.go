@@ -73,7 +73,7 @@ func TestReaperKeepsTheCommandsGodebug(t *testing.T) {
 				r.mu.Unlock()
 				environ, _ := os.ReadFile("/proc/" + strconv.Itoa(sid) + "/environ")
 				var godebug string
-				for _, kv := range strings.Split(string(environ), "\x00") {
+				for kv := range strings.SplitSeq(string(environ), "\x00") {
 					if v, ok := strings.CutPrefix(kv, "GODEBUG="); ok {
 						godebug = v
 					}

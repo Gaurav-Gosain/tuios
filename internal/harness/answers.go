@@ -2,6 +2,7 @@ package harness
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -432,8 +433,8 @@ const maxOptionGap = 3
 func parseOptions(lines []string) ([]Option, int) {
 	var out []Option
 	want, gap, first := 0, 0, -1
-	for i := len(lines) - 1; i >= 0; i-- {
-		n, label, ok := parseOptionLine(lines[i])
+	for i, line := range slices.Backward(lines) {
+		n, label, ok := parseOptionLine(line)
 		if !ok {
 			if len(out) > 0 {
 				if gap++; gap > maxOptionGap {

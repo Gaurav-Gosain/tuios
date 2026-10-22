@@ -131,5 +131,3 @@ func exitCode(p fields) (int, bool) {
 	}
 	return 0, false
 }
-
-func boolPtr(b bool) *bool { return &b }

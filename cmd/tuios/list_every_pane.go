@@ -360,7 +360,7 @@ func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput
 			fmt.Println(session.UntrustedFence("pane "+plainLine(p.Name)+" on "+plainLine(p.Host), body))
 			continue
 		}
-		for _, l := range strings.Split(body, "\n") {
+		for l := range strings.SplitSeq(body, "\n") {
 			fmt.Printf("    │ %s\n", l)
 		}
 	}

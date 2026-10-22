@@ -461,9 +461,14 @@ func directFrame(head string, data []byte) []byte {
 		}
 		b.WriteString("\x1b_G")
 		if i == 0 {
-			b.WriteString(head + ",")
+			b.WriteString(head)
+			b.WriteString(",")
 		}
-		b.WriteString("m=" + strconv.Itoa(more) + ";" + enc[i:end] + "\x1b\\")
+		b.WriteString("m=")
+		b.WriteString(strconv.Itoa(more))
+		b.WriteString(";")
+		b.WriteString(enc[i:end])
+		b.WriteString("\x1b\\")
 		if end >= len(enc) {
 			break
 		}

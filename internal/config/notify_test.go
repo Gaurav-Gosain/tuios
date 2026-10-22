@@ -85,7 +85,10 @@ token = "` + hookToken + `"
 		var all strings.Builder
 		for _, w := range append(res.Errors, res.Warnings...) {
 			if w.Field == "notify" {
-				all.WriteString(w.Key + ": " + w.Message + "\n")
+				all.WriteString(w.Key)
+				all.WriteString(": ")
+				all.WriteString(w.Message)
+				all.WriteString("\n")
 			}
 		}
 		out := all.String()

@@ -277,7 +277,9 @@ func Diff(path string, stat bool) (string, error) {
 		}
 		b.WriteString("untracked:\n")
 		for f := range strings.SplitSeq(u, "\n") {
-			b.WriteString("  " + f + "\n")
+			b.WriteString("  ")
+			b.WriteString(f)
+			b.WriteString("\n")
 		}
 	}
 	return b.String(), nil

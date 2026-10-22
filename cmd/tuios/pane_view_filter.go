@@ -76,7 +76,7 @@ const (
 // sequence it starts is complete.
 func (f *queryFilter) Write(b []byte) []byte {
 	out := make([]byte, 0, len(b)+16)
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		c := b[i]
 		switch f.state {
 		case fsGround:

@@ -51,13 +51,16 @@ func (e *diagnosticError) Error() string {
 	var b strings.Builder
 	b.WriteString(e.What)
 	if e.Cause != "" {
-		b.WriteString("\nMost likely cause: " + e.Cause)
+		b.WriteString("\nMost likely cause: ")
+		b.WriteString(e.Cause)
 	}
 	for _, line := range e.Extra {
-		b.WriteString("\n" + line)
+		b.WriteString("\n")
+		b.WriteString(line)
 	}
 	if e.Fix != "" {
-		b.WriteString("\nFix: " + e.Fix)
+		b.WriteString("\nFix: ")
+		b.WriteString(e.Fix)
 	}
 	return b.String()
 }

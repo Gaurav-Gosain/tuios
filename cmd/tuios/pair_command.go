@@ -1591,7 +1591,7 @@ func renderQR(text string, colour bool) string {
 	}
 	var b strings.Builder
 	for y := 0; y < n; y += 2 {
-		for x := 0; x < n; x++ {
+		for x := range n {
 			top, bottom := dark(x, y), y+1 < n && dark(x, y+1)
 			if colour {
 				fg, bg := "97", "107"
@@ -1601,7 +1601,11 @@ func renderQR(text string, colour bool) string {
 				if bottom {
 					bg = "40"
 				}
-				b.WriteString("\x1b[" + fg + ";" + bg + "m▀")
+				b.WriteString("\x1b[")
+				b.WriteString(fg)
+				b.WriteString(";")
+				b.WriteString(bg)
+				b.WriteString("m▀")
 				continue
 			}
 			switch {

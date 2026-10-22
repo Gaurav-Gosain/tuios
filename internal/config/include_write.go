@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
@@ -86,29 +87,23 @@ func (n WriteNote) Message() string {
 
 func (n *WriteNote) addRedirected(from, to string) {
 	r := Redirect{From: from, To: to}
-	for _, e := range n.Redirected {
-		if e == r {
-			return
-		}
+	if slices.Contains(n.Redirected, r) {
+		return
 	}
 	n.Redirected = append(n.Redirected, r)
 }
 
 func (n *WriteNote) addMoved(from, to string) {
 	r := Redirect{From: from, To: to}
-	for _, e := range n.Moved {
-		if e == r {
-			return
-		}
+	if slices.Contains(n.Moved, r) {
+		return
 	}
 	n.Moved = append(n.Moved, r)
 }
 
 func (n *WriteNote) addKept(p string) {
-	for _, e := range n.Kept {
-		if e == p {
-			return
-		}
+	if slices.Contains(n.Kept, p) {
+		return
 	}
 	n.Kept = append(n.Kept, p)
 }
@@ -281,7 +276,7 @@ func (w *layerWriter) writable(i int) bool {
 
 // lastWritable is the last layer tuios can write, or -1.
 func (w *layerWriter) lastWritable() int {
-	for i := len(w.lc.Layers) - 1; i >= 0; i-- {
+	for i := range slices.Backward(w.lc.Layers) {
 		if w.writable(i) {
 			return i
 		}
@@ -355,9 +350,9 @@ func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 		// A new entry goes beside the others: the last writable file that
 		// holds the table it goes into.
 		for n := len(path) - 1; n >= 1 && owner < 0; n-- {
-			for i := len(w.lc.Layers) - 1; i >= 0; i-- {
-				v, ok := lookupPath(w.lc.Layers[i].Values, path[:n])
-				if !ok || !isEntryCollection(v) || w.lc.Layers[i].isLook() {
+			for i, layer := range slices.Backward(w.lc.Layers) {
+				v, ok := lookupPath(layer.Values, path[:n])
+				if !ok || !isEntryCollection(v) || layer.isLook() {
 					continue
 				}
 				if w.writable(i) {
@@ -567,7 +562,10 @@ func (lc *LayeredConfig) Holders(key []string) []ConfigLayer {
 func marshalTable(values map[string]any) ([]byte, error) {
 	var buf strings.Builder
 	if inc, ok := values[IncludeKey]; ok {
-		buf.WriteString(IncludeKey + " = " + encodeValue(inc) + "\n\n")
+		buf.WriteString(IncludeKey)
+		buf.WriteString(" = ")
+		buf.WriteString(encodeValue(inc))
+		buf.WriteString("\n\n")
 		rest := make(map[string]any, len(values))
 		for k, v := range values {
 			if k != IncludeKey {
@@ -651,7 +649,8 @@ func FirstRunConfig(path, include string) []byte {
 	var sb strings.Builder
 	sb.WriteString(configFileHeader(path))
 	if include != "" {
-		sb.WriteString(include + "\n\n")
+		sb.WriteString(include)
+		sb.WriteString("\n\n")
 	}
 	var startup []string
 	lc, err := loadLayered(path, true)
@@ -672,7 +671,9 @@ func FirstRunConfig(path, include string) []byte {
 		}
 	}
 	if len(startup) > 0 {
-		sb.WriteString("[startup]\n" + strings.Join(startup, "\n") + "\n")
+		sb.WriteString("[startup]\n")
+		sb.WriteString(strings.Join(startup, "\n"))
+		sb.WriteString("\n")
 	}
 	return []byte(sb.String())
 }

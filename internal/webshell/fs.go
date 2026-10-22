@@ -257,11 +257,17 @@ func configText(theme, border, glyphs string) string {
 	var b strings.Builder
 	b.WriteString("[appearance]\n")
 	if theme != "" {
-		b.WriteString(`theme = "` + theme + "\"\n")
+		b.WriteString(`theme = "`)
+		b.WriteString(theme)
+		b.WriteString("\"\n")
 	}
-	b.WriteString(`border_style = "` + border + "\"\n")
+	b.WriteString(`border_style = "`)
+	b.WriteString(border)
+	b.WriteString("\"\n")
 	if glyphs != "" && glyphs != "default" {
-		b.WriteString(`glyphs = "` + glyphs + "\"\n")
+		b.WriteString(`glyphs = "`)
+		b.WriteString(glyphs)
+		b.WriteString("\"\n")
 	}
 	b.WriteString("\n[keybindings]\nleader_key = \"ctrl+b\"\n")
 	return b.String()

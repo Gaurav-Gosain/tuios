@@ -3,6 +3,7 @@
 package scrollback
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -451,8 +452,8 @@ func cellsToStyledText(cells []uv.Cell) string {
 
 	// Find last non-space cell
 	lastContent := -1
-	for i := len(cells) - 1; i >= 0; i-- {
-		c := string(cells[i].Content)
+	for i, cell := range slices.Backward(cells) {
+		c := string(cell.Content)
 		if c != "" && strings.TrimSpace(c) != "" {
 			lastContent = i
 			break

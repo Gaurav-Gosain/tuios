@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -172,7 +171,8 @@ func highlight(line string, th *sketch.Theme) string {
 		c := rs[i]
 		switch {
 		case c == '%' && i+1 < len(rs) && rs[i+1] == '%':
-			b.WriteString(muted + string(rs[i:]))
+			b.WriteString(muted)
+			b.WriteString(string(rs[i:]))
 			i = len(rs)
 		case c == '"':
 			j := i + 1
@@ -180,17 +180,21 @@ func highlight(line string, th *sketch.Theme) string {
 				j++
 			}
 			j = min(j+1, len(rs))
-			b.WriteString(str + string(rs[i:j]))
+			b.WriteString(str)
+			b.WriteString(string(rs[i:j]))
 			i = j
 		case c == '|':
 			label = !label
-			b.WriteString(muted + "|")
+			b.WriteString(muted)
+			b.WriteString("|")
 			i++
 		case label:
-			b.WriteString(str + string(c))
+			b.WriteString(str)
+			b.WriteString(string(c))
 			i++
 		case c >= '0' && c <= '9':
-			b.WriteString(num + string(c))
+			b.WriteString(num)
+			b.WriteString(string(c))
 			i++
 		case c == '_' || c == '-' && i+1 < len(rs) && (rs[i+1] >= 'a' && rs[i+1] <= 'z') || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
 			j := i
@@ -200,16 +204,20 @@ func highlight(line string, th *sketch.Theme) string {
 			j = max(j, i+1)
 			word := string(rs[i:j])
 			if slices.Contains(mermaidKeywords, word) {
-				b.WriteString(key + word)
+				b.WriteString(key)
+				b.WriteString(word)
 			} else {
-				b.WriteString(fg + word)
+				b.WriteString(fg)
+				b.WriteString(word)
 			}
 			i = j
 		case strings.ContainsRune("-.=<>[](){}:;,&|", c):
-			b.WriteString(muted + string(c))
+			b.WriteString(muted)
+			b.WriteString(string(c))
 			i++
 		default:
-			b.WriteString(fg + string(c))
+			b.WriteString(fg)
+			b.WriteString(string(c))
 			i++
 		}
 	}
@@ -235,7 +243,7 @@ func (s *liveScreen) showTyped(src string, caret int, draw string, typed bool) {
 	s.live.Show(draw)
 	st := s.name
 	if err := s.live.Err(); err != nil && !typed {
-		msg := strings.SplitN(err.Error(), "\n", 2)[0]
+		msg, _, _ := strings.Cut(err.Error(), "\n")
 		st = "!" + s.name + "  " + msg
 	} else if s.kitty {
 		st += "  live"
@@ -634,7 +642,7 @@ func printFrameStats(w io.Writer, stats []mermaid.FrameStat) {
 			return 0
 		}
 		s := slices.Clone(d)
-		sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+		slices.Sort(s)
 		return s[min(len(s)-1, int(float64(len(s))*p))]
 	}
 	fmt.Fprintf(w, "frames: %d in motion, %d final\n", len(draw), finals)

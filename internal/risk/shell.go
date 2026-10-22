@@ -328,7 +328,8 @@ func splitSegments(text string, nested *[]string) []segment {
 		}
 		var scope strings.Builder
 		for _, g := range groups {
-			scope.WriteString("/g" + g)
+			scope.WriteString("/g")
+			scope.WriteString(g)
 		}
 		out = append(out, segment{text: cur.String(), piped: piped, subst: subst, scope: scope.String()})
 		cur.Reset()

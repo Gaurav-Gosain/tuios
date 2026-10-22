@@ -583,8 +583,8 @@ func KeyLabel(key string) string {
 	}
 	parts := strings.Split(key, "+")
 	// "ctrl++" is ctrl and the plus key.
-	if strings.HasSuffix(key, "++") {
-		parts = append(strings.Split(strings.TrimSuffix(key, "++"), "+"), "+")
+	if before, ok := strings.CutSuffix(key, "++"); ok {
+		parts = append(strings.Split(before, "+"), "+")
 	}
 	for i, p := range parts {
 		if name, ok := keyNames[strings.ToLower(p)]; ok {

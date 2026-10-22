@@ -48,7 +48,12 @@ func cardPanel(s Snapshot, o Options, pal overlay.Palette, w int) overlay.Panel 
 	value := ink(bg, pal.Fg)
 
 	var b strings.Builder
-	line := func(parts ...string) { b.WriteString(strings.Join(parts, "") + "\n") }
+	line := func(parts ...string) {
+		for _, p := range parts {
+			b.WriteString(p)
+		}
+		b.WriteString("\n")
+	}
 
 	r := s.Result
 	title := "run held"

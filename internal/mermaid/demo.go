@@ -1,6 +1,7 @@
 package mermaid
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -218,12 +219,13 @@ func Balanced(src string) string {
 			stack = stack[:len(stack)-1]
 		}
 	}
-	out := src
+	var out strings.Builder
+	out.WriteString(src)
 	if quote {
-		out += `"`
+		out.WriteString(`"`)
 	}
-	for i := len(stack) - 1; i >= 0; i-- {
-		out += string(stack[i])
+	for _, s := range slices.Backward(stack) {
+		out.WriteString(string(s))
 	}
-	return out
+	return out.String()
 }

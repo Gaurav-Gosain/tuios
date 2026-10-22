@@ -325,8 +325,7 @@ func (e *tomlEdit) remove(path []string) {
 	for {
 		d := e.scan()
 		done := true
-		for h := len(d.headers) - 1; h >= 0; h-- {
-			hd := d.headers[h]
+		for h, hd := range slices.Backward(d.headers) {
 			if len(hd.path) >= len(path) && slices.Equal(hd.path[:len(path)], path) {
 				e.cut(hd.line, e.lastCode(hd.line+1, d.blockEnd(e, h)))
 				done = false
@@ -336,8 +335,7 @@ func (e *tomlEdit) remove(path []string) {
 		if !done {
 			continue
 		}
-		for i := len(d.keys) - 1; i >= 0; i-- {
-			k := d.keys[i]
+		for _, k := range slices.Backward(d.keys) {
 			if !k.inArray && len(k.path) >= len(path) && slices.Equal(k.path[:len(path)], path) {
 				e.cut(k.start, k.end)
 				done = false
@@ -415,8 +413,7 @@ func (e *tomlEdit) dropEmptyTables() {
 	for {
 		d := e.scan()
 		removed := false
-		for h := len(d.headers) - 1; h >= 0; h-- {
-			hd := d.headers[h]
+		for h, hd := range slices.Backward(d.headers) {
 			if hd.array {
 				continue
 			}

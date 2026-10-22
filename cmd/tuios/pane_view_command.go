@@ -408,8 +408,7 @@ func (v *paneView) reconnect() error {
 		if _, err = v.connect(); err == nil {
 			return nil
 		}
-		var perm *errPaneViewPermanent
-		if errors.As(err, &perm) {
+		if _, ok := errors.AsType[*errPaneViewPermanent](err); ok {
 			return err
 		}
 	}

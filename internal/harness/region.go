@@ -2,6 +2,7 @@ package harness
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -136,8 +137,8 @@ func isBoxBorder(line string) bool {
 // last two border lines. ok is false when the tail holds fewer than two.
 func promptBox(tail []string) (top, bottom int, ok bool) {
 	bottom = -1
-	for i := len(tail) - 1; i >= 0; i-- {
-		if !isBoxBorder(tail[i]) {
+	for i, t := range slices.Backward(tail) {
+		if !isBoxBorder(t) {
 			continue
 		}
 		if bottom < 0 {
@@ -192,8 +193,8 @@ func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 		}
 		return 0, 0, false
 	case RegionAfterLastRule:
-		for i := len(tail) - 1; i >= 0; i-- {
-			if isBoxBorder(tail[i]) {
+		for i, t := range slices.Backward(tail) {
+			if isBoxBorder(t) {
 				return i + 1, len(tail), true
 			}
 		}
@@ -343,16 +344,16 @@ func dialogBoxes(lines []string) []dialogBox {
 		grid[i] = cells(l)
 	}
 	var out []dialogBox
-	for top := len(grid) - 1; top >= 0; top-- {
-		for left, r := range grid[top] {
+	for top, g := range slices.Backward(grid) {
+		for left, r := range g {
 			if !strings.ContainsRune(dialogTopLeft, r) {
 				continue
 			}
 			right := left + 1
-			for right < len(grid[top]) && !strings.ContainsRune(dialogTopRight, grid[top][right]) {
+			for right < len(g) && !strings.ContainsRune(dialogTopRight, g[right]) {
 				right++
 			}
-			if right >= len(grid[top]) {
+			if right >= len(g) {
 				continue
 			}
 			for row := top + 1; row < len(grid) && row-top < maxDialogLines; row++ {

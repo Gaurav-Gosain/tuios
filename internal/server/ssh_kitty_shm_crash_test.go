@@ -82,7 +82,7 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 		// has to vary to stay a flood, which is exactly what a live stream does.
 		const buffers = 4
 		var script strings.Builder
-		script.WriteString("(for i in $(seq 0 " + fmt.Sprint(shape.frames-1) + "); do case $((i % " + fmt.Sprint(buffers) + ")) in\n")
+		fmt.Fprintf(&script, "(for i in $(seq 0 %d); do case $((i %% %d)) in\n", shape.frames-1, buffers)
 		for b := range buffers {
 			shmName := fmt.Sprintf("tuios-crash-%d-%d-%d", os.Getpid(), si, b)
 			shmPath := "/dev/shm/" + shmName

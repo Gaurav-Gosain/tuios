@@ -82,11 +82,21 @@ func unifiedHunks(ops []diffOp) string {
 		for _, op := range ops[start:i] {
 			switch op.Op {
 			case '-':
-				b.WriteString(red + "-" + op.Line + reset + "\r\n")
+				b.WriteString(red)
+				b.WriteString("-")
+				b.WriteString(op.Line)
+				b.WriteString(reset)
+				b.WriteString("\r\n")
 			case '+':
-				b.WriteString(green + "+" + op.Line + reset + "\r\n")
+				b.WriteString(green)
+				b.WriteString("+")
+				b.WriteString(op.Line)
+				b.WriteString(reset)
+				b.WriteString("\r\n")
 			default:
-				b.WriteString(" " + op.Line + "\r\n")
+				b.WriteString(" ")
+				b.WriteString(op.Line)
+				b.WriteString("\r\n")
 			}
 		}
 	}

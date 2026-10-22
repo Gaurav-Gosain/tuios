@@ -151,7 +151,9 @@ func (r *renderer) event(ev Event) string {
 					b.WriteString("\n")
 				}
 				if part != "" {
-					b.WriteString(sgrDim + part + sgrReset)
+					b.WriteString(sgrDim)
+					b.WriteString(part)
+					b.WriteString(sgrReset)
 				}
 			}
 		} else {
@@ -235,7 +237,11 @@ func (r *renderer) planBlock(b *strings.Builder, p Plan) {
 		case "in_progress":
 			mark = "[>]"
 		}
-		s.WriteString("  " + mark + " " + oneLine(e.Content) + "\n")
+		s.WriteString("  ")
+		s.WriteString(mark)
+		s.WriteString(" ")
+		s.WriteString(oneLine(e.Content))
+		s.WriteString("\n")
 	}
 	if s.String() == r.plan {
 		return
@@ -250,9 +256,16 @@ func (r *renderer) prompt(text string) string {
 	r.lineStart(&b)
 	b.WriteString("\n")
 	lines := strings.Split(clean(text), "\n")
-	b.WriteString(sgrBold + "you" + sgrReset + "  " + lines[0] + "\n")
+	b.WriteString(sgrBold)
+	b.WriteString("you")
+	b.WriteString(sgrReset)
+	b.WriteString("  ")
+	b.WriteString(lines[0])
+	b.WriteString("\n")
 	for _, l := range lines[1:] {
-		b.WriteString("     " + l + "\n")
+		b.WriteString("     ")
+		b.WriteString(l)
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 	r.thought = false
@@ -265,28 +278,48 @@ func (r *renderer) permission(p *Permission) string {
 	var b strings.Builder
 	r.lineStart(&b)
 	r.thought = false
-	b.WriteString("\n" + sgrBold + sgrYellow + "permission" + sgrReset + " " + toolLabel(p.Tool) + "\n")
+	b.WriteString("\n")
+	b.WriteString(sgrBold)
+	b.WriteString(sgrYellow)
+	b.WriteString("permission")
+	b.WriteString(sgrReset)
+	b.WriteString(" ")
+	b.WriteString(toolLabel(p.Tool))
+	b.WriteString("\n")
 	if d := oneLine(p.Detail); d != "" {
-		b.WriteString("  " + d + "\n")
+		b.WriteString("  ")
+		b.WriteString(d)
+		b.WriteString("\n")
 	}
 	if reason := oneLine(p.Reason); reason != "" {
-		b.WriteString("  reason: " + reason + "\n")
+		b.WriteString("  reason: ")
+		b.WriteString(reason)
+		b.WriteString("\n")
 	}
 	// Input the title does not show is shown under it, so the pane shows the
 	// whole call even when the Inbox cannot.
 	for _, k := range slices.Sorted(maps.Keys(p.Tool.Input)) {
 		if v := p.Tool.Input[k]; v != "" && !strings.Contains(p.Tool.Title, v) {
-			b.WriteString("  " + oneLine(k) + ": " + oneLine(v) + "\n")
+			b.WriteString("  ")
+			b.WriteString(oneLine(k))
+			b.WriteString(": ")
+			b.WriteString(oneLine(v))
+			b.WriteString("\n")
 		}
 	}
 	if p.Tool.Text != "" {
-		b.WriteString(sgrDim + indentLines(clipLines(clean(p.Tool.Text), maxToolText)) + sgrReset + "\n")
+		b.WriteString(sgrDim)
+		b.WriteString(indentLines(clipLines(clean(p.Tool.Text), maxToolText)))
+		b.WriteString(sgrReset)
+		b.WriteString("\n")
 	}
 	if len(p.Tool.Diffs) > 0 {
 		b.WriteString(renderDiffs(p.Tool.Diffs))
 		r.tools[p.Tool.ID] = toolShown{status: r.tools[p.Tool.ID].status, diffs: diffKey(p.Tool.Diffs)}
 	}
-	b.WriteString("  " + optionKeys(p) + "\n")
+	b.WriteString("  ")
+	b.WriteString(optionKeys(p))
+	b.WriteString("\n")
 	return b.String()
 }
 

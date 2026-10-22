@@ -220,7 +220,7 @@ func runShell(t *TTY) int {
 	s := &shell{t: t, cwd: Home}
 	t.laid, _ = t.Size()
 	greeting := []string{bold + "tuios" + reset, dim + "web" + reset, dim + "shell." + reset, dim + "Type" + reset, bold + "help" + reset}
-	for _, w := range strings.Fields("to see what it can do.") {
+	for w := range strings.FieldsSeq("to see what it can do.") {
 		greeting = append(greeting, dim+w+reset)
 	}
 	t.Lay(func(cols int) []string { return wrapTokens(greeting, cols) })
@@ -310,7 +310,9 @@ func (s *shell) redraw() {
 	b.WriteString(s.promptText())
 	b.WriteString(s.highlighted())
 	if back := len(s.line) - s.cursor; back > 0 {
-		b.WriteString("\x1b[" + strconv.Itoa(back) + "D")
+		b.WriteString("\x1b[")
+		b.WriteString(strconv.Itoa(back))
+		b.WriteString("D")
 	}
 	s.t.write(b.String())
 }
@@ -337,9 +339,12 @@ func (s *shell) highlighted() string {
 		if runnable(word) {
 			colour = green
 		}
-		b.WriteString(colour + word + reset)
+		b.WriteString(colour)
+		b.WriteString(word)
+		b.WriteString(reset)
 		if found {
-			b.WriteString(" " + tail)
+			b.WriteString(" ")
+			b.WriteString(tail)
 		}
 	}
 	return b.String()

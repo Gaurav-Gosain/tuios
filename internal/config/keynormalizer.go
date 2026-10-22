@@ -64,8 +64,8 @@ func splitKeyChord(lower string) (mods []string, base string, ok bool) {
 		return nil, "+", true
 	}
 	var rest string
-	if strings.HasSuffix(lower, "++") {
-		base, rest = "+", strings.TrimSuffix(lower, "++")
+	if before, cut := strings.CutSuffix(lower, "++"); cut {
+		base, rest = "+", before
 	} else {
 		i := strings.LastIndex(lower, "+")
 		if i < 0 {
@@ -77,10 +77,8 @@ func splitKeyChord(lower string) (mods []string, base string, ok bool) {
 		return nil, "", false
 	}
 	mods = strings.Split(rest, "+")
-	for _, m := range mods {
-		if m == "" {
-			return nil, "", false
-		}
+	if slices.Contains(mods, "") {
+		return nil, "", false
 	}
 	return mods, base, true
 }

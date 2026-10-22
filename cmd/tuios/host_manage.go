@@ -642,7 +642,8 @@ func describeConfigApplied(raw []byte) string {
 		b.WriteString("Nothing changed.\n")
 	}
 	for _, c := range res.Changes {
-		b.WriteString(plainLine(c) + "\n")
+		b.WriteString(plainLine(c))
+		b.WriteString("\n")
 	}
 	grants := "no grants"
 	if len(res.DefaultGrants) > 0 {
@@ -652,7 +653,9 @@ func describeConfigApplied(raw []byte) string {
 	if len(res.DroppedKeys) > 0 {
 		fmt.Fprintf(&b, "tuios cannot read %s:\n", plural.CountAs(len(res.DroppedKeys), "key", "keys"))
 		for _, d := range res.DroppedKeys {
-			b.WriteString("  " + plainLine(d) + "\n")
+			b.WriteString("  ")
+			b.WriteString(plainLine(d))
+			b.WriteString("\n")
 		}
 	}
 	return b.String()

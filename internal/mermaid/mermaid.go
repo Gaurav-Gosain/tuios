@@ -158,9 +158,15 @@ func Kitty(w io.Writer, png []byte, cols int) error {
 		}
 		b.WriteString("\x1b_G")
 		if i == 0 {
-			b.WriteString("a=T,f=100,q=2,c=" + strconv.Itoa(cols) + ",")
+			b.WriteString("a=T,f=100,q=2,c=")
+			b.WriteString(strconv.Itoa(cols))
+			b.WriteString(",")
 		}
-		b.WriteString("m=" + strconv.Itoa(more) + ";" + enc[i:end] + "\x1b\\")
+		b.WriteString("m=")
+		b.WriteString(strconv.Itoa(more))
+		b.WriteString(";")
+		b.WriteString(enc[i:end])
+		b.WriteString("\x1b\\")
 	}
 	b.WriteString("\r\n")
 	_, err := w.Write(b.Bytes())
