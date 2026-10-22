@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"slices"
 	"strconv"
 	"sync/atomic"
 )
@@ -821,9 +822,9 @@ func (s *gfxScanner) spanEnd(from int64) (end int64, closed bool) {
 	if s.spanOpen && s.spanFrom == from {
 		return 0, false
 	}
-	for i := len(s.spans) - 1; i >= 0; i-- {
-		if s.spans[i][0] == from {
-			return s.spans[i][1], true
+	for _, v := range slices.Backward(s.spans) {
+		if v[0] == from {
+			return v[1], true
 		}
 	}
 	// Pruned: it ended before the ring's start, so long ago.

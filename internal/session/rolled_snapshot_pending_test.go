@@ -75,7 +75,7 @@ func TestRolledSnapshotCatchUpDropsThePendingSequence(t *testing.T) {
 	}
 
 	client.Write(replay)
-	if top := strings.SplitN(client.Text(), "\n", 2)[0]; !strings.HasPrefix(top, header) {
+	if top, _, _ := strings.Cut(client.Text(), "\n"); !strings.HasPrefix(top, header) {
 		t.Errorf("the client's top row is %q, want %q: the snapshot's cut sequence was joined to the ring's first bytes", strings.TrimRight(top, " "), header)
 	}
 }

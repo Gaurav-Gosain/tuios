@@ -192,8 +192,8 @@ func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) 
 			return true
 		})
 		p.terminalMu.RUnlock()
-		for i := len(chunk) - 1; i >= 0; i-- {
-			if !fn(lo+dropped+i, chunk[i]) {
+		for i, c := range slices.Backward(chunk) {
+			if !fn(lo+dropped+i, c) {
 				return bottom, true
 			}
 		}
@@ -375,8 +375,7 @@ func (d *Daemon) verbCommandHistory(_ *connState, params json.RawMessage) (any, 
 			origin = pane.pty.marks.Trimmed()
 		}
 		seen := map[string]bool{}
-		for i := len(records) - 1; i >= 0; i-- {
-			r := records[i]
+		for _, r := range slices.Backward(records) {
 			if seen[r.Cmdline] {
 				continue
 			}

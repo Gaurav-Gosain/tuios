@@ -4002,8 +4002,8 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 		// The width the replay begins at. A client resumed here is usually at
 		// it already and skips it; a rolled client, whose screen the resync
 		// below clears, is not.
-		for i := len(p.resizeMarks) - 1; i >= 0; i-- {
-			if m := p.resizeMarks[i]; m.seq <= startSeq {
+		for _, m := range slices.Backward(p.resizeMarks) {
+			if m.seq <= startSeq {
 				send(ptyChunk{width: m.width, height: m.height})
 				break
 			}

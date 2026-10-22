@@ -43,7 +43,7 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantEvents: []string{EventPrompt, EventCommandStarted, EventCommandFinished, EventPrompt},
 			wantPrompt: true,
 			wantSeq:    1,
-			wantExit:   intPtr(2),
+			wantExit:   new(2),
 			wantLast:   "make test",
 		},
 		{
@@ -71,7 +71,7 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantEvents: []string{EventCommandStarted, EventCommandFinished},
 			wantPrompt: true,
 			wantSeq:    1,
-			wantExit:   intPtr(0),
+			wantExit:   new(0),
 			wantLast:   "true",
 		},
 		{
@@ -83,7 +83,7 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantEvents: []string{EventPrompt, EventCommandStarted, EventCommandFinished},
 			wantPrompt: true,
 			wantSeq:    1,
-			wantExit:   intPtr(0),
+			wantExit:   new(0),
 			wantLast:   "make",
 		},
 		{
@@ -92,7 +92,7 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantEvents: []string{EventCommandStarted, EventCommandFinished},
 			wantPrompt: true,
 			wantSeq:    1,
-			wantExit:   intPtr(0),
+			wantExit:   new(0),
 			wantLast:   "curl -H 'token=[redacted]' x",
 		},
 	}

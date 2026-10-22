@@ -175,8 +175,7 @@ func (d *Daemon) verbDropFiles(cs *connState, params json.RawMessage) (any, *ver
 		err := fileEnd{d: d, host: p.Host}.call(ctx, "file-drop-dir", map[string]any{"bytes": total}, &out)
 		cancel()
 		if err != nil {
-			var ve *VerbCallError
-			if errors.As(err, &ve) {
+			if ve, ok := errors.AsType[*VerbCallError](err); ok {
 				return nil, newVerbError(ve.Code, ve.Message)
 			}
 			return nil, newVerbError(ErrVerbHostUnreachable, err.Error())

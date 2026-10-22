@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -631,20 +632,17 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	var te *transferError
-	if errors.As(err, &te) {
+	if _, ok := errors.AsType[*transferError](err); ok {
 		return err
 	}
-	var ve *VerbCallError
-	if errors.As(err, &ve) {
+	if ve, ok := errors.AsType[*VerbCallError](err); ok {
 		switch ve.Code {
 		case ErrVerbHostUnreachable, ErrVerbHostRefused, ErrVerbBusy, ErrVerbTooManyConnections:
 			return &transferError{code: ve.Code, msg: ve.Message, retry: true}
 		}
 		return &transferError{code: ve.Code, msg: ve.Message}
 	}
-	var pe *fs.PathError
-	if errors.As(err, &pe) {
+	if pe, ok := errors.AsType[*fs.PathError](err); ok {
 		v := fileError("copy", pe.Path, err)
 		return &transferError{code: v.Code, msg: v.Message}
 	}
@@ -1318,11 +1316,11 @@ func removeMoved(ctx context.Context, src fileEnd, root string, entries []WalkEn
 		}
 	}
 	left := false
-	for i := len(entries) - 1; i >= 0; i-- {
-		if !entries[i].Dir {
+	for _, e := range slices.Backward(entries) {
+		if !e.Dir {
 			continue
 		}
-		if err := src.remove(ctx, joinRemote(root, entries[i].Rel), false); err != nil && !gone(err) {
+		if err := src.remove(ctx, joinRemote(root, e.Rel), false); err != nil && !gone(err) {
 			if ctx.Err() != nil {
 				return false, ctx.Err()
 			}
@@ -1981,8 +1979,7 @@ func (d *Daemon) verbTransferStart(cs *connState, params json.RawMessage) (any, 
 		st, err := d.transfers.end(probe, p.Dst.Host).stat(ctx, p.Dst.Path)
 		cancel()
 		if err != nil {
-			var ve *VerbCallError
-			if errors.As(err, &ve) {
+			if ve, ok := errors.AsType[*VerbCallError](err); ok {
 				return nil, newVerbError(ve.Code, ve.Message)
 			}
 			return nil, newVerbError(ErrVerbHostUnreachable, err.Error())

@@ -100,8 +100,7 @@ func (d *Daemon) verbHostSpeedTest(_ *connState, params json.RawMessage) (any, *
 	ctx, cancel := context.WithTimeout(d.ctx, 10*time.Minute)
 	defer cancel()
 	fail := func(err error) *verbError {
-		var ve *VerbCallError
-		if errors.As(err, &ve) {
+		if ve, ok := errors.AsType[*VerbCallError](err); ok {
 			return newVerbError(ve.Code, ve.Message)
 		}
 		return newVerbError(ErrVerbHostUnreachable, p.Host+": "+err.Error())

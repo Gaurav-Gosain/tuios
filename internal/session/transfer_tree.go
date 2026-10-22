@@ -203,8 +203,7 @@ func sendTreeFile(d *Daemon, acc access, bw *bufio.Writer, p string, req treeReq
 	}
 	n, rerr := io.CopyBuffer(w, body, buf)
 	if rerr != nil {
-		var pe *fs.PathError
-		if !errors.As(rerr, &pe) {
+		if _, ok := errors.AsType[*fs.PathError](rerr); !ok {
 			// Not the file: the stream it writes to.
 			return rerr
 		}

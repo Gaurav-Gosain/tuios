@@ -137,7 +137,7 @@ func (d *Daemon) herdrAgentRename(cs *connState, in *herdrIn) (*herdrResult, *he
 		}
 	}
 	args := herdrWin(sess, win.ID)
-	args.Name = ptr(in.Name)
+	args.Name = new(in.Name)
 	if _, herr := d.herdrVerb(cs, "set-window", args, "agent_rename_failed"); herr != nil {
 		return nil, herr
 	}
@@ -372,7 +372,7 @@ func herdrClientTitle(clear bool) func(*Daemon, *connState, *herdrIn) (*herdrRes
 			sess = d.herdrFocusedSession(d.herdrSessions(cs))
 		}
 		if sess == nil || d.findTUIClient(sess.ID) == nil {
-			return &herdrResult{Type: "client_window_title", Changed: ptr(false), Reason: "no_foreground_client"}, nil
+			return &herdrResult{Type: "client_window_title", Changed: new(false), Reason: "no_foreground_client"}, nil
 		}
 		if herr := d.herdrAdmit(cs, "run-command", sess); herr != nil {
 			return nil, herr
