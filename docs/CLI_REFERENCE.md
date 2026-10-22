@@ -271,6 +271,13 @@ tuios look apply tuios.dev/r/<id>
 tuios look apply https://example.com/my.look.toml
 tuios look apply ./my.look.toml
 
+# Choose a look from the gallery list, and apply it
+tuios look pick
+
+# List the gallery looks: id, name and author
+tuios look list
+tuios look list --json
+
 # Show the look in use
 tuios look show
 
@@ -306,6 +313,19 @@ tuios look keys --json
   another file includes. tuios names the file and the keys.
 - A new look replaces the look in use.
 - A config folder that tuios cannot write stops the command.
+
+`tuios look pick` shows the looks of the gallery, each with its name, its
+author and the colours of its theme. `tuios look` with no command does the
+same in a terminal. The command palette has it as "Choose a look", which
+opens it in a new pane.
+
+- Up and down move. Enter applies the look. Esc closes the list.
+- Enter asks the same questions as `tuios look apply`, the take-over question
+  too. `--take-over` answers that question yes.
+- `tuios look list` prints the id, the name and the author of each look.
+  `--json` adds the colours of each theme.
+- The list comes from `tuios.dev/gallery/feed`. When tuios cannot get it, the
+  command says so and exits with an error.
 
 `tuios look remove` deletes `config.d/look.toml` and the theme and glyph set
 that the look installed. Use `--yes` to skip the question. After a take-over,

@@ -17,10 +17,10 @@ func TestResolveLookSource(t *testing.T) {
 		in, where, err string
 		remote         bool
 	}{
-		{in: "tuios.dev/r/abc-1", where: lookGallery + "abc-1.toml", remote: true},
-		{in: "https://tuios.dev/r/abc-1", where: lookGallery + "abc-1.toml", remote: true},
-		{in: "https://tuios.dev/r/abc-1.toml", where: lookGallery + "abc-1.toml", remote: true},
-		{in: "abc-1", where: lookGallery + "abc-1.toml", remote: true},
+		{in: "tuios.dev/r/abc-1", where: lookGalleryURL("abc-1"), remote: true},
+		{in: "https://tuios.dev/r/abc-1", where: lookGalleryURL("abc-1"), remote: true},
+		{in: "https://tuios.dev/r/abc-1.toml", where: lookGalleryURL("abc-1"), remote: true},
+		{in: "abc-1", where: lookGalleryURL("abc-1"), remote: true},
 		{in: "https://example.com/a.toml", where: "https://example.com/a.toml", remote: true},
 		{in: "./mine.toml", where: "./mine.toml"},
 		{in: "tokyo", where: "tokyo"}, // a file of that name wins over the id

@@ -8244,3 +8244,14 @@ take-over, each on its own scratch config. Run on 2026-10-22.
 | A file that changed while tuios asked stops the command | the compare in `configWrites` cut | `TestLookTakeOverKeepsLaterEdits/edit_during_the_question` ("the take-over did not stop on the edit") | **caught** |
 | A remove with look.toml gone still puts the values back | `runLookRemove` stops with "No look is applied" when there is no look file | `TestLookTakeOverKeepsLaterEdits/look_file_deleted_by_hand` ("the remove did not put config.toml back") | **caught** |
 | A second look gives back the keys the first took and it does not set | the apply's restore skips every key | `TestLookTakeOverKeepsLaterEdits/second_look_over_a_take-over` ("the second look did not give the theme back to config.toml") | **caught** |
+| look remove puts the saved values back | `remove` in `internal/config/look.go` skips `Restore.write` | `TestLookTakeOverAndRemove` ("look remove did not put config.toml back byte for byte") | **caught** |
+
+## Look list and picker
+
+`TestLookPickAppliesAGalleryLook` serves a fake gallery feed on a loopback
+address through `TUIOS_LOOK_GALLERY`, runs `tuios look list`, and picks the
+second look with `tuios look pick`. Run on 2026-10-22.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Enter applies the look under the cursor | the picker's Enter chooses row 0 | `TestLookPickAppliesAGalleryLook` (Alpha goes in, so the take-over question for Beta's border never comes) | **caught** |

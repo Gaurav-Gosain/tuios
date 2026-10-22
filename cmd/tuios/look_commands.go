@@ -19,10 +19,6 @@ import (
 	"golang.org/x/term"
 )
 
-// lookGallery is where a gallery id resolves: tuios.dev/r/<id> serves the
-// look as <id>.toml.
-const lookGallery = "https://tuios.dev/r/"
-
 // lookFetchTimeout bounds a look download, start to end.
 const lookFetchTimeout = 15 * time.Second
 
@@ -37,7 +33,17 @@ borders, gaps, dock and rail style. The tuios.dev gallery shares looks.
 tuios writes a look to config.d/look.toml, its own file. config.toml wins over
 it, so a key you set in config.toml hides the look's value. A take-over lets
 the look set those keys. tuios saves your values, and "tuios look remove" puts
-them back. A look may set only look keys. "tuios look keys" lists them.`,
+them back. A look may set only look keys. "tuios look keys" lists them.
+
+"tuios look" with no command, in a terminal, shows the gallery looks to choose
+from, as "tuios look pick" does.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+				return cmd.Help()
+			}
+			return runLookPick(cmd.OutOrStdout(), false)
+		},
 	}
 
 	var applyYes, applyTakeOver bool
@@ -115,7 +121,53 @@ take-over keeps your newer value, and tuios names it.`,
 	}
 	keysCmd.Flags().BoolVar(&keysJSON, "json", false, "Print the keys and their types as JSON")
 
-	lookCmd.AddCommand(applyCmd, removeCmd, showCmd, keysCmd)
+	var listJSON bool
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List the looks in the tuios.dev gallery",
+		Long: `List the looks in the tuios.dev gallery: the id, the name and the author of
+each look. Give the id to "tuios look apply".`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			looks, err := fetchLookList()
+			if err != nil {
+				return err
+			}
+			return printLookList(cmd.OutOrStdout(), looks, listJSON)
+		},
+	}
+	listCmd.Flags().BoolVar(&listJSON, "json", false, "Print the looks as JSON, with the colours of each theme")
+
+	var pickTakeOver, pickHold bool
+	pickCmd := &cobra.Command{
+		Use:   "pick",
+		Short: "Choose a look from the tuios.dev gallery and apply it",
+		Long: `Show the looks in the tuios.dev gallery, each with its name, its author and
+the colours of its theme. Up and down move. Enter applies the look, with the
+same questions as "tuios look apply". Esc closes the list.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !term.IsTerminal(int(os.Stdin.Fd())) {
+				return errors.New("tuios look pick needs a terminal. Use tuios look list and tuios look apply")
+			}
+			err := runLookPick(cmd.OutOrStdout(), pickTakeOver)
+			if pickHold {
+				// The pane the palette opens closes with the program, so the
+				// result stays until the person has read it.
+				if err != nil {
+					fmt.Fprintln(cmd.OutOrStdout(), "Error:", err)
+				}
+				fmt.Fprint(cmd.OutOrStdout(), "\nPress Enter to close.")
+				_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+			}
+			return err
+		},
+	}
+	pickCmd.Flags().BoolVar(&pickTakeOver, "take-over", false, "Let the look set the keys a later file sets, and save your values")
+	pickCmd.Flags().BoolVar(&pickHold, "hold", false, "Wait for Enter before the command ends")
+	_ = pickCmd.Flags().MarkHidden("hold")
+
+	lookCmd.AddCommand(applyCmd, removeCmd, showCmd, keysCmd, listCmd, pickCmd)
 	return lookCmd
 }
 
@@ -485,7 +537,7 @@ func resolveLookSource(source string, exists func(string) bool) (lookSource, err
 		if !validGalleryID(id) {
 			return lookSource{}, fmt.Errorf("%q is not a gallery id", id)
 		}
-		return lookSource{remote: true, where: lookGallery + id + ".toml"}, nil
+		return lookSource{remote: true, where: lookGalleryURL(id)}, nil
 	case strings.HasPrefix(s, "https://"):
 		u, err := url.Parse(s)
 		if err != nil || u.Host == "" {
@@ -497,7 +549,7 @@ func resolveLookSource(source string, exists func(string) bool) (lookSource, err
 	case exists(s):
 		return lookSource{where: s}, nil
 	case validGalleryID(s):
-		return lookSource{remote: true, where: lookGallery + s + ".toml"}, nil
+		return lookSource{remote: true, where: lookGalleryURL(s)}, nil
 	}
 	return lookSource{}, fmt.Errorf("%s is not a file, an https URL or a gallery id", s)
 }

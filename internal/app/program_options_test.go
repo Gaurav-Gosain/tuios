@@ -58,8 +58,9 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			// browse are not clients. They draw no panes, run their own small
 			// model, and keep Bubble Tea's signal handler, so a kill still
 			// gives the terminal back. ProgramOptions removes that handler,
-			// because a client's command owns its signals.
-			if path == "internal/explore/explore.go" {
+			// because a client's command owns its signals. The look list of
+			// tuios look pick is the same kind of program.
+			if path == "internal/explore/explore.go" || path == "cmd/tuios/look_pick.go" {
 				return
 			}
 			sites++

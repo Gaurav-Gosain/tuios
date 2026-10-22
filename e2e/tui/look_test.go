@@ -1,10 +1,16 @@
 package tuie2e
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"tuios.dev/shot"
 )
 
 // TestLookTakeOverAndRemove drives `tuios look apply` against a config whose
@@ -123,6 +129,7 @@ border_unfocused_color = "#553300"
 	prompt := cli.Snapshot()
 	transcript.WriteString("--- the take-over on a terminal\n" + prompt + "\n")
 	saveArtifact(t, cli, artifactDir(t), "take-over-prompt")
+	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "take-over-prompt")
 	if !strings.Contains(prompt, "cannot change config.d/zz-locked.toml") {
 		t.Fatalf("ASSERTION: the take-over did not name the read-only file that keeps its key:\n%s", prompt)
 	}
@@ -339,4 +346,163 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 			t.Fatalf("ASSERTION: the remove of the second look did not put border_style back:\n%s", got)
 		}
 	})
+}
+// galleryFeedLook is one look the fake gallery serves: the feed entry and the
+// look file, which the real gallery serves from the same text.
+type galleryFeedLook struct{ id, title, login, text string }
+
+// fakeGallery serves a gallery feed and its looks on a loopback address, the
+// way tuios.dev serves /gallery/feed and /r/<id>.toml. It records each path
+// asked for.
+func fakeGallery(t *testing.T, looks []galleryFeedLook) (*httptest.Server, *sync.Map) {
+	t.Helper()
+	type file struct {
+		Label string `json:"label"`
+		Text  string `json:"text"`
+	}
+	type entry struct {
+		ID    string            `json:"id"`
+		Login string            `json:"login"`
+		Title string            `json:"title"`
+		Files []file            `json:"files"`
+		Look  map[string]string `json:"look"`
+	}
+	feed := struct {
+		Version int     `json:"version"`
+		Updated string  `json:"updated"`
+		Entries []entry `json:"entries"`
+	}{Version: 1, Updated: "2026-10-22T00:00:00Z"}
+	byPath := map[string]string{}
+	for _, l := range looks {
+		feed.Entries = append(feed.Entries, entry{ID: l.id, Login: l.login, Title: l.title,
+			Files: []file{{Label: "toml", Text: l.text}}, Look: map[string]string{"id": l.id}})
+		byPath["/r/"+l.id+".toml"] = l.text
+	}
+	// An entry with no look is a screenshot alone. The list leaves it out.
+	feed.Entries = append(feed.Entries, entry{ID: "999", Login: "someone", Title: "Just a picture"})
+	feedJSON, err := json.Marshal(feed)
+	if err != nil {
+		t.Fatalf("encode the feed: %v", err)
+	}
+	hits := &sync.Map{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Store(r.URL.Path, true)
+		if r.URL.Path == "/gallery/feed" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(feedJSON)
+			return
+		}
+		if text, ok := byPath[r.URL.Path]; ok {
+			_, _ = w.Write([]byte(text))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, hits
+}
+
+// TestLookPickAppliesAGalleryLook serves a fake gallery and drives the look
+// list: `tuios look list` names each look, a gallery that does not answer is
+// one sentence and a failed exit, and `tuios look pick` on a terminal applies
+// the look the person moves to, through the same questions as apply.
+//
+// How this could pass wrongly, written down first:
+//   - The pick could apply the first look whatever the cursor says. The test
+//     moves to the second look, and only the second sets a rounded border.
+//   - The look could come from somewhere other than the gallery. The test
+//     checks the server served the second look's file.
+func TestLookPickAppliesAGalleryLook(t *testing.T) {
+	base := t.TempDir()
+	useShippedLooks(base)
+	writeConfig(t, base, "[appearance]\nborder_style = \"double\"\n")
+	alpha := "look = 1\nname = \"Alpha\"\n\n[appearance]\ngap = 1\n"
+	beta := `look = 1
+name = "Beta"
+
+[appearance]
+border_style = "rounded"
+
+[theme]
+id = "beta"
+bg = "#101820"
+fg = "#f2aa4c"
+red = "#e05050"
+green = "#50e050"
+blue = "#5050e0"
+`
+	srv, hits := fakeGallery(t, []galleryFeedLook{
+		{id: "101", title: "Alpha", login: "ann", text: alpha},
+		{id: "202", title: "Beta", login: "bob", text: beta},
+	})
+	env := []string{"TUIOS_LOOK_GALLERY=" + srv.URL}
+
+	out, err := tuiosCLIEnv(t, base, env, "look", "list")
+	if err != nil {
+		t.Fatalf("tuios look list: %v\n%s", err, out)
+	}
+	for _, want := range []string{"101", "Alpha", "ann", "202", "Beta", "bob"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("ASSERTION: look list does not show %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Just a picture") {
+		t.Fatalf("ASSERTION: look list shows an entry with no look:\n%s", out)
+	}
+	asJSON, err := tuiosCLIEnv(t, base, env, "look", "list", "--json")
+	var listed []struct {
+		ID, Name, Author string
+		Colors           []string
+	}
+	if err != nil || json.Unmarshal([]byte(asJSON), &listed) != nil || len(listed) != 2 ||
+		listed[1].Name != "Beta" || len(listed[1].Colors) != 5 || listed[1].Colors[0] != "#101820" {
+		t.Fatalf("ASSERTION: look list --json is not the two looks with Beta's colours: %v\n%s", err, asJSON)
+	}
+
+	offline, err := tuiosCLIEnv(t, base, []string{"TUIOS_LOOK_GALLERY=http://127.0.0.1:1"}, "look", "list")
+	if err == nil || strings.Count(strings.TrimSpace(offline), "\n") != 0 || !strings.Contains(offline, "cannot get the look list") {
+		t.Fatalf("ASSERTION: with no gallery, look list did not fail with one sentence: %v\n%s", err, offline)
+	}
+
+	cli := startIn(t, base, startOpts{cols: 100, rows: 30, shippedLooks: true, animations: true, env: env,
+		args: []string{"look", "pick"}})
+	if err := cli.WaitForText("Choose a look", uiTimeout); err != nil {
+		t.Fatalf("the look list is not on screen: %v\n%s", err, cli.Snapshot())
+	}
+	if err := cli.Type("j"); err != nil {
+		t.Fatalf("move down: %v", err)
+	}
+	if err := cli.WaitForText("2 of 2", uiTimeout); err != nil {
+		t.Fatalf("the cursor did not move to Beta: %v\n%s", err, cli.Snapshot())
+	}
+	saveArtifact(t, cli, artifactDir(t), "look-pick")
+	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "look-pick")
+	if err := cli.Type("\r"); err != nil {
+		t.Fatalf("choose Beta: %v", err)
+	}
+	for _, q := range []string{"Apply this look? [y/N]", "Let the look set these keys?"} {
+		if err := cli.WaitForText(q, uiTimeout); err != nil {
+			t.Fatalf("the question %q is not on screen: %v\n%s", q, err, cli.Snapshot())
+		}
+		if err := cli.Type("y\r"); err != nil {
+			t.Fatalf("answer %q: %v", q, err)
+		}
+	}
+	if err := cli.WaitForText("The look is applied", uiTimeout); err != nil {
+		t.Fatalf("the pick did not apply the look: %v\n%s", err, cli.Snapshot())
+	}
+	saveArtifact(t, cli, artifactDir(t), "look-pick-applied")
+	savePNG(t, cli.Screen(), shot.XTermPalette(), artifactDir(t), "look-pick-applied")
+	if _, ok := hits.Load("/r/202.toml"); !ok {
+		t.Fatal("ASSERTION: tuios did not download Beta's look file from the gallery")
+	}
+	show, err := tuiosCLI(t, base, "look", "show")
+	if err != nil || !strings.Contains(show, "Beta") || !strings.Contains(show, "look-beta") {
+		t.Fatalf("ASSERTION: look show does not name Beta and its theme: %v\n%s", err, show)
+	}
+	origin, err := tuiosCLI(t, base, "config", "origin", "appearance.border_style")
+	if err != nil || !originLine(origin, "appearance.border_style", "look.toml") {
+		t.Fatalf("ASSERTION: border_style does not come from the look after the take-over: %v\n%s", err, origin)
+	}
+	saveSyncArtifact(t, "look-pick-transcript.txt", out+"\n"+asJSON+"\n"+offline+"\n--- the pick\n"+cli.Snapshot()+"\n--- look show\n"+show)
 }
