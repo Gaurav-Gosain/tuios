@@ -8079,3 +8079,35 @@ run each:
 | The prompt rule holds a plugin | the `needs_input` check skipped for plugins | `TestNativePluginApproval` ("prompt exited 0, want x") | **caught** |
 | A plugin with no approval does not run | `applyApproval` lets a plugin with no approval through | `TestNativePluginApproval` ("plugins list does not say the plugin waits") | **caught** |
 | Only the person answers | `herdrPluginTrust` cut from `plugin.approve` | `TestNativePluginApproval` ("a pane answered for the person (exit 0)") | **caught** |
+
+### After the review of #1006
+
+The review found that the plugin token never bound, that Tab then Enter in
+the dialog allowed a plugin, that `approve` asked one daemon only, and that
+the submit key of `send-text` was not checked. New tests:
+`TestPluginTokenHoldsTheCaller`, `TestPluginApprovalAsksEveryDaemon`,
+`TestPluginApprovalDialogFits`, the unit test
+`TestPluginApprovalTakesOnlyTheTypedWord` (internal/app) and
+`TestThePluginTokenHoldsTheCaller` (internal/session), and new cases in
+`TestNativePluginApproval`: Up, Up, Enter, Tab, Enter in the dialog,
+`send-keys`, `run`, `send-text` with submit into a pane that comes to a
+prompt during the paste, `queue-prompt`, an answer for an old trust hash,
+and an Allow without admin.
+
+Run on 2026-10-22, one change each, one run each:
+
+| Claim | Control | Test that failed | Result |
+|---|---|---|---|
+| A process with a plugin's token is the plugin on the herdr socket | `bindPeerPluginToken` returns at once | `TestPluginTokenHoldsTheCaller` ("disable over the herdr socket with the token: <nil>") | **caught** |
+| `pane-grants` takes the plugin token | `plugin_id` and `plugin_token` dropped from the verb's parameters | `TestPluginTokenHoldsTheCaller` ("read, which the plugin holds ... exit status 1") | **caught** |
+| No key on a row allows | Enter on the Allow row allows | `TestNativePluginApproval` ("Enter on Allow did not ask for the word") | **caught** |
+| Keys as the dialog opens answer nothing | `pluginApprovalSettled` always true | `TestPluginApprovalTakesOnlyTheTypedWord` ("keys in the first half second answered the dialog") | **caught** |
+| `approve` asks every daemon first | `confirmPerson` cut from `approve` | `TestPluginApprovalAsksEveryDaemon` ("a pane approved a plugin", "a pane wrote an approval") | **caught** |
+| The submit key is checked again | the submit guard of `send-text` returns nil | `TestNativePluginApproval` ("submit exited 0", "the submit key answered the prompt") | **caught** |
+| A long name cannot push the answers off | `ShownName` keeps the name whole and the title line wraps | `TestPluginApprovalDialogFits` ("the dialog lost \"Not now\" on a 24-row screen") | **caught** |
+| A shadowed copy is not asked about | the shadow filter in `pluginAsksOf` cut | `TestPluginApprovalDialogFits` ("the dialog asks about the shadowed copy") | **caught** |
+| A plugin cannot queue | the queue refusal in `checkPluginGrants` cut | `TestNativePluginApproval` ("queue.out lacks \"a plugin cannot queue\"") | **caught** |
+
+The title-wrap control alone, with `ShownName` still cutting the name, was
+not caught: the cut to 64 characters already keeps the dialog on screen.
+
