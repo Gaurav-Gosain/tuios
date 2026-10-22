@@ -202,6 +202,70 @@ builds:
     flags:
       - -trimpath
 
+  # The command-line tools of the Go libraries in this repository. Each is a
+  # package of its library's module, so it builds in the library's folder
+  # with that module's own requirements, as `go install
+  # tuios.dev/<library>/cmd/<tool>@latest` does. tuios does not import them.
+  - id: sketch
+    dir: sketch
+    main: ./cmd/sketch
+    binary: sketch
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
+  - id: tplot
+    dir: plot
+    main: ./cmd/tplot
+    binary: tplot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
+  - id: tml
+    dir: loom
+    main: ./cmd/tml
+    binary: tml
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
 archives:
   - id: tuios-archive
     name_template: >-
@@ -262,6 +326,56 @@ archives:
         dst: licenses/sketch/LICENSE
       - src: sketch/raster/fonts/NOTICE
         dst: licenses/sketch/NOTICE
+
+
+  - id: sketch-archive
+    name_template: >-
+      sketch_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    ids:
+      - sketch
+    files:
+      - src: sketch/README.md
+        dst: README.md
+      # sketch is a port of pele (MIT) and draws its pictures in Arimo
+      # (SIL OFL 1.1) and Go Mono. Both licences travel with the binary.
+      - src: sketch/LICENSE
+        dst: LICENSE
+      - src: sketch/raster/fonts/NOTICE
+        dst: NOTICE
+
+  - id: tplot-archive
+    name_template: >-
+      tplot_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    ids:
+      - tplot
+    files:
+      - src: plot/README.md
+        dst: README.md
+      - src: plot/LICENSE
+        dst: LICENSE
+
+  - id: tml-archive
+    name_template: >-
+      tml_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    ids:
+      - tml
+    files:
+      - src: loom/README.md
+        dst: README.md
+      - src: loom/LICENSE
+        dst: LICENSE
 
 
 checksum:
@@ -365,6 +479,64 @@ aurs:
       # documentation
       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
 
+  - name: tuios-sketch-bin
+    ids:
+      - sketch-archive
+    homepage: https://tuios.dev
+    description: "Draw Mermaid diagrams in the terminal, or as SVG or PNG"
+    maintainers:
+      - "Gaurav Gosain <itsgauravgosain@gmail.com>"
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/tuios-sketch-bin.git"
+    provides:
+      - sketch
+    conflicts:
+      - sketch
+    package: |
+      install -Dm755 "./sketch" "${pkgdir}/usr/bin/sketch"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+      install -Dm644 "./NOTICE" "${pkgdir}/usr/share/licenses/${pkgname}/NOTICE"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+
+  - name: tuios-plot-bin
+    ids:
+      - tplot-archive
+    homepage: https://tuios.dev
+    description: "Draw charts in the terminal from CSV, TSV or JSON"
+    maintainers:
+      - "Gaurav Gosain <itsgauravgosain@gmail.com>"
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/tuios-plot-bin.git"
+    provides:
+      - tplot
+    conflicts:
+      - tplot
+    package: |
+      install -Dm755 "./tplot" "${pkgdir}/usr/bin/tplot"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+
+  - name: tuios-tml-bin
+    ids:
+      - tml-archive
+    homepage: https://tuios.dev
+    description: "Show TML documents in the terminal"
+    maintainers:
+      - "Gaurav Gosain <itsgauravgosain@gmail.com>"
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/tuios-tml-bin.git"
+    provides:
+      - tml
+    conflicts:
+      - tml
+    package: |
+      install -Dm755 "./tml" "${pkgdir}/usr/bin/tml"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+
 # Homebrew tap (using casks for pre-compiled binaries)
 homebrew_casks:
   # Deprecated. homebrew-core has a `tuios` formula, which `brew install tuios`
@@ -464,6 +636,75 @@ homebrew_casks:
       postflight_steps do
         on_macos do
           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tuios-web"]
+        end
+      end
+
+  # The library tools. The cask names carry a tuios- prefix: homebrew-cask
+  # already has a sketch cask, so a bare name would be ambiguous. The
+  # binaries keep their short names.
+  - name: tuios-sketch
+    ids:
+      - sketch-archive
+    repository:
+      owner: Gaurav-Gosain
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://tuios.dev
+    description: "Draw Mermaid diagrams in the terminal, or as SVG or PNG"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for tuios-sketch version {{ .Tag }}"
+    binaries:
+      - sketch
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/sketch"]
+        end
+      end
+
+  - name: tuios-plot
+    ids:
+      - tplot-archive
+    repository:
+      owner: Gaurav-Gosain
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://tuios.dev
+    description: "Draw charts in the terminal from CSV, TSV or JSON"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for tuios-plot version {{ .Tag }}"
+    binaries:
+      - tplot
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tplot"]
+        end
+      end
+
+  - name: tuios-tml
+    ids:
+      - tml-archive
+    repository:
+      owner: Gaurav-Gosain
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://tuios.dev
+    description: "Show TML documents in the terminal"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for tuios-tml version {{ .Tag }}"
+    binaries:
+      - tml
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tml"]
         end
       end
 
