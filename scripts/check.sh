@@ -297,29 +297,47 @@ check_fix() {
 # gopls also type-checks each file under other platforms (js/wasm, windows,
 # freebsd/386) and tags those diagnostics with the platform. Many of them are
 # files no release builds there, so only the host's diagnostics fail the gate.
-# The rest go to gopls-other-platforms.log. A full run reads every Go file, which takes
-# minutes, so both modes read the files the branch changed against $base.
+# The rest go to gopls-other-platforms.log. A full run reads every Go file,
+# which takes minutes, so both modes read the files the branch changed against
+# $base. Like lint, it fails only on the lines the branch added; the findings
+# on older lines of those files go to gopls-old-lines.log.
 check_gopls() {
-	local files=() out host f
-	if [ "$changed" = 0 ]; then
-		if merge_base=$(git merge-base "$base" HEAD 2>/dev/null); then
-			while IFS= read -r f; do
-				[ -f "$f" ] && files+=("$f")
-			done < <({
-				git diff --name-only --diff-filter=d "$merge_base" -- '*.go'
-				git ls-files --others --exclude-standard '*.go'
-			} | sort -u)
-		fi
-	else
-		files=("${changed_go[@]}")
+	local files=() out host f mb=${merge_base:-}
+	if [ -z "$mb" ]; then
+		mb=$(git merge-base "$base" HEAD 2>/dev/null) || return 0
 	fi
+	while IFS= read -r f; do
+		[ -f "$f" ] && files+=("$f")
+	done < <({
+		git diff --name-only --diff-filter=d "$mb" -- '*.go'
+		git ls-files --others --exclude-standard '*.go'
+	} | sort -u)
 	[ ${#files[@]} -eq 0 ] && return 0
 	out=$($GOPLS check "${files[@]}" 2>&1 | grep -v '^go: downloading ')
 	[ -z "$out" ] && return 0
-	host=$(grep -v $'^\t' <<<"$out" | grep -v ' \[[a-z0-9,]*\]$')
 	grep ' \[[a-z0-9,]*\]$' <<<"$out" >"$log_dir/gopls-other-platforms.log"
+	host=$(grep -v $'^\t' <<<"$out" | grep -v ' \[[a-z0-9,]*\]$' | sed "s|^$root/||")
 	[ -z "$host" ] && return 0
-	echo "$host"
+	# added prints "file:line" for every line the branch added or changed.
+	added() {
+		local f
+		for f in "${files[@]}"; do
+			if git ls-files --error-unmatch "$f" >/dev/null 2>&1 && git cat-file -e "$mb:$f" 2>/dev/null; then
+				git diff -U0 "$mb" -- "$f" | awk -v f="$f" '
+					/^@@/ {
+						split($3, a, ","); start = substr(a[1], 2); n = (a[2] == "") ? 1 : a[2]
+						for (i = 0; i < n; i++) print f ":" start + i
+					}'
+			else
+				awk -v f="$f" '{ print f ":" NR }' "$f"
+			fi
+		done
+	}
+	local new
+	new=$(awk -F: 'NR == FNR { seen[$1 ":" $2] = 1; next } ($1 ":" $2) in seen' <(added) <(echo "$host"))
+	awk -F: 'NR == FNR { seen[$1 ":" $2] = 1; next } !(($1 ":" $2) in seen)' <(added) <(echo "$host") >"$log_dir/gopls-old-lines.log"
+	[ -z "$new" ] && return 0
+	echo "$new"
 	return 1
 }
 
