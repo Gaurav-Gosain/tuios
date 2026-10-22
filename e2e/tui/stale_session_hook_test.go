@@ -16,8 +16,9 @@ import (
 // other way (a daemon restart, a handoff from a build that did not carry it).
 // The real `tuios agent-hook claude-code` runs inside the pane and names alpha
 // and the pane's own id: its UserPromptSubmit must set the pane in omega to
-// working. The same call from outside the pane must still be refused with
-// session_not_found, since only a pane may be followed to itself.
+// working. The same call from outside the pane, and from a second pane in
+// omega with its own token, must still be refused with session_not_found,
+// since only a pane may be followed to itself.
 //
 // NEGATIVE CONTROL (NEGATIVE_CONTROLS.md, "A pane whose session name is
 // gone"): with followOwnPane cut from admitVerb, it fails at "the hook did not
@@ -67,10 +68,31 @@ func TestHookFromPaneWhoseSessionNameIsGone(t *testing.T) {
 	outside, err := tuiosCLI(t, base, "call", "set-agent-state", string(raw))
 	art.add("set-agent-state from outside", map[string]any{"session": "alpha", "window": win}, nil, outside)
 	if err == nil || !strings.Contains(outside, "session_not_found") {
-		t.Fatalf("ASSERTION: a call from outside the pane naming the gone session was not refused: %v\n%s", err, outside)
+		t.Errorf("ASSERTION: a call from outside the pane naming the gone session was not refused: %v\n%s", err, outside)
 	}
 	if s := state(); s == "working" {
-		t.Fatalf("ASSERTION: a call from outside the pane set the pane to %q", s)
+		t.Errorf("ASSERTION: a call from outside the pane set the pane to %q", s)
+	}
+
+	other := must("new-window", map[string]any{"session": "omega", "name": "other"})
+	otherWin, _ := other["window_id"].(string)
+	if otherWin == "" {
+		t.Fatalf("new-window gave no window_id: %v", other)
+	}
+	fromOther := tuiosBin + " call set-agent-state '" + string(raw) + "' 2>&1; echo OTHER-DONE-$((40+2))\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "omega", "-w", otherWin, fromOther); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	otherContent := waitMoveCapture(t, call, "omega", otherWin, "OTHER-DONE-42")
+	art.add("set-agent-state from a second pane", map[string]any{"session": "alpha", "window": win, "from": otherWin}, map[string]any{"content": otherContent}, "")
+	if !strings.Contains(otherContent, "session_not_found") {
+		t.Errorf("ASSERTION: a call from a second pane naming the gone session and the first pane was not refused:\n%s", otherContent)
+	}
+	if s := state(); s == "working" {
+		t.Errorf("ASSERTION: a call from a second pane set the first pane to %q", s)
+	}
+	if t.Failed() {
+		t.FailNow()
 	}
 
 	payload := `{"hook_event_name":"UserPromptSubmit","session_id":"gone-hook","prompt":"keep going"}`
