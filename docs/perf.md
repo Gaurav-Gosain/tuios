@@ -3271,6 +3271,13 @@ it measured 45,973,666 and 42,707,986 bytes (Go 1.26.10, as CI builds it). The
 change measured 46,063,778 and 42,774,930, so it adds 90,112 and 66,944 bytes.
 No dependency was added. The new budgets leave 4,198 bytes of room.
 
+The budgets went to 46,141,704 and 42,845,784 when sketch began to draw
+$$...$$ math labels through a host resolver, as pele v1.8.0 does. The build
+before it measured 46,063,778 and 42,774,930 bytes (Go 1.26.10, as CI builds
+it). The change measured 46,137,506 and 42,841,586, so it adds 73,728 and
+66,656 bytes. No dependency was added. The new budgets leave 4,198 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
