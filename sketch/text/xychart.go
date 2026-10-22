@@ -54,7 +54,29 @@ func canvasRole(r plot.Role) uint8 {
 			return seriesRole(i)
 		}
 	}
+	switch r {
+	case plot.None, plot.Fg:
+		return roleText
+	}
 	return roleLine
+}
+
+// paste copies a grid of tuios.dev/plot into the canvas from x0, y0: each
+// cell's text, its role and its ground.
+func (c *canvas) paste(g *plot.Grid, x0, y0 int) {
+	for y := 0; y < g.H; y++ {
+		for x := 0; x < g.W; x++ {
+			cell := g.At(x, y)
+			if cell.Text == "" || cell.Text == " " {
+				continue
+			}
+			bg := uint8(roleNone)
+			if cell.Bg != plot.None {
+				bg = canvasRole(cell.Bg)
+			}
+			c.putBg(x0+x, y0+y, []rune(cell.Text)[0], canvasRole(cell.Role), bg)
+		}
+	}
 }
 
 // xyLegend is the legend in lines of at most w cells: a mark in the colour of

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tuios.dev/plot"
 	"tuios.dev/sketch"
 	"tuios.dev/sketch/internal/types"
 )
@@ -54,14 +55,12 @@ func radarFraction(r *types.GeoRadar, v float64) float64 {
 	return (math.Min(math.Max(v, r.Min), r.Max) - r.Min) / (r.Max - r.Min)
 }
 
-// radarPolar draws the chart in braille dots.
+// radarPolar draws the chart with tuios.dev/plot's radar, in braille dots,
+// with the legend under it.
 func radarPolar(r *types.GeoRadar, opt Options) (*canvas, error) {
-	n := len(r.Axes)
 	labelW := 0
-	labels := make([]string, n)
-	for i, a := range r.Axes {
-		labels[i] = fit(a, 20)
-		labelW = max(labelW, width(labels[i]))
+	for _, a := range r.Axes {
+		labelW = max(labelW, min(width(a), 20))
 	}
 	// The chart is 15 rows tall, 17 when there are columns to spare, and
 	// down to 9 when they are few. Its width in cells is what makes it
@@ -70,14 +69,9 @@ func radarPolar(r *types.GeoRadar, opt Options) (*canvas, error) {
 	if opt.Cols == 0 || opt.Cols >= 110 {
 		rows = 17
 	}
-	size := func(rows int) (w int, rho float64) {
-		// rho is the radius in cell widths, a dot short of the edge.
-		rho = (float64(rows)/2 - 0.25) * pieAspect
-		return 2*int(math.Ceil(rho)) + 1, rho
-	}
 	total := func(rows int) int {
-		w, _ := size(rows)
-		return labelW + 2 + w + 2 + labelW
+		rho := (float64(rows)/2 - 0.25) * pieAspect
+		return labelW + 2 + 2*int(math.Ceil(rho)) + 1 + 2 + labelW
 	}
 	if opt.Cols > 0 {
 		for rows > 9 && total(rows) > opt.Cols {
@@ -87,83 +81,23 @@ func radarPolar(r *types.GeoRadar, opt Options) (*canvas, error) {
 			return nil, ErrTooWide
 		}
 	}
-	pw, rho := size(rows)
-	// The plot sits under a row for the labels of the top, with a row
-	// under it for the labels of the bottom, and the legend under that.
-	px, py := labelW+2, 1
-	legend := radarLegend(r, total(rows))
-	h := py + rows + 1 + 1 + len(legend)
-	c, err := newCanvas(total(rows), h)
-	if err != nil {
-		return nil, err
+	w := total(rows)
+	series := make([]plot.Series, len(r.Curves))
+	for k, curve := range r.Curves {
+		series[k] = plot.Series{Name: curve.Label, Values: curve.Values, Role: plot.SeriesRole(k)}
 	}
-	// In dots: a dot is half a cell wide and a quarter of a cell tall.
-	cx, cy := float64(pw), float64(rows)*2
-	at := func(angle, f float64) (int, int) {
-		x := cx + math.Cos(angle)*f*rho*2
-		y := cy + math.Sin(angle)*f*rho*4/pieAspect
-		return int(math.Round(x)), int(math.Round(y))
-	}
-	angle := func(i int) float64 { return -math.Pi/2 + 2*math.Pi*float64(i)/float64(n) }
-	d := newDotGrid(pw, rows)
-	grid := d.layer(roleFrame)
 	ticks := r.Ticks
 	if ticks <= 0 {
 		ticks = 1
 	}
-	for t := 1; t <= ticks; t++ {
-		f := float64(t) / float64(ticks)
-		if r.Polygon {
-			for i := 0; i < n; i++ {
-				x0, y0 := at(angle(i), f)
-				x1, y1 := at(angle(i+1), f)
-				d.line(grid, x0, y0, x1, y1, 2)
-			}
-			continue
-		}
-		steps := int(f*rho*12) + 12
-		for k := 0; k < steps; k += 2 {
-			x, y := at(2*math.Pi*float64(k)/float64(steps), f)
-			d.set(grid, x, y)
-		}
+	g := plot.Radar{Axes: r.Axes, Series: series, Min: r.Min, Max: r.Max, Rings: ticks, Polygon: r.Polygon, Aspect: pieAspect}.Draw(w, rows+2, plot.Braille)
+	legend := radarLegend(r, w)
+	h := g.H + 1 + len(legend)
+	c, err := newCanvas(w, h)
+	if err != nil {
+		return nil, err
 	}
-	spokes := d.layer(roleFrame)
-	for i := 0; i < n; i++ {
-		x, y := at(angle(i), 1)
-		d.line(spokes, int(cx), int(cy), x, y, 2)
-	}
-	for k, curve := range r.Curves {
-		l := d.layer(seriesRole(k))
-		for i := 0; i < n; i++ {
-			x0, y0 := at(angle(i), radarFraction(r, value(curve.Values, i)))
-			x1, y1 := at(angle(i+1), radarFraction(r, value(curve.Values, (i+1)%n)))
-			d.line(l, x0, y0, x1, y1, 1)
-			// A point at each value, two dots across.
-			d.set(l, x0+1, y0)
-		}
-	}
-	// The labels first, so that the dots keep out of them.
-	for i, s := range labels {
-		a := angle(i)
-		ux, uy := math.Cos(a), math.Sin(a)
-		// The anchor, in cells, a cell past the rim.
-		ax := float64(px) + float64(pw)/2 + ux*(rho+1.5)
-		ay := float64(py) + float64(rows)/2 + uy*(rho+0.6)/pieAspect
-		y := int(math.Floor(ay))
-		y = min(max(y, 0), py+rows)
-		var x int
-		switch {
-		case math.Abs(ux) < 0.25:
-			x = int(math.Round(ax - float64(width(s))/2))
-		case ux > 0:
-			x = int(math.Round(ax))
-		default:
-			x = int(math.Round(ax)) - width(s)
-		}
-		x = min(max(x, 0), c.w-width(s))
-		c.text(x, y, s, roleHead)
-	}
-	d.paint(c, px, py)
+	c.paste(g, 0, 0)
 	for i, line := range legend {
 		for _, it := range line {
 			y := h - len(legend) + i
