@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/db.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/flowchart/db.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package flowchart
 
@@ -253,8 +253,10 @@ func (db *FlowDb) AddVertex(id string, textObj *FlowText, typ *string, style []s
 	if dir != nil {
 		vertex.Dir = *dir
 	}
+	// pele writes props ?? {}; a nil map reads as an empty one.
 	if vertex.Props == nil {
 		vertex.Props = props
+
 	} else {
 		for k, v := range props {
 			vertex.Props[k] = v
@@ -371,14 +373,14 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 		}
 	}
 	pair := start + "\x00" + end
+	count := db.pairCount[pair]
 	if _, taken := db.edgeById[id]; id != "" && !taken {
 		edge.ID = id
 		edge.IsUserDefinedId = true
 	} else {
-		existing := db.pairCount[pair]
 		n := 0
-		if existing != 0 {
-			n = existing + 1
+		if count != 0 {
+			n = count + 1
 		}
 		edge.ID = "L_" + start + "_" + end + "_" + strconv.Itoa(n)
 	}
@@ -387,7 +389,7 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 		throwFlow("Edge limit exceeded. "+strconv.Itoa(len(db.Edges))+" edges found, but the limit is "+strconv.Itoa(max)+".", types.CodeLimit)
 	}
 	db.Edges = append(db.Edges, edge)
-	db.pairCount[pair]++
+	db.pairCount[pair] = count + 1
 	if _, ok := db.edgeById[edge.ID]; !ok {
 		db.edgeById[edge.ID] = edge
 	}

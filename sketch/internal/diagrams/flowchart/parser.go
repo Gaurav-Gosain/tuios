@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/parser.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/flowchart/parser.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package flowchart
 
@@ -395,7 +395,7 @@ func parseFlowchart(source string, db *FlowDb) {
 		return nil
 	}
 
-	vertexStatement := func() []string {
+	vertexStatement := func(collect bool) []string {
 		stmt := node()
 		if pendingData != nil {
 			addData(stmt[len(stmt)-1], *pendingData)
@@ -412,7 +412,9 @@ func parseFlowchart(source string, db *FlowDb) {
 				addData(next[len(next)-1], *pendingData)
 			}
 			db.AddLink(stmt, next, info)
-			nodes = append(append([]string{}, next...), nodes...)
+			if collect {
+				nodes = append(append([]string{}, next...), nodes...)
+			}
 			stmt = next
 		}
 	}
@@ -547,7 +549,7 @@ func parseFlowchart(source string, db *FlowDb) {
 	}
 
 	// statement returns the item it adds to an open subgraph's list, and false for none.
-	statement := func() (DocItem, bool) {
+	statement := func(collect bool) (DocItem, bool) {
 		t := typesT[i]
 		switch t {
 		case T_STYLE:
@@ -604,7 +606,7 @@ func parseFlowchart(source string, db *FlowDb) {
 			if ID[t] == 0 {
 				fail(STATEMENT_START)
 			}
-			nodes := vertexStatement()
+			nodes := vertexStatement(collect)
 			separator()
 			return DocItem{IsList: true, List: nodes}, len(nodes) > 0
 		}
@@ -646,7 +648,8 @@ func parseFlowchart(source string, db *FlowDb) {
 				list = nil
 				collect = true
 			} else {
-				item, some := statement()
+				item, some := statement(collect)
+
 				if collect && some {
 					list = append(list, item)
 				}

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/graph.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/flowchart/graph.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 package flowchart
 
@@ -117,11 +117,11 @@ func buildFlowGraph(model *FlowDb, defaultCurve string) FlowGraph {
 			if !ok {
 				continue
 			}
-			if def.Styles != nil {
-				out = trimAll(append(out, def.Styles...))
+			for _, s := range def.Styles {
+				out = append(out, js.Trim(s))
 			}
-			if def.TextStyles != nil {
-				out = trimAll(append(out, def.TextStyles...))
+			for _, s := range def.TextStyles {
+				out = append(out, js.Trim(s))
 			}
 		}
 		return out
@@ -323,7 +323,6 @@ func buildFlowGraph(model *FlowDb, defaultCurve string) FlowGraph {
 			Shape:             shape,
 		}
 		nodes = append(nodes, node)
-		byID[vertex.ID] = node
 	}
 
 	for index, raw := range model.Edges {
@@ -388,14 +387,6 @@ func buildFlowGraph(model *FlowDb, defaultCurve string) FlowGraph {
 	}
 
 	return FlowGraph{Nodes: nodes, Edges: edges}
-}
-
-func trimAll(list []string) []string {
-	out := make([]string, len(list))
-	for i, s := range list {
-		out[i] = js.Trim(s)
-	}
-	return out
 }
 
 func firstNonEmpty(list ...string) string {

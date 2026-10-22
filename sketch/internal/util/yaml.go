@@ -1,4 +1,4 @@
-// Ported from pele src/util/yaml.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/util/yaml.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // pele throws; the port panics with yamlError or incomplete and ParseYaml
 // recovers them into an error.
@@ -38,7 +38,10 @@ type reader struct {
 var reCRLFYaml = lazyre.New(`\r\n?`)
 
 func newReader(src string) *reader {
-	return &reader{lines: strings.Split(reCRLFYaml.ReplaceAllString(src, "\n"), "\n")}
+	if strings.Contains(src, "\r") {
+		src = reCRLFYaml.ReplaceAllString(src, "\n")
+	}
+	return &reader{lines: strings.Split(src, "\n")}
 }
 
 func (r *reader) skipBlank() {
@@ -170,8 +173,8 @@ func scalar(raw string) YamlValue {
 	case "false", "False", "FALSE":
 		return false
 	}
-	// Every number pattern below starts with a sign, a dot or a digit.
-	if !strings.ContainsRune("+-.0123456789", rune(s[0])) {
+	c := s[0]
+	if c != '-' && c != '+' && c != '.' && (c < '0' || c > '9') {
 		return s
 	}
 	if reInt.MatchString(s) || reFloat.MatchString(s) {
@@ -255,7 +258,11 @@ func fold(text string) string {
 }
 
 func unquoteDouble(body string) string {
+	if !strings.Contains(body, `\`) {
+		return fold(body)
+	}
 	var out strings.Builder
+
 	s := fold(reEscNL.ReplaceAllString(body, ""))
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
