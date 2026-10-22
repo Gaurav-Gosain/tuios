@@ -85,7 +85,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 	// Running down, the two columns share the width the host has.
 	room := math.Inf(1)
 	if vertical && options.MaxWidth != nil && *options.MaxWidth > 0 {
-		room = *options.MaxWidth - 2*pad
+		room = *options.MaxWidth - float64(2*pad)
 	}
 	const taken = AXIS + SPINE*2 + 4*PAD_X
 	periodText := math.Min(MIN_TEXT, math.Max(80, js.Round((room-taken)*0.38)))
@@ -368,7 +368,7 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 		height = bottom + pad
 	}
 
-	totalWidth := math.Ceil(width + 2*pad)
+	totalWidth := math.Ceil(width + float64(2*pad))
 	totalHeight := math.Ceil(math.Max(height, pad*2))
 	var geometry *types.Geometry
 	if options.Geometry != nil {

@@ -133,7 +133,7 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 		label := text.LayoutLabel(axes[i].label, false, measurer, small, 4000, 0)
 		at := float64(radius*labelFactor) + 6
 		// Each label hangs off its axis on the side away from the center.
-		cx := u.x * at
+		cx := float64(u.x * at)
 		if u.x > 0.01 {
 			cx += label.Width / 2
 		} else if u.x < -0.01 {
@@ -141,7 +141,7 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 		} else {
 			cx += 0
 		}
-		cy := u.y * at
+		cy := float64(u.y * at)
 		if u.y > 0.01 {
 			cy += label.Height / 2
 		} else if u.y < -0.01 {
@@ -191,7 +191,7 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 	for _, label := range legend {
 		legendWidth = math.Max(legendWidth, label.Width)
 	}
-	legendHeight := float64(len(legend)) * ROW
+	legendHeight := float64(float64(len(legend)) * ROW)
 	legendX := x1 + GAP
 	legendTop := -legendHeight / 2
 	if tight {

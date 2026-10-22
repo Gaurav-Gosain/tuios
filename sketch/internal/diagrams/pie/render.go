@@ -206,23 +206,23 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 		if share == 0 {
 			continue
 		}
-		end := angle + share*math.Pi*2
+		end := angle + float64(float64(share*math.Pi)*2)
 		slices += `<path class="pele-slice" data-id="` + svg.EscText(label) + `" d="` + slice(angle, end, radius, inner) + `" fill="` + svg.SeriesColor(index) + `"/>`
 		mid := (angle + end) / 2
 		txt := js.ToFixed0(share*100) + "%"
 		if narrow[index] {
 			width := measurer.Width(txt, small, 0)
 			at := mid
-			for step := 0; step < 360 && !clear(placedOutside, js.Sin(at)*rim, -js.Cos(at)*rim, width, small); step++ {
+			for step := 0; step < 360 && !clear(placedOutside, float64(js.Sin(at)*rim), float64(-js.Cos(at)*rim), width, small); step++ {
 				at += 2 / rim
 			}
-			x := js.Sin(at) * rim
-			y := -js.Cos(at) * rim
+			x := float64(js.Sin(at) * rim)
+			y := float64(-js.Cos(at) * rim)
 			placedOutside = append(placedOutside, outsideLabel{x, y, width})
-			outside += `<text x="` + num(x) + `" y="` + num(y+small*0.35) + `">` + txt + `</text>`
+			outside += `<text x="` + num(x) + `" y="` + num(y+float64(small*0.35)) + `">` + txt + `</text>`
 		} else {
 			r := radius * textPosition
-			labels += `<text x="` + num(js.Sin(mid)*r) + `" y="` + num(-js.Cos(mid)*r+small*0.35) + `">` + txt + `</text>`
+			labels += `<text x="` + num(js.Sin(mid)*r) + `" y="` + num(float64(-js.Cos(mid)*r)+float64(small*0.35)) + `">` + txt + `</text>`
 		}
 		angle = end
 	}
@@ -258,8 +258,8 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 			`</g>`
 	}
 
-	totalWidth := math.Ceil(width + 2*pad)
-	totalHeight := math.Ceil(height + titleHeight + 2*pad)
+	totalWidth := math.Ceil(width + float64(2*pad))
+	totalHeight := math.Ceil(height + titleHeight + float64(2*pad))
 	translate := `transform="translate(` + num(cx) + `,` + num(cy) + `)"`
 	content := svg.LabelSvg(title, totalWidth/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil) +
 		`<g class="pele-slices" ` + translate + ` stroke="var(--_bg)" stroke-width="1" stroke-linejoin="round">` + slices + `</g>`

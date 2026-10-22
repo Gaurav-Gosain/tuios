@@ -119,7 +119,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			wrap = math.Min(maxNodeWidth, 2000)
 		}
 	}
-	glyph := size * 1.25
+	glyph := float64(size * 1.25)
 
 	nodes := model.nodes
 	n := len(nodes)
@@ -134,7 +134,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 	// An outline has the width the host gives it, less what its level is set in.
 	room := math.Inf(1)
 	if down && options.MaxWidth != nil && *options.MaxWidth > 0 {
-		room = *options.MaxWidth - 2*pad
+		room = *options.MaxWidth - float64(2*pad)
 	}
 	labels := make([]text.Label, n)
 	shapes := make([]string, n)
@@ -153,7 +153,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		if drawn[i] {
 			iconRoom = glyph + ICON_GAP
 		}
-		fit := math.Min(wrap, math.Max(72, room-float64(depth[i])*INDENT-2*TEXT_PAD-iconRoom))
+		fit := math.Min(wrap, math.Max(72, room-float64(float64(depth[i])*INDENT)-2*TEXT_PAD-iconRoom))
 		labels[i] = text.LayoutLabel(node.descr, true, measurer, size, fit, 0)
 		label := labels[i]
 		tw := label.Width
@@ -232,7 +232,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			if i > 0 && parent[i] == 0 {
 				row += ROW_GAP
 			}
-			x[i] = float64(depth[i])*INDENT + w[i]/2
+			x[i] = float64(float64(depth[i])*INDENT) + w[i]/2
 			y[i] = row
 			row += h[i] + ROW_GAP
 		}
@@ -249,7 +249,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		right := 0.0
 		for k := 1; k < count; k++ {
 			right += extent[branches[k-1].id]
-			diff := math.Abs(2*right - total + float64(2*k-count)*BRANCH_GAP_Y)
+			diff := math.Abs(float64(2*right) - total + float64(float64(2*k-count)*BRANCH_GAP_Y))
 			if diff < best {
 				best = diff
 				split = k
@@ -278,7 +278,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 				if i > 0 {
 					gap = GAP_X
 				}
-				x[c] = x[i] + float64(side[c])*(w[i]/2+gap+w[c]/2)
+				x[c] = x[i] + float64(float64(side[c])*(w[i]/2+gap+w[c]/2))
 			}
 		}
 	}
@@ -343,12 +343,12 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			if shapes[p] != "" {
 				inset = svg.ShapeInset(shapes[p], w[p], h[p], from, 0)
 			}
-			x1 := x[p] + dir*(w[p]/2-inset)
+			x1 := x[p] + float64(dir*(w[p]/2-inset))
 			y1 := y[p] + anchor[p]
 			near := cx - (dir*w[i])/2
 			x2 := near
 			if shape != "" {
-				x2 += dir * svg.ShapeInset(shape, w[i], h[i], 4-from, 0)
+				x2 += float64(dir * svg.ShapeInset(shape, w[i], h[i], 4-from, 0))
 			}
 			y2 := top + anchor[i]
 			mid := num((x1 + x2) / 2)
@@ -414,8 +414,8 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		titleHeight = title.Height + 16
 	}
 	width := math.Max(maxX-minX, title.Width)
-	totalWidth := math.Ceil(width + 2*pad)
-	totalHeight := math.Ceil(maxY - minY + titleHeight + 2*pad)
+	totalWidth := math.Ceil(width + float64(2*pad))
+	totalHeight := math.Ceil(maxY - minY + titleHeight + float64(2*pad))
 	content := svg.LabelSvg(title, totalWidth/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil) +
 		`<g transform="translate(` + num(pad-minX+(width-maxX+minX)/2) + `,` + num(pad+titleHeight-minY) + `)">` + g.out + `</g>`
 

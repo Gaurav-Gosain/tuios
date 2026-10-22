@@ -140,7 +140,7 @@ func (p *plot) x(t float64) float64 {
 	if p.scale == 0 {
 		return p.left + p.plotWidth/2
 	}
-	return p.left + (t-p.start)*p.scale
+	return p.left + float64((t-p.start)*p.scale)
 }
 
 func renderGantt(model *GanttDb, config types.Config, options types.RenderOptions) types.Rendered {
@@ -227,8 +227,8 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	acc := svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}
 
 	if !hasPlot {
-		width := math.Ceil(math.Max(title.Width, 1) + 2*pad)
-		height := math.Ceil(math.Max(title.Height, 1) + 2*pad)
+		width := math.Ceil(math.Max(title.Width, 1) + float64(2*pad))
+		height := math.Ceil(math.Max(title.Height, 1) + float64(2*pad))
 		content := svg.LabelSvg(title, width/2, pad+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil)
 		rendered := types.Rendered{SVG: svg.SvgDocument("gantt", width, height, size, options, acc, content), Width: width, Height: height, Links: []types.LinkInfo{}}
 		if options.Geometry != nil {
@@ -287,7 +287,7 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	if hasTopPadding && hasGridStart {
 		gridLead = math.Max(0, math.Min(topPadding-gridStart, plotTop-headHeight))
 	}
-	plotHeight := float64(max(rowCount, 1)) * rowHeight
+	plotHeight := float64(float64(max(rowCount, 1)) * rowHeight)
 	plotBottom := plotTop + plotHeight
 
 	// Bars and where their labels go: inside when they fit, otherwise beside the bar on the side with room.
@@ -368,9 +368,9 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 		lastLabel = label
 		extent = math.Max(extent, lastRight)
 		body := `text-anchor="middle">` + svg.Esc(label) + `</text>`
-		axisBottom.WriteString(`<text x="` + num(tx) + `" y="` + num(bottomY+tickSize*0.35) + `" ` + body)
+		axisBottom.WriteString(`<text x="` + num(tx) + `" y="` + num(bottomY+float64(tickSize*0.35)) + `" ` + body)
 		if topAxis {
-			axisTop.WriteString(`<text x="` + num(tx) + `" y="` + num(topY+tickSize*0.35) + `" ` + body)
+			axisTop.WriteString(`<text x="` + num(tx) + `" y="` + num(topY+float64(tickSize*0.35)) + `" ` + body)
 		}
 	}
 
@@ -404,13 +404,13 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 		vertEnds[line] = cx + label.Width/2
 		extent = math.Max(extent, vertEnds[line])
 		vertLines.WriteString(`<path class="pele-vert" data-id="` + svg.EscText(task.id) + `" d="M` + num(vx) + `,` + num(plotTop-gridLead) + `V` + num(plotBottom) + `"/>`)
-		vertLabels.WriteString(svg.LabelSvg(label, cx, vertTop+float64(line)*vertLine+vertLine/2, ` class="pele-vert-label" data-id="`+svg.EscText(task.id)+`"`, nil))
+		vertLabels.WriteString(svg.LabelSvg(label, cx, vertTop+float64(float64(line)*vertLine)+vertLine/2, ` class="pele-vert-label" data-id="`+svg.EscText(task.id)+`"`, nil))
 	}
 
 	width := math.Ceil(math.Max(extent, pad+title.Width) + pad)
 	vertHeight := 0.0
 	if len(vertEnds) > 0 {
-		vertHeight = 4 + float64(len(vertEnds))*vertLine
+		vertHeight = 4 + float64(float64(len(vertEnds))*vertLine)
 	}
 	height := math.Ceil(plotBottom + tickHeight + vertHeight + pad)
 
@@ -423,7 +423,7 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 			end++
 		}
 		index := categories[section] % sectionStyles
-		y := plotTop + float64(row)*rowHeight
+		y := plotTop + float64(float64(row)*rowHeight)
 		h := float64(end-row) * rowHeight
 		if len(categoryKeys) > 1 || section != "" {
 			fill := "none"
@@ -479,7 +479,7 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	var tasksOut strings.Builder
 	for _, bar := range bars {
 		task := bar.task
-		cy := plotTop + float64(bar.row)*rowHeight + rowHeight/2
+		cy := plotTop + float64(float64(bar.row)*rowHeight) + rowHeight/2
 		state := ""
 		if task.active {
 			state = "active"

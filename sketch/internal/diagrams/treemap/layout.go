@@ -43,12 +43,12 @@ func squarify(boxes []*Box, total, x, y, w, h, gap float64) {
 	for from < len(boxes) {
 		scale := (w * h) / rest
 		side := math.Min(w, h)
-		sum := boxes[from].value * scale
+		sum := float64(boxes[from].value * scale)
 		largest := sum
 		worst := math.Max((side*side*largest)/(sum*sum), (sum*sum)/(side*side*largest))
 		to := from + 1
 		for to < len(boxes) {
-			smallest := boxes[to].value * scale
+			smallest := float64(boxes[to].value * scale)
 			next := sum + smallest
 			ratio := math.Max((side*side*largest)/(next*next), (next*next)/(side*side*smallest))
 			if ratio > worst {

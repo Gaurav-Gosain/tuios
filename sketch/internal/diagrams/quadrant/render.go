@@ -67,7 +67,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		return text.LayoutLabel(t.text, t.typ == "markdown", measurer, fontSize, math.Max(max, 40), 0)
 	}
 
-	title := text.LayoutLabel(model.title, false, measurer, size, math.Max(width-2*outer, 40), text.Bold)
+	title := text.LayoutLabel(model.title, false, measurer, size, math.Max(width-float64(2*outer), 40), text.Bold)
 	titlePad := length(config, "titlePadding", 10, 200)
 	titleSpace := 0.0
 	if title.Height > 0 {
@@ -80,7 +80,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	xBelow := hasPoints || setting(config, "xAxisPosition") == "bottom"
 	yRight := setting(config, "yAxisPosition") == "right"
 
-	side := width - 2*outer
+	side := width - float64(2*outer)
 	xLeftMax := side
 	if model.xAxisRight != nil {
 		xLeftMax = side/2 - 16
@@ -92,7 +92,7 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	if hasX {
 		xSpace = xHeight + xPad
 	}
-	tall := height - 2*outer - titleSpace - xSpace
+	tall := height - float64(2*outer) - titleSpace - xSpace
 	yBottomMax := tall
 	if model.yAxisTop != nil {
 		yBottomMax = tall/2 - 16

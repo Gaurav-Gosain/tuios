@@ -121,11 +121,11 @@ func add(date js.Date, amount float64, unit Unit) js.Date {
 	case "w":
 		return addDays(date, js.Round(7*amount))
 	case "h":
-		return js.NewDate(date.T+amount*3600000, date.Loc)
+		return js.NewDate(date.T+float64(amount*3600000), date.Loc)
 	case "m":
-		return js.NewDate(date.T+amount*60000, date.Loc)
+		return js.NewDate(date.T+float64(amount*60000), date.Loc)
 	case "s":
-		return js.NewDate(date.T+amount*1000, date.Loc)
+		return js.NewDate(date.T+float64(amount*1000), date.Loc)
 	default:
 		return js.NewDate(date.T+amount, date.Loc)
 	}
@@ -144,7 +144,7 @@ func isoWeek(date js.Date) float64 {
 		extra = 7
 	}
 	first := addDays(jan1, 4-weekday+extra)
-	zoneDelta := (utcOffset(first) - utcOffset(thursday)) * 60000
+	zoneDelta := float64((utcOffset(first) - utcOffset(thursday)) * 60000)
 	weeks := (thursday.T - first.T - zoneDelta) / WEEK
 	if weeks < 0 {
 		return js.Or(math.Ceil(weeks), 0) + 1
@@ -410,7 +410,7 @@ func readOffset(fields *Fields, input string) bool {
 		return true
 	}
 	// input is a sign, two digits, maybe a colon, and maybe two digits more.
-	minutes := js.Number(input[1:3]) * 60
+	minutes := float64(js.Number(input[1:3]) * 60)
 	if rest := strings.TrimPrefix(input[3:], ":"); len(rest) == 2 {
 		minutes += js.Number(rest)
 	}
@@ -450,7 +450,7 @@ func read(f *Fields, kind int, input string) bool {
 	case rAfternoonLower:
 		f.afternoon = boolInt(input == "pm")
 	case rQuarter:
-		f.month = (js.Number(input)-1)*3 + 1
+		f.month = float64((js.Number(input)-1)*3) + 1
 	case rTenths:
 		f.milliseconds = js.Number(input) * 100
 	case rHundredths:
@@ -614,7 +614,7 @@ func loose(input, template string, now js.Date, cache *formatCache) (js.Date, bo
 	seconds := or0(f.seconds)
 	ms := or0(f.milliseconds)
 	if !math.IsNaN(f.offset) {
-		return js.NewDate(js.DateUTC(year, month, day, hours, minutes, seconds, ms+f.offset*60000), now.Loc), true
+		return js.NewDate(js.DateUTC(year, month, day, hours, minutes, seconds, ms+float64(f.offset*60000)), now.Loc), true
 	}
 	// Applying a week number needs a dayjs plugin Mermaid does not load.
 	if truthy(f.week) {

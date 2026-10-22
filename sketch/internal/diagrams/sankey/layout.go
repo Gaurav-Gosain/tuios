@@ -264,12 +264,12 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 	// The room a node keeps clear above and below itself.
 	margin := make([]float64, n)
 	for k := range links {
-		links[k].thickness = links[k].value * unit * scale
+		links[k].thickness = float64(links[k].value * unit * scale)
 	}
 	for _, column := range columns {
 		y := 0.0
 		for _, i := range column {
-			nodes[i].height = flow[i] * scale
+			nodes[i].height = float64(flow[i] * scale)
 			margin[i] = math.Max(0, claim-nodes[i].height) / 2
 			nodes[i].y = y + margin[i]
 			y += nodes[i].height + float64(2*margin[i]) + gap

@@ -423,7 +423,7 @@ func (db *GanttDb) isInvalidDate(date js.Date) bool {
 	formatted, hasFormatted := dateOnly, true
 	db.spend(DATED_STEP)
 	if template != "YYYY-MM-DD" {
-		db.spend(FORMAT_STEP + float64(js.Len(template))*8)
+		db.spend(FORMAT_STEP + float64(float64(js.Len(template))*8))
 		formatted, hasFormatted = format(date, template)
 	}
 	listed := func(set map[string]bool) bool { return set[dateOnly] || (hasFormatted && set[formatted]) }
@@ -441,7 +441,7 @@ func (db *GanttDb) spend(units float64) {
 }
 
 func (db *GanttDb) parse(str, template string) (js.Date, bool) {
-	db.spend(float64(js.Len(template)+1) * float64(js.Len(str)+1))
+	db.spend(float64(float64(js.Len(template)+1) * float64(js.Len(str)+1)))
 	return parseStrict(str, template, js.NewDate(db.now, db.loc), &db.cache)
 }
 

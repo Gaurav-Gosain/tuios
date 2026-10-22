@@ -125,7 +125,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	if on(chart, "showTitle", true) {
 		titleText = model.title
 	}
-	title := text.LayoutLabel(titleText, false, measurer, size, width-2*pad, text.Bold)
+	title := text.LayoutLabel(titleText, false, measurer, size, width-float64(2*pad), text.Bold)
 	titleSpace := 0.0
 	if title.Height > 0 {
 		titleSpace = title.Height + 12
@@ -246,7 +246,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		} else if ranged {
 			at = 0
 		}
-		return inset + float64(at*(1-2*inset))
+		return inset + float64(at*(1-float64(2*inset)))
 	}
 
 	categoryConf := record(chart["xAxis"])
@@ -283,7 +283,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	leftLabels := on(leftConf, "showLabel", true)
 	bottomLabels := on(bottomConf, "showLabel", true)
 
-	wrapAt := math.Max(48, float64((width-2*pad-64-legendSpace)*slot)-8)
+	wrapAt := math.Max(48, float64((width-float64(2*pad)-64-legendSpace)*slot)-8)
 	if horizontal {
 		wrapAt = width * 0.3
 	}
@@ -326,7 +326,7 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 			}
 			step := tickStep(math.Abs(x1-x0), math.Max(2, math.Min(10, math.Floor(length/spacing))))
 			for _, value := range ticksBetween(math.Min(x0, x1), math.Max(x0, x1), step) {
-				marks = append(marks, Mark{at: inset + float64(((value-x0)/(x1-x0))*(1-2*inset)), label: label(js.Num(value), small, 4000)})
+				marks = append(marks, Mark{at: inset + float64(((value-x0)/(x1-x0))*(1-float64(2*inset))), label: label(js.Num(value), small, 4000)})
 			}
 		} else if has0 {
 			marks = append(marks, Mark{at: 0.5, label: label(js.Num(x0), small, 4000)})

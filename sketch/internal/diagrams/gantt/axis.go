@@ -92,9 +92,9 @@ func (c *Calendar) baseFloor(d *js.Date) {
 	case second:
 		d.SetTime(d.T - d.Milliseconds())
 	case minute:
-		d.SetTime(d.T - d.Milliseconds() - d.Seconds()*SECOND)
+		d.SetTime(d.T - d.Milliseconds() - float64(d.Seconds()*SECOND))
 	case hour:
-		d.SetTime(d.T - d.Milliseconds() - d.Seconds()*SECOND - d.Minutes()*MINUTE)
+		d.SetTime(d.T - d.Milliseconds() - float64(d.Seconds()*SECOND) - float64(d.Minutes()*MINUTE))
 	case day:
 		startOfDay(d)
 	case week:
@@ -114,15 +114,15 @@ func (c *Calendar) baseOffset(d *js.Date, step float64) {
 	case millisecond:
 		d.SetTime(d.T + step)
 	case second:
-		d.SetTime(d.T + step*SECOND)
+		d.SetTime(d.T + float64(step*SECOND))
 	case minute:
-		d.SetTime(d.T + step*MINUTE)
+		d.SetTime(d.T + float64(step*MINUTE))
 	case hour:
-		d.SetTime(d.T + step*HOUR)
+		d.SetTime(d.T + float64(step*HOUR))
 	case day:
 		d.SetDate(d.Date() + step)
 	case week:
-		d.SetDate(d.Date() + step*7)
+		d.SetDate(d.Date() + float64(step*7))
 	case month:
 		d.SetMonth(d.Month()+step, math.NaN())
 	case year:
@@ -182,9 +182,9 @@ func (c *Calendar) offset(d *js.Date, n float64) {
 	}
 	switch c.unit {
 	case millisecond:
-		d.SetTime(d.T + n*step)
+		d.SetTime(d.T + float64(n*step))
 	case year:
-		d.SetFullYear(d.FullYear() + n*step)
+		d.SetFullYear(d.FullYear() + float64(n*step))
 	case week:
 		c.baseOffset(d, n*step)
 	default:
@@ -199,7 +199,7 @@ func (c *Calendar) offset(d *js.Date, n float64) {
 
 // Whole units between two floored dates, discounting a change of UTC offset between them.
 func span(start, end js.Date, unit float64) float64 {
-	return math.Floor((end.T - start.T - (end.TimezoneOffset()-start.TimezoneOffset())*MINUTE) / unit)
+	return math.Floor((end.T - start.T - float64((end.TimezoneOffset()-start.TimezoneOffset())*MINUTE)) / unit)
 }
 
 func mod(a, b float64) float64 {
