@@ -7582,6 +7582,16 @@ An a=t of a file under i=0 is held by a kept unit test, not here: `TestUnnamedTr
 | A fix that keeps nothing for any a=t | Same guard | Replaced with `andPlace` | `TestUnnamedTransmitIsNotKept` ("an a=t under i=7 left 0 kept entries, want 1") | **caught** |
 | A fix that keeps nothing under i=0 | Same guard | Replaced with `cmd.ImageID != 0` | `TestUnnamedTransmitIsNotKept` ("an a=T under i=0 left 1 kept entries, want 2") | **caught** |
 
+## The risk test's cut, independent of the temp folder name
+
+`TestRiskInWorktree` needs the Inbox line to cut the Edit's path inside the worktree's path. The line shows 91 runes of the path. The isolation root was `t.TempDir()`, whose random part has 1 to 10 digits. With 7 digits the cut fell just after the worktree's path, and the precondition failed on CI. The root is now padded to 45 runes, so the cut falls 10 runes before the end of the worktree's path. A longer temp folder makes the worktree's path longer than the line, and the cut still falls inside it. Run on 2026-10-22.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A temp folder with a 7-digit random part moves the cut past the worktree's path | n/a, injected: the CI failure's folder | the root forced to `/tmp/TestRiskInWorktree3910109/001`, the folder of the CI failure, in the old test | `TestRiskInWorktree`, 5 of 5 runs ("precondition: ... does not stop inside") | **caught**, the flake |
+
+The fixed test with the same forced folder passes 5 of 5 runs. `TestRiskInWorktreeRedacted` fails with the forced folder on both builds, as it must: the forced name has no run for the redaction to hide. Both tests pass 25 of 25 runs with the fix.
+
 ## Agent row after exit
 
 The test is `TestHookClaimLapsesWithTheHarness` in `harness_integrations_test.go`. A program named `claude` (`testdata/fakeclaude`) runs the stand-in script, which replays a Claude Code session with tool calls through the real `tuios agent-hook claude-code`, ends the turn with `Stop`, and then leaves the pane at its shell. The `unreadable-pid` case runs no stand-in: it reports for the pane from outside it with `tuios call set-agent-state` and a `harness_pid` of 2000000000, which no pid namespace on Linux or macOS reaches, as an agent in a container with the socket passed in would, and holds the pane at its shell for three detection ticks. Each control is a text replacement in the branch's checkout, built to a separate binary and put back before the next. Run on 2026-10-18 on macOS against upstream main at 55590f29. The fixed build passes all six cases.

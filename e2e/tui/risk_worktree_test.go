@@ -153,7 +153,7 @@ func TestRiskInWorktreeRedacted(t *testing.T) {
 // worktree and the panes' sessions.
 func riskWorktree(t *testing.T) (base, root string, panes []string) {
 	t.Helper()
-	base = t.TempDir()
+	base = riskBase(t, t.TempDir())
 	killDaemon(t, base)
 	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -193,6 +193,30 @@ func riskWorktree(t *testing.T) (base, root string, panes []string) {
 		fireEditHook(t, base, session, filepath.Join(root, "demo", "greet.py"))
 	}
 	return base, root, panes
+}
+
+// riskBaseLen is the length riskWorktree pads its isolation root to. An Inbox
+// line shows the first 91 runes of an Edit's path, and the worktree is 56
+// runes under the root, so a root of 45 puts the cut 10 runes before the end
+// of the worktree's path.
+const riskBaseLen = 45
+
+// riskBase pads tmp to riskBaseLen runes with a directory of its own. The
+// random part of a t.TempDir() name has 1 to 10 digits. With 7, the cut fell
+// just after the worktree's path, and the line no longer stopped inside it.
+// A tmp already as long or longer is used as it is: the worktree's path is
+// then longer than the line shows, and the cut still falls inside it.
+func riskBase(t *testing.T, tmp string) string {
+	t.Helper()
+	n := riskBaseLen - len(tmp) - 1
+	if n < 1 {
+		return tmp
+	}
+	base := filepath.Join(tmp, strings.Repeat("p", n))
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatalf("mkdir the padded root: %v", err)
+	}
+	return base
 }
 
 // checkInsideMarks asserts that no pane's Edit inside root is marked outside
