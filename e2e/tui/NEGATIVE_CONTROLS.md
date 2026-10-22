@@ -119,6 +119,19 @@ Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
 -run '^TestTiledPanesMoveOneWay$' -v .` from `e2e/tui`. With
 `TUIOS_E2E_FRAMES` set, the run saves the frame rectangles of each
 transition, the host stream, and the offset the open starts at.
+## Prompt-aware agent restoration
+
+`TestAutoResumeWaitsForShellReadiness` covers A-only/A+B prompts, fast unmarked
+shells, foreground readers, restored prompt history, and the shared 10-second
+deadline. Main fails the delayed-prompt and transient-busy cases. Before the
+unmarked-path fix, plain and busy unmarked shells took 10 seconds and failed
+their latency bounds. Observed controls: treating D as readiness or bypassing
+foreground ownership sends input into a startup reader. Removing busy retry
+leaves a Resume offer. Skipping the quiet window resumes at about 25 ms. A
+20-second budget misses the test's 12-second outcome limit.
+`TestWaitShellPromptReadiness` also checks cancellation and shell exit.
+Run from `e2e/tui` with `TUIOS_E2E=1 go test -count=1
+-run '^TestAutoResumeWaitsForShellReadiness$' -v .`. `TUIOS_E2E_FRAMES` saves frames.
 
 ## Sidebar-created worktrees apply startup tiling
 

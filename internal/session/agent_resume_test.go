@@ -1,11 +1,14 @@
 package session
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"tuios.dev/vt"
 )
 
 // echoHarness installs a user manifest whose resume command is an echo, so a
@@ -317,6 +320,55 @@ func TestAutoResumeFallsBackToAsking(t *testing.T) {
 	items := waitAttention(t, c, "the fallback", hasKind(AttentionResume, "win-agent"))
 	if len(items) != 1 {
 		t.Errorf("the Inbox holds %v", items)
+	}
+}
+
+// TestWaitShellPromptReadiness accepts prompt marks or quiet unmarked shells,
+// never command-finished marks alone.
+func TestWaitShellPromptReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		marks []vt.SemanticMarkerType
+		want  bool
+		wait  bool
+	}{
+		{"input ready", []vt.SemanticMarkerType{vt.MarkerPromptStart, vt.MarkerCommandStart}, true, false},
+		{"A-only prompt", []vt.SemanticMarkerType{vt.MarkerPromptStart}, true, false},
+		{"command finished", []vt.SemanticMarkerType{vt.MarkerCommandExecuted, vt.MarkerCommandFinished}, false, true},
+		{"unmarked fallback", nil, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pty := &PTY{}
+			for _, mark := range tc.marks {
+				pty.shell.note(vt.SemanticMarker{Type: mark, ExitCode: -1}, time.Now(), markContext{})
+			}
+			pty.lastOutput.Store(time.Now().Add(-time.Second).UnixNano())
+			quiet := 20 * time.Millisecond
+			if !tc.wait && len(tc.marks) > 0 {
+				quiet = time.Hour
+			}
+			start := time.Now()
+			if got := waitShellPrompt(t.Context(), pty, start.Add(80*time.Millisecond), quiet); got != tc.want {
+				t.Errorf("ready=%v, want %v", got, tc.want)
+			}
+			if tc.wait && time.Since(start) < 80*time.Millisecond {
+				t.Error("decided before the readiness deadline")
+			}
+			if !tc.wait && time.Since(start) >= 80*time.Millisecond {
+				t.Error("waited for the deadline instead of readiness")
+			}
+		})
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	pty := &PTY{}
+	pty.lastOutput.Store(time.Now().Add(-time.Second).UnixNano())
+	if waitShellPrompt(ctx, pty, time.Now().Add(time.Second), time.Millisecond) {
+		t.Error("a canceled wait reported ready")
+	}
+	pty.exited = true
+	if waitShellPrompt(t.Context(), pty, time.Now().Add(time.Second), time.Millisecond) {
+		t.Error("an exited shell reported ready")
 	}
 }
 
