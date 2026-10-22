@@ -20,8 +20,8 @@ require (
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	tuios.dev/progstatus v0.1.0 // indirect
-	tuios.dev/swatch v0.1.0 // indirect
+	tuios.dev/progstatus v0.1.1-0.20261022115830-89e7799e5ee4 // indirect
+	tuios.dev/swatch v0.1.1-0.20261022115830-89e7799e5ee4 // indirect
 )
 
 require (
@@ -44,7 +44,7 @@ require (
 	github.com/xo/terminfo v1.0.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	tuios.dev/shot v0.2.0
+	tuios.dev/shot v0.2.1-0.20261022115830-89e7799e5ee4
 )
 
 replace github.com/Gaurav-Gosain/tuios => ../..
