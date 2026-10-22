@@ -80,6 +80,12 @@ func (e *exchange) route(c *session.TUIClient, m *OS, label string) {
 		})
 	})
 	c.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
+		// The generation is read on the read loop, as WireDaemonClient reads it.
+		// Without it the client pushes the generation it attached with, the
+		// daemon reads every later push as tiled in a stale layout, and keeps
+		// its own rectangles: a floated pane then reaches the peer at the
+		// daemon's nominal size.
+		gen := c.SessionLayoutGeneration()
 		e.enqueue(func() {
 			e.n++
 			m.Update(SessionResizeMsg{
@@ -87,6 +93,7 @@ func (e *exchange) route(c *session.TUIClient, m *OS, label string) {
 				Height:      height,
 				ClientCount: clientCount,
 				Reserve:     reserve,
+				Generation:  gen,
 			})
 		})
 	})

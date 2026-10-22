@@ -7740,6 +7740,16 @@ The frame step of `TestTMLOwnerComesFirstAndCannotBeForged` and `TestTMLOwnerNam
 | The fit checked only at the press, drawing a cut question | "a smaller surface did not hide the cut question" | **caught** |
 | The window name left out of the new-window yes | "d asked no question showing \"with the window name prod\"" | **caught** |
 
+## The multi-client rigs drop the layout generation
+
+`TestFloatedPaneStaysFloatedEverywhere` failed on CI with the peer holding the floated pane at 118x38 while the local client drew it at 58x36. The rigs in `internal/app` route a session resize into `SessionResizeMsg` without its `Generation`, which `WireDaemonClient` passes. The local client then pushed the generation it attached with, the daemon read every later push as tiled in a stale layout and kept its own rectangles (`keepRectsOfStaleLayout`), and the peer adopted the daemon's nominal 120x40 for the floated pane. A trace of the failing run shows the local client's push arriving at the peer with `fl=true 0,0 120x40` while the local client drew 60x38. Whether it failed depended on whether the local client's first push landed before the peer's join moved the generation on. The four rigs now read the generation on the read loop and pass it. The product passes it already. Run on 2026-10-22.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The rig's resize carries no generation | the `Generation` field in `routeSide`, as on main | four copies at once on two cores | `TestFloatedPaneStaysFloatedEverywhere`, 3 of 240 runs, and 3 of 800 in a second batch ("the pair never settled on one arithmetic"), with the CI numbers | **caught**, statistically |
+
+With the fix the same load passes 800 of 800 runs in two batches, and the other multi-client rig tests pass. The race needs the daemon to move the generation between two of the local client's pushes, which a test cannot schedule from outside, so the control is statistical.
+
 ## Snapping left with a pixel-mouse pane on screen
 
 `TestFloatingSnapLeftWithPixelMousePastTheEdge` in `snap_pixel_edge_test.go` runs a pane that shows a kitty image and turns on SGR-pixel mouse reports (1016), as disktree does. It drags the other floating pane to the left edge in host pixels, holds the pointer past the edge at a negative x, and lets go there. A terminal in 1016 reports such a pointer at a negative position, and ghostty does. The test asserts that the pane lands on the left half at full height, and that the client draws no frame and sends no image command in the 3s after the snap lands. `standalone` and `daemon` run the same steps.

@@ -34,12 +34,15 @@ func (r *rig) watchSessionResize() {
 	r.t.Helper()
 	r.client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
 		select {
+		// The generation is read here, on the read loop, as WireDaemonClient
+		// reads it.
 		case r.m.ClientEventChan <- ClientEvent{
 			Type:        "resize",
 			Width:       width,
 			Height:      height,
 			ClientCount: clientCount,
 			Reserve:     reserve,
+			Generation:  r.client.SessionLayoutGeneration(),
 		}:
 		default:
 			r.t.Errorf("ClientEventChan full, dropped a session resize to %dx%d", width, height)
@@ -64,12 +67,8 @@ func (r *rig) awaitSessionResize(what string) SessionResizeMsg {
 			if ev.Type != "resize" {
 				r.t.Fatalf("waiting for %s: got a %q event", what, ev.Type)
 			}
-			msg := SessionResizeMsg{
-				Width:       ev.Width,
-				Height:      ev.Height,
-				ClientCount: ev.ClientCount,
-				Reserve:     ev.Reserve,
-			}
+			// The message the program loop makes of the event.
+			msg := clientEventMsg(ev).(SessionResizeMsg)
 			r.m.Update(msg)
 			if msg.Width != fromW || msg.Height != fromH {
 				return msg

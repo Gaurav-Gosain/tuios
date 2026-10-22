@@ -376,6 +376,12 @@ func (f *fleet) route(fc *fleetClient) {
 		})
 	})
 	fc.c.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
+		// The generation is read on the read loop, as WireDaemonClient reads it.
+		// Without it the client pushes the generation it attached with, the
+		// daemon reads every later push as tiled in a stale layout, and keeps
+		// its own rectangles: a floated pane then reaches the peer at the
+		// daemon's nominal size.
+		gen := fc.c.SessionLayoutGeneration()
 		f.ex.enqueue(func() {
 			f.ex.n++
 			fc.g.install()
@@ -384,6 +390,7 @@ func (f *fleet) route(fc *fleetClient) {
 				Height:      height,
 				ClientCount: clientCount,
 				Reserve:     reserve,
+				Generation:  gen,
 			})
 			f.trace(fc, fmt.Sprintf("took session %dx%d reserve %+v", width, height, reserve))
 		})
