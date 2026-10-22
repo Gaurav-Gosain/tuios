@@ -28,6 +28,32 @@ app     █████████████▉     4.8
 vt      █████████          3.1
 ```
 
+## Command line
+
+`plot` draws a chart from CSV, TSV, JSON or plain numbers. It reads a file or
+standard input.
+
+```sh
+go install tuios.dev/plot/cmd/plot@latest
+```
+
+```sh
+printf 'session,6.2\napp,4.8\nvt,3.1\n' | plot
+seq 1 50 | awk '{print sin($1/5)}' | plot --kind line
+echo '{"US": 410, "DE": 120, "SG": 14}' | plot --kind map --log
+```
+
+- A text column gives the labels. Each column of numbers is a series. A first
+  row of names is a header.
+- JSON can be `[1, 2, 3]`, `{"a": 1}`, `{"rx": [1, 2], "tx": [3, 4]}`, rows as
+  arrays, or rows as objects.
+- Without `--kind`, a few labelled values draw as bars, and anything else as a
+  line chart. The kinds are `bar`, `column`, `line`, `area`, `spark`, `hist`,
+  `heatmap`, `pie`, `donut`, `gauge` and `map`.
+- Colours are the 16 ANSI colours, so the chart takes your terminal's theme.
+  Without colour, charts that need colour to tell parts apart use ASCII marks.
+- `plot -h` lists every flag.
+
 ## Modes
 
 A mode sets the glyphs a chart can use. Use the best mode that the terminal
