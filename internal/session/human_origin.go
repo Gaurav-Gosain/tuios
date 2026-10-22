@@ -244,5 +244,9 @@ func (d *Daemon) mayActAsHuman(cs *connState) bool {
 	if cs.viaLink && !cs.linkHuman {
 		return false
 	}
+	if cs.pluginBound.Load() != nil {
+		// It presented a plugin's token, so it is that plugin.
+		return false
+	}
 	return !d.connFromPane(cs)
 }

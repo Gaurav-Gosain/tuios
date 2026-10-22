@@ -294,6 +294,11 @@ type TUIClient struct {
 	// did, the newest per surface: the daemon sends the open surfaces right
 	// behind the attach reply, before the client has wired its handlers.
 	tmlSurfaceHandler func(*TMLSurfacePayload)
+	// pluginAsksHandler takes the daemon's MsgPluginApprovals push. See
+	// OnPluginApprovals. pluginAsksLast is the newest push that came before
+	// a handler did: the daemon sends it right behind the attach reply.
+	pluginAsksHandler func(PluginApprovalsPayload)
+	pluginAsksLast    *PluginApprovalsPayload
 	tmlBacklog        []*TMLSurfacePayload
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
@@ -455,6 +460,9 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// holds no surface of a session on another machine. Through a host the
 	// window shows its placeholder line instead. See tml_surface.go.
 	hello.TMLSurfaces = c.viaHost == ""
+	// Plugins run on this machine's daemon, and only the person here
+	// answers for them. See plugin_approval.go.
+	hello.PluginApprovals = c.viaHost == ""
 
 	// Add graphics capabilities if provided
 	if caps != nil {
@@ -1193,6 +1201,21 @@ func (c *TUIClient) OnPaneMark(handler func(PaneMarkPayload)) {
 	c.multiClientMu.Lock()
 	c.paneMarkHandler = handler
 	c.multiClientMu.Unlock()
+}
+
+// OnPluginApprovals registers the handler for MsgPluginApprovals, the
+// daemon's list of native plugins that wait for the person. A push that
+// came before the handler is handed to it now. It runs on the read-loop
+// goroutine, so it only queues. See plugin_approval.go.
+func (c *TUIClient) OnPluginApprovals(handler func(PluginApprovalsPayload)) {
+	c.multiClientMu.Lock()
+	c.pluginAsksHandler = handler
+	last := c.pluginAsksLast
+	c.pluginAsksLast = nil
+	c.multiClientMu.Unlock()
+	if handler != nil && last != nil {
+		handler(*last)
+	}
 }
 
 // DrawsTML reports whether this client draws TML surfaces: only a client of
@@ -1943,6 +1966,22 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.multiClientMu.RUnlock()
 		var payload PaneMarkPayload
 		if handler != nil && msg.ParsePayload(&payload) == nil {
+			handler(payload)
+		}
+
+	case MsgPluginApprovals:
+		var payload PluginApprovalsPayload
+		if err := msg.ParsePayload(&payload); err != nil {
+			debugLog("[CLIENT] Failed to parse plugin approvals: %v", err)
+			return
+		}
+		c.multiClientMu.Lock()
+		handler := c.pluginAsksHandler
+		if handler == nil {
+			c.pluginAsksLast = &payload
+		}
+		c.multiClientMu.Unlock()
+		if handler != nil {
 			handler(payload)
 		}
 

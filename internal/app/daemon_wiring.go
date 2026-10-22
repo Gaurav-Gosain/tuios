@@ -135,6 +135,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a pane mark")
 		}
 	})
+	// Native plugins that wait for the person's approval. See
+	// plugin_approval.go.
+	client.OnPluginApprovals(func(p session.PluginApprovalsPayload) {
+		if m.QueueClientEvent(ClientEvent{Type: "plugin-approvals", PluginAsks: p.Asks}) {
+			clientLog("ClientEventChan full, displaced an event for plugin approvals")
+		}
+	})
 	// A TML surface opened, changed or closed. Applied in Update; see
 	// tml.go.
 	m.initTML()

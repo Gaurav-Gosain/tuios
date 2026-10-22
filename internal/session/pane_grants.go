@@ -686,7 +686,7 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	// Under open with no pane given grants every pane holds admin, and only a
 	// typing verb has anything to check: whether it answers another pane's
 	// prompt (holdTypingTarget).
-	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() && !d.nativePluginsRun() && !typingVerbs[verb] {
+	if cs.paneBound.Load() == nil && cs.pluginBound.Load() == nil && !d.manager.grants.mayMatter() && !d.nativePluginsRun() && !typingVerbs[verb] {
 		return params, nil
 	}
 	pa := d.paneAuthority(cs)
@@ -959,18 +959,28 @@ func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMess
 // under the default open mode, and admin does not imply respond: without the
 // rule one agent could answer another agent's permission prompt by typing
 // "1" and Enter into it. The person answers it, or gives respond.
+//
+// A native plugin has a typing rule of its own: with write it types into
+// any pane, whatever that pane holds, and the prompt rule still holds it.
+// The person gave it write in so many words ("types into any pane that
+// does not wait on a prompt"), and under the default open mode every pane
+// holds admin, so the pane rule would leave write with no pane to type
+// into. A plugin never holds respond, so it never answers a prompt.
 func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked bool) string {
 	if target.ID == pa.window {
 		return ""
 	}
 	held, _ := d.manager.grants.effective(target.ID)
+	if pa.plugin != "" {
+		held = 0
+	}
 	if !pa.grants.Has(GrantAdmin) && !pa.grants.Covers(held) {
 		return "window " + shortWindowID(target.ID) + " holds " + held.String() + ", more than this pane holds, and what is typed there runs with that. " +
 			"A pane types only into panes that hold nothing it does not"
 	}
 	// files reaches a folder, so holding it too is not enough: what is typed
 	// into a pane whose folder is wider would copy from the wider folder.
-	if !pa.grants.Has(GrantAdmin) && held.Has(GrantFiles) {
+	if !pa.grants.Has(GrantAdmin) && pa.plugin == "" && held.Has(GrantFiles) {
 		if tf := d.windowFolder(target.ID); tf != "" {
 			if pf := d.paneFolder(pa); pf == "" || !pathUnder(tf, pf) {
 				return "window " + shortWindowID(target.ID) + " holds files for " + echoName(tf) + ", a folder this pane's files grant does not reach, and what is typed there copies from it. " +
@@ -985,6 +995,9 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 		// the same missing state. See agents_switch.go.
 		return "the agent features are off, so tuios cannot see whether window " + shortWindowID(target.ID) +
 			" is waiting on a prompt. Typing into a pane this pane did not open, and that is not at its shell prompt, needs the respond grant"
+	}
+	if !blockedChecked && target.AgentState == AgentStateNeedsInput && !pa.grants.Has(GrantRespond) && pa.plugin != "" {
+		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it. A plugin never answers a prompt. Only you do that"
 	}
 	if !blockedChecked && target.AgentState == AgentStateNeedsInput && !pa.grants.Has(GrantRespond) {
 		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it, which needs the respond grant"
@@ -1135,7 +1148,7 @@ func (d *Daemon) checkGrantMessage(cs *connState, t MessageType) *verbError {
 	if t == MsgHello || t == MsgPing || cs == nil || cs.viaLink || cs.paneOnly {
 		return nil
 	}
-	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() && !d.nativePluginsRun() {
+	if cs.paneBound.Load() == nil && cs.pluginBound.Load() == nil && !d.manager.grants.mayMatter() && !d.nativePluginsRun() {
 		return nil
 	}
 	pa := d.paneAuthority(cs)
@@ -1232,13 +1245,23 @@ func (d *Daemon) permissionMode() string {
 // it also places a connection the kernel cannot place.
 func (d *Daemon) verbPaneGrants(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		PaneID    string `json:"pane_id"`
-		PaneToken string `json:"pane_token"`
-		PeerPID   *int   `json:"peer_pid"`
-		PeerStart uint64 `json:"peer_start"`
+		PaneID      string `json:"pane_id"`
+		PaneToken   string `json:"pane_token"`
+		PluginID    string `json:"plugin_id"`
+		PluginToken string `json:"plugin_token"`
+		PeerPID     *int   `json:"peer_pid"`
+		PeerStart   uint64 `json:"peer_start"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.PluginID != "" || p.PluginToken != "" {
+		if p.PeerPID != nil || p.PaneID != "" || p.PaneToken != "" {
+			return nil, invalidParam("plugin_token", "pass plugin_id and plugin_token alone")
+		}
+		if verr := d.bindPluginToken(cs, p.PluginID, p.PluginToken); verr != nil {
+			return nil, verr
+		}
 	}
 	if p.PeerPID != nil {
 		// Another process asked about: the holder of a tmux shim pane asks

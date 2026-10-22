@@ -939,9 +939,35 @@ command = ["bin/status"]
   match. In a folder with both files and no `[herdr]` table,
   `tuios-plugin.toml` wins.
 
-The processes of a native plugin hold the grants you approved at
-`tuios plugins install`, in every session. A native plugin that you link or
-put in a folder, and did not install, holds no grants. A herdr plugin holds
+A native plugin runs only after you allow it on this machine.
+`tuios plugins install` asks you, and records your answer in the state
+folder. A native plugin that comes some other way waits for you: from
+`plugins.lock` on another machine, from `tuios plugins link`, or from a
+plugin folder. `tuios plugins list` shows it as "waiting for approval".
+When you attach, tuios asks in a dialog:
+
+- **Allow** runs it. A plugin that asks for `admin` needs you to type
+  `admin` first.
+- **Deny** keeps it off. `tuios plugins list` shows "denied".
+- **Not now** closes the dialog. The plugin keeps waiting.
+
+`tuios plugins approve ID` asks the same question in a terminal, and
+`--deny` denies. When the manifest changes, tuios asks again. Only you can
+answer: a pane or a plugin that answers is refused.
+
+The processes of a native plugin hold the grants you allowed, in every
+session:
+
+| Grant | What the plugin can do |
+|---|---|
+| `read` | Reads every session and pane on this machine. |
+| `write` | Types into any pane that does not wait on a prompt. |
+| `fan` | Starts agents in new sessions. |
+| `admin` | Does all that you can do in tuios. |
+
+A plugin with `write` types into a pane whatever that pane holds. It never
+types into a pane that waits on a prompt, such as an approval, because the
+keys would answer it. A plugin never holds `respond`. A herdr plugin holds
 the default grants of `[agents.permissions]`. A pane that a native plugin
 opens holds no more than the plugin.
 
@@ -954,8 +980,14 @@ new session leaves the plugin. This check stops mistakes and misled tools.
 It does not stop a program that tries to escape. No plugin process can act
 as the person.
 
+Each process of a native plugin also gets `TUIOS_PLUGIN_ID` and
+`TUIOS_PLUGIN_TOKEN`. The tuios command line sends them to the daemon, so
+a process that left the plugin's session is still held to the plugin's
+grants. The token works for one daemon start.
+
 A native plugin holds `admin` only when you approved it on this machine.
-`tuios plugins install --grant admin` asks each tuios daemon that runs
+`tuios plugins install --grant admin` and `tuios plugins approve --grant
+admin` ask each tuios daemon that runs
 whether the command runs outside its panes and plugins. It does not start a
 daemon to ask. Then it records the approval in the state folder.
 `plugins.lock` alone never gives `admin`. A plugin installed from a folder

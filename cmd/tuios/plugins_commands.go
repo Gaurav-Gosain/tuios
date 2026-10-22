@@ -41,7 +41,7 @@ An enabled plugin runs its commands with your rights, outside every pane, as it 
 	}
 	cmd.AddCommand(newPluginsListCommand(), newPluginsInfoCommand(),
 		newPluginsEnableCommand(true), newPluginsEnableCommand(false),
-		newPluginsInstallCommand(),
+		newPluginsInstallCommand(), newPluginsApproveCommand(),
 		newPluginsLinkCommand(), newPluginsUnlinkCommand(), newPluginsBuildCommand(),
 		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand())
 	return cmd
@@ -116,6 +116,10 @@ func printJSONValue(w io.Writer, v any) error {
 
 func entryState(e herdrplugin.Entry) string {
 	switch {
+	case e.Err != nil && e.Plugin != nil && e.Plugin.Approval == herdrplugin.ApprovalWaiting:
+		return "waiting for approval"
+	case e.Err != nil && e.Plugin != nil && e.Plugin.Approval == herdrplugin.ApprovalDenied:
+		return "denied"
 	case e.Err != nil:
 		return "error"
 	case e.Enabled:

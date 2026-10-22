@@ -13,12 +13,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
@@ -390,13 +388,18 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 			return fail(err)
 		}
 	}
-	if slices.Contains(e.Grants, "admin") {
-		// checkNativeAsks made sure the person typed --grant admin. The
-		// daemon confirms that the person runs this command.
-		if err := confirmPerson(); err != nil {
-			return err
+	if p.Format == herdrplugin.FormatTuios {
+		admin := slices.Contains(e.Grants, "admin")
+		if admin {
+			// checkNativeAsks made sure the person typed --grant admin.
+			// The daemon confirms that the person runs this command.
+			if err := confirmPerson(); err != nil {
+				return err
+			}
 		}
-		if err := herdrplugin.ApproveAdmin(in.dirs.AdminApprovalsPath(), p, e.Approved); err != nil {
+		// The person said yes above, so this machine runs it. Another
+		// machine that gets plugins.lock asks again.
+		if err := herdrplugin.Approve(in.dirs.ApprovalsPath(), p, e.Approved, admin); err != nil {
 			return err
 		}
 	}
@@ -628,18 +631,24 @@ func dirExists(p string) bool {
 	return err == nil && info.IsDir()
 }
 
-// shownArgv is an argv as the plan shows it. An argument with a character
-// that is not printable is quoted, so it cannot change what the terminal
-// shows.
-func shownArgv(argv ...string) string {
-	out := make([]string, len(argv))
-	for i, a := range argv {
-		out[i] = a
-		if strings.ContainsFunc(a, func(r rune) bool { return !unicode.IsPrint(r) }) {
-			out[i] = strconv.Quote(a)
-		}
+// shownArgv is an argv as the plan shows it (herdrplugin.ShownArgv).
+func shownArgv(argv ...string) string { return herdrplugin.ShownArgv(argv...) }
+
+// grantsText says what a plugin may do when it calls tuios, one line per
+// grant, in the words the approval dialog uses.
+func grantsText(p *herdrplugin.Plugin) string {
+	switch {
+	case p.Format != herdrplugin.FormatTuios:
+		return "It can call tuios with the default pane grants.\n"
+	case len(p.Grants) == 0:
+		return "It can call tuios only for what every pane may do.\n"
 	}
-	return strings.Join(out, " ")
+	var b strings.Builder
+	b.WriteString("It can call tuios with these grants, in every session:\n")
+	for _, g := range p.Grants {
+		fmt.Fprintf(&b, "  %-6s %s\n", g, herdrplugin.GrantMeaning(g))
+	}
+	return b.String()
 }
 
 // installPlan is what the person approves: facts only.
@@ -671,39 +680,14 @@ func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, 
 		head = ""
 	}
 	f("\nRuns when enabled, outside every pane, with your rights:\n")
-	n := b.Len()
-	for _, s := range p.Startup {
-		f("  startup  %s\n", shownArgv(s.Command...))
+	runs := herdrplugin.RunsLines(p)
+	if len(runs) == 0 {
+		runs = []string{"nothing"}
 	}
-	var hooks, actions, panes, links []string
-	for _, ev := range p.Events {
-		hooks = append(hooks, ev.On)
+	for _, line := range runs {
+		f("  %s\n", line)
 	}
-	for _, a := range p.Actions {
-		actions = append(actions, a.ID)
-	}
-	for _, x := range p.Panes {
-		panes = append(panes, x.ID+" ("+x.Placement+")")
-	}
-	for _, h := range p.LinkHandlers {
-		links = append(links, h.ID)
-	}
-	for i, list := range [][]string{hooks, actions, panes, links} {
-		if len(list) > 0 {
-			f("  %-8s %s (%d)\n", [...]string{"hooks", "actions", "panes", "links"}[i], shownArgv(strings.Join(list, ", ")), len(list))
-		}
-	}
-	if b.Len() == n {
-		f("  nothing\n")
-	}
-	switch {
-	case p.Format != herdrplugin.FormatTuios:
-		f("\nIt can call tuios with the default pane grants.\n")
-	case len(p.Grants) == 0:
-		f("\nIt can call tuios only for what every pane may do.\n")
-	default:
-		f("\nIt can call tuios in every session with these grants: %s.\n", strings.Join(p.Grants, ", "))
-	}
+	f("\n%s", grantsText(p))
 	if !o.noEnable {
 		f("tuios enables the plugin after the install.\n")
 	}

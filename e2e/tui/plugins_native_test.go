@@ -28,7 +28,8 @@ import (
 //
 // The same script runs from a herdr manifest, installed from a folder, which
 // keeps the default grants (admin under mode open), and from a native
-// manifest that is linked, not installed, which holds nothing.
+// manifest that is linked, not installed, which asks for nothing and runs
+// only after tuios plugins approve.
 //
 // The negative controls are in NEGATIVE_CONTROLS.md, "Native plugins".
 
@@ -146,7 +147,7 @@ func TestNativePluginGrants(t *testing.T) {
 	bare := filepath.Join(t.TempDir(), "native.git")
 	testutil.Git(t, work, "clone", "-q", "--bare", work, bare)
 	out, err := tuiosCLI(t, base, "plugins", "install", "file://"+bare, "--yes")
-	if err != nil || !strings.Contains(out, "(tuios plugin)") || !strings.Contains(out, "in every session with these grants: read.") {
+	if err != nil || !strings.Contains(out, "(tuios plugin)") || !strings.Contains(out, "It can call tuios with these grants, in every session:\n  read   Reads every session and pane on this machine.") {
 		t.Fatalf("install of the native probe: %v\n%s", err, out)
 	}
 	art := artifactDir(t)
@@ -157,9 +158,13 @@ func TestNativePluginGrants(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "plugins", "install", herdrDir, "--yes"); err != nil {
 		t.Fatalf("install of the herdr probe: %v\n%s", err, out)
 	}
-	linked := nativeProbeDir(t, "tuios-plugin.toml", nativeManifest("e2e.linked", `"read"`, ""))
+	linked := nativeProbeDir(t, "tuios-plugin.toml", nativeManifest("e2e.linked", "", ""))
 	if out, err := tuiosCLI(t, base, "plugins", "link", linked, "--enable"); err != nil {
 		t.Fatalf("link of the native probe: %v\n%s", err, out)
+	}
+	// Linked, it waits for the person on this machine.
+	if out, err := tuiosCLI(t, base, "plugins", "approve", "e2e.linked", "--yes"); err != nil || !strings.Contains(out, "It runs now.") {
+		t.Fatalf("approve of the linked probe: %v\n%s", err, out)
 	}
 
 	// "0" is a success, "x" any failure.
@@ -170,7 +175,7 @@ func TestNativePluginGrants(t *testing.T) {
 		// A herdr plugin holds the default grants: admin under open. What it
 		// left behind still cannot act as the person.
 		"e2e.herdrprobe": {"read": "0", "herdrlist": "0", "pluginlist": "0", "write": "0", "binary": "0", "orphan-write": "0", "orphan-trust": "x"},
-		// A linked native plugin was approved by nobody and holds nothing.
+		// A linked native plugin that asks for nothing holds nothing.
 		"e2e.linked": {"read": "x", "herdrlist": "0", "pluginlist": "x", "write": "x", "binary": "x", "orphan-write": "x", "orphan-trust": "x"},
 	}
 	for id, codes := range want {
@@ -208,7 +213,7 @@ func TestNativePluginGrants(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "plugins", "install", adminDir, "--yes", "--no-enable", "--grant", "admin"); err != nil {
 		t.Fatalf("install with --grant admin: %v\n%s", err, out)
 	}
-	approvals := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", "%admin-approvals.toml")
+	approvals := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", "%approvals.toml")
 	if st, err := os.Stat(approvals); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf("the admin approval file: %v, mode %v, want 0600", err, st)
 	}
@@ -232,11 +237,27 @@ func TestNativePluginGrants(t *testing.T) {
 	adminState("after probe.sh changed back", "holds admin")
 	// A folder that others may write is not trusted.
 	_ = os.Chmod(filepath.Dir(approvals), 0o770)
-	adminState("with the approval folder writable by the group", "plugin_admin_not_approved")
+	adminState("with the approval folder writable by the group", "plugin_needs_approval")
 	_ = os.Chmod(filepath.Dir(approvals), 0o700)
 	adminState("with the approval folder private again", "holds admin")
-	_ = os.Remove(approvals)
-	adminState("with no approval on this machine", "plugin_admin_not_approved")
+	// Drop the admin plugin's approval and keep the others.
+	kept := ""
+	text, _ := os.ReadFile(approvals)
+	for _, chunk := range strings.SplitAfter(string(text), "[[approval]]") {
+		if !strings.Contains(chunk, "e2e.admin") {
+			kept += chunk
+		} else if strings.HasSuffix(chunk, "[[approval]]") {
+			kept += "[[approval]]"
+		}
+	}
+	if err := os.WriteFile(approvals, []byte(kept), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	adminState("with no approval on this machine", "plugin_needs_approval")
+	hasAdminApproval := func() bool {
+		b, _ := os.ReadFile(approvals)
+		return strings.Contains(string(b), "e2e.admin")
+	}
 	// A pane cannot approve admin, also with its pane variables cut: the
 	// daemon places the caller by the kernel.
 	if out, err := tuiosCLI(t, base, "new", "approver", "--detach"); err != nil {
@@ -269,11 +290,11 @@ func TestNativePluginGrants(t *testing.T) {
 		if !strings.Contains(string(paneText), "only you, from a terminal outside tuios") {
 			t.Errorf("the refusal in the pane (%s):\n%s", extra, paneText)
 		}
-		if _, err := os.Stat(approvals); err == nil {
+		if hasAdminApproval() {
 			t.Errorf("a pane wrote the admin approval (%s)", extra)
 		}
 	}
-	adminState("after the pane tried to approve", "plugin_admin_not_approved")
+	adminState("after the pane tried to approve", "plugin_needs_approval")
 	// A hand-written grant in plugins.lock does not widen a local plugin:
 	// its trust hash no longer matches.
 	localDir := nativeProbeDir(t, "tuios-plugin.toml", nativeManifest("e2e.local", `"fan"`, ""))
@@ -341,7 +362,7 @@ func TestNativePluginGrants(t *testing.T) {
 	if !strings.Contains(info, "grants    asks read, holds read") {
 		t.Errorf("plugins info does not show the grants:\n%s", info)
 	}
-	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.linked"); !strings.Contains(info, "grants    asks read, holds none") {
+	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.linked"); !strings.Contains(info, "grants    asks none, holds none") {
 		t.Errorf("plugins info of the linked plugin:\n%s", info)
 	}
 }

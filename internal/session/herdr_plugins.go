@@ -48,6 +48,7 @@ func buildHerdrPluginMethods() map[string]herdrPluginMethod {
 			return d.herdrPluginSetEnabled(cs, p, false)
 		},
 		"plugin.restart":       (*Daemon).herdrPluginRestart,
+		"plugin.approve":       (*Daemon).herdrPluginApprove,
 		"plugin.action.list":   (*Daemon).herdrPluginActionList,
 		"plugin.action.invoke": (*Daemon).herdrPluginActionInvoke,
 		"plugin.log.list":      (*Daemon).herdrPluginLogList,

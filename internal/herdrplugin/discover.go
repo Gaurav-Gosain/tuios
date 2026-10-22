@@ -204,17 +204,9 @@ func Discover(d Dirs, enabled []string) []Entry {
 			}
 			e.ID, e.Plugin = p.PluginID, p
 			if p.Format == FormatTuios {
-				// A native plugin holds what the person approved at
-				// install, which checkManaged held to the manifest, and
-				// otherwise nothing.
-				p.Held = []string{}
-				if lock != nil {
-					p.Held = slices.Clone(lock.Grants)
-				}
-				if slices.Contains(p.Held, "admin") && !adminApproved(d.AdminApprovalsPath(), p, lock.Approved) {
-					p.Held = []string{}
-					e.Err = errf("plugin_admin_not_approved", "%s holds the admin grant only when you approve it on this machine. Run tuios plugins install again with --grant admin, from a terminal outside tuios", p.PluginID)
-				}
+				// A native plugin runs only with an approval on this
+				// machine, and holds what it approved (approval.go).
+				e.Err = applyApproval(d, p, lock)
 			}
 			if byID[p.PluginID] {
 				e.Err = errf("plugin_id_shadowed", "another plugin with id %s was found first. This copy does not run", p.PluginID)

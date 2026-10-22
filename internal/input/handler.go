@@ -568,6 +568,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.WorktreePromptOpen() {
 		return handleWorktreePromptInput(msg, o)
 	}
+	// The plugin approval dialog opens by itself and owns every key while
+	// it is up, so no key meant for a pane answers it. See
+	// app/plugin_approval.go.
+	if o.PluginApprovalOpen() {
+		return o, o.PluginApprovalKey(msg.String(), msg.Text)
+	}
 
 	// A copy's question and the Copies panel, the same way: the rail and
 	// the dock open them, and their keys must reach them. The question is

@@ -369,6 +369,7 @@ var messageTypeNames = [...]string{
 	MsgDirChanged:        "DirChanged",
 	MsgSessionsChanged:   "SessionsChanged",
 	MsgPaneMark:          "PaneMark",
+	MsgPluginApprovals:   "PluginApprovals",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

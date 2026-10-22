@@ -112,7 +112,16 @@ func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 // can only narrow what the connection may do, so a failure is ignored: the
 // daemon holds the call to what it can prove either way.
 func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string) {
-	if kernelPlaces || c.daemon == nil || !c.daemon.PaneGrants {
+	if c.daemon == nil || !c.daemon.PaneGrants {
+		return
+	}
+	// A native plugin's process presents its plugin's token on every
+	// platform: a process that left the plugin's process session is still
+	// held to its grants. See plugin_token.go.
+	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); id != "" && tok != "" {
+		_, _ = c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok})
+	}
+	if kernelPlaces {
 		return
 	}
 	id, tok := getenv("TUIOS_PANE_ID"), getenv("TUIOS_PANE_TOKEN")

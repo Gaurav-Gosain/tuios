@@ -1600,6 +1600,9 @@ type OS struct {
 	// repository, whose enter hands the daemon's new-worktree verb a command.
 	// Zero when it is closed, the way filePrompt is. See worktree_prompt.go.
 	worktreePrompt worktreePromptState
+	// pluginApproval is the dialog that asks the person about a native
+	// plugin that waits for approval. See plugin_approval.go.
+	pluginApproval pluginApprovalState
 	// fileClip is what a copy or a cut in the files section captured, waiting
 	// for a paste. It holds paths and no bytes, so it costs nothing to carry.
 	fileClip fileClipboard

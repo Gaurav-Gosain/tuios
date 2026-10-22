@@ -399,6 +399,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "worktreeprompt", content, geo, rows)
 	}
 
+	if m.PluginApprovalOpen() {
+		content, geo, rows := m.renderPluginApproval()
+		layers = m.placeOverlayPanel(layers, overlayKindPluginApproval, content, geo, rows)
+	}
+
 	if m.ShowHelp {
 		content, geo := m.RenderHelpMenu()
 		layers = m.placeOverlayPanel(layers, "help", content, geo, nil)

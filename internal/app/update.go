@@ -212,6 +212,8 @@ type ClientEvent struct {
 	Mail session.AgentMailPayload
 	// PaneMark is the push behind a "pane-mark" event.
 	PaneMark session.PaneMarkPayload
+	// PluginAsks is the push behind a "plugin-approvals" event.
+	PluginAsks []session.PluginApprovalAsk
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -545,6 +547,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return SessionsChangedMsg{}
 	case "pane-mark":
 		return PaneMarkMsg{Mark: event.PaneMark}
+	case "plugin-approvals":
+		return PluginApprovalsMsg{Asks: event.PluginAsks}
 	case "paste-refused":
 		return PasteRefusedMsg{Message: event.Reason}
 	case "agent-mail-mark":
@@ -1716,6 +1720,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// A TML surface was pushed, an answer came back, or a click left a
 		// side effect. See tml.go.
 		return m, m.handleTMLWake()
+
+	case PluginApprovalsMsg:
+		m.setPluginAsks(msg.Asks)
+		return m, nil
+
+	case pluginApprovalDoneMsg:
+		m.pluginApprovalDone(msg)
+		return m, nil
 
 	case PaneMarkMsg:
 		// A pane out of view rang the bell or printed. One push per pane

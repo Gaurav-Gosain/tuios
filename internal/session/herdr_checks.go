@@ -109,6 +109,7 @@ var herdrChecks = map[string]herdrCheck{
 	"plugin.pane.close":            herdrVerbs,
 	"popup.close":                  herdrVerbs,
 	"plugin.enable":                herdrTrust,
+	"plugin.approve":               herdrTrust,
 	"plugin.disable":               herdrTrust,
 
 	"events.subscribe": herdrVerbs,
