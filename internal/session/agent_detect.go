@@ -759,12 +759,21 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 				delete(s.agentSharedGuards, w.ID)
 			}
 		}
-		claim := s.agentClaims[w.ID]
+		claim, held := s.agentClaims[w.ID]
 		owned := claim.auto
 		// Noted whoever owns the claim, and before the switch, because
 		// most of its branches do nothing for a claim the detector does
 		// not own. It is what lets the exit be acted on later.
+		//
+		// On a pane nothing holds, the mark goes on a claim at the detector's
+		// rank, not on the zero claim: that one's empty source ranks as a
+		// report, and storing it would shut every other tier out of a pane
+		// whose state a tier has since yielded, for as long as the agent ran.
+		// It is not auto: the detector did not set the state it finds.
 		if detected && !claim.sawProcess {
+			if !held {
+				claim.source = AgentSourceDetect
+			}
 			claim.sawProcess = true
 			out.bookkeeping = true
 			if write {
