@@ -3,10 +3,12 @@ package tuie2e
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -140,6 +142,8 @@ run prompt "$T" send-text -s work -w "$PROMPTW" "1"
 run keys "$T" call send-keys '{"session":"work","window":"'"$PROMPTW"'","keys":["Enter"]}'
 run runp "$T" call run '{"session":"work","window":"'"$PROMPTW"'","command":"echo ran-by-plugin"}'
 run submit "$T" call send-text '{"session":"work","window":"'"$RACEW"'","text":"x","submit":true}'
+run askrace "$T" call ask-agent '{"session":"work","window":"'"$RACEASKW"'","text":"x","ready_timeout":3000}'
+run runrace "$T" call run '{"session":"work","window":"'"$RACERUNW"'","command":"x","timeout":3000}'
 run queue "$T" call queue-prompt '{"session":"work","window":"'"$SHELLW"'","text":"hello"}'
 run respond "$T" respond approve -s work -w "$PROMPTW"
 run regrant "$T" set-pane-grants -w "$SHELLW" --grants admin
@@ -160,21 +164,27 @@ run approve "$T" plugins approve e2e.writer --deny --yes
 // the manifest asks again.
 func TestNativePluginApproval(t *testing.T) {
 	base := t.TempDir()
-	ids := approvalSession(t, base, 3)
-	shellW, promptW, raceW := ids[0], ids[1], ids[2]
+	ids := approvalSession(t, base, 5)
+	shellW, promptW, raceW, raceAskW, raceRunW := ids[0], ids[1], ids[2], ids[3], ids[4]
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "work", "-w", promptW); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
 	}
 	// The race pane reads one byte, which the plugin's paste is, then comes
 	// to a prompt, as an agent that shows a permission dialog does. An
 	// Enter that reached it would print approved.
+	// One race pane each for send-text with submit, ask-agent and run. The
+	// run pane first prints the marks of a finished command and a new
+	// prompt, so run takes it as a shell at its prompt.
 	race := "stty raw -echo; dd bs=1 count=1 >/dev/null 2>&1; '" + tuiosBin + "' set-agent-state needs_input; stty sane; read -p 'Approve? ' y; echo \"approved:[$y]\"\n"
-	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", raceW, race); err != nil {
-		t.Fatalf("send-text: %v\n%s", err, out)
+	marks := `printf '\033]133;A\007\033]133;B\007\033]133;C\007\033]133;D;0\007\033]133;A\007\033]133;B\007'; `
+	for w, line := range map[string]string{raceW: race, raceAskW: race, raceRunW: marks + race} {
+		if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", w, line); err != nil {
+			t.Fatalf("send-text: %v\n%s", err, out)
+		}
 	}
 
 	dir := approvalPlugin(t, base, "e2e.writer", "Writer probe", `"write"`, writerScript)
-	if err := os.WriteFile(filepath.Join(dir, "targets.sh"), []byte("SHELLW='"+shellW+"'\nPROMPTW='"+promptW+"'\nRACEW='"+raceW+"'\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "targets.sh"), []byte("SHELLW='"+shellW+"'\nPROMPTW='"+promptW+"'\nRACEW='"+raceW+"'\nRACEASKW='"+raceAskW+"'\nRACERUNW='"+raceRunW+"'\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	art := artifactDir(t)
@@ -279,7 +289,7 @@ func TestNativePluginApproval(t *testing.T) {
 	}
 
 	// The plugin runs now. "0" is a success, "x" any failure.
-	want := map[string]string{"ordinary": "0", "prompt": "x", "keys": "x", "runp": "x", "submit": "x", "queue": "x", "respond": "x", "regrant": "x", "read": "x", "approve": "x"}
+	want := map[string]string{"ordinary": "0", "prompt": "x", "keys": "x", "runp": "x", "submit": "x", "askrace": "x", "runrace": "x", "queue": "x", "respond": "x", "regrant": "x", "read": "x", "approve": "x"}
 	for name, code := range want {
 		got := strings.TrimSpace(waitPluginFile(t, base, "e2e.writer", name+".code", "\n"))
 		if (got == "0") != (code == "0") {
@@ -315,10 +325,14 @@ func TestNativePluginApproval(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	time.Sleep(500 * time.Millisecond)
-	raceScreen, _ := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", raceW)
-	_ = os.WriteFile(filepath.Join(art, "race-pane.txt"), []byte(raceScreen), 0o644)
-	if strings.Contains(raceScreen, "approved:[]") {
-		t.Errorf("the submit key answered the prompt that came up during the paste:\n%s", raceScreen)
+	for name, w := range map[string]string{"send-text": raceW, "ask-agent": raceAskW, "run": raceRunW} {
+		screen, _ := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", w)
+		_ = os.WriteFile(filepath.Join(art, "race-"+name+".txt"), []byte(screen), 0o644)
+		// The command line holds approved:[$y] once. An answer prints a
+		// second approved:[.
+		if strings.Count(screen, "approved:[") > strings.Count(screen, "approved:[$y]") {
+			t.Errorf("the submit key of %s answered the prompt that came up during the paste:\n%s", name, screen)
+		}
 	}
 	info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.writer")
 	_ = os.WriteFile(filepath.Join(art, "info-allowed.txt"), []byte(info), 0o644)
@@ -360,7 +374,10 @@ sleep 120
 	if len(tok) != 2 {
 		t.Fatalf("token file: %q", tok)
 	}
-	env := []string{"TUIOS_PLUGIN_ID=" + tok[0], "TUIOS_PLUGIN_TOKEN=" + tok[1]}
+	// As a plugin's process has them: its id, its token and its daemon's
+	// socket.
+	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
+	env := []string{"TUIOS_PLUGIN_ID=" + tok[0], "TUIOS_PLUGIN_TOKEN=" + tok[1], "TUIOS_SOCKET=" + sock}
 	art := artifactDir(t)
 	for _, c := range []struct {
 		why  string
@@ -382,7 +399,7 @@ sleep 120
 	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.victim"); !strings.Contains(info, "waiting for approval") {
 		t.Errorf("the victim left the waiting state:\n%s", info)
 	}
-	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_PLUGIN_ID=e2e.tok", "TUIOS_PLUGIN_TOKEN=00" + tok[1][2:]}, "list-sessions")
+	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_PLUGIN_ID=e2e.tok", "TUIOS_PLUGIN_TOKEN=00" + tok[1][2:], "TUIOS_SOCKET=" + sock}, "list-sessions")
 	if err == nil || !strings.Contains(out, "did not take its token") {
 		t.Errorf("a token that does not prove the plugin: %v\n%s", err, out)
 	}
@@ -465,5 +482,84 @@ func waitFileText(t *testing.T, path, want string) string {
 			t.Fatalf("%s never held %q. It holds:\n%s", path, want, b)
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// holdScript connects to the daemon as a plugin process, then leaves the
+// plugin's process group (setpgid) or its session (setsid), and waits. When
+// the file go appears it calls list-sessions on the same connection and
+// writes the answer.
+const holdScript = `import json, os, socket, sys, time
+mode, sock, d = sys.argv[1], sys.argv[2], sys.argv[3]
+s = socket.socket(socket.AF_UNIX)
+s.connect(sock)
+f = s.makefile('rwb')
+def call(i, verb, params=None):
+    req = {"id": i, "verb": verb}
+    if params is not None:
+        req["params"] = params
+    f.write((json.dumps(req) + "\n").encode())
+    f.flush()
+    return f.readline().decode()
+call(1, "hello", {})
+if mode == "setsid":
+    os.setsid()
+else:
+    os.setpgid(0, 0)
+open(os.path.join(d, mode + ".pid"), "w").write(str(os.getpid()) + "\n")
+while not os.path.exists(os.path.join(d, "go")):
+    time.sleep(0.05)
+open(os.path.join(d, mode + ".out"), "w").write(call(2, "list-sessions"))
+`
+
+// TestPluginStopHoldsItsProcesses: a disabled plugin leaves nothing that
+// holds more than it did. A child that moved to a process group of its own
+// is killed with the plugin's session. A child that connected as the plugin
+// and then left the session keeps its connection, which still holds the
+// plugin's grants, now none, and never the default grants of a process the
+// daemon started (admin under open). The children run with the plugin's
+// token cut from their environment, so only the kernel's answer at connect
+// places them.
+func TestPluginStopHoldsItsProcesses(t *testing.T) {
+	base := t.TempDir()
+	approvalSession(t, base, 1)
+	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
+	script := `D="$HERDR_PLUGIN_STATE_DIR"
+for m in setpgid setsid; do
+  env -u TUIOS_PLUGIN_ID -u TUIOS_PLUGIN_TOKEN python3 -I hold.py $m '` + sock + `' "$D" </dev/null >"$D/$m.err" 2>&1 &
+done
+sleep 120
+`
+	dir := approvalPlugin(t, base, "e2e.hold", "Hold probe", `"read"`, script)
+	if err := os.WriteFile(filepath.Join(dir, "hold.py"), []byte(holdScript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "approve", "e2e.hold", "--yes"); err != nil {
+		t.Fatalf("approve: %v\n%s", err, out)
+	}
+	pid := func(mode string) int {
+		var n int
+		_, _ = fmt.Sscan(strings.TrimSpace(waitPluginFile(t, base, "e2e.hold", mode+".pid", "\n")), &n)
+		return n
+	}
+	pgPID, sidPID := pid("setpgid"), pid("setsid")
+	t.Cleanup(func() { _ = syscall.Kill(sidPID, syscall.SIGKILL); _ = syscall.Kill(pgPID, syscall.SIGKILL) })
+	if out, err := tuiosCLI(t, base, "plugins", "disable", "e2e.hold"); err != nil {
+		t.Fatalf("disable: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for syscall.Kill(pgPID, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("the child that called setpgid outlived the disable (pid %d)", pgPID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err := os.WriteFile(filepath.Join(pluginState(base, "e2e.hold"), "go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := waitPluginFile(t, base, "e2e.hold", "setsid.out", "\n")
+	savePluginArtifact(t, base, "e2e.hold", "setsid.out")
+	if !strings.Contains(got, "forbidden") || !strings.Contains(got, "refused for plugin e2e.hold") {
+		t.Errorf("a connection of the stopped plugin was not held to it:\n%s", got)
 	}
 }

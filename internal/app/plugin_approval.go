@@ -59,6 +59,9 @@ type pluginApprovalState struct {
 	// typed is what the person typed in the field: allow, or admin for
 	// a plugin that asks for admin.
 	typed string
+	// denyArmed is true after Deny was chosen once. A second Enter or click
+	// on Deny denies. Any other key takes it back.
+	denyArmed bool
 	// openedAt is when the question opened. Keys and clicks are ignored
 	// for pluginApprovalSettle after it, so what the person was typing
 	// into a pane, or clicking, as it opened answers nothing.
@@ -120,6 +123,7 @@ func (m *OS) openNextPluginAsk() {
 			st.seen[pluginAskKey(a)] = true
 			st.open, st.selected, st.typed, st.err, st.busy = &a, pluginRowLater, "", "", false
 			st.openedAt = pluginApprovalNow()
+			st.denyArmed = false
 			return
 		}
 	}
@@ -166,8 +170,13 @@ func (m *OS) PluginApprovalSelect(idx int) {
 // as Tab and Enter or Up, Up and Enter, cannot. The cursor does not wrap.
 func (m *OS) PluginApprovalKey(key, text string) tea.Cmd {
 	st := &m.pluginApproval
-	if st.open == nil || !m.pluginApprovalSettled() {
+	if st.open == nil || !m.pluginApprovalSettled() || m.ProcessingRemoteKeys {
+		// Keys a script or a pane sent through the client (send-keys, a
+		// tape) are not the person's, and answer nothing.
 		return nil
+	}
+	if key != "enter" {
+		st.denyArmed = false
 	}
 	switch key {
 	case "esc":
@@ -204,17 +213,15 @@ func (m *OS) PluginApprovalKey(key, text string) tea.Cmd {
 }
 
 // PluginApprovalActivate is a click on row idx. Not now closes at once.
-// Deny takes a second click on the row the first one put the cursor on.
-// Allow never answers to a click: it asks for the typed word.
+// Deny takes a second click or Enter. Allow never answers to a click: it
+// asks for the typed word.
 func (m *OS) PluginApprovalActivate(idx int) tea.Cmd {
 	st := &m.pluginApproval
 	if st.open == nil || st.busy || !m.pluginApprovalSettled() {
 		return nil
 	}
-	if idx == pluginRowDeny && st.selected != pluginRowDeny {
-		st.selected = idx
-		st.err = "Click Deny again to deny the plugin."
-		return nil
+	if idx != pluginRowDeny {
+		st.denyArmed = false
 	}
 	return m.pluginApprovalChoose(idx)
 }
@@ -229,6 +236,11 @@ func (m *OS) pluginApprovalChoose(idx int) tea.Cmd {
 		return nil
 	case pluginRowAllow:
 		st.err = "Type " + pluginApprovalWord(st.open) + " in the field, then press Enter."
+		return nil
+	}
+	if !st.denyArmed {
+		st.denyArmed = true
+		st.err = "Press Enter or click Deny again to deny the plugin."
 		return nil
 	}
 	return m.pluginApprovalAnswer(false)

@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/google/uuid"
 )
 
@@ -661,6 +662,11 @@ type connState struct {
 	// start time (peerChanged).
 	peerStart   uint64
 	peerStartOK bool
+	// peerEnv is the peer's environment, read once at accept (pinPeer)
+	// for paneOrigin and the plugin token. peerEnvOK is false when it
+	// could not be read.
+	peerEnv   procinfo.Env
+	peerEnvOK bool
 	// paneOnly marks a call a pane on another machine sent through its report
 	// channel (hosted_calls.go). It is a pane by construction, whatever the
 	// pid says, so it can never act as the person.

@@ -24,3 +24,9 @@ func StartedAt(int) (time.Time, bool) { return time.Time{}, false }
 
 // SessionID is unknown where the kernel does not give the peer's pid.
 func SessionID(int) (int, bool) { return 0, false }
+
+// Environ reads nothing here: the kernel does not give it.
+func Environ(int) (Env, bool) { return Env{}, false }
+
+// SessionMembers is nil here: the kernel does not say.
+func SessionMembers(int) []int { return nil }

@@ -518,7 +518,7 @@ func (d *Daemon) herdrPluginLogList(cs *connState, params json.RawMessage) (any,
 var pluginPaneProtected = []string{
 	"HERDR_SOCKET_PATH", "HERDR_ENV", "HERDR_PLUGIN_ID", "HERDR_PLUGIN_ROOT",
 	"HERDR_PLUGIN_CONFIG_DIR", "HERDR_PLUGIN_STATE_DIR", "HERDR_PLUGIN_ENTRYPOINT_ID",
-	"HERDR_PLUGIN_CONTEXT_JSON", "HERDR_BIN_PATH",
+	"HERDR_PLUGIN_CONTEXT_JSON", "HERDR_BIN_PATH", "TUIOS_PLUGIN_ID", "TUIOS_PLUGIN_TOKEN",
 }
 
 // overlaySize is the popup size of an overlay pane: herdr draws an overlay
@@ -650,7 +650,14 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		}
 	}
 	env = append(env, "PWD="+cwd)
-	env = append(env, d.plugins.baseEnv(e.Plugin, dirs)...)
+	// A plugin's pane is held by its pane grants, which are no more than
+	// the plugin's. It gets no plugin token: a tuios in it that talks to
+	// another daemon would present a token that daemon cannot prove.
+	for _, kv := range d.plugins.baseEnv(e.Plugin, dirs) {
+		if k, _, _ := strings.Cut(kv, "="); k != "TUIOS_PLUGIN_ID" && k != "TUIOS_PLUGIN_TOKEN" {
+			env = append(env, kv)
+		}
+	}
 	env = append(env, "HERDR_PLUGIN_ENTRYPOINT_ID="+pane.ID, "HERDR_PLUGIN_CONTEXT_JSON="+string(ctxJSON))
 
 	argv := slices.Clone(pane.Command)

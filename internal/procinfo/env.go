@@ -47,3 +47,18 @@ func ProcargsEnvVar(buf []byte, name string) (string, bool) {
 	}
 	return EnvironVar(rest, name)
 }
+
+// Env is the environment a process was started with, read once, so several
+// variables cost one read.
+type Env struct {
+	block    []byte
+	procargs bool
+}
+
+// Get returns one variable and whether it was present.
+func (e Env) Get(name string) (string, bool) {
+	if e.procargs {
+		return ProcargsEnvVar(e.block, name)
+	}
+	return EnvironVar(e.block, name)
+}

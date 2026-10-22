@@ -74,6 +74,7 @@ func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 		if p.PluginID != id {
 			return refuse("this process runs in plugin " + p.PluginID + ", not in " + id)
 		}
+		cs.pluginBound.Store(&id)
 		return nil
 	}
 	if _, win := d.peerPane(cs); win != "" {
@@ -97,11 +98,14 @@ func (d *Daemon) bindPeerPluginToken(cs *connState) {
 	if cs == nil || cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
 		return
 	}
-	id, ok := readEnvVarOf(cs.peerPID, "TUIOS_PLUGIN_ID")
+	if !cs.peerEnvOK {
+		return
+	}
+	id, ok := cs.peerEnv.Get("TUIOS_PLUGIN_ID")
 	if !ok || id == "" {
 		return
 	}
-	tok, _ := readEnvVarOf(cs.peerPID, "TUIOS_PLUGIN_TOKEN")
+	tok, _ := cs.peerEnv.Get("TUIOS_PLUGIN_TOKEN")
 	if verr := d.bindPluginToken(cs, id, tok); verr != nil {
 		LogBasic("Client %s (pid %d) names plugin %s and is not placed in it: %s", cs.clientID, cs.peerPID, id, verr.Message)
 	}

@@ -1003,7 +1003,19 @@ that left the plugin's session but kept them is still held to the
 plugin's grants, and is never you. The tuios command line also sends them
 with `pane-grants`, and fails when the daemon does not take them. The
 token works for one daemon start. A process that removes the variables
-and leaves the session is not held by them.
+and leaves the session is not held by them. The command line presents the
+token only to the plugin's own daemon (`TUIOS_SOCKET`), so a call with
+`--server` to another daemon works. A plugin's own panes get no token:
+their pane grants hold them.
+
+A connection that the kernel placed in a plugin when it connected stays
+that plugin's for as long as it is open. When the plugin stops, it holds
+nothing. Stopping a plugin kills every process in its session, also a
+child that moved to a process group of its own.
+
+A terminal that a plugin starts, with `tuios attach` in it, runs with the
+plugin's variables, so tuios holds it as the plugin. Without `admin` the
+attach is refused: the client protocol reaches every pane.
 
 A native plugin holds `admin` only when you approved it on this machine.
 `tuios plugins install --grant admin` and `tuios plugins approve --grant

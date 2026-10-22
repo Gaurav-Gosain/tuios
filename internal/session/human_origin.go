@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
@@ -80,10 +81,24 @@ func (d *Daemon) pinPeer(cs *connState) {
 		return
 	}
 	cs.peerStart, cs.peerStartOK = procinfo.StartTime(cs.peerPID)
+	// The environment is read once here, for the plugin token and for
+	// paneOrigin.
+	cs.peerEnv, cs.peerEnvOK = procinfo.Environ(cs.peerPID)
 	// A process that carries a plugin's token in its environment is that
 	// plugin, on every socket and protocol, also when it left the plugin's
 	// process session. See plugin_token.go.
 	d.bindPeerPluginToken(cs)
+	// A process the kernel places in a native plugin stays that plugin for
+	// as long as the connection is open, also after the plugin stops and
+	// its session entry goes: it then holds what the plugin holds, which is
+	// nothing, and never the default grants of a process the daemon
+	// started.
+	if cs.pluginBound.Load() == nil {
+		if p := d.pluginOfPeer(cs); p != nil && p.Format == herdrplugin.FormatTuios {
+			id := p.PluginID
+			cs.pluginBound.Store(&id)
+		}
+	}
 	d.connFromPane(cs)
 }
 
@@ -105,6 +120,12 @@ func (d *Daemon) peerChanged(cs *connState) bool {
 // paneOrigin reports whether the process pid runs inside a pane of this
 // daemon, and which test said so. pid must be a known peer pid.
 func (d *Daemon) paneOrigin(pid int) (bool, string) {
+	env, ok := procinfo.Environ(pid)
+	return d.paneOriginWith(pid, env, ok)
+}
+
+// paneOriginWith is paneOrigin with the process's environment already read.
+func (d *Daemon) paneOriginWith(pid int, env procinfo.Env, envOK bool) (bool, string) {
 	self := os.Getpid()
 	if pid <= 0 || pid == self {
 		// The daemon itself, which is what a client in the daemon's own
@@ -137,11 +158,11 @@ func (d *Daemon) paneOrigin(pid int) (bool, string) {
 	// hook command, which is automation and not the person, is placed the same
 	// way as a pane.
 	for _, name := range []string{"TUIOS_PANE_ID", "TUIOS_WINDOW_ID"} {
-		if id, ok := procinfo.EnvVar(pid, name); ok && id != "" && d.holdsWindow(id) {
+		if id, ok := env.Get(name); envOK && ok && id != "" && d.holdsWindow(id) {
 			return true, paneOriginEnv
 		}
 	}
-	if sock, ok := procinfo.EnvVar(pid, "TUIOS_SOCKET"); ok && sock != "" && sock == d.manager.SocketPath() {
+	if sock, ok := env.Get("TUIOS_SOCKET"); envOK && ok && sock != "" && sock == d.manager.SocketPath() {
 		return true, paneOriginEnv
 	}
 	return false, ""
@@ -202,7 +223,7 @@ func (d *Daemon) connFromPane(cs *connState) bool {
 		return false
 	}
 	cs.fromPaneOnce.Do(func() {
-		fromPane, why := d.paneOrigin(cs.peerPID)
+		fromPane, why := d.paneOriginWith(cs.peerPID, cs.peerEnv, cs.peerEnvOK)
 		if !fromPane && d.peerChanged(cs) {
 			fromPane, why = true, paneOriginChanged
 		}
@@ -249,7 +270,8 @@ func (d *Daemon) mayActAsHuman(cs *connState) bool {
 		return false
 	}
 	if cs.pluginBound.Load() != nil {
-		// It presented a plugin's token, so it is that plugin.
+		// It presented a plugin's token, or the kernel placed it in a
+		// plugin when it connected: it is that plugin.
 		return false
 	}
 	return !d.connFromPane(cs)

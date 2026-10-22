@@ -69,6 +69,16 @@ func EnvVar(pid int, name string) (string, bool) {
 	return EnvironVar(data, name)
 }
 
+// Environ reads the environment process pid was started with, once, and
+// false when it cannot be read.
+func Environ(pid int) (Env, bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ")
+	if err != nil {
+		return Env{}, false
+	}
+	return Env{block: data}, true
+}
+
 // Stat returns the contents of /proc/<pid>/stat, for StatField.
 func Stat(pid int) (string, bool) {
 	if pid <= 0 {
@@ -142,4 +152,27 @@ func StartedAt(pid int) (time.Time, bool) {
 func SessionID(pid int) (int, bool) {
 	sid, err := unix.Getsid(pid)
 	return sid, err == nil && sid > 0
+}
+
+// SessionMembers lists the pids of the processes in session sid, read from
+// /proc. A process that exits during the scan may be listed or not.
+func SessionMembers(sid int) []int {
+	if sid <= 0 {
+		return nil
+	}
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil
+	}
+	var out []int
+	for _, e := range ents {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		if s, ok := SessionID(pid); ok && s == sid {
+			out = append(out, pid)
+		}
+	}
+	return out
 }

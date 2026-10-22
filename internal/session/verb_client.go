@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -101,7 +102,7 @@ func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 		return nil, err
 	}
 	c.daemon = hs
-	if err := c.presentPaneToken(peerPIDSupported, os.Getenv); err != nil {
+	if err := c.presentPaneToken(peerPIDSupported, os.Getenv, socketPath); err != nil {
 		_ = c.Close()
 		return nil, err
 	}
@@ -119,11 +120,14 @@ func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 // on every platform. That one must take: a refusal, or a daemon that does
 // not know the parameters, fails the connection, so a plugin's call never
 // goes through unplaced. See plugin_token.go.
-func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string) error {
+func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string, socketPath string) error {
 	if c.daemon == nil || !c.daemon.PaneGrants {
 		return nil
 	}
-	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); id != "" || tok != "" {
+	// Only to the plugin's own daemon, whose socket the plugin's processes
+	// get as TUIOS_SOCKET: another daemon cannot prove the token, and a
+	// call there with --server must not fail for it.
+	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); (id != "" || tok != "") && sameSocket(getenv("TUIOS_SOCKET"), socketPath) {
 		if _, err := c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok}); err != nil {
 			return fmt.Errorf("this process belongs to plugin %s, and the daemon did not take its token: %w", id, err)
 		}
@@ -137,6 +141,11 @@ func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) str
 	}
 	_, _ = c.Call("pane-grants", map[string]any{"pane_id": id, "pane_token": tok})
 	return nil
+}
+
+// sameSocket reports whether two socket paths name the same socket.
+func sameSocket(a, b string) bool {
+	return a != "" && b != "" && filepath.Clean(a) == filepath.Clean(b)
 }
 
 // DialVerbClientThroughHost connects to the daemon on host by way of the daemon

@@ -81,6 +81,38 @@ func TestPluginApprovalTakesOnlyTheTypedWord(t *testing.T) {
 		t.Fatal("one click on Deny answered")
 	}
 
+	// Up then Enter puts the cursor on Deny and asks again. A second
+	// Enter denies.
+	denied := func() bool {
+		for _, c := range calls {
+			if c["allow"] == false {
+				return true
+			}
+		}
+		return false
+	}
+	md := open()
+	now = now.Add(time.Second)
+	press(md, "up", "enter")
+	if denied() {
+		t.Fatal("Up then Enter denied the plugin without a second Enter")
+	}
+	press(md, "enter")
+	if !denied() {
+		t.Fatal("a second Enter on Deny did not deny")
+	}
+
+	// Keys a pane or a script sends through the client are not the
+	// person's: send-keys of allow and Enter answers nothing.
+	mr := open()
+	now = now.Add(time.Second)
+	mr.ProcessingRemoteKeys = true
+	press(mr, "a", "l", "l", "o", "w", "enter")
+	if allowed() {
+		t.Fatal("keys sent through the client allowed the plugin")
+	}
+	mr.ProcessingRemoteKeys = false
+
 	// The word and Enter allow it.
 	press(m, "a", "l", "l", "o", "w", "enter")
 	if !allowed() {

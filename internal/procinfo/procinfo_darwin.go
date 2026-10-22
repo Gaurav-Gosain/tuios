@@ -67,6 +67,16 @@ func EnvVar(pid int, name string) (string, bool) {
 	return ProcargsEnvVar(buf, name)
 }
 
+// Environ reads the environment process pid was started with, once, and
+// false when it cannot be read.
+func Environ(pid int) (Env, bool) {
+	buf, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return Env{}, false
+	}
+	return Env{block: buf, procargs: true}, true
+}
+
 // StartedAt returns when process pid started, and false when it cannot be
 // read.
 func StartedAt(pid int) (time.Time, bool) {
@@ -82,4 +92,23 @@ func StartedAt(pid int) (time.Time, bool) {
 func SessionID(pid int) (int, bool) {
 	sid, err := unix.Getsid(pid)
 	return sid, err == nil && sid > 0
+}
+
+// SessionMembers lists the pids of the processes in session sid, as the
+// kernel's process table says.
+func SessionMembers(sid int) []int {
+	if sid <= 0 {
+		return nil
+	}
+	procs, err := unix.SysctlKinfoProcSlice("kern.proc.session", sid)
+	if err != nil {
+		return nil
+	}
+	out := make([]int, 0, len(procs))
+	for _, p := range procs {
+		if pid := int(p.Proc.P_pid); pid > 0 {
+			out = append(out, pid)
+		}
+	}
+	return out
 }

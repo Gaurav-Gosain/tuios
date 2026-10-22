@@ -5,6 +5,8 @@ package herdrplugin
 import (
 	"os/exec"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // detach gives the command a session of its own: no controlling terminal,
@@ -20,11 +22,19 @@ type procGroup struct{ cmd *exec.Cmd }
 // track records the started command's group. It cannot fail here.
 func track(cmd *exec.Cmd) (*procGroup, error) { return &procGroup{cmd: cmd}, nil }
 
-// kill kills the process group the command leads. The group id is the
-// process id, which Setsid made so.
+// kill kills the process group the command leads, and every other process
+// in its session: a child that moved to a group of its own with setpgid is
+// still in the session, and still the plugin's (plugin_grants.go in
+// session). The group and the session id are the process id, which Setsid
+// made so.
 func (g *procGroup) kill() {
-	if g.cmd.Process != nil {
-		_ = syscall.Kill(-g.cmd.Process.Pid, syscall.SIGKILL)
+	if g.cmd.Process == nil {
+		return
+	}
+	sid := g.cmd.Process.Pid
+	_ = syscall.Kill(-sid, syscall.SIGKILL)
+	for _, pid := range procinfo.SessionMembers(sid) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 }
 
