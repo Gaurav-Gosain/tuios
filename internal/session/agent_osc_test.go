@@ -2,16 +2,17 @@ package session
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"tuios.dev/vt"
 )
 
-// agentPaneWithWindow is bareSessionWithWindow with a harness named on the
-// window, which is what an OSC 9;4 report needs before it may drive agent
-// state (see progressTarget). No state is set: the pane is attributed to an
-// agent and the agent has not said anything yet.
+// agentPaneWithWindow is bareSessionWithWindow with an agent in the window
+// (see attributeHarness), which is what an OSC 9;4 report needs before it may
+// drive agent state (see progressTarget). No state is set: the agent has not
+// said anything yet.
 func agentPaneWithWindow(t *testing.T) (*Session, string) {
 	t.Helper()
 	sess, id := bareSessionWithWindow(t)
@@ -19,13 +20,17 @@ func agentPaneWithWindow(t *testing.T) (*Session, string) {
 	return sess, id
 }
 
-// attributeHarness names a harness on a window without setting a state.
+// attributeHarness puts an agent in a window without setting a state: it names
+// the harness on the window and records the test process as the harness
+// process, which is running. A harness named on its own is what an agent that
+// has left the pane leaves behind, and is not an agent in it (agentInPane).
 func attributeHarness(t *testing.T, sess *Session, windowID, harnessID string) {
 	t.Helper()
 	err := sess.mutateState(func(st *SessionState) error {
 		for i := range st.Windows {
 			if st.Windows[i].ID == windowID {
 				st.Windows[i].AgentHarness = harnessID
+				sess.setAgentHarnessPID(windowID, os.Getpid(), true)
 				return nil
 			}
 		}

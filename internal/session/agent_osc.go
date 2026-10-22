@@ -74,10 +74,11 @@ func (s *Session) applyPaneProgress(ptyID, windowID string, state vt.ProgressSta
 // plain shell pane into an agent, with a state mark, a silence timer and Inbox
 // entries its owner never asked for. So the sequence is believed about an agent
 // only once something else has said an agent is there: a state already on the
-// pane (a report, a hook, the foreground-process detector, a screen rule), a
-// harness named on it, a claim held for it, or a harness process recorded in
-// it. The sequence is still parked on the pane either way (see
+// pane, from a report, a hook, the foreground-process detector or a screen
+// rule. The sequence is still parked on the pane either way (see
 // storeAgentProgress), so a manifest's osc_progress rules can read it.
+//
+// See agentInPane for what counts.
 func (s *Session) progressTarget(windowID string) (current AgentState, exists, agentPane bool) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
@@ -86,11 +87,31 @@ func (s *Session) progressTarget(windowID string) (current AgentState, exists, a
 		if w.ID != windowID {
 			continue
 		}
-		_, claimed := s.agentClaims[w.ID]
-		agentPane = w.AgentState != AgentStateNone || w.AgentHarness != "" || claimed || s.agentHarnessPIDs[w.ID].pid != 0
-		return w.AgentState, true, agentPane
+		return w.AgentState, true, s.agentInPane(w)
 	}
 	return AgentStateNone, false, false
+}
+
+// agentInPane reports whether an agent is in a window now: it has a state, or
+// a harness process recorded for it is still running. It is what the tiers that
+// read the pane itself (OSC 9;4, the title, the screen, notifications) need
+// before what they read may say anything about an agent. Called with stateMu
+// held.
+//
+// What an agent leaves behind when it goes does not count. A pane at none keeps
+// the harness it was attributed to, for a later resume, and the claim of the
+// report that said none, and neither says an agent is in it now: taking them
+// for one read `mise upgrade` in a pane Claude Code had left as Claude Code
+// working, then idle for good. An agent that starts in the pane again is heard
+// once the foreground-process detector puts the pane at working, within one
+// detection tick, or once it reports for itself; a bar it draws before then is
+// not read.
+func (s *Session) agentInPane(w *WindowState) bool {
+	if w.AgentState != AgentStateNone {
+		return true
+	}
+	h := s.agentHarnessPIDs[w.ID]
+	return h.pid != 0 && !h.exited()
 }
 
 // applyAgentProgress records an OSC 9;4 progress report against a window as an

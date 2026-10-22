@@ -102,14 +102,22 @@ func screenRuleMessage(reg *harness.Registry, hid string, rule int, tail []strin
 }
 
 // agentHarnessOf names the window backed by ptyID and the harness running in it,
-// under the state read lock. An empty harness means nothing has claimed the pane
-// as an agent, and a screen rule has nothing to match with.
+// under the state read lock. An empty harness means no agent is in the pane, and
+// the title, screen and notification rules have nothing to match with.
+//
+// A pane with no agent in it (agentInPane) has no harness running in it,
+// whatever it is attributed to. It keeps the harness its agent left it with, for
+// a later resume, and reading the next program in the pane by that harness's
+// rules took a spinner in its title for the agent working.
 func (s *Session) agentHarnessOf(ptyID string) (windowID, harnessID string) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	for i := range s.state.Windows {
-		if s.state.Windows[i].PTYID == ptyID {
-			return s.state.Windows[i].ID, s.state.Windows[i].AgentHarness
+		if w := &s.state.Windows[i]; w.PTYID == ptyID {
+			if !s.agentInPane(w) {
+				return w.ID, ""
+			}
+			return w.ID, w.AgentHarness
 		}
 	}
 	return "", ""
