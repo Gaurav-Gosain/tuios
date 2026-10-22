@@ -22,6 +22,7 @@ const ResetSequence = "\033[!p" + // DECSTR: soft reset, which clears nothing
 	"\033[?1016l" + // Disable SGR-pixel mouse reports
 	"\033[?2031l" + // Stop colour scheme (light and dark) reports
 	"\033[?25h" + // Show cursor
+	"\033[?7h" + // Autowrap on: a frame cut short can leave it off, and DECSTR differs by terminal
 	"\033]22;default\033\\" + // Pointer shape back to default (OSC 22)
 	"\033[?47l" + // Exit alternate screen buffer
 	"\033[0m" + // Reset all text attributes
