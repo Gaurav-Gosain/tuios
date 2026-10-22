@@ -363,9 +363,12 @@ check_cross() {
 
 check_deadcode() {
 	local out
-	# The binaries are the roots. -test adds the tests, so a helper only a
-	# test calls does not count as dead.
-	out=$($DEADCODE -test ./cmd/tuios ./cmd/tuios-web ./cmd/tuios-fuzz 2>&1 | grep -v '^go: ')
+	# The binaries and every test are the roots, so a helper only a test
+	# calls does not count as dead. pkg/ is the public API for embedders, and
+	# nothing in this module has to call it. deadcode reads the host
+	# platform only, so a function only windows or js/wasm calls shows up
+	# here too.
+	out=$($DEADCODE -test ./... 2>&1 | grep -v '^go: ' | grep -v '^pkg/')
 	[ -z "$out" ] && return 0
 	if [ "$changed" = 1 ]; then
 		local f hits=""

@@ -90,7 +90,7 @@ Run `just check --changed` before you mark a pull request ready. It runs
 | `gopls` | `gopls check` on the changed Go files | yes |
 | `tidy` | `go mod tidy -diff` per module, `scripts/library-pins.sh check` | yes |
 | `cross` | `go build` for linux, darwin, windows and freebsd | yes |
-| `deadcode` | functions no binary or test reaches | no, report |
+| `deadcode` | functions no binary or test reaches, outside `pkg/` | no, report |
 
 `--only vet,lint` runs a subset. Each check writes its full output to
 `.dev/check/NAME.log`. In `--changed` mode, `lint` reports only the findings
