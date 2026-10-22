@@ -115,6 +115,53 @@ func (d *Daemon) followRenamedSession(verb string, params json.RawMessage) json.
 	return out
 }
 
+// followOwnPane sends a call from a pane about that same pane to the session
+// holding it, when the session it names is gone under every name. The pane's
+// TUIOS_SESSION is what its processes send, and it can name a session the
+// daemon no longer knows by that name: an alias held only in daemon memory is
+// lost to a restart, or to a handoff from a build that did not carry it, and
+// every hook of an agent in the pane is then refused with session_not_found
+// for as long as the agent runs. The window id is the pane's own and names
+// one pane on this machine, so the caller, placed in that pane by its token or
+// by its process, is answered as it was before the name went.
+//
+// A session name that resolves is never rewritten here, so a call naming a
+// session that exists, the pane's or another, is checked as it is sent. A
+// placement read from the caller's environment does not count, since a
+// process can set that itself.
+func (d *Daemon) followOwnPane(cs *connState, params json.RawMessage) json.RawMessage {
+	if cs == nil || cs.viaLink || cs.paneOnly || len(params) == 0 {
+		return params
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(params, &m); err != nil {
+		return params
+	}
+	var session, window string
+	if raw, ok := m["session"]; !ok || json.Unmarshal(raw, &session) != nil || session == "" {
+		return params
+	}
+	if raw, ok := m["window"]; !ok || json.Unmarshal(raw, &window) != nil || window == "" {
+		return params
+	}
+	if s, _ := d.manager.ResolveSession(session); s != nil {
+		return params
+	}
+	holder := d.sessionHoldingWindow(window)
+	if holder == nil {
+		return params
+	}
+	if placed, via := d.placePaneWindow(cs); placed != window || (via != "token" && via != "pid") {
+		return params
+	}
+	m["session"], _ = json.Marshal(holder.Name())
+	out, err := json.Marshal(m)
+	if err != nil {
+		return params
+	}
+	return out
+}
+
 // StaleDaemonError explains an unknown_verb answer for a verb this tuios
 // knows: the daemon that answered is older than the binary. It returns nil
 // for every other error, including an unknown_verb for a verb this tuios

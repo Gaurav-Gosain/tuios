@@ -2725,6 +2725,9 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 	// A window moved out of the session named goes to the one it is in now.
 	// See window_move_session.go.
 	params = d.followMovedWindow(params)
+	// A pane's own call naming a session that is gone goes to the pane's
+	// session. See session_rename.go.
+	params = d.followOwnPane(cs, params)
 	granted, verr := d.checkGrants(cs, verb, params)
 	if verr != nil {
 		return verbEntry{}, nil, verr
