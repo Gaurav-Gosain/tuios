@@ -261,8 +261,9 @@ check_vet() {
 }
 
 check_lint() {
+	# The whole of each changed package, not only the changed lines: a change
+	# to one function can raise a finding at its callers.
 	local mod rc=0 p args=(run --timeout 20m)
-	[ "$changed" = 1 ] && args+=(--new-from-merge-base "$merge_base")
 	for mod in "${modules[@]}"; do
 		# e2e/tui is not in the lint workflow, and its tests are the suite's
 		# own harness. vet and the build still cover it.

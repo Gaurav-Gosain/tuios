@@ -93,8 +93,8 @@ Run `just check --changed` before you mark a pull request ready. It runs
 | `deadcode` | functions no binary or test reaches, outside `pkg/` | no, report |
 
 `--only vet,lint` runs a subset. Each check writes its full output to
-`.dev/check/NAME.log`. `gopls` always, and `lint` in `--changed` mode, fail
-only on the lines the branch added. Apply a `fix` finding package by package, and read each
+`.dev/check/NAME.log`. `gopls` fails only on the lines the branch added.
+`lint` covers the whole of each changed package. Apply a `fix` finding package by package, and read each
 diff first. `go fix -diff ./...` prints the patches. Fix a finding at the
 root. A `//nolint` needs its reason on the same line.
 
