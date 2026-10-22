@@ -1,0 +1,25 @@
+wardley-beta
+title tuios value chain
+
+evolution Genesis@0.25 -> Custom@0.5 -> Product@0.75 -> Commodity@1.0
+
+anchor Developer [0.95, 0.6]
+
+component "Agent cockpit" [0.82, 0.22] (build)
+component "Window manager" [0.72, 0.56] (build)
+component "Coding agents" [0.58, 0.36] (buy)
+component "Session daemon" [0.5, 0.45] (build)
+component "VT emulator" [0.35, 0.6] (build)
+component "SSH" [0.2, 0.88] (buy)
+component "PTY" [0.12, 0.95] (market)
+
+Developer -> "Agent cockpit"
+Developer -> "Window manager"
+"Agent cockpit" -> "Coding agents"
+"Agent cockpit" -> "Session daemon"
+"Window manager" -> "Session daemon"
+"Session daemon" -> "VT emulator"
+"Session daemon" -> "SSH"
+"VT emulator" -> "PTY"
+
+evolve "Agent cockpit" 0.45

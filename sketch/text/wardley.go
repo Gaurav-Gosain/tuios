@@ -10,7 +10,7 @@ import (
 
 // A wardley map is drawn as its grid: visibility up, evolution across, the stages as columns
 // named under the axis. A component is a dot with its name beside it, an anchor a diamond, and a
-// pipeline a square over its components. Links are dotted lines under the names, and an evolving
+// pipeline a square over its components. Links are lines of braille dots under the names, and an evolving
 // component has a dashed line to an open circle where it is heading. Labelled links and notes are
 // listed under the map. Under 40 columns the map is a table of its components and links.
 
@@ -96,17 +96,13 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 			at[i][1]--
 		}
 	}
-	// Links first, as dots between the components, so that names and marks draw over them.
+	// Links are lines of braille dots from mark to mark, drawn last into the cells that
+	// names, marks and stage lines leave free.
+	links := newDotGrid(c.w, c.h)
+	linkLayer := links.layer(roleLine)
 	for _, link := range wm.Links {
 		a, b := at[link.From], at[link.To]
-		steps := max(abs(b[0]-a[0]), abs(b[1]-a[1]))
-		for s := 1; s < steps; s++ {
-			x := a[0] + int(math.Round(float64((b[0]-a[0])*s)/float64(steps)))
-			y := a[1] + int(math.Round(float64((b[1]-a[1])*s)/float64(steps)))
-			if p := c.at(x, y); p != nil && p.r == 0 {
-				c.put(x, y, '·', roleLine)
-			}
-		}
+		links.line(linkLayer, a[0]*2+1, a[1]*4+2, b[0]*2+1, b[1]*4+2, 1)
 	}
 	for _, trend := range wm.Trends {
 		i := int(trend[0])
@@ -141,7 +137,7 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 			return false
 		}
 		for k := 0; k < n; k++ {
-			if p := c.at(x+k, y); p == nil || (p.r != 0 && p.r != '·') {
+			if p := c.at(x+k, y); p == nil || p.r != 0 {
 				return false
 			}
 		}
@@ -177,6 +173,7 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 			c.text(min(x+2, w-lw), y, label, role)
 		}
 	}
+	links.paint(c, 0, 0)
 	for k, line := range noteLines {
 		c.text(0, axisY+4+k, line, roleNote)
 	}

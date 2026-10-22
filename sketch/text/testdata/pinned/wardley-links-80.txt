@@ -1,0 +1,24 @@
+                               tuios value chain
+↑ Visibility
+ │                   ┆                  ┆                  ┆
+ │                   ┆                  ┆  ⢀⣀⣀⣀⠤◆ Developer┆
+ │                   ┆       ⣀⣀⣀⡠⠤⠤⠤⠒⠒⠒⠊┆⠉⠉⠁   ⢠⠃          ┆
+ │   Agent cockpit ●┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄○  ┆      ⡎           ┆
+ │                  ⠈┆⣄⡀                ┆     ⡜            ┆
+ │                   ┆ ⠙⢦⣀              ┆    ●⠁Window manager
+ │                   ┆   ⠑⢕⠤⡀           ┆  ⢀⠜              ┆
+ │                   ┆     ⠑⠪⡢⢄         ┆ ⡰⠁               ┆
+ │                   ┆       ⠈●⠑Coding agents              ┆
+ │                   ┆           ⠈⠒⢄  ⢀⠔┆                  ┆
+ │                   ┆              ⠉●⢎Session daemon      ┆
+ │                   ┆                  ┆⠛⠲⠦⣤⣀⣀            ┆
+ │                   ┆                  ┆    ⠈⠑⠛●⢖VT emulator
+ │                   ┆                  ┆          ⠉⠒⠪⠭⣒⠢⠤⢄┆
+ │                   ┆                  ┆               ⠉⠑⠒┆⣉⡑⠒⠢⠤⣀⡀
+ │                   ┆                  ┆                  ┆ ⠈⠉⠒⠢⢄⣈⠉⠑⠒● SSH
+ │                   ┆                  ┆                  ┆       ⠉⠑⠢⠤⣀⡀
+ │                   ┆                  ┆                  ┆            ⠈⠑⠒● PTY
+ │                   ┆                  ┆                  ┆
+ └──────────────────────────────────────────────────────────────────────────────
+        Genesis            Custom             Product           Commodity
+                                                                     Evolution →
