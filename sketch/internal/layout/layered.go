@@ -2117,6 +2117,13 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		}
 		var onTrack [][]int
 		rows := 0
+		if !weighed {
+			// sketch: plainTracks gives the same tracks as the loop below without trying every
+			// track in turn, unless the pieces fall outside what it relies on.
+			if got, ok := plainTracks(list, from, to, LO, HI, track); ok {
+				rows, sequence = got, nil
+			}
+		}
 		for stepAt, at := range sequence {
 			k := list[at]
 			t := 0
