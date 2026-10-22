@@ -129,7 +129,17 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 	case "sankey":
 		c, err = drawSankey(layout, opt)
 	default:
-		c, err = drawSequence(layout, opt)
+		if squeeze {
+			// pele wraps message labels only when the layout runs past MaxWidth. A label
+			// of 64 characters fits a layout 640 units wide, so at 80 columns it does not
+			// wrap, and its cells make the drawing wider than 80 columns. Narrower
+			// layouts wrap it.
+			c, err = narrower(d, layout, opt, squeeze, func(l *sketch.Layout, opt Options, _ bool) (*canvas, error) {
+				return drawSequence(l, opt)
+			})
+		} else {
+			c, err = drawSequence(layout, opt)
+		}
 	}
 	if err != nil {
 		return nil, err
