@@ -404,9 +404,9 @@ func TestCopyModeBorderlessMotionReachesLastRow(t *testing.T) {
 	if w.CopyMode.CursorY != last {
 		t.Errorf("G moves to row %d, want %d", w.CopyMode.CursorY, last)
 	}
-	typeCopyKeys(o, w, "$")
+	typeCopyKeys(o, w, strings.Repeat("l", w.ContentWidth()))
 	if got, want := w.CopyMode.CursorX, w.ContentWidth()-1; got != want {
-		t.Errorf("$ moves to column %d, want the last column %d", got, want)
+		t.Errorf("l moves to column %d, want the last column %d", got, want)
 	}
 }
 

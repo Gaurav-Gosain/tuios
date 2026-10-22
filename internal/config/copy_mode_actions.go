@@ -16,11 +16,13 @@ const (
 
 // The copy-mode motions a config can bind, in [keybindings.copy_mode]. They
 // are live only while a pane is in copy mode, in normal and visual selection.
-// The vim keys 0 and $ do the same and are not bindings: copy mode reads them
-// itself, with the other vim motions.
+// The vim keys 0, ^ and $ do the same and are not bindings: copy mode reads
+// them itself, with the other vim motions. The line end and ^ go to the last
+// and first nonblank characters of the row, not to the pane edge.
 const (
-	ActionCopyModeLineStart = "copy_mode_line_start"
-	ActionCopyModeLineEnd   = "copy_mode_line_end"
+	ActionCopyModeLineStart     = "copy_mode_line_start"
+	ActionCopyModeFirstNonBlank = "copy_mode_first_nonblank"
+	ActionCopyModeLineEnd       = "copy_mode_line_end"
 )
 
 // copyModeFixedKeys are the keys copy mode reads itself, in
