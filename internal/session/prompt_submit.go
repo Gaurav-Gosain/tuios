@@ -147,6 +147,18 @@ func submitPastes(ctx context.Context, pane promptPane, pastes []string, in harn
 	return submitPastesStamped(ctx, pane, pastes, in, promptSubmitQuiet, promptSubmitMaxWait)
 }
 
+// submitGuardKey carries a check that runs right before the submit key.
+type submitGuardKey struct{}
+
+// withSubmitGuard returns ctx with check, which submitPastesStamped runs
+// right before it writes the submit key. The wait for the paste to be taken
+// can be long, and a pane can come to a prompt in it: the Enter would then
+// answer the prompt. A check that fails stops the submit, with its error
+// wrapped. The paste stays in the pane, unsubmitted.
+func withSubmitGuard(ctx context.Context, check func() *verbError) context.Context {
+	return context.WithValue(ctx, submitGuardKey{}, check)
+}
+
 // submitPastesStamped is submitPastes with the waits as parameters.
 func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, in harness.InputProfile, quiet, maxWait time.Duration) (time.Time, error) {
 	if in.SubmitKey == "" {
@@ -180,6 +192,11 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 		}
 		if err := waitPasteTaken(ctx, pane, pastedAt, quiet, maxWait); err != nil {
 			return time.Time{}, err
+		}
+	}
+	if check, ok := ctx.Value(submitGuardKey{}).(func() *verbError); ok && check != nil {
+		if verr := check(); verr != nil {
+			return time.Time{}, fmt.Errorf("the prompt was pasted and not submitted: %w", verr)
 		}
 	}
 	submittedAt := time.Now()

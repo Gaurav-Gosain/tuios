@@ -58,6 +58,11 @@ func pluginAsksOf(entries []herdrplugin.Entry) []PluginApprovalAsk {
 		if !e.Enabled || p == nil || p.Format != herdrplugin.FormatTuios || p.Approval != herdrplugin.ApprovalWaiting {
 			continue
 		}
+		if e.Err != nil && e.Err.Code != "plugin_needs_approval" && e.Err.Code != "plugin_admin_not_approved" {
+			// A shadowed copy, or one that does not run for another
+			// reason: an answer would not make it run.
+			continue
+		}
 		source := "folder " + p.PluginRoot
 		if e.Lock != nil && !e.Lock.Local() {
 			source = strings.TrimSuffix(strings.TrimPrefix(e.Lock.Source, "https://"), ".git")

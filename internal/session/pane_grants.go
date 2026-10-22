@@ -962,10 +962,12 @@ func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMess
 //
 // A native plugin has a typing rule of its own: with write it types into
 // any pane, whatever that pane holds, and the prompt rule still holds it.
-// The person gave it write in so many words ("types into any pane that
-// does not wait on a prompt"), and under the default open mode every pane
-// holds admin, so the pane rule would leave write with no pane to type
-// into. A plugin never holds respond, so it never answers a prompt.
+// The person gave it write in so many words ("types into your panes and
+// shells, so it can run commands as you"), and under the default open mode
+// every pane holds admin, so the pane rule would leave write with no pane to
+// type into. A plugin never holds respond. The prompt rule knows only the
+// prompts tuios sees (needs_input): a plain y/N question in a shell is not
+// one, and a plugin with write can answer it.
 func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked bool) string {
 	if target.ID == pa.window {
 		return ""
@@ -997,7 +999,7 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 			" is waiting on a prompt. Typing into a pane this pane did not open, and that is not at its shell prompt, needs the respond grant"
 	}
 	if !blockedChecked && target.AgentState == AgentStateNeedsInput && !pa.grants.Has(GrantRespond) && pa.plugin != "" {
-		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it. A plugin never answers a prompt. Only you do that"
+		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it. A plugin does not answer a prompt that tuios knows of. Only you do that"
 	}
 	if !blockedChecked && target.AgentState == AgentStateNeedsInput && !pa.grants.Has(GrantRespond) {
 		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it, which needs the respond grant"

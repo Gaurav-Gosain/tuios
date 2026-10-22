@@ -1187,7 +1187,17 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// prompt. See prompt_submit.go. The gate reads the pane first, so it can
 	// tell afterwards whether the pane took the question. See prompt_gate.go.
 	gate := d.newPromptGate(sess, target.ID)
-	submittedAt, werr := submitPrompt(d.ctx, pty, p.Text, d.inputProfileFor(sess, target.ID))
+	// And once more right before the submit key, which would answer a
+	// prompt that came up while the paste was taken in.
+	ctx := withSubmitGuard(d.ctx, func() *verbError {
+		if !p.AllowBlocked {
+			if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
+				return verr
+			}
+		}
+		return d.recheckTyping(cs, "ask-agent", sess, target.ID)
+	})
+	submittedAt, werr := submitPrompt(ctx, pty, p.Text, d.inputProfileFor(sess, target.ID))
 	if werr != nil {
 		return nil, promptWriteError(werr)
 	}

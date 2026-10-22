@@ -350,6 +350,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	defer cancel()
 	pty.shell.expect()
 	defer pty.shell.stopExpecting()
+	ctx = withSubmitGuard(ctx, func() *verbError { return d.recheckTyping(cs, "run", sess, w.ID) })
 	if _, err := submitPrompt(ctx, pty, p.Command, harness.DefaultInputProfile()); err != nil {
 		return nil, promptWriteError(err)
 	}

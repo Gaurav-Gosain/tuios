@@ -88,6 +88,25 @@ func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 	return nil
 }
 
+// bindPeerPluginToken places the connection in the plugin whose token the
+// peer process was started with, read from its environment at accept. It
+// needs nothing from the caller, so a raw socket call and the client
+// protocol are held too. Where the environment cannot be read (Windows, the
+// BSDs), the CLI presents the token with pane-grants instead.
+func (d *Daemon) bindPeerPluginToken(cs *connState) {
+	if cs == nil || cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
+		return
+	}
+	id, ok := readEnvVarOf(cs.peerPID, "TUIOS_PLUGIN_ID")
+	if !ok || id == "" {
+		return
+	}
+	tok, _ := readEnvVarOf(cs.peerPID, "TUIOS_PLUGIN_TOKEN")
+	if verr := d.bindPluginToken(cs, id, tok); verr != nil {
+		LogBasic("Client %s (pid %d) names plugin %s and is not placed in it: %s", cs.clientID, cs.peerPID, id, verr.Message)
+	}
+}
+
 // boundPluginGrants is what plugin id holds now: none when it is not a
 // native plugin that runs.
 func (d *Daemon) boundPluginGrants(id string) Grants {

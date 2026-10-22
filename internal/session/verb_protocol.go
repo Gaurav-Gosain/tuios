@@ -324,6 +324,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "pane_token", Type: "string", Description: "The pane's $TUIOS_PANE_TOKEN, which proves pane_id. It is good for one pane of one daemon start."},
 				{Name: "peer_pid", Type: "int", Description: "Answer for the process with this pid instead of the caller, placed the way a caller is. The tmux shim's pane holder asks this for the process on its own socket before it replaces the pane's command. The answer echoes peer_pid. A pane without admin asking about a process in another pane is told only pane and admin. Not with pane_id or pane_token, and refused over a link."},
 				{Name: "peer_start", Type: "int", Description: "With peer_pid: the process's start time as the asker read it when the process connected. A process with another start time now is not the one that connected, and is answered as one that cannot be read."},
+				{Name: "plugin_id", Type: "string", Description: "The native plugin the caller belongs to, normally $TUIOS_PLUGIN_ID. Only with plugin_token, and only alone. It places this connection in that plugin for as long as it is open, held to the plugin's grants. A caller the kernel places in another plugin is refused."},
+				{Name: "plugin_token", Type: "string", Description: "The plugin's $TUIOS_PLUGIN_TOKEN, which proves plugin_id. It is good for one plugin of one daemon start."},
 			},
 			returns: []verbParam{
 				{Name: "pane", Type: "bool", Description: "Whether the caller runs in a pane of this daemon. When false, no pane grants apply to it: the person's own CLI and client keep full rights."},

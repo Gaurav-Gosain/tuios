@@ -445,7 +445,7 @@ func TestTheClientPresentsItsPaneWhereTheKernelCannot(t *testing.T) {
 	if !kernel.Daemon().PaneGrants {
 		t.Fatal("the daemon's hello does not say it takes pane grants")
 	}
-	kernel.presentPaneToken(true, getenv)
+	_ = kernel.presentPaneToken(true, getenv)
 	if _, err := kernel.Call("capture-pane", map[string]any{"session": "b", "window": b1}); err != nil {
 		t.Errorf("a client that presented nothing was held: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestTheClientPresentsItsPaneWhereTheKernelCannot(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = c.Close() }()
-	c.presentPaneToken(false, getenv)
+	_ = c.presentPaneToken(false, getenv)
 	_, err = c.Call("capture-pane", map[string]any{"session": "b", "window": b1})
 	var callErr *VerbCallError
 	if !errors.As(err, &callErr) || callErr.Code != ErrVerbForbidden {
@@ -863,5 +863,44 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Error("the person's send-keys never reached the attached client")
+	}
+}
+
+// TestThePluginTokenHoldsTheCaller: a process that presents a plugin's
+// token is held to that plugin, which here holds nothing, and is never the
+// person. A token that does not prove the id fails the connection, so a
+// plugin's call is never let through unplaced. Review of #1006, B1: the verb
+// did not declare the parameters, the dispatcher refused them, and the CLI
+// ignored the refusal.
+func TestThePluginTokenHoldsTheCaller(t *testing.T) {
+	d, sp, _, _, b1 := scopeFixture(t)
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
+	env := map[string]string{"TUIOS_PLUGIN_ID": "e2e.tok", "TUIOS_PLUGIN_TOKEN": d.manager.PluginToken("e2e.tok")}
+	getenv := func(k string) string { return env[k] }
+
+	c, err := DialVerbClientAt(sp, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if err := c.presentPaneToken(true, getenv); err != nil {
+		t.Fatalf("a good plugin token was refused: %v", err)
+	}
+	var callErr *VerbCallError
+	if _, err := c.Call("capture-pane", map[string]any{"session": "b", "window": b1}); !errors.As(err, &callErr) || callErr.Code != ErrVerbForbidden {
+		t.Errorf("capture by a plugin that holds nothing = %v, want forbidden", err)
+	}
+	if _, err := c.Call("attach-presence", nil); err == nil {
+		t.Errorf("a caller with a plugin's token was confirmed as the person")
+	}
+
+	env["TUIOS_PLUGIN_TOKEN"] = "00" + env["TUIOS_PLUGIN_TOKEN"][2:]
+	bad, err := DialVerbClientAt(sp, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = bad.Close() }()
+	if err := bad.presentPaneToken(true, getenv); err == nil {
+		t.Errorf("a token that does not prove the plugin id was taken")
 	}
 }

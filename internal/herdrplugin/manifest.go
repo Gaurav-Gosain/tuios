@@ -385,6 +385,14 @@ func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 	if p.Name, perr = nonEmpty(*raw.Name, "invalid_plugin_name", "plugin name is required"); perr != nil {
 		return nil, perr
 	}
+	// The name is shown in the approval dialog, the install question and
+	// the listings. A control or bidi character is dropped, so the name
+	// cannot hide or move text, and it is cut to MaxNameRunes, so it
+	// cannot push the grants off the screen.
+	p.Name = ShownName(p.Name)
+	if p.Name == "" {
+		return nil, errf("invalid_plugin_name", "plugin name is required")
+	}
 	if p.Version, perr = nonEmpty(*raw.Version, "invalid_plugin_version", "plugin version is required"); perr != nil {
 		return nil, perr
 	}

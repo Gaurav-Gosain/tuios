@@ -80,6 +80,10 @@ func (d *Daemon) pinPeer(cs *connState) {
 		return
 	}
 	cs.peerStart, cs.peerStartOK = procinfo.StartTime(cs.peerPID)
+	// A process that carries a plugin's token in its environment is that
+	// plugin, on every socket and protocol, also when it left the plugin's
+	// process session. See plugin_token.go.
+	d.bindPeerPluginToken(cs)
 	d.connFromPane(cs)
 }
 

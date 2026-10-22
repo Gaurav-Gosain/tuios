@@ -946,13 +946,22 @@ folder. A native plugin that comes some other way waits for you: from
 plugin folder. `tuios plugins list` shows it as "waiting for approval".
 When you attach, tuios asks in a dialog:
 
-- **Allow** runs it. A plugin that asks for `admin` needs you to type
-  `admin` first.
-- **Deny** keeps it off. `tuios plugins list` shows "denied".
-- **Not now** closes the dialog. The plugin keeps waiting.
+- To allow it, type `allow` and press Enter. For a plugin that asks for
+  `admin`, type `admin`. No key or click alone allows a plugin.
+- **Deny** keeps it off. `tuios plugins list` shows "denied". A click on
+  Deny asks for a second click.
+- **Not now** closes the dialog. The plugin keeps waiting. Enter and esc
+  start on Not now.
+
+The dialog ignores keys and clicks for half a second after it opens, so
+what you were typing into a pane answers nothing.
 
 `tuios plugins approve ID` asks the same question in a terminal, and
-`--deny` denies. When the manifest changes, tuios asks again. Only you can
+`--deny` denies. Before it writes an answer, it asks each tuios daemon
+that runs whether the command runs outside its panes and plugins, also
+under `--server`. With no daemon to ask, it refuses. `tuios plugins
+install` writes the approval the same way, and with no daemon to ask it
+leaves the plugin waiting for the dialog. When the manifest changes, tuios asks again. Only you can
 answer: a pane or a plugin that answers is refused.
 
 The processes of a native plugin hold the grants you allowed, in every
@@ -961,13 +970,20 @@ session:
 | Grant | What the plugin can do |
 |---|---|
 | `read` | Reads every session and pane on this machine. |
-| `write` | Types into any pane that does not wait on a prompt. |
+| `write` | Types into your panes and shells, so it can run commands as you. It stops at an agent's approval prompt. |
 | `fan` | Starts agents in new sessions. |
 | `admin` | Does all that you can do in tuios. |
 
-A plugin with `write` types into a pane whatever that pane holds. It never
-types into a pane that waits on a prompt, such as an approval, because the
-keys would answer it. A plugin never holds `respond`. A herdr plugin holds
+A plugin with `write` types into a pane whatever that pane holds, your own
+shells included, so it can run commands as you. tuios refuses its keys for
+a pane that waits on a prompt tuios knows of: an agent's approval that the
+harness reports or a screen rule finds. tuios checks again right before the
+Enter of `send-text --submit`, `ask-agent` and `run`. tuios does not know a
+plain question in a shell, such as `read -p`, `sudo`, `rm -i` or an ssh
+host key question, and a plugin with `write` can answer it. A plugin with
+`read` can also watch a pane and type in the moment before tuios sees a new
+prompt. A plugin never holds `respond`. A plugin cannot queue with
+`queue-prompt` or `send-review`. A herdr plugin holds
 the default grants of `[agents.permissions]`. A pane that a native plugin
 opens holds no more than the plugin.
 
@@ -981,9 +997,13 @@ It does not stop a program that tries to escape. No plugin process can act
 as the person.
 
 Each process of a native plugin also gets `TUIOS_PLUGIN_ID` and
-`TUIOS_PLUGIN_TOKEN`. The tuios command line sends them to the daemon, so
-a process that left the plugin's session is still held to the plugin's
-grants. The token works for one daemon start.
+`TUIOS_PLUGIN_TOKEN`. On Linux and macOS the daemon reads them from the
+environment of each process that connects, on every socket. A process
+that left the plugin's session but kept them is still held to the
+plugin's grants, and is never you. The tuios command line also sends them
+with `pane-grants`, and fails when the daemon does not take them. The
+token works for one daemon start. A process that removes the variables
+and leaves the session is not held by them.
 
 A native plugin holds `admin` only when you approved it on this machine.
 `tuios plugins install --grant admin` and `tuios plugins approve --grant

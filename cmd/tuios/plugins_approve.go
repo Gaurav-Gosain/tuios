@@ -92,19 +92,21 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 	if !ok {
 		return errors.New("nothing was changed")
 	}
+	// Every daemon that runs confirms that the person runs this command,
+	// before any answer is written, also under --server. With no daemon to
+	// ask, nothing proves it, so nothing is written. See approval.go.
+	if err := confirmPerson(); err != nil {
+		return err
+	}
 	params := map[string]any{"plugin_id": p.PluginID, "trust": p.Trust, "allow": allow, "admin": admin}
 	_, running, err := pluginCall("plugin.approve", params, 30*time.Second)
 	if err != nil {
 		return err
 	}
 	if !running {
-		// No daemon: the next one reads the answer. admin still needs a
-		// daemon to confirm that you run this command.
-		if admin {
-			if err := confirmPerson(); err != nil {
-				return err
-			}
-		}
+		// The daemon this command names does not run, and every daemon
+		// that runs confirmed the person above. The next daemon reads the
+		// answer.
 		dirs := herdrplugin.DefaultDirs(pluginsConfigPathOrEmpty(), nil)
 		if allow {
 			err = herdrplugin.Approve(dirs.ApprovalsPath(), p, p.Trust, admin)

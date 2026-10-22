@@ -101,34 +101,42 @@ func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 		return nil, err
 	}
 	c.daemon = hs
-	c.presentPaneToken(peerPIDSupported, os.Getenv)
+	if err := c.presentPaneToken(peerPIDSupported, os.Getenv); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
 	return c, nil
 }
 
 // presentPaneToken places this connection in the caller's pane where the
 // daemon cannot place it by pid, so a call from a pane is held to the pane's
 // grants on every platform. It sends TUIOS_PANE_ID and TUIOS_PANE_TOKEN with
-// pane-grants when both are set and the daemon takes them. Presenting a token
-// can only narrow what the connection may do, so a failure is ignored: the
-// daemon holds the call to what it can prove either way.
-func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string) {
+// pane-grants when both are set and the daemon takes them. Presenting a pane
+// token can only narrow what the connection may do, so a failure is
+// ignored: the daemon holds the call to what it can prove either way.
+//
+// A native plugin's process presents TUIOS_PLUGIN_ID and TUIOS_PLUGIN_TOKEN
+// on every platform. That one must take: a refusal, or a daemon that does
+// not know the parameters, fails the connection, so a plugin's call never
+// goes through unplaced. See plugin_token.go.
+func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string) error {
 	if c.daemon == nil || !c.daemon.PaneGrants {
-		return
+		return nil
 	}
-	// A native plugin's process presents its plugin's token on every
-	// platform: a process that left the plugin's process session is still
-	// held to its grants. See plugin_token.go.
-	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); id != "" && tok != "" {
-		_, _ = c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok})
+	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); id != "" || tok != "" {
+		if _, err := c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok}); err != nil {
+			return fmt.Errorf("this process belongs to plugin %s, and the daemon did not take its token: %w", id, err)
+		}
 	}
 	if kernelPlaces {
-		return
+		return nil
 	}
 	id, tok := getenv("TUIOS_PANE_ID"), getenv("TUIOS_PANE_TOKEN")
 	if id == "" || tok == "" {
-		return
+		return nil
 	}
 	_, _ = c.Call("pane-grants", map[string]any{"pane_id": id, "pane_token": tok})
+	return nil
 }
 
 // DialVerbClientThroughHost connects to the daemon on host by way of the daemon

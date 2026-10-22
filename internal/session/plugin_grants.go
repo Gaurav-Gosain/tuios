@@ -80,6 +80,12 @@ func (d *Daemon) checkPluginGrants(verb string, pa *paneAuth, params json.RawMes
 	if verb == "respond" {
 		return nil, deny("a plugin cannot answer a prompt. Only the person or a pane given respond does that")
 	}
+	if verb == "queue-prompt" || verb == "send-review" {
+		// The queue types later, as the pane that queued, and a plugin has
+		// no pane: delivery would drop the entry. Refused, so the plugin
+		// is told now.
+		return nil, deny(verb + " queues for later, and a plugin cannot queue. Use send-text or ask-agent")
+	}
 	if !pa.grants.Has(GrantAdmin) {
 		var need Grants
 		name := ""

@@ -2,8 +2,10 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -54,8 +56,13 @@ type pluginApprovalState struct {
 	open *session.PluginApprovalAsk
 	// selected is the answer row under the cursor.
 	selected int
-	// typed is what the person typed to give admin.
+	// typed is what the person typed in the field: allow, or admin for
+	// a plugin that asks for admin.
 	typed string
+	// openedAt is when the question opened. Keys and clicks are ignored
+	// for pluginApprovalSettle after it, so what the person was typing
+	// into a pane, or clicking, as it opened answers nothing.
+	openedAt time.Time
 	// err is the daemon's last refusal.
 	err string
 	// busy is true while an answer is on its way.
@@ -112,6 +119,7 @@ func (m *OS) openNextPluginAsk() {
 		if a := st.asks[i]; !st.seen[pluginAskKey(a)] {
 			st.seen[pluginAskKey(a)] = true
 			st.open, st.selected, st.typed, st.err, st.busy = &a, pluginRowLater, "", "", false
+			st.openedAt = pluginApprovalNow()
 			return
 		}
 	}
@@ -123,74 +131,116 @@ func (m *OS) ClosePluginApproval() {
 	m.openNextPluginAsk()
 }
 
-// PluginApprovalSelect puts the cursor on an answer row.
+// pluginApprovalSettle is how long the dialog ignores keys and clicks
+// after it opens.
+const pluginApprovalSettle = 500 * time.Millisecond
+
+// pluginApprovalNow is the clock the dialog reads. Tests replace it.
+var pluginApprovalNow = time.Now
+
+// pluginApprovalSettled reports whether the dialog has been open long
+// enough to take an answer.
+func (m *OS) pluginApprovalSettled() bool {
+	return pluginApprovalNow().Sub(m.pluginApproval.openedAt) >= pluginApprovalSettle
+}
+
+// pluginApprovalWord is what the person types to allow the plugin.
+func pluginApprovalWord(a *session.PluginApprovalAsk) string {
+	if pluginAskAdmin(a) {
+		return "admin"
+	}
+	return "allow"
+}
+
+// PluginApprovalSelect puts the cursor on an answer row, as a hover does.
 func (m *OS) PluginApprovalSelect(idx int) {
-	if idx >= 0 && idx < len(pluginApprovalRows) {
+	if idx >= 0 && idx < len(pluginApprovalRows) && m.pluginApprovalSettled() {
 		m.pluginApproval.selected = idx
 	}
 }
 
 // PluginApprovalKey handles a key while the dialog is open.
+//
+// Allow takes a typed word: allow, or admin for a plugin that asks for it,
+// then Enter. No row and no key alone allows, so keys meant for a pane, such
+// as Tab and Enter or Up, Up and Enter, cannot. The cursor does not wrap.
 func (m *OS) PluginApprovalKey(key, text string) tea.Cmd {
 	st := &m.pluginApproval
-	if st.open == nil {
+	if st.open == nil || !m.pluginApprovalSettled() {
 		return nil
 	}
 	switch key {
 	case "esc":
 		m.ClosePluginApproval()
 		return nil
-	case "up", "shift+tab":
-		st.selected = (st.selected + len(pluginApprovalRows) - 1) % len(pluginApprovalRows)
+	case "up":
+		st.selected = max(st.selected-1, 0)
 		return nil
-	case "down", "tab":
-		st.selected = (st.selected + 1) % len(pluginApprovalRows)
+	case "down":
+		st.selected = min(st.selected+1, len(pluginApprovalRows)-1)
 		return nil
 	case "enter":
-		return m.PluginApprovalActivate(st.selected)
-	}
-	if !pluginAskAdmin(st.open) {
-		return nil
-	}
-	// The admin field takes what is typed.
-	switch key {
+		if strings.TrimSpace(st.typed) == pluginApprovalWord(st.open) {
+			return m.pluginApprovalAnswer(true)
+		}
+		return m.pluginApprovalChoose(st.selected)
 	case "backspace":
 		if r := []rune(st.typed); len(r) > 0 {
 			st.typed = string(r[:len(r)-1])
 		}
+		st.err = ""
+		return nil
 	case "ctrl+u":
-		st.typed = ""
-	default:
-		if text != "" {
-			st.typed += printableRunes(text)
-		} else if len(key) == 1 && key[0] > 32 && key[0] <= 126 {
-			st.typed += key
-		}
+		st.typed, st.err = "", ""
+		return nil
+	}
+	if text != "" {
+		st.typed += printableRunes(text)
+	} else if len(key) == 1 && key[0] > 32 && key[0] <= 126 {
+		st.typed += key
 	}
 	st.err = ""
 	return nil
 }
 
-// PluginApprovalActivate answers with row idx.
+// PluginApprovalActivate is a click on row idx. Not now closes at once.
+// Deny takes a second click on the row the first one put the cursor on.
+// Allow never answers to a click: it asks for the typed word.
 func (m *OS) PluginApprovalActivate(idx int) tea.Cmd {
+	st := &m.pluginApproval
+	if st.open == nil || st.busy || !m.pluginApprovalSettled() {
+		return nil
+	}
+	if idx == pluginRowDeny && st.selected != pluginRowDeny {
+		st.selected = idx
+		st.err = "Click Deny again to deny the plugin."
+		return nil
+	}
+	return m.pluginApprovalChoose(idx)
+}
+
+// pluginApprovalChoose acts on answer row idx.
+func (m *OS) pluginApprovalChoose(idx int) tea.Cmd {
+	st := &m.pluginApproval
+	st.selected = idx
+	switch idx {
+	case pluginRowLater:
+		m.ClosePluginApproval()
+		return nil
+	case pluginRowAllow:
+		st.err = "Type " + pluginApprovalWord(st.open) + " in the field, then press Enter."
+		return nil
+	}
+	return m.pluginApprovalAnswer(false)
+}
+
+// pluginApprovalAnswer sends the answer to the daemon.
+func (m *OS) pluginApprovalAnswer(allow bool) tea.Cmd {
 	st := &m.pluginApproval
 	if st.open == nil || st.busy {
 		return nil
 	}
-	st.selected = idx
-	if idx == pluginRowLater {
-		m.ClosePluginApproval()
-		return nil
-	}
-	allow := idx == pluginRowAllow
-	admin := false
-	if allow && pluginAskAdmin(st.open) {
-		if strings.TrimSpace(st.typed) != "admin" {
-			st.err = "Type admin in the field to give the admin grant."
-			return nil
-		}
-		admin = true
-	}
+	admin := allow && pluginAskAdmin(st.open)
 	st.busy, st.err = true, ""
 	id, trust := st.open.ID, st.open.Trust
 	params := map[string]any{"plugin_id": id, "trust": trust, "allow": allow, "admin": admin}
@@ -221,76 +271,79 @@ func (m *OS) pluginApprovalDone(msg pluginApprovalDoneMsg) {
 	m.openNextPluginAsk()
 }
 
-// pluginApprovalLines is the dialog's text above the answers. The first line
-// is the question.
-func pluginApprovalLines(a *session.PluginApprovalAsk) []string {
-	name := a.Name
-	if name == "" {
-		name = a.ID
-	}
-	lines := []string{
-		fmt.Sprintf("Allow the plugin %s to run on this machine?", name),
-		fmt.Sprintf("%s %s, from %s", a.ID, a.Version, a.Source),
-		"",
-		"It runs on its own, with your rights:",
-	}
-	runs := a.Runs
-	if len(runs) == 0 {
-		runs = []string{"nothing"}
-	}
-	const maxRuns = 4
-	for i, r := range runs {
-		if i == maxRuns {
-			lines = append(lines, fmt.Sprintf("  and %d more. Run tuios plugins info %s to see all.", len(runs)-maxRuns, a.ID))
-			break
-		}
-		lines = append(lines, "  "+r)
-	}
-	lines = append(lines, "")
-	if len(a.Grants) == 0 {
-		lines = append(lines, "It can use tuios only for what every pane may do.")
-	} else {
-		lines = append(lines, "It can use tuios with these grants:")
-		for _, g := range a.Grants {
-			lines = append(lines, fmt.Sprintf("  %-6s %s", g, herdrplugin.GrantMeaning(g)))
-		}
-	}
-	return lines
-}
+// pluginApprovalMaxRuns is how many of the plugin's commands the dialog
+// lists. The rest are counted.
+const pluginApprovalMaxRuns = 4
 
-// renderPluginApproval draws the dialog.
+// renderPluginApproval draws the dialog. Every line is cut to the width,
+// never wrapped, except the note at the end, so the grants and the answer
+// rows are always on screen whatever the plugin calls itself.
 func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.pluginApproval
 	a := st.open
 	pal := theme.UI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(pluginApprovalWidth, m.GetRenderWidth())
+	inner := max(width-2, 1)
 
 	var body []string
-	for i, l := range pluginApprovalLines(a) {
-		for _, wrapped := range wrapPlain(l, max(width-2, 1)) {
-			if i == 0 {
-				body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
-					overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(wrapped), width, bg))
-				continue
-			}
+	line := func(text string, ink color.Color) {
+		body = append(body, dialogBodyLine(text, width, ink, bg))
+	}
+	name := herdrplugin.ShownName(a.Name)
+	if name == "" {
+		name = a.ID
+	}
+	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
+		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate("Allow the plugin "+name+"?", inner)), width, bg))
+	line(a.ID+" "+herdrplugin.ShownName(a.Version), pal.FgDim)
+	from, src := "from ", a.Source
+	if p, ok := strings.CutPrefix(src, "folder "); ok {
+		from, src = "from the folder ", p
+	}
+	line(from+truncPathLeft(src, max(inner-len(from), 1)), pal.FgDim)
+	line("", pal.FgDim)
+	line("It runs on its own, with your rights:", pal.FgDim)
+	runs := a.Runs
+	if len(runs) == 0 {
+		runs = []string{"nothing"}
+	}
+	for i, r := range runs {
+		if i == pluginApprovalMaxRuns {
+			line(fmt.Sprintf("  and %d more. Run tuios plugins info %s to see all.", len(runs)-pluginApprovalMaxRuns, a.ID), pal.FgDim)
+			break
+		}
+		line("  "+r, pal.FgDim)
+	}
+	line("", pal.FgDim)
+	if len(a.Grants) == 0 {
+		line("It can use tuios only for what every pane may do.", pal.FgDim)
+	} else {
+		line("It can use tuios with these grants:", pal.FgDim)
+		for _, g := range a.Grants {
 			ink := pal.FgDim
-			if strings.HasPrefix(l, "  admin") {
+			if g == "admin" || g == "write" {
 				ink = pal.Warn
 			}
-			body = append(body, dialogBodyLine(wrapped, width, ink, bg))
+			// The grant's name stays whole. Its words wrap.
+			for i, w := range wrapPlain(herdrplugin.GrantMeaning(g), max(inner-9, 10)) {
+				label := ""
+				if i == 0 {
+					label = g
+				}
+				line(fmt.Sprintf("  %-6s %s", label, w), ink)
+			}
 		}
 	}
-	if pluginAskAdmin(a) {
-		body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
-		body = append(body, dialogBodyLine("To give it admin, type admin here:", width, pal.Fg, bg))
-		field := fieldTail(printableRunes(st.typed), max(width-4, 1))
-		body = append(body, overlay.Fill(
-			overlay.Style(bg).Render(" ")+
-				overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
-				overlay.Style(bg).Foreground(pal.Fg).Render(field)+
-				overlay.Cursor(" ", bg, pal.Fg), width, bg))
-	}
+	line("", pal.FgDim)
+	word := pluginApprovalWord(a)
+	line("To allow it, type "+word+" and press Enter:", pal.Fg)
+	field := fieldTail(printableRunes(st.typed), max(width-4, 1))
+	body = append(body, overlay.Fill(
+		overlay.Style(bg).Render(" ")+
+			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
+			overlay.Style(bg).Foreground(pal.Fg).Render(field)+
+			overlay.Cursor(" ", bg, pal.Fg), width, bg))
 	note, ink := "Not now leaves it off. You can answer later with tuios plugins approve.", pal.FgMute
 	switch {
 	case st.busy:
@@ -300,9 +353,8 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 	case len(st.asks) > 1:
 		note = fmt.Sprintf("%d plugins wait for your answer.", len(st.asks))
 	}
-	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
-	for _, wrapped := range wrapPlain(note, max(width-2, 1)) {
-		body = append(body, dialogBodyLine(wrapped, width, ink, bg))
+	for _, wrapped := range wrapPlain(note, inner) {
+		line(wrapped, ink)
 	}
 	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))
 	top := len(body)

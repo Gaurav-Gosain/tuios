@@ -1,6 +1,9 @@
 package tuie2e
 
 import (
+	"bufio"
+	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,43 +13,34 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The first-run approval of a native plugin, and the typing rule of a
-// plugin with write.
-//
-// A linked native plugin does not run until the person allows it on this
-// machine. An attached client asks in a dialog, which is drawn at truecolor
-// and at 16 colours. A pane cannot answer for the person, also with its pane
-// variables cut. Allowed, the plugin's startup tries what write gives and
-// what it does not:
-//
-//   - send-text into an ordinary shell pane, which holds admin under the
-//     default open mode: it types (the plugin's own typing rule).
-//   - send-text into a pane that waits on a prompt: refused, the prompt
-//     rule holds a plugin.
-//   - respond, set-pane-grants, list-sessions and plugin.approve: refused,
-//     each needs what the plugin does not hold.
-//
-// A changed grant in the manifest asks again.
+// The first-run approval of a native plugin, the plugin token, and the
+// typing rule of a plugin with write.
 //
 // The negative controls are in NEGATIVE_CONTROLS.md, "Plugin approval".
 
-const writerScript = `T='%TUIOS%'
-D="$HERDR_PLUGIN_STATE_DIR"
-. ./targets.sh
-run() { n=$1; shift; "$@" >"$D/$n.out" 2>&1; echo $? >"$D/$n.code"; }
-run ordinary "$T" send-text -s work -w "$SHELLW" "echo typed-by-plugin
-"
-run prompt "$T" send-text -s work -w "$PROMPTW" "1"
-run respond "$T" respond approve -s work -w "$PROMPTW"
-run regrant "$T" set-pane-grants -w "$SHELLW" --grants admin
-run read "$T" list-sessions
-run approve "$T" plugins approve e2e.writer --deny --yes
-`
+// approvalPlugin links a native plugin with one startup script and enables
+// it. %TUIOS% in the script is the tuios binary.
+func approvalPlugin(t *testing.T, base, id, name, grants, script string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), strings.ReplaceAll(id, ".", "-"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeApprovalManifest(t, dir, id, name, grants)
+	if err := os.WriteFile(filepath.Join(dir, "probe.sh"), []byte(strings.ReplaceAll(script, "%TUIOS%", tuiosBin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "link", dir, "--enable"); err != nil {
+		t.Fatalf("link %s: %v\n%s", id, err, out)
+	}
+	return dir
+}
 
-func writerManifest(grants string) string {
-	return `schema = 1
-id = "e2e.writer"
-name = "Writer probe"
+func writeApprovalManifest(t *testing.T, dir, id, name, grants string) {
+	t.Helper()
+	m := `schema = 1
+id = "` + id + `"
+name = "` + name + `"
 version = "1.0.0"
 platforms = ["linux", "macos"]
 
@@ -58,44 +52,130 @@ id = "main"
 run = "startup"
 command = ["sh", "probe.sh"]
 `
+	if err := os.WriteFile(filepath.Join(dir, "tuios-plugin.toml"), []byte(m), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
-// TestNativePluginApproval checks the first-run approval and a plugin's
-// typing rule.
-func TestNativePluginApproval(t *testing.T) {
-	base := t.TempDir()
+// approvalSession makes the session work with n windows and returns their
+// ids.
+func approvalSession(t *testing.T, base string, n int) []string {
+	t.Helper()
 	writeConfig(t, base, "")
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLI(t, base, "new-window", "-s", "work", "--no-focus"); err != nil {
-		t.Fatalf("new-window: %v\n%s", err, out)
+	for range n - 1 {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", "work", "--no-focus"); err != nil {
+			t.Fatalf("new-window: %v\n%s", err, out)
+		}
 	}
 	ids := windowIDs(t, base, "work")
-	if len(ids) != 2 {
-		t.Fatalf("session work has %d windows, want 2", len(ids))
+	if len(ids) != n {
+		t.Fatalf("session work has %d windows, want %d", len(ids), n)
 	}
-	shellW, promptW := ids[0], ids[1]
+	return ids
+}
+
+// herdrCall sends one method to the daemon's herdr socket from this test
+// process, which is the person.
+func approvalHerdrCall(t *testing.T, base, method string, params map[string]any) map[string]any {
+	t.Helper()
+	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock.herdr")
+	conn, err := net.DialTimeout("unix", sock, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial the herdr socket: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	line, _ := json.Marshal(map[string]any{"id": "e2e", "method": method, "params": params})
+	if _, err := conn.Write(append(line, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	reply, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("%s: no answer: %v", method, err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(reply, &out); err != nil {
+		t.Fatalf("%s: %v: %s", method, err, reply)
+	}
+	return out
+}
+
+func herdrErrorCode(resp map[string]any) string {
+	if e, ok := resp["error"].(map[string]any); ok {
+		code, _ := e["code"].(string)
+		return code
+	}
+	return ""
+}
+
+// pluginTrust reads a plugin's trust hash from plugins info --json.
+func pluginTrust(t *testing.T, base, id string) string {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "plugins", "info", id, "--json")
+	if err != nil {
+		t.Fatalf("plugins info %s: %v\n%s", id, err, out)
+	}
+	var e struct {
+		Plugin struct {
+			Trust string `json:"trust_hash"`
+		} `json:"plugin"`
+	}
+	if err := json.Unmarshal([]byte(out), &e); err != nil || e.Plugin.Trust == "" {
+		t.Fatalf("no trust hash for %s: %v\n%s", id, err, out)
+	}
+	return e.Plugin.Trust
+}
+
+const writerScript = `T='%TUIOS%'
+D="$HERDR_PLUGIN_STATE_DIR"
+. ./targets.sh
+run() { n=$1; shift; "$@" >"$D/$n.out" 2>&1; echo $? >"$D/$n.code"; }
+run ordinary "$T" send-text -s work -w "$SHELLW" "echo typed-by-plugin
+"
+run prompt "$T" send-text -s work -w "$PROMPTW" "1"
+run keys "$T" call send-keys '{"session":"work","window":"'"$PROMPTW"'","keys":["Enter"]}'
+run runp "$T" call run '{"session":"work","window":"'"$PROMPTW"'","command":"echo ran-by-plugin"}'
+run submit "$T" call send-text '{"session":"work","window":"'"$RACEW"'","text":"x","submit":true}'
+run queue "$T" call queue-prompt '{"session":"work","window":"'"$SHELLW"'","text":"hello"}'
+run respond "$T" respond approve -s work -w "$PROMPTW"
+run regrant "$T" set-pane-grants -w "$SHELLW" --grants admin
+run read "$T" list-sessions
+run approve "$T" plugins approve e2e.writer --deny --yes
+`
+
+// TestNativePluginApproval: a linked native plugin waits and runs nothing.
+// A pane cannot answer for the person. The dialog at truecolor and at 16
+// colours takes no key alone as Allow: Up, Up, Enter, Tab, Enter from the
+// default row allows nothing. Typing allow and Enter allows it. Then the
+// plugin's write: it types into an ordinary shell, and is refused on a pane
+// that waits on a prompt by send-text, send-keys and run, and at the Enter
+// of send-text with submit when the pane comes to a prompt while the paste
+// is taken in. It cannot queue, respond, change grants, read without read,
+// or approve. An answer for an old trust hash, and an answer that does not
+// type admin for a plugin that asks for it, are refused. A changed grant in
+// the manifest asks again.
+func TestNativePluginApproval(t *testing.T) {
+	base := t.TempDir()
+	ids := approvalSession(t, base, 3)
+	shellW, promptW, raceW := ids[0], ids[1], ids[2]
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "work", "-w", promptW); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
 	}
+	// The race pane reads one byte, which the plugin's paste is, then comes
+	// to a prompt, as an agent that shows a permission dialog does. An
+	// Enter that reached it would print approved.
+	race := "stty raw -echo; dd bs=1 count=1 >/dev/null 2>&1; '" + tuiosBin + "' set-agent-state needs_input; stty sane; read -p 'Approve? ' y; echo \"approved:[$y]\"\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", raceW, race); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
 
-	dir := filepath.Join(t.TempDir(), "writer")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	dir := approvalPlugin(t, base, "e2e.writer", "Writer probe", `"write"`, writerScript)
+	if err := os.WriteFile(filepath.Join(dir, "targets.sh"), []byte("SHELLW='"+shellW+"'\nPROMPTW='"+promptW+"'\nRACEW='"+raceW+"'\n"), 0o644); err != nil {
 		t.Fatal(err)
-	}
-	write := func(name, text string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("probe.sh", strings.ReplaceAll(writerScript, "%TUIOS%", tuiosBin))
-	write("targets.sh", "SHELLW='"+shellW+"'\nPROMPTW='"+promptW+"'\n")
-	write("tuios-plugin.toml", writerManifest(`"write"`))
-	if out, err := tuiosCLI(t, base, "plugins", "link", dir, "--enable"); err != nil {
-		t.Fatalf("link: %v\n%s", err, out)
 	}
 	art := artifactDir(t)
 
@@ -111,7 +191,7 @@ func TestNativePluginApproval(t *testing.T) {
 	}
 
 	// A pane cannot answer for the person, also with its pane variables
-	// cut: the daemon places the caller by the kernel.
+	// cut: every daemon checks the caller by the kernel.
 	paneOut := filepath.Join(t.TempDir(), "pane-approve")
 	line := "env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID '" + tuiosBin + "' plugins approve e2e.writer --yes >'" + paneOut + ".out' 2>&1; echo $? >'" + paneOut + ".code'\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", shellW, line); err != nil {
@@ -120,55 +200,86 @@ func TestNativePluginApproval(t *testing.T) {
 	code := waitFileText(t, paneOut+".code", "\n")
 	paneText, _ := os.ReadFile(paneOut + ".out")
 	_ = os.WriteFile(filepath.Join(art, "pane-approve.txt"), paneText, 0o644)
-	if strings.TrimSpace(code) == "0" || !strings.Contains(string(paneText), "plugin.approve is for the person") {
+	if strings.TrimSpace(code) == "0" || !strings.Contains(string(paneText), "only you, from a terminal outside tuios") {
 		t.Fatalf("a pane answered for the person (exit %s):\n%s", strings.TrimSpace(code), paneText)
 	}
-	if listed, _ := tuiosCLI(t, base, "plugins", "list"); !strings.Contains(listed, "waiting for approval") {
-		t.Fatalf("the plugin left the waiting state after the pane tried:\n%s", listed)
+
+	// The daemon refuses an answer for an old trust hash, and an Allow
+	// that does not type admin for a plugin that asks for it.
+	admDir := approvalPlugin(t, base, "e2e.adm", "Admin probe", `"admin"`, "sleep 1\n")
+	if code := herdrErrorCode(approvalHerdrCall(t, base, "plugin.approve", map[string]any{"plugin_id": "e2e.adm", "trust": pluginTrust(t, base, "e2e.adm"), "allow": true})); code != "plugin_admin_not_typed" {
+		t.Errorf("allow of an admin plugin without admin answered %q, want plugin_admin_not_typed", code)
+	}
+	old := pluginTrust(t, base, "e2e.adm")
+	writeApprovalManifest(t, admDir, "e2e.adm", "Admin probe", `"admin", "read"`)
+	if code := herdrErrorCode(approvalHerdrCall(t, base, "plugin.approve", map[string]any{"plugin_id": "e2e.adm", "trust": old, "allow": true, "admin": true})); code != "plugin_changed" {
+		t.Errorf("an answer for an old trust hash answered %q, want plugin_changed", code)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "disable", "e2e.adm"); err != nil {
+		t.Fatalf("disable: %v\n%s", err, out)
 	}
 
-	// The dialog, at truecolor. Not now leaves the plugin waiting.
 	dialog := func(name string, env []string) *tuitest.Terminal {
 		t.Helper()
 		term := startIn(t, base, startOpts{args: []string{"attach", "work"}, env: env})
-		if err := term.WaitForText("Allow the plugin Writer probe", bootTimeout); err != nil {
+		if err := term.WaitForText("Allow the plugin Writer probe?", bootTimeout); err != nil {
 			t.Fatalf("no approval dialog (%s): %v\n%s", name, err, term.Snapshot())
 		}
-		if err := term.WaitForText("Types into any pane that does not wait on a prompt.", uiTimeout); err != nil {
+		if err := term.WaitForText("Types into your panes and shells", uiTimeout); err != nil {
 			t.Fatalf("the dialog does not say what write does (%s): %v\n%s", name, err, term.Snapshot())
 		}
 		saveArtifact(t, term, art, "dialog-"+name)
 		savePNG(t, term.Screen(), hostPalette(t, ""), art, "dialog-"+name)
+		// Past the half second the dialog ignores keys for.
+		time.Sleep(700 * time.Millisecond)
 		return term
 	}
-	term := dialog("truecolor", []string{"TERM=xterm-256color", "COLORTERM=truecolor"})
-	if err := term.SendKeys("\x1b"); err != nil {
-		t.Fatal(err)
+	keys := func(term *tuitest.Terminal, ks ...string) {
+		t.Helper()
+		for _, k := range ks {
+			if err := term.SendKeys(k); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
 	}
+	notRun := func(why string) {
+		t.Helper()
+		time.Sleep(500 * time.Millisecond)
+		if got := readPluginFile(base, "e2e.writer", "ordinary.code"); got != "" {
+			t.Fatalf("%s let the plugin run: ordinary.code is %q", why, got)
+		}
+	}
+
+	// Truecolor. Keys meant for a shell allow nothing: Up, Up and Enter
+	// reach the Allow row and ask for the word, and Tab and Enter do not
+	// wrap past it.
+	term := dialog("truecolor", []string{"TERM=xterm-256color", "COLORTERM=truecolor"})
+	keys(term, "\x1b[A", "\x1b[A", "\r", "\t", "\r")
+	if err := term.WaitForText("Type allow in the field, then press Enter.", uiTimeout); err != nil {
+		t.Fatalf("Enter on Allow did not ask for the word: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, art, "dialog-keys")
+	notRun("Up, Up, Enter, Tab, Enter")
+	keys(term, "\x1b")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Allow the plugin") }, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the dialog: %v\n%s", err, term.Snapshot())
 	}
 	term.Close()
-	time.Sleep(500 * time.Millisecond)
-	if got := readPluginFile(base, "e2e.writer", "ordinary.code"); got != "" {
-		t.Fatalf("not now let the plugin run: ordinary.code is %q", got)
-	}
+	notRun("Not now")
 
-	// At 16 colours, and Allow: up twice from Not now, then enter.
+	// 16 colours. Typing allow and Enter allows it.
 	term = dialog("16", []string{"TERM=xterm", "COLORTERM="})
-	for _, k := range []string{"\x1b[A", "\x1b[A", "\r"} {
-		if err := term.SendKeys(k); err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
+	keys(term, "a", "l", "l", "o", "w")
+	saveArtifact(t, term, art, "dialog-16-typed")
+	savePNG(t, term.Screen(), hostPalette(t, ""), art, "dialog-16-typed")
+	keys(term, "\r")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Allow the plugin") }, uiTimeout); err != nil {
 		t.Fatalf("allow did not close the dialog: %v\n%s", err, term.Snapshot())
 	}
-	saveArtifact(t, term, art, "allowed-16")
 
 	// The plugin runs now. "0" is a success, "x" any failure.
-	want := map[string]string{"ordinary": "0", "prompt": "x", "respond": "x", "regrant": "x", "read": "x", "approve": "x"}
+	want := map[string]string{"ordinary": "0", "prompt": "x", "keys": "x", "runp": "x", "submit": "x", "queue": "x", "respond": "x", "regrant": "x", "read": "x", "approve": "x"}
 	for name, code := range want {
 		got := strings.TrimSpace(waitPluginFile(t, base, "e2e.writer", name+".code", "\n"))
 		if (got == "0") != (code == "0") {
@@ -176,12 +287,17 @@ func TestNativePluginApproval(t *testing.T) {
 		}
 		savePluginArtifact(t, base, "e2e.writer", name+".out")
 	}
+	const atPrompt = "A plugin does not answer a prompt that tuios knows of"
 	for name, text := range map[string]string{
-		"prompt":  "A plugin never answers a prompt",
+		"prompt":  atPrompt,
+		"keys":    atPrompt,
+		"runp":    atPrompt,
+		"submit":  atPrompt,
+		"queue":   "a plugin cannot queue",
 		"respond": "a plugin cannot answer a prompt",
 		"regrant": "set-pane-grants is refused for plugin e2e.writer",
 		"read":    "list-sessions needs the read grant",
-		"approve": "plugin.approve is for the person",
+		"approve": "only you, from a terminal outside tuios",
 	} {
 		if got := readPluginFile(base, "e2e.writer", name+".out"); !strings.Contains(got, text) {
 			t.Errorf("%s.out lacks %q:\n%s", name, text, got)
@@ -198,8 +314,12 @@ func TestNativePluginApproval(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	prompt, _ := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", promptW)
-	_ = os.WriteFile(filepath.Join(art, "prompt-pane.txt"), []byte(prompt), 0o644)
+	time.Sleep(500 * time.Millisecond)
+	raceScreen, _ := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", raceW)
+	_ = os.WriteFile(filepath.Join(art, "race-pane.txt"), []byte(raceScreen), 0o644)
+	if strings.Contains(raceScreen, "approved:[]") {
+		t.Errorf("the submit key answered the prompt that came up during the paste:\n%s", raceScreen)
+	}
 	info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.writer")
 	_ = os.WriteFile(filepath.Join(art, "info-allowed.txt"), []byte(info), 0o644)
 	if !strings.Contains(info, "grants    asks write, holds write") {
@@ -207,7 +327,7 @@ func TestNativePluginApproval(t *testing.T) {
 	}
 
 	// A changed grant in the manifest asks again.
-	write("tuios-plugin.toml", writerManifest(`"read", "write"`))
+	writeApprovalManifest(t, dir, "e2e.writer", "Writer probe", `"read", "write"`)
 	listed, _ = tuiosCLI(t, base, "plugins", "list")
 	_ = os.WriteFile(filepath.Join(art, "list-changed.txt"), []byte(listed), 0o644)
 	if !strings.Contains(listed, "waiting for approval") {
@@ -219,6 +339,117 @@ func TestNativePluginApproval(t *testing.T) {
 		t.Fatalf("no dialog for the changed plugin: %v\n%s", err, again.Snapshot())
 	}
 	saveArtifact(t, again, art, "dialog-changed")
+}
+
+// TestPluginTokenHoldsTheCaller: a process that carries a plugin's token,
+// outside the plugin's process session, is held to the plugin: on the verb
+// socket through the CLI, and on the herdr socket, where nothing presents
+// it. It cannot act as the person, so it approves and disables nothing. A
+// token that does not prove the plugin fails the CLI.
+func TestPluginTokenHoldsTheCaller(t *testing.T) {
+	base := t.TempDir()
+	approvalSession(t, base, 1)
+	approvalPlugin(t, base, "e2e.tok", "Token probe", `"read"`, `printf '%s\n%s\n' "$TUIOS_PLUGIN_ID" "$TUIOS_PLUGIN_TOKEN" >"$HERDR_PLUGIN_STATE_DIR/token"
+sleep 120
+`)
+	approvalPlugin(t, base, "e2e.victim", "Victim", `"admin"`, "sleep 1\n")
+	if out, err := tuiosCLI(t, base, "plugins", "approve", "e2e.tok", "--yes"); err != nil {
+		t.Fatalf("approve: %v\n%s", err, out)
+	}
+	tok := strings.Fields(waitPluginFile(t, base, "e2e.tok", "token", "e2e.tok\n"))
+	if len(tok) != 2 {
+		t.Fatalf("token file: %q", tok)
+	}
+	env := []string{"TUIOS_PLUGIN_ID=" + tok[0], "TUIOS_PLUGIN_TOKEN=" + tok[1]}
+	art := artifactDir(t)
+	for _, c := range []struct {
+		why  string
+		args []string
+		ok   bool
+		want string
+	}{
+		{"read, which the plugin holds", []string{"list-sessions"}, true, "work"},
+		{"typing, which it does not", []string{"send-text", "-s", "work", "echo by-token\n"}, false, "refused for plugin e2e.tok"},
+		{"disable over the herdr socket", []string{"plugins", "disable", "e2e.tok"}, false, "for the person"},
+		{"approve another plugin", []string{"plugins", "approve", "e2e.victim", "--grant", "admin", "--yes"}, false, "only you, from a terminal outside tuios"},
+	} {
+		out, err := tuiosCLIEnv(t, base, env, c.args...)
+		_ = os.WriteFile(filepath.Join(art, strings.ReplaceAll(c.why, " ", "-")+".txt"), []byte(out), 0o644)
+		if (err == nil) != c.ok || !strings.Contains(out, c.want) {
+			t.Errorf("%s with the token: %v, want ok=%v and %q\n%s", c.why, err, c.ok, c.want, out)
+		}
+	}
+	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.victim"); !strings.Contains(info, "waiting for approval") {
+		t.Errorf("the victim left the waiting state:\n%s", info)
+	}
+	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_PLUGIN_ID=e2e.tok", "TUIOS_PLUGIN_TOKEN=00" + tok[1][2:]}, "list-sessions")
+	if err == nil || !strings.Contains(out, "did not take its token") {
+		t.Errorf("a token that does not prove the plugin: %v\n%s", err, out)
+	}
+}
+
+// TestPluginApprovalAsksEveryDaemon: a pane cannot approve through a second
+// daemon it starts, nor under a --server that names no daemon. Every daemon
+// that runs is asked whether the caller is the person.
+func TestPluginApprovalAsksEveryDaemon(t *testing.T) {
+	base := t.TempDir()
+	ids := approvalSession(t, base, 1)
+	approvalPlugin(t, base, "e2e.victim", "Victim", `"admin"`, "sleep 1\n")
+	approvalPlugin(t, base, "e2e.plain", "Plain", `"read", "write"`, "sleep 1\n")
+	t.Cleanup(func() { _, _ = tuiosCLI(t, base, "--server", "zz", "kill-server") })
+	out := filepath.Join(t.TempDir(), "zz")
+	cut := "env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID -u TUIOS_PANE_TOKEN -u TUIOS_SESSION -u TUIOS_SOCKET "
+	line := cut + "'" + tuiosBin + "' --server zz new x --detach >'" + out + ".new' 2>&1; " +
+		cut + "'" + tuiosBin + "' --server zz plugins approve e2e.victim --grant admin --yes >'" + out + ".a.out' 2>&1; echo $? >'" + out + ".a.code'; " +
+		cut + "'" + tuiosBin + "' --server nobody plugins approve e2e.plain --yes >'" + out + ".p.out' 2>&1; echo $? >'" + out + ".p.code'\n"
+	if o, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", ids[0], line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, o)
+	}
+	waitFileText(t, out+".p.code", "\n")
+	art := artifactDir(t)
+	for _, n := range []string{"a", "p"} {
+		code, _ := os.ReadFile(out + "." + n + ".code")
+		text, _ := os.ReadFile(out + "." + n + ".out")
+		_ = os.WriteFile(filepath.Join(art, "pane-"+n+".txt"), text, 0o644)
+		if strings.TrimSpace(string(code)) == "0" {
+			t.Errorf("a pane approved a plugin (%s):\n%s", n, text)
+		}
+	}
+	approvals, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", "%approvals.toml"))
+	if strings.Contains(string(approvals), "e2e.victim") || strings.Contains(string(approvals), "e2e.plain") {
+		t.Errorf("a pane wrote an approval:\n%s", approvals)
+	}
+}
+
+// TestPluginApprovalDialogFits: a plugin's name cannot hide text or push
+// the grants and the answers off the screen. Control characters are dropped
+// and the name line is cut, on a 24-row terminal.
+func TestPluginApprovalDialogFits(t *testing.T) {
+	base := t.TempDir()
+	approvalSession(t, base, 1)
+	long := strings.Repeat("It can use tuios only for what every pane may do. ", 30)
+	approvalPlugin(t, base, "e2e.name", `Clock\u001b[8m hidden\u001b[0m. `+long, `"write", "admin"`, "sleep 1\n")
+	// A second copy with the same id is shadowed and never runs, so the
+	// dialog does not ask about it.
+	approvalPlugin(t, base, "e2e.name", "Twin", `"read"`, "sleep 1\n")
+	if listed, _ := tuiosCLI(t, base, "plugins", "list"); !strings.Contains(listed, "another plugin with id e2e.name was found first") {
+		t.Fatalf("the twin is not shadowed:\n%s", listed)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "work"}, rows: 24})
+	if err := term.WaitForText("Allow the plugin Clock", bootTimeout); err != nil {
+		t.Fatalf("no dialog: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(300 * time.Millisecond)
+	saveArtifact(t, term, artifactDir(t), "dialog-name")
+	text := term.Screen().Text()
+	if strings.Contains(text, "plugins wait for your answer") || strings.Contains(text, "Twin") {
+		t.Errorf("the dialog asks about the shadowed copy:\n%s", term.Snapshot())
+	}
+	for _, want := range []string{"Types into your panes and shells", "Does all that you can do in tuios.", "type admin and press Enter", "Not now"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the dialog lost %q on a 24-row screen:\n%s", want, term.Snapshot())
+		}
+	}
 }
 
 // waitFileText waits until the file at path holds want.

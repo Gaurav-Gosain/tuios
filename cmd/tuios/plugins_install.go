@@ -389,17 +389,20 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		}
 	}
 	if p.Format == herdrplugin.FormatTuios {
+		// checkNativeAsks made sure the person typed --grant admin. Every
+		// daemon that runs confirms that the person runs this command
+		// before the approval is written. With no daemon to ask, the
+		// plugin is installed and waits: tuios asks on the next attach.
+		// Another machine that gets plugins.lock asks again.
 		admin := slices.Contains(e.Grants, "admin")
-		if admin {
-			// checkNativeAsks made sure the person typed --grant admin.
-			// The daemon confirms that the person runs this command.
-			if err := confirmPerson(); err != nil {
+		switch err := confirmPerson(); {
+		case err == nil:
+			if err := herdrplugin.Approve(in.dirs.ApprovalsPath(), p, e.Approved, admin); err != nil {
 				return err
 			}
-		}
-		// The person said yes above, so this machine runs it. Another
-		// machine that gets plugins.lock asks again.
-		if err := herdrplugin.Approve(in.dirs.ApprovalsPath(), p, e.Approved, admin); err != nil {
+		case len(liveDaemonSockets()) == 0 && !admin:
+			fmt.Fprintf(out, "No tuios daemon runs to confirm that you run this command, so %s waits for your approval. tuios asks when you attach. You can also run tuios plugins approve %s.\n", e.ID, e.ID)
+		default:
 			return err
 		}
 	}
@@ -841,7 +844,7 @@ func confirmPerson() error {
 		_, err = client.CallWithTimeout("attach-presence", nil, 5*time.Second)
 		_ = client.Close()
 		if err != nil {
-			return fmt.Errorf("only you, from a terminal outside tuios, can give a plugin the admin grant. The daemon said: %w", err)
+			return fmt.Errorf("only you, from a terminal outside tuios, can approve a plugin. The daemon said: %w", err)
 		}
 	}
 	return nil

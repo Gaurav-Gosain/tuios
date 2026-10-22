@@ -17,7 +17,7 @@ func GrantMeaning(grant string) string {
 	case "read":
 		return "Reads every session and pane on this machine."
 	case "write":
-		return "Types into any pane that does not wait on a prompt."
+		return "Types into your panes and shells, so it can run commands as you. It stops at an agent's approval prompt."
 	case "fan":
 		return "Starts agents in new sessions."
 	case "files":
@@ -26,6 +26,25 @@ func GrantMeaning(grant string) string {
 		return "Does all that you can do in tuios."
 	}
 	return ""
+}
+
+// MaxNameRunes is the longest plugin name tuios shows.
+const MaxNameRunes = 64
+
+// ShownName is a plugin name as tuios shows it: with control and bidi
+// characters dropped, spaces collapsed, and cut to MaxNameRunes.
+func ShownName(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if hasControl(string(r)) {
+			return -1
+		}
+		return r
+	}, name)
+	name = strings.Join(strings.Fields(name), " ")
+	if r := []rune(name); len(r) > MaxNameRunes {
+		name = string(r[:MaxNameRunes-1]) + "…"
+	}
+	return name
 }
 
 // RunsLines lists what p runs on its own once it is allowed: its startup
