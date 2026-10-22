@@ -15,4 +15,3 @@ TestAnImagePastedIntoAnSSHShellGoesToThatMachine # the tmux subtest, shard 2 (#9
 
 # go test ./...
 TestFloatedPaneStaysFloatedEverywhere            # internal/app, failed on #940 (plot only)
-TestGitTimeoutHoldsWithAHungChild                # internal/review, failed on #983

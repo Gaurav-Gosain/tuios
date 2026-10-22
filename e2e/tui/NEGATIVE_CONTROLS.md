@@ -7430,6 +7430,16 @@ not reattach. Run on 2026-10-18 on branch `feat/reattach-after-daemon-restart`.
 | The restart does not say "restart" | `runRestart`: `kill-server` without `--restart` | `TestRestartTheDaemonFromTheVersionNotice` ("the second client quit (code 1) instead of reattaching") | **caught** |
 | The client is deaf to "stop" | `beginDaemonReconnect`: the goodbye check cut | `TestPlainKillServerEndsClientsAtOnce` ("the client did not quit within 1 s of a plain kill-server") | **caught** |
 
+## Git's timeout test measured from after its own deadline
+
+`TestGitTimeoutHoldsWithAHungChild` in `internal/review` failed on CI with "Git returned after 499.38ms". The test made the 500 ms context first and read the clock after it. The deadline counts from inside `WithTimeout`, so a pause between the two lines made a Git that returned on time read as early. The test now reads the clock before it makes the context. Run on 2026-10-22.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The clock starts after the context, so a descheduled test reads the deadline as early | n/a, injected: a scheduling gap made deterministic | the old order, with a 5 ms sleep between `WithTimeout` and `time.Now()` | `TestGitTimeoutHoldsWithAHungChild`, 10 of 10 runs ("Git returned after 495.3ms") | **caught** |
+
+The same 5 ms sleep between the clock and the context in the fixed test passes 10 of 10 runs. The fixed test passes 30 of 30 runs.
+
 ## Restart follow-ups
 
 `TestHostsSyncRestartWithYes` now attaches a client on the fake host before
