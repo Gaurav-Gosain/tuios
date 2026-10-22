@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	golang.org/x/image v0.45.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	tuios.dev/plot v0.1.1-0.20261022133612-8ebab24dc8d1
 )
@@ -14,6 +15,5 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )

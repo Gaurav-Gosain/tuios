@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"image/png"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -243,7 +244,16 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 	if format == "svg" {
 		return write([]byte(out.Data + "\n"))
 	}
-	img, err := raster.Draw(out.Data, raster.Options{Scale: o.scale, Background: true, Readable: true})
+	scale := o.scale
+	cellW := 1
+	if format == "kitty" {
+		var cols, rows, cellH int
+		cols, rows, cellW, cellH = terminalCells(stdout)
+		// As large as the terminal allows, leaving two rows for the prompt, and
+		// no larger than twice the SVG size.
+		scale = math.Min(2, math.Min(float64(cols*cellW)/math.Max(1, out.Width), float64(max(rows-2, 4)*cellH)/math.Max(1, out.Height)))
+	}
+	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: true, Readable: true})
 	if err != nil {
 		return err
 	}
@@ -254,12 +264,30 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 	if format == "png" {
 		return write(b.Bytes())
 	}
-	return kitty(stdout, b.Bytes())
+	return kitty(stdout, b.Bytes(), int(math.Ceil(float64(img.Bounds().Dx())/float64(cellW))))
 }
 
-// kitty writes a PNG as a kitty graphics image at its own size. The terminal
-// moves the cursor below it.
-func kitty(w io.Writer, png []byte) error {
+// terminalCells is the width and height of the terminal in cells and the size
+// of a cell in pixels, with a common guess where the terminal does not say.
+func terminalCells(w io.Writer) (cols, rows, cellW, cellH int) {
+	cols, rows, cellW, cellH = 100, 40, 10, 20
+	f, ok := w.(*os.File)
+	if !ok {
+		return cols, rows, cellW, cellH
+	}
+	if c, r, err := term.GetSize(int(f.Fd())); err == nil && c > 0 && r > 0 {
+		cols, rows = c, r
+	}
+	if pw, ph, c, r, ok := windowPixels(f); ok && c > 0 && r > 0 && pw > 0 && ph > 0 {
+		cellW, cellH = pw/c, ph/r
+	}
+	return cols, rows, max(cellW, 1), max(cellH, 1)
+}
+
+// kitty writes a PNG as a kitty graphics image cols cells wide. The terminal
+// keeps the picture's aspect and moves the cursor below it, so the next
+// diagram starts under this one.
+func kitty(w io.Writer, png []byte, cols int) error {
 	enc := base64.StdEncoding.EncodeToString(png)
 	var b bytes.Buffer
 	const chunk = 4096
@@ -271,7 +299,7 @@ func kitty(w io.Writer, png []byte) error {
 		}
 		b.WriteString("\x1b_G")
 		if i == 0 {
-			b.WriteString("a=T,f=100,q=2,")
+			b.WriteString("a=T,f=100,q=2,c=" + strconv.Itoa(cols) + ",")
 		}
 		b.WriteString("m=" + strconv.Itoa(more) + ";" + enc[i:end] + "\x1b\\")
 	}
