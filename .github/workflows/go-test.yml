@@ -182,7 +182,9 @@ jobs:
     runs-on: macos-latest
     # The opencode reader proves that a socket belongs to this user from the
     # sysctl net.inet.tcp.pcblist_n, which only a real macOS kernel fills.
-    # The package's suite runs here, the real table included.
+    # The package's suite runs here, the real table included. The plugin
+    # runner holds a native plugin to its grants through the darwin reaper
+    # code, so its suite and the session's plugin grant tests run here too.
     timeout-minutes: 15
 
     steps:
@@ -194,7 +196,23 @@ jobs:
           cache-id: tests
 
       - name: Test
-        run: go test -count=1 -timeout 10m ./internal/transcriptview/
+        run: go test -count=1 -timeout 10m ./internal/transcriptview/ ./internal/herdrplugin/
+
+      - name: Plugin grant tests
+        # go test passes when -run matches nothing, and a test that skips
+        # passes too. Each test named below must print its PASS line, so a
+        # rename or a skip fails the step.
+        shell: bash
+        run: |
+          go test -count=1 -timeout 5m -v \
+            -run '^(TestHerdrMethodsNameTheirCheck|TestHerdrVerbMethodsRefuseAPluginWithNoGrants)$' \
+            ./internal/session/ | tee "$RUNNER_TEMP/plugin-grant-tests.log"
+          for name in TestHerdrMethodsNameTheirCheck TestHerdrVerbMethodsRefuseAPluginWithNoGrants; do
+            if ! grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/plugin-grant-tests.log"; then
+              echo "::error::$name did not run and pass"
+              exit 1
+            fi
+          done
 
   sketch-fma:
     name: sketch goldens (${{ matrix.name }})
