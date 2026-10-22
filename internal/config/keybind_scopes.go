@@ -75,6 +75,7 @@ const (
 	SectionMail             = "mail"
 	SectionTransfers        = "transfers"
 	SectionCopyMode         = "copy_mode"
+	SectionReview           = "review"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
 	SectionLists            = "lists"
@@ -94,6 +95,7 @@ const (
 	ScopeMail           = "mail"
 	ScopeTransfers      = "transfers"
 	ScopeCopyMode       = "copy"
+	ScopeReview         = "review"
 	ScopePrefix         = "prefix"
 	ScopePrefixWindow   = "prefix.window"
 	ScopePrefixMinimize = "prefix.minimize"
@@ -198,6 +200,13 @@ func Scopes(leader string) []Scope {
 			// nothing in window mode is a resolution, not a clash.
 			ID: ScopeCopyMode, Name: "Copy mode",
 			Sections: []string{SectionCopyMode},
+			Reaches:  ReachModal,
+		},
+		{
+			// The review overlay owns the keyboard while it is open, so ] and
+			// [ move through its hunks and nothing else.
+			ID: ScopeReview, Name: "Review",
+			Sections: []string{SectionReview},
 			Reaches:  ReachModal,
 		},
 		{
@@ -361,6 +370,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.Transfers
 	case SectionCopyMode:
 		return k.CopyMode
+	case SectionReview:
+		return k.Review
 	case SectionGUI:
 		return k.GUI
 	}
