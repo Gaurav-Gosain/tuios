@@ -8708,3 +8708,16 @@ With the fix both cases pass three runs of three; the trace of `blocker-released
 | `yieldAgentClaim` keeps a claim only for `auto`, and deletes one that carries only `sawProcess` | `screen-idle-yielded-on-exit`, three runs of three ("the pane kept agent state idle (source report, harness ) with the agent gone and its shell in the foreground") | **caught** |
 
 Not covered: `yieldAgentClaim` carrying `sawProcess` on an `auto` claim. The detector clears a claim it owns when the agent leaves whether or not the mark is set, so the mark on such a claim has no reader, and the change only keeps it for a later hand-over.
+
+## Pasting into input boxes
+
+`TestPasteIntoInputBoxes` attaches a real client to a daemon session whose pane shows the prompt `PST> `, and opens each input from terminal mode, where a paste nothing claims is typed into the focused pane: the window rename (ctrl+b r), the session rename (ctrl+r in the session switcher), the workspace rename (ctrl+b w r), the command palette, the help's search line, the session switcher's filter and the settings search. Each gets a bracketed paste holding a line break (and, for the window rename, a tab and a trailing CRLF), and must show it on one line with single spaces while the pane, read whole with `capture-pane`, shows none of its words, before and after the input closes. The window rename is committed and read back from `list-windows`. The help's list, which takes no text, must drop a paste. The rename also takes the paste key, ctrl+shift+v and ctrl+v, whose OSC 52 clipboard read a stand-in host terminal answers. Each control is a build of the branch with the wiring cut, running only this test. Run on 2026-10-23 on macOS against upstream main at b8160edd.
+
+Without the fix, the inputs opened by a prefix chord (window and workspace rename) drop the paste, since the chord leaves terminal mode, and the rest send it to the shell, which runs each pasted line as a command.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (`internal/input/handler.go` and `internal/app/keyboard_enhancements.go` as on upstream main) | All ten subtests: `window_rename` and `workspace_rename` ("the field never showed the paste on one line"), `session_rename`, `command_palette`, `help_search`, `session_switcher`, `settings_search` ("a paste into the … reached the pane, which shows \"sr1\"", and so on), `help_list_drops_it` ("a paste into the help's list reached the pane, which shows \"hl1\""), both `rename_paste_key_*` ("the paste key's clipboard went into the field: field never read \"CLIP name\"") | **caught** |
+| The drop for anything else that owns the keyboard: `pasteTakenByOverlay` ends with the overlays it named before instead of `OverlayOwnsKeyboard` | `help_list_drops_it` ("a paste into the help's list reached the pane, which shows \"hl1\"") | **caught** |
+
+Not covered end to end: the other one-line fields `textFieldPaste` lists (launcher, workspace switcher, aggregate view, keybind manager filter, theme picker and editor, glyph, effect and layout pickers, host picker, settings inline edit, file and worktree dialogs, tape name, accent hex, scrollback browser and copy-mode search), and the paste key in any field but the rename.

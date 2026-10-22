@@ -84,14 +84,22 @@ func (m *OS) KeysGoToBindings() bool {
 		m.LayoutPrefixActive || m.TuiosPrefixActive || m.Menu != "" || m.PrefixRepeatLive() {
 		return true
 	}
-	if m.SidebarFocused || m.AnyOverlayOpen() || m.ContextMenuActive() ||
-		m.ReviewOpen() || m.Renaming() || m.CaptureActive() ||
-		m.ShowScrollbackBrowser || m.ShowTapeReview || m.ShowTapeManager ||
-		m.ShowLogs || m.ShowCacheStats {
+	if m.OverlayOwnsKeyboard() {
 		return true
 	}
 	window := m.GetFocusedWindow()
 	return window == nil || window.InCopyMode()
+}
+
+// OverlayOwnsKeyboard reports whether something in front of the panes takes
+// the keys: the focused rail, an overlay, a dialog, an editor or a gesture
+// over the screen. A paste then never reaches a pane, since none of them
+// would get a key typed in its place.
+func (m *OS) OverlayOwnsKeyboard() bool {
+	return m.SidebarFocused || m.AnyOverlayOpen() || m.ContextMenuActive() ||
+		m.ReviewOpen() || m.Renaming() || m.CaptureActive() ||
+		m.ShowScrollbackBrowser || m.ShowTapeReview || m.ShowTapeManager ||
+		m.ShowLogs || m.ShowCacheStats
 }
 
 // PaneKeyboardFlags returns the kitty keyboard protocol flags the focused pane
