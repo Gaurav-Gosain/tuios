@@ -518,6 +518,14 @@ type GeoEventCard struct {
 type GeoVenn struct {
 	Title   []string
 	Regions []GeoVennRegion
+	// Circles are the sets' circles as the SVG places them, in the order of
+	// their series colours.
+	Circles []GeoVennCircle
+}
+
+type GeoVennCircle struct {
+	Set     string
+	X, Y, R float64
 }
 
 type GeoVennRegion struct {
@@ -525,6 +533,8 @@ type GeoVennRegion struct {
 	Size  float64
 	Label string
 	Texts []string
+	// X and Y are where the SVG centres the region's label and texts.
+	X, Y float64
 }
 
 // GeoWardley is a wardley map as lists. Evolution and visibility are percentages.

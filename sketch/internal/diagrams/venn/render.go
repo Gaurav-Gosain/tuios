@@ -332,7 +332,7 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 	if options.Geometry != nil {
 		geo := &types.GeoVenn{Title: title.Plain()}
 		for _, region := range order {
-			r := types.GeoVennRegion{Sets: region.sets, Size: region.size}
+			r := types.GeoVennRegion{Sets: region.sets, Size: region.size, X: float64(region.spot.x*scale) + ox, Y: float64(region.spot.y*scale) + oy}
 			for _, line := range region.lines {
 				t := strings.Join(line.label.Plain(), " ")
 				if line.hasID {
@@ -342,6 +342,9 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 				}
 			}
 			geo.Regions = append(geo.Regions, r)
+		}
+		for _, c := range placed {
+			geo.Circles = append(geo.Circles, types.GeoVennCircle{Set: c.id, X: c.x, Y: c.y, R: c.r})
 		}
 		rendered.Geometry = &types.Geometry{Width: width, Height: height, Venn: geo}
 	}

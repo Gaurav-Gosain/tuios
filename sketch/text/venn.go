@@ -6,12 +6,14 @@ import (
 	"strings"
 
 	"tuios.dev/sketch"
+	"tuios.dev/sketch/internal/types"
 )
 
-// A venn diagram is drawn as a table, since circles of a few cells lose what is written in
-// them: the sets, then the overlaps the source states, each with its label, its relative size,
-// and the texts written in it. When a row does not fit the columns, its label and texts go on
-// the lines under its name, and long text wraps.
+// A venn diagram is drawn as its circles, in braille dots, each in its set's series colour, with
+// each region's label and texts where the SVG writes them. Without colour, or when the labels do
+// not fit inside the circles, it is a table: the sets, then the overlaps the source states, each
+// with its label, its relative size, and the texts written in it. When a row does not fit the
+// columns, its label and texts go on the lines under its name, and long text wraps.
 
 // vennSize writes a relative size with at most three decimals.
 func vennSize(v float64) string {
@@ -33,6 +35,97 @@ func drawVenn(l *sketch.Layout, opt Options) (*canvas, error) {
 	if vn == nil {
 		return nil, ErrUnsupported
 	}
+	if opt.Color && (opt.Cols == 0 || opt.Cols > 40) {
+		if c := vennCircles(vn, opt); c != nil {
+			return c, nil
+		}
+	}
+	return vennTable(vn, opt)
+}
+
+// vennCircles draws the circles, or gives nil when the labels do not fit.
+func vennCircles(vn *types.GeoVenn, opt Options) *canvas {
+	if len(vn.Circles) == 0 || len(vn.Circles) > 8 {
+		return nil
+	}
+	minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for _, c := range vn.Circles {
+		minX, maxX = math.Min(minX, c.X-c.R), math.Max(maxX, c.X+c.R)
+		minY, maxY = math.Min(minY, c.Y-c.R), math.Max(maxY, c.Y+c.R)
+	}
+	if !(maxX > minX) || !(maxY > minY) {
+		return nil
+	}
+	// The circles take 64 columns, fewer when the columns are fewer. A
+	// cell is pieAspect times as tall as it is wide.
+	cols := 64
+	if opt.Cols > 0 {
+		cols = min(cols, opt.Cols-2)
+	}
+	sx := float64(cols) / (maxX - minX)
+	sy := sx / pieAspect
+	rows := int(math.Ceil((maxY-minY)*sy)) + 1
+	if int64(cols+2)*int64(rows+len(vn.Title)+1) > MaxCells {
+		return nil
+	}
+	c, err := newCanvas(cols+2, rows)
+	if err != nil {
+		return nil
+	}
+	cellX := func(x float64) float64 { return (x-minX)*sx + 1 }
+	cellY := func(y float64) float64 { return (y - minY) * sy }
+	// The labels first, where the SVG centres them. One that would leave
+	// the canvas, or cover another, means the circles are too small.
+	for _, r := range vn.Regions {
+		var lines []string
+		role := uint8(roleText)
+		if r.Label != "" {
+			lines = append(lines, r.Label)
+		}
+		lines = append(lines, r.Texts...)
+		if len(lines) == 0 {
+			continue
+		}
+		if len(r.Sets) == 1 {
+			role = roleTitle
+		}
+		y0 := int(math.Round(cellY(r.Y) - float64(len(lines))/2))
+		for k, line := range lines {
+			w := width(line)
+			x := int(math.Round(cellX(r.X) - float64(w)/2))
+			y := y0 + k
+			if x < 0 || x+w > c.w || y < 0 || y >= c.h || !c.blank(x, y, w) {
+				return nil
+			}
+			lr := role
+			if k > 0 || r.Label == "" {
+				lr = roleNote
+			}
+			c.text(x, y, line, lr)
+		}
+	}
+	d := newDotGrid(c.w, c.h)
+	d.merge = true
+	for i, circle := range vn.Circles {
+		l := d.layer(seriesRole(i))
+		// In dots: two to a cell across, four down.
+		cx, cy := cellX(circle.X)*2, cellY(circle.Y)*4
+		rx, ry := circle.R*sx*2, circle.R*sy*4
+		steps := int(math.Max(rx, ry)*7) + 16
+		for k := 0; k < steps; k++ {
+			a := 2 * math.Pi * float64(k) / float64(steps)
+			d.set(l, int(math.Round(cx+math.Cos(a)*rx)), int(math.Round(cy+math.Sin(a)*ry)))
+		}
+	}
+	d.paint(c, 0, 0)
+	out, err := withTitle(c, vn.Title, opt.Cols)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+func vennTable(vn *types.GeoVenn, opt Options) (*canvas, error) {
 	type row struct {
 		name, label, size string
 		texts             []string

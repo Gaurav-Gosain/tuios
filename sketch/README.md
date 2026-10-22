@@ -145,8 +145,10 @@ when the boxes are too small. An info diagram is its line of text. A tree view
 is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
 with its causes as bones, or an indented tree when it is narrow. A Cynefin
 diagram is a grid of its four domains. An event model is swimlanes in time
-order, or a list of frames when it is narrow. A Venn diagram is a table of its
-sets and their overlaps. A Wardley map is a grid of visibility by evolution,
+order, or a list of frames when it is narrow. A Venn diagram is its circles in
+braille dots, a colour for each set, with the labels where the SVG writes them.
+Without colour, or when its labels do not fit, it is a table of its sets and
+their overlaps. A Wardley map is a grid of visibility by evolution,
 or a table when it is narrow. A railroad diagram is its tracks in cells, or
 its rules as EBNF text when they do not fit. Use case diagrams and agent flows
 are drawn as a flowchart is. A swimlane diagram is a flowchart with its lanes
