@@ -1294,18 +1294,22 @@ When a search finds more than 1000 matches, the prompt shows `1000+`.
 
 ### Line start and line end
 
-`Home` moves the copy cursor to the start of the line, as `0` does. `End`
-moves it to the end of the line, as `$` does. Both keys also move the end of a
-`v` or `V` selection.
+`Home` moves the copy cursor to column zero of the line, as `0` does. `End`
+moves it to the last nonblank character of the line, as `$` does, and not to
+the blank cells up to the pane edge. `copy_mode_first_nonblank` moves it to the
+first nonblank character, as `^` does, and has no default key. On a blank line
+all three go to column zero. The keys also move the end of a `v` or `V`
+selection.
 
 | Action | Default key |
 | --- | --- |
 | `copy_mode_line_start` | `Home` |
+| `copy_mode_first_nonblank` | none |
 | `copy_mode_line_end` | `End` |
 
 The keys are in the `copy_mode` section. They work only in copy mode. In the
-search prompt, they do not move the cursor. `0` and `$` are fixed keys, and
-you cannot rebind them.
+search prompt, they do not move the cursor. `0`, `^` and `$` are fixed keys,
+and you cannot rebind them.
 
 Do not bind a key here that copy mode already uses, such as `y` or `v`, or a
 key of a `[[keybindings.copy_pipe]]` entry. `tuios keybinds doctor` and the
