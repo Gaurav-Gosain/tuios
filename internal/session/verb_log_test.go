@@ -19,7 +19,11 @@ func ringHas(sub string) bool {
 func ringDump() string {
 	var b strings.Builder
 	for _, e := range GetLogEntries(0) {
-		b.WriteString("  [" + e.Level + "] " + e.Message + "\n")
+		b.WriteString("  [")
+		b.WriteString(e.Level)
+		b.WriteString("] ")
+		b.WriteString(e.Message)
+		b.WriteString("\n")
 	}
 	return b.String()
 }

@@ -277,7 +277,11 @@ func (d *Daemon) composeQueued(sess *Session, target WindowState, e *queueEntry)
 			}
 			// The path is set off by spaces, so an agent that looks for
 			// paths in the text finds it whole.
-			b.WriteString("[Image #" + strconv.Itoa(p.N) + "] " + path + " ")
+			b.WriteString("[Image #")
+			b.WriteString(strconv.Itoa(p.N))
+			b.WriteString("] ")
+			b.WriteString(path)
+			b.WriteString(" ")
 		}
 	}
 	pastes = append(pastes, b.String())
@@ -366,7 +370,11 @@ func (d *Daemon) fileParts(parts []queuePart) (string, []string, error) {
 				return "", paths, err
 			}
 			paths = append(paths, path)
-			b.WriteString("[Image #" + strconv.Itoa(p.N) + ": " + path + "]")
+			b.WriteString("[Image #")
+			b.WriteString(strconv.Itoa(p.N))
+			b.WriteString(": ")
+			b.WriteString(path)
+			b.WriteString("]")
 		}
 	}
 	return b.String(), paths, nil

@@ -92,7 +92,8 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 	in.WriteString("\x1b[1;31mBOLDRED\x1b[0m \x1b[48;2;10;20;30mTRUEBG\x1b[0m\r\n")
 	in.WriteString("wide 日本語 end\r\n")
 	// 100 letters in an 80-column pane: the emulator wraps it, a soft wrap.
-	in.WriteString(strings.Repeat("w", 100) + "\r\n")
+	in.WriteString(strings.Repeat("w", 100))
+	in.WriteString("\r\n")
 	in.WriteString("$ ")
 	if _, err := src.Write([]byte(in.String())); err != nil {
 		t.Fatal(err)

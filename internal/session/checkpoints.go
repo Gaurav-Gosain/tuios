@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -203,8 +204,7 @@ func (d *Daemon) forWindowState(s *Session, window string, fn func(WindowState))
 func (d *Daemon) checkpointLabel(s *Session, window, fallback string) string {
 	entries, _, _ := d.activity.read(s.ID, window)
 	var ended string
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
+	for _, e := range slices.Backward(entries) {
 		switch e.Kind {
 		case ActivityPrompt:
 			if e.Text != "" {

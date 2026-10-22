@@ -286,7 +286,8 @@ type cannedConn struct {
 func (c *cannedConn) Write(p []byte) (int, error) {
 	c.out.Write(p)
 	if len(c.replies) > 0 {
-		c.pending.WriteString(c.replies[0] + "\n")
+		c.pending.WriteString(c.replies[0])
+		c.pending.WriteString("\n")
 		c.replies = c.replies[1:]
 	}
 	return len(p), nil

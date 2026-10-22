@@ -305,9 +305,12 @@ func fanJudgeSession(info *WorktreeInfo) string {
 // letter, and how to read them and report.
 func fanJudgePrompt(info *WorktreeInfo, siblings []*Session) string {
 	var b strings.Builder
-	b.WriteString("You judge a fan of " + strconv.Itoa(len(siblings)) + " attempts at one task. Do not change any file.")
+	b.WriteString("You judge a fan of ")
+	b.WriteString(strconv.Itoa(len(siblings)))
+	b.WriteString(" attempts at one task. Do not change any file.")
 	if task := strings.TrimSpace(info.Prompt); task != "" {
-		b.WriteString(" The task was: " + strings.Join(strings.Fields(task), " "))
+		b.WriteString(" The task was: ")
+		b.WriteString(strings.Join(strings.Fields(task), " "))
 	}
 	b.WriteString(" The attempts are the sessions")
 	for i, s := range siblings {
@@ -315,10 +318,18 @@ func fanJudgePrompt(info *WorktreeInfo, siblings []*Session) string {
 		if i == 0 {
 			sep = ""
 		}
-		b.WriteString(sep + " " + string(rune('A'+i%26)) + " " + s.Name())
+		b.WriteString(sep)
+		b.WriteString(" ")
+		b.WriteString(string(rune('A' + i%26)))
+		b.WriteString(" ")
+		b.WriteString(s.Name())
 	}
 	first := siblings[0].Name()
-	b.WriteString(". Read them with: tuios fan compare " + first + " --json, which gives each attempt's folder, and git -C FOLDER diff in each. tuios lets you read them and nothing more.")
-	b.WriteString(" Then report once with: tuios fan verdict " + first + " --pick SESSION --summary \"the verdict in one or two sentences\" --reason \"one reason\" --note \"SESSION=a note on that attempt\". Repeat --reason and --note as needed.")
+	b.WriteString(". Read them with: tuios fan compare ")
+	b.WriteString(first)
+	b.WriteString(" --json, which gives each attempt's folder, and git -C FOLDER diff in each. tuios lets you read them and nothing more.")
+	b.WriteString(" Then report once with: tuios fan verdict ")
+	b.WriteString(first)
+	b.WriteString(" --pick SESSION --summary \"the verdict in one or two sentences\" --reason \"one reason\" --note \"SESSION=a note on that attempt\". Repeat --reason and --note as needed.")
 	return b.String()
 }

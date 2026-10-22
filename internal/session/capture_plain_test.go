@@ -143,7 +143,8 @@ func TestUnwrapCaptureJoinsWrappedRows(t *testing.T) {
 	got = trimCapture(got)
 	var want strings.Builder
 	for _, l := range lines {
-		want.WriteString(ansi.Strip(l) + "\n")
+		want.WriteString(ansi.Strip(l))
+		want.WriteString("\n")
 	}
 	if got != want.String() {
 		t.Fatalf("unwrapped capture:\n got %q\nwant %q", got, want.String())

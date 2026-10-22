@@ -25,7 +25,7 @@ func FuzzGfxScanner(f *testing.F) {
 		var b bytes.Buffer
 		b.WriteString("\x1b[H")
 		n := (len(payload) + chunks - 1) / chunks
-		for c := 0; c < chunks; c++ {
+		for c := range chunks {
 			part := payload[min(c*n, len(payload)):min((c+1)*n, len(payload))]
 			m := 0
 			if c < chunks-1 {
@@ -128,7 +128,7 @@ func joinRuns(d string) string {
 		key                uint64
 	}
 	var runs []run
-	for _, part := range bytes.Split([]byte(d), []byte("]")) {
+	for part := range bytes.SplitSeq([]byte(d), []byte("]")) {
 		if len(part) == 0 {
 			continue
 		}

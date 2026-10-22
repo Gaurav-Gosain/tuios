@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -369,8 +370,7 @@ func (ps *paneStream) run(br *bufio.Reader) {
 	if err == nil {
 		return
 	}
-	var exit *paneExit
-	if errors.As(err, &exit) {
+	if exit, ok := errors.AsType[*paneExit](err); ok {
 		_ = ps.writeFrame(paneFrameExit, []byte(exit.reason))
 		_ = ps.cs.conn.Close()
 	}
@@ -822,8 +822,8 @@ func (p *PTY) subscribeAt(clientID string, fromSeq int64, fromSnapshot bool) (*p
 func (p *PTY) sizeAt(seq int64) (int, int) {
 	p.outputMu.RLock()
 	defer p.outputMu.RUnlock()
-	for i := len(p.resizeMarks) - 1; i >= 0; i-- {
-		if m := p.resizeMarks[i]; m.seq <= seq {
+	for _, m := range slices.Backward(p.resizeMarks) {
+		if m.seq <= seq {
 			return m.width, m.height
 		}
 	}

@@ -137,9 +137,9 @@ func (state *SessionState) LastWindowMove(windowID string) (WindowMove, bool) {
 	if state == nil {
 		return WindowMove{}, false
 	}
-	for i := len(state.WindowMoves) - 1; i >= 0; i-- {
-		if state.WindowMoves[i].Window == windowID {
-			return state.WindowMoves[i], true
+	for _, v := range slices.Backward(state.WindowMoves) {
+		if v.Window == windowID {
+			return v, true
 		}
 	}
 	return WindowMove{}, false
@@ -704,8 +704,7 @@ func (d *Daemon) moveQueuedWindow(window, session string) {
 
 // isPaneNotMovable reports whether err is a refusal to move the pane.
 func isPaneNotMovable(err error) (string, bool) {
-	var e errPaneNotMovable
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[errPaneNotMovable](err); ok {
 		return e.why, true
 	}
 	return "", false

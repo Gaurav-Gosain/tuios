@@ -249,8 +249,7 @@ func tmlDocSource(raw json.RawMessage) ([]byte, *verbError) {
 // tmlInvalid is the invalid_tml error for a document's problems.
 func tmlInvalid(problems []tml.Problem, err error) *verbError {
 	msg := err.Error()
-	var terr *tml.Error
-	if errors.As(err, &terr) {
+	if terr, ok := errors.AsType[*tml.Error](err); ok {
 		problems = terr.Problems
 	}
 	e := hintedVerbError(ErrVerbInvalidTML, msg, &VerbHint{

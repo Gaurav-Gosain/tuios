@@ -539,8 +539,7 @@ func loadHistory(sessionName string) map[string]*savedHistory {
 		}
 		h, err := decodeHistory(f)
 		_ = f.Close()
-		var other errHistoryVersion
-		if errors.As(err, &other) {
+		if _, ok := errors.AsType[errHistoryVersion](err); ok {
 			// Another build's file, whole as far as this one can tell. It is
 			// skipped rather than deleted: that build may run here again.
 			log.Printf("Skipping saved history %s: %v", path, err)

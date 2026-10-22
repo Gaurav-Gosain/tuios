@@ -26,7 +26,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 	c.StartReadLoop()
 	defer c.Close()
 
-	var inFlight int32
+	var inFlight atomic.Int32
 	arrived := make(chan int32, 4)
 	release := make(chan struct{}, 4)
 	var writeMu sync.Mutex
@@ -40,7 +40,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 			if err != nil {
 				return
 			}
-			arrived <- atomic.AddInt32(&inFlight, 1)
+			arrived <- inFlight.Add(1)
 			go func(reqType MessageType) {
 				<-release
 				marker := "list"
@@ -53,7 +53,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 				writeMu.Lock()
 				_ = WriteMessage(server, resp)
 				writeMu.Unlock()
-				atomic.AddInt32(&inFlight, -1)
+				inFlight.Add(-1)
 			}(m.Type)
 		}
 	}()

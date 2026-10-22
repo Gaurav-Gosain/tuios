@@ -601,12 +601,7 @@ func (k denyKeys) holds(p string) bool {
 // covers reports whether p is at or inside an entry.
 func (k denyKeys) covers(p string) bool {
 	fp := newDenyKey(p)
-	for _, c := range k {
-		if fp.under(c) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(k, fp.under)
 }
 
 // denyKeysTTL is how long a prepared deny list is used. Its entries change

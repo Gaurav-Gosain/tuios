@@ -314,7 +314,7 @@ func isEnvLine(l string) bool {
 	if l[eq+1:] == secretMask {
 		return true
 	}
-	for i := 0; i < eq; i++ {
+	for i := range eq {
 		c := l[i]
 		if !(c >= 'A' && c <= 'Z' || c == '_' || i > 0 && c >= '0' && c <= '9') {
 			return false

@@ -750,7 +750,7 @@ func (d *Daemon) herdrAnchorsFor(cs *connState, window string) []herdrAnchor {
 		}
 	}
 	cur := cs.peerPID
-	for depth := 0; depth < paneOriginMaxDepth; depth++ {
+	for range paneOriginMaxDepth {
 		ppid, _, ok := readProcLineage(cur)
 		if !ok || ppid <= 1 || ppid == paneShell || ppid == os.Getpid() {
 			break

@@ -165,7 +165,7 @@ func frameSkipping(ops []byte, slowEvery, readSize, joinAt uint8) error {
 func genPaneStream(ops []byte) []byte {
 	var b bytes.Buffer
 	n := 0
-	for i := 0; i < len(ops); i++ {
+	for i := range ops {
 		arg := 0
 		if i+1 < len(ops) {
 			arg = int(ops[i+1])
@@ -233,7 +233,7 @@ func genPaneStream(ops []byte) []byte {
 
 func writeFrame(b *bytes.Buffer, keys, payload string, chunks int) {
 	per := (len(payload) + chunks - 1) / chunks
-	for c := 0; c < chunks; c++ {
+	for c := range chunks {
 		part := payload[min(c*per, len(payload)):min((c+1)*per, len(payload))]
 		m := 0
 		if c < chunks-1 {

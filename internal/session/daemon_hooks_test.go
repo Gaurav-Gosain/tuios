@@ -290,7 +290,7 @@ func TestTheAgentStateHookObeysTheAlertPolicy(t *testing.T) {
 		// timer. suppress_focused off, because the pane under test is the
 		// focused one and this is not the test for that rule.
 		AgentAlerts: &config.AgentAlertsConfig{
-			SettleSeconds:   intPtr(0),
+			SettleSeconds:   new(0),
 			SuppressFocused: &off,
 		},
 	})
@@ -352,8 +352,6 @@ func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
 		}
 	}
 }
-
-func intPtr(v int) *int { return &v }
 
 // waitUntilHookTest polls until cond holds or the test fails.
 func waitUntilHookTest(t *testing.T, what string, cond func() bool) {
