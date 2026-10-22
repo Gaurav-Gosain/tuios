@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Sizes of this change
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: binary-size-*
           path: ${{ runner.temp }}/now
