@@ -1,0 +1,45 @@
+[
+ {
+  "src": "flowchart LR\n  A[\"<b>First<br/>Second</b> plain<br/>Third\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<strong>First<br>Second</strong> plain<br>Third\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<i>First<BR />Second</i> plain<BR />Third\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<em>First\\nSecond</em> plain\\nThird\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<b>First\nSecond</b> plain\nThird\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<em>First<br/>Second</em> plain<br/>Third\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<b><i>First<br/><br/>Second</i> bold</b> plain\"] --> B[plain]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<b><i>First<br/><br/>Second</i> bold</b> plain\"] --> B[plain]\n  style A font-weight:bold"
+ },
+ {
+  "src": "flowchart LR\n A[\"<b>First<br/>Second\"] --> B[plain]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"`**First\nSecond** <b>html<br>bold</b>`\"]"
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: <b>one<br>two</b> three<br>four\n  Note over A,B: <i>note<br/>still italic</i><br/>plain"
+ },
+ {
+  "src": "stateDiagram-v2\n  s1 : <strong>bold<br>across</strong> lines\n  [*] --> s1"
+ },
+ {
+  "src": "mindmap\n  root((<em>Root<br>node</em>))\n    child"
+ },
+ {
+  "src": "flowchart TD\n  A[\"<b>a long bold label that wraps<br>and keeps bold after the break</b> then plain words that wrap too\"]",
+  "maxWidth": 200
+ }
+]

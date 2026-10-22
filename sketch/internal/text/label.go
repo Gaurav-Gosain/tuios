@@ -145,8 +145,8 @@ func isWordRune(r rune) bool {
 }
 
 // Splits inline HTML and, for markdown labels, emphasis markers into styled spans.
-func inline(line *[]Span, source string, markdown bool, base int, m TextMeasurer) {
-	style := base
+func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int, m TextMeasurer) int {
+	style := htmlStyle
 	marked := 0
 	var text strings.Builder
 	i := 0
@@ -170,8 +170,10 @@ func inline(line *[]Span, source string, markdown bool, base int, m TextMeasurer
 				if bit != 0 {
 					flush()
 					if closing {
+						htmlStyle = (htmlStyle &^ bit) | (base & bit)
 						style = (style &^ bit) | (base & bit)
 					} else {
+						htmlStyle = htmlStyle | bit
 						style = style | bit
 					}
 				}
@@ -219,6 +221,7 @@ func inline(line *[]Span, source string, markdown bool, base int, m TextMeasurer
 		i++
 	}
 	flush()
+	return htmlStyle
 }
 
 func measureSpans(line []Span, measurer TextMeasurer, size float64) float64 {
@@ -342,9 +345,12 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	var lines [][]Span
 	var widths []float64
 	width := 0.0
+	// HTML tags can span explicit breaks; Markdown emphasis stays local to each line.
+	htmlStyle := base
 	for _, part := range reBreak.Split(source, -1) {
 		var line []Span
-		inline(&line, js.Trim(part), markdown, base, measurer)
+		htmlStyle = inline(&line, js.Trim(part), markdown, base, htmlStyle, measurer)
+
 		w := measureSpans(line, measurer, size)
 		if w > maxWidth {
 			wrap(line, measurer, size, maxWidth, &lines, &widths)

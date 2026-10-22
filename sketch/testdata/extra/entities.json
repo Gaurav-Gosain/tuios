@@ -1,0 +1,26 @@
+[
+ {
+  "src": "flowchart LR\n  A[\"GET /plans/&lcub;id&rcub;\"] --> B[\"items#lsqb;0#rsqb; #verbar; none\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"&AMP; &LT; &GT; &QUOT; &lsqb; &rsqb; &lcub; &rcub; &verbar; &VerticalLine; &midast; &DiacriticalGrave; &Hat; &UnderBar;\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"#AMP; #LT; #GT; #QUOT; #lsqb; #rsqb; #lcub; #rcub; #verbar; #VerticalLine; #midast; #DiacriticalGrave; #Hat; #UnderBar;\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"x #amp;lt; y #38;gt; z\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"zero #0; big #99999999; surrogate #55296; ok #35; #lt; #nosuch;\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"#amp;#35;59; and #amp;amp;lt;\"]"
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B: #amp; #lcub;x#rcub; #verbar; #0;\n  Note right of B: #38;#35; #lsqb;y#rsqb;"
+ },
+ {
+  "src": "classDiagram\n  class A {\n    +items #lsqb;#rsqb; #verbar; &lcub;&rcub;\n  }"
+ }
+]
