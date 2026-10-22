@@ -157,9 +157,10 @@ func captureTerminalState() (restore func()) {
 //
 // The daemon client's detach sync and Close are skipped: both can block on the
 // same wedge, and the session itself lives on in the daemon.
-// forcedExitPrefix undoes what Bubble Tea's exit would have: the kitty
-// keyboard flags, modifyOtherKeys and the alternate screen.
-const forcedExitPrefix = "\x1b[=0;1u\x1b[>4m\x1b[?1049l"
+// forcedExitPrefix undoes what Bubble Tea's exit would have: it pops the kitty
+// keyboard flags Bubble Tea pushed, so the host gets its own back, and resets
+// modifyOtherKeys and the alternate screen.
+const forcedExitPrefix = "\x1b[<1u\x1b[>4m\x1b[?1049l"
 
 func forceExit(restoreTerminal func(), code int) {
 	restoreTerminal()

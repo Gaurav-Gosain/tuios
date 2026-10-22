@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -189,7 +190,22 @@ func TestExitTurnsOffWhatItTurnedOn(t *testing.T) {
 				}
 			}
 			checkLast("cursor style", regexp.MustCompile(`\x1b\[[0-9]? q`), "\x1b[0 q")
-			checkLast("kitty keyboard flags", regexp.MustCompile(`\x1b\[[=>][0-9;]*u`), "\x1b[=0;1u")
+			// Bubble Tea pushes the kitty keyboard flags and pops them at
+			// exit, so the host gets back the flags it had. The pop must come
+			// after the last change, and every push needs its pop.
+			checkLast("kitty keyboard flags", regexp.MustCompile(`\x1b\[[=><][0-9;]*u`), "\x1b[<1u")
+			pushes := len(regexp.MustCompile(`\x1b\[>[0-9]*u`).FindAll(raw, -1))
+			pops := 0
+			for _, m := range regexp.MustCompile(`\x1b\[<([0-9]*)u`).FindAllSubmatch(raw, -1) {
+				n, err := strconv.Atoi(string(m[1]))
+				if err != nil {
+					n = 1
+				}
+				pops += n
+			}
+			if pushes == 0 || pops != pushes {
+				t.Errorf("tuios pushed the kitty keyboard flags %d times and popped them %d times", pushes, pops)
+			}
 			checkLast("modifyOtherKeys", regexp.MustCompile(`\x1b\[>4(;[0-9]+)?m`), "\x1b[>4m")
 			checkLast("pointer shape", regexp.MustCompile(`\x1b\]22;[^\x1b\x07]*`), "\x1b]22;default")
 		})
