@@ -458,7 +458,6 @@ func herdrString(m map[string]any, key string) string {
 	return s
 }
 
-//go:fix inline
 func ptr[T any](v T) *T { return new(v) }
 
 // herdrVersion is the version a pong and a snapshot report: the herdr
