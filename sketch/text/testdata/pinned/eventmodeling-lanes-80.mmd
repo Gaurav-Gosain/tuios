@@ -1,0 +1,11 @@
+eventmodeling
+
+tf 01 ui AgentPane
+tf 02 cmd RunTool { command: string }
+tf 03 evt ApprovalAsked { tool: string }
+tf 04 rmo Inbox ->> 03
+tf 05 ui InboxPanel
+tf 06 cmd Approve { allow: bool }
+tf 07 evt ApprovalGranted { by: string }
+tf 08 pcr AgentResumer
+tf 09 evt ToolRan { exit: int }

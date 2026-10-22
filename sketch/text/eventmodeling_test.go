@@ -31,7 +31,36 @@ Events                         ┌ 03 ────┐
 │ checks stock  │
 └───────────────┘
 `)
+	// The lanes, tighter: lane names on the rules.
 	drawPinned(t, src, 30, `
+┄┄ UI/Automation ┄┄┄┄┄┄┄┄┄┄┄┄
+
+ ┌ 01 ────┐
+ │ Cart   │
+ └────────┘
+        ││
+┄┄ Command/Read Model ┄┄┄┄┄┄┄
+        ▼└─────────▼
+     ┌ 02 ────┐   ┌ 04 ↺ ──┐
+     │ Add    │   │ Items  │
+     │ a: 1   │   └────────┘
+     └────────┘
+            │
+┄┄ Events ┄┄┼┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+            ▼
+         ┌ 03 ────┐
+         │ Added  │
+         └────────┘
+
+┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+
+┌───────────────┐
+│ Note · 02 Add │
+│ checks stock  │
+└───────────────┘
+`)
+	// Narrower still: the list.
+	drawPinned(t, src, 24, `
 UI/Automation
 ┌ 01 ──┐
 │ Cart │

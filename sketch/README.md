@@ -164,7 +164,8 @@ is drawn as the `tree` command draws a folder. An Ishikawa diagram is a spine
 with its causes as bones, each category in its own colour. Its causes wrap
 to fit the columns, and it is an indented tree when it is narrower still. A Cynefin
 diagram is a grid of its four domains. An event model is swimlanes in time
-order, or a list of frames when it is narrow. A Venn diagram is its circles in
+order. When they do not fit, the lanes are drawn tighter, with each lane's name
+on its rule, and narrower still it is a list of frames. A Venn diagram is its circles in
 braille dots, a colour for each set, with the labels where the SVG writes them.
 Without colour, or when its labels do not fit, it is a table of its sets and
 their overlaps. A Wardley map is a grid of visibility by evolution,

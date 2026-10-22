@@ -11,7 +11,9 @@ import (
 // as boxes in time order from left to right, each with its frame number on its top edge. A frame
 // in a new lane starts under the end of the one before it, as in the SVG, so the arrow between
 // them drops straight down. Notes and specifications follow as boxes under the lanes. When the
-// lanes do not fit the columns, the frames are listed one under another with their lanes.
+// lanes do not fit the columns, they are drawn tighter: each lane's name goes on its rule, a
+// frame in a new lane starts a few cells after the one before it, and data wraps narrower. When that does not fit either, the
+// frames are listed one under another with their lanes.
 
 const emDataWidth = 28
 
@@ -70,7 +72,10 @@ func drawEventModel(l *sketch.Layout, opt Options) (*canvas, error) {
 	if em == nil {
 		return nil, ErrUnsupported
 	}
-	if c := emLanes(em, opt); c != nil {
+	if c := emLanes(em, opt, false); c != nil {
+		return c, nil
+	}
+	if c := emLanes(em, opt, true); c != nil {
 		return c, nil
 	}
 	return emList(em, opt)
@@ -97,7 +102,11 @@ func emCards(em *types.GeoEventModel, w int) [][]styled {
 	return out
 }
 
-func emLanes(em *types.GeoEventModel, opt Options) *canvas {
+func emLanes(em *types.GeoEventModel, opt Options, tight bool) *canvas {
+	dataW := emDataWidth
+	if tight {
+		dataW = 16
+	}
 	labelW := 0
 	for _, lane := range em.Lanes {
 		labelW = max(labelW, width(lane))
@@ -111,7 +120,7 @@ func emLanes(em *types.GeoEventModel, opt Options) *canvas {
 	}
 	right := 0
 	for i, f := range em.Boxes {
-		lines := emLines(f, emDataWidth)
+		lines := emLines(f, dataW)
 		w := max(styledWidth(lines)+4, width(f.ID)+6, 10)
 		h := len(lines) + 2
 		x := 0
@@ -119,6 +128,10 @@ func emLanes(em *types.GeoEventModel, opt Options) *canvas {
 			prev := boxes[i-1]
 			if em.Boxes[i-1].Lane == f.Lane {
 				x = laneRight[f.Lane] + 3
+			} else if tight {
+				// Far enough along for the arrow from the frame before to
+				// drop straight down, and no further.
+				x = max(prev.x+4, laneRight[f.Lane]+3)
 			} else {
 				x = max(prev.x+max(prev.w/2, prev.w-8), laneRight[f.Lane]+3)
 			}
@@ -130,6 +143,10 @@ func emLanes(em *types.GeoEventModel, opt Options) *canvas {
 	}
 	// Each lane is a blank row, its boxes, and a blank row, under a rule.
 	left := labelW + 1
+	if tight {
+		// The lane's name goes on its rule, so the boxes start at the left.
+		left = 1
+	}
 	w := left + right + 1
 	laneY := make([]int, len(em.Lanes))
 	y := len(em.Title)
@@ -158,7 +175,11 @@ func emLanes(em *types.GeoEventModel, opt Options) *canvas {
 	}
 	for i, lane := range em.Lanes {
 		c.hline(0, w-1, laneY[i], dotted, roleFrame)
-		c.text(0, laneY[i]+2, lane, roleHead)
+		if tight {
+			c.text(2, laneY[i], " "+lane+" ", roleHead)
+		} else {
+			c.text(0, laneY[i]+2, lane, roleHead)
+		}
 	}
 	if len(em.Lanes) > 0 {
 		c.hline(0, w-1, rule, dotted, roleFrame)
