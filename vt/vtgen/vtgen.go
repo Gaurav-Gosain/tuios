@@ -880,22 +880,41 @@ func (g *Gen) dcs() Seq {
 // repeats, graphics carriage returns and new lines.
 func (g *Gen) sixel() Seq {
 	var b strings.Builder
-	b.WriteString("\x1bP" + g.pick([]string{"", "0;1;0", "9", "2"}) + "q")
-	b.WriteString("\"1;1;" + g.param() + ";" + g.param())
+	b.WriteString("\x1bP")
+	b.WriteString(g.pick([]string{"", "0;1;0", "9", "2"}))
+	b.WriteString("q")
+	b.WriteString("\"1;1;")
+	b.WriteString(g.param())
+	b.WriteString(";")
+	b.WriteString(g.param())
 	for range 1 + g.u(3) {
 		reg := strconv.Itoa(g.u(300))
 		switch g.u(3) {
 		case 0:
-			b.WriteString("#" + reg + ";2;" + g.param() + ";" + g.param() + ";" + g.param())
+			b.WriteString("#")
+			b.WriteString(reg)
+			b.WriteString(";2;")
+			b.WriteString(g.param())
+			b.WriteString(";")
+			b.WriteString(g.param())
+			b.WriteString(";")
+			b.WriteString(g.param())
 		case 1:
-			b.WriteString("#" + reg + ";1;" + g.param() + ";50;100")
+			b.WriteString("#")
+			b.WriteString(reg)
+			b.WriteString(";1;")
+			b.WriteString(g.param())
+			b.WriteString(";50;100")
 		default:
-			b.WriteString("#" + reg)
+			b.WriteString("#")
+			b.WriteString(reg)
 		}
 		for range 1 + g.u(6) {
 			switch g.u(4) {
 			case 0:
-				b.WriteString("!" + g.param() + g.pick([]string{"~", "?", "@", "N"}))
+				b.WriteString("!")
+				b.WriteString(g.param())
+				b.WriteString(g.pick([]string{"~", "?", "@", "N"}))
 			case 1:
 				b.WriteString("$")
 			case 2:
@@ -1043,7 +1062,8 @@ func (g *Gen) kitty() Seq {
 			switch g.u(3) {
 			case 0:
 			case 1:
-				run.WriteString(kittyPlaceholderMarks[0] + kittyPlaceholderMarks[i%len(kittyPlaceholderMarks)])
+				run.WriteString(kittyPlaceholderMarks[0])
+				run.WriteString(kittyPlaceholderMarks[i%len(kittyPlaceholderMarks)])
 			default:
 				run.WriteString(g.pick(kittyPlaceholderMarks))
 			}

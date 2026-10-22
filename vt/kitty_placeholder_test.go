@@ -408,7 +408,7 @@ func TestACaptureHoldsNoPlaceholders(t *testing.T) {
 			t.Errorf("the capture kept a placeholder: %q", got)
 		}
 	}
-	if line := strings.SplitN(StripKittyPlaceholders(term.String()), "\n", 2)[0]; !strings.HasPrefix(line, "A   B") {
+	if line, _, _ := strings.Cut(StripKittyPlaceholders(term.String()), "\n"); !strings.HasPrefix(line, "A   B") {
 		t.Errorf("the capture reads %q, want A, three blanks, B", line)
 	}
 }

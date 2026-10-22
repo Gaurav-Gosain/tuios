@@ -43,7 +43,7 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 		remap[i] = -1
 	}
 	var used []int
-	for dy := 0; dy < dstH; dy++ {
+	for dy := range dstH {
 		row := srcRow(dy)
 		for _, sx := range xmap {
 			v := row[sx]

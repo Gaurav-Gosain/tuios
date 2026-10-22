@@ -3,6 +3,7 @@ package vt
 import (
 	"bytes"
 	"image/color"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
@@ -255,12 +256,7 @@ func (e *Emulator) notePending(p []byte, from parser.State, need int) {
 // holdsC1Introducer reports whether p holds a byte with the value of an 8-bit
 // C1 control that starts a sequence: DCS, SOS, CSI, OSC, PM or APC.
 func holdsC1Introducer(p []byte) bool {
-	for _, b := range p {
-		if isC1Introducer(b) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(p, isC1Introducer)
 }
 
 // isC1Introducer reports whether b is an 8-bit C1 control that starts a

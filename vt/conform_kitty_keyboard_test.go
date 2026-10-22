@@ -19,7 +19,9 @@ func TestConform_KittyKeyboardStacks(t *testing.T) {
 	push := func(flags ...string) string {
 		var b strings.Builder
 		for _, f := range flags {
-			b.WriteString("\x1b[>" + f + "u")
+			b.WriteString("\x1b[>")
+			b.WriteString(f)
+			b.WriteString("u")
 		}
 		return b.String()
 	}
@@ -27,7 +29,9 @@ func TestConform_KittyKeyboardStacks(t *testing.T) {
 	ans := func(flags ...string) string {
 		var b strings.Builder
 		for _, f := range flags {
-			b.WriteString("\x1b[?" + f + "u")
+			b.WriteString("\x1b[?")
+			b.WriteString(f)
+			b.WriteString("u")
 		}
 		return b.String()
 	}

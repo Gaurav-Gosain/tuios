@@ -92,6 +92,9 @@ func TestEncoderMatchesKitty(t *testing.T) {
 			t.Errorf("flags %d %s %s: tuios %q, kitty %q", flags, parts[1], parts[2], got, want)
 		}
 	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("read the kitty golden file: %v", err)
+	}
 	if compared < 4000 {
 		t.Fatalf("compared only %d cases", compared)
 	}

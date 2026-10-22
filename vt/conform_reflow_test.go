@@ -222,7 +222,10 @@ func TestReflowLeavesAMarkedPromptToTheShell(t *testing.T) {
 		for range h + 5 {
 			b.WriteString("row\r\n")
 		}
-		b.WriteString(tc.a + strings.Repeat("p", w) + "\r\n> " + tc.b)
+		b.WriteString(tc.a)
+		b.WriteString(strings.Repeat("p", w))
+		b.WriteString("\r\n> ")
+		b.WriteString(tc.b)
 		_, _ = emu.WriteString(b.String())
 		start := emu.ScrollbackLen()
 		for i := 1; i <= 4; i++ {

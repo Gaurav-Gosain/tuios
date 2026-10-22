@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -143,8 +144,8 @@ func (l *SemanticMarkerList) Clear() {
 func (l *SemanticMarkerList) Last(t SemanticMarkerType) *SemanticMarker {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for i := len(l.markers) - 1; i >= 0; i-- {
-		if m := l.markers[i]; m.Type == t && m.AbsLine >= l.trimmed {
+	for _, m := range slices.Backward(l.markers) {
+		if m.Type == t && m.AbsLine >= l.trimmed {
 			m.AbsLine -= l.trimmed
 			return &m
 		}

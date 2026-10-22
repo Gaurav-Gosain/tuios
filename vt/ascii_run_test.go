@@ -28,7 +28,11 @@ func TestASCIIRunMatchesPerCharacterPath(t *testing.T) {
 		for range 60 {
 			switch rng.IntN(4) {
 			case 0:
-				in.WriteString("\x1b[" + strconv.Itoa(1+rng.IntN(h)) + ";" + strconv.Itoa(1+rng.IntN(w)) + "H")
+				in.WriteString("\x1b[")
+				in.WriteString(strconv.Itoa(1 + rng.IntN(h)))
+				in.WriteString(";")
+				in.WriteString(strconv.Itoa(1 + rng.IntN(w)))
+				in.WriteString("H")
 			default:
 				in.WriteString(pieces[rng.IntN(len(pieces))])
 			}

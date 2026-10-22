@@ -66,7 +66,10 @@ func FuzzKittyHeader(f *testing.F) {
 		a, b := *full, *head
 		a.Data, a.FilePath, a.RawPayload, a.PayloadErr = nil, "", "", nil
 		b.FilePath, b.RawPayload, b.PayloadErr = "", "", nil
-		if !reflect.DeepEqual(a, b) { //nolint:govet // PayloadErr is cleared on both sides above, so no error is compared
+		// PayloadErr is nil on both sides, so no error is compared. The any
+		// conversions say so to the deepequalerrors check, which reads only
+		// the static type.
+		if !reflect.DeepEqual(any(a), any(b)) {
 			t.Fatalf("%q: the control keys differ:\n full   %+v\n header %+v", data, a, b)
 		}
 	})

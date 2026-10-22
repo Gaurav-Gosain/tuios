@@ -3,6 +3,7 @@ package vt
 import (
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/progstatus"
@@ -93,8 +94,8 @@ func (h *handlers) handleCc(r byte) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
 	hs := h.ccHandlers[r]
-	for i := len(hs) - 1; i >= 0; i-- {
-		if hs[i]() {
+	for _, h := range slices.Backward(hs) {
+		if h() {
 			return true
 		}
 	}
@@ -107,8 +108,8 @@ func (h *handlers) handleDcs(cmd ansi.Cmd, params ansi.Params, data []byte) bool
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
 	if handlers, ok := h.dcsHandlers[int(cmd)]; ok {
-		for i := len(handlers) - 1; i >= 0; i-- {
-			if handlers[i](params, data) {
+		for _, handler := range slices.Backward(handlers) {
+			if handler(params, data) {
 				return true
 			}
 		}
@@ -122,8 +123,8 @@ func (h *handlers) handleCsi(cmd ansi.Cmd, params ansi.Params) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
 	if handlers, ok := h.csiHandlers[int(cmd)]; ok {
-		for i := len(handlers) - 1; i >= 0; i-- {
-			if handlers[i](params) {
+		for _, handler := range slices.Backward(handlers) {
+			if handler(params) {
 				return true
 			}
 		}
@@ -137,8 +138,8 @@ func (h *handlers) handleOsc(cmd int, data []byte) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
 	if handlers, ok := h.oscHandlers[cmd]; ok {
-		for i := len(handlers) - 1; i >= 0; i-- {
-			if handlers[i](data) {
+		for _, handler := range slices.Backward(handlers) {
+			if handler(data) {
 				return true
 			}
 		}
@@ -151,8 +152,8 @@ func (h *handlers) handleOsc(cmd int, data []byte) bool {
 func (h *handlers) handleApc(data []byte) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
-	for i := len(h.apcHandlers) - 1; i >= 0; i-- {
-		if h.apcHandlers[i](data) {
+	for _, v := range slices.Backward(h.apcHandlers) {
+		if v(data) {
 			return true
 		}
 	}
@@ -164,8 +165,8 @@ func (h *handlers) handleApc(data []byte) bool {
 func (h *handlers) handleSos(data []byte) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
-	for i := len(h.sosHandlers) - 1; i >= 0; i-- {
-		if h.sosHandlers[i](data) {
+	for _, v := range slices.Backward(h.sosHandlers) {
+		if v(data) {
 			return true
 		}
 	}
@@ -177,8 +178,8 @@ func (h *handlers) handleSos(data []byte) bool {
 func (h *handlers) handlePm(data []byte) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
-	for i := len(h.pmHandlers) - 1; i >= 0; i-- {
-		if h.pmHandlers[i](data) {
+	for _, v := range slices.Backward(h.pmHandlers) {
+		if v(data) {
 			return true
 		}
 	}
@@ -191,8 +192,8 @@ func (h *handlers) handleEsc(cmd int) bool {
 	// Reverse iterate over the handlers so that the last registered handler
 	// is the first to be called.
 	if handlers, ok := h.escHandler[cmd]; ok {
-		for i := len(handlers) - 1; i >= 0; i-- {
-			if handlers[i]() {
+		for _, handler := range slices.Backward(handlers) {
+			if handler() {
 				return true
 			}
 		}
