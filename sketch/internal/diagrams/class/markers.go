@@ -33,10 +33,10 @@ func classMarker(typ EndMarker, x, y, dx, dy float64, color string) string {
 	ny := dx
 	switch typ {
 	case "extension":
-		bx := x - dx*TRIANGLE
-		by := y - dy*TRIANGLE
-		return `<path class="pele-marker" d="M` + num(x) + `,` + num(y) + `L` + num(bx+nx*HALF) + `,` + num(by+ny*HALF) + `L` +
-			num(bx-nx*HALF) + `,` + num(by-ny*HALF) + `Z" stroke-linejoin="round"/>`
+		bx := x - float64(dx*TRIANGLE)
+		by := y - float64(dy*TRIANGLE)
+		return `<path class="pele-marker" d="M` + num(x) + `,` + num(y) + `L` + num(bx+float64(nx*HALF)) + `,` + num(by+float64(ny*HALF)) + `L` +
+			num(bx-float64(nx*HALF)) + `,` + num(by-float64(ny*HALF)) + `Z" stroke-linejoin="round"/>`
 	case "composition", "aggregation":
 		mx := x - (dx*DIAMOND)/2
 		my := y - (dy*DIAMOND)/2
@@ -45,10 +45,10 @@ func classMarker(typ EndMarker, x, y, dx, dy float64, color string) string {
 		if typ == "composition" {
 			fill = ` fill="` + color + `"`
 		}
-		return `<path class="pele-marker" d="M` + num(x) + `,` + num(y) + `L` + num(mx+nx*half) + `,` + num(my+ny*half) + `L` +
-			num(x-dx*DIAMOND) + `,` + num(y-dy*DIAMOND) + `L` + num(mx-nx*half) + `,` + num(my-ny*half) + `Z" stroke-linejoin="round"` + fill + `/>`
+		return `<path class="pele-marker" d="M` + num(x) + `,` + num(y) + `L` + num(mx+float64(nx*half)) + `,` + num(my+float64(ny*half)) + `L` +
+			num(x-float64(dx*DIAMOND)) + `,` + num(y-float64(dy*DIAMOND)) + `L` + num(mx-float64(nx*half)) + `,` + num(my-float64(ny*half)) + `Z" stroke-linejoin="round"` + fill + `/>`
 	case "lollipop":
-		return `<circle class="pele-marker" cx="` + num(x-dx*RING) + `" cy="` + num(y-dy*RING) + `" r="5"/>`
+		return `<circle class="pele-marker" cx="` + num(x-float64(dx*RING)) + `" cy="` + num(y-float64(dy*RING)) + `" r="5"/>`
 	case "dependency":
 		return svg.Marker("arrow_point", x, y, dx, dy, color)
 	}

@@ -209,7 +209,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 				c.PadTop = GROUP_PAD
 			}
 			c.PadBottom = groupPad
-			c.MinW = label.Width + 2*groupPad - 12
+			c.MinW = label.Width + float64(2*groupPad) - 12
 		} else {
 			shape := CanonicalShape(node.Shape)
 			labelText := ""
@@ -299,13 +299,13 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 				if label.Height > 0 {
 					extra = label.Height + 8
 				}
-				cnodes[src].H += 2 * (LOOP + extra)
+				cnodes[src].H += float64(2 * (LOOP + extra))
 			} else {
 				extra := 0.0
 				if label.Width > 0 {
 					extra = label.Width + 12
 				}
-				cnodes[src].W += 2 * (LOOP + extra)
+				cnodes[src].W += float64(2 * (LOOP + extra))
 			}
 		}
 		drawn = append(drawn, edge)
@@ -360,8 +360,8 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	ox := pad + (inner-lay.Width)/2
 	oy := pad + titleHeight
 	layout.ShiftLayout(cnodes, cedges, ox, oy)
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(lay.Height + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(lay.Height + titleHeight + float64(2*pad))
 	links := []types.LinkInfo{}
 
 	crossings := svg.Crossings{}
@@ -460,7 +460,7 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 				}
 				frame = `<rect x="` + svg.Num(-box/2) + `" y="` + svg.Num(top) + `" width="` + svg.Num(box) + `" height="` + svg.Num(box) + `" rx="` + rx + `"` + SHAPE_ATTRS + view.style.Shape + `/>`
 			}
-			glyph := box * 0.6
+			glyph := float64(box * 0.6)
 			markup := ""
 			if icons != nil {
 				markup = icons(node.Icon)

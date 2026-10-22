@@ -334,13 +334,13 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 				if label.Height > 0 {
 					room = label.Height + 8
 				}
-				cnodes[src].H += 2 * (LOOP + room)
+				cnodes[src].H += float64(2 * (LOOP + room))
 			} else {
 				room := 0.0
 				if label.Width > 0 {
 					room = label.Width + 12
 				}
-				cnodes[src].W += 2 * (LOOP + room)
+				cnodes[src].W += float64(2 * (LOOP + room))
 			}
 		}
 		drawn = append(drawn, edge)
@@ -375,8 +375,8 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 	ox := pad + (inner-lay.Width)/2
 	oy := pad + titleHeight
 	layout.ShiftLayout(cnodes, cedges, ox, oy)
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(lay.Height + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(lay.Height + titleHeight + float64(2*pad))
 	links := []types.LinkInfo{}
 
 	shapeView := func(i int) svg.ShapeView { return svg.ShapeView{Shape: views[i].shape, W: views[i].w, H: views[i].h} }

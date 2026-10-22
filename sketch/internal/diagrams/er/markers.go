@@ -18,7 +18,7 @@ const (
 //
 //go:noinline
 func markerAt(x, y, dx, dy, back, side float64) string {
-	return svg.Num(x-dx*back-dy*side) + "," + svg.Num(y-dy*back+dx*side)
+	return svg.Num(x-float64(dx*back)-float64(dy*side)) + "," + svg.Num(y-float64(dy*back)+float64(dx*side))
 }
 
 func markerBar(x, y, dx, dy, back float64) string {
@@ -26,7 +26,7 @@ func markerBar(x, y, dx, dy, back float64) string {
 }
 
 func markerRing(x, y, dx, dy, back float64) string {
-	return `<circle class="pele-marker" cx="` + svg.Num(x-dx*back) + `" cy="` + svg.Num(y-dy*back) + `" r="3.5" fill="var(--_bg)"/>`
+	return `<circle class="pele-marker" cx="` + svg.Num(x-float64(dx*back)) + `" cy="` + svg.Num(y-float64(dy*back)) + `" r="3.5" fill="var(--_bg)"/>`
 }
 
 func markerPath(d string) string { return `<path class="pele-marker" d="` + d + `"/>` }

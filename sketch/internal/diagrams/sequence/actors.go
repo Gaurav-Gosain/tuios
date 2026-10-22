@@ -59,7 +59,7 @@ func actorSize(kind string, label text.Label, minW, minH, paddingX float64) Acto
 		stack = STACK
 	}
 	return ActorSize{
-		W: math.Max(minW, label.Width+2*paddingX) + extra,
+		W: math.Max(minW, label.Width+float64(2*paddingX)) + extra,
 		H: math.Max(minH, label.Height+2*PAD_Y) + stack,
 	}
 }

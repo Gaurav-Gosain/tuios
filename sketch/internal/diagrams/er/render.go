@@ -423,8 +423,8 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	ox := pad + (inner-layoutWidth)/2
 	oy := pad + titleHeight
 	layout.ShiftLayout(cnodes, cedges, ox, oy)
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(lay.Height + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(lay.Height + titleHeight + float64(2*pad))
 	var links []types.LinkInfo
 
 	crossings := svg.Crossings{}
@@ -510,7 +510,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 						stripes.WriteString(`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h) + `"/>`)
 					}
 				}
-				baseline := y + ROW_PAD/2.0 + rowLine/2 + view.rowSize*0.35
+				baseline := y + ROW_PAD/2.0 + rowLine/2 + float64(view.rowSize*0.35)
 				cells.WriteString(textLeft(row.cells[0], x0+view.cols[0], baseline, ` class="pele-er-type" fill="var(--_m)"`+txt, icons) +
 					textLeft(row.cells[1], x0+view.cols[1], baseline, ` class="pele-er-name"`+txt, icons) +
 					textLeft(row.cells[2], x0+view.cols[2], baseline, ` class="pele-er-keys" font-size="`+js.Num(view.keySize)+`" fill="var(--_m)"`+txt, icons) +
@@ -550,7 +550,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		scale := math.Min(1, math.Max(side-8, 0)/total)
 		at := (-total * scale) / 2
 		for _, loop := range own {
-			loop.band *= scale
+			loop.band = float64(loop.band * scale)
 			loop.at = at + loop.band/2
 			at += loop.band
 		}
@@ -774,7 +774,7 @@ func spreadEnds(cedges []*layout.CEdge, cnodes []*layout.CNode, views []*NodeVie
 			return 0
 		})
 		for i, end := range ends {
-			end.route[end.at+axis] = center + (float64(i)-float64(len(ends)-1)/2)*step
+			end.route[end.at+axis] = center + float64((float64(i)-float64(len(ends)-1)/2)*step)
 		}
 	}
 }

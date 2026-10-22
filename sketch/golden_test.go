@@ -214,9 +214,11 @@ func TestGoldenExtra(t *testing.T) {
 			t.Fatal(err)
 		}
 		var cases []struct {
-			Src      string  `json:"src"`
-			MaxWidth float64 `json:"maxWidth"`
-			Math     bool    `json:"math"`
+			Src      string   `json:"src"`
+			MaxWidth float64  `json:"maxWidth"`
+			FontSize *float64 `json:"fontSize"`
+			Padding  *float64 `json:"padding"`
+			Math     bool     `json:"math"`
 		}
 		if err := json.Unmarshal(data, &cases); err != nil {
 			t.Fatalf("%s: %v", f, err)
@@ -231,6 +233,8 @@ func TestGoldenExtra(t *testing.T) {
 			if c.MaxWidth > 0 {
 				opts.MaxWidth = &c.MaxWidth
 			}
+			opts.FontSize = c.FontSize
+			opts.Padding = c.Padding
 			if c.Math {
 				opts.Math = goldenMath
 			}

@@ -1,0 +1,17 @@
+[
+ {
+  "src": "classDiagram\n  namespace N0 {\n    class C0\n    class C5 {\n      +int x\n      +run() bool\n    }\n  }\n  namespace N1 {\n    class C4\n  }\n  class C1\n  class C2\n  class C3\n  C3 -- C3\n  C1 --> C1\n  C0 ..|> C1\n  C3 *-- C3\n  C1 <|-- C5\n  C1 <|-- C1\n  C2 <|-- C1\n  C4 -- C4 : Load\n  C4 -- C4 : db\n  C1 o-- C4\n"
+ },
+ {
+  "src": "classDiagram\n  class C0 {\n    ~Hello_world0\n    +String jan1\n    #String f2\n    ok3\n    #f4(int a, String b)\n  }\n  class C2~T~ {\n    #String A_much_longer_label_that_has_to_wrap_somewhere0\n    -String x1\n    String iiii_lll2\n    Go_upstairs3\n    #iiii_lll4\n  }\n  C0 .. \"n\" C1\n  C1 \"many\" <--> C0 : iiii lll\n  C0 ..> \"n\" C0\n  C1 \"1\" --> C0\n  C0 <|-- C3 : A much longer label that has to wrap somewhere\n",
+  "fontSize": 17,
+  "padding": 23.2
+ },
+ {
+  "src": "erDiagram\n  E2 ||--|| E0 : has\n  E3 ||..o{ E2 : places\n  E1 |o--|{ E4 : places\n  E1 |o--|{ E3 : \"appears in\"\n  E4 ||--|| E1 : has\n  E3 ||--o{ E2 : x\n  E4 |o--|{ E3 : has\n  E4 }|..|{ E3 : x\n  E3 }o--|| E4 : places\n  E3 }|..|{ E0 : x\n  E1 {\n    string name\n    int id PK\n  }\n  E2 {\n    string name\n    int id PK\n  }\n"
+ },
+ {
+  "src": "erDiagram\n  E2 ||--o{ E3 : places\n  E3 ||..o{ E0 : x\n  E2 ||--|| E2 : \"appears in\"\n  E3 ||..o{ E3 : \"appears in\"\n  E2 }o--|| E3 : places\n  E1 ||..o{ E0 : x\n  E1 o{--|| E1 : \"appears in\"\n  E0 o{--|| E1 : has\n  E0 }o--|| E1 : \"appears in\"\n  E3 o{--|| E1 : places\n  E3 o{--|| E1 : x\n  E2 o{--|| E3 : places\n  E1 |o--|{ E3 : places\n  E2 ||--o{ E1 : places\n  E2 o{--|| E2 : \"appears in\"\n  E0 {\n    string name\n    int id PK\n  }\n",
+  "maxWidth": 509.7
+ }
+]

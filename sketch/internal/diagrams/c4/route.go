@@ -207,8 +207,8 @@ func connect(a, b *Box, shift float64) (float64, float64, float64, float64) {
 	if length == 0 || math.IsNaN(length) {
 		length = 1
 	}
-	nx := (-(qy - py) / length) * shift
-	ny := ((qx - px) / length) * shift
+	nx := float64((-(qy - py) / length) * shift)
+	ny := float64(((qx - px) / length) * shift)
 	ta := hit(a, qx+nx, qy+ny, px+nx, py+ny)
 	tb := hit(b, px+nx, py+ny, qx+nx, qy+ny)
 	if ta <= 1 && tb <= 1 {

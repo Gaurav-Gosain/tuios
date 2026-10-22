@@ -192,11 +192,11 @@ func option(conf types.Config, key string, fallback float64) float64 {
 }
 
 func half(x, y, dir, up float64, stick bool) string {
-	bx := svg.Num(x - dir*svg.ARROW)
+	bx := svg.Num(x - float64(dir*svg.ARROW))
 	if stick {
-		return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+up*5) + `"/>`
+		return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+float64(up*5)) + `"/>`
 	}
-	return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+up*4.5) + `V` + svg.Num(y) + `Z" fill="var(--_l)" stroke="none"/>`
+	return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+float64(up*4.5)) + `V` + svg.Num(y) + `Z" fill="var(--_l)" stroke="none"/>`
 }
 
 // head draws the head whose tip is at (x, y) and points along dir. `up` is the side a half head sits on.
@@ -207,7 +207,7 @@ func head(typ int, x, y, dir, up float64) string {
 	case Head_Cross:
 		return svg.Marker("arrow_cross", x, y, dir, 0, "var(--_l)")
 	case Head_Open:
-		return `<path class="pele-marker" d="M` + svg.Num(x-dir*svg.ARROW) + `,` + svg.Num(y-4.5) + `L` + svg.Num(x) + `,` + svg.Num(y) + `L` + svg.Num(x-dir*svg.ARROW) + `,` + svg.Num(y+4.5) + `" stroke-linejoin="round"/>`
+		return `<path class="pele-marker" d="M` + svg.Num(x-float64(dir*svg.ARROW)) + `,` + svg.Num(y-4.5) + `L` + svg.Num(x) + `,` + svg.Num(y) + `L` + svg.Num(x-float64(dir*svg.ARROW)) + `,` + svg.Num(y+4.5) + `" stroke-linejoin="round"/>`
 	case Head_HalfSolid:
 		return half(x, y, dir, up, false)
 	case Head_HalfStick:
@@ -272,7 +272,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		if options.MaxWidth != nil {
 			maxW = *options.MaxWidth
 		}
-		wrapLimit = math.Max(32, (maxW-2*pad)/math.Max(1, float64(db.Actors.Len()))-actorMargin-24)
+		wrapLimit = math.Max(32, (maxW-float64(2*pad))/math.Max(1, float64(db.Actors.Len()))-actorMargin-24)
 	}
 	wrapW := math.Min(option(conf, "width", 160), wrapLimit)
 	// Mermaid's default of 35 corresponds to Pele's default gap. Other values move it by the difference.
@@ -405,7 +405,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		}
 		if m.Type == LINETYPE_NOTE {
 			label := textLabel(m.Message, small, m.Wrap, wrapW, 0)
-			w := label.Width + 2*notePad
+			w := label.Width + float64(2*notePad)
 			if m.Placement == PLACEMENT_LEFTOF {
 				need(a-1, a, w+2*NOTE_GAP+ACT_W)
 			} else if m.Placement == PLACEMENT_RIGHTOF {
@@ -414,7 +414,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				need(a-1, a, w/2+NOTE_GAP)
 				need(a, a+1, w/2+NOTE_GAP)
 			} else {
-				need(min(a, b), max(a, b), w-2*noteOver)
+				need(min(a, b), max(a, b), w-float64(2*noteOver))
 			}
 			views[i] = &view{kind: V_Note, a: a, b: b, label: label, w: w}
 		} else if isLineMessage(m.Type) {
@@ -436,7 +436,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				if tight {
 					lw = math.Min(label.Width, math.Max(16, wrapW-16))
 				}
-				need(min(a, b), max(a, b), lw+2*msgPad+ACT_W+badge+created+central)
+				need(min(a, b), max(a, b), lw+float64(2*msgPad)+ACT_W+badge+created+central)
 				views[i] = &view{kind: V_Line, a: a, b: b, label: label}
 			}
 		}
@@ -630,9 +630,9 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					lo := math.Min(a.x, b.x) - noteOver
 					hi := math.Max(a.x, b.x) + noteOver
 					if tight || m.Wrap {
-						v.label = textLabel(m.Message, small, true, math.Max(wrapW, hi-lo-2*notePad), 0)
+						v.label = textLabel(m.Message, small, true, math.Max(wrapW, hi-lo-float64(2*notePad)), 0)
 					}
-					v.w = math.Max(hi-lo, v.label.Width+2*notePad)
+					v.w = math.Max(hi-lo, v.label.Width+float64(2*notePad))
 					v.x = (lo + hi - v.w) / 2
 				}
 				x0 = v.x
@@ -644,7 +644,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				x0 = math.Min(a.x, b.x)
 				x1 = math.Max(a.x, b.x)
 				if tight || m.Wrap {
-					v.label = textLabel(m.Message, small, true, math.Max(wrapW, x1-x0-2*msgPad-ACT_W), 0)
+					v.label = textLabel(m.Message, small, true, math.Max(wrapW, x1-x0-float64(2*msgPad)-ACT_W), 0)
 				}
 				if b.createAt == i {
 					if b.x > a.x {
@@ -724,7 +724,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	rightEdge := func(col *column, extra int) float64 {
 		depth := len(col.activations) + extra
 		if depth > 0 {
-			return col.x + ACT_W/2 + float64(depth-1)*ACT_STEP
+			return col.x + ACT_W/2 + float64(float64(depth-1)*ACT_STEP)
 		}
 		return col.x
 	}
@@ -739,7 +739,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		start := col.activations[len(col.activations)-1]
 		col.activations = col.activations[:len(col.activations)-1]
 		bottom := math.Max(end, start+ACT_MIN)
-		x := col.x - ACT_W/2 + float64(len(col.activations))*ACT_STEP
+		x := col.x - ACT_W/2 + float64(float64(len(col.activations))*ACT_STEP)
 		extend(x, x+ACT_W)
 		activationsOut = append(activationsOut, `<rect class="pele-activation" data-id="`+svg.EscText(col.id)+`" x="`+svg.Num(x)+`" y="`+svg.Num(start)+
 			`" width="10" height="`+svg.Num(bottom-start)+`" rx="2"/>`)
@@ -768,7 +768,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 	badge := func(i int, cx, cy, w float64) string {
 		return `<g class="pele-sequence-number"><rect x="` + svg.Num(cx-w/2) + `" y="` + svg.Num(cy-BADGE_H/2) + `" width="` + svg.Num(w) + `" height="16" rx="8" fill="var(--_l)" stroke="none"/><text x="` +
-			svg.Num(cx) + `" y="` + svg.Num(cy+tiny*0.35) + `" text-anchor="middle" font-size="` + js.Num(tiny) + `" fill="var(--_bg)" stroke="none">` + svg.Esc(js.Num(numbering.index[i])) + `</text></g>`
+			svg.Num(cx) + `" y="` + svg.Num(cy+float64(tiny*0.35)) + `" text-anchor="middle" font-size="` + js.Num(tiny) + `" fill="var(--_bg)" stroke="none">` + svg.Esc(js.Num(numbering.index[i])) + `</text></g>`
 	}
 
 	geo := options.Geometry != nil
@@ -830,7 +830,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 						backed(label, fr.x0+8+label.Width/2, dy+2+label.Height/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
 				}
 				inner += `<rect x="` + x + `" y="` + svg.Num(fr.top) + `" width="` + svg.Num(fr.tabW) + `" height="20" fill="var(--_s)"` + svg.ROUNDED + `/>` +
-					`<text class="pele-frame-kind" x="` + svg.Num(fr.x0+fr.tabW/2) + `" y="` + svg.Num(fr.top+TAB_H/2+tiny*0.35) +
+					`<text class="pele-frame-kind" x="` + svg.Num(fr.x0+fr.tabW/2) + `" y="` + svg.Num(fr.top+TAB_H/2+float64(tiny*0.35)) +
 					`" text-anchor="middle" font-size="` + js.Num(tiny) + `" font-weight="var(--_hw)" fill="var(--_m)" stroke="none">` + fr.kind + `</text>` +
 					backed(fr.title, fr.x0+fr.tabW+8+fr.title.Width/2, fr.top+math.Max(TAB_H, fr.title.Height)/2, ` class="pele-frame-label" fill="var(--_m)" stroke="none"`)
 				framesOut.WriteString(`<g class="pele-frame pele-frame-` + fr.kind + `">` + inner + `</g>`)
@@ -855,7 +855,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			}
 		} else if v != nil && v.kind == V_Note {
 			a := cols[v.a]
-			h := v.label.Height + 2*math.Max(4, notePad-4)
+			h := v.label.Height + float64(2*math.Max(4, notePad-4))
 			top := y + 10
 			x := v.x
 			if m.Placement == PLACEMENT_RIGHTOF {
@@ -1000,32 +1000,32 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					b.top = lineY - b.size.H/2
 					b.lifeStart = b.top + b.size.H
 					if isFigure(b.kind) {
-						x1 = b.x - dir*18
+						x1 = b.x - float64(dir*18)
 					} else {
-						x1 = b.x - dir*(b.size.W/2+1)
+						x1 = b.x - float64(dir*(b.size.W/2+1))
 					}
 				}
 				if circleFrom {
 					inner += circle(a.x, lineY)
-					x0 = a.x + dir*CENTRAL_R
+					x0 = a.x + float64(dir*CENTRAL_R)
 				}
 				if circleTo {
 					inner += circle(b.x, lineY)
-					x1 = b.x - dir*CENTRAL_R
+					x1 = b.x - float64(dir*CENTRAL_R)
 				}
 				if bw > 0 {
 					// The number sits on the lifeline at the tail of the arrow, past a connection circle if there is one.
 					if tailAtEnd {
 						cx := x1
 						if circleTo {
-							cx = x1 - dir*(bw/2+2)
+							cx = x1 - float64(dir*(bw/2+2))
 						}
 						inner += badge(i, cx, lineY, bw)
 						x1 = cx - (dir*bw)/2
 					} else {
 						cx := x0
 						if circleFrom {
-							cx = x0 + dir*(bw/2+2)
+							cx = x0 + float64(dir*(bw/2+2))
 						}
 						inner += badge(i, cx, lineY, bw)
 						x0 = cx + (dir*bw)/2
@@ -1040,11 +1040,11 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				}
 				from := x0
 				if st.atStart {
-					from += dir * headTrim
+					from += float64(dir * headTrim)
 				}
 				to := x1
 				if st.atEnd {
-					to -= dir * headTrim
+					to -= float64(dir * headTrim)
 				}
 				inner = `<path d="M` + svg.Num(from) + `,` + svg.Num(lineY) + `H` + svg.Num(to) + `"` + attrs + `/>` + heads + inner
 				if label.Width > 0 {
@@ -1167,8 +1167,8 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		titleOut = svg.LabelSvg(title, cx, minY+title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, icons)
 	}
 
-	width := math.Ceil(maxX - minX + 2*pad)
-	height := math.Ceil(bottom - minY + 2*pad)
+	width := math.Ceil(maxX - minX + float64(2*pad))
+	height := math.Ceil(bottom - minY + float64(2*pad))
 	smallStr := js.Num(small)
 	content := make([]string, 0, 32)
 	content = append(content, `<g transform="translate(`+svg.Num(pad-minX)+`,`+svg.Num(pad-minY)+`)">`, titleOut)

@@ -499,13 +499,13 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 				if label.Height > 0 {
 					room = label.Height + 8
 				}
-				cnodes[src].H += 2 * (LOOP + room)
+				cnodes[src].H += float64(2 * (LOOP + room))
 			} else {
 				room := 0.0
 				if label.Width > 0 {
 					room = label.Width + 12
 				}
-				cnodes[src].W += 2 * (LOOP + room)
+				cnodes[src].W += float64(2 * (LOOP + room))
 			}
 		}
 		drawn = append(drawn, edge)
@@ -536,8 +536,8 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 	ox := pad + (inner-lay.Width)/2
 	oy := pad + titleHeight
 	layout.ShiftLayout(cnodes, cedges, ox, oy)
-	width := math.Ceil(inner + 2*pad)
-	height := math.Ceil(lay.Height + titleHeight + 2*pad)
+	width := math.Ceil(inner + float64(2*pad))
+	height := math.Ceil(lay.Height + titleHeight + float64(2*pad))
 
 	// Where edges cross each boundary's top border, so that a title can keep out of their way.
 	crossings := svg.Crossings{}

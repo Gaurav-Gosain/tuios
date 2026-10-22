@@ -392,7 +392,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		case K_Choice:
 			v.w, v.h = 30, 30
 		case K_Fork, K_Join:
-			length := clamp(40*float64(degree[i])+16, 72, 320)
+			length := clamp(float64(40*float64(degree[i]))+16, 72, 320)
 			if across(i) {
 				v.w, v.h = length, BAR
 			} else {
@@ -511,14 +511,14 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			if across(i) {
 				room = reach + loopWidth[i]
 			} else {
-				room = reach*0.75 + 4 + loopHeight[i]
+				room = float64(reach*0.75) + 4 + loopHeight[i]
 			}
 			if !item.IsGroup {
 				if across(i) {
-					item.W += 2 * room
+					item.W += float64(2 * room)
 					item.H = math.Max(item.H, loopHeight[i])
 				} else {
-					item.H += 2 * room
+					item.H += float64(2 * room)
 					item.W = math.Max(item.W, loopWidth[i])
 				}
 				room = 0
@@ -600,8 +600,8 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		HeadRoom: svg.MarkerTrim("arrow_point"),
 	})
 
-	width := math.Ceil(lay.Width + 2*pad)
-	height := math.Ceil(lay.Height + 2*pad)
+	width := math.Ceil(lay.Width + float64(2*pad))
+	height := math.Ceil(lay.Height + float64(2*pad))
 	var links []types.LinkInfo
 
 	// Route points by rounded y, to find the edges that cross a composite's title bar.
@@ -847,8 +847,8 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 				out = w / 2
 				spreadBase = h/2 - 4
 			}
-			spread := math.Max(math.Min(spreadBase, 8+k*6), 2)
-			reach := LOOP + k*8
+			spread := math.Max(math.Min(spreadBase, 8+float64(k*6)), 2)
+			reach := LOOP + float64(k*8)
 			trim := svg.MarkerTrim(endType) / js.Or(js.Hypot(reach, spread), 1)
 			// Offsets are given for a loop on the right and turned a quarter for one below.
 			px := func(dx, dy float64) float64 {
@@ -865,7 +865,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			}
 			at := func(dx, dy float64) string { return svg.Num(px(dx, dy)) + `,` + svg.Num(py(dx, dy)) }
 			path = svg.EdgePath{
-				D:   `M` + at(0, -spread) + `C` + at(reach, -2*spread) + ` ` + at(reach, 2*spread) + ` ` + at(reach*trim, spread+spread*trim),
+				D:   `M` + at(0, -spread) + `C` + at(reach, -2*spread) + ` ` + at(reach, 2*spread) + ` ` + at(reach*trim, spread+float64(spread*trim)),
 				Ex:  px(0, spread),
 				Ey:  py(0, spread),
 				Edx: px(-reach, -spread) - px(0, 0),
@@ -883,7 +883,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 				ce.LabelY = a.Y - loopHeight[ce.Src]/2 + below
 			} else {
 				ce.LabelX = a.X
-				ce.LabelY = a.Y + out + furthest*0.75 + 4 + below
+				ce.LabelY = a.Y + out + float64(furthest*0.75) + 4 + below
 			}
 		} else {
 			route := append([]float64{}, ce.Route...)

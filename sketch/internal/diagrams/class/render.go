@@ -338,7 +338,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 				return 0
 			}
 			if count > 0 {
-				return 2*SECTION_PAD + float64(count)*lineHeight
+				return 2*SECTION_PAD + float64(float64(count)*lineHeight)
 			}
 			return EMPTY_SECTION
 		}
@@ -431,7 +431,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 		if edge.Source == edge.Target {
 			views[edge.Source].loops++
-			cnodes[edge.Source].W += 2 * (LOOP + labelW)
+			cnodes[edge.Source].W += float64(2 * (LOOP + labelW))
 		} else {
 			meet(edge.Source, 0, startW)
 			meet(edge.Target, 2, endW)
@@ -461,7 +461,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 					if room > 0 {
 						per = room + 24
 					}
-					need = math.Max(need, (count-1)*per+24)
+					need = math.Max(need, float64((count-1)*per)+24)
 				}
 			}
 			need = math.Min(need, 480)
@@ -653,7 +653,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			}
 			route[end+across] = at
 			if j < len(gaps) {
-				at += gaps[j] * scale
+				at += float64(gaps[j] * scale)
 			}
 		}
 	}
@@ -755,7 +755,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			c := cnodes[ce.Src]
 			view := views[ce.Src]
 			x := c.X + view.w/2
-			spread := math.Min(view.h/2-4, 8+float64(k)*6)
+			spread := math.Min(view.h/2-4, 8+float64(float64(k)*6))
 			card(edge.StartLabelRight, startRoom[i], x, c.Y-spread, 1, false)
 			card(edge.EndLabelLeft, endRoom[i], x, c.Y+spread, 1, true)
 		} else if len(route) >= 6 {
@@ -777,8 +777,8 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 
 	ox := pad - minX
 	oy := pad - minY
-	width := math.Ceil(maxX - minX + 2*pad)
-	height := math.Ceil(maxY - minY + 2*pad)
+	width := math.Ceil(maxX - minX + float64(2*pad))
+	height := math.Ceil(maxY - minY + float64(2*pad))
 	var links []types.LinkInfo
 
 	crossings := svg.Crossings{}
@@ -826,7 +826,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 		body.WriteString(svg.LabelSvg(view.label, 0, (y+first-TITLE_PAD)/2, ` class="pele-label"`+titleSize+` font-weight="var(--_hw)"`+style.Text, icons))
 		lines := func(out *strings.Builder, list []Line, kind string, from float64) {
-			baseline := from + SECTION_PAD + lineHeight/2 + memberSize*0.35
+			baseline := from + SECTION_PAD + lineHeight/2 + float64(memberSize*0.35)
 			for _, line := range list {
 				var mark string
 				switch line.classifier {
@@ -938,8 +938,8 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			k := float64(loopAt[i])
 			x := c.X + ox + view.w/2
 			y := c.Y + oy
-			spread := math.Min(view.h/2-4, 8+k*6)
-			reach := LOOP + k*8
+			spread := math.Min(view.h/2-4, 8+float64(k*6))
+			reach := LOOP + float64(k*8)
 			path = svg.EdgePath{
 				D: `M` + num(x+startTrim) + `,` + num(y-spread) + `C` + num(x+reach+startTrim) + `,` + num(y-spread) + ` ` +
 					num(x+reach+endTrim) + `,` + num(y+spread) + ` ` + num(x+endTrim) + `,` + num(y+spread),
