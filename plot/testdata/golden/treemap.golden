@@ -1,0 +1,81 @@
+=== braille 44x12
+|┌─ app  60 ───────────────┬─ daemon  40 ───┐|
+|├─────────────────────────┼────────────────┤|
+|│                         │                │|
+|│         render          │                │|
+|│           40            │    session     │|
+|│                         │       30       │|
+|│                         │                │|
+|├─────────────────────────┤                │|
+|│          input          ├────────────────┤|
+|│           20            │      cli       │|
+|│                         │       10       │|
+|└─────────────────────────┴────────────────┘|
+--- roles
+|aabbbbbccccaaaaaaaaaaaaaaaaabbbbbbbbccccaaaa|
+|adddddddddddddddddddddddddaeeeeeeeeeeeeeeeea|
+|a                         a                a|
+|a         bbbbbb          a                a|
+|a           cc            a    bbbbbbb     a|
+|a                         a       cc       a|
+|a                         a                a|
+|afffffffffffffffffffffffffa                a|
+|a          bbbbb          agggggggggggggggga|
+|a           cc            a      bbb       a|
+|a                         a       cc       a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a=mute b=fg c=dim d=series1 e=series3 f=series2 g=series4 (upper case is bold)
+=== blocks 44x12
+|┌─ app  60 ───────────────┬─ daemon  40 ───┐|
+|├─────────────────────────┼────────────────┤|
+|│                         │                │|
+|│         render          │                │|
+|│           40            │    session     │|
+|│                         │       30       │|
+|│                         │                │|
+|├─────────────────────────┤                │|
+|│          input          ├────────────────┤|
+|│           20            │      cli       │|
+|│                         │       10       │|
+|└─────────────────────────┴────────────────┘|
+--- roles
+|aabbbbbccccaaaaaaaaaaaaaaaaabbbbbbbbccccaaaa|
+|adddddddddddddddddddddddddaeeeeeeeeeeeeeeeea|
+|a                         a                a|
+|a         bbbbbb          a                a|
+|a           cc            a    bbbbbbb     a|
+|a                         a       cc       a|
+|a                         a                a|
+|afffffffffffffffffffffffffa                a|
+|a          bbbbb          agggggggggggggggga|
+|a           cc            a      bbb       a|
+|a                         a       cc       a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a=mute b=fg c=dim d=series1 e=series3 f=series2 g=series4 (upper case is bold)
+=== ascii 44x12
+|+- app  60 ---------------+- daemon  40 ---+|
+|+-------------------------+----------------+|
+||                         |                ||
+||         render          |                ||
+||           40            |    session     ||
+||                         |       30       ||
+||                         |                ||
+|+-------------------------+                ||
+||          input          +----------------+|
+||           20            |      cli       ||
+||                         |       10       ||
+|+-------------------------+----------------+|
+--- roles
+|aabbbbbccccaaaaaaaaaaaaaaaaabbbbbbbbccccaaaa|
+|adddddddddddddddddddddddddaeeeeeeeeeeeeeeeea|
+|a                         a                a|
+|a         bbbbbb          a                a|
+|a           cc            a    bbbbbbb     a|
+|a                         a       cc       a|
+|a                         a                a|
+|afffffffffffffffffffffffffa                a|
+|a          bbbbb          agggggggggggggggga|
+|a           cc            a      bbb       a|
+|a                         a       cc       a|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a=mute b=fg c=dim d=series1 e=series3 f=series2 g=series4 (upper case is bold)

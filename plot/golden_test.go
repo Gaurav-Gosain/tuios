@@ -118,6 +118,12 @@ var cases = []chartCase{
 	{"span", 20, 1, func(w, h int, m Mode) *Grid {
 		return Span{Start: 3, End: 7.5, Min: 0, Max: 10, Fill: "▒", Role: Info}.Draw(w, m)
 	}},
+	{"treemap", 44, 12, func(w, h int, m Mode) *Grid {
+		return TreemapOf([]TreeItem{
+			{Label: "app", Children: []TreeItem{{Label: "render", Value: 40}, {Label: "input", Value: 20}}},
+			{Label: "daemon", Children: []TreeItem{{Label: "session", Value: 30}, {Label: "cli", Value: 10}}},
+		}, nil).Draw(w, h, m)
+	}},
 	{"bar-v-axis", 40, 8, func(w, h int, m Mode) *Grid {
 		return Bar{Values: runSecs, Labels: []string{"30 ago"}, Axis: true, Role: Info}.Draw(w, h, m)
 	}},
