@@ -69,7 +69,7 @@ func capturePane(t *testing.T, c *verbConn, session, window string) string {
 // waitPaneHolds polls a pane until it shows want.
 func waitPaneHolds(t *testing.T, c *verbConn, session, window, want string) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second * testDeadlineScale)
+	deadline := time.Now().Add(15 * time.Second * testDeadlineScale)
 	for {
 		text := capturePane(t, c, session, window)
 		if strings.Contains(text, want) {
@@ -244,7 +244,7 @@ func TestResumeAgentRefusesWhatItCannotDo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !waitShellPrompt(t.Context(), pty, 5*time.Second, 200*time.Millisecond) {
+	if !waitShellPrompt(t.Context(), pty, time.Now().Add(5*time.Second), 200*time.Millisecond) {
 		t.Fatal("the restored shell never drew its prompt")
 	}
 	if _, err := pty.Write([]byte("sleep 30\r")); err != nil {
@@ -287,7 +287,7 @@ func TestAutoResumeFallsBackToAsking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !waitShellPrompt(t.Context(), pty, 5*time.Second, 200*time.Millisecond) {
+	if !waitShellPrompt(t.Context(), pty, time.Now().Add(5*time.Second), 200*time.Millisecond) {
 		t.Fatal("the restored shell never drew its prompt")
 	}
 	if _, err := pty.Write([]byte("sleep 30\r")); err != nil {

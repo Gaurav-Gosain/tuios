@@ -95,11 +95,12 @@ const (
 // the emulator's callback with the terminal lock held, so it takes nothing
 // else and calls nothing out.
 type shellTrack struct {
-	mu      sync.Mutex
-	seen    bool
-	phase   shellPhase
-	cmdline string
-	started time.Time
+	mu          sync.Mutex
+	seen        bool
+	phase       shellPhase
+	promptReady bool
+	cmdline     string
+	started     time.Time
 	// startedLine is the row the running command's C mark was on.
 	startedLine int
 	// seq counts finished commands. A command a new prompt cut short, with no
@@ -148,6 +149,9 @@ type ShellFacts struct {
 	// AtPrompt is true when the shell is reading a command line: after a
 	// prompt mark, or after a command finished and before the next prompt.
 	AtPrompt bool
+	// PromptReady follows a fresh A or B mark; C and D clear it. Unlike
+	// AtPrompt, a finished command alone does not make it true.
+	PromptReady bool
 	// Running is the command line running now, empty at a prompt.
 	Running string
 	// CommandSeq is how many commands the pane has finished.
@@ -176,6 +180,7 @@ func (t *shellTrack) facts() ShellFacts {
 	f := ShellFacts{
 		Seen:          t.seen,
 		AtPrompt:      !t.promptOnly && (t.phase == shellPrompt || t.phase == shellFinished),
+		PromptReady:   !t.promptOnly && t.phase == shellPrompt && t.promptReady,
 		CommandSeq:    t.seq,
 		LastCmdline:   t.lastCmdline,
 		LastDuration:  t.lastDuration,
@@ -202,6 +207,7 @@ func (t *shellTrack) note(m vt.SemanticMarker, now time.Time, mc markContext) []
 	var out []SessionEvent
 	switch m.Type {
 	case vt.MarkerPromptStart, vt.MarkerCommandStart:
+		t.promptReady = true
 		// A prompt while a command runs is a command that ended without a
 		// D mark, which bash integrations commonly do on ctrl+c.
 		if t.phase == shellRunning {
@@ -234,6 +240,7 @@ func (t *shellTrack) note(m vt.SemanticMarker, now time.Time, mc markContext) []
 		t.phase = shellPrompt
 		t.promptLine = m.AbsLine
 	case vt.MarkerCommandExecuted:
+		t.promptReady = false
 		if t.phase == shellRunning {
 			// Two integrations at once, a shell's own and one from an rc
 			// file, send two C marks for one command at the same place. The
@@ -255,6 +262,7 @@ func (t *shellTrack) note(m vt.SemanticMarker, now time.Time, mc markContext) []
 		t.startedCwd = mc.cwd
 		out = append(out, SessionEvent{Type: EventCommandStarted, Cmdline: t.cmdline})
 	case vt.MarkerCommandFinished:
+		t.promptReady = false
 		// zsh and fish send D before every prompt, including one after an
 		// empty line where nothing ran. Only a D that ends a command counts.
 		if t.phase != shellRunning {

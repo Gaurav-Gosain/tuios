@@ -3546,8 +3546,18 @@ command that reopens the conversation: `claude --resume <id>`, `codex resume
 | Value | What a restore does |
 | --- | --- |
 | `ask` (default) | A Resume row in the Inbox per pane, its summary the exact command. Your client says once, in the dock, that there are conversations to resume. `y` on the row goes to the pane and types the command; `d` dismisses it. |
-| `auto` | Waits for each new shell to draw its prompt, then types the command, 100 ms apart. A pane whose shell is not at its prompt within 10 seconds gets the Resume row instead. |
+| `auto` | Waits for each new shell's prompt signal before typing. Per-pane waits are staggered by 100 ms. A pane whose shell is not at its prompt after 10 seconds gets the Resume row instead. |
 | `off` | Nothing. The id stays on the pane. |
+
+Automatic resume uses the new shell's OSC 133 A or B mark, not saved scrollback.
+A shell that sent no marks keeps the existing 300 ms quiet-window fallback.
+The shell must own the foreground before anything is typed. If startup is still
+busy, the daemon keeps polling within the same 10-second budget. The unmarked
+fallback is still a heuristic. Use `tuios doctor shell` to check prompt
+integration. A shell that reports a command finishing but never marks a new
+prompt gets the Inbox offer instead. A-only marking, such as Kitty's zsh
+integration, is supported. It marks the start of prompt rendering, not its
+completion. No additional configuration is needed.
 
 A pane counts as running an agent when its saved state has an agent state or
 a harness attribution, both of which clear when the agent leaves the pane. The

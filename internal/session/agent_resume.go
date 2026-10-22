@@ -30,9 +30,10 @@ import (
 //   - ask (the default): each restored pane with a resumable conversation gets
 //     a resume item in the Inbox. The person answers it with y in the Inbox or
 //     with tuios resume-agent, or dismisses it. Nothing is typed until then.
-//   - auto: the daemon types the resume command into each restored shell once
-//     the shell has drawn its prompt, 100 ms apart. A pane whose shell is not
-//     at its prompt by then gets the ask item instead.
+//   - auto: the daemon waits for the restored shell's prompt mark and
+//     retries while its terminal is busy, for at most ten seconds. A shell
+//     with no marks may use the existing quiet-output fallback. A pane
+//     still unsafe then gets the ask item instead.
 //   - off: neither. The id stays on the window, so resume-agent still works.
 //
 // The command is built from the harness manifest's [resume] template and the
@@ -66,13 +67,12 @@ func resolveResumeMode(v string) string {
 // agents does not start twenty harnesses in the same instant.
 const resumeAutoStagger = 100 * time.Millisecond
 
-// resumeShellWait bounds how long an automatic resume waits for a restored
-// shell to draw its prompt, and resumeShellQuiet is how long the shell must
-// then stay quiet before the command is typed. A shell whose startup prints in
-// bursts is caught between them by the quiet window, not in the middle.
+// resumeShellWait bounds the whole readiness wait, including busy retries.
+// resumeShellQuiet preserves the quiet-output fallback for unmarked shells.
 const (
 	resumeShellWait  = 10 * time.Second
 	resumeShellQuiet = 300 * time.Millisecond
+	resumePromptPoll = 25 * time.Millisecond
 )
 
 // resumeOffer is one pane a restore brought back with a conversation that
@@ -188,34 +188,51 @@ func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 	if err != nil {
 		return
 	}
-	if !waitShellPrompt(d.ctx, pty, resumeShellWait, resumeShellQuiet) {
-		if d.ctx.Err() == nil {
-			d.attention.openResume(d.resumeItem(o))
+	deadline := time.Now().Add(resumeShellWait)
+	for waitShellPrompt(d.ctx, pty, deadline, resumeShellQuiet) {
+		if d.ctx.Err() != nil || pty.IsExited() {
+			return
 		}
-		return
+		if _, err = d.typeResume(sess, o.window); err == nil {
+			return
+		}
+		if !errors.Is(err, errResumeBusy) || !time.Now().Before(deadline) {
+			break
+		}
+		select {
+		case <-time.After(min(resumePromptPoll, time.Until(deadline))):
+		case <-d.ctx.Done():
+			return
+		}
 	}
-	if _, err := d.typeResume(sess, o.window); err != nil {
-		LogError("Automatic resume of %s in %s failed, asking instead: %v", o.harness, shortID(o.window), err)
+	if d.ctx.Err() == nil && !pty.IsExited() {
+		if err != nil {
+			LogError("Automatic resume of %s in %s failed, asking instead: %v", o.harness, shortID(o.window), err)
+		}
 		d.attention.openResume(d.resumeItem(o))
 	}
 }
 
-// waitShellPrompt waits for a new shell to print something and then go quiet
-// for quiet, which is a shell that has drawn its prompt. It reports false when
-// maxWait runs out first, the shell exits or ctx ends.
-func waitShellPrompt(ctx context.Context, pty *PTY, maxWait, quiet time.Duration) bool {
-	deadline := time.Now().Add(maxWait)
-	tick := time.NewTicker(25 * time.Millisecond)
+// waitShellPrompt waits for a fresh A or B prompt mark, or quiet output from
+// a shell that never marked anything. These are readiness candidates only.
+// typeResume checks foreground ownership, and autoResume retries busy panes
+// within the same deadline.
+func waitShellPrompt(ctx context.Context, pty *PTY, deadline time.Time, quiet time.Duration) bool {
+	tick := time.NewTicker(resumePromptPoll)
 	defer tick.Stop()
 	for {
-		if pty.IsExited() {
+		if ctx.Err() != nil || pty.IsExited() {
 			return false
 		}
-		if last := pty.LastOutput(); last > 0 && time.Since(time.Unix(0, last)) >= quiet {
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		facts := pty.ShellFacts()
+		if facts.PromptReady {
 			return true
 		}
-		if time.Now().After(deadline) {
-			return false
+		if last := pty.LastOutput(); !facts.Seen && last > 0 && time.Since(time.Unix(0, last)) >= quiet {
+			return true
 		}
 		select {
 		case <-tick.C:
