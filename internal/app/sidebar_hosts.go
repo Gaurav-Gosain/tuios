@@ -95,6 +95,23 @@ type FederationSession struct {
 	// machine that is not there is not evidence about what its agents are
 	// doing now.
 	AgentState string
+	// Agents are the session's agent panes, which the agents view draws as
+	// rows of their own. Empty from a daemon that does not send them.
+	Agents []FederationAgent
+}
+
+// FederationAgent is one agent pane of a session on another machine, as the
+// daemon passed it on.
+type FederationAgent struct {
+	ID        string                  `json:"id"`
+	Title     string                  `json:"title"`
+	State     string                  `json:"state"`
+	StateAt   int64                   `json:"state_at"`
+	Harness   string                  `json:"harness"`
+	Message   string                  `json:"message"`
+	Kind      string                  `json:"kind"`
+	Meta      []sessiontree.MetaToken `json:"meta"`
+	Subagents int                     `json:"subagents"`
 }
 
 // FederationHostsMsg carries a fresh snapshot back to the Update goroutine.
@@ -191,12 +208,13 @@ func refreshFederationCmd() tea.Cmd {
 				Status   string `json:"status"`
 				Reason   string `json:"reason"`
 				Sessions []struct {
-					Name        string `json:"name"`
-					DisplayName string `json:"display_name"`
-					WindowCount int    `json:"window_count"`
-					Attached    bool   `json:"attached"`
-					Global      bool   `json:"global"`
-					AgentState  string `json:"agent_state"`
+					Name        string            `json:"name"`
+					DisplayName string            `json:"display_name"`
+					WindowCount int               `json:"window_count"`
+					Attached    bool              `json:"attached"`
+					Global      bool              `json:"global"`
+					AgentState  string            `json:"agent_state"`
+					Agents      []FederationAgent `json:"agents"`
 				} `json:"sessions"`
 			} `json:"hosts"`
 		}
@@ -238,6 +256,7 @@ func refreshFederationCmd() tea.Cmd {
 					Attached:    s.Attached,
 					Global:      s.Global,
 					AgentState:  s.AgentState,
+					Agents:      s.Agents,
 				})
 			}
 			msg.Snapshot.Hosts = append(msg.Snapshot.Hosts, fh)

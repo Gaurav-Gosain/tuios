@@ -181,7 +181,7 @@ func TestReadOnlyGrantRefusesTypingAndMail(t *testing.T) {
 
 func TestFanGrantReachesTheFanGroup(t *testing.T) {
 	d, sp, a1, _, b1 := scopeFixture(t)
-	mustSetWorktree(t, d, "b", &WorktreeInfo{LaunchedFrom: "a"})
+	mustSetWorktree(t, d, "b", &WorktreeInfo{LaunchedFrom: "a", LaunchedFromID: d.manager.GetSession("a").ID})
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 
 	setStrict(d, "read", "write")

@@ -176,6 +176,11 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**list-host-sessions rows carry agents.** A remote session row gains
+`agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
+`harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
+The agents view draws them as rows.
+
 **send-agent-message takes a message in parts.** `text` is no longer
 required when `parts` is given. `parts` is the form `queue-prompt` takes. A
 message that fits 8 KiB and holds no image has its blocks put in place. Any
@@ -958,6 +963,12 @@ changes for everyone:
   `launched_from` for such a session. Rows of any other session are unchanged.
   The field is additive on the saved session record, so an older daemon reads
   a newer record and drops it.
+  The record also holds that session's ID, and reach is checked by the ID, so
+  a later session that takes the name reaches nothing. When that session ends,
+  the sessions it started stop naming it. A record written before the ID names
+  its lead by name alone. That name reaches nothing, and a restore drops it,
+  so such a lead reaches its attempts again only by `fan --join` or as the
+  person.
 - On a restricted connection, every verb outside the table in
   `internal/session/conn_scope.go` answers `forbidden` with a hint naming
   `restrict-connection`, and under scope `own` a verb that names no session

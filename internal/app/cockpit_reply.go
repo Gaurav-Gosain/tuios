@@ -38,15 +38,20 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 			// where it was last.
 			ed.at.ok, ed.at.drawn = false, false
 		}
-		y := y1 - 3
+		// A row of air above the hints, when the screen has rows to spare.
+		h := 3
+		if c.h >= 30 {
+			h = 4
+		}
+		y := y1 - h
 		c.hline(x, y-1, w, hzGlyph(), l.edge)
-		c.fill(x, y, w, 3, l.panel)
+		c.fill(x, y, w, h, l.panel)
 		c.text(x+2, y, right-16, ckSeg{t: "Reply to ", fg: pal.FgMute}, ckSeg{t: name, fg: pal.FgDim, attrs: ckBold})
 		c.textR(right-2, y, ckSeg{t: when, fg: pal.FgDim})
 		c.text(x+2, y+1, right-2, ckSeg{t: " ", bg: pal.FgMute}, ckSeg{t: " Write a reply.", fg: pal.FgMute})
-		c.text(x+2, y+2, right-14, hints...)
-		bx := c.textR(right-2, y+2, send)
-		c.mark(pal, bx, y+2, right-2-bx, 1, ckOn)
+		c.text(x+2, y1-1, right-14, hints...)
+		bx := c.textR(right-2, y1-1, send)
+		c.mark(pal, bx, y1-1, right-2-bx, 1, ckOn)
 		st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y1, kind: ckHitAction, action: "reply"})
 		return y - 1
 	}

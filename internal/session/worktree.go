@@ -39,6 +39,9 @@ type WorktreeInfo struct {
 	// own session reaches the sessions its session launched. Empty when the
 	// fan came from outside every pane, and on a record from before the field.
 	LaunchedFrom string `json:"launched_from,omitempty"`
+	// LaunchedFromID is that session's ID, which reach is checked by. Empty
+	// on a record from before the field.
+	LaunchedFromID string `json:"launched_from_id,omitempty"`
 	// Managed marks a worktree tuios created under its own directory.
 	Managed bool `json:"managed,omitempty"`
 	// Prompt is the text a fan-out delivers to the agent in this session.

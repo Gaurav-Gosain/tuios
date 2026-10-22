@@ -7949,8 +7949,8 @@ Run on 2026-10-21.
 
 ## Cockpit side tabs wait for the no-transcript reply
 
-`TestCockpitSideTabs` used to accept both `Thread / Checkpoints / Live`
-and the pending `Thread / Changes / Checkpoints / Live` row. In the latter
+`TestCockpitSideTabs` used to accept both `Thread / Checkpoints / Pane`
+and the pending `Thread / Changes / Checkpoints / Pane` row. In the latter
 case `]` selected Changes; the no-transcript reply removed that tab and the
 client selected Thread. This is the documented first-tab fallback, not a
 change to the product's selection policy.
@@ -7962,26 +7962,37 @@ Changes, initially unselected; `]` must select it. The first invocation of
 the actual settled-row wait records its decision before SIGCONT releases
 the real no-transcript reply. That decision must reject the pending row;
 the subsequent settled row must pass, select Thread, and allow navigation
-to Checkpoints and Live. Cleanup always resumes the isolated daemon.
+to Checkpoints and Pane. Cleanup always resumes the isolated daemon.
 
-Run on 2026-10-21, on macOS arm64 and Linux arm64, with the unchanged product binary built
-from main `a10ac97d`:
+Run on 2026-10-22 on macOS arm64 and Linux arm64, with the product source
+unchanged from upstream main `4235fabd`. On that base the original unchanged
+`TestCockpitSideTabs` failed 21 of 30 Linux runs under contention, all waiting
+for Checkpoints. With the settled-row wait, both `TestCockpitSideTabs` and
+`TestCockpitSideTabsPendingTranscript` pass 30 of 30 each on Linux under the
+same contention and 30 of 30 each on native macOS. Linux uses CPU 0 and four
+concurrent nice-10 busy loops; both platforms use Go 1.26.10.
 
 | Wiring cut | Result |
 | --- | --- |
-| In the `term.WaitFor` callback, replace `ready = !strings.Contains(line, "Changes")` with `ready = true`, retaining the Thread/Checkpoints/Live match | **caught**, 3 of 3 on each platform: `ASSERTION: the side-tab wait accepted the unresolved Changes row` |
+| In the `term.WaitFor` callback, replace `ready = !strings.Contains(line, "Changes")` with `ready = true`, retaining the Thread/Checkpoints/Pane match | **caught**, 3 of 3 on each platform: `ASSERTION: the side-tab wait accepted the unresolved Changes row` |
+
+Historical evidence from 2026-10-21 at `a10ac97d`: the original wait failed
+26 of 30 Linux contention runs, and this call-site control was caught 3 of 3
+on each platform. Those counts are separate from the current-base results
+above.
 
 This cuts the settled-state gate at the wait's call site, restoring the old
 substring condition. The same fixture supplies both halves: the held
 four-tab row is rejected and the real three-tab row is accepted. Plain and
 styled PTY captures include `pending-transcript-tabs-100x30`,
 `pending-changes-selected-100x30`, and `settled-no-transcript-tabs-100x30`;
-the settled row and final Live view also have PNGs. Set
+the settled row and final Pane view also have PNGs. Set
 `TUIOS_E2E_FRAMES` to keep them and run from `e2e/tui`:
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=30 -run '^TestCockpitSideTabs' -v .
 ```
+
 ## A fan joined from outside
 
 `TestFanRefusesJoiningAnotherGroup` and `TestFanNameIsHeldWhileItIsMade` in
@@ -7996,3 +8007,29 @@ on 2026-10-21.
 | Joining a fan is explicit: a taken name is refused for every caller, the person included | the `fan_exists` refusal removed | `TestFanRefusesJoiningAnotherGroup` (the taken name is not refused) | **caught** |
 | A new name is held from the check until its sessions exist | the reservation left out of `taken` | `TestFanNameIsHeldWhileItIsMade` ("fan/raceb: the outsider's repo-fan-raceb-2 joined the person's repo-fan-raceb") | **caught** |
 | A name with a character that does not print is refused | the `fanStemPrintable` check skipped | `TestFanRefusesJoiningAnotherGroup` (a name with a zero-width space makes a fan) | **caught** |
+
+## A fan's lead by its session ID
+
+`TestFanLeadIsHeldByID` in `internal/session` (a security boundary test): the
+session that ran `fan` reaches its attempts by that session's ID. After a
+restart without it, and after it ends, a session that takes its name reaches
+none of them. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Reach checks the lead's session ID | the ID check skipped, so the name decides | `TestFanLeadIsHeldByID` ("compare-fan from a new session of the lead's name after a restart": expected error) | **caught** |
+| The attempts stop naming a lead that ended | the `forgetLauncher` call removed | `TestFanLeadIsHeldByID` ("the attempt still names its ended lead") | **caught** |
+| A record from before the ID reaches nothing by name | `sessionInScope` passes a record with no ID whose name matches | `TestReview978LegacyRecord` ("a session named like the lead of an older record does compare-fan") | **caught** |
+| A restore drops a lead named without an ID | the clearing in `restoredWorktree` removed | `TestReview978LegacyRecord` ("a restored record from before the ID still names its lead") | **caught** |
+| Both of the above | both cuts together, the review's repro | `TestReview978LegacyRecord` (after the restart, a session of the dead lead's name does compare-fan and send-text) | **caught** |
+
+## The cockpit of frame (a)
+
+`TestCockpitFrameA` builds frame (a) of the cockpit design: twelve agents on
+three machines, a held approval, three branches with pull requests, a fan of
+three and two subagents. Run on 2026-10-21.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A host's session listing carries its agent panes | the build before this change, where a remote session carries its rolled-up state alone | `TestCockpitFrameA` ("the cockpit never showed the agents of all three machines") | **caught** |
+| The attempts of a fan sit under one row for the fan | `buildCockpitRows` uses the group's rows without `ckGatherFans` | `TestCockpitFrameA` ("the fleet lacks the pull requests, the fan or the machines") | **caught** |

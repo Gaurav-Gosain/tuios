@@ -1298,6 +1298,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	// and it runs on the manager's delete hook, so every path that kills a
 	// session takes the files with it.
 	d.stash.forget(s.ID)
+	// And the sessions it started no longer name it.
+	d.forgetLauncher(s)
 	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
 		SessionName: s.Name(),
 		Reason:      "the session was terminated",

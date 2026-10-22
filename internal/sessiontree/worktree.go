@@ -30,6 +30,15 @@ type WorktreeRef struct {
 	// pass"), empty when there is none. The agent rows of the session draw
 	// it as their pr token.
 	PR string
+	// PRFailed is how many of the pull request's checks failed.
+	PRFailed int
+	// Path is the worktree's directory on its machine, and RepoRoot its
+	// repository's main checkout. A fan is one group in one repository.
+	Path     string
+	RepoRoot string
+	// Prompt is the first line of the task a fan gave the session, empty
+	// when no fan made it.
+	Prompt string
 }
 
 // GroupByRepo returns the session list with every worktree session gathered

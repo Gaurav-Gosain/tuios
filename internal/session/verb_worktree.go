@@ -612,7 +612,10 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	readyTimeout := durationOr(p.ReadyTimeout, fanDefaultReadyTimeout)
 	// The session of the pane that asked, so a connection restricted to that
 	// session reaches the agents it started. See conn_scope.go.
-	launchedFrom := d.callerSession(cs)
+	launchedFrom, launchedFromID := "", ""
+	if s := d.callerSession(cs); s != nil {
+		launchedFrom, launchedFromID = s.Name(), s.ID
+	}
 
 	sessions := make([]map[string]any, 0, p.Count)
 	for i, branch := range branches {
@@ -620,6 +623,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, func(info *WorktreeInfo) {
 			info.Group = stem
 			info.LaunchedFrom = launchedFrom
+			info.LaunchedFromID = launchedFromID
 			info.Prompt = prompt
 			info.PromptStatus = PromptPending
 			info.Agent = launch.spec

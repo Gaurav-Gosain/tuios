@@ -722,7 +722,15 @@ func TestCockpitSideColumn(t *testing.T) {
 		t.Fatalf("ASSERTION: the side column lacks the live pane, the last turn or the checkpoints: %v\n%s", err, term.Snapshot())
 	}
 	s := term.Screen()
-	if !strings.Contains(string([]rune(s.Line(rowWith(s, "Checkpoints")))[154:]), " 2") {
+	// The side column's heading, not the focus tab of the same name.
+	cpRow := -1
+	for r := range 55 {
+		if line := []rune(s.Line(r)); len(line) > 154 && strings.Contains(string(line[154:]), "Checkpoints") {
+			cpRow = r
+			break
+		}
+	}
+	if cpRow < 0 || !strings.Contains(string([]rune(s.Line(cpRow))[154:]), " 2") {
 		t.Fatalf("ASSERTION: the checkpoint count is not the two the CLI lists\n%s", term.Snapshot())
 	}
 	// The pane prints while the view is open: the box follows.
@@ -880,7 +888,7 @@ func testCockpitSideTabs(t *testing.T, pending bool) {
 		t.Fatal(err)
 	}
 	if pending {
-		waitText(t, term, "the pending transcript's tabs", "Thread", "Changes", "Checkpoints", "Live")
+		waitText(t, term, "the pending transcript's tabs", "Thread", "Changes", "Checkpoints", "Pane")
 		saveArtifact(t, term, artifactDir(t), "pending-transcript-tabs-100x30")
 		if !cockpitSideTabSelected(term.Screen(), "Thread") || cockpitSideTabSelected(term.Screen(), "Changes") {
 			t.Fatalf("the pending row did not start on Thread\n%s", term.Snapshot())
@@ -899,7 +907,7 @@ func testCockpitSideTabs(t *testing.T, pending bool) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		ready := false
 		for _, line := range strings.Split(s.Text(), "\n") {
-			if strings.Contains(line, "Thread") && strings.Contains(line, "Checkpoints") && strings.Contains(line, "Live") {
+			if strings.Contains(line, "Thread") && strings.Contains(line, "Checkpoints") && strings.Contains(line, "Pane") {
 				// The same names also occur before the no-transcript reply,
 				// when ] would select Changes instead of Checkpoints.
 				ready = !strings.Contains(line, "Changes")

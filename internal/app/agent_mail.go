@@ -243,7 +243,10 @@ func agentMailNotThePerson(id, name string) string {
 // list-windows prints one.
 func shortWindowLabel(id string) string {
 	if len(id) > 8 {
-		return id[:8]
+		// By character, so a cut never splits one.
+		if r := []rune(id); len(r) > 8 {
+			return string(r[:8])
+		}
 	}
 	return id
 }

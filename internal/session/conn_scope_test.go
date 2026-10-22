@@ -208,7 +208,7 @@ func TestRestrictConnectionReachesTheFanGroup(t *testing.T) {
 	}
 	// b was launched from a; c and e are siblings of one fan; e is in no
 	// group of a's.
-	mustSetWorktree(t, d, "b", &WorktreeInfo{LaunchedFrom: "a"})
+	mustSetWorktree(t, d, "b", &WorktreeInfo{LaunchedFrom: "a", LaunchedFromID: d.manager.GetSession("a").ID})
 	sibling := func(name string) {
 		info := &WorktreeInfo{Group: "fan/x", Managed: true}
 		info.RepoRoot = "/src/repo"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -98,6 +99,80 @@ type remoteSessionRow struct {
 	// about the session, and this client has not looked at another machine's
 	// panes, so they roll up as unseen, which is what they are.
 	AgentState string `json:"agent_state,omitempty"`
+	// Agents are the session's agent panes, one row each, for the agents
+	// view, which draws every agent on every machine as a row of its own. It
+	// is built here from the host's window summaries, never decoded from the
+	// host: whatever a host sends under this name is replaced.
+	Agents []remoteAgentPane `json:"agents,omitempty"`
+}
+
+// remoteAgentPane is one agent pane of a session on another machine: what its
+// row in the agents view says. The host is untrusted, so every field is
+// bounded (see agentPanes).
+type remoteAgentPane struct {
+	ID        string           `json:"id"`
+	Title     string           `json:"title,omitempty"`
+	State     string           `json:"state"`
+	StateAt   int64            `json:"state_at,omitempty"`
+	Harness   string           `json:"harness,omitempty"`
+	Message   string           `json:"message,omitempty"`
+	Kind      string           `json:"kind,omitempty"`
+	Meta      []AgentMetaToken `json:"meta,omitempty"`
+	Subagents int              `json:"subagents,omitempty"`
+}
+
+// Bounds of a host's agent panes as a listing passes them on: about 600 bytes
+// a pane at most, 32 panes a session and 256 a host.
+const (
+	remoteAgentPanesMax = 32
+	remoteAgentHostMax  = 256
+	remoteAgentMetaMax  = 8
+	remoteAgentTextMax  = 160
+	remoteAgentIDMax    = 64
+)
+
+// plausibleWindowID reports whether id can be a window ID: letters, digits
+// and hyphens, at most remoteAgentIDMax bytes. A host chooses the IDs of its
+// panes, and the agents view draws one when a pane has no title.
+func plausibleWindowID(id string) bool {
+	if id == "" || len(id) > remoteAgentIDMax {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// agentPanes are the agent panes among a host's window summaries, bounded.
+func agentPanes(windows []WindowSummary) []remoteAgentPane {
+	var out []remoteAgentPane
+	clip := func(s string) string {
+		if len(s) <= remoteAgentTextMax {
+			return s
+		}
+		return strings.ToValidUTF8(s[:remoteAgentTextMax], "")
+	}
+	for _, w := range windows {
+		if w.AgentState == "" || !plausibleWindowID(w.ID) {
+			continue
+		}
+		if len(out) == remoteAgentPanesMax {
+			break
+		}
+		p := remoteAgentPane{ID: w.ID, Title: clip(w.Title), State: clip(w.AgentState), StateAt: w.AgentStateAt,
+			Harness: clip(w.AgentHarness), Message: clip(w.AgentMessage), Kind: clip(w.AgentKind), Subagents: max(w.Subagents, 0)}
+		for _, t := range w.AgentMeta {
+			if len(p.Meta) == remoteAgentMetaMax {
+				break
+			}
+			p.Meta = append(p.Meta, AgentMetaToken{Key: clip(t.Key), Value: clip(t.Value)})
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // remoteSessionListRow is a row as a host sends it. It carries the window
@@ -352,11 +427,19 @@ func decodeHostSessions(raw json.RawMessage) ([]remoteSessionListRow, error) {
 }
 
 // sessionRowsOut is a host's rows as a listing sends them, each rolled up to
-// its most urgent agent state.
+// its most urgent agent state, with at most remoteAgentHostMax agent panes
+// over all of them.
 func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
 	rows := make([]remoteSessionRow, 0, len(in))
+	left := remoteAgentHostMax
 	for _, r := range in {
 		r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
+		agents := agentPanes(r.Windows)
+		if len(agents) > left {
+			agents = agents[:left]
+		}
+		left -= len(agents)
+		r.remoteSessionRow.Agents = agents
 		rows = append(rows, r.remoteSessionRow)
 	}
 	return rows
