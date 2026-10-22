@@ -124,7 +124,7 @@ argv = ["echo", "resumed-{session_id}"]
 	for {
 		out, _ := tuiosCLI(t, base, "capture-pane", "-s", "e2e-resume")
 		ran := false
-		for _, line := range strings.Split(out, "\n") {
+		for line := range strings.SplitSeq(out, "\n") {
 			ran = ran || strings.TrimSpace(line) == "resumed-5f1c-9a3d"
 		}
 		if ran {

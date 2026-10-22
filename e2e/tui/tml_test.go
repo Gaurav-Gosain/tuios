@@ -266,8 +266,7 @@ func TestTMLShowRefusesABadDocument(t *testing.T) {
 	killDaemon(t, base)
 	doc := writeTMLDoc(t, base, "bad.tml", `<tml><chart-bar data="state.x"/><text role="#ff0000">x</text></tml>`)
 	out, err := tuiosCLI(t, base, "tml", "show", doc)
-	var exit *exec.ExitError
-	if !errors.As(err, &exit) {
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 		t.Fatalf("tuios tml show of a bad document did not fail: %v\n%s", err, out)
 	}
 	for _, want := range []string{`Did you mean "bar"?`, "unknown_component", "hex_color"} {

@@ -47,7 +47,7 @@ func TestDaemonToggleTilingReproFlow(t *testing.T) {
 			t.Errorf("window %s spans the full width (%d): it was never tiled", r.ID, r.Width)
 		}
 	}
-	for a := 0; a < len(rects); a++ {
+	for a := range rects {
 		for b := a + 1; b < len(rects); b++ {
 			if geomOverlap(rects[a], rects[b]) {
 				t.Errorf("windows overlap: %s (%d,%d %dx%d) and %s (%d,%d %dx%d)",
@@ -82,7 +82,7 @@ func hasInteriorVerticalSplit(s tuitest.Screen) bool {
 		return false
 	}
 	lines := make([]string, rows)
-	for r := 0; r < rows; r++ {
+	for r := range rows {
 		lines[r] = s.Line(r)
 	}
 	// Vertical box-drawing glyphs used for borders.

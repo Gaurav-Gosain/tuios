@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -145,8 +146,8 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 // for it finds the header first and clicks a path instead of a control.
 func findFooterFiles(s tuitest.Screen) (int, int, bool) {
 	lines := strings.Split(s.Text(), "\n")
-	for row := len(lines) - 1; row >= 0; row-- {
-		if col := strings.Index(lines[row], "files"); col >= 0 {
+	for row, line := range slices.Backward(lines) {
+		if col := strings.Index(line, "files"); col >= 0 {
 			return col, row, true
 		}
 	}

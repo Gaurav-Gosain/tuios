@@ -91,7 +91,7 @@ func paneInDir(t *testing.T, base, session, prefix, dir string) bool {
 	deadline := time.Now().Add(shellTimeout)
 	for {
 		pane, _ = tuiosCLI(t, base, "capture-pane", "-s", session)
-		for _, line := range strings.Split(pane, "\n") {
+		for line := range strings.SplitSeq(pane, "\n") {
 			switch strings.TrimSpace(line) {
 			case "CWD-SAME":
 				return true

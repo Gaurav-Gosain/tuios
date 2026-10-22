@@ -53,7 +53,7 @@ func printMarker(t *testing.T, base, sess, window, command, marker string) {
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {
 		out, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", window)
-		for _, l := range strings.Split(out, "\n") {
+		for l := range strings.SplitSeq(out, "\n") {
 			if strings.TrimSpace(l) == marker {
 				return
 			}
@@ -214,7 +214,7 @@ func TestNavigatorKeepsADonePaneSeen(t *testing.T) {
 			if !strings.Contains(text, navMarker) {
 				return false
 			}
-			for _, l := range strings.Split(text, "\n") {
+			for l := range strings.SplitSeq(text, "\n") {
 				if strings.Contains(navListRow(l), mark+" logs") {
 					return true
 				}
@@ -295,7 +295,7 @@ func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
 		if !strings.Contains(text, navDecoy) || strings.Count(text, navMarker) < 3 {
 			return false
 		}
-		for _, l := range strings.Split(text, "\n") {
+		for l := range strings.SplitSeq(text, "\n") {
 			if row := navListRow(l); strings.Contains(row, "logs │") {
 				return strings.HasPrefix(row, "▎")
 			}
@@ -491,7 +491,7 @@ func TestNavigatorTakesPastes(t *testing.T) {
 	last := func() string {
 		out, _ := tuiosCLI(t, base, "capture-pane", "-s", "home", "-w", home)
 		l := ""
-		for _, line := range strings.Split(out, "\n") {
+		for line := range strings.SplitSeq(out, "\n") {
 			if strings.TrimSpace(line) != "" {
 				l = strings.TrimRight(line, " ")
 			}

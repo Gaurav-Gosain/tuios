@@ -137,7 +137,11 @@ func writeLinkSSH(t *testing.T, dir string, m *oneMachine) string {
 			continue
 		}
 		k, v, _ := strings.Cut(kv, "=")
-		b.WriteString("export " + k + "='" + v + "'\n")
+		b.WriteString("export ")
+		b.WriteString(k)
+		b.WriteString("='")
+		b.WriteString(v)
+		b.WriteString("'\n")
 	}
 	b.WriteString("unset XDG_RUNTIME_DIR\n")
 	b.WriteString("exec /bin/sh -c \"$*\"\n")

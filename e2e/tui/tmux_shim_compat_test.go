@@ -395,7 +395,7 @@ func TestTmuxShimSelectPaneDirection(t *testing.T) {
 	tr := newShimTranscript(t, base)
 	rects := waitForSettledGeometryIn(t, base, "shimdir", 4)
 	ids := map[string]string{}
-	for _, l := range strings.Split(tr.ok("list-panes", "-t", "shimdir", "-F", "#{tuios_window_id} #{pane_id}"), "\n") {
+	for l := range strings.SplitSeq(tr.ok("list-panes", "-t", "shimdir", "-F", "#{tuios_window_id} #{pane_id}"), "\n") {
 		if w, p, ok := strings.Cut(l, " "); ok {
 			ids[w] = p
 		}

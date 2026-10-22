@@ -87,8 +87,8 @@ func findText(t *testing.T, term *tuitest.Terminal, want string) (row, col int) 
 	_, rows := s.Size()
 	for r := range rows {
 		line := s.Line(r)
-		if b := strings.Index(line, want); b >= 0 {
-			return r, len([]rune(line[:b]))
+		if before, _, ok := strings.Cut(line, want); ok {
+			return r, len([]rune(before))
 		}
 	}
 	t.Fatalf("%q is in the screen text but on no single row\n%s", want, term.Snapshot())

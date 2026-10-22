@@ -206,9 +206,9 @@ func TestPaneReportsItsPixelSize(t *testing.T) {
 // start of a line, so it is the pane's first column.
 func paneLeftOf(t *testing.T, term *tuitest.Terminal, marker string) int {
 	t.Helper()
-	for _, line := range strings.Split(term.Screen().Text(), "\n") {
-		if i := strings.Index(line, marker); i >= 0 {
-			return utf8.RuneCountInString(line[:i])
+	for line := range strings.SplitSeq(term.Screen().Text(), "\n") {
+		if before, _, ok := strings.Cut(line, marker); ok {
+			return utf8.RuneCountInString(before)
 		}
 	}
 	t.Fatalf("%q is not on the screen\n%s", marker, term.Snapshot())

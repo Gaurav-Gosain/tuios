@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -187,8 +188,7 @@ func (ft *fakeTerm) exitCode(timeout time.Duration) (int, bool) {
 	if ft.err == nil {
 		return 0, true
 	}
-	var ee *exec.ExitError
-	if errors.As(ft.err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](ft.err); ok {
 		if code := ee.ExitCode(); code >= 0 {
 			return code, true
 		}
@@ -225,12 +225,7 @@ func (ft *fakeTerm) ttyCooked(t *testing.T) bool {
 	}
 	words := strings.Fields(string(out))
 	has := func(w string) bool {
-		for _, x := range words {
-			if x == w {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(words, w)
 	}
 	return has("icanon") && has("echo")
 }

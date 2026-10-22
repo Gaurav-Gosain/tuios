@@ -29,7 +29,7 @@ func reportedPaneSize(t *testing.T, term *tuitest.Terminal, tag string) (rows, c
 		t.Fatalf("ask pane %s for its size: %v", tag, err)
 	}
 	find := func(s tuitest.Screen) (int, int, bool) {
-		for _, line := range strings.Split(s.Text(), "\n") {
+		for line := range strings.SplitSeq(s.Text(), "\n") {
 			if strings.Contains(line, "stty") {
 				continue
 			}

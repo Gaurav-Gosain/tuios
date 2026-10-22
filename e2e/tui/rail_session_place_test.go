@@ -60,7 +60,7 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 	// railHas reports whether one line of the frame carries every marker.
 	railHas := func(markers ...string) func(tuitest.Screen) bool {
 		return func(s tuitest.Screen) bool {
-			for _, line := range strings.Split(s.Text(), "\n") {
+			for line := range strings.SplitSeq(s.Text(), "\n") {
 				ok := true
 				for _, m := range markers {
 					if !strings.Contains(line, m) {

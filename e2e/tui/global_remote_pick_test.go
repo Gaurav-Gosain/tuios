@@ -330,7 +330,7 @@ func TestAPickOfAHostWhoseLinkIsDownSaysSo(t *testing.T) {
 // betaRowUp reports whether the picker's beta row shows a session count,
 // which is what a row whose link is up shows in place of the link's state.
 func betaRowUp(s tuitest.Screen) bool {
-	for _, line := range strings.Split(s.Text(), "\n") {
+	for line := range strings.SplitSeq(s.Text(), "\n") {
 		if strings.Contains(line, " beta ") && strings.Contains(line, "session") {
 			return true
 		}

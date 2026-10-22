@@ -40,7 +40,11 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 		// on this machine too. The stand-in is what puts the second daemon's
 		// environment in place, so a path decided anywhere else never reaches
 		// it. See xdgDir.
-		b.WriteString("export " + key + "=" + xdgDir(remoteBase, key) + "\n")
+		b.WriteString("export ")
+		b.WriteString(key)
+		b.WriteString("=")
+		b.WriteString(xdgDir(remoteBase, key))
+		b.WriteString("\n")
 	}
 	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {

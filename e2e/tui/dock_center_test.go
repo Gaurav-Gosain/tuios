@@ -139,11 +139,11 @@ refresh = "once"
 						t.Errorf("popup resized the center contents and moved the clock from %d to %d", initial, got)
 					}
 					line := term.Screen().Line(row)
-					mark := strings.Index(line, "\uf057")
+					before, _, _ := strings.Cut(line, "\uf057")
 					if !strings.Contains(line, " ▊ \uf057") {
 						t.Errorf("the popup has no gap before its cap: %q", line)
 					}
-					leftClick(t, term, ansi.StringWidth(line[:mark]), row)
+					leftClick(t, term, ansi.StringWidth(before), row)
 					if err := term.WaitForText("END-CENTER", uiTimeout); err != nil {
 						t.Fatalf("clicking the truncated popup did not open its full message: %v\n%s", err, term.Snapshot())
 					}
@@ -154,11 +154,11 @@ refresh = "once"
 					}
 				}
 				line := term.Screen().Line(row)
-				entry := strings.Index(line, "1:")
-				if entry < 0 {
+				before, _, ok := strings.Cut(line, "1:")
+				if !ok {
 					t.Fatalf("no minimized entry to restore: %q", line)
 				}
-				leftClick(t, term, ansi.StringWidth(line[:entry]), row)
+				leftClick(t, term, ansi.StringWidth(before), row)
 				if err := term.WaitFor(func(s tuitest.Screen) bool {
 					return !strings.Contains(s.Line(row), "EDITOR") && strings.Contains(s.Text(), "EDITOR-WITH-A-LONG-NAME")
 				}, uiTimeout); err != nil {

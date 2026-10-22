@@ -49,7 +49,7 @@ func railHeaderGapAt(t *testing.T, width int) {
 	}
 	rowOf := func(s tuitest.Screen, needle string) int {
 		_, rows := s.Size()
-		for r := 0; r < rows; r++ {
+		for r := range rows {
 			if strings.Contains(line(s, r), needle) {
 				return r
 			}

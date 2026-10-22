@@ -355,7 +355,7 @@ func lastPaneLine(t *testing.T, base, id string) string {
 		t.Fatalf("capture-pane: %v\n%s", err, out)
 	}
 	last := ""
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if l := strings.TrimRight(line, " "); strings.TrimSpace(l) != "" {
 			last = l
 		}
@@ -465,7 +465,7 @@ func TestPaneLabelsKeepKeysAndPastesFromPanes(t *testing.T) {
 func panesDrawn(s tuitest.Screen) []string {
 	var out []string
 	for _, name := range []string{"alpha", "beta", "gamma"} {
-		for _, line := range strings.Split(s.Text(), "\n") {
+		for line := range strings.SplitSeq(s.Text(), "\n") {
 			if strings.Contains(line, "╯") && strings.Contains(line, " "+name+" ") {
 				out = append(out, name)
 				break

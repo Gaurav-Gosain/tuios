@@ -124,7 +124,7 @@ func TestBackgroundsFromTheSettingsPanel(t *testing.T) {
 	var problems []string
 	for y := 0; y < 40 && y <= lines; y++ {
 		hasAll, hasDock := false, false
-		for x := 0; x < 120; x++ {
+		for x := range 120 {
 			c := s.Cell(x, y)
 			switch {
 			case c.Bg.Kind == tuitest.ColorDefault:

@@ -33,7 +33,7 @@ func (k gfxKey) String() string { return fmt.Sprintf("i=%d,p=%d", k.img, k.place
 // kittyParams splits a parameter list into its key/value pairs.
 func kittyParams(s string) map[string]string {
 	out := map[string]string{}
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		k, v, ok := strings.Cut(part, "=")
 		if ok {
 			out[k] = v

@@ -78,7 +78,7 @@ func TestLsStyleStreamHasNoBackgroundBleed(t *testing.T) {
 // also holds the filenames, and are skipped.
 func findCellSpan(screen tuitest.Screen, cols, rows int, name string) (int, int, bool) {
 	runes := []rune(name)
-	for row := 0; row < rows; row++ {
+	for row := range rows {
 		if strings.Contains(screen.Line(row), "printf") {
 			continue
 		}

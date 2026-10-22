@@ -115,7 +115,7 @@ func savePluginArtifact(t *testing.T, base, id, name string) {
 
 // envValue reads KEY=VALUE from a file a stand-in wrote.
 func envValue(text, key string) string {
-	for _, l := range strings.Split(text, "\n") {
+	for l := range strings.SplitSeq(text, "\n") {
 		if v, ok := strings.CutPrefix(l, key+"="); ok {
 			return v
 		}
@@ -239,7 +239,7 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 	w2 := herdrPaneByLabel(t, base, "w2")["pane_id"].(string)
 	events := waitPluginFile(t, base, id, "events.log", "pane.created "+w2+" ")
 	line := ""
-	for _, l := range strings.Split(events, "\n") {
+	for l := range strings.SplitSeq(events, "\n") {
 		if strings.Contains(l, w2) {
 			line = l
 		}

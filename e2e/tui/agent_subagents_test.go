@@ -138,11 +138,9 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 	explained := make([]string, len(starts))
 	errs := make([]error, len(starts))
 	for i, payload := range starts {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			explained[i], errs[i] = subagentHook(base, dir, "e2e-lead", payload)
-		}()
+		})
 	}
 	wg.Wait()
 	for i := range starts {

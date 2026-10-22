@@ -41,11 +41,11 @@ func TestPaneXTVERSIONNamesTuios(t *testing.T) {
 				t.Fatalf("read reply: %v", err)
 			}
 			got := string(raw)
-			start := strings.Index(got, "\x1bP>|")
-			if start < 0 {
+			_, after, ok := strings.Cut(got, "\x1bP>|")
+			if !ok {
 				t.Fatalf("no XTVERSION answer in the reply: %q", got)
 			}
-			answer := got[start+len("\x1bP>|"):]
+			answer := after
 			if end := strings.Index(answer, "\x1b\\"); end >= 0 {
 				answer = answer[:end]
 			}

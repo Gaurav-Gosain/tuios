@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -90,9 +91,7 @@ func (r *atRig) join(win, path, sessionID string) {
 func (r *atRig) read(win string, extra map[string]any) map[string]any {
 	r.t.Helper()
 	p := map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce}
-	for k, v := range extra {
-		p[k] = v
-	}
+	maps.Copy(p, extra)
 	res, verr := r.ctl.call(r.t, "agent-transcript", p)
 	r.art.call("agent-transcript", p, res, verr)
 	if verr != nil {

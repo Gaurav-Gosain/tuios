@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -61,9 +62,9 @@ func (b *guiBridge) waitWave3b(ok func(*wireWave3bEvent) bool, what string) *wir
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for {
-		for i := len(b.events) - 1; i >= 0; i-- {
+		for _, v := range slices.Backward(b.events) {
 			var ev wireWave3bEvent
-			if json.Unmarshal(b.events[i], &ev) == nil && ok(&ev) {
+			if json.Unmarshal(v, &ev) == nil && ok(&ev) {
 				return &ev
 			}
 		}

@@ -164,12 +164,10 @@ func TestClientsStartingAtOnceProduceOneDaemon(t *testing.T) {
 	var wg sync.WaitGroup
 	begin := make(chan struct{})
 	for i := range starters {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-begin
 			outs[i], errs[i] = tuiosCLI(t, base, "new", fmt.Sprintf("e2e-race-%d", i), "--detach")
-		}()
+		})
 	}
 	close(begin)
 	wg.Wait()

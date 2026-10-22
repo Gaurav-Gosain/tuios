@@ -419,7 +419,7 @@ func farProxies(remoteBase string) []int {
 			continue
 		}
 		env, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "environ"))
-		for _, kv := range bytes.Split(env, []byte{0}) {
+		for kv := range bytes.SplitSeq(env, []byte{0}) {
 			if string(kv) == want {
 				pids = append(pids, pid)
 				break

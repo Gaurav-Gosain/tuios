@@ -39,12 +39,20 @@ func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string
 	b.WriteString("addr=\"$1\"\nshift\n")
 	// A file down-ADDR in dir takes the machine off the network: every new
 	// connection to it is refused, the way ssh refuses a powered-off box.
-	b.WriteString("if [ -e \"" + dir + "/down-$addr\" ]; then\n  echo \"ssh: connect to host $addr port 22: Connection refused\" >&2\n  exit 255\nfi\n")
+	b.WriteString("if [ -e \"")
+	b.WriteString(dir)
+	b.WriteString("/down-$addr\" ]; then\n  echo \"ssh: connect to host $addr port 22: Connection refused\" >&2\n  exit 255\nfi\n")
 	b.WriteString("case \"$addr\" in\n")
 	for addr, base := range bases {
-		b.WriteString("  " + addr + ")\n")
+		b.WriteString("  ")
+		b.WriteString(addr)
+		b.WriteString(")\n")
 		for _, key := range xdgKeys {
-			b.WriteString("    export " + key + "=" + xdgDir(base, key) + "\n")
+			b.WriteString("    export ")
+			b.WriteString(key)
+			b.WriteString("=")
+			b.WriteString(xdgDir(base, key))
+			b.WriteString("\n")
 		}
 		b.WriteString("    ;;\n")
 	}
@@ -66,9 +74,15 @@ func writeMachinesConfig(t *testing.T, base string, hosts []string) {
 	}
 	var body strings.Builder
 	for _, h := range hosts {
-		body.WriteString("[hosts." + h + "]\n")
-		body.WriteString("addr = \"someone@" + h + "box\"\n")
-		body.WriteString("command = \"" + tuiosBin + "\"\n")
+		body.WriteString("[hosts.")
+		body.WriteString(h)
+		body.WriteString("]\n")
+		body.WriteString("addr = \"someone@")
+		body.WriteString(h)
+		body.WriteString("box\"\n")
+		body.WriteString("command = \"")
+		body.WriteString(tuiosBin)
+		body.WriteString("\"\n")
 		body.WriteString("connect_timeout = 5\n\n")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body.String()), 0o600); err != nil {
@@ -85,9 +99,15 @@ func writeHostAddrs(t *testing.T, base string, hosts map[string]string) {
 	}
 	var body strings.Builder
 	for name, addr := range hosts {
-		body.WriteString("[hosts." + name + "]\n")
-		body.WriteString("addr = \"" + addr + "\"\n")
-		body.WriteString("command = \"" + tuiosBin + "\"\n")
+		body.WriteString("[hosts.")
+		body.WriteString(name)
+		body.WriteString("]\n")
+		body.WriteString("addr = \"")
+		body.WriteString(addr)
+		body.WriteString("\"\n")
+		body.WriteString("command = \"")
+		body.WriteString(tuiosBin)
+		body.WriteString("\"\n")
 		body.WriteString("connect_timeout = 5\n\n")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body.String()), 0o600); err != nil {
@@ -148,7 +168,7 @@ func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string) *globalFle
 
 // hostLineUp reports whether the `tuios hosts` line for name says up.
 func hostLineUp(listing, name string) bool {
-	for _, line := range strings.Split(listing, "\n") {
+	for line := range strings.SplitSeq(listing, "\n") {
 		fields := strings.Fields(strings.ReplaceAll(line, "│", " "))
 		if len(fields) > 2 && fields[0] == name && fields[2] == "up" {
 			return true
@@ -350,7 +370,7 @@ func findPickerRow(s tuitest.Screen, title, label string) (row, col int, ok bool
 // pickerOpen reports whether the picker titled title is on screen. The
 // palette's "New window on another machine" row does not count.
 func pickerOpen(s tuitest.Screen, title string) bool {
-	for _, line := range strings.Split(s.Text(), "\n") {
+	for line := range strings.SplitSeq(s.Text(), "\n") {
 		if isPickerTitle(line, title) {
 			return true
 		}

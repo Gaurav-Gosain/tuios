@@ -81,7 +81,11 @@ func TestHelloDropsAnUnsafeTerm(t *testing.T) {
 		}
 		c.close()
 		got, pane := paneTerms(t, base, session)
-		panes.WriteString("=== verb hello, " + tc.name + "\n" + pane + "\n")
+		panes.WriteString("=== verb hello, ")
+		panes.WriteString(tc.name)
+		panes.WriteString("\n")
+		panes.WriteString(pane)
+		panes.WriteString("\n")
 		if got != tc.want {
 			t.Errorf("%s: a session made after the verb hello named term %q and color_term %q gave its pane %q, want %q",
 				tc.name, tc.term, tc.colorTerm, got, tc.want)
@@ -100,7 +104,11 @@ func TestHelloDropsAnUnsafeTerm(t *testing.T) {
 			t.Fatalf("%s: tuios new -d: %v\n%s", tc.name, err, out)
 		}
 		got, pane := paneTerms(t, base, session)
-		panes.WriteString("=== binary hello, " + tc.name + "\n" + pane + "\n")
+		panes.WriteString("=== binary hello, ")
+		panes.WriteString(tc.name)
+		panes.WriteString("\n")
+		panes.WriteString(pane)
+		panes.WriteString("\n")
 		if got != tc.want {
 			t.Errorf("%s: a session made by tuios new -d with TERM %q gave its pane %q, want %q", tc.name, tc.term, got, tc.want)
 		}
@@ -140,7 +148,7 @@ func paneTerms(t *testing.T, base, session string) (got, pane string) {
 	for {
 		pane, _ = tuiosCLI(t, base, "capture-pane", "-s", session)
 		var term, colorTerm string
-		for _, line := range strings.Split(pane, "\n") {
+		for line := range strings.SplitSeq(pane, "\n") {
 			line = strings.TrimSpace(line)
 			if !strings.HasSuffix(line, " END") || strings.Contains(line, "%s") {
 				continue

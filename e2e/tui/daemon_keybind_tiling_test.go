@@ -47,7 +47,7 @@ func TestKeybindTileThenNewWindows(t *testing.T) {
 		}
 	}
 	overlaps := 0
-	for a := 0; a < len(rects); a++ {
+	for a := range rects {
 		for b := a + 1; b < len(rects); b++ {
 			if geomOverlap(rects[a], rects[b]) {
 				overlaps++

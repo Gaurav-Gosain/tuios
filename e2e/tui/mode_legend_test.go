@@ -94,7 +94,7 @@ func legendVocabulary(items []legendItem) map[string]bool {
 		for _, s := range it.short {
 			vocab[s] = true
 		}
-		for _, w := range strings.Fields(it.label) {
+		for w := range strings.FieldsSeq(it.label) {
 			vocab[w] = true
 		}
 	}

@@ -196,7 +196,7 @@ func TestEventsCarryAFarNameWithC1ControlsEscaped(t *testing.T) {
 		}
 	}
 	seen := map[string]bool{}
-	for _, line := range strings.Split(events.String(), "\n") {
+	for line := range strings.SplitSeq(events.String(), "\n") {
 		var ev struct {
 			File *struct {
 				Rel string `json:"rel"`

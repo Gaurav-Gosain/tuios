@@ -33,8 +33,8 @@ func textAt(s tuitest.Screen, want string, from int) (row, col int, ok bool) {
 			continue
 		}
 		tail := string(runes[from:])
-		if i := strings.Index(tail, want); i >= 0 {
-			return r, from + len([]rune(tail[:i])), true
+		if before, _, ok := strings.Cut(tail, want); ok {
+			return r, from + len([]rune(before)), true
 		}
 	}
 	return 0, 0, false

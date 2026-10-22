@@ -37,12 +37,12 @@ func nameColOf(s tuitest.Screen, row int, name string) int {
 		return -1
 	}
 	line := railLine(s, row)
-	i := strings.Index(line, name)
-	if i < 0 {
+	before, _, ok := strings.Cut(line, name)
+	if !ok {
 		return -1
 	}
 	// Byte offset to cell column: the rail's marks are multi-byte.
-	return len([]rune(line[:i]))
+	return len([]rune(before))
 }
 
 // ruledAfter reports whether a heading's rule runs out of the name on this row.

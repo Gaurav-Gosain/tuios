@@ -246,7 +246,7 @@ func TestReviewFrameAndStatusLine(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('b'), "v")
 	waitScreen(t, term, "the review never opened", "Review", "M README", "esc close")
 	joined := 0
-	for _, l := range strings.Split(term.Snapshot(), "\n") {
+	for l := range strings.SplitSeq(term.Snapshot(), "\n") {
 		l = strings.TrimSpace(l)
 		if strings.HasPrefix(l, "├") && strings.HasSuffix(l, "┤") {
 			joined++

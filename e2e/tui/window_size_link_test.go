@@ -460,14 +460,14 @@ func TestWindowSizeRailOverLeftoverTakesClicks(t *testing.T) {
 				continue
 			}
 			tail := string(line[railX:])
-			i := strings.Index(tail, "Terminal ")
-			if i < 0 {
+			before, after, ok := strings.Cut(tail, "Terminal ")
+			if !ok {
 				continue
 			}
 			n++
-			id := strings.Fields(tail[i+len("Terminal "):])
+			id := strings.Fields(after)
 			if len(id) > 0 && !strings.HasPrefix(focused, id[0]) {
-				row, col = y, railX+len([]rune(tail[:i]))+2
+				row, col = y, railX+len([]rune(before))+2
 			}
 		}
 		return n == 2 && row >= 0

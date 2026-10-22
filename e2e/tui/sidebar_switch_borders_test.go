@@ -32,7 +32,7 @@ func isCorner(r rune) bool {
 func tallVertCols(s tuitest.Screen) map[int]int {
 	cols, rows := s.Size()
 	out := map[int]int{}
-	for c := 0; c < cols; c++ {
+	for c := range cols {
 		run := 0
 		for r := 1; r < rows-2; r++ {
 			line := []rune(s.Line(r))

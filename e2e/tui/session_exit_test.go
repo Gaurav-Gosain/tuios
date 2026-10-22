@@ -285,7 +285,7 @@ func TestExitMessageNamesCurrentSession(t *testing.T) {
 // the alt-screen render (which can contain session names from overlays like the
 // session switcher) by matching only the literal message prefixes.
 func exitLine(raw string) string {
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Detached from session '") ||
 			strings.HasPrefix(line, "Killed session '") {
@@ -299,7 +299,7 @@ func exitLine(raw string) string {
 // for diagnostics only.
 func tailMessage(raw string) string {
 	var out []string
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		if strings.Contains(line, "session") || strings.Contains(line, "detached") ||
 			strings.Contains(line, "Killed") || strings.Contains(line, "myproj") {
 			out = append(out, strings.TrimSpace(line))

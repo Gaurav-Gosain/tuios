@@ -51,7 +51,7 @@ session = "side-left"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
 		var left, right, editor bool
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if len(line) < cols {
 				continue

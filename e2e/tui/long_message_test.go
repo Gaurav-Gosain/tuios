@@ -62,8 +62,8 @@ func dockColumnOf(t *testing.T, term *tuitest.Terminal, needle string) (col, row
 	_, rows := s.Size()
 	for y := rows - 1; y >= 0; y-- {
 		line := s.Line(y)
-		if i := strings.Index(line, needle); i >= 0 {
-			return len([]rune(line[:i])), y
+		if before, _, ok := strings.Cut(line, needle); ok {
+			return len([]rune(before)), y
 		}
 	}
 	t.Fatalf("%q is not on the screen\n%s", needle, term.Snapshot())

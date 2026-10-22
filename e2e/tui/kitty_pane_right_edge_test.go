@@ -19,7 +19,7 @@ import (
 func borderColumns(s tuitest.Screen) []int {
 	counts := map[int]int{}
 	widest := 0
-	for _, line := range strings.Split(s.Text(), "\n") {
+	for line := range strings.SplitSeq(s.Text(), "\n") {
 		col := 0
 		for _, r := range line {
 			if r == '│' || r == '┃' || r == '║' {

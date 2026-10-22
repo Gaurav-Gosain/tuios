@@ -101,7 +101,7 @@ func findOnScreen(t *testing.T, term *tuitest.Terminal, needle string) (col, row
 	t.Helper()
 	s := term.Screen()
 	_, rows := s.Size()
-	for r := 0; r < rows; r++ {
+	for r := range rows {
 		if c := strings.Index(s.Line(r), needle); c >= 0 {
 			return c, r
 		}
@@ -171,7 +171,7 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 // even when the dock repeats the name further down.
 func screenRowOf(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
-	for r := 0; r < rows; r++ {
+	for r := range rows {
 		if strings.Contains(s.Line(r), needle) {
 			return r
 		}

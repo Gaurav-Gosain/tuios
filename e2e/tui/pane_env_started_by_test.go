@@ -102,7 +102,7 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 	deadline := time.Now().Add(shellTimeout)
 	for len(got) < len(names) {
 		pane, _ = tuiosCLIEnv(t, base, agentEnv, "capture-pane", "-s", session)
-		for _, line := range strings.Split(pane, "\n") {
+		for line := range strings.SplitSeq(pane, "\n") {
 			line = strings.TrimSpace(line)
 			if !strings.HasPrefix(line, "VAR ") || !strings.HasSuffix(line, "] END") || strings.Contains(line, "%s") {
 				continue

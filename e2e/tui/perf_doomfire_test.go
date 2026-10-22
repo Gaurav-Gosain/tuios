@@ -31,10 +31,10 @@ func synthDoomFireE2E(cols, rows, frames int) []byte {
 	var b strings.Builder
 	rng := rand.New(rand.NewSource(42))
 	pal := [][3]int{{7, 7, 7}, {31, 7, 7}, {103, 31, 7}, {175, 63, 7}, {223, 95, 7}, {255, 143, 7}, {255, 191, 7}, {255, 255, 255}}
-	for f := 0; f < frames; f++ {
+	for range frames {
 		b.WriteString("\x1b[H")
-		for y := 0; y < rows; y++ {
-			for x := 0; x < cols; x++ {
+		for y := range rows {
+			for range cols {
 				t := pal[rng.Intn(len(pal))]
 				bo := pal[rng.Intn(len(pal))]
 				fmt.Fprintf(&b, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm▀", t[0], t[1], t[2], bo[0], bo[1], bo[2])

@@ -116,7 +116,7 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 
 // placementIDOf is the p= key of a kitty command's parameters, "" for none.
 func placementIDOf(params string) string {
-	for _, kv := range strings.Split(params, ",") {
+	for kv := range strings.SplitSeq(params, ",") {
 		if v, ok := strings.CutPrefix(kv, "p="); ok {
 			return v
 		}

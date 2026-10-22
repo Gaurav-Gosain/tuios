@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,12 +50,7 @@ func sessionNames(t *testing.T, base string) []string {
 }
 
 func hasName(names []string, want string) bool {
-	for _, n := range names {
-		if n == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(names, want)
 }
 
 // TestSocketEnvRefusalKeepsThePathWholeOnATerminal is the same refusal read
@@ -147,7 +143,11 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 
 	fresh := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "fresh.sock")
 	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_SOCKET=" + fresh}, "new", "stray", "--detach")
-	transcript.WriteString("$ TUIOS_SOCKET=" + fresh + " tuios new stray --detach\n" + out + "\n")
+	transcript.WriteString("$ TUIOS_SOCKET=")
+	transcript.WriteString(fresh)
+	transcript.WriteString(" tuios new stray --detach\n")
+	transcript.WriteString(out)
+	transcript.WriteString("\n")
 	if err == nil {
 		t.Errorf("a command with TUIOS_SOCKET naming no daemon ran:\n%s", out)
 	}
@@ -165,7 +165,13 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 	// way rather than reading the other daemon.
 	for _, args := range [][]string{{"ls"}, {"list-windows", "-s", "home"}} {
 		out, err := tuiosCLIEnv(t, base, []string{"TUIOS_SOCKET=" + fresh}, args...)
-		transcript.WriteString("$ TUIOS_SOCKET=" + fresh + " tuios " + strings.Join(args, " ") + "\n" + out + "\n")
+		transcript.WriteString("$ TUIOS_SOCKET=")
+		transcript.WriteString(fresh)
+		transcript.WriteString(" tuios ")
+		transcript.WriteString(strings.Join(args, " "))
+		transcript.WriteString("\n")
+		transcript.WriteString(out)
+		transcript.WriteString("\n")
 		if err == nil || !strings.Contains(out, "TUIOS_SOCKET") {
 			t.Errorf("tuios %v with TUIOS_SOCKET naming no daemon was not refused: %v\n%s", args, err, out)
 		}
@@ -177,7 +183,11 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 	// The positive halves. TUIOS_SOCKET naming the socket the command reaches
 	// anyway, as it does in every pane.
 	out, err = tuiosCLIEnv(t, base, []string{"TUIOS_SOCKET=" + own}, "new", "same", "--detach")
-	transcript.WriteString("$ TUIOS_SOCKET=" + own + " tuios new same --detach\n" + out + "\n")
+	transcript.WriteString("$ TUIOS_SOCKET=")
+	transcript.WriteString(own)
+	transcript.WriteString(" tuios new same --detach\n")
+	transcript.WriteString(out)
+	transcript.WriteString("\n")
 	if err != nil {
 		t.Errorf("TUIOS_SOCKET naming the daemon's own socket was refused: %v\n%s", err, out)
 	}
@@ -191,7 +201,11 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 	}
 	otherSock := filepath.Join(xdgDir(other, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 	out, err = tuiosCLIEnv(t, base, []string{"TUIOS_SOCKET=" + otherSock}, "new", "isolated", "--detach")
-	transcript.WriteString("$ TUIOS_SOCKET=" + otherSock + " tuios new isolated --detach\n" + out + "\n")
+	transcript.WriteString("$ TUIOS_SOCKET=")
+	transcript.WriteString(otherSock)
+	transcript.WriteString(" tuios new isolated --detach\n")
+	transcript.WriteString(out)
+	transcript.WriteString("\n")
 	if err != nil {
 		t.Errorf("TUIOS_SOCKET naming another live daemon was refused: %v\n%s", err, out)
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -106,7 +107,7 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 		t.Fatalf("read the screenshot: %v", err)
 	}
 	shotRows := 0
-	for _, l := range strings.Split(string(shotText), "\n") {
+	for l := range strings.SplitSeq(string(shotText), "\n") {
 		if !strings.HasPrefix(l, "WRA") && !strings.HasPrefix(l, "WRBx") {
 			continue
 		}
@@ -241,8 +242,8 @@ func paneCols(t *testing.T, base, session, window, tag string, ok func(int) bool
 		time.Sleep(300 * time.Millisecond)
 		grid, err := daemonPane(base, session, window)
 		if err == nil {
-			for i := len(grid) - 1; i >= 0; i-- {
-				f := strings.Fields(grid[i])
+			for _, g := range slices.Backward(grid) {
+				f := strings.Fields(g)
 				if len(f) == 3 && f[0] == tag {
 					if c, err := strconv.Atoi(f[2]); err == nil && ok(c) {
 						return c

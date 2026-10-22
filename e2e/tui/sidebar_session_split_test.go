@@ -85,7 +85,7 @@ session = "side-right"
 			return false
 		}
 		var top, bottom int = -1, -1
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := s.Line(y)
 			if len(line) > 36 {
 				line = line[:36]

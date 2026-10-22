@@ -42,7 +42,10 @@ func icatStylePlaceholders(marker string) string {
 	for row := range rows {
 		b.WriteString(`\033[38;2;0;10;11m`)
 		for col := range cols {
-			b.WriteString(string(kitty.Placeholder) + string(kitty.Diacritic(row)) + string(kitty.Diacritic(col)) + string(kitty.Diacritic(0xF7)))
+			b.WriteString(string(kitty.Placeholder))
+			b.WriteString(string(kitty.Diacritic(row)))
+			b.WriteString(string(kitty.Diacritic(col)))
+			b.WriteString(string(kitty.Diacritic(0xF7)))
 		}
 		b.WriteString(`\033[39m`)
 		if row == 0 {
@@ -228,11 +231,11 @@ func TestPlaceholdersOnAKittyAndAPlainClient(t *testing.T) {
 	_, rows := scr.Size()
 	for y := range rows {
 		line := scr.Line(y)
-		i := strings.Index(line, "AFTER")
-		if i < 0 {
+		before, _, ok := strings.Cut(line, "AFTER")
+		if !ok {
 			continue
 		}
-		if !strings.HasSuffix(line[:i], "│   ") {
+		if !strings.HasSuffix(before, "│   ") {
 			t.Errorf("the image did not keep its three cells on the plain client: %q", line)
 		}
 		return

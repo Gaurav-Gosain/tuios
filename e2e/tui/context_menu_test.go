@@ -194,8 +194,8 @@ func markedRow(s tuitest.Screen) string {
 	_, rows := s.Size()
 	for r := range rows {
 		line := s.Line(r)
-		if idx := strings.Index(line, "› "); idx >= 0 {
-			return strings.TrimSpace(line[idx+len("› "):])
+		if _, after, ok := strings.Cut(line, "› "); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return ""
@@ -380,11 +380,11 @@ func TestContextMenuOnDockEntry(t *testing.T) {
 
 	_, rows := term.Screen().Size()
 	dockRow := term.Screen().Line(rows - 1)
-	b := strings.Index(dockRow, "logs")
-	if b < 0 {
+	before, _, ok := strings.Cut(dockRow, "logs")
+	if !ok {
 		t.Fatalf("no dock entry on the dock row %q\n%s", dockRow, term.Snapshot())
 	}
-	x := len([]rune(dockRow[:b]))
+	x := len([]rune(before))
 
 	shiftRightClick(t, term, x, rows-1)
 	waitMenu(t, term, "dock entry", "Restore")

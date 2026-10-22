@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -264,8 +265,7 @@ func withPreV080Pins(src string, replace bool) string {
 		appended = append(appended, missing[tbl]...)
 	}
 	sort.Slice(inserts, func(i, j int) bool { return inserts[i].at < inserts[j].at })
-	for i := len(inserts) - 1; i >= 0; i-- {
-		ins := inserts[i]
+	for _, ins := range slices.Backward(inserts) {
 		rest := append([]string{}, lines[ins.at+1:]...)
 		lines = append(append(lines[:ins.at+1], ins.rows...), rest...)
 	}

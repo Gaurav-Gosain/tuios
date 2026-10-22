@@ -12,10 +12,10 @@ import (
 // numberedSessionRow reports whether the rail portion of the screen carries
 // the session's row led by a switch number.
 func numberedSessionRow(screen, name string) bool {
-	for _, line := range strings.Split(screen, "\n") {
+	for line := range strings.SplitSeq(screen, "\n") {
 		rail := line
-		if i := strings.Index(line, "│"); i >= 0 {
-			rail = line[:i]
+		if before, _, ok := strings.Cut(line, "│"); ok {
+			rail = before
 		}
 		if !strings.Contains(rail, name) {
 			continue

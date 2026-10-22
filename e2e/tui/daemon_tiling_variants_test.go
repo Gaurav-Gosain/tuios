@@ -18,7 +18,7 @@ func assertTiled(t *testing.T, rects []winRect, cols int) {
 			t.Errorf("window %s spans the full width (%d): it was never tiled", r.ID, r.Width)
 		}
 	}
-	for a := 0; a < len(rects); a++ {
+	for a := range rects {
 		for b := a + 1; b < len(rects); b++ {
 			if geomOverlap(rects[a], rects[b]) {
 				t.Errorf("windows overlap: %s (%d,%d %dx%d) and %s (%d,%d %dx%d)",

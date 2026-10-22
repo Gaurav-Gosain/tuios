@@ -191,7 +191,8 @@ func makeSmallTree(t *testing.T, root string, n int, seed uint64) int64 {
 		if i%2 == 0 {
 			var b strings.Builder
 			for b.Len() < size {
-				b.WriteString(words[rng.IntN(len(words))] + " ")
+				b.WriteString(words[rng.IntN(len(words))])
+				b.WriteString(" ")
 			}
 			copy(data, b.String())
 		} else {

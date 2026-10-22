@@ -241,8 +241,8 @@ func imageOrigin(t *testing.T, term *tuitest.Terminal, marker string) image.Poin
 		if strings.Contains(line, "printf") {
 			continue
 		}
-		if i := strings.Index(line, marker); i >= 0 {
-			return image.Pt(len([]rune(line[:i])), y+1)
+		if before, _, ok := strings.Cut(line, marker); ok {
+			return image.Pt(len([]rune(before)), y+1)
 		}
 	}
 	t.Fatalf("marker %q not on screen\n%s", marker, s.Text())
@@ -572,7 +572,7 @@ print("DA1=" + r.decode(errors="replace").replace("\x1b[?", "").rstrip("c") + "=
 	typeLine(t, term, "python3 "+script)
 	var got string
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		for _, line := range strings.Split(s.Text(), "\n") {
+		for line := range strings.SplitSeq(s.Text(), "\n") {
 			if i := strings.Index(line, "DA1="); i >= 0 && strings.Contains(line, "=END") && !strings.Contains(line, "python3") {
 				got = line[i+4 : strings.Index(line, "=END")]
 				return true

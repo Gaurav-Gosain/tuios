@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 // found from the rail's own header row rather than from a config value. It
 // returns (-1, -1) when the rail is not on screen.
 func railBand(s tuitest.Screen) (first, last int) {
-	for _, line := range strings.Split(s.Text(), "\n") {
+	for line := range strings.SplitSeq(s.Text(), "\n") {
 		runes := []rune(line)
 		i := runeIndex(runes, sidebarHeader)
 		if i < 0 {
@@ -290,8 +291,8 @@ func lastPlacementRows(t *testing.T, stream []byte) int {
 // draws across the whole screen above its status line.
 func dockTopRow(s tuitest.Screen) int {
 	lines := strings.Split(s.Text(), "\n")
-	for r := len(lines) - 1; r >= 0; r-- {
-		trimmed := strings.TrimRight(lines[r], " ")
+	for r, line := range slices.Backward(lines) {
+		trimmed := strings.TrimRight(line, " ")
 		if len([]rune(trimmed)) > 100 && strings.Count(trimmed, "─") > 100 {
 			return r
 		}

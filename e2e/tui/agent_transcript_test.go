@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -110,9 +111,7 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	nonce := pres["human_nonce"].(string)
 	params := func(extra map[string]any) map[string]any {
 		p := map[string]any{"session": transcriptSession, "window": win, "human_nonce": nonce}
-		for k, v := range extra {
-			p[k] = v
-		}
+		maps.Copy(p, extra)
 		return p
 	}
 

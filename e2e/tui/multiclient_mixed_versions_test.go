@@ -78,10 +78,10 @@ func TestMixedVersionsReshapeOneTree(t *testing.T) {
 	_, rows := scr.Size()
 	for y := range rows {
 		line := scr.Line(y)
-		if i := strings.Index(line, "SNAP-42-MARK"); i >= 0 {
+		if before, _, ok := strings.Cut(line, "SNAP-42-MARK"); ok {
 			// The frame around the pane is drawn in runes of more than one
 			// byte, so the column is counted in runes.
-			if c := scr.Cell(utf8.RuneCountInString(line[:i]), y); !c.Bold || !c.Italic {
+			if c := scr.Cell(utf8.RuneCountInString(before), y); !c.Bold || !c.Italic {
 				t.Errorf("the snapshot lost the line's style: %+v", c)
 			}
 			break

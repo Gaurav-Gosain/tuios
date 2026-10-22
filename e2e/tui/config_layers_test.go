@@ -51,8 +51,8 @@ func linkConfigPart(t *testing.T, base, rel, target string) string {
 // before that are not in after.
 func addedLines(before, after string) (added, removed []string) {
 	b := strings.Split(strings.TrimRight(before, "\n"), "\n")
-	a := strings.Split(strings.TrimRight(after, "\n"), "\n")
-	for _, l := range a {
+	a := strings.SplitSeq(strings.TrimRight(after, "\n"), "\n")
+	for l := range a {
 		if i := slices.Index(b, l); i >= 0 {
 			b = slices.Delete(b, i, i+1)
 			continue
@@ -82,7 +82,7 @@ func TestFirstStartWithNixStyleConfigD(t *testing.T) {
 
 	first := readFileString(t, configPathIn(base))
 	var settings []string
-	for _, l := range strings.Split(first, "\n") {
+	for l := range strings.SplitSeq(first, "\n") {
 		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
 			settings = append(settings, l)
 		}

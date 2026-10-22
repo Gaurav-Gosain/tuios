@@ -167,7 +167,7 @@ func waitShmStream(t *testing.T, term *tuitest.Terminal, logPath string) []strin
 		time.Sleep(100 * time.Millisecond)
 	}
 	b, _ := os.ReadFile(logPath)
-	for _, n := range strings.Fields(string(b)) {
+	for n := range strings.FieldsSeq(string(b)) {
 		_ = os.Remove("/dev/shm/" + n)
 	}
 	t.Fatalf("the stream never finished\n%s", term.Snapshot())

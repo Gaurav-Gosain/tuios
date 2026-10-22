@@ -117,7 +117,7 @@ func checkPaneTerm(t *testing.T, base, clientTerm, want string) {
 	deadline := time.Now().Add(shellTimeout)
 	for got == nil {
 		pane, _ = tuiosCLIEnv(t, base, clientEnv, "capture-pane", "-s", session)
-		for _, line := range strings.Split(pane, "\n") {
+		for line := range strings.SplitSeq(pane, "\n") {
 			if line = strings.TrimSpace(line); !strings.Contains(line, "%s") {
 				if m := paneTermLine.FindStringSubmatch(line); m != nil {
 					got = m

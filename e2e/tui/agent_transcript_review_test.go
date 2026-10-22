@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,9 +92,7 @@ func TestTranscriptNonceScope(t *testing.T) {
 	read := func(s *linkStream, nonce any, extra map[string]any) (map[string]any, *spVerbErr) {
 		t.Helper()
 		p := map[string]any{"session": transcriptSession, "window": win, "human_nonce": nonce}
-		for k, v := range extra {
-			p[k] = v
-		}
+		maps.Copy(p, extra)
 		res, verr := s.call(t, "agent-transcript", p)
 		r.art.call("agent-transcript", p, res, verr)
 		return res, verr

@@ -126,7 +126,7 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	// which holds no second separator. A title drawn first would let
 	// "from tuios tml show" be read as the owner.
 	frameRow := ""
-	for _, line := range strings.Split(term.Screen().Text(), "\n") {
+	for line := range strings.SplitSeq(term.Screen().Text(), "\n") {
 		if strings.Contains(line, "Deploy prod?") {
 			frameRow = line
 			break

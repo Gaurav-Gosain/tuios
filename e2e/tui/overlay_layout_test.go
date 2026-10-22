@@ -59,11 +59,11 @@ func span(line string, from, to int) string {
 // runeCol is the cell column of the first needle in line, or -1. The overlays
 // here draw only single-width glyphs, so a rune is a cell.
 func runeCol(line, needle string) int {
-	i := strings.Index(line, needle)
-	if i < 0 {
+	before, _, ok := strings.Cut(line, needle)
+	if !ok {
 		return -1
 	}
-	return len([]rune(line[:i]))
+	return len([]rune(before))
 }
 
 // TestOverlayLayouts opens the palette, the which-key menu and an empty list

@@ -113,8 +113,8 @@ func markerFg(s tuitest.Screen, marker string) (tuitest.Color, bool) {
 	_, rows := s.Size()
 	for r := range rows {
 		line := s.Line(r)
-		if i := strings.Index(line, marker); i >= 0 {
-			return s.Cell(len([]rune(line[:i])), r).Fg, true
+		if before, _, ok := strings.Cut(line, marker); ok {
+			return s.Cell(len([]rune(before)), r).Fg, true
 		}
 	}
 	return tuitest.Color{}, false

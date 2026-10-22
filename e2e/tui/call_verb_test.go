@@ -101,8 +101,7 @@ func TestCallVerb(t *testing.T) {
 
 // exitCodeOf is the status a tuiosCLI error carries, 0 for none.
 func exitCodeOf(err error) int {
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		return ee.ExitCode()
 	}
 	if err != nil {

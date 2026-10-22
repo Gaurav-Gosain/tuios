@@ -13,7 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,7 +192,11 @@ func writeDelayedFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, dela
 	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    --) shift; break ;;\n    *) break ;;\n  esac\ndone\n")
 	b.WriteString("shift\n")
 	for _, key := range xdgKeys {
-		b.WriteString("export " + key + "=" + xdgDir(remoteBase, key) + "\n")
+		b.WriteString("export ")
+		b.WriteString(key)
+		b.WriteString("=")
+		b.WriteString(xdgDir(remoteBase, key))
+		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "%s=%d:%d:%d exec %s %s %s -- \"$*\"\n", throttleEnv, rate, depth, delayMs, self, throttleMarker, dir)
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
@@ -575,7 +579,7 @@ func TestATransferLeavesTypingOnItsMachineFast(t *testing.T) {
 	during := transferNow(t, base, row.ID)
 	stats := func(v []time.Duration) map[string]float64 {
 		s := append([]time.Duration(nil), v...)
-		sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+		slices.Sort(s)
 		ms := func(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
 		return map[string]float64{"p50_ms": ms(s[len(s)/2]), "p90_ms": ms(s[len(s)*9/10]), "max_ms": ms(s[len(s)-1])}
 	}

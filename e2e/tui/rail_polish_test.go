@@ -372,7 +372,7 @@ func railRowAfter(s tuitest.Screen, needle string, after int) int {
 // railRowOf is screenRowOf confined to the rail's columns, or -1.
 func railRowOf(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
-	for r := 0; r < rows; r++ {
+	for r := range rows {
 		if strings.Contains(railLine(s, r), needle) {
 			return r
 		}

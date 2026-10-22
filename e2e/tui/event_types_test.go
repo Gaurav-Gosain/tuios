@@ -65,7 +65,12 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		// the call has a deadline: it fails the check below instead of the
 		// whole run timing out.
 		out, errOut, err := subscribeWithin(t, base, uiTimeout, "subscribe", "-s", "events", "--types", tc.types, "--count", "1")
-		transcript.WriteString("$ tuios subscribe --types " + tc.types + "\n" + out + errOut + "\n")
+		transcript.WriteString("$ tuios subscribe --types ")
+		transcript.WriteString(tc.types)
+		transcript.WriteString("\n")
+		transcript.WriteString(out)
+		transcript.WriteString(errOut)
+		transcript.WriteString("\n")
 		if err == nil || strings.Contains(err.Error(), "killed") {
 			t.Errorf("subscribe --types %s was not refused (%v)\n%s", tc.types, err, out)
 			continue
@@ -107,7 +112,11 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		event = lines.Text()
 	}
 	_ = sub.Wait()
-	transcript.WriteString("$ tuios subscribe --types window-created --count 1\n" + ack + "\n" + event + "\n")
+	transcript.WriteString("$ tuios subscribe --types window-created --count 1\n")
+	transcript.WriteString(ack)
+	transcript.WriteString("\n")
+	transcript.WriteString(event)
+	transcript.WriteString("\n")
 	if !strings.Contains(event, `"type":"window-created"`) {
 		t.Errorf("subscribe --types window-created printed %q, want a window-created event", event)
 	}

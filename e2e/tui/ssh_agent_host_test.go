@@ -123,10 +123,20 @@ addr=$1
 shift
 case "$addr" in fwd@*) fwd=1 ;; esac
 `)
-	b.WriteString("printf '%s' \"$SSH_AUTH_SOCK\" > " + dir + "/env-$(printf '%s' \"$addr\" | tr -c 'A-Za-z0-9' _)\n")
-	b.WriteString("if [ -n \"$fwd\" ]; then\n  printf '%s' \"$SSH_AUTH_SOCK\" > " + agentPath + "\n  export SSH_AUTH_SOCK=" + relay + "\nelse\n  unset SSH_AUTH_SOCK\nfi\n")
+	b.WriteString("printf '%s' \"$SSH_AUTH_SOCK\" > ")
+	b.WriteString(dir)
+	b.WriteString("/env-$(printf '%s' \"$addr\" | tr -c 'A-Za-z0-9' _)\n")
+	b.WriteString("if [ -n \"$fwd\" ]; then\n  printf '%s' \"$SSH_AUTH_SOCK\" > ")
+	b.WriteString(agentPath)
+	b.WriteString("\n  export SSH_AUTH_SOCK=")
+	b.WriteString(relay)
+	b.WriteString("\nelse\n  unset SSH_AUTH_SOCK\nfi\n")
 	for _, key := range xdgKeys {
-		b.WriteString("export " + key + "=" + xdgDir(remoteBase, key) + "\n")
+		b.WriteString("export ")
+		b.WriteString(key)
+		b.WriteString("=")
+		b.WriteString(xdgDir(remoteBase, key))
+		b.WriteString("\n")
 	}
 	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {

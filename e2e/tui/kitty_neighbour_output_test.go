@@ -36,7 +36,9 @@ func (h *hostStream) Write(p []byte) (int, error) {
 func (h *hostStream) mark(name string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.buf.WriteString(phaseMark + name + "\x00\x00")
+	h.buf.WriteString(phaseMark)
+	h.buf.WriteString(name)
+	h.buf.WriteString("\x00\x00")
 }
 
 func (h *hostStream) bytes() []byte {

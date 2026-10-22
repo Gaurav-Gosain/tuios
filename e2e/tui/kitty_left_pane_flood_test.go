@@ -64,7 +64,9 @@ func (h *kittyHost) Write(p []byte) (int, error) {
 func (h *kittyHost) mark(name string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.buf.WriteString(phaseMark + name + "\x00\x00")
+	h.buf.WriteString(phaseMark)
+	h.buf.WriteString(name)
+	h.buf.WriteString("\x00\x00")
 }
 
 func (h *kittyHost) bytes() []byte {
@@ -197,7 +199,7 @@ func announcedSizes(geom string) [][4]int {
 		return nil
 	}
 	var out [][4]int
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		var s [4]int
 		if n, _ := fmt.Sscan(line, &s[0], &s[1], &s[2], &s[3]); n == 4 && s[2] > 0 {
 			out = append(out, s)
@@ -235,7 +237,7 @@ func wireCmds(stream []byte) []wireCmd {
 		for _, m := range graphicsRE.FindAllSubmatch(chunk, -1) {
 			params := string(m[1])
 			c := wireCmd{phase: phase, params: params}
-			for _, kv := range strings.Split(params, ",") {
+			for kv := range strings.SplitSeq(params, ",") {
 				k, v, ok := strings.Cut(kv, "=")
 				if !ok {
 					continue

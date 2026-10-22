@@ -48,11 +48,11 @@ func copyCursorMoved(t *testing.T, term *tuitest.Terminal, row, from int, what s
 func toMiddle(t *testing.T, term *tuitest.Terminal, row int) int {
 	t.Helper()
 	line := term.Screen().Line(row)
-	b := strings.Index(line, "middle")
-	if b < 0 {
+	before, _, ok := strings.Cut(line, "middle")
+	if !ok {
 		t.Fatalf("row %d does not hold the line: %q", row, line)
 	}
-	col := len([]rune(line[:b]))
+	col := len([]rune(before))
 	if err := term.SendKeys("?middle", tuitest.Enter); err != nil {
 		t.Fatalf("search: %v", err)
 	}

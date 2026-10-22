@@ -180,7 +180,7 @@ func TestProgramStatusAlertAfterTheGap(t *testing.T) {
 	notices := func() []string {
 		data, _ := os.ReadFile(hostLog)
 		var out []string
-		for _, l := range strings.Split(string(data), "\n") {
+		for l := range strings.SplitSeq(string(data), "\n") {
 			if strings.HasPrefix(l, "notify ") {
 				out = append(out, l)
 			}

@@ -389,7 +389,7 @@ func parseNumberedStream(stream []byte) []numberedCmd {
 	open := -1
 	for _, m := range graphicsRE.FindAllSubmatch(stream, -1) {
 		c := numberedCmd{keys: map[string]string{}, rawParam: string(m[1])}
-		for _, kv := range strings.Split(string(m[1]), ",") {
+		for kv := range strings.SplitSeq(string(m[1]), ",") {
 			if k, v, ok := strings.Cut(kv, "="); ok {
 				c.keys[k] = v
 			}
@@ -871,7 +871,7 @@ func hostPlacements(stream []byte, id int) map[string][2]int {
 			col, _ = strconv.Atoi(string(m[2]))
 		}
 		keys := map[string]string{}
-		for _, kv := range strings.Split(string(m[3]), ",") {
+		for kv := range strings.SplitSeq(string(m[3]), ",") {
 			if k, v, ok := strings.Cut(kv, "="); ok {
 				keys[k] = v
 			}

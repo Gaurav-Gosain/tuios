@@ -107,7 +107,7 @@ func TestMoveWindowToSession(t *testing.T) {
 	}
 	first := waitMoveCapture(t, call, "alpha", win, "MOVED-PANE-MARK")
 	pid := ""
-	for _, f := range strings.Fields(first[strings.Index(first, "MOVED-PANE-MARK"):]) {
+	for f := range strings.FieldsSeq(first[strings.Index(first, "MOVED-PANE-MARK"):]) {
 		if strings.HasPrefix(f, "pid-") {
 			pid = f
 			break

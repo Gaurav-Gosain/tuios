@@ -336,7 +336,7 @@ func TestRenderTraceRecordsEachAnnouncement(t *testing.T) {
 		t.Fatalf("the trace file was not written: %v", err)
 	}
 	var announced int
-	for _, line := range strings.Split(string(body), "\n") {
+	for line := range strings.SplitSeq(string(body), "\n") {
 		if strings.Contains(line, "announce id=") && strings.Contains(line, " via ") {
 			announced++
 		}

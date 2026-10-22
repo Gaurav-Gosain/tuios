@@ -37,7 +37,7 @@ func tuiosCLIIn(t *testing.T, base, dir string, args ...string) (string, error) 
 // of the screen, so the topmost match is the rail's row.
 func railLineWith(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
-	for r := 0; r < rows; r++ {
+	for r := range rows {
 		if strings.Contains(s.Line(r), needle) {
 			return r
 		}

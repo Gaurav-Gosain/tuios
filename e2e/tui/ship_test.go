@@ -185,7 +185,8 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 	t.Cleanup(func() {
 		var b strings.Builder
 		for _, c := range f.ghCalls() {
-			b.WriteString(strings.Join(c, " ") + "\n")
+			b.WriteString(strings.Join(c, " "))
+			b.WriteString("\n")
 		}
 		_ = os.WriteFile(filepath.Join(artifactDir(t), "gh-calls.txt"), []byte(b.String()), 0o644)
 	})

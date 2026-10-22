@@ -301,12 +301,12 @@ func echoedRow(t *testing.T, term *tuitest.Terminal, text string) (row, col int)
 	_, rows := s.Size()
 	for r := rows - 1; r >= 0; r-- {
 		line := s.Line(r)
-		b := strings.Index(line, text)
-		if b < 0 {
+		before, _, ok := strings.Cut(line, text)
+		if !ok {
 			continue
 		}
-		if strings.TrimLeft(line[:b], "│ ") == "" {
-			return r, len([]rune(line[:b]))
+		if strings.TrimLeft(before, "│ ") == "" {
+			return r, len([]rune(before))
 		}
 	}
 	t.Fatalf("no row starts with %q\n%s", text, term.Snapshot())

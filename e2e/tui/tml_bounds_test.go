@@ -42,7 +42,7 @@ func tmlDaemonPID(t *testing.T, base string) int {
 // held, and the burst is what the test bounds.
 func tmlHWM(pid int) int64 {
 	st, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-	for _, l := range strings.Split(string(st), "\n") {
+	for l := range strings.SplitSeq(string(st), "\n") {
 		if strings.HasPrefix(l, "VmHWM:") {
 			v, _ := strconv.ParseInt(strings.Fields(l)[1], 10, 64)
 			return v

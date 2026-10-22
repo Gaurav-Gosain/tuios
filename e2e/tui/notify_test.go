@@ -40,7 +40,7 @@ func newFakePush(t *testing.T) *fakePush {
 	f := &fakePush{}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
-		provider := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/"), "/", 2)[0]
+		provider, _, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 		h := map[string]string{}
 		for _, k := range []string{"Title", "Priority", "Click", "Tags", "Authorization", "Content-Type"} {
 			if v := r.Header.Get(k); v != "" {

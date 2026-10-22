@@ -111,7 +111,7 @@ func TestSavedLsGroupsSessionsBySpace(t *testing.T) {
 	if len(blocks) < 4 || !strings.HasPrefix(blocks[3], "4 sessions") {
 		t.Fatalf("ASSERTION: the saved listing's tables are not followed by its count:\n%s", out)
 	}
-	for _, line := range strings.Split(ansiEscape.ReplaceAllString(out, ""), "\n") {
+	for line := range strings.SplitSeq(ansiEscape.ReplaceAllString(out, ""), "\n") {
 		for _, name := range all {
 			if strings.Contains(line, name) && !strings.Contains(line, "saved") {
 				t.Fatalf("ASSERTION: the saved listing does not tag %s saved:\n%s", name, out)

@@ -184,7 +184,7 @@ func TestTMLOwnerScriptAnswersEvents(t *testing.T) {
 	}
 	data, _ := os.ReadFile(filepath.Join(base, "events.log"))
 	var names []string
-	for _, l := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		var ev line
 		if json.Unmarshal([]byte(l), &ev) != nil || ev.TML == nil {
 			continue

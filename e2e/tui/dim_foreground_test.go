@@ -27,8 +27,8 @@ func markerCell(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
 	_, rows := s.Size()
 	for r := range rows {
 		line := s.Line(r)
-		if i := strings.Index(line, marker); i >= 0 {
-			return s.Cell(len([]rune(line[:i])), r), true
+		if before, _, ok := strings.Cut(line, marker); ok {
+			return s.Cell(len([]rune(before)), r), true
 		}
 	}
 	return tuitest.Cell{}, false

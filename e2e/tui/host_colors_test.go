@@ -168,7 +168,11 @@ func askPane(t *testing.T, base, session, host string, want map[string]string) m
 	var cmd strings.Builder
 	cmd.WriteString("clear")
 	for spec := range want {
-		cmd.WriteString("; " + host + " query '" + spec + "'")
+		cmd.WriteString("; ")
+		cmd.WriteString(host)
+		cmd.WriteString(" query '")
+		cmd.WriteString(spec)
+		cmd.WriteString("'")
 	}
 	cmd.WriteString("\r")
 	got := map[string]string{}

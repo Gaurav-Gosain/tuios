@@ -97,7 +97,7 @@ func waitForFileWith(t *testing.T, path, want string) string {
 // envOf parses `env` output into a map.
 func envOf(dump string) map[string]string {
 	vars := map[string]string{}
-	for _, line := range strings.Split(dump, "\n") {
+	for line := range strings.SplitSeq(dump, "\n") {
 		if k, v, ok := strings.Cut(line, "="); ok {
 			vars[k] = v
 		}

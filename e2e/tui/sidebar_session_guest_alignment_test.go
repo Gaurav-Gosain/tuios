@@ -68,7 +68,7 @@ session = "side"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		_, rows := s.Size()
 		side, center, centerTop := -1, -1, -1
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := s.Line(y)
 			if strings.Contains(line, "SMARK") {
 				side = y

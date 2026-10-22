@@ -224,7 +224,7 @@ func pacingLog(t *testing.T, base string) []string {
 		t.Fatalf("tuios logs: %v: %s", err, out)
 	}
 	var lines []string
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if strings.Contains(l, "output pacing") {
 			lines = append(lines, strings.TrimSpace(l))
 		}
@@ -429,7 +429,7 @@ var base64Run = regexp.MustCompile(`[A-Za-z0-9+/]{48,}`)
 // five of them.
 func base64Rows(screen string) []string {
 	var out []string
-	for _, line := range strings.Split(screen, "\n") {
+	for line := range strings.SplitSeq(screen, "\n") {
 		if base64Run.MatchString(line) {
 			out = append(out, fmt.Sprintf("  %.100s", line))
 			if len(out) == 5 {

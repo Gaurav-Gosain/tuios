@@ -622,7 +622,7 @@ func debugLogSince(t *testing.T, from int64) string {
 // registerLines are the passthrough's records of the sixel images panes drew.
 func registerLines(log string) []string {
 	var out []string
-	for _, l := range strings.Split(log, "\n") {
+	for l := range strings.SplitSeq(log, "\n") {
 		if strings.Contains(l, "SIXEL-PASSTHROUGH: Register:") {
 			out = append(out, l)
 		}
@@ -759,8 +759,8 @@ func symbolOriginIn(t *testing.T, s tuitest.Screen) image.Point {
 		if strings.Contains(line, "printf") {
 			continue
 		}
-		if i := strings.Index(line, "IMGTOP"); i >= 0 {
-			return image.Pt(len([]rune(line[:i])), y+1)
+		if before, _, ok := strings.Cut(line, "IMGTOP"); ok {
+			return image.Pt(len([]rune(before)), y+1)
 		}
 	}
 	t.Fatalf("IMGTOP not on screen\n%s", s.Text())

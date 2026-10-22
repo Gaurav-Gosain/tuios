@@ -231,7 +231,11 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 	var transcript strings.Builder
 	run := func(args ...string) (string, error) {
 		out, err := tuiosCLIEnv(t, base, env, args...)
-		transcript.WriteString("$ tuios " + strings.Join(args, " ") + "\n" + out + "\n")
+		transcript.WriteString("$ tuios ")
+		transcript.WriteString(strings.Join(args, " "))
+		transcript.WriteString("\n")
+		transcript.WriteString(out)
+		transcript.WriteString("\n")
 		return out, err
 	}
 
@@ -310,10 +314,14 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 		}
 	}
 
-	transcript.WriteString("--- config.toml\n" + readFileString(t, configPathIn(base)))
-	transcript.WriteString("--- hosts.toml\n" + readFileString(t, hosts))
-	transcript.WriteString("--- keys.toml\n" + readFileString(t, keys))
-	transcript.WriteString("--- locked.toml\n" + readFileString(t, locked))
+	transcript.WriteString("--- config.toml\n")
+	transcript.WriteString(readFileString(t, configPathIn(base)))
+	transcript.WriteString("--- hosts.toml\n")
+	transcript.WriteString(readFileString(t, hosts))
+	transcript.WriteString("--- keys.toml\n")
+	transcript.WriteString(readFileString(t, keys))
+	transcript.WriteString("--- locked.toml\n")
+	transcript.WriteString(readFileString(t, locked))
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "transcript.txt"), []byte(transcript.String()), 0o644); err != nil { //nolint:gosec // a test artifact
 		t.Logf("save the transcript: %v", err)
 	}

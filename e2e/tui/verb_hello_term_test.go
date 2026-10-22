@@ -123,7 +123,7 @@ func readPaneTerm(t *testing.T, base string, env []string, session string) (pane
 	deadline := time.Now().Add(shellTimeout)
 	for got == "" {
 		pane, _ = tuiosCLIEnv(t, base, env, "capture-pane", "-s", session)
-		for _, line := range strings.Split(pane, "\n") {
+		for line := range strings.SplitSeq(pane, "\n") {
 			if line = strings.TrimSpace(line); strings.HasPrefix(line, "TERM=") && strings.HasSuffix(line, " END") &&
 				!strings.Contains(line, "%s") {
 				got = strings.TrimSuffix(line, " END")
@@ -189,7 +189,7 @@ func TestStartAgentGivesItsSessionTheCallersTerm(t *testing.T) {
 	deadline := time.Now().Add(shellTimeout)
 	for got == "" {
 		pane, _ = tuiosCLIEnv(t, base, callerEnv, "capture-pane", "-s", session)
-		for _, line := range strings.Split(pane, "\n") {
+		for line := range strings.SplitSeq(pane, "\n") {
 			if line = strings.TrimSpace(line); strings.HasPrefix(line, "TERM=") && strings.HasSuffix(line, " END") {
 				got = strings.TrimSuffix(line, " END")
 			}

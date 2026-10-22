@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -68,12 +69,7 @@ func navIsSlot(c tuitest.Color, slots ...uint8) bool {
 	if c.Kind != tuitest.ColorIndexed {
 		return false
 	}
-	for _, s := range slots {
-		if c.Index == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slots, c.Index)
 }
 
 // TestNavigatorPreviewKeepsColour: the preview shows a pane's text in the

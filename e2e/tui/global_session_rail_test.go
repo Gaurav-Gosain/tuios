@@ -103,10 +103,10 @@ func TestTheRailNamesTheMachineAPaneRunsOn(t *testing.T) {
 // line is cut at the rail's right edge and only that side is read: without the
 // cut, anything a pane happens to be drawing counts as the rail saying it.
 func railRowWith(screen string, parts ...string) bool {
-	for _, line := range strings.Split(screen, "\n") {
+	for line := range strings.SplitSeq(screen, "\n") {
 		rail := line
-		if i := strings.Index(line, "│"); i >= 0 {
-			rail = line[:i]
+		if before, _, ok := strings.Cut(line, "│"); ok {
+			rail = before
 		}
 		all := true
 		for _, p := range parts {
@@ -138,8 +138,8 @@ func containsAll(s string, parts ...string) bool {
 func railRowIndex(screen string, parts ...string) int {
 	for i, line := range strings.Split(screen, "\n") {
 		rail := line
-		if j := strings.Index(line, "│"); j >= 0 {
-			rail = line[:j]
+		if before, _, ok := strings.Cut(line, "│"); ok {
+			rail = before
 		}
 		all := true
 		for _, p := range parts {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -77,9 +78,9 @@ func (b *guiBridge) waitEvent(ok func(*wireInboxEvent) bool, what string, d time
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for {
-		for i := len(b.events) - 1; i >= 0; i-- {
+		for _, v := range slices.Backward(b.events) {
 			var ev wireInboxEvent
-			if json.Unmarshal(b.events[i], &ev) == nil && ok(&ev) {
+			if json.Unmarshal(v, &ev) == nil && ok(&ev) {
 				return &ev
 			}
 		}

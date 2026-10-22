@@ -181,8 +181,8 @@ func agentNameCells(s tuitest.Screen, name string) (row, col int, ok bool) {
 				continue
 			}
 			tail := string(runes[railX:])
-			if i := strings.Index(tail, name); i >= 0 {
-				return r, railX + len([]rune(tail[:i])), true
+			if before, _, ok := strings.Cut(tail, name); ok {
+				return r, railX + len([]rune(before)), true
 			}
 		}
 	}

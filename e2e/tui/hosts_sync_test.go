@@ -88,11 +88,19 @@ func newSyncFleet(t *testing.T, names []string, down []string) *syncFleet {
 		h.home = xdgDir(h.base, "HOME")
 		h.bin = filepath.Join(h.home, ".local", "bin", "tuios")
 		f.hosts[n] = h
-		script.WriteString("  someone@" + n + "box)\n")
+		script.WriteString("  someone@")
+		script.WriteString(n)
+		script.WriteString("box)\n")
 		for _, key := range xdgKeys {
-			script.WriteString("    export " + key + "=" + xdgDir(h.base, key) + "\n")
+			script.WriteString("    export ")
+			script.WriteString(key)
+			script.WriteString("=")
+			script.WriteString(xdgDir(h.base, key))
+			script.WriteString("\n")
 		}
-		script.WriteString("    export PATH=" + filepath.Dir(h.bin) + ":/usr/bin:/bin SHELL=/bin/sh\n    ;;\n")
+		script.WriteString("    export PATH=")
+		script.WriteString(filepath.Dir(h.bin))
+		script.WriteString(":/usr/bin:/bin SHELL=/bin/sh\n    ;;\n")
 	}
 	script.WriteString("  *) echo \"ssh: Could not resolve hostname $addr\" >&2; exit 255 ;;\nesac\n")
 	script.WriteString("exec /bin/sh -c \"$*\"\n")
@@ -106,7 +114,13 @@ func newSyncFleet(t *testing.T, names []string, down []string) *syncFleet {
 		if h, ok := f.hosts[n]; ok {
 			bin = h.bin
 		}
-		cfg.WriteString("[hosts." + n + "]\naddr = \"someone@" + n + "box\"\ncommand = \"" + bin + "\"\nconnect_timeout = 5\n\n")
+		cfg.WriteString("[hosts.")
+		cfg.WriteString(n)
+		cfg.WriteString("]\naddr = \"someone@")
+		cfg.WriteString(n)
+		cfg.WriteString("box\"\ncommand = \"")
+		cfg.WriteString(bin)
+		cfg.WriteString("\"\nconnect_timeout = 5\n\n")
 	}
 	dir := filepath.Join(f.here, "XDG_CONFIG_HOME", "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

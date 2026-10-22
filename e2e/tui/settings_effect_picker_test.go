@@ -123,12 +123,9 @@ func effectRowsOnScreen(s tuitest.Screen) (rows []int, text []string) {
 		if len(fields) < 2 {
 			continue
 		}
-		for _, band := range effectBands {
-			if fields[len(fields)-1] == band {
-				rows = append(rows, row)
-				text = append(text, line)
-				break
-			}
+		if slices.Contains(effectBands, fields[len(fields)-1]) {
+			rows = append(rows, row)
+			text = append(text, line)
 		}
 	}
 	return rows, text

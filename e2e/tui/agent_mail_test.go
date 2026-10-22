@@ -350,8 +350,8 @@ func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host 
 		}
 		label.row = -1
 		for i, line := range strings.Split(text, "\n") {
-			if at := strings.Index(line, "#1"); at >= 0 && !strings.Contains(line, "[Image") {
-				label.row, label.col = i, len([]rune(line[:at]))
+			if before, _, ok := strings.Cut(line, "#1"); ok && !strings.Contains(line, "[Image") {
+				label.row, label.col = i, len([]rune(before))
 			}
 		}
 		if label.row < 0 {

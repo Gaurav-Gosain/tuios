@@ -27,7 +27,7 @@ command = "printf 'LEFT-ONLY-HIDDEN\\n'"
 	term, _ := railClient(t, "hidden-left", cfg, startOpts{cols: 120, rows: 40})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if strings.Contains(string(line[:min(28, len(line))]), "LEFT-ONLY-HIDDEN") {
 				return len(line) <= cols-28 || !strings.Contains(string(line[cols-28:]), "LEFT-ONLY-HIDDEN")
@@ -79,7 +79,7 @@ command = "printf 'RIGHT-ONLY-HIDDEN\\n'"
 	term, _ := railClient(t, "hidden-right", cfg, startOpts{cols: 120, rows: 40})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if len(line) > cols-28 && strings.Contains(string(line[cols-28:]), "RIGHT-ONLY-HIDDEN") {
 				return !strings.Contains(string(line[:min(28, len(line))]), "RIGHT-ONLY-HIDDEN")
@@ -115,7 +115,7 @@ command = "printf 'EXPLICIT-RIGHT\\n'"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
 		left, right := false, false
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			left = left || strings.Contains(string(line[:min(28, len(line))]), "EXPLICIT-LEFT")
 			if len(line) > cols-28 {
@@ -217,7 +217,7 @@ sections = "sessions,files"
 	leaveTerminalMode(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if strings.Contains(string(line[:min(28, len(line))]), "LEFT-ONLY.txt") {
 				return len(line) <= cols-28 || !strings.Contains(string(line[cols-28:]), "LEFT-ONLY.txt")
@@ -261,7 +261,7 @@ sections = "sessions,git"
 	leaveTerminalMode(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if strings.Contains(string(line[:min(28, len(line))]), "left-only-branch") {
 				return len(line) <= cols-28 || !strings.Contains(string(line[cols-28:]), "left-only-branch")
@@ -298,7 +298,7 @@ command = "i=1; while [ $i -le 70 ]; do printf 'LEFT-%02d\\n' \"$i\"; i=$((i+1))
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		leftMoved, rightStayed := true, false
 		cols, rows := s.Size()
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			leftMoved = leftMoved && !strings.Contains(string(line[:min(28, len(line))]), "LEFT-01")
 			if len(line) > cols-28 {
@@ -329,7 +329,7 @@ sections = "sessions"
 	screen := term.Screen()
 	cols, rows := screen.Size()
 	arrowsFaceInward := false
-	for y := 0; y < rows; y++ {
+	for y := range rows {
 		line := []rune(screen.Line(y))
 		if len(line) > cols-28 && strings.Contains(string(line[:28]), "«") && strings.Contains(string(line[cols-28:]), "»") {
 			arrowsFaceInward = true
@@ -413,7 +413,7 @@ sections = "sessions"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
 		leftX, rightX = -1, -1
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if leftX < 0 {
 				if i := strings.Index(string(line[:min(28, len(line))]), "dual-key-edge"); i >= 0 {
@@ -481,7 +481,7 @@ sections = "sessions"
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			if len(line) > cols-28 && strings.Contains(string(line[cols-28:]), "dual-input") {
 				return true
@@ -494,7 +494,7 @@ sections = "sessions"
 	screen := term.Screen()
 	cols, rows := screen.Size()
 	found := false
-	for y := 0; y < rows; y++ {
+	for y := range rows {
 		line := []rune(screen.Line(y))
 		if len(line) <= cols-28 {
 			continue
@@ -561,7 +561,7 @@ command = "printf 'LEFT-CUSTOM-ROW\\n'"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
 		left, right := false, false
-		for y := 0; y < rows; y++ {
+		for y := range rows {
 			line := []rune(s.Line(y))
 			left = left || strings.Contains(string(line[:min(28, len(line))]), "LEFT-CUSTOM-ROW")
 			// Screen.Line may omit trailing blank cells. Only require

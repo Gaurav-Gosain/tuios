@@ -132,7 +132,7 @@ func runShown(t *testing.T, base, sess, window, command, want string) {
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {
 		out, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", window)
-		for _, l := range strings.Split(out, "\n") {
+		for l := range strings.SplitSeq(out, "\n") {
 			if strings.TrimSpace(l) == want || strings.HasSuffix(strings.TrimSpace(l), want) && !strings.Contains(l, "printf") {
 				return
 			}
