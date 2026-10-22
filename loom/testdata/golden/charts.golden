@@ -32,9 +32,9 @@
 |                                                    |
 |  mon ██████                                        |
 |  tue ██████                  ▄▄▄▄▄▄                |
-|      00  02                ▄█▀█▀▀███▄   ■ go 60%   |
-|      ███████████████      ███      ███  ■ zig 30%  |
-|      1      5      9      ███      ███  ■ sh 10%   |
+|      00  02                ▄█▀█▀▀███▄   █ go  60%  |
+|      ███████████████      ███      ███  █ zig 30%  |
+|      1      5      9      ███      ███  █ sh  10%  |
 |                            ▀█▀█▄▄███▀              |
 |                              ▀▀▀▀▀▀                |
 |                                                    |
@@ -83,9 +83,9 @@
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aadddammnneeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aadddammoonnaaaaaaaaaaaaaaaaaakkkeeeaaaaaaaaaaaaaaaa|
-|aaaaaahhaahhaaaaaaaaaaaaaaaajjpkkeeeeeaaaeaddadddaaa|
+|aaaaaahhaahhaaaaaaaaaaaaaaaajjpkkeeeeeaaaeaddaadddaa|
 |aaaaaammmnnnjjjoooeeeaaaaaajjjaaaaaaeeeaajadddadddaa|
-|aaaaaahaaaaaahaaaaaahaaaaaajjjaaaaaaeeeaakaddadddaaa|
+|aaaaaahaaaaaahaaaaaahaaaaaajjjaaaaaaeeeaakaddaadddaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaajjqeeeeeeeaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -151,9 +151,9 @@ q: fg=info bg=accent-bright
 |                                                    |
 |  mon ██████                                        |
 |  tue ██████                  ▄▄▄▄▄▄                |
-|      00  02                ▄█▀█▀▀███▄   ■ go 60%   |
-|      ███████████████      ███      ███  ■ zig 30%  |
-|      1      5      9      ███      ███  ■ sh 10%   |
+|      00  02                ▄█▀█▀▀███▄   █ go  60%  |
+|      ███████████████      ███      ███  █ zig 30%  |
+|      1      5      9      ███      ███  █ sh  10%  |
 |                            ▀█▀█▄▄███▀              |
 |                              ▀▀▀▀▀▀                |
 |                                                    |
@@ -202,9 +202,9 @@ q: fg=info bg=accent-bright
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aadddaggmmeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 |aadddaggnnmmaaaaaaaaaaaaaaaaaakkkeeeaaaaaaaaaaaaaaaa|
-|aaaaaahhaahhaaaaaaaaaaaaaaaajjokkeeeeeaaaeaddadddaaa|
+|aaaaaahhaahhaaaaaaaaaaaaaaaajjokkeeeeeaaaeaddaadddaa|
 |aaaaaagggmmmjjjnnneeeaaaaaajjjaaaaaaeeeaajadddadddaa|
-|aaaaaahaaaaaahaaaaaahaaaaaajjjaaaaaaeeeaakaddadddaaa|
+|aaaaaahaaaaaahaaaaaahaaaaaajjjaaaaaaeeeaakaddaadddaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaajjpeeeeeeeaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeaaaaaaaaaaaaaaaa|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -269,9 +269,9 @@ p: fg=info bg=accent-bright
 |                                                    |
 |  mon ██████                                        |
 |  tue ██████                  ▄▄▄▄▄▄                |
-|      00  02                ▄█▀█▀▀███▄   ■ go 60%   |
-|      ███████████████      ███      ███  ■ zig 30%  |
-|      1      5      9      ███      ███  ■ sh 10%   |
+|      00  02                ▄█▀█▀▀███▄   █ go  60%  |
+|      ███████████████      ███      ███  █ zig 30%  |
+|      1      5      9      ███      ███  █ sh  10%  |
 |                            ▀█▀█▄▄███▀              |
 |                              ▀▀▀▀▀▀                |
 |                                                    |
@@ -320,9 +320,9 @@ p: fg=info bg=accent-bright
 |                                                    |
 |  ccc jjggdd                                        |
 |  ccc jjkkgg                  hhhddd                |
-|      ff  ff                gglhhddddd   d cc ccc   |
+|      ff  ff                gglhhddddd   d cc  ccc  |
 |      jjjgggmmmkkkddd      ggg      ddd  g ccc ccc  |
-|      f      f      f      ggg      ddd  h cc ccc   |
+|      f      f      f      ggg      ddd  h cc  ccc  |
 |                            ggnddddddd              |
 |                              dddddd                |
 |                                                    |
@@ -385,9 +385,9 @@ n: fg=info bg=accent-bright
 |                                                    |
 |  mon ..::@@                                        |
 |  tue ..##::                  ooo***                |
-|      00  02                ++ooo*****   * go 60%   |
+|      00  02                ++ooo*****   * go  60%  |
 |      ...:::+++###@@@      +++      ***  + zig 30%  |
-|      1      5      9      +++      ***  o sh 10%   |
+|      1      5      9      +++      ***  o sh  10%  |
 |                            +++*******              |
 |                              ******                |
 |                                                    |
