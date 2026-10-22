@@ -85,7 +85,7 @@ require (
 	tuios.dev/plot v0.1.1-0.20261021163928-0b9f16190301 // indirect
 	tuios.dev/progstatus v0.1.0
 	tuios.dev/shot v0.2.0
-	tuios.dev/sketch v0.1.2-0.20261022072006-fc997105ea60
+	tuios.dev/sketch v0.1.2-0.20261022074657-3c0052825d65
 	tuios.dev/swatch v0.1.0
 	tuios.dev/tml v0.1.1-0.20261019164123-bf9b29e8d0d8
 	tuios.dev/vt v0.2.1-0.20261018063954-380e9b0f60bb
