@@ -1,3 +1,5 @@
+//go:build unix
+
 // Command placeholders stands in for an application that shows an image
 // through kitty Unicode placeholders, as ntcharts/picture does: one a=T,U=1
 // per frame under one image id, and a grid of U+10EEEE cells printed once

@@ -1,3 +1,5 @@
+//go:build unix
+
 // Command framepace is the guest of the frame pacing measurements in
 // perf_frames_test.go. It draws frames into its pane at a fixed rate and logs
 // when it wrote each one, so the harness can line a frame up with the moment

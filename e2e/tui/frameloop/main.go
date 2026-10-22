@@ -1,3 +1,5 @@
+//go:build unix
+
 // Command frameloop stands in for a graphics app that fills its pane, in the
 // way that matters to the passthrough: it asks the kernel how big its terminal
 // is in pixels, renders a bitmap of exactly that size, and streams it through
