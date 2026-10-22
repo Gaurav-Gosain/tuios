@@ -14,6 +14,29 @@ buf := s.Render(80, 24)
 fmt.Print(buf.Render()) // ANSI; buf.String() gives plain text
 ```
 
+## Command line
+
+`tml` shows a TML document in the terminal, drawn by loom.
+
+```sh
+go install tuios.dev/loom/cmd/tml@latest
+```
+
+```sh
+tml dashboard.tml                       # full screen, with keys and the mouse
+tml --print --width 100 report.tml      # draw once, as text
+tml --check report.tml                  # print each problem in the document
+answer=$(tml confirm.tml)               # the value of close(), as JSON
+```
+
+- In a terminal the document opens full screen. Press `q` or `esc` to quit
+  when the document does not use the key, or `ctrl+c` at any time.
+- A `close` action quits and prints its value as JSON. A `copy` action copies
+  with OSC 52. `emit`, `open`, `pane` and links need a host such as tuios, so
+  they do nothing here.
+- When the output is not a terminal, or with `--print`, `tml` draws the
+  document once and writes it as text.
+
 ## What it draws
 
 | Group | Components |
