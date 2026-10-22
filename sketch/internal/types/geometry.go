@@ -365,8 +365,10 @@ type GeoFlowNode struct {
 type GeoFlow struct {
 	// Source and Target are indexes into Nodes.
 	Source, Target int
-	// Value is the flow as written, with the prefix and the suffix.
+	// Value is the flow as written, with the prefix and the suffix, and
+	// Size the number.
 	Value string
+	Size  float64
 	// SourceY and TargetY are the middle of the band where it leaves its source
 	// and where it enters its target, in SVG units.
 	SourceY, TargetY float64

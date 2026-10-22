@@ -228,7 +228,7 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 			g.Nodes = append(g.Nodes, types.GeoFlowNode{Label: model.nodes[i].id, Value: value, Layer: node.layer, Y: node.y + node.height/2})
 		}
 		for _, link := range links {
-			g.Flows = append(g.Flows, types.GeoFlow{Source: link.source, Target: link.target, Value: prefix + js.Num(rounded(link.value)) + suffix,
+			g.Flows = append(g.Flows, types.GeoFlow{Source: link.source, Target: link.target, Value: prefix + js.Num(rounded(link.value)) + suffix, Size: link.value,
 				SourceY: link.sourceY, TargetY: link.targetY})
 		}
 		geometry = &types.Geometry{Width: width, Height: height, Sankey: g}

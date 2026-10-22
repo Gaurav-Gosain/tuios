@@ -150,7 +150,8 @@ has no room. A quadrant chart is a box in four parts, with its points as dots.
 A kanban board puts its columns in more rows when they do not fit. A git graph
 runs down, one row for each commit, with the oldest commit at the top, and
 each branch in its own colour. A
-sankey diagram puts its nodes in columns of boxes joined by lines. When two
+sankey diagram puts its nodes in columns of boxes joined by lines, heavy for
+the big flows. When two
 lines would join, when they cross more than three times, or when the columns
 do not fit, it is a table of flows: source, target and value. Block,
 architecture, requirement and C4 diagrams are drawn as a flowchart is. A block

@@ -12,9 +12,10 @@ import (
 
 // A sankey diagram is drawn from its lists. The nodes are boxes in columns, one
 // column per layer of the layout, in the order the layout stacks them. Each
-// flow is a line from the right side of its source to an arrow at the left
-// side of its target, through a lane of its own between the columns, with its
-// value on it. A flow that passes a column runs straight through it.
+// flow runs from the right side of its source to the left side of its target,
+// through a lane of its own between the columns, to an arrow, with its value
+// on it. A flow of a third of the largest node or more is a heavy line, so the
+// big flows stand out. A flow that passes a column runs straight through it.
 //
 // Lines that cross are hard to follow in cells. When the lines would cross more
 // than maxCrossings times, or the columns do not fit, the diagram is a table
@@ -63,6 +64,39 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 	if len(s.Nodes) == 0 {
 		return nil, errCrossed
 	}
+	// thick is the rows of a flow. weightOf is the weight of its line: heavy
+	// for a flow of a third of the largest node or more, so the big flows
+	// stand out.
+	thick := func(int) int { return 1 }
+	weightOf := func(int) uint8 { return light }
+	{
+		in, out := make([]float64, len(s.Nodes)), make([]float64, len(s.Nodes))
+		for _, fl := range s.Flows {
+			if fl.Source >= 0 && fl.Source < len(s.Nodes) && fl.Target >= 0 && fl.Target < len(s.Nodes) && fl.Size > 0 {
+				out[fl.Source] += fl.Size
+				in[fl.Target] += fl.Size
+			}
+		}
+		most := 0.0
+		for i := range s.Nodes {
+			most = math.Max(most, math.Max(in[i], out[i]))
+		}
+		if most > 0 && !math.IsInf(most, 0) {
+			weightOf = func(f int) uint8 {
+				if s.Flows[f].Size >= most/3 {
+					return heavy
+				}
+				return light
+			}
+		}
+	}
+	sumThick := func(list []int, segs []*flowSeg) int {
+		n := 0
+		for _, k := range list {
+			n += thick(segs[k].flow)
+		}
+		return n
+	}
 	layers := 0
 	for _, n := range s.Nodes {
 		layers = max(layers, n.Layer+1)
@@ -109,7 +143,7 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 		sort.SliceStable(cols[k], func(i, j int) bool { return cols[k][i].y < cols[k][j].y })
 		for _, it := range cols[k] {
 			if it.node < 0 {
-				it.h = 1
+				it.h = thick(it.flow)
 				continue
 			}
 			n := s.Nodes[it.node]
@@ -117,7 +151,7 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 			if n.Value != "" {
 				lines = 2
 			}
-			it.h = max(lines, len(it.ins), len(it.outs)) + 2
+			it.h = max(lines, sumThick(it.ins, segs), sumThick(it.outs, segs)) + 2
 			colW[k] = max(colW[k], width(n.Label)+4, width(n.Value)+4)
 		}
 	}
@@ -173,9 +207,10 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 			}
 			return
 		}
-		start := it.top + 1 + (it.h-2-len(list))/2
-		for i, k := range list {
-			set(segs[k], start+i)
+		at := it.top + 1 + (it.h-2-sumThick(list, segs))/2
+		for _, k := range list {
+			set(segs[k], at)
+			at += thick(segs[k].flow)
 		}
 	}
 	for _, col := range cols {
@@ -235,7 +270,10 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 	for k, col := range cols {
 		for _, it := range col {
 			if it.node < 0 {
-				c.hline(x[k], x[k]+colW[k]-1, it.top, light, seriesRole(s.Flows[it.flow].Source))
+				role := seriesRole(s.Flows[it.flow].Source)
+				for j := 0; j < it.h; j++ {
+					c.hline(x[k], x[k]+colW[k]-1, it.top+j, weightOf(it.flow), role)
+				}
 				continue
 			}
 			n := s.Nodes[it.node]
@@ -260,16 +298,18 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 			if g.to.node < 0 {
 				end = tx
 			}
+			weight := weightOf(g.flow)
+			// The box's side keeps its light line where the flow leaves it.
 			if g.from.node >= 0 {
 				c.stroke(bx, g.rs, right, light, role)
 			}
 			if g.lane < 0 {
-				c.hline(bx, end, g.rs, light, role)
+				c.hline(bx+1, end, g.rs, weight, role)
 			} else {
 				lx := laneX + g.lane
-				c.hline(bx, lx, g.rs, light, role)
-				c.vline(lx, g.rs, g.rt, light, role)
-				c.hline(lx, end, g.rt, light, role)
+				c.hline(bx+1, lx, g.rs, weight, role)
+				c.vline(lx, g.rs, g.rt, weight, role)
+				c.hline(lx, end, g.rt, weight, role)
 			}
 			if g.first && values {
 				c.text(bx+2, g.rs, s.Flows[g.flow].Value, roleNote)
