@@ -141,7 +141,8 @@ graph it takes the layout that sketch works out for the SVG and maps it to
 cells. The labels stay real text. A pie chart is a disc of half blocks in
 the series colours, with a legend of labels, shares and, with `showData`,
 values. pele leaves a slice under 1% out of the pie. Without colour, or in 40
-columns or fewer, a pie chart is a bar for each slice. A mindmap is a tree. A gantt chart is bars on a date axis. A
+columns or fewer, a pie chart is a bar for each slice. A mindmap is a tree. A gantt chart is bars on a date axis, a blank
+line between rows. A
 timeline runs across, and runs down when it does not fit the columns. So does
 a user journey. An XY chart draws its bars and lines with tuios.dev/plot, and
 turns its categories into rows when they do not fit across. It writes point

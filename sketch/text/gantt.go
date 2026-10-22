@@ -11,10 +11,12 @@ import (
 // Gantt charts: each section is a group of rows under its name, and each task
 // a bar on a date axis with tick labels under it. The bar's glyph says its
 // state, so that it reads without colour too: █ a task, ▒ an active one, ░ a
-// done one, ▓ a critical one, ▚ a critical active one and ▘ a critical done
+// done one, ▓ a critical one, ■ a critical active one and □ a critical done
 // one. Critical tasks are red as well. A milestone is ◆, and excluded days
-// are dotted. Vertical markers and the today line run down the chart. A
-// legend under the axis names the glyphs the chart uses.
+// are dotted. A blank line parts each row of tasks from the next, so bars on
+// rows next to each other do not run together. Vertical markers and the
+// today line run down the chart. A legend under the axis names the glyphs
+// the chart uses.
 
 // ganttKinds are the glyphs of the legend, in its order, with their names.
 var ganttKinds = [...]struct {
@@ -26,8 +28,8 @@ var ganttKinds = [...]struct {
 	{'▒', "active", roleBox},
 	{'░', "done", roleLine},
 	{'▓', "critical", roleCrit},
-	{'▚', "critical, active", roleCrit},
-	{'▘', "critical, done", roleCrit},
+	{'■', "critical, active", roleCrit},
+	{'□', "critical, done", roleCrit},
 	{'◆', "milestone", roleBox},
 	{'·', "excluded", roleFrame},
 }
@@ -125,6 +127,10 @@ func drawGantt(l *sketch.Layout, opt Options) (*canvas, error) {
 			for _, part := range wrap(s, labelW) {
 				lines = append(lines, line{label: part, section: true, row: -1})
 			}
+		}
+		if i > 0 && len(lines) > 0 && !lines[len(lines)-1].section {
+			// A blank line between two rows of tasks.
+			lines = append(lines, line{row: -1})
 		}
 		firstLine[i] = len(lines)
 		parts := wrap(rowLabel[i], labelW-2)

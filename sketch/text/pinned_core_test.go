@@ -79,6 +79,7 @@ Cats  █████████████▍                            25%
 		{"gantt", "gantt\n  dateFormat YYYY-MM-DD\n  axisFormat %m-%d\n  section Build\n  One :done, a, 2024-01-01, 2d\n  Two :crit, b, after a, 2d\n  section Ship\n  Done :milestone, m, after b, 0d", 50, `
 Build   ┆         ┆         ┆         ┆         ┆
   One   ░░░░░░░░░░░░░░░░░░░░░         ┆         ┆
+        ┆         ┆         ┆         ┆         ┆
   Two   ┆         ┆         ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 Ship    ┆         ┆         ┆         ┆         ┆
   Done  ┆         ┆         ┆         ┆         ◆
@@ -113,14 +114,17 @@ Ship    ┆         ┆         ┆         ┆         ┆
 		// and excluded days are dotted.
 		{"gantt states", "gantt\n  dateFormat YYYY-MM-DD\n  axisFormat %m-%d\n  excludes weekends\n  section S\n  A :done, crit, a, 2024-01-01, 6d\n  B :active, crit, b, after a, 3d\n  C :crit, c, after b, 2d\n  M :milestone, m, after c, 0d", 60, `
 S    ┆      ┆      ┆   ···┆····  ┆       ┆      ┆······┆
-  A  ▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘▘       ┆      ┆······┆
-  B  ┆      ┆      ┆   ···┆····  ▚▚▚▚▚▚▚▚▚▚▚▚   ┆······┆
+  A  □□□□□□□□□□□□□□□□□□□□□□□□□□□□□       ┆      ┆······┆
+     ┆      ┆      ┆   ···┆····  ┆       ┆      ┆······┆
+  B  ┆      ┆      ┆   ···┆····  ■■■■■■■■■■■■   ┆······┆
+     ┆      ┆      ┆   ···┆····  ┆       ┆      ┆······┆
   C  ┆      ┆      ┆   ···┆····  ┆       ┆  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+     ┆      ┆      ┆   ···┆····  ┆       ┆      ┆······┆
   M  ┆      ┆      ┆   ···┆····  ┆       ┆      ┆······┆  ◆
      ├──────┼──────┼──────┼──────┼───────┼──────┼──────┼───
    01-01  01-03  01-05  01-07  01-09   01-11  01-13  01-15
 
-▓ critical  ▚ critical, active  ▘ critical, done
+▓ critical  ■ critical, active  □ critical, done
 ◆ milestone  · excluded
 `},
 	}
