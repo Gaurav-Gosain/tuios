@@ -7463,6 +7463,17 @@ The two halves of the live box fix each cover the bug alone in this test, so
 the test guards the pair. Both stay: the forget drops a pane id that can
 match again after a restore, and the follow does not wait for a key.
 
+## xpanes -ss interval, measured from the fork
+
+`TestXpanesDefaultModeWithoutAClient` checks that `--interval 0.3` spaces the `-ss` panes. It read the time each pane's `date` ran, which adds however long the scheduler took to exec it, and a CI runner measured 210 ms. The panes now write the start time of their own process from `/proc/PID/stat`. The daemon forks a pane before `new-window` answers, and xpanes sleeps the interval after that answer, so the forks are at least the interval apart. Off Linux the test still reads `date`. Run on 2026-10-22.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The exec of pane x is late, which the old test read as a short interval | n/a, injected: a scheduling delay made deterministic | the command sleeps 100 ms before it stamps, in pane x only, with the old `date` stamp | `TestXpanesDefaultModeWithoutAClient`, 5 of 5 runs ("started 199.9ms apart") | **caught**, the flake |
+| xpanes does not wait between `-ss` panes | the `time.Sleep(interval)` in the `-ss` loop of `cmd/tuios/xpanes_command.go` | branch cut | `TestXpanesDefaultModeWithoutAClient` with the fix, 3 of 3 runs ("started 0s apart") | **caught** |
+
+The fixed test with the same 100 ms delay in pane x passes 5 of 5 runs, and passes 25 of 25 runs without it.
+
 ## The cockpit's spawn sheet
 
 `TestCockpitSpawnSheet` opens the cockpit with `ctrl+b i`, presses `n`, types

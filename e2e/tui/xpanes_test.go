@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -304,9 +306,20 @@ func TestXpanesDefaultModeWithoutAClient(t *testing.T) {
 	}
 	xpanesHello(t, base, "demo")
 
+	// Each pane writes when its process was forked. The daemon forks a -ss
+	// pane before new-window answers, and xpanes sleeps the interval after
+	// that answer, so the forks are at least the interval apart. The time the
+	// pane's own date ran is not: it adds however long the scheduler took to
+	// run the exec, and on a loaded runner that cut a 0.3 s gap to 0.21 s.
+	// Linux has the fork time in /proc, in clock ticks since boot. Elsewhere
+	// the date is the best there is.
 	mark := base + "/ss-"
+	stamp, unit := "date +%s%N", time.Nanosecond
+	if runtime.GOOS == "linux" {
+		stamp, unit = "cut -d' ' -f22 /proc/$$/stat", clockTick(t)
+	}
 	out, err := tuiosCLI(t, base, "xpanes", "--session", "demo", "--no-sync", "-ss", "--interval", "0.3",
-		"-c", "date +%s%N > "+mark+"{}", "x", "y")
+		"-c", stamp+" > "+mark+"{}", "x", "y")
 	if err != nil {
 		t.Fatalf("xpanes -ss: %v\n%s", err, out)
 	}
@@ -325,7 +338,7 @@ func TestXpanesDefaultModeWithoutAClient(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	if gap := time.Duration(starts[1] - starts[0]); gap < 250*time.Millisecond {
+	if gap := time.Duration(starts[1]-starts[0]) * unit; gap < 250*time.Millisecond {
 		t.Fatalf("the -ss panes started %v apart, want at least 0.25 s", gap)
 	}
 	deadline := time.Now().Add(shellTimeout)
@@ -344,6 +357,21 @@ func TestXpanesDefaultModeWithoutAClient(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// clockTick is the length of one clock tick, the unit of the start time in
+// /proc/PID/stat.
+func clockTick(t *testing.T) time.Duration {
+	t.Helper()
+	out, err := exec.Command("getconf", "CLK_TCK").Output()
+	if err != nil {
+		t.Fatalf("getconf CLK_TCK: %v", err)
+	}
+	hz, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil || hz <= 0 {
+		t.Fatalf("getconf CLK_TCK printed %q", out)
+	}
+	return time.Second / time.Duration(hz)
 }
 
 // The same repro with a client attached to the session.

@@ -10,7 +10,6 @@
 
 # e2e/tui
 TestPasteBuffersKeepYanksAndPasteThem            # failed on #940 and on main after #983
-TestXpanesDefaultModeWithoutAClient              # panes started 210 ms apart, the test wants 250 ms (#984)
 TestAnImagePastedIntoAnSSHShellGoesToThatMachine # the tmux subtest, shard 2 (#978)
 
 # go test ./...
