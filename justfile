@@ -432,6 +432,15 @@ wasm-check:
     {{ NICE }} {{ TASKSET }} go test -count=1 ./internal/webshell/ ./internal/learn/
     {{ NICE }} {{ TASKSET }} {{ quote(root / "cmd/tuios-wasm/build.sh") }} {{ quote(out / "learn") }}
 
+# The deterministic checks in one gate: fmt, vet, lint, vulns, modernizers,
+# gopls, tidy, cross builds, dead code. --changed limits it to the packages
+# this branch changed against origin/main. Run `just check --changed` before
+# a pull request is marked ready.
+# Run every deterministic Go check
+[group('check')]
+check *args:
+    {{ NICE }} {{ TASKSET }} {{ quote(root / "scripts/check.sh") }} "$@"
+
 # Run the local part of CI: fmt, tidy, lint, test, size
 [group('check')]
 ci: fmt-check tidy-check lint test size

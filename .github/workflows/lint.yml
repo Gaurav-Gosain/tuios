@@ -2,7 +2,9 @@ name: Lint
 
 # Static analysis on every pull request: golangci-lint with the repository's
 # .golangci.yml, govulncheck for known vulnerabilities in code tuios reaches,
-# and go vet on the platforms the release builds for but no test job runs on.
+# go vet on the platforms the release builds for but no test job runs on, and
+# goimports, gopls and the go fix modernizers on the files a pull request
+# changed (scripts/check.sh, which `just check` runs locally).
 # The unit test workflow covers gofmt, tidy and vet on linux.
 
 on:
@@ -117,6 +119,46 @@ jobs:
             echo "These Go files hold a literal byte order mark. Write \\xef\\xbb\\xbf instead:" >&2
             echo "$bad" >&2
             exit 1
+          fi
+
+  sanity:
+    name: goimports, gopls and modernizers (changed files)
+    # The parts of scripts/check.sh no other job runs, on the files the pull
+    # request changed: goimports, gopls check, and the go fix modernizers as a
+    # report. gofmt, tidy, vet, golangci-lint and govulncheck have jobs of
+    # their own.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge base with the target branch decides what changed.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            scripts/check.sh
+
+      - name: Check the changed files
+        run: scripts/check.sh --changed "origin/${{ github.base_ref }}" --only fmt,fix,gopls
+
+      - name: Report the modernizers
+        if: always()
+        run: |
+          if [ -s .dev/check/fix.log ]; then
+            {
+              echo "### go fix modernizers on the changed packages"
+              echo
+              echo "These do not fail the check. Read each one before you apply it."
+              echo
+              echo '```'
+              head -n 200 .dev/check/fix.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
   govulncheck:

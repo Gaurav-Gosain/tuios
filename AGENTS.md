@@ -73,6 +73,31 @@ and run throwaway daemons under a scratch directory. Only `install`,
 `install-ghostty`, `deploy`, `deploy-hosts` and `restart` touch the live
 daemon. `just deploy` runs `tuios hosts sync --dev --local --restart --yes`.
 
+### The check gate
+
+Run `just check --changed` before you mark a pull request ready. It runs
+`scripts/check.sh` on the packages the branch changed against `origin/main`.
+`just check` runs it on every module, which is the form for main.
+
+| Check | What it runs | Fails the gate |
+|-------|--------------|----------------|
+| `fmt` | `gofmt -l`, and `goimports -l` when installed | yes |
+| `vet` | `go vet`, also with `-tags ghostty` when libghostty-vt is built | yes |
+| `lint` | `golangci-lint` with `.golangci.yml`, at the CI version | yes |
+| `tuioslint` | the `internal/lint` tests | yes |
+| `vuln` | `govulncheck`, for each module the branch touched | yes |
+| `fix` | the `go fix` modernizers, one line per finding | no, report |
+| `gopls` | `gopls check` on the changed Go files | yes |
+| `tidy` | `go mod tidy -diff` per module, `scripts/library-pins.sh check` | yes |
+| `cross` | `go build` for linux, darwin, windows and freebsd | yes |
+| `deadcode` | functions no binary or test reaches | no, report |
+
+`--only vet,lint` runs a subset. Each check writes its full output to
+`.dev/check/NAME.log`. In `--changed` mode, `lint` reports only the findings
+the branch added. Apply a `fix` finding package by package, and read each
+diff first. `go fix -diff ./...` prints the patches. Fix a finding at the
+root. A `//nolint` needs its reason on the same line.
+
 ### Browser build (Learn tuios)
 
 `cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at
@@ -299,7 +324,7 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 ### Go Style
 
 - Follow standard Go conventions ([Effective Go](https://go.dev/doc/effective_go))
-- Run `go fmt` before committing
+- Run `go fmt` before committing, and `just check --changed` before a pull request is marked ready
 - Package comments on all packages (see existing `internal/*/` packages)
 - Meaningful variable names (avoid single letters except loop indices)
 
