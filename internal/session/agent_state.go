@@ -455,6 +455,13 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			override = true
 		}
 		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto, misses: claim.misses, event: r.event}
+		// sawProcess is carried over too, for the same reason auto is: it is
+		// what lets the detector clear a claim it does not own once the agent
+		// has left the pane. Claude Code clears its progress bar as it exits,
+		// and a claim rebuilt from that report without it kept the pane at idle
+		// for as long as the pane lived. A none report ends it, the way it ends
+		// the harness pid: that agent has gone.
+		next.sawProcess = claim.sawProcess && r.State != AgentStateNone
 		next.identity = identityAfterReport(claim, r, next.harness)
 		switch {
 		case override:

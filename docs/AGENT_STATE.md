@@ -1439,6 +1439,8 @@ editor or a pager the agent opened, is counted, and the claim clears after six
 consecutive ticks of it (twelve seconds at the default interval). One missed
 read is not an exit.
 
+A state another tier inferred, from the title, a progress bar or a screen rule, clears the same way once the detector has seen an agent process in the pane and the pane is back at its shell, whatever that tier read last. That includes the progress bar Claude Code clears as it exits, which arrives after the detector's last look at the agent.
+
 A state a hook reported is cleared the same way once the harness has gone. The hook names the harness process it ran under (`harness_pid`), and the daemon records that pid with the process's start time when it is the process that sent the report or one of its ancestors. When the start time no longer reads, or reads different because another process was given the pid, and the pane is back at its shell, the pane goes to `none` and its row leaves the agents section. This is what clears a Claude Code that quit without its `SessionEnd` hook landing, crashed, or was killed. Any other pid is never taken for exited, so its pane keeps its state until it is changed. That is a pid:
 
 - the reporter does not run under. An agent in a container with the socket passed in reports one from its own pid namespace, and it may name an unrelated process here.
