@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"text/tabwriter"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -58,7 +59,9 @@ func lookGalleryBase() (string, error) {
 	case "https":
 		return base, nil
 	case "http":
-		if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() || u.Hostname() == "localhost" {
+		// A literal loopback address only: a name such as localhost goes
+		// through the resolver, which can answer anything.
+		if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
 			return base, nil
 		}
 	}
@@ -171,11 +174,13 @@ func parseLookFeed(data []byte) ([]galleryLook, error) {
 	return looks, nil
 }
 
-// cleanLookText is s on one line, with no control or bidi character, cut to
-// maxLookName runes.
+// cleanLookText is s on one line, cut to maxLookName runes. Every control
+// character, format character (bidi controls and zero-width marks are
+// format characters), and line or paragraph separator becomes a space, so a
+// name cannot reorder or break the list.
 func cleanLookText(s string) string {
 	s = strings.TrimSpace(strings.Map(func(r rune) rune {
-		if theme.IsUnsafeRune(r) {
+		if theme.IsUnsafeRune(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' || r == '\u061c' {
 			return ' '
 		}
 		return r

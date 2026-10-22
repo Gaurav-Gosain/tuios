@@ -347,6 +347,7 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 		}
 	})
 }
+
 // galleryFeedLook is one look the fake gallery serves: the feed entry and the
 // look file, which the real gallery serves from the same text.
 type galleryFeedLook struct{ id, title, login, text string }

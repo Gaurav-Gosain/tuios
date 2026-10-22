@@ -56,3 +56,33 @@ func TestLookRedirectStaysHTTPS(t *testing.T) {
 		t.Errorf("a redirect to https is refused: %v", err)
 	}
 }
+
+// The gallery override may leave https only for a literal loopback address.
+// A name goes through the resolver, which can answer with any address.
+func TestLookGalleryBaseKeepsHTTPSOffLoopback(t *testing.T) {
+	for in, ok := range map[string]bool{
+		"":                        true,
+		"https://example.com":     true,
+		"http://127.0.0.1:8080":   true,
+		"http://[::1]:8080":       true,
+		"http://localhost:8080":   false,
+		"http://example.com":      false,
+		"http://127.0.0.1.nip.io": false,
+		"ftp://127.0.0.1":         false,
+	} {
+		t.Setenv(lookGalleryEnv, in)
+		if _, err := lookGalleryBase(); (err == nil) != ok {
+			t.Errorf("%q: error %v, want ok=%v", in, err, ok)
+		}
+	}
+}
+
+// A stranger names a look, and the name reaches the terminal. No character
+// that reorders, hides or breaks a line may stay in it.
+func TestCleanLookTextDropsFormatCharacters(t *testing.T) {
+	for _, r := range []rune{'‮', '⁦', '​', '‍', '\ufeff', '­', ' ', ' ', '؜', '\x1b', '\n'} {
+		if got := cleanLookText("a" + string(r) + "b"); got != "a b" {
+			t.Errorf("U+%04X: got %q, want %q", r, got, "a b")
+		}
+	}
+}
