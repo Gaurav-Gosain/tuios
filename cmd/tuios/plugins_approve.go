@@ -4,14 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // tuios plugins approve: the person's answer for a native plugin on this
@@ -85,7 +83,7 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 	if !allow {
 		question = "Deny " + id + " on this machine?"
 	}
-	ok, err := lookPrompt{yes: yes, tty: term.IsTerminal(int(os.Stdin.Fd())), in: os.Stdin}.confirm(out, question) //nolint:gosec // a file descriptor fits an int
+	ok, err := newLookPrompt(yes, false).confirm(out, question)
 	if err != nil {
 		return err
 	}
