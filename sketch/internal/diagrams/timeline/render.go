@@ -247,10 +247,15 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 			for _, i := range group.periods {
 				color := colorOf(group, i)
 				h := chipHeight(periodLabels[i])
-				cy := y + h/2
+				// A period and its first event share one center line, so the line between them runs straight.
+				first := h
+				if len(eventLabels[i]) > 0 {
+					first = eventHeight(eventLabels[i][0])
+				}
+				cy := y + math.Max(h, first)/2
 				var d, cards strings.Builder
 				svg.WriteStrings(&d, "M", num(left+colW), ",", num(cy), "H", num(axisX))
-				ey := y
+				ey := cy - first/2
 				last := cy
 				for _, label := range eventLabels[i] {
 					eh := eventHeight(label)
@@ -263,11 +268,11 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 					svg.WriteStrings(&d, "M", num(axisX), ",", num(cy), "H", num(spineX), "V", num(last))
 				}
 				openPeriod(i)
-				period(i, color, left, y, h)
+				period(i, color, left, cy-h/2, h)
 				svg.WriteStrings(&body, `<path class="pele-edge" d="`, d.String(), `"`, LINE, `/>`)
 				dot(axisX, cy, color)
 				svg.WriteStrings(&body, cards.String(), "</g>")
-				y = math.Max(y+h, ey-EVENT_GAP) + GAP
+				y = math.Max(cy+h/2, ey-EVENT_GAP) + GAP
 
 			}
 			if len(group.periods) == 0 {

@@ -1,7 +1,10 @@
 package sketch
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +12,7 @@ import (
 
 // FuzzRender drives the whole pipeline with text: preprocess, detect, each
 // ported type's lexer and parser, layout and SVG. The seeds are the corpus of
-// every ported type and the security templates of each. A render may fail with a PeleError, but must not panic, must
+// every ported type, the security templates of each and the extra cases. A render may fail with a PeleError, but must not panic, must
 // stay inert, and must finish in bounded time.
 func FuzzRender(f *testing.F) {
 	for _, c := range loadGoldens(f) {
@@ -24,6 +27,23 @@ func FuzzRender(f *testing.F) {
 		for _, template := range templates {
 			f.Add(template(PAYLOADS[1]))
 			f.Add(template("a&b"))
+		}
+	}
+	// The extra cases reach label markup, entities and layouts the corpus does not.
+	extras, _ := filepath.Glob("testdata/extra/*.json")
+	for _, file := range extras {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			f.Fatal(err)
+		}
+		var cases []struct {
+			Src string `json:"src"`
+		}
+		if err := json.Unmarshal(data, &cases); err != nil {
+			f.Fatalf("%s: %v", file, err)
+		}
+		for _, c := range cases {
+			f.Add(c.Src)
 		}
 	}
 	for _, template := range gitTemplates {

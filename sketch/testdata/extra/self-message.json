@@ -1,0 +1,18 @@
+[
+ {
+  "src": "sequenceDiagram\n  A->>A: one<br/>two<br/>three\n  A->>B: next"
+ },
+ {
+  "src": "sequenceDiagram\n  A->>A: a message to self long enough to wrap onto several lines\n  A->>B: next",
+  "maxWidth": 200
+ },
+ {
+  "src": "sequenceDiagram\n  A->>A: one<br/>two<br/>three<br/>four<br/>five\n  Note over A: note\n  A-->>A: short\n  A->>B: next"
+ },
+ {
+  "src": "sequenceDiagram\n  autonumber\n  participant A\n  participant B\n  A->>A: tall<br>self<br>label\n  B->>B: x\n  A->>B: after"
+ },
+ {
+  "src": "sequenceDiagram\n  loop every row\n    A->>A: one<br>two<br>three\n  end\n  A->>B: next"
+ }
+]

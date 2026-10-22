@@ -969,7 +969,8 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					gMessages = append(gMessages, types.GeoMessage{From: v.a, To: v.b, Y: top, Y2: bottom, X0: x0, X1: x1, Self: true, Dotted: st.dotted,
 						HeadStart: headOf(st.head, st.atStart), HeadEnd: headOf(st.head, st.atEnd), Label: label.Plain(), LabelX: out + 8 + label.Width/2, LabelY: (top + bottom) / 2})
 				}
-				lineY = bottom
+				// A label taller than the loop reaches below it, so the next row starts under the label.
+				lineY = math.Max(bottom, (top+bottom)/2+label.Height/2)
 			} else {
 
 				dir := -1.0
