@@ -206,6 +206,11 @@ func TestExitTurnsOffWhatItTurnedOn(t *testing.T) {
 			if pushes == 0 || pops != pushes {
 				t.Errorf("tuios pushed the kitty keyboard flags %d times and popped them %d times", pushes, pops)
 			}
+			// Each screen has its own stack, so the last pop must come before
+			// tuios leaves the alternate screen, where its push went.
+			if all := regexp.MustCompile(`\x1b\[<[0-9]*u`).FindAllIndex(raw, -1); len(all) > 0 && all[len(all)-1][0] > leave {
+				t.Errorf("tuios popped the kitty keyboard flags after it left the alternate screen")
+			}
 			checkLast("modifyOtherKeys", regexp.MustCompile(`\x1b\[>4(;[0-9]+)?m`), "\x1b[>4m")
 			checkLast("pointer shape", regexp.MustCompile(`\x1b\]22;[^\x1b\x07]*`), "\x1b]22;default")
 		})
