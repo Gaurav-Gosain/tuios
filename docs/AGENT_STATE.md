@@ -1317,7 +1317,10 @@ instance one running behind a wrapper. A report that names none is silent about
 attribution and leaves it standing, so a hook that reports only a state does not
 cost its pane the screen rules that cover the prompts its hooks do not. The one
 report that clears attribution is `none`, which says outright that the pane is
-not running an agent.
+not running an agent. It clears it even when it names a harness, as a harness's
+own `none` does (Claude Code's `SessionEnd`, herdr's `pane.release_agent`), so
+the pane leaves `list-agents` with its agent. The conversation id stays, with
+the harness it belongs to, for `tuios resume-agent`.
 
 ### The one exception: a visible blocker
 

@@ -106,9 +106,10 @@ func screenRuleMessage(reg *harness.Registry, hid string, rule int, tail []strin
 // the title, screen and notification rules have nothing to match with.
 //
 // A pane with no agent in it (agentInPane) has no harness running in it,
-// whatever it is attributed to. It keeps the harness its agent left it with, for
-// a later resume, and reading the next program in the pane by that harness's
-// rules took a spinner in its title for the agent working.
+// whatever it is attributed to. A pane carried over from a daemon that kept the
+// harness its agent left it with is one, and reading the next program in the
+// pane by that harness's rules took a spinner in its title for the agent
+// working.
 func (s *Session) agentHarnessOf(ptyID string) (windowID, harnessID string) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()

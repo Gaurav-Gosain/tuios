@@ -8681,3 +8681,17 @@ the dialog.
 |---|---|---|---|---|
 | The kill's own "Killed session" note replaced the deletion note — the one record of where the stashed changes went — and made `TestSidebarCloseDeletesWorktree` flake at the already-gone and dirty steps | The `pendingWorktreeKill` suppression in `update.go` | Build with the suppression short-circuited | `TestSidebarCloseDeletesWorktree` ("the kill's own note replaced the deletion note"), deterministically on all three deletions | **caught** |
 | remove-worktree deleted a worktree whose detached HEAD held commits no branch has, without a word — the removal leaves those commits unreachable | The `OwnCommits` refusal in the verb, and the dialog's refusal line and toll | Build from before the fix | `TestSidebarCloseRefusesDetachedWorktree` ("the close dialog said nothing about the detached HEAD") | **caught** |
+
+## Agent listing after SessionEnd
+
+The test is `TestListAgentsDropsAPaneWhoseAgentEnded` in `agent_leftover_harness_test.go`. `session-end` runs a stand-in `claude` (`testdata/fakeclaude`) through the real `tuios agent-hook claude-code`: it starts, works a turn, ends it, sends `SessionEnd` and exits, and the shell has the pane again. `reported-none` sends `set-agent-state working --harness claude-code` and then `set-agent-state none --harness claude-code` from outside the pane with no agent process, the shape of herdr's `pane.release_agent`, then leaves a note with `set-agent-state idle -m`, which has to list the pane again. Each case first waits for the pane to be listed, then for `list-agents` (without `--all`) to drop it, and reads it every 250ms for four more seconds; `session-end` also checks the conversation id is kept. Each case saves `trace.txt` and `pane.txt`. The control is upstream main without the fix, built to a separate binary. Run on 2026-10-23 on macOS against upstream main at 85cb48c9.
+
+Upstream main fails both cases two runs of two, with the pane at `none`, source `report`, harness `claude-code`, and the conversation id kept, which is the row the live daemon kept for over forty hours. The fixed build passes both.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (upstream main): `harnessAfterReport` keeps the harness a `none` report names | `session-end` ("after SessionEnd, with the shell back: list-agents still says listed=true for <window>, want false"), `reported-none` ("after none naming the harness: list-agents still says listed=true for <window>, want false") | **caught** |
+
+`TestAgentSignalsOnAnExitedAgentsPane` read the kept harness as its precondition ("want none still attributed to claude-code"), and failed its four exit cases (`hook-exit`, `osc-tier-exit-bar`, `osc-tier-exit-title`, `restart-after-exit`) on the fixed build until that check read `none` with no harness. With the harness gone, its exit cases no longer reach the `agentInPane` gate: the control "`agentHarnessOf` returns the remembered harness whatever `agentInPane` says" (from "Agent signals on an exited agent's pane") passes all six cases on the fixed build, run once on 2026-10-23. The gate stays for a pane carried at `none` with a harness from a daemon without this fix.
+
+Not covered: a pane carried at `none` with a harness from a daemon without the fix, which keeps its row until a `none` report or the detector clears it (`tuios set-agent-state none -w <pane>` does).

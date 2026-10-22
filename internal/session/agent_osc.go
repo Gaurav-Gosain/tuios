@@ -99,10 +99,10 @@ func (s *Session) progressTarget(windowID string) (current AgentState, exists, a
 // held.
 //
 // What an agent leaves behind when it goes does not count. A pane at none keeps
-// the harness it was attributed to, for a later resume, and the claim of the
-// report that said none, and neither says an agent is in it now: taking them
-// for one read `mise upgrade` in a pane Claude Code had left as Claude Code
-// working, then idle for good. An agent that starts in the pane again is heard
+// its conversation id and the harness the id belongs to, for a later resume,
+// and the claim of the report that said none, and none of them says an agent
+// is in it now: taking them for one read `mise upgrade` in a pane Claude Code
+// had left as Claude Code working, then idle for good. An agent that starts in the pane again is heard
 // once the foreground-process detector puts the pane at working, within one
 // detection tick, or once it reports for itself; a bar it draws before then is
 // not read.

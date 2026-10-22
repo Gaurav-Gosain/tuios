@@ -79,9 +79,10 @@ type progressReading struct {
 // The bug: Claude Code ran in a pane and left it, and the pane was then used
 // for `mise upgrade`. mise's progress bar was read as the agent's, so the pane
 // showed Claude Code working, then idle for good, with no agent in it. A pane
-// keeps the harness its agent was attributed to after the agent leaves, for a
-// later resume, and that remembered harness was taken for an agent being
-// there: it let OSC 9;4 apply, and it ran the harness's title, screen and
+// kept the harness its agent was attributed to after the agent left (a none
+// report that named it kept it, see TestListAgentsDropsAPaneWhoseAgentEnded),
+// and that remembered harness was taken for an agent being there: it let
+// OSC 9;4 apply, and it ran the harness's title, screen and
 // notification rules against whatever ran in the pane next. What held this
 // off was only the rank of the claim the agent's last report left: a hook's
 // SessionEnd ranks above the OSC tier, a claim at the OSC tier or below (or
@@ -246,8 +247,8 @@ func TestAgentSignalsOnAnExitedAgentsPane(t *testing.T) {
 				waitCapture(t, base, session, "0", "SHELL-BACK")
 				// Two detector passes with the pane at its shell.
 				time.Sleep(2 * time.Second)
-				if r := read("agent gone"); r.State != "none" || r.Harness != "claude-code" {
-					t.Fatalf("after its agent left, the pane is %s (source %s, harness %q), want none still attributed to claude-code", r.State, r.Source, r.Harness)
+				if r := read("agent gone"); r.State != "none" || r.Harness != "" {
+					t.Fatalf("after its agent left, the pane is %s (source %s, harness %q), want none and no harness", r.State, r.Source, r.Harness)
 				}
 			}
 

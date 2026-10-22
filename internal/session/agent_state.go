@@ -602,8 +602,19 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 // guessed, which is how a harness behind a wrapper gets attributed at all. The
 // one report that clears it is none, since that is the caller saying in as many
 // words that the pane is not running an agent.
+//
+// It clears it whatever harness the none report names. A harness's own none
+// names that harness (Claude Code's SessionEnd hook, herdr's
+// pane.release_agent), and a none that kept it left the pane at none with a
+// harness. Nothing cleared that afterwards: the detector lets go of a claim it
+// does not own only while the pane still shows a state, and a pane at none has
+// none to clear. So the pane stayed in list-agents, at none and at its shell,
+// for as long as it lived.
 func harnessAfterReport(w *WindowState, r AgentReport) string {
-	if r.Harness != "" || r.State == AgentStateNone {
+	if r.State == AgentStateNone {
+		return ""
+	}
+	if r.Harness != "" {
 		return r.Harness
 	}
 	return w.AgentHarness
