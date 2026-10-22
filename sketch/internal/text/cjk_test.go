@@ -1,4 +1,4 @@
-// Ported from pele tests/render/cjk-wrap.test.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele tests/render/cjk-wrap.test.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 // The last case, which renders a flowchart, is covered by testdata/extra in the root package.
 
 package text

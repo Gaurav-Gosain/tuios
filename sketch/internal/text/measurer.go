@@ -1,4 +1,4 @@
-// Ported from pele src/text/measurer.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/text/measurer.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // The canvas measurer is browser only and is not ported. defaultMeasurer always
 // gives the metrics measurer, which is what pele uses outside a browser.

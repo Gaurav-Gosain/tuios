@@ -6,7 +6,7 @@ It is a port of [pele](https://github.com/obsidianmd/pele), the Mermaid
 renderer by [kepano](https://github.com/kepano) of
 [Obsidian](https://obsidian.md), under the MIT licence. The layout, the
 shapes, the safety rules and the test corpus are pele's work. The port
-follows pele v1.7.0, commit `8603bf3313add9143cd417015d4a6bd6c522dada`.
+follows pele v1.8.0, commit `8fad23bd51783e4df1204e177a7fb0d2a30dcd13`.
 [LICENSE](LICENSE) has the notice of pele and of the port.
 [raster/fonts/NOTICE](raster/fonts/NOTICE) has the licences of the fonts that
 sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
@@ -75,6 +75,8 @@ other than http, https, mailto or tel.
 
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap. They match too.
+The cases of `math-typeset.json` are drawn with a fixed math resolver, the
+same one in `gen.mjs` and in `golden_test.go`.
 
 ## Use
 
@@ -90,7 +92,18 @@ os.WriteFile("out.svg", []byte(svg.Data), 0o644)
 `svg.MermaidType` is the name Mermaid gives it, such as `flowchart-v2` for
 `graph TD`. A `Diagram` and an `Error` carry both names too. A parse error
 names the diagram type even when the parser of the type does not, as pele
-v1.7.0 does.
+v1.8.0 does.
+
+## Math
+
+A label of a flowchart, sequence, swimlane, block, class, ER, kanban, mindmap,
+requirement, state or use case diagram can hold TeX between `$$` marks.
+`RenderOptions.Math` is a `MathResolver`: it gets the TeX and the font size
+and gives SVG or HTML markup with its size in pixels. sketch has no typesetter.
+With no resolver, or when the resolver has nothing for an expression, the label
+shows the `$$...$$` source as text. Diagram titles always show text. The
+markup goes into the SVG as it is, as pele writes it: give only markup you
+trust. `sketch/text` draws the source.
 
 ## Text
 

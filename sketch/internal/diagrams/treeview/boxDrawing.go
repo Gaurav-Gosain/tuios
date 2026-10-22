@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treeview/boxDrawing.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/treeview/boxDrawing.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // pele indexes lines in UTF-16 code units. Every box character is one unit, so the port keeps
 // byte offsets for slicing and counts units only where an index is a number: the column of a

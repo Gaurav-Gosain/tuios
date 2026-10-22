@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/quadrant/index.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/diagrams/quadrant/index.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 
 // Package quadrant draws Mermaid's quadrantChart: points on a square of four
 // quadrants, with labelled axes.

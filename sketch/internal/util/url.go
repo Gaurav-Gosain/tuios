@@ -1,4 +1,4 @@
-// Ported from pele src/util/url.ts at 8603bf3313add9143cd417015d4a6bd6c522dada.
+// Ported from pele src/util/url.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
 //
 // `new URL()` is approximated for http and https: the scheme and host are
 // lowercased and an empty path becomes "/". decodeURIComponent is ported as is.

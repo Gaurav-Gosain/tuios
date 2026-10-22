@@ -1,4 +1,4 @@
-// Code generated from pele tests/render/*-security.test.ts at 8603bf33. DO NOT EDIT.
+// Code generated from pele tests/render/*-security.test.ts at 8fad23bd. DO NOT EDIT.
 
 package sketch
 
