@@ -7,6 +7,61 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Synchronized output holds the native cursor with content
+
+`TestSynchronizedOutputHoldsHostCursor` uses a real daemon, attached client,
+and 232x53 PTY with animations enabled. A FIFO feeds separate writes for a
+complete frame, an open DEC 2026 update at a drawing position, its completed
+frame, and an ordinary cursor-only update. Before sampling the hold, the test
+requires `get-window` to report the attached client's raw VT cursor at the
+intermediate position. This is independent of `GuestCursor`'s presentation
+cache: a delayed producer cannot make the hold assertion pass without ever
+opening the update. Acknowledgement and sampling have budgets below the VT's
+one-second sync timeout; exceeding them fails the test.
+
+Run on 2026-10-23 on macOS with Go 1.26.10, based on `a1823e525376` plus
+the cursor sync gate. A Go overlay changed only the call-site condition
+`if !w.Terminal.IsSyncActive()` in `Window.GuestCursor` to `if true`.
+It did not change the cursor accessors or the native/software ownership fix.
+The negative binary failed all three cases while `SYNCCOMMITTED` remained on
+screen: the host cursor moved from zero-based `(5,3)` to `(37,13)` and changed
+from bar to block. The visible case was detected immediately after client
+acknowledgement; hide-during and show-during were detected about 11 ms later.
+All three cases then passed their positive halves: closing 2026 moved to
+`(9,6)` with an underline and the requested visibility, and ordinary
+cursor-only output moved to `(10,7)`, visible with a bar.
+
+The fixed binary passed the same acknowledged fixture: the host cursor stayed
+at `(5,3)` with its prior visibility and bar shape throughout each approximately
+307–309 ms sampling interval, then committed the final cursor. Repeat from
+`e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -p 1
+-run '^TestSynchronizedOutputHoldsHostCursor$' -count=1 -timeout 2m -v .`.
+Set `TUIOS_E2E_FRAMES` to an existing directory for the raw host stream
+(`cursor-sync.ansi`), client acknowledgements and cursor observations
+(`cursor-sync.txt`), and plain/styled held frames for every visibility case.
+The local run redirected only the harness's runtime root through an owned
+short `/tmp` alias to the investigation scratch directory for Unix socket
+length, and disabled its unrelated stale-runtime sweep through a test overlay.
+
+A temporary deterministic probe also exercised actual `OS.View`,
+`viewCursor`, and `GuestCursor`: position, visibility, shape, blink and OSC 12
+colour stayed committed during sync, then refreshed after its close. Its
+first-read-during-sync and busy-I/O-lock checks passed with the fix. Removing
+only the same gate failed the three View cases and the first-read case;
+ordinary updates and the nonblocking-lock control still passed. The probe is
+not retained because the real PTY E2E catches the reported bug.
+
+Focused `go test -race -p 1` checks passed for the probe plus native cursor
+ownership, cursor parking, overlay cursor suppression, I/O lock reentry, and
+content sync holds through cache invalidation, composition and the fullscreen
+fast path. Both normal and gate-disabled command binaries built successfully.
+
+This forces a fragmented guest update. It demonstrates the transport/render
+failure mechanism, not the frequency of natural Neovim j/k fragmentation or
+physical Ghostty display behavior. Cursor and content are still sampled under
+separate lock acquisitions; this gate prevents mid-sync cursor sampling and
+does not introduce an atomic frame snapshot.
+
 ## Native cursor ownership across guest visibility changes
 
 `TestNativeCursorVisibilityTransition` in `internal/app` deterministically

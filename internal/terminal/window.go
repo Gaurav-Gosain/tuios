@@ -181,11 +181,10 @@ type Window struct {
 	// any business setting it, and setting it wrong serves a stale frame.
 	cachedContentDim int
 	// CachedCursor is what this window's cursor was the last time the render
-	// loop could read it: where it is, whether it is hidden, and the shape the
-	// guest asked for. Reading the live one needs the I/O lock, which a pane
-	// flooding output holds in a near-continuous burst, and the frame that
-	// would block on it is the same frame carrying the user's keystroke echo.
-	// Serving a cursor one frame old costs nothing anyone can see.
+	// loop could read it outside a synchronized update: where it is, whether it
+	// is hidden, and the shape the guest asked for. Reading the live one needs
+	// the I/O lock, which output bursts can hold almost continuously. Reusing
+	// this sample keeps those panes from delaying the user's keystroke echo.
 	CachedCursor       uv.Position
 	CachedCursorHidden bool
 	CachedCursorStyle  vt.CursorStyle
@@ -975,8 +974,9 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 // The I/O lock is taken only if it is free. A pane in an output burst holds
 // the exclusive side almost continuously, and the frame that would wait for
 // it carries the user's keystroke echo. When the lock is busy the cursor the
-// last read saw is returned, which is at most a frame stale. ok is false when
-// the window has no terminal.
+// last read saw is returned. During a synchronized update the same cache holds
+// the cursor with the last complete content, rather than exposing the guest's
+// intermediate drawing positions or styles. ok is false without a terminal.
 func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
 	if w.Terminal == nil {
 		return pos, false, false
@@ -987,10 +987,12 @@ func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
 			w.RUnlockIO()
 			return pos, false, false
 		}
-		w.CachedCursor = w.Terminal.CursorPosition()
-		w.CachedCursorHidden = w.Terminal.IsCursorHidden()
-		w.CachedCursorStyle, w.CachedCursorSteady = w.Terminal.CursorStyle()
-		w.CachedCursorColor = w.Terminal.GuestCursorColor()
+		if !w.Terminal.IsSyncActive() {
+			w.CachedCursor = w.Terminal.CursorPosition()
+			w.CachedCursorHidden = w.Terminal.IsCursorHidden()
+			w.CachedCursorStyle, w.CachedCursorSteady = w.Terminal.CursorStyle()
+			w.CachedCursorColor = w.Terminal.GuestCursorColor()
+		}
 		w.RUnlockIO()
 	}
 	return w.CachedCursor, w.CachedCursorHidden, true
