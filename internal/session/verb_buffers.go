@@ -484,6 +484,9 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 		Delete  bool   `json:"delete"`
 		Raw     bool   `json:"raw"`
 		Version uint64 `json:"version"`
+		// AllowBlocked lets a pane paste into a pane on needs_input
+		// (typingBlocked).
+		AllowBlocked bool `json:"allow_blocked"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -503,6 +506,9 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 		return nil, mapResolveErr(rerr, sess)
 	}
 	if verr := d.recheckTyping(cs, "paste-buffer", sess, p.Window); verr != nil {
+		return nil, verr
+	}
+	if verr := d.recheckBlocked(cs, "paste-buffer", sess, p.Window, p.AllowBlocked); verr != nil {
 		return nil, verr
 	}
 	text := vt.SanitizePaste(pastebuf.PasteText(b.Data, p.Raw))
@@ -611,6 +617,7 @@ func bufferVerbs() map[string]verbEntry {
 				{Name: "delete", Type: "bool", Description: "Delete the buffer after the paste, unless its content was set again meanwhile.", Default: "false"},
 				{Name: "raw", Type: "bool", Description: "Keep each line feed instead of turning it into a carriage return.", Default: "false"},
 				version,
+				typingAllowBlockedParam,
 			},
 			returns: []verbParam{
 				{Name: "name", Type: "string", Description: "The buffer that was pasted."},

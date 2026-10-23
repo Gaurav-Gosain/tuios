@@ -898,6 +898,9 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		Literal bool   `json:"literal"`
 		Raw     bool   `json:"raw"`
 		Repeat  int    `json:"repeat"`
+		// AllowBlocked lets a pane send keys to a pane on needs_input
+		// (typingBlocked).
+		AllowBlocked bool `json:"allow_blocked"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -942,6 +945,9 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		}
 	}
 	if verr := d.recheckTyping(cs, "send-keys", sess, p.Window); verr != nil {
+		return nil, verr
+	}
+	if verr := d.recheckBlocked(cs, "send-keys", sess, p.Window, p.AllowBlocked); verr != nil {
 		return nil, verr
 	}
 
@@ -1052,6 +1058,9 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 		Text    string `json:"text"`
 		Paste   bool   `json:"paste"`
 		Submit  bool   `json:"submit"`
+		// AllowBlocked lets a pane type into a pane on needs_input
+		// (typingBlocked).
+		AllowBlocked bool `json:"allow_blocked"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -1071,6 +1080,9 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 	if verr := d.recheckTyping(cs, "send-text", sess, p.Window); verr != nil {
 		return nil, verr
 	}
+	if verr := d.recheckBlocked(cs, "send-text", sess, p.Window, p.AllowBlocked); verr != nil {
+		return nil, verr
+	}
 	if p.Submit {
 		// The prompt path ask-agent types with: one paste, a wait for the
 		// program to take it in, and the harness's own submit key.
@@ -1083,7 +1095,12 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 		// The pane is checked again right before the submit key: it can
 		// come to a prompt while the paste is taken in, and the Enter
 		// would answer it.
-		ctx := withSubmitGuard(d.ctx, func() *verbError { return d.recheckTyping(cs, "send-text", sess, window) })
+		ctx := withSubmitGuard(d.ctx, func() *verbError {
+			if verr := d.recheckTyping(cs, "send-text", sess, window); verr != nil {
+				return verr
+			}
+			return d.recheckBlocked(cs, "send-text", sess, window, p.AllowBlocked)
+		})
 		if _, err := submitPrompt(ctx, pty, p.Text, d.inputProfileFor(sess, window)); err != nil {
 			return nil, ptyWriteError(err)
 		}
