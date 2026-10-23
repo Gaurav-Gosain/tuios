@@ -7,6 +7,35 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Native cursor ownership across guest visibility changes
+
+`TestNativeCursorVisibilityTransition` in `internal/app` deterministically
+shows the guest cursor between the ownership query and the locked cell walk.
+Its visible, hidden and hidden-to-visible cases require text and cached text
+to contain no software cursor while native rendering owns it, and check the
+independently sampled native cursor after movement. In the same fixture each
+case then shows the guest cursor, sets `ShowScrollbackBrowser = true`, clears
+the content cache and requires a software cursor: the fallback still works
+when native ownership is unavailable.
+
+Run on 2026-10-23 on macOS against upstream main `c5077dcc` plus the fix.
+A Go overlay replaced only the `renderTerminal` call-site selection
+`nativeCursor, _ := m.paneCursor(); useRealCursor := nativeCursor != nil`
+with `useRealCursor := m.getRealCursor() != nil`; production files were not
+edited or reverted. From the root, `go test -p 2 -overlay <overlay.json>
+./internal/app -run '^TestNativeCursorVisibilityTransition$' -count=1 -v`
+failed only `hidden-to-visible`, printing:
+
+```text
+render painted 1 software cursors while the native cursor owns rendering
+cached text retained a software cursor after the native cursor moved
+```
+
+All three cases printed `software fallback rendered without native ownership`,
+including the failing transition case. The same command without the overlay
+passed all three cases. This is a deterministic race regression; the separate
+real-client cursor E2E tests do not force this interleaving.
+
 ## Sidebar-created worktrees apply startup tiling
 
 `TestRailRightClickMakesAWorktree` drives the repository row's real right-click
