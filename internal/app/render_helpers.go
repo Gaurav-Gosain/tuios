@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -16,54 +15,44 @@ import (
 	"github.com/charmbracelet/x/ansi/parser"
 )
 
-// agentStateIndicator returns the one-cell glyph that marks a pane's agent state
-// in its window title, or the empty string for none/unset. The glyphs are
-// deliberately distinct shapes rather than the same shape in different colors, so
-// the state reads at a glance and survives a monochrome capture: a filled circle
-// working, a triangle needs-input, a hollow circle idle, a filled square done,
-// and a cross errored.
+// agentStateIndicator returns the mark of a pane's agent state, or the empty
+// string for none/unset. The mark is the active glyph set's, falling back to
+// the built-in one (config.AgentStateMark), in its ASCII form on a terminal
+// that cannot draw more. Every surface that shows agent state goes through
+// this function, so the rail, the title bars and the palette can never
+// disagree.
 //
-// ASCII-only terminals get a parallel set that keeps the same five states
-// apart in one cell. Every surface that shows agent state goes through this
-// function, so the rail, the title bars and the palette can never disagree.
+// A mark is one or two cells. A surface that draws marks in a column pads them
+// to agentMarkWidth with agentMarkCell, so a set with a two-cell mark keeps
+// its rows in line.
 func agentStateIndicator(state string) string {
-	m, ok := agentStateMarks[session.AgentState(state)]
-	if !ok {
-		return ""
-	}
-	if overlay.UseASCII() {
-		return m.ascii
-	}
-	return m.glyph
+	return config.AgentStateMark(state, overlay.UseASCII())
 }
 
-// agentStateMarks is the symbol set: each state's mark, and the ASCII form it
-// takes on a terminal that cannot draw more. It is the one table, so the
-// title sanitiser's list of our own marks (chromeGlyphs) is read from it and
-// cannot fall behind it.
-var agentStateMarks = map[session.AgentState]struct{ glyph, ascii string }{
-	session.AgentStateWorking:    {"●", "*"},
-	session.AgentStateNeedsInput: {"▲", "!"},
-	session.AgentStateIdle:       {"○", "o"},
-	session.AgentStateDone:       {"■", "#"},
-	session.AgentStateErrored:    {"×", "x"},
-	// An agent is there and the daemon cannot say what it is doing. It drew
-	// nothing at all before, which read as no agent, and that is the common
-	// case rather than an edge: the stall timer writes this state for any
-	// agent with no screen rules to read, which is every agent matched by
-	// name alone.
-	//
-	// A hollow square rather than a question mark: the row already names the
-	// agent, so the question is about the state and not about whether
-	// anything is there. It reads as the same family as idle's hollow circle,
-	// which is the nearest thing to what it means.
-	session.AgentStateUnknown: {"□", "?"},
-	// Display only, never a pane's state: the agent is at rest and
-	// subagents it started still run (see displayState). A lozenge in the
-	// working ink: a shape none of the states uses, and one Go Mono, which
-	// tuios shot draws with when no font is given, has. The half-filled
-	// circle the design named draws as a missing glyph there.
-	agentStateWaiting: {"◊", "%"},
+// agentMarkWidth is the width of the mark column: the widest mark the active
+// glyph set draws.
+func agentMarkWidth() int {
+	return config.AgentMarkWidth(overlay.UseASCII())
+}
+
+// agentMarkCell pads a mark, or the empty string, with spaces to the width of
+// the mark column. The padding goes after the mark, so the marks stay in one
+// column and the text after them in another.
+func agentMarkCell(mark string) string {
+	if d := agentMarkWidth() - lipgloss.Width(mark); d > 0 {
+		return mark + strings.Repeat(" ", d)
+	}
+	return mark
+}
+
+// agentMarkCellRight is agentMarkCell for a mark at the end of a right-aligned
+// column: the padding goes in front, so the marks end on the row's edge and
+// the figures before them stay in their own column.
+func agentMarkCellRight(mark string) string {
+	if d := agentMarkWidth() - lipgloss.Width(mark); d > 0 {
+		return strings.Repeat(" ", d) + mark
+	}
+	return mark
 }
 
 // agentMark is the mark and the colour one pane's agent state wears, and every
@@ -344,9 +333,10 @@ func windowTitleText(window *terminal.Window, markState string, position int, ma
 		windowName = host + ":" + windowName
 	}
 
-	// Reserve room for the indicator and its trailing space before truncating.
+	// Reserve room for the indicator, measured since a glyph set's mark may be
+	// two cells, and its trailing space before truncating.
 	if indicator != "" {
-		maxWidth = max(maxWidth-2, 0)
+		maxWidth = max(maxWidth-lipgloss.Width(indicator)-1, 0)
 	}
 
 	maxNameLen := max(maxWidth-6, 0)

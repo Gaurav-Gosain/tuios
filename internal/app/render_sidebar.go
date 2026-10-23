@@ -634,20 +634,15 @@ func sidebarFit(s string, cw int, bg color.Color) string {
 	return s
 }
 
-// chromeGlyphs are the symbol codepoints we draw ourselves: the agent-state
-// marks. They sit inside the decorative blocks printableTitle strips, so they
-// are named rather than kept by range. Read off agentStateMarks rather than
-// listed: the list was written by hand and left out unknown's "□", so the
-// palette's row for an agent in that state lost its mark.
-var chromeGlyphs = func() map[rune]bool {
-	out := make(map[rune]bool, len(agentStateMarks))
-	for _, m := range agentStateMarks {
-		for _, r := range m.glyph {
-			out[r] = true
-		}
-	}
-	return out
-}()
+// chromeGlyph reports whether r is part of an agent-state mark: one of ours,
+// or one the active glyph set names. The marks sit inside the decorative
+// blocks printableTitle strips, so they are named rather than kept by range,
+// and they are read off the marks themselves rather than listed: the list was
+// written by hand and left out unknown's "□", so the palette's row for an
+// agent in that state lost its mark.
+func chromeGlyph(r rune) bool {
+	return config.IsAgentMarkRune(r, overlay.UseASCII())
+}
 
 // printableTitle strips what a terminal cannot be trusted to render out of a
 // title before it is shown as chrome (sidebar rows, the window title badge, the
@@ -703,7 +698,7 @@ func printableRune(r rune, ascii bool) bool {
 	case r >= 0xf0000:
 		// Plane 15/16 private use.
 		return false
-	case r >= 0x25a0 && r <= 0x2bff && !chromeGlyphs[r]:
+	case r >= 0x25a0 && r <= 0x2bff && !chromeGlyph(r):
 		// Geometric Shapes through Miscellaneous Symbols and Arrows. Agents
 		// park spinners and status ornaments in here (Claude Code alone uses
 		// U+2733 idle and a U+2802/U+2810 Braille spinner) and they tofu in
@@ -713,7 +708,7 @@ func printableRune(r rune, ascii bool) bool {
 	case r >= 0xfe00 && r <= 0xfe0f:
 		// Variation Selectors (VS1-16), including the emoji VS16.
 		return false
-	case r >= 0x1f000 && r <= 0x1faff:
+	case r >= 0x1f000 && r <= 0x1faff && !chromeGlyph(r):
 		// Emoji and pictographic planes (Regional Indicator flag halves
 		// U+1F1E6-1F1FF sit inside this span).
 		return false
@@ -723,10 +718,14 @@ func printableRune(r rune, ascii bool) bool {
 	return true
 }
 
-// sidebarNameCol is the column every rail row's text starts on: gutter, glyph,
-// one cell of air. One spine for all three sections, which is what the flat
-// layout buys over the tree.
-const sidebarNameCol = 3
+// sidebarNameCol is the column every rail row's text starts on: gutter, the
+// mark column, one cell of air. One spine for all three sections, which is
+// what the flat layout buys over the tree. The mark column is as wide as the
+// widest agent-state mark the glyph set draws, so a set with a two-cell mark
+// moves the spine for every row rather than for the one row wearing it.
+func sidebarNameCol() int {
+	return 2 + agentMarkWidth()
+}
 
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
 // space on the row background when there is no state or glyphs are disabled,
@@ -1212,13 +1211,21 @@ func sidebarComposeRow(gutter, glyph, name, right string, cw int, bg color.Color
 // step is what says the rows are somebody's.
 func sidebarComposeGroupRow(indent int, gutter, glyph, name, right string, cw int, bg color.Color) string {
 	row := gutter + sidebarStyle(bg, nil).Render(strings.Repeat(" ", max(indent, 0))) +
-		glyph + sidebarStyle(bg, nil).Render(" ") + name
+		sidebarMarkCell(glyph, bg) + name
 	if rw := lipgloss.Width(right); rw > 0 {
 		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
 		row += sidebarStyle(bg, nil).Render(strings.Repeat(" ", gap)) +
 			right + sidebarStyle(bg, nil).Render(" ")
 	}
 	return sidebarFit(row, cw, bg)
+}
+
+// sidebarMarkCell is a row's styled glyph padded out to the mark column, and
+// the one cell of air after it. A one-cell mark on a set whose widest mark is
+// two keeps its row's name on the spine with the rows beside it.
+func sidebarMarkCell(glyph string, bg color.Color) string {
+	air := max(agentMarkWidth()-lipgloss.Width(glyph), 0) + 1
+	return glyph + sidebarStyle(bg, nil).Render(strings.Repeat(" ", air))
 }
 
 // sidebarRuleInk is the ink a heading's rule takes. The rule is a separator, so
@@ -1244,7 +1251,7 @@ func sidebarRuleInk(bg color.Color, pal overlay.Palette) color.Color {
 // on.
 func sidebarComposeRuledRow(indent int, gutter, glyph, name, right string, cw int, bg color.Color, pal overlay.Palette, s *config.Settings) string {
 	row := gutter + sidebarStyle(bg, nil).Render(strings.Repeat(" ", max(indent, 0))) +
-		glyph + sidebarStyle(bg, nil).Render(" ") + name
+		sidebarMarkCell(glyph, bg) + name
 	rw := lipgloss.Width(right)
 	pad := 1
 	if rw > 0 {
@@ -1280,7 +1287,7 @@ func sidebarNameAvailIn(cw, rightW, indent int) int {
 	if rightW > 0 {
 		rightW += 2 // the inset cell, and the gap in front of the figure
 	}
-	return max(cw-sidebarNameCol-max(indent, 0)-rightW, 1)
+	return max(cw-sidebarNameCol()-max(indent, 0)-rightW, 1)
 }
 
 // renderSidebar composes the vertical session sidebar as a single layer, the way
@@ -1969,7 +1976,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	overflowRow := func(n, indent int) string {
 		// Stands in for the rows it hides, so it starts where their names do.
 		more := overlay.Ellipsis() + " +" + strconv.Itoa(n)
-		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol+indent)+
+		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol()+indent)+
 			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
 	}
 	// recordToken publishes a header control's rectangle and its nav row, the
@@ -2267,7 +2274,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// only for that state, so a rail with no working agent records
 			// nothing and the motion clock never starts. See shimmer.go.
 			if e.State == "working" && bodyW > 0 {
-				x0 := contentX0 + sidebarNameCol
+				x0 := contentX0 + sidebarNameCol()
 				m.motion.rail = append(m.motion.rail, shimmerSpan{
 					y: topMargin + len(lines), x0: x0, x1: min(x0+bodyW, contentX0+cw),
 				})
@@ -3096,7 +3103,7 @@ func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, st sideba
 		sep = " . "
 	}
 	text := "none here" + sep + strconv.Itoa(total) + " all"
-	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol))+
+	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol()))+
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, sidebarNameAvail(cw, 0))), cw, rowBg)
 }
 
@@ -3142,7 +3149,7 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // sentence.
 func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
-	indent := sidebarNameCol + 1
+	indent := sidebarNameCol() + 1
 	avail := sidebarNameAvail(cw, 0) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
 	quiet := sidebarStyle(rowBg, pal.FgMute)

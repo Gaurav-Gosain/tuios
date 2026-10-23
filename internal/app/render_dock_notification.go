@@ -339,6 +339,10 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		mark = lipgloss.NewStyle().Foreground(theme.ReadableAt(fg, bg, theme.MarkFloor)).Render(" " + glyph)
 	}
 
+	// notifChromeWidth counts the mark as one cell. A glyph set's agent mark
+	// may be two, and the block is measured against what it draws.
+	chromeW := notifChromeWidth + max(lipgloss.Width(mark)-2, 0)
+
 	budget := notifBudget(renderWidth)
 	if avail > 0 {
 		// One column short of what is left, so the opening cap always has a
@@ -352,23 +356,23 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		// and a contract that is broken in the tight case is not a contract. A
 		// dock with fewer columns than that free is already overfull, and the
 		// bar's own one-screen backstop is what handles it.
-		budget = min(budget, max(avail-1, notifChromeWidth))
+		budget = min(budget, max(avail-1, chromeW))
 	}
 
 	// The meta gives way before the message does only when it has to: the
 	// counter outranks the esc affordance, because a buried error is news and a
 	// dismissal hint the user has seen before is not.
 	meta := s.notifMeta(ground)
-	if notifChromeWidth+lipgloss.Width(meta) > budget {
+	if chromeW+lipgloss.Width(meta) > budget {
 		bare := s
 		bare.msg.Sticky = false
 		meta = bare.notifMeta(ground)
 	}
-	if notifChromeWidth+lipgloss.Width(meta) > budget {
+	if chromeW+lipgloss.Width(meta) > budget {
 		meta = ""
 	}
 
-	room := budget - notifChromeWidth - lipgloss.Width(meta)
+	room := budget - chromeW - lipgloss.Width(meta)
 
 	// A message that does not fit says so in a word as well as with the
 	// ellipsis: "more" is what a click on it gives. The word is given up
