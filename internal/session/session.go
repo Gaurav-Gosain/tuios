@@ -919,6 +919,9 @@ type PTY struct {
 	outputBuffer []byte
 	outputPos    int
 	outputSeq    int64
+	// outputTaps get a copy of every chunk appended after they were added.
+	// Guarded by outputMu. See output_tap.go.
+	outputTaps []*outputTap
 	// resizeMarks are the stream positions resizes took effect at, oldest
 	// first, kept while the ring still holds bytes either side of them plus
 	// the newest one behind the ring, which is the width the ring's first
@@ -4958,6 +4961,9 @@ func (p *PTY) readOutput() {
 			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
 			seq := p.appendToBuffer(data)
+			for _, tap := range p.outputTaps {
+				tap.add(data)
+			}
 			p.outputMu.Unlock()
 
 			// Broadcast to subscribers
