@@ -184,7 +184,10 @@ func TestAnAdminPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
 	if err := d.manager.GetSession("a").mutateState(func(st *SessionState) error { st.FocusedWindowID = a2; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	wantForbidden(t, "send-keys with no window into a focused prompt", callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "1 Enter"}))
+	// A pane must name the window, so no keys reach the focused prompt.
+	if code := errCode(t, callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "1 Enter"})); code != ErrVerbInvalidParams {
+		t.Errorf("send-keys with no window from a pane answered %s, want invalid_params", code)
+	}
 
 	// Its own pane is its own.
 	result(t, callP(c, t, "send-text", map[string]any{"session": "a", "window": a1, "text": "x"}))
@@ -193,7 +196,10 @@ func TestAnAdminPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"admin", "respond"}}))
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
-	result(t, callP(dialVerb(t, sp), t, "send-text", map[string]any{"session": "a", "window": a2, "text": "1\r"}))
+	if code := errCode(t, callP(dialVerb(t, sp), t, "send-text", map[string]any{"session": "a", "window": a2, "text": "1\r"})); code != ErrVerbAgentBlocked {
+		t.Errorf("send-text with respond and no allow_blocked answered %s, want agent_blocked", code)
+	}
+	result(t, callP(dialVerb(t, sp), t, "send-text", map[string]any{"session": "a", "window": a2, "text": "1\r", "allow_blocked": true}))
 
 	// The person is never held by it.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
@@ -589,11 +595,11 @@ func TestAPaneSendKeysNeverDrivesTheClient(t *testing.T) {
 	}
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
-	got := result(t, callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "x"}))
+	got := result(t, callP(c, t, "send-keys", map[string]any{"session": "a", "window": a1, "keys": "x"}))
 	if got["sent_to"] == "client" {
 		t.Fatalf("an admin pane's send-keys went through the client: %v", got)
 	}
-	resp := callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "PREFIX n"})
+	resp := callP(c, t, "send-keys", map[string]any{"session": "a", "window": a1, "keys": "PREFIX n"})
 	wantForbidden(t, "an admin pane's PREFIX", resp)
 	if e, _ := resp["error"].(map[string]any); e != nil {
 		msg := fmt.Sprint(e["message"], e["hint"])

@@ -125,9 +125,8 @@ tuios capture-pane -s "$TUIOS_SESSION" -w docs
 ```
 
 - **Always pass `-w`.** With `-w`, keys go to that window's program whatever
-  the person has focused. Without it they go to the person's client as if the
-  person pressed them, which is the focused window (often your own) or the
-  window manager.
+  the person has focused. From a pane, `send-text` and `send-keys`
+  without `-w` are refused.
 - `new-window` prints `3a42ab8f  docs`: the short id and the name. Either one
   is a `-w` target. `--print-id` prints only the full id, for
   `id=$(tuios new-window ... --print-id)`. A name you give beats any window's
