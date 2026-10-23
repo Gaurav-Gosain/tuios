@@ -2053,6 +2053,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		cs.mu.Lock()
 		sessionID := cs.sessionID
 		sessionName := cs.sessionName
+		input := cs.lastActivity
 		subs := make([]string, 0, len(cs.ptySubscriptions))
 		for ptyID := range cs.ptySubscriptions {
 			subs = append(subs, ptyID)
@@ -2095,7 +2096,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		// the client is out of d.clients, so the size is taken over the ones that
 		// remain; a clean detach cleared sessionID above and does not come here.
 		if sessionID != "" {
-			d.notifyClientLeft(sessionID, clientID)
+			d.notifyClientLeft(sessionID, clientID, input)
 		}
 
 		_ = conn.Close()

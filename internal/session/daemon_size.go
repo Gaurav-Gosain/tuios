@@ -56,23 +56,33 @@ func clampClientSize(w, h int) (int, int) {
 // latest, and the policy in force. Each client counts at no less than
 // minClientWidth x minClientHeight.
 func (d *Daemon) calculateSessionSize(sessionID string) (width, height int, policy string) {
-	width, height, policy, _ = d.settleSessionSize(sessionID)
+	width, height, policy, _, _ = d.settleSessionSize(sessionID)
 	return width, height, policy
 }
 
 // settleSessionSize is calculateSessionSize, and also the client that sets
 // the size: the latest client under latest, otherwise the client whose width
 // (or, failing that, height) the size took. owner is "" with no clients.
-func (d *Daemon) settleSessionSize(sessionID string) (width, height int, policy, owner string) {
+//
+// kept is true when the latest client has left and nobody still attached has
+// had input since (see pickLatest): the size is then the one the session
+// already has, and owner is the client that left.
+func (d *Daemon) settleSessionSize(sessionID string) (width, height int, policy, owner string, kept bool) {
+	session := d.manager.GetSessionByID(sessionID)
 	clients := d.sessionSizedClients(sessionID)
-	policy = d.effectiveWindowSize(d.manager.GetSessionByID(sessionID), clients)
+	policy = d.effectiveWindowSize(session, clients)
 	clients = sizingClients(policy, clients)
 	latest := ""
 	if policy == config.WindowSizeLatest {
-		latest = d.pickLatest(sessionID, clients, time.Now())
+		latest, kept = d.pickLatest(sessionID, clients, time.Now())
+	}
+	if kept && session != nil && len(clients) > 0 {
+		if width, height = session.Size(); width > 0 && height > 0 {
+			return width, height, policy, latest, true
+		}
 	}
 	width, height = sizeForPolicy(policy, clients, latest)
-	return width, height, policy, sizeOwner(clients, latest, width, height)
+	return width, height, policy, sizeOwner(clients, latest, width, height), false
 }
 
 // sizeOwner is the client a session's size came from: latest when it is one
@@ -277,7 +287,9 @@ func (d *Daemon) refreshLinkedViewer(sessionID string) {
 }
 
 // notifyClientLeft broadcasts a client leave event to all other clients in the session.
-func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
+// input is the leaving client's last input, for the latest policy.
+func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string, input time.Time) {
+	d.latestLeft(sessionID, leavingClientID, input)
 	// Every leave comes here, a detach and a dropped connection alike, so
 	// this is where the agent link moves back to the client before.
 	d.agentForget(sessionID, leavingClientID)
@@ -334,7 +346,7 @@ func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, heig
 		return 0, 0, LayoutReserve{}
 	}
 
-	newWidth, newHeight, policy, owner := d.settleSessionSize(sessionID)
+	newWidth, newHeight, policy, owner, kept := d.settleSessionSize(sessionID)
 	if newWidth == 0 || newHeight == 0 {
 		// Nothing known to measure. Report what the session already holds, so a
 		// caller stamping a reply is never handed a zero.
@@ -344,7 +356,12 @@ func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, heig
 	// The reserve settles with the size, and a change to either has to be
 	// announced: the panes' box is the size less the reserve, so a client told
 	// only about the size would lay them out in a box nobody else is using.
-	newReserve := d.calculateSessionReserve(sessionID, policy, owner, newWidth, newHeight)
+	// A kept size keeps its reserve too, the one laid out for the client that
+	// left: the box of the panes is what must not move.
+	newReserve := session.LayoutReserve()
+	if !kept {
+		newReserve = d.calculateSessionReserve(sessionID, policy, owner, newWidth, newHeight)
+	}
 
 	oldWidth, oldHeight := session.Size()
 	oldReserve := session.LayoutReserve()
