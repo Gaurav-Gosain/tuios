@@ -229,6 +229,18 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 	return nil
 }
 
+// senderPane is the --from of a message or an ask: the flag when given, else
+// the pane the command runs in. A reply needs a sender to go to, and loop
+// detection needs one to see a cycle, so a pane names itself without being
+// told to. Outside a pane it stays empty. It is a claim either way: the
+// daemon does not check it.
+func senderPane(from string) string {
+	if from != "" {
+		return from
+	}
+	return os.Getenv("TUIOS_PANE_ID")
+}
+
 // runSendAgentMessage queues a message for another agent.
 func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, to)
