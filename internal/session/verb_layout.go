@@ -49,7 +49,7 @@ var splitSides = []string{"left", "right", "up", "down"}
 //
 // One verb rather than three because the caller's question is always "focus
 // this" and only the way it names the pane changes.
-func (d *Daemon) verbFocusWindow(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
 		Window    string `json:"window"`
@@ -73,7 +73,7 @@ func (d *Daemon) verbFocusWindow(_ *connState, params json.RawMessage) (any, *ve
 		return nil, invalidParam("window", "window, relative and direction are three ways to name one pane. Pass exactly one")
 	}
 
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -135,7 +135,7 @@ func focusResult(sess *Session) map[string]any {
 // named one meant focusing it first, which is a visible change to the session
 // the caller did not ask for and cannot undo without knowing what was focused
 // before.
-func (d *Daemon) verbMoveWindow(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
 		Window    string `json:"window"`
@@ -152,12 +152,12 @@ func (d *Daemon) verbMoveWindow(_ *connState, params json.RawMessage) (any, *ver
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
 	if p.ToSession != "" {
-		return d.moveWindowAcross(sess, p.Window, p.ToSession, p.Workspace, p.Follow)
+		return d.moveWindowAcross(cs, sess, p.Window, p.ToSession, p.Workspace, p.Follow)
 	}
 
 	target := p.Window
@@ -199,8 +199,8 @@ func (d *Daemon) verbMoveWindow(_ *connState, params json.RawMessage) (any, *ver
 
 // moveWindowAcross is move-window with to_session: the window leaves sess and
 // joins the session toName names, with its process still running.
-func (d *Daemon) moveWindowAcross(sess *Session, target, toName string, workspace int, follow bool) (any, *verbError) {
-	dst := d.findTargetSession(toName)
+func (d *Daemon) moveWindowAcross(cs *connState, sess *Session, target, toName string, workspace int, follow bool) (any, *verbError) {
+	dst := d.findTargetSession(cs, toName)
 	if dst == nil {
 		dst = d.manager.GetSessionByID(toName)
 	}
@@ -287,7 +287,7 @@ func moveErr(err error, sess *Session, ws int) *verbError {
 // Named select- rather than set- because the two set-workspace verbs that
 // already exist change a workspace's label and its order, and this changes
 // neither: it changes which one you are looking at.
-func (d *Daemon) verbSelectWorkspace(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSelectWorkspace(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
 		Workspace int    `json:"workspace"`
@@ -299,7 +299,7 @@ func (d *Daemon) verbSelectWorkspace(_ *connState, params json.RawMessage) (any,
 	if p.Workspace == 0 {
 		return nil, invalidParam("workspace", "workspace is required and is the workspace number to show, e.g. 2")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -328,7 +328,7 @@ func (d *Daemon) verbSelectWorkspace(_ *connState, params json.RawMessage) (any,
 // One verb with optional fields rather than rename-window plus minimize-window
 // plus restore-window, which would be three verbs that differ by a word and
 // three round trips to apply together.
-func (d *Daemon) verbSetWindow(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string  `json:"session"`
 		Window    string  `json:"window"`
@@ -341,7 +341,7 @@ func (d *Daemon) verbSetWindow(_ *connState, params json.RawMessage) (any, *verb
 	if p.Name == nil && p.Minimized == nil {
 		return nil, invalidParam("name", "nothing to set: pass name, minimized, or both")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -390,14 +390,14 @@ func (d *Daemon) verbSetWindow(_ *connState, params json.RawMessage) (any, *verb
 // caller wanting to know where to put a pane had to read the workspace count and
 // the names from session-info, the per-workspace tallies from list-windows, and
 // join them itself.
-func (d *Daemon) verbListWorkspaces(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListWorkspaces(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -447,7 +447,7 @@ func countOnWorkspace(state *SessionState, ws int) int {
 // Both are routed. Tiling is a geometry the renderer computes, and a daemon
 // that recorded the flag without one would report a layout the session is not
 // actually in, which is worse than refusing.
-func (d *Daemon) verbSetLayout(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetLayout(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session  string `json:"session"`
 		Tiling   *bool  `json:"tiling"`
@@ -469,7 +469,7 @@ func (d *Daemon) verbSetLayout(_ *connState, params json.RawMessage) (any, *verb
 	if p.MasterCount != 0 && (p.MasterCount < config.MasterCountMin || p.MasterCount > config.MasterCountMax) {
 		return nil, invalidParam("master_count", fmt.Sprintf("use a number from %d to %d", config.MasterCountMin, config.MasterCountMax))
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -569,7 +569,7 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 	case !slices.Contains(splitDirections, p.Direction):
 		return nil, invalidParam("direction", "unknown split direction "+echoName(p.Direction), splitDirections...)
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -710,7 +710,7 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 			Detail:  "Nothing was run. Name the pane to type into with send-keys or send-text.",
 		})
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

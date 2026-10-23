@@ -32,7 +32,7 @@ const optionAgentsEnabled = "agents.enabled"
 // This is the discovery half of the pair. An agent asked to turn the sidebar on
 // had no way to learn that the path is appearance.sidebar.enabled short of
 // reading the docs, and guessing was indistinguishable from succeeding.
-func (d *Daemon) verbListOptions(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListOptions(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Section string `json:"section"`
@@ -46,10 +46,10 @@ func (d *Daemon) verbListOptions(_ *connState, params json.RawMessage) (any, *ve
 	// build, not of a session, so listing them works before any session exists.
 	// A session only adds which of them this session has been told to override.
 	var sess *Session
-	if s := d.findTargetSession(p.Session); s != nil {
+	if s := d.findTargetSession(cs, p.Session); s != nil {
 		sess = s
 	} else if p.Session != "" {
-		return nil, mustResolve(d, p.Session)
+		return nil, mustResolve(d, cs, p.Session)
 	}
 
 	sections := map[string]bool{}
@@ -127,8 +127,8 @@ func sortedKeys(set map[string]bool) []string {
 
 // mustResolve re-runs session resolution for its error, for a caller that has
 // already established the session is missing.
-func mustResolve(d *Daemon, name string) *verbError {
-	_, verr := d.resolveVerbSession(name)
+func mustResolve(d *Daemon, cs *connState, name string) *verbError {
+	_, verr := d.resolveVerbSession(cs, name)
 	if verr != nil {
 		return verr
 	}
@@ -253,7 +253,7 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 		}, nil
 	}
 
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -347,7 +347,7 @@ func (d *Daemon) verbGetOption(cs *connState, params json.RawMessage) (any, *ver
 	if p.Key == "" {
 		return nil, invalidParam("key", `key is required, e.g. "appearance.sidebar.enabled"`)
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

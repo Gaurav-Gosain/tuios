@@ -133,7 +133,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if _, _, verr := d.childWindowBound(cs, "start-agent", cwd); verr != nil {
 		return nil, verr
 	}
-	sess := d.findTargetSession(name)
+	sess := d.findTargetSession(cs, name)
 	created := false
 	if sess == nil {
 		if name == "" {

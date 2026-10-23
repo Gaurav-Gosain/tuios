@@ -89,9 +89,10 @@ the absence of a hint never changes what `code` means.
 Every `result` carries a `type` discriminator string so a generic client can
 dispatch on the result shape without tracking which verb it sent.
 
-Most verbs that name a session accept an empty or omitted `session`, which
-resolves to the most recently active session. The exceptions say so in their
-own `session` parameter description in `list-verbs`:
+Most verbs that name a session accept an empty or omitted `session`. From a
+caller inside a pane, it resolves to the pane's own session. From a caller
+outside every pane, it resolves to the most recently active session. The
+exceptions say so in their own `session` parameter description in `list-verbs`:
 
 - `subscribe` reads an omitted `session` as every session. Its `session` is a
   filter, not a target.
@@ -100,7 +101,7 @@ own `session` parameter description in `list-verbs`:
   `session` and watches every session.
 - `kill-session` and `remove-worktree` require `session` and never guess.
 - `list-hooks`, `list-options`, `list-themes` and `list-glyphs` fall back to the
-  most recently active session, and to the daemon's defaults when there is no
+  caller's session or the most recently active one, and to the daemon's defaults when there is no
   session at all, rather than failing.
 
 ## Versioning and introspection
@@ -1587,7 +1588,7 @@ Response (abridged):
       "verb": "capture-pane",
       "description": "Capture a pane's content.",
       "params": [
-        {"name": "session", "type": "string", "description": "Session name. Omit to target the most recently active session."},
+        {"name": "session", "type": "string", "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."},
         {"name": "source", "type": "string", "description": "Which buffer to capture.",
          "accepted": ["visible", "recent"], "default": "visible"}
       ],

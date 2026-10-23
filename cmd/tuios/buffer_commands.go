@@ -205,7 +205,7 @@ and types it.`,
 	}
 	cmd.Flags().BoolVarP(&raw, "raw", "r", false, "Keep each line feed instead of turning it into a carriage return")
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer (default: the newest)")
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: most recently active)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVarP(&window, "window", "w", "", "Target window by name or ID (default: focused)")
 	cmd.Flags().BoolVarP(&del, "delete", "d", false, "Delete the buffer after the paste")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
