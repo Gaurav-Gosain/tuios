@@ -112,7 +112,7 @@ func isAgentWindow(w WindowState) bool {
 // With all_sessions it answers for every session on the daemon at once, which is
 // what a hub asks a linked host so its listing covers more than the session that
 // host last touched. Every row names its session either way.
-func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListAgents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session     string `json:"session"`
 		All         bool   `json:"all"`
@@ -135,7 +135,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 		}
 		return d.listAgentsAllSessions(p.All, sel), nil
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -507,7 +507,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		})
 	}
 
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -739,7 +739,7 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 			Detail: "Mail from another machine is held so the person decides whether an agent sees it. Only a client attached right now can pass it on, with the nonce its attach reply carried.",
 		})
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -812,7 +812,7 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -981,7 +981,7 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	if p.Window == "" {
 		return nil, invalidParam("window", "window is required: name the agent to ask")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

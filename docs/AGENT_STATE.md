@@ -344,7 +344,7 @@ reports each window's `agent_state`, so a cross-session view can read every
 pane's state in one call.
 
 Targeting follows the same rules as the other window verbs: `-s`/`--session`
-selects the session (default: most recently active), `-w`/`--window` selects the
+selects the session (default: the pane's own session, else the most recently active), `-w`/`--window` selects the
 window by id or name (default: the focused window).
 
 `set-agent-state` is tuios's contract, and the one to build on: it is

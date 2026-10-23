@@ -187,7 +187,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		}
 	} else {
 		var verr *verbError
-		if sess, verr = d.resolveVerbSession(p.Session); verr != nil {
+		if sess, verr = d.resolveVerbSession(cs, p.Session); verr != nil {
 			return nil, verr
 		}
 	}

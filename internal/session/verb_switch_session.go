@@ -157,7 +157,7 @@ func (d *Daemon) switchTarget(cs *connState, p switchSessionParams) (*connState,
 		return d.attachedClientByID(p.Client)
 	}
 	if p.Session != "" {
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}

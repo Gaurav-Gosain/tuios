@@ -19,14 +19,14 @@ import (
 // composed in the client, so the components run there, and the daemon has
 // nothing to report about a dock nobody is drawing.
 
-func (d *Daemon) verbListDockComponents(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListDockComponents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -58,7 +58,7 @@ func (d *Daemon) verbListDockComponents(_ *connState, params json.RawMessage) (a
 	return out, nil
 }
 
-func (d *Daemon) verbRefreshDock(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbRefreshDock(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
 		Component string `json:"component"`
@@ -66,7 +66,7 @@ func (d *Daemon) verbRefreshDock(_ *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

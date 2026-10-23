@@ -713,11 +713,11 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		return grantForbidden(verb, pa, why)
 	}
 	if pa.plugin != "" {
-		return d.checkPluginGrants(verb, pa, params, deny)
+		return d.checkPluginGrants(cs, verb, pa, params, deny)
 	}
 	if pa.grants.Has(GrantAdmin) {
 		if typingVerbs[verb] {
-			return d.holdTypingTarget(verb, pa, params, deny)
+			return d.holdTypingTarget(cs, verb, pa, params, deny)
 		}
 		if grantKind(verb) == scopeSelf {
 			return d.holdOwnRecord(verb, pa, params, deny)
@@ -821,7 +821,7 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	if verr != nil || !typingVerbs[verb] {
 		return out, verr
 	}
-	return d.holdTypingTarget(verb, pa, out, deny)
+	return d.holdTypingTarget(cs, verb, pa, out, deny)
 }
 
 // holdLinkTyping holds a typing call over a link to the rule a pane here is
@@ -839,7 +839,7 @@ func (d *Daemon) holdLinkTyping(cs *connState, verb string, params json.RawMessa
 		LogBasic("Link %s (%s) refused %s: %s", cs.clientID, pa.window, verb, why)
 		return grantForbidden(verb, pa, why)
 	}
-	return d.holdTypingTarget(verb, pa, params, deny)
+	return d.holdTypingTarget(cs, verb, pa, params, deny)
 }
 
 // linkTypingAuthority is what a typing caller over a link holds here, or nil
@@ -900,7 +900,7 @@ var typingVerbs = map[string]bool{
 // The call's window is pinned to the id it resolves to now, so a focus change
 // between this check and the handler cannot send the text somewhere else. A
 // target that does not resolve is left for the handler to report.
-func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
+func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(params, &m); err != nil || m == nil {
 		return params, nil
@@ -912,7 +912,7 @@ func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMess
 		}
 		return s
 	}
-	sess := d.findTargetSession(str("session"))
+	sess := d.findTargetSession(cs, str("session"))
 	if sess == nil {
 		return params, nil
 	}
@@ -1030,7 +1030,7 @@ func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage
 		}
 	} else {
 		if session != "" {
-			if sess := d.findTargetSession(session); sess == nil || sess.ID != own.ID {
+			if sess := d.findTargetSession(nil, session); sess == nil || sess.ID != own.ID {
 				return nil, other("session " + echoName(session) + " is not the pane's own session")
 			}
 		}
@@ -1527,7 +1527,7 @@ func (d *Daemon) verbSetPaneGrants(cs *connState, params json.RawMessage) (any, 
 	if p.Session == "" && caller != nil && caller.session != "" {
 		p.Session = caller.session
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
