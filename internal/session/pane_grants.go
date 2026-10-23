@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
@@ -912,11 +913,14 @@ func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, para
 		}
 		return s
 	}
+	window := str("window")
+	if window == "" && (verb == "send-text" || verb == "send-keys") && pa.inPane() {
+		return nil, typingNeedsWindow(verb)
+	}
 	sess := d.findTargetSession(cs, str("session"))
 	if sess == nil {
 		return params, nil
 	}
-	window := str("window")
 	if verb == "ask-agent" && (window == "" || window == AgentInboxHuman) {
 		// ask-agent needs a window, and human is an inbox, not a pane. The
 		// handler answers both without typing.
@@ -949,6 +953,10 @@ func (d *Daemon) holdTypingTarget(cs *connState, verb string, pa *paneAuth, para
 	}
 	if why := d.typingRefusal(pa, target, blockedChecked); why != "" {
 		return nil, deny(why)
+	}
+	if verr := typingBlocked(verb, pa, target, sess.Name(), allowBlocked); verr != nil {
+		LogBasic("Pane %s refused %s: window %s is on needs_input", shortWindowID(pa.window), verb, shortWindowID(target.ID))
+		return nil, verr
 	}
 	if pa.grants.Has(GrantAdmin) {
 		// A pane holding admin is only checked, not pinned: with no window,
@@ -1125,6 +1133,98 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it, which needs the respond grant"
 	}
 	return ""
+}
+
+// typingAllowBlockedParam is the allow_blocked parameter of the verbs in
+// paneTypingVerbs.
+var typingAllowBlockedParam = verbParam{
+	Name:        "allow_blocked",
+	Type:        "bool",
+	Description: "From a pane, type into a pane on needs_input instead of refusing with agent_blocked. What is typed then answers its prompt, which also needs the respond grant. The person, outside every pane, is not held.",
+	Default:     "false",
+}
+
+// paneTypingVerbs are the typing verbs that type into a pane on needs_input
+// only with allow_blocked. ask-agent has the rule of its own, and run and the
+// queue type only at a shell prompt or into an agent at rest. Of these,
+// send-text and send-keys also need a window from a pane (typingNeedsWindow).
+// paste-buffer does not: tmux's paste-buffer pastes into the caller's own
+// pane, and scripts use it so.
+var paneTypingVerbs = map[string]bool{
+	"send-text":    true,
+	"send-keys":    true,
+	"paste-buffer": true,
+}
+
+// inPane reports whether pa is a caller inside a pane on this machine: not
+// a link, a native plugin, or a process the daemon started outside every
+// pane.
+func (pa *paneAuth) inPane() bool {
+	return pa != nil && pa.plugin == "" && pa.via != "link" && pa.window != "" && pa.window != unplacedWindow
+}
+
+// typingNeedsWindow refuses a typing verb from a pane that names no window.
+// With no window the text goes to the pane the person has in focus, which an
+// agent cannot see and which moves under it. Its own pane is one an agent
+// can always name, with TUIOS_PANE_ID.
+func typingNeedsWindow(verb string) *verbError {
+	return hintedVerbError(ErrVerbInvalidParams, verb+" from a pane needs a window: without one, the text goes to the pane the person has in focus", &VerbHint{
+		Param:   "window",
+		Verb:    "list-windows",
+		Command: "tuios list-windows",
+		Detail:  "Nothing was typed. Name the pane with -w: its name, its id, or its index from list-windows.",
+	})
+}
+
+// typingBlocked refuses a pane's send-text, send-keys or paste-buffer into
+// another pane on needs_input unless the call passes allow_blocked, the rule
+// ask-agent has. typingRefusal has already asked for respond: this holds a
+// pane that has respond as well, because typing into a prompt by mistake
+// answers it, and the mistake is easy to make. allow_blocked says the caller
+// read the prompt and means to answer it.
+//
+// The person, outside every pane, is held to neither rule.
+func typingBlocked(verb string, pa *paneAuth, target WindowState, session string, allowBlocked bool) *verbError {
+	if allowBlocked || !paneTypingVerbs[verb] || !pa.inPane() || target.ID == pa.window || target.AgentState != AgentStateNeedsInput {
+		return nil
+	}
+	what := "a prompt"
+	switch agentBlockedBy(target) {
+	case harness.PromptKindApproval:
+		what = "an approval"
+	case harness.PromptKindQuestion:
+		what = "a question"
+	case harness.PromptKindAuth:
+		what = "a login"
+	}
+	msg := "window " + shortWindowID(target.ID) + " is waiting on " + what + ", and text typed now would answer it"
+	if note := printableClaim(target.AgentMessage, agentMsgMaxSubject); note != "" {
+		msg += ": " + note
+	}
+	return hintedVerbError(ErrVerbAgentBlocked, msg, &VerbHint{
+		Param:   "allow_blocked",
+		Verb:    "peek-prompt",
+		Command: "tuios peek-prompt -s " + session + " -w " + shortWindowID(target.ID),
+		Detail:  "Nothing was typed. Read the prompt with peek-prompt. Tell the person which pane waits, with tuios ask-human. To answer the prompt yourself, pass --allow-blocked.",
+	})
+}
+
+// recheckBlocked repeats typingBlocked right before a typing verb writes: the
+// target can come to a prompt after checkGrants ran. A window of "" is the
+// focused one, which a pane cannot name (typingNeedsWindow).
+func (d *Daemon) recheckBlocked(cs *connState, verb string, sess *Session, windowID string, allowBlocked bool) *verbError {
+	if cs == nil || allowBlocked || windowID == "" {
+		return nil
+	}
+	pa := cs.paneView.Load()
+	if !pa.inPane() {
+		return nil
+	}
+	target, ok := findWindowState(sess.GetState(), windowID)
+	if !ok {
+		return nil
+	}
+	return typingBlocked(verb, pa, target, sess.Name(), false)
 }
 
 // recheckTyping repeats the target check right before a typing verb writes,
