@@ -197,24 +197,23 @@ func defaultMarkLayout(t *testing.T) markLayout {
 
 // TestAgentMarksFollowTheGlyphSet: a glyph set names a two-cell mark for
 // needs_input and a narrow one for working. The rail, the title bar and the
-// cockpit draw the set's marks. A mark and the gap after it take the two
-// cells a one-cell mark and its blank take, so every name starts in the
-// column it starts in with the shipped marks: ✋ runs straight into its name
-// and a narrow mark keeps one blank. Nothing is pushed past the rail's right
-// edge or the title bar's corner. The last frames are saved under
-// artifactDir.
+// cockpit draw the set's marks. The rail's mark column is as wide as the
+// set's widest mark and one blank, so with ✋ in the set every rail name
+// starts one column right of where it starts with the shipped marks, all in
+// one column: ✋ keeps one blank before its name and a narrow mark two.
+// Nothing is pushed past the rail's right edge or the title bar's corner. The
+// last frames are saved under artifactDir.
 //
 // How this could pass wrongly, written down first:
 //   - The mark could be found anywhere, the dock's message included, so the
 //     rail's marks are read right of the rail's header column and only on the
 //     row of the pane's own name.
-//   - The names could share a column that has moved for every row, which is a
-//     column of their own and a gap after every narrow mark that a one-cell
-//     set does not have. The columns are compared with a run on the shipped
-//     marks, not only with each other.
-//   - ✋ could overdraw a blank it was not meant to have. It has to be a
-//     two-cell cell in the column the shipped mark is drawn in, with the
-//     name in the next cell after it.
+//   - The names could share a column that moved by some other amount, or
+//     not at all, which leaves ✋ against its name. The columns are compared
+//     with a run on the shipped marks, not only with each other.
+//   - ✋ could overdraw the blank it is meant to have. It has to be a
+//     two-cell cell in the column the shipped mark is drawn in, with one
+//     blank cell and then the name.
 //   - The title could fit by luck of the window's width. The front window's
 //     title-bar corner has to be in the column of its own bottom corner.
 //   - The cockpit could draw the rail's marks through some other path, so its
@@ -241,23 +240,28 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 		t.Fatalf("the rail's agents section did not list all three panes: %v\n%s", rows, term.Snapshot())
 	}
 	for name, at := range rows {
-		if at[1] != want.railName {
-			t.Errorf("ASSERTION: %s starts at column %d, and at %d with the shipped marks: the glyph set moved the rail's names\n%s",
+		if at[1] != want.railName+1 {
+			t.Errorf("ASSERTION: %s starts at column %d, and at %d with the shipped marks: want one column further right for the set's two-cell mark\n%s",
 				name, at[1], want.railName, term.Snapshot())
 		}
 	}
 	hand := s.Cell(want.railMark, rows["hand-pane"][0])
-	if hand.Content != "✋" || hand.Width != 2 || want.railMark+2 != rows["hand-pane"][1] {
-		t.Errorf("ASSERTION: column %d holds %q, %d cells, and hand-pane starts at %d; want ✋ in two cells and the name straight after it\n%s",
+	if hand.Content != "✋" || hand.Width != 2 || want.railMark+3 != rows["hand-pane"][1] {
+		t.Errorf("ASSERTION: column %d holds %q, %d cells, and hand-pane starts at %d; want ✋ in two cells, one blank, then the name\n%s",
 			want.railMark, hand.Content, hand.Width, rows["hand-pane"][1], term.Snapshot())
+	}
+	if c := s.Cell(want.railMark+2, rows["hand-pane"][0]); c.Content != " " && c.Content != "" {
+		t.Errorf("ASSERTION: hand-pane has %q in the blank after ✋\n%s", c.Content, term.Snapshot())
 	}
 	for name, mark := range map[string]string{"work-pane": "◆", "rest-pane": "○"} {
 		row := rows[name][0]
 		if c := s.Cell(want.railMark, row); c.Content != mark {
 			t.Errorf("ASSERTION: %s wears %q in the mark column, want %q\n%s", name, c.Content, mark, term.Snapshot())
 		}
-		if c := s.Cell(want.railMark+1, row); c.Content != " " && c.Content != "" {
-			t.Errorf("ASSERTION: %s has %q in the one blank after its narrow mark\n%s", name, c.Content, term.Snapshot())
+		for col := want.railMark + 1; col <= want.railMark+2; col++ {
+			if c := s.Cell(col, row); c.Content != " " && c.Content != "" {
+				t.Errorf("ASSERTION: %s has %q at column %d, in the two blanks after its narrow mark\n%s", name, c.Content, col, term.Snapshot())
+			}
 		}
 	}
 	// The sessions row's pane count is the right-hand figure, and it sits in
@@ -267,15 +271,15 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 		line, idx := markRowCells(s, at[0])
 		plus = idx[strings.LastIndex(line, "+")]
 	}
-	homes := markedAt(s, "✋home")
+	homes := markedAt(s, "✋ home")
 	for _, at := range homes {
 		line, idx := markRowCells(s, at[0])
 		count = idx[len(strings.TrimRight(line, " "))-1]
 	}
 	if len(homes) == 0 {
-		t.Errorf("ASSERTION: no rail row reads ✋home, the session's mark straight against its name\n%s", term.Snapshot())
+		t.Errorf("ASSERTION: no rail row reads ✋ home, the session's mark one blank before its name\n%s", term.Snapshot())
 	} else if plus == 0 || count != plus || plus >= cols {
-		t.Errorf("ASSERTION: the ✋home row ends at column %d and the header's + at %d: the row overran the rail\n%s",
+		t.Errorf("ASSERTION: the ✋ home row ends at column %d and the header's + at %d: the row overran the rail\n%s",
 			count, plus, term.Snapshot())
 	}
 

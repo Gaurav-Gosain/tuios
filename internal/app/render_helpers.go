@@ -36,18 +36,21 @@ func agentMarkWidth() int {
 }
 
 // agentMarkLead is how many cells a mark at the head of a row and the gap after
-// it take together, whatever the mark.
-const agentMarkLead = 2
+// it take together: the widest mark the active glyph set draws and one blank.
+// It follows the set rather than the rows on screen, so a pane changing state
+// never moves the text of the others. The built-in marks are one cell, so the
+// lead is two unless a set brings a two-cell mark such as an emoji.
+func agentMarkLead() int {
+	return agentMarkWidth() + 1
+}
 
 // agentMarkGap is the blank between a mark at the head of a row and the row's
-// text. A one-cell mark is followed by one blank and a two-cell mark by none,
-// its second cell being its gap, so the text starts in the same column
-// whichever mark the row wears and whichever glyph set draws it. A terminal
-// draws an emoji narrower than its two cells, so a blank after one would read
-// as a gap twice the width of the others. No mark at all leaves both cells
-// blank.
+// text, so the text starts in the same column whichever mark the row wears. In
+// a set that mixes one-cell and two-cell marks, a one-cell mark is followed by
+// two blanks and a two-cell one by one, which keeps a blank between every mark
+// and its text. No mark at all leaves the whole lead blank.
 func agentMarkGap(mark string) string {
-	return strings.Repeat(" ", max(agentMarkLead-lipgloss.Width(mark), 0))
+	return strings.Repeat(" ", max(agentMarkLead()-lipgloss.Width(mark), 1))
 }
 
 // agentMarkCellRight pads a mark at the end of a right-aligned column to
