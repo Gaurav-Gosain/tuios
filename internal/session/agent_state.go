@@ -449,6 +449,21 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			return err
 		}
 		w := &st.Windows[idx]
+		if ask, asking := s.askShowLocked(w); asking {
+			// The pane shows a question from ask-human over its state. The
+			// report is about the state beneath it, judged and applied
+			// there, and the question stays on top unless the report is
+			// one the person has to see now (ask_human_state.go).
+			shown := w
+			beneath := *shown
+			ask.beneath.put(&beneath)
+			w = &beneath
+			defer func() {
+				if s.settleAskShowLocked(shown, &beneath, ask, applied) {
+					effective = AgentStateNeedsInput
+				}
+			}()
+		}
 		if r.foreignPane {
 			effective = w.AgentState
 			return errAgentReportRefused(agentRefusedForeignPane)

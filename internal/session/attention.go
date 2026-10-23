@@ -653,6 +653,13 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 
 	switch state {
 	case AgentStateNeedsInput.Name():
+		if a.askShownLocked(sessionName, ev.Window, ev.hookMessage) {
+			// The pane shows its own open ask-human question as its state
+			// (ask_human_state.go). The ask item is the row for it, with
+			// the answers, so a question item beside it would only repeat
+			// the question without them.
+			break
+		}
 		it := base
 		it.Kind = AttentionQuestion
 		if ev.hookKind == "approval" {

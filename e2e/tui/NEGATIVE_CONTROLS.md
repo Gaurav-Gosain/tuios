@@ -9110,3 +9110,22 @@ Run on 2026-10-24 on Linux amd64, two runs of each binary.
 
 With the change in place the test passes. The same cut binary also showed
 the stale-daemon warning, because the result no longer carries `new`.
+## ask-human from a pane shows needs_input, and a long question says what to do
+
+`TestAskHumanFromAPaneShowsNeedsInput` runs an agent script in a second pane on a real daemon with an attached client. The script reports working, then asks a question with `ask-human`. While the question waits, the test checks the pane's state and note, reports idle from the same pane, checks that the Inbox holds one ask item with its two answers, and answers it with `1` on the client. The asker must print the answer, and the pane must end on idle with its own note. Pane B, which holds admin and not respond, must then be able to type into the pane. Last, the script reports a real prompt and asks again with a short timeout. The pane must keep its own prompt during and after the wait.
+
+`TestAskHumanLongQuestionSaysWhatToDo` asks a 204-byte question with the CLI. The error must give the length, the limit and the `send-agent-message -w human` command, must not name `list-verbs`, and the question must not reach the Inbox.
+
+Each control cuts one change, rebuilds, runs the test twice, and restores the file, checked byte for byte with sha256. Run on 2026-10-24 on Linux amd64 against feat/ask-human-needs-input.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| origin/main | binary built from origin/main | `TestAskHumanFromAPaneShowsNeedsInput`: "while the question waits: the asking pane shows {State:working Message:refactoring the parser}"; `TestAskHumanLongQuestionSaysWhatToDo`: no length, no command, and "the error still points at list-verbs" | **caught** |
+| No Inbox dedupe | cut the `askShownLocked` check from `noteAgentState` | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: the Inbox holds an ask item and a question item for the pane, and the client never shows "1 needs you" | **caught** |
+| Reports not kept beneath the question | `askShadows` returns false | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: "the pane's idle report replaced the question at once" | **caught** |
+| The end takes the #1054 hold | `endAskShow` sets `promptHold` on the claim, as a report from outside the pane does | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: "B could not type into the pane after its question ended" | **caught** |
+| The question covers a real prompt | cut the `needs_input` guard from `showAsk` | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: "the question was laid over the pane's own prompt: {State:needs_input Message:Deploy now?}" | **caught** |
+
+With the change in place, both tests pass, and so do the four older ask-human tests in the file.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestAskHuman' -v .` from `e2e/tui`. With `TUIOS_E2E_FRAMES` set, the run saves the Inbox frame while the question waits, the frame after the answer, and the CLI error.
