@@ -607,7 +607,7 @@ it matched.`,
 			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow, sendKeysRepeat, sendKeysJSON)
 		},
 	}
-	sendKeysCmd.Flags().StringVarP(&sendKeysSession, "session", "s", "", "Target session (default: most recently active)")
+	sendKeysCmd.Flags().StringVarP(&sendKeysSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	sendKeysCmd.Flags().BoolVarP(&sendKeysLiteral, "literal", "l", false, "Write the argument to the window's terminal unchanged, with no key names")
 	sendKeysCmd.Flags().BoolVarP(&sendKeysRaw, "raw", "r", false, "Treat each character as a separate key (no splitting on space/comma)")
 	sendKeysCmd.Flags().StringVarP(&sendKeysWindow, "window", "w", "", "Target window: id, index, name or id prefix (default: the attached client, else the focused window)")
@@ -807,7 +807,7 @@ exists: get-window and list-windows read windows with the read grant.`,
 			return runCommand(runCommandSession, args[0], args[1:], runCommandJSON)
 		},
 	}
-	runCommandCmd.Flags().StringVarP(&runCommandSession, "session", "s", "", "Target session (default: most recently active)")
+	runCommandCmd.Flags().StringVarP(&runCommandSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	runCommandCmd.Flags().BoolVar(&runCommandList, "list", false, "List all available commands")
 	runCommandCmd.Flags().BoolVar(&runCommandJSON, "json", false, "Output result as JSON (for scripting)")
 	_ = runCommandCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -860,7 +860,7 @@ agents.enabled is the person's switch. A process in a pane cannot set it.
 			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON)
 		},
 	}
-	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: most recently active)")
+	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setConfigCmd.Flags().BoolVar(&setConfigJSON, "json", false, "Output result as JSON, with applied and the reason when it is false")
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -934,7 +934,7 @@ every pane, it is about the focused pane.`,
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.sessionID, "agent-session-id", "", "The harness's own conversation id, stored on the pane for a later resume")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.transcriptPath, "transcript-path", "", "The transcript file the harness writes, joined exactly instead of searched for")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.ifState, "if-state", "", "Apply only when the pane is in one of these comma-separated states")
-	setAgentStateCmd.Flags().StringVarP(&setAgentStateSession, "session", "s", "", "Target session (default: most recently active)")
+	setAgentStateCmd.Flags().StringVarP(&setAgentStateSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateMessage, "message", "m", "", "Optional short note reported with the state")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateSource, "source", "", "Where the state came from: report, osc, screen, stall (default: report)")
@@ -985,7 +985,7 @@ activity the harness hooks report, and are refused here.`,
 				setAgentMetaSource, setAgentMetaTTL, setAgentMetaClear, setAgentMetaJSON)
 		},
 	}
-	setAgentMetaCmd.Flags().StringVarP(&setAgentMetaSession, "session", "s", "", "Target session (default: most recently active)")
+	setAgentMetaCmd.Flags().StringVarP(&setAgentMetaSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setAgentMetaCmd.Flags().StringVarP(&setAgentMetaWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	setAgentMetaCmd.Flags().StringVar(&setAgentMetaSource, "source", "", "Who is writing, so --clear removes only this writer's keys")
 	setAgentMetaCmd.Flags().DurationVar(&setAgentMetaTTL, "ttl", 0, "Drop the keys set by this call after this long (default: keep until removed)")
@@ -1015,7 +1015,7 @@ nested run.`,
 			return runSetAgentSession(setAgentSessionSession, setAgentSessionWindow, setAgentSessionHarness, args[0])
 		},
 	}
-	setAgentSessionCmd.Flags().StringVarP(&setAgentSessionSession, "session", "s", "", "Target session (default: most recently active)")
+	setAgentSessionCmd.Flags().StringVarP(&setAgentSessionSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setAgentSessionCmd.Flags().StringVarP(&setAgentSessionWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	setAgentSessionCmd.Flags().StringVar(&setAgentSessionHarness, "harness", "", "Id of the harness the conversation belongs to, e.g. qwen (required)")
 	_ = setAgentSessionCmd.MarkFlagRequired("harness")
@@ -1038,7 +1038,7 @@ nested run.`,
 			return runGetAgentState(getAgentStateSession, getAgentStateWindow, getAgentStateJSON)
 		},
 	}
-	getAgentStateCmd.Flags().StringVarP(&getAgentStateSession, "session", "s", "", "Target session (default: most recently active)")
+	getAgentStateCmd.Flags().StringVarP(&getAgentStateSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	getAgentStateCmd.Flags().StringVarP(&getAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	getAgentStateCmd.Flags().BoolVar(&getAgentStateJSON, "json", false, "Output result as JSON")
 	_ = getAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -1065,7 +1065,7 @@ did not match, what it compared against.`,
 			return runExplainAgentDetect(explainDetectSession, explainDetectWindow, explainDetectJSON)
 		},
 	}
-	explainAgentDetectCmd.Flags().StringVarP(&explainDetectSession, "session", "s", "", "Target session (default: most recently active)")
+	explainAgentDetectCmd.Flags().StringVarP(&explainDetectSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	explainAgentDetectCmd.Flags().StringVarP(&explainDetectWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	explainAgentDetectCmd.Flags().BoolVar(&explainDetectJSON, "json", false, "Output result as JSON")
 	_ = explainAgentDetectCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -1098,7 +1098,7 @@ a bundled one.`,
 				explainScreenHarness, explainScreenLines, explainScreenJSON)
 		},
 	}
-	explainAgentScreenCmd.Flags().StringVarP(&explainScreenSession, "session", "s", "", "Target session (default: most recently active)")
+	explainAgentScreenCmd.Flags().StringVarP(&explainScreenSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	explainAgentScreenCmd.Flags().StringVarP(&explainScreenWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	explainAgentScreenCmd.Flags().StringVar(&explainScreenHarness, "harness", "", "Run this harness's rules instead of the one the pane is attributed to")
 	explainAgentScreenCmd.Flags().IntVar(&explainScreenLines, "lines", 0, "Read this many lines from the bottom instead of the manifest's")
@@ -1129,7 +1129,7 @@ as typed. End the text with a newline to run it as a command.`,
 			return runSendText(sendTextSession, sendTextWindow, args[0], sendTextJSON)
 		},
 	}
-	sendTextCmd.Flags().StringVarP(&sendTextSession, "session", "s", "", "Target session (default: most recently active)")
+	sendTextCmd.Flags().StringVarP(&sendTextSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	sendTextCmd.Flags().StringVarP(&sendTextWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	sendTextCmd.Flags().BoolVar(&sendTextJSON, "json", false, "Output result as JSON")
 	_ = sendTextCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -1230,7 +1230,7 @@ window as one line with its uri.`,
 			})
 		},
 	}
-	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the current one)")
 	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
@@ -1332,7 +1332,7 @@ popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 	popupCmd.Flags().BoolVar(&popupWait, "wait", false, "Stay open until the command exits, and exit with its status")
 	popupCmd.Flags().BoolVar(&popupCapture, "capture-stdout", false, "Print the command's standard output here instead of in the popup (implies --wait)")
 	popupCmd.Flags().IntVar(&popupTimeout, "timeout", 0, "With --wait: milliseconds to wait (default: as long as the popup is open)")
-	popupCmd.Flags().StringVarP(&popupSession, "session", "s", "", "Target session (default: most recently active)")
+	popupCmd.Flags().StringVarP(&popupSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	// Spelled out, with no shorthands. -w is the window selector in every other
 	// tuios command and -h is cobra's help, so both of the short forms a reader
 	// would reach for already mean something else here.
@@ -1378,7 +1378,7 @@ keyboard does.`,
 				splitWindowName, splitWindowJSON)
 		},
 	}
-	splitWindowCmd.Flags().StringVarP(&splitWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	splitWindowCmd.Flags().StringVarP(&splitWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	splitWindowCmd.Flags().StringVarP(&splitWindowWindow, "window", "w", "", "Pane to split by name or ID (default: focused)")
 	splitWindowCmd.Flags().StringVar(&splitWindowName, "name", "", "Name for the new pane")
 	splitWindowCmd.Flags().BoolVar(&splitWindowJSON, "json", false, "Output result as JSON")
@@ -1415,7 +1415,7 @@ other two forms work on a detached session.`,
 				focusWindowDirection, focusWindowJSON)
 		},
 	}
-	focusWindowCmd.Flags().StringVarP(&focusWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	focusWindowCmd.Flags().StringVarP(&focusWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	focusWindowCmd.Flags().StringVar(&focusWindowRelative, "relative", "", "Focus the next or prev window on this workspace")
 	focusWindowCmd.Flags().StringVar(&focusWindowDirection, "direction", "", "Focus the neighbouring pane: left, right, up or down")
 	focusWindowCmd.Flags().BoolVar(&focusWindowJSON, "json", false, "Output result as JSON")
@@ -1471,7 +1471,7 @@ cannot move.`,
 				moveWindowFollow, moveWindowJSON)
 		},
 	}
-	moveWindowCmd.Flags().StringVarP(&moveWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	moveWindowCmd.Flags().StringVarP(&moveWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	moveWindowCmd.Flags().StringVarP(&moveWindowWindow, "window", "w", "", "Window to move by name or ID (default: focused)")
 	moveWindowCmd.Flags().StringVar(&moveWindowToSession, "to-session", "", "Session to move the window to")
 	moveWindowCmd.Flags().BoolVar(&moveWindowFollow, "follow", false, "Switch to that workspace after moving")
@@ -1521,7 +1521,7 @@ sets as the title.`,
 			return runSetWindow(setWindowSession, setWindowWindow, name, minimized, setWindowJSON)
 		},
 	}
-	setWindowCmd.Flags().StringVarP(&setWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	setWindowCmd.Flags().StringVarP(&setWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setWindowCmd.Flags().StringVarP(&setWindowWindow, "window", "w", "", "Window to change by name or ID (default: focused)")
 	setWindowCmd.Flags().StringVar(&setWindowName, "name", "", "New name, or \"\" to clear it")
 	setWindowCmd.Flags().BoolVar(&setWindowMinimize, "minimize", false, "Minimize the window")
@@ -1553,7 +1553,7 @@ This changes which workspace is displayed. To label one use
 			return runSelectWorkspace(selectWorkspaceSession, workspace, selectWorkspaceJSON)
 		},
 	}
-	selectWorkspaceCmd.Flags().StringVarP(&selectWorkspaceSession, "session", "s", "", "Target session (default: most recently active)")
+	selectWorkspaceCmd.Flags().StringVarP(&selectWorkspaceSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	selectWorkspaceCmd.Flags().BoolVar(&selectWorkspaceJSON, "json", false, "Output result as JSON")
 	_ = selectWorkspaceCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -1574,7 +1574,7 @@ is showing.`,
 			return runListWorkspaces(listWorkspacesSession, listWorkspacesJSON)
 		},
 	}
-	listWorkspacesCmd.Flags().StringVarP(&listWorkspacesSession, "session", "s", "", "Target session (default: most recently active)")
+	listWorkspacesCmd.Flags().StringVarP(&listWorkspacesSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listWorkspacesCmd.Flags().BoolVar(&listWorkspacesJSON, "json", false, "Output as JSON")
 	_ = listWorkspacesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -1631,7 +1631,7 @@ only mean something while the panes are tiled.`,
 				setLayoutRotate, setLayoutMasterPosition, setLayoutMasters, setLayoutJSON)
 		},
 	}
-	setLayoutCmd.Flags().StringVarP(&setLayoutSession, "session", "s", "", "Target session (default: most recently active)")
+	setLayoutCmd.Flags().StringVarP(&setLayoutSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	setLayoutCmd.Flags().StringVar(&setLayoutTiling, "tiling", "", "Tile the panes automatically: true or false")
 	setLayoutCmd.Flags().BoolVar(&setLayoutEqualize, "equalize", false, "Reset the splits: every split to half in BSP, the configured master ratio in master-stack")
 	setLayoutCmd.Flags().BoolVar(&setLayoutRotate, "rotate", false, "Flip the axis of the split holding the focused pane")
@@ -1680,7 +1680,7 @@ the override is shown beside the default.`,
 		},
 	}
 	listOptionsCmd.Flags().StringVar(&listOptionsSearch, "search", "", "Fuzzy search the paths, values and descriptions, best match first")
-	listOptionsCmd.Flags().StringVarP(&listOptionsSession, "session", "s", "", "Target session (default: most recently active)")
+	listOptionsCmd.Flags().StringVarP(&listOptionsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listOptionsCmd.Flags().StringVar(&listOptionsSection, "section", "", "Only options in this group, e.g. sidebar or dock")
 	listOptionsCmd.Flags().BoolVar(&listOptionsJSON, "json", false, "Output as JSON")
 	_ = listOptionsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -1718,7 +1718,7 @@ without a restart.`,
 			return runListThemes(listThemesSession, name, listThemesFilter, listThemesJSON)
 		},
 	}
-	listThemesCmd.Flags().StringVarP(&listThemesSession, "session", "s", "", "Target session (default: most recently active)")
+	listThemesCmd.Flags().StringVarP(&listThemesSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listThemesCmd.Flags().StringVar(&listThemesFilter, "filter", "", "Only ids containing this, e.g. gruvbox")
 	listThemesCmd.Flags().BoolVar(&listThemesJSON, "json", false, "Output as JSON")
 	_ = listThemesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -1766,7 +1766,7 @@ restart. Give it "inherits" to start from a built-in and change one mark.`,
 			return runListGlyphs(listGlyphsSession, name, listGlyphsJSON)
 		},
 	}
-	listGlyphsCmd.Flags().StringVarP(&listGlyphsSession, "session", "s", "", "Target session (default: most recently active)")
+	listGlyphsCmd.Flags().StringVarP(&listGlyphsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listGlyphsCmd.Flags().BoolVar(&listGlyphsJSON, "json", false, "Output as JSON")
 	_ = listGlyphsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -1794,7 +1794,7 @@ The dock is composed by the attached client, so this needs one attached.`,
 			return queryDockComponents(listDockComponentsSession, listDockComponentsJSON)
 		},
 	}
-	listDockComponentsCmd.Flags().StringVarP(&listDockComponentsSession, "session", "s", "", "Target session (default: most recently active)")
+	listDockComponentsCmd.Flags().StringVarP(&listDockComponentsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listDockComponentsCmd.Flags().BoolVar(&listDockComponentsJSON, "json", false, "Output as JSON")
 	_ = listDockComponentsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -1827,7 +1827,7 @@ that need its terminal, so they are only listed while a client is attached.`,
 			return runListHooks(listHooksSession, listHooksEvent, listHooksJSON)
 		},
 	}
-	listHooksCmd.Flags().StringVarP(&listHooksSession, "session", "s", "", "Target session (default: most recently active)")
+	listHooksCmd.Flags().StringVarP(&listHooksSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listHooksCmd.Flags().StringVar(&listHooksEvent, "event", "", "Only the hooks on this event")
 	listHooksCmd.Flags().BoolVar(&listHooksJSON, "json", false, "Output as JSON")
 	_ = listHooksCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -1859,7 +1859,7 @@ thing it reports has changed, instead of the dock polling for it.`,
 			return runRefreshDock(refreshDockSession, name, refreshDockJSON)
 		},
 	}
-	refreshDockCmd.Flags().StringVarP(&refreshDockSession, "session", "s", "", "Target session (default: most recently active)")
+	refreshDockCmd.Flags().StringVarP(&refreshDockSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	refreshDockCmd.Flags().BoolVar(&refreshDockJSON, "json", false, "Output as JSON")
 	_ = refreshDockCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2054,7 +2054,7 @@ non-zero with the timeout error.`,
 	waitForCmd.Flags().Uint64Var(&waitForCommandSeq, "command-seq", 0, "For command-finished: match once the pane has finished more than this many commands")
 	waitForCmd.Flags().StringVar(&waitForSelect, "select", "", "For agent-state: watch the agent panes a selector matches, in every session. Takes no --session, --window or --any-session")
 	waitForCmd.Flags().BoolVar(&waitForEvery, "every", false, "With --select: wait until every matched pane is in one of the --until states, not only the first")
-	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: most recently active)")
+	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused, and for agent-state any window)")
 	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
 	waitForCmd.Flags().StringVar(&waitForUntil, "until", "", "Agent state(s) to wait for, comma-separated, required by agent-state")
@@ -2091,7 +2091,7 @@ To change the name itself, use 'tuios rename-session'.`,
 			return runSetSessionName(setSessionNameSession, name)
 		},
 	}
-	setSessionNameCmd.Flags().StringVarP(&setSessionNameSession, "session", "s", "", "Target session (default: most recently active)")
+	setSessionNameCmd.Flags().StringVarP(&setSessionNameSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = setSessionNameCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var renameSessionSession string
@@ -2145,7 +2145,7 @@ survives a reattach. Pass no accent to clear it.`,
 			return runSetSessionAccent(setSessionAccentSession, accent)
 		},
 	}
-	setSessionAccentCmd.Flags().StringVarP(&setSessionAccentSession, "session", "s", "", "Target session (default: most recently active)")
+	setSessionAccentCmd.Flags().StringVarP(&setSessionAccentSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = setSessionAccentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var setSessionSpaceSession string
@@ -2176,7 +2176,7 @@ global session cannot be in a space.`,
 			return runSetSessionSpace(setSessionSpaceSession, space)
 		},
 	}
-	setSessionSpaceCmd.Flags().StringVarP(&setSessionSpaceSession, "session", "s", "", "Target session (default: most recently active)")
+	setSessionSpaceCmd.Flags().StringVarP(&setSessionSpaceSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = setSessionSpaceCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var setWorkspaceNameSession string
@@ -2203,10 +2203,10 @@ number. The number stays the workspace's identity. Pass no name to clear it.`,
 			return runSetWorkspaceName(setWorkspaceNameSession, workspace, name)
 		},
 	}
-	setWorkspaceNameCmd.Flags().StringVarP(&setWorkspaceNameSession, "session", "s", "", "Target session (default: most recently active)")
+	setWorkspaceNameCmd.Flags().StringVarP(&setWorkspaceNameSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = setWorkspaceNameCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: most recently active)")
+	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = getConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	getConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
@@ -2252,7 +2252,7 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
 			return runTapeExec(tapeExecSession, args[0], tapeExecTimeout)
 		},
 	}
-	tapeExecCmd.Flags().StringVarP(&tapeExecSession, "session", "s", "", "Target session (default: most recently active)")
+	tapeExecCmd.Flags().StringVarP(&tapeExecSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	tapeExecCmd.Flags().DurationVar(&tapeExecTimeout, "timeout", 30*time.Minute, "How long to wait for the tape to end")
 	_ = tapeExecCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2336,7 +2336,7 @@ Use --json for machine-readable output that can be used for scripting.`,
 			return queryWindows(listWindowsSession, listWindowsJSON)
 		},
 	}
-	listWindowsCmd.Flags().StringVarP(&listWindowsSession, "session", "s", "", "Target session (default: most recently active)")
+	listWindowsCmd.Flags().StringVarP(&listWindowsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listWindowsCmd.Flags().BoolVar(&listWindowsJSON, "json", false, "Output as JSON")
 	listWindowsCmd.Flags().BoolVar(&listWindowsAll, "all", false, "List the panes of every session on this machine, one row each")
 	listWindowsCmd.Flags().BoolVar(&listWindowsAllHosts, "all-hosts", false, "Also list the panes of every session on each host in [hosts]")
@@ -2371,7 +2371,7 @@ own session and its fan group.`,
 			return queryWindow(getWindowSession, args, getWindowJSON)
 		},
 	}
-	getWindowCmd.Flags().StringVarP(&getWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	getWindowCmd.Flags().StringVarP(&getWindowSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	getWindowCmd.Flags().BoolVar(&getWindowJSON, "json", false, "Output as JSON")
 	_ = getWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2399,7 +2399,7 @@ The theme is not listed here. It is a session option. Read it with
 			return querySession(sessionInfoSession, sessionInfoJSON)
 		},
 	}
-	sessionInfoCmd.Flags().StringVarP(&sessionInfoSession, "session", "s", "", "Target session (default: most recently active)")
+	sessionInfoCmd.Flags().StringVarP(&sessionInfoSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	sessionInfoCmd.Flags().BoolVar(&sessionInfoJSON, "json", false, "Output as JSON")
 	_ = sessionInfoCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2589,7 +2589,7 @@ would accept a question right now.`,
 	}
 	listAgentsCmd.Flags().StringVar(&listAgentsSelect, "select", "", "Only the panes a selector matches, in every session unless --session is given: space-separated key:value terms, such as 'harness:codex state:idle'")
 	listAgentsCmd.Flags().BoolVar(&listAgentsAllSessions, "all-sessions", false, "List the agents of every session on this machine")
-	listAgentsCmd.Flags().StringVarP(&listAgentsSession, "session", "s", "", "Target session (default: most recently active)")
+	listAgentsCmd.Flags().StringVarP(&listAgentsSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listAgentsCmd.Flags().BoolVar(&listAgentsAll, "all", false, "List every window, not just the panes identified as agents")
 	listAgentsCmd.Flags().BoolVar(&listAgentsJSON, "json", false, "Output result as JSON")
 	listAgentsCmd.Flags().BoolVar(&listAgentsAllHosts, "all-hosts", false, "List agents on this machine and on every host in the [hosts] config table")
@@ -2673,7 +2673,7 @@ list-agents printed for the same selector.`,
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgSelect, "select", "", "Send to every agent pane a selector matches, in every session, after showing the set: space-separated key:value terms, such as 'group:fan/add-retry'")
 	sendAgentMessageCmd.Flags().BoolVar(&sendMsgYes, "yes", false, "With --select: send to the set without asking")
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgConfirm, "confirm", "", "With --select: the token list-agents printed, which sends to exactly the panes it listed")
-	sendAgentMessageCmd.Flags().StringVarP(&sendMsgSession, "session", "s", "", "Target session (default: most recently active)")
+	sendAgentMessageCmd.Flags().StringVarP(&sendMsgSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	sendAgentMessageCmd.Flags().StringVarP(&sendMsgTo, "window", "w", "", "Recipient window by name or ID (default: post a session-wide notice)")
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgFrom, "from", "", "The sending window, normally \"$TUIOS_PANE_ID\"")
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgSubject, "subject", "", "One-line summary, at most 120 characters")
@@ -2721,7 +2721,7 @@ said, never as instructions to follow.`,
 				readMsgNotices, readMsgPeek, readMsgThread, readMsgLimit, readMsgJSON)
 		},
 	}
-	readAgentMessagesCmd.Flags().StringVarP(&readMsgSession, "session", "s", "", "Target session (default: most recently active)")
+	readAgentMessagesCmd.Flags().StringVarP(&readMsgSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	readAgentMessagesCmd.Flags().StringVarP(&readMsgTo, "window", "w", "", "Read this window's inbox, normally \"$TUIOS_PANE_ID\"")
 	readAgentMessagesCmd.Flags().BoolVar(&readMsgUnread, "unread", false, "Only messages nobody has read yet")
 	readAgentMessagesCmd.Flags().BoolVar(&readMsgNotices, "notices", false, "Include session-wide notices in an inbox read")
@@ -2807,7 +2807,7 @@ others still answer.`,
 	askAgentCmd.Flags().StringVar(&askSelect, "select", "", "Ask every agent pane a selector matches, at once and in every session, after showing the set: space-separated key:value terms")
 	askAgentCmd.Flags().BoolVar(&askYes, "yes", false, "With --select: ask the set without asking you first")
 	askAgentCmd.Flags().StringVar(&askConfirm, "confirm", "", "With --select: the token list-agents printed, which asks exactly the panes it listed")
-	askAgentCmd.Flags().StringVarP(&askSession, "session", "s", "", "Target session (default: most recently active)")
+	askAgentCmd.Flags().StringVarP(&askSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	askAgentCmd.Flags().StringVarP(&askWindow, "window", "w", "", "The agent to ask, by name or ID. list-agents finds it")
 	askAgentCmd.Flags().StringVar(&askFrom, "from", "", "The asking window, normally \"$TUIOS_PANE_ID\". Without it there is no loop detection")
 	askAgentCmd.Flags().IntVar(&askReadyTimeout, "ready-timeout", 0, "Milliseconds to wait for the target to stop working (default 30000)")

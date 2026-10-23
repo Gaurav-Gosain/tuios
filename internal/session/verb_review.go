@@ -91,8 +91,8 @@ type reviewRepo struct {
 // reviewTarget resolves the pane a review verb is about, the focused one when
 // window is empty, and the repository under it: the session's worktree when
 // the pane is in it, else the repository holding the pane's directory.
-func (d *Daemon) reviewTarget(sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
-	sess, target, verr := d.resolveVerbPane(sessionName, window)
+func (d *Daemon) reviewTarget(cs *connState, sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
+	sess, target, verr := d.resolveVerbPane(cs, sessionName, window)
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
 	}
@@ -105,8 +105,8 @@ func (d *Daemon) reviewTarget(sessionName, window string) (*Session, WindowState
 
 // resolveVerbPane resolves a session and a window in it, the focused one when
 // window is empty.
-func (d *Daemon) resolveVerbPane(sessionName, window string) (*Session, WindowState, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) resolveVerbPane(cs *connState, sessionName, window string) (*Session, WindowState, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, WindowState{}, verr
 	}
@@ -221,7 +221,7 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	if p.Index != "" && (p.Base != "" || p.Against != "" || p.Uncommitted) {
 		return nil, invalidParam("index", "index reads the worktree's own index, so it takes no base, against or uncommitted")
 	}
-	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.reviewTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
@@ -321,7 +321,7 @@ func (d *Daemon) reviewSibling(cs *connState, sess *Session, repo reviewRepo, na
 			Detail: "Nothing was read. against names another attempt of the same fan. Leave it out to review against the base.",
 		})
 	}
-	sib, info, verr := d.worktreeTarget(name)
+	sib, info, verr := d.worktreeTarget(cs, name)
 	if verr != nil {
 		return nil, verr
 	}
@@ -532,7 +532,7 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 			return nil, verr
 		}
 	}
-	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.reviewTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
@@ -660,7 +660,7 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.reviewTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}

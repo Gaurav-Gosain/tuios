@@ -83,8 +83,8 @@ var fanReadyStates = map[string]bool{
 
 // worktreeTarget is what every worktree verb needs from a session: the
 // session itself and its record, or the error saying it has none.
-func (d *Daemon) worktreeTarget(name string) (*Session, *WorktreeInfo, *verbError) {
-	sess, verr := d.resolveVerbSession(name)
+func (d *Daemon) worktreeTarget(cs *connState, name string) (*Session, *WorktreeInfo, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, name)
 	if verr != nil {
 		return nil, nil, verr
 	}
@@ -371,7 +371,7 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
-func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session     string `json:"session"`
 		Force       bool   `json:"force"`
@@ -386,7 +386,7 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 			"session is required (remove-worktree never guesses which worktree to remove)",
 			&VerbHint{Param: "session", Command: "tuios worktree ls", Available: d.worktreeSessionNames()})
 	}
-	sess, info, verr := d.worktreeTarget(p.Session)
+	sess, info, verr := d.worktreeTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

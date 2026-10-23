@@ -71,14 +71,14 @@ type searchPane struct {
 // localPanes lists the panes with a PTY on this daemon in the sessions named,
 // or in every session when names is empty, the pane with the newest output
 // first.
-func (d *Daemon) localPanes(names []string) ([]searchPane, *verbError) {
+func (d *Daemon) localPanes(cs *connState, names []string) ([]searchPane, *verbError) {
 	var sessions []*Session
 	if len(names) == 0 {
 		sessions = d.manager.AllSessions()
 	} else {
 		seen := map[string]bool{}
 		for _, name := range names {
-			sess, verr := d.resolveVerbSession(name)
+			sess, verr := d.resolveVerbSession(cs, name)
 			if verr != nil {
 				return nil, verr
 			}
@@ -220,7 +220,7 @@ func matchWindow(line string, from, to int) (text string, start, end int) {
 	return text, runeFrom - first, min(runeTo-first, searchTextMax)
 }
 
-func (d *Daemon) verbSearchPanes(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSearchPanes(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Query    string   `json:"query"`
 		Regex    bool     `json:"regex"`
@@ -258,7 +258,7 @@ func (d *Daemon) verbSearchPanes(_ *connState, params json.RawMessage) (any, *ve
 	limit := clampCount(p.Max, searchMaxDefault, searchMaxCap)
 	perPane := clampCount(p.PerPane, searchPerPaneDefault, searchPerPaneCap)
 
-	panes, verr := d.localPanes(p.Sessions)
+	panes, verr := d.localPanes(cs, p.Sessions)
 	if verr != nil {
 		return nil, verr
 	}
@@ -321,7 +321,7 @@ func clampCount(v, def, limit int) int {
 	return min(v, limit)
 }
 
-func (d *Daemon) verbCommandHistory(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbCommandHistory(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -335,7 +335,7 @@ func (d *Daemon) verbCommandHistory(_ *connState, params json.RawMessage) (any, 
 	var panes []searchPane
 	switch {
 	case p.Window != "":
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}
@@ -350,11 +350,11 @@ func (d *Daemon) verbCommandHistory(_ *connState, params json.RawMessage) (any, 
 		}
 	case p.Session != "":
 		var verr *verbError
-		if panes, verr = d.localPanes([]string{p.Session}); verr != nil {
+		if panes, verr = d.localPanes(cs, []string{p.Session}); verr != nil {
 			return nil, verr
 		}
 	default:
-		panes, _ = d.localPanes(nil)
+		panes, _ = d.localPanes(cs, nil)
 	}
 	insensitive := smartCaseInsensitive("smart", p.Query)
 	query := p.Query

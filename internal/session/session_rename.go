@@ -39,7 +39,7 @@ func RenamedSessionTarget(err error) (current string, ok bool) {
 	return m[2], true
 }
 
-func (d *Daemon) verbRenameSession(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbRenameSession(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Name    string `json:"name"`
@@ -47,7 +47,7 @@ func (d *Daemon) verbRenameSession(_ *connState, params json.RawMessage) (any, *
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

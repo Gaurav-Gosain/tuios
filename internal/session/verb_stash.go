@@ -32,7 +32,7 @@ const stashTransferMaxBytes = 8 << 20
 // verbStashPut copies a file into the session's store and answers with the
 // stored path. With content the bytes come in the request, for a file on
 // another machine, and path is only the name they are stored under.
-func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Path    string `json:"path"`
@@ -45,7 +45,7 @@ func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, invalidParam("path", "path is required: name the file to store")
 	}
 
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -111,14 +111,14 @@ func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbE
 }
 
 // verbStashList reports what a session's store holds.
-func (d *Daemon) verbStashList(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbStashList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -168,7 +168,7 @@ func (d *Daemon) verbStashList(_ *connState, params json.RawMessage) (any, *verb
 // verbStashGet hands back the bytes of one stashed file, so a file can cross a
 // link. Only a path this session's store put there is served: the stash is
 // not a way to read the daemon's disk.
-func (d *Daemon) verbStashGet(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbStashGet(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Path    string `json:"path"`
@@ -179,7 +179,7 @@ func (d *Daemon) verbStashGet(_ *connState, params json.RawMessage) (any, *verbE
 	if p.Path == "" {
 		return nil, invalidParam("path", "path is required: name the stashed file to read")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

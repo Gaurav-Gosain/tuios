@@ -436,7 +436,7 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	if err != nil {
 		return nil, tmlInvalid(nil, err)
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -1066,14 +1066,14 @@ func (d *Daemon) verbTMLGet(cs *connState, params json.RawMessage) (any, *verbEr
 }
 
 // verbTMLList lists the open surfaces of a session.
-func (d *Daemon) verbTMLList(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbTMLList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
