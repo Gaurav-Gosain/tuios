@@ -18,6 +18,7 @@ package childproc
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -30,7 +31,8 @@ import (
 // get code run as a child of the daemon. core.fsmonitor only speeds git up,
 // so it is off.
 func gitArgs(name string, args []string) []string {
-	if name != "git" {
+	// A path to git is git too, here or in a later caller.
+	if base := strings.TrimSuffix(filepath.Base(name), ".exe"); base != "git" {
 		return args
 	}
 	return append([]string{"-c", "core.fsmonitor=false"}, args...)
