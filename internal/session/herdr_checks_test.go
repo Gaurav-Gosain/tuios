@@ -123,6 +123,14 @@ func TestHerdrVerbMethodsRefuseAPluginWithNoGrants(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("native plugins run only where the kernel names a caller")
 	}
+	// The person's shell starts on its own time, and its prompt raises the
+	// pane's revision. A prompt that lands between the two snapshots below
+	// reads as a change the calls made, so the shell prints a prompt the test
+	// can wait for, and the first snapshot is taken once it shows. After it the
+	// shell writes nothing until it reads input, so any later change to the
+	// pane is a call that got through.
+	const prompt = "tuios-test-ready>"
+	t.Setenv("PS1", prompt+" ")
 	d, sp := startTestDaemon(t)
 	ws := herdrOK(t, "workspace.create", herdrDial(t, sp, "workspace.create", map[string]any{"cwd": t.TempDir(), "focus": false, "label": "Demo"}))
 	ids := map[string]string{
@@ -130,6 +138,11 @@ func TestHerdrVerbMethodsRefuseAPluginWithNoGrants(t *testing.T) {
 		"TAB":  ws["tab"].(map[string]any)["tab_id"].(string),
 		"PANE": ws["root_pane"].(map[string]any)["pane_id"].(string),
 	}
+
+	herdrOK(t, "pane.wait_for_output", herdrDial(t, sp, "pane.wait_for_output", map[string]any{
+		"pane_id": ids["PANE"], "source": "visible",
+		"match": map[string]any{"type": "substring", "value": prompt}, "timeout_ms": 15_000,
+	}))
 
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	p := &herdrplugin.Plugin{PluginID: "t.none", Format: herdrplugin.FormatTuios, PluginRoot: t.TempDir(), Held: []string{}}
