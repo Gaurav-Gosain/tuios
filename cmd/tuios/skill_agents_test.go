@@ -19,10 +19,27 @@ import (
 
 // TestSkillListsEveryErrorCode holds the error catalogue to the protocol's own.
 // A code the skill omits is one a caller matching on codes will not handle.
+//
+// Each code also needs a row in the table of what to do, so an agent that
+// meets it finds the next step, not only the name.
 func TestSkillListsEveryErrorCode(t *testing.T) {
+	text := skillText(t, "errors")
+	fixed := map[string]bool{}
+	for line := range strings.SplitSeq(text, "\n") {
+		cells := strings.Split(line, "|")
+		if len(cells) < 3 || !strings.HasPrefix(strings.TrimSpace(cells[1]), "`") {
+			continue
+		}
+		for _, m := range regexp.MustCompile("`([a-z_]+)`").FindAllStringSubmatch(cells[1], -1) {
+			fixed[m[1]] = true
+		}
+	}
 	for _, code := range session.VerbErrorCodes() {
-		if !strings.Contains(skillText(t, "errors"), "`"+code+"`") {
+		if !strings.Contains(text, "`"+code+"`") {
 			t.Errorf("the skill does not document the %q error code", code)
+		}
+		if !fixed[code] {
+			t.Errorf("the errors topic has no row that says what to do about %q", code)
 		}
 	}
 }
