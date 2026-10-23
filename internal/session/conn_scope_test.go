@@ -261,6 +261,8 @@ func TestRestrictedSubscribeCarriesOnlyTheSessionsItReaches(t *testing.T) {
 		t.Fatalf("subscribe ack = %v", ack)
 	}
 
+	// The person, outside every pane: a pane reports only for itself.
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	plain := dialVerb(t, sp)
 	setAgentState(t, plain, "b", b1, "working", "", "")
 	setAgentState(t, plain, "a", a1, "working", "", "")

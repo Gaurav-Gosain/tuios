@@ -8538,3 +8538,25 @@ Run on 2026-10-23 on Linux, each against a build with lines cut, built to a sepa
 | The same | yes, both sides | the daemon lines and the `WorkspaceLayoutMode` line in `renumberLocalWorkspaces` cut | `TestLayoutModeMovesWithItsWorkspace` (the same message) | **caught** |
 
 The fixed build passes it.
+
+## A pane reports agent state only for its own window
+
+`TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` runs on a daemon in the
+default open mode, where every pane holds admin. Pane A reports
+`needs_input` for itself with no `--window` and waits on a prompt. Pane B runs
+`set-agent-state -w A working`, then `send-keys -w A 'y Enter'`. Both are
+refused and A's prompt stays unanswered. Then the person's CLI marks A
+`working` from outside every pane, which works, and B's keys are still refused
+because A has drawn nothing since its prompt. Given `respond`, B marks A and
+answers the prompt.
+
+Run on 2026-10-23 on Linux.
+
+| Control | Tests that fail | Verdict |
+|---|---|---|
+| a binary built from origin/main at `e2fa758d5` | the test ("B answered A's prompt without respond": `SET_EXIT=0`, `SK_EXIT=0`, `ANSWERED:y`) | **caught** |
+| `promptStillShown` made to return false | the test ("B answered A's prompt after the person marked A working": `SK2_EXIT=0`, `ANSWERED:y`) | **caught** |
+| The positive half | none: B with `respond` marks A and its keys answer the prompt | **guard** |
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
+-run '^TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt$' -v .` from `e2e/tui`.

@@ -504,6 +504,13 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			next.blocker = true
 			next.prior = priorOf(claim, prev, w.AgentHarness)
 		}
+		switch {
+		case r.State == AgentStateNeedsInput:
+		case prev == AgentStateNeedsInput:
+			next.promptLeftAt = time.Now().UnixNano()
+		default:
+			next.promptLeftAt = claim.promptLeftAt
+		}
 		if next.blocker {
 			// A blocker over a herdr reporter's claim still follows the
 			// reporter's process, so a crashed harness clears the pane even
@@ -674,6 +681,28 @@ const agentBlockerOverrideGrace = 2 * time.Second
 // inference about the process.
 func agentStateBlocks(state AgentState) bool {
 	return state == AgentStateNeedsInput
+}
+
+// promptStillShown reports whether w left needs_input and its pane has drawn
+// nothing since. The prompt it waited on is then still on the screen, and
+// keys typed into it answer it, whatever state was reported after. A report
+// from someone else, or a progress sequence written into the pane's
+// terminal, moves the state without touching the screen.
+func (s *Session) promptStillShown(w WindowState) bool {
+	if w.PTYID == "" {
+		return false
+	}
+	s.stateMu.RLock()
+	left := s.agentClaims[w.ID].promptLeftAt
+	s.stateMu.RUnlock()
+	if left == 0 {
+		return false
+	}
+	pty := s.GetPTY(w.PTYID)
+	if pty == nil || pty.IsExited() {
+		return false
+	}
+	return pty.LastOutput() <= left
 }
 
 // blockerOverridesClaim is the one hole in the source ranking: a screen rule

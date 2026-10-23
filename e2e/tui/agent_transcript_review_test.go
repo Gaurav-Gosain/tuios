@@ -247,8 +247,9 @@ func TestTranscriptPathRules(t *testing.T) {
 		}
 		return res
 	}
-	if res := inPane(winA, winB, "AFORB"); !strings.Contains(fmt.Sprint(res["transcript_refused"]), "own pane") {
-		t.Fatalf("pane A named a transcript for pane B: want transcript_refused, got %v", res)
+	// The whole report is refused: a pane reports only for its own window.
+	if res := inPane(winA, winB, "AFORB"); !strings.Contains(fmt.Sprint(res["error"]), "reports only for its own window") {
+		t.Fatalf("pane A reported for pane B: want the report refused, got %v", res)
 	}
 	r.noTranscript(winB, "pane A named a transcript for pane B")
 	if res := inPane(winB, winB, "BFORB"); res["transcript_refused"] != nil {

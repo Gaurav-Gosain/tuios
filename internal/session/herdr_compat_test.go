@@ -179,7 +179,9 @@ func TestHerdrPaneReportsOnlyForItself(t *testing.T) {
 	}
 	f.wantState(t, f.b, AgentStateNone, "the other pane")
 
-	f.caller = ""
+	// The person: a process outside every pane. The fixture's pid names no
+	// process, which would read as a caller that handed its socket on.
+	f.caller, f.pid = "", 0
 	if _, e := f.call(t, "pane.report_agent", map[string]any{"pane_id": herdrPaneID(f.sess.ID, f.b), "source": "mirror", "agent": "claude", "state": "working", "seq": 1}); e != "" {
 		t.Fatalf("a report from outside every pane was refused: %s", e)
 	}
@@ -194,6 +196,9 @@ func TestHerdrPaneReportsOnlyForItself(t *testing.T) {
 		t.Fatal("notification.show from outside every pane went through")
 	}
 
+	// A process the daemon placed in no pane, such as one that handed its
+	// socket on and exited, holds the strict default in no session.
+	f.pid = 1 << 30
 	f.d.onConfigReload(&config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{"read", "write"}}}}, nil)
 	if _, e := f.call(t, "pane.report_agent", map[string]any{"pane_id": f.a, "source": "mirror", "agent": "claude", "state": "working", "seq": 2}); !strings.HasPrefix(e, "forbidden") {
 		t.Fatalf("under strict a process outside every pane answered %q, want forbidden", e)
