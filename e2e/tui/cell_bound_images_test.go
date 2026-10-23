@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
@@ -117,18 +118,31 @@ func TestCellBoundImageHostGetsGlyphs(t *testing.T) {
 			origin := showFixture(t, term, f, "IMGTOP")
 			out := host.bytes()[before:]
 			s := term.Screen()
+			paintedIn := func(s tuitest.Screen) int {
+				n := 0
+				for r := range f.rows {
+					for c := range f.cols {
+						if s.Cell(origin.X+c, origin.Y+r).Bg.Kind != tuitest.ColorDefault {
+							n++
+						}
+					}
+				}
+				return n
+			}
+			painted := paintedIn(s)
+			// The glyphs reach the host over more than one frame, and on a
+			// loaded machine a single read landed between them (60 of 80
+			// cells). Where every cell has to be painted, read until it is.
+			// Where none may be, one read is the stricter test.
+			for deadline := time.Now().Add(5 * time.Second); xtermJS && painted != f.cols*f.rows && time.Now().Before(deadline); {
+				time.Sleep(50 * time.Millisecond)
+				s = term.Screen()
+				painted = paintedIn(s)
+			}
 			savePNG(t, s, shot.XTermPalette(), artifactDir(t), "after")
 
 			kitty := bytes.Contains(out, []byte("\x1b_G"))
 			sixel := sixelDCS.Match(out)
-			painted := 0
-			for r := range f.rows {
-				for c := range f.cols {
-					if s.Cell(origin.X+c, origin.Y+r).Bg.Kind != tuitest.ColorDefault {
-						painted++
-					}
-				}
-			}
 			t.Logf("%s: kitty sent %v, sixel sent %v, %d of %d picture cells painted",
 				tc.name, kitty, sixel, painted, f.cols*f.rows)
 
