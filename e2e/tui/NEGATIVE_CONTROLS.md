@@ -9169,3 +9169,40 @@ Each control cuts one change, rebuilds, runs the test twice, and restores the fi
 With the change in place, both tests pass, and so do the four older ask-human tests in the file.
 
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestAskHuman' -v .` from `e2e/tui`. With `TUIOS_E2E_FRAMES` set, the run saves the Inbox frame while the question waits, the frame after the answer, and the CLI error.
+## capture-pane --scrollback keeps the last 3 commands
+
+Two tests cover the default of `capture-pane --scrollback` with no `--lines`.
+
+`TestCaptureScrollbackKeepsTheLastCommands` runs four short commands in a bash
+pane that sends OSC 133 marks. The default capture must hold the last three,
+each with its command line, and not the oldest one. Then the pane prints
+10,000 lines in one command. The capture must stay at 2000 lines or fewer,
+keep the two short commands whole, and keep the long command's command line,
+`BIG1` and `BIG10000`. `BIG5000` must go, and one `… N lines omitted …` line
+must replace the middle. The marker count, the stderr note and the JSON
+`lines_omitted` must agree, and kept plus omitted lines must add up to the
+command. The positive half: `--lines 0` gives every line.
+
+`TestCaptureScrollbackFallsBackToLinesWithoutMarks` prints 2500 numbered lines
+in a `/bin/sh` pane, which sends no marks. The positive half: `--lines 0` gives
+every line and no note. The capped half: the capture keeps the last 2000
+lines, and the stderr note says the shell sends no marks, gives the count and
+names `tuios doctor shell`. With `--json`, `lines_omitted` equals the whole
+history minus 2000 and `command_marks` is false. `--lines 50` gives 50 lines
+and no note.
+
+Run on 2026-10-24 on Linux amd64, two runs of each binary. Each cut was
+restored after its build and checked with sha256.
+
+| Control | How | Result | Verdict |
+| --- | --- | --- | --- |
+| origin/main | binary built from origin/main | 2 runs of 2: the fallback test fails with "CAP1 present=true, CAP2500 present=true, 2502 lines", the commands test with "the capture holds the fourth command back" | **caught** |
+| no default cap | `capped := false && ...` in the capture-pane command | 2 runs of 2, both tests fail as on origin/main | **caught** |
+| no default commands | `commands = 0` where the default sets `captureDefaultCommands` | 2 runs of 2: the fallback note lacks "no command marks", and the commands test fails with "the capture holds the fourth command back" | **caught** |
+| cut from the front | `head := 0` in `trimMiddle` | 2 runs of 2: the commands test fails with "the trimmed capture lacks" the long command's command line | **caught** |
+
+With the change in place both tests pass, and so does
+`TestScrollbackResizeCaptureCountsMatch`, which captures with `--scrollback`.
+An origin/main daemon with the new CLI keeps 2000 lines and prints a note to
+run `tuios restart-server`. `--commands` against it exits 1 with the same
+advice.

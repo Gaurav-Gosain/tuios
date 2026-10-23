@@ -138,6 +138,8 @@ tuios list-windows --json | jq -r '.windows[] | "\(.index)\t\(.window_id)"' |
   done
 ```
 
+`capture-pane --scrollback` keeps the last 3 commands in at most 2000 lines, and `--commands N` keeps the last N. Give `--lines 0` only when you need the whole history.
+
 A person can do the same by hand with multi copy mode. They add the panes to
 multifocus, press `Ctrl+B [`, search once, press `V` and `y`. tuios copies the
 selected line of each pane as plain text, markdown or JSON. `Y` saves it to a

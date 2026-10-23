@@ -3693,8 +3693,9 @@ tuios capture-pane [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
-- `-S, --scrollback`: Include the full scrollback history
-- `--lines <N>`: Keep only the last N lines (0 keeps all)
+- `-S, --scrollback`: Include the scrollback history. Without `--lines`, the capture keeps the last 3 commands in at most 2000 lines
+- `--commands <N>`: Keep the last N commands of the scrollback in at most 2000 lines. It needs the shell's OSC 133 marks. Takes no `--lines`, `--last-command` or `--unwrap`
+- `--lines <N>`: Keep only the last N lines. `0` keeps all
 - `--ansi`: Preserve ANSI escape codes (colors, styles)
 - `--resolved`: Rewrite ANSI index colours (31, 91, 38;5;n, ...) to 24-bit
   RGB, so a capture matches what a themed client paints. Indices below 16 come
@@ -3723,13 +3724,39 @@ is for consumers that render the capture verbatim, and implies `--ansi`.
 the cursor do not count. This is how you read the tail of a long scrollback
 without pulling all of it.
 
+A history holds 10,000 lines or more, which is too much for an agent to read.
+So `--scrollback` without `--lines` keeps the last 3 commands. It finds them
+by the shell's OSC 133 marks. Each command runs from its prompt to the next
+prompt. The capture keeps at most 2000 lines. A command whose output is too
+long keeps its command line, the start of its output and its end. One line
+replaces the middle, for example `… 48,213 lines omitted …`. `--commands N`
+keeps the last N commands under the same limit.
+
+A shell that sends no marks gives the last 2000 lines. So does `--unwrap`,
+because joined lines do not match the marks. `tuios doctor shell` prints the
+lines that turn the marks on.
+
+When the capture leaves something out, a note on stderr says what. With
+`--json`, `lines_omitted` gives the count, `command_marks` says whether the
+marks cut the capture, and `commands` gives each command's kept and omitted
+lines. Use `--lines 0` to get the whole history. The `capture-pane` verb
+itself has no cap, so the tmux shim and the MCP server get the whole history
+as before. A daemon older than `--commands` refuses it, and the command tells
+you to run `tuios restart-server`.
+
 **Examples:**
 ```bash
 # Capture the focused window's visible screen
 tuios capture-pane
 
-# Capture a specific window with its scrollback
+# Capture the last 3 commands of a window
 tuios capture-pane -w build --scrollback
+
+# Capture the last 10 commands
+tuios capture-pane -w build --commands 10
+
+# Capture the whole scrollback
+tuios capture-pane -w build --scrollback --lines 0
 
 # Read the last 40 lines a build printed
 tuios capture-pane -w build --scrollback --lines 40

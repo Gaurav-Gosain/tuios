@@ -797,7 +797,23 @@ type captureOptions struct {
 	lines                      int
 	lastCommand, unwrap, trim  bool
 	jsonOut                    bool
+	// capped is true when lines (and commands) are the default cap rather
+	// than the caller's own --lines.
+	capped bool
+	// commands asks for the last N shell commands, under lines in total.
+	commands         int
+	explicitCommands bool
 }
+
+// captureScrollbackCap is the most lines capture-pane --scrollback keeps when
+// no --lines is given, and captureDefaultCommands how many commands it keeps.
+// A full history is 10,000 lines or more, which floods an agent's context.
+// The cap lives here and not in the verb: the tmux shim, the MCP server and
+// the web client call capture-pane for the whole history.
+const (
+	captureScrollbackCap   = 2000
+	captureDefaultCommands = 3
+)
 
 func runCapturePane(o captureOptions) error {
 	t, err := dialTarget(o.session, o.window)
@@ -826,7 +842,22 @@ func runCapturePane(o captureOptions) error {
 	if o.trim {
 		params["trim"] = true
 	}
+	if o.commands > 0 {
+		params["commands"] = o.commands
+	}
 	raw, err := t.client.Call("capture-pane", t.params(params))
+	staleCommands := false
+	if call, ok := errors.AsType[*session.VerbCallError](err); ok && o.commands > 0 && call.Code == session.ErrVerbInvalidParams &&
+		call.Hint != nil && call.Hint.Param == "commands" && strings.Contains(call.Message, "has no parameter") {
+		if o.explicitCommands {
+			return reportVerbError(errStaleCommands, o.jsonOut)
+		}
+		// The default asked for commands, not the caller: fall back to the
+		// line cap, and say why in the note.
+		delete(params, "commands")
+		staleCommands = true
+		raw, err = t.client.Call("capture-pane", t.params(params))
+	}
 	if err != nil {
 		if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbInvalidParams &&
 			call.Hint != nil && (call.Hint.Param == "unwrap" || call.Hint.Param == "trim") {
@@ -843,11 +874,78 @@ func runCapturePane(o captureOptions) error {
 	if json.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
 		fmt.Fprintln(os.Stderr, "warning: "+errStaleCapture.Error()+".")
 	}
+	if (o.capped || o.explicitCommands) && !o.jsonOut {
+		if note := captureCapNote(raw, o.explicitCommands, staleCommands); note != "" {
+			fmt.Fprintln(os.Stderr, note)
+		}
+	}
 	if o.jsonOut {
 		return printVerbResultOn(t, raw, o.jsonOut)
 	}
 	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
 }
+
+// captureCapNote is the stderr line for a scrollback capture the default cap
+// or --commands shortened, or "" when it left nothing out. A daemon from
+// before lines_omitted does not say how many lines it left out, so a capture
+// of exactly the cap is reported without a count.
+func captureCapNote(raw json.RawMessage, explicit, stale bool) string {
+	var res struct {
+		Content           string            `json:"content"`
+		LinesOmitted      *int              `json:"lines_omitted"`
+		CommandMarks      *bool             `json:"command_marks"`
+		Commands          []json.RawMessage `json:"commands"`
+		CommandsAvailable int               `json:"commands_available"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return ""
+	}
+	const tail = " To get the whole history, use --lines 0."
+	omitted := 0
+	if res.LinesOmitted != nil {
+		omitted = *res.LinesOmitted
+	}
+	full := strings.Count(strings.TrimSuffix(res.Content, "\n"), "\n")+1 >= captureScrollbackCap
+	switch {
+	case res.CommandMarks != nil && *res.CommandMarks:
+		shown := len(res.Commands)
+		if res.CommandsAvailable <= shown && omitted == 0 {
+			return ""
+		}
+		note := fmt.Sprintf("note: capture-pane shows the last %d commands", shown)
+		if res.CommandsAvailable > shown {
+			note += fmt.Sprintf(" of %s", commas(res.CommandsAvailable))
+		}
+		note += "."
+		if omitted > 0 {
+			note += fmt.Sprintf(" It left out %s lines from the middle of their output.", commas(omitted))
+		}
+		return note + tail
+	case res.CommandMarks != nil:
+		if omitted == 0 && !explicit {
+			return ""
+		}
+		note := fmt.Sprintf("note: the shell in this pane sends no command marks, so capture-pane shows the last %s lines.", commas(captureScrollbackCap))
+		if omitted > 0 {
+			note += fmt.Sprintf(" It left out %s older lines.", commas(omitted))
+		}
+		return note + " Run 'tuios doctor shell' to turn the marks on." + tail
+	case stale:
+		if omitted == 0 && !(res.LinesOmitted == nil && full) {
+			return ""
+		}
+		return fmt.Sprintf("note: the running daemon is older than this tuios, so capture-pane shows the last %s lines. Run 'tuios restart-server' to update it.", commas(captureScrollbackCap)) + tail
+	case omitted > 0:
+		return fmt.Sprintf("note: capture-pane shows the last %s lines. It left out %s older lines.", commas(captureScrollbackCap), commas(omitted)) + tail
+	case res.LinesOmitted == nil && full:
+		return fmt.Sprintf("note: capture-pane shows the last %s lines. Older lines can be left out.", commas(captureScrollbackCap)) + tail
+	}
+	return ""
+}
+
+// errStaleCommands is what capture-pane --commands says when the daemon does
+// not know the commands parameter, worded like errStaleCapture.
+var errStaleCommands = errors.New("the running daemon is older than this tuios and does not know --commands. Run 'tuios restart-server' to update it")
 
 // errStaleCapture is what capture-pane says when the daemon does not know
 // unwrap or trim. Since v0.8.0 a daemon refuses a parameter it does not know,
