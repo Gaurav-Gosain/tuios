@@ -62,7 +62,7 @@ var agentOnlyVerbs = []string{
 	"get-agent-state", "report-agent-activity", "agent-activity",
 	"agent-transcript",
 	// Mail.
-	"send-agent-message", "release-agent-message", "read-agent-messages",
+	"send-agent-message", "release-agent-message", "read-agent-messages", "agent-mail-notice",
 	// The Inbox, attention and approvals.
 	"list-attention", "dismiss-attention", "mark-attention",
 	"peek-prompt", "respond", "request-approval", "reply-approval",

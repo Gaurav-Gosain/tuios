@@ -275,6 +275,65 @@ type Decision struct {
 	// harness takes a decision back from the hook. The hook may then hold the
 	// prompt for an answer from the Inbox. See approval.go.
 	Approval *Approval `json:"approval,omitempty"`
+	// Context is set for an event whose output the harness adds to the
+	// agent's context, where the hook may tell the agent about its unread
+	// mail. It may be set on a skip: Claude Code's compact SessionStart
+	// reports no state, and the agent still has to hear where it is. See
+	// ContextOutput.
+	Context ContextOutput `json:"context,omitempty"`
+}
+
+// ContextOutput says how a hook adds text to the agent's context for one
+// event, or that it cannot.
+type ContextOutput string
+
+// The ways a hook adds context.
+const (
+	// ContextNone: the harness does not read the hook's output as context.
+	ContextNone ContextOutput = ""
+	// ContextPlain: plain text on stdout is added as context. Claude Code
+	// and Codex read SessionStart and UserPromptSubmit this way.
+	ContextPlain ContextOutput = "plain"
+	// ContextJSON: only hookSpecificOutput.additionalContext in a JSON
+	// object on stdout is added. Plain text is ignored. Claude Code and
+	// Codex read PostToolUse this way.
+	ContextJSON ContextOutput = "json"
+)
+
+// contextFor is how harness id adds context for event. Sources: the Claude
+// Code hooks reference (plain stdout is context for SessionStart and
+// UserPromptSubmit; additionalContext lands next to the tool result for
+// PostToolUse and PostToolUseFailure), and the Codex hooks guide ("Plain text
+// on stdout is added as extra developer context" for SessionStart and
+// UserPromptSubmit; "Plain text on stdout is ignored" for PostToolUse, which
+// takes additionalContext).
+func contextFor(id, event string) ContextOutput {
+	if id != ClaudeCode && id != Codex {
+		return ContextNone
+	}
+	switch event {
+	case "SessionStart", "UserPromptSubmit":
+		return ContextPlain
+	case "PostToolUse":
+		return ContextJSON
+	case "PostToolUseFailure":
+		if id == ClaudeCode {
+			return ContextJSON
+		}
+	}
+	return ContextNone
+}
+
+// ContextJSONOutput is the stdout that adds text to the agent's context for
+// an event read as ContextJSON.
+func ContextJSONOutput(event, text string) string {
+	out, _ := json.Marshal(map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":     event,
+			"additionalContext": text,
+		},
+	})
+	return string(out) + "\n"
 }
 
 func skip(harness, event, why string) Decision {
@@ -343,9 +402,9 @@ func Translate(harnessName string, in Input) Decision {
 	p := fields(payload)
 	switch id {
 	case ClaudeCode:
-		return translateClaude(in, p)
+		return withContext(translateClaude(in, p))
 	case Codex:
-		return translateCodex(in, p)
+		return withContext(translateCodex(in, p))
 	case GeminiCLI:
 		return translateGemini(in, p)
 	case OpenCode, Kilo:
@@ -368,6 +427,26 @@ func Translate(harnessName string, in Input) Decision {
 		return translateIdentity(id, in, p)
 	}
 }
+
+// withContext marks a decision whose event the harness reads as context. A
+// skip is marked only when it is Claude Code's compact SessionStart, the one
+// skip of a pane's own agent: the others are a nested or foreign harness, a
+// subagent, or a payload that did not parse.
+func withContext(d Decision) Decision {
+	if d.Report == nil && d.Skip != SkipCompact {
+		return d
+	}
+	if d.Report != nil && d.Report.State == "" {
+		// A subagent's event, which has no state of its own.
+		return d
+	}
+	d.Context = contextFor(d.Harness, d.Event)
+	return d
+}
+
+// SkipCompact is the skip reason of Claude Code's SessionStart after a
+// compaction.
+const SkipCompact = "compaction restarts the session mid-turn"
 
 // StdoutAnswer is what a hook for harness must print on stdout whatever it
 // decides: the answer that changes nothing, for a harness that parses a

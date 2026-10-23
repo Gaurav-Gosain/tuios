@@ -155,6 +155,7 @@ var verbCapabilities = map[string][]string{
 
 	"send-agent-message":  {config.LinkAllowMail},
 	"read-agent-messages": {config.LinkAllowMail},
+	"agent-mail-notice":   {config.LinkAllowMail},
 	"stash-put":           {config.LinkAllowMail},
 	"stash-list":          {config.LinkAllowMail},
 	"stash-get":           {config.LinkAllowMail},

@@ -48,8 +48,15 @@ tuios send-agent-message -s work 'deploying in five minutes'   # a notice to the
 ```
 
 This queues. It does not touch the recipient's keyboard, so you can leave a
-message for an agent that is mid-turn. **The recipient has to read its inbox**;
-no harness does that on its own. For an agent that does not, use `ask-agent`.
+message for an agent that is mid-turn. tuios tells the recipient that mail
+waits:
+
+- **During a turn.** With the Claude Code or Codex hooks installed (`tuios
+  integration install`), the agent gets one line in its context when a prompt
+  is submitted or a tool call ends. The line gives the count, the senders and
+  the command that reads the mail. It never holds the subject or the body. Each
+  message is announced once, and again after a compaction or a resume while it
+  is still unread.
 
 ### Reading your mail
 
@@ -108,7 +115,9 @@ only.
 
 ### Being reachable yourself
 
-Nothing polls your inbox for you. Two habits are enough:
+With the hooks installed, tuios tells you about new mail during your turn, in a
+line that starts `You have 1 unread tuios message`. Run the command it names.
+Without the hooks, two habits are enough:
 
 - Check once before you tell the person you are done:
   `tuios read-agent-messages -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --unread`.

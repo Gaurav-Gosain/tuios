@@ -90,6 +90,7 @@ var hostedCallVerbs = map[string]string{
 	"wait-for":            "window",
 	// set-agent-state's activity with no state, about the same pane.
 	"report-agent-activity": "window",
+	"agent-mail-notice":     "window",
 }
 
 // hostedCallDropped are parameters removed from a forwarded call before the

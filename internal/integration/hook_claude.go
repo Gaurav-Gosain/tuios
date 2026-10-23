@@ -121,7 +121,7 @@ func translateClaude(in Input, p fields) Decision {
 	case "SessionStart":
 		source := p.str("source")
 		if source == "compact" {
-			return skip(ClaudeCode, event, "compaction restarts the session mid-turn")
+			return skip(ClaudeCode, event, SkipCompact)
 		}
 		r := identity(Report{State: "idle"}, p)
 		r.Activity = &Activity{Event: ActivitySessionStart, Text: activityText(source)}

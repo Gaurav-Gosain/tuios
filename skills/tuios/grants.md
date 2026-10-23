@@ -20,8 +20,8 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach. Includes `read`, `write`, `fan` and `files`, never `respond` |
 
 Whatever you hold, you can report about your own pane (`set-agent-state`,
-`set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human`,
-`request-approval`) and ask what you hold. So `tuios agent-hook` works in every pane.
+`set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-mail-notice`,
+`ask-human`, `request-approval`) and ask what you hold. So `tuios agent-hook` works in every pane.
 A report about another pane needs `respond`, with `admin` too, because the
 state it sets decides whether that pane waits on a prompt. A process tuios
 starts outside every pane, such as a hook, reports for no pane.

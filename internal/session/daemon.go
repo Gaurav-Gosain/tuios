@@ -1262,6 +1262,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.noteQueueEvent(name, ev)
 		}
 		d.reviewNotes.noteSessionEvent(ev)
+		if ev.Type == EventWindowClosed {
+			d.agents.forgetNotices(name, ev.Window)
+		}
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
 			Session:    name,

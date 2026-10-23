@@ -8845,3 +8845,23 @@ With the fix the test passes four runs of four; the trace reads `working` from `
 | `detectionPass` marks `sawProcess` on the zero claim of a pane nothing holds, rather than on a claim at `AgentSourceDetect` (the build of the branch the fix sits on) | three runs of three ("an OSC-tier report was not applied to a pane no tier held while the agent ran: read idle (source report, harness ), set-agent-state said \"Not applied: a higher-ranked source owns this pane. It still reports idle.\"") | **caught** |
 
 Not covered: the other ways a pane can be left with a state and no claim before the detector first sees an agent in it. A transcript join dropped (`DropAgentTranscript`) yields the same way the screen tier does; a program's records ending clear the state to `none` before they yield, and the detector then takes a pane at `none` as its own.
+## Mail notices in the hooks of Claude Code and Codex
+
+`TestHookTellsTheAgentAboutItsMailOnce` runs the real `tuios agent-hook` for
+two panes, found from `TUIOS_PANE_ID` as a harness in the pane finds them,
+while a third pane sends them mail. It counts every hook's output: the first
+message is announced once over one `UserPromptSubmit` and three `PostToolUse`
+events, a second message is announced once in `hookSpecificOutput` JSON, a
+compact `SessionStart` prints the hint and the notice again, a Codex pane gets
+the same, and a `SessionStart` after the mail was read prints no notice. No
+output may hold the subject's or the body's marker text. The positive half of
+each "nothing printed" check is the notice printed in the same fixture a step
+earlier. The artifact is `mail-notice-hooks.log`: each event and its output.
+
+Each control cuts one change, rebuilds, runs the test, and reverts the patch.
+Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The hook never asks for the notice | drop the `fetchMailNotice` call from `agentHook` | `UserPromptSubmit printed "", want "You have 1 unread tuios message from \"review\". ..."` | **caught** |
+| A message is announced again on every event | skip the announced-mark check in `takeNotice` | `the first message was announced 4 times, want once` | **caught** |

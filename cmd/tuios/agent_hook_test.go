@@ -416,7 +416,9 @@ func TestAgentHookFindsThePaneWithoutItsEnvironment(t *testing.T) {
 	h := &hookRun{daemon: &fakeDaemon{resolved: map[string]any{"session": "work", "window_id": "w3", "by": "tty"}}}
 	h.run(t, agentHookOptions{}, `{"hook_event_name":"UserPromptSubmit","session_id":"s1"}`, "claude-code")
 
-	if len(h.daemon.calls) != 3 || h.daemon.calls[0].verb != "resolve-pane" {
+	// resolve-pane, list-verbs, set-agent-state, then agent-mail-notice:
+	// UserPromptSubmit is read as context.
+	if len(h.daemon.calls) != 4 || h.daemon.calls[0].verb != "resolve-pane" || h.daemon.calls[3].verb != "agent-mail-notice" {
 		t.Fatalf("calls = %v", h.daemon.calls)
 	}
 	if sid := h.daemon.calls[0].params["sid"]; sid != float64(4242) {

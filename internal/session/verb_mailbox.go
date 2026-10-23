@@ -263,6 +263,10 @@ type agentBus struct {
 	// asks records the ask edges open right now, so a cycle can be refused
 	// before it is created rather than noticed after it has spun.
 	asks map[string]map[string]int
+
+	// noticed is the newest message id announced to each pane, by window
+	// id. See mail_notice.go.
+	noticed map[string]noticeMark
 }
 
 // agentMailbox is one session's ring.
@@ -305,6 +309,7 @@ func (b *agentBus) forget(session string) {
 	b.mu.Lock()
 	delete(b.boxes, session)
 	b.mu.Unlock()
+	b.forgetNotices(session, "")
 }
 
 // allow charges one send against the sender's token bucket, reporting whether
@@ -840,6 +845,12 @@ func (b *agentBus) rename(old, newName string) {
 		delete(b.boxes, old)
 		if b.boxes[newName] == nil {
 			b.boxes[newName] = mb
+		}
+	}
+	for w, m := range b.noticed {
+		if m.session == old {
+			m.session = newName
+			b.noticed[w] = m
 		}
 	}
 }
