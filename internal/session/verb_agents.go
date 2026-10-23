@@ -1000,7 +1000,9 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		return nil, mapResolveErr(err, sess)
 	}
 	target := state.Windows[idx]
-	res, verr := d.askAgent(cs, sess, state, target, p, false)
+	gone, stop := askCancel(cs)
+	defer stop()
+	res, verr := d.askAgent(cs, sess, state, target, p, false, gone)
 	if verr != nil {
 		return nil, verr
 	}
@@ -1044,6 +1046,8 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 		return nil, verr
 	}
 	results := make([]map[string]any, len(panes))
+	gone, stop := askCancel(cs)
+	defer stop()
 	var wg sync.WaitGroup
 	for i, pane := range panes {
 		wg.Go(func() {
@@ -1058,7 +1062,7 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 				results[i] = row
 				return
 			}
-			res, verr := d.askAgent(cs, pane.sess, state, target, p, true)
+			res, verr := d.askAgent(cs, pane.sess, state, target, p, true, gone)
 			if verr != nil {
 				row["ok"] = false
 				row["error"] = verr
@@ -1090,7 +1094,9 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 }
 
 // askAgent is one ask of target in sess. fromAnySession is resolveSender's.
-func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool) (map[string]any, *verbError) {
+// gone closes when the caller went away: an ask that is still waiting then
+// leaves the line and types nothing.
+func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool, gone <-chan struct{}) (map[string]any, *verbError) {
 	from, fromLabel := "", ""
 	viaLink := cs != nil && cs.viaLink
 	switch {
@@ -1153,10 +1159,13 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// for its turn, in the order the asks came, for up to timeout. See
 	// ask_turns.go.
 	turnStart := time.Now()
-	ahead, release := d.askTurns.take(d.ctx, target.ID, timeout)
+	ahead, release := d.askTurns.take(d.ctx, gone, target.ID, timeout)
 	if release == nil {
 		if d.ctx.Err() != nil {
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		}
+		if closed(gone) {
+			return nil, askCallerGoneError()
 		}
 		return nil, hintedVerbError(ErrVerbNotReady, "other asks of this agent were still running when the timeout elapsed: "+strconv.Itoa(ahead)+" were ahead of this one", &VerbHint{
 			Param:   "timeout",
@@ -1182,7 +1191,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// with whatever the target is doing.
 	waitedFor := ""
 	if !p.Force {
-		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout, p.AllowBlocked)
+		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout, p.AllowBlocked, gone)
 		if verr != nil {
 			return nil, verr
 		}
@@ -1206,6 +1215,11 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// holdTypingTarget.
 	if verr := d.recheckTyping(cs, "ask-agent", sess, target.ID); verr != nil {
 		return nil, verr
+	}
+	// A caller that went away while the ask waited gets nothing typed: no
+	// one would read the answer.
+	if closed(gone) {
+		return nil, askCallerGoneError()
 	}
 	// Pasted and submitted with a carriage return, the way fan types its
 	// prompt. See prompt_submit.go. The gate reads the pane first, so it can
@@ -1376,7 +1390,7 @@ func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 // waiting on does not help: the prompt stays until somebody answers it. With
 // allowBlocked, needs_input counts as at rest instead, which is what every
 // caller got before needs_input left agentRestStates.
-func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool) (string, *verbError) {
+func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool, gone <-chan struct{}) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
 		sess:    sess,
@@ -1426,6 +1440,8 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 			})
 		case <-d.ctx.Done():
 			return "", newVerbError(ErrVerbInternal, "daemon is shutting down")
+		case <-gone:
+			return "", askCallerGoneError()
 		case ev := <-sub.ch:
 			if ev.Type == EventSessionClosed {
 				return "", newVerbError(ErrVerbSessionNotFound, "the session was killed before the target was ready")
@@ -1618,4 +1634,56 @@ func tailLines(content string, before, maxLines int) (string, bool) {
 		truncated = true
 	}
 	return strings.TrimRight(strings.Join(added, "\n"), "\n \t"), truncated
+}
+
+// askCancel is a channel that closes when the caller on cs goes away: its
+// connection closes, or the hosted pane it calls for ends. A verb reads
+// nothing from its connection while it runs, so the watch peeks at it.
+// stop ends the watch. A caller with no connection never goes away.
+func askCancel(cs *connState) (<-chan struct{}, func()) {
+	if cs == nil {
+		return nil, func() {}
+	}
+	var gone <-chan struct{}
+	stopWatch := func() {}
+	if cs.conn != nil {
+		gone, stopWatch = watchPeerClose(cs.conn)
+	}
+	out := make(chan struct{})
+	quit := make(chan struct{})
+	go func() {
+		select {
+		case <-gone:
+		case <-cs.done:
+		case <-cs.hostedEnded:
+		case <-quit:
+			return
+		}
+		close(out)
+	}()
+	var once sync.Once
+	return out, func() {
+		once.Do(func() {
+			close(quit)
+			stopWatch()
+		})
+	}
+}
+
+// closed reports whether ch is closed. A nil channel never is.
+func closed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// askCallerGoneError ends an ask whose caller went away before it typed.
+func askCallerGoneError() *verbError {
+	return newVerbError(ErrVerbInternal, "the caller went away before the question was typed, so nothing was typed")
 }

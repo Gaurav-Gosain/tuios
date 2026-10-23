@@ -9000,3 +9000,13 @@ Run on 2026-10-24 on Linux against upstream main at 856b8ef4.
 | The fix removed (upstream main) | "the help overlay does not list the global f7 for Switch to workspace 1": the row lists only `alt+1` | **caught** |
 | Asks take no turn | `askAgent` takes a no-op turn instead of `askTurns.take` | `ask ASK-THREE did not get its own answer: "GOT[ASK-THREEASK-FOUR]\nDONE[ASK-THREEASK-FOUR]"`: the two questions were typed into one line | **caught** |
 | The same, with the "sent together" half taken out of the test | as above | `ask ASK-TWO failed: exit status 1` (`not_ready` after its 1 second ready timeout) | **caught** |
+
+`TestACancelledAskLeavesTheLine` asks the same stand-in agent a question,
+then starts a second ask and kills its process while it waits its turn, then
+starts a third. The third must wait behind one ask, not two, and the pane must
+never show the cancelled question. The artifact is `ask-cancel.log`: the pane
+at the end. Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The ask never learns its caller went away | `askCancel` returns a channel that never closes | `the third ask waited behind 2 asks, want 1` and `the question of a caller that went away was typed` | **caught** |

@@ -36,10 +36,12 @@ type askTurns struct {
 	lines map[string]*askLine
 }
 
-// take waits for window's turn, for at most timeout or until ctx ends. It
-// returns how many asks were ahead when it came, and a release func, or nil
-// when the wait ended without a turn. Every turn taken must be released once.
-func (t *askTurns) take(ctx context.Context, window string, timeout time.Duration) (ahead int, release func()) {
+// take waits for window's turn, for at most timeout, until ctx ends, or until
+// gone closes because the caller went away. It returns how many asks were
+// ahead when it came, and a release func, or nil when the wait ended without
+// a turn. A wait that ends leaves the line, so the asks behind it move up.
+// Every turn taken must be released once.
+func (t *askTurns) take(ctx context.Context, gone <-chan struct{}, window string, timeout time.Duration) (ahead int, release func()) {
 	t.mu.Lock()
 	if t.lines == nil {
 		t.lines = map[string]*askLine{}
@@ -66,6 +68,7 @@ func (t *askTurns) take(ctx context.Context, window string, timeout time.Duratio
 		return ahead, t.releaser(window)
 	case <-timer.C:
 	case <-ctx.Done():
+	case <-gone:
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -113,9 +116,15 @@ func (t *askTurns) passLocked(window string, l *askLine) {
 	delete(t.lines, window)
 }
 
-// busy reports whether an ask holds window's turn or waits for it.
+// busy reports whether an ask holds window's turn. An ask that only waits
+// in line does not make a pane busy, but no ask waits unless another holds
+// the turn: the turn passes straight to the next ask in line, and the line
+// goes when nobody holds it. The holder may still be waiting for the agent
+// to come to rest; the pane is busy then too, since the holder types the
+// moment it does.
 func (t *askTurns) busy(window string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.lines[window] != nil
+	l := t.lines[window]
+	return l != nil && l.held
 }
