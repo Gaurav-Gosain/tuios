@@ -53,7 +53,7 @@ const fanVerifyWindow = "verify"
 // refusal's hint names only the fan sessions the caller on cs reaches, so a
 // pane held to its own reach learns no other session's name from it.
 func (d *Daemon) fanTarget(cs *connState, name string) (*Session, *WorktreeInfo, *verbError) {
-	sess, info, verr := d.worktreeTarget(name)
+	sess, info, verr := d.worktreeTarget(cs, name)
 	if verr != nil {
 		return nil, nil, verr
 	}
@@ -762,7 +762,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 	if p.Session == "" {
 		return nil, invalidParam("session", "session is required: the attempt to keep")
 	}
-	kept, info, verr := d.worktreeTarget(p.Session)
+	kept, info, verr := d.worktreeTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

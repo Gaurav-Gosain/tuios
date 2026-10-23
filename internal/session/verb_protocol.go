@@ -238,7 +238,7 @@ var (
 var sessionParam = verbParam{
 	Name:        "session",
 	Type:        "string",
-	Description: "Session name. Omit to target the most recently active session.",
+	Description: "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one.",
 }
 
 // windowParam is the window selector shared by window-targeted verbs.
@@ -730,7 +730,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"start-agent": {
 			description: "Start an agent in a new pane of a session and answer once it is ready for a prompt: its state reads idle or done, from a report, a hook, its screen or its title (unknown counts only for a harness that can never show idle). A pane on needs_input ends the wait at once with ready false and blocked_by, and is kept. With prompt, the first prompt is typed once it is ready, the way fan types it. A named session that does not exist is created. From another machine, address it with a host-qualified session and name the repository by repo_url.",
 			params: append([]verbParam{
-				{Name: "session", Type: "string", Description: "Session to open the pane in. Created when it does not exist. Omit for the most recently active session, or a new one named after the agent when there is none."},
+				{Name: "session", Type: "string", Description: "Session to open the pane in. Created when it does not exist. Omit from a pane for the pane's own session. Outside every pane, omit for the most recently active session, or a new one named after the agent when there is none."},
 				{Name: "agent", Type: "string", Required: true, Description: "The agent, as one string: a harness id or program name (claude, codex, gemini), or any program, with its arguments after it. Split the way a shell splits words and exec'd directly; nothing is expanded."},
 				{Name: "args", Type: "[]string", Description: "More arguments after the agent's own, as an argv. No shell parses them."},
 				{Name: "name", Type: "string", Description: "The window's name, which list-agents shows and -w takes, so the caller can address the agent as, say, reviewer."},
@@ -2081,7 +2081,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			description: "Block until a condition matches, or fail with the timeout code.",
 			params: []verbParam{
 				{Name: "condition", Type: "string", Required: true, Description: "Condition to wait for.", Accepted: waitConditions},
-				{Name: "session", Type: "string", Description: "Session name. session-exists requires it: it is the session to wait for. For the other conditions, omit to target the most recently active session."},
+				{Name: "session", Type: "string", Description: "Session name. session-exists requires it: it is the session to wait for. For the other conditions, omit it from a pane for the pane's own session, and from outside every pane for the most recently active one."},
 				windowParam,
 				{Name: "any_session", Type: "bool", Description: "For agent-state only: watch every session on the daemon, including ones created during the wait. Takes no session or window. The result names the session that matched.", Default: "false"},
 				{Name: "pattern", Type: "string", Description: "Regular expression, required by window-output."},

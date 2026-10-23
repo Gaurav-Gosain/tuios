@@ -507,7 +507,7 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 	if verr := refuseForwardedPane(cs, "paste-image"); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

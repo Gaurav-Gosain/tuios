@@ -10,7 +10,7 @@ import (
 
 // verbSetAgentMeta records display metadata about the agent in a pane. See
 // agent_meta.go for what it is and why it is display only.
-func (d *Daemon) verbSetAgentMeta(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetAgentMeta(cs *connState, params json.RawMessage) (any, *verbError) {
 	// The herdr socket calls this handler directly, past admitVerb.
 	if !d.agentsEnabled() {
 		return nil, agentsDisabledError()
@@ -64,7 +64,7 @@ func (d *Daemon) verbSetAgentMeta(_ *connState, params json.RawMessage) (any, *v
 	}
 	source, _ := CleanAgentMetaValue(p.Source)
 
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

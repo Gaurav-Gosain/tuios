@@ -494,7 +494,7 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 	if err != nil {
 		return nil, d.bufferError("paste-buffer", err)
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

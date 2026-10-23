@@ -99,7 +99,7 @@ tuios agent-proto --help.`,
 			}, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session to open the pane in, HOST:SESSION for another machine. Created when it does not exist (default: most recently active)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session to open the pane in, HOST:SESSION for another machine. Created when it does not exist (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVar(&name, "name", "", "The pane's name, which list-agents shows and -w takes")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "The directory the agent starts in (default: the focused pane's)")
 	cmd.Flags().StringVar(&repo, "repo", "", "A directory inside a repository: the agent starts in its main checkout")

@@ -159,7 +159,7 @@ func (p *PTY) ClearHistory(ctx context.Context, screen bool) error {
 
 // verbClearHistory is clear-history. Without screen it is tmux clear-history:
 // the history goes and the screen stays.
-func (d *Daemon) verbClearHistory(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbClearHistory(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -168,7 +168,7 @@ func (d *Daemon) verbClearHistory(_ *connState, params json.RawMessage) (any, *v
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

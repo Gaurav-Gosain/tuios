@@ -366,7 +366,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 		}
 	}
 
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
