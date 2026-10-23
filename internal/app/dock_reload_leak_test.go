@@ -48,6 +48,20 @@ func (r *dockReloadRuntime) drain(m *OS) {
 	}
 }
 
+// drainUntil drains like drain until ok holds, for up to five seconds, and
+// reports whether it held. A quiet spell is not enough on its own to say a
+// command has answered: the custom component runs a real process, and on a
+// loaded machine it can take longer than drain's 50ms to answer.
+func (r *dockReloadRuntime) drainUntil(m *OS, ok func() bool) bool {
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		r.drain(m)
+		if ok() {
+			return true
+		}
+	}
+	return ok()
+}
+
 // settledGoroutines waits for the goroutine count to reach want or below, and
 // returns the count it saw last. A stopped engine's goroutines leave on their
 // own schedule, so a single read would race them.
@@ -106,9 +120,9 @@ func TestDockReloadDoesNotLeakListeners(t *testing.T) {
 	rt.run(m.InitDockComponents())
 	rt.drain(m)
 
+	drew := func() bool { return m.dockEngine.Text("custom/hello") == "hello" }
 	rt.run(m.ApplyReloadedConfig(cfg))
-	rt.drain(m)
-	if m.dockEngine.Text("custom/hello") != "hello" {
+	if !rt.drainUntil(m, drew) {
 		t.Fatal("the custom component did not draw after a reload")
 	}
 	base := stableGoroutines()
@@ -118,7 +132,7 @@ func TestDockReloadDoesNotLeakListeners(t *testing.T) {
 		rt.run(m.ApplyReloadedConfig(cfg))
 		rt.drain(m)
 	}
-	if m.dockEngine.Text("custom/hello") != "hello" {
+	if !rt.drainUntil(m, drew) {
 		t.Fatal("the custom component did not draw after many reloads")
 	}
 
