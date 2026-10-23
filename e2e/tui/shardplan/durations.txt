@@ -1202,6 +1202,7 @@ TestTheSuiteReadsNoConfigButItsOwn 0.0
 TestThemeOffLeavesThePaletteToTheTerminal 2.0
 TestThemePickerEnterOnNoMatch 0.2
 TestThemedDaemonPaneReportsTheTheme 1.4
+TestTiledPanesMoveOneWay 3.0
 TestTilingOffBringsTheStripOnScreen 5.8
 TestTintPickerOffersItsKeywords 0.7
 TestTmuxShimBuffersAndEnvironment 0.3
