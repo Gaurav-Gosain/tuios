@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -448,9 +450,13 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 		if nested, err := worktree.NestedRepo(info.Path); err != nil {
 			// The check is what stands between the removal and a nested
 			// repository's history, so a failed read fails closed.
-			return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{
-				Detail: "git could not read the worktree's status for the nested-repository check, so nothing was removed.",
-			})
+			// The walk of the untracked and ignored paths fails with a
+			// *fs.PathError; git fails with a plain error.
+			detail := "git could not read the worktree's status for the nested repository check. Nothing was removed."
+			if _, walk := errors.AsType[*fs.PathError](err); walk {
+				detail = "tuios could not read the untracked and ignored folders for the nested repository check. Nothing was removed."
+			}
+			return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{Detail: detail})
 		} else if nested != "" && !p.Force {
 			return nil, hintedVerbError(ErrVerbWorktreeNested,
 				fmt.Sprintf("%s holds a nested git repository at %s. Nothing was removed.", info.Path, nested),
