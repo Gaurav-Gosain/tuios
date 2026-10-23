@@ -190,7 +190,9 @@ is an answer, and each entry says which.
 ask of the same target runs no longer types over it, and no longer fails with
 `not_ready` once `ready_timeout` passes. It waits for its turn, first come
 first served, for up to `timeout`, and then goes on as before. A turn that
-does not come in time is `not_ready`, and nothing is typed. The reply gains
+does not come in time is `not_ready`, and nothing is typed. An ask whose
+caller closes its connection while it waits leaves the line and types
+nothing. The reply gains
 `queued_behind` and `waited_turn_ms`. A queued prompt (`queue-prompt`) is not
 typed while an ask holds the target's turn.
 

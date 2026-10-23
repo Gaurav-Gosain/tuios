@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // The asks wait 10 seconds of silence before they guess the agent is done,
@@ -174,5 +175,74 @@ func TestAsksOfOneAgentTakeTurns(t *testing.T) {
 	}
 	if pos("DONE["+first+"]") > pos("GOT["+second+"]") {
 		t.Fatalf("the two asks sent together were typed into each other:\n%s", pane)
+	}
+}
+
+// TestACancelledAskLeavesTheLine asks a busy stand-in agent a question, and
+// the caller of a second ask gives up while it waits its turn. The cancelled
+// question must never be typed, and a third ask, sent after the second gave
+// up, must wait only for the first.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with askCancel never closing, so
+// the ask never learns its caller went away, the cancelled question is typed
+// once its turn comes, and the third ask waits behind it.
+func TestACancelledAskLeavesTheLine(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-askcancel"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	script := filepath.Join(base, "slow-agent.sh")
+	if err := os.WriteFile(script, []byte(slowAgentScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "answerer", "-s", session, "--no-focus"); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	agent := windowID(t, base, session, "answerer")
+	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", agent, "sh '"+script+"' '"+tuiosBin+"'\n"); err != nil {
+		t.Fatalf("start the stand-in agent: %v\n%s", err, out)
+	}
+	waitCapture(t, base, session, agent, "AGENT-READY")
+	waitAgentState(t, base, session, agent, "idle", "", &stateLog{name: "ask-cancel"}, "stand-in agent ready")
+
+	first := askAsync(t, base, session, agent, "ASK-FIRST")
+	waitCapture(t, base, session, agent, "GOT[ASK-FIRST]")
+
+	// The second caller waits its turn, then goes away.
+	args := []string{"ask-agent", "-s", session, "-w", agent, "--json", "--settle", "10000", "--timeout", "60000", "ASK-CANCELLED"}
+	cancelled := exec.Command(tuiosBin, args...)
+	cancelled.Dir = workDirIn(t, base)
+	cancelled.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cancelled.Env = append(cancelled.Env, key+"="+xdgDir(base, key))
+	}
+	if err := cancelled.Start(); err != nil {
+		t.Fatalf("start the ask that gives up: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	_ = cancelled.Process.Kill()
+	_ = cancelled.Wait()
+
+	third := askAsync(t, base, session, agent, "ASK-THIRD")
+	if res, out, err := first(); err != nil || !strings.Contains(res.Reply, "DONE[ASK-FIRST]") {
+		t.Fatalf("the first ask failed: %v\n%s", err, out)
+	}
+	res, out, err := third()
+	if err != nil || !strings.Contains(res.Reply, "DONE[ASK-THIRD]") {
+		t.Fatalf("the third ask failed: %v\n%s", err, out)
+	}
+	if res.QueuedBehind != 1 {
+		t.Errorf("the third ask waited behind %d asks, want 1: the cancelled one left the line", res.QueuedBehind)
+	}
+	// Room for the cancelled question to be typed, if it were.
+	time.Sleep(4 * time.Second)
+	pane := capture(t, base, session, agent)
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "ask-cancel.log"), []byte(pane), 0o644); err != nil {
+		t.Errorf("save the artifact: %v", err)
+	}
+	if strings.Contains(pane, "ASK-CANCELLED") {
+		t.Fatalf("the question of a caller that went away was typed:\n%s", pane)
 	}
 }

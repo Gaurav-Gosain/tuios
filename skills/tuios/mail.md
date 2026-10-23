@@ -190,7 +190,8 @@ This works with any agent, because it types at the target's keyboard. In order:
    served. An ask that comes while another ask of the same agent runs waits
    for it to finish, for up to `--timeout`, and then goes on. The reply says
    how long it waited (`queued_behind`, `waited_turn_ms`). If the turn does not
-   come in time, the call fails with `not_ready`, and nothing is typed.
+   come in time, the call fails with `not_ready`, and nothing is typed. If you
+   stop the call while it waits, it leaves the line and types nothing.
 2. **Waits until the target is not mid-turn.** Still `working` or `unknown`
    after `--ready-timeout` is `not_ready`, and nothing is sent. For `unknown`,
    look at the pane and pass `--force` if it is at its prompt.
