@@ -22,32 +22,39 @@ import (
 // this function, so the rail, the title bars and the palette can never
 // disagree.
 //
-// A mark is one or two cells. A surface that draws marks in a column pads them
-// to agentMarkWidth with agentMarkCell, so a set with a two-cell mark keeps
-// its rows in line.
+// A mark is one or two cells. A row that leads with a mark follows it with
+// agentMarkGap, so the text after it starts in one column whatever the set
+// draws; a column of marks that ends on the row's right edge pads them with
+// agentMarkCellRight.
 func agentStateIndicator(state string) string {
 	return config.AgentStateMark(state, overlay.UseASCII())
 }
 
-// agentMarkWidth is the width of the mark column: the widest mark the active
-// glyph set draws.
+// agentMarkWidth is the width of the widest mark the active glyph set draws.
 func agentMarkWidth() int {
 	return config.AgentMarkWidth(overlay.UseASCII())
 }
 
-// agentMarkCell pads a mark, or the empty string, with spaces to the width of
-// the mark column. The padding goes after the mark, so the marks stay in one
-// column and the text after them in another.
-func agentMarkCell(mark string) string {
-	if d := agentMarkWidth() - lipgloss.Width(mark); d > 0 {
-		return mark + strings.Repeat(" ", d)
-	}
-	return mark
+// agentMarkLead is how many cells a mark at the head of a row and the gap after
+// it take together, whatever the mark.
+const agentMarkLead = 2
+
+// agentMarkGap is the blank between a mark at the head of a row and the row's
+// text. A one-cell mark is followed by one blank and a two-cell mark by none,
+// its second cell being its gap, so the text starts in the same column
+// whichever mark the row wears and whichever glyph set draws it. A terminal
+// draws an emoji narrower than its two cells, so a blank after one would read
+// as a gap twice the width of the others. No mark at all leaves both cells
+// blank.
+func agentMarkGap(mark string) string {
+	return strings.Repeat(" ", max(agentMarkLead-lipgloss.Width(mark), 0))
 }
 
-// agentMarkCellRight is agentMarkCell for a mark at the end of a right-aligned
-// column: the padding goes in front, so the marks end on the row's edge and
-// the figures before them stay in their own column.
+// agentMarkCellRight pads a mark at the end of a right-aligned column to
+// agentMarkWidth: the padding goes in front, so the marks end on the row's
+// edge and the figures before them stay in their own column. Nothing follows
+// such a mark for its second cell to stand in for, so the column is as wide as
+// the widest mark.
 func agentMarkCellRight(mark string) string {
 	if d := agentMarkWidth() - lipgloss.Width(mark); d > 0 {
 		return strings.Repeat(" ", d) + mark

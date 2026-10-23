@@ -184,13 +184,29 @@ A mark may be one cell or two, so it can be an emoji:
 }
 ```
 
-The mark column is as wide as the widest mark the set draws. A set with one
-two-cell mark widens the column for every row, and a one-cell mark is padded
-out to it, so the names after the marks stay in one column on the rail, in the
-aggregate view and in the cockpit, and a title, a palette row or a dock message
-is measured with the mark it carries. The collapsed strip has one column for a
-mark, so a two-cell mark there takes the gutter cell beside it as well, and the
-strip's alarm badge keeps its count and drops the mark when both do not fit.
+A mark at the head of a row and the gap after it always take two cells: a
+one-cell mark is followed by one blank, and a two-cell mark by none, its second
+cell being its gap. A terminal draws an emoji narrower than its two cells, so a
+blank after `✋` would read as a gap twice as wide as the one after `●`. The
+names after the marks therefore start in the same column whatever the set
+draws, on the rail and its subagent rows, in the aggregate view, the palette,
+the Inbox and the cockpit, which keeps its wider gap and lets a two-cell mark
+take the first cell of it:
+
+```
+▎✋hand-pane
+ ◆ work-pane
+ ○ rest-pane
+```
+
+Where nothing follows a mark for its second cell to stand in for, the mark is
+measured. A column of marks that ends on a row's right edge, as in the session
+switcher, is as wide as the widest mark the set draws; a title, a count beside
+a mark, the cockpit's header and a dock message are measured with the mark
+they carry, and keep a space after it. The collapsed strip has one column for
+a mark, so a two-cell mark there takes the gutter cell beside it as well, and
+the strip's alarm badge keeps its count and drops the mark when both do not
+fit.
 
 Under `--ascii-only` a mark that is not 7-bit gives way to the ASCII form
 (`*`, `!`, `o`, `#`, `x`, `?`, `%`).

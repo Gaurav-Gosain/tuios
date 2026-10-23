@@ -102,11 +102,10 @@ func agentMarks(ascii bool) *agentMarkInfo {
 	return info
 }
 
-// AgentMarkWidth is the width of the agent-state mark column: the widest mark
-// the active set draws, one cell or two. Every surface that draws a mark in a
-// column pads the narrower marks out to it, so a set with one two-cell mark
-// widens the column for every row rather than pushing that one row's name out
-// of line with the rows beside it.
+// AgentMarkWidth is the width of the widest agent-state mark the active set
+// draws, one cell or two. A column of marks that ends on a row's right edge
+// pads the narrower marks out to it, so the figures in front of them stay in
+// one column.
 func AgentMarkWidth(ascii bool) int {
 	return agentMarks(ascii).width
 }

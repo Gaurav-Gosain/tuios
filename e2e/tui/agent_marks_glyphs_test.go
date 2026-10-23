@@ -124,20 +124,97 @@ func railColumn(s tuitest.Screen) int {
 	return -1
 }
 
+// markLayout is where one run draws hand-pane's agent mark and name, as cell
+// columns: on its rail row, and on its row in the cockpit's fleet column.
+type markLayout struct {
+	railMark, railName, ckMark, ckName int
+}
+
+// cellLeftOf is the column of the nearest cell left of col on row that holds
+// content, or -1.
+func cellLeftOf(s tuitest.Screen, row, col int, content string) int {
+	for c := col - 1; c >= 0; c-- {
+		if s.Cell(c, row).Content == content {
+			return c
+		}
+	}
+	return -1
+}
+
+// cockpitRows opens the cockpit and returns the row and the cell column of
+// each name in its fleet column.
+func cockpitRows(t *testing.T, term *tuitest.Terminal, names ...string) (tuitest.Screen, map[string][2]int) {
+	t.Helper()
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		for _, name := range names {
+			if fleetRowWith(s, name) < 0 {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		t.Fatalf("the cockpit never listed %v: %v\n%s", names, err, term.Snapshot())
+	}
+	s := term.Screen()
+	out := map[string][2]int{}
+	for _, name := range names {
+		r := fleetRowWith(s, name)
+		line, at := markRowCells(s, r)
+		out[name] = [2]int{r, at[strings.Index(line, name)]}
+	}
+	return s, out
+}
+
+// defaultMarkLayout is where the shipped marks put hand-pane's mark and name:
+// the rail's ▲ and the cockpit's own ●, both one cell. A glyph set's marks
+// are held to these columns.
+func defaultMarkLayout(t *testing.T) markLayout {
+	t.Helper()
+	term, _ := marksClient(t, "", "")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		x := railColumn(s)
+		return x > 0 && len(railNames(s, x, "▲ hand-pane")) == 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("the default rail never drew ▲ hand-pane: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+	rail := railNames(s, railColumn(s), "hand-pane")["hand-pane"]
+	var l markLayout
+	l.railName = rail[1]
+	l.railMark = cellLeftOf(s, rail[0], rail[1], "▲")
+	s, ck := cockpitRows(t, term, "hand-pane")
+	l.ckName = ck["hand-pane"][1]
+	l.ckMark = cellLeftOf(s, ck["hand-pane"][0], l.ckName, "●")
+	if l.railMark < 0 || l.ckMark < 0 {
+		t.Fatalf("no default mark in front of hand-pane: %+v\n%s", l, term.Snapshot())
+	}
+	return l
+}
+
 // TestAgentMarksFollowTheGlyphSet: a glyph set names a two-cell mark for
 // needs_input and a narrow one for working. The rail, the title bar and the
-// cockpit draw the set's marks, the rows they are on keep their names in one
-// column with a row whose mark is one cell, and nothing is pushed past the
-// rail's right edge or the title bar's corner. The last frames are saved
-// under artifactDir.
+// cockpit draw the set's marks. A mark and the gap after it take the two
+// cells a one-cell mark and its blank take, so every name starts in the
+// column it starts in with the shipped marks: ✋ runs straight into its name
+// and a narrow mark keeps one blank. Nothing is pushed past the rail's right
+// edge or the title bar's corner. The last frames are saved under
+// artifactDir.
 //
 // How this could pass wrongly, written down first:
 //   - The mark could be found anywhere, the dock's message included, so the
 //     rail's marks are read right of the rail's header column and only on the
-//     row of the pane's own name, two cells in front of it.
-//   - Names in one column could be the default one-cell layout with the wide
-//     mark overdrawing the air after it. The cell after the mark has to be
-//     blank, and the wide mark has to be a two-cell cell.
+//     row of the pane's own name.
+//   - The names could share a column that has moved for every row, which is a
+//     column of their own and a gap after every narrow mark that a one-cell
+//     set does not have. The columns are compared with a run on the shipped
+//     marks, not only with each other.
+//   - ✋ could overdraw a blank it was not meant to have. It has to be a
+//     two-cell cell in the column the shipped mark is drawn in, with the
+//     name in the next cell after it.
 //   - The title could fit by luck of the window's width. The front window's
 //     title-bar corner has to be in the column of its own bottom corner.
 //   - The cockpit could draw the rail's marks through some other path, so its
@@ -147,11 +224,12 @@ func railColumn(s tuitest.Screen) int {
 // Negative controls are in NEGATIVE_CONTROLS.md under "Agent-state marks from
 // the glyph set".
 func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
+	want := defaultMarkLayout(t)
 	term, _ := marksClient(t, "[appearance]\nglyphs = \"hands\"\n", marksSet)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		x := railColumn(s)
-		got := railNames(s, x, "✋ hand-pane", "◆", "rest-pane")
-		return x > 0 && len(got) == 3
+		got := railNames(s, x, "hand-pane", "◆", "rest-pane")
+		return x > 0 && len(got) == 3 && len(markedAt(s, "✋")) > 0
 	}, uiTimeout); err != nil {
 		t.Fatalf("the rail never drew the set's marks in front of the agent rows: %v\n%s", err, term.Snapshot())
 	}
@@ -162,25 +240,24 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("the rail's agents section did not list all three panes: %v\n%s", rows, term.Snapshot())
 	}
-	nameCol := rows["hand-pane"][1]
 	for name, at := range rows {
-		if at[1] != nameCol {
-			t.Errorf("ASSERTION: %s starts at column %d and hand-pane at %d: a two-cell mark moved its row's name off the spine\n%s",
-				name, at[1], nameCol, term.Snapshot())
+		if at[1] != want.railName {
+			t.Errorf("ASSERTION: %s starts at column %d, and at %d with the shipped marks: the glyph set moved the rail's names\n%s",
+				name, at[1], want.railName, term.Snapshot())
 		}
 	}
-	hand := s.Cell(nameCol-3, rows["hand-pane"][0])
-	if hand.Content != "✋" || hand.Width != 2 {
-		t.Errorf("ASSERTION: the needs-input mark is %q, %d cells, two cells before the name; want ✋ in two cells\n%s",
-			hand.Content, hand.Width, term.Snapshot())
+	hand := s.Cell(want.railMark, rows["hand-pane"][0])
+	if hand.Content != "✋" || hand.Width != 2 || want.railMark+2 != rows["hand-pane"][1] {
+		t.Errorf("ASSERTION: column %d holds %q, %d cells, and hand-pane starts at %d; want ✋ in two cells and the name straight after it\n%s",
+			want.railMark, hand.Content, hand.Width, rows["hand-pane"][1], term.Snapshot())
 	}
 	for name, mark := range map[string]string{"work-pane": "◆", "rest-pane": "○"} {
 		row := rows[name][0]
-		if c := s.Cell(nameCol-3, row); c.Content != mark {
+		if c := s.Cell(want.railMark, row); c.Content != mark {
 			t.Errorf("ASSERTION: %s wears %q in the mark column, want %q\n%s", name, c.Content, mark, term.Snapshot())
 		}
-		if c := s.Cell(nameCol-2, row); c.Content != " " && c.Content != "" {
-			t.Errorf("ASSERTION: %s has %q where its narrow mark's padding goes\n%s", name, c.Content, term.Snapshot())
+		if c := s.Cell(want.railMark+1, row); c.Content != " " && c.Content != "" {
+			t.Errorf("ASSERTION: %s has %q in the one blank after its narrow mark\n%s", name, c.Content, term.Snapshot())
 		}
 	}
 	// The sessions row's pane count is the right-hand figure, and it sits in
@@ -190,16 +267,20 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 		line, idx := markRowCells(s, at[0])
 		plus = idx[strings.LastIndex(line, "+")]
 	}
-	for _, at := range markedAt(s, "✋ home") {
+	homes := markedAt(s, "✋home")
+	for _, at := range homes {
 		line, idx := markRowCells(s, at[0])
 		count = idx[len(strings.TrimRight(line, " "))-1]
 	}
-	if plus == 0 || count != plus || plus >= cols {
-		t.Errorf("ASSERTION: the ✋ home row ends at column %d and the header's + at %d: the row overran the rail\n%s",
+	if len(homes) == 0 {
+		t.Errorf("ASSERTION: no rail row reads ✋home, the session's mark straight against its name\n%s", term.Snapshot())
+	} else if plus == 0 || count != plus || plus >= cols {
+		t.Errorf("ASSERTION: the ✋home row ends at column %d and the header's + at %d: the row overran the rail\n%s",
 			count, plus, term.Snapshot())
 	}
 
-	// The title bar of the front window, hand-pane's.
+	// The title bar of the front window, hand-pane's. A title is not a column,
+	// so its mark keeps its space.
 	var title [2]int
 	for _, at := range markedAt(s, "✋ hand-pane") {
 		if at[1] < railX {
@@ -225,34 +306,26 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "agent-marks-rail")
 
-	// The cockpit lists the same three agents in its fleet column.
-	windowManagementMode(t, term)
-	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
-		t.Fatal(err)
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return fleetRowWith(s, "hand-pane") >= 0 && fleetRowWith(s, "work-pane") >= 0 && fleetRowWith(s, "rest-pane") >= 0
-	}, uiTimeout); err != nil {
-		t.Fatalf("the cockpit never listed the three agents: %v\n%s", err, term.Snapshot())
-	}
-	s = term.Screen()
-	cockpit := map[string][2]int{}
-	for _, name := range []string{"hand-pane", "work-pane", "rest-pane"} {
-		r := fleetRowWith(s, name)
-		line, at := markRowCells(s, r)
-		cockpit[name] = [2]int{r, at[strings.Index(line, name)]}
-	}
-	col := cockpit["hand-pane"][1]
+	// The cockpit lists the same three agents in its fleet column, each name
+	// where the shipped marks put it, each mark in the shipped mark's column.
+	s, cockpit := cockpitRows(t, term, "hand-pane", "work-pane", "rest-pane")
 	for name, at := range cockpit {
-		if at[1] != col {
-			t.Errorf("ASSERTION: the cockpit starts %s at column %d and hand-pane at %d\n%s", name, at[1], col, term.Snapshot())
+		if at[1] != want.ckName {
+			t.Errorf("ASSERTION: the cockpit starts %s at column %d, and at %d with the shipped marks\n%s", name, at[1], want.ckName, term.Snapshot())
 		}
 	}
 	for name, mark := range map[string]string{"hand-pane": "✋", "work-pane": "◆", "rest-pane": "○"} {
-		line, _ := markRowCells(s, cockpit[name][0])
-		before := line[:strings.Index(line, name)]
-		if !strings.Contains(before, mark) {
-			t.Errorf("ASSERTION: the cockpit's %s row reads %q before the name, want the mark %q\n%s", name, before, mark, term.Snapshot())
+		row := cockpit[name][0]
+		c := s.Cell(want.ckMark, row)
+		if c.Content != mark {
+			line, _ := markRowCells(s, row)
+			t.Errorf("ASSERTION: the cockpit's %s row has %q in the mark column, want %q; the row reads %q\n%s", name, c.Content, mark, line, term.Snapshot())
+			continue
+		}
+		for col := want.ckMark + max(c.Width, 1); col < want.ckName; col++ {
+			if g := s.Cell(col, row).Content; g != " " && g != "" {
+				t.Errorf("ASSERTION: the cockpit's %s row has %q at column %d, between its mark and its name\n%s", name, g, col, term.Snapshot())
+			}
 		}
 	}
 	// The counts over the fleet wear the same marks as its rows.
