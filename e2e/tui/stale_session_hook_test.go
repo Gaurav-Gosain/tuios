@@ -85,7 +85,10 @@ func TestHookFromPaneWhoseSessionNameIsGone(t *testing.T) {
 	}
 	otherContent := waitMoveCapture(t, call, "omega", otherWin, "OTHER-DONE-42")
 	art.add("set-agent-state from a second pane", map[string]any{"session": "alpha", "window": win, "from": otherWin}, map[string]any{"content": otherContent}, "")
-	if !strings.Contains(otherContent, "session_not_found") {
+	// A pane reports only for its own window, so this is refused before the
+	// session is looked up (forbidden). session_not_found is the refusal of a
+	// build that checks the session first.
+	if !strings.Contains(otherContent, "session_not_found") && !strings.Contains(otherContent, "forbidden") {
 		t.Errorf("ASSERTION: a call from a second pane naming the gone session and the first pane was not refused:\n%s", otherContent)
 	}
 	if s := state(); s == "working" {
