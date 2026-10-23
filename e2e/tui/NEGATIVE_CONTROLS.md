@@ -8861,6 +8861,18 @@ each "nothing printed" check is the notice printed in the same fixture a step
 earlier. The artifact is `mail-notice-hooks.log`: each event and its output.
 
 Each control cuts one change, rebuilds, runs the test, and reverts the patch.
+
+## Asks of one agent take turns
+
+`TestAsksOfOneAgentTakeTurns` asks a stand-in agent, which takes 3 seconds
+over each question and reports `working` and `idle`, four questions against a
+real daemon. Two asks sent together must each get an answer that holds its own
+`DONE` line and no other question's. Then one ask is answered while a second
+comes with a ready timeout of 1 second: both must succeed, the second with
+`queued_behind` 1 and `waited_turn_ms` of a second or more. The pane must show
+each question taken and answered before the next. The artifact is
+`ask-turns.log`: each ask's JSON answer and the pane at the end.
+
 Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
 
 | Control | How | Test that fails | Verdict |
@@ -8963,3 +8975,5 @@ Run on 2026-10-24 on Linux with Go 1.27.1 against upstream main at efdc2a9c. Eac
 | No line passed to the editor | `standalone` and `daemon` ("the editor got [FILE], want it to end with [+2991 FILE]") | **caught** |
 
 Not covered end to end: the refusal in a browser client and in an SSH client from another machine, the removal when the client ends while the editor runs, the File editor setting, and the helix `FILE:LINE` form.
+| Asks take no turn | `askAgent` takes a no-op turn instead of `askTurns.take` | `ask ASK-THREE did not get its own answer: "GOT[ASK-THREEASK-FOUR]\nDONE[ASK-THREEASK-FOUR]"`: the two questions were typed into one line | **caught** |
+| The same, with the "sent together" half taken out of the test | as above | `ask ASK-TWO failed: exit status 1` (`not_ready` after its 1 second ready timeout) | **caught** |
