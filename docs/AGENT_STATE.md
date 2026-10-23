@@ -1982,10 +1982,11 @@ counts as seen.
 
 ## Indicator
 
-tuios draws a one-cell mark for each pane's state. It is the same mark, in the
-same colour, on every surface that shows a state: the rail and its collapsed
-strip, the window title, the command palette, the session switcher, the
-aggregate view, the Inbox and the dock's notifications.
+tuios draws a mark for each pane's state. It is the same mark, in the same
+colour, on every surface that shows a state: the rail and its collapsed strip,
+the window title, the command palette, the session switcher, the aggregate
+view, the Inbox and the dock's notifications. The cockpit draws marks of its
+own design.
 
 | State                     | Mark      | Colour   | `--ascii-only` |
 | ------------------------- | --------- | -------- | -------------- |
@@ -2005,9 +2006,17 @@ window with no name.
 
 Every mark is East Asian Ambiguous width, so a terminal that draws ambiguous
 characters two cells wide (common with CJK locales) should run with
-`--ascii-only`. The `ascii` glyph set (`appearance.glyphs`) does not change
-these marks: it covers the chrome's glyphs only. The ASCII forms keep one
-meaning per character: mail is `@`, a thread from another
+`--ascii-only`. The `ascii` glyph set (`appearance.glyphs`) draws the ASCII
+forms, as `--ascii-only` does; the other built-in sets keep the marks above.
+
+A glyph set can: it names a mark per state (`state_needs_input`,
+`state_working` and so on), one or two cells wide, so `✋` can stand for needs
+you. A set that names a state's mark changes it on every surface, the cockpit
+included; a state it leaves alone keeps the mark above, and the cockpit keeps
+its own design. Under `--ascii-only` a mark that is not 7-bit gives way to the
+ASCII form. See [GLYPHS.md](GLYPHS.md#agent-state-marks).
+
+The ASCII forms keep one meaning per character: mail is `@`, a thread from another
 machine `~`, an Inbox item to resume `>` and mail waiting to be sent `^`, and
 none of those is a state's mark.
 

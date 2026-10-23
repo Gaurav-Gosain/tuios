@@ -15,6 +15,7 @@ writing your own.
 - [The Border](#the-border)
 - [Writing a Set](#writing-a-set)
 - [Roles](#roles)
+- [Agent-State Marks](#agent-state-marks)
 - [Cell Widths](#cell-widths)
 - [What the Terminal Can Draw](#what-the-terminal-can-draw)
 - [ASCII Mode](#ascii-mode)
@@ -138,6 +139,9 @@ reports it under `problems` with the reason.
   terminal is in ASCII mode; with icons on, a nerd font codepoint per file type
   is drawn over them, in the file type's own colour unless
   `appearance.sidebar.file_icon_colors` is off
+- **Agent-state marks:** `state_working`, `state_needs_input`, `state_idle`,
+  `state_done`, `state_errored`, `state_unknown`, `state_waiting` (an agent at
+  rest whose subagents still run). See [Agent-State Marks](#agent-state-marks)
 - **Scrollbar:** `scrollbar_thumb`, `scrollbar_track`
 - **Text:** `ellipsis`, `sigil`, `dash_rule`
 - **Border:** `border.top`, `border.bottom`, `border.left`, `border.right`, the
@@ -157,6 +161,39 @@ overflows, in the rail's edge rule, with no track. `appearance.scrollbar.thumb`
 does not reach it: it is the pane bar's. With no set, the rail's thumb is `┃`,
 and `#` under `--ascii-only`. A thumb that is the same glyph as the rule is
 drawn as `█` instead (`#` under `--ascii-only`), so it still shows.
+
+## Agent-State Marks
+
+The `state_*` roles are the marks a pane's agent state wears on every surface
+that shows one: the rail and its collapsed strip, the window title, the command
+palette, the session switcher, the aggregate view, the Inbox, the cockpit and
+the dock's notifications. A role the set leaves alone keeps the mark TUIOS
+ships (`●` working, `▲` needs you, `○` idle, `■` done, `×` errored, `□`
+unknown, `◊` waiting), and the cockpit keeps its own design for it. Of the
+built-in sets only `ascii` names them, with the ASCII forms below.
+
+A mark may be one cell or two, so it can be an emoji:
+
+```json
+{
+  "display_name": "Hands",
+  "inherits": "default",
+  "state_needs_input": "✋",
+  "state_errored": "⛔",
+  "state_working": "◆"
+}
+```
+
+The mark column is as wide as the widest mark the set draws. A set with one
+two-cell mark widens the column for every row, and a one-cell mark is padded
+out to it, so the names after the marks stay in one column on the rail, in the
+aggregate view and in the cockpit, and a title, a palette row or a dock message
+is measured with the mark it carries. The collapsed strip has one column for a
+mark, so a two-cell mark there takes the gutter cell beside it as well, and the
+strip's alarm badge keeps its count and drops the mark when both do not fit.
+
+Under `--ascii-only` a mark that is not 7-bit gives way to the ASCII form
+(`*`, `!`, `o`, `#`, `x`, `?`, `%`).
 
 ## Cell Widths
 
@@ -181,6 +218,19 @@ padding.
 `separator`, `ellipsis`, `collapse` and `expand` take any width: each is drawn
 somewhere that measures it rather than budgeting a column for it. Border runes
 must be one cell.
+
+The `state_*` marks may be one cell or two. A mark must measure the same as a
+whole and character by character, which refuses an emoji that is wide only
+because of what follows it: `⚠` is one cell, and `⚠️` (with the emoji
+variation selector), a skin tone or a joined family measure two cells as a
+whole but are drawn one cell wide by some terminals, which would shift every
+cell after the mark. A mark that is wide by itself, `✋`, `⛔` or `🔥`, is two
+cells on every terminal.
+
+No role may hold a control character or a byte that is not UTF-8: a glyph is
+written into the frame as it is, so an escape in a set file would reach the
+terminal as a sequence. Such a role keeps the default and is reported in
+`problems` like a role of the wrong width.
 
 ## What the Terminal Can Draw
 

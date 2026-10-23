@@ -327,7 +327,10 @@ drawn only when `appearance.border_style` is `glyphs`. A set file goes in the
 glyphs dir `list-glyphs` reported and can `inherits` a built-in. `close`,
 `maximize`, `minimize`, `focus`, `attention`, `bullet` and `add` must be one
 cell wide; a glyph of the wrong width is dropped and named under `problems`,
-which is the one thing to check after writing a set.
+which is the one thing to check after writing a set. The agent-state marks are
+roles too (`state_needs_input`, `state_working`, `state_idle`, `state_done`,
+`state_errored`, `state_unknown`, `state_waiting`) and may be one or two cells,
+so `"state_needs_input": "✋"` is a set file of three lines with `inherits`.
 
 ### Spacing and composition
 
