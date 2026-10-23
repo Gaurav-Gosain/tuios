@@ -8912,3 +8912,27 @@ still passes now that `SaveCheckpoint` goes through the same `SnapshotTree`.
 Fan compare (`WorkingNumstat`, `WorkingDetail`), `tuios fan diff` and
 review-stage take the same limit through the same `SnapshotTree`, and have no
 end-to-end test of it.
+
+## Mail wakes an agent at rest
+
+`TestMailWakesAnIdleAgentOnce` runs stand-in agents that print each line typed
+into them, against a real daemon. A burst of three messages to an idle agent
+types one line, not before the 5 second grace, and no second line in the 9
+seconds after it. An agent on `needs_input` gets nothing typed, and its
+positive half is the line it gets once it reports idle. An agent that heard of
+its mail from a real `PostToolUse` hook mid-turn gets nothing typed when it
+comes to rest. No pane may show the subject's or the body's marker text.
+`TestMailWakeTurnsOff` runs the same agent with `[agents.mail] wake = false`:
+nothing is typed. Its positive half, in the same daemon: with `wake = true`
+written to the file, the next message types the line. The artifact is
+`mail-wake.log`: what each pane showed each time its count of typed lines
+changed.
+
+Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Mail never arms a wake | `return` at the top of `noteMailSent` | `TestMailWakesAnIdleAgentOnce`: "the idle agent was never told about its mail"; `TestMailWakeTurnsOff`: "with wake = true again the agent was not told about its mail" | **caught** |
+| The notice mark is ignored | in `mailWakeLook`, wake for any unread mail and pick from every sender | `TestMailWakesAnIdleAgentOnce`: "an agent its hook told about the mail was woken for it too" | **caught** |
+| The switch is ignored | `SetMailWake` stores true whatever it is given | `TestMailWakeTurnsOff`: "with wake = false a line was typed" | **caught** |
+| The waker types into a pane not at rest | drop the `agentReady` check in `mailWakeLook` | none: the queue refuses the pane on `needs_input` itself and holds the line until the pane is at rest | **not caught, by design**: the queue is the guard that types, and this check only saves a queue entry |

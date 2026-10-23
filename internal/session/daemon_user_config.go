@@ -92,6 +92,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.RecapTestPatterns = uc.Agents.Recap.Resolved().TestPatterns
 	// The daemon holds every pane's delivery queue, so it bounds them.
 	cfg.QueueMax = uc.Agents.Queue.MaxEntries()
+	// The daemon types the wake prompt for mail, so it reads whether to.
+	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
 	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
 	// The daemon runs the herdr plugins, so it reads which ones.

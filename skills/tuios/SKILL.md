@@ -250,6 +250,9 @@ tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --unread
 ```
 
+tuios tells the recipient about the message, during its turn or once it is at
+rest. You do not need to follow mail with `ask-agent` to make sure it is read.
+
 The person has an address, `human`. For a decision with a few answers, ask it:
 
 ```sh

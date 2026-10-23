@@ -358,3 +358,24 @@ func (d *Daemon) verbAgentMailNotice(cs *connState, params json.RawMessage) (any
 	}
 	return out, nil
 }
+
+// unannounced reports the inbox's unread mail and the newest message id
+// announced to it. Mail newer than mark was never announced. It marks nothing.
+func (b *agentBus) unannounced(session, inbox string) (mailSummary, uint64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.unreadSummaryLocked(session, inbox), b.noticed[inbox].id
+}
+
+// markNoticed records that the inbox's mail up to id was announced. It never
+// moves a mark back.
+func (b *agentBus) markNoticed(session, inbox string, id uint64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.noticed == nil {
+		b.noticed = map[string]noticeMark{}
+	}
+	if b.noticed[inbox].id < id {
+		b.noticed[inbox] = noticeMark{id: id, session: session}
+	}
+}

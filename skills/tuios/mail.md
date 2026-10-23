@@ -57,6 +57,13 @@ waits:
   the command that reads the mail. It never holds the subject or the body. Each
   message is announced once, and again after a compaction or a resume while it
   is still unread.
+- **At rest.** When mail stays unread for 5 seconds and nobody told the agent,
+  tuios types the same line into the agent's pane once it has rested for a
+  second. It never types into a pane on `needs_input`. A burst of mail gives
+  one line. The person can turn this off with `[agents.mail] wake = false`.
+
+So you do not need to follow a message with `ask-agent` to make sure it is
+read. Use `ask-agent` when you need the answer now.
 
 ### Reading your mail
 
@@ -115,9 +122,10 @@ only.
 
 ### Being reachable yourself
 
-With the hooks installed, tuios tells you about new mail during your turn, in a
-line that starts `You have 1 unread tuios message`. Run the command it names.
-Without the hooks, two habits are enough:
+tuios tells you about new mail, in a line that starts `You have 1 unread tuios
+message`: in your context during a turn when your hooks are installed, and as
+a typed prompt when you are at rest. Run the command it names. Two habits
+still help:
 
 - Check once before you tell the person you are done:
   `tuios read-agent-messages -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --unread`.
@@ -271,8 +279,8 @@ tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 1800000
 tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --unread
 ```
 
-The second shape works only if the reviewer reads its inbox. The first works
-against any agent.
+tuios tells the reviewer about the message, during its turn or once it is at
+rest, so the second shape works with any agent too. It does not block you.
 
 To hand a busy agent its next instruction without blocking, and without
 relying on it reading mail, queue it. The daemon types it as a prompt once the

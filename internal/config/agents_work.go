@@ -156,6 +156,17 @@ func (c QueueConfig) MaxEntries() int {
 	return c.Max
 }
 
+// MailConfig is the [agents.mail] table.
+type MailConfig struct {
+	// Wake types a one-line prompt into an agent at rest that has mail it
+	// was not told about, through the delivery queue. Unset means true.
+	Wake *bool `toml:"wake,omitempty"`
+}
+
+// WakeOn reports whether an idle agent is told about its mail. It is unless
+// the file says wake = false.
+func (c MailConfig) WakeOn() bool { return c.Wake == nil || *c.Wake }
+
 // Checkpoint bounds: how many checkpoints one pane keeps.
 const (
 	DefaultCheckpointKeep = 50

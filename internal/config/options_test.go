@@ -43,6 +43,7 @@ var optionWalkSkips = map[string]string{
 	"agents.recap":          "file-plane config the daemon reads from the file, like [hosts]",
 	"agents.queue":          "file-plane config the daemon reads from the file, like [hosts]",
 	"agents.checkpoints":    "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.mail":           "whether tuios types into an agent's pane is not for a pane to change over the control protocol",
 	"agents.herdr_protocol": "file-plane config the daemon reads from the file, like [hosts]",
 	// Read by a client when it starts, which is when it asks its terminal.
 	"agents.host_program_status": "file-plane config a client reads from the file when it starts, like [hosts]",

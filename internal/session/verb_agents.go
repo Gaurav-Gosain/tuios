@@ -674,6 +674,10 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	})
 	// Mail to the person waits in the Inbox until it is read.
 	d.attention.noteMail(stored)
+	// Mail to an agent at rest wakes it if nobody tells it sooner.
+	if stored.Kind == agentMsgDirect {
+		d.noteMailSent(sess.Name(), stored.To, stored.ID, d.mailOriginOf(cs, stored.VerifiedHuman))
+	}
 
 	return map[string]any{
 		"type":       "agent_message_sent",

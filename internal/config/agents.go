@@ -36,6 +36,9 @@ type AgentsConfig struct {
 	// Queue is the [agents.queue] table: messages waiting to be typed to an
 	// agent when it comes to rest. See agents_work.go.
 	Queue QueueConfig `toml:"queue,omitempty"`
+	// Mail is the [agents.mail] table: how tuios tells an agent that mail
+	// waits for it. See agents_work.go.
+	Mail MailConfig `toml:"mail,omitempty"`
 	// Checkpoints is the [agents.checkpoints] table: the state of a pane's
 	// git work tree saved at the end of each agent turn. See agents_work.go.
 	Checkpoints CheckpointsConfig `toml:"checkpoints,omitempty"`

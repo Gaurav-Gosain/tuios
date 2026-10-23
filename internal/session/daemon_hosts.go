@@ -136,6 +136,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.approvalsWaiting.Store(approvalsWait)
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
+	d.SetMailWake(cfg.Agents.Mail.WakeOn())
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)

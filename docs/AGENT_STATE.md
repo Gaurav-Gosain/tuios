@@ -4592,6 +4592,37 @@ your own `u` within the 10 seconds still puts it back. Nothing new is
 allowed: the daemon still refuses to type over a prompt, right before it
 types.
 
+### Mail that wakes an agent at rest
+
+An agent at rest runs no hooks, so it does not hear of mail that arrives
+while it waits. When mail for a pane stays unread and unannounced for 5
+seconds, and the pane's agent is at rest, the daemon queues one line for it:
+
+```
+You have 2 unread tuios messages from "review". Read them with: tuios read-agent-messages -s work -w c7be946f --unread
+```
+
+The line goes through the delivery queue, so it is typed only after a second
+at rest, never into a pane on `needs_input`, and never twice. `list-queued`
+shows it with `by` set to `tuios mail`. The line holds only the count, the
+senders' names cut to letters, digits and `. _ - : @`, and the command. It
+never holds a subject or a body, so mail cannot type a prompt into an agent.
+
+- **Once per message.** A hook notice and a wake share one mark per pane. Mail
+  a hook announced during a turn wakes nothing when the turn ends. A burst of
+  mail gives one line, and mail that comes while a wake waits in the queue
+  adds none. Two wakes of one pane are at least 30 seconds apart.
+- **Grants.** The wake carries the authority of the caller that sent the
+  mail, as its connection proved it, not the `from` the message claims. A
+  pane that may not type into the recipient cannot wake it, and the queue
+  checks again right before it types.
+- **At rest** means `idle` or `done`, and `unknown` only for a harness that
+  can never show idle. A pane on `none` gets no wake, because its prompt line
+  belongs to a shell. A pane on `needs_input` gets its line once it is at rest
+  again.
+- **Off.** `[agents.mail] wake = false` turns it off. Mail is still stored,
+  and the hooks still announce it.
+
 ## Reviewing an agent's changes
 
 When an agent finishes, you read what it changed, leave notes on the lines
