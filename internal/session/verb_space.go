@@ -29,7 +29,7 @@ func spaceName(raw string) (string, *verbError) {
 	return name, nil
 }
 
-func (d *Daemon) verbSetSessionSpace(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetSessionSpace(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Space   string `json:"space"`
@@ -41,7 +41,7 @@ func (d *Daemon) verbSetSessionSpace(_ *connState, params json.RawMessage) (any,
 	if verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

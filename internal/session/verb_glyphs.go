@@ -55,7 +55,7 @@ func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	// One read of config.toml serves the whole request.
-	sess := d.findTargetSession(p.Session)
+	sess := d.findTargetSession(cs, p.Session)
 	opts := d.optionsFor(cs, sess)
 	if sess != nil {
 		out["session"] = sess.Name()
@@ -64,7 +64,7 @@ func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *ve
 			out["active_source"] = source
 		}
 	} else if p.Session != "" {
-		return nil, mustResolve(d, p.Session)
+		return nil, mustResolve(d, cs, p.Session)
 	}
 
 	if p.Glyphs == "" {
