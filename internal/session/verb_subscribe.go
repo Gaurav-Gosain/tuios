@@ -386,17 +386,17 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 	case "session-exists":
 		return d.waitSessionExists(p.Session, deadline)
 	case "window-output":
-		return d.waitWindowOutput(p.Session, p.Window, p.Pattern, p.Source, deadline)
+		return d.waitWindowOutput(cs, p.Session, p.Window, p.Pattern, p.Source, deadline)
 	case "window-exit":
-		return d.waitWindowExit(p.Session, p.Window, deadline)
+		return d.waitWindowExit(cs, p.Session, p.Window, deadline)
 	case "window-idle":
-		return d.waitWindowIdle(p.Session, p.Window, p.Idle, deadline)
+		return d.waitWindowIdle(cs, p.Session, p.Window, p.Idle, deadline)
 	case "agent-state":
-		return d.waitAgentState(p.Session, p.Window, p.Until, deadline)
+		return d.waitAgentState(cs, p.Session, p.Window, p.Until, deadline)
 	case "agent-message":
-		return d.waitAgentMessage(p.Session, p.Window, p.Thread, deadline)
+		return d.waitAgentMessage(cs, p.Session, p.Window, p.Thread, deadline)
 	case waitCommandFinished:
-		return d.waitCommandFinishedFor(p.Session, p.Window, p.CommandSeq, deadline)
+		return d.waitCommandFinishedFor(cs, p.Session, p.Window, p.CommandSeq, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {
@@ -451,8 +451,8 @@ func (d *Daemon) waitSessionExists(name string, deadline <-chan time.Time) (any,
 }
 
 // waitWindowExit resolves when the target window's shell process exits.
-func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitWindowExit(cs *connState, sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -497,8 +497,8 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 
 // waitWindowIdle resolves when the target window produces no output for idleMs
 // milliseconds. Each output event resets the idle timer.
-func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitWindowIdle(cs *connState, sessionName, window string, idleMs int, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -555,12 +555,12 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 // It subscribes before the initial check, so a transition in the race window is
 // not missed, and re-reads the canonical state on every event rather than
 // trusting the payload, the waitSessionExists discipline.
-func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-chan time.Time) (any, *verbError) {
+func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string, deadline <-chan time.Time) (any, *verbError) {
 	states, verr := parseUntilStates(until)
 	if verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(sessionName)
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -784,7 +784,7 @@ func parseUntilStates(until string) (map[string]bool, *verbError) {
 // of the gap, so the last output of a burst is always checked. A gap marker or
 // dropped event cannot hang the wait because a low-rate backstop ticker also
 // re-checks.
-func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, deadline <-chan time.Time) (any, *verbError) {
+func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, source string, deadline <-chan time.Time) (any, *verbError) {
 	if pattern == "" {
 		return nil, invalidParam("pattern", "pattern is required for the window-output condition")
 	}
@@ -795,7 +795,7 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 			Detail: "pattern is a Go regular expression (RE2 syntax).",
 		})
 	}
-	sess, verr := d.resolveVerbSession(sessionName)
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -905,8 +905,8 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 // A thread the ring holds nothing from simply never matches, and times out like
 // any other wait: the ring forgets, so a thread nobody has started and a thread
 // that has aged out are the same thing to a reader.
-func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitAgentMessage(cs *connState, sessionName, window string, thread uint64, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}

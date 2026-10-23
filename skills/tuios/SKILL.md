@@ -77,9 +77,9 @@ has the whole model.
 
 ## Addressing things
 
-Sessions are addressed by name with `-s`. Omit it and the most recently active
-session is used, which is a guess when several are live. Inside a pane, pass
-`-s "$TUIOS_SESSION"`.
+Sessions are addressed by name with `-s`. Inside a pane, a command without
+`-s` acts on the pane's own session. Outside every pane, it acts on the most
+recently active session.
 
 Windows are addressed with `-w`, which takes, in order: the full uuid, the index
 `list-windows` prints (all digits), the exact window name (a name you gave,

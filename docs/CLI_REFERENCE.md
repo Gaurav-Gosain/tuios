@@ -1309,7 +1309,7 @@ tuios send-keys <keys> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <target>`: Target window: full id, the index `list-windows` prints, the exact name, or a unique id prefix (default: the attached client, else the focused window)
 - `-N, --repeat <n>`: Send the whole sequence n times, 1 to 1000 (default 1)
 - `-l, --literal`: Write the argument to the window's terminal unchanged, with no key names
@@ -1391,7 +1391,7 @@ tuios send-text <text> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `--json`: Output the result as JSON. Without it the command prints nothing, and a failure exits `1`
 
@@ -1479,7 +1479,7 @@ command that has flags of its own, or tuios reads them as its own flags:
 `tuios new-window log -- git log --oneline -20`.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--workspace <n>`: Workspace to open the window on (default: the current one)
 - `--cwd <dir>`: Directory to start the shell in (default: the daemon's)
 - `--no-focus`: Leave the focus where it is
@@ -1553,7 +1553,7 @@ tuios popup [flags] -- <command> [args...]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--width <size>`: Width in cells (`60`) or percent (`60%`). Default `80%`
 - `--height <size>`: Height in cells (`20`) or percent (`50%`). Default `60%`
 - `--dim <percent>`: Dim the screen behind this popup by `0` to `90` percent. Omit to inherit `appearance.popup_dim` (default `0`); explicit `--dim 0` turns it off
@@ -1823,7 +1823,7 @@ while (two minutes for many agent harnesses) keeps `--timeout` below that, or
 asks with `--no-wait` and waits with `tuios wait-for agent-message`.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: The pane asking, where a late answer is mailed (default: your own pane; none from outside every pane)
 - `-o, --option <answer>`: An answer the person can pick; give 1 to 9, each one line of at most 60 bytes
 - `--timeout <ms>`: Milliseconds to wait for the answer (default: 120000, at most one hour)
@@ -1859,7 +1859,7 @@ tuios run-command <command> [args...] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output result as JSON (useful for scripting)
 - `--list`: List all available commands
 
@@ -1942,7 +1942,7 @@ tuios set-config <path> <value> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output the result as JSON: `key`, `value`, `applied`, and `reason` when `applied` is false
 
 With a client attached, the client applies the value and writes it to
@@ -2057,7 +2057,7 @@ tuios wait-for <condition> [flags]
 | `command-finished` | A shell that marks its commands with OSC 133 finished one. With `--window`, that pane's next command, or with `--command-seq N` the first once the pane has finished more than N (already true if it happened before the wait). Without a window, any pane in the session. Prints the exit code |
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused; `agent-state`: any window)
 - `--pattern <regexp>`: Go regular expression (RE2), required by `window-output`
 - `--until <states>`: Agent state(s) to wait for, comma-separated, required by `agent-state`
@@ -2137,7 +2137,7 @@ The words after `--` are joined with spaces into one line that the shell
 parses, so quote for the shell as you would when typing it.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `--timeout <ms>`: Milliseconds to wait for the command (default: 30000). A timeout does not stop the command
 - `--lines <N>`: Keep only the last N lines of the output (0 keeps all)
@@ -2307,7 +2307,7 @@ tuios peek-prompt -w <window> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <target>`: The blocked pane, by name or ID, or `HOST:SESSION:WINDOW`
 - `--json`: Output the verb result as JSON
 
@@ -2344,7 +2344,7 @@ tuios respond <action> [value] -w <window> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <target>`: The blocked pane, by name or ID, or `HOST:SESSION:WINDOW`
 - `--prompt-id <id>`: The prompt id `peek-prompt` printed; a prompt that changed since is refused
 - `--timeout <ms>`: How long to wait for the pane to move on (default 5000, at most 30000)
@@ -2390,7 +2390,7 @@ tuios queue rm ID | --all -w <window> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <target>`: The agent's pane, by name or ID, or `HOST:SESSION:WINDOW` (default: the focused pane; for `ls`, every pane of the session)
 - `--all` (`rm`): Drop every message queued for the pane that you may drop
 - `--json`: Output the verb result as JSON
@@ -2717,7 +2717,7 @@ left, so a feed may write on every tick. The keys `now`, `prompt` and
 refused here; see [`tuios agent-log`](#tuios-agent-log).
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `--source <name>`: Who is writing, so `--clear` removes only this writer's keys
 - `--ttl <duration>`: Drop the keys this call sets after this long, at most `24h` (default: keep until removed)
@@ -2763,7 +2763,7 @@ tuios agent-log [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `--since <duration>`: Only what happened in this long, such as `30m` (default: everything kept)
 - `--limit <n>`: At most this many entries, the newest, 1 to 256 (default: 64)
@@ -2828,7 +2828,7 @@ bytes.
 
 **Flags:**
 - `--harness <id>`: Id of the harness the conversation belongs to (required)
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 
 **Example:**
@@ -2859,7 +2859,7 @@ It works on any pane with a recorded conversation, including one whose agent
 had exited before the restart, which the restore itself does not offer.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `--dry-run`: Print the command without typing it
 - `--json`: Output result as JSON
@@ -2938,7 +2938,7 @@ tuios set-session-name [name] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 
 **Examples:**
 ```bash
@@ -2963,7 +2963,7 @@ tuios set-session-accent [accent] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 
 **Examples:**
 ```bash
@@ -2989,7 +2989,7 @@ tuios set-session-space [space] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 
 **Examples:**
 ```bash
@@ -3019,7 +3019,7 @@ tuios set-workspace-name <workspace> [name] [flags]
 - `name`: Label for the workspace. Omit to clear it.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 
 **Examples:**
 ```bash
@@ -3078,7 +3078,7 @@ tuios list-hooks [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--event <name>`: Only the hooks on this event
 - `--json`: Output as JSON (default is human-readable table)
 
@@ -3141,7 +3141,7 @@ tuios list-dock-components [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output as JSON (default is human-readable table)
 
 **Example output:**
@@ -3210,7 +3210,7 @@ a component that failed five times in a row starts working again once its script
 is fixed, without restarting the session.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output as JSON
 
 **Examples:**
@@ -3243,7 +3243,7 @@ pane again to unpin it. The view belongs to the attached client, so the command
 needs one. Set the size and the corner in `[pip]`.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--off`: Unpin whatever is pinned
 - `--json`: Output as JSON
 
@@ -3341,7 +3341,7 @@ Exit status:
 - 1 for an error, such as a pane or session that does not exist
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <window>`: The pane to show, by ID or name
 - `--size follow|pane`: Whether the pane takes this terminal's size (default: follow)
 
@@ -3364,7 +3364,7 @@ tuios list-windows [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output as JSON (default is human-readable table)
 - `--all`: List the panes of every session on this machine, one row each
 - `--all-hosts`: Also list the panes of every session on each host in `[hosts]`
@@ -3480,7 +3480,7 @@ tuios get-window [id-or-name] [flags]
 - `id-or-name`: Window ID or custom name. If omitted, returns the focused window.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active).
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active).
   `host:session` reads a session on another machine.
 - `--json`: Output as JSON (default is human-readable)
 
@@ -3567,7 +3567,7 @@ tuios session-info [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--json`: Output as JSON (default is human-readable)
 
 **Examples:**
@@ -3662,7 +3662,7 @@ tuios capture-pane [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `-S, --scrollback`: Include the full scrollback history
 - `--lines <N>`: Keep only the last N lines (0 keeps all)
@@ -3730,7 +3730,7 @@ tuios screenshot [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
 - `-f, --format <fmt>`: `png` (default), `svg`, `ansi`, `html` or `txt`
 - `--frame <style>`: `window` (default), `plain` or `none`
@@ -4777,7 +4777,7 @@ asks the person before a surface first types into a pane. `tml validate` prints 
 and exits with status 1 when the document has errors. It needs no daemon.
 
 **Flags of `tml show`:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `--popup`: Show it as a popup (the default)
 - `--pane`: Show it as a tiled pane
 - `--name <name>`: Name for the window (default: the document's title)

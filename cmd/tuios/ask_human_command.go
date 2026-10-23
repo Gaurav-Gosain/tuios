@@ -131,7 +131,7 @@ without one (dismissed, superseded, or its pane closed).`,
 			return runAskHuman(o)
 		},
 	}
-	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: most recently active)")
+	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVarP(&o.window, "window", "w", "", "The pane asking, where a late answer is mailed (default: your own pane)")
 	cmd.Flags().StringArrayVarP(&o.options, "option", "o", nil, "An answer the person can pick. Give 1 to 9")
 	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "Milliseconds to wait for the answer (default: 120000, at most one hour)")
