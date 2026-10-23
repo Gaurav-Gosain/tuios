@@ -1500,6 +1500,11 @@ type Session struct {
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
 
+	// askShows records, by window ID, the question from ask-human a pane
+	// shows as its agent state while its call waits, and the state beneath
+	// it. Read and written under stateMu. See askShow.
+	askShows map[string]askShow
+
 	// agentHarnessPIDs records, by window ID, the pid of the harness process
 	// whose hook last set the window's AgentSessionID, as the hook reported it.
 	// sessionGuard reads it to tell a new conversation in the same harness
