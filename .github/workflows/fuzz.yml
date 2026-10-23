@@ -157,7 +157,7 @@ jobs:
           failed=""
           for target in $TARGETS; do
             echo "::group::$target"
-            if ! go test "./$PKG/" -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
+            if ! ./scripts/fuzz-target.sh "./$PKG/" -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
               failed="$failed $target"
             fi
             echo "::endgroup::"
@@ -236,7 +236,7 @@ jobs:
           for target in FuzzGhosttyTerminalWrite; do
             echo "::group::$target"
             if ! PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
-              go test -tags ghostty ./vt/ -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
+              ./scripts/fuzz-target.sh -tags ghostty ./vt/ -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
               failed="$failed $target"
             fi
             echo "::endgroup::"
