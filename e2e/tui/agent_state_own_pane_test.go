@@ -51,6 +51,9 @@ printf 'ANSWERED:%s\n' "$ans"
 // Between the person's mark and B's keys, B resizes A, and A draws its
 // prompt again. That output must not end the hold.
 //
+// With respond, B's keys into the prompt are still refused until B passes
+// --allow-blocked.
+//
 // Negative control: on origin/main SET_EXIT=0 and SK_EXIT=0 appear and A
 // shows ANSWERED:y. With promptStillShown cut from typingRefusal, or with the
 // hold ended by any output after it, the person half fails: B's keys answer
@@ -174,14 +177,26 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 		t.Errorf("ASSERTION: B's keys into the prompt still shown were not refused:\n%s", text)
 	}
 
-	// With respond, B may mark A and answer its prompt.
+	// With respond, B may mark A. Its keys into A's prompt still need
+	// --allow-blocked, which says B read the prompt and means to answer it.
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", sess, "-w", attacker, "--grants", "admin,respond"); err != nil {
 		t.Fatalf("give B respond: %v\n%s", err, out)
 	}
 	text = fromAttacker(tuiosBin+" set-agent-state -s "+sess+" -w "+victim+" needs_input; echo SET3_\"EXIT\"=$?; "+
 		tuiosBin+" send-keys -s "+sess+" -w "+victim+" 'y Enter'; echo SK3_\"EXIT\"=$?", "SK3_EXIT")
-	if !strings.Contains(text, "SET3_EXIT=0") || !strings.Contains(text, "SK3_EXIT=0") {
-		t.Errorf("ASSERTION: B with respond was refused:\n%s", text)
+	if !strings.Contains(text, "SET3_EXIT=0") {
+		t.Errorf("ASSERTION: B with respond could not mark A:\n%s", text)
+	}
+	if !strings.Contains(text, "SK3_EXIT=1") || !strings.Contains(text, "allow-blocked") {
+		t.Errorf("ASSERTION: B's keys into A's prompt without --allow-blocked were not refused:\n%s", text)
+	}
+	time.Sleep(time.Second)
+	if strings.Contains(victimText(), "ANSWERED") {
+		t.Fatalf("ASSERTION: B answered A's prompt without --allow-blocked:\n%s", victimText())
+	}
+	text = fromAttacker(tuiosBin+" send-keys -s "+sess+" -w "+victim+" --allow-blocked 'y Enter'; echo SK4_\"EXIT\"=$?", "SK4_EXIT")
+	if !strings.Contains(text, "SK4_EXIT=0") {
+		t.Errorf("ASSERTION: B with respond and --allow-blocked was refused:\n%s", text)
 	}
 	deadline = time.Now().Add(uiTimeout)
 	for !strings.Contains(victimText(), "ANSWERED:y") {

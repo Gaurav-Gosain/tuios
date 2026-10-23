@@ -641,7 +641,9 @@ func TestAPaneCannotTypeIntoAPaneThatHoldsMore(t *testing.T) {
 	if f, _ := focusedWindowID(d.manager.GetSession("a").GetState()); f != a2 {
 		t.Fatalf("focused window = %s, want %s for this check", f, a2)
 	}
-	wantForbidden(t, "send-text into the focused admin sibling", callP(c, t, "send-text", map[string]any{"text": widen}))
+	if code := errCode(t, callP(c, t, "send-text", map[string]any{"text": widen})); code != ErrVerbInvalidParams {
+		t.Errorf("send-text with no window from a pane answered %s, want invalid_params", code)
+	}
 
 	// Its own pane is always its own to type into.
 	result(t, callP(c, t, "send-text", map[string]any{"window": a1, "text": "x"}))
@@ -688,9 +690,12 @@ func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 		t.Errorf("ask-agent into a prompt answered %s, want agent_blocked as before", code)
 	}
 
-	// respond covers it.
+	// respond covers it, with allow_blocked to say the caller read the prompt.
 	setStrict(d, append(append([]string{}, config.DefaultStrictGrants...), config.PaneGrantRespond)...)
-	result(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"}))
+	if code := errCode(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"})); code != ErrVerbAgentBlocked {
+		t.Errorf("send-keys with respond and no allow_blocked answered %s, want agent_blocked", code)
+	}
+	result(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter", "allow_blocked": true}))
 
 	// A pane that has come to a prompt since the call was checked is refused
 	// by the handler's second look.

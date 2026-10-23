@@ -1303,6 +1303,11 @@ attached and whichever window has the focus. Without `-w` they go to the
 attached client as if the person pressed them, which drives the window manager
 or the focused window; with no client attached they go to the focused window.
 
+From inside a pane, `-w` is required. A pane does not send keys into a pane
+that waits on a prompt (`needs_input`). To answer that prompt, pass
+`--allow-blocked`. It also needs the `respond` grant. You, outside every pane,
+are held to neither rule.
+
 **Usage:**
 ```bash
 tuios send-keys <keys> [flags]
@@ -1314,6 +1319,7 @@ tuios send-keys <keys> [flags]
 - `-N, --repeat <n>`: Send the whole sequence n times, 1 to 1000 (default 1)
 - `-l, --literal`: Write the argument to the window's terminal unchanged, with no key names
 - `-r, --raw`: Treat each character as a separate key (no splitting on space/comma)
+- `--allow-blocked`: From a pane, send keys into a pane that waits on a prompt. Read the prompt first
 - `--json`: Output the result as JSON
 
 **Output:**
@@ -1385,6 +1391,9 @@ Nothing in the argument is interpreted, so spaces, quotes and punctuation
 arrive as typed. A trailing newline is the Enter that runs the line, which
 makes this one call where `send-keys` needs two.
 
+From inside a pane, `-w` is required, and a pane does not type into a pane on
+`needs_input` without `--allow-blocked`, as for `send-keys`.
+
 **Usage:**
 ```bash
 tuios send-text <text> [flags]
@@ -1393,6 +1402,7 @@ tuios send-text <text> [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
+- `--allow-blocked`: From a pane, type into a pane that waits on a prompt. Read the prompt first
 - `--json`: Output the result as JSON. Without it the command prints nothing, and a failure exits `1`
 
 **Examples:**
@@ -1421,7 +1431,7 @@ tuios list-buffers [--json]
 tuios show-buffer [-b <name>] [--json]
 tuios set-buffer [-b <name>] [-a] [<text> | -] [--json]
 tuios delete-buffer [-b <name>] [--json]
-tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [-r] [--json]
+tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [-r] [--allow-blocked] [--json]
 ```
 
 **Flags:**
@@ -1430,6 +1440,7 @@ tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [-r] [--json]
 - `-s, --session`, `-w, --window`: The pane `paste-buffer` pastes into (default: the focused pane)
 - `-d, --delete`: `paste-buffer` deletes the buffer after the paste, unless it was set again meanwhile
 - `-r, --raw`: `paste-buffer` keeps each line feed. Without it, each line feed becomes a carriage return, as in tmux
+- `--allow-blocked`: From a pane, `paste-buffer` pastes into a pane that waits on a prompt
 - `--json`: Output the result as JSON
 
 A buffer can hold any bytes, a binary file included. `show-buffer` prints the
