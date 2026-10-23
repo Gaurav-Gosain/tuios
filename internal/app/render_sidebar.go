@@ -718,18 +718,16 @@ func printableRune(r rune, ascii bool) bool {
 	return true
 }
 
-// sidebarNameCol is the column every rail row's text starts on: gutter, the
-// mark column, one cell of air. One spine for all three sections, which is
-// what the flat layout buys over the tree. The mark column is as wide as the
-// widest agent-state mark the glyph set draws, so a set with a two-cell mark
-// moves the spine for every row rather than for the one row wearing it.
-func sidebarNameCol() int {
-	return 2 + agentMarkWidth()
-}
+// sidebarNameCol is the column every rail row's text starts on: gutter, then
+// the mark and its gap (agentMarkGap), which take two cells whichever mark the
+// glyph set draws. One spine for all three sections, which is what the flat
+// layout buys over the tree.
+const sidebarNameCol = 1 + agentMarkLead
 
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
-// space on the row background when there is no state or glyphs are disabled,
-// so rows stay aligned. It always occupies exactly one cell.
+// space on the row background when there is no state or glyphs are disabled.
+// It is one cell, or two for a glyph set's two-cell mark; sidebarMarkCell
+// follows it with the gap that keeps the rows aligned.
 //
 // running is how many subagents the pane's agent is running, which turns a
 // pane at rest into waiting (see displayState).
@@ -1220,12 +1218,10 @@ func sidebarComposeGroupRow(indent int, gutter, glyph, name, right string, cw in
 	return sidebarFit(row, cw, bg)
 }
 
-// sidebarMarkCell is a row's styled glyph padded out to the mark column, and
-// the one cell of air after it. A one-cell mark on a set whose widest mark is
-// two keeps its row's name on the spine with the rows beside it.
+// sidebarMarkCell is a row's styled glyph and the gap after it, which end on
+// the name spine whether the glyph is one cell or two (agentMarkGap).
 func sidebarMarkCell(glyph string, bg color.Color) string {
-	air := max(agentMarkWidth()-lipgloss.Width(glyph), 0) + 1
-	return glyph + sidebarStyle(bg, nil).Render(strings.Repeat(" ", air))
+	return glyph + sidebarStyle(bg, nil).Render(agentMarkGap(glyph))
 }
 
 // sidebarRuleInk is the ink a heading's rule takes. The rule is a separator, so
@@ -1287,7 +1283,7 @@ func sidebarNameAvailIn(cw, rightW, indent int) int {
 	if rightW > 0 {
 		rightW += 2 // the inset cell, and the gap in front of the figure
 	}
-	return max(cw-sidebarNameCol()-max(indent, 0)-rightW, 1)
+	return max(cw-sidebarNameCol-max(indent, 0)-rightW, 1)
 }
 
 // renderSidebar composes the vertical session sidebar as a single layer, the way
@@ -1976,7 +1972,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	overflowRow := func(n, indent int) string {
 		// Stands in for the rows it hides, so it starts where their names do.
 		more := overlay.Ellipsis() + " +" + strconv.Itoa(n)
-		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol()+indent)+
+		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol+indent)+
 			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
 	}
 	// recordToken publishes a header control's rectangle and its nav row, the
@@ -2274,7 +2270,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// only for that state, so a rail with no working agent records
 			// nothing and the motion clock never starts. See shimmer.go.
 			if e.State == "working" && bodyW > 0 {
-				x0 := contentX0 + sidebarNameCol()
+				x0 := contentX0 + sidebarNameCol
 				m.motion.rail = append(m.motion.rail, shimmerSpan{
 					y: topMargin + len(lines), x0: x0, x1: min(x0+bodyW, contentX0+cw),
 				})
@@ -3103,7 +3099,7 @@ func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, st sideba
 		sep = " . "
 	}
 	text := "none here" + sep + strconv.Itoa(total) + " all"
-	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol()))+
+	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol))+
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, sidebarNameAvail(cw, 0))), cw, rowBg)
 }
 
@@ -3149,7 +3145,7 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // sentence.
 func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
-	indent := sidebarNameCol() + 1
+	indent := sidebarNameCol + 1
 	avail := sidebarNameAvail(cw, 0) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
 	quiet := sidebarStyle(rowBg, pal.FgMute)

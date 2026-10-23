@@ -281,12 +281,12 @@ func (m *OS) sidebarAgentFoldRow(e sidebarAgentEntry, cw int, pal overlay.Palett
 	if st.lit() {
 		fg = pal.Fg
 	}
-	indent := sidebarNameCol()
+	indent := sidebarNameCol
 	text := "+" + strconv.Itoa(e.Fold) + " at rest"
 	if names {
 		indent++
 		text, fg = e.FoldNames, pal.FgMute
 	}
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+
-		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(sidebarNameAvail(cw, 0)-(indent-sidebarNameCol()), 1))), cw, rowBg)
+		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(sidebarNameAvail(cw, 0)-(indent-sidebarNameCol), 1))), cw, rowBg)
 }

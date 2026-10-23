@@ -293,7 +293,7 @@ func (m *OS) SwitchToSessionByIndex(n int) {
 // palette and the title bar never disagree about what a glyph means.
 func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool, running int) string {
 	if glyph := agentStateIndicator(displayState(agentState, doneSeen, running)); glyph != "" {
-		return prefix + agentMarkCell(glyph) + " " + name
+		return prefix + glyph + agentMarkGap(glyph) + name
 	}
 	return prefix + name
 }

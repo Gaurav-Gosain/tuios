@@ -9051,19 +9051,20 @@ Run on 2026-10-24 on Linux amd64 with Go 1.27.1 against upstream main at 4364999
 
 `TestAgentMarksFollowTheGlyphSet` writes a glyph set naming `✋` for
 `state_needs_input` and `◆` for `state_working`, reports three agents over the
-CLI and reads the rail, the front window's title bar and the cockpit by cell.
-`TestAgentMarksKeepTheirDefaults` is its positive half: no set, `--ascii-only`
-and the built-in `ascii` set. `TestAgentMarksRefuseWhatTheyCannotDraw` writes a
-four-cell mark, a mark wide only through the emoji variation selector and one
-carrying an escape, beside one good mark. Run on 2026-10-23.
+CLI and reads the rail, the front window's title bar and the cockpit by cell,
+holding the names and marks to the columns a run on the shipped marks puts
+them in. `TestAgentMarksKeepTheirDefaults` is its positive half: no set,
+`--ascii-only` and the built-in `ascii` set.
+`TestAgentMarksRefuseWhatTheyCannotDraw` writes a four-cell mark, a mark wide
+only through the emoji variation selector and one carrying an escape, beside
+one good mark. Run on 2026-10-23.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A set names the state marks at all | the binary built from the commit before the feature | `TestAgentMarksFollowTheGlyphSet` ("the rail never drew the set's marks"), `TestAgentMarksKeepTheirDefaults/ascii-set` ("the rail never drew \"! hand-pane\""), `TestAgentMarksRefuseWhatTheyCannotDraw` ("the rail did not fall back to ▲ and ○ beside the set's ◆") | **caught** |
-| The mark column is as wide as the widest mark | `agentMarks` in `internal/config/agent_marks.go` never raises the width above one | `TestAgentMarksFollowTheGlyphSet` ("work-pane starts at column 120 and hand-pane at 121: a two-cell mark moved its row's name off the spine") | **caught** |
-| The cockpit draws the set's marks | `ckStateMark` returns the cockpit's own glyph | `TestAgentMarksFollowTheGlyphSet` ("the cockpit's work-pane row reads \"     \" before the name, want the mark \"◆\"", "the cockpit's counts do not wear the set's marks"), `TestAgentMarksKeepTheirDefaults/ascii-set` | **caught** |
+| A mark and its gap take two cells, so a two-cell mark's second cell is its gap | `agentMarkGap` in `internal/app/render_helpers.go` counts every mark as one cell | `TestAgentMarksFollowTheGlyphSet` ("hand-pane starts at column 121, and at 120 with the shipped marks: the glyph set moved the rail's names", "column 118 holds \"✋\", 2 cells, and hand-pane starts at 121; want ✋ in two cells and the name straight after it", "no rail row reads ✋home") | **caught** |
+| The names stay where the shipped marks put them, rail and cockpit | the binary built from the commit before this rule, which widened the mark column to the widest mark | `TestAgentMarksFollowTheGlyphSet` ("hand-pane starts at column 121, and at 120 with the shipped marks", the same for work-pane and rest-pane, "the cockpit starts hand-pane at column 6, and at 5 with the shipped marks", the same for work-pane and rest-pane) | **caught** |
 | A mark that is not one or two cells, or wide only through what follows it, keeps the default | the `MarkWidth` check in `sanitizeGlyphSet` cut | `TestAgentMarksRefuseWhatTheyCannotDraw` ("the rail did not fall back to ▲ and ○") | **caught** |
-| The cockpit's name column moves with the mark column | with the width cut above, the cockpit rows | none: at the widths the test runs the cockpit leaves a blank cell after a one-cell mark, so a two-cell mark fits it either way; only the narrow single-line row (under 48 columns) needs the move | **not caught** |
 | The title bar reserves the mark's measured width | not cut | none: the test's titles have room to spare | **not caught** |
 
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run

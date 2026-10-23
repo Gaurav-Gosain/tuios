@@ -791,7 +791,7 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 			words += " " + strings.ToLower(ckGroupTitles[r.group])
 			ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + 1, kind: ckHitMore, group: r.group})
 		}
-		c.text(x+4+agentMarkWidth(), y, right, ckSeg{t: words, fg: pal.FgMute})
+		c.text(x+5, y, right, ckSeg{t: words, fg: pal.FgMute})
 		return
 	case ckRowChild:
 		g, ink := l.ckStateMark("working", ckGlyphWorking), overlay.MixColors(pal.Busy, l.panel, 0.3)
@@ -802,7 +802,7 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		if what == "" {
 			what = r.child.Description
 		}
-		c.text(x+4, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + " ", fg: ink},
+		c.text(x+4, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + agentMarkGap(g), fg: ink},
 			ckSeg{t: printableTitle(firstNonEmptyStr(r.child.Type, "agent")), fg: pal.FgDim}, ckSeg{t: "  " + printableTitle(what), fg: pal.FgMute})
 		return
 	case ckRowFan:
@@ -866,8 +866,8 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.attempt {
 		// One attempt of a fan, under the fan's row: its tree mark, state,
 		// name, agent and machine, and its diff at the end.
-		ax := c.text(x+2, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: agentMarkCell(g), fg: gInk})
-		ax = c.text(ax+1, y, right, ckSeg{t: ckPad(ckTrunc(name, 11), 12), fg: ink(nameInk)})
+		ax := c.text(x+2, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + agentMarkGap(g), fg: gInk})
+		ax = c.text(ax, y, right, ckSeg{t: ckPad(ckTrunc(name, 11), 12), fg: ink(nameInk)})
 		rx := right
 		if diff := ckDiffSegs(l, e); diff != nil {
 			rx = c.textR(right, y, diff...) - 2
@@ -881,12 +881,11 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		nameW = 13
 	}
 	c.text(x+2, y, right, ckSeg{t: g, fg: gInk})
-	// The name starts past the mark column, which is as wide as the widest
-	// mark the glyph set draws, so a two-cell mark keeps every row's name in
-	// one column.
-	nx := x + 4 + agentMarkWidth()
+	// The name starts in the same column whichever mark the row wears: a
+	// two-cell mark's second cell is part of its gap (agentMarkGap).
+	nx := x + 5
 	if r.lines == 1 && w < 48 {
-		nx--
+		nx = x + 4
 	}
 	c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})
