@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,7 +57,9 @@ exit 0
 //     while the screen tier still held it, with its mark intact, and so pass
 //     without the fix. The detector runs every four seconds here, the exit
 //     lands between two passes, and the test fails unless it read the claim
-//     handed back, idle from a tier other than the screen, before none.
+//     handed back, idle from a tier other than the screen, before none. The
+//     daemon's clock decides where between two passes the exit lands, so a run
+//     that misses the hand-back is tried again, up to three times.
 //   - A pane that clears and comes back would pass a single read. The test
 //     reads for a further four seconds after none.
 func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
@@ -97,12 +100,8 @@ func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
 			// there on every run of blocker-released-on-exit.
 			writeConfig(t, base, "[daemon]\nagent_detect_seconds = 4\n")
 			killDaemon(t, base)
-			const session = "e2e-handback"
-			if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
-				t.Fatalf("create %s: %v\n%s", session, err, out)
-			}
-
-			began := time.Now()
+			var session string
+			var began time.Time
 			var trace []oscExitReading
 			defer func() {
 				dir := artifactDir(t)
@@ -148,36 +147,56 @@ func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
 				}
 			}
 
-			if out, err := tuiosCLI(t, base, "set-agent-state", tc.seedState, "--source", tc.seedSource, "--harness", "claude-code", "-s", session, "-w", "0"); err != nil {
-				t.Fatalf("give the pane a %s-tier state: %v\n%s", tc.seedSource, err, out)
-			}
-			send("claude "+script+" "+tc.draw+"\n", "start the agent")
-			if r, ok := until(15*time.Second, func(r oscExitReading) bool {
-				return r.State == tc.wantState && r.Source == "screen"
-			}); !ok {
-				t.Fatalf("the screen tier never took the pane at %s, last read %+v", tc.wantState, r)
-			}
-			// A detector pass with the agent in the foreground, so it has
-			// seen the process before the agent leaves, and the exit half way
-			// to the next one.
-			time.Sleep(6 * time.Second)
-			if r := read(); r.State != tc.wantState || r.Source != "screen" {
-				t.Fatalf("the screen tier let go of the pane before the agent exited, read %+v", r)
-			}
-
-			exited := len(trace)
-			send("\n", "let the agent exit")
-			if r, ok := until(10*time.Second, func(r oscExitReading) bool { return r.State == "none" }); !ok {
-				t.Fatalf("ASSERTION: the pane kept agent state %s (source %s, harness %s) with the agent gone and its shell in the foreground", r.State, r.Source, r.Harness)
-			}
-			handedBack := false
-			for _, r := range trace[exited:] {
-				if r.State == "idle" && r.Source != "screen" {
-					handedBack = true
+			// The detector ticks on the daemon's clock, so where the exit falls
+			// between two passes is chance. A pass that lands between the exit
+			// and the look clears the pane before the hand-back, which tests
+			// nothing, and under load that happened on about one run in three.
+			// Such a run is tried again on a fresh session. An assertion fails
+			// at once, and only a run that reached the hand-back can pass.
+			const tries = 3
+			for try := 1; ; try++ {
+				session = fmt.Sprintf("e2e-handback-%d", try)
+				if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+					t.Fatalf("create %s: %v\n%s", session, err, out)
 				}
-			}
-			if !handedBack {
-				t.Fatalf("the pane cleared before the screen tier handed its claim back, so the hand-back was not exercised; see the saved trace")
+				began = time.Now()
+				trace = nil
+
+				if out, err := tuiosCLI(t, base, "set-agent-state", tc.seedState, "--source", tc.seedSource, "--harness", "claude-code", "-s", session, "-w", "0"); err != nil {
+					t.Fatalf("give the pane a %s-tier state: %v\n%s", tc.seedSource, err, out)
+				}
+				send("claude "+script+" "+tc.draw+"\n", "start the agent")
+				if r, ok := until(15*time.Second, func(r oscExitReading) bool {
+					return r.State == tc.wantState && r.Source == "screen"
+				}); !ok {
+					t.Fatalf("the screen tier never took the pane at %s, last read %+v", tc.wantState, r)
+				}
+				// A detector pass with the agent in the foreground, so it has
+				// seen the process before the agent leaves, and the exit half
+				// way to the next one.
+				time.Sleep(6 * time.Second)
+				if r := read(); r.State != tc.wantState || r.Source != "screen" {
+					t.Fatalf("the screen tier let go of the pane before the agent exited, read %+v", r)
+				}
+
+				exited := len(trace)
+				send("\n", "let the agent exit")
+				if r, ok := until(10*time.Second, func(r oscExitReading) bool { return r.State == "none" }); !ok {
+					t.Fatalf("ASSERTION: the pane kept agent state %s (source %s, harness %s) with the agent gone and its shell in the foreground", r.State, r.Source, r.Harness)
+				}
+				handedBack := false
+				for _, r := range trace[exited:] {
+					if r.State == "idle" && r.Source != "screen" {
+						handedBack = true
+					}
+				}
+				if handedBack {
+					break
+				}
+				if try == tries {
+					t.Fatalf("the pane cleared before the screen tier handed its claim back on all %d tries, so the hand-back was not exercised; see the saved trace", tries)
+				}
+				t.Logf("try %d: a detector pass cleared the pane before the hand-back, so the scenario runs again", try)
 			}
 			if r, back := until(4*time.Second, func(r oscExitReading) bool { return r.State != "none" }); back {
 				t.Fatalf("ASSERTION: the pane went back to agent state %s (source %s, harness %s) after it cleared at the shell", r.State, r.Source, r.Harness)
