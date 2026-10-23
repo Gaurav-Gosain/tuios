@@ -1997,6 +1997,7 @@ directory holds only the colours that are different from its base.`,
 	var waitForEvery bool
 	var waitForJSON bool
 	var waitForCommandSeq uint64
+	var waitForNew bool
 	waitForCmd := &cobra.Command{
 		Use:   "wait-for <condition>",
 		Short: "Block until a condition matches",
@@ -2004,7 +2005,10 @@ directory holds only the colours that are different from its base.`,
 
 Conditions:
   session-exists  the named session is present
-  window-output   the window printed something matching --pattern
+  window-output   the window printed something matching --pattern. The screen
+                  and the scrollback count, so a marker already on the
+                  screen matches at once. With --new, only output written
+                  after the wait starts counts
   window-exit     the window's program exited. The output shows its exit
                   status, and --json gives it in exit_code. The command
                   still exits 0. Use new-window --wait to exit with it
@@ -2028,6 +2032,9 @@ capture-pane and sleep. A condition that does not match before --timeout exits
 non-zero with the timeout error.`,
 		Example: `  # Wait for a build to print its marker
   tuios wait-for window-output -w build --pattern 'BUILD OK'
+
+  # Ignore the marker of the last build that is still on the screen
+  tuios wait-for window-output -w build --pattern 'BUILD OK' --new
 
   # Wait for a pane to go quiet for two seconds
   tuios wait-for window-idle -w build --idle 2000
@@ -2060,7 +2067,7 @@ non-zero with the timeout error.`,
 				commandSeq = &waitForCommandSeq
 			}
 			return runWaitFor(waitForSession, waitForWindow, args[0], waitForPattern,
-				waitForUntil, waitForIdle, waitForThread, waitForTimeout, waitForAnySession, waitForSelect, waitForEvery, waitForJSON, commandSeq)
+				waitForUntil, waitForIdle, waitForThread, waitForTimeout, waitForAnySession, waitForSelect, waitForEvery, waitForJSON, commandSeq, waitForNew)
 		},
 	}
 	waitForCmd.Flags().Uint64Var(&waitForCommandSeq, "command-seq", 0, "For command-finished: match once the pane has finished more than this many commands")
@@ -2069,6 +2076,7 @@ non-zero with the timeout error.`,
 	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused, and for agent-state any window)")
 	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
+	waitForCmd.Flags().BoolVar(&waitForNew, "new", false, "For window-output: match only output written after the wait starts. A screen redraw counts as new output")
 	waitForCmd.Flags().StringVar(&waitForUntil, "until", "", "Agent state(s) to wait for, comma-separated, required by agent-state")
 	waitForCmd.Flags().IntVar(&waitForIdle, "idle", 0, "Milliseconds of silence that count as idle, for window-idle (default: 500)")
 	waitForCmd.Flags().Uint64Var(&waitForThread, "thread", 0, "Only match a message in this thread, for agent-message. Pass any message id in it")
