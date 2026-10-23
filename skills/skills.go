@@ -16,6 +16,7 @@
 // fails while the archive is stale.
 package skills
 
+//go:generate go run gentml.go
 //go:generate go run gen.go
 
 import (
