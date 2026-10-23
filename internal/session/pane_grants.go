@@ -1020,7 +1020,6 @@ func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage
 		if window != "" && window != pa.window {
 			return nil, other("window " + echoName(window) + " is not this pane")
 		}
-		window = pa.window
 	} else {
 		if session != "" {
 			if sess := d.findTargetSession(session); sess == nil || sess.ID != own.ID {
@@ -1028,9 +1027,7 @@ func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage
 			}
 		}
 		session = own.Name()
-		if window == "" {
-			window = pa.window
-		} else {
+		if window != "" {
 			// A name or a short id is resolved the way the handler would,
 			// in the pane's own session.
 			wins := own.GetState().Windows
