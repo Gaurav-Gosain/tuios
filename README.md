@@ -14,6 +14,9 @@
   <a title="This tool is Tool of The Week on Terminal Trove, The $HOME of all things in the terminal" href="https://terminaltrove.com/"><img src="https://cdn.terminaltrove.com/media/badges/tool_of_the_week/png/terminal_trove_tool_of_the_week_green_on_dark_grey_bg.png" alt="Terminal Trove Tool of The Week" style="width: 250px;" /></a>
 </div>
 
+> [!WARNING]
+> **An account on X called @tuiosdev is pretending to be tuios. It is not this project.** tuios has no X or Twitter account. It lives only at [tuios.dev](https://tuios.dev) and in this repository. There is no tuios token or presale. Please report that account if you see it.
+
 <picture>
   <source srcset="./assets/demo.avif" type="image/avif">
   <img alt="TUIOS" src="./assets/demo.gif">
@@ -22,9 +25,6 @@
 TUIOS is a modern terminal multiplexer and window manager built with Go. It provides a vim-like modal interface with multiple terminal panes, workspaces, BSP tiling, kitty graphics protocol support, and a command palette, all running inside your existing terminal. A daemon keeps sessions alive, reaches sessions on your other machines, and lets the coding agents in your panes report their state and message each other.
 
 Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driven rendering for near-zero idle CPU usage, flicker-free kitty image passthrough, and comprehensive keyboard/mouse interaction.
-
-> [!IMPORTANT]
-> **Official sources.** tuios lives only at [tuios.dev](https://tuios.dev) and in this repository. tuios has no X or Twitter account. An account that says it is tuios, or offers a tuios token or presale, is not this project.
 
 ## Documentation
 
