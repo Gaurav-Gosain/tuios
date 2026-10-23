@@ -1842,7 +1842,15 @@ asks with `--no-wait` and waits with `tuios wait-for agent-message`.
 - `--request-id <id>`: Come back for a question already asked
 - `--json`: Output the result as JSON: `request_id`, `status`, `answer`, `answer_index`, `answered_by`, `verified_human`
 
-The question is one line of printable text, at most 160 bytes.
+The question is one line of printable text, at most 160 bytes. For a longer
+question, send the details to the person with `tuios send-agent-message -w human`,
+then ask a short question.
+
+While a call from inside a pane waits, that pane shows `needs_input` with the
+question as its note. When the call returns, the pane shows its earlier state
+again, or the state the pane reported while the call waited. A pane already on
+`needs_input` keeps its own prompt. A question from outside every pane changes
+no pane's state.
 
 **Exit status:** `0` with the answer alone on stdout; `2` when there is no
 answer yet; `1` when the question ended without one (dismissed, superseded by

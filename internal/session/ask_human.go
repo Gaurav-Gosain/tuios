@@ -5,7 +5,10 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Asking the person a question, and getting the answer back.
@@ -292,6 +295,31 @@ func askLineShown(s string, limit int) bool {
 	return len(s) <= limit && approvalLineShown(s)
 }
 
+// askLinePrintable reports whether s is one line of printable text, at any
+// length: what a question over the limit is when only its length is wrong.
+func askLinePrintable(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsPrint(r) || InvisibleFormatRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// askShellWord is s as one shell word for a hint command: as it is when it
+// holds only characters a shell leaves alone, else in single quotes.
+func askShellWord(s string) string {
+	if s != "" && strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.:/@%+=,", r))
+	}) < 0 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // askResult is ask-human's answer.
 func askResult(requestID string, out askOutcome) map[string]any {
 	status := out.Reason
@@ -351,6 +379,19 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 		return d.rejoinAsk(cs, p.RequestID, fromPane, own, wait, timeout)
 	}
 
+	if len(p.Question) > attentionMaxSummary && askLinePrintable(p.Question) {
+		// The common miss: the details went into the question. Say where
+		// they go instead, with a command, rather than point at list-verbs.
+		mail := "tuios send-agent-message -w human \"<the details>\""
+		if sess, verr := d.resolveVerbSession(cs, p.Session); verr == nil {
+			mail = "tuios send-agent-message -s " + askShellWord(sess.Name()) + " -w human \"<the details>\""
+		}
+		return nil, hintedVerbError(ErrVerbInvalidParams, "the question is "+strconv.Itoa(len(p.Question))+" bytes, and the limit is "+strconv.Itoa(attentionMaxSummary)+" bytes", &VerbHint{
+			Param:   "question",
+			Command: mail,
+			Detail:  "Nothing was asked. Send the details to the person in a message, then ask a short question.",
+		})
+	}
 	if !askLineShown(p.Question, attentionMaxSummary) {
 		return nil, invalidParam("question", "question is required: one line of printable text, at most 160 bytes, that the Inbox shows as written. Put the details in a message to human and ask the short question here")
 	}
@@ -403,7 +444,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	if !wait {
 		return askResult(hold.id, askOutcome{}), nil
 	}
-	return d.awaitAsk(cs, hold, timeout), nil
+	return d.awaitAsk(cs, hold, timeout, fromPane), nil
 }
 
 // rejoinAsk is ask-human with a request id: wait on the question again, or
@@ -435,11 +476,20 @@ func (d *Daemon) rejoinAsk(cs *connState, requestID string, fromPane bool, own s
 		d.attention.leaveAsk(hold)
 		return askResult(requestID, askOutcome{}), nil
 	}
-	return d.awaitAsk(cs, hold, timeout), nil
+	return d.awaitAsk(cs, hold, timeout, fromPane), nil
 }
 
-// awaitAsk blocks on an open question until it ends or timeout passes.
-func (d *Daemon) awaitAsk(cs *connState, hold *askHold, timeout time.Duration) map[string]any {
+// awaitAsk blocks on an open question until it ends or timeout passes. A
+// caller inside the asking pane is an agent blocked on the person, so the
+// pane shows the question as its state until the call returns
+// (ask_human_state.go).
+func (d *Daemon) awaitAsk(cs *connState, hold *askHold, timeout time.Duration, fromPane bool) map[string]any {
+	if fromPane && hold.window != "" {
+		if sess, _ := d.manager.ResolveSession(hold.session); sess != nil {
+			sess.showAsk(hold.window, hold.id, hold.question)
+			defer sess.endAskShow(hold.window, hold.id)
+		}
+	}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
