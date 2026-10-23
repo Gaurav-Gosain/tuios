@@ -426,7 +426,7 @@ func (m *OS) worktreeTollCmd(name string) tea.Cmd {
 		return nil
 	}
 	dial := m.verbDialer()
-	params := map[string]any{"repo": info.Repo, "changes": true}
+	params := map[string]any{"repo": info.Repo, "changes": true, "session": name}
 	return func() tea.Msg {
 		var res struct {
 			Worktrees []struct {

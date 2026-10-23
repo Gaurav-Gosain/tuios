@@ -259,6 +259,7 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 	var p struct {
 		Repo    string `json:"repo"`
 		Group   string `json:"group"`
+		Session string `json:"session"`
 		Changes bool   `json:"changes"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -274,6 +275,12 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			continue
 		}
 		if p.Group != "" && wt.Group != p.Group {
+			continue
+		}
+		// One session only. The counts under changes walk ignored and
+		// untracked trees — node_modules included — and the close dialog is
+		// the only caller that needs them, for one worktree it names.
+		if p.Session != "" && s.Name != p.Session {
 			continue
 		}
 		states := make([]string, 0, len(s.Windows))
@@ -492,9 +499,10 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 			if killed {
 				msg += " The session was killed to free the directory for the removal."
 			}
-			return nil, hintedVerbError(ErrVerbGitFailed, msg, &VerbHint{
-				Detail: msg,
-			})
+			// The message carries the whole story — the refusal, the stash, the
+			// kill — and the client prints message and Detail together, so a
+			// Detail that repeats it prints the story twice.
+			return nil, hintedVerbError(ErrVerbGitFailed, msg, nil)
 		}
 		out["discarded"] = discard
 	}

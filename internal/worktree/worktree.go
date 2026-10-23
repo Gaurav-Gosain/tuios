@@ -222,24 +222,44 @@ func Changes(path string) (int, error) {
 	return n, nil
 }
 
+// statusEntries reads `git status --porcelain -z --untracked-files=all
+// --ignored=matching` in the worktree at path and returns the ignored and the
+// untracked paths it lists, the status markers stripped. -z ends every record
+// at NUL and keeps git from quoting, so a path with a space or a non-ASCII
+// character survives the round trip. Splitting on a newline would cut such a
+// path in half, and a quoted name would lstat as its quoted form and fail the
+// walk a clean worktree never fails.
+func statusEntries(path string) (ignored, untracked []string, err error) {
+	out, err := run(path, "status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching")
+	if err != nil {
+		return nil, nil, err
+	}
+	for record := range strings.SplitSeq(out, "\x00") {
+		if entry, ok := strings.CutPrefix(record, "!! "); ok {
+			ignored = append(ignored, entry)
+		} else if entry, ok := strings.CutPrefix(record, "?? "); ok {
+			untracked = append(untracked, entry)
+		}
+	}
+	return ignored, untracked, nil
+}
+
 // Ignored scans the paths a removal would take unsaved: git never stashes
 // them, and git worktree remove deletes them without --force. --ignored=matching
 // reports a matched directory as one entry however many files sit in it, so the
 // entry is walked to count the files a person deleting the worktree is owed.
 func Ignored(path string) (int, error) {
-	out, err := run(path, "status", "--porcelain", "--untracked-files=all", "--ignored=matching")
+	entries, _, err := statusEntries(path)
 	if err != nil {
 		return 0, err
 	}
 	n := 0
-	for line := range strings.SplitSeq(out, "\n") {
-		if strings.HasPrefix(line, "!! ") {
-			c, err := countFiles(filepath.Join(path, strings.TrimPrefix(line, "!! ")))
-			if err != nil {
-				return 0, err
-			}
-			n += c
+	for _, entry := range entries {
+		c, err := countFiles(filepath.Join(path, entry))
+		if err != nil {
+			return 0, err
 		}
+		n += c
 	}
 	return n, nil
 }
@@ -250,18 +270,11 @@ func Ignored(path string) (int, error) {
 // Empty when there is none. Untracked paths are in the scan because --stash
 // saves their files but not a nested repository's .git.
 func NestedRepo(path string) (string, error) {
-	out, err := run(path, "status", "--porcelain", "--untracked-files=all", "--ignored=matching")
+	ignored, untracked, err := statusEntries(path)
 	if err != nil {
 		return "", err
 	}
-	for line := range strings.SplitSeq(out, "\n") {
-		entry, ok := strings.CutPrefix(line, "!! ")
-		if !ok {
-			entry, ok = strings.CutPrefix(line, "?? ")
-		}
-		if !ok {
-			continue
-		}
+	for _, entry := range append(ignored, untracked...) {
 		nested, err := findNestedRepo(filepath.Join(path, entry))
 		if err != nil {
 			return "", err

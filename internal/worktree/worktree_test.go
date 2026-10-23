@@ -102,3 +102,52 @@ func TestParseWorktreeList(t *testing.T) {
 		}
 	}
 }
+
+// TestIgnoredReadsAPathWithASpace pins the -z read of git status: without it
+// git quotes a path with a space or a non-ASCII character, and the quoted form
+// lstat's as nothing, failing the walk a clean worktree never fails.
+func TestIgnoredReadsAPathWithASpace(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	wt := filepath.Join(t.TempDir(), "wt")
+	out, err := run(repo, "worktree", "add", "-b", "feat/spaces", "--", wt)
+	if err != nil {
+		t.Fatalf("worktree add: %v: %s", err, out)
+	}
+	for _, name := range []string{"notes draft.txt", "résumé.txt"} {
+		if err := os.WriteFile(filepath.Join(wt, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	n, err := Ignored(wt)
+	if err != nil {
+		t.Fatalf("Ignored on untracked names git would quote: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("Ignored counted %d files, want 0: nothing is ignored", n)
+	}
+
+	if _, err := NestedRepo(wt); err != nil {
+		t.Fatalf("NestedRepo on untracked names git would quote: %v", err)
+	}
+
+	ignored := filepath.Join(wt, "cache dir")
+	if err := os.MkdirAll(ignored, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ignored, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitignore := filepath.Join(wt, ".gitignore")
+	if err := os.WriteFile(gitignore, []byte("cache dir/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err = Ignored(wt)
+	if err != nil {
+		t.Fatalf("Ignored on an ignored directory with a space: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("Ignored counted %d files, want the 1 in \"cache dir\"", n)
+	}
+}

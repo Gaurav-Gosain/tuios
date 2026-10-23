@@ -621,7 +621,8 @@ func buildVerbRegistry() map[string]verbEntry {
 			params: []verbParam{
 				{Name: "repo", Type: "string", Description: "Only worktrees of this repository, by name."},
 				{Name: "group", Type: "string", Description: "Only the sessions of this fan-out, by its branch stem."},
-				{Name: "changes", Type: "bool", Description: "Run git in every worktree and report the count of uncommitted changes, the commits ahead of base, and whether the branch is merged. Off by default because it runs git.", Default: "false"},
+				{Name: "session", Type: "string", Description: "Only this session's worktree. The close dialog asks for the one it deletes, so the counts under changes run git there and nowhere else."},
+				{Name: "changes", Type: "bool", Description: "Run git in the matching worktrees and report the count of uncommitted changes, the commits ahead of base, and whether the branch is merged. Off by default because it runs git.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, managed, gone, state, harness, windows, attached, prompt_status, prompt_note, launched_from (the session whose pane ran the fan, only when a pane did), pr (the branch's pull request as ship-status reports it, only when tuios knows of one), and with changes: changes, ahead, merged, and merged_into. merged is true when the branch has commits of its own and merging it into base, or into the upstream of base, changes nothing. A merge commit, a fast-forward, a rebase and a squash all count. merged_into names the ref, only when merged is true. No fetch is run, so a remote ref is as git last fetched it."},
