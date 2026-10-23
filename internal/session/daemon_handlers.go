@@ -237,7 +237,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.attachSeq = d.attachCount.Add(1)
 	cs.viewOnly = payload.ViewOnly
 	cs.passive = payload.Passive
-	cs.lastActivity = time.Time{}
+	// lastActivity is left alone. It is when the person at this client last
+	// gave input, wherever that was, and a session switch is the same person
+	// on the same connection: one who typed in another session and came back
+	// is still the latest, and takes the size in the reply below rather than
+	// on the next key. A new connection starts with none. See window_size.go.
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
 	cs.mu.Unlock()
@@ -489,6 +493,7 @@ func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 	cs.mu.Lock()
 	sessionID := cs.sessionID
 	sessionName := cs.sessionName
+	input := cs.lastActivity
 	if sessionID == "" || (want != "" && (sessionID != want || cs.repliedSession != want)) {
 		cs.mu.Unlock()
 		return false
@@ -538,7 +543,7 @@ func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 	d.forgetPushes(cs, sessionID)
 
 	// Notify other clients that this client left
-	d.notifyClientLeft(sessionID, clientID)
+	d.notifyClientLeft(sessionID, clientID, input)
 	return true
 }
 
