@@ -127,7 +127,9 @@ jobs:
     # request changed: goimports, gopls check, and the go fix modernizers as a
     # report. gofmt, tidy, vet, golangci-lint and govulncheck have jobs of
     # their own.
-    if: github.event_name == 'pull_request'
+    #
+    # On main it checks the last commit. That also builds the pinned gopls and
+    # goimports into the shared cache, which pull requests only restore.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -136,15 +138,15 @@ jobs:
           # The merge base with the target branch decides what changed.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            scripts/check.sh
+          cache-id: sanity
 
       - name: Check the changed files
-        run: scripts/check.sh --changed "origin/${{ github.base_ref }}" --only fmt,fix,gopls
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
+        run: scripts/check.sh --changed "$BASE" --only fmt,fix,gopls
 
       - name: Report the modernizers
         if: always()
