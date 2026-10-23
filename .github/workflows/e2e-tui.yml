@@ -35,7 +35,7 @@ concurrency:
 # estimate is over E2E_SHARD_LIMIT, which leaves a wide margin under the 18
 # minute go test timeout. Keep the matrix below in step with E2E_SHARDS.
 env:
-  E2E_SHARDS: "9"
+  E2E_SHARDS: "10"
   E2E_SHARD_LIMIT: 11m
 
 jobs:
@@ -113,11 +113,11 @@ jobs:
     # The split was a hash of the test name until seven shards ran between 525
     # and 1054 seconds, and the long one crossed the 1080 second timeout. A
     # hash balances the count of tests, and a few tests take a minute or two.
-    # The split is now by measured time, with nine shards near ten minutes.
+    # The split is now by measured time, with ten shards near ten minutes.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     name: e2e-tui (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: tested
     # tested is skipped on a pull request, so the shards must not wait for its
