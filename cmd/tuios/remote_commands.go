@@ -855,6 +855,10 @@ func runCapturePane(o captureOptions) error {
 // daemon.
 var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios restart-server' to update it")
 
+// errStaleWaitNew is what wait-for --new says when the daemon does not know
+// the new parameter, worded like errStaleCapture.
+var errStaleWaitNew = errors.New("the running daemon is older than this tuios and does not know --new. Run 'tuios restart-server' to update it")
+
 // printCapture writes a capture-pane result. A capture from this machine is
 // the content as it is. A capture from host is fenced with
 // session.UntrustedFence, with control and invisible format characters
@@ -1762,7 +1766,10 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64, fresh bool) error {
+	if fresh && condition != "window-output" {
+		return errors.New("--new goes with window-output")
+	}
 	if anySession && (sessionName != "" || windowTarget != "") {
 		return errors.New("--any-session watches every session, so it takes no --session or --window. Drop one or the other")
 	}
@@ -1803,11 +1810,30 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	if commandSeq != nil {
 		params["command_seq"] = *commandSeq
 	}
+	// Sent only when asked for, so a wait against an older daemon keeps
+	// working: it would refuse a parameter it does not know.
+	if fresh {
+		params["new"] = true
+	}
 
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
 	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
 	if err != nil {
+		if call, ok := errors.AsType[*session.VerbCallError](err); ok && fresh && call.Code == session.ErrVerbInvalidParams &&
+			call.Hint != nil && call.Hint.Param == "new" && strings.Contains(call.Message, "has no parameter") {
+			return reportVerbError(errStaleWaitNew, jsonOutput)
+		}
 		return reportVerbError(t.explain("wait-for", err), jsonOutput)
+	}
+	// A daemon older than v0.8.0 ignores unknown parameters, so it matched
+	// old output too. It omits the field that says new was used.
+	if fresh {
+		var echo struct {
+			New bool `json:"new"`
+		}
+		if json.Unmarshal(raw, &echo) == nil && !echo.New {
+			fmt.Fprintln(os.Stderr, "warning: "+errStaleWaitNew.Error()+". The match can be old output.")
+		}
 	}
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)

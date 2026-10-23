@@ -2071,6 +2071,7 @@ tuios wait-for <condition> [flags]
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused; `agent-state`: any window)
 - `--pattern <regexp>`: Go regular expression (RE2), required by `window-output`
+- `--new`: For `window-output`: match only output written after the wait starts. Text already on the screen or in the scrollback does not match. A program that redraws its screen writes its text again, and that text matches
 - `--until <states>`: Agent state(s) to wait for, comma-separated, required by `agent-state`
 - `--thread <id>`: Only match a message in this thread, for `agent-message`. Pass any message id in it
 - `--idle <ms>`: Milliseconds of silence that count as idle (default: 500)
@@ -2092,10 +2093,19 @@ run matches the same way. Assemble the marker so the literal appears only in the
 output (`printf "BUILD_%s\n" OK`), or use `window-exit` in a window opened for
 the one command.
 
+`--new` removes the old output from the match. The wait then reads only the
+output the pane writes after the daemon starts the wait. Output written before
+that point does not count, so a command that finishes before the wait starts does not
+match. A daemon older than this flag refuses it, and the command tells you to
+run `tuios restart-server`.
+
 **Examples:**
 ```bash
 # Wait for a build to print its marker
 tuios wait-for window-output -w build --pattern 'BUILD OK'
+
+# Ignore the marker of the last build that is still on the screen
+tuios wait-for window-output -w build --pattern 'BUILD OK' --new
 
 # Wait for a pane to go quiet for two seconds
 tuios wait-for window-idle -w build --idle 2000
