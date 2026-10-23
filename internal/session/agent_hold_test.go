@@ -155,3 +155,49 @@ func TestAgentHoldNeverDelaysAStateThatWantsAHuman(t *testing.T) {
 		t.Fatalf("errored was delayed: state = %q, want errored at once", got)
 	}
 }
+
+// TestAgentHoldDropsAStateWhenTheAgentLeaves is the race the e2e test
+// TestAgentStateClearsWhenTheLastWordWasAProgressClear hit on a loaded machine:
+// the agent clears its progress bar and exits, the clear is held as the quieter
+// state, and the pane is cleared to none before the hold comes due. Publishing
+// the hold then brought the pane back to idle with no agent in it. A held state
+// is the OSC tier speaking late, so it needs what the tier needed when it spoke:
+// an agent in the pane.
+func TestAgentHoldDropsAStateWhenTheAgentLeaves(t *testing.T) {
+	sess, id := agentPaneWithWindow(t)
+	now := time.Now()
+
+	sess.applyAgentProgressAt(id, vt.ProgressIndeterminate, now)
+	sess.applyAgentProgressAt(id, vt.ProgressClear, now.Add(10*time.Millisecond))
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state during the hold = %q, want working (the quiet state is held)", got)
+	}
+
+	// The agent leaves while the clear is held, and the detector's exit sweep
+	// clears the pane the way it does at the shell: no state, no harness, and
+	// no claim or harness process left to outrank a late report.
+	err := sess.mutateState(func(st *SessionState) error {
+		for i := range st.Windows {
+			if st.Windows[i].ID == id {
+				st.Windows[i].AgentState = AgentStateNone
+				st.Windows[i].AgentHarness = ""
+			}
+		}
+		delete(sess.agentClaims, id)
+		delete(sess.agentHarnessPIDs, id)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("clear the pane: %v", err)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateNone {
+		t.Fatalf("state after the agent left = %q, want none", got)
+	}
+
+	if n := sess.settleAgentHolds(now.Add(time.Hour)); n != 0 {
+		t.Fatalf("settle published %d held states on a pane the agent had left, want 0", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateNone {
+		t.Fatalf("state after the hold came due = %q, want none: a late progress clear brought the pane back", got)
+	}
+}

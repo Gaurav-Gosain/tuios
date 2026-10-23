@@ -147,6 +147,14 @@ func (s *Session) settleAgentHolds(now time.Time) int {
 
 	settled := 0
 	for _, d := range due {
+		// A hold is its source speaking late, so it needs what the source
+		// needed when it spoke: an agent in the pane. An agent that cleared its
+		// progress bar and exited inside the window has had its pane cleared at
+		// the shell by now, and publishing the clear would bring the pane back
+		// to idle with no agent in it.
+		if _, exists, agentPane := s.progressTarget(d.window); !exists || !agentPane {
+			continue
+		}
 		if _, applied, err := s.ApplyAgentReport(d.window, AgentReport{State: d.hold.state, Source: d.hold.source}); err == nil && applied {
 			settled++
 		}
