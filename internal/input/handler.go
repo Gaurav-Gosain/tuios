@@ -282,10 +282,10 @@ func pasteTakenByOverlay(o *app.OS, content string) (tea.Cmd, bool) {
 	}
 	// The go-to picker takes a paste as query text, on one line.
 	if o.GotoPickerOpen() {
-		if text := strings.Join(strings.Fields(content), " "); text != "" {
+		if text := pasteLine(content); text != "" {
 			o.SetGotoPickerQuery(o.GotoPickerQuery() + text)
 		}
-		return true
+		return nil, true
 	}
 	// The multi copy save prompt takes a paste as its path, with line
 	// breaks and control characters removed. It must never reach a shell:
