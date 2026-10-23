@@ -123,6 +123,15 @@ func (c *canvas) put(x, y int, g string, w int, st style) {
 	if c.cells != nil {
 		*c.cells += w
 	}
+	// Line.Set breaks up a wide cell only where it writes the lead. The
+	// tail of a wide grapheme can land on the lead of another wide one,
+	// whose placeholder would then be orphaned and the row one cell short,
+	// so blank each cell under the tail first.
+	for k := 1; k < w; k++ {
+		if under := line.At(x + k); under != nil && under.Width != 1 {
+			line.Set(x+k, nil)
+		}
+	}
 	line.Set(x, &cell)
 }
 

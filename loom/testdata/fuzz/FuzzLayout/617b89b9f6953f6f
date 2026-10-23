@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte("0$1100101002000011010070\x1d")
+byte('\x10')
+byte('\x11')
+byte('\x04')
