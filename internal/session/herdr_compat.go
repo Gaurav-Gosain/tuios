@@ -507,7 +507,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		if d.herdrYields(window, harness, p.Source) {
 			return map[string]any{"type": "ok"}, "", ""
 		}
-		out, code, msg := d.herdrReport(sess, window, harness, pid, p)
+		out, code, msg := d.herdrReport(sess, window, harness, pid, p, !outside)
 		if code == "" {
 			// A report names its agent itself, so the name alone earns no
 			// trust: the pane must be running that agent's process.
@@ -534,7 +534,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		// detection then reads the pane as for any other. A state the
 		// detector holds is not a report's, and stays.
 		if held := d.reportClaimHarness(window); held != nil {
-			if _, code, msg := d.herdrSetState(sess, window, *held, "none", "", "", "", 0); code != "" {
+			if _, code, msg := d.herdrSetState(sess, window, *held, "none", "", "", "", 0, !outside); code != "" {
 				return nil, code, msg
 			}
 		}
@@ -545,7 +545,7 @@ func (d *Daemon) herdrCall(cs *connState, req herdrRequest) (any, string, string
 		// The release carries a seq, recorded above, and the high-water
 		// mark stays. A report Crush queued before it quit can reach the
 		// socket after the release, and it must not bring the pane back.
-		if _, code, msg := d.herdrSetState(sess, window, harness, "none", "", "", "", 0); code != "" {
+		if _, code, msg := d.herdrSetState(sess, window, harness, "none", "", "", "", 0, !outside); code != "" {
 			return nil, code, msg
 		}
 	}
@@ -869,7 +869,7 @@ func (d *Daemon) herdrNotify(window string, p herdrParams) (any, string, string)
 // herdrReport applies one pane.report_agent. pid is the reporting process,
 // sent as the harness pid, so a Crush that moves to another conversation
 // while it works is the same harness in the pane and not a nested one.
-func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParams) (any, string, string) {
+func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParams, own bool) (any, string, string) {
 	msg := ""
 	if p.Message != nil {
 		msg = strings.TrimSpace(*p.Message)
@@ -880,7 +880,7 @@ func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParam
 	}
 	switch p.State {
 	case "working":
-		_, code, text := d.herdrSetState(sess, window, harness, "working", msg, sid, "", pid)
+		_, code, text := d.herdrSetState(sess, window, harness, "working", msg, sid, "", pid, own)
 		if code != "" {
 			return nil, code, text
 		}
@@ -892,7 +892,7 @@ func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParam
 				msg = herdrBlockedPlaceholder
 			}
 		}
-		_, code, text := d.herdrSetStateKind(sess, window, harness, "needs_input", kind, msg, sid, "", pid)
+		_, code, text := d.herdrSetStateKind(sess, window, harness, "needs_input", kind, msg, sid, "", pid, own)
 		if code != "" {
 			return nil, code, text
 		}
@@ -900,12 +900,12 @@ func (d *Daemon) herdrReport(sess, window, harness string, pid int, p herdrParam
 		// Rest after a turn is a finished turn; rest from anywhere else,
 		// Crush's first report included, is idle. The message a reporter
 		// sends with idle is empty or stale, and is not kept.
-		reason, code, text := d.herdrSetState(sess, window, harness, "done", "", sid, "working,needs_input", pid)
+		reason, code, text := d.herdrSetState(sess, window, harness, "done", "", sid, "working,needs_input", pid, own)
 		if code != "" {
 			return nil, code, text
 		}
 		if reason == agentRefusedIfState {
-			if _, code, text := d.herdrSetState(sess, window, harness, "idle", "", sid, "", pid); code != "" {
+			if _, code, text := d.herdrSetState(sess, window, harness, "idle", "", sid, "", pid, own); code != "" {
 				return nil, code, text
 			}
 		}
@@ -950,12 +950,13 @@ func herdrBlockedKind(harness, msg string) string {
 
 // herdrSetState reports one state for the pane through set-agent-state,
 // returning the refusal reason, if any, or an error code and message.
-func (d *Daemon) herdrSetState(sess, window, harness, state, msg, sid, ifState string, pid int) (string, string, string) {
-	return d.herdrSetStateKind(sess, window, harness, state, "", msg, sid, ifState, pid)
+func (d *Daemon) herdrSetState(sess, window, harness, state, msg, sid, ifState string, pid int, own bool) (string, string, string) {
+	return d.herdrSetStateKind(sess, window, harness, state, "", msg, sid, ifState, pid, own)
 }
 
 // herdrSetStateKind is herdrSetState with the kind of a needs_input block.
-func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid, ifState string, pid int) (string, string, string) {
+// own says the report comes from the pane it is about (herdrPane).
+func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid, ifState string, pid int, own bool) (string, string, string) {
 	params := map[string]any{"session": sess, "window": window, "state": state}
 	if kind != "" {
 		params["kind"] = kind
@@ -976,7 +977,7 @@ func (d *Daemon) herdrSetStateKind(sess, window, harness, state, kind, msg, sid,
 		params["if_state"] = ifState
 	}
 	raw, _ := json.Marshal(params)
-	out, verr := d.verbSetAgentState(nil, raw)
+	out, verr := d.setAgentState(nil, raw, own)
 	if verr != nil {
 		return "", "report_failed", verr.Message
 	}

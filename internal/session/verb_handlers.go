@@ -1386,6 +1386,13 @@ func (d *Daemon) verbSetWorkspaceOrder(_ *connState, params json.RawMessage) (an
 }
 
 func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, *verbError) {
+	return d.setAgentState(cs, params, false)
+}
+
+// setAgentState is set-agent-state. ownPane says the caller is the pane the
+// report is about, for a caller with no connection to place: the herdr
+// socket's report from a pane for itself.
+func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bool) (any, *verbError) {
 	// The herdr socket calls this handler directly, past admitVerb.
 	if !d.agentsEnabled() {
 		return nil, agentsDisabledError()
@@ -1498,6 +1505,7 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
 	}
 	report.foreignPane = d.harnessOutsidePane(cs, sess, target, p.HarnessPID)
+	report.fromPane = ownPane || d.reportFromOwnPane(cs, sess, target)
 	// The identity guard is read before the report applies, because it is
 	// about the pane as the report found it, and applyAgentReport checks
 	// if_state first and so may never reach it.
@@ -1618,6 +1626,35 @@ func (d *Daemon) reportTarget(cs *connState, sessionName, window string) (*Sessi
 		target = id
 	}
 	return sess, target, nil
+}
+
+// reportFromOwnPane says the caller on cs runs in the pane target names: a
+// process the daemon placed there, or a call run as a pane on another
+// machine. A report from it is the pane's word about itself.
+func (d *Daemon) reportFromOwnPane(cs *connState, sess *Session, target string) bool {
+	if cs == nil {
+		return false
+	}
+	w, ok := findWindowStateByTarget(sess, target)
+	if !ok {
+		return false
+	}
+	if cs.hostedWindow != "" {
+		return cs.hostedWindow == w.ID
+	}
+	pa := d.paneAuthority(cs)
+	return pa != nil && pa.plugin == "" && !pa.hosted && pa.window == w.ID
+}
+
+// findWindowStateByTarget resolves target (an id, a short id or a name) in
+// sess.
+func findWindowStateByTarget(sess *Session, target string) (WindowState, bool) {
+	wins := sess.GetState().Windows
+	idx, err := findWindowStateIndex(wins, target)
+	if err != nil {
+		return WindowState{}, false
+	}
+	return wins[idx], true
 }
 
 // Rates of report-agent-activity. Each event it records may change what the

@@ -819,6 +819,9 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 			_, _, _, _ = sess.applyAgentReport(hold.window, AgentReport{
 				State:   AgentStateWorking,
 				IfState: []AgentState{AgentStateNeedsInput},
+				// The prompt was the pane's own held approval, now
+				// answered, so nothing is left on the screen to hold.
+				fromPane: true,
 			})
 		}
 	}

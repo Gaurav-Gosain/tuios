@@ -163,6 +163,12 @@ type AgentReport struct {
 	// the report is then refused with foreign_pane before anything else is
 	// read.
 	foreignPane bool
+	// fromPane says the report comes from the pane it is about: a caller
+	// placed in that pane, a herdr report the pane sent for itself, or the
+	// answer to the pane's own held approval. A report from anywhere else
+	// that moves the pane off needs_input does not prove the prompt is gone,
+	// and holds it (promptHold).
+	fromPane bool
 	// paneWroteAt is the unix-nano time the pane last produced output, as the
 	// source read it at the moment it looked. Only the daemon's own looks set
 	// it (the title, the screen and a notification). blockerOverridesClaim reads
@@ -435,6 +441,8 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	}
 	var effective AgentState
 	applied := false
+	var holdAt int64
+	var heldWindow, heldPTY string
 	err := s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, target)
 		if err != nil {
@@ -505,11 +513,16 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			next.prior = priorOf(claim, prev, w.AgentHarness)
 		}
 		switch {
-		case r.State == AgentStateNeedsInput:
+		case r.State == AgentStateNeedsInput, r.fromPane, r.paneWroteAt != 0:
+			// On a prompt again, or a word from the pane itself or from the
+			// daemon's own look at it (only a look sets paneWroteAt; a
+			// caller that names source screen has looked at nothing):
+			// nothing to hold.
 		case prev == AgentStateNeedsInput:
-			next.promptLeftAt = time.Now().UnixNano()
+			next.promptHold = time.Now().UnixNano()
+			holdAt = next.promptHold
 		default:
-			next.promptLeftAt = claim.promptLeftAt
+			next.promptHold, next.holdFg = claim.promptHold, claim.holdFg
 		}
 		if next.blocker {
 			// A blocker over a herdr reporter's claim still follows the
@@ -545,10 +558,14 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.
 		s.setAgentClaim(w.ID, next)
+		heldWindow, heldPTY = w.ID, w.PTYID
 		effective = r.State
 		applied = true
 		return nil
 	})
+	if holdAt != 0 {
+		s.notePromptHoldFg(heldWindow, heldPTY, holdAt)
+	}
 	if errors.Is(err, errAgentClaimHeld) {
 		return effective, false, agentRefusedOutranked, nil
 	}
@@ -683,26 +700,59 @@ func agentStateBlocks(state AgentState) bool {
 	return state == AgentStateNeedsInput
 }
 
-// promptStillShown reports whether w left needs_input and its pane has drawn
-// nothing since. The prompt it waited on is then still on the screen, and
-// keys typed into it answer it, whatever state was reported after. A report
-// from someone else, or a progress sequence written into the pane's
-// terminal, moves the state without touching the screen.
-func (s *Session) promptStillShown(w WindowState) bool {
-	if w.PTYID == "" {
-		return false
+// paneForeground is the foreground process group of the pane with this
+// PTY, and false when the pane has exited or the group cannot be read.
+func (s *Session) paneForeground(ptyID string) (int, bool) {
+	pty := s.GetPTY(ptyID)
+	if pty == nil || pty.IsExited() {
+		return 0, false
 	}
+	info, ok := foregroundProcess(pty.ShellPID())
+	return info.pid, ok
+}
+
+// notePromptHoldFg records the pane's foreground process group on the hold
+// taken at holdAt. It is read outside the state lock, since it reads /proc.
+func (s *Session) notePromptHoldFg(windowID, ptyID string, holdAt int64) {
+	fg, ok := s.paneForeground(ptyID)
+	if !ok {
+		return
+	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if c, held := s.agentClaims[windowID]; held && c.promptHold == holdAt {
+		c.holdFg = fg
+		s.agentClaims[windowID] = c
+	}
+}
+
+// promptStillShown reports whether w is held as still on the prompt it was
+// moved off (promptHold). Keys typed into it would answer that prompt,
+// whatever state was reported after.
+//
+// The hold ends when the pane says something for itself, when a look at its
+// screen reports, when it comes to a prompt again, or when the program in its
+// foreground changes, which is what answering the prompt or leaving it
+// usually does. Output does not end it: a resize makes most prompts draw
+// themselves again, and anyone may resize a pane.
+func (s *Session) promptStillShown(w WindowState) bool {
 	s.stateMu.RLock()
-	left := s.agentClaims[w.ID].promptLeftAt
+	c := s.agentClaims[w.ID]
 	s.stateMu.RUnlock()
-	if left == 0 {
+	if c.promptHold == 0 {
 		return false
 	}
 	pty := s.GetPTY(w.PTYID)
 	if pty == nil || pty.IsExited() {
 		return false
 	}
-	return pty.LastOutput() <= left
+	if c.holdFg == 0 {
+		// The foreground could not be read when the hold began. It holds
+		// until the pane says something for itself.
+		return true
+	}
+	fg, ok := s.paneForeground(w.PTYID)
+	return !ok || fg == c.holdFg
 }
 
 // blockerOverridesClaim is the one hole in the source ranking: a screen rule

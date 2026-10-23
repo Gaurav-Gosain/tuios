@@ -979,11 +979,19 @@ func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMess
 // handler resolves nothing else: a window left out means the caller's pane,
 // never the focused one.
 func (d *Daemon) holdOwnRecord(verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
-	if pa.grants.Has(GrantRespond) || pa.plugin != "" || pa.window == unplacedWindow {
+	if pa.grants.Has(GrantRespond) || pa.plugin != "" {
 		// A plugin with admin holds what the person gave it in so many
-		// words. A caller placed in no pane holds what such a caller always
-		// held (paneAuthority).
+		// words.
 		return params, nil
+	}
+	if pa.window == unplacedWindow {
+		// A process the daemon started outside every pane, such as git or a
+		// hook. A pane can get code run that way, so it reports for no pane,
+		// as it may not act as the person either (mayActAsHuman).
+		LogBasic("A process outside every pane (%s) refused %s: it reports for no pane", pa.grants.String(), verb)
+		return nil, hintedVerbError(ErrVerbForbidden, verb+" is refused: this process runs outside every pane, so it reports for no pane", &VerbHint{
+			Detail: "Nothing was done. Report from inside the pane, or run the command yourself. A pane with the respond grant can report for another pane.",
+		})
 	}
 	if pa.hosted {
 		// A hosted pane's report about itself is sent on to the machine
@@ -1102,12 +1110,12 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 			" is waiting on a prompt. Typing into a pane this pane did not open, and that is not at its shell prompt, needs the respond grant"
 	}
 	if target.AgentState != AgentStateNeedsInput && !pa.grants.Has(GrantRespond) {
-		// The state says the pane is not on a prompt, but the pane has drawn
-		// nothing since it was. A verb that checks needs_input itself reads
+		// The state says the pane is not on a prompt, but something other
+		// than the pane moved it off one (promptStillShown). A verb that checks needs_input itself reads
 		// the same state, so blockedChecked does not cover this.
 		if sess := d.sessionHoldingWindow(target.ID); sess != nil && sess.promptStillShown(target) {
-			return "window " + shortWindowID(target.ID) + " was waiting on a prompt and has not drawn anything since, so what is typed now could answer it. " +
-				"That needs the respond grant. Wait for the pane to draw again"
+			return "window " + shortWindowID(target.ID) + " was waiting on a prompt, and its state was changed from outside the pane. " +
+				"The prompt can still be on the screen, and what is typed now could answer it, which needs the respond grant"
 		}
 	}
 	if !blockedChecked && target.AgentState == AgentStateNeedsInput && !pa.grants.Has(GrantRespond) && pa.plugin != "" {

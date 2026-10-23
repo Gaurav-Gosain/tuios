@@ -23,7 +23,8 @@ Whatever you hold, you can report about your own pane (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human`,
 `request-approval`) and ask what you hold. So `tuios agent-hook` works in every pane.
 A report about another pane needs `respond`, with `admin` too, because the
-state it sets decides whether that pane waits on a prompt.
+state it sets decides whether that pane waits on a prompt. A process tuios
+starts outside every pane, such as a hook, reports for no pane.
 
 The paste buffers hold what the person copied, so they need grants too:
 `list-buffers` and `show-buffer` need `read`, `set-buffer` and `delete-buffer`
@@ -61,8 +62,9 @@ typing into any pane but your own (`send-text`, `send-keys`, `run`,
 `ask-agent`, `queue`) is refused when the target holds a grant you do not.
 Typing into another pane on `needs_input` is refused unless you hold
 `respond`, with `admin` too, because keys typed there answer its prompt.
-A pane that left `needs_input` and has drawn nothing since is refused the same
-way, because its prompt is still on the screen.
+A pane that something other than itself moved off `needs_input` is refused the
+same way, because its prompt can still be on the screen. This lasts until the
+pane reports for itself, comes to a prompt again, or runs another program.
 A permission prompt is for the person. `queue` waits until the pane is at rest,
 so it is not refused for this. Without `respond`, `send-keys` with no window
 types into the focused pane, `PREFIX` is refused, and `run-command` may not

@@ -642,7 +642,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	if verr := checkParamNames(verb, entry, raw); verr != nil {
 		return nil, verr
 	}
-	cs := &connState{clientID: "hosted:" + host, done: make(chan struct{}), paneOnly: true, hostedEnded: ended}
+	cs := &connState{clientID: "hosted:" + host, done: make(chan struct{}), paneOnly: true, hostedEnded: ended, hostedWindow: windowID}
 	return entry.handler(d, cs, raw)
 }
 

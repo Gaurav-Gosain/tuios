@@ -8543,20 +8543,31 @@ The fixed build passes it.
 
 `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` runs on a daemon in the
 default open mode, where every pane holds admin. Pane A reports
-`needs_input` for itself with no `--window` and waits on a prompt. Pane B runs
-`set-agent-state -w A working`, then `send-keys -w A 'y Enter'`. Both are
-refused and A's prompt stays unanswered. Then the person's CLI marks A
-`working` from outside every pane, which works, and B's keys are still refused
-because A has drawn nothing since its prompt. Given `respond`, B marks A and
-answers the prompt.
+`needs_input` for itself with no `--window` and waits on a prompt that it
+draws again on SIGWINCH. Pane B runs `set-agent-state -w A working`, then
+`send-keys -w A 'y Enter'`. Both are refused and A's prompt stays unanswered.
+Then the person's CLI marks A `working` from outside every pane, which works.
+B resizes A, A draws its prompt again, and B's keys are still refused. Given
+`respond`, B marks A and answers the prompt.
+
+`TestADaemonChildCannotMarkAnotherPane` runs `set-agent-state -w A working`
+from an `after-new-window` hook, a process the daemon starts outside every
+pane. It is refused and A stays on `needs_input`.
 
 Run on 2026-10-23 on Linux.
 
 | Control | Tests that fail | Verdict |
 |---|---|---|
-| a binary built from origin/main at `e2fa758d5` | the test ("B answered A's prompt without respond": `SET_EXIT=0`, `SK_EXIT=0`, `ANSWERED:y`) | **caught** |
-| `promptStillShown` made to return false | the test ("B answered A's prompt after the person marked A working": `SK2_EXIT=0`, `ANSWERED:y`) | **caught** |
+| a binary built from origin/main at `e2fa758d5` | `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` ("B answered A's prompt without respond": `SET_EXIT=0`, `SK_EXIT=0`, `ANSWERED:y`) | **caught** |
+| `promptStillShown` made to return false | `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` ("B answered A's prompt after the person marked A working": `SK2_EXIT=0`, `ANSWERED:y`) | **caught** |
+| the hold ended by any output after it, with the unplaced exemption in `holdOwnRecord` (the build at `7ae7a847f`) | `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` (`REDRAWN` after the resize, then `SK2_EXIT=0`, `ANSWERED:y`), `TestADaemonChildCannotMarkAnotherPane` (`HOOK_EXIT=0`, A moved to `working`) | **caught** |
 | The positive half | none: B with `respond` marks A and its keys answer the prompt | **guard** |
 
+`TestGitRunsNoFSMonitor` in `internal/childproc` sets `core.fsmonitor` in a
+repository to a program that leaves a file. Plain git runs it, which is the
+test's own positive control. With `gitArgs` returning the arguments unchanged,
+it fails with "git started by childproc ran the repository's core.fsmonitor".
+
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
--run '^TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt$' -v .` from `e2e/tui`.
+-run '^(TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt|TestADaemonChildCannotMarkAnotherPane)$' -v .`
+from `e2e/tui`.

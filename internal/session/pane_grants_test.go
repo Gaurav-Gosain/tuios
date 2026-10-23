@@ -695,15 +695,12 @@ func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 	// A pane that has come to a prompt since the call was checked is refused
 	// by the handler's second look.
 	setStrict(d)
-	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
-	setAgentState(t, person, "a", a2, string(AgentStateIdle), "", "")
+	// The pane says it is at rest itself. A word from anyone else would
+	// hold it as still on its prompt (promptStillShown).
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a2 })
+	setAgentState(t, dialVerb(t, sp), "a", a2, string(AgentStateIdle), "", "")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	cs := &connState{}
-	// A pane that left a prompt is held as on it until it draws again
-	// (promptStillShown). The Enter typed above may not have drawn yet.
-	sessA := d.manager.GetSession("a")
-	w2, _ := findWindowState(sessA.GetState(), a2)
-	sessA.GetPTY(w2.PTYID).lastOutput.Store(time.Now().UnixNano())
 	if _, verr := d.checkGrants(cs, "send-text", json.RawMessage(`{"window":"`+a2+`","text":"x"}`)); verr != nil {
 		t.Fatal(verr)
 	}

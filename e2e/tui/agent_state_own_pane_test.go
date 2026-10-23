@@ -28,11 +28,16 @@ import (
 //     read again a second after the attacker's line finishes.
 
 // victimPrompt reports needs_input for its own pane with no --window, the way
-// a harness hook does, then asks and waits for an answer.
-const victimPrompt = `#!/bin/sh
+// a harness hook does, then asks and waits for an answer. It draws the
+// question again on SIGWINCH, as Ink and ratatui prompts do, and says REDRAWN
+// when it does.
+const victimPrompt = `#!/usr/bin/env bash
 "$TUIOS_E2E_CLI" set-agent-state needs_input --kind approval --message 'approve Bash: rm -rf build'
-printf 'Allow the edit? [y/n] '
-read -r ans
+ask() { printf 'Allow the edit? [y/n] '; }
+trap 'printf "\nREDRAWN "; ask' WINCH
+ask
+# A short timeout lets the trap run while it waits.
+until read -r -t 0.2 ans; do :; done
 printf 'ANSWERED:%s\n' "$ans"
 `
 
@@ -43,9 +48,13 @@ printf 'ANSWERED:%s\n' "$ans"
 // pane, may still mark A; B still may not type into the prompt that is on
 // A's screen. With respond, B marks A and answers its prompt.
 //
+// Between the person's mark and B's keys, B resizes A, and A draws its
+// prompt again. That output must not end the hold.
+//
 // Negative control: on origin/main SET_EXIT=0 and SK_EXIT=0 appear and A
-// shows ANSWERED:y. With promptStillShown cut from typingRefusal, the person
-// half fails: B's keys answer the prompt after the person marked A working.
+// shows ANSWERED:y. With promptStillShown cut from typingRefusal, or with the
+// hold ended by any output after it, the person half fails: B's keys answer
+// the prompt after the person marked A working and B resized A.
 func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 	term, base := attachClientBase(t)
 	const sess = "e2e-ctrlp"
@@ -106,7 +115,7 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 	}
 
 	// The victim reports for itself, with no --window, and waits on a prompt.
-	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", victim, "TUIOS_E2E_CLI="+tuiosBin+" sh "+script+"\n"); err != nil {
+	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", victim, "TUIOS_E2E_CLI="+tuiosBin+" bash "+script+"\n"); err != nil {
 		t.Fatalf("start the victim: %v\n%s", err, out)
 	}
 	deadline := time.Now().Add(uiTimeout)
@@ -142,6 +151,19 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 		t.Fatalf("ASSERTION: the person's set-agent-state was refused: %v\n%s", err, out)
 	}
 	waitState("working")
+
+	// B makes A draw its prompt again by resizing it. Output after the
+	// prompt does not show the prompt is gone.
+	if text := fromAttacker(tuiosBin+" call resize '{\"session\":\""+sess+"\",\"window\":\""+victim+"\",\"width\":50,\"height\":16}'; echo RS_\"EXIT\"=$?", "RS_EXIT"); !strings.Contains(text, "RS_EXIT=0") {
+		t.Fatalf("B's resize of A failed:\n%s", text)
+	}
+	deadline = time.Now().Add(uiTimeout)
+	for !strings.Contains(victimText(), "REDRAWN") {
+		if time.Now().After(deadline) {
+			t.Fatalf("A never drew its prompt again after the resize:\n%s", victimText())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	text = fromAttacker(tuiosBin+" send-keys -s "+sess+" -w "+victim+" 'y Enter'; echo SK2_\"EXIT\"=$?", "SK2_EXIT")
 	time.Sleep(time.Second)
 	saveFrame(t, term, "agent-state-prompt-still-shown")
@@ -170,4 +192,79 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 	}
 	saveFrame(t, term, "agent-state-respond-answers")
 	alive(t, term, "after the agent state checks")
+}
+
+// TestADaemonChildCannotMarkAnotherPane: a process the daemon starts outside
+// every pane, here an after-new-window hook, runs set-agent-state -w A. A
+// pane can get code run that way (git run by the daemon in a folder the pane
+// controls, before core.fsmonitor was turned off for it), so such a process
+// may not report for a pane. A waits on a prompt and stays on needs_input.
+//
+// How it could pass wrongly: the hook might never run, and A would keep its
+// state anyway. The hook writes its exit code, and the test waits for it.
+//
+// Negative control: on origin/main, and with the unplaced exemption back in
+// holdOwnRecord, HOOK_EXIT=0 appears and A moves to working.
+func TestADaemonChildCannotMarkAnotherPane(t *testing.T) {
+	const sess = "e2e-child"
+	base := t.TempDir()
+	killDaemon(t, base)
+	armed := filepath.Join(base, "armed")
+	out := filepath.Join(base, "hook.out")
+	hook := filepath.Join(base, "hook.sh")
+	body := "#!/bin/sh\n[ -e " + armed + " ] || exit 0\nrm -f " + armed + "\n" +
+		tuiosBin + " set-agent-state -s " + sess + " -w victim working > " + out + ".tmp 2>&1\n" +
+		"echo HOOK_EXIT=$? >> " + out + ".tmp\nmv " + out + ".tmp " + out + "\n"
+	if err := os.WriteFile(hook, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, base, "[hooks]\nafter-new-window = \""+hook+"\"\n")
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "victim", "--no-focus"); err != nil {
+		t.Fatalf("open the victim: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", sess, "-w", "victim", "needs_input", "--kind", "approval"); err != nil {
+		t.Fatalf("the person's set-agent-state failed: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(armed, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "trigger", "--no-focus"); err != nil {
+		t.Fatalf("open the trigger window: %v\n%s", err, out)
+	}
+	var got []byte
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		b, err := os.ReadFile(out)
+		if err == nil && strings.Contains(string(b), "HOOK_EXIT=") {
+			got = b
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the hook never ran set-agent-state")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "daemon-child-set-agent-state.txt"), got, 0o644)
+	}
+	flat := strings.Join(strings.Fields(string(got)), " ")
+	if !strings.Contains(flat, "HOOK_EXIT=1") || !strings.Contains(flat, "respond") {
+		t.Errorf("ASSERTION: the daemon's child was not refused for another pane:\n%s", got)
+	}
+	state, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", sess, "-w", "victim")
+	if err != nil {
+		t.Fatalf("get-agent-state: %v\n%s", err, state)
+	}
+	var r struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(state), &r); err != nil {
+		t.Fatalf("get-agent-state json: %v\n%s", err, state)
+	}
+	if r.State != "needs_input" {
+		t.Errorf("ASSERTION: the daemon's child moved the victim to %q", r.State)
+	}
 }

@@ -691,6 +691,10 @@ type connState struct {
 	// call came on ends. A wait-for stops on it, so a wait does not outlive
 	// the channel that would carry its answer. nil means it never ends.
 	hostedEnded <-chan struct{}
+	// hostedWindow, on a paneOnly call, is the window of the pane on another
+	// machine the call is run as (runHostedCall). Its reports are the pane's
+	// own.
+	hostedWindow string
 
 	// attached says the attach reply has been written to this connection, and
 	// it is what broadcastToSession requires before it will send anything.
