@@ -157,10 +157,27 @@ func (m *OS) notePointerEvent(at time.Time) {
 func (m *OS) requireRealLayout() {
 	m.settleSizes(func() {
 		m.landSnapAnimations()
-		if m.viewportResizing || len(m.PendingResizes) > 0 {
-			m.endResizeDeferral()
-		}
+		m.endResizeDeferralIfAny()
 	})
+}
+
+// requireRealRelayout is requireRealLayout for a structural change that lays
+// every pane out again straight away: a pane opening or closing in the BSP
+// tree. A deferred resize is still drained, and for the same reason. A snap in
+// flight is left alone: the layout pass that follows turns it toward its new
+// rectangle from where it is drawn (see animateWindow). Landing it first threw
+// every sliding pane to the end of its old slide in one frame, so opening a
+// pane while another was still growing made the neighbours jump.
+func (m *OS) requireRealRelayout() {
+	m.settleSizes(m.endResizeDeferralIfAny)
+}
+
+// endResizeDeferralIfAny ends a resize deferral when one is live or has
+// resizes waiting.
+func (m *OS) endResizeDeferralIfAny() {
+	if m.viewportResizing || len(m.PendingResizes) > 0 {
+		m.endResizeDeferral()
+	}
 }
 
 // endLostGesture retires a drag or resize whose release never arrived.

@@ -85,6 +85,22 @@ func traceWrite(line string) {
 	fmt.Fprintf(renderTraceFH, "%8.3f %s\n", time.Since(renderTraceT0).Seconds(), line)
 }
 
+// traceFrame records the rectangle every pane on screen is drawn at in this
+// frame, and how many animations are moving them. One line per call to View,
+// so a layout transition can be read back frame by frame: a pane that jumps,
+// or moves one way and then back, shows up as the numbers doing so.
+func (m *OS) traceFrame() {
+	var b strings.Builder
+	fmt.Fprintf(&b, "frame anims=%d", len(m.Animations))
+	for _, w := range m.Windows {
+		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized {
+			continue
+		}
+		fmt.Fprintf(&b, " %s=%d,%d,%d,%d", shortID(w.ID), w.X, w.Y, w.Width, w.Height)
+	}
+	traceWrite(b.String())
+}
+
 // shortID trims a window or PTY ID to something readable in a log line. IDs
 // restored from session state are not guaranteed UUID-length (a non-daemon
 // window carries an empty PTYID), so a plain id[:8] slice would panic.

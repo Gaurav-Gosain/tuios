@@ -230,10 +230,6 @@ func (m *OS) ApplyBSPLayout() {
 		opening := win.Opening
 		win.Opening = false
 
-		// Cancel any existing snap animation for this window to prevent
-		// animation pileup during continuous resize.
-		m.CancelSnapAnimation(win)
-
 		// A live resize drag reapplies this layout on every composed frame, to
 		// keep the separator overlay's ratios in step with the geometry the
 		// pointer is producing. Set that geometry directly.
@@ -264,6 +260,9 @@ func (m *OS) ApplyBSPLayout() {
 		// resize_deferral.go: a deferral that outlives its gesture leaves every
 		// later retile placing panes visually and never giving them a real size.
 		if deferring {
+			// The geometry is set directly, so a snap in flight would stamp
+			// its own rectangle back over it on the next tick.
+			m.CancelSnapAnimation(win)
 			win.X, win.Y = rect.X, rect.Y
 			borderChanged := win.Tiled != borderless
 			if borderChanged {
@@ -320,6 +319,7 @@ func (m *OS) ApplyBSPLayout() {
 		}
 		if opening && dur > 0 {
 			if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
+				m.CancelSnapAnimation(win)
 				win.X, win.Y = x, y
 				// Assigned, not resized: the emulator keeps the size the pane was
 				// created at for the length of the animation, the way every other
@@ -329,12 +329,9 @@ func (m *OS) ApplyBSPLayout() {
 			}
 		}
 
-		// Create animation for smooth transition
-		anim := m.newSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur)
-
-		if anim != nil {
-			m.Animations = append(m.Animations, anim)
-		} else if borderless != wasTiled {
+		// Move the pane from where it is drawn now. A pane already sliding is
+		// turned toward the new slot rather than started again.
+		if anim := m.animateWindow(win, rect.X, rect.Y, rect.W, rect.H, dur); anim == nil && borderless != wasTiled {
 			// A pane already at its target rectangle is left alone by
 			// NewSnapAnimation unless it is daemon-backed, and a changed
 			// allowance owes the guest a new box even at the same rectangle.
@@ -429,7 +426,7 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	// A new pane is a structural change, not a resize step. Whatever resize was
 	// in flight, the layout this produces is what the user is left looking at,
 	// so it has to be a real one.
-	m.requireRealLayout()
+	m.requireRealRelayout()
 
 	tree := m.GetOrCreateBSPTree()
 	windowIntID := m.GetWindowIntID(window.ID)
@@ -494,7 +491,7 @@ func (m *OS) bspSplitTarget(tree *layout.BSPTree, windowID string) int {
 func (m *OS) RemoveWindowFromBSPTree(window *terminal.Window) {
 	// Closing a pane is structural too; the panes that inherit its space must
 	// end up at real sizes. See AddWindowToBSPTree.
-	m.requireRealLayout()
+	m.requireRealRelayout()
 
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil {

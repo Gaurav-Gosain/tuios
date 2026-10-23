@@ -54,6 +54,56 @@ func (m *OS) newSnapAnimation(w *terminal.Window, x, y, width, height int, dur t
 	return anim
 }
 
+// snapInFlight is the snap animation moving w, or nil.
+func (m *OS) snapInFlight(w *terminal.Window) *ui.Animation {
+	for _, a := range m.Animations {
+		if a.Window == w && a.Type == ui.AnimationSnap && !a.Complete {
+			return a
+		}
+	}
+	return nil
+}
+
+// animateWindow moves w to a rectangle over dur, and returns the animation
+// that does it, or nil when the window was placed at once.
+//
+// It is the one way a layout moves a pane: see addAnimation for what happens
+// to a window that is already sliding.
+func (m *OS) animateWindow(w *terminal.Window, x, y, width, height int, dur time.Duration) *ui.Animation {
+	if a := m.snapInFlight(w); a != nil {
+		if dur > 0 {
+			a.Retarget(x, y, width, height, dur, m.layoutClock())
+			return a
+		}
+		m.CancelSnapAnimation(w)
+	}
+	anim := m.newSnapAnimation(w, x, y, width, height, dur)
+	m.addAnimation(anim)
+	return anim
+}
+
+// addAnimation starts an animation, keeping to one snap per window.
+//
+// A window already sliding is retargeted rather than given a second snap: it
+// bends from the rectangle drawn on screen toward the new one, at the speed
+// it already has, instead of stopping, restarting from rest or jumping. Two
+// snaps on one window would each stamp their own rectangle on it every frame,
+// and the window would flicker between them until the first one landed and
+// threw it to its own target.
+func (m *OS) addAnimation(anim *ui.Animation) {
+	if anim == nil {
+		return
+	}
+	if old := m.snapInFlight(anim.Window); old != nil && old != anim {
+		if anim.Type == ui.AnimationSnap {
+			old.Retarget(anim.EndX, anim.EndY, anim.EndWidth, anim.EndHeight, anim.Duration, anim.StartTime)
+			return
+		}
+		m.CancelSnapAnimation(anim.Window)
+	}
+	m.Animations = append(m.Animations, anim)
+}
+
 // HasActiveAnimations returns true if there are any active animations
 func (m *OS) HasActiveAnimations() bool {
 	return len(m.Animations) > 0

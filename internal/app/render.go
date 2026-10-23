@@ -1097,6 +1097,9 @@ func (m *OS) chargeRenderCost(d time.Duration) {
 }
 
 func (m *OS) View() tea.View {
+	if renderTraceEnabled {
+		m.traceFrame()
+	}
 	var view tea.View
 	// composed is set when this call composed a frame that differs from the
 	// last one.

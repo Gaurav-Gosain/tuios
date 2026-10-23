@@ -29,23 +29,52 @@ const (
 	MinAnimatedHeight = 3
 )
 
+// springStiffness is the spring's angular frequency times the duration. A
+// critically damped spring released from rest has (1+k)e^-k of its distance
+// left at the end of the duration: at 7 that is 0.7%, under half a cell for a
+// move across a 60-column pane, so landing exactly on the target when the
+// clock runs out is not a visible step.
+const springStiffness = 7.0
+
+// The four edges a rectangle is animated as: left, top, right, bottom.
+const (
+	edgeLeft = iota
+	edgeTop
+	edgeRight
+	edgeBottom
+	edgeCount
+)
+
 // Animation represents an animated transition for a window.
+//
+// Each edge of the rectangle moves as a critically damped spring toward the
+// target. A spring is the curve that can change its mind: Retarget hands the
+// spring a new target from where the edge is and how fast it is moving, so a
+// layout that changes again mid-flight bends the motion instead of restarting
+// it from rest or snapping. The position is a closed form of the time since
+// the last (re)start, so it does not depend on how often frames are drawn.
 type Animation struct {
-	Window         *terminal.Window
-	Type           AnimationType
-	StartTime      time.Time
-	Duration       time.Duration
-	StartX         int
-	StartY         int
-	StartWidth     int
-	StartHeight    int
-	EndX           int
-	EndY           int
-	EndWidth       int
-	EndHeight      int
-	Progress       float64
-	Complete       bool
-	InitialResized bool // Track if we've done the initial resize
+	Window    *terminal.Window
+	Type      AnimationType
+	StartTime time.Time
+	Duration  time.Duration
+	// The rectangle the motion last started from, and the one it ends at.
+	StartX      int
+	StartY      int
+	StartWidth  int
+	StartHeight int
+	EndX        int
+	EndY        int
+	EndWidth    int
+	EndHeight   int
+	Progress    float64
+	Complete    bool
+
+	// The spring's state at StartTime: each edge's offset from its target and
+	// its velocity in cells per second. A fresh animation starts at rest at
+	// the Start rectangle; Retarget carries the velocity across.
+	offset [edgeCount]float64
+	vel    [edgeCount]float64
 }
 
 // NewRestoreAnimation creates a restore animation for the specified window.
@@ -62,7 +91,7 @@ func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Dur
 		return nil
 	}
 
-	return &Animation{
+	a := &Animation{
 		Window:      w,
 		Type:        AnimationRestore,
 		StartTime:   time.Now(),
@@ -75,13 +104,17 @@ func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Dur
 		EndY:        w.PreMinimizeY,
 		EndWidth:    w.PreMinimizeWidth,
 		EndHeight:   w.PreMinimizeHeight,
-		Progress:    0,
-		Complete:    false,
 	}
+	a.restFromStart()
+	return a
 }
 
 // NewSnapAnimation creates a snap animation for moving a window to a target position.
 // targetX, targetY, targetWidth, and targetHeight specify the final window bounds.
+//
+// It starts from the rectangle the window holds now, which is the rectangle
+// last drawn for it. A window that already has a snap in flight should be
+// retargeted instead (see Retarget), which keeps its speed.
 func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetHeight int, duration time.Duration) *Animation {
 	// Don't animate if already at target
 	if w.X == targetX && w.Y == targetY &&
@@ -104,7 +137,7 @@ func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetH
 		return nil
 	}
 
-	return &Animation{
+	a := &Animation{
 		Window:      w,
 		Type:        AnimationSnap,
 		StartTime:   time.Now(),
@@ -117,9 +150,52 @@ func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetH
 		EndY:        targetY,
 		EndWidth:    targetWidth,
 		EndHeight:   targetHeight,
-		Progress:    0,
-		Complete:    false,
 	}
+	a.restFromStart()
+	return a
+}
+
+// restFromStart sets the spring at rest on the Start rectangle.
+func (a *Animation) restFromStart() {
+	start := edgesOf(a.StartX, a.StartY, a.StartWidth, a.StartHeight)
+	end := a.endEdges()
+	for i := range edgeCount {
+		a.offset[i] = start[i] - end[i]
+		a.vel[i] = 0
+	}
+}
+
+// HeadsTo reports whether the animation is already on its way to the given
+// rectangle.
+func (a *Animation) HeadsTo(x, y, width, height int) bool {
+	return a.EndX == x && a.EndY == y && a.EndWidth == width && a.EndHeight == height
+}
+
+// Retarget points an animation in flight at a new rectangle.
+//
+// The motion continues from where each edge is at now, at the speed it is
+// moving, so the window bends toward the new target with no jump and no
+// stall. The clock restarts at now, so the window gets the full duration to
+// arrive. Retargeting to the rectangle it is already heading for changes
+// nothing: a layout pass that repeats itself must not restart the motion.
+func (a *Animation) Retarget(x, y, width, height int, duration time.Duration, now time.Time) {
+	if a.Complete || a.HeadsTo(x, y, width, height) {
+		return
+	}
+	pos, vel := a.springAt(now)
+	if duration > 0 {
+		a.Duration = duration
+	}
+	end := edgesOf(x, y, width, height)
+	for i := range edgeCount {
+		a.offset[i] = pos[i] - end[i]
+		a.vel[i] = vel[i]
+	}
+	a.StartX, a.StartY = a.Window.X, a.Window.Y
+	a.StartWidth, a.StartHeight = a.Window.Width, a.Window.Height
+	a.EndX, a.EndY, a.EndWidth, a.EndHeight = x, y, width, height
+	a.StartTime = now
+	a.Progress = 0
 }
 
 // Update updates the animation progress and applies changes to the window.
@@ -139,29 +215,35 @@ func (a *Animation) UpdateAt(now time.Time) bool {
 	// Don't resize the VT emulator during animation. Wait until it completes.
 	// This prevents content overflow and size mismatch issues
 
-	// Calculate progress (0.0 to 1.0)
 	elapsed := now.Sub(a.StartTime)
-	progress := float64(elapsed) / float64(a.Duration)
-
-	if progress >= 1.0 {
-		progress = 1.0
+	if a.Duration <= 0 || elapsed >= a.Duration {
 		a.Complete = true
 	}
+	a.Progress = min(max(float64(elapsed)/float64(max(a.Duration, 1)), 0), 1)
 
-	// Apply easing function (smooth in/out)
-	a.Progress = easeInOutCubic(progress)
-
-	// Animate position and visual size for smooth animations
-	newX := interpolate(a.StartX, a.EndX, a.Progress)
-	newY := interpolate(a.StartY, a.EndY, a.Progress)
-	// The far edges are interpolated rather than the sizes. Two panes that
-	// share an edge at both ends of a slide (a column and its neighbour on the
-	// scrolling strip, two tiles in a split) then round that edge to the same
-	// cell on every frame. Rounding the width on its own let the edge of one
-	// and the start of the next land a cell apart, which drew a one-column gap
-	// or overlap that flickered along the seam.
-	newWidth := max(interpolate(a.StartX+a.StartWidth, a.EndX+a.EndWidth, a.Progress)-newX, 1)
-	newHeight := max(interpolate(a.StartY+a.StartHeight, a.EndY+a.EndHeight, a.Progress)-newY, 1)
+	var newX, newY, newWidth, newHeight int
+	if a.Complete {
+		newX, newY, newWidth, newHeight = a.EndX, a.EndY, a.EndWidth, a.EndHeight
+	} else {
+		pos, _ := a.springAt(now)
+		// The edges are rounded rather than the sizes. Two panes that share an
+		// edge (a column and its neighbour on the scrolling strip, two tiles in
+		// a split) then round that edge to the same cell on every frame.
+		// Rounding the width on its own let the edge of one and the start of
+		// the next land a cell apart, which drew a one-column gap or overlap
+		// that flickered along the seam.
+		left := roundEdge(pos[edgeLeft])
+		top := roundEdge(pos[edgeTop])
+		newX, newY = left, top
+		newWidth = max(roundEdge(pos[edgeRight])-left, 1)
+		newHeight = max(roundEdge(pos[edgeBottom])-top, 1)
+		// A spring that has come within half a cell of the target draws the
+		// target, and there is nothing left to show: land it now rather than
+		// spend frames redrawing the same cells until the clock runs out.
+		if newX == a.EndX && newY == a.EndY && newWidth == a.EndWidth && newHeight == a.EndHeight {
+			a.Complete = true
+		}
+	}
 
 	a.Window.X = newX
 	a.Window.Y = newY
@@ -174,10 +256,54 @@ func (a *Animation) UpdateAt(now time.Time) bool {
 
 	// If animation is complete, finalize the state
 	if a.Complete {
+		a.Progress = 1
 		a.settle()
 	}
 
 	return a.Complete
+}
+
+// springAt returns each edge's position, in cells, and velocity, in cells per
+// second, at now.
+//
+// A critically damped spring with offset e and velocity v at time zero is at
+// target + (e + (v + w e) t) e^(-w t) at time t: it closes on the target as
+// fast as a spring can without passing it when released from rest.
+func (a *Animation) springAt(now time.Time) (pos, vel [edgeCount]float64) {
+	end := a.endEdges()
+	t := max(now.Sub(a.StartTime).Seconds(), 0)
+	omega := springStiffness / math.Max(a.Duration.Seconds(), 1e-3)
+	decay := math.Exp(-omega * t)
+	for i := range edgeCount {
+		e, v := a.offset[i], a.vel[i]
+		b := v + omega*e
+		off := (e + b*t) * decay
+		// A spring handed a velocity toward the target can carry past it.
+		// A pane edge never overshoots its slot: it stops there.
+		if e != 0 && math.Signbit(off) != math.Signbit(e) {
+			off = 0
+			v = 0
+		} else {
+			v = (v - omega*b*t) * decay
+		}
+		pos[i] = end[i] + off
+		vel[i] = v
+	}
+	return pos, vel
+}
+
+func (a *Animation) endEdges() [edgeCount]float64 {
+	return edgesOf(a.EndX, a.EndY, a.EndWidth, a.EndHeight)
+}
+
+func edgesOf(x, y, width, height int) [edgeCount]float64 {
+	return [edgeCount]float64{float64(x), float64(y), float64(x + width), float64(y + height)}
+}
+
+// roundEdge rounds half away from zero, so an edge shared by two panes lands
+// on one cell for both.
+func roundEdge(v float64) int {
+	return int(math.Round(v))
 }
 
 // Finish lands an animation now, exactly as running it to its last frame would.
@@ -219,18 +345,4 @@ func (a *Animation) settle() {
 			a.Window.Minimized = false
 		}
 	}
-}
-
-// easeInOutCubic applies cubic easing to the animation progress for smooth transitions.
-func easeInOutCubic(t float64) float64 {
-	if t < 0.5 {
-		return 4 * t * t * t
-	}
-	p := 2*t - 2
-	return 1 + p*p*p/2
-}
-
-// interpolate performs linear interpolation between start and end values.
-func interpolate(start, end int, progress float64) int {
-	return start + int(math.Round(float64(end-start)*progress))
 }

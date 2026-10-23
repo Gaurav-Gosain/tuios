@@ -14,7 +14,7 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 	// Create and start snap animation
 	anim := m.CreateSnapAnimation(i, quarter)
 	if anim != nil {
-		m.Animations = append(m.Animations, anim)
+		m.addAnimation(anim)
 	} else {
 		// No animation needed (already at target), but still resize terminal if needed
 		win := m.Windows[i]

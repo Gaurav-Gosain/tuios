@@ -1275,6 +1275,22 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 		adoptGeometry = false
 	}
 
+	// A pane that is sliding is drawn where its animation has it, and the
+	// animation lands it on the target and resizes the guest once when it
+	// gets there. The rectangle in a sync is a target, not a frame: writing it
+	// on the window drew the pane at that rectangle for one frame, the next
+	// tick of the animation put it back mid-slide, and the guest was resized
+	// twice on the way. So a sliding pane is turned toward the sync's
+	// rectangle instead. That is nothing at all when the sync is this
+	// client's own layout coming back, which is the usual case: the push
+	// carries each animation's target. See BuildSessionState.
+	if adoptGeometry {
+		if anim := m.snapInFlight(w); anim != nil {
+			anim.Retarget(ws.X, ws.Y, ws.Width, ws.Height, 0, m.layoutClock())
+			adoptGeometry = false
+		}
+	}
+
 	// Check if size changed
 	sizeChanged := adoptGeometry && (w.Width != ws.Width || w.Height != ws.Height)
 

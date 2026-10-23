@@ -112,7 +112,7 @@ func (m *OS) RestoreWindow(i int) {
 			window.Width = anim.StartWidth
 			window.Height = anim.StartHeight
 
-			m.Animations = append(m.Animations, anim)
+			m.addAnimation(anim)
 		}
 
 		// Mark as not minimized after setting position so it shows during animation
@@ -339,7 +339,7 @@ func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) 
 	}
 	if animate && !deferring {
 		if anim := m.zoomAnimation(w, x, y, width, height); anim != nil {
-			m.Animations = append(m.Animations, anim)
+			m.addAnimation(anim)
 			w.InvalidateCache()
 			return
 		}
@@ -570,7 +570,7 @@ func (m *OS) animateToRect(w *terminal.Window, x, y, width, height int) bool {
 	if anim == nil {
 		return false
 	}
-	m.Animations = append(m.Animations, anim)
+	m.addAnimation(anim)
 	w.InvalidateCache()
 	return true
 }

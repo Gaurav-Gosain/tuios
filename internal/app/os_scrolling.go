@@ -219,9 +219,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		}
 
 		if slide || (animate && alreadyPlaced && moved) {
-			m.CancelAnimationsForWindow(win)
-			if anim := m.newSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
-				m.Animations = append(m.Animations, anim)
+			if anim := m.animateWindow(win, rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
 				continue
 			}
 		}

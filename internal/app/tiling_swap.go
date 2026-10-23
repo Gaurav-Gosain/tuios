@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -9,6 +10,21 @@ import (
 
 // SwapWindowsInstant swaps the positions of two windows instantly without animation
 func (m *OS) SwapWindowsInstant(index1, index2 int) {
+	m.swapWindows(index1, index2, 0)
+}
+
+// destinationOf is the rectangle a window is on its way to: the target of
+// the snap moving it, or where it is when nothing is.
+func (m *OS) destinationOf(w *terminal.Window) (x, y, width, height int) {
+	if a := m.snapInFlight(w); a != nil {
+		return a.EndX, a.EndY, a.EndWidth, a.EndHeight
+	}
+	return w.X, w.Y, w.Width, w.Height
+}
+
+// swapWindows trades the slots of two windows, sliding each to the other's
+// over dur, or at once when dur is zero.
+func (m *OS) swapWindows(index1, index2 int, dur time.Duration) {
 	if index1 < 0 || index1 >= len(m.Windows) || index2 < 0 || index2 >= len(m.Windows) {
 		return
 	}
@@ -16,9 +32,19 @@ func (m *OS) SwapWindowsInstant(index1, index2 int) {
 	window1 := m.Windows[index1]
 	window2 := m.Windows[index2]
 
-	// Store the positions for swapping
-	x1, y1, w1, h1 := window1.X, window1.Y, window1.Width, window1.Height
-	x2, y2, w2, h2 := window2.X, window2.Y, window2.Width, window2.Height
+	// The slots are where the windows are going, not where a slide in flight
+	// happens to have them on this frame.
+	x1, y1, w1, h1 := m.destinationOf(window1)
+	x2, y2, w2, h2 := m.destinationOf(window2)
+
+	if dur > 0 {
+		m.animateWindow(window1, x2, y2, w2, h2, dur)
+		m.animateWindow(window2, x1, y1, w1, h1, dur)
+		m.finishSwap(index1, index2)
+		return
+	}
+	m.CancelSnapAnimation(window1)
+	m.CancelSnapAnimation(window2)
 
 	// Swap positions instantly
 	window1.X = x2
@@ -37,6 +63,13 @@ func (m *OS) SwapWindowsInstant(index1, index2 int) {
 	window2.MarkPositionDirty()
 	window2.InvalidateCache()
 
+	m.finishSwap(index1, index2)
+}
+
+// finishSwap records a swap of two windows' slots: in the BSP tree, in the
+// window order, in the focus, and on the daemon.
+func (m *OS) finishSwap(index1, index2 int) {
+	window1, window2 := m.Windows[index1], m.Windows[index2]
 	// Swap windows in the BSP tree so the layout is preserved on retile
 	m.SwapWindowsInBSPTree(window1, window2)
 
@@ -101,10 +134,10 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	)
 
 	if anim1 != nil {
-		m.Animations = append(m.Animations, anim1)
+		m.addAnimation(anim1)
 	}
 	if anim2 != nil {
-		m.Animations = append(m.Animations, anim2)
+		m.addAnimation(anim2)
 	}
 
 	// Sync state to daemon after animations are set up
@@ -148,7 +181,7 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 		)
 
 		if anim != nil {
-			m.Animations = append(m.Animations, anim)
+			m.addAnimation(anim)
 		}
 	}
 }
@@ -156,11 +189,6 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 // SwapWindow swaps the focused window with the adjacent window in the given direction
 func (m *OS) SwapWindow(dir Direction) {
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-		return
-	}
-
-	// Don't swap if animations are in progress
-	if m.HasActiveAnimations() {
 		return
 	}
 
@@ -173,13 +201,18 @@ func (m *OS) SwapWindow(dir Direction) {
 	targetIndex := m.findAdjacentWindow(focusedWindow, dir)
 
 	if targetIndex >= 0 {
-		// Swap instantly without animation for keyboard shortcuts
-		m.SwapWindowsInstant(m.FocusedWindow, targetIndex)
+		// The two panes trade places with the fast slide a dropped pane
+		// uses, so the eye can follow which pane went where. A swap pressed
+		// again while they slide trades their destinations.
+		m.swapWindows(m.FocusedWindow, targetIndex, m.Settings.GetFastAnimationDuration())
 	}
 }
 
 // findAdjacentWindow finds the closest window in the given direction
 func (m *OS) findAdjacentWindow(focused *terminal.Window, dir Direction) int {
+	// Judged by where the panes are going, so a swap pressed while they
+	// still slide picks the neighbour the layout gives them.
+	fx, fy, fw, fh := m.destinationOf(focused)
 	targetIndex := -1
 	var minDistance int
 
@@ -195,26 +228,27 @@ func (m *OS) findAdjacentWindow(focused *terminal.Window, dir Direction) int {
 			continue
 		}
 
+		wx, wy, ww, wh := m.destinationOf(window)
 		var isInDirection, overlaps bool
 		var distance int
 
 		switch dir {
 		case DirLeft:
-			isInDirection = window.X+window.Width <= focused.X+swapTolerance
-			overlaps = window.Y < focused.Y+focused.Height && window.Y+window.Height > focused.Y
-			distance = focused.X - (window.X + window.Width)
+			isInDirection = wx+ww <= fx+swapTolerance
+			overlaps = wy < fy+fh && wy+wh > fy
+			distance = fx - (wx + ww)
 		case DirRight:
-			isInDirection = window.X >= focused.X+focused.Width-swapTolerance
-			overlaps = window.Y < focused.Y+focused.Height && window.Y+window.Height > focused.Y
-			distance = window.X - (focused.X + focused.Width)
+			isInDirection = wx >= fx+fw-swapTolerance
+			overlaps = wy < fy+fh && wy+wh > fy
+			distance = wx - (fx + fw)
 		case DirUp:
-			isInDirection = window.Y+window.Height <= focused.Y+swapTolerance
-			overlaps = window.X < focused.X+focused.Width && window.X+window.Width > focused.X
-			distance = focused.Y - (window.Y + window.Height)
+			isInDirection = wy+wh <= fy+swapTolerance
+			overlaps = wx < fx+fw && wx+ww > fx
+			distance = fy - (wy + wh)
 		case DirDown:
-			isInDirection = window.Y >= focused.Y+focused.Height-swapTolerance
-			overlaps = window.X < focused.X+focused.Width && window.X+window.Width > focused.X
-			distance = window.Y - (focused.Y + focused.Height)
+			isInDirection = wy >= fy+fh-swapTolerance
+			overlaps = wx < fx+fw && wx+ww > fx
+			distance = wy - (fy + fh)
 		}
 
 		if isInDirection && overlaps && distance < minDistance {
@@ -261,15 +295,11 @@ func (m *OS) SwapWindowsByID(source, target string) error {
 	if si == ti {
 		return nil
 	}
-	// A pane opened a moment ago is still sliding to its tile. Swapping
-	// rectangles mid-slide would swap the in-between ones, and the slides
-	// would then land each pane back where it started: the client would
-	// draw one order and tell the daemon another. The slides land first,
-	// so the swap trades the rectangles the layout gave.
-	m.landSnapAnimations()
-	m.CancelAnimationsForWindow(m.Windows[si])
-	m.CancelAnimationsForWindow(m.Windows[ti])
-	m.SwapWindowsInstant(si, ti)
+	// A pane opened a moment ago may still be sliding to its tile. The swap
+	// trades the rectangles the layout gave, not the in-between ones a slide
+	// has on this frame (see swapWindows), so the client draws the order it
+	// tells the daemon.
+	m.swapWindows(si, ti, m.Settings.GetFastAnimationDuration())
 	m.FocusWindow(ti)
 	return nil
 }

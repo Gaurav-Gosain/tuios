@@ -90,6 +90,35 @@ All three cases printed `software fallback rendered without native ownership`,
 including the failing transition case. The same command without the overlay
 passed all three cases. This is a deterministic race regression; the separate
 real-client cursor E2E tests do not force this interleaving.
+## Tiled panes move one way when a pane opens, swaps or closes
+
+`TestTiledPanesMoveOneWay` opens a second pane beside a first in a BSP daemon
+session with animations on, swaps the two with `H`, and closes the second.
+The render trace gives the first pane's rectangle in every frame the client
+composed. The open is also replayed from the host stream at the close of every
+synchronized update. Each transition must go from the start to the target in
+one direction, through at least three values in between, and must not reach
+the target early and leave it. The new pane's shell reports a directory (OSC 7)
+every 40ms, so the daemon broadcasts the session during the slide. The test
+requires a state sync for the first pane between two frames of its slide.
+
+Run on 2026-10-23 on Linux amd64 (Go 1.26.10).
+
+| Control | How | Result | Verdict |
+| --- | --- | --- | --- |
+| The parent commit | `f4a47c486` with only the frame line of the render trace added | 2 runs of 2 fail. Widths `[120 60 120 60 119 117 60 114 ...]`, presented right edges `[119 59 119 59 118 ...]`: the flash, once per broadcast. The swap is a cut: left edges `[60]` | **caught** |
+| No retarget on a sync | the fix with the `snapInFlight` check in `updateWindowFromState` removed | 2 runs of 2 fail. Widths `[120 60 116 108 60 99 91 60 ...]` | **caught** |
+| Landing snaps before a BSP open or close | `requireRealRelayout` back to `requireRealLayout` | not caught. A pane opened while another still slides is not in this test | **not caught** |
+
+With the fix the test passed 3 runs of 3. Open widths
+`[120 116 108 100 91 84 78 74 70 67 65 64 63 62 61 60]`, swap left edges
+`[0 6 19 31 41 48 52 55 57 58 59 60]`, close widths
+`[60 63 71 79 88 95 101 106 109 112 114 116 117 118 119 120]`.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
+-run '^TestTiledPanesMoveOneWay$' -v .` from `e2e/tui`. With
+`TUIOS_E2E_FRAMES` set, the run saves the frame rectangles of each
+transition, the host stream, and the offset the open starts at.
 
 ## Sidebar-created worktrees apply startup tiling
 
