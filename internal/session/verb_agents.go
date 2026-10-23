@@ -1149,6 +1149,24 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		lines = askDefaultLines
 	}
 
+	// One ask types at a pane at a time. Another ask of the same pane waits
+	// for its turn, in the order the asks came, for up to timeout. See
+	// ask_turns.go.
+	turnStart := time.Now()
+	ahead, release := d.askTurns.take(d.ctx, target.ID, timeout)
+	if release == nil {
+		if d.ctx.Err() != nil {
+			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		}
+		return nil, hintedVerbError(ErrVerbNotReady, "other asks of this agent were still running when the timeout elapsed: "+strconv.Itoa(ahead)+" were ahead of this one", &VerbHint{
+			Param:   "timeout",
+			Command: "tuios send-agent-message -w " + shortWindowID(target.ID) + " '<what you wanted to ask>'",
+			Detail:  "Nothing was typed. Asks of one agent take turns, first come first served, and this one waited its whole timeout for its turn. Raise timeout, or leave a message instead: tuios tells the agent about its mail.",
+		})
+	}
+	defer release()
+	waitedTurn := time.Since(turnStart)
+
 	// Step one: do not type into an agent that is blocked on a prompt, because
 	// the text would answer the prompt. This holds with force too: force skips
 	// the wait for a working agent, and only allow_blocked says the caller knows
@@ -1239,8 +1257,12 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		"window":     target.ID,
 		"name":       windowLabelOf(target),
 		"waited_for": waitedFor,
-		"settled_by": settledBy,
-		"state":      endState,
+		// queued_behind is how many asks of the same agent were ahead of
+		// this one, and waited_turn_ms how long it waited for its turn.
+		"queued_behind":  ahead,
+		"waited_turn_ms": waitedTurn.Milliseconds(),
+		"settled_by":     settledBy,
+		"state":          endState,
 		// untrusted, as in read-agent-messages: this is another program's output.
 		"untrusted": true,
 		"reply":     reply,

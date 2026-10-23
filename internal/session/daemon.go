@@ -304,6 +304,9 @@ type Daemon struct {
 	// mail. Its zero value is ready, and off until SetMailWake. See
 	// mail_wake.go.
 	mailWake mailWaker
+	// askTurns keeps one ask-agent typing at a pane at a time. See
+	// ask_turns.go.
+	askTurns askTurns
 
 	// reviewNotes holds the review notes left on panes' changes. Its zero
 	// value is ready; Start loads what the last daemon saved. See

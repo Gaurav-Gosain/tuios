@@ -186,6 +186,14 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**Asks of one agent take turns.** An `ask-agent` that comes while another
+ask of the same target runs no longer types over it, and no longer fails with
+`not_ready` once `ready_timeout` passes. It waits for its turn, first come
+first served, for up to `timeout`, and then goes on as before. A turn that
+does not come in time is `not_ready`, and nothing is typed. The reply gains
+`queued_behind` and `waited_turn_ms`. A queued prompt (`queue-prompt`) is not
+typed while an ask holds the target's turn.
+
 **list-host-sessions rows carry agents.** A remote session row gains
 `agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
 `harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
