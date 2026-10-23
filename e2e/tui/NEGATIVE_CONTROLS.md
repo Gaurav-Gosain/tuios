@@ -8852,7 +8852,9 @@ two panes, found from `TUIOS_PANE_ID` as a harness in the pane finds them,
 while a third pane sends them mail. It counts every hook's output: the first
 message is announced once over one `UserPromptSubmit` and three `PostToolUse`
 events, a second message is announced once in `hookSpecificOutput` JSON, a
-compact `SessionStart` prints the hint and the notice again, a Codex pane gets
+compact `SessionStart` prints the hint and the notice again, a compact
+`SessionStart` of another conversation gets no notice, a hook whose stdout is
+a closed pipe does not use up the notice, a Codex pane gets
 the same, and a `SessionStart` after the mail was read prints no notice. No
 output may hold the subject's or the body's marker text. The positive half of
 each "nothing printed" check is the notice printed in the same fixture a step
@@ -8865,3 +8867,5 @@ Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
 | --- | --- | --- | --- |
 | The hook never asks for the notice | drop the `fetchMailNotice` call from `agentHook` | `UserPromptSubmit printed "", want "You have 1 unread tuios message from \"review\". ..."` | **caught** |
 | A message is announced again on every event | skip the announced-mark check in `takeNotice` | `the first message was announced 4 times, want once` | **caught** |
+| The compact `SessionStart` skips the guard | skip the harness guard in `verbAgentMailNotice` | `a compact SessionStart of another conversation got the pane's notice` | **caught** |
+| A hook whose output is lost uses up the notice | the hook asks without `lease` | `after a hook lost its output, the next PostToolUse added "", want the notice for 3 messages` | **caught** |

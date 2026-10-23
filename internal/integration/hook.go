@@ -281,6 +281,9 @@ type Decision struct {
 	// reports no state, and the agent still has to hear where it is. See
 	// ContextOutput.
 	Context ContextOutput `json:"context,omitempty"`
+	// ContextSessionID is the conversation id of a skip that has Context, so
+	// the hook can hold its mail notice to the same guard a report meets.
+	ContextSessionID string `json:"context_session_id,omitempty"`
 }
 
 // ContextOutput says how a hook adds text to the agent's context for one
@@ -402,9 +405,9 @@ func Translate(harnessName string, in Input) Decision {
 	p := fields(payload)
 	switch id {
 	case ClaudeCode:
-		return withContext(translateClaude(in, p))
+		return withContext(translateClaude(in, p), p)
 	case Codex:
-		return withContext(translateCodex(in, p))
+		return withContext(translateCodex(in, p), p)
 	case GeminiCLI:
 		return translateGemini(in, p)
 	case OpenCode, Kilo:
@@ -432,7 +435,7 @@ func Translate(harnessName string, in Input) Decision {
 // skip is marked only when it is Claude Code's compact SessionStart, the one
 // skip of a pane's own agent: the others are a nested or foreign harness, a
 // subagent, or a payload that did not parse.
-func withContext(d Decision) Decision {
+func withContext(d Decision, p fields) Decision {
 	if d.Report == nil && d.Skip != SkipCompact {
 		return d
 	}
@@ -441,6 +444,9 @@ func withContext(d Decision) Decision {
 		return d
 	}
 	d.Context = contextFor(d.Harness, d.Event)
+	if d.Report == nil {
+		d.ContextSessionID = p.str("session_id")
+	}
 	return d
 }
 

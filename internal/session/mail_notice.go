@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Mail notices: the one line that tells an agent it has unread mail.
@@ -34,9 +35,31 @@ const mailNoticeMaxName = 24
 
 // noticeMark is the newest message id announced to one pane, and the session
 // the pane was in, so a session that ends takes its marks with it.
+//
+// A hook takes a notice on a lease: the mail it describes counts as announced
+// until leaseUntil, and becomes announced for good only when the hook says it
+// wrote the line (commitNotice). A hook that missed its deadline printed
+// nothing, and its lease runs out, so the next hook announces the mail again.
 type noticeMark struct {
 	id      uint64
 	session string
+	// lease is the token of the open lease, 0 for none. leaseTo is the id
+	// it covers.
+	lease      uint64
+	leaseTo    uint64
+	leaseUntil time.Time
+}
+
+// noticeLease is how long a hook's notice counts as announced before the
+// hook says it wrote it. It is longer than a hook's whole run.
+const noticeLease = 3 * time.Second
+
+// effective is the newest id that counts as announced at now.
+func (m noticeMark) effective(now time.Time) uint64 {
+	if m.lease != 0 && now.Before(m.leaseUntil) {
+		return max(m.id, m.leaseTo)
+	}
+	return m.id
 }
 
 // mailSummary is a pane's unread mail as a notice describes it.
@@ -78,24 +101,50 @@ func (b *agentBus) unreadSummaryLocked(session, inbox string) mailSummary {
 }
 
 // takeNotice reports the inbox's unread mail and whether it holds a message
-// not yet announced, and marks everything it reports as announced. With reset
-// it announces whatever is unread. The check and the mark are one step, so two
-// hooks that run at once announce a message once.
-func (b *agentBus) takeNotice(session, inbox string, reset bool) (mailSummary, bool) {
+// not yet announced, and marks everything it reports as announced: for good,
+// or with lease until the caller commits it with the token it returns. With
+// reset it announces whatever is unread. The check and the mark are one
+// step, so two hooks that run at once announce a message once.
+func (b *agentBus) takeNotice(session, inbox string, reset, lease bool) (mailSummary, bool, uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	s := b.unreadSummaryLocked(session, inbox)
 	if s.unread == 0 {
-		return s, false
+		return s, false, 0
 	}
 	if b.noticed == nil {
 		b.noticed = map[string]noticeMark{}
 	}
-	if !reset && s.newest <= b.noticed[inbox].id {
-		return s, false
+	now := time.Now()
+	m := b.noticed[inbox]
+	if !reset && s.newest <= m.effective(now) {
+		return s, false, 0
 	}
-	b.noticed[inbox] = noticeMark{id: s.newest, session: session}
-	return s, true
+	m.session = session
+	if !lease {
+		m.id = max(m.id, s.newest)
+		b.noticed[inbox] = m
+		return s, true, 0
+	}
+	b.leaseSeq++
+	m.lease, m.leaseTo, m.leaseUntil = b.leaseSeq, s.newest, now.Add(noticeLease)
+	b.noticed[inbox] = m
+	return s, true, m.lease
+}
+
+// commitNotice makes the lease with token announced for good. It reports
+// false when the lease ran out or another took its place.
+func (b *agentBus) commitNotice(inbox string, token uint64) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	m, ok := b.noticed[inbox]
+	if !ok || token == 0 || m.lease != token {
+		return false
+	}
+	m.id = max(m.id, m.leaseTo)
+	m.lease, m.leaseTo, m.leaseUntil = 0, 0, time.Time{}
+	b.noticed[inbox] = m
+	return true
 }
 
 // forgetNotices drops the marks of one pane, or with window empty of every
@@ -240,11 +289,21 @@ func mailNoticeText(s mailSummary, session, window string) string {
 
 // verbAgentMailNotice answers a pane's hook with the notice line for its
 // unread mail, once per message. See the top of this file.
-func (d *Daemon) verbAgentMailNotice(_ *connState, params json.RawMessage) (any, *verbError) {
+//
+// A hook names its harness, conversation and process, and the call is held to
+// the guard a report from that hook would be: a nested harness, another
+// conversation's process, or a harness outside the pane gets no notice and the
+// reason. A hook asks with lease and commits once it wrote the line.
+func (d *Daemon) verbAgentMailNotice(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string `json:"session"`
-		Window  string `json:"window"`
-		Reset   bool   `json:"reset"`
+		Session        string `json:"session"`
+		Window         string `json:"window"`
+		Reset          bool   `json:"reset"`
+		Lease          bool   `json:"lease"`
+		Commit         uint64 `json:"commit"`
+		Harness        string `json:"harness"`
+		AgentSessionID string `json:"agent_session_id"`
+		HarnessPID     int    `json:"harness_pid"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -252,26 +311,50 @@ func (d *Daemon) verbAgentMailNotice(_ *connState, params json.RawMessage) (any,
 	if p.Window == "" {
 		return nil, invalidParam("window", "window is required: name the pane whose mail to announce, normally $TUIOS_PANE_ID")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, target, verr := d.reportTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
 	state := sess.GetState()
-	idx, err := findWindowStateIndex(state.Windows, p.Window)
+	idx, err := findWindowStateIndex(state.Windows, target)
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
 	}
-	target := state.Windows[idx]
-	sum, fresh := d.agents.takeNotice(sess.Name(), target.ID, p.Reset)
-	notice := ""
-	if fresh {
-		notice = mailNoticeText(sum, sess.Name(), target.ID)
-	}
-	return map[string]any{
+	windowID := state.Windows[idx].ID
+	out := map[string]any{
 		"type":      "agent_mail_notice",
 		"session":   sess.Name(),
-		"window_id": target.ID,
-		"unread":    sum.unread,
-		"notice":    notice,
-	}, nil
+		"window_id": windowID,
+	}
+	if p.Commit != 0 {
+		out["committed"] = d.agents.commitNotice(windowID, p.Commit)
+		return out, nil
+	}
+	if p.Harness != "" {
+		_, _, reason, err := sess.activityReportGuard(windowID, AgentReport{
+			Harness:      p.Harness,
+			SessionID:    p.AgentSessionID,
+			HarnessPID:   p.HarnessPID,
+			SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
+			foreignPane:  d.harnessOutsidePane(cs, sess, windowID, p.HarnessPID),
+		})
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		if reason != "" {
+			out["notice"], out["reason"] = "", reason
+			return out, nil
+		}
+	}
+	sum, fresh, token := d.agents.takeNotice(sess.Name(), windowID, p.Reset, p.Lease)
+	notice := ""
+	if fresh {
+		notice = mailNoticeText(sum, sess.Name(), windowID)
+	}
+	out["unread"] = sum.unread
+	out["notice"] = notice
+	if token != 0 {
+		out["lease"] = token
+	}
+	return out, nil
 }

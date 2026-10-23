@@ -6446,10 +6446,19 @@ arrives. `reset: true` announces all unread mail again; the hook sets it on a
 `SessionStart`, since a new, resumed or compacted conversation no longer holds
 the earlier line. The marks live in daemon memory and go with the pane.
 
+A hook asks with `lease: true` and its `harness`, `agent_session_id` and
+`harness_pid`. The guard of `report-agent-activity` applies: a pane attributed
+to another harness or conversation, or a harness outside the pane, gets no
+notice and the `reason`. With a lease, the mail counts as announced for 3
+seconds, and the answer carries a `lease` token. The hook sends it back in
+`commit` once it wrote the line. A hook that missed its deadline sends nothing,
+the lease runs out, and the next hook announces the mail again.
+
 From a pane it is the pane's own record: `window` must be the caller's pane.
 
 Result: `window_id`, `unread` (seen messages included), `notice` (empty for
-nothing new).
+nothing new), `lease` for a call with a lease that gave a notice, `committed`
+for a call with `commit`, and `reason` when the guard gave no notice.
 
 ### agent-activity
 

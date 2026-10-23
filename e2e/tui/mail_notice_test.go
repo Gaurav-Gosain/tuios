@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runHookAsPane runs the real hook for harness with payload the way a
@@ -47,7 +48,10 @@ func runHookAsPane(t *testing.T, base, harness, session, window, payload string)
 //
 // Negative controls: with fetchMailNotice taken out of agentHook, no hook
 // prints the notice. With takeNotice not checking the announced mark, the
-// notice repeats on every PostToolUse and the count fails.
+// notice repeats on every PostToolUse and the count fails. With
+// verbAgentMailNotice skipping the harness guard, the other conversation's
+// compact SessionStart gets the notice. With the hook asking without a lease,
+// the hook whose output was lost uses up the notice.
 func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -154,6 +158,13 @@ func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 		t.Fatalf("a compact SessionStart printed %q, want the hint and the notice", compact)
 	}
 
+	// A compact SessionStart from another conversation in the pane, such as
+	// a nested Claude Code, reports nothing and must not get the pane's
+	// notice: it meets the guard a report from it would.
+	if out := hook("claude-code", `{"hook_event_name":"SessionStart","session_id":"intruder","source":"compact"}`); strings.Contains(out, "unread") {
+		t.Fatalf("a compact SessionStart of another conversation got the pane's notice: %q", out)
+	}
+
 	// Codex, in a pane of its own, reads the same events the same way.
 	hookIn(cxrcpt, "codex", `{"hook_event_name":"SessionStart","session_id":"c1","source":"startup"}`)
 	sendTo(cxrcpt, "third "+body)
@@ -163,6 +174,30 @@ func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 	}
 	if out := hookIn(cxrcpt, "codex", `{"hook_event_name":"UserPromptSubmit","session_id":"c1","prompt":"next"}`); strings.TrimSpace(out) != "" {
 		t.Fatalf("Codex UserPromptSubmit repeated the notice: %q", out)
+	}
+
+	// A hook whose output never reaches the harness must not use up the
+	// notice. Its stdout is a pipe nobody reads, closed before it runs.
+	send("fourth " + body)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Close()
+	lost := exec.Command(tuiosBin, "agent-hook", "claude-code", "--timeout", "10s")
+	lost.Dir = workDirIn(t, base)
+	lost.Env = append(os.Environ(), "SHELL=/bin/sh", "TUIOS_PANE_ID="+rcpt, "TUIOS_SESSION="+session)
+	for _, key := range xdgKeys {
+		lost.Env = append(lost.Env, key+"="+xdgDir(base, key))
+	}
+	lost.Stdin = strings.NewReader(`{"hook_event_name":"PostToolUse","session_id":"m1","tool_name":"Bash","tool_input":{"command":"ls"}}`)
+	lost.Stdout = w
+	_ = lost.Run()
+	_ = w.Close()
+	fmt.Fprintf(&log, "-- a PostToolUse hook ran with its output lost\n")
+	time.Sleep(4 * time.Second)
+	if c := additional(hook("claude-code", `{"hook_event_name":"PostToolUse","session_id":"m1","tool_name":"Bash","tool_input":{"command":"ls"}}`)); !strings.HasPrefix(c, "You have 3 unread tuios messages") {
+		t.Fatalf("after a hook lost its output, the next PostToolUse added %q, want the notice for 3 messages", c)
 	}
 
 	// Reading the mail ends the notices.

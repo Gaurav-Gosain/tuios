@@ -267,6 +267,8 @@ type agentBus struct {
 	// noticed is the newest message id announced to each pane, by window
 	// id. See mail_notice.go.
 	noticed map[string]noticeMark
+	// leaseSeq numbers the leases of takeNotice.
+	leaseSeq uint64
 }
 
 // agentMailbox is one session's ring.

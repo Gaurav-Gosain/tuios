@@ -133,7 +133,8 @@ also add one line about the pane's unread mail, when there is mail the agent
 was not told about: the count, the senders and the command that reads it. It
 never holds a subject or a body. Each message is announced once. A
 SessionStart announces all unread mail again, since the agent no longer holds
-the earlier line. PostToolUse prints the line as hookSpecificOutput JSON,
+the earlier line. A hook that cannot write its output does not use up the
+notice. PostToolUse prints the line as hookSpecificOutput JSON,
 because these harnesses ignore its plain output. Outside tuios, and with
 --window, the hook prints none of these lines.
 
@@ -233,6 +234,10 @@ type agentHookOutcome struct {
 	// not ask for one.
 	MailNotice string `json:"mail_notice,omitempty"`
 	MailError  string `json:"mail_error,omitempty"`
+	// MailLease is the token that makes the notice announced for good once
+	// it is written. MailCommitted says that was done.
+	MailLease     uint64 `json:"mail_lease,omitempty"`
+	MailCommitted bool   `json:"mail_committed,omitempty"`
 }
 
 // approvalTrace is the Inbox half of a hook run, for --explain.
@@ -267,7 +272,9 @@ func runAgentHook(o agentHookOptions, args []string, hio agentHookIO) {
 	case <-time.After(timeout):
 		out = agentHookOutcome{Decision: integration.Decision{Harness: harness}, Error: "gave up after " + timeout.String()}
 	}
-	writeContext(out, hio.stdout)
+	if writeContext(out, hio.stdout) && out.MailLease != 0 {
+		out.MailCommitted = commitMailNotice(out, hio)
+	}
 	if holdable(out) {
 		out.Hold = holdForAnswer(out, hio)
 	}
@@ -288,10 +295,41 @@ func startHint(out agentHookOutcome) bool {
 		out.Window != "" && out.Session != "" && out.PaneBy != "flag"
 }
 
+// mailCommitDeadline bounds the call that makes a written notice announced
+// for good. Past it the lease runs out, and the next hook announces the mail
+// again: a repeat, never a notice lost.
+const mailCommitDeadline = 300 * time.Millisecond
+
+// commitMailNotice tells the daemon the notice was written.
+func commitMailNotice(out agentHookOutcome, hio agentHookIO) bool {
+	done := make(chan bool, 1)
+	go func() {
+		client, err := hio.dial()
+		if err != nil {
+			done <- false
+			return
+		}
+		if c, ok := client.(io.Closer); ok {
+			defer func() { _ = c.Close() }()
+		}
+		raw, err := client.Call("agent-mail-notice", map[string]any{"session": out.Session, "window": out.Window, "commit": out.MailLease})
+		var res struct {
+			Committed bool `json:"committed"`
+		}
+		done <- err == nil && json.Unmarshal(raw, &res) == nil && res.Committed
+	}()
+	select {
+	case ok := <-done:
+		return ok
+	case <-time.After(mailCommitDeadline):
+		return false
+	}
+}
+
 // writeContext prints what the hook adds to the agent's context: where it
 // runs, on a SessionStart, and the line about its unread mail, in the form
-// the harness reads for the event.
-func writeContext(out agentHookOutcome, w io.Writer) {
+// the harness reads for the event. It reports whether it wrote the notice.
+func writeContext(out agentHookOutcome, w io.Writer) bool {
 	var text string
 	if startHint(out) {
 		text = integration.SessionStartHint(shortWindowID(out.Window), out.Session)
@@ -300,12 +338,13 @@ func writeContext(out agentHookOutcome, w io.Writer) {
 		text += out.MailNotice + "\n"
 	}
 	if text == "" {
-		return
+		return false
 	}
 	if out.Context == integration.ContextJSON {
 		text = integration.ContextJSONOutput(out.Event, strings.TrimSuffix(text, "\n"))
 	}
-	_, _ = io.WriteString(w, text)
+	_, err := io.WriteString(w, text)
+	return err == nil && out.MailNotice != ""
 }
 
 // mayNotice reports whether a hook run asks for the notice about the pane's
@@ -329,9 +368,17 @@ func mayNotice(out agentHookOutcome) bool {
 // agent no longer holds an earlier notice. A daemon from before the verb
 // answers unknown_verb, and the hook prints nothing.
 func fetchMailNotice(out *agentHookOutcome, client verbCaller) {
-	params := map[string]any{"session": out.Session, "window": out.Window}
+	params := map[string]any{"session": out.Session, "window": out.Window, "lease": true, "harness": out.Harness}
 	if out.Event == "SessionStart" {
 		params["reset"] = true
+	}
+	// The same guard a report from this hook meets: the compact
+	// SessionStart sends no report, so this is its only check.
+	if id := hookSessionID(*out); id != "" {
+		params["agent_session_id"] = id
+		if out.HarnessPID > 1 {
+			params["harness_pid"] = out.HarnessPID
+		}
 	}
 	raw, err := client.Call("agent-mail-notice", params)
 	if err != nil {
@@ -340,12 +387,27 @@ func fetchMailNotice(out *agentHookOutcome, client verbCaller) {
 	}
 	var res struct {
 		Notice string `json:"notice"`
+		Lease  uint64 `json:"lease"`
+		Reason string `json:"reason"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		out.MailError = err.Error()
 		return
 	}
-	out.MailNotice = res.Notice
+	if res.Reason != "" {
+		out.MailError = "no notice: " + res.Reason
+		return
+	}
+	out.MailNotice, out.MailLease = res.Notice, res.Lease
+}
+
+// hookSessionID is the conversation id the hook event names, which a skip
+// such as the compact SessionStart keeps only in its context decision.
+func hookSessionID(out agentHookOutcome) string {
+	if out.Report != nil {
+		return out.Report.SessionID
+	}
+	return out.ContextSessionID
 }
 
 // holdable reports whether a hook run may wait for an answer from the Inbox:
