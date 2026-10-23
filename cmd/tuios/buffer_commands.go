@@ -174,7 +174,7 @@ func newDeleteBufferCommand() *cobra.Command {
 
 func newPasteBufferCommand() *cobra.Command {
 	var name, sessionName, window string
-	var del, raw, jsonOutput bool
+	var del, raw, allowBlocked, jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "paste-buffer",
 		Short: "Paste a paste buffer into a pane",
@@ -192,7 +192,8 @@ The buffers are this machine's. With a session on another machine, the text of
 the buffer goes there as a paste.
 
 Run from inside a pane, this needs the read and write grants: it reads a buffer
-and types it.`,
+and types it. A pane does not paste into another pane that waits on a prompt
+(needs_input) unless you pass --allow-blocked.`,
 		Example: `  # Paste the last yank into the focused pane
   tuios paste-buffer
 
@@ -200,7 +201,7 @@ and types it.`,
   tuios paste-buffer -b deploy -w ops -d`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runPasteBuffer(name, sessionName, window, del, raw, jsonOutput)
+			return runPasteBuffer(name, sessionName, window, del, raw, allowBlocked, jsonOutput)
 		},
 	}
 	cmd.Flags().BoolVarP(&raw, "raw", "r", false, "Keep each line feed instead of turning it into a carriage return")
@@ -208,6 +209,7 @@ and types it.`,
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVarP(&window, "window", "w", "", "Target window by name or ID (default: focused)")
 	cmd.Flags().BoolVarP(&del, "delete", "d", false, "Delete the buffer after the paste")
+	cmd.Flags().BoolVar(&allowBlocked, "allow-blocked", false, "From a pane, paste into a pane that waits on a prompt. Read the prompt first")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
@@ -394,7 +396,7 @@ func runDeleteBuffer(name string, jsonOutput bool) error {
 	return nil
 }
 
-func runPasteBuffer(name, sessionName, window string, del, rawText, jsonOutput bool) error {
+func runPasteBuffer(name, sessionName, window string, del, rawText, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, window)
 	if err != nil {
 		return err
@@ -408,6 +410,9 @@ func runPasteBuffer(name, sessionName, window string, del, rawText, jsonOutput b
 		}
 		if rawText {
 			params["raw"] = true
+		}
+		if allowBlocked {
+			params["allow_blocked"] = true
 		}
 		raw, err := t.client.Call("paste-buffer", params)
 		if err != nil {

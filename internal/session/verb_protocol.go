@@ -1410,7 +1410,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbCloseWorkspace,
 		},
 		"send-keys": {
-			description: "Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to that window's terminal; without one, to an attached client (the window manager) or else the focused window.",
+			description: "Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to that window's terminal; without one, to an attached client (the window manager) or else the focused window. From a pane, window is required.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
@@ -1418,6 +1418,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "literal", Type: "bool", Description: "Send the keys to the PTY without parsing them as key names.", Default: "false"},
 				{Name: "raw", Type: "bool", Description: "Treat every character as its own key instead of splitting on spaces and commas.", Default: "false"},
 				{Name: "repeat", Type: "int", Description: "Send the whole sequence this many times, 1 to 1000.", Default: "1"},
+				typingAllowBlockedParam,
 			},
 			returns: []verbParam{
 				{Name: "sent_to", Type: "string", Description: "window when the keys were written to a window's terminal, client when an attached client took them as the person's keys."},
@@ -1432,13 +1433,14 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSendKeys,
 		},
 		"send-text": {
-			description: "Send literal text to a window's PTY.",
+			description: "Send literal text to a window's PTY. From a pane, window is required.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
 				{Name: "text", Type: "string", Required: true, Description: "Text written verbatim to the PTY."},
 				{Name: "paste", Type: "bool", Description: "Send the text as a paste. Control characters other than tab, line feed and carriage return are removed. The text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on.", Default: "false"},
 				{Name: "submit", Type: "bool", Description: "Paste the text and submit it with the Enter key of the harness in the pane, after a short wait for the paste to be taken in, as ask-agent does.", Default: "false"},
+				typingAllowBlockedParam,
 			},
 			examples: []string{
 				`{"id":1,"verb":"send-text","params":{"session":"work","text":"echo hi\n"}}`,

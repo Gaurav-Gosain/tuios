@@ -547,6 +547,7 @@ as it returns. It fails if the daemon has not finished within 10 seconds.`,
 	var sendKeysWindow string
 	var sendKeysRepeat int
 	var sendKeysJSON bool
+	var sendKeysAllowBlocked bool
 	sendKeysCmd := &cobra.Command{
 		Use:   "send-keys <keys>",
 		Short: "Send keys (arrows, page keys, ctrl+c) to a window",
@@ -556,6 +557,10 @@ With -w the keys go to that window's terminal, whether or not a client is
 attached and whichever window has the focus. Without -w they go to the attached
 client as if the person pressed them, which drives the window manager or the
 focused window. With no client attached they go to the focused window.
+
+From inside a pane, -w is required. A pane does not send keys into a pane
+that waits on a prompt (needs_input). To answer that prompt, pass
+--allow-blocked. It also needs the respond grant.
 
 To type text, use send-text. send-keys splits its argument on spaces and commas,
 so 'echo hello' types "echohello".
@@ -604,7 +609,7 @@ it matched.`,
   tuios send-keys "ctrl+b,n"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow, sendKeysRepeat, sendKeysJSON)
+			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow, sendKeysRepeat, sendKeysAllowBlocked, sendKeysJSON)
 		},
 	}
 	sendKeysCmd.Flags().StringVarP(&sendKeysSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
@@ -613,6 +618,7 @@ it matched.`,
 	sendKeysCmd.Flags().StringVarP(&sendKeysWindow, "window", "w", "", "Target window: id, index, name or id prefix (default: the attached client, else the focused window)")
 	sendKeysCmd.Flags().IntVarP(&sendKeysRepeat, "repeat", "N", 1, "Send the whole sequence this many times (1 to 1000)")
 	sendKeysCmd.Flags().BoolVar(&sendKeysJSON, "json", false, "Output result as JSON")
+	sendKeysCmd.Flags().BoolVar(&sendKeysAllowBlocked, "allow-blocked", false, "From a pane, send keys into a pane that waits on a prompt. Read the prompt first")
 	_ = sendKeysCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// Add completion for send-keys
@@ -1108,13 +1114,18 @@ a bundled one.`,
 	var sendTextSession string
 	var sendTextWindow string
 	var sendTextJSON bool
+	var sendTextAllowBlocked bool
 	sendTextCmd := &cobra.Command{
 		Use:   "send-text <text>",
 		Short: "Write text verbatim to a pane",
 		Long: `Write text straight to a pane's PTY with no key parsing at all.
 
 Nothing in the argument is interpreted: spaces, quotes and punctuation arrive
-as typed. End the text with a newline to run it as a command.`,
+as typed. End the text with a newline to run it as a command.
+
+From inside a pane, -w is required. A pane does not type into a pane that
+waits on a prompt (needs_input). To answer that prompt, pass --allow-blocked.
+It also needs the respond grant.`,
 		Example: `  # Run a command in the focused pane
   tuios send-text 'go build ./...
 '
@@ -1126,12 +1137,13 @@ as typed. End the text with a newline to run it as a command.`,
   tuios send-text -w build 'partial input'`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSendText(sendTextSession, sendTextWindow, args[0], sendTextJSON)
+			return runSendText(sendTextSession, sendTextWindow, args[0], sendTextAllowBlocked, sendTextJSON)
 		},
 	}
 	sendTextCmd.Flags().StringVarP(&sendTextSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	sendTextCmd.Flags().StringVarP(&sendTextWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	sendTextCmd.Flags().BoolVar(&sendTextJSON, "json", false, "Output result as JSON")
+	sendTextCmd.Flags().BoolVar(&sendTextAllowBlocked, "allow-blocked", false, "From a pane, type into a pane that waits on a prompt. Read the prompt first")
 	_ = sendTextCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var newWindowSession string
