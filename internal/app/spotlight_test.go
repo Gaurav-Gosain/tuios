@@ -199,7 +199,7 @@ func TestSpotlightMouseMotionIsThrottled(t *testing.T) {
 	if !m.renderSkipped {
 		t.Error("a second move inside one frame budget was drawn; the throttle is not on")
 	}
-	if !m.spotlightMotionPending {
+	if !m.pointerMotionPending {
 		t.Error("the skipped move was not recorded, so nothing will flush it")
 	}
 }
@@ -554,7 +554,7 @@ func TestSpotlightPendingMotionWakesTheTick(t *testing.T) {
 	if m.tickNeedsWork() {
 		t.Fatal("an idle client with the beam on already wants work; the idle diet is broken")
 	}
-	m.spotlightMotionPending = true
+	m.pointerMotionPending = true
 	if !m.tickNeedsWork() {
 		t.Error("a skipped beam move does not wake the tick, so it would never be drawn")
 	}

@@ -163,3 +163,45 @@ func BenchmarkMouseSweepContent(b *testing.B) {
 	}
 	b.ReportMetric(float64(frames)/float64(b.N), "frames/event")
 }
+
+// BenchmarkMouseSweepSettings is a pointer sweeping the rows of the settings
+// panel on a wide screen (320x80), through the filter, Update and View, as
+// fast as a terminal reports it. An open overlay passes every motion, and
+// before motion had a frame budget each one composed a whole frame: about 9 ms
+// a frame at this size against a report every few ms, so hover trailed the
+// pointer by a second (issue #1058). frames/1k-events is how many of a
+// thousand events composed one; ns/op is what an event costs on average.
+func BenchmarkMouseSweepSettings(b *testing.B) {
+	app.SetInputHandler(HandleInput)
+	cfg := config.DefaultConfig()
+	o := app.NewOS(app.OSOptions{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)})
+	o.Width, o.Height = 320, 80
+	o.EffectiveWidth, o.EffectiveHeight = 320, 80
+	em := vt.NewEmulator(318, 78)
+	b.Cleanup(func() { _ = em.Close() })
+	win := &terminal.Window{ID: "sweep-0001", Terminal: em, Pty: &sinkPty{}, X: 0, Y: 0, Width: 320, Height: 80}
+	o.Windows = []*terminal.Window{win}
+	o.FocusedWindow = 0
+	win.Workspace = o.CurrentWorkspace
+	o.Mode = app.WindowManagementMode
+	o.OpenSettings()
+	last := o.View().Content
+
+	// Each composed frame moves the highlight to a new row, so a frame that
+	// differs from the last one is a frame that was composed.
+	frames := 0
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		var msg tea.Msg = tea.MouseMotionMsg{X: 140 + i%7, Y: 10 + i%60}
+		if msg = app.FilterMouseMotion(o, msg); msg == nil {
+			continue
+		}
+		o.Update(msg)
+		if frame := o.View().Content; frame != last {
+			frames++
+			last = frame
+		}
+	}
+	b.ReportMetric(1000*float64(frames)/float64(b.N), "frames/1k-events")
+}

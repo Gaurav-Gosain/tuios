@@ -1175,11 +1175,13 @@ func (m *OS) View() tea.View {
 			// for this frame. See releaseEmulatorScratch.
 			m.emulatorReleasePending = true
 		}
-		// This frame carries the beam at the pointer's newest position, so the
-		// skipped move it was waiting for has been drawn. Cleared here rather
-		// than on the motion path so a frame composed for any other reason (a
-		// keystroke, pane output) counts too.
-		m.spotlightMotionPending = false
+		// This frame carries the hover and the beam at the pointer's newest
+		// position, so the skipped move it was waiting for has been drawn.
+		// Cleared here rather than on the motion path so a frame composed for
+		// any other reason (a keystroke, pane output) counts too, and it starts
+		// the motion frame budget over for the same reason.
+		m.pointerMotionPending = false
+		m.lastInteractionRender = composeStart
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
 		return true

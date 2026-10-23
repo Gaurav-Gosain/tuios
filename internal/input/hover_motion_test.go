@@ -3,6 +3,7 @@ package input
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -54,7 +55,15 @@ func hoverOS(t *testing.T) *app.OS {
 }
 
 // frameLines composes a frame the way the program does and splits it into rows.
+//
+// Motion draws at most once per frame period, and a move the budget held back
+// is drawn by the maintenance tick it arms. These tests send events faster than
+// that, so that tick is delivered here first, as the program would deliver it
+// before the next frame.
 func frameLines(m *app.OS) []string {
+	if m.PointerMotionPending() {
+		_, _ = m.Update(app.TickerMsg(time.Now()))
+	}
 	return strings.Split(m.View().Content, "\n")
 }
 

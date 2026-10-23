@@ -4425,3 +4425,68 @@ follow the reader's speed: the reads are the same size on every build.
   program's input to a polled file. Reading again without a wait after a full
   read never applies, since a read never fills the buffer. See
   `docs/design/pane-read-path.md`.
+
+## 2026-10 motion draws once per frame (#1058)
+
+On a wide screen, hover over the settings panel trailed the pointer by up to
+two seconds. Bubble Tea composes a frame after every message. An open overlay
+passes every motion event, so each report composed a whole frame. At 320x80
+a frame with the settings panel up cost about 9 ms of client CPU, and a
+terminal reports motion every few ms. The events queued up behind the frames,
+and the queue drained only after the pointer stopped. v0.10.1 behaves the
+same way, so this is not a regression.
+
+### What changed
+
+- Every motion event draws at most once per frame period (`max_fps`). Drags
+  and the mouse beam had this budget already, and now hover has it too. The
+  handler still runs for every event, so the model always holds the newest
+  pointer position.
+- A move that the budget held back sets `pointerMotionPending`. The
+  maintenance tick wakes at the end of the frame period and draws the last
+  position. A pointer at rest never sets the flag, so idle stays at zero
+  wakeups.
+- Every composed frame restarts the budget, so a frame for pane output also
+  counts.
+- The hosts page parsed the whole config file on every frame to read the
+  `[tailscale]` table. That was 16% of client CPU during the sweep. The table
+  is now parsed again only when the file's size or modification time changes.
+
+### Numbers
+
+`drive.py`: a PTY driver that runs the real client on a scratch daemon. It
+opens settings and sends SGR motion reports at 200 Hz for 3 s, one row per
+event. Lag is the time from the last report to the last frame byte. CPU is
+the client's utime and stime.
+
+| Size | | lag | client CPU | frames written |
+|---|---|---|---|---|
+| 120x40 | before | 0 ms | 102% | 600 |
+| | after | 4 ms | 22% | 172 |
+| 200x60 | before | 63 ms | 136% | 590 |
+| | after | 6 ms | 32% | 171 |
+| 320x80 | before | 838 ms | 143% | 451 |
+| | after | 2 ms | 44% | 140 |
+| 400x100 | before | 2310 ms | 138% | 346 |
+| | after | 7 ms | 55% | 106 |
+| 320x80, 3 panes | before | 662 ms | 130% | 452 |
+| | after | 11 ms | 40% | 140 |
+| 320x80, v0.10.1 | | 575 ms | 152% | 436 |
+
+The rail at 320x80 went from 2.4 ms to 0.9 ms of CPU per event. Idle at
+200x60 is 0 context switches a second before and after, and 0 to 0.3 a
+second in the 3 s after a sweep.
+
+`BenchmarkMouseSweepSettings` (new; 320x80, settings open, filter, Update and
+View per event):
+
+| | ns/op | frames/1k-events |
+|---|---|---|
+| before | 3.22 to 3.52 ms | 765 to 772 |
+| after | 21.8 to 22.0 µs | 1.2 |
+
+### Measured and deliberately not changed
+
+A settings frame at 320x80 still costs about 5.7 ms. `renderSettings` is 1.9
+ms of that, mostly `ansi.StringWidth` in the row layout. With one frame per
+period, that cost no longer builds a queue.

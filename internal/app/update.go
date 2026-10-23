@@ -575,7 +575,7 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 // gate stays bounded no matter how many idle shells are open.
 func (m *OS) tickNeedsWork() bool {
 	return m.tickAtFrameRate() || len(m.Notifications) > 0 ||
-		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.spotlightMotionPending ||
+		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.pointerMotionPending ||
 		m.cockpitHoldDue(time.Now()) || m.tickPolledWork()
 }
 
@@ -1409,7 +1409,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			hasBackgroundChanges || m.notifBurnMoved() || notifExpired || leftScriptMode ||
 			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed ||
-			m.spotlightMotionPending
+			m.pointerMotionPending
 		if !needsRender {
 			m.renderSkipped = true
 			return m, tea.Batch(cmds...)
@@ -1420,9 +1420,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// next idleTickerAfter: the next such frame is a whole cell away.
 		m.quietFrame = !(hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			hasBackgroundChanges || leftScriptMode || m.SidebarMarqueeActive() || m.TooltipPending() ||
-			railTitleChanged || zenCrossed || m.spotlightMotionPending)
+			railTitleChanged || zenCrossed || m.pointerMotionPending)
 		m.renderSkipped = false
-		m.spotlightMotionPending = false
+		m.pointerMotionPending = false
 		m.tickStats.Render++
 		// This tick is about to draw, so it counts against the interaction frame
 		// budget too. Without this a motion event landing just after a tick
@@ -1960,37 +1960,28 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cmd = tea.Batch(cmd, saverCmd)
 		}
 
-		// Motion events during a drag or resize arrive far faster than a frame
-		// can be composed: the pointer emits one per cell it crosses, while a
-		// frame costs milliseconds. Rendering every one builds a backlog that
-		// grows for as long as the drag lasts, which is why the layout trails
-		// the pointer instead of merely being a frame behind it.
+		// Motion events arrive far faster than a frame can be composed: the
+		// pointer emits one per cell it crosses, and a terminal on a large
+		// screen reports hundreds a second, while a frame costs milliseconds
+		// and more the wider the screen. bubbletea composes a frame after
+		// every message, so drawing each one builds a backlog that grows for
+		// as long as the pointer moves: the drag trails the pointer, and hover
+		// over a panel or the rail lags it by seconds (issue #1058).
 		//
-		// Only the redundant intermediate frames are dropped, never the input.
-		// The handler above has already applied this event's geometry, so the
-		// model always reflects the newest pointer position; skipping the draw
-		// just means the next draw shows a later position. The interaction tick
-		// forces a render while InteractionMode is set, so a skipped motion is
-		// always flushed within one tick, and mouse release is not a motion
-		// event so the final position is drawn unconditionally.
-		// The mouse-anchored spotlight is throttled for the same reason a drag
-		// is: the beam moves with the pointer, so every motion event makes the
-		// frame differ from the last one and the compose stops being thrown
-		// away. Without this a fast swipe composes once per cell crossed.
-		beamFollowsMouse := m.spotlight.on &&
-			m.spotlightConfig().FollowMode() == config.SpotlightFollowMouse
-		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion && (m.InteractionMode || beamFollowsMouse) {
+		// So motion draws at most once per frame period. Only the redundant
+		// intermediate frames are dropped, never the input: the handler above
+		// has applied this event, so the model always holds the newest pointer
+		// position, and the next frame shows it. A skipped move sets
+		// pointerMotionPending, which wakes the maintenance tick for the end of
+		// the frame period (see nextWake) and draws the last position the
+		// pointer reached. A pointer at rest never sets it, so the idle tick
+		// stays idle. A press, a release or a key is not motion and draws at
+		// once.
+		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion {
 			now := time.Now()
-			if now.Sub(m.lastInteractionRender) < time.Second/time.Duration(m.Settings.NormalFPS) {
+			if now.Sub(m.lastInteractionRender) < m.framePeriod() {
 				m.renderSkipped = true
-				// A drag has the interaction tick to flush the position it
-				// skipped. A beam following the pointer has no tick of its own,
-				// and adding one would cost every idle client a wake-up for a
-				// setting it is not using. This flag is the flush instead: it
-				// is true only between a skipped move and the next frame, so a
-				// client with the beam off, or with the pointer at rest, never
-				// sees it and the idle tick stays idle.
-				m.spotlightMotionPending = beamFollowsMouse
+				m.pointerMotionPending = true
 			} else {
 				m.lastInteractionRender = now
 			}

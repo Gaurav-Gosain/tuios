@@ -122,8 +122,8 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 		at(m.Inbox.ck.holdUntil)
 	}
 	// A pointer move held back by the frame budget goes out on the next frame.
-	if m.spotlightMotionPending {
-		at(now.Add(m.framePeriod()))
+	if m.pointerMotionPending {
+		at(m.lastInteractionRender.Add(m.framePeriod()))
 	}
 	// What the idle gate finds by looking.
 	if m.tickPolledWork() {
@@ -183,4 +183,11 @@ func (m *OS) railReadsDue(at func(time.Time)) {
 	if v := m.filesView; v.Err != "" && !v.Loading && m.filesSectionEnabled() && v.Want == m.filesWantDir() {
 		at(v.ErrAt.Add(fileRetryInterval))
 	}
+}
+
+// PointerMotionPending reports whether a pointer move is waiting for the
+// maintenance tick to draw it, because it arrived inside the frame budget of
+// the last frame. See the motion budget in update.go.
+func (m *OS) PointerMotionPending() bool {
+	return m.pointerMotionPending
 }

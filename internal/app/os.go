@@ -526,16 +526,15 @@ type OS struct {
 	// themeFx is the running theme transition, if any. See
 	// theme_transition.go.
 	themeFx themeTransition
-	// lastInteractionRender is when a drag/resize motion event last produced a
-	// frame. Motion events arrive faster than a frame can be composed, so this
+	// lastInteractionRender is when a motion event last produced a frame.
+	// Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
 	lastInteractionRender time.Time
-	// spotlightMotionPending is set when a mouse-anchored spotlight dropped a
-	// motion frame to the frame budget. It is the one term that flushes that
-	// position, because the beam has no tick of its own. False whenever the
-	// beam is off or the pointer is at rest, which is what keeps the idle tick
-	// idle. See update.go.
-	spotlightMotionPending bool
+	// pointerMotionPending is set when a motion event dropped its frame to the
+	// frame budget. It is the term that flushes that position: hover and the
+	// mouse-anchored beam have no tick of their own. False whenever the pointer
+	// is at rest, which is what keeps the idle tick idle. See update.go.
+	pointerMotionPending bool
 	// viewportResizing is set while terminal sizes are still arriving. A retile
 	// it drives places panes directly instead of easing them into position, and
 	// resizes them visually only, exactly as a mouse resize drag does: a resize
@@ -786,6 +785,12 @@ type OS struct {
 	tailnetMu         sync.Mutex
 	tailnetAskedAt    time.Time
 	tailnetCandidates []string
+	// The [tailscale] table as last read, and the version of the config file
+	// it was read from. See tailnetOptionsCached.
+	tailnetOpt        federation.TailnetOptions
+	tailnetOptEnabled bool
+	tailnetOptKey     tailnetFileKey
+	tailnetOptValid   bool
 	// SessionWorktree is the attached session's daemon-owned worktree record,
 	// nil when its directory is not a linked git worktree. Every other
 	// session's arrives with the cached listing; this one comes down with the
