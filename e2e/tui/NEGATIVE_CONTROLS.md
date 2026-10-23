@@ -8525,3 +8525,16 @@ Run on 2026-10-21 on macOS, each against a build with one line changed, built to
 | A command pane's exit closed up the numbers | n/a, the spawn fact itself | `ownShell` set for every pane (`true \|\| len(sp.command) == 0 ...`) | `TestWorkspaceSelfExitLeavesTheNumbers` ("the daemon has workspace 3 named \"\", want \"DPLY\" (names map[1:EDIT 2:DPLY])") | **caught** |
 
 `TestWorkspaceSelfExitLeavesTheNumbers` passes on the first build and `TestWorkspaceShellExitClosesUp` on the second, as they should: each build breaks only the side the other test covers. The fixed build passes both.
+
+### A workspace's layout mode moves with it
+
+A move renumbers every map kept by workspace number. The per-workspace layout modes are one of those maps, on the client (`renumberLocalWorkspaces`) and in the daemon (`renumberWorkspaces` and `takeWorkspaceMapsFrom`). The new test is `TestLayoutModeMovesWithItsWorkspace` in `workspace_layout_mode_test.go`.
+
+Run on 2026-10-23 on Linux, each against a build with lines cut, built to a separate path, the source restored afterwards.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A moved workspace left its layout mode on its old number | yes, daemon side | the two `WorkspaceLayoutModes` lines cut from `workspace_renumber.go` | `TestLayoutModeMovesWithItsWorkspace` ("has layout mode \"scrolling\", want \"bsp\"") | **caught** |
+| The same | yes, both sides | the daemon lines and the `WorkspaceLayoutMode` line in `renumberLocalWorkspaces` cut | `TestLayoutModeMovesWithItsWorkspace` (the same message) | **caught** |
+
+The fixed build passes it.

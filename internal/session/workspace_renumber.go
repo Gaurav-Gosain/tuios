@@ -183,6 +183,7 @@ func (st *SessionState) renumberWorkspaces(newOf map[int]int) {
 	st.WorkspaceMasterSplits = RenumberWorkspaceMap(st.WorkspaceMasterSplits, newOf)
 	st.WorkspaceMasterLayout = RenumberWorkspaceMap(st.WorkspaceMasterLayout, newOf)
 	st.WorkspaceHasCustom = RenumberWorkspaceMap(st.WorkspaceHasCustom, newOf)
+	st.WorkspaceLayoutModes = RenumberWorkspaceMap(st.WorkspaceLayoutModes, newOf)
 	st.WorkspaceScrollColumns = RenumberWorkspaceMap(st.WorkspaceScrollColumns, newOf)
 	st.WorkspaceOrder = nil
 }
@@ -560,6 +561,7 @@ func takeWorkspaceMapsFrom(incoming, canonical *SessionState) {
 	incoming.WorkspaceStackRatio = maps.Clone(canonical.WorkspaceStackRatio)
 	incoming.WorkspaceMasterSplits = cloneMasterSplits(canonical.WorkspaceMasterSplits)
 	incoming.WorkspaceHasCustom = maps.Clone(canonical.WorkspaceHasCustom)
+	incoming.WorkspaceLayoutModes = maps.Clone(canonical.WorkspaceLayoutModes)
 	incoming.WorkspaceScrollColumns = canonical.WorkspaceScrollColumns
 	if incoming.WorkspaceTrees != nil {
 		incoming.WorkspaceTrees = canonical.WorkspaceTrees

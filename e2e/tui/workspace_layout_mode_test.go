@@ -98,3 +98,27 @@ func TestPerWorkspaceLayoutModesSurviveSwitchAndReattach(t *testing.T) {
 	saveFrame(t, second, "per-workspace-layout-modes")
 	alive(t, second, "after the reattached switches")
 }
+
+// TestLayoutModeMovesWithItsWorkspace: a workspace that moves takes its layout
+// mode to its new number. EDIT picks scrolling and REVW picks BSP, then EDIT
+// moves right: workspace 2 must be scrolling and workspace 1 BSP, both on the
+// client that moved them and in the daemon's session-info.
+func TestLayoutModeMovesWithItsWorkspace(t *testing.T) {
+	term, base := renumberSetup(t)
+	runPaletteEntry(t, term, "Layout: scrolling (niri)")
+	waitLayoutMode(t, base, renumberSession, "scrolling")
+	altReaches(t, term, '2', "REVW")
+	runPaletteEntry(t, term, "Layout: BSP tiling")
+	waitLayoutMode(t, base, renumberSession, "bsp")
+	altReaches(t, term, '1', "EDIT")
+	waitLayoutMode(t, base, renumberSession, "scrolling")
+
+	moveWorkspaceKey(t, term, ">")
+	waitPills(t, term, "1·REVW", "2·EDIT", "3·DPLY")
+	waitLayoutMode(t, base, renumberSession, "scrolling")
+	altReaches(t, term, '1', "REVW")
+	waitLayoutMode(t, base, renumberSession, "bsp")
+	altReaches(t, term, '2', "EDIT")
+	waitLayoutMode(t, base, renumberSession, "scrolling")
+	alive(t, term, "after moving a workspace with a layout mode")
+}
