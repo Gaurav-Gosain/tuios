@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/color"
 	"maps"
 	"os"
 	"path/filepath"
@@ -1176,12 +1177,27 @@ func (d *Daemon) verbCapturePane(cs *connState, params json.RawMessage) (any, *v
 		Palette    []string `json:"palette"`    // 16 hex colours to resolve against (default: xterm)
 		Unwrap     bool     `json:"unwrap"`     // join the rows the terminal soft-wrapped
 		Trim       bool     `json:"trim"`       // drop the blank lines at the end
+		Commands   int      `json:"commands"`   // the last N shell commands, under lines in total
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if verr := validateCaptureSource(p.Source); verr != nil {
 		return nil, verr
+	}
+	if p.Commands < 0 {
+		return nil, invalidParam("commands", "commands is how many of the last shell commands to capture, 1 or more")
+	}
+	if p.Commands > 0 {
+		switch {
+		case p.Source != "" && p.Source != "recent":
+			return nil, invalidParam("commands", "commands reads the scrollback, so it takes no source other than recent")
+		case p.Start > 0 || p.End > 0:
+			return nil, invalidParam("commands", "commands takes no start or end. Use lines for the most lines to keep")
+		case p.Unwrap:
+			return nil, invalidParam("commands", "commands takes no unwrap")
+		}
+		p.Scrollback = true
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -1202,21 +1218,59 @@ func (d *Daemon) verbCapturePane(cs *connState, params json.RawMessage) (any, *v
 	// escape sequences, and the reply must admit what the content carries
 	// instead of reporting styled=false beside a rewritten capture.
 	ansi := p.Styled || p.ANSI || p.Resolved
-	var content string
-	var meta paneMeta
+	var palette [16]color.Color
 	if p.Resolved {
-		palette, verr := paletteFromParams(p.Palette)
-		if verr != nil {
+		var verr *verbError
+		if palette, verr = paletteFromParams(p.Palette); verr != nil {
 			return nil, verr
 		}
+	}
+	var content string
+	var meta paneMeta
+	// commandMarks is set by a commands capture: true when the pane's marks
+	// cut the capture into commands, false when it fell back to lines.
+	var commandMarks *bool
+	var commandList []map[string]any
+	commandsAvailable := 0
+	omitted := -1
+	if p.Commands > 0 {
+		ceiling := p.Lines
+		if ceiling <= 0 {
+			ceiling = defaultCommandCeiling
+		}
+		rows, blocks, m, ok := pty.captureCommandRows(ansi)
+		commandMarks = &ok
+		if ok {
+			meta, commandsAvailable = m, len(blocks)
+			content, omitted, commandList = captureCommands(rows, blocks, p.Commands, ceiling)
+			if p.Resolved {
+				content = ResolveSGR(content, palette)
+			}
+		} else {
+			// No marks to cut by: the last ceiling lines, as lines gives.
+			p.Lines = ceiling
+		}
+	}
+	byCommands := commandMarks != nil && *commandMarks
+	switch {
+	case byCommands:
+		// Built above.
+	case p.Resolved:
 		content, meta = pty.CaptureContentResolvedMeta(scrollback, palette, p.Unwrap)
-	} else {
+	default:
 		content, meta = pty.CaptureContentMeta(scrollback, ansi, p.Unwrap)
 	}
 	if p.Trim {
 		content = trimCapture(content)
 	}
-	content = sliceCaptureLines(content, p.Start, p.End, p.Lines)
+	if !byCommands {
+		// Counted before the cut, so the caller can tell a capture that
+		// lines shortened from one that held everything.
+		if p.Lines > 0 && p.Start <= 0 && p.End <= 0 {
+			omitted = max(captureLineCount(content)-p.Lines, 0)
+		}
+		content = sliceCaptureLines(content, p.Start, p.End, p.Lines)
+	}
 
 	source := p.Source
 	if source == "" {
@@ -1242,6 +1296,16 @@ func (d *Daemon) verbCapturePane(cs *connState, params json.RawMessage) (any, *v
 	}
 	if p.Trim {
 		out["trimmed"] = true
+	}
+	if omitted >= 0 {
+		out["lines_omitted"] = omitted
+	}
+	if commandMarks != nil {
+		out["command_marks"] = *commandMarks
+		if *commandMarks {
+			out["commands"] = commandList
+			out["commands_available"] = commandsAvailable
+		}
 	}
 	// A revision counts from 0 again when the daemon restarts, so it is a
 	// cache key only beside the daemon start it came from.
@@ -2357,6 +2421,17 @@ func (d *Daemon) verbExplainAgentScreen(cs *connState, params json.RawMessage) (
 	out["title_matched"] = titleRule >= 0
 	out["title_rule_state"] = titleState
 	return out, nil
+}
+
+// captureLineCount is how many lines lines can choose from in content: the
+// rows up to the last one that is not blank, as sliceCaptureLines counts them.
+func captureLineCount(content string) int {
+	split := strings.Split(strings.TrimSuffix(content, "\n"), "\n")
+	n := len(split)
+	for n > 0 && strings.TrimSpace(split[n-1]) == "" {
+		n--
+	}
+	return n
 }
 
 // sliceCaptureLines applies the optional region/lines selection to captured
