@@ -172,7 +172,7 @@ func (st sidebarRowState) lit() bool { return st.Cursor || st.Hover }
 // severity mark and the foreign tint in the gutter keep their own meaning.
 func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
 	rs := overlay.RowState{Cursor: st.Cursor, Focused: st.Focused, Hover: st.Hover}
-	return pal.CursorText(pal.Mark(row, rs), rs, sidebarNameCol-1)
+	return pal.CursorText(pal.Mark(row, rs), rs, sidebarNameCol()-1)
 }
 
 // railRowState reads the rail's focus once so a row site does not have to.
@@ -748,10 +748,10 @@ func printableRune(r rune, ascii bool) bool {
 }
 
 // sidebarNameCol is the column every rail row's text starts on: gutter, then
-// the mark and its gap (agentMarkGap), which take two cells whichever mark the
-// glyph set draws. One spine for all three sections, which is what the flat
-// layout buys over the tree.
-const sidebarNameCol = 1 + agentMarkLead
+// the mark and its gap (agentMarkLead), the same whichever mark the row
+// wears. One spine for all three sections, which is what the flat layout buys
+// over the tree.
+func sidebarNameCol() int { return 1 + agentMarkLead() }
 
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
 // space on the row background when there is no state or glyphs are disabled.
@@ -1312,7 +1312,7 @@ func sidebarNameAvailIn(cw, rightW, indent int) int {
 	if rightW > 0 {
 		rightW += 2 // the inset cell, and the gap in front of the figure
 	}
-	return max(cw-sidebarNameCol-max(indent, 0)-rightW, 1)
+	return max(cw-sidebarNameCol()-max(indent, 0)-rightW, 1)
 }
 
 // renderSidebar composes the vertical session sidebar as a single layer, the way
@@ -2032,7 +2032,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	overflowRow := func(n, indent int) string {
 		// Stands in for the rows it hides, so it starts where their names do.
 		more := overlay.Ellipsis() + " +" + strconv.Itoa(n)
-		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol+indent)+
+		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol()+indent)+
 			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
 	}
 	// recordToken publishes a header control's rectangle and its nav row, the
@@ -2337,7 +2337,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// only for that state, so a rail with no working agent records
 			// nothing and the motion clock never starts. See shimmer.go.
 			if e.State == "working" && bodyW > 0 {
-				x0 := contentX0 + sidebarNameCol
+				x0 := contentX0 + sidebarNameCol()
 				m.motion.rail = append(m.motion.rail, shimmerSpan{
 					y: topMargin + len(lines), x0: x0, x1: min(x0+bodyW, contentX0+cw),
 				})
@@ -3208,7 +3208,7 @@ func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, st sideba
 		sep = " . "
 	}
 	text := "none here" + sep + strconv.Itoa(total) + " all"
-	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol))+
+	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol()))+
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, sidebarNameAvail(cw, 0))), cw, rowBg)
 }
 
@@ -3254,7 +3254,7 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // sentence.
 func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
-	indent := sidebarNameCol + 1
+	indent := sidebarNameCol() + 1
 	avail := sidebarNameAvail(cw, 0) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
 	quiet := sidebarStyle(rowBg, pal.FgMute)

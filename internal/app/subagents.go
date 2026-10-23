@@ -552,7 +552,7 @@ func sidebarWithChildren(parents []sidebarAgentEntry, info []sidebarChildParent,
 // sidebarChildIndent is where a child row's mark sits: one cell past the
 // name spine, the note line's indent, so the row reads as part of its
 // parent's entry.
-const sidebarChildIndent = sidebarNameCol + 1
+func sidebarChildIndent() int { return sidebarNameCol() + 1 }
 
 // sidebarChildLead is the indent in front of a child row's mark, and on its
 // second line in front of the note: blanks for the rows as a list, and tree
@@ -562,7 +562,7 @@ const sidebarChildIndent = sidebarNameCol + 1
 func (m *OS) sidebarChildLead(e sidebarAgentEntry, rowBg color.Color, pal overlay.Palette, second bool) string {
 	pad := sidebarStyle(rowBg, nil)
 	if !m.Settings.SidebarSubagents.Tree {
-		return pad.Render(strings.Repeat(" ", sidebarChildIndent))
+		return pad.Render(strings.Repeat(" ", sidebarChildIndent()))
 	}
 	branch := m.Settings.GetRailTreeBranch()
 	if e.Last {
@@ -576,11 +576,11 @@ func (m *OS) sidebarChildLead(e sidebarAgentEntry, rowBg color.Color, pal overla
 	}
 	lead := " " + branch
 	w := lipgloss.Width(lead)
-	if w > sidebarChildIndent {
-		lead = overlay.Truncate(lead, sidebarChildIndent)
+	if w > sidebarChildIndent() {
+		lead = overlay.Truncate(lead, sidebarChildIndent())
 		w = lipgloss.Width(lead)
 	}
-	return sidebarStyle(rowBg, pal.FgMute).Render(lead) + pad.Render(strings.Repeat(" ", sidebarChildIndent-w))
+	return sidebarStyle(rowBg, pal.FgMute).Render(lead) + pad.Render(strings.Repeat(" ", sidebarChildIndent()-w))
 }
 
 // sidebarTreePipe is the line a tree branch continues down with: │ under ├,
@@ -626,7 +626,7 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 			if e.Open || len(e.HeadKids) == 0 {
 				return sidebarFit(lead, cw, rowBg)
 			}
-			indent := sidebarChildIndent + 2
+			indent := sidebarChildIndent() + 2
 			return sidebarFit(lead+pad.Render("  ")+
 				sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(sidebarSubagentNames(e.HeadKids), max(cw-indent, 1))), cw, rowBg)
 		}
@@ -638,7 +638,7 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 		if st.lit() {
 			fg = pal.Fg
 		}
-		avail := max(cw-sidebarChildIndent-2, 1)
+		avail := max(cw-sidebarChildIndent()-2, 1)
 		return sidebarFit(lead+sidebarStyle(rowBg, pal.FgMute).Render(mark)+pad.Render(" ")+
 			sidebarStyle(rowBg, fg).Render(overlay.Truncate(session.SubagentsText(len(e.HeadKids)), avail)), cw, rowBg)
 	}
@@ -655,7 +655,7 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 			fg = pal.Fg
 		}
 		return sidebarFit(lead+pad.Render("  ")+
-			sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(cw-sidebarChildIndent-2, 1))), cw, rowBg)
+			sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(cw-sidebarChildIndent()-2, 1))), cw, rowBg)
 	}
 	s := *e.Child
 	ended := !s.Running()
@@ -663,7 +663,7 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 		if !fields.Note {
 			return sidebarFit(lead, cw, rowBg)
 		}
-		indent := sidebarChildIndent + 2
+		indent := sidebarChildIndent() + 2
 		return sidebarFit(lead+pad.Render("  ")+
 			sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(subagentNote(s), max(cw-indent, 1))), cw, rowBg)
 	}
@@ -702,7 +702,7 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 	if rightW > 0 {
 		rightW++
 	}
-	avail := max(cw-sidebarChildIndent-2-rightW, 1)
+	avail := max(cw-sidebarChildIndent()-2-rightW, 1)
 	name, kind := "", ""
 	if fields.Name {
 		name = subagentName(s)

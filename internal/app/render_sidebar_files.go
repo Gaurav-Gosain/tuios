@@ -312,7 +312,7 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 		if row.Warn {
 			ink = pal.Warning
 		}
-		return sidebarFit(sidebarStyle(bg, nil).Render(strings.Repeat(" ", sidebarNameCol))+
+		return sidebarFit(sidebarStyle(bg, nil).Render(strings.Repeat(" ", sidebarNameCol()))+
 			sidebarStyle(bg, ink).Render(overlay.Truncate(row.Name, sidebarNameAvail(cw, 0))), cw, bg)
 	}
 
