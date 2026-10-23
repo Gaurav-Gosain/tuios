@@ -119,14 +119,3 @@ func (t *askTurns) busy(window string) bool {
 	defer t.mu.Unlock()
 	return t.lines[window] != nil
 }
-
-// waiting is how many asks wait for window's turn, not counting the one that
-// holds it.
-func (t *askTurns) waiting(window string) int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if l := t.lines[window]; l != nil {
-		return len(l.waiters)
-	}
-	return 0
-}
