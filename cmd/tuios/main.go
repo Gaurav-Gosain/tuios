@@ -2759,7 +2759,8 @@ quiet for --settle. The answer says which of the two ended the wait.
 Three things it will not do. It will not type at an agent on needs_input: such
 an agent is waiting on a prompt, most often a permission menu, and the question
 would be read as the answer. That fails with agent_blocked and nothing is typed.
-read the prompt with capture-pane and answer it yourself or ask the person.
+Read the prompt with peek-prompt and tell the person: only the person answers
+another agent's prompt.
 --allow-blocked overrides it, for a prompt you have read that takes free text.
 It will not type at an agent that is working, which is what --force overrides
 at the cost of interleaving with whatever the target is doing. --force does not
