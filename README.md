@@ -23,6 +23,9 @@ TUIOS is a modern terminal multiplexer and window manager built with Go. It prov
 
 Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driven rendering for near-zero idle CPU usage, flicker-free kitty image passthrough, and comprehensive keyboard/mouse interaction.
 
+> [!IMPORTANT]
+> **Official sources.** tuios lives only at [tuios.dev](https://tuios.dev) and in this repository. tuios has no X or Twitter account. An account that says it is tuios, or offers a tuios token or presale, is not this project.
+
 ## Documentation
 
 Full documentation is available at **[tuios.dev](https://tuios.dev)** (hosted) or in the [`docs/`](./docs/) folder. To try tuios without installing it, take the guided tour at **[tuios.dev/learn](https://tuios.dev/learn)**: the real app, compiled to WebAssembly, with a practice shell in every pane.
