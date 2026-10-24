@@ -23,8 +23,13 @@ swimlane diagrams, use case diagrams and agent flows: every type that pele
 draws. A type that pele does not draw gives an error with the code
 `unsupported-diagram`.
 
-The output matches the output of pele, except links. The test suite compares
-each diagram with an SVG that pele drew from the same source, byte for byte.
+The output matches the output of pele, except links and one line break. The
+test suite compares each diagram with an SVG that pele drew from the same
+source, byte for byte.
+
+At a narrow width, a label too wide for its room breaks at its last hyphen or
+space before it breaks inside a word. pele breaks after the last character
+that fits (tuios issue 1032).
 
 Links go through Go's `net/url`, not the WHATWG URL parser of a browser, so
 some links differ from pele's. sketch writes no link for `http:host` or
