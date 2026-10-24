@@ -328,11 +328,15 @@ func generateCategoryBindings(registry *config.KeybindRegistry, categoryName str
 // generateWorkspaceBindings generates all workspace-related bindings
 func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
+	// Every live key from every section. GetKeys stops at the first section
+	// that names the action, and the workspaces section always does from the
+	// defaults, so a key bound in [keybindings.global] never showed (#1085).
+	presses := config.PressesByAction(registry)
 
 	// Add all 9 workspace switches
 	for i := 1; i <= 9; i++ {
 		action := fmt.Sprintf("switch_workspace_%d", i)
-		keys := registry.GetKeys(action)
+		keys := presses[action]
 		if len(keys) > 0 {
 			bindings = append(bindings, HelpBinding{
 				Action:      action,
@@ -346,7 +350,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 	// Add all 9 move and follow actions
 	for i := 1; i <= 9; i++ {
 		action := fmt.Sprintf("move_and_follow_%d", i)
-		keys := registry.GetKeys(action)
+		keys := presses[action]
 		if len(keys) > 0 {
 			bindings = append(bindings, HelpBinding{
 				Action:      action,
@@ -359,7 +363,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 
 	for i := 1; i <= 9; i++ {
 		action := fmt.Sprintf("send_to_workspace_%d", i)
-		keys := registry.GetKeys(action)
+		keys := presses[action]
 		if len(keys) > 0 {
 			bindings = append(bindings, HelpBinding{
 				Action:      action,

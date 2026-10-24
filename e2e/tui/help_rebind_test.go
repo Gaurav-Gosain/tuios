@@ -63,3 +63,42 @@ func TestHelpShowsAKeyReboundAtRuntime(t *testing.T) {
 	}
 	alive(t, term, "after a rebind with help open")
 }
+
+// TestHelpListsWorkspaceKeysFromEverySection is issue #1085. The Spaces tab
+// read each workspace action's keys from the first config section that named
+// it. The workspaces section always does, from the defaults, so a key bound
+// to switch_workspace_N in [keybindings.global] worked but never showed.
+//
+// How this could pass wrongly, written down first:
+//   - The row could show the global key only because the test replaced the
+//     default. The test binds the global key and leaves the workspaces
+//     section alone, so the shipped default is still there to win first.
+//   - The key could show in some other row. The test wants the row whose
+//     description is "Switch to workspace 1".
+func TestHelpListsWorkspaceKeysFromEverySection(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[keybindings.global]\nswitch_workspace_1 = [\"f7\"]\n")
+	term := startIn(t, base, startOpts{cols: 140, rows: 44})
+	waitBoot(t, term)
+
+	openHelp(t, term)
+	if err := term.SendKeys("/"); err != nil {
+		t.Fatalf("send '/': %v", err)
+	}
+	if err := term.SendKeys("workspace 1"); err != nil {
+		t.Fatalf("type search: %v", err)
+	}
+	shows := func(s tuitest.Screen) bool {
+		for line := range strings.SplitSeq(s.Text(), "\n") {
+			if strings.Contains(line, "Switch to workspace 1") && strings.Contains(line, "f7") {
+				return true
+			}
+		}
+		return false
+	}
+	if err := term.WaitFor(shows, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the help overlay does not list the global f7 for Switch to workspace 1: %v\n%s",
+			err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "help-workspace-global-key")
+}

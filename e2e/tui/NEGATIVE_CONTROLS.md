@@ -8976,3 +8976,13 @@ Run on 2026-10-24 on Linux with Go 1.27.1 against upstream main at efdc2a9c. Eac
 | No line passed to the editor | `standalone` and `daemon` ("the editor got [FILE], want it to end with [+2991 FILE]") | **caught** |
 
 Not covered end to end: the refusal in a browser client and in an SSH client from another machine, the removal when the client ends while the editor runs, the File editor setting, and the helix `FILE:LINE` form.
+
+## Workspace keys from every section in the help overlay
+
+`TestHelpListsWorkspaceKeysFromEverySection` binds `f7` to `switch_workspace_1` in `[keybindings.global]` and leaves the workspaces section at its defaults. It opens the help overlay, searches for "workspace 1", and requires the "Switch to workspace 1" row to list `f7`. With `TUIOS_E2E_FRAMES` set, it saves the frame.
+
+Run on 2026-10-24 on Linux against upstream main at 856b8ef4.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (upstream main) | "the help overlay does not list the global f7 for Switch to workspace 1": the row lists only `alt+1` | **caught** |
