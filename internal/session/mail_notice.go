@@ -360,22 +360,40 @@ func (d *Daemon) verbAgentMailNotice(cs *connState, params json.RawMessage) (any
 }
 
 // unannounced reports the inbox's unread mail and the newest message id
-// announced to it. Mail newer than mark was never announced. It marks nothing.
+// announced to it, an open lease included. Mail newer than mark was never
+// announced. It marks nothing.
 func (b *agentBus) unannounced(session, inbox string) (mailSummary, uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.unreadSummaryLocked(session, inbox), b.noticed[inbox].id
+	return b.unreadSummaryLocked(session, inbox), b.noticed[inbox].effective(time.Now())
 }
 
-// markNoticed records that the inbox's mail up to id was announced. It never
-// moves a mark back.
-func (b *agentBus) markNoticed(session, inbox string, id uint64) {
+// claimNotice marks the inbox's mail up to id announced, but only while the
+// mark is still was: nobody announced anything since the caller looked. It
+// reports whether it claimed. It never moves a mark back.
+func (b *agentBus) claimNotice(session, inbox string, id, was uint64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.noticed == nil {
 		b.noticed = map[string]noticeMark{}
 	}
-	if b.noticed[inbox].id < id {
-		b.noticed[inbox] = noticeMark{id: id, session: session}
+	m := b.noticed[inbox]
+	if m.effective(time.Now()) != was {
+		return false
+	}
+	m.session = session
+	m.id = max(m.id, id)
+	b.noticed[inbox] = m
+	return true
+}
+
+// unclaimNotice puts the mark back to was after a claim of id that came to
+// nothing, unless something moved it since.
+func (b *agentBus) unclaimNotice(inbox string, id, was uint64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if m, ok := b.noticed[inbox]; ok && m.id == id && m.lease == 0 {
+		m.id = was
+		b.noticed[inbox] = m
 	}
 }

@@ -136,7 +136,16 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.approvalsWaiting.Store(approvalsWait)
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
-	d.SetMailWake(cfg.Agents.Mail.WakeOn())
+	// A file change only turns the wake off. A process in a pane can write
+	// the file, and the wake types into panes, so turning it on waits for
+	// tuios config apply from outside tuios, or a daemon restart, as a wider
+	// [agents.permissions] does.
+	wake := cfg.Agents.Mail.WakeOn()
+	if wake && !byPerson && !d.mailWake.on.Load() {
+		wake = false
+		log.Printf("[agents.mail] wake = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The wake stays off.")
+	}
+	d.SetMailWake(wake)
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)

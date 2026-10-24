@@ -2099,8 +2099,9 @@ max_untracked_mb = 50
 - `[agents.mail]` `wake` types one line into an agent at rest that has mail
   nobody told it about, through the delivery queue: the count, the senders
   and the command that reads the mail, never the mail itself. It is true by
-  default. Set it to false to stop it. The daemon reads it at start and again
-  when the file changes. See
+  default. Set it to false to stop it. The daemon reads it at start. A file
+  change turns it off at once. Turning it on again waits for `tuios config
+  apply` from outside tuios, or a restart. See
   [AGENT_STATE.md](AGENT_STATE.md#mail-that-wakes-an-agent-at-rest).
 - `[agents.checkpoints]` saves the git work tree of an agent's pane each time
   the agent finishes a turn that changed a file (`tuios checkpoint`).

@@ -58,8 +58,8 @@ waits:
   message is announced once, and again after a compaction or a resume while it
   is still unread.
 - **At rest.** When mail stays unread for 5 seconds and nobody told the agent,
-  tuios types the same line into the agent's pane once it has rested for a
-  second. It never types into a pane on `needs_input`. A burst of mail gives
+  tuios types a line with the count and the command into the agent's pane
+  once it has rested for a second. It never types into a pane on `needs_input`. A burst of mail gives
   one line. The person can turn this off with `[agents.mail] wake = false`.
 
 So you do not need to follow a message with `ask-agent` to make sure it is

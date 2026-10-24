@@ -66,6 +66,7 @@ const mailWakeWait = 9 * time.Second
 //     and the pane must show exactly one typed line, also well after it.
 //   - The wake could type the mail's subject or body, which would let mail put
 //     a prompt into an agent. Both hold marker text the pane must never show.
+//     Nor may it type the sender's name, which is a pane title a sender sets.
 //   - The pane on needs_input could get nothing because the wake never runs at
 //     all. Its positive half: once the pane reports idle, it gets its line.
 //   - An agent its hook already told could be woken for the same mail. A third
@@ -77,7 +78,8 @@ const mailWakeWait = 9 * time.Second
 //
 // Negative controls (NEGATIVE_CONTROLS.md): with noteMailSent returning at
 // once, no wake is typed. With mailWakeLook ignoring the notice mark, the
-// agent its hook told is woken too.
+// agent its hook told is woken too. With the wake typing the hook's line,
+// which names senders, the sender's name reaches the pane.
 func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -125,6 +127,10 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		if strings.Contains(out, "marker") {
 			t.Fatalf("%s: text from the mail was typed into the agent:\n%s", step, out)
 		}
+		// The sender's name is text a sender chose too: a pane's title.
+		if strings.Contains(out, `"review"`) {
+			t.Fatalf("%s: the sender's name was typed into the agent:\n%s", step, out)
+		}
 		return n, out
 	}
 
@@ -148,7 +154,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 	for {
 		n, out := check(idle, "idle agent after the burst")
 		if n > 0 {
-			if !strings.Contains(out, `GOT[You have 3 unread tuios messages from "review". Read them with: tuios read-agent-messages -s `+session+` -w `+idle[:8]+` --unread]`) {
+			if !strings.Contains(out, `GOT[You have 3 unread tuios messages. Read them with: tuios read-agent-messages -s `+session+` -w `+idle[:8]+` --unread]`) {
 				t.Fatalf("the idle agent got the wrong line:\n%s", out)
 			}
 			if since := time.Since(sent); since < 4*time.Second {
@@ -183,7 +189,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 	deadline = time.Now().Add(mailWakeWait + uiTimeout)
 	for {
 		n, out := check(blocked, "agent after needs_input")
-		if n == 1 && strings.Contains(out, `GOT[You have 1 unread tuios message from "review".`) {
+		if n == 1 && strings.Contains(out, `GOT[You have 1 unread tuios message. Read it with:`) {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -194,11 +200,14 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 }
 
 // TestMailWakeTurnsOff runs the same stand-in agent with [agents.mail] wake =
-// false: mail for it types nothing. The positive half, in the same daemon:
-// with wake set to true in the file again, the next mail wakes it.
+// false: mail for it types nothing. wake = true written to the file, as a
+// process in a pane could write it, still types nothing. The positive half,
+// in the same daemon: once the person runs tuios config apply, the next mail
+// wakes it.
 //
-// Negative control (NEGATIVE_CONTROLS.md): with SetMailWake ignoring its
-// argument, the first mail types a line and the test fails.
+// Negative controls (NEGATIVE_CONTROLS.md): with SetMailWake ignoring its
+// argument, the first mail types a line. With a file change allowed to turn
+// the wake on, the mail after the file change types a line.
 func TestMailWakeTurnsOff(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -223,23 +232,32 @@ func TestMailWakeTurnsOff(t *testing.T) {
 		t.Fatalf("with wake = false a line was typed:\n%s", out)
 	}
 
+	// A process in a pane can write the file, so the file alone does not
+	// turn the wake back on: mail sent after the change still types nothing.
 	if err := os.WriteFile(cfg, []byte("[agents.mail]\nwake = true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The daemon reads the file when it changes. Mail sent once it has
+	time.Sleep(2 * time.Second)
+	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", session, "-w", agent, "second"); err != nil {
+		t.Fatalf("send-agent-message: %v\n%s", err, out)
+	}
+	time.Sleep(mailWakeWait)
+	if n, out := gotLines(t, base, session, agent); n != 0 {
+		t.Fatalf("wake = true written to the file turned the wake on without the person:\n%s", out)
+	}
+
+	// The person applies the file from outside tuios, and the next mail
 	// wakes the agent.
+	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
+		t.Fatalf("tuios config apply: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", session, "-w", agent, "third"); err != nil {
+		t.Fatalf("send-agent-message: %v\n%s", err, out)
+	}
 	deadline := time.Now().Add(mailWakeWait + uiTimeout)
-	sentSecond := false
 	for {
-		if !sentSecond {
-			time.Sleep(2 * time.Second)
-			if out, err := tuiosCLI(t, base, "send-agent-message", "-s", session, "-w", agent, "second"); err != nil {
-				t.Fatalf("send-agent-message: %v\n%s", err, out)
-			}
-			sentSecond = true
-		}
 		n, out := gotLines(t, base, session, agent)
-		if n == 1 && strings.Contains(out, "GOT[You have 2 unread tuios messages") {
+		if n == 1 && strings.Contains(out, "GOT[You have 3 unread tuios messages") {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -247,4 +265,105 @@ func TestMailWakeTurnsOff(t *testing.T) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+// TestMailWakeTakesNoAuthorityFromAReadOnlyCaller sends mail to an agent at
+// rest from tuios mcp, whose connection is read_only: it may type into no
+// pane, so its mail must not get a line typed either. The positive half, in
+// the same daemon: mail from the person's shell wakes the agent.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the scope check cut from
+// mailOriginOf, the read_only connection's mail types a line.
+func TestMailWakeTakesNoAuthorityFromAReadOnlyCaller(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	const session = "e2e-wakero"
+	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	agent := startMailAgent(t, base, session, "agent")
+	reqs := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tuios_send_agent_message","arguments":{"session":"` + session + `","to":"` + agent + `","text":"from a read-only caller"}}}`,
+	}, "\n") + "\n"
+	out, err := tuiosCLIStdin(t, base, reqs, "mcp", "--scope", "all")
+	if err != nil || !strings.Contains(out, `agent_message_sent`) {
+		t.Fatalf("tuios mcp did not send the mail: %v\n%s", err, out)
+	}
+	time.Sleep(mailWakeWait)
+	if n, out := gotLines(t, base, session, agent); n != 0 {
+		t.Fatalf("mail from a read_only connection typed a line into the agent:\n%s", out)
+	}
+
+	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", session, "-w", agent, "from the shell"); err != nil {
+		t.Fatalf("send-agent-message: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	for {
+		n, out := gotLines(t, base, session, agent)
+		if n == 1 && strings.Contains(out, "GOT[You have 2 unread tuios messages") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("mail from the shell did not wake the agent:\n%s", out)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine sends mail to an
+// agent at rest from a pane of this session whose process runs on build. Its
+// call reaches this daemon forwarded as the pane, which queue-prompt refuses,
+// so its mail must not get a line typed either. The positive half, in the
+// same daemon: mail from the person's shell wakes the agent.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the forwarded-pane check cut
+// from mailOriginOf, the hosted pane's mail types a line.
+func TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	env := []string{"TUIOS_SSH=" + ssh}
+
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool {
+		return containsAll(s, "build", "up")
+	}, "the daemon never reported build up")
+	agent := startMailAgent(t, base, "home", "agent")
+
+	script := tuiosBin + ` send-agent-message -s home -w ` + agent + ` --from "$TUIOS_PANE_ID" 'from build'; echo "SENT $?"; sleep 600`
+	if out, err := tuiosCLIEnv(t, base, env, "new-window", "hosted", "-s", "home",
+		"--host", "build", "--", "/bin/sh", "-c", script); err != nil {
+		t.Fatalf("create a window on build: %v\n%s", err, out)
+	}
+	hosted := windowID(t, base, "home", "hosted")
+	sent := waitCapture(t, base, "home", hosted, "SENT")
+	if !strings.Contains(sent, "SENT 0") {
+		t.Fatalf("the hosted pane could not send its mail:\n%s", sent)
+	}
+	time.Sleep(mailWakeWait)
+	if n, out := gotLines(t, base, "home", agent); n != 0 {
+		t.Fatalf("mail from a pane on another machine typed a line into the agent:\n%s", out)
+	}
+
+	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", "home", "-w", agent, "from the shell"); err != nil {
+		t.Fatalf("send-agent-message: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	for {
+		n, out := gotLines(t, base, "home", agent)
+		if n == 1 && strings.Contains(out, "GOT[You have 2 unread tuios messages") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("mail from the shell did not wake the agent:\n%s", out)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	alive(t, term, "after mail from a hosted pane")
 }

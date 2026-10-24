@@ -676,7 +676,9 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	d.attention.noteMail(stored)
 	// Mail to an agent at rest wakes it if nobody tells it sooner.
 	if stored.Kind == agentMsgDirect {
-		d.noteMailSent(sess.Name(), stored.To, stored.ID, d.mailOriginOf(cs, stored.VerifiedHuman))
+		if origin, ok := d.mailOriginOf(cs, stored.VerifiedHuman); ok {
+			d.noteMailSent(sess.Name(), stored.To, stored.ID, origin)
+		}
 	}
 
 	return map[string]any{

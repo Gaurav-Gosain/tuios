@@ -4599,14 +4599,17 @@ while it waits. When mail for a pane stays unread and unannounced for 5
 seconds, and the pane's agent is at rest, the daemon queues one line for it:
 
 ```
-You have 2 unread tuios messages from "review". Read them with: tuios read-agent-messages -s work -w c7be946f --unread
+You have 2 unread tuios messages. Read them with: tuios read-agent-messages -s work -w c7be946f --unread
 ```
 
 The line goes through the delivery queue, so it is typed only after a second
 at rest, never into a pane on `needs_input`, and never twice. `list-queued`
-shows it with `by` set to `tuios mail`. The line holds only the count, the
-senders' names cut to letters, digits and `. _ - : @`, and the command. It
-never holds a subject or a body, so mail cannot type a prompt into an agent.
+shows it with `by` set to `tuios mail`. The line holds only the count and the
+command. It holds no text a sender chose: no subject, no body, and no sender
+name, which is a pane title. So mail cannot type a prompt into an agent. The
+line is written again right before it is typed: a wake whose mail was read
+while it waited is dropped, and one that waited while more mail came says the
+new count.
 
 - **Once per message.** A hook notice and a wake share one mark per pane. Mail
   a hook announced during a turn wakes nothing when the turn ends. A burst of
@@ -4615,13 +4618,17 @@ never holds a subject or a body, so mail cannot type a prompt into an agent.
 - **Grants.** The wake carries the authority of the caller that sent the
   mail, as its connection proved it, not the `from` the message claims. A
   pane that may not type into the recipient cannot wake it, and the queue
-  checks again right before it types.
+  checks again right before it types. A connection restricted to `read_only`
+  (`tuios mcp` without `--write`) and a pane on another machine wake nothing,
+  as `queue-prompt` refuses them.
 - **At rest** means `idle` or `done`, and `unknown` only for a harness that
   can never show idle. A pane on `none` gets no wake, because its prompt line
   belongs to a shell. A pane on `needs_input` gets its line once it is at rest
   again.
 - **Off.** `[agents.mail] wake = false` turns it off. Mail is still stored,
-  and the hooks still announce it.
+  and the hooks still announce it. A change of the file turns it off at once.
+  Turning it on again waits for `tuios config apply` from outside tuios, or a
+  daemon restart, since a process in a pane can write the file.
 
 ## Reviewing an agent's changes
 

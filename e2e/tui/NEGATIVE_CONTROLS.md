@@ -8922,9 +8922,17 @@ seconds after it. An agent on `needs_input` gets nothing typed, and its
 positive half is the line it gets once it reports idle. An agent that heard of
 its mail from a real `PostToolUse` hook mid-turn gets nothing typed when it
 comes to rest. No pane may show the subject's or the body's marker text.
-`TestMailWakeTurnsOff` runs the same agent with `[agents.mail] wake = false`:
-nothing is typed. Its positive half, in the same daemon: with `wake = true`
-written to the file, the next message types the line. The artifact is
+No pane may show the sender's name either. `TestMailWakeTurnsOff` runs the
+same agent with `[agents.mail] wake = false`: nothing is typed, and
+`wake = true` written to the file, as a pane could write it, still types
+nothing. Its positive half, in the same daemon: after `tuios config apply`,
+the next message types the line. `TestMailWakeTakesNoAuthorityFromAReadOnlyCaller`
+sends mail through `tuios mcp`, a `read_only` connection, and
+`TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine` from a pane whose
+process runs on a linked machine: neither types a line. The positive half of
+each, in the same daemon: mail from the person's shell wakes the agent.
+The controls were run again on 2026-10-24 after the review fixes, and the
+first three rows below hold. The artifact is
 `mail-wake.log`: what each pane showed each time its count of typed lines
 changed.
 
@@ -8935,4 +8943,8 @@ Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
 | Mail never arms a wake | `return` at the top of `noteMailSent` | `TestMailWakesAnIdleAgentOnce`: "the idle agent was never told about its mail"; `TestMailWakeTurnsOff`: "with wake = true again the agent was not told about its mail" | **caught** |
 | The notice mark is ignored | in `mailWakeLook`, wake for any unread mail and pick from every sender | `TestMailWakesAnIdleAgentOnce`: "an agent its hook told about the mail was woken for it too" | **caught** |
 | The switch is ignored | `SetMailWake` stores true whatever it is given | `TestMailWakeTurnsOff`: "with wake = false a line was typed" | **caught** |
+| The wake line names the sender | the wake types the hook's line, which names senders | `TestMailWakesAnIdleAgentOnce`: "the sender's name was typed into the agent" | **caught** |
+| A read_only connection lends the wake its authority | cut the scope check from `mailOriginOf` | `TestMailWakeTakesNoAuthorityFromAReadOnlyCaller`: "mail from a read_only connection typed a line into the agent" | **caught** |
+| A pane on another machine lends the wake its authority | cut the forwarded-pane check from `mailOriginOf` | `TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine`: "mail from a pane on another machine typed a line into the agent" | **caught** |
+| A file change turns the wake on | drop the `byPerson` check in `applyUserConfig` | `TestMailWakeTurnsOff`: "wake = true written to the file turned the wake on without the person" | **caught** |
 | The waker types into a pane not at rest | drop the `agentReady` check in `mailWakeLook` | none: the queue refuses the pane on `needs_input` itself and holds the line until the pane is at rest | **not caught, by design**: the queue is the guard that types, and this check only saves a queue entry |
