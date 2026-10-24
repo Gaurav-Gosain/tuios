@@ -29,29 +29,40 @@ const (
 var paletteHints = []overlay.Hint{
 	{Key: "↑↓", Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "run"},
-	// The state filter is a token typed into the search field rather than a key,
-	// so the footer is the only place it can announce itself.
+	// The action search and the state filter are tokens typed into the search
+	// field rather than keys, so the footer is the only place they can announce
+	// themselves.
+	{Key: PaletteKeybindToken, Label: "actions"},
 	{Key: "@", Label: "state"},
 	{Key: "esc", Label: "close"},
 }
 
-// paletteStateHint is the index of the "@ state" hint in paletteHints.
-const paletteStateHint = 2
+// paletteActionsHint and paletteStateHint are the indexes of the "# actions"
+// and "@ state" hints in paletteHints.
+const (
+	paletteActionsHint = 2
+	paletteStateHint   = 3
+)
 
 // paletteFooter is the palette's footer for this client: the "@ state" hint
 // waits until an agent has been seen, since the filter it announces lists
 // agent panes and there are none. Typing "@" works either way.
 //
-// A "#" search also shows the rebind key, after "run", since the rows it lists
-// are actions and the key does nothing on any other row. It is spelt "^e", the
-// way the keybind manager's footer spells its keys.
+// A "#" search shows the rebind key where "# actions" was, since the rows it
+// lists are actions and the key does nothing on any other row, and the search
+// the hint announced is already open. It is spelt "^e", the way the keybind
+// manager's footer spells its keys. A file search has no actions to search, so
+// it shows neither.
 func (m *OS) paletteFooter() []overlay.Hint {
-	hints := paletteHints
+	hints := slices.Clone(paletteHints)
 	if !m.agentsSeen() {
-		hints = slices.Delete(slices.Clone(hints), paletteStateHint, paletteStateHint+1)
+		hints = slices.Delete(hints, paletteStateHint, paletteStateHint+1)
 	}
-	if keybinds, _ := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds && !m.fileSearch {
-		hints = slices.Insert(slices.Clone(hints), paletteStateHint, overlay.Hint{Key: overlay.ShortKey(PaletteRebindKey), Label: "rebind"})
+	switch keybinds, _ := splitPaletteKeybinds(m.CommandPaletteQuery); {
+	case m.fileSearch:
+		hints = slices.Delete(hints, paletteActionsHint, paletteActionsHint+1)
+	case keybinds:
+		hints[paletteActionsHint] = overlay.Hint{Key: overlay.ShortKey(PaletteRebindKey), Label: "rebind"}
 	}
 	return hints
 }
