@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/state/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/state/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package state
 
@@ -187,11 +187,14 @@ func renderState(db *StateDb, config types.Config, options types.RenderOptions) 
 // draw: `turned` draws a diagram that runs across as one that runs down.
 func draw(db *StateDb, config types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	graph := db.Graph
+	// State diagrams follow the flowchart curve.
+	flow, _ := config["flowchart"].(map[string]any)
+	curve, _ := flow["curve"].(string)
 	size := types.Or(options.FontSize, 16)
 	small := js.Round(size * 0.875)
 	measurer := options.Measurer
 	if measurer == nil {
-		measurer = text.DefaultMeasurer(options.FontFamily, "")
+		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	wrapWidth := numberOption(config, "wrappingWidth", 200)
 	pad := types.Or(options.Padding, 8)
@@ -597,6 +600,8 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		EdgeSep:  EDGE_SEP,
 		RankSep:  numberOption(config, "rankSpacing", RANK_SEP),
 		PortSep:  20,
+		Tracks:   curve == "step" || curve == "stepBefore" || curve == "stepAfter",
+		Straight: curve == "linear",
 		HeadRoom: svg.MarkerTrim("arrow_point"),
 	})
 
@@ -925,7 +930,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 					route = append(route, point...)
 				}
 			}
-			path = svg.RoutePath(route, "", 0, svg.MarkerTrim(endType), leaves, arrives)
+			path = svg.RoutePath(route, curve, 0, svg.MarkerTrim(endType), leaves, arrives)
 		}
 		edgesOut.WriteString(`<g class="pele-edge `)
 		if note {

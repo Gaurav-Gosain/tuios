@@ -1,9 +1,10 @@
 // Package raster draws the SVG that tuios.dev/sketch writes into an image. It
 // reads only the subset of SVG that pele emits: g, a, svg, rect, circle,
 // ellipse, polygon, polyline, line, path, text and tspan, with translate,
-// rotate, scale and matrix transforms, CSS variables and color-mix. It is not
-// a general SVG renderer: images, gradients, filters and clip paths are not
-// drawn.
+// rotate, scale and matrix transforms, CSS variables and color-mix, and the
+// baseline shift, smaller size and underline of label tags. It is not a
+// general SVG renderer: images, gradients, filters and clip paths are not
+// drawn. A gradient paint takes its fallback colour.
 package raster
 
 import (
@@ -52,9 +53,12 @@ type state struct {
 	color                      color.NRGBA
 	fontSize                   float64
 	bold, italic, mono         bool
-	anchor                     string
-	preserve                   bool
-	m                          matrix
+	// shift moves text off the baseline, down for <sub> and up for <sup>.
+	shift     float64
+	underline bool
+	anchor    string
+	preserve  bool
+	m         matrix
 	// plain is m without the overrides of a motion frame. moved says they differ,
 	// so text is shifted to where its anchor went instead of being scaled.
 	plain matrix
@@ -243,9 +247,24 @@ func (r *renderer) apply(n *node, st state) state {
 		case "stroke-miterlimit":
 			st.miterLimit = lengthOf(value, 4)
 		case "font-size":
-			if v := lengthOf(value, -1); v > 0 {
+			if value == "smaller" {
+				// pele measures smaller text at this size.
+				st.fontSize /= 1.2
+			} else if v := lengthOf(value, -1); v > 0 {
 				st.fontSize = math.Min(v, 2000)
 			}
+		case "baseline-shift":
+			// pele writes the shift before the smaller size, so this is the parent's size.
+			switch value {
+			case "sub":
+				st.shift = st.fontSize * 0.25
+			case "super":
+				st.shift = -st.fontSize * 0.4
+			case "baseline":
+				st.shift = 0
+			}
+		case "text-decoration":
+			st.underline = strings.Contains(value, "underline")
 		case "font":
 			for _, f := range strings.Fields(value) {
 				if strings.HasSuffix(f, "px") {

@@ -1,0 +1,67 @@
+[
+ {
+  "src": "sankey\na,b,5\na,c,3\nb,d,4\nc,d,1.239\n",
+  "idPrefix": "p1"
+ },
+ {
+  "src": "---\nconfig:\n  sankey:\n    nodeColors:\n      a: \"#123456\"\n      b: \"url(#x)\"\n---\nsankey\na,b,5\na,c,3\nb,d,4\nc,d,1.239\n",
+  "idPrefix": "p_1"
+ },
+ {
+  "src": "---\nconfig:\n  sankey:\n    nodeColors:\n      a: 'red&blue'\n      b: 'x\"y'\n---\nsankey\na,b,5\na,c,3\nb,d,4\nc,d,1.239\n",
+  "idPrefix": "p1"
+ },
+ {
+  "src": "---\nconfig:\n  sankey:\n    linkColor: target\n---\nsankey\na,b,5\na,c,3\nb,d,4\nc,d,1.239\n",
+  "idPrefix": "p1"
+ },
+ {
+  "src": "sankey\na,b,5\na,c,3\nb,d,4\nc,d,1.239\n",
+  "idPrefix": "p\"1"
+ },
+ {
+  "src": "sankey-beta\nVisitors,Signed up,3200\nVisitors,Bounced,9800\nSigned up,Opened a folder,2100\nSigned up,Never returned,1100\nOpened a folder,Ran Agency,1450\nOpened a folder,Write-only,650\nRan Agency,Upgraded to Pro,380\nRan Agency,Stayed free,1070\nUpgraded to Pro,Upgraded to Team,96\nUpgraded to Pro,Stayed on Pro,284",
+  "fontSize": 14,
+  "maxWidth": 664
+ },
+ {
+  "src": "sankey-beta\nVisitors,Signed up,3200\nVisitors,Bounced,9800\nSigned up,Opened a folder,2100\nSigned up,Never returned,1100\nOpened a folder,Ran Agency,1450\nOpened a folder,Write-only,650\nRan Agency,Upgraded to Pro,380\nRan Agency,Stayed free,1070\nUpgraded to Pro,Upgraded to Team,96\nUpgraded to Pro,Stayed on Pro,284",
+  "fontSize": 16,
+  "maxWidth": 664
+ },
+ {
+  "src": "---\nconfig:\n  sankey:\n    showValues: false\n---\nsankey\nA,B,1\nC,D,200\nE,F,1\nF,G,600\nG,D,200\nB,D,1\n"
+ },
+ {
+  "src": "sankey\ns0,t,1\ns1,t,1\ns2,t,1\ns3,t,1\ns4,t,1\ns5,t,1\ns6,t,1\ns7,t,1\ns8,t,1\ns9,t,1\ns10,t,1\ns11,t,1\ns12,t,1\ns13,t,1\ns14,t,1\ns15,t,1\ns16,t,1\ns17,t,1\ns18,t,1\ns19,t,1\n"
+ },
+ {
+  "src": "sankey\ns0,t,1\ns1,t,1\ns2,t,1\ns3,t,1\ns4,t,1\ns5,t,1\ns6,t,1\ns7,t,1\ns8,t,1\ns9,t,1\ns10,t,1\ns11,t,1\ns12,t,1\ns13,t,1\ns14,t,1\ns15,t,1\ns16,t,1\ns17,t,1\ns18,t,1\ns19,t,1\ns20,t,1\ns21,t,1\ns22,t,1\ns23,t,1\ns24,t,1\ns25,t,1\ns26,t,1\ns27,t,1\ns28,t,1\ns29,t,1\ns30,t,1\ns31,t,1\ns32,t,1\ns33,t,1\ns34,t,1\ns35,t,1\ns36,t,1\ns37,t,1\ns38,t,1\ns39,t,1\ns40,t,1\ns41,t,1\ns42,t,1\ns43,t,1\ns44,t,1\ns45,t,1\ns46,t,1\ns47,t,1\ns48,t,1\ns49,t,1\ns50,t,1\ns51,t,1\ns52,t,1\ns53,t,1\ns54,t,1\ns55,t,1\ns56,t,1\ns57,t,1\ns58,t,1\ns59,t,1\n"
+ },
+ {
+  "src": "sankey\na,b,5\na,c,3\nb,d,4\nc,d,1.239\n",
+  "maxWidth": 320
+ },
+ {
+  "src": "sankey\ns0,t,1\ns1,t,1\ns2,t,1\ns3,t,1\ns4,t,1\ns5,t,1\ns6,t,1\ns7,t,1\ns8,t,1\ns9,t,1\ns10,t,1\ns11,t,1\ns12,t,1\ns13,t,1\ns14,t,1\ns15,t,1\ns16,t,1\ns17,t,1\ns18,t,1\ns19,t,1\n",
+  "fontSize": 32
+ },
+ {
+  "src": "sankey\nДоход,Расходы,100\n\"Café\",\"München\",50\n収入,支出,10\n☀️,🏠,5\nCafé,Cafè,3\n"
+ },
+ {
+  "src": "sankey-beta\n\"Доход, \"\"чистый\"\"\",Café,2\nCafé,収入,1\n"
+ },
+ {
+  "src": "---\nconfig:\n  sankey:\n    labelStyle: outlined\n---\nsankey\n\"Доход #35; #amp; #34;чистый#34;\",Расходы,1\n"
+ },
+ {
+  "src": "sankey\na#amp;#35;xFFFE;,b,1\n"
+ },
+ {
+  "src": "---\nconfig:\n  sankey:\n    labelStyle: outlined\n---\nsankey\nДоход &#xFFFE;,Расходы,1\n"
+ },
+ {
+  "src": "sankey\n\"<script>Доход 🏠</script>\",\"収入\"\" onload=\"\"alert(1)\",1\n"
+ }
+]

@@ -1,0 +1,9 @@
+[
+ {
+  "src": "quadrantChart\n      title Q4 candidates by effort and impact\n      x-axis Low effort --> High effort\n      y-axis Low impact --> High impact\n      quadrant-1 Plan carefully\n      quadrant-2 Do first\n      quadrant-3 Reconsider\n      quadrant-4 Quick wins\n      Chart gallery editor: [0.72, 0.85]\n      First-run onboarding: [0.35, 0.78]\n      Shared folders: [0.88, 0.70]\n      Export to PDF: [0.30, 0.55]\n      Custom themes: [0.45, 0.20]\n      Calendar sync: [0.65, 0.30]\n      Keyboard shortcut sheet: [0.12, 0.48]"
+ },
+ {
+  "src": "quadrantChart\n      title Q4 candidates by effort and impact\n      x-axis Low effort --> High effort\n      y-axis Low impact --> High impact\n      quadrant-1 Plan carefully\n      quadrant-2 Do first\n      quadrant-3 Reconsider\n      quadrant-4 Quick wins\n      Left edge: [0, 0.5]",
+  "maxWidth": 320
+ }
+]

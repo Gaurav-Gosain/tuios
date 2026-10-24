@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/common/fit.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/common/fit.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // The three regular expressions are hand matchers here: RE_TAG_START has a lookahead,
 // and RE_UNIT cuts text into UTF-16 units, which a rune of Go stands for.

@@ -1,0 +1,35 @@
+[
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: linear\n---\nstateDiagram-v2\ndirection TB\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: step\n---\nstateDiagram-v2\ndirection TB\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: stepBefore\n---\nstateDiagram-v2\ndirection TB\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: stepAfter\n---\nstateDiagram-v2\ndirection TB\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: linear\n---\nstateDiagram-v2\ndirection LR\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: step\n---\nstateDiagram-v2\ndirection LR\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: stepBefore\n---\nstateDiagram-v2\ndirection LR\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: stepAfter\n---\nstateDiagram-v2\ndirection LR\n state A {\n a --> b\n a --> c\n }\n out --> a\n A --> out"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: step\n---\nstateDiagram-v2\n direction TB\n A --> B\n A --> C\n A --> D\n B --> E\n C --> E\n D --> E\n E --> F : Yes\n E --> A : No"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: step\n---\nstateDiagram-v2\n direction LR\n A --> B\n A --> C\n A --> D\n B --> E\n C --> E\n D --> E\n E --> F : Yes\n E --> A : No"
+ },
+ {
+  "src": "---\nconfig:\n  flowchart:\n    curve: linear\n---\nstateDiagram-v2\na --> a : again"
+ }
+]

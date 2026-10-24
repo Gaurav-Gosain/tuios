@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sankey/parser.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/sankey/parser.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package sankey
 
@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/types"
 )
 
@@ -64,6 +65,17 @@ func collapseBreaks(text string) string {
 	return out.String()
 }
 
+// invalidXML is RE_INVALID_XML.test(text): /[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]/u.
+// Valid UTF-8 holds no surrogate, and DecodeEntities makes none.
+func invalidXML(text string) bool {
+	for _, r := range text {
+		if r <= 0x08 || r == 0x0b || r == 0x0c || (r >= 0x0e && r <= 0x1f) || r == 0xfffe || r == 0xffff {
+			return true
+		}
+	}
+	return false
+}
+
 func parseSankey(src string, db *SankeyDb) {
 	toks := tokenize(src)
 	typ := func(i int) int {
@@ -117,7 +129,18 @@ func parseSankey(src string, db *SankeyDb) {
 		return text
 	}
 
-	name := func() string { return strings.ReplaceAll(js.Trim(field()), `""`, `"`) }
+	name := func() string {
+		start := len(src)
+		if i < len(toks.starts) {
+			start = toks.starts[i]
+		}
+		name := strings.ReplaceAll(js.Trim(field()), `""`, `"`)
+		// Entity codes can encode characters excluded by the lexer.
+		if invalidXML(text.DecodeEntities(name)) {
+			panic(types.SyntaxError("sankey", src, start, "Invalid XML character in node name", false))
+		}
+		return name
+	}
 
 	expect(T_SANKEY, "")
 	expect(T_NEWLINE, "")

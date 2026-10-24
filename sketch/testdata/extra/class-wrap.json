@@ -1,0 +1,54 @@
+[
+ {
+  "src": "classDiagram\ndirection TB\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 320,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection TB\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 600,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection BT\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 320,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection BT\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 600,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection LR\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 320,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection LR\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 600,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection RL\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 320,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\ndirection RL\nclassA <|-- classB\nclassC *-- classD\nclassE o-- classF\nclassG <-- classH\nclassI -- classJ\nclassK <.. classL\nclassM <|.. classN\nclassO .. classP",
+  "maxWidth": 600,
+  "autoDirection": false
+ },
+ {
+  "src": "classDiagram\nnamespace N0 {\nclass A0\nclass B0\n}\nA0 \"one\" --> \"many\" B0 : uses\nnote for A0 \"check\"\nB0 --> B0 : retry\nnamespace N1 {\nclass A1\nclass B1\n}\nA1 \"one\" --> \"many\" B1 : uses\nnote for A1 \"check\"\nB1 --> B1 : retry\nnamespace N2 {\nclass A2\nclass B2\n}\nA2 \"one\" --> \"many\" B2 : uses\nnote for A2 \"check\"\nB2 --> B2 : retry\nnamespace N3 {\nclass A3\nclass B3\n}\nA3 \"one\" --> \"many\" B3 : uses\nnote for A3 \"check\"\nB3 --> B3 : retry",
+  "maxWidth": 600
+ },
+ {
+  "src": "classDiagram\nnote \"From Duck till Zebra\"\nAnimal <|-- Duck\nAnimal <|-- Fish\nAnimal <|-- Zebra\nAnimal <|-- Cat\nAnimal <|-- Dog",
+  "maxWidth": 320
+ },
+ {
+  "src": "classDiagram\nA --> B\nclass C",
+  "maxWidth": 1
+ }
+]
