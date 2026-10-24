@@ -171,8 +171,10 @@ var verbScopes = map[string]scopeKind{
 
 	"send-text": scopeWrite,
 	"send-keys": scopeWrite,
-	"ask-agent": scopeWrite,
-	"respond":   scopeWrite,
+	// Clearing a pane's history changes what every viewer of it sees.
+	"clear-history": scopeWrite,
+	"ask-agent":     scopeWrite,
+	"respond":       scopeWrite,
 
 	"fan":         scopeLaunch,
 	"start-agent": scopeLaunch,

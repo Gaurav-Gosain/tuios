@@ -518,6 +518,9 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// them too.
 	"copy_mode_search_forward":  "user binding and palette row",
 	"copy_mode_search_backward": "user binding and palette row",
+	// cmd+k in other terminals, which the host terminal usually keeps for
+	// itself, so it ships unbound.
+	"clear_scrollback": "user binding and palette row",
 	// Hints on every pane at once. The plain hints key does the same with
 	// hints.all_panes on (issue #248).
 	"hints_all_panes": "user binding and palette row",

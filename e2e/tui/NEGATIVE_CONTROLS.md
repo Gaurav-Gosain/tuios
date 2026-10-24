@@ -9010,3 +9010,16 @@ at the end. Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 | Control | How | Test that fails | Verdict |
 | --- | --- | --- | --- |
 | The ask never learns its caller went away | `askCancel` returns a channel that never closes | `the third ask waited behind 2 asks, want 1` and `the question of a caller that went away was typed` | **caught** |
+## Clear the scrollback
+
+`TestClearScrollback` prints 200 numbered rows in a pane, goes to the top of the history in copy mode and requires `row-1` there. Then it presses `super+k`, sent as a kitty keyboard sequence, which the test config binds to `clear_scrollback` in `[keybindings.global]`. The test requires no `row-N` row on the screen, a command typed next on the pane's first row behind the `$ ` prompt, and no `row-N` row at the top of the history in copy mode. In the `daemon` case the rows are printed in a detached session before the client attaches. The test then detaches, attaches again, and checks the screen, copy mode and `tuios capture-pane --scrollback` again. Last, it prints 200 more rows, runs `tuios clear-history` without `--screen`, and requires the oldest row gone and the newest row still on the screen.
+
+Run on 2026-10-24 on Linux with Go 1.27.1 against upstream main at 43649994b. Each control is a text replacement, built to a separate binary and put back before the next. The fixed build passes both cases, with the pure Go emulator and with `-tags ghostty`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The change removed (upstream main) | `standalone` and `daemon` ("super+k did not clear the rows from the screen") | **caught** |
+| The daemon-side clear removed: in `internal/app/clear_scrollback.go` a daemon session clears the client's own emulator and calls no verb | `daemon` ("the attach after the clear shows the old rows again") | **caught** |
+| The screen cleared with ED 2 and the cursor sent home, so the prompt goes: in `ClearHistorySequence` | `standalone` and `daemon` ("the command typed after the clear is on row -1 behind the prompt, want row 10, the pane's first row") | **caught** |
+
+Not covered end to end: the refusal while a full-screen program holds the pane, a prompt of two lines marked with OSC 133, and the `clear-history` command of the tmux shim.

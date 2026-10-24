@@ -855,6 +855,8 @@ var ActionDescriptions = map[string]string{
 
 	// The scrollback in the editor (prefix E, ctrl+g in copy mode)
 	ActionEditScrollback: "Open the scrollback in the editor",
+	// No default key (cmd+k in other terminals)
+	ActionClearScrollback: "Clear the scrollback and the screen above the prompt",
 
 	// Copy mode search (no default keybinding)
 	ActionCopyModeSearchForward:  "Enter copy mode and search forward",

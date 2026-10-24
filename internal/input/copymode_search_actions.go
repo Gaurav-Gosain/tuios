@@ -21,9 +21,10 @@ func handleCopyModeSearchBackward(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	return o, nil
 }
 
-// copyModeSearchActionKey runs copy_mode_search_forward or
-// copy_mode_search_backward when the key is bound to one of them and the pane
-// is in copy mode's normal state. It reads the sections a key reaches outside
+// copyModeSearchActionKey runs copy_mode_search_forward,
+// copy_mode_search_backward or clear_scrollback when the key is bound to one
+// of them and the pane is in copy mode's normal state. clear_scrollback is
+// here so a cmd+k binding works whether or not the pane is in copy mode. It reads the sections a key reaches outside
 // copy mode without a prefix: global, and terminal_mode or the window-mode
 // section for the current mode. The prefix sections are not read, because
 // copy mode takes the leader key itself (ctrl+b is page up there).
@@ -37,7 +38,8 @@ func copyModeSearchActionKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Wi
 		return o, nil, false
 	}
 	isSearchAction := func(a string) bool {
-		return a == config.ActionCopyModeSearchForward || a == config.ActionCopyModeSearchBackward
+		return a == config.ActionCopyModeSearchForward || a == config.ActionCopyModeSearchBackward ||
+			a == config.ActionClearScrollback
 	}
 	action := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction)
 	if !isSearchAction(action) {

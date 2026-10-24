@@ -103,6 +103,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},
 	{ErrVerbNoShellIntegration, "The pane's shell has not sent the OSC 133 marks that say where a command starts and ends, so the daemon cannot run a command in it and report its exit code, or say what the last command printed. Nothing was typed. Enable the shell's prompt integration, or use send-text and wait-for window-output."},
 	{ErrVerbNotAtPrompt, "run typed nothing because the pane's shell is not at its prompt: a command is running in it. The message names the command. Wait for it with wait-for command-finished, or run in another pane."},
+	{ErrVerbFullScreen, "clear-history cleared nothing because a full-screen program, such as an editor or a pager, uses the pane's alternate screen. Quit the program, then call again."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
 	{ErrVerbUnknownHost, "No host by that name is configured. The hint lists the hosts that are. A host name is matched exactly, so nothing is guessed."},
 	{ErrVerbHostUnreachable, "The host is configured and is not answering. Nothing was queued. Read the host's status with list-hosts."},

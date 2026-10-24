@@ -213,6 +213,7 @@ var verbCapabilities = map[string][]string{
 	"close-workspace":  {config.LinkAllowWrite},
 	"send-keys":        {config.LinkAllowWrite},
 	"send-text":        {config.LinkAllowWrite},
+	"clear-history":    {config.LinkAllowWrite},
 	// The paste buffers hold what the person copied on this machine. A
 	// link reads them only where it may also capture a pane, and changes
 	// or pastes them only where it may type.

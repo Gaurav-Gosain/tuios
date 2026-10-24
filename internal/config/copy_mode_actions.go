@@ -27,6 +27,12 @@ const (
 // opens it in the editor. It is bound after the leader and in copy mode.
 const ActionEditScrollback = "edit_scrollback"
 
+// ActionClearScrollback clears the focused pane's scrollback and the rows
+// above its prompt, as cmd+k does in Ghostty and iTerm2. It has no default
+// key: the host terminal takes cmd+k for itself unless told not to. Bind it
+// in any section, global for a key that works while typing.
+const ActionClearScrollback = "clear_scrollback"
+
 // copyModeFixedKeys are the keys copy mode reads itself, in
 // internal/input/copymode_handlers.go and copymode_multi.go, besides the
 // digits of a count. A [keybindings.copy_mode] binding on one of them takes

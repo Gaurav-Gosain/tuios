@@ -14,6 +14,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard`, `forbidden`, `not_human`, `prompt_changed`, `not_resumable`,
 `no_shell_integration`, `not_at_prompt`, `confirm_required`, `no_transcript`,
+`full_screen`,
 `unsupported_harness`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `worktree_detached`, `worktree_nested`, `git_failed`, `fan_exists`,
@@ -64,6 +65,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `prompt_changed` | The prompt moved or was answered before `respond` landed. Nothing was pressed. |
 | `not_resumable` | The pane has no conversation `resume-agent` can bring back. Nothing was typed. |
 | `no_shell_integration`, `not_at_prompt` | From `run`: the shell sends no OSC 133 marks, or is busy. Nothing was typed. Use `send-text` and a marker, or `wait-for command-finished`. |
+| `full_screen` | From `clear-history`: a full-screen program uses the pane. Nothing was cleared. Wait for the program to exit. |
 | `confirm_required` | A write by selector, or a `ship-push` or `ship-pr`. The hint lists the panes, or what would be sent, and a token. Check them, then call again with the token. |
 | `no_transcript`, `unsupported_harness` | From `agent-transcript`: the pane is not joined to a transcript, or its harness keeps none this daemon reads. Read the pane with `capture-pane`. |
 | `protocol_mismatch` | The caller's protocol version is outside what this daemon accepts. Use a matching tuios. |

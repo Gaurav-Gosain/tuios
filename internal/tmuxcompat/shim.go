@@ -112,6 +112,7 @@ var commands = map[string]handler{
 	"list-sessions":       (*Shim).listSessions,
 	"has-session":         (*Shim).hasSession,
 	"kill-pane":           (*Shim).killPane,
+	"clear-history":       (*Shim).clearHistory,
 	"kill-window":         (*Shim).killWindow,
 	"select-pane":         (*Shim).selectPane,
 	"select-window":       (*Shim).selectWindow,
@@ -158,6 +159,7 @@ var specs = map[string]spec{
 	"list-sessions":       {values: "F"},
 	"has-session":         {values: "t"},
 	"kill-pane":           {values: "t"},
+	"clear-history":       {bools: "H", values: "t"},
 	"kill-window":         {values: "t"},
 	"select-pane":         {bools: "DLRUZ", values: "tTP"},
 	"select-window":       {values: "t"},
@@ -989,6 +991,29 @@ func (s *Shim) killPane(name string, args []string) (string, []string, error) {
 		return OutcomeError, nil, err
 	}
 	if _, err := s.Caller.Call("close-window", map[string]any{"session": target.sess.name, "window": target.ID}); err != nil {
+		return OutcomeError, nil, err
+	}
+	return OutcomeOK, nil, nil
+}
+
+// clearHistory drops the target pane's scrollback and keeps its screen, as
+// tmux does. -H, which also drops tmux's stored hyperlinks, needs nothing
+// more: tuios keeps a hyperlink in its cell, and the cells go with the rows.
+func (s *Shim) clearHistory(name string, args []string) (string, []string, error) {
+	p, err := parseFlags(name, specs[name], args)
+	if err != nil {
+		return OutcomeUnsupported, nil, err
+	}
+	v, err := s.loadView()
+	if err != nil {
+		return OutcomeError, nil, err
+	}
+	tv, _ := p.Value('t')
+	target, err := v.resolvePane(tv, s.callerPane(v))
+	if err != nil {
+		return OutcomeError, nil, err
+	}
+	if _, err := s.Caller.Call("clear-history", map[string]any{"session": target.sess.name, "window": target.ID}); err != nil {
 		return OutcomeError, nil, err
 	}
 	return OutcomeOK, nil, nil

@@ -1732,6 +1732,38 @@ tuios close-window build
 tuios close-window -s work 86e5e19f
 ```
 
+### `tuios clear-history`
+
+Clear the scrollback of a pane, as tmux `clear-history` does. The screen
+stays. With `--screen`, tuios also removes the rows above the prompt, as
+`cmd+k` does in Ghostty and iTerm2. The prompt row then moves to the top of
+the pane.
+
+The daemon clears the pane for every client of the session. An attach later
+does not bring the old rows back. tuios clears nothing while a full-screen
+program, such as an editor, uses the pane. The `clear_scrollback` key does the
+same as `--screen`. See [KEYBINDINGS.md](KEYBINDINGS.md#clear-the-scrollback).
+
+**Usage:**
+```bash
+tuios clear-history [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: the session of this pane, else the most recently active)
+- `-w, --window <window>`: Target window by name or ID (default: the focused pane)
+- `--screen`: Also remove the rows above the prompt
+- `--json`: Output the result as JSON
+
+**Examples:**
+```bash
+# Clear the scrollback of the focused pane
+tuios clear-history
+
+# Clear the scrollback and the screen of the pane named build
+tuios clear-history -w build --screen
+```
+
 ### `tuios close-workspace`
 
 Close every pane on a workspace, like tmux `kill-window`. Without a number,

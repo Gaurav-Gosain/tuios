@@ -1598,6 +1598,23 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbCapturePane,
 		},
+		"clear-history": {
+			description: "Clear a pane's scrollback for every client of the session.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "screen", Type: "bool", Description: "Also remove the rows above the prompt, as cmd+k does in Ghostty and iTerm2. The prompt row moves to the top of the pane. Without it, the screen stays, as with tmux clear-history.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "window", Type: "string", Description: "The id of the pane that was cleared."},
+				{Name: "screen", Type: "bool", Description: "Whether the rows above the prompt were removed too."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"clear-history","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"clear-history","params":{"session":"work","screen":true}}`,
+			},
+			handler: (*Daemon).verbClearHistory,
+		},
 		"screenshot": {
 			description: "Render a window to an image file.",
 			params: []verbParam{

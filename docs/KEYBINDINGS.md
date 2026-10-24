@@ -1201,6 +1201,56 @@ edit_scrollback = ["ctrl+o"]
 The tmux preset uses `Ctrl+B E` to make the splits equal. With that preset,
 the editor key is `Ctrl+B Ctrl+T E`.
 
+### Clear the scrollback
+
+The `clear_scrollback` action clears the scrollback of the focused pane. It
+also removes the rows above the prompt, and the prompt row moves to the top of
+the pane. Ghostty, iTerm2 and Terminal.app do the same on `Cmd+K`.
+
+| Action | Default key |
+| --- | --- |
+| `clear_scrollback` | None |
+
+The command palette entry is "Clear the scrollback".
+
+- tuios sends no key to the program, so the shell does not redraw.
+- When the shell marks its prompt with OSC 133, tuios keeps all the lines of
+  the prompt.
+- In a session with a daemon, the daemon clears the pane. Each client of the
+  session shows the clear. An attach later does not bring the old rows back.
+- The key also works in copy mode. tuios leaves copy mode.
+- tuios clears nothing while a full-screen program, such as vim or less, uses
+  the pane. tuios shows a message.
+
+`tuios clear-history` clears the scrollback from the command line, as tmux
+`clear-history` does. It keeps the screen. With `--screen`, it does the same
+as the key. See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-clear-history).
+
+The action has no default key, because the host terminal usually keeps `Cmd+K`
+for itself. To use `Cmd+K`, bind `super+k` in the `global` section. A key in
+the `global` section works in terminal mode and in window mode.
+
+```toml
+[keybindings.global]
+clear_scrollback = ["super+k"]
+```
+
+Then tell the host terminal to send `Cmd+K` to tuios. In Ghostty, add this line
+to the Ghostty config:
+
+```
+keybind = cmd+k=unbind
+```
+
+In iTerm2 and Terminal.app, `Cmd+K` is a menu item. Remove or change its
+shortcut in the settings of the terminal. A terminal that does not send the
+Super key cannot send `super+k`. Bind another key, such as `Ctrl+B K`:
+
+```toml
+[keybindings.prefix_mode]
+clear_scrollback = ["K"]
+```
+
 ### Pipe a yank through a command
 
 A yank can go through a command before it goes to the clipboard. tmux calls

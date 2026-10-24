@@ -860,6 +860,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, m.EditScrollbackInEditor()
 			},
 		},
+		{
+			Name:     "Clear the scrollback",
+			Bind:     config.ActionClearScrollback,
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.ClearScrollback()
+			},
+		},
 		// Floating
 		{
 			Name:     "Toggle floating",

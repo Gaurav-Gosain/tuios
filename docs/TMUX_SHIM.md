@@ -196,6 +196,7 @@ Some values come from tuios facts:
 | `delete-buffer` | Deletes a buffer |
 | `show-options`, `show-window-options` | Print the options that describe tuios, such as `window-size`, `base-index 1` and `history-limit`. `window-size` is the session's `daemon.window_size` (`smallest`, `largest` or `latest`), or `latest` from a daemon that does not report it. `-v` prints the value alone, `-q` hides the error for an unknown option |
 | `set-option window-size`, `set-window-option window-size` | Set the session's `daemon.window_size` to `smallest`, `largest` or `latest`. `manual` is refused. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client) |
+| `clear-history` | Clears the scrollback of a pane and keeps its screen (`clear-history` verb). `-H` is accepted. A pane that shows a full-screen program is refused |
 | `kill-pane`, `kill-window` | Close a pane, or every pane of a workspace (`close-window`) |
 | `select-pane` | Focuses a pane (`focus-window`), or with `-L -R -U -D` the target's neighbour. The neighbour is found from the panes' positions, as tmux finds it, so a session with no client attached answers too. `-T` names the pane (`set-window`) and leaves the focus alone. `-P` (a style) is ignored |
 | `last-pane` | Focuses the pane that was active in the window before the current one, from the workspace's focus history. `no last pane` when there is none |
