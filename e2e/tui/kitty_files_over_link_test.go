@@ -193,6 +193,12 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		if containsUpload(uploads, []byte("not a real key\n")) {
 			t.Errorf("the key crossed the link")
 		}
+		// A refusal must be the far machine's, before a byte moves: the
+		// owner's emulator also answers an error (EBADPNG) for bytes that
+		// are not an image, which would pass the reply check alone.
+		if passwd, err := os.ReadFile("/etc/passwd"); err == nil && containsUpload(uploads, passwd) {
+			t.Errorf("a file of another user (/etc/passwd) crossed the link")
+		}
 		// A refused path is not handed on either: the host terminal shares
 		// this machine here and would read it.
 		if len(paths) > 0 {

@@ -9064,3 +9064,13 @@ Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 Not covered end to end: the terminals row scrolled out of a short rail, and a peek of another session. The same `focusDrawn` check covers them.
 | The fix removed | upstream main at 43649994b | `dark-truecolor` and `light-truecolor`: "the cursor row on P1 differs from its neighbours only by its ground". `dark-16` passes, since main already draws reverse video there | **caught** |
 | The mark skips every cell | `CursorText` returns its span unchanged | `dark-truecolor` and `light-truecolor`, same message | **caught** |
+## Kitty images named by path in a window on another machine
+
+`TestKittyFilesFromAPaneOnAHost` links two daemons on one machine through the ssh stand-in and opens a window on the far one with `new-window --host build`. In it, `kittylive` (a guest in `e2e/tui/kittylive`) walks every transmission medium and prints PASS or FAIL with the reply it read: the a=q probe, a=q for a file, t=d PNG and RGBA, t=f, t=f with O= and S=, t=t (the file must be deleted) and t=s (the object must be unlinked). The host terminal's stream must hold each file's exact bytes as a direct upload, and no path. The `icat` subtest runs the real `kitten icat` (skipped when it is not installed): `--detect-support` must pick memory or file, and both modes must reach the host. The `refused` subtest runs `kittylive -refuse`: a /proc path, /etc/passwd, a symlink into /proc, a t=t file outside the temporary folders, and a key in the far home's `~/.ssh` by path and by symlink must each get an error reply, and neither the key's nor /etc/passwd's bytes, nor any path, may reach the host. Run on 2026-10-24 on Linux.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (main at efdc2a9c4) | `media` ("5 FAIL, 3 pass": t=f and t=t answered `ENOTSUPPORTED:the path would be read on another machine`, the t=s object never unlinked), `icat` (icat refuses: no pixel size in the pane), `refused` ("the host was handed paths", the key's among them) | **caught** |
+| The link's read rules (`check` in `openKittyLinkMedium`) skipped | `refused` ("the key crossed the link") | **caught** |
+| The owner check skipped | `refused` ("a file of another user (/etc/passwd) crossed the link"). The reply alone was an error (the owner's emulator answered EBADPNG), which is why the host stream is checked | **caught** |
+| kitty's sensitive path check (`vt.KittySensitivePath`) skipped | none: /proc is also in the link's read deny list, so both /proc cases are still refused | **not caught** (covered twice) |
