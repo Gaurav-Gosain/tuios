@@ -9004,3 +9004,13 @@ Each control is a text replacement in the branch's checkout, built to a separate
 | `ckArtFormRow` returns nothing, so a row in Needs you for a form reads as working | "the row in Needs you does not say a form waits" | **caught** |
 
 Not covered: a TML surface in a session the client is not attached to. The view lists it and draws its last state, read-only, and says to attach.
+
+## Typing into a TML text field
+
+`TestTMLInputTyping` in `tml_input_typing_test.go`. An agent's pane shows a form with one `input` bound to the state and a `Send` button with the key `y`. A click puts the caret in the field. The person types, deletes with `ctrl+u`, `backspace` and `ctrl+w`, moves the caret with `left` and `home`, types a `y` while the field has the focus, and pastes. The agents view takes the same form with its text, the person types once more there, and `enter` submits it. The agent's `--wait` prints the text with status 0. Run on 2026-10-24 on Linux. Each control is a text replacement, built to a separate binary and put back before the next.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Upstream main at 22d63929 | Typing step 1: the field takes no typed text | **caught** |
+| `Surface.Key` checks the button keys before the focused text field | Typing step 3: the `y` of "today" presses Send | **caught** |
+| A paste into a TML window is refused as before | "the paste in the field" | **caught** |

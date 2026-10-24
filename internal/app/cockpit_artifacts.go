@@ -416,6 +416,24 @@ func (m *OS) CockpitArtifactKey(key string) tea.Cmd {
 	return cmd
 }
 
+// CockpitArtifactPaste puts pasted text into the focused text field of the
+// surface the view draws. The person is in the surface, so a paste no field
+// takes is dropped.
+func (m *OS) CockpitArtifactPaste(text string) tea.Cmd {
+	v, _ := m.ckArtLive()
+	if v == nil || v.confirm != nil {
+		return nil
+	}
+	defer m.cockpitTouch()
+	res, err := v.surface.Paste(text)
+	if err != nil {
+		clientLog("TML surface %s: paste: %v", v.id, err)
+	}
+	cmd := m.tmlResult(nil, v, res)
+	m.markTMLDirty(v.id)
+	return cmd
+}
+
 // cockpitArtifactMouse gives a press or a wheel move in the drawn surface to
 // it. handled is false outside the surface.
 func (m *OS) cockpitArtifactMouse(x, y int, button loom.MouseButton) (tea.Cmd, bool) {

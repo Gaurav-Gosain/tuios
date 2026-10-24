@@ -256,6 +256,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 // terminal's bracketed paste (tea.PasteMsg) and the paste key's clipboard read
 // (tea.ClipboardMsg), so neither path can reach a pane the other protects.
 func pasteTakenByOverlay(o *app.OS, content string) (tea.Cmd, bool) {
+	// A TML surface the person is in, in the agents view, takes a paste
+	// into its focused text field.
+	if o.ShowInbox && o.CockpitArtifactFocused() {
+		return o.CockpitArtifactPaste(content), true
+	}
 	// While the Inbox's reply editor is open the paste is the reply's text,
 	// line breaks and all. A long paste is held as one block.
 	// The reply editor is handled by the two callers, before this.
