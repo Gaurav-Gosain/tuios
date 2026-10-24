@@ -125,6 +125,48 @@ func TestPaletteViewOnlyActionSaysSoInFull(t *testing.T) {
 	}
 }
 
+// TestPaletteFooterNamesTheActionSearch. The "#" token is the only way to the
+// few hundred actions behind the palette's twenty commands, and a token typed
+// into the search field has no key to show, so the footer is where it says it
+// is there. Once "#" is typed the hint has done its job and the footer names
+// the rebind key instead.
+//
+// Negative control: drop the "# actions" hint from paletteHints and this fails
+// on the opened palette's footer.
+func TestPaletteFooterNamesTheActionSearch(t *testing.T) {
+	term, _ := attachClientBase(t)
+	dir := artifactDir(t)
+
+	if err := term.SendKeys(legacyCtrlP); err != nil {
+		t.Fatalf("open palette: %v", err)
+	}
+	waitPaletteOpen(t, term, "before reading the footer")
+	footer := func(s tuitest.Screen) string {
+		row := rowWith(s, "esc close")
+		if row < 0 {
+			return ""
+		}
+		return strings.Split(s.Text(), "\n")[row]
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(footer(s), "# actions")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the palette's footer does not name the action search: %q\n%s", strings.TrimSpace(footer(term.Screen())), term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "1-footer")
+
+	if err := term.Type("#new_window"); err != nil {
+		t.Fatalf("type the token query: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		f := footer(s)
+		return strings.Contains(f, "rebind") && !strings.Contains(f, "# actions")
+	}, uiTimeout); err != nil {
+		t.Fatalf("an action search's footer should name rebind and drop the action search hint: %q\n%s", strings.TrimSpace(footer(term.Screen())), term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "2-action-search-footer")
+}
+
 // waitSessionWindows waits for the daemon to list want windows in session.
 func waitSessionWindows(t *testing.T, base, session string, want int, what string) {
 	t.Helper()
