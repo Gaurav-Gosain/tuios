@@ -107,6 +107,26 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 			sy = math.Max(sy, 4/dy)
 		}
 	}
+	// A label between two boxes side by side fits the gap between them, so
+	// that it covers neither box: pele leaves that room, as C4 does since
+	// pele 1.9.0.
+	for k := range l.Edges {
+		e := &l.Edges[k]
+		w := widest(e.Label)
+		if w == 0 || e.From == e.To || e.From < 0 || e.To < 0 || e.From >= len(l.Nodes) || e.To >= len(l.Nodes) {
+			continue
+		}
+		a, b := &l.Nodes[e.From], &l.Nodes[e.To]
+		if a.X > b.X {
+			a, b = b, a
+		}
+		left, right := a.X+a.W/2, b.X-b.W/2
+		if a.Group || b.Group || right <= left || e.LabelX < left || e.LabelX > right ||
+			math.Abs(e.LabelY-a.Y) > a.H/2 || math.Abs(e.LabelY-b.Y) > b.H/2 {
+			continue
+		}
+		sx = math.Max(sx, float64(w+4)/(right-left))
+	}
 	// A cell is about twice as tall as it is wide.
 	sy = math.Max(sy, sx*0.45)
 	return sx, sy

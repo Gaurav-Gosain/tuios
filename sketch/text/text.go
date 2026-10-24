@@ -63,6 +63,13 @@ func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 		// A graph still too wide loses the columns that hold only gaps and
 		// horizontal lines.
 		lines, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
+		// A class diagram puts its groups of classes that are not joined in
+		// rows that fit the width. A cell can take fewer units than 8, so the
+		// rows are asked for narrower until they fit, a few times at most.
+		for try := 0; err == ErrTooWide && d.Type == "class" && try < 4; try++ {
+			w *= 0.8
+			lines, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
+		}
 	}
 	return lines, err
 }
@@ -298,9 +305,13 @@ func (c *canvas) clear(x, y int) {
 	}
 }
 
-// text writes a string from x, wide characters taking two cells.
+// text writes a string from x, wide characters taking two cells. A break
+// hint takes no cell and is not written.
 func (c *canvas) text(x, y int, s string, role uint8) {
 	for _, r := range s {
+		if isHint(r) {
+			continue
+		}
 		c.put(x, y, r, role)
 		if runeWidth(r) == 2 {
 			if p := c.at(x+1, y); p != nil {
@@ -572,6 +583,9 @@ func stripSGR(s string) string {
 // runeWidth is the cells a character takes: two for the wide East Asian
 // ranges that pele's width table counts as wide, one otherwise.
 func runeWidth(c rune) int {
+	if isHint(c) {
+		return 0
+	}
 	if (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
 		(c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) ||
 		(c >= 0xffe0 && c <= 0xffe6) || c >= 0x1f300 {
@@ -597,11 +611,22 @@ func safeRune(r rune) rune {
 	return r
 }
 
-// safeString is s with each character safeRune maps changed: for text
-// handed to tuios.dev/plot, which leaves a control out instead.
+// safeString is s with each character safeRune maps changed, and break
+// hints left out: for text handed to tuios.dev/plot, which leaves a control out
+// instead.
 func safeString(s string) string {
-	return strings.Map(safeRune, s)
+	return strings.Map(func(r rune) rune {
+		if isHint(r) {
+			return -1
+		}
+		return safeRune(r)
+	}, s)
 }
+
+// isHint reports a break hint of a label: a zero-width space, or a soft
+// hyphen, which shows as "-" only where a line breaks at it. A hint takes no
+// cell. A terminal can give a soft hyphen a cell, so a hint is never written.
+func isHint(r rune) bool { return r == 0x200b || r == 0xad }
 
 // width is the cells a string takes.
 func width(s string) int {

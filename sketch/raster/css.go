@@ -104,6 +104,14 @@ func parsePaint(s string) (paint, bool) {
 	case "currentcolor":
 		return paint{current: true}, true
 	}
+	// A paint server, such as a sankey link's gradient, is not drawn: the colour
+	// after it is the fallback, as SVG has it.
+	if strings.HasPrefix(strings.ToLower(s), "url(") {
+		if end := strings.IndexByte(s, ')'); end > 0 {
+			return parsePaint(s[end+1:])
+		}
+		return paint{}, false
+	}
 	c, ok := parseColor(s)
 	return paint{c: c}, ok
 }
