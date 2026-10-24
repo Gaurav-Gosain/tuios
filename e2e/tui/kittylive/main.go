@@ -255,6 +255,12 @@ func refuseSteps() []step {
 			return "", nil
 		}},
 	}
+	steps = append(steps, step{name: "chunked-file", desc: "t=f sent in chunks (m=1): refused whole", refuse: true, run: func() (string, func() (string, bool)) {
+		p := filepath.Join(*dir, "chunked.png")
+		write(p, checker(color.RGBA{0, 0, 0, 255}))
+		fmt.Printf("\x1b_Ga=T,i=50,f=100,t=f,m=1;%s\x1b\\\x1b_Gm=0;\x1b\\", base64.StdEncoding.EncodeToString([]byte(p)))
+		return "", nil
+	}})
 	if runtime.GOOS == "linux" {
 		steps = append(steps, shmKeepSteps()...)
 	}

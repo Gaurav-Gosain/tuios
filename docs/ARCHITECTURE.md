@@ -828,9 +828,19 @@ is the frame the command describes (`vt.KittyMediumIsFrame`). A query deletes
 nothing. A name is text the pane printed, and a printed file can name an
 object another program still uses.
 
-A command that B cannot classify within 50 ms (a program that printed half
-of it and paused) is dropped if it can name a file or start a marker. Sent on
-as it was, a path would reach A's clients and their terminals.
+Every command with a file medium is B's, whatever its action and m are. A
+chunked one (m=1) is refused whole and its later chunks are dropped. A
+command that B cannot classify within 50 ms (a program that printed half of
+it and paused) is refused with an answer when its keys name a file, and
+dropped when it may start a marker. One whose keys so far name no file goes
+on, and the rest of its keys are checked as they come. Sent on as it was, a
+path would reach A's clients and their terminals. As a second layer, A's
+clients drop a file medium command from any pane whose process runs on
+another machine.
+
+An open or a read of a file that hangs past its budget (a network or FUSE
+mount that stopped answering) is given up on. While four of them still hang,
+B refuses new ones, so a pane cannot pile up stuck threads.
 
 The pump waiting keeps the order: the process's later output comes after the
 image, as it does in kitty. Other panes do not wait. Each pane has its own

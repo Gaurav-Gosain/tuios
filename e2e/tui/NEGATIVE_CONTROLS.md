@@ -9082,3 +9082,11 @@ After review, on 2026-10-24 on Linux. The `refused` run gained three shared memo
 | `kitty_link_far.go` as before the review | `refused` (all three objects deleted: "still there: false"), `TestKittyFilesStalledOwnerHoldsOnlyItsPane` ("the small image never answered in 30 s while two large ones were stalled") | **caught** |
 | `kitty_link_far.go` and `kitty_link_near.go` as before the review | `split-marker` ("the pane stalled after a split marker prefix", 20 s) | **caught** |
 | `kitty_link_far.go` alone as before the review | `split-marker` passes: the near side's rescan from the ESC also finds the real marker | **not caught** (either fix is enough) |
+
+Second review, on 2026-10-25 on Linux. `refused` gained `chunked-file`: a t=f command sent with m=1 and a last chunk, which must get an error reply, with no path reaching the host. The host checks now run even when kittylive fails, so a path is reported whatever the guest was told. `lone-esc` prints a lone ESC, pauses past the hold, then a file command and text that starts with D; the text must arrive whole and no path may reach the host.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `kitty_link_far.go` and `hosted_resume.go` as after the first review, and the client's refusal of file media from remote panes cut | `refused` (the chunked command answered OK, and "the host was handed paths" with its path), `lone-esc` ("the text after a dropped command lost its first letter") | **caught** |
+| The far side as after the first review, the client's refusal kept | `refused` (answered OK, no path reaches the host: the client drops it), `lone-esc` | **caught**; the client's refusal stops the path alone |
+| The client's refusal cut, the far side fixed | none: the far side refuses the chunked command itself | **not caught** (either layer is enough) |

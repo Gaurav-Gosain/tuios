@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -140,16 +141,70 @@ func takeKittyLinkSlot(stop <-chan struct{}) (func(), error) {
 	}
 }
 
-// kittyLinkSlotReader reads r one slot at a time.
+// kittyLinkReadBudget bounds one read of a file. A read on a network or FUSE
+// mount that stopped answering never returns, and the transfer cannot wait
+// for it.
+const kittyLinkReadBudget = 10 * time.Second
+
+// kittyLinkMaxStuck is how many opens and reads may hang past their budget
+// before new ones are refused. A hung one keeps its goroutine and its thread
+// until the system answers, and a pane that names a hung path again and
+// again would pile them up.
+const kittyLinkMaxStuck = 4
+
+// kittyLinkStuck counts the opens and reads past their budget that have not
+// returned yet.
+var kittyLinkStuck atomic.Int32
+
+// errKittyLinkStuck is a read refused because earlier ones still hang.
+var errKittyLinkStuck = errors.New("earlier reads of files are still stuck")
+
+// kittyLinkBounded runs fn, at most budget, and counts it as stuck while it
+// runs past. It reports false when fn did not finish in time; fn must then
+// touch nothing the caller still uses.
+func kittyLinkBounded(budget time.Duration, fn func()) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	t := time.NewTimer(budget)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		kittyLinkStuck.Add(1)
+		go func() {
+			<-done
+			kittyLinkStuck.Add(-1)
+		}()
+		return false
+	}
+}
+
+// kittyLinkSlotReader reads r one slot at a time, each read bounded by
+// kittyLinkReadBudget. A read goes into a buffer of its own, so one that
+// returns late writes nothing the caller still holds.
 type kittyLinkSlotReader struct{ r io.Reader }
 
 func (s kittyLinkSlotReader) Read(p []byte) (int, error) {
+	if kittyLinkStuck.Load() >= kittyLinkMaxStuck {
+		return 0, errKittyLinkStuck
+	}
 	done, err := takeKittyLinkSlot(nil)
 	if err != nil {
 		return 0, err
 	}
 	defer done()
-	return s.r.Read(p)
+	buf := make([]byte, len(p))
+	var n int
+	var rerr error
+	if !kittyLinkBounded(kittyLinkReadBudget, func() { n, rerr = s.r.Read(buf) }) {
+		return 0, errors.New("a read of the file timed out")
+	}
+	copy(p, buf[:n])
+	return n, rerr
 }
 
 // kittyLinkStallWriter gives each write to conn kittyLinkStallBudget.
@@ -229,12 +284,23 @@ type kittyLinkFilter struct {
 	gen     uint64
 	deliver func([]byte)
 	handle  func(apc []byte)
+	// refuse answers the program for a file command that came apart, from
+	// its control keys, when it is dropped.
+	refuse func(ctrl []byte)
 	// skip drops the output up to the next ESC: the rest of a command that
 	// could name a file, or of a marker, that came apart. See arm.
 	skip bool
 	// escSent is set when a lone ESC went out on the hold timeout, so an
 	// APC that the next read opens with '_' is skipped.
 	escSent bool
+	// keys holds the control keys of a graphics command whose start went
+	// out on the hold timeout before its ';'. The rest of its keys are
+	// checked as they come, so a t=f added after the pause cannot follow.
+	keys     []byte
+	keysOpen bool
+	// chunks drops the later chunks of a chunked file command, which is
+	// refused whole.
+	chunks bool
 }
 
 // feed passes one read of the process's output through the filter.
@@ -258,8 +324,18 @@ func (f *kittyLinkFilter) flush() {
 	if len(f.held) > 0 {
 		h := f.held
 		f.held = nil
-		f.deliver(h)
+		if kittyLinkHeldSafe(h) {
+			f.deliver(h)
+		}
 	}
+}
+
+// closeOpenEscape sends a backslash after an ESC the owner was already sent
+// alone, when what follows that ESC is skipped. The owner sees ESC \, an ST
+// that does nothing, instead of the ESC joining its next byte (ESC X opens a
+// string that swallows output, ESC D eats a D).
+func (f *kittyLinkFilter) closeOpenEscape() {
+	f.deliver([]byte{'\\'})
 }
 
 func (f *kittyLinkFilter) scan(data []byte) {
@@ -267,8 +343,15 @@ func (f *kittyLinkFilter) scan(data []byte) {
 	if f.escSent {
 		f.escSent = false
 		if len(data) > 0 && data[0] == '_' {
+			// The ESC went out alone and this opens an APC after it. The
+			// owner gets ESC \ and the APC is skipped.
+			f.closeOpenEscape()
 			f.skip = true
 		}
+	}
+	if f.keysOpen {
+		i = f.continueKeys(data)
+		start = i
 	}
 	for {
 		if f.skip {
@@ -289,6 +372,28 @@ func (f *kittyLinkFilter) scan(data []byte) {
 			break
 		}
 		i += j
+		if f.chunks {
+			if n, more, ok := kittyLinkContinuation(data[i:]); ok {
+				if i > start {
+					f.deliver(data[start:i])
+				}
+				f.chunks = more
+				i += n
+				start = i
+				continue
+			} else if n == 0 && !more {
+				// Not a chunk at all: the chunked command is over.
+				f.chunks = false
+			} else {
+				// Cannot tell yet.
+				if i > start {
+					f.deliver(data[start:i])
+				}
+				f.held = append([]byte(nil), data[i:]...)
+				f.arm()
+				return
+			}
+		}
 		kind, n := classifyKittyLinkEscape(data[i:])
 		switch kind {
 		case escPass:
@@ -305,7 +410,11 @@ func (f *kittyLinkFilter) scan(data []byte) {
 			if i > start {
 				f.deliver(data[start:i])
 			}
-			f.handle(data[i : i+n])
+			apc := data[i : i+n]
+			if kittyLinkChunked(apc) {
+				f.chunks = true
+			}
+			f.handle(apc)
 		case escDrop:
 			if i > start {
 				f.deliver(data[start:i])
@@ -327,12 +436,47 @@ func (f *kittyLinkFilter) scan(data []byte) {
 	}
 }
 
-// arm settles what is held when nothing more comes soon. A lone ESC goes
-// out. A graphics command whose keys say it names no file goes out. Anything
-// else that is held, the start of a command that may name a file or of a
-// marker, is dropped with the rest of it: sent as it is, a path would reach
-// the owner and the terminal there, and a marker prefix would confuse the
-// owner's scan.
+// continueKeys takes the rest of the control keys of a command whose start
+// went out on the hold timeout, and returns where scanning goes on. Keys
+// that turn out to name a file are refused: what follows them is dropped and
+// the owner gets ESC \ to close the command it was sent the start of.
+func (f *kittyLinkFilter) continueKeys(data []byte) int {
+	end := bytes.IndexAny(data, ";\x1b")
+	part := data
+	if end >= 0 {
+		part = data[:end]
+	}
+	f.keys = append(f.keys, part...)
+	if kittyLinkFileMedium(f.keys) || len(f.keys) > kittyLinkMaxKeys {
+		f.keysOpen = false
+		if f.refuse != nil {
+			f.refuse(f.keys)
+		}
+		f.keys = nil
+		f.deliver([]byte("\x1b\\"))
+		f.skip = true
+		return 0
+	}
+	if end < 0 {
+		f.deliver(data)
+		return len(data)
+	}
+	f.keysOpen, f.keys = false, nil
+	return 0
+}
+
+// arm settles what is held when nothing more comes soon:
+//
+//   - a lone ESC goes out;
+//   - a graphics command that names no file goes out, also when its keys
+//     are not all in yet (continueKeys checks the rest);
+//   - a command that names a file is refused, with an answer to the
+//     program, and dropped with the rest of it;
+//   - anything else, the start of an APC or of a marker, is dropped with the
+//     rest of it.
+//
+// Sent on as it is, a path would reach the owner and the terminal there,
+// and a marker prefix would confuse the owner's scan.
 func (f *kittyLinkFilter) arm() {
 	gen := f.gen
 	time.AfterFunc(kittyLinkHoldMax, func() {
@@ -343,12 +487,28 @@ func (f *kittyLinkFilter) arm() {
 		}
 		h := f.held
 		f.held = nil
+		f.gen++
 		switch {
 		case len(h) == 1:
 			f.deliver(h)
 			f.escSent = true
 		case kittyLinkHeldSafe(h):
 			f.deliver(h)
+		case len(h) >= 3 && h[1] == '_' && h[2] == 'G':
+			ctrl, _, semi := bytes.Cut(h[3:], []byte{';'})
+			switch {
+			case kittyLinkFileMedium(ctrl):
+				if f.refuse != nil {
+					f.refuse(ctrl)
+				}
+				f.skip = true
+			case !semi && !f.chunks:
+				f.deliver(h)
+				f.keys = append([]byte(nil), ctrl...)
+				f.keysOpen = true
+			default:
+				f.skip = true
+			}
 		default:
 			f.skip = true
 		}
@@ -362,7 +522,46 @@ func kittyLinkHeldSafe(h []byte) bool {
 		return false
 	}
 	ctrl, _, semi := bytes.Cut(h[3:], []byte{';'})
-	return semi && !kittyLinkFileKeys(ctrl)
+	return semi && !kittyLinkFileMedium(ctrl)
+}
+
+// kittyLinkContinuation looks for a later chunk of a chunked command at the
+// start of b: a graphics command whose keys are only m and q. It returns the
+// chunk's length and whether more follow. ok is false with n 0 and more false
+// when b is something else, and false with more true when b is too short to
+// tell.
+func kittyLinkContinuation(b []byte) (n int, more, ok bool) {
+	if len(b) < 3 {
+		return 0, true, false
+	}
+	if b[1] != '_' || b[2] != 'G' {
+		return 0, false, false
+	}
+	end := bytes.IndexByte(b[3:], 0x1b)
+	body := b[3:]
+	if end >= 0 {
+		body = body[:end]
+	}
+	ctrl, _, semi := bytes.Cut(body, []byte{';'})
+	for pair := range bytes.SplitSeq(ctrl, []byte{','}) {
+		if len(pair) < 2 || pair[1] != '=' || (pair[0] != 'm' && pair[0] != 'q') {
+			if !semi && end < 0 {
+				return 0, true, false
+			}
+			return 0, false, false
+		}
+		if pair[0] == 'm' {
+			more = len(pair) > 2 && pair[2] == '1'
+		}
+	}
+	if end < 0 || 3+end+1 >= len(b) {
+		return 0, true, false
+	}
+	n = 3 + end + 1
+	if b[n] == '\\' {
+		n++
+	}
+	return n, more, true
 }
 
 type escKind int
@@ -406,7 +605,7 @@ func classifyKittyLinkEscape(b []byte) (escKind, int) {
 			// after them is sent on.
 			return escSkip, len(b)
 		}
-		if !kittyLinkFileKeys(ctrl) {
+		if !kittyLinkFileMedium(ctrl) {
 			return escPass, 3
 		}
 		if end < 0 {
@@ -452,36 +651,30 @@ func classifyKittyLinkEscape(b []byte) (escKind, int) {
 	return escPass, 2
 }
 
-// kittyLinkFileKeys reports whether a graphics command's control keys ask for
-// a file medium upload or query this side handles: one command, not chunked.
-func kittyLinkFileKeys(ctrl []byte) bool {
-	medium, action, more := byte('d'), byte('t'), false
-	for len(ctrl) > 0 {
-		var pair []byte
-		pair, ctrl, _ = bytes.Cut(ctrl, []byte{','})
-		if len(pair) < 3 || pair[1] != '=' {
-			continue
-		}
-		switch pair[0] {
-		case 't':
+// kittyLinkFileMedium reports whether a graphics command's control keys name
+// a file medium (t=f, t=t or t=s), whatever the action and m are. Every such
+// command is this side's to handle: none goes on to the owner, where the
+// path would reach the terminal.
+func kittyLinkFileMedium(ctrl []byte) bool {
+	medium := byte('d')
+	for pair := range bytes.SplitSeq(ctrl, []byte{','}) {
+		if len(pair) >= 3 && pair[0] == 't' && pair[1] == '=' {
 			medium = pair[2]
-		case 'a':
-			action = pair[2]
-		case 'm':
-			more = pair[2] == '1'
 		}
 	}
-	switch medium {
-	case 'f', 't', 's':
-	default:
-		return false
+	return medium == 'f' || medium == 't' || medium == 's'
+}
+
+// kittyLinkChunked reports whether a graphics command says more chunks
+// follow (m=1).
+func kittyLinkChunked(apc []byte) bool {
+	ctrl, _, _ := bytes.Cut(apc[3:], []byte{';'})
+	for pair := range bytes.SplitSeq(ctrl, []byte{','}) {
+		if len(pair) >= 3 && pair[0] == 'm' && pair[1] == '=' {
+			return pair[2] == '1'
+		}
 	}
-	switch action {
-	case 't', 'T', 'q', 'f':
-	default:
-		return false
-	}
-	return !more
+	return false
 }
 
 // kittyLinkKeys is a file command's control keys rewritten for direct
@@ -519,6 +712,19 @@ func (hp *hostedPane) kittyFileCommand(apc []byte) {
 	}
 	if cmd.PayloadErr != nil {
 		hp.kittyReply(cmd, "EINVAL:the path is not valid base64")
+		return
+	}
+	if cmd.More {
+		// A path in chunks: kitty sends one in one command, and nothing
+		// here joins the chunks. Refused whole; the filter drops the
+		// later chunks.
+		hp.kittyReply(cmd, "EINVAL:a file transmission must be one command, not chunked")
+		return
+	}
+	switch cmd.Action {
+	case vt.KittyActionTransmit, vt.KittyActionTransmitPlace, vt.KittyActionQuery, vt.KittyActionFrame:
+	default:
+		hp.kittyReply(cmd, "EINVAL:this action does not take a file medium")
 		return
 	}
 
@@ -601,6 +807,16 @@ func (hp *hostedPane) kittyFileCommand(apc []byte) {
 		// reply goes into the pane's input.
 		hp.kittyReply(cmd, "EIO:the image did not reach the terminal")
 	}
+}
+
+// kittyRefuseParts answers a file command that came apart and was dropped,
+// from its control keys.
+func (hp *hostedPane) kittyRefuseParts(ctrl []byte) {
+	cmd, err := vt.ParseKittyCommand(ctrl)
+	if err != nil || cmd == nil {
+		return
+	}
+	hp.kittyReply(cmd, "EINVAL:the command came in parts too far apart")
 }
 
 // kittyReply answers the process in the pane, as kitty answers an upload,
@@ -691,28 +907,39 @@ func (m *kittyLinkMedium) release(read bool) {
 // openKittyLinkMediumTimed is openKittyLinkMedium, bounded by
 // kittyLinkOpenBudget.
 func openKittyLinkMediumTimed(cmd *vt.KittyCommand, check func(*os.File, string) error) (*kittyLinkMedium, string) {
-	type res struct {
-		m   *kittyLinkMedium
-		msg string
+	if kittyLinkStuck.Load() >= kittyLinkMaxStuck {
+		return nil, "EBUSY:earlier reads of files are still stuck"
 	}
-	got := make(chan res, 1)
-	go func() {
-		m, msg := openKittyLinkMedium(cmd, check)
-		got <- res{m, msg}
-	}()
-	t := time.NewTimer(kittyLinkOpenBudget)
-	defer t.Stop()
-	select {
-	case r := <-got:
-		return r.m, r.msg
-	case <-t.C:
-		go func() {
-			if r := <-got; r.m != nil {
-				r.m.release(false)
+	var (
+		mu   sync.Mutex
+		late bool
+		m    *kittyLinkMedium
+		msg  string
+	)
+	ok := kittyLinkBounded(kittyLinkOpenBudget, func() {
+		got, gotMsg := openKittyLinkMedium(cmd, check)
+		mu.Lock()
+		defer mu.Unlock()
+		if late {
+			// The caller gave up on this open: nothing else closes it.
+			if got != nil {
+				got.release(false)
 			}
-		}()
+			return
+		}
+		m, msg = got, gotMsg
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	if !ok {
+		late = true
+		if m != nil {
+			// It finished as the budget ran out.
+			m.release(false)
+		}
 		return nil, "EBADF:Failed to open file for graphics transmission: timed out"
 	}
+	return m, msg
 }
 
 // openKittyLinkMedium checks and opens the file a file medium names. The

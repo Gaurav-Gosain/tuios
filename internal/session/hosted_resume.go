@@ -73,7 +73,7 @@ func (hp *hostedPane) pump() {
 	if hp.kittyLink != nil {
 		// Graphics commands that name a file are read here and sent to the
 		// owner as bytes. See kitty_link_far.go.
-		filter = &kittyLinkFilter{deliver: hp.deliver, handle: hp.kittyFileCommand}
+		filter = &kittyLinkFilter{deliver: hp.deliver, handle: hp.kittyFileCommand, refuse: hp.kittyRefuseParts}
 		out = filter.feed
 	}
 	for {

@@ -217,17 +217,40 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		}
 	})
 
+	// A program prints a lone ESC, pauses past the far side's hold, and then
+	// a file command after it. The ESC went to this side alone and the
+	// command was dropped, so the ESC joined the next byte the far side sent:
+	// ESC D, which moves the cursor down and eats the D.
+	t.Run("lone-esc", func(t *testing.T) {
+		clearPane(t, term)
+		host.mark("lone")
+		green := filepath.Join(pics, "green.png")
+		runTagged(t, term, "lone", `printf '\033'; sleep 0.3; printf '_Ga=T,i=3,f=100,t=f,q=2;%s\033\\%s\n' "$(printf %s `+green+` | base64 | tr -d '\n')" "D""ONE-LONE-ESC"`)
+		if snap := term.Snapshot(); !strings.Contains(snap, "DONE-LONE-ESC") {
+			t.Errorf("the text after a dropped command lost its first letter:\n%s", snap)
+		}
+		stream := host.bytes()
+		if i := bytes.Index(stream, []byte(phaseMark+"lone")); i >= 0 {
+			stream = stream[i:]
+		}
+		if paths, _ := linkTransmits(t, stream); len(paths) > 0 {
+			t.Errorf("the host was handed paths %q", paths)
+		}
+	})
+
 	t.Run("refused", func(t *testing.T) {
 		host.mark("refused")
 		clearPane(t, term)
 		typeLine(t, term, live+" -refuse -dir "+pics+" -deny "+key)
-		// Six refusals, and on Linux three shared memory objects that
+		// Seven refusals, and on Linux three shared memory objects that
 		// must survive.
-		want := "ALL 6 PASS"
+		want := "ALL 7 PASS"
 		if runtime.GOOS == "linux" {
-			want = "ALL 9 PASS"
+			want = "ALL 10 PASS"
 		}
-		waitLive(t, term, want)
+		// The host checks below run even when a reply is wrong, so a path
+		// that reached the host is reported whatever the guest was told.
+		expectLive(t, term, want)
 		saveArtifact(t, term, artifactDir(t), "refused")
 		stream := host.bytes()
 		if i := bytes.Index(stream, []byte(phaseMark+"refused")); i >= 0 {
@@ -286,6 +309,18 @@ func clearPane(t *testing.T, term *tuitest.Terminal) {
 		return !strings.Contains(text, "PASS") && !strings.Contains(text, "FAIL")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the pane did not clear: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// expectLive is waitLive that reports a FAIL and goes on.
+func expectLive(t *testing.T, term *tuitest.Terminal, want string) {
+	t.Helper()
+	_ = term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, want) || strings.Contains(text, " FAIL")
+	}, 60*time.Second)
+	if snap := term.Snapshot(); !strings.Contains(snap, want) {
+		t.Errorf("kittylive did not pass:\n%s", snap)
 	}
 }
 

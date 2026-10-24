@@ -2516,7 +2516,7 @@ func adoptWindowHost(w *terminal.Window, host string) {
 	if w == nil {
 		return
 	}
-	w.Host = host
+	w.SetHost(host)
 }
 
 // startedByFromWire splits a window's started_by into its session and window,
