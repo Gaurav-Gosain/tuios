@@ -17,8 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	uv "github.com/charmbracelet/ultraviolet"
-	"tuios.dev/vt"
 )
 
 // scriptDoneLinger is how long the "DONE" completion indicator stays on screen
@@ -1546,70 +1544,6 @@ func (m *OS) checkScriptWaitRegex() bool {
 	}
 
 	return false
-}
-
-// capturePane captures the content of a pane.
-// flags is a comma-separated string of options: "scrollback", "ansi".
-func (m *OS) capturePane(windowTarget, flags string) (string, error) {
-	// Resolve target window
-	var win *terminal.Window
-	if windowTarget == "" {
-		win = m.GetFocusedWindow()
-	} else {
-		windowID, err := m.resolveWindowTarget(windowTarget)
-		if err != nil {
-			return "", err
-		}
-		for _, w := range m.Windows {
-			if w.ID == windowID {
-				win = w
-				break
-			}
-		}
-	}
-
-	if win == nil {
-		return "", fmt.Errorf("no window found")
-	}
-	if win.Terminal == nil {
-		return "", fmt.Errorf("window has no terminal")
-	}
-
-	includeScrollback := strings.Contains(flags, "scrollback")
-	includeANSI := strings.Contains(flags, "ansi")
-
-	win.RLockIO()
-	defer win.RUnlockIO()
-
-	var content string
-	if includeANSI {
-		content = win.Terminal.Render()
-	} else {
-		content = win.Terminal.String()
-	}
-
-	if includeScrollback {
-		// Prepend scrollback content
-		scrollbackLen := win.Terminal.ScrollbackLen()
-		if scrollbackLen > 0 {
-			var sb strings.Builder
-			win.Terminal.ScrollbackRows(0, scrollbackLen, func(_ int, line uv.Line) bool {
-				if includeANSI {
-					sb.WriteString(line.Render())
-				} else {
-					sb.WriteString(vt.StripSixelMarkers(line.String()))
-				}
-				sb.WriteByte('\n')
-				return true
-			})
-			sb.WriteString(content)
-			content = sb.String()
-		}
-	}
-
-	// A pane on a host that draws kitty placeholders keeps them in its
-	// grid; a capture is text and gets blanks in their place.
-	return vt.StripKittyPlaceholders(content), nil
 }
 
 // LeaderKeyPress is the leader key as the key press it is, for send_prefix,
