@@ -243,7 +243,7 @@ func (m *OS) renderScrollbackBrowser() string {
 	// panel. They are drawn, so they keep their colour.
 	box := lipgloss.NewStyle().
 		Padding(1, 2).
-		Border(lipgloss.RoundedBorder()).
+		Border(overlay.EdgeBorder()).
 		BorderForeground(browserFrameInk(pal)).
 		Render(content)
 
@@ -862,7 +862,7 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 	// takes the fill with it for the rest of that line.
 	modal := lipgloss.NewStyle().
 		Padding(1, 2).
-		Border(lipgloss.RoundedBorder()).
+		Border(overlay.EdgeBorder()).
 		BorderForeground(browserFrameInk(pal)).
 		Render(modalContent)
 

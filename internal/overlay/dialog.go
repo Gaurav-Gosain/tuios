@@ -67,6 +67,17 @@ func edgeFrame() (tl, tr, bl, br, h, v string) {
 	return tl, tr, bl, br, h, v
 }
 
+// EdgeBorder is edgeFrame as a lipgloss border, for a host surface that frames
+// itself with lipgloss and puts no fill inside the frame, so the frame is its
+// only edge: the scrollback browser and its help modal.
+func EdgeBorder() lipgloss.Border {
+	tl, tr, bl, br, h, v := edgeFrame()
+	return lipgloss.Border{
+		TopLeft: tl, TopRight: tr, BottomLeft: bl, BottomRight: br,
+		Top: h, Bottom: h, Left: v, Right: v,
+	}
+}
+
 // panelFrame is the frame a framed panel draws: edgeFrame at 16 colours,
 // where the frame is the panel's only edge, else dialogFrame.
 func panelFrame(pal Palette) (tl, tr, bl, br, h, v string) {
