@@ -175,6 +175,10 @@ var (
 	// (Nerd Font: nf-fa-keyboard)
 	DockModeIconPrefix string
 
+	// DockModeIconLocked and DockModeIconUnlocked follow the mode icon while
+	// keybindings.lock is on (Nerd Font: nf-fa-lock, nf-fa-unlock).
+	DockModeIconLocked, DockModeIconUnlocked string
+
 	// DockIconTerminalCount is the icon for terminal count (Nerd Font: nf-fa-terminal)
 	DockIconTerminalCount string
 
@@ -213,6 +217,8 @@ func init() {
 	DockModeIconTerminal = " " + fa.Terminal.String() + " "
 	DockModeIconTiling = " " + fa.Th.String() + " "
 	DockModeIconPrefix = " " + fa.Keyboard.String() + " "
+	DockModeIconLocked = fa.Lock.String()
+	DockModeIconUnlocked = fa.Unlock.String()
 	DockIconTerminalCount = fa.Terminal.String()
 	DockIconWorkspaceCount = fa.ThLarge.String()
 	DockIconLeaveRunning = fa.SignOut.String()
@@ -249,6 +255,10 @@ const (
 
 	// DockModeIconPrefixASCII is the ASCII fallback for the armed leader
 	DockModeIconPrefixASCII = " P "
+	// DockModeIconLockedASCII and DockModeIconUnlockedASCII are the lock
+	// state without Nerd Fonts.
+	DockModeIconLockedASCII   = "LOCK"
+	DockModeIconUnlockedASCII = "UNLOCK"
 
 	// DockIconTerminalCountASCII is the ASCII fallback for terminal count
 	DockIconTerminalCountASCII = "win"
@@ -933,6 +943,20 @@ func (s *Settings) GetDockModeIconPrefix() string {
 		return DockModeIconPrefixASCII
 	}
 	return DockModeIconPrefix
+}
+
+// GetDockLockIcon returns the lock state the mode pill shows while
+// keybindings.lock is on, for the current glyph set.
+func (s *Settings) GetDockLockIcon(locked bool) string {
+	switch {
+	case locked && s.NerdFontsOff():
+		return DockModeIconLockedASCII
+	case locked:
+		return DockModeIconLocked
+	case s.NerdFontsOff():
+		return DockModeIconUnlockedASCII
+	}
+	return DockModeIconUnlocked
 }
 
 // GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.

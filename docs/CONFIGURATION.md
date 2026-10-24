@@ -201,6 +201,19 @@ option_glyphs = "auto"   # auto, alt, bind, type
 See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 [One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).
 
+## Lock mode
+
+```toml
+[keybindings]
+lock = true
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `lock` | `false` | `true` gives every key to the pane in terminal mode, except the leader. The leader unlocks for one action, and then tuios locks again. A repeatable action keeps its menu open until you press `esc`. The zellij preset sets `true`. |
+
+See [Lock mode](KEYBINDINGS.md#lock-mode).
+
 ## Opening links
 
 tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a

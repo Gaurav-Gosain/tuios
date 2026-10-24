@@ -942,6 +942,12 @@ type KeybindingsConfig struct {
 	// "bind" when keyboard_layout is "us" or, with keyboard_layout unset, the
 	// Mac's input source is US or ABC, and "alt" otherwise.
 	OptionGlyphs string `toml:"option_glyphs,omitempty"`
+	// Lock is zellij's locked mode. When true, terminal mode gives every key
+	// to the focused pane except the leader: no terminal_mode key, no global
+	// key, no workspace chord and no hold key. The leader unlocks for one
+	// action, and tuios locks again when it is done. A repeatable action (see
+	// Repeat) keeps its menu open until esc. Unset is false, or the preset's.
+	Lock *bool `toml:"lock,omitempty"`
 	// Repeat lists the actions that stay armed after the leader, as tmux's
 	// bind -r does: the same key pressed again inside
 	// appearance.prefix_repeat_time runs the action again without the leader.
@@ -2835,6 +2841,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	s.KeyboardLayout = cfg.Keybindings.KeyboardLayout
 	s.OptionGlyphs = cfg.Keybindings.OptionGlyphs
+	s.Lock = cfg.Keybindings.Lock != nil && *cfg.Keybindings.Lock
 
 	// The motion level. A config that was not run through the load path (one
 	// built in code) can still carry the old boolean, so it is folded here as
@@ -3402,6 +3409,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 			}
 			if cfg.Keybindings.LeaderTwice == "" {
 				cfg.Keybindings.LeaderTwice = kb.LeaderTwice
+			}
+			if cfg.Keybindings.Lock == nil && kb.Lock != nil {
+				lock := *kb.Lock
+				cfg.Keybindings.Lock = &lock
 			}
 		}
 	}

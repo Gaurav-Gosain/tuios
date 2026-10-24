@@ -390,7 +390,8 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// so holding it cannot type anything into a pane; every other key struck
 	// while it is held loses the trigger's own modifier, so holding Option and
 	// tapping n runs the window-mode action bound to n.
-	if o.PressHoldKey(msg) {
+	// Lock mode gives the hold key to the pane like every other key.
+	if !o.Locked() && o.PressHoldKey(msg) {
 		return o, nil
 	}
 	msg = o.StripHoldModifier(msg)
@@ -669,7 +670,9 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	//
 	// It is after every overlay above: a key while the palette or the help
 	// panel is open belongs to the panel, whatever was pressed before it.
-	if !o.PrefixActive {
+	// Lock mode holds a menu open instead, so no window is armed while it is on;
+	// one left over from window mode must not take a locked key either.
+	if !o.PrefixActive && !o.Locked() {
 		if m, cmd, ok := tryPrefixRepeat(msg, o); ok {
 			return m, cmd
 		}

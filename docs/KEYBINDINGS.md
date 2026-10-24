@@ -46,7 +46,7 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 | `tuios` | `ctrl+b` | The tuios keys. This is the default |
 | `tmux` | `ctrl+b` | tmux 3.8's keys after the leader |
 | `screen` | `ctrl+a` | GNU screen's keys after the leader, also on the control variant (`ctrl+a ctrl+n`). `ctrl+a ctrl+a` goes to the last workspace. `ctrl+a a` sends `ctrl+a` to the pane |
-| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` the session switcher. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next |
+| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` the session switcher. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next. It turns on [lock mode](#lock-mode) |
 
 - A tmux window is a workspace here. A tmux pane is a window here. So `c`,
   `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.
@@ -79,6 +79,39 @@ uses that leader. The offer changes nothing until you press `U` and Enter.
 `tuios keybinds cheatsheet tmux` shows the keys in three groups: the keys that
 work as in tmux, the tuios keys that moved, and what tmux has that tuios does
 not. `tuios keybinds preset show tmux` prints the preset file.
+
+## Lock mode
+
+Lock mode gives every key to the program in the pane. It is the locked mode of
+zellij. Turn it on in `config.toml`:
+
+```toml
+[keybindings]
+lock = true
+```
+
+The zellij preset turns it on. Set `lock = false` to turn it off under that
+preset.
+
+- In terminal mode, tuios takes only the leader. Every other key goes to the
+  pane, also the keys that tuios binds. `alt+1` to `alt+9`, `alt+n`,
+  `alt+esc`, `ctrl+p`, the arrow keys with `alt`, `shift+up` and the hold key
+  all go to the pane.
+- The leader unlocks. Press the leader, then the keys of one action. The
+  action runs and tuios locks again.
+- A repeatable action keeps its menu open. These are the actions in
+  `keybindings.repeat`, such as focus moves and resize steps. Press the key
+  again to move again. You do not press the leader again.
+- Press `esc` to close the menu and lock again. `ctrl+c` also closes it.
+- A key that the open menu does not bind closes the menu. The key goes to the
+  pane.
+- To go to window mode, press the leader, then `esc`.
+- To send the leader to the pane, press the leader two times.
+- Window mode, overlays, copy mode and the mouse do not change.
+
+The mode pill in the dock shows a lock when tuios is locked. It shows an open
+lock while the leader or a menu waits for a key. Without Nerd Fonts, the pill
+shows `LOCK` and `UNLOCK`.
 
 ## The full list
 

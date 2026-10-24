@@ -9243,3 +9243,16 @@ Not covered: a TML surface in a session the client is not attached to. The view 
 | --- | --- | --- |
 | `railCursorBg` always returns nil, so the option does nothing | `cursor-bg-truecolor`: "cursor_background is set, but the cursor row is not on #ff00ff" | **caught** |
 | `railCursorBg` has no 16-colour check | passes: at 16 colours the reverse video drops every ground of the row, so the colour cannot show | **not caught**, the check is a guard only |
+## Lock mode
+
+`TestLockModeGivesEveryKeyToThePane` in `lock_mode_test.go` attaches a real client to a daemon session under `keybindings.preset = "zellij"`, which turns `keybindings.lock` on with ctrl+g as the leader. It keeps the client in terminal mode, since alt+esc is a key lock gives the pane. It runs `cat -v` in the focused pane of two. Locked, alt+2, alt+n and ctrl+p must reach `cat -v` as `^[2^[n^P`, with the session still on workspace 1, focus unchanged and no palette. ctrl+g p h moves focus left, then l, h and l without the leader move it again, and the dock pill shows the unlock glyph. esc must lock again, so h and alt+2 after it reach `cat -v` as `h^[2` and focus stays. ctrl+g p d splits, and alt+2 after it must leave the session on workspace 1. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-24 on Linux with Go 1.27.1, based on origin/main at 5a2e8221b.
+
+The fixed build passes three runs of three.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (origin/main at 5a2e8221b) | fails at the start: "the dock does not say locked". origin/main has no `keybindings.lock`, and its zellij preset leaves the tuios chords on | **caught** |
+| The locked path in `HandleTerminalModeKey` (`if o.Locked() { ... typeIntoPane }`) made `if false && ...`, the dock indicator kept | "alt+2 alt+n ctrl+p did not reach cat -v as bytes" | **caught** |
+| `menuKey.ran` returns false at once, so no menu is held | "l after ctrl+g p h, without the leader: focus is on <a>, want <b>" | **caught** |
+
+Not covered end to end: the hold key under lock, a declared menu held by a repeatable action, and the timed repeat window skipped while locked.
