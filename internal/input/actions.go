@@ -638,6 +638,13 @@ func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleToggleFloating floats the focused pane or tiles it. A TML surface
+// moves between a popup and a tiled pane, and keeps its state.
+func handleToggleFloating(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleFloating()
+	return o, nil
+}
+
 func handleSwapLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		if o.UseScrollingLayout {

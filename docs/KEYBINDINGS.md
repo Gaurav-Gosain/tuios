@@ -1466,6 +1466,7 @@ Inside it:
 | `space` | Read an approval's or a question's prompt and answer it here |
 | `n` | Open the New agent sheet. See below |
 | `c` | On an attempt of a fan: compare the attempts. See below |
+| `o` | Open what the agent has shown, such as a TML form, on its Artifacts tab, and use it. `esc` goes back to the list |
 | `f` | Show only what needs you, then each kind of item, then every agent |
 | `s` | Step the order inside each group |
 | `/` | Search. A `key:value` term is a selector, such as `harness:codex` |
@@ -1473,8 +1474,8 @@ Inside it:
 | `y` `p` `m` | Resume, pass held mail on, open the mailbox |
 | `x` `*` | Mark an agent, or every agent shown, for a bulk answer. A marked row shows a mark, and the header counts the marks |
 | `1` `3` with marks | Allow every marked approval once, after a sheet that lists them, or reject them |
-| `[` `]` | Switch the focus tabs: Thread, Changes, Checkpoints and Pane |
-| `J` `K` | Scroll the thread, or a long plan waiting for a yes |
+| `[` `]` | Switch the focus tabs: Thread, Changes, Artifacts, Checkpoints and Pane |
+| `J` `K` | Scroll the thread, or a long plan waiting for a yes. On the Artifacts tab, move between the artifacts |
 | `e` | Show every line of every card in the thread |
 | `v` | Review the agent's changes |
 | `ctrl+]` | Go to the agent's pane and zoom it. `ctrl+b i` comes back to the same agent |
@@ -1525,6 +1526,25 @@ through `tuios start-agent`. Uncommitted files stay in this folder. On a
 linked host the agent works in a new worktree of the host's checkout, which
 the host finds by the repository's origin.
 
+The Artifacts tab lists what the agent has shown you: each TML document its
+pane opened, open or closed, and each screenshot it took. The newest is
+first. The selected one is drawn under the list. An open document is the
+same document as its popup or pane, with the same state: what you choose in
+one place shows in the other. `o` or a click gives it the keys, and `esc`
+gives them back. A closed document shows what it showed last, and your
+answer. A document from another session is read-only here.
+
+A TML popup and the agents view do not show at the same time:
+
+- Open the view while an agent's popup floats, and the view selects that
+  agent and shows the popup's document, with the keys.
+- A document that opens while the view is open shows in the focus when it is
+  from the selected agent. From another agent, its row gets a
+  `● new artifact` chip, and a popup moves the row to Needs you. A click on
+  the chip opens it.
+- Close the view while the Artifacts tab shows an open document, and its
+  window gets the focus and floats again.
+
 In the image view, which a click on an image chip in the reply opens: `o`
 opens the image in the desktop's viewer, `c` saves a copy and copies its
 path, `s` saves a copy, `left` and `right` step through the images, `+` and
@@ -1571,7 +1591,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_write`, `inbox_sort`, `inbox_view_pane`, `inbox_new_agent`,
 `inbox_allow`, `inbox_allow_always`, `inbox_open`, `inbox_back`,
 `inbox_help`, `inbox_mark`, `inbox_mark_all`, `inbox_tab_prev`,
-`inbox_tab_next`, `inbox_expand`, `inbox_compare`),
+`inbox_tab_next`, `inbox_expand`, `inbox_compare`, `inbox_artifact`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,

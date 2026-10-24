@@ -657,6 +657,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_tab_next":     "Agents view: the focus's tab to the right",
 	"inbox_expand":       "Agents view: show every line of every card in the thread, or fold them again",
 	"inbox_compare":      "Agents view: compare the attempts of the fan under the cursor, ask a judge, keep one",
+	"inbox_artifact":     "Agents view: open what the agent has shown, such as a TML form, and use it",
 
 	// The rail's agent rows. They act only while the cursor is on an agent
 	// row, and a key they share with a rail binding keeps its rail meaning on
@@ -1020,6 +1021,7 @@ var ActionDescriptions = map[string]string{
 	"window_prefix_next":   "Focus the next window",
 	"window_prefix_prev":   "Focus the previous window",
 	"window_prefix_tiling": "Turn tiling on or off",
+	"window_prefix_float":  "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup",
 	"prefix_tuios":         "Open the tuios menu: the tuios keys a preset moved",
 	"open_keybind_presets": "Choose the keys: tuios, tmux, screen or zellij",
 }

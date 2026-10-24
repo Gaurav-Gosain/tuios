@@ -9206,3 +9206,19 @@ With the change in place both tests pass, and so does
 An origin/main daemon with the new CLI keeps 2000 lines and prints a note to
 run `tuios restart-server`. `--commands` against it exits 1 with the same
 advice.
+
+## Artifacts in the agents view, and the float toggle for TML
+
+`TestCockpitArtifacts` in `cockpit_artifacts_test.go`. An agent's pane shows a TML form as a popup. Opening the agents view moves the form into the view with the keys, and the person makes two choices there. A second agent's popup arrives while the view is open: its row gets the `new artifact` chip and moves to Needs you, and a click on the chip opens it in the view, where the person answers it. Closing the view lets the first form float again with the choices. `ctrl+b t f` docks it as a pane and floats it again, with the choices kept. A second client at 16 colours shows the form in its view. The person submits the form from the view, and the agent's `--wait` prints the answer with status 0. Run on 2026-10-24 on Linux against upstream main at 5a2e8221. With the fix it passes three runs of three.
+
+Each control is a text replacement in the branch's checkout, built to a separate binary and put back before the next.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Upstream main, with the step that waits for the popup's `dock` control left out | "the form moved into the agents view": the popup draws under the view, which shows no form | **caught** |
+| Upstream main as is | "the floating form": the popup has no `dock` control | **caught** |
+| `OpenInbox` does not call `cockpitAdoptFloating` | "the form moved into the agents view" | **caught** |
+| `CloseInbox` does not call `cockpitArtifactRelease` | Toggle 1: the popup does not get the focus back, so `ctrl+b t f` acts on another pane | **caught** |
+| `ToggleFloating` refuses TML windows as it refuses other popups | Toggle 1: the form stays a popup | **caught** |
+
+Not covered: a TML surface in a session the client is not attached to. The view lists it and draws its last state, read-only, and says to attach.

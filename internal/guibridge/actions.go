@@ -62,7 +62,7 @@ var allowedActions = map[string]bool{
 	"prefix_split_horizontal": true, "prefix_split_vertical": true,
 	"prefix_rotate_split": true, "prefix_equalize_splits": true,
 	"window_prefix_new": true, "window_prefix_close": true,
-	"window_prefix_next": true, "window_prefix_prev": true, "window_prefix_tiling": true,
+	"window_prefix_next": true, "window_prefix_prev": true, "window_prefix_tiling": true, "window_prefix_float": true,
 	"minimize_prefix_focused": true, "minimize_prefix_restore_all": true,
 }
 

@@ -89,6 +89,10 @@ type TMLSurfacePayload struct {
 	Title    string
 	// Owner names who opened the surface, for the frame.
 	Owner string
+	// Caller is the window id of the pane that opened the surface, empty
+	// for the person's own. The agents view lists the surface under that
+	// pane's agent, in its Artifacts.
+	Caller string
 	// Version counts every change, DocVersion only the changes to the tree.
 	Version    uint64
 	DocVersion uint64
@@ -201,7 +205,7 @@ type tmlHost struct {
 // patch that made this version when ops is set. The caller holds the host's
 // lock.
 func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
-	p := &TMLSurfacePayload{Surface: s.id, WindowID: s.windowID, Title: s.title, Owner: s.owner,
+	p := &TMLSurfacePayload{Surface: s.id, WindowID: s.windowID, Title: s.title, Owner: s.owner, Caller: s.artifactCaller(),
 		Version: s.version, DocVersion: s.docVersion, Closed: s.closed}
 	if s.closed {
 		return p
@@ -217,6 +221,15 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 	}
 	p.State, _ = json.Marshal(s.store.State())
 	return p
+}
+
+// artifactCaller is the window id of the pane that opened s, or "" for a
+// caller in no pane, a pane tuios cannot place and a linked machine.
+func (s *tmlSurface) artifactCaller() string {
+	if s.caller == unplacedWindow || strings.HasPrefix(s.caller, "link:") {
+		return ""
+	}
+	return s.caller
 }
 
 // newTMLSurfaceID returns a short random id, such as tml-4f1a9c02.
@@ -531,6 +544,7 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	s.windowID = win.ID
 	payload := s.payload(true, nil)
 	d.tml.mu.Unlock()
+	d.recordTMLOpened(s, target)
 	d.pushTMLSurface(sess.ID, payload)
 
 	if !p.Wait {
@@ -729,6 +743,7 @@ func (d *Daemon) tmlClose(id string, value any, has bool, reason string) *verbEr
 	}
 	s.closed, s.value, s.hasValue, s.reason = true, value, has, reason
 	delete(d.tml.surfaces, id)
+	d.recordTMLClosed(s)
 	payload := s.payload(false, nil)
 	close(s.done)
 	sessionID, windowID := s.sessionID, s.windowID
@@ -753,6 +768,7 @@ func (d *Daemon) tmlWindowGone(id string) {
 	}
 	s.closed, s.reason = true, TMLDismissed
 	delete(d.tml.surfaces, id)
+	d.recordTMLClosed(s)
 	payload := s.payload(false, nil)
 	close(s.done)
 	sessionID := s.sessionID
@@ -1254,4 +1270,55 @@ func (d *Daemon) runTMLPaneAction(s *tmlSurface, a tmlPaneAction) map[string]any
 		return map[string]any{"verb": a.Verb, "ok": false, "error": verr.Message, "code": verr.Code}
 	}
 	return map[string]any{"verb": a.Verb, "ok": true}
+}
+
+// verbTMLPlace moves a surface between a popup and a tiled pane: the person's
+// choice of where it sits. The surface, its state and its window stay; only
+// the window's placement changes, so a form keeps what the person typed. It
+// acts as the person, so it needs the attach nonce of a client. A patch or a
+// replace from the owner never moves the window back.
+func (d *Daemon) verbTMLPlace(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Surface    string `json:"surface"`
+		Target     string `json:"target"`
+		HumanNonce string `json:"human_nonce"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Target != TMLTargetPopup && p.Target != TMLTargetPane {
+		return nil, invalidParam("target", "unknown target "+echoName(p.Target), tmlTargets...)
+	}
+	s, verr := d.tmlSurfaceOf(p.Surface)
+	if verr != nil {
+		return nil, verr
+	}
+	d.tml.mu.Lock()
+	sessionID, windowID := s.sessionID, s.windowID
+	d.tml.mu.Unlock()
+	if _, ok := d.humanNonceFor(p.HumanNonce, sessionID, cs); !ok {
+		return nil, hintedVerbError(ErrVerbNotHuman, "tml-place acts as the person, so it needs the attach nonce of a client", &VerbHint{
+			Param:  "human_nonce",
+			Detail: "The person moves a surface between a popup and a pane. A program chooses the place once, with tml-open.",
+		})
+	}
+	sess := d.manager.GetSessionByID(sessionID)
+	if sess == nil || windowID == "" {
+		return nil, noSurface(p.Surface)
+	}
+	popup := p.Target == TMLTargetPopup
+	err := sess.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, windowID)
+		if err != nil {
+			return err
+		}
+		w := &state.Windows[idx]
+		w.Popup, w.IsFloating = popup, popup
+		return nil
+	})
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	d.artifacts.update(s.caller, s.id, func(r *artifactRec) { r.target = p.Target })
+	return map[string]any{"type": "tml_placed", "surface": p.Surface, "window_id": windowID, "target": p.Target}, nil
 }

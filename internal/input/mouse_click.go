@@ -465,6 +465,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				o.CloseWindowByHand(clickedWindowIndex)
 			case app.WindowButtonMinimize:
 				o.MinimizeWindow(clickedWindowIndex)
+			case app.WindowButtonFloat:
+				o.FocusWindow(clickedWindowIndex)
+				o.ToggleFloating()
 			case app.WindowButtonZoom:
 				// On a tiled pane the control is the zoom. A full-screen snap
 				// there would fight the tiler, which owns the rectangle and

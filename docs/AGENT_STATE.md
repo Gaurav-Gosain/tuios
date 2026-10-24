@@ -2554,6 +2554,17 @@ the focus. When the list is taller than the screen, rows are one line and a
 group longer than 8 rows shows its first 8 and `+N more`, which a click or
 `right` opens. Needs you never folds.
 
+The Artifacts tab lists what the agent has shown you, newest first: the TML
+documents its pane opened with `tuios tml show`, open or closed, and the
+screenshots it took. An open document is drawn live and takes the keys on
+`o` or a click, so you answer a form here and the agent gets the answer. It
+is the same document as the popup or pane, not a copy. A document from
+another agent gets a `● new artifact` chip on that agent's row, and a popup
+moves the row to Needs you, so a question never waits out of sight. The
+daemon keeps the last 20 per pane in memory, so a client that attaches again
+sees the same list. See
+[KEYBINDINGS.md](KEYBINDINGS.md#the-agents-view) for the keys.
+
 At 170 columns and wider a side column sits beside the focus:
 
 - **Live**: the agent's pane, its last rows that hold text, in a frame. It

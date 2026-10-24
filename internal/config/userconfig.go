@@ -1390,6 +1390,7 @@ func DefaultConfig() *UserConfig {
 				"window_prefix_next":   {"tab"},
 				"window_prefix_prev":   {"shift+tab"},
 				"window_prefix_tiling": {"t"},
+				"window_prefix_float":  {"f"},
 				"window_prefix_cancel": {"esc"},
 			},
 			MinimizePrefix: map[string][]string{
@@ -1618,7 +1619,10 @@ const (
 	ActionInboxNewAgent    = "inbox_new_agent"
 	// ActionInboxCompare opens the comparison of the attempts of the fan
 	// under the cursor.
-	ActionInboxCompare    = "inbox_compare"
+	ActionInboxCompare = "inbox_compare"
+	// ActionInboxArtifact opens what the agent under the cursor has shown,
+	// such as a TML form, on its Artifacts tab, and gives it the keys.
+	ActionInboxArtifact   = "inbox_artifact"
 	ActionInboxDetailDown = "inbox_detail_down"
 	ActionInboxDetailUp   = "inbox_detail_up"
 	// The approval card's keys, the keys that open and close the focus on a
@@ -1703,6 +1707,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxDenyReason:  {"R"},
 		ActionInboxNewAgent:    {"n"},
 		ActionInboxCompare:     {"c"},
+		ActionInboxArtifact:    {"o"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},
 		ActionInboxAllow:       {"a"},

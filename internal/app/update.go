@@ -987,6 +987,11 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if side := m.CockpitSideWanted(); side != nil {
 		agents = tea.Batch(agents, side)
 	}
+	// The selected agent's artifacts, read once and again when a surface
+	// opens or closes.
+	if arts := m.CockpitArtifactsWanted(); arts != nil {
+		agents = tea.Batch(agents, arts)
+	}
 	// A verdict the open fan comparison does not show yet is read now. A
 	// nil check when the comparison is closed.
 	if cmp := m.cockpitCompareStale(); cmp != nil {
@@ -1159,6 +1164,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applyCompare(msg)
 	case ckFanActMsg:
 		return m, m.applyFanAct(msg)
+	case tmlPlacedMsg:
+		m.applyTMLPlaced(msg)
+		return m, nil
+	case ckArtifactsMsg:
+		m.applyCockpitArtifacts(msg)
+		return m, nil
 	case ckLivePrimeMsg:
 		m.applyLivePrime(msg)
 		return m, nil

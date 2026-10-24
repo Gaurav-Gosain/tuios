@@ -57,6 +57,8 @@ terminal_focus_up = ["k", "up"]
 terminal_focus_right = ["l", "right"]
 window_prefix_next = ["p", "tab"]
 window_prefix_rename = ["c"]
+# zellij's pane mode floats and embeds a pane with e.
+window_prefix_float = ["e"]
 
 # Tab mode: ctrl+g t, then one key.
 [workspace_prefix]

@@ -305,7 +305,7 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "agentmail":
 		m.AgentMailMove(wheelDelta(up))
 	case "inbox":
-		m.CockpitWheel(x, up)
+		m.CockpitWheel(x, y, up)
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
 		m.WorkspaceSwitcherMove(wheelDelta(up), n)
