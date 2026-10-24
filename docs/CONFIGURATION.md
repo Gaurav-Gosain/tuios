@@ -1251,9 +1251,19 @@ border_gradient_angle = 45
 
 The small dialogs, such as rename, confirm and new space, draw their frame in the pane border style, `appearance.border_style`. The larger panels, such as the command palette, the switchers, the Agents view and the settings page, have no frame unless `appearance.frame_panels` is on. Then they take the same frame.
 
-With `appearance.pane_overlays` on, a dialog or a panel looks like a pane window. Every panel is framed then, as if `frame_panels` were on. The frame is drawn in the colour the focused pane's border has at that moment, because an open dialog or panel is the focused thing: `appearance.border_focused_color` when it is set, else the theme's colour for the current mode, copy mode or a waiting agent, or the session's tint. The frame and everything inside it, the title and hints in the frame line included, sit on the background an empty pane cell has: `appearance.pane_background` when it is set, else the terminal's own. So the frame line and the content share one background, as they do in a pane. The selected row, the row under the pointer and input fields are steps of that background, so a selected row on a navy pane is a darker navy. Pills keep their own colours.
+With `appearance.pane_overlays` on, a dialog or a panel looks like a pane window:
 
-The option is off by default, and then a dialog or a panel keeps its own shaded background and its frame keeps its quiet ink. Under `hidden`, which draws no frame, the shade is a dialog's only edge, so it stays even with the option on. At 16 colours every background is the terminal's own, and the option only changes the frame's colour. With no theme and a terminal that never says what its background is, the overlays keep their shade too, since there is no colour to fill them with or to step the rows from.
+- Every panel is framed, as if `frame_panels` were on.
+- The frame takes the focused pane's border colour, because an open dialog or panel is the focused thing. That is `appearance.border_focused_color` when it is set. Otherwise it is the theme's colour for the current mode (copy mode or a waiting agent) or the session's tint.
+- The frame and everything in it sit on the background of an empty pane cell. That is `appearance.pane_background` when it is set, else the terminal's own. The title and hints in the frame line share that background, as they do in a pane.
+- The selected row, the row under the pointer and input fields are steps of that background. On a navy pane, a selected row is a darker navy.
+- Pills keep their own colours.
+
+The option is off by default. Then a dialog or a panel keeps its own shaded background, and its frame keeps its quiet ink. Some cases keep the shade even with the option on:
+
+- Under `hidden`, no frame is drawn, so the shade is a dialog's only edge.
+- At 16 colours every background is the terminal's own, so the option changes only the frame's colour.
+- With no theme, and a terminal that never reports its background, there is no colour to fill the overlay with or to step its rows from.
 
 `appearance.overlay_border_color` sets a colour for every dialog and panel frame, with or without `pane_overlays`.
 
