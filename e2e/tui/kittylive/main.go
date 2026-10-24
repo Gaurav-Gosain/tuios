@@ -22,7 +22,7 @@
 // symlink in DIR that leads into /proc, and, with -deny FILE, a file the
 // link's read rules keep from other machines.
 //
-// The first line it prints names the machine it runs on. The last line is
+// The first line it prints says whether the pane runs on a linked machine. The last line is
 // "ALL n PASS" or "n FAIL".
 package main
 
@@ -86,8 +86,11 @@ func main() {
 		}
 	}()
 
-	host, _ := os.Hostname()
-	fmt.Printf("\x1b[1mkitty graphics check\x1b[0m on \x1b[1;36m%s\x1b[0m (%s)\n", host, runtime.GOOS)
+	where := "a local pane"
+	if os.Getenv("TUIOS_PANE_HOSTED") == "1" {
+		where = "a pane on a linked machine"
+	}
+	fmt.Printf("\x1b[1mkitty graphics check\x1b[0m in \x1b[1;36m%s\x1b[0m (%s)\n", where, runtime.GOOS)
 
 	steps := mediaSteps()
 	if *refuse {
@@ -155,19 +158,19 @@ func mediaSteps() []step {
 			return "", nil
 		}},
 		{name: "direct-png", desc: "t=d PNG (f=100), chunked at 4 KiB", run: func() (string, func() (string, bool)) {
-			chunked("a=T,i=1,f=100,c=20,r=6", checker(color.RGBA{220, 50, 47, 255}))
+			chunked("a=T,i=1,f=100,c=16,r=4", checker(color.RGBA{220, 50, 47, 255}))
 			return "red and white checkerboard above", nil
 		}},
-		{name: "direct-rgba", desc: "t=d raw RGBA (f=32), one 4 KiB-chunked transmission", run: func() (string, func() (string, bool)) {
+		{name: "direct-rgba", desc: "t=d raw RGBA (f=32), chunked at 4 KiB", run: func() (string, func() (string, bool)) {
 			w, h := 64, 32
 			pix := bytes.Repeat([]byte{38, 139, 210, 255}, w*h)
 			chunked(fmt.Sprintf("a=T,i=2,f=32,s=%d,v=%d,c=8,r=2", w, h), pix)
 			return "solid blue block above", nil
 		}},
-		{name: "file", desc: "t=f: a regular file on this machine, read where the pane runs", run: func() (string, func() (string, bool)) {
+		{name: "file", desc: "t=f: a regular file, read on the machine the pane runs on", run: func() (string, func() (string, bool)) {
 			p := filepath.Join(*dir, "green.png")
 			write(p, checker(color.RGBA{133, 153, 0, 255}))
-			apc("a=T,i=3,f=100,t=f,c=20,r=6", []byte(p))
+			apc("a=T,i=3,f=100,t=f,c=16,r=4", []byte(p))
 			return "green and white checkerboard above", func() (string, bool) {
 				_, err := os.Stat(p)
 				return fmt.Sprintf("; file kept: %v", err == nil), err == nil
@@ -178,10 +181,10 @@ func mediaSteps() []step {
 			junk := bytes.Repeat([]byte("junk"), 1000)
 			p := filepath.Join(*dir, "junk.bin")
 			write(p, append(append(append([]byte{}, junk...), img...), junk...))
-			apc(fmt.Sprintf("a=T,i=4,f=100,t=f,O=%d,S=%d,c=10,r=5", len(junk), len(img)), []byte(p))
+			apc(fmt.Sprintf("a=T,i=4,f=100,t=f,O=%d,S=%d,c=8,r=4", len(junk), len(img)), []byte(p))
 			return "solid orange square above", nil
 		}},
-		{name: "tempfile", desc: "t=t: a file in TMPDIR named tty-graphics-protocol, which the terminal must delete", run: func() (string, func() (string, bool)) {
+		{name: "tempfile", desc: "t=t: a temp file named tty-graphics-protocol; the terminal deletes it", run: func() (string, func() (string, bool)) {
 			f, err := os.CreateTemp("", "kittylive-*-tty-graphics-protocol.png")
 			if err != nil {
 				fail("temp file: %v", err)
@@ -189,13 +192,13 @@ func mediaSteps() []step {
 			_, _ = f.Write(checker(color.RGBA{108, 113, 196, 255}))
 			_ = f.Close()
 			p := f.Name()
-			apc("a=T,i=5,f=100,t=t,c=20,r=6", []byte(p))
+			apc("a=T,i=5,f=100,t=t,c=16,r=4", []byte(p))
 			return "purple and white checkerboard above", func() (string, bool) {
 				gone := waitGone(p)
 				return fmt.Sprintf("; temp file deleted: %v", gone), gone
 			}
 		}},
-		{name: "shm", desc: "t=s: a POSIX shared memory object, which the terminal must unlink", run: func() (string, func() (string, bool)) {
+		{name: "shm", desc: "t=s: a POSIX shared memory object; the terminal unlinks it", run: func() (string, func() (string, bool)) {
 			if runtime.GOOS != "linux" {
 				apc("a=q,i=6,s=1,v=1,t=d,f=24", []byte{0, 0, 0})
 				return "", func() (string, bool) { return "; skipped: no /dev/shm here", true }
@@ -280,11 +283,11 @@ func chunked(keys string, data []byte) {
 	fmt.Print(b.String())
 }
 
-// checker is a 200x120 PNG of c and white squares.
+// checker is a 160x80 PNG of c and white squares.
 func checker(c color.RGBA) []byte {
-	img := image.NewRGBA(image.Rect(0, 0, 200, 120))
-	for y := range 120 {
-		for x := range 200 {
+	img := image.NewRGBA(image.Rect(0, 0, 160, 80))
+	for y := range 80 {
+		for x := range 160 {
 			if (x/20+y/20)%2 == 0 {
 				img.Set(x, y, c)
 			} else {
