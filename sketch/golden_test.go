@@ -218,6 +218,8 @@ func TestGoldenExtra(t *testing.T) {
 			MaxWidth float64  `json:"maxWidth"`
 			FontSize *float64 `json:"fontSize"`
 			Padding  *float64 `json:"padding"`
+			IDPrefix *string  `json:"idPrefix"`
+			AutoDir  *bool    `json:"autoDirection"`
 			Math     bool     `json:"math"`
 		}
 		if err := json.Unmarshal(data, &cases); err != nil {
@@ -235,6 +237,8 @@ func TestGoldenExtra(t *testing.T) {
 			}
 			opts.FontSize = c.FontSize
 			opts.Padding = c.Padding
+			opts.IDPrefix = c.IDPrefix
+			opts.AutoDirection = c.AutoDir
 			if c.Math {
 				opts.Math = goldenMath
 			}

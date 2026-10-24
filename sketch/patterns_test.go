@@ -2,7 +2,6 @@ package sketch
 
 import (
 	"regexp"
-	"strings"
 	"sync"
 	"testing"
 
@@ -38,7 +37,7 @@ var regexpDetectors = sync.OnceValue(func() []struct {
 		{"mindmap", regexp.MustCompile(`^` + sp + `mindmap`)},
 		{"architecture", regexp.MustCompile(`^` + sp + `architecture`)},
 		{"agentflow", regexp.MustCompile(`^` + sp + `agentflow-beta\b`)},
-		{"c4", regexp.MustCompile(`^` + sp + `C4Context|C4Container|C4Component|C4Dynamic|C4Deployment`)},
+		{"c4", regexp.MustCompile(`^` + sp + `(?:C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)`)},
 		{"kanban", regexp.MustCompile(`^` + sp + `kanban`)},
 		{"class", regexp.MustCompile(`^` + sp + `classDiagram`)},
 		{"er", regexp.MustCompile(`^` + sp + `erDiagram`)},
@@ -86,13 +85,6 @@ func detectByRegexp(cleaned string) (Type, bool) {
 	for _, d := range regexpDetectors() {
 		if d.re.MatchString(head) {
 			return d.typ, true
-		}
-		if d.typ == "c4" {
-			for _, w := range c4Anywhere {
-				if strings.Contains(cleaned, w) {
-					return d.typ, true
-				}
-			}
 		}
 	}
 	return "", false

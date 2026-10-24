@@ -1,0 +1,14 @@
+[
+ {
+  "src": "C4Context\nSystem(a, \"A\")\nSystem(b, \"B\")\nRel(a, b, \"Sends a fairly long description of the relationship\")"
+ },
+ {
+  "src": "C4Context\nSystem(a, \"A\")\nSystem(b, \"B\")\nRel(a, b, \"Makes API calls to\", \"JSON/HTTPS\")"
+ },
+ {
+  "src": "flowchart LR\n  a[Web app] --> b[C4Container view]"
+ },
+ {
+  "src": "sequenceDiagram\n  Alice->>Bob: C4Dynamic view"
+ }
+]

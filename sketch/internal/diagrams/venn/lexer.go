@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/venn/lexer.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/venn/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // Offsets are byte offsets. pele reads UTF-16 code units; every test here is of an ASCII
 // character, so a byte stands for a unit, except where JavaScript white space outside ASCII

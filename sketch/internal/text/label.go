@@ -1,4 +1,4 @@
-// Ported from pele src/text/label.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/text/label.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // pele keeps the expressions of the label being laid out in module state
 // (`marks`). The port passes them down as an argument.
@@ -37,11 +37,57 @@ type Label struct {
 
 const LINE_HEIGHT = 1.5
 
+// Lines of one wrapped label sit closer, so the label reads as one block.
+const WRAPPED_LINE_HEIGHT = 1.3
+
+// snug is the line height of a label with the given number of lines.
+func snug(lines int, size, lineHeight float64) float64 {
+	if lines > 1 {
+		return js.Round(size * WRAPPED_LINE_HEIGHT)
+	}
+	return lineHeight
+}
+
+var tagStyles = map[string]int{
+	"b":      Bold,
+	"strong": Bold,
+	"i":      Italic,
+	"em":     Italic,
+	"cite":   Italic,
+	"dfn":    Italic,
+	"var":    Italic,
+	"code":   Mono,
+	"kbd":    Mono,
+	"samp":   Mono,
+	"tt":     Mono,
+	"sub":    Sub,
+	"sup":    Sup,
+	"u":      Underline,
+	"ins":    Underline,
+}
+
+const shift = Sub | Sup
+
+// htmlTags are the tags a label drops while it keeps their text. Anything else
+// shaped like a tag, such as the type in List<T>, is text.
+var htmlTags = func() map[string]bool {
+	out := map[string]bool{}
+	for _, tag := range strings.Fields("a abbr address article aside audio b bdi bdo big blockquote body br button caption center cite code col " +
+		"colgroup data dd del details dfn dialog div dl dt em embed fieldset figcaption figure font footer form h1 h2 " +
+		"h3 h4 h5 h6 head header hr html i iframe img input ins kbd label legend li link main map mark meta meter nav " +
+		"noscript object ol optgroup option output p picture pre progress q rp rt ruby s samp script section select " +
+		"small source span strike strong style sub summary sup table tbody td template textarea tfoot th thead time " +
+		"title tr track tt u ul var video wbr") {
+		out[tag] = true
+	}
+	return out
+}()
+
 var (
 	reBreak = lazyre.New(`(?i)<br[` + js.S + `]*/?>|\\n|\n`)
 	reTag   = lazyre.New(`^</?([a-zA-Z][\w-]*)(?:[` + js.S + `][^<>]*)?/?>`)
 	reIcon  = lazyre.New(`(fa[bklrs]?):fa-([\w-]+)`)
-	rePiece = lazyre.New(`[` + js.S + `]*(?:[` + cjkOpen + `]*[` + cjk + `][` + cjkClose + `]*|[^` + js.S + cjk + `]+[` + cjkClose + `]*)[` + js.S + `]*|[` + js.S + `]+`)
+	rePiece = lazyre.New(`[` + js.S + `]*(?:[` + cjkOpen + `]*[` + cjk + `][` + cjkClose + `]*|[^` + js.S + cjk + hint + `]+[` + hint + `]*[` + cjkClose + `]*|[` + hint + `]+)[` + js.S + `]*|[` + js.S + `]+`)
 	reCRLF  = lazyre.New(`\r\n?`)
 )
 
@@ -50,7 +96,14 @@ const (
 	cjk      = `\x{2e80}-\x{9fff}\x{f900}-\x{faff}\x{ff00}-\x{ff60}`
 	cjkClose = `、。，．：；！？）］｝」』】〕〉》〙〗ー…‥・ゝゞぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ,.:;!?)\]}`
 	cjkOpen  = `（［｛「『【〔〈《〘〖(\[{`
+	// Break hints: a zero-width space, and a soft hyphen, which shows as '-' where a line breaks.
+	hint = `\x{200b}\x{00ad}`
 )
+
+// hasHint is RE_HINT.test(text).
+func hasHint(text string) bool {
+	return strings.ContainsRune(text, 0x200b) || strings.ContainsRune(text, 0xad)
+}
 
 // hasCJK is /[CJK]/.test(text). The ranges are all in the BMP, so a rune
 // compares as the UTF-16 unit it is in JavaScript.
@@ -277,15 +330,26 @@ func isWordRune(r rune) bool {
 	return r < 128 && (r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '_')
 }
 
+// openTags is the HTML emphasis open across the lines of a label.
+type openTags struct {
+	style int
+	// Sub/sup stack; only the innermost tag shifts text.
+	shifts []int
+}
+
 // Splits inline HTML and, for markdown labels, emphasis markers into styled spans.
-func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int, m TextMeasurer, found *marks) int {
-	style := htmlStyle
+func inline(line *[]Span, source string, markdown bool, base int, open *openTags, m TextMeasurer, found *marks) {
+	style := open.style
 	marked := 0
 	var text strings.Builder
 	i := 0
 	n := len(source)
 	flush := func() {
-		pushIcons(line, text.String(), style, m, found)
+		st := style
+		if k := len(open.shifts); k > 0 {
+			st |= open.shifts[k-1]
+		}
+		pushIcons(line, text.String(), st, m, found)
 		text.Reset()
 	}
 	for i < n {
@@ -294,24 +358,37 @@ func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int,
 			if loc := reTag.FindStringSubmatchIndex(source[i:]); loc != nil {
 				tag := strings.ToLower(source[i+loc[2] : i+loc[3]])
 				closing := i+1 < n && source[i+1] == '/'
-				bit := 0
-				if tag == "b" || tag == "strong" {
-					bit = Bold
-				} else if tag == "i" || tag == "em" {
-					bit = Italic
-				}
-				if bit != 0 {
+				bit := tagStyles[tag]
+				if bit&shift != 0 {
+					flush()
+					at := -1
+					for k := len(open.shifts) - 1; k >= 0; k-- {
+						if open.shifts[k] == bit {
+							at = k
+							break
+						}
+					}
+					if !closing {
+						open.shifts = append(open.shifts, bit)
+					} else if at != -1 {
+						open.shifts = append(open.shifts[:at], open.shifts[at+1:]...)
+					}
+				} else if bit != 0 {
 					flush()
 					if closing {
-						htmlStyle = (htmlStyle &^ bit) | (base & bit)
+						open.style = (open.style &^ bit) | (base & bit)
 						style = (style &^ bit) | (base & bit)
 					} else {
-						htmlStyle = htmlStyle | bit
+						open.style = open.style | bit
 						style = style | bit
 					}
 				}
-				i += loc[1]
-				continue
+				// Other HTML tags are dropped and their text kept. Anything else shaped like a tag, such
+				// as the type in List<T>, is text.
+				if bit != 0 || htmlTags[tag] {
+					i += loc[1]
+					continue
+				}
 			}
 		} else if markdown && (ch == '*' || ch == '_') {
 			double := i+1 < n && source[i+1] == ch
@@ -321,7 +398,7 @@ func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int,
 				bit = Bold
 				ln = 2
 			}
-			open := marked&bit == 0
+			opening := marked&bit == 0
 			prev := ' '
 			if i > 0 {
 				prev, _ = utf8.DecodeLastRuneInString(source[:i])
@@ -334,8 +411,8 @@ func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int,
 			if double {
 				marker += marker
 			}
-			canOpen := open && !js.IsSpace(next) && strings.Contains(source[i+ln:], marker)
-			canClose := !open && !js.IsSpace(prev)
+			canOpen := opening && !js.IsSpace(next) && strings.Contains(source[i+ln:], marker)
+			canClose := !opening && !js.IsSpace(prev)
 			wordy := ch == '_' && isWordRune(prev) && isWordRune(next)
 			if (canOpen || canClose) && !wordy {
 				flush()
@@ -354,7 +431,6 @@ func inline(line *[]Span, source string, markdown bool, base int, htmlStyle int,
 		i++
 	}
 	flush()
-	return htmlStyle
 }
 
 func measureSpans(line []Span, measurer TextMeasurer, size float64) float64 {
@@ -376,10 +452,27 @@ func measureSpans(line []Span, measurer TextMeasurer, size float64) float64 {
 func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, widths *[]float64) {
 	var current []Span
 	width := 0.0
-	commit := func() {
+	// tail holds the text of the last span of current while pieces are added to it.
+	// pele adds each piece with +=, which JavaScript ropes make linear. In Go each +=
+	// copies the string, so a run of pieces without width, which never breaks the
+	// line, would take quadratic time. The span's Text is written from tail when it
+	// is read: by a measure, a commit, or a span after it.
+	var tail []byte
+	stale := false
+	sync := func() {
+		if stale {
+			current[len(current)-1].Text = string(tail)
+			stale = false
+		}
+	}
+	commit := func(hyphen bool) {
+		sync()
 		if plain(current) {
 			last := &current[len(current)-1]
 			trimmed := js.TrimEnd(last.Text)
+			if hyphen && strings.HasSuffix(last.Text, "\u00ad") {
+				trimmed = strings.TrimSuffix(trimmed, "\u00ad") + "-"
+			}
 			if trimmed != last.Text {
 				last.Text = trimmed
 				w := measurer.Width(trimmed, size, last.Style)
@@ -392,36 +485,90 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 		current = nil
 		width = 0
 	}
-	for _, span := range line {
+	for si, span := range line {
 		if span.Icon != "" || span.Math != nil {
 			w := float64(size * 1.25)
 			if span.Math != nil {
 				w = span.Math.Width
 			}
 			if width > 0 && width+w > max {
-				commit()
+				commit(false)
 			}
+			sync()
 			s := span
 			s.Width = w
 			current = append(current, s)
 			width += w
 			continue
 		}
-		for _, piece := range rePiece.FindAllString(span.Text, -1) {
-			part := piece
-			if width > 0 && width+measurer.Width(js.TrimEnd(part), size, span.Style) > max {
-				commit()
-				part = js.TrimStart(part)
+		pieces := rePiece.FindAllString(span.Text, -1)
+		// A piece ending in a soft hyphen fits if its '-' does, or if the rest of the word does, which
+		// hides the hyphen. The line only grows along a word, so no later hyphen in it fits either,
+		// and the remaining width of each word makes this one check.
+		soft := strings.ContainsRune(span.Text, 0xad)
+		var own, rest []float64
+		if soft {
+			n := len(pieces)
+			own = make([]float64, n)
+			rest = make([]float64, n+1)
+			for q := n - 1; q >= 0; q-- {
+				// A soft hyphen before a space is no break of its own: the space is.
+				shy := strings.HasSuffix(pieces[q], "\u00ad")
+				end := js.TrimEnd(pieces[q])
+				if shy {
+					end = strings.TrimSuffix(end, "\u00ad")
+				}
+				own[q] = measurer.Width(end, size, span.Style)
+				// Word width beyond this span is unknown.
+				switch {
+				case !shy:
+					rest[q] = own[q]
+				case q == n-1:
+					if si == len(line)-1 {
+						rest[q] = own[q]
+					} else {
+						rest[q] = math.Inf(1)
+					}
+				default:
+					rest[q] = own[q] + rest[q+1]
+				}
+			}
+		}
+		for p, part := range pieces {
+			var partWidth float64
+			if soft {
+				partWidth = own[p]
+			} else {
+				partWidth = measurer.Width(js.TrimEnd(part), size, span.Style)
+			}
+			var fits bool
+			if !soft || !strings.HasSuffix(part, "\u00ad") {
+				fits = width+partWidth <= max
+			} else {
+				fits = width+measurer.Width(strings.TrimSuffix(part, "\u00ad")+"-", size, span.Style) <= max || width+rest[p] <= max
+			}
+			if width > 0 && !fits {
+				// Breaking at whitespace leaves a preceding soft hyphen hidden.
+				trimmed := js.TrimStart(part)
+				commit(trimmed == part)
+				part = trimmed
 			}
 			if plain(current) && current[len(current)-1].Style == span.Style {
 				last := &current[len(current)-1]
-				last.Text += part
-				last.Width = measurer.Width(last.Text, size, last.Style)
-				width = 0
-				for _, s := range current {
-					width += s.Width
+				if !stale {
+					tail = append(tail[:0], last.Text...)
+				}
+				tail = append(tail, part...)
+				stale = true
+				// Remeasuring for each zero-width piece would take quadratic time.
+				if partWidth > 0 || js.TrimEnd(part) != part {
+					sync()
+					before := last.Width
+					last.Width = measurer.Width(last.Text, size, last.Style)
+					width += last.Width - before
 				}
 			} else {
+				sync()
 				w := measurer.Width(part, size, span.Style)
 				current = append(current, Span{Text: part, Style: span.Style, Width: w})
 				width += w
@@ -429,7 +576,7 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 		}
 	}
 	if len(current) > 0 || len(*out) == 0 {
-		commit()
+		commit(false)
 	}
 }
 
@@ -455,7 +602,7 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	if !hasMarkup(raw) && !strings.Contains(raw, "&") && !strings.Contains(raw, "ﬂ") {
 		text := js.Trim(raw)
 		width := measurer.Width(text, size, base)
-		if width <= maxWidth || !(strings.Contains(text, " ") || hasCJK(text)) {
+		if width <= maxWidth || !(strings.Contains(text, " ") || hasCJK(text) || hasHint(text)) {
 			// One span on one line: its slices share one allocation.
 			one := &struct {
 				lines  [1][]Span
@@ -483,7 +630,8 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 				widest = w
 			}
 		}
-		return Label{Lines: lines, Widths: widths, Width: widest, Height: float64(len(lines)) * lineHeight, Size: size, LineHeight: lineHeight}
+		lh := snug(len(lines), size, lineHeight)
+		return Label{Lines: lines, Widths: widths, Width: widest, Height: float64(len(lines)) * lh, Size: size, LineHeight: lh}
 	}
 	return layoutLines(raw, markdown, measurer, size, maxWidth, base, lineHeight, nil)
 }
@@ -501,10 +649,10 @@ func layoutLines(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	var widths []float64
 	width := 0.0
 	// HTML tags can span explicit breaks; Markdown emphasis stays local to each line.
-	htmlStyle := base
+	open := &openTags{style: base}
 	for _, part := range reBreak.Split(source, -1) {
 		var line []Span
-		htmlStyle = inline(&line, js.Trim(part), markdown, base, htmlStyle, measurer, found)
+		inline(&line, js.Trim(part), markdown, base, open, measurer, found)
 
 		w := measureSpans(line, measurer, size)
 		if w > maxWidth {
@@ -519,7 +667,8 @@ func layoutLines(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 			width = w
 		}
 	}
-	return Label{Lines: lines, Widths: widths, Width: width, Height: float64(len(lines)) * lineHeight, Size: size, LineHeight: lineHeight}
+	lh := snug(len(lines), size, lineHeight)
+	return Label{Lines: lines, Widths: widths, Width: width, Height: float64(len(lines)) * lh, Size: size, LineHeight: lh}
 }
 
 // WithHeights gives each line of a label holding math the height that math needs.
@@ -615,13 +764,55 @@ func hasMarkup(raw string) bool {
 	}
 }
 
-// Plain gives the label as lines of plain text. Not part of pele.
+// Plain gives the label as lines of plain text. Not part of pele. Text in
+// <sub> or <sup> is written in Unicode subscript or superscript characters,
+// such as H₂O and mc², when each of its characters has one, and after "_" or
+// "^" when not. Other styles, such as <code> or <u>, leave the text as it is.
 func (l Label) Plain() []string {
 	out := make([]string, len(l.Lines))
 	for i, line := range l.Lines {
 		for _, span := range line {
-			out[i] += span.Text
+			switch {
+			case span.Style&Sub != 0:
+				out[i] += shifted(span.Text, subscripts, "_")
+			case span.Style&Sup != 0:
+				out[i] += shifted(span.Text, superscripts, "^")
+			default:
+				out[i] += span.Text
+			}
 		}
 	}
 	return out
+}
+
+var (
+	subscripts   = scriptTable("0123456789+-=()aehijklmnoprstuvx", "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ")
+	superscripts = scriptTable("0123456789+-=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW",
+		"⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ")
+)
+
+func scriptTable(from, to string) map[rune]rune {
+	table := map[rune]rune{}
+	shifted := []rune(to)
+	for i, r := range []rune(from) {
+		table[r] = shifted[i]
+	}
+	return table
+}
+
+// shifted writes text in the characters of table, or after mark when one of
+// its characters has none: in parentheses when it is longer than one character.
+func shifted(text string, table map[rune]rune, mark string) string {
+	var b strings.Builder
+	for _, r := range text {
+		s, ok := table[r]
+		if !ok {
+			if utf8.RuneCountInString(text) == 1 {
+				return mark + text
+			}
+			return mark + "(" + text + ")"
+		}
+		b.WriteRune(s)
+	}
+	return b.String()
 }

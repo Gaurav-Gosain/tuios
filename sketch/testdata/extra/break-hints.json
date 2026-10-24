@@ -1,0 +1,33 @@
+[
+ {
+  "src": "sequenceDiagram\n  participant UE\n  participant gNB\n  participant AMF\n  gNB->>UE: RRCConnection​Reconfiguration​Complete\n  UE->>gNB: ok",
+  "maxWidth": 360
+ },
+ {
+  "src": "flowchart LR\n  A[\"RRCConnection​Reconfiguration​Complete\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"RRCConnection­Reconfiguration­Complete\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"RRCConnection&shy;Reconfiguration&shy;Complete\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[RRCConnection­Reconfiguration­Complete]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"Re­con­fig\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"a uni­t test of a much longer label so it wraps\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"ab­<i> cd</i> and some more words to wrap here\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"a plain label that is long enough to wrap onto more than one line\"] --> B[\"one line\"]"
+ },
+ {
+  "src": "flowchart TD\n  A[\"first line<br/>second line\"]"
+ }
+]

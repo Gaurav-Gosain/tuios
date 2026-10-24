@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sankey/lexer.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/sankey/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // The port reads UTF-8 bytes. Every character the lexer takes is ASCII, so a byte offset
 // stands for pele's unit offset, except in the keyword test: see keywordLength.
@@ -49,9 +49,22 @@ const (
 	S_escaped_text
 )
 
-// isTextData is RFC 4180 TEXTDATA: printable ASCII except the double quote and the comma.
+// isTextData is RFC 4180 TEXTDATA extended to Unicode, excluding controls and invalid XML characters.
 func isTextData(c int) bool {
-	return c >= 32 && c <= 126 && c != 34 && c != 44
+	return (c >= 32 && c <= 126 && c != 34 && c != 44) ||
+		(c >= 0xa0 && c <= 0xd7ff) ||
+		(c >= 0xe000 && c <= 0xfffd) ||
+		(c >= 0x10000 && c <= 0x10ffff)
+}
+
+// runeAt is src.codePointAt(q) and its length in bytes. The source is valid UTF-8, so a
+// surrogate, which codePointAt can give, never appears.
+func runeAt(src string, q int) (int, int) {
+	if c := src[q]; c < utf8.RuneSelf {
+		return int(c), 1
+	}
+	r, size := utf8.DecodeRuneInString(src[q:])
+	return int(r), size
 }
 
 func byteAt(src string, q int) int {
@@ -122,9 +135,9 @@ func tokenize(src string) Tokens {
 				continue
 			}
 			for q < n {
-				d := int(src[q])
+				d, size := runeAt(src, q)
 				if isTextData(d) || d == 44 || d == 13 || d == 10 {
-					q++
+					q += size
 				} else if d == 34 && byteAt(src, q+1) == 34 {
 					q += 2
 				} else {
@@ -163,8 +176,12 @@ func tokenize(src string) Tokens {
 				emit(T_DQUOTE, p, p+1)
 				continue
 			}
-			for q < n && isTextData(int(src[q])) {
-				q++
+			for q < n {
+				d, size := runeAt(src, q)
+				if !isTextData(d) {
+					break
+				}
+				q += size
 			}
 			emit(T_NON_ESCAPED_TEXT, p, q)
 		}
