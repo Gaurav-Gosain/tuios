@@ -480,7 +480,12 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		clientLog("TML surface %s: %v", p.Surface, err)
 		return false
 	}
-	v.title, v.owner, v.caller = p.Title, p.Owner, p.Caller
+	v.title, v.owner = p.Title, p.Owner
+	// The opening pane never changes. A refresh read with tml-get carries
+	// no caller, so it keeps the one the first push gave.
+	if p.Caller != "" {
+		v.caller = p.Caller
+	}
 	v.refreshing = false
 	v.version, v.docVersion = p.Version, p.DocVersion
 	v.content = ""
