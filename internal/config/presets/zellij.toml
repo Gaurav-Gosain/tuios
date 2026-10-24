@@ -1,12 +1,13 @@
 # The zellij preset, in zellij's unlock-first shape: ctrl+g is the leader, a
 # letter after it opens one of zellij's modes as a tuios menu, and the next
-# key runs one action and goes back to typing into the pane. Window mode and
-# the terminal-mode keys keep the tuios keys, so ctrl+p, ctrl+n, ctrl+o and
-# ctrl+t still reach the shell and vim.
+# key runs one action and goes back to typing into the pane. Lock is on, so in
+# terminal mode every key but ctrl+g goes to the pane, alt+1 and the other
+# tuios chords included. A focus move keeps its menu open until esc.
 #
 # A delta over the tuios defaults, as presets/tmux.toml is.
 
 leader_key = "ctrl+g"
+lock = true
 repeat = [
   "terminal_focus_left", "terminal_focus_right", "terminal_focus_up", "terminal_focus_down",
 ]
@@ -20,12 +21,13 @@ same = ["prefix_detach", "prefix_quit"]
 missing = [
   "n: resize mode. Use the resize_pane actions, or the mouse",
   "h: move mode. Use swap_left, swap_right, swap_up and swap_down",
-  "A mode that stays open. A menu here runs one key and closes",
+  "A mode that stays open for every key. Only a focus move keeps its menu open until esc",
   "Floating and stacked panes, and pane frames on or off",
   "e in scroll mode: open the scrollback in $EDITOR",
 ]
 notes = [
   "Press ctrl+g two times to send ctrl+g to the program in the pane.",
+  "Lock is on: every key but ctrl+g goes to the pane. Set keybindings.lock = false to use the tuios chords again.",
 ]
 
 [prefix_mode]

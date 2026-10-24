@@ -123,7 +123,9 @@ func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
 // Bindings() spelling chords from Scopes(leader), the list says ctrl+g t r
 // for the split and the list check fails.
 func TestZellijPresetOpensModes(t *testing.T) {
-	term, base := panesSession(t, "zellijkeys", "\n[keybindings]\npreset = \"zellij\"\n")
+	// The preset turns lock on, so the client stays in terminal mode: see
+	// lockedSession.
+	term, base := lockedSession(t, "zellijkeys", "\n[keybindings]\npreset = \"zellij\"\n")
 	waitForSettledGeometryIn(t, base, "zellijkeys", 1)
 	for _, tc := range []struct{ key, title string }{{"t", "Switch to workspace"}, {"p", "Toggle tiling mode"}} {
 		if err := term.SendKeys(tuitest.Ctrl('g'), tc.key); err != nil {

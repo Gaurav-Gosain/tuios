@@ -45,10 +45,9 @@ func handleOpenMenu(action string) ActionHandler {
 // every other prefix does.
 func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	name := o.Menu
-	o.Menu = ""
-	o.PrefixActive = false
+	k := startMenuKey(o)
 	menu, ok := declaredMenu(o, name)
-	if !ok {
+	if !ok || k.leaves(msg) {
 		return o, nil
 	}
 	action := lookupAction(o, msg, func(key string) string { return o.KeybindRegistry.GetMenuAction(name, key) })
@@ -57,10 +56,16 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if menu.Sticky && m.Menu == "" && !m.PrefixActive {
 			m.Menu = name
 			m.PrefixActive = true
+		} else {
+			// Lock mode holds a menu open after a repeatable action too.
+			k.ran(m, action)
 		}
 		return m, cmd
 	}
-	if k := msg.String(); k == "esc" || k == "ctrl+c" {
+	if s := msg.String(); s == "esc" || s == "ctrl+c" {
+		return o, nil
+	}
+	if k.unbound(msg, o) {
 		return o, nil
 	}
 	if menu.Sticky && o.Mode == app.TerminalMode {

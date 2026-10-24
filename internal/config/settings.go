@@ -633,6 +633,9 @@ type Settings struct {
 	// rather than the binding tables. Empty is the default of each.
 	KeyboardLayout string
 	OptionGlyphs   string
+	// Lock is keybindings.lock: terminal mode gives every key but the leader
+	// to the focused pane.
+	Lock bool
 
 	// PaneGap is the cells of empty space the tiler keeps between two neighbouring
 	// panes: i3's inner gap, and about the only spacing a terminal window manager
