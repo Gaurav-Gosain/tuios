@@ -31,9 +31,9 @@ const paneOverlaysLook = "pane_overlays = true\n" +
 //     the dialog. Its frame and interior are held as the rename dialog's are by
 //     TestOverlayFramesMatchPaneBorders, title and hints included.
 //   - scrollback-browser: the browser over a pane that printed two commands
-//     with OSC 133 marks. Its frame takes the focused border's ink, its
-//     selected command row is a step of the pane ground, and its footer's key
-//     pills are steps of it too.
+//     with OSC 133 marks. Its frame takes the focused border's ink and sits
+//     on the pane's ground along all four edges, its selected command row is a
+//     step of the pane ground, and its footer's key pills are steps of it too.
 //   - copy-mode-search: the search bar copy mode draws at the foot of the pane
 //     is on the pane's ground.
 //
@@ -90,6 +90,7 @@ func TestPaneOverlaysReachTheRemainingSurfaces(t *testing.T) {
 			t.Fatalf("the scrollback browser does not read as a pane window (want frame fg=%+v on %+v, the selected row and key pills steps of %+v, not the stock %+v and %+v):\n%s\n%s",
 				matchBorder, matchPaneBg, matchPaneBg, stockBrowserTrueColor.selected, stockBrowserTrueColor.pill, report, term.SnapshotStyled())
 		}
+		wantBrowserFrameOnPane(t, term, art, "pane-overlays-scrollback-browser", b)
 		closeScrollbackBrowser(t, term)
 		alive(t, term, "after the scrollback browser check")
 	})
@@ -396,6 +397,43 @@ func readBrowserLook(s tuitest.Screen, b overlayBox) (browserLook, bool) {
 	}
 	l.report = r.String()
 	return l, ok
+}
+
+// wantBrowserFrameOnPane fails unless every cell of the browser's frame at b,
+// all four edges end to end, is a frame glyph on the pane's ground.
+// readBrowserLook reads six cells round the top-left corner, so a frame whose
+// right or bottom edge took another ground would pass it; this reads them all,
+// as wantFrameRowsOnPane does the rows a dialog's title and hints ride in.
+func wantBrowserFrameOnPane(t *testing.T, term *tuitest.Terminal, art, name string, b overlayBox) {
+	t.Helper()
+	var report string
+	err := term.WaitFor(func(s tuitest.Screen) bool {
+		var r strings.Builder
+		ok, cells := true, 0
+		check := func(x, y int) {
+			cells++
+			c := s.Cell(x, y)
+			if c.Content == "" || !strings.Contains(frameGlyphs, c.Content) || c.Bg != matchPaneBg {
+				fmt.Fprintf(&r, "(%d,%d) %q bg=%+v\n", x, y, c.Content, c.Bg)
+				ok = false
+			}
+		}
+		for x := b.x0; x <= b.x1; x++ {
+			check(x, b.y0)
+			check(x, b.y1)
+		}
+		for y := b.y0 + 1; y < b.y1; y++ {
+			check(b.x0, y)
+			check(b.x1, y)
+		}
+		fmt.Fprintf(&r, "frame cells read: %d\n", cells)
+		report = r.String()
+		return ok
+	}, uiTimeout)
+	saveOverlayText(t, art, name+"-frame-grounds", report)
+	if err != nil {
+		t.Fatalf("the scrollback browser's frame at %+v is not all on the pane's ground %+v:\n%s\n%s", b, matchPaneBg, report, term.SnapshotStyled())
+	}
 }
 
 // openCopyModeSearch prints a line to find, enters copy mode and types a
