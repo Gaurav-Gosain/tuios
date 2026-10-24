@@ -154,6 +154,9 @@ func (st state) runWidth(text string) float64 {
 	var pf *face
 	var pg *glyph
 	for _, ru := range text {
+		if hidden(ru) {
+			continue
+		}
 		f, g := st.glyphOf(ru)
 		if g != nil && pg != nil && f == pf {
 			width += f.kern(pg, g) * st.fontSize / f.upem
@@ -202,6 +205,10 @@ func (st state) face() *face {
 }
 
 // glyphOf finds a glyph for r in the run's face, then in the others.
+// hidden is a character that takes no room and shows nothing: a zero-width
+// space, or a soft hyphen where the line does not break. pele measures both as nothing.
+func hidden(r rune) bool { return r == 0x200b || r == 0xad }
+
 func (st state) glyphOf(r rune) (*face, *glyph) {
 	f := st.face()
 	if g := f.glyphFor(r); g.ok {
@@ -218,6 +225,9 @@ func (st state) glyphOf(r rune) (*face, *glyph) {
 }
 
 func (st state) advance(r rune) float64 {
+	if hidden(r) {
+		return 0
+	}
 	f, g := st.glyphOf(r)
 	if g == nil {
 		if r < 32 {
@@ -299,9 +309,14 @@ func (r *renderer) text(n *node, st state) {
 			var p path
 			var pf *face
 			var pg *glyph
+			startX := penX
+			penY := penY + run.st.shift
 			for _, ru := range run.text {
 				if r.budget--; r.budget < 0 {
 					return
+				}
+				if hidden(ru) {
+					continue
 				}
 				f, g := run.st.glyphOf(ru)
 				if g == nil {
@@ -347,6 +362,15 @@ func (r *renderer) text(n *node, st state) {
 					}
 				}
 				penX += g.advance * k
+			}
+			if run.st.underline && penX > startX {
+				s := run.st.fontSize
+				y0, y1 := penY+s*0.1, penY+s*0.1+max(s*0.07, 1)
+				p.moveTo(pt{startX, y0})
+				p.lineTo(pt{penX, y0})
+				p.lineTo(pt{penX, y1})
+				p.lineTo(pt{startX, y1})
+				p.close()
 			}
 			st := run.st
 			if r.readable && !st.authored {

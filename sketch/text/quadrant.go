@@ -130,7 +130,13 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 	// The names of the quadrants in their outer corners: 1 top right, 2 top
 	// left, 3 bottom left, 4 bottom right. A name moves in a row from the edge
 	// while a point is in its way.
+	// titleRow is the row of each quadrant's name, and inward the way to the middle.
+	var titleRow, inward [4]int
 	for k, name := range q.Quadrants {
+		titleRow[k], inward[k] = top+1, 1
+		if k >= 2 {
+			titleRow[k], inward[k] = bottom-1, -1
+		}
 		s := fit(name, half-2)
 		if s == "" {
 			continue
@@ -151,6 +157,7 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		}
 		c.text(x, ty, s, roleTitle)
 		take(x-1, ty, width(s)+2)
+		titleRow[k] = ty
 	}
 
 	// The axis names.
@@ -197,6 +204,25 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		tries := []spot{{d.x + 2, d.y}, {d.x - 1 - w, d.y}, {d.x - w/2, d.y - 1}, {d.x - w/2, d.y + 1},
 			{d.x + 2, d.y - 1}, {d.x - 1 - w, d.y - 1}, {d.x + 2, d.y + 1}, {d.x - 1 - w, d.y + 1},
 			{d.x - w/2, d.y - 2}, {d.x - w/2, d.y + 2}}
+		// Then under the name of the point's quadrant, as pele 1.9.0 does, kept
+		// clear of the box's edge.
+		k := 3
+		switch {
+		case d.x < midX && d.y < mid:
+			k = 1
+		case d.x < midX:
+			k = 2
+		case d.y < mid:
+			k = 0
+		}
+		lo, hi := x0+2, midX-2-w
+		if k == 0 || k == 3 {
+			lo, hi = midX+2, x1-1-w
+		}
+		if hi >= lo {
+			tx := min(max(d.x-w/2, lo), hi)
+			tries = append(tries, spot{tx, titleRow[k] + inward[k]}, spot{tx, titleRow[k] + 2*inward[k]})
+		}
 		placed := false
 		for _, cross := range []bool{false, true} {
 			for _, t := range tries {
