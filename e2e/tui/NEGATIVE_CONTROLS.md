@@ -9052,19 +9052,29 @@ Run on 2026-10-24 on Linux amd64 with Go 1.27.1 against upstream main at 4364999
 `TestAgentMarksFollowTheGlyphSet` writes a glyph set naming `✋` for
 `state_needs_input` and `◆` for `state_working`, reports three agents over the
 CLI and reads the rail, the front window's title bar and the cockpit by cell,
-holding the names and marks to the columns a run on the shipped marks puts
-them in. `TestAgentMarksKeepTheirDefaults` is its positive half: no set,
-`--ascii-only` and the built-in `ascii` set.
-`TestAgentMarksRefuseWhatTheyCannotDraw` writes a four-cell mark, a mark wide
-only through the emoji variation selector and one carrying an escape, beside
-one good mark. Run on 2026-10-23.
+against a run on the shipped marks: the rail's names one column right of where
+the shipped marks put them, the wide cockpit's names where they put them.
+`TestAgentMarksLineUpInEveryList` uses the same set with two more panes that
+have no agent and reads the navigator's Panes box, its preview and the
+aggregate view: names in one column whether the row wears ✋, a one-cell mark
+or none, and the preview's location line under its header's name.
+`TestAgentMarksKeepTheirDefaults` is the positive half: no set, `--ascii-only`
+and the built-in `ascii` set. `TestAgentMarksRefuseWhatTheyCannotDraw` writes
+a four-cell mark, a mark wide only through the emoji variation selector and
+one carrying an escape, beside one good mark. The first and fourth rows were
+run on 2026-10-23, the rest on 2026-10-24.
 
 | Wiring | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A set names the state marks at all | the binary built from the commit before the feature | `TestAgentMarksFollowTheGlyphSet` ("the rail never drew the set's marks"), `TestAgentMarksKeepTheirDefaults/ascii-set` ("the rail never drew \"! hand-pane\""), `TestAgentMarksRefuseWhatTheyCannotDraw` ("the rail did not fall back to ▲ and ○ beside the set's ◆") | **caught** |
-| A mark and its gap take two cells, so a two-cell mark's second cell is its gap | `agentMarkGap` in `internal/app/render_helpers.go` counts every mark as one cell | `TestAgentMarksFollowTheGlyphSet` ("hand-pane starts at column 121, and at 120 with the shipped marks: the glyph set moved the rail's names", "column 118 holds \"✋\", 2 cells, and hand-pane starts at 121; want ✋ in two cells and the name straight after it", "no rail row reads ✋home") | **caught** |
-| The names stay where the shipped marks put them, rail and cockpit | the binary built from the commit before this rule, which widened the mark column to the widest mark | `TestAgentMarksFollowTheGlyphSet` ("hand-pane starts at column 121, and at 120 with the shipped marks", the same for work-pane and rest-pane, "the cockpit starts hand-pane at column 6, and at 5 with the shipped marks", the same for work-pane and rest-pane) | **caught** |
+| A mark and its gap take the set's widest mark and one blank, so with ✋ in the set every rail name moves one column right and all stay in one column | `agentMarkLead` in `internal/app/render_helpers.go` returns 2, the shipped marks' lead, whatever the set draws | `TestAgentMarksFollowTheGlyphSet` ("work-pane starts at column 120, and at 120 with the shipped marks: want one column further right for the set's two-cell mark", the same for rest-pane, "work-pane has \"w\" at column 120, in the two blanks after its narrow mark", the same for rest-pane), `TestAgentMarksLineUpInEveryList` ("the navigator starts work-pane (mark \"◆\") at column 13 and hand-pane (mark ✋) at 14: the names are not in one column", the same for rest-pane and plain-a, and "the aggregate view starts plain-a (mark \"\") at column 30 and hand-pane (mark ✋) at 31", the same for work-pane and rest-pane) | **caught** |
+| A wide cockpit keeps its two blanks after the mark, so its names stay where the shipped marks put them | the `max(nx, x+5)` clause for a wide cockpit in `drawFleetRow` (`internal/app/render_cockpit.go`) cut, so every cockpit takes the rail's lead | `TestAgentMarksFollowTheGlyphSet` ("the cockpit starts hand-pane at column 5, and at 4 with the shipped marks", the same for work-pane and rest-pane) | **caught** |
 | A mark that is not one or two cells, or wide only through what follows it, keeps the default | the `MarkWidth` check in `sanitizeGlyphSet` cut | `TestAgentMarksRefuseWhatTheyCannotDraw` ("the rail did not fall back to ▲ and ○") | **caught** |
+| The navigator's pane rows lead with the set's mark and its gap | `navPaneName` in `internal/app/render_navigator.go` back to two hand-padded blanks for no mark and one blank after a mark | `TestAgentMarksLineUpInEveryList` ("the navigator starts work-pane (mark \"◆\") at column 13 and hand-pane (mark ✋) at 14: the names are not in one column", the same for rest-pane and plain-a, and "the preview's location line starts at column 64 and its header's name at 63", the header being drawn by the same function) | **caught** |
+| The navigator preview's location line starts under its header's name | the location line in `navigatorPreview` back to a two-blank lead | `TestAgentMarksLineUpInEveryList` ("the preview's location line starts at column 63 and its header's name at 64") | **caught** |
+| The aggregate view's rows lead with the set's mark and its gap | `aggregateViewRow` in `internal/app/render_aggregate_view.go` back to `mark, markW := pad+pad, 2` and one blank after the focus accent | `TestAgentMarksLineUpInEveryList` ("the aggregate view starts plain-a (mark \"\") at column 30 and hand-pane (mark ✋) at 31: the names are not in one column") | **caught** |
+| The navigator and the aggregate view, together | the binary built from the branch as it stood before the fix that moved both onto the lead | `TestAgentMarksLineUpInEveryList` (the navigator's three rows as in the navigator row above, and the aggregate view's plain-a row as in the aggregate row above) | **caught** |
+| A narrow cockpit, under 48 columns, starts its names after the set's lead | not cut | none: the tests draw a wide cockpit | **not caught** |
 | The title bar reserves the mark's measured width | not cut | none: the test's titles have room to spare | **not caught** |
 
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
