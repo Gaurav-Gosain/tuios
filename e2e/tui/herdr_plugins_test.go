@@ -385,10 +385,15 @@ func TestHerdrPluginActions(t *testing.T) {
 // variables, and the marker it prints is on screen. popup.close and
 // plugin.pane.close close them.
 //
+// The split pane tags the pane it was opened from with a metadata token, as
+// herdr-sidebar tags each preview pane it opens, and the token is on that
+// pane's record. A plain pane that tags another pane is still refused.
+//
 // Negative controls (NEGATIVE_CONTROLS.md, "herdr plugins"): with Env cut
 // from the NewWindowOptions in herdrPluginPaneOpen, the pane env files lack
 // the entrypoint; with Popup forced false, the popup opens as a tile and
-// the window count check fails.
+// the window count check fails; with the pluginPaneMetadataTarget call cut
+// from herdrPane, the plugin pane's tag is refused.
 func TestHerdrPluginPanes(t *testing.T) {
 	term, base := pluginClient(t, pluginsConfig(t, []string{"e2e.panes"}, "panes"))
 	const id = "e2e.panes"
@@ -454,8 +459,25 @@ func TestHerdrPluginPanes(t *testing.T) {
 	if envValue(side, "entry") != "side" || envValue(side, "pane") != paneID || envValue(side, "cwd") != root {
 		t.Fatalf("the split pane saw (opened as %s):\n%s", paneID, side)
 	}
+	// The split pane tagged the pane focused when it opened.
+	mark := waitPluginFile(t, base, id, "mark.out", "code=")
+	_, target, _ := strings.Cut(mark, "code=0 target=")
+	target = strings.TrimSpace(target)
+	if target == "" || target == paneID {
+		t.Fatalf("the plugin pane could not tag the pane it was opened from:\n%s", mark)
+	}
+	tagged := herdrCall(t, base, "pane.get", map[string]any{"pane_id": target})
+	if got := dig(tagged, "pane", "tokens", "e2e-mark"); got != "from-plugin-pane" {
+		t.Fatalf("%s holds e2e-mark %v after the plugin pane tagged it: %v", target, got, tagged)
+	}
+	// A plain pane may still tag only itself.
+	plain := runHerdrSteps(t, base, "w1", "plain-mark", "step mark \"$H\" pane report-metadata "+paneID+" --source e2e.plain --token e2e-mark=from-w1\n")
+	if st := plain["mark"]; st.code == 0 || !strings.Contains(st.out+st.err, "may report only for itself") {
+		t.Fatalf("a plain pane tagged the plugin pane: exit %d, stdout %q, stderr %q", st.code, st.out, st.err)
+	}
 	savePluginArtifact(t, base, id, "pane-pop.env")
 	savePluginArtifact(t, base, id, "pane-side.env")
+	savePluginArtifact(t, base, id, "mark.out")
 	if res := herdrCall(t, base, "plugin.pane.close", map[string]any{"pane_id": paneID}); res["type"] != "plugin_pane_closed" {
 		t.Fatalf("plugin.pane.close answered %v", res)
 	}

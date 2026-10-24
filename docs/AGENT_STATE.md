@@ -462,6 +462,12 @@ holds no session, and the daemon answers `forbidden`. A report from another
 machine is refused. `notification.show` names no pane, so it needs a caller
 in a pane. The `pane_id` can be herdr's form or the window id.
 
+A pane that a herdr plugin opened with `plugin.pane.open` can also set
+`pane.report_metadata` tokens on another pane, as the plugin's own commands
+can. herdr-sidebar uses this to mark each preview pane it opens. Under mode
+`strict` the daemon refuses it, as it refuses the plugin's commands. Agent
+state from that pane is still only for that pane.
+
 #### herdr's command line
 
 Tools built for herdr call herdr's CLI through `$HERDR_BIN_PATH`. In a tuios
