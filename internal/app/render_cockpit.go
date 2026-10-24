@@ -207,6 +207,9 @@ type ckFrameKey struct {
 	hosts                uint64
 	depth                overlay.Depth
 	ascii, nerd, snoozes bool
+	// tml moves with every repaint of a surface, which the Artifacts tab
+	// may draw, and art with the tab's own state.
+	tml, art uint64
 }
 
 // renderCockpit draws the cockpit over the screen between the dock's rows,
@@ -234,6 +237,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 		list: st.agents.listAt, minute: now.Unix() / 60, theme: theme.Generation(), live: st.Live, liveGen: ck.liveGen,
 		open: st.threads.open, daemon: m.IsDaemonSession, keys: m.KeybindRegistry, hosts: m.federationGen,
 		depth: l.pal.Depth, ascii: l.ascii, nerd: l.nerd, snoozes: st.life.ShowSnoozed,
+		tml: m.tml.gen + m.tml.setGen<<32, art: ck.art.gen,
 	}
 	if e, ok := m.cockpitAgent(); ok {
 		if t := st.threads.byKey[agentKey(e)]; t != nil {
@@ -864,6 +868,12 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	}
 	c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})
+	if r.agent >= 0 && m.ckArtifactNew(e, false) {
+		// A surface the person has not seen: the chip opens it.
+		cx := c.textR(rx-2, y, ckSeg{t: l.g(ckGlyphNeeds) + " " + ckArtChip, fg: ink(pal.Attention), attrs: ckBold})
+		ck.hits = append([]ckHit{{x0: cx, y0: top + y, x1: rx - 2, y1: top + y + 1, kind: ckHitAction, action: "artrow:" + r.key}}, ck.hits...)
+		rx = cx
+	}
 	if r.lines == 1 && w < 48 {
 		c.text(nx+nameW, y, rx-1, ckSeg{t: ckTrunc(place, rx-1-nx-nameW), fg: ink(pal.FgMute)})
 		return
@@ -1339,6 +1349,12 @@ func (m *OS) drawCockpitStrip(c *ckCanvas, l ckLook, y, top int) int {
 		x = c.text(x, y, 0, ckSeg{t: " " + g + " ", fg: gInk, bg: bg}, ckSeg{t: name + " ", fg: overlay.Readable(nameInk, bg), bg: bg, attrs: ckBold})
 		c.mark(pal, x0, y, x-x0, 1, overlay.RowState{Cursor: r.key == sel.key, Focused: true})
 		ck.hits = append(ck.hits, ckHit{x0: x0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitRow, key: r.key})
+		if r.agent >= 0 && m.ckArtifactNew(e, false) {
+			// A surface the person has not seen: the chip opens it.
+			cx := x + 1
+			x = c.text(cx, y, 0, ckSeg{t: l.g(ckGlyphNeeds) + " " + ckArtChip, fg: pal.Attention, attrs: ckBold})
+			ck.hits = append([]ckHit{{x0: cx, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "artrow:" + r.key}}, ck.hits...)
+		}
 		x += 2
 	}
 	return y + 1
@@ -1468,6 +1484,8 @@ func (m *OS) drawCockpitHints(c *ckCanvas, l ckLook, y int, now time.Time) {
 func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	st := &m.Inbox
 	switch {
+	case st.ck.art.focus:
+		return []overlay.Hint{{Key: "esc", Label: "back to the agents", Priority: overlay.HintEssential}}
 	case st.ck.cmp != nil:
 		n := "1"
 		if res := st.ck.cmp.res; res != nil && len(res.Rows) > 1 {
@@ -1714,6 +1732,11 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	// The side column's pieces as focus tabs, narrower than it, above the
 	// card.
 	switch m.cockpitTab() {
+	case ckArtTab:
+		if cardTop-1-bodyTop >= 2 {
+			m.drawArtifacts(c, l, e, x, bodyTop, w, cardTop-1, top, now)
+		}
+		return
 	case "Checkpoints":
 		if room := cardTop - 1 - bodyTop; room >= 2 {
 			m.drawCheckpoints(c, l, e, x, bodyTop, w, max((room-1)/2, 1))
@@ -1768,6 +1791,9 @@ func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
 	// Changes waits for a transcript page: a pane the daemon turns out to have
 	// no file for would lose the tab again, and a ] pressed meanwhile would
 	// land on it and then fall back to Thread.
+	if arts := m.ckArtTabLabel(e); arts != "" {
+		side = append([]string{arts}, side...)
+	}
 	t := m.Inbox.threads.byKey[agentKey(e)]
 	if !m.threadReadsTranscript(e) || t == nil || !t.read {
 		return append([]string{"Thread"}, side...)

@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
+	"tuios.dev/loom"
 )
 
 // The cockpit is the Inbox drawn as one full-screen surface on ctrl+b i: a
@@ -229,6 +230,8 @@ type cockpitState struct {
 	// cmp is the open comparison of a fan's attempts, nil when it is not up.
 	// See cockpit_compare.go.
 	cmp *ckCompare
+	// art is the Artifacts tab. See cockpit_artifacts.go.
+	art ckArtState
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -248,9 +251,12 @@ type ckPlaced struct {
 type ckRowsKey struct {
 	list       agentsListKey
 	inbox, gen uint64
-	colH       int
-	oneLine    bool
-	minute     int64
+	// arts moves when a surface opens or closes, or one is seen: a new
+	// surface puts a chip on its agent's row.
+	arts    uint64
+	colH    int
+	oneLine bool
+	minute  int64
 }
 
 // ckHit is a click target: a fleet row, a group heading, a button.
@@ -302,7 +308,7 @@ func (m *OS) cockpitRows() []ckRow {
 	now := time.Now()
 	m.cockpitSettleHold(now)
 	key := ckRowsKey{
-		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH,
+		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
 		oneLine: ck.oneLine, minute: now.Unix() / 60,
 	}
 	if ck.rows != nil && ck.rowsAt == key {
@@ -413,6 +419,11 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if e.StateAt > 0 && now.Sub(time.Unix(0, e.StateAt)) > ckEarlierAfter {
 				g = ckEarlier
 			}
+		}
+		if g != ckNeeds && m.ckArtifactNew(e, true) {
+			// A popup the person has not seen in this view waits for them,
+			// so its agent rests with the agents that need them.
+			g = ckNeeds
 		}
 		g = m.ckHoldGroup(agentKey(e), g, now)
 		groups[g] = append(groups[g], ckRow{kind: ckRowAgent, group: g, agent: i, key: "a:" + agentKey(e)})
@@ -979,6 +990,14 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	if ck.spawn != nil {
 		return m.spawnClick(x, y), true
 	}
+	if cmd, ok := m.cockpitArtifactMouse(x, y, loom.MouseLeft); ok {
+		return cmd, true
+	}
+	if ck.art.focus {
+		// A click anywhere else gives the keys back to the view.
+		ck.art.focus = false
+		m.cockpitTouch()
+	}
 	for _, h := range ck.hits {
 		if x < h.x0 || x >= h.x1 || y < h.y0 || y >= h.y1 {
 			continue
@@ -1063,6 +1082,15 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 			m.CockpitScope(h)
 			return nil
 		}
+		if id, ok := strings.CutPrefix(action, "art:"); ok {
+			m.ckArtShow(id, true)
+			return nil
+		}
+		if key, ok := strings.CutPrefix(action, "artrow:"); ok {
+			m.cockpitSelectKey(key)
+			m.cockpitReplyFollow()
+			return m.CockpitArtifactOpen()
+		}
 		if i, ok := strings.CutPrefix(action, "image:"); ok {
 			n, _ := strconv.Atoi(i)
 			return m.cockpitOpenImage(n)
@@ -1120,11 +1148,19 @@ func (m *OS) CockpitHover(x, y int) {
 
 // CockpitWheel scrolls the fleet when the pointer is over it, and the card's
 // detail when it is over the focus area.
-func (m *OS) CockpitWheel(x int, up bool) {
+func (m *OS) CockpitWheel(x, y int, up bool) {
 	ck := &m.Inbox.ck
 	if ck.img != nil || ck.spawn != nil {
 		// The image view and the spawn sheet cover everything behind
 		// them.
+		return
+	}
+	button := loom.WheelDown
+	if up {
+		button = loom.WheelUp
+	}
+	if cmd, ok := m.cockpitArtifactMouse(x, y, button); ok {
+		m.queueTMLCmd(cmd)
 		return
 	}
 	if x < ck.fleetW {
@@ -1265,11 +1301,17 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 			m.cockpitTouch()
 		}
 		return nil, true
+	case config.ActionInboxArtifact:
+		return m.CockpitArtifactOpen(), true
 	case config.ActionInboxDetailDown, config.ActionInboxDetailUp:
-		// J and K scroll a plan's detail first, then the thread.
+		// J and K scroll a plan's detail first, then the thread. On the
+		// Artifacts tab they move through the artifacts.
 		d := 1
 		if action == config.ActionInboxDetailUp {
 			d = -1
+		}
+		if m.ckArtMove(d) {
+			return nil, true
 		}
 		m.cockpitSync()
 		if cmd, ok := m.InboxDetailScroll(d); ok {

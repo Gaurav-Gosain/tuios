@@ -52,6 +52,10 @@ type tmlClient struct {
 	// clockArmed says a minute tick is on its way for the views whose
 	// bindings call ago(). UI goroutine only.
 	clockArmed bool
+	// setGen counts the views made and dropped, and gen every repaint of
+	// one, for the keys of the agents view, which lists and draws them too.
+	// UI goroutine only.
+	setGen, gen uint64
 }
 
 // TMLClockMsg is the minute tick of the surfaces that call ago().
@@ -87,9 +91,13 @@ func (m *OS) handleTMLClock() tea.Cmd {
 
 // tmlView is one surface as this client draws it.
 type tmlView struct {
-	id         string
-	title      string
-	owner      string
+	id    string
+	title string
+	owner string
+	// caller is the window id of the pane that opened the surface, "" for
+	// the person's own. at is when this client first got it.
+	caller     string
+	at         time.Time
 	version    uint64
 	docVersion uint64
 	doc        *tml.Node
@@ -392,6 +400,7 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 			return false
 		}
 		delete(m.tml.views, p.Surface)
+		m.tml.setGen++
 		m.markTMLDirty(p.Surface)
 		return true
 	}
@@ -449,8 +458,10 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 			return false
 		}
 		if v == nil {
-			v = &tmlView{id: p.Surface}
+			v = &tmlView{id: p.Surface, at: time.Now()}
 			m.tml.views[p.Surface] = v
+			m.tml.setGen++
+			defer m.cockpitArtifactArrived(v)
 		}
 		v.doc = doc
 	}
@@ -469,7 +480,7 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		clientLog("TML surface %s: %v", p.Surface, err)
 		return false
 	}
-	v.title, v.owner = p.Title, p.Owner
+	v.title, v.owner, v.caller = p.Title, p.Owner, p.Caller
 	v.refreshing = false
 	v.version, v.docVersion = p.Version, p.DocVersion
 	v.content = ""
@@ -501,6 +512,7 @@ func (m *OS) pruneTMLViews(state *session.SessionState) {
 	for id := range m.tml.views {
 		if !shown[id] {
 			delete(m.tml.views, id)
+			m.tml.setGen++
 		}
 	}
 }
@@ -553,6 +565,7 @@ func (m *OS) tmlViewOf(w *terminal.Window) *tmlView {
 
 // markTMLDirty marks the windows that draw a surface for a repaint.
 func (m *OS) markTMLDirty(id string) {
+	m.tml.gen++
 	for _, w := range m.Windows {
 		if w != nil && w.Kind == session.WindowKindTML && session.TMLSurfaceID(w.URI) == id {
 			w.MarkContentDirty()
@@ -839,9 +852,9 @@ func (m *OS) TMLMouse(w *terminal.Window, ev uv.MouseEvent) {
 // daemon, and the effects.
 func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd {
 	if len(res.Changed) > 0 || res.View || len(res.Effects) > 0 {
-		w.MarkContentDirty()
-		m.cachedViewContent = ""
+		m.tmlRepaint(w, v)
 	}
+	roomW, roomH := m.tmlRoom(w, v)
 	var cmds []tea.Cmd
 	ops := tmlStateOps(v.surface.State(), res.Changed)
 	closing, hasValue := false, false
@@ -858,7 +871,7 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 				m.ShowNotification("Not run: "+why+".", "warning", m.Settings.NotificationDuration)
 				continue
 			}
-			if tmlAsks(a) && !tmlQuestionFits(len(m.tmlQuestion(a, w.ContentWidth())), w.ContentHeight()) {
+			if tmlAsks(a) && !tmlQuestionFits(len(m.tmlQuestion(a, roomW)), roomH) {
 				// The whole question must fit, or the person would say
 				// yes to a part of it.
 				m.ShowNotification("The surface's command is too long to show here, so tuios does not run it.", "warning", m.Settings.NotificationDuration)
@@ -869,8 +882,7 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 				// program, the person says yes to it. The action waits for
 				// the answer.
 				v.confirm = &a
-				w.MarkContentDirty()
-				m.cachedViewContent = ""
+				m.tmlRepaint(w, v)
 				continue
 			}
 			actions = append(actions, a)
@@ -896,6 +908,30 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 		cmds = append(cmds, m.tmlInput(v, tmlInputReq{ops: ops, events: events, actions: actions, closing: closing, value: value, hasValue: hasValue}))
 	}
 	return tea.Batch(cmds...)
+}
+
+// tmlRepaint marks a surface for a repaint: its window when it has one here,
+// and the agents view, which may draw it instead.
+func (m *OS) tmlRepaint(w *terminal.Window, v *tmlView) {
+	if w != nil {
+		w.MarkContentDirty()
+	}
+	m.cachedViewContent = ""
+	m.tml.gen++
+	if v != nil {
+		// The window and the agents view draw the surface at their own
+		// sizes, so neither keeps the other's last frame.
+		v.content = ""
+	}
+}
+
+// tmlRoom is the room a surface is drawn in: its window's content box, or
+// the box the agents view last drew it in.
+func (m *OS) tmlRoom(w *terminal.Window, v *tmlView) (int, int) {
+	if w != nil {
+		return w.ContentWidth(), w.ContentHeight()
+	}
+	return m.Inbox.ck.art.box.w, m.Inbox.ck.art.box.h
 }
 
 // tmlStateOps turns the state paths a local action changed into a JSON Patch

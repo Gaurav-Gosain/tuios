@@ -1235,6 +1235,35 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbTMLList,
 		},
+		"tml-place": {
+			description: "Move a TML surface between a popup and a tiled pane, as the person chose. The surface keeps its state, so a form keeps what the person typed. Needs the attach nonce of a client.",
+			params: []verbParam{
+				{Name: "surface", Type: "string", Required: true, Description: "The surface id."},
+				{Name: "target", Type: "string", Required: true, Description: "popup or pane.", Accepted: tmlTargets},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The attach nonce of the client the person uses."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The surface's window."},
+				{Name: "target", Type: "string", Description: "Where the surface is now."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"tml-place","params":{"surface":"tml-4f1a9c02","target":"pane","human_nonce":"..."}}`,
+			},
+			handler: (*Daemon).verbTMLPlace,
+		},
+		"artifact-list": {
+			description: "List what one pane has shown the person, newest first: the TML surfaces it opened, open or closed, and the screenshots it took. The daemon keeps the last 20 of each pane until it restarts.",
+			params: []verbParam{
+				{Name: "window", Type: "string", Required: true, Description: "The window id of the pane."},
+			},
+			returns: []verbParam{
+				{Name: "artifacts", Type: "[]object", Description: "Each artifact: id, kind (tml or screenshot), title, at (Unix nanoseconds) and window_id. A tml artifact adds surface, target, open, doc and state, and when it closed, reason and value. A screenshot adds path and format."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"artifact-list","params":{"window":"3f2a91c0-0000-4000-8000-000000000000"}}`,
+			},
+			handler: (*Daemon).verbArtifactList,
+		},
 		"tml-validate": {
 			description: "Check a TML document as tml-open would. Needs no session.",
 			params: []verbParam{

@@ -35,6 +35,7 @@ command here runs as written. Change only the pane names and the quoted text.
 | Wait for an agent to stop or to need input | `tuios wait-for agent-state -s "$TUIOS_SESSION" -w worker --until needs_input,idle,done --timeout 600000` |
 | Read the prompt an agent waits on | `tuios peek-prompt -s "$TUIOS_SESSION" -w deploy` |
 | Ask the person, and wait for the answer | `tuios ask-human 'Deploy to staging?' -o yes -o no --timeout 90000` |
+| Show the person a form, a table or a dashboard, and wait for the answer | `tuios tml show FILE --wait`. `tuios --skill tml` has the components. |
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 
 `new-window` prints the short id and the name (`3a42ab8f  tests`). With

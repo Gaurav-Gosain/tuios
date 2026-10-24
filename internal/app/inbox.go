@@ -1143,6 +1143,10 @@ func (m *OS) OpenInbox(filter string) {
 	m.cockpitRows()
 	m.cockpitClamp()
 	m.cockpitSync()
+	// A TML popup an agent has floating now moves into the view.
+	if filter == "" {
+		m.cockpitAdoptFloating()
+	}
 }
 
 // OpenInboxOn shows the Inbox with the cursor on the item with this id, as
@@ -1169,6 +1173,8 @@ func (m *OS) inboxLandOn(id string) {
 
 // CloseInbox hides the Inbox, and the peek with it.
 func (m *OS) CloseInbox() {
+	// A surface the person was in floats again, with what they typed.
+	m.cockpitArtifactRelease()
 	m.ShowInbox = false
 	// The live pane goes back to being streamed as its workspace has it.
 	m.cockpitLiveFollow()

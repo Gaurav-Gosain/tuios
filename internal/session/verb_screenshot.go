@@ -117,6 +117,7 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newVerbError(ErrVerbCommandFailed, err.Error())
 	}
 
+	d.recordScreenshot(cs, path, string(settings.Format))
 	return map[string]any{
 		"type":   "screenshot",
 		"path":   path,

@@ -4791,8 +4791,13 @@ A small document:
 </tml>
 ```
 
+The person can move a surface between a popup and a pane: `ctrl+b t f`, the
+`dock` control on a popup's top border, or `float` on the pane's title bar.
+The document keeps its state. Each document a pane shows is also listed in
+the agents view, on the agent's Artifacts tab.
+
 The verbs behind these commands are `tml-open`, `tml-patch`, `tml-replace`,
-`tml-get`, `tml-list`, `tml-close` and `tml-validate`, in
+`tml-get`, `tml-list`, `tml-close`, `tml-place` and `tml-validate`, in
 [protocol.md](protocol.md). The events are `tml-event`.
 
 ### `tuios mermaid`

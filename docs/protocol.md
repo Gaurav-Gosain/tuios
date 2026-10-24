@@ -2641,6 +2641,25 @@ reaches only that session. Each refusal is `forbidden`.
 List the open surfaces of a session. Params: `session`. Answers `surfaces`,
 each with `surface`, `window_id`, `title`, `owner` and `version`.
 
+### tml-place
+
+Move a surface between a popup and a tiled pane, as the person chose.
+Params: `surface`, `target` (`popup` or `pane`) and `human_nonce`, the
+client's attach nonce. The window and its surface stay, so the state does
+too. A `tml-patch` or `tml-replace` from the owner does not move it back.
+Answers `{"type": "tml_placed", "surface", "window_id", "target"}`.
+
+### artifact-list
+
+List what one pane has shown the person, newest first. Params: `window`, the
+pane's window id. Each artifact has `id`, `kind` (`tml` or `screenshot`),
+`title`, `at` (Unix nanoseconds) and `window_id`. A `tml` artifact adds
+`surface`, `target`, `open`, `doc` and `state`; a closed one adds `reason`
+and `value`. A `screenshot` adds `path` and `format`. The daemon keeps the
+last 20 of each pane, for the last 128 panes that showed something, until it
+restarts. A pane reads its own list with no grant. Another pane's list needs
+the `read` grant and the pane's session in scope.
+
 ### tml-validate
 
 Check a document as `tml-open` would, with no session. Params: `doc`. Answers
@@ -2648,7 +2667,10 @@ Check a document as `tml-open` would, with no session. Params: `doc`. Answers
 
 The daemon sends each surface to a TUI client whose hello sets
 `tml_surfaces`, as a `MsgTMLSurface` frame: when it opens, when it changes,
-when it closes, and for every open surface right after the attach reply. A
+when it closes, and for every open surface right after the attach reply.
+`Caller` in the frame is the window id of the pane that opened the surface,
+empty for the person's own. The agents view lists the surface under that
+pane's agent. A
 push carries the tree only when the client may not have it: on open, on attach
 and after a replace. A push that a patch made carries the patch and no state:
 a client one version behind applies it, and a client further behind reads the
