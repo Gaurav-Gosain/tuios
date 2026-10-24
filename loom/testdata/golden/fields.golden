@@ -7,21 +7,22 @@
 |Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
 |Checked       [x]                                       |
 --- styles
-|aaabbbbbbbbbbbcdddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaabbbbbbbbbbceeebeeeebeeeeeebbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaaaabbbbbbbbebdddddddbebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbfggbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaabaaabbbbbbbeeebeeebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbdd|
-|aaaaaaabbbbbbbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaabbbbbbbbbbbcdddddddebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaabbbbbbbbbbcfffbffffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaaaabbbbbbbbfbdddddddbfbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbghhbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaabaaabbbbbbbfffbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbhhhhhhgiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiibbdd|
+|aaaaaaabbbbbbbgggbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a: fg=dim bg=panel
 b: bg=panel
 c: fg=edge bg=panel
 d: fg=fg bg=panel
-e: fg=mute bg=panel
-f: fg=accent-bright bg=panel
-g: fg=accent bg=panel
-h: fg=track bg=panel
+e: bg=panel reverse
+f: fg=mute bg=panel
+g: fg=accent-bright bg=panel
+h: fg=accent bg=panel
+i: fg=track bg=panel
 === 256 56x7
 |Tag           ▏v0.11.0                                 ▕|
 |Note          ▏Why this deploy                         ▕|
@@ -31,21 +32,22 @@ h: fg=track bg=panel
 |Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
 |Checked       [x]                                       |
 --- styles
-|aaabbbbbbbbbbbcdddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaabbbbbbbbbbceeebeeeebeeeeeebbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaaaabbbbbbbbebdddddddbebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbfggbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaabaaabbbbbbbeeebeeebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbggggggfhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbdd|
-|aaaaaaabbbbbbbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaabbbbbbbbbbbcdddddddebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaabbbbbbbbbbcfffbffffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbc|
+|aaaaaabbbbbbbbfbdddddddbfbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbghhbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaabaaabbbbbbbfffbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|aaaaaabaaaaabbhhhhhhgiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiibbdd|
+|aaaaaaabbbbbbbgggbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
 a: fg=dim bg=panel
 b: bg=panel
 c: fg=edge bg=panel
 d: fg=fg bg=panel
-e: fg=mute bg=panel
-f: fg=accent-bright bg=panel
-g: fg=accent bg=panel
-h: fg=success-tint bg=panel
+e: bg=panel reverse
+f: fg=mute bg=panel
+g: fg=accent-bright bg=panel
+h: fg=accent bg=panel
+i: fg=success-tint bg=panel
 === 16 56x7
 |Tag           ▏v0.11.0                                 ▕|
 |Note          ▏Why this deploy                         ▕|
@@ -55,18 +57,19 @@ h: fg=success-tint bg=panel
 |Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
 |Checked       [x]                                       |
 --- styles
-|aaa           bccccccc                                 b|
+|aaa           bcccccccd                                b|
 |aaaa          bbbb bbbb bbbbbb                         b|
 |aaaaaa        b ccccccc b                               |
-|aaaaaa aaaaa  dee cc                                    |
+|aaaaaa aaaaa  eff cc                                    |
 |aaa aaa       bbb bbb                                   |
-|aaaaaa aaaaa  eeeeeedbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  cc|
-|aaaaaaa       ddd                                       |
+|aaaaaa aaaaa  ffffffebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  cc|
+|aaaaaaa       eee                                       |
 a: fg=dim
 b: fg=mute
 c: fg=fg
-d: fg=accent-bright
-e: fg=accent
+d: reverse
+e: fg=accent-bright
+f: fg=accent
 === ascii 56x7
 |Tag           [v0.11.0                                 ]|
 |Note          [Why this deploy                         ]|
@@ -76,11 +79,11 @@ e: fg=accent
 |Canary share  ======O===============================  10|
 |Checked       [x]                                       |
 --- styles
+|                      a                                 |
 |                                                        |
 |                                                        |
 |                                                        |
 |                                                        |
 |                                                        |
 |                                                        |
-|                                                        |
-
+a: reverse

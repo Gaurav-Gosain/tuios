@@ -47,7 +47,7 @@ answer=$(tml confirm.tml)               # the value of close(), as JSON
 | Charts | `bar`, `line`, `area`, `sparkline`, `gauge`, `progress`, `histogram`, `heatmap`, `pie`, through [tuios.dev/plot](https://pkg.go.dev/tuios.dev/plot) |
 | Containers | `card`, `tabs`, `modal` (in place), `toast` |
 | Status | `badge`, `status`, `spinner`, `button` |
-| Forms | The fields show their label and value. Editing comes later. |
+| Forms | `input` and `textarea` take typed text, with a caret and the readline keys. `submit` buttons and `enter` in an input run the form's `on-submit`. The other fields show their label and value. |
 
 `markdown`, `diff` and `mermaid` show their source. `image` shows its alt text.
 Nothing is left out without a mark.
@@ -100,9 +100,17 @@ to a budget.
 `set` and `toggle` run at once, with no round trip to the owner. `emit`,
 `close`, `copy`, `open` and `pane` come back to your program as `Effects`.
 
-A button's `key` works from anywhere on the surface. `tab` and `shift+tab`
-move the focus. The focused table or list takes the arrow keys, `enter` and
-`s` (sort by the next column).
+A button's `key` works from anywhere on the surface, except while a text
+field has the focus. `tab` and `shift+tab` move the focus. The focused table
+or list takes the arrow keys, `enter` and `s` (sort by the next column).
+
+A text field takes the focus from `tab` or a click, never by default. It then
+takes every key that types or edits: printable keys, `space`, `backspace`,
+`delete`, `left`, `right`, `home`, `end`, `ctrl+a`, `ctrl+e`, `ctrl+b`,
+`ctrl+f`, `ctrl+u`, `ctrl+k`, `ctrl+w` and `alt+backspace`. `Paste` puts text
+at the caret. `enter` submits the form in an input and starts a line in a
+textarea. `esc` leaves the field. A field with `bind` writes that state path;
+one without keeps its text in the view, where `form.NAME` reads it.
 
 ## Links and time
 
