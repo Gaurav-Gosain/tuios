@@ -187,7 +187,7 @@ func TestStockRemainingSurfacesKeepTheirOwnLook(t *testing.T) {
 			box := openPluginApproval(t, term, base)
 			name := "stock-" + tc.name + "-plugin-approval"
 			saveArtifact(t, term, art, name)
-			wantStockDialog(t, term, art, name, box, tc.dialog)
+			wantStockDialog(t, term, art, name, "the plugin approval dialog", box, tc.dialog)
 			closePluginApproval(t, term)
 			alive(t, term, "after the stock plugin approval check")
 		})

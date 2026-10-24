@@ -67,7 +67,7 @@ func TestStockOverlaysKeepTheirOwnLook(t *testing.T) {
 			enableTiling(t, term)
 			box := openRenameFrame(t, term)
 			saveArtifact(t, term, art, "stock-"+tc.name+"-rename")
-			wantStockDialog(t, term, art, "stock-"+tc.name+"-rename", box, tc.want)
+			wantStockDialog(t, term, art, "stock-"+tc.name+"-rename", "the rename dialog", box, tc.want)
 			closeRename(t, term)
 
 			sendKeys(t, term, tuitest.Ctrl('p'))
@@ -88,9 +88,10 @@ func TestStockOverlaysKeepTheirOwnLook(t *testing.T) {
 	}
 }
 
-// wantStockDialog fails unless the rename dialog at b has its frame in want's
-// ink and ground and its padding cell on want's dialog ground.
-func wantStockDialog(t *testing.T, term *tuitest.Terminal, art, name string, b overlayBox, want stockLook) {
+// wantStockDialog fails unless the dialog at b, named what in the failure, has
+// its frame in want's ink and ground and its padding cell on want's dialog
+// ground.
+func wantStockDialog(t *testing.T, term *tuitest.Terminal, art, name, what string, b overlayBox, want stockLook) {
 	t.Helper()
 	var report string
 	err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -113,8 +114,8 @@ func wantStockDialog(t *testing.T, term *tuitest.Terminal, art, name string, b o
 	}, uiTimeout)
 	saveOverlayText(t, art, name+"-colours", report)
 	if err != nil {
-		t.Fatalf("the rename dialog at %+v does not keep upstream's look (want frame fg=%+v bg=%+v, interior bg=%+v):\n%s\n%s",
-			b, want.frameFg, want.frameBg, want.dialogBg, report, term.SnapshotStyled())
+		t.Fatalf("%s at %+v does not keep upstream's look (want frame fg=%+v bg=%+v, interior bg=%+v):\n%s\n%s",
+			what, b, want.frameFg, want.frameBg, want.dialogBg, report, term.SnapshotStyled())
 	}
 }
 
