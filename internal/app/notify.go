@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -150,9 +151,21 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 			// Channel full, drop (non-blocking).
 		}
 
-		// The literal bell is intentionally not forwarded to the host: gating it
-		// on focus would require reading OS window state (m.Windows/m.FocusedWindow)
-		// from this PTY goroutine, which races the Update goroutine. The visual
-		// bell above already identifies the window that rang.
+		// The BEL itself is not written from here. notifications.bell decides
+		// whether it reaches the host terminal, and the Update goroutine owns
+		// that setting, so ringBell writes it when it handles this message.
 	}
+}
+
+// ringBell carries out notifications.bell for one rate-limited pane bell, on
+// the Update goroutine. It writes the BEL to the host terminal when the mode
+// forwards, through the same writer as the agent alert bell, so a served
+// client gets it on its own connection. It reports whether the dock should
+// also show the bell message.
+func (m *OS) ringBell() bool {
+	mode := m.Settings.Bell
+	if mode == config.BellForward || mode == config.BellBoth {
+		m.writeHostSequence([]byte{0x07})
+	}
+	return mode == config.BellToast || mode == config.BellBoth || mode == ""
 }

@@ -41,6 +41,10 @@ type Settings struct {
 	// screen, which is the affordance that it is waiting for you.
 	NotificationErrorSticky bool
 
+	// Bell is notifications.bell: what a pane's BEL does. Only the Update
+	// goroutine reads it.
+	Bell string
+
 	// NormalFPS is the normal refresh rate during regular operation.
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
@@ -829,12 +833,29 @@ const ImageSymbolsAuto = "auto"
 // than auto are mosaic.Kind names.
 var ImageSymbolModes = []string{ImageSymbolsAuto, "octant", "sextant", "quadrant", "half", "off"}
 
+// The values of notifications.bell.
+const (
+	// BellToast shows a message in the dock. It is the default, and what
+	// tuios did before the option existed.
+	BellToast = "toast"
+	// BellForward writes the BEL to the terminal tuios runs in.
+	BellForward = "forward"
+	// BellBoth does both.
+	BellBoth = "both"
+	// BellOff does neither.
+	BellOff = "off"
+)
+
+// BellModes is what notifications.bell accepts.
+var BellModes = []string{BellToast, BellForward, BellBoth, BellOff}
+
 func DefaultSettings() Settings {
 	return Settings{
 		NotificationDuration:        6 * time.Second,
 		NotificationWarningDuration: 8 * time.Second,
 		NotificationErrorDuration:   15 * time.Second,
 		NotificationErrorSticky:     true,
+		Bell:                        BellToast,
 		NormalFPS:                   DefaultFPS,
 		UseASCIIOnly:                false,
 		Motion:                      MotionFull,

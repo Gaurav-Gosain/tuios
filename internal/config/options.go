@@ -1097,6 +1097,11 @@ var optionSpecs = []Option{
 		Description: "Make errors wait for esc instead of expiring",
 		Default:     "true",
 	},
+	{
+		Path: "notifications.bell", Type: OptionString, Section: "notifications",
+		Description: "What a pane's bell does: a dock message, a bell in your terminal, both, or nothing",
+		Accepted:    BellModes, Default: BellToast,
+	},
 
 	// [notifications.agent]. The sounds table is absent: its two keys are paths
 	// to files, which no accepted set or range can check.

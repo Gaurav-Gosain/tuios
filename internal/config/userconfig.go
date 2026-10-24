@@ -129,6 +129,10 @@ type NotificationsConfig struct {
 	// ErrorSticky makes errors wait for esc instead of expiring (default true).
 	ErrorSticky *bool `toml:"error_sticky"`
 
+	// Bell is what a pane's BEL does: toast, forward, both or off. See
+	// BellModes.
+	Bell string `toml:"bell"`
+
 	// Agent is the [notifications.agent] table: what happens when a pane's
 	// agent state changes. See agent_alerts.go.
 	Agent AgentAlertsConfig `toml:"agent"`
@@ -1493,6 +1497,8 @@ func DefaultConfig() *UserConfig {
 			Lists: getDefaultListsKeybinds(),
 		},
 	}
+	// Written out so the file shows the key and its default.
+	cfg.Notifications.Bell = BellToast
 	return cfg
 }
 
@@ -3123,6 +3129,11 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	// explicit false turns it off.
 	if cfg.Notifications.ErrorSticky != nil {
 		s.NotificationErrorSticky = *cfg.Notifications.ErrorSticky
+	}
+	// An unknown value keeps the default; validation already warned about it.
+	s.Bell = BellToast
+	if slices.Contains(BellModes, cfg.Notifications.Bell) {
+		s.Bell = cfg.Notifications.Bell
 	}
 }
 

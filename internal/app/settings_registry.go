@@ -158,6 +158,7 @@ var settingLabels = map[string]string{
 	"notifications.warning_duration":             "Warning duration",
 	"notifications.error_duration":               "Error duration",
 	"notifications.error_sticky":                 "Errors wait for esc",
+	"notifications.bell":                         "Pane bell",
 	"notifications.agent.enabled":                "Agent alerts",
 	"notifications.agent.notify":                 "Agent alert on the desktop",
 	"notifications.agent.dock":                   "Agent alert in the dock",

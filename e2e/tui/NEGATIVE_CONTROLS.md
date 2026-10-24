@@ -9023,3 +9023,15 @@ Run on 2026-10-24 on Linux with Go 1.27.1 against upstream main at 43649994b. Ea
 | The screen cleared with ED 2 and the cursor sent home, so the prompt goes: in `ClearHistorySequence` | `standalone` and `daemon` ("the command typed after the clear is on row -1 behind the prompt, want row 10, the pane's first row") | **caught** |
 
 Not covered end to end: the refusal while a full-screen program holds the pane, a prompt of two lines marked with OSC 133, and the `clear-history` command of the tmux shim.
+## Pane bell to the host terminal
+
+`TestPaneBellReachesHost` runs `printf '\a'` in a pane under each value of `notifications.bell`. It reads the raw stream the host terminal gets and counts each BEL outside an escape sequence. A BEL that ends an OSC does not count. It also reads the screen for the "bell" message in the dock. The `toast`, `forward`, `both` and `off` cases attach to a daemon session. `forward-standalone` runs without a daemon. With `TUIOS_E2E_FRAMES` set, it saves each host stream as `pane-bell-*.ansi`.
+
+Run on 2026-10-24 on Linux amd64 (Go 1.27.1) against upstream main at 43649994. The fixed build passes all five cases.
+
+| Control | How | Cases that fail | Verdict |
+| --- | --- | --- | --- |
+| The fix removed (upstream main) | build main | `forward`, `both`, `forward-standalone` ("the host got 0 bells, want 1"); `forward`, `off`, `forward-standalone` ("bell message on screen = true, want false") | **caught** |
+| The BEL sent as an OSC terminator | `ringBell` writes `ESC ] 2 ; x BEL` instead of a bare BEL | `forward`, `both`, `forward-standalone` ("the host got 0 bells, want 1") | **caught** |
+
+Not covered end to end: the bell over `tuios ssh` and in tuios-web. Both use the writer the agent alert bell uses.
