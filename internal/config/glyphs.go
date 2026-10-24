@@ -266,6 +266,9 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 		"sigil":           overlay.SigilMark(),
 		"dash_rule":       overlay.DashRuleGlyph(),
 	}
+	for state := range agentMarkDefaults {
+		out["state_"+state] = AgentStateMark(state, s.UseASCIIOnly)
+	}
 	// The border is reported through the set's own resolution rather than
 	// through GetBorderForStyle, because the two answer different questions.
 	// GetBorderForStyle says what is on screen now, which is border_style's

@@ -48,6 +48,10 @@ type ckLookKey struct {
 	// The palette's grounds and inks: with theme none they follow the host
 	// terminal's colours, which change with no new theme generation.
 	canvas, panel, fg, accent color.Color
+	// The glyph set, whose state marks the cockpit draws (ckStateMark). A
+	// selected set is a new value, so a change of set rebuilds the look and
+	// with it every frame keyed on the look.
+	glyphs *theme.GlyphSet
 }
 
 // cockpitLook is the look for the depth in force, built again only when the
@@ -57,7 +61,7 @@ func (m *OS) cockpitLook() ckLook {
 	ck := &m.Inbox.ck
 	pal := theme.UI()
 	key := ckLookKey{theme: theme.Generation(), depth: pal.Depth, ascii: overlay.UseASCII(), plain: m.Settings.NoNerdFont,
-		canvas: pal.Canvas, panel: pal.Panel, fg: pal.Fg, accent: pal.Accent}
+		canvas: pal.Canvas, panel: pal.Panel, fg: pal.Fg, accent: pal.Accent, glyphs: theme.Glyphs()}
 	if ck.lookAt != key || ck.look.pal.Canvas == nil {
 		ck.look, ck.lookAt = m.buildCockpitLook(pal), key
 		ck.lookGen++
@@ -157,21 +161,40 @@ func (l ckLook) g(gl ckGlyph) string {
 	return gl.uni
 }
 
+// ckStateMark is the mark the cockpit draws for an agent state: the glyph
+// set's when the set names one the terminal can draw, and the cockpit's own
+// design otherwise. The cockpit's marks are not the rail's (a Nerd Font check
+// for a finished agent, a dot for one that needs you), so a set that names
+// nothing leaves the cockpit looking as it was designed, and a set that does
+// name a state is obeyed here as it is everywhere else.
+func (l ckLook) ckStateMark(state string, def ckGlyph) string {
+	if g := config.SetAgentStateMark(state, l.ascii); g != "" {
+		return g
+	}
+	return l.g(def)
+}
+
 // ckMark is the mark and colour of an agent state, by the design's table.
 func (l ckLook) ckMark(state string, doneSeen bool) (string, color.Color) {
 	switch state {
 	case "needs_input":
-		return l.g(ckGlyphNeeds), l.pal.Attention
+		return l.ckStateMark(state, ckGlyphNeeds), l.pal.Attention
 	case "errored":
-		return l.g(ckGlyphFailed), l.pal.Warn
+		return l.ckStateMark(state, ckGlyphFailed), l.pal.Warn
 	case "working":
-		return l.g(ckGlyphWorking), l.pal.Busy
+		return l.ckStateMark(state, ckGlyphWorking), l.pal.Busy
 	case "done":
 		if !doneSeen {
-			return l.g(ckGlyphReview), l.pal.Success
+			return l.ckStateMark(state, ckGlyphReview), l.pal.Success
+		}
+	case "unknown":
+		// The design folds unknown into idle; a set that names unknown's mark
+		// is asking for it to be told apart.
+		if g := config.SetAgentStateMark(state, l.ascii); g != "" {
+			return g, l.pal.FgMute
 		}
 	}
-	return l.g(ckGlyphIdle), l.pal.FgMute
+	return l.ckStateMark("idle", ckGlyphIdle), l.pal.FgMute
 }
 
 // ckItemMark is the mark and colour of an Inbox item.
@@ -180,15 +203,15 @@ func (l ckLook) ckItemMark(it session.AttentionItem) (string, color.Color) {
 	case session.AttentionMail:
 		return sidebarMailGlyph(), l.pal.AccentBright
 	case session.AttentionErrored:
-		return l.g(ckGlyphFailed), l.pal.Warn
+		return l.ckStateMark("errored", ckGlyphFailed), l.pal.Warn
 	case session.AttentionFinished:
-		return l.g(ckGlyphReview), l.pal.Success
+		return l.ckStateMark("done", ckGlyphReview), l.pal.Success
 	case session.AttentionResume:
 		return l.g(ckGlyphResume), l.pal.AccentBright
 	case session.AttentionOutbox:
 		return inboxKindGlyph(it.Kind), l.pal.AccentBright
 	}
-	return l.g(ckGlyphNeeds), l.pal.Attention
+	return l.ckStateMark("needs_input", ckGlyphNeeds), l.pal.Attention
 }
 
 // ckFrameKey is what a frame was drawn from.
@@ -391,23 +414,23 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		}
 	}
 	type cnt struct {
-		g     ckGlyph
+		g     string
 		ink   color.Color
 		n     int
 		words string
 	}
 	cnts := []cnt{
-		{ckGlyphNeeds, pal.Attention, counts[ckNeeds], "needs you"},
-		{ckGlyphWorking, pal.Busy, counts[ckWorking], "working"},
-		{ckGlyphReview, pal.Success, counts[ckReview], "to review"},
-		{ckGlyphIdle, pal.FgMute, counts[ckIdle] + counts[ckEarlier], "idle"},
+		{l.ckStateMark("needs_input", ckGlyphNeeds), pal.Attention, counts[ckNeeds], "needs you"},
+		{l.ckStateMark("working", ckGlyphWorking), pal.Busy, counts[ckWorking], "working"},
+		{l.ckStateMark("done", ckGlyphReview), pal.Success, counts[ckReview], "to review"},
+		{l.ckStateMark("idle", ckGlyphIdle), pal.FgMute, counts[ckIdle] + counts[ckEarlier], "idle"},
 	}
 	// The counts say their words when the row has room for them beside the
 	// search and the button, and only their marks otherwise.
 	full := x
 	for i, k := range cnts {
 		if k.n > 0 || i == 0 {
-			full += ckWidth(ckSeg{t: l.g(k.g) + " " + strconv.Itoa(k.n) + " " + k.words}) + 3
+			full += ckWidth(ckSeg{t: k.g + " " + strconv.Itoa(k.n) + " " + k.words}) + 3
 		}
 	}
 	compact := full > c.w-2-ckWidth(ckSeg{t: " + New agent "})-16
@@ -415,7 +438,7 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 		if k.n == 0 && i > 0 {
 			continue
 		}
-		segs := []ckSeg{{t: l.g(k.g) + " ", fg: k.ink}, {t: strconv.Itoa(k.n), fg: pal.Fg, attrs: ckBold}}
+		segs := []ckSeg{{t: k.g + " ", fg: k.ink}, {t: strconv.Itoa(k.n), fg: pal.Fg, attrs: ckBold}}
 		if !compact {
 			segs = append(segs, ckSeg{t: " " + k.words, fg: pal.FgDim})
 		}
@@ -771,15 +794,15 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		c.text(x+5, y, right, ckSeg{t: words, fg: pal.FgMute})
 		return
 	case ckRowChild:
-		g, ink := l.g(ckGlyphWorking), overlay.MixColors(pal.Busy, l.panel, 0.3)
+		g, ink := l.ckStateMark("working", ckGlyphWorking), overlay.MixColors(pal.Busy, l.panel, 0.3)
 		if !r.child.Running() {
-			g, ink = l.g(ckGlyphReview), pal.FgMute
+			g, ink = l.ckStateMark("done", ckGlyphReview), pal.FgMute
 		}
 		what := r.child.Now
 		if what == "" {
 			what = r.child.Description
 		}
-		c.text(x+4, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + " ", fg: ink},
+		c.text(x+4, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + agentMarkGap(g), fg: ink},
 			ckSeg{t: printableTitle(firstNonEmptyStr(r.child.Type, "agent")), fg: pal.FgDim}, ckSeg{t: "  " + printableTitle(what), fg: pal.FgMute})
 		return
 	case ckRowFan:
@@ -843,8 +866,8 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.attempt {
 		// One attempt of a fan, under the fan's row: its tree mark, state,
 		// name, agent and machine, and its diff at the end.
-		ax := c.text(x+2, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g, fg: gInk})
-		ax = c.text(ax+1, y, right, ckSeg{t: ckPad(ckTrunc(name, 11), 12), fg: ink(nameInk)})
+		ax := c.text(x+2, y, right, ckSeg{t: ckTree(l, r.last), fg: l.edgePanel}, ckSeg{t: g + agentMarkGap(g), fg: gInk})
+		ax = c.text(ax, y, right, ckSeg{t: ckPad(ckTrunc(name, 11), 12), fg: ink(nameInk)})
 		rx := right
 		if diff := ckDiffSegs(l, e); diff != nil {
 			rx = c.textR(right, y, diff...) - 2
@@ -858,9 +881,12 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		nameW = 13
 	}
 	c.text(x+2, y, right, ckSeg{t: g, fg: gInk})
-	nx := x + 5
-	if r.lines == 1 && w < 48 {
-		nx = x + 4
+	// The name starts in the same column whichever mark the row wears: past the
+	// set's widest mark and its gap (agentMarkLead). Where there is room the
+	// gap is two blanks, and a two-cell mark takes the first of them.
+	nx := x + 2 + agentMarkLead()
+	if r.lines != 1 || w >= 48 {
+		nx = max(nx, x+5)
 	}
 	c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})

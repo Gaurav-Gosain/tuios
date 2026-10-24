@@ -97,7 +97,7 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(panePlural(item.WindowCount))
 	if glyph, glyphColor := agentMark(item.AgentState, item.DoneSeen, item.Subagents, pal); glyph != "" && !down {
 		right += overlay.Style(rowBg).Foreground(glyphColor).
-			Bold(sidebarAttention(item.AgentState)).Render(" " + glyph)
+			Bold(sidebarAttention(item.AgentState)).Render(" " + agentMarkCellRight(glyph))
 	}
 	if item.IsCurrent {
 		right = overlay.Style(rowBg).Foreground(pal.Success).Render("current  ") + right

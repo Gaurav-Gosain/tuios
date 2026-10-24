@@ -101,13 +101,14 @@ func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color
 
 	// The focused pane is marked in the accent rather than with an asterisk
 	// against its name, which would read as part of the name.
-	mark, markW := pad+pad, 2
+	markW := agentMarkLead()
+	mark := overlay.Style(rowBg).Render(strings.Repeat(" ", markW))
 	state, seen := m.railAgentState(item.Window.ID, item.Window.AgentState, item.Window.AgentCompletionSeq)
 	if glyph, glyphColor := agentMark(state, seen, item.Window.AgentSubagents, pal); glyph != "" {
 		mark = overlay.Style(rowBg).Foreground(glyphColor).
-			Bold(sidebarAttention(state)).Render(glyph) + pad
+			Bold(sidebarAttention(state)).Render(glyph) + overlay.Style(rowBg).Render(agentMarkGap(glyph))
 	} else if item.IsFocused {
-		mark = overlay.Style(rowBg).Foreground(pal.Accent).Render(accentMark()) + pad
+		mark = overlay.Style(rowBg).Foreground(pal.Accent).Render(accentMark()) + overlay.Style(rowBg).Render(agentMarkGap(accentMark()))
 	}
 
 	avail := max(width-lipgloss.Width(right)-markW-3, 1)

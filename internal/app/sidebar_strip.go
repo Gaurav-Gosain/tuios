@@ -607,8 +607,8 @@ func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw in
 	if e.Focused && !peeked {
 		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.sessionTint(e.SessionID, bg), pal)
 	}
-	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
-		stripStateMark(e.State, e.DoneSeen, e.Subagents, pal, bg, lit, &m.Settings), cw, bg)
+	mark, markFg := stripStateMark(e.State, e.DoneSeen, e.Subagents, pal, lit, &m.Settings)
+	return stripCell(lead, leadFg, mark, markFg, cw, bg)
 }
 
 // sidebarStripAgentCell is one pane of the last group in two cells: the gutter
@@ -624,20 +624,32 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
 		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.agentIdentityTint(e, bg), pal)
 	}
-	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
-		stripStateMark(e.State, e.DoneSeen, e.Subagents, pal, bg, lit, &m.Settings), cw, bg)
+	mark, markFg := stripStateMark(e.State, e.DoneSeen, e.Subagents, pal, lit, &m.Settings)
+	return stripCell(lead, leadFg, mark, markFg, cw, bg)
 }
 
-// stripStateMark is a pane's one cell on the spine: the quiet dot every list on
+// stripStateMark is a pane's mark on the spine: the quiet dot every list on
 // this rail rests at, or the pane's state glyph in its own colour when it has
 // something to say. One vocabulary across the lists is what lets the stack be
 // read as one object at two cells wide.
-func stripStateMark(state string, doneSeen bool, running int, pal overlay.Palette, bg color.Color, lit bool, s *config.Settings) string {
+func stripStateMark(state string, doneSeen bool, running int, pal overlay.Palette, lit bool, s *config.Settings) (string, color.Color) {
 	mark, markFg := s.GetRailBullet(), stripRestingInk(lit, pal)
 	if g, fg := agentMark(state, doneSeen, running, pal); g != "" && s.SidebarShowGlyphs {
 		mark, markFg = g, fg
 	}
-	return sidebarStyle(bg, markFg).Render(mark)
+	return mark, markFg
+}
+
+// stripCell is a strip row's two cells: the gutter mark and the spine mark.
+// A two-cell state mark from the glyph set has no second column to go to, so
+// it takes the gutter as well and ends on the spine's cell like every other
+// mark. The state is the louder of the two things the row can say, and the
+// focus bar comes back as soon as the state does not need the room.
+func stripCell(lead string, leadFg color.Color, mark string, markFg color.Color, cw int, bg color.Color) string {
+	if lipgloss.Width(lead)+lipgloss.Width(mark) > cw {
+		return sidebarFit(sidebarStyle(bg, markFg).Render(mark), cw, bg)
+	}
+	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+sidebarStyle(bg, markFg).Render(mark), cw, bg)
 }
 
 // stripRestingInk is the colour a mark saying nothing in particular is drawn in.
@@ -673,6 +685,12 @@ func sidebarStripBadgeCell(info sidebarStripBadgeInfo, cw int, pal overlay.Palet
 		glyph = "!"
 	}
 	bg := agentGlyphColor(info.State, pal)
+	// A two-cell mark from the glyph set leaves no cell for the count beside
+	// it. The count stays, because the fill already says how bad the worst
+	// one is and only the digit says how many.
+	if lipgloss.Width(count+glyph) > cw {
+		glyph = ""
+	}
 	return sidebarFit(sidebarStyle(bg, pal.Canvas).Bold(true).Render(count+glyph), cw, bg)
 }
 
@@ -757,5 +775,5 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 			mark, markFg = agentStateIndicator(node.AgentState), pal.Success
 		}
 	}
-	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+sidebarStyle(bg, markFg).Render(mark), cw, bg)
+	return stripCell(lead, leadFg, mark, markFg, cw, bg)
 }

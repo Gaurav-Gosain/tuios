@@ -10,10 +10,13 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/adrg/xdg"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // A glyph set is the other half of a rice. A theme says what colour the chrome
@@ -126,6 +129,20 @@ type GlyphSet struct {
 	Parent string `json:"parent,omitempty"` // the ".." row
 	File   string `json:"file,omitempty"`
 
+	// The agent-state marks, one per state, drawn wherever a pane's agent
+	// state shows: the rail and its strip, the title bars, the palette, the
+	// switcher, the Inbox, the cockpit and the dock. One or two cells each,
+	// so a mark may be a wide emoji; every surface lays its rows out against
+	// the widest mark the set draws. Waiting is display-only: an agent at
+	// rest whose subagents still run.
+	StateWorking    string `json:"state_working,omitempty"`
+	StateNeedsInput string `json:"state_needs_input,omitempty"`
+	StateIdle       string `json:"state_idle,omitempty"`
+	StateDone       string `json:"state_done,omitempty"`
+	StateErrored    string `json:"state_errored,omitempty"`
+	StateUnknown    string `json:"state_unknown,omitempty"`
+	StateWaiting    string `json:"state_waiting,omitempty"`
+
 	ScrollbarThumb string `json:"scrollbar_thumb,omitempty"`
 	ScrollbarTrack string `json:"scrollbar_track,omitempty"`
 
@@ -207,6 +224,8 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Folder: ">", Parent: "^", File: ".",
 		ScrollbarThumb: "|", ScrollbarTrack: ".",
 		Ellipsis: "...", Sigil: ">", DashRule: "-",
+		StateWorking: "*", StateNeedsInput: "!", StateIdle: "o", StateDone: "#",
+		StateErrored: "x", StateUnknown: "?", StateWaiting: "%",
 	},
 }
 
@@ -317,9 +336,18 @@ func loadGlyphSetFile(path string) (*GlyphSet, []string, error) {
 type glyphRole struct {
 	name  string
 	field func(*GlyphSet) *string
-	// width is the cells the glyph must measure, or 0 where any width goes.
+	// width is the cells the glyph must measure, 0 where any width goes, or
+	// markWidth for an agent-state mark.
 	width int
 }
+
+// markWidth is the width of an agent-state mark's role: one cell or two. A
+// row that leads with a mark gives it the set's widest mark and one blank, so
+// the name after it stays in line with the next row's whichever mark it wears.
+const markWidth = -1
+
+// MarkMaxWidth is the widest an agent-state mark may measure.
+const MarkMaxWidth = 2
 
 // glyphRoles is every role a set can name, with the width each one has to
 // measure.
@@ -367,6 +395,13 @@ var glyphRoles = []glyphRole{
 	// so its stepper takes any width; the ASCII default is two cells.
 	{"collapse", func(g *GlyphSet) *string { return &g.Collapse }, 0},
 	{"expand", func(g *GlyphSet) *string { return &g.Expand }, 0},
+	{"state_working", func(g *GlyphSet) *string { return &g.StateWorking }, markWidth},
+	{"state_needs_input", func(g *GlyphSet) *string { return &g.StateNeedsInput }, markWidth},
+	{"state_idle", func(g *GlyphSet) *string { return &g.StateIdle }, markWidth},
+	{"state_done", func(g *GlyphSet) *string { return &g.StateDone }, markWidth},
+	{"state_errored", func(g *GlyphSet) *string { return &g.StateErrored }, markWidth},
+	{"state_unknown", func(g *GlyphSet) *string { return &g.StateUnknown }, markWidth},
+	{"state_waiting", func(g *GlyphSet) *string { return &g.StateWaiting }, markWidth},
 	{"scrollbar_thumb", func(g *GlyphSet) *string { return &g.ScrollbarThumb }, 1},
 	{"scrollbar_track", func(g *GlyphSet) *string { return &g.ScrollbarTrack }, 1},
 	{"ellipsis", func(g *GlyphSet) *string { return &g.Ellipsis }, 0},
@@ -389,7 +424,26 @@ func sanitizeGlyphSet(set *GlyphSet) []string {
 	var problems []string
 	for _, role := range glyphRoles {
 		p := role.field(set)
-		if *p == "" || role.width == 0 {
+		if *p == "" {
+			continue
+		}
+		if !glyphPrintable(*p) {
+			problems = append(problems, fmt.Sprintf(
+				"glyph set %s: %s holds a control character or a byte that is not UTF-8, so it keeps the default",
+				set.ID, role.name))
+			*p = ""
+			continue
+		}
+		if role.width == markWidth {
+			if w, ok := MarkWidth(*p); !ok {
+				problems = append(problems, fmt.Sprintf(
+					"glyph set %s: %s is %d cells wide and the layout budgets 1 or 2, so it keeps the default",
+					set.ID, role.name, w))
+				*p = ""
+			}
+			continue
+		}
+		if role.width == 0 {
 			continue
 		}
 		if w := lipgloss.Width(*p); w != role.width {
@@ -401,7 +455,7 @@ func sanitizeGlyphSet(set *GlyphSet) []string {
 	}
 	if set.Border != nil {
 		for _, p := range borderFields(set.Border) {
-			if *p != "" && lipgloss.Width(*p) != 1 {
+			if *p != "" && (!glyphPrintable(*p) || lipgloss.Width(*p) != 1) {
 				problems = append(problems, fmt.Sprintf(
 					"glyph set %s: a border rune must be one cell, so %q keeps the default", set.ID, *p))
 				*p = ""
@@ -410,6 +464,59 @@ func sanitizeGlyphSet(set *GlyphSet) []string {
 	}
 	set.ASCII = glyphSetIsASCII(set)
 	return problems
+}
+
+// glyphPrintable reports whether a glyph is valid UTF-8 with no control
+// character in it. A glyph is written into the frame as it is, so an escape in
+// a set file would be a sequence sent to the client's terminal, and it
+// measures as no cells, so the width checks alone would let it through.
+func glyphPrintable(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// MarkWidth measures an agent-state mark and reports whether it can be drawn:
+// one or two cells, and the same width whether it is measured as one grapheme
+// or rune by rune.
+//
+// The second test is what refuses an emoji that is wide only because of what
+// follows it. "⚠" is one cell and "⚠️" (with the emoji variation selector),
+// a skin tone or a joined family measure two as a grapheme, but terminals
+// disagree about that, and a terminal that draws one cell would shift every
+// cell after the mark. A mark that is wide by itself, "✋" or "⛔", is two
+// cells everywhere.
+func MarkWidth(s string) (int, bool) {
+	w := ansi.StringWidth(s)
+	return w, w >= 1 && w <= MarkMaxWidth && w == ansi.StringWidthWc(s) && glyphPrintable(s)
+}
+
+// StateMark is the set's mark for one agent state, by the state's wire name,
+// or the empty string when the set leaves it to the default.
+func (g *GlyphSet) StateMark(state string) string {
+	switch state {
+	case "working":
+		return g.StateWorking
+	case "needs_input":
+		return g.StateNeedsInput
+	case "idle":
+		return g.StateIdle
+	case "done":
+		return g.StateDone
+	case "errored":
+		return g.StateErrored
+	case "unknown":
+		return g.StateUnknown
+	case "waiting":
+		return g.StateWaiting
+	}
+	return ""
 }
 
 // glyphSetIsASCII reports whether every glyph the set names is 7-bit.
