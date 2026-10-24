@@ -8986,3 +8986,17 @@ Run on 2026-10-24 on Linux against upstream main at 856b8ef4.
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The fix removed (upstream main) | "the help overlay does not list the global f7 for Switch to workspace 1": the row lists only `alt+1` | **caught** |
+## Codex 0.164 folder trust prompt
+
+The measured `codex.txt#2` fixture is the startup screen from a live Codex
+0.164.0 pane, with only its folder shortened. `TestScreenFixtures` reads the
+same bottom eight non-empty lines that the screen classifier sees. The legacy
+Codex trust fixture remains beside it as the positive compatibility half.
+
+The control was run on 2026-10-24 on Linux amd64 with Go 1.26.10, against
+upstream main at `fed94a1a`: add the measured fixture before widening the
+existing trust rule.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The Codex trust rule knows only the legacy question and footer | Leave `internal/harness/manifests/codex.toml` unchanged and add the measured fixture | `TestScreenFixtures/codex.txt#2` (`classified as none (rule -1), want needs_input`) | **caught** |

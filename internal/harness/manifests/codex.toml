@@ -62,13 +62,21 @@ deny           = { keys = ["esc"] }
 #   › 1. Yes, continue
 #     2. No, quit
 #     Press enter to continue
+#
+# Newer Codex releases use a shorter question and different choices:
+#
+#     Trust this folder? Codex can read, edit, and run files here, subject to
+#     your permission settings.
+#   › 1. Trust and continue
+#     2. Back to Agent Command Center
+#     enter continue · esc back
 [[screen.rule]]
 state    = "needs_input"
 priority = 30
 kind     = "approval"
 message  = "Asks you to trust the directory."
-regex    = ['(?i)do\s+you\s+trust\s+the\s+contents\s+of\s+this\s+directory\?']
-any      = ["press enter to continue", "1. yes"]
+regex    = ['(?i)(?:do\s+you\s+trust\s+the\s+contents\s+of\s+this\s+directory\?|trust\s+this\s+folder\?)']
+any      = ["press enter to continue", "enter continue · esc back", "1. yes", "1. trust and continue"]
 
 # The update offer at start, which waits for a key before Codex runs.
 [[screen.rule]]
