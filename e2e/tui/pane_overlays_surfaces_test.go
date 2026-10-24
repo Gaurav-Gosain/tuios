@@ -305,10 +305,7 @@ const browserTitle = "Scrollback browser"
 // left one.
 func openScrollbackBrowser(t *testing.T, term *tuitest.Terminal) overlayBox {
 	t.Helper()
-	enterTerminalMode(t, term)
-	runInShell(t, term, `printf '\033]133;A\007$ \033]133;B\007echo one\n\033]133;C\007first-%s\n\033]133;D;0\007\033]133;A\007$ \033]133;B\007echo two\n\033]133;C\007second-out\n\033]133;D;0\007' out`, "first-out", shellTimeout)
-	time.Sleep(300 * time.Millisecond)
-	sendKeys(t, term, tuitest.Ctrl('b'), "s")
+	showScrollbackBrowser(t, term)
 	var b overlayBox
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		y := rowWith(s, browserTitle)
@@ -332,6 +329,16 @@ func openScrollbackBrowser(t *testing.T, term *tuitest.Terminal) overlayBox {
 		t.Fatalf("the scrollback browser never opened on the two commands: %v\n%s", err, term.Snapshot())
 	}
 	return b
+}
+
+// showScrollbackBrowser prints two commands with OSC 133 marks in the pane and
+// presses the keys that open the scrollback browser on them.
+func showScrollbackBrowser(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	enterTerminalMode(t, term)
+	runInShell(t, term, `printf '\033]133;A\007$ \033]133;B\007echo one\n\033]133;C\007first-%s\n\033]133;D;0\007\033]133;A\007$ \033]133;B\007echo two\n\033]133;C\007second-out\n\033]133;D;0\007' out`, "first-out", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+	sendKeys(t, term, tuitest.Ctrl('b'), "s")
 }
 
 func closeScrollbackBrowser(t *testing.T, term *tuitest.Terminal) {
