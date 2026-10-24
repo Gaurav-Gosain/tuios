@@ -141,6 +141,14 @@ var (
 // mode.
 func startOverlayBorders(t *testing.T, appearance string, env []string) *tuitest.Terminal {
 	t.Helper()
+	term, _ := startOverlaySession(t, appearance, env)
+	return term
+}
+
+// startOverlaySession is startOverlayBorders that also returns the client's
+// base directory, for a test that runs the CLI against the same daemon.
+func startOverlaySession(t *testing.T, appearance string, env []string) (*tuitest.Terminal, string) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	writeConfig(t, base, "[appearance]\n"+appearance)
@@ -162,7 +170,7 @@ func startOverlayBorders(t *testing.T, appearance string, env []string) *tuitest
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(insertGuard)
-	return term
+	return term, base
 }
 
 // overlayBox is where an overlay's frame cells are: x0 and x1 are its left and
