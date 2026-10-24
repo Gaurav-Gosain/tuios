@@ -166,7 +166,7 @@ func TestRestrictConnectionNeverWidens(t *testing.T) {
 	wantForbidden(t, "moving to another pane", callP(c, t, "restrict-connection", map[string]any{"read_only": true, "pane_id": b1, "pane_token": d.manager.PaneToken(b1)}))
 	// Repeating the restriction is fine.
 	restrict(t, c, map[string]any{"scope": "own", "read_only": true})
-	wantForbidden(t, "send-text after a refused widening", callP(c, t, "send-text", map[string]any{"text": "x"}))
+	wantForbidden(t, "send-text after a refused widening", callP(c, t, "send-text", map[string]any{"window": a1, "text": "x"}))
 }
 
 func TestRestrictConnectionPlacesTheCallerByTokenOnlyWhenTheKernelCannot(t *testing.T) {

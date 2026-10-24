@@ -174,7 +174,7 @@ func verbErrorJSON(err error) map[string]any {
 // runSendKeys sends keystrokes to a running TUIOS session over the verb
 // protocol, and says where they went: the window the daemon wrote them to, or
 // the attached client. repeat 0 or 1 sends the sequence once.
-func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, jsonOutput bool) error {
+func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -192,6 +192,9 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 	// takes a call that does not use it.
 	if repeat > 1 {
 		params["repeat"] = repeat
+	}
+	if allowBlocked {
+		params["allow_blocked"] = true
 	}
 	raw2, err := t.client.Call("send-keys", t.params(params))
 	if err != nil {
@@ -749,18 +752,23 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 // runSendText writes text verbatim to a pane's PTY. Unlike send-keys it parses
 // nothing, so a trailing newline in the argument is the Enter that submits the
 // line, and one call is enough to type and run a command.
-func runSendText(sessionName, windowTarget, text string, jsonOutput bool) error {
+func runSendText(sessionName, windowTarget, text string, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	raw, err := t.client.Call("send-text", t.params(map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"text":    text,
-	}))
+	}
+	// Sent only when set, so a call without it works against an older daemon.
+	if allowBlocked {
+		params["allow_blocked"] = true
+	}
+	raw, err := t.client.Call("send-text", t.params(params))
 	if err != nil {
 		return t.explain("send-text", err)
 	}
@@ -846,6 +854,10 @@ func runCapturePane(o captureOptions) error {
 // and its own wording ("fix the name") points at the caller instead of at the
 // daemon.
 var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios restart-server' to update it")
+
+// errStaleWaitNew is what wait-for --new says when the daemon does not know
+// the new parameter, worded like errStaleCapture.
+var errStaleWaitNew = errors.New("the running daemon is older than this tuios and does not know --new. Run 'tuios restart-server' to update it")
 
 // printCapture writes a capture-pane result. A capture from this machine is
 // the content as it is. A capture from host is fenced with
@@ -1754,7 +1766,10 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64, fresh bool) error {
+	if fresh && condition != "window-output" {
+		return errors.New("--new goes with window-output")
+	}
 	if anySession && (sessionName != "" || windowTarget != "") {
 		return errors.New("--any-session watches every session, so it takes no --session or --window. Drop one or the other")
 	}
@@ -1795,11 +1810,30 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	if commandSeq != nil {
 		params["command_seq"] = *commandSeq
 	}
+	// Sent only when asked for, so a wait against an older daemon keeps
+	// working: it would refuse a parameter it does not know.
+	if fresh {
+		params["new"] = true
+	}
 
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
 	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
 	if err != nil {
+		if call, ok := errors.AsType[*session.VerbCallError](err); ok && fresh && call.Code == session.ErrVerbInvalidParams &&
+			call.Hint != nil && call.Hint.Param == "new" && strings.Contains(call.Message, "has no parameter") {
+			return reportVerbError(errStaleWaitNew, jsonOutput)
+		}
 		return reportVerbError(t.explain("wait-for", err), jsonOutput)
+	}
+	// A daemon older than v0.8.0 ignores unknown parameters, so it matched
+	// old output too. It omits the field that says new was used.
+	if fresh {
+		var echo struct {
+			New bool `json:"new"`
+		}
+		if json.Unmarshal(raw, &echo) == nil && !echo.New {
+			fmt.Fprintln(os.Stderr, "warning: "+errStaleWaitNew.Error()+". The match can be old output.")
+		}
 	}
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)

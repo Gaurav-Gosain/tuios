@@ -182,7 +182,7 @@ func (d *Daemon) verbBundleWorktree(cs *connState, params json.RawMessage) (any,
 		return nil, hintedVerbError(ErrVerbInvalidParams, "session is required (bundle-worktree never guesses which worktree to read)",
 			&VerbHint{Param: "session", Command: "tuios worktree ls", Available: d.worktreeSessionNames()})
 	}
-	sess, info, verr := d.worktreeTarget(p.Session)
+	sess, info, verr := d.worktreeTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

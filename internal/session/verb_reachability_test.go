@@ -228,6 +228,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"wait-for#4": {blocks: true, why: "no pane in any session reports an agent state"},
 	"wait-for#5": {blocks: true, why: "no shell in the fixture marks its commands"},
 	"wait-for#6": {blocks: true, why: "no pane matches the selector, so every pane matching can never hold"},
+	"wait-for#7": {blocks: true, why: "no pane prints \"BUILD OK\" after the wait starts"},
 
 	// The fixture's shells are not the fake integrated shell, so no pane marks
 	// its commands. run waits a moment for a first prompt before it says so.

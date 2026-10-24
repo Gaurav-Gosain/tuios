@@ -109,8 +109,8 @@ func checkpointVerbs() map[string]verbEntry {
 
 // checkpointTarget resolves the pane a checkpoint verb is about and the work
 // tree under it.
-func (d *Daemon) checkpointTarget(sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
-	sess, target, verr := d.resolveVerbPane(sessionName, window)
+func (d *Daemon) checkpointTarget(cs *connState, sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
+	sess, target, verr := d.resolveVerbPane(cs, sessionName, window)
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
 	}
@@ -170,7 +170,7 @@ func checkpointsOfPane(ctx context.Context, repo reviewRepo, window string) ([]w
 }
 
 // verbListCheckpoints answers list-checkpoints.
-func (d *Daemon) verbListCheckpoints(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListCheckpoints(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -178,7 +178,7 @@ func (d *Daemon) verbListCheckpoints(_ *connState, params json.RawMessage) (any,
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, target, repo, verr := d.checkpointTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.checkpointTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
@@ -201,7 +201,7 @@ func (d *Daemon) verbListCheckpoints(_ *connState, params json.RawMessage) (any,
 }
 
 // verbCheckpointDiff answers checkpoint-diff.
-func (d *Daemon) verbCheckpointDiff(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbCheckpointDiff(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string   `json:"session"`
 		Window  string   `json:"window"`
@@ -230,7 +230,7 @@ func (d *Daemon) verbCheckpointDiff(_ *connState, params json.RawMessage) (any, 
 			return nil, invalidParam("paths", err.Error())
 		}
 	}
-	sess, target, repo, verr := d.checkpointTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.checkpointTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
@@ -293,7 +293,7 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 	if p.N < 1 {
 		return nil, invalidParam("n", "n is required: the checkpoint to restore, from 1")
 	}
-	sess, target, repo, verr := d.checkpointTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.checkpointTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
