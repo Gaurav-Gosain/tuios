@@ -184,29 +184,31 @@ A mark may be one cell or two, so it can be an emoji:
 }
 ```
 
-A mark at the head of a row and the gap after it always take two cells: a
-one-cell mark is followed by one blank, and a two-cell mark by none, its second
-cell being its gap. A terminal draws an emoji narrower than its two cells, so a
-blank after `✋` would read as a gap twice as wide as the one after `●`. The
-names after the marks therefore start in the same column whatever the set
-draws, on the rail and its subagent rows, in the aggregate view, the palette,
-the Inbox and the cockpit, which keeps its wider gap and lets a two-cell mark
-take the first cell of it:
+A mark at the head of a row and the gap after it take as many cells as the
+widest mark the set draws, and one more. With the shipped marks, all one cell,
+that is two cells: a mark and one blank. A set with a two-cell mark such as
+`✋` makes it three, so `✋` keeps one blank before its name and a one-cell mark
+two. The column follows the set rather than the rows on screen, so a pane
+changing state never moves the names of the others. The names after the marks
+therefore start in one column, on the rail and its subagent rows, in the
+navigator, the aggregate view, the palette, the Inbox and the cockpit; a row
+with no mark leaves the whole column blank. The cockpit keeps two blanks after
+a one-cell mark where it has room, and a two-cell mark takes the first of them,
+so its names stay where the shipped marks put them:
 
 ```
-▎✋hand-pane
- ◆ work-pane
- ○ rest-pane
+▎✋ hand-pane
+ ◆  work-pane
+ ○  rest-pane
 ```
 
-Where nothing follows a mark for its second cell to stand in for, the mark is
-measured. A column of marks that ends on a row's right edge, as in the session
-switcher, is as wide as the widest mark the set draws; a title, a count beside
-a mark, the cockpit's header and a dock message are measured with the mark
-they carry, and keep a space after it. The collapsed strip has one column for
-a mark, so a two-cell mark there takes the gutter cell beside it as well, and
-the strip's alarm badge keeps its count and drops the mark when both do not
-fit.
+Where a mark does not lead a row, it is measured. A column of marks that ends
+on a row's right edge, as in the session switcher, is as wide as the widest
+mark the set draws; a title, a count beside a mark, the cockpit's header and a
+dock message are measured with the mark they carry, and keep a space after it.
+The collapsed strip has one column for a mark, so a two-cell mark there takes
+the gutter cell beside it as well, and the strip's alarm badge keeps its count
+and drops the mark when both do not fit.
 
 Under `--ascii-only` a mark that is not 7-bit gives way to the ASCII form
 (`*`, `!`, `o`, `#`, `x`, `?`, `%`).
