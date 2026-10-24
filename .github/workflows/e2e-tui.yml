@@ -79,8 +79,6 @@ jobs:
     name: e2e-tui shard plan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      mode: ${{ steps.select.outputs.mode }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -102,14 +100,17 @@ jobs:
           go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$E2E_SHARDS" -max "$E2E_SHARD_LIMIT"
 
       # The shards make the same choice on their own. This copy says on the
-      # run what was chosen and why, and tells the full-suite job below
-      # whether every test ran.
+      # run what was chosen and why. Its notice "mode=all" is how
+      # scripts/e2e-tested.sh knows that every test ran, so the push to main
+      # skips the suite only after a pull request run of the whole suite.
       - name: Select the tests this change can reach
-        id: select
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
-        run: ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
+        run: |
+          set -euo pipefail
+          GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
+          echo "::notice title=e2e-tui selection::$(grep '^mode=' "$RUNNER_TEMP/select.out")"
 
   e2e-tui:
     runs-on: ubuntu-latest
@@ -262,16 +263,3 @@ jobs:
         # runner. Never fail the job on this.
         if: always() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: pkill -f "$RUNNER_TEMP/tuios" || true
-
-  # Passes only when every test ran and passed. scripts/e2e-tested.sh looks
-  # for it, so the push to main skips the suite only after a pull request run
-  # of the whole suite on the same commit. After a partial selection this job
-  # is skipped, and main runs everything.
-  full-suite:
-    name: e2e-tui full suite
-    needs: [shard-plan, e2e-tui]
-    if: ${{ !cancelled() && needs.shard-plan.outputs.mode == 'all' && needs.e2e-tui.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - run: echo "Every end-to-end test ran on this commit and passed."
