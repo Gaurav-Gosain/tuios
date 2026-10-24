@@ -360,7 +360,7 @@ func (d *Daemon) resumeError(sess *Session, plan resumePlan, err error) *verbErr
 	case errors.Is(err, errResumeBusy):
 		return hintedVerbError(ErrVerbNotReady, "the pane is running a program, so nothing was typed", &VerbHint{
 			Verb:    "capture-pane",
-			Command: "tuios capture-pane -w " + shortWindowID(plan.window.ID),
+			Command: "tuios capture-pane " + paneArgs(sess, plan.window.ID),
 			Detail:  "resume-agent types only into a pane whose shell is at its prompt, so the command cannot land in an editor or another agent. Quit what runs there, or open a new pane, and try again.",
 		})
 	case errors.Is(err, errResumeRemote):

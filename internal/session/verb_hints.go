@@ -88,8 +88,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbOptionNotFound, "No option by that path exists. The hint carries the closest match and the full path list. list-options describes them."},
 	{ErrVerbCommandFailed, "The verb was routed to the attached client and came back failed."},
 	{ErrVerbTimeout, "A wait-for condition did not match before its timeout elapsed."},
-	{ErrVerbNotReady, "The target agent was mid-turn, so the call declined to type at it. Wait for it, leave a message instead, or force it. resume-agent raises it for a pane whose shell is not at its prompt."},
-	{ErrVerbAgentBlocked, "The target agent is on needs_input, waiting on an approval or a question, and text typed now would answer it. Nothing was typed. Read the prompt with capture-pane, then answer it yourself or ask the person. allow_blocked overrides it."},
+	{ErrVerbNotReady, "The target agent was mid-turn, so the call declined to type at it. Nothing was typed. Wait for it, queue the text with queue-prompt, or leave a message with send-agent-message. resume-agent raises it for a pane whose shell is not at its prompt."},
+	{ErrVerbAgentBlocked, "The target agent is on needs_input, waiting on an approval or a question, and text typed now would answer it. Nothing was typed. Read the prompt with peek-prompt. Do not type at it: only the person answers another agent's prompt. Tell the person which pane waits and on what. allow_blocked overrides it, for a prompt that takes free text."},
 	{ErrVerbLoopRefused, "The call was refused because it would loop: a pane addressing itself, or an ask that closes a cycle with one in flight."},
 	{ErrVerbRateLimited, "The sender is over the cross-agent message rate cap."},
 	{ErrVerbPromptStalled, "The prompt was pasted and Enter was sent, and within the stall window the pane did not turn working or needs_input, or, for an agent that cannot show working, print anything. The text was typed. Look at the pane with capture-pane before doing anything else: if the prompt sits in the input box, press Enter there with send-keys; if the agent is still starting, wait for it and ask again. Sending the prompt again without looking can type it twice."},
@@ -374,8 +374,8 @@ func (d *Daemon) sessionNames() []string {
 }
 
 // windowTargets returns the addressable identifiers of a session's windows (id
-// and display name for each), sorted, for a window_not_found hint. Ids and names
-// are both accepted by the window parameter, so both belong in the list.
+// and display name for each), sorted. They are the candidates a did-you-mean
+// suggestion is picked from, since the window parameter accepts both.
 func windowTargets(state *SessionState) []string {
 	if state == nil {
 		return nil
@@ -395,6 +395,78 @@ func windowTargets(state *SessionState) []string {
 	}
 	sort.Strings(targets)
 	return targets
+}
+
+// windowChoices lists a session's windows for the available list of a
+// window_not_found hint: one entry a window, its name with the short id after
+// it ("review (523518d9)"), or the short id alone for a window with no name.
+// A list of ids and names side by side named every window twice and was hard
+// to read.
+func windowChoices(state *SessionState) []string {
+	if state == nil {
+		return nil
+	}
+	out := make([]string, 0, len(state.Windows))
+	for _, w := range state.Windows {
+		short := shortWindowID(w.ID)
+		name := w.CustomName
+		if name == "" {
+			name = w.Title
+		}
+		switch {
+		case name == "" || name == w.ID:
+			out = append(out, short)
+		case strings.Contains(name, short):
+			out = append(out, name)
+		default:
+			out = append(out, name+" ("+short+")")
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// cliWord is s as one shell word for a hint command: as it is when it holds
+// only characters a shell leaves alone, else in single quotes.
+func cliWord(s string) string {
+	if s != "" && strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.:/@%+=,", r))
+	}) < 0 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// sessionArg is "-s SESSION" for a hint command. Without it the command runs
+// against the most recently active session, which need not be the one the
+// failed call named.
+func sessionArg(sess *Session) string {
+	if sess == nil {
+		return ""
+	}
+	return "-s " + cliWord(sess.Name())
+}
+
+// paneArgs is "-s SESSION -w WINDOW" for a hint command, so the command
+// reaches the pane the failed call was about. The window is named by its name
+// when that name picks it out alone, else by its short id.
+func paneArgs(sess *Session, windowID string) string {
+	window := shortWindowID(windowID)
+	if sess != nil {
+		windows := sess.GetState().Windows
+		if i, err := findWindowStateIndex(windows, windowID); err == nil {
+			if name := windows[i].CustomName; name != "" {
+				if j, err := findWindowStateIndex(windows, name); err == nil && j == i {
+					window = name
+				}
+			}
+		}
+	}
+	args := "-w " + cliWord(window)
+	if s := sessionArg(sess); s != "" {
+		args = s + " " + args
+	}
+	return args
 }
 
 // VerbErrorCodes returns every stable error code in the protocol's catalogue,

@@ -659,6 +659,10 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 				"To let such calls answer prompts, add \"respond\" to allow in " + pa.linkTable + " in the config on this machine.",
 		})
 	}
+	target := "-w " + shortWindowID(pa.window)
+	if pa.session != "" {
+		target = "-s " + cliWord(pa.session) + " " + target
+	}
 	source := "the default of [agents.permissions]"
 	if pa.explicit {
 		source = "the grants it was given"
@@ -667,7 +671,9 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 		Verb:    "pane-grants",
 		Command: "tuios pane-grants",
 		Detail: "Pane " + shortWindowID(pa.window) + " holds " + pa.grants.String() + ", " + source + ". Nothing was done. " +
-			"The person can give this pane more with tuios set-pane-grants -w " + shortWindowID(pa.window) + " --grants <names>, " +
+			"What a pane may do is the person's decision. Do not try another verb or another process to do the same thing. " +
+			"Tell the person what you needed and why. " +
+			"The person can give this pane more with tuios set-pane-grants " + target + " --grants <names>, " +
 			"or every pane started with none with mode and grants under [agents.permissions] in config.toml.",
 	})
 }

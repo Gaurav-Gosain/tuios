@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -226,6 +227,18 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		fmt.Fprintf(w, "To message or ask exactly these, pass --select %q --confirm %s.\n", plainLine(res.Select), plainLine(res.Confirm))
 	}
 	return nil
+}
+
+// senderPane is the --from of a message or an ask: the flag when given, else
+// the pane the command runs in. A reply needs a sender to go to, and loop
+// detection needs one to see a cycle, so a pane names itself without being
+// told to. Outside a pane it stays empty. It is a claim either way: the
+// daemon does not check it.
+func senderPane(from string) string {
+	if from != "" {
+		return from
+	}
+	return os.Getenv("TUIOS_PANE_ID")
 }
 
 // runSendAgentMessage queues a message for another agent.
@@ -625,8 +638,7 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 		}
 	}
 
-	grace := time.Duration(readyTimeout+timeout)*time.Millisecond + 10*time.Second
-	raw, err := t.client.CallWithTimeout("ask-agent", params, grace)
+	raw, err := t.client.CallWithTimeout("ask-agent", params, askGrace(readyTimeout, timeout))
 	if err != nil {
 		return reportVerbError(t.explain("ask-agent", err), jsonOutput)
 	}
@@ -634,6 +646,20 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	return printAskReply(os.Stdout, raw, t.host)
+}
+
+// askGrace is how long the client waits for an ask-agent answer: the wait
+// for the ask's turn and the wait for the answer, each up to the timeout, the
+// wait for the agent to be at rest, and ten seconds more. A flag left at 0
+// takes the daemon's default.
+func askGrace(readyTimeout, timeout int) time.Duration {
+	if readyTimeout <= 0 {
+		readyTimeout = 30000
+	}
+	if timeout <= 0 {
+		timeout = 300000
+	}
+	return time.Duration(readyTimeout+2*timeout)*time.Millisecond + 10*time.Second
 }
 
 // printAskReply prints an ask-agent reply: the reply fenced as untrusted,
@@ -647,6 +673,10 @@ func printAskReply(w io.Writer, raw json.RawMessage, host string) error {
 		State     string `json:"state"`
 		Reply     string `json:"reply"`
 		Truncated bool   `json:"truncated"`
+		// QueuedBehind is how many asks of the agent were ahead of this one,
+		// and WaitedTurnMS how long it waited for them.
+		QueuedBehind int   `json:"queued_behind"`
+		WaitedTurnMS int64 `json:"waited_turn_ms"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -658,6 +688,13 @@ func printAskReply(w io.Writer, raw json.RawMessage, host string) error {
 	}
 	fmt.Fprintln(w, session.UntrustedFence(who, strings.TrimRight(plainText(res.Reply), "\n")))
 	fmt.Fprintf(w, "\nsettled by %s; %s now reports %s\n", plainLine(res.SettledBy), who, plainLine(res.State))
+	if res.QueuedBehind > 0 {
+		asks := "1 earlier ask"
+		if res.QueuedBehind > 1 {
+			asks = strconv.Itoa(res.QueuedBehind) + " earlier asks"
+		}
+		fmt.Fprintf(w, "waited %s for %s of this agent.\n", (time.Duration(res.WaitedTurnMS) * time.Millisecond).Round(100*time.Millisecond), asks)
+	}
 	if res.Truncated {
 		fmt.Fprintln(w, "older reply lines were cut to fit --lines; capture the pane for the rest.")
 	}
