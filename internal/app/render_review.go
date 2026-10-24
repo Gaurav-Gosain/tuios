@@ -191,6 +191,9 @@ func reviewFileCounts(r reviewState, e reviewFileEntry) string {
 		}
 		return reviewCount(n, "note")
 	}
+	if e.file.Skipped {
+		return "not read"
+	}
 	if e.file.Binary {
 		return "binary"
 	}
@@ -351,6 +354,8 @@ func (m *OS) reviewRows(width int) []reviewRow {
 	switch {
 	case e.file == nil:
 		info("No longer changed. Its notes are kept until you resolve them with x.")
+	case e.file.Skipped:
+		info("Untracked and larger than max_untracked_mb, so it was not read.")
 	case e.file.Binary:
 		info("Binary file, " + reviewFileCounts(*r, *e) + ". No text is shown.")
 	case e.file.Truncated:

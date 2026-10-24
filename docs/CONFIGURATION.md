@@ -2099,7 +2099,11 @@ max_untracked_mb = 50
   50 by default, at most 1000. `max_untracked_mb` leaves an untracked file
   larger than this many megabytes out of a checkpoint: 50 by default, and a
   negative value means no limit. `tuios checkpoint list` names the files left
-  out, and a restore does not change them. The daemon reads these at start
+  out, and a restore does not change them. The same limit holds for
+  `tuios review`, review-stage, fan compare and `tuios fan diff`, which never
+  read such a file: review lists it as not read. Reading one would copy it
+  into the repository's object store, and through a clean filter such as Git
+  LFS's into that store too, on every read. The daemon reads these at start
   and again when the file changes. See [Turn checkpoints](AGENT_STATE.md#turn-checkpoints).
 
 One rail option goes with them: `appearance.sidebar.agent_rest_fold`, how long

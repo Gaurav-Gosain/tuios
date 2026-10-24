@@ -142,6 +142,10 @@ type Options struct {
 	Context int
 	// Limits bound the diff; the zero value is DefaultLimits.
 	Limits Limits
+	// MaxUntracked is the size in bytes past which an untracked file is not
+	// read: it is listed as Skipped, with no counts and no hunks. Zero or
+	// less is no limit.
+	MaxUntracked int64
 }
 
 // Build reads the diff. Nothing in the repository, its index or its working
@@ -153,9 +157,10 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 		lim = DefaultLimits
 	}
 	tree := opt.Tree
+	var skipped []string
 	var err error
 	if tree == "" {
-		tree, err = worktree.SnapshotTree(ctx, opt.Dir)
+		tree, skipped, err = worktree.SnapshotTree(ctx, opt.Dir, opt.MaxUntracked)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +168,7 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	d := &Diff{TreeSHA: tree, Files: []File{}}
 	from := opt.Base.SHA
 	if opt.AgainstDir != "" {
-		from, err = worktree.SnapshotTree(ctx, opt.AgainstDir)
+		from, _, err = worktree.SnapshotTree(ctx, opt.AgainstDir, opt.MaxUntracked)
 		if err != nil {
 			return nil, fmt.Errorf("the other worktree: %w", err)
 		}
@@ -204,6 +209,11 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 		}
 		d.Truncated = truncated
 	}
+	for _, p := range skipped {
+		if underPaths(p, opt.Paths) {
+			files = append(files, File{Path: p, Status: StatusUntracked, Skipped: true, Hunks: []Hunk{}})
+		}
+	}
 	d.Files = files
 	for _, f := range files {
 		d.Totals.Files++
@@ -211,6 +221,21 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 		d.Totals.Removed += f.Removed
 	}
 	return d, nil
+}
+
+// underPaths reports whether path is one of paths or inside one of them, the
+// way a literal pathspec matches. No paths matches every path.
+func underPaths(path string, paths []string) bool {
+	if len(paths) == 0 {
+		return true
+	}
+	for _, p := range paths {
+		p = strings.TrimSuffix(p, "/")
+		if path == p || strings.HasPrefix(path, p+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // pathspec is the "--" and the paths, each literal.

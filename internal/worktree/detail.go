@@ -31,12 +31,13 @@ const diffLineMax = 200
 
 // WorkingDetail is what a worktree changed against base, file by file, the
 // first maxFiles files by lines changed, and the first maxLines changed lines
-// of its diff. It reads the working state the way WorkingNumstat does.
-func WorkingDetail(ctx context.Context, path, base string, maxFiles, maxLines int) ([]FileStat, []DiffLine, error) {
+// of its diff. It reads the working state the way WorkingNumstat does,
+// untracked files larger than maxUntracked bytes left out.
+func WorkingDetail(ctx context.Context, path, base string, maxFiles, maxLines int, maxUntracked int64) ([]FileStat, []DiffLine, error) {
 	if strings.HasPrefix(base, "-") {
 		return nil, nil, fmt.Errorf("base %q is not a ref", base)
 	}
-	tree, err := SnapshotTree(ctx, path)
+	tree, _, err := SnapshotTree(ctx, path, maxUntracked)
 	if err != nil {
 		return nil, nil, err
 	}

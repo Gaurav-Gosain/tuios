@@ -217,6 +217,7 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	rows := make([]fanCompareRow, len(siblings))
+	maxUntracked := d.checkpoints.maxUntracked.Load()
 	var wg sync.WaitGroup
 	for i, s := range siblings {
 		rows[i] = d.fanRow(s)
@@ -228,9 +229,9 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(d.ctx, fanGitTimeout)
 			defer cancel()
-			fanRowChanges(ctx, row, wt)
+			fanRowChanges(ctx, row, wt, maxUntracked)
 			if p.Detail && row.BaseSHA != "" {
-				row.FileList, row.Lines, _ = worktree.WorkingDetail(ctx, wt.Path, row.BaseSHA, fanDetailFiles, fanDetailLines)
+				row.FileList, row.Lines, _ = worktree.WorkingDetail(ctx, wt.Path, row.BaseSHA, fanDetailFiles, fanDetailLines, maxUntracked)
 			}
 			if p.Detail {
 				var err error
@@ -333,8 +334,9 @@ func (d *Daemon) fanRow(s *Session) fanCompareRow {
 // with no base. The counts run from that merge base, which is BaseSHA, not
 // from the base's tip, so a base that moves on (a fetch, or one attempt merged
 // into it) does not change the other rows. Every git call here runs under
-// ctx, which the caller bounds with fanGitTimeout.
-func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo) {
+// ctx, which the caller bounds with fanGitTimeout. Untracked files larger
+// than maxUntracked bytes are not read or counted.
+func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo, maxUntracked int64) {
 	if wt == nil {
 		return
 	}
@@ -355,7 +357,7 @@ func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo) {
 		row.Note = err.Error()
 		return
 	}
-	n, err := worktree.WorkingNumstat(ctx, wt.Path, from)
+	n, err := worktree.WorkingNumstat(ctx, wt.Path, from, maxUntracked)
 	if err != nil {
 		row.Note = err.Error()
 		return

@@ -71,7 +71,7 @@ func agentWorkVerbs() map[string]verbEntry {
 		},
 		// verb_review.go
 		"review-diff": {
-			description: "Read what the agent in a pane changed: the diff of its worktree against the base it was made from, or for a plain repository against the upstream merge base, untracked files included and ignored files left out. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",
+			description: "Read what the agent in a pane changed: the diff of its worktree against the base it was made from, or for a plain repository against the upstream merge base, untracked files included (one larger than max_untracked_mb is listed as skipped and not read) and ignored files left out. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,

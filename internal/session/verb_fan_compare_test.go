@@ -238,7 +238,7 @@ func TestFanRowChangesRunsEveryGitCallUnderTheBound(t *testing.T) {
 		info := *wt
 		info.Base = base
 		var row fanCompareRow
-		fanRowChanges(ctx, &row, &info)
+		fanRowChanges(ctx, &row, &info, 0)
 		if row.BaseSHA != "" || row.Files != nil || row.Ahead != nil || row.Dirty != nil {
 			t.Errorf("base %q: a row past its bound ran git: %+v", base, row)
 		}

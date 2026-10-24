@@ -4622,7 +4622,11 @@ Committed and uncommitted work show together, untracked files included (status
 `U`) and ignored files left out. The working state is written as a git tree
 through a temporary copy of the worktree's index, so the repository's index,
 its files and what the agent staged are never changed; the objects the tree
-needs are loose objects that `git gc` collects. A diff stops at 400 files,
+needs are loose objects that `git gc` collects. An untracked file larger than
+`[agents.checkpoints] max_untracked_mb` (50 MB by default) is never read: it
+is listed as not read (`skipped`), with no counts. Reading it would copy it
+into the object store, and through a clean filter such as Git LFS's into that
+store as well, on every review. A diff stops at 400 files,
 2 MiB of text or 5000 lines in one file, and the files past a limit are
 listed with their counts only (`truncated`). Binary files have counts only.
 All the git calls of one diff are bounded at 10 seconds together, and nothing

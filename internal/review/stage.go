@@ -85,15 +85,16 @@ func IndexOptions(ctx context.Context, dir, mode string) (Options, error) {
 //
 // The listing runs over the whole tree, as review-diff's does, so a rename is
 // seen as one. The hunks are read for the one file, which gives the same
-// hunks as the whole diff for any file that is not a rename.
-func IndexChange(ctx context.Context, dir, mode, path string, context int) (*File, error) {
+// hunks as the whole diff for any file that is not a rename. An untracked
+// file larger than maxUntracked bytes is not read, so it has no change here.
+func IndexChange(ctx context.Context, dir, mode, path string, context int, maxUntracked int64) (*File, error) {
 	opt, err := IndexOptions(ctx, dir, mode)
 	if err != nil {
 		return nil, err
 	}
 	tree := opt.Tree
 	if tree == "" {
-		if tree, err = worktree.SnapshotTree(ctx, dir); err != nil {
+		if tree, _, err = worktree.SnapshotTree(ctx, dir, maxUntracked); err != nil {
 			return nil, err
 		}
 	}

@@ -2390,8 +2390,9 @@ Show what the agent in a pane changed, leave notes on its lines, and send the
 notes to the agent. The diff is the pane's worktree against the base it was
 made from, or for a plain repository against the merge base with its upstream
 branch, else only what is not committed. Committed and uncommitted work show
-together, untracked files included and ignored files left out. It is read by
-the daemon through a temporary git index, so the repository, its index and its
+together, untracked files included and ignored files left out. An untracked
+file larger than `[agents.checkpoints] max_untracked_mb` (50 by default) is
+listed as not read, with no counts. It is read by the daemon through a temporary git index, so the repository, its index and its
 files are not changed. See
 [Reviewing an agent's changes](AGENT_STATE.md#reviewing-an-agents-changes).
 

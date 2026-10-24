@@ -171,7 +171,8 @@ type CheckpointsConfig struct {
 	// 50; values past 1000 read as 1000.
 	Keep int `toml:"keep,omitempty"`
 	// MaxUntrackedMB is the size past which an untracked file is left out
-	// of a checkpoint, in megabytes. Zero means the default, 50. A negative
+	// of a checkpoint, in megabytes, and is not read by review, review-stage,
+	// fan compare or fan diff either. Zero means the default, 50. A negative
 	// value means no limit.
 	MaxUntrackedMB int `toml:"max_untracked_mb,omitempty"`
 }

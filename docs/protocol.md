@@ -4123,7 +4123,9 @@ is in it, else the repository holding the pane's directory; none is
 working state, committed or not, untracked files included and ignored files
 left out, is written as a git tree through a temporary copy of the worktree's
 index, so its index, its files and what the agent staged are not changed.
-Every git call of one diff together is bounded at 10 seconds (`git_failed`
+An untracked file larger than `[agents.checkpoints] max_untracked_mb` is left
+out of the tree and never read; it is listed with status `U`, `skipped` true
+and no counts or hunks. Every git call of one diff together is bounded at 10 seconds (`git_failed`
 past it). [AGENT_STATE.md](AGENT_STATE.md#reviewing-an-agents-changes) has the
 whole contract.
 

@@ -8886,3 +8886,29 @@ After review: under `hidden`, a frame that is a surface's only edge falls back t
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A 16-colour panel loses its only edge under hidden | `panelFrame(pal)` at the `Panel.Render` frame site | Calls `dialogFrame()` again | `/hidden-16` (`got tl=" " … want tl="╭" tr="╮" bl="╰" br="╯" top="─" side="│"`) | **caught** |
+
+## Review leaves out large untracked files
+
+`TestReviewDoesNotReadLargeUntrackedFiles` sets `max_untracked_mb = 1` and
+routes `*.bin` through a clean filter that logs each file it runs on, which
+stands in for Git LFS without needing it installed. The pane's repository holds
+a 2 MiB untracked `data/large.bin` and a small `small.bin`. The small file going
+through the filter is the positive half: it shows the probe sees what review
+reads.
+
+Run on 2026-10-23 on macOS with Go 1.26.10, based on `5a2e8221` plus the fix.
+The negative binary changed only `Build` in `internal/review/diff.go` to pass
+`0` instead of `opt.MaxUntracked` to `worktree.SnapshotTree`. It failed every
+assertion about the large file: `--stat` listed `data/large.bin +1 -0`, the
+JSON had it with counts and `skipped` false, the filter's log named
+`data/large.bin` once per review, and the object store held its blob. The fixed
+binary passed the same test, and `TestCheckpointLeavesOutLargeUntrackedFiles`
+still passes now that `SaveCheckpoint` goes through the same `SnapshotTree`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Review stages every untracked file, however large | `Build`: `worktree.SnapshotTree(ctx, opt.Dir, 0)` (the tree before the change) | `TestReviewDoesNotReadLargeUntrackedFiles` (the 2 MiB file has counts, went through the clean filter, and is in the object store) | **caught** |
+
+Fan compare (`WorkingNumstat`, `WorkingDetail`), `tuios fan diff` and
+review-stage take the same limit through the same `SnapshotTree`, and have no
+end-to-end test of it.

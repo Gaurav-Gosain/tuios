@@ -46,7 +46,7 @@ func TestWorkingNumstatCountsCommitsAndUncommittedWork(t *testing.T) {
 	write("ignored.log", "noise\n")
 	before := testutil.Git(t, path, "status", "--porcelain")
 
-	n, err := WorkingNumstat(context.Background(), path, "main")
+	n, err := WorkingNumstat(context.Background(), path, "main", 0)
 	if err != nil {
 		t.Fatalf("WorkingNumstat: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestWorkingNumstatCountsCommitsAndUncommittedWork(t *testing.T) {
 	if after := testutil.Git(t, path, "status", "--porcelain"); after != before {
 		t.Errorf("git status changed:\nbefore %q\nafter  %q", before, after)
 	}
-	if _, err := WorkingNumstat(context.Background(), path, "--output=/tmp/x"); err == nil {
+	if _, err := WorkingNumstat(context.Background(), path, "--output=/tmp/x", 0); err == nil {
 		t.Error("a base that reads as an option was accepted")
 	}
 }
@@ -99,7 +99,7 @@ func TestSnapshotTreeStartsFromTheWorktreeIndex(t *testing.T) {
 	if st := testutil.Git(t, path, "status", "--porcelain"); st != "" {
 		t.Skipf("git rehashed the file itself (status %q), so the stat cache cannot be observed here", st)
 	}
-	got, err := SnapshotTree(context.Background(), path)
+	got, _, err := SnapshotTree(context.Background(), path, 0)
 	if err != nil {
 		t.Fatalf("SnapshotTree: %v", err)
 	}

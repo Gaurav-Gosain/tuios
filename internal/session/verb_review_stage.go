@@ -168,7 +168,7 @@ func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *v
 			named = p.Undo.Entries[0].Path
 		}
 	} else {
-		undo, verr = reviewStageChange(ctx, repo.root, p, ctxLines)
+		undo, verr = reviewStageChange(ctx, repo.root, p, ctxLines, d.checkpoints.maxUntracked.Load())
 	}
 	if verr != nil {
 		return nil, verr
@@ -197,14 +197,15 @@ func reviewStagePaths(p reviewStageParams) []string {
 }
 
 // reviewStageChange stages or unstages p.Path, its hunk p.Hunk, or the lines
-// p.Lines of that hunk.
-func reviewStageChange(ctx context.Context, root string, p reviewStageParams, contextLines int) (reviewUndo, *verbError) {
+// p.Lines of that hunk. An untracked file larger than maxUntracked bytes is
+// not read, so it has no change to stage.
+func reviewStageChange(ctx context.Context, root string, p reviewStageParams, contextLines int, maxUntracked int64) (reviewUndo, *verbError) {
 	unstage := p.Action == "unstage"
 	mode := review.IndexUnstaged
 	if unstage {
 		mode = review.IndexStaged
 	}
-	f, err := review.IndexChange(ctx, root, mode, p.Path, contextLines)
+	f, err := review.IndexChange(ctx, root, mode, p.Path, contextLines, maxUntracked)
 	if err != nil {
 		return reviewUndo{}, reviewStageGitFailed(err)
 	}

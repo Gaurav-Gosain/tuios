@@ -228,14 +228,15 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 
 	ctx, cancel := context.WithTimeout(d.ctx, reviewTimeout)
 	defer cancel()
-	opt := review.Options{Dir: repo.root, Paths: p.Paths, Context: lines}
+	maxUntracked := d.checkpoints.maxUntracked.Load()
+	opt := review.Options{Dir: repo.root, Paths: p.Paths, Context: lines, MaxUntracked: maxUntracked}
 	againstName := ""
 	if p.Index != "" {
 		iopt, err := review.IndexOptions(ctx, repo.root, p.Index)
 		if err != nil {
 			return nil, reviewGitFailed(err)
 		}
-		iopt.Paths, iopt.Context = p.Paths, lines
+		iopt.Paths, iopt.Context, iopt.MaxUntracked = p.Paths, lines, maxUntracked
 		opt = iopt
 	} else if p.Against != "" {
 		sib, verr := d.reviewSibling(cs, sess, repo, p.Against)

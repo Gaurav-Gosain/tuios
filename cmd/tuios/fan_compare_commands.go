@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -284,7 +286,11 @@ func runFanDiff(a, b string, stat bool) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	diff, err := worktree.DiffWorking(ctx, ra.Path, rb.Path, stat)
+	cfg, err := config.LoadUserConfig()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+	diff, err := worktree.DiffWorking(ctx, ra.Path, rb.Path, stat, cfg.Agents.Checkpoints.MaxUntrackedBytes())
 	if err != nil {
 		return err
 	}

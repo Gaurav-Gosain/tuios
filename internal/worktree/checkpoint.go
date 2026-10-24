@@ -321,15 +321,11 @@ func SaveCheckpoint(ctx context.Context, root string, m CheckpointMeta, keep int
 	if err != nil {
 		return Checkpoint{}, false, err
 	}
-	skipped, err := largeUntracked(ctx, root, m.MaxUntracked)
+	tree, skipped, err := SnapshotTree(ctx, root, m.MaxUntracked)
 	if err != nil {
 		return Checkpoint{}, false, err
 	}
 	m.skipped = skipped
-	tree, err := snapshotTreeExcluding(ctx, root, skipped)
-	if err != nil {
-		return Checkpoint{}, false, err
-	}
 	n := 1
 	if len(list) > 0 {
 		last := list[len(list)-1]

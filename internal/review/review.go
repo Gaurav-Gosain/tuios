@@ -102,8 +102,11 @@ type File struct {
 	Binary  bool   `json:"binary,omitempty"`
 	// Truncated marks a file past a limit: its counts are right and its
 	// hunks are left out.
-	Truncated bool   `json:"truncated,omitempty"`
-	Hunks     []Hunk `json:"hunks"`
+	Truncated bool `json:"truncated,omitempty"`
+	// Skipped marks an untracked file larger than Options.MaxUntracked. It
+	// was never read, so it has no counts and no hunks.
+	Skipped bool   `json:"skipped,omitempty"`
+	Hunks   []Hunk `json:"hunks"`
 	// oldMode and newMode are the file's modes on each side, as git's raw
 	// listing gives them ("000000" for none). A patch that creates the file
 	// in the index needs its mode.

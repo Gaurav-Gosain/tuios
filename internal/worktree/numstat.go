@@ -21,6 +21,12 @@ import (
 // were: what the agent staged stays staged and nothing is added. The objects
 // the tree needs are written to the repository's object store as loose
 // objects, which git gc collects like any other unreferenced object.
+//
+// An untracked file larger than the caller's limit is left out and never
+// read. Staging a file copies it into the object store, and a clean filter
+// such as Git LFS's copies it again into its own store, so a multi-gigabyte
+// data file the repository does not track would otherwise be copied on every
+// read, and a read cut off by its timeout would leave a partial copy behind.
 
 // Numstat is how much a worktree changed against a base: the files that
 // differ and the lines added and removed in them. A binary file counts as a
@@ -32,15 +38,25 @@ type Numstat struct {
 }
 
 // SnapshotTree writes the working state of the worktree at path as a git tree
-// and returns its hash.
+// and returns its hash, with the untracked files larger than maxUntracked
+// bytes left out and never read. It returns their paths, relative to path and
+// sorted. Zero or less is no limit.
 //
 // The temporary index starts as a copy of the worktree's own, so git's stat
 // cache holds and only the files that changed since the agent last touched
 // the index are hashed again. A worktree with no index, or one git cannot use
 // from a copy (a split index keeps part of itself beside the original), starts
 // from HEAD instead, which hashes every tracked file.
-func SnapshotTree(ctx context.Context, path string) (string, error) {
-	return snapshotTreeExcluding(ctx, path, nil)
+func SnapshotTree(ctx context.Context, path string, maxUntracked int64) (string, []string, error) {
+	skipped, err := largeUntracked(ctx, path, maxUntracked)
+	if err != nil {
+		return "", nil, err
+	}
+	tree, err := snapshotTreeExcluding(ctx, path, skipped)
+	if err != nil {
+		return "", nil, err
+	}
+	return tree, skipped, nil
 }
 
 // snapshotTreeExcluding is SnapshotTree with the paths in exclude, relative
@@ -132,12 +148,13 @@ func addAndWriteTree(ctx context.Context, path string, env []string, exclude []s
 }
 
 // WorkingNumstat counts what the worktree at path changed against base, a
-// commit or ref: its commits and its uncommitted work together.
-func WorkingNumstat(ctx context.Context, path, base string) (Numstat, error) {
+// commit or ref: its commits and its uncommitted work together. Untracked
+// files larger than maxUntracked bytes are not counted, as in SnapshotTree.
+func WorkingNumstat(ctx context.Context, path, base string, maxUntracked int64) (Numstat, error) {
 	if strings.HasPrefix(base, "-") {
 		return Numstat{}, fmt.Errorf("base %q is not a ref", base)
 	}
-	tree, err := SnapshotTree(ctx, path)
+	tree, _, err := SnapshotTree(ctx, path, maxUntracked)
 	if err != nil {
 		return Numstat{}, err
 	}
@@ -171,13 +188,14 @@ func ParseNumstat(out string) Numstat {
 // DiffWorking is what the worktree at b has that the worktree at a does not:
 // a unified diff of their working states, from a to b. Both must be worktrees
 // of one repository, which share its object store. With stat it is the
-// summary form.
-func DiffWorking(ctx context.Context, a, b string, stat bool) (string, error) {
-	ta, err := SnapshotTree(ctx, a)
+// summary form. Untracked files larger than maxUntracked bytes are left out
+// on both sides, as in SnapshotTree.
+func DiffWorking(ctx context.Context, a, b string, stat bool, maxUntracked int64) (string, error) {
+	ta, _, err := SnapshotTree(ctx, a, maxUntracked)
 	if err != nil {
 		return "", err
 	}
-	tb, err := SnapshotTree(ctx, b)
+	tb, _, err := SnapshotTree(ctx, b, maxUntracked)
 	if err != nil {
 		return "", err
 	}
