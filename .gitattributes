@@ -7,3 +7,5 @@ docs/release-notes/*.md merge=union
 # Generated from skills/tuios/*.md. Never merge it by hand: scripts/rebase.sh
 # regenerates it at each commit where a rebase conflicts on it.
 skills/tuios.tar.gz binary linguist-generated=true
+# Written by the e2e-tui test map workflow.
+e2e/tui/testselect/testmap.txt linguist-generated=true -diff

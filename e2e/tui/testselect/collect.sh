@@ -2,11 +2,11 @@
 # collect.sh BIN OUT [JOBS]
 #
 # Runs each end-to-end test named on stdin in its own process against BIN, a
-# tuios built with -cover -tags coverflush, and writes OUT/<Test>.files: the
-# source files whose code the test ran. Code that runs in every process (package
-# init and the start of main) is taken out first, from a run of
-# `BIN --version`, so a package counts only when the test reached code of its
-# own. testselect -build turns the .files files into the test map.
+# tuios built with -cover -tags coverflush, and writes OUT/<Test>.funcs: the
+# functions the test ran. Code that runs in every process (package init and
+# the start of main) is taken out first, from a run of `BIN --version`, so a
+# function counts only when the test reached it on its own. testselect -build
+# turns the .funcs files into the test map.
 #
 # A test that fails is run once more. Its coverage is kept either way, and its
 # name goes to OUT/failed.txt, because a test that stopped early may have
@@ -53,14 +53,17 @@ one() {
 	fi
 	if [ -s "$dir.txt" ]; then
 		# A profile line is "path/file.go:start,end statements count".
-		awk 'NR == FNR { base[$1] = 1; next }
-			FNR > 1 && $NF > 0 && !($1 in base) { sub(/:.*/, "", $1); print $1 }' \
-			"$work/base.keys" "$dir.txt" | sort -u >"$out/$name.files"
+		# The functions the test ran: a profile with the start-up blocks
+		# counted as not run, read by go tool cover.
+		awk 'NR == FNR { base[$1] = 1; next } FNR > 1 && ($1 in base) { $NF = 0 } { print }' \
+			"$work/base.keys" "$dir.txt" >"$dir.own"
+		(cd ../.. && go tool cover -func="$dir.own") |
+			awk '$NF != "0.0%" && $1 != "total:" { sub(/:[0-9]+:$/, "", $1); print $1, $2 }' | sort -u >"$out/$name.funcs"
 	else
-		: >"$out/$name.files"
+		: >"$out/$name.funcs"
 	fi
-	rm -rf "$dir" "$dir.txt" "$dir.log"
-	echo "$name $status $(wc -l <"$out/$name.files")"
+	rm -rf "$dir" "$dir.txt" "$dir.own" "$dir.log"
+	echo "$name $status $(wc -l <"$out/$name.funcs")"
 }
 export -f one
 export work out bin

@@ -75,7 +75,7 @@ var global = []*regexp.Regexp{
 // buildInputs are the non-Go files the go command compiles into a package.
 var buildInputs = regexp.MustCompile(`\.(s|S|c|cc|cpp|cxx|h|hh|hpp|hxx|m|f|F|for|f90|swig|swigcxx|syso)$`)
 
-func choose(root, base, head, mapFile string, m *testMap, names []string) *selection {
+func choose(root, base, head, mapFile string, m *testMap, testNames []string) *selection {
 	changes, err := changedFiles(root, base, head)
 	if err != nil {
 		return everything(fmt.Sprintf("the diff from %s cannot be read: %v", base, err))
@@ -90,9 +90,10 @@ func choose(root, base, head, mapFile string, m *testMap, names []string) *selec
 	mapPath := filepath.ToSlash(filepath.Join("e2e/tui", mapFile))
 
 	sel := &selection{tests: map[string]bool{}}
-	bodyFiles := map[string]bool{}
-	declPkgs := map[string]bool{}
-	reach := false // the change reaches the binary or the suite
+	bodyFuncs := map[funcRef]bool{} // functions whose body alone changed
+	declPkgs := map[string]bool{}   // packages changed in a way only their importers bound
+	var names []name                // declarations that changed
+	reaches := false                // the change reaches the binary or the suite
 	for _, c := range changes {
 		p := c.path
 		switch {
@@ -130,7 +131,7 @@ func choose(root, base, head, mapFile string, m *testMap, names []string) *selec
 			for _, t := range tests {
 				sel.tests[t] = true
 			}
-			reach = true
+			reaches = true
 			sel.reasons = append(sel.reasons, fmt.Sprintf("%s: %s", p, why))
 			continue
 		}
@@ -143,17 +144,48 @@ func choose(root, base, head, mapFile string, m *testMap, names []string) *selec
 			case strings.HasSuffix(p, "_test.go"):
 				sel.reasons = append(sel.reasons, p+": a unit test file, not in the binary")
 			case strings.HasSuffix(p, ".go"):
-				reach = true
-				funcs, ok := bodyOnly(root, base, head, c, m.init[p])
-				if ok {
-					bodyFiles[p] = true
-					sel.reasons = append(sel.reasons, fmt.Sprintf("%s: inside %s", p, strings.Join(funcs, ", ")))
-				} else {
+				gc := analyzeGoFile(root, base, head, dir, c, m.init[p])
+				switch {
+				case !gc.built:
+					sel.reasons = append(sel.reasons, p+": not in the linux build")
+				case gc.global != "":
+					reaches = true
 					declPkgs[dir] = true
-					sel.reasons = append(sel.reasons, fmt.Sprintf("%s: a declaration in %s", p, dir))
+					sel.reasons = append(sel.reasons, fmt.Sprintf("%s: %s", p, gc.global))
+				default:
+					reaches = true
+					var parts []string
+					if len(gc.bodies) > 0 {
+						for _, f := range gc.funcs {
+							bodyFuncs[funcRef{p, f}] = true
+						}
+						parts = append(parts, "inside "+strings.Join(gc.bodies, ", "))
+					}
+					if len(gc.names) > 0 {
+						var ids []string
+						for _, n := range gc.names {
+							ids = append(ids, n.ident)
+						}
+						names = append(names, gc.names...)
+						parts = append(parts, "declares "+strings.Join(ids, ", "))
+					}
+					if len(parts) == 0 {
+						parts = append(parts, "comments only")
+					}
+					sel.reasons = append(sel.reasons, fmt.Sprintf("%s: %s", p, strings.Join(parts, "; ")))
 				}
-			case info.embeds[p] || (path.Dir(p) == dir && buildInputs.MatchString(p)):
-				reach = true
+			case info.embeds[p]:
+				reaches = true
+				vars := embedVars(root, dir)
+				if len(vars) == 0 {
+					declPkgs[dir] = true
+				}
+				for _, v := range vars {
+					names = append(names, name{dir, v, false, ""})
+				}
+				sel.reasons = append(sel.reasons, fmt.Sprintf("%s: embedded in %s", p, dir))
+			case path.Dir(p) == dir && buildInputs.MatchString(p):
+				reaches = true
 				declPkgs[dir] = true
 				sel.reasons = append(sel.reasons, fmt.Sprintf("%s: built into %s", p, dir))
 			default:
@@ -172,12 +204,48 @@ func choose(root, base, head, mapFile string, m *testMap, names []string) *selec
 		return everything(p + " is not covered by a rule")
 	}
 
-	if !reach {
+	if !reaches {
 		return sel
 	}
 
-	// A declaration reaches the code that names it: its own package and the
-	// packages that import it.
+	// A changed declaration reaches the code that names it (see reach). When
+	// that walk cannot finish, or the change has effects no name carries, the
+	// package and every package that imports it count.
+	// A method whose name some interface uses changes its type. Any other
+	// method is reached through its name like a function.
+	if slices.ContainsFunc(names, func(n name) bool { return n.recv != "" }) {
+		methods, err := interfaceMethods(root)
+		if err != nil {
+			return everything(fmt.Sprintf("the interfaces of the binary cannot be listed: %v", err))
+		}
+		for i, n := range names {
+			if n.recv != "" && methods[n.ident] {
+				names[i] = name{n.dir, n.recv, true, ""}
+			}
+		}
+	}
+	refFuncs, ok := reach(root, g, names)
+	if !ok {
+		sel.reasons = append(sel.reasons, "the changed declarations reach too far to follow, so their packages and importers count")
+		refFuncs = map[funcRef]bool{}
+		for _, n := range names {
+			declPkgs[n.dir] = true
+		}
+	}
+	if len(refFuncs) > 0 {
+		var list []string
+		for f := range refFuncs {
+			list = append(list, f.file+":"+f.name)
+		}
+		slices.Sort(list)
+		if len(list) > 8 {
+			list = append(list[:8], fmt.Sprintf("and %d more", len(refFuncs)-8))
+		}
+		sel.reasons = append(sel.reasons, "the changed declarations are named in "+strings.Join(list, ", "))
+	}
+
+	// The tests that ran a changed function, or one that names a changed
+	// declaration, or any code of a package that counts whole.
 	near := map[string]bool{}
 	for dir := range declPkgs {
 		near[dir] = true
@@ -185,38 +253,39 @@ func choose(root, base, head, mapFile string, m *testMap, names []string) *selec
 			near[imp] = true
 		}
 	}
-	fileIndex := map[string]int{}
-	for i, f := range m.files {
-		fileIndex[f] = i
+	hit := map[int]bool{}
+	for f := range bodyFuncs {
+		for _, t := range m.testsOf(f) {
+			hit[t] = true
+		}
 	}
-	bodyIdx := map[int]bool{}
-	for f := range bodyFiles {
-		if i, ok := fileIndex[f]; ok {
-			bodyIdx[i] = true
+	for f := range refFuncs {
+		for _, t := range m.testsOf(f) {
+			hit[t] = true
+		}
+	}
+	if len(near) > 0 {
+		for f, tests := range m.funcs {
+			if near[path.Dir(f.file)] {
+				for _, t := range tests {
+					hit[t] = true
+				}
+			}
 		}
 	}
 	cmdTests := testsThatBuildTheBinary(root)
 	unknown, every := 0, 0
-	for _, name := range names {
-		files, known := m.tests[name]
+	for _, test := range testNames {
+		i, known := m.index[test]
 		switch {
 		case !known:
-			sel.tests[name] = true
+			sel.tests[test] = true
 			unknown++
-		case m.every[name] || cmdTests[name]:
-			sel.tests[name] = true
+		case m.every[test] || cmdTests[test]:
+			sel.tests[test] = true
 			every++
-		default:
-			if slices.ContainsFunc(files, func(i int) bool { return bodyIdx[i] }) {
-				sel.tests[name] = true
-				continue
-			}
-			for _, i := range files {
-				if near[path.Dir(m.files[i])] {
-					sel.tests[name] = true
-					break
-				}
-			}
+		case hit[i]:
+			sel.tests[test] = true
 		}
 	}
 	if unknown > 0 {
