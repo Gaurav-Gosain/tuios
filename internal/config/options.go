@@ -381,6 +381,16 @@ var optionSpecs = []Option{
 		Default:     "", Color: true,
 	},
 	{
+		Path: "appearance.border_focused_color_window", Type: OptionString, Section: "appearance",
+		Description: "Colour of the focused pane's border in window mode. It wins over border_focused_color",
+		Default:     "", Color: true,
+	},
+	{
+		Path: "appearance.border_focused_color_terminal", Type: OptionString, Section: "appearance",
+		Description: "Colour of the focused pane's border in terminal mode. It wins over border_focused_color",
+		Default:     "", Color: true,
+	},
+	{
 		Path: "appearance.border_focused_gradient", Type: OptionString, Section: "appearance",
 		Description: "Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour",
 		Default:     "",

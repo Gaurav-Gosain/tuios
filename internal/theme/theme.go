@@ -4,6 +4,7 @@ package theme
 import (
 	"image/color"
 	"log"
+	"math"
 	"sync"
 
 	"charm.land/lipgloss/v2"
@@ -15,8 +16,9 @@ import (
 var enabled bool
 
 // Border color overrides from user config. When non-nil they take precedence
-// over the theme-derived border colors. A single focused override applies to
-// both window-mode and terminal-mode focused borders.
+// over the theme-derived border colors. The focused border has one override per
+// mode and one for both: a mode's own wins, then the shared one, then the
+// theme.
 //
 // They are process-global and are written whenever a session applies its
 // appearance config, which is once per client. Under the ssh server that is
@@ -31,32 +33,64 @@ var enabled bool
 // per-session is a larger change than a data race deserves, and the lock is
 // the part that has to be true either way.
 var (
-	borderMu                sync.RWMutex
-	borderFocusedOverride   ColorSpec
-	borderUnfocusedOverride ColorSpec
+	borderMu        sync.RWMutex
+	borderOverrides [borderKinds]ColorSpec
 )
 
-// SetBorderOverrides sets the border colours from config values, in any form
-// ParseColor reads. An empty or unparseable value clears that override and
-// restores the theme colour; the config validator has said why.
-func SetBorderOverrides(focused, unfocused string) {
+// borderKind names one border override.
+type borderKind int
+
+const (
+	borderUnfocused borderKind = iota
+	// borderFocused is appearance.border_focused_color, for both modes.
+	borderFocused
+	borderFocusedWindow
+	borderFocusedTerminal
+	borderKinds
+)
+
+// BorderOverrides are the border colours a config sets, each in any form
+// ParseColor reads. Empty leaves that border to the theme.
+type BorderOverrides struct {
+	// Focused is the focused border in both modes.
+	Focused string
+	// FocusedWindow and FocusedTerminal are the focused border in one mode.
+	// Each wins over Focused in its mode.
+	FocusedWindow, FocusedTerminal string
+	Unfocused                      string
+}
+
+// SetBorderOverrides sets the border colours from config values. An empty or
+// unparseable value clears that override and restores the theme colour; the
+// config validator has said why.
+func SetBorderOverrides(o BorderOverrides) {
 	borderMu.Lock()
 	defer borderMu.Unlock()
-	borderFocusedOverride = SpecOf(focused)
-	borderUnfocusedOverride = SpecOf(unfocused)
+	borderOverrides = [borderKinds]ColorSpec{
+		borderUnfocused:       SpecOf(o.Unfocused),
+		borderFocused:         SpecOf(o.Focused),
+		borderFocusedWindow:   SpecOf(o.FocusedWindow),
+		borderFocusedTerminal: SpecOf(o.FocusedTerminal),
+	}
 }
 
 // borderOverride reads one override under the lock and resolves it, nil when
 // it is unset. A role or a slot resolves on the theme in force, so an override
 // written as "accent" follows a theme change.
-func borderOverride(focused bool) color.Color {
+func borderOverride(kind borderKind) color.Color {
 	borderMu.RLock()
-	c := borderUnfocusedOverride
-	if focused {
-		c = borderFocusedOverride
-	}
+	c := borderOverrides[kind]
 	borderMu.RUnlock()
 	return c.Resolve()
+}
+
+// focusedOverride is the configured focused border for one mode: the mode's
+// own key, then the key for both modes, nil when neither is set.
+func focusedOverride(mode borderKind) color.Color {
+	if c := borderOverride(mode); c != nil {
+		return c
+	}
+	return borderOverride(borderFocused)
 }
 
 // Initialize makes the named theme the active one.
@@ -294,7 +328,7 @@ func BorderUnfocused() color.Color { return BorderUnfocusedOn(nil) }
 func BorderUnfocusedOn(hostBg color.Color) color.Color {
 	// A configured colour is returned as chosen: measurement was overridden on
 	// purpose, the same way the scrollbar treats a configured tint.
-	if unfocused := borderOverride(false); unfocused != nil {
+	if unfocused := borderOverride(borderUnfocused); unfocused != nil {
 		return unfocused
 	}
 	t := Current()
@@ -315,9 +349,14 @@ func BorderFocusedWindow() color.Color { return BorderFocusedWindowOn(nil) }
 // BorderFocusedWindowOn is BorderFocusedWindow on a known host background.
 // See BorderUnfocusedOn.
 func BorderFocusedWindowOn(hostBg color.Color) color.Color {
-	if focused := borderOverride(true); focused != nil {
+	if focused := focusedOverride(borderFocusedWindow); focused != nil {
 		return focused
 	}
+	return focusedWindowDefault(hostBg)
+}
+
+// focusedWindowDefault is the window mode border when no key sets it.
+func focusedWindowDefault(hostBg color.Color) color.Color {
 	t := Current()
 	if t == nil {
 		return slotAt16(14, hostBorderInk(lipgloss.Color("#AFFFFF"), hostBg))
@@ -332,22 +371,93 @@ func BorderFocusedTerminal() color.Color { return BorderFocusedTerminalOn(nil) }
 // BorderFocusedTerminalOn is BorderFocusedTerminal on a known host
 // background. See BorderUnfocusedOn.
 func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
-	if focused := borderOverride(true); focused != nil {
+	if focused := focusedOverride(borderFocusedTerminal); focused != nil {
 		return focused
+	}
+	if Depth() == overlay.Depth16 {
+		// Bright green against the window mode's bright cyan: two slots, so
+		// the terminal's palette keeps them apart.
+		return overlay.Slot(10)
 	}
 	t := Current()
 	if t == nil {
-		return slotAt16(10, hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg))
+		return modesApart(focusedWindowDefault(hostBg), hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg), hostBg)
 	}
 	// Light green for terminal mode: use bright green
-	return slotAt16(10, borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen)))
+	terminal := borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
+	return modesApart(focusedWindowDefault(hostBg), terminal, TerminalBg())
+}
+
+// modeLightnessGap is the least OKLab lightness between the two default
+// focused borders. On 231 of the 344 bundled themes the accent and the success
+// colour sit within 0.08 of each other, catppuccin mocha at 0.000 and nord at
+// 0.005. Hue alone then tells the modes apart, which fails a person who cannot
+// tell cyan from green and anyone who sees the border from the corner of an
+// eye.
+const modeLightnessGap = 0.1
+
+// modesApartMemo keeps the last few answers of modesApart, which is asked on
+// every frame and converts to OKLab and measures contrast on each call.
+var modesApartMemo struct {
+	sync.Mutex
+	keys [4][3][4]uint32
+	out  [4]color.Color
+	next int
+}
+
+// modesApart is the terminal mode border moved in lightness, hue and chroma
+// kept, until it sits modeLightnessGap from the window mode border. It goes
+// darker first: on a dark ground that is where a saturated green keeps its
+// chroma, and on a light ground it is the side with more contrast. It goes
+// lighter when darker would leave the gamut or fall under the mark floor on
+// ground, and it stays as it is when neither works. A nil ground is taken as
+// dark, the way the no-theme colours are picked.
+func modesApart(window, terminal, ground color.Color) color.Color {
+	key := [3][4]uint32{rgbaKey(window), rgbaKey(terminal), rgbaKey(ground)}
+	m := &modesApartMemo
+	m.Lock()
+	defer m.Unlock()
+	for i, k := range m.keys {
+		if m.out[i] != nil && k == key {
+			return m.out[i]
+		}
+	}
+	out := terminal
+	lw := overlay.Lightness(window)
+	if math.Abs(lw-overlay.Lightness(terminal)) < modeLightnessGap {
+		if ground == nil {
+			ground = color.Black
+		}
+		for _, l := range []float64{lw - modeLightnessGap, lw + modeLightnessGap} {
+			c := overlay.WithLightness(terminal, l)
+			// A colour out of gamut at l comes back clamped, at another lightness.
+			if math.Abs(overlay.Lightness(c)-l) > 0.02 || ContrastRatio(c, ground) < MarkFloor {
+				continue
+			}
+			out = c
+			break
+		}
+	}
+	m.keys[m.next], m.out[m.next] = key, out
+	m.next = (m.next + 1) % len(m.out)
+	return out
+}
+
+// rgbaKey is c's channels as a memo key, all zero for nil.
+func rgbaKey(c color.Color) [4]uint32 {
+	if c == nil {
+		return [4]uint32{}
+	}
+	r, g, b, a := c.RGBA()
+	return [4]uint32{r, g, b, a}
 }
 
 // BorderFocusedCopy is the focused pane's border while it is in copy mode:
 // the theme's border.copy, or nil when the theme names none. A configured
-// border_focused_color wins, so it is nil then too.
+// border_focused_color wins, so it is nil then too. The keys for one mode do
+// not: copy mode is a third state, and keeps its own colour.
 func BorderFocusedCopy() color.Color {
-	if borderOverride(true) != nil {
+	if borderOverride(borderFocused) != nil {
 		return nil
 	}
 	if c := chromeFurniture(RoleBorderCopy); c != nil {
@@ -359,7 +469,7 @@ func BorderFocusedCopy() color.Color {
 // BorderFocusedAttention is the focused pane's border while its agent waits
 // for input: the theme's status.attention, or nil as BorderFocusedCopy.
 func BorderFocusedAttention() color.Color {
-	if borderOverride(true) != nil {
+	if borderOverride(borderFocused) != nil {
 		return nil
 	}
 	if c := chromeFurniture(RoleAttention); c != nil {

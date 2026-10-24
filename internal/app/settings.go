@@ -216,12 +216,11 @@ func (m *OS) applyTheme(name string) {
 // package and repaints so the new colors show immediately. Empty values clear
 // the override and restore the theme-derived colors.
 func (m *OS) applyBorderColors() {
-	focused, unfocused := "", ""
+	var overrides theme.BorderOverrides
 	if m.UserConfig != nil {
-		focused = m.UserConfig.Appearance.BorderFocusedColor
-		unfocused = m.UserConfig.Appearance.BorderUnfocusedColor
+		overrides = m.UserConfig.Appearance.BorderOverrides()
 	}
-	theme.SetBorderOverrides(focused, unfocused)
+	theme.SetBorderOverrides(overrides)
 	m.MarkAllDirty()
 }
 
@@ -411,6 +410,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.scrollbar.thumb"),
 			opt("appearance.scrollbar.track"),
 			opt("appearance.border_focused_color"),
+			opt("appearance.border_focused_color_window"),
+			opt("appearance.border_focused_color_terminal"),
 			opt("appearance.border_unfocused_color"),
 			opt("appearance.border_focused_gradient"),
 			opt("appearance.border_gradient_angle"),

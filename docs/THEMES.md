@@ -569,7 +569,8 @@ by surface. Each one you leave out draws as before:
   [CONFIGURATION.md](CONFIGURATION.md).
 - `appearance.border_unfocused_color` in the config wins over
   `border.unfocused`. `appearance.border_focused_color` wins over the focused
-  border's colours by state.
+  border's colours by state. The keys for one mode,
+  `border_focused_color_window` and `border_focused_color_terminal`, do not.
 - In a config colour, write a role by its full name, such as
   `fg = "status.attention"`.
 - At 16 colours these fields are not used. Each piece uses its slot, as before.
@@ -699,9 +700,10 @@ pointer are underlined.
   are loaded; subdirectories are ignored.
 - **No validation beyond parsing.** A syntactically valid file with meaningless
   colors loads happily. Use `tuios --preview-theme <id>` to check the result.
-- **Border color overrides are separate.** `border_focused_color` and
+- **Border color overrides are separate.** `border_focused_color`,
+  `border_focused_color_window`, `border_focused_color_terminal` and
   `border_unfocused_color` in `[appearance]` override the theme's border colors
-  and are not part of the theme file. Both rows in the settings page open a
+  and are not part of the theme file. Each row in the settings page open a
   colour picker, seeded on the colour the border is currently drawn in; clearing
   one there unsets the override and hands the border back to the theme.
 - **The chrome's neutrals do not follow the sixteen.** Dialogs and the

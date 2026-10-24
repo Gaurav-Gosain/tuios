@@ -589,6 +589,8 @@ func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
 	a := &cfg.Appearance
 	warnColours(result, "appearance", "The border uses the theme colour",
 		"border_focused_color", a.BorderFocusedColor,
+		"border_focused_color_window", a.BorderFocusedColorWindow,
+		"border_focused_color_terminal", a.BorderFocusedColorTerminal,
 		"border_unfocused_color", a.BorderUnfocusedColor)
 	if a.BorderFocusedGradient == "" {
 		return

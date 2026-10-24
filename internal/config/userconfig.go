@@ -381,6 +381,10 @@ type AppearanceConfig struct {
 	SharedBorders            *bool                   `toml:"shared_borders"`               // Share borders between adjacent tiled windows (default: false)
 	// Customization
 	BorderFocusedColor string `toml:"border_focused_color"` // Hex color for focused pane border (e.g., "#89b4fa")
+	// BorderFocusedColorWindow and BorderFocusedColorTerminal are the focused
+	// border in one mode. Each wins over BorderFocusedColor in its mode.
+	BorderFocusedColorWindow   string `toml:"border_focused_color_window"`
+	BorderFocusedColorTerminal string `toml:"border_focused_color_terminal"`
 	// BorderFocusedGradient is two or more colours the focused border steps
 	// through, separated by spaces or commas. Empty draws one colour.
 	BorderFocusedGradient string `toml:"border_focused_gradient"`
@@ -3004,7 +3008,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// Custom border colors override the theme-derived colors. Empty strings
 	// clear any override and restore theme colors. This runs after the theme
 	// switch above, which resets the derived colors.
-	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
+	theme.SetBorderOverrides(cfg.Appearance.BorderOverrides())
 	s.BorderFocusedGradient = cfg.Appearance.BorderFocusedGradient
 	s.BorderGradientAngle = DefaultBorderGradientAngle
 	if a := cfg.Appearance.BorderGradientAngle; a != nil {
@@ -3906,4 +3910,15 @@ func GetConfigPath() (string, error) {
 		return xdg.ConfigFile("tuios/config.toml")
 	}
 	return path, nil
+}
+
+// BorderOverrides are the border colour keys of a, as the theme package takes
+// them.
+func (a *AppearanceConfig) BorderOverrides() theme.BorderOverrides {
+	return theme.BorderOverrides{
+		Focused:         a.BorderFocusedColor,
+		FocusedWindow:   a.BorderFocusedColorWindow,
+		FocusedTerminal: a.BorderFocusedColorTerminal,
+		Unfocused:       a.BorderUnfocusedColor,
+	}
 }

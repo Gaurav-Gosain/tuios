@@ -105,6 +105,8 @@ var lookKeys = []string{
 	"appearance.border_style",
 	"appearance.frame_panels",
 	"appearance.border_focused_color",
+	"appearance.border_focused_color_window",
+	"appearance.border_focused_color_terminal",
 	"appearance.border_unfocused_color",
 	"appearance.border_focused_gradient",
 	"appearance.border_gradient_angle",

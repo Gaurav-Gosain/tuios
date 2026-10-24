@@ -47,7 +47,7 @@ type colorSetting struct {
 	namedColor func(keyword string, ground color.Color) color.Color
 }
 
-// colorSettings are the three, in the order they appear in the panel.
+// colorSettings are the colour rows, in the order they appear in the panel.
 var colorSettings = []colorSetting{
 	{
 		Path:  "appearance.border_focused_color",
@@ -57,6 +57,26 @@ var colorSettings = []colorSetting{
 		apply: func(m *OS, _ string) { m.applyBorderColors() },
 		effective: func(color.Color, *config.Settings) color.Color {
 			return theme.BorderFocusedWindow()
+		},
+	},
+	{
+		Path:  "appearance.border_focused_color_window",
+		Label: "Window mode border",
+		Desc:  "Colour of the focused pane's border in window mode",
+		Unset: "(focused border)",
+		apply: func(m *OS, _ string) { m.applyBorderColors() },
+		effective: func(color.Color, *config.Settings) color.Color {
+			return theme.BorderFocusedWindow()
+		},
+	},
+	{
+		Path:  "appearance.border_focused_color_terminal",
+		Label: "Terminal mode border",
+		Desc:  "Colour of the focused pane's border in terminal mode",
+		Unset: "(focused border)",
+		apply: func(m *OS, _ string) { m.applyBorderColors() },
+		effective: func(color.Color, *config.Settings) color.Color {
+			return theme.BorderFocusedTerminal()
 		},
 	},
 	{

@@ -21,7 +21,7 @@ import (
 // Negative control: dropping the lock from SetBorderOverrides makes this
 // report a race under -race.
 func TestTheBorderOverridesSurviveConcurrentSessions(t *testing.T) {
-	t.Cleanup(func() { SetBorderOverrides("", "") })
+	t.Cleanup(func() { SetBorderOverrides(BorderOverrides{}) })
 
 	var wg sync.WaitGroup
 	// Two connections arriving together, each applying its own appearance,
@@ -29,9 +29,9 @@ func TestTheBorderOverridesSurviveConcurrentSessions(t *testing.T) {
 	for i := range 8 {
 		wg.Go(func() {
 			if i%2 == 0 {
-				SetBorderOverrides("#89b4fa", "#45475a")
+				SetBorderOverrides(BorderOverrides{Focused: "#89b4fa", Unfocused: "#45475a"})
 			} else {
-				SetBorderOverrides("", "")
+				SetBorderOverrides(BorderOverrides{})
 			}
 		})
 	}

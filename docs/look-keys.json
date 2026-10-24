@@ -28,6 +28,20 @@
       "color": true
     },
     {
+      "path": "appearance.border_focused_color_terminal",
+      "type": "string",
+      "description": "Colour of the focused pane's border in terminal mode. It wins over border_focused_color",
+      "default": "",
+      "color": true
+    },
+    {
+      "path": "appearance.border_focused_color_window",
+      "type": "string",
+      "description": "Colour of the focused pane's border in window mode. It wins over border_focused_color",
+      "default": "",
+      "color": true
+    },
+    {
       "path": "appearance.border_focused_gradient",
       "type": "string",
       "description": "Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour",

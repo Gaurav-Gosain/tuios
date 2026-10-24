@@ -9035,3 +9035,15 @@ Run on 2026-10-24 on Linux amd64 (Go 1.27.1) against upstream main at 43649994. 
 | The BEL sent as an OSC terminator | `ringBell` writes `ESC ] 2 ; x BEL` instead of a bare BEL | `forward`, `both`, `forward-standalone` ("the host got 0 bells, want 1") | **caught** |
 
 Not covered end to end: the bell over `tuios ssh` and in tuios-web. Both use the writer the agent alert bell uses.
+## One focused border colour per mode
+
+`TestFocusedBorderColourPerMode` reads the focused pane's top left corner in window mode and again after `i` in terminal mode. `per-mode` sets `border_focused_color`, `border_focused_color_window` and `border_focused_color_terminal` to three colours and requires the two mode keys. `shared` sets only `border_focused_color` and requires it in both modes. The two `lightness` cases set no key, on no theme and on `catppuccin_mocha`, and require the two default borders at least 0.08 apart in OKLab lightness. `16` requires two different palette slots at 16 colours. With `TUIOS_E2E_FRAMES` set, each case saves both frames as text and PNG.
+
+Run on 2026-10-24 on Linux amd64 with Go 1.27.1 against upstream main at 43649994b. Each control past the first is a text replacement in `internal/theme/theme.go`, built to a separate binary and put back before the next. The fixed build passes every case.
+
+| Control: what was cut | Cases that fail | Verdict |
+| --- | --- | --- |
+| The change removed (upstream main) | `per-mode` ("the window mode border is #ff00ff, want #ff8800"), `lightness-no-theme` (#afffff L 0.949, #aaffaa L 0.925), `lightness-catppuccin-mocha` (#93e2d5 and #a6e3a1, both L 0.858) | **caught** |
+| `focusedOverride` does not fall back to `border_focused_color` | `shared` ("the borders are #afffff and #91e592, want #ff00ff in both modes") | **caught** |
+| `modesApart` returns the terminal colour unchanged | `lightness-no-theme` and `lightness-catppuccin-mocha` ("under 0.08 apart in lightness") | **caught** |
+| Any of the above | `16` passes on main too: the two slots were already 14 and 10. It guards that the change keeps them apart | **not caught, by design** |

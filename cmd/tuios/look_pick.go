@@ -213,7 +213,7 @@ func lookColors(text string) []string {
 		}
 	}
 	if ap, ok := raw["appearance"].(map[string]any); ok {
-		return pick(ap, "desktop_background", "border_focused_color", "border_unfocused_color")
+		return pick(ap, "desktop_background", "border_focused_color", "border_focused_color_window", "border_focused_color_terminal", "border_unfocused_color")
 	}
 	return nil
 }

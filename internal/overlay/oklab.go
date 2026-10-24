@@ -183,3 +183,15 @@ func FixLightness(c, bg color.Color, floor float64) color.Color {
 	}
 	return best
 }
+
+// Lightness is c's OKLab lightness, 0 for black and 1 for white.
+func Lightness(c color.Color) float64 { return toLab(c).l }
+
+// WithLightness is c with its OKLab lightness set to l and its hue and chroma
+// kept. A colour the sRGB gamut cannot hold at l is clamped per channel, so a
+// caller that cares measures Lightness of the result.
+func WithLightness(c color.Color, l float64) color.Color {
+	v := toLab(c)
+	v.l = math.Max(0, math.Min(1, l))
+	return v.rgba()
+}
