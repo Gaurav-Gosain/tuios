@@ -9050,6 +9050,9 @@ Run on 2026-10-24 on Linux amd64 with Go 1.27.1 against upstream main at 4364999
 ## The agents row marks the focused pane
 
 `TestAgentRowMarksFocusWithoutTerminals` (in `rail_polish_test.go`) sets `sections = "sessions,agents"`, makes two panes, and reports both as `working`. The test requires the focus mark in the rail gutter of the focused agent row and a blank gutter on the other row. It then focuses the other pane and requires the mark to move. It runs at 16 colours and at truecolor, and saves a PNG of each frame.
+## The rail cursor row has a mark that does not need its background
+
+`TestRailCursorShowsWithoutItsGround` (in `sidebar_keyboard_test.go`) sets `background = "off"` for the app and the rail, makes two panes, and gives the rail the keyboard. It finds the cursor row by its background, the one thing main draws for it. It requires a text cell past the gutter in underline or reverse video on that row, and on no other rail row. It moves the cursor with `j` and `k` and checks the mark again. It runs on a dark terminal at truecolor and at 16 colours, and under `catppuccin_latte` at truecolor.
 
 Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 
@@ -9059,3 +9062,5 @@ Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 | The agent row keeps the compact-rail rule | `focusMark` set to `e.Focused && width <= sidebarCompactWidth && terminals in the layout`, which is the old rule | both cases: "the focused agent row carries no focus mark" | **caught** |
 
 Not covered end to end: the terminals row scrolled out of a short rail, and a peek of another session. The same `focusDrawn` check covers them.
+| The fix removed | upstream main at 43649994b | `dark-truecolor` and `light-truecolor`: "the cursor row on P1 differs from its neighbours only by its ground". `dark-16` passes, since main already draws reverse video there | **caught** |
+| The mark skips every cell | `CursorText` returns its span unchanged | `dark-truecolor` and `light-truecolor`, same message | **caught** |

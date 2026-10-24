@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -81,4 +82,137 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 	}
 
 	alive(t, term, "after driving the sidebar by keyboard")
+}
+
+// railBandRow is the rail row the keyboard cursor stands on: the one row
+// whose content cells carry a ground or reverse video while the rail paints
+// no ground of its own. It returns -1 when no row does, as while the cursor
+// is on a header's add control.
+func railBandRow(s tuitest.Screen) int {
+	_, rows := s.Size()
+	for r := range rows {
+		for x := 1; x < railWidth-1; x++ {
+			c := s.Cell(x, r)
+			if c.Bg.Kind != tuitest.ColorDefault || c.Reverse {
+				return r
+			}
+		}
+	}
+	return -1
+}
+
+// railRowMarkedOffGround reports whether rail row r carries a mark that is
+// not a ground: a text cell past the gutter in underline or reverse video.
+func railRowMarkedOffGround(s tuitest.Screen, r int) bool {
+	for x := 1; x < railWidth-1; x++ {
+		c := s.Cell(x, r)
+		if strings.TrimSpace(c.Content) != "" && (c.Underline || c.Reverse) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestRailCursorShowsWithoutItsGround (discussion 1094): with the rail's
+// background off, the keyboard cursor row has to differ from its neighbours
+// by more than the ground, which a see-through terminal can show as almost
+// nothing. The cursor walks down to the first pane row with j, then to the
+// next with j and back with k. Each step requires the mark on the cursor row
+// and on no other rail row. It runs on a dark terminal at truecolor and at 16
+// colours, and under a light theme at truecolor, and saves a PNG of each.
+//
+// How this could pass wrongly, written down first:
+//   - The cursor row could be found by its text, and the test would then
+//     read a row with no cursor. It is found by its ground instead, the
+//     one thing main draws for it.
+//   - A mark on every row would pass a test that reads one row, so every
+//     other rail row must carry no mark.
+//   - The rail could paint a ground of its own, which hides the bug. The
+//     config sets the rail background off.
+//
+// Negative control: on main the truecolor cursor row differs only by its
+// ground, and the first wait fails in the dark and light truecolor cases.
+func TestRailCursorShowsWithoutItsGround(t *testing.T) {
+	cases := []struct {
+		name, theme string
+		depth       chromeDepth
+	}{
+		{"dark-truecolor", "", chromeDepths[2]},
+		{"dark-16", "", chromeDepths[0]},
+		{"light-truecolor", "catppuccin_latte", chromeDepths[2]},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := "[appearance]\nbackground = \"off\"\n"
+			if tc.theme != "" {
+				cfg += "theme = \"" + tc.theme + "\"\n"
+			}
+			cfg += "\n[appearance.sidebar]\nenabled = true\nwidth = " + strconv.Itoa(railWidth) + "\nbackground = \"off\"\n"
+			term, _ := railClient(t, "e2e", cfg, startOpts{cols: 120, rows: 30, env: tc.depth.env})
+			renameWindow(t, term, "P1")
+			newWindow(t, term)
+			renameWindow(t, term, "P2")
+			if err := term.SendKeys("s"); err != nil {
+				t.Fatalf("focus the rail: %v", err)
+			}
+			if err := term.WaitForText(railPill, uiTimeout); err != nil {
+				t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
+			}
+			dir := artifactDir(t)
+			host := hostPalette(t, tc.theme)
+			// on reports whether the cursor stands on the row of name and that
+			// row alone carries the mark.
+			on := func(name string) func(tuitest.Screen) bool {
+				return func(s tuitest.Screen) bool {
+					r := railRowOf(s, name)
+					if r < 0 || railBandRow(s) != r {
+						return false
+					}
+					_, rows := s.Size()
+					for y := range rows {
+						// Only the rail's own lines, which end in its edge
+						// rule. The dock below has underlined cells of its
+						// own in the same columns.
+						if edge := s.Cell(railWidth-1, y).Content; edge == " " || edge == "" || edge == "─" {
+							continue
+						}
+						if railRowMarkedOffGround(s, y) != (y == r) {
+							return false
+						}
+					}
+					return true
+				}
+			}
+			// Walk down to P1's row. The headers' add controls sit between
+			// the rows, so the number of steps is read off the screen.
+			for range 6 {
+				if r := railRowOf(term.Screen(), "P1"); r >= 0 && railBandRow(term.Screen()) == r {
+					break
+				}
+				if err := term.SendKeys("j"); err != nil {
+					t.Fatalf("move the cursor: %v", err)
+				}
+				time.Sleep(insertGuard)
+			}
+			err := term.WaitFor(on("P1"), uiTimeout)
+			savePNG(t, term.Screen(), host, dir, "cursor-"+tc.name+"-p1")
+			saveArtifact(t, term, dir, "cursor-"+tc.name+"-p1")
+			if err != nil {
+				t.Fatalf("the cursor row on P1 differs from its neighbours only by its ground: %v\n%s", err, term.SnapshotStyled())
+			}
+			if err := term.SendKeys("j"); err != nil {
+				t.Fatalf("move the cursor down: %v", err)
+			}
+			if err := term.WaitFor(on("P2"), uiTimeout); err != nil {
+				t.Fatalf("j did not move the cursor mark to P2: %v\n%s", err, term.SnapshotStyled())
+			}
+			savePNG(t, term.Screen(), host, dir, "cursor-"+tc.name+"-p2")
+			if err := term.SendKeys("k"); err != nil {
+				t.Fatalf("move the cursor up: %v", err)
+			}
+			if err := term.WaitFor(on("P1"), uiTimeout); err != nil {
+				t.Fatalf("k did not move the cursor mark back to P1: %v\n%s", err, term.SnapshotStyled())
+			}
+		})
+	}
 }

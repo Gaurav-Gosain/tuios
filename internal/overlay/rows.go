@@ -90,6 +90,40 @@ func (p Palette) MarkCell(st RowState) func(*uv.Cell) {
 	return nil
 }
 
+// CursorText underlines the text of a cursor row, from cell skip on, in the
+// cursor's colour: the accent for the focused cursor and FgMute for an
+// unfocused one. The focused cursor's text is bold too. It is for the depths where the ground carries the state,
+// since a ground can all but vanish: a see-through terminal shows its
+// wallpaper through a row painted one step off the rail's own ground. At 16
+// colours the span is returned as it is, because Mark already draws the
+// cursor in attributes there. Cells that are underlined already keep their
+// own underline, so a name the row style marks keeps its colour.
+func (p Palette) CursorText(span string, st RowState, skip int) string {
+	if p.Depth == Depth16 || !st.Cursor || span == "" {
+		return span
+	}
+	ink := p.FgMute
+	if st.Focused {
+		ink = p.Accent
+	}
+	width := ansi.StringWidth(span)
+	scr := uv.NewScreenBuffer(width, 1)
+	uv.NewStyledString(span).Draw(scr, scr.Bounds())
+	line := scr.Line(0)
+	for x := skip; x < len(line); x++ {
+		c := line.At(x)
+		if c == nil || c.Width == 0 || strings.TrimSpace(c.Content) == "" || c.Style.Underline != uv.UnderlineNone {
+			continue
+		}
+		c.Style.Underline = uv.UnderlineSingle
+		c.Style.UnderlineColor = ink
+		if st.Focused {
+			c.Style.Attrs |= uv.AttrBold
+		}
+	}
+	return line.Render()
+}
+
 // reverseCell makes a cell part of a reverse-video bar. Its colours are
 // dropped so the bar is one solid run in the terminal's own two colours,
 // rather than a patchwork of every ink the row was drawn in; weight and

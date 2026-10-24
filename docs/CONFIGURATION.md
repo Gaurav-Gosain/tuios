@@ -1659,6 +1659,14 @@ density = "roomy"
 
 The panes do not move. Only the rail's rows change.
 
+## The rail's cursor row
+
+When the rail has the keyboard, the cursor row has a lighter background. The
+text of the row is also bold and underlined in the accent colour. This mark
+does not need the background, so you can see the cursor on a see-through
+terminal or with `background = "off"`. The gutter keeps its own marks. At 16
+colours the cursor row is in reverse video.
+
 ## A rail section that overflows
 
 A section with more rows than the lines it is given shows as many as fit. It ends in `… +N` for the rest. The wheel over a section scrolls it. The keyboard cursor scrolls it to keep itself in view.

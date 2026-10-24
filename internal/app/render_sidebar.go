@@ -158,10 +158,16 @@ type sidebarRowState struct {
 // parts of a row that only care about being on a ground ask.
 func (st sidebarRowState) lit() bool { return st.Cursor || st.Hover }
 
-// mark applies the 16-colour form of the row's state to a finished row (see
-// overlay.RowState). At other depths the row's ground already says it.
+// mark applies the row's state to a finished row in attributes (see
+// overlay.RowState). At 16 colours that is the whole cursor treatment. At
+// other depths the ground says it, and the cursor row also underlines its
+// text in the cursor's colour, since a see-through terminal or a rail with
+// its background off can show that ground as almost nothing. The underline
+// starts after the gutter and the state glyph, so the focus mark, the
+// severity mark and the foreign tint in the gutter keep their own meaning.
 func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
-	return pal.Mark(row, overlay.RowState{Cursor: st.Cursor, Focused: st.Focused, Hover: st.Hover})
+	rs := overlay.RowState{Cursor: st.Cursor, Focused: st.Focused, Hover: st.Hover}
+	return pal.CursorText(pal.Mark(row, rs), rs, sidebarNameCol-1)
 }
 
 // railRowState reads the rail's focus once so a row site does not have to.
