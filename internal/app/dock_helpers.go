@@ -708,6 +708,11 @@ func (m *OS) prefixPillShown() bool {
 	return m.dockPlan.Has(config.DockComponentMode)
 }
 
+// withLockIcon puts the lock state after a mode pill's label.
+func withLockIcon(label, icon string) string {
+	return strings.TrimRight(label, " ") + " " + icon
+}
+
 // buildDockLeftText builds the dock's left region: the mode pill's label, the
 // passive badges trailing it, the width the two claim, and the mode info the
 // renderer styles them with.
@@ -734,6 +739,11 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		// too. See renderOverlays.
 		modeInfo.Color = theme.UI().Warning
 		modeLabel = m.Settings.GetDockModeIconPrefix()
+		// Lock mode says it is unlocked while the leader waits. See
+		// lock_mode.go.
+		if m.lockPillShown() {
+			modeLabel = withLockIcon(modeLabel, m.Settings.GetDockLockIcon(false))
+		}
 	case m.SidebarFocused:
 		// The rail owns the keyboard: the mode pill is the authoritative "who has
 		// input" indicator, so it says so in accent, outranking the pane mode.
@@ -770,6 +780,10 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 				modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit
 			} else {
 				modeLabel = m.Settings.GetDockModeIconTerminal()
+			}
+			// Lock mode says every key but the leader goes to the pane.
+			if m.Locked() {
+				modeLabel = withLockIcon(modeLabel, m.Settings.GetDockLockIcon(true))
 			}
 		}
 	default:

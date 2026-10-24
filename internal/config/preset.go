@@ -54,6 +54,7 @@ type keybindPreset struct {
 	LeaderKey    string              `toml:"leader_key"`
 	LeaderTwice  string              `toml:"leader_twice"`
 	Repeat       []string            `toml:"repeat"`
+	Lock         *bool               `toml:"lock"`
 	About        PresetAbout         `toml:"about"`
 	PrefixMode   map[string][]string `toml:"prefix_mode"`
 	TerminalMode map[string][]string `toml:"terminal_mode"`
@@ -141,6 +142,10 @@ func applyPreset(kb *KeybindingsConfig, name string) error {
 	}
 	if p.LeaderTwice != "" {
 		kb.LeaderTwice = p.LeaderTwice
+	}
+	if p.Lock != nil {
+		lock := *p.Lock
+		kb.Lock = &lock
 	}
 	kb.PrefixMode = overlayPresetSection(kb.PrefixMode, p.PrefixMode)
 	kb.TerminalMode = overlayPresetSection(kb.TerminalMode, p.TerminalMode)

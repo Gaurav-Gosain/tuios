@@ -28,14 +28,22 @@ func dispatchAction(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 // key can mean different things under different prefixes.
 type sectionLookup func(*config.KeybindRegistry, string) string
 
-// runPrefix dispatches the key through one prefix section. An unbound key is
-// simply dropped, which is what dismissing a prefix chord should do.
+// runPrefix closes the open sub-prefix and dispatches the key through its
+// section. An unbound key is simply dropped, which is what dismissing a prefix
+// chord should do. In lock mode a repeatable action keeps the sub-prefix open
+// until esc (see lock_mode.go).
 func runPrefix(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) (*app.OS, tea.Cmd) {
-	if o.KeybindRegistry == nil {
+	k := startMenuKey(o)
+	if o.KeybindRegistry == nil || k.leaves(msg) {
 		return o, nil
 	}
 	action := lookupAction(o, msg, func(key string) string { return lookup(o.KeybindRegistry, key) })
-	m, cmd, _ := dispatchAction(action, msg, o)
+	m, cmd, ran := dispatchAction(action, msg, o)
+	if ran {
+		k.ran(m, action)
+	} else {
+		k.unbound(msg, o)
+	}
 	return m, cmd
 }
 
@@ -44,13 +52,18 @@ func runPrefix(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) (*app.OS, t
 // leader key does not swallow shell input) and is ignored in window-management
 // mode.
 func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.PrefixActive = false
+	k := startMenuKey(o)
+	if k.leaves(msg) {
+		return o, nil
+	}
 
 	if o.KeybindRegistry != nil {
 		action := lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction)
 		if app.PrefixWorkActions[action] {
 			if cmd, handled := runPrefixWork(action, o); handled {
-				armIfRepeatable(o, action)
+				if !k.ran(o, action) {
+					armIfRepeatable(o, action)
+				}
 				return o, cmd
 			}
 			// Not built yet: the key is treated as unbound below.
@@ -58,7 +71,9 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			action = ""
 		}
 		if m, cmd, ok := dispatchAction(action, msg, o); ok {
-			armIfRepeatable(m, action)
+			if !k.ran(m, action) {
+				armIfRepeatable(m, action)
+			}
 			return m, cmd
 		}
 	}
@@ -102,36 +117,26 @@ func runPrefixWork(action string, o *app.OS) (tea.Cmd, bool) {
 
 // HandleWorkspacePrefixCommand handles the key after leader+w.
 func HandleWorkspacePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.WorkspacePrefixActive = false
-	o.PrefixActive = false
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetWorkspacePrefixAction)
 }
 
 // HandleMinimizePrefixCommand handles the key after leader+m.
 func HandleMinimizePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.MinimizePrefixActive = false
-	o.PrefixActive = false
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetMinimizePrefixAction)
 }
 
 // HandleTilingPrefixCommand handles the key after leader+t (the window prefix).
 func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.TilingPrefixActive = false
-	o.PrefixActive = false
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetWindowPrefixAction)
 }
 
 // HandleDebugPrefixCommand handles the key after leader+D.
 func HandleDebugPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.DebugPrefixActive = false
-	o.PrefixActive = false
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetDebugPrefixAction)
 }
 
 // HandleTapePrefixCommand handles the key after leader+T.
 func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.TapePrefixActive = false
-	o.PrefixActive = false
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetTapePrefixAction)
 }
 
@@ -139,8 +144,6 @@ func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 // open another menu (leader ctrl+t m is the minimize menu under the tmux
 // preset): the action sets that menu's flag as it does from the leader.
 func HandleTuiosPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.TuiosPrefixActive = false
-	o.PrefixActive = false
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetTuiosPrefixAction)
 }
 
