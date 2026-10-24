@@ -5,6 +5,8 @@ package common
 import (
 	"math"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/svg"
@@ -124,9 +126,29 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 					added = nextWidth - last.Width
 				}
 				if len(current) > 0 && width+added > room {
+					carry, carried := splitAtBreak(current, measurer, label.Size)
+					if carried {
+						width = 0
+						for _, s := range current {
+							width += s.Width
+						}
+					}
 					commit()
 					last = nil
 					added = measurer.Width(char, label.Size, span.Style)
+					if carried {
+						current = append(current, carry)
+						width = carry.Width
+						if carry.Style == span.Style {
+							last = &current[0]
+							added = measurer.Width(last.Text+char, label.Size, span.Style) - last.Width
+						}
+						if width+added > room {
+							commit()
+							last = nil
+							added = measurer.Width(char, label.Size, span.Style)
+						}
+					}
 				}
 				if last != nil && last.Icon == "" && last.Math == nil && last.Style == span.Style {
 					last.Text += char
@@ -154,6 +176,48 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 		return text.WithHeights(out)
 	}
 	return out
+}
+
+// isBreakHyphen reports a hyphen a line may break after. U+2011, the
+// non-breaking hyphen, is not one.
+func isBreakHyphen(r rune) bool { return r == '-' || r == '\u2010' }
+
+// splitAtBreak cuts the line's last span at its last space or at its last
+// hyphen that follows a letter or digit, so a line too wide for its room
+// breaks there rather than inside a word (tuios issue 1032; pele breaks after
+// the last character that fits). A hyphen after a space or at the start, as
+// in a flag or a minus sign, is not a break. The hyphen stays, the space is
+// dropped, and the rest comes back to start the next line. It reports false
+// when the span is an icon or math, has no break, or ends on one.
+func splitAtBreak(line []text.Span, measurer text.TextMeasurer, size float64) (text.Span, bool) {
+	last := &line[len(line)-1]
+	if last.Icon != "" || last.Math != nil {
+		return text.Span{}, false
+	}
+	s := last.Text
+	for i := len(s); i > 0; {
+		r, n := utf8.DecodeLastRuneInString(s[:i])
+		i -= n
+		var head, tail string
+		switch {
+		case isBreakHyphen(r):
+			if prev, _ := utf8.DecodeLastRuneInString(s[:i]); !unicode.IsLetter(prev) && !unicode.IsDigit(prev) {
+				continue
+			}
+			head, tail = s[:i+n], s[i+n:]
+		case js.IsSpace(r):
+			head, tail = js.TrimEnd(s[:i]), js.TrimStart(s[i:])
+		default:
+			continue
+		}
+		if head == "" || tail == "" {
+			return text.Span{}, false
+		}
+		last.Text = head
+		last.Width = measurer.Width(head, size, last.Style)
+		return text.Span{Text: tail, Style: last.Style, Width: measurer.Width(tail, size, last.Style)}, true
+	}
+	return text.Span{}, false
 }
 
 // LeftLabelSvg writes a label with every line starting at x. A line is anchored at its start and keeps its
