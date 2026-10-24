@@ -1422,13 +1422,15 @@ With `appearance.pane_overlays` on, a dialog or a panel looks like a pane window
 - The selected row, the row under the pointer and input fields are steps of that background. On a navy pane, a selected row is a darker navy.
 - Pills keep their own colours.
 
+The scrollback browser and the copy-mode search bar follow the option too. The browser's frame takes the focused pane's border colour, and its selected row and key pills are steps of the pane's background. The search bar sits on the pane's background.
+
 The option is off by default. Then a dialog or a panel keeps its own shaded background, and its frame keeps its quiet ink. Some cases keep the shade even with the option on:
 
 - Under `hidden`, no frame is drawn, so the shade is a dialog's only edge.
 - At 16 colours every background is the terminal's own, so the option changes only the frame's colour.
 - With no theme, and a terminal that never reports its background, there is no colour to fill the overlay with or to step its rows from.
 
-`appearance.overlay_border_color` sets a colour for every dialog and panel frame, with or without `pane_overlays`.
+`appearance.overlay_border_color` sets a colour for every dialog and panel frame, and for the scrollback browser's, with or without `pane_overlays`.
 
 | Option | Values | Default |
 |---|---|---|
