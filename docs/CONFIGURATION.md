@@ -1414,6 +1414,8 @@ border_gradient_angle = 45
 
 The small dialogs, such as rename, confirm and new space, draw their frame in the pane border style, `appearance.border_style`. The larger panels, such as the command palette, the switchers, the Agents view and the settings page, have no frame unless `appearance.frame_panels` is on. Then they take the same frame.
 
+The scrollback browser and its help modal draw their frame in the border style too.
+
 With `appearance.pane_overlays` on, a dialog or a panel looks like a pane window:
 
 - Every panel is framed, as if `frame_panels` were on.
@@ -1450,7 +1452,7 @@ overlay_border_color = "accent"
 How each border style draws a dialog or a framed panel:
 
 - `rounded`, `normal`, `thick`, `double` and `ascii` draw that style's corners and lines.
-- `hidden` draws no frame. The dialog keeps its size, and its title and key hints stay where the frame would carry them. A frame that is the only edge of what it holds is drawn as in `rounded` instead: the frame of a panel at 16 colours, and the frames round the regions inside a panel, such as an explorer's list and preview.
+- `hidden` draws no frame. The dialog keeps its size, and its title and key hints stay where the frame would carry them. A frame that is the only edge of what it holds is drawn as in `rounded` instead: the frame of a panel at 16 colours, the frames round the regions inside a panel, such as an explorer's list and preview, and the frames of the scrollback browser and its help modal, which have no background of their own.
 - `block`, `outer-half-block` and `inner-half-block` draw the `rounded` frame. A solid frame is too heavy round a dialog of three rows.
 - `glyphs` draws the border of the active glyph set. A part of the border the set does not name is drawn as in `rounded`.
 - With `--ascii-only`, every frame is drawn with `+`, `-` and `|`.
