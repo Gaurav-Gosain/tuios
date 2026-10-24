@@ -15,9 +15,11 @@ name: e2e-tui test map
 
 on:
   schedule:
-    # 02:37 UTC daily, clear of the race build, the fuzz campaign and the
-    # client tests.
-    - cron: "37 2 * * *"
+    # 02:37 UTC on Mondays, clear of the race build, the fuzz campaign and
+    # the client tests. The map is about a megabyte, so a weekly refresh keeps
+    # the history small. A test that a newer change made reach more code
+    # still runs on main, which always runs the whole suite.
+    - cron: "37 2 * * 1"
   workflow_dispatch:
 
 permissions:

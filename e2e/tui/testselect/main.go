@@ -3,16 +3,20 @@
 //
 // The suite drives a real tuios binary, so the imports of a test file say
 // nothing about the code it reaches. The test map (testmap.txt) says it
-// instead: a coverage run records, for each test, the source files whose code
-// it ran. testselect reads the diff between two commits and keeps a test when
-// the change can reach it:
+// instead: a coverage run records, for each function, the tests that ran it.
+// testselect reads the diff between two commits and keeps a test when the
+// change can reach it:
 //
-//   - A change inside the body of a function selects the tests that ran code
-//     in that file. A function body only matters to a test that runs it.
-//   - Any other change to a package of the binary (a declaration, a new or
-//     removed file, an embedded file, a function every process runs at
-//     start-up) selects the tests that ran code in that package or in a
-//     package that imports it directly.
+//   - A change inside the body of a function selects the tests that ran it.
+//   - A changed, added or removed declaration (a function's signature, a
+//     type, a variable, a constant) selects the tests that ran a function
+//     that names it, in its own package or as pkg.Name in an importer. A
+//     package-level declaration that names it joins the walk (see reach).
+//   - A method selects like a function, unless an interface uses its name:
+//     then the method set changed, and the type counts as changed.
+//   - An init function, a blank or dot import, cgo, or a build constraint
+//     selects the tests that ran any code of the package or of a package
+//     that imports it.
 //   - A change to a test file of the suite selects the tests it changes, or
 //     every test in the file when a helper changed that only that file uses.
 //   - A test the map does not know, or one the map marks with "*", runs on
@@ -21,8 +25,9 @@
 // Everything that cannot be judged runs the whole suite: the CI files, the
 // harness and anything else in e2e/tui, go.mod, go.sum and go.work beyond
 // lines that pin a tuios.dev library, a package the harness itself imports,
-// and any path the rules do not name. Documentation, and Go packages that
-// neither the binary nor the suite builds, run nothing.
+// and any path the rules do not name. Documentation, unit tests, files the
+// linux build leaves out, and Go packages that neither the binary nor the
+// suite builds run nothing.
 //
 // Usage:
 //
