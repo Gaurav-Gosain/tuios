@@ -110,8 +110,16 @@ type remotePane struct {
 	linkUntil    time.Time
 	onLinkChange func()
 	// width and height are the last size asked for, sent again after a
-	// reattach.
-	width, height int
+	// reattach, with xpixel and ypixel, its size in pixels.
+	width, height  int
+	xpixel, ypixel int
+	// pixels is set when the far machine takes a size in pixels with
+	// resize-pane. One that does not gets cells only.
+	pixels bool
+	// kitty writes the images the far machine read for the pane's kitty
+	// graphics commands into its output. Nil when the far machine does not
+	// read them. See kitty_link_near.go.
+	kitty *kittyLinkNear
 }
 
 // remotePaneLinkReconnecting is the link state of a pane being reattached.
@@ -150,11 +158,16 @@ func openRemotePane(ctx context.Context, fed paneFederation, host string, spec h
 	p := &remotePane{
 		host: host, id: opened.Pane, fed: fed, stream: stream, br: br,
 		callsToken: opened.CallsToken, done: make(chan struct{}),
-		width: spec.Width, height: spec.Height,
+		width: spec.Width, height: spec.Height, pixels: opened.Pixels,
 	}
 	if opened.ResumeToken != "" && opened.Grace > 0 {
 		p.resumeToken = opened.ResumeToken
 		p.grace = time.Duration(opened.Grace) * time.Second
+	}
+	if token := opened.KittyMediaToken; token != "" {
+		p.kitty = &kittyLinkNear{fetch: func(id string) (io.ReadCloser, int64, error) {
+			return p.fetchKittyMedium(token, id)
+		}}
 	}
 	return p, nil
 }
@@ -168,6 +181,11 @@ type paneOpened struct {
 	Grace       int64  `json:"grace"`
 	Resumed     bool   `json:"resumed"`
 	Gap         bool   `json:"gap"`
+	// KittyMediaToken is set when the far machine reads the files the
+	// pane's kitty graphics commands name. See kitty_link_near.go.
+	KittyMediaToken string `json:"kitty_media_token"`
+	// Pixels is set when resize-pane takes xpixel and ypixel there.
+	Pixels bool `json:"pixels"`
 }
 
 // openPaneReply sends open-pane on a fresh connection to the far daemon and
@@ -189,13 +207,16 @@ func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, 
 	var err error
 	// At most one retry per optional param: the far daemon names one unknown
 	// param per refusal.
-	for range 3 {
+	for range 4 {
 		if resp, err = sendOpenPane(stream, br, spec); err != nil {
 			return paneOpened{}, nil, err
 		}
 		switch {
 		case spec.Resumable && refusesParam(resp.Error, "resumable"):
 			spec.Resumable = false
+			continue
+		case spec.KittyMedia && refusesParam(resp.Error, "kitty_media"):
+			spec.KittyMedia = false
 			continue
 		case spec.Window != "" && refusesParam(resp.Error, "window"):
 			spec.Window = ""
@@ -213,6 +234,9 @@ func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, 
 		}
 		if !spec.Resumable && spec.Resume == nil {
 			resp.Result.ResumeToken, resp.Result.Grace = "", 0
+		}
+		if !spec.KittyMedia {
+			resp.Result.KittyMediaToken = ""
 		}
 	}
 	if resp.Error != nil {
@@ -281,6 +305,14 @@ func refusesParam(verr *verbError, name string) bool {
 // reconnect), and Read carries on from the byte it stopped at; any other end
 // is returned, and PTY treats it the way it treats a local shell exiting.
 func (p *remotePane) Read(b []byte) (int, error) {
+	if p.kitty != nil {
+		return p.kitty.read(b, p.readRaw)
+	}
+	return p.readRaw(b)
+}
+
+// readRaw is Read without the images: the far machine's bytes as they came.
+func (p *remotePane) readRaw(b []byte) (int, error) {
 	for {
 		p.mu.Lock()
 		br, pending := p.br, p.pendingErr
@@ -343,21 +375,36 @@ func (p *remotePane) Write(b []byte) (int, error) {
 // another. A pane that the far side has forgotten reports itself, so the
 // caller learns the process is gone from the resize as well as from the read.
 func (p *remotePane) Resize(width, height int) error {
+	return p.SetWinsize(width, height, 0, 0)
+}
+
+// SetWinsize is Resize with the size in pixels, which kitty graphics and
+// sixel programs read to scale their images (kitten icat refuses to draw
+// without it). It makes the pane a ptyspawn.WinsizeSetter. A far machine
+// that does not take pixels is sent the cells alone, and fills the pixels in
+// from its fallback cell.
+func (p *remotePane) SetWinsize(width, height, xpixel, ypixel int) error {
 	p.mu.Lock()
 	closed := p.closed
 	p.width, p.height = width, height
+	p.xpixel, p.ypixel = xpixel, ypixel
 	p.mu.Unlock()
 	if closed {
 		return io.ErrClosedPipe
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
 	defer cancel()
-	_, err := p.fed.Call(ctx, p.host, "resize-pane", map[string]any{
-		"pane":   p.id,
-		"width":  width,
-		"height": height,
-	})
+	_, err := p.fed.Call(ctx, p.host, "resize-pane", p.resizeParams(width, height, xpixel, ypixel))
 	return err
+}
+
+// resizeParams is a resize-pane request for this pane.
+func (p *remotePane) resizeParams(width, height, xpixel, ypixel int) map[string]any {
+	params := map[string]any{"pane": p.id, "width": width, "height": height}
+	if p.pixels && xpixel > 0 && ypixel > 0 {
+		params["xpixel"], params["ypixel"] = xpixel, ypixel
+	}
+	return params
 }
 
 // Close ends the pane. Closing the stream is what tells the far side: its
@@ -504,13 +551,16 @@ func (p *remotePane) afterReattach(gap bool, width, height int) {
 	if width <= 0 || height <= 0 {
 		return
 	}
+	p.mu.Lock()
+	xpixel, ypixel := p.xpixel, p.ypixel
+	p.mu.Unlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
 		defer cancel()
 		if gap && height > 1 {
-			_, _ = p.fed.Call(ctx, p.host, "resize-pane", map[string]any{"pane": p.id, "width": width, "height": height - 1})
+			_, _ = p.fed.Call(ctx, p.host, "resize-pane", p.resizeParams(width, height-1, xpixel, ypixel*(height-1)/height))
 		}
-		_, _ = p.fed.Call(ctx, p.host, "resize-pane", map[string]any{"pane": p.id, "width": width, "height": height})
+		_, _ = p.fed.Call(ctx, p.host, "resize-pane", p.resizeParams(width, height, xpixel, ypixel))
 	}()
 }
 
@@ -575,6 +625,10 @@ func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cw
 	// decides how long from its own policy; an older one refuses the param
 	// and the pane ends with the link as before.
 	spec.Resumable = true
+	// Ask the far machine to read the files kitty graphics commands name,
+	// where the paths mean something. An older one refuses the param, and
+	// file media are refused as before.
+	spec.KittyMedia = true
 	if s.config != nil {
 		// The terminal type travels and the shell does not.
 		//

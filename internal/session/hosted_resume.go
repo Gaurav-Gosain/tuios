@@ -68,12 +68,23 @@ func (hp *hostedPane) start() {
 // process exiting looks like from here, and then ends the pane.
 func (hp *hostedPane) pump() {
 	buf := make([]byte, 32*1024)
+	out := hp.deliver
+	var filter *kittyLinkFilter
+	if hp.kittyLink != nil {
+		// Graphics commands that name a file are read here and sent to the
+		// owner as bytes. See kitty_link_far.go.
+		filter = &kittyLinkFilter{deliver: hp.deliver, handle: hp.kittyFileCommand}
+		out = filter.feed
+	}
 	for {
 		n, err := hp.pty.Read(buf)
 		if n > 0 {
-			hp.deliver(buf[:n])
+			out(buf[:n])
 		}
 		if err != nil {
+			if filter != nil {
+				filter.flush()
+			}
 			hp.close()
 			return
 		}

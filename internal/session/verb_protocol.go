@@ -827,6 +827,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "window", Type: "string", Description: "The asking daemon's id for the window the pane is drawn in. Exported as TUIOS_PANE_ID, and a promise to open the pane's report channel with pane-calls: a report the process sends naming it is forwarded there."},
 				{Name: "resumable", Type: "bool", Description: "Ask for the pane to outlive a dropped connection for the grace this machine's link policy gives the asking machine (hosted_grace), so it can be reattached with resume. The reply carries resume_token and grace when one was given."},
 				{Name: "resume", Type: "object", Description: "Reattach a pane instead of starting one: {\"pane\": id, \"token\": resume_token, \"offset\": bytes of output already received}. What was missed is written after the reply, from the pane's 64 KB ring, and the pane is live again from there."},
+				{Name: "kitty_media", Type: "bool", Description: "Read the files that kitty graphics commands in the pane name (t=f, t=t, t=s) on this machine. Each command is answered here when the file may not be read, and replaced by a marker for pane-kitty-medium when it may. The reply carries kitty_media_token when the asking machine may read files here."},
 			},
 			returns: []verbParam{
 				{Name: "pane", Type: "string", Description: "The id that addresses this pane in resize-pane. It lives as long as the connection does, or with resumable until its grace runs out."},
@@ -834,6 +835,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "resume_token", Type: "string", Description: "The secret a reattach takes. Present only when resumable was asked and a grace was given."},
 				{Name: "grace", Type: "int", Description: "How many seconds the pane waits to be reattached after its connection drops."},
 				{Name: "resumed", Type: "bool", Description: "True on a reattach."},
+				{Name: "pixels", Type: "bool", Description: "resize-pane takes xpixel and ypixel."},
+				{Name: "kitty_media_token", Type: "string", Description: "The secret pane-kitty-medium takes. Present only when kitty_media was asked and the asking machine may read files here."},
 				{Name: "gap", Type: "bool", Description: "On a reattach, true when more output was missed than the ring holds: the whole ring is written, and the screen may need a redraw."},
 			},
 			examples: []string{`{"id":1,"verb":"open-pane","params":{"width":120,"height":40}}`},
@@ -870,6 +873,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
 				{Name: "width", Type: "int", Description: "The new width in cells."},
 				{Name: "height", Type: "int", Description: "The new height in cells."},
+				{Name: "xpixel", Type: "int", Description: "The new width in pixels, for programs that scale images to it. Omit to use the fallback cell size."},
+				{Name: "ypixel", Type: "int", Description: "The new height in pixels."},
 			},
 			returns: []verbParam{
 				{Name: "pane", Type: "string", Description: "The pane that was resized."},
@@ -951,6 +956,21 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			examples: []string{`{"id":1,"verb":"pane-calls","params":{"pane":"f2c1","token":"<from the open-pane reply>"}}`},
 			handler:  (*Daemon).verbPaneCalls,
+		},
+		"pane-kitty-medium": {
+			description: "Turn this connection into the bytes of an image that a pane this machine runs for another machine named by path in a kitty graphics command (t=f, t=t or t=s). The pane's output holds a marker with the id in the command's place. Only the daemon that owns the window holds the token. After the reply the connection carries size bytes, as one flate stream when compressed is set, then closes. A temporary file or a shared memory object is deleted after it is read.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Required: true, Description: "The pane id open-pane returned."},
+				{Name: "token", Type: "string", Required: true, Description: "The kitty_media_token open-pane returned."},
+				{Name: "id", Type: "string", Required: true, Description: "The id in the marker."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane the image is from."},
+				{Name: "size", Type: "int", Description: "The image's bytes, before compression."},
+				{Name: "compressed", Type: "bool", Description: "The bytes come as one flate stream."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-kitty-medium","params":{"pane":"f2c1","token":"<from the open-pane reply>","id":"<from the marker>"}}`},
+			handler:  (*Daemon).verbPaneKittyMedium,
 		},
 		"read-dir": {
 			description: "List a directory on this machine, as the rail's file section reads it. The machine with the process is the machine with the files, so a pane running here is listed here.",

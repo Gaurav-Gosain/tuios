@@ -185,6 +185,9 @@ var verbCapabilities = map[string][]string{
 	"pane-cwd":     {config.LinkAllowOpen},
 	"pane-agent":   {config.LinkAllowOpen},
 	"pane-calls":   {config.LinkAllowOpen},
+	// pane-kitty-medium carries the bytes of a file a hosted pane named in a
+	// kitty graphics command: a file read, so it needs files.
+	"pane-kitty-medium": {config.LinkAllowFiles},
 
 	// paste-pane-image writes a file for a hosted pane, which the peer
 	// opened, and needs the pane's token as well. paste-image writes a file

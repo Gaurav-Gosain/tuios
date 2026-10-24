@@ -35,7 +35,10 @@ const kittyFileMediumRefusal = "ENOTSUPPORTED:the path would be read on another 
 // when either is not:
 //
 //   - remotePane: the pane's process runs on another machine over a link, so
-//     the path it sends names a file over there.
+//     the path it sends names a file over there. A far daemon that reads file
+//     media itself (kitty_link_far.go) answers or rewrites such a query
+//     before it reaches this one, so only a far daemon from before that sends
+//     one here.
 //   - a client attached over a link (see Session.SetLinkedViewer) is drawing
 //     the session from another machine, where the path names nothing, or
 //     names some other file.

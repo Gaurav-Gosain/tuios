@@ -773,11 +773,12 @@ the machine it was written on, so where it gets read decides whether it works.
   sixel (see below): any attached client that shows the image is enough, and
   with no client attached the last answer stands. Otherwise the answer says
   whether the path will be read on the machine it names a file on. File
-  media are refused for a pane
-  whose process runs on another machine over a link, and while any client
-  attached over a link is drawing the session. Everywhere else they are
-  accepted, and each client handles the path as in standalone. Direct
-  transmission is always accepted.
+  media are refused while any client attached over a link is drawing the
+  session. Everywhere else they are accepted, and each client handles the
+  path as in standalone. Direct transmission is always accepted.
+- **A window on another machine.** The pane's process runs on machine B and
+  the window is drawn by a session on machine A (`new-window --host`). The
+  path names a file on B, so B reads it. See below.
 
 A path is text the pane printed. Any output can carry one, for example a file
 that a program prints, so tuios checks the path before anything opens it. The
@@ -801,10 +802,44 @@ in the home directory is refused. `$TMPDIR` is ignored when it is `/`, the home
 directory or a parent of it. A guest that asks first with `a=q` is told
 not to send a path at all, and streams the bytes.
 
-A guest on another machine that asks is told not to send a path at all. One
-that sends a path without asking has it read on the wrong machine, where it
-names nothing or names one of the user's own files. The checks above apply to
-that read too.
+### Kitty file media from a window on another machine
+
+B runs no emulator for the pane (see `hosted_pane.go`), so the work is split
+between the two daemons (`kitty_link_far.go` on B, `kitty_link_near.go` on A):
+
+1. B's pump passes the process's output through a filter. A graphics command
+   with a file medium (t=f, t=t, t=s) is taken out of the stream. Everything
+   else passes unchanged. The filter scans for ESC with `IndexByte`, so plain
+   output costs one pass over the bytes.
+2. B checks the path and opens the file. A refusal is answered to the process
+   at once, in kitty's words. Nothing goes to A.
+3. A query (a=q) is passed on as a query for direct transmission, so A answers
+   it from what its clients can show, as for any other pane.
+4. An upload is replaced by a marker: an APC that names the transfer and
+   carries the command's other keys. B's pump then waits.
+5. A sees the marker, fetches the bytes with `pane-kitty-medium` on a bulk
+   stream, and writes them after the marker as t=d chunks of 4096 characters.
+   Raw pixels cross compressed. When the bytes are sent, B deletes a t=t file
+   or a t=s object and its pump goes on.
+
+The pump waiting keeps the order: the process's later output comes after the
+image, as it does in kitty. Other panes do not wait. Each pane has its own
+stream and pump, and the bytes ride a bulk stream, which writes behind every
+ordinary frame on the link and keeps to a window. At most two files are read
+at once on B.
+
+The bytes leave B, so B reads only what the link may read with `file-read`:
+the machine needs the `files` capability, the read deny list applies (keys,
+credentials, shell start files, histories, tuios's own state), a file with
+other names (hard links) is refused, and `files_read_roots` narrows it. The
+kitty checks above apply as well, including the temporary folder rule for
+t=t. A temporary folder is not required for t=f, because the link can
+already read the same file with `file-read`. Without the `files` capability
+B leaves the commands as they are, and A refuses them as it did before.
+
+A far machine from before this refuses the `kitty_media` param of open-pane,
+and the pane opens without it: file media are then refused for that pane,
+and a guest that asks first is told to stream.
 
 ### Sixel images
 
