@@ -115,7 +115,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		m.SettingsSelected = 0
 	}
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 
 	tabs := make([]string, len(cats))

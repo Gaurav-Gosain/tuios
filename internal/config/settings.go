@@ -133,6 +133,16 @@ type Settings struct {
 	// panels at 16 colours that need a frame. Set via appearance.frame_panels.
 	FramePanels bool
 
+	// PaneOverlays draws dialogs and panels like pane windows: framed in the
+	// focused pane's border colour, on the ground an empty pane cell shows.
+	// Set via appearance.pane_overlays.
+	PaneOverlays bool
+
+	// OverlayBorderColor is the colour every overlay frame is drawn in. Empty
+	// keeps the overlay's own, or the focused pane's border under
+	// PaneOverlays. Set via appearance.overlay_border_color.
+	OverlayBorderColor string
+
 	// TilingScheme is the BSP insertion scheme a workspace starts with the
 	// first time it is tiled: one of the TilingScheme* constants (spiral,
 	// longest_side, alternate, smart_split). Set via appearance.tiling_scheme.

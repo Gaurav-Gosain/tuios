@@ -5,7 +5,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The theme picker and the glyph-set picker are the same panel with a
@@ -49,8 +48,8 @@ type livePickerPanel struct {
 
 // renderLivePicker draws a live picker panel, returning the panel, geometry,
 // and per-row hit rects.
-func renderLivePicker(p livePickerPanel) (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+func (m *OS) renderLivePicker(p livePickerPanel) (string, overlay.Geometry, []overlayRowHit) {
+	pal := m.overlayUI()
 	bg := pal.Surface
 	items := p.Items
 

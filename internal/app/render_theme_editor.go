@@ -93,7 +93,7 @@ func (m *OS) themeEditorPlace() (x, y, w, h int) {
 // while it is hidden, as a layer.
 func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	st := &m.themeEditor
-	pal := theme.UI()
+	pal := m.overlayUI()
 	x, y, w, h := m.themeEditorPlace()
 	z := m.overlayZ("themeeditor")
 	if st.hidden {

@@ -217,25 +217,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
 		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
 		var borderColorObj color.Color
-		tint, quietTint, tinted := m.sessionBorderTint()
+		_, quietTint, tinted := m.sessionBorderTint()
 		var stateColor color.Color
 		if isFocused {
 			stateColor = m.focusedStateBorder(window)
 		}
 		switch {
-		case stateColor != nil:
-			// Copy mode or an agent that waits, in a colour the theme names
-			// for it, outranks the mode and the session.
-			borderColorObj = stateColor
-		case isFocused && m.Mode == TerminalMode:
-			// The mode colour outranks the session's. This border says the keys
-			// are going into the guest, which is the more urgent fact and the
-			// one a person checks before typing.
-			borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
-		case isFocused && tinted:
-			borderColorObj = tint
 		case isFocused:
-			borderColorObj = theme.BorderFocusedWindowOn(m.host.bg)
+			borderColorObj = m.focusedBorderColor(stateColor)
 		case m.MultiCopyParked(window.ID):
 			// A pane multi copy mode's search found nothing in drops the
 			// multifocus colour: it is out of the selection until a search
@@ -990,6 +979,25 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 func (m *OS) fastPathPaints() bool {
 	return m.surfaceGround(surfacePane).on() || m.surfaceGround(surfaceChrome).on() ||
 		(m.surfaceGround(surfaceDock).on() && m.Settings.DockbarPosition != "hidden")
+}
+
+// focusedBorderColor is the colour the focused pane's border is drawn in, given
+// what focusedStateBorder said for it. Copy mode or an agent that waits, in a
+// colour the theme names for it, outranks the mode and the session. The mode
+// colour outranks the session's: in terminal mode the border says the keys are
+// going into the guest, which is the more urgent fact and the one a person
+// checks before typing.
+func (m *OS) focusedBorderColor(state color.Color) color.Color {
+	if state != nil {
+		return state
+	}
+	if m.Mode == TerminalMode {
+		return theme.BorderFocusedTerminalOn(m.host.bg)
+	}
+	if tint, _, ok := m.sessionBorderTint(); ok {
+		return tint
+	}
+	return theme.BorderFocusedWindowOn(m.host.bg)
 }
 
 // focusedStateBorder is the focused pane's border for a state the theme

@@ -2,7 +2,6 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // renameDialogWidth is the micro-dialog's preferred inner width: a name and a
@@ -39,7 +38,7 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 	if !m.Renaming() {
 		return "", overlay.Geometry{}, 0, 0, false
 	}
-	pal := theme.UI()
+	pal := m.overlayUI()
 	renderW := m.GetRenderWidth()
 	inner := overlay.DialogFitWidth(renameDialogWidth, renderW)
 

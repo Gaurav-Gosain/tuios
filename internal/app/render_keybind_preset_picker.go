@@ -32,7 +32,7 @@ func (m *OS) renderPresetPicker() (string, overlay.Geometry, []overlayRowHit) {
 	width, visible, hints := m.presetPickerLayout()
 	names := config.Presets()
 	current := m.currentPreset()
-	return renderLivePicker(livePickerPanel{
+	return m.renderLivePicker(livePickerPanel{
 		Title:    "Keybind preset",
 		Items:    names,
 		Selected: &p.selected,

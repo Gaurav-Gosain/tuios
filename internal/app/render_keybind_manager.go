@@ -7,7 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Keybind manager layout. Preferred sizes; a smaller screen gets a fitted
@@ -123,7 +122,7 @@ func (m *OS) keybindLayout() (width, rows int, hints []overlay.Hint, chrome keyb
 // renderKeybindManager draws the overlay and returns the panel, its geometry,
 // and the per-row hit rects the renderer recorded as it drew them.
 func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	width, visible, hints, chrome := m.keybindLayout()
 
 	var lines []string

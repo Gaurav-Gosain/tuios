@@ -182,15 +182,71 @@ var uiMemo struct {
 	pal   overlay.Palette
 }
 
+// PaneUI is UI for an overlay drawn like a pane window: filled with ground,
+// the colour an empty pane cell shows, rather than with the chrome's own
+// surface. The surface is ground, and every step a cursor row, a hovered row,
+// a card or a status tint takes, and every ink, is derived from it, so a
+// selected row is a step of the pane's colour and not of the chrome's. At 16
+// colours, where every ground is the terminal's own, and for a nil ground, it
+// is UI.
+//
+// The palette is kept per ground beside UI's, not in place of it: the clients
+// of one process can each have their own pane ground, and UI is what every
+// other caller, the rail and the dock among them, is drawn with.
+func PaneUI(ground color.Color) overlay.Palette {
+	if ground == nil || Depth() == overlay.Depth16 {
+		return UI()
+	}
+	r, g, b, a := ground.RGBA()
+	key := paneUIKey{ui: currentUIKey(), ground: [4]uint32{r, g, b, a}}
+	paneUIMemo.Lock()
+	defer paneUIMemo.Unlock()
+	if p, ok := paneUIMemo.m[key]; ok {
+		return p
+	}
+	p := buildUIOn(key.ui.depth, Current(), CurrentChrome(), ground)
+	if paneUIMemo.m == nil || len(paneUIMemo.m) >= paneUIMemoMax {
+		paneUIMemo.m = make(map[paneUIKey]overlay.Palette, paneUIMemoMax)
+	}
+	paneUIMemo.m[key] = p
+	return p
+}
+
+// paneUIKey is what PaneUI builds a palette from: what UI is built from, and
+// the ground.
+type paneUIKey struct {
+	ui     uiKey
+	ground [4]uint32
+}
+
+// paneUIMemo keeps PaneUI's palettes, one per ground and look. It is emptied
+// when full rather than evicted entry by entry: a full map means the theme or
+// the grounds are changing, and the next frames build what they need again.
+var paneUIMemo struct {
+	sync.Mutex
+	m map[paneUIKey]overlay.Palette
+}
+
+// paneUIMemoMax bounds paneUIMemo. A client has one pane ground at a time, so
+// this is room for that many clients' grounds, or for a live edit of
+// pane_background to walk through as many before the map is emptied.
+const paneUIMemoMax = 16
+
 // buildUI builds the palette for depth d.
 func buildUI(d overlay.Depth) overlay.Palette {
-	return buildUIWith(d, Current(), CurrentChrome())
+	return buildUIOn(d, Current(), CurrentChrome(), nil)
 }
 
 // buildUIWith builds the palette for depth d from the theme t and its chrome
 // ch, either of which may be nil. The theme editor builds one for a draft that
 // is not in force.
 func buildUIWith(d overlay.Depth, cur *tint.Tint, ch *Chrome) overlay.Palette {
+	return buildUIOn(d, cur, ch, nil)
+}
+
+// buildUIOn is buildUIWith with the ramp built on pane, when it is not nil:
+// the ground of an overlay drawn like a pane window (see PaneUI).
+func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) overlay.Palette {
 	p := overlay.Palette{
 		Canvas:   uiCanvas,
 		Panel:    tone.BBQ,
@@ -285,7 +341,15 @@ func buildUIWith(d overlay.Depth, cur *tint.Tint, ch *Chrome) overlay.Palette {
 	} else if h := hostInForce(); h != nil {
 		ground, groundLight = h.bg, h.light
 	}
-	if ground != nil && !customRamp && d != overlay.Depth16 {
+	if pane != nil && d != overlay.Depth16 {
+		// The pane's ground is the surface itself, and the steps a row, a card
+		// and the inks take are measured from it, whatever ramp the theme
+		// would otherwise give its chrome.
+		c := paneChrome(pane)
+		light, customRamp = GroundIsLight(pane), true
+		p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
+		p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+	} else if ground != nil && !customRamp && d != overlay.Depth16 {
 		var c Chrome
 		if groundLight {
 			light = true
@@ -356,6 +420,32 @@ func lightDialogChrome(ground color.Color) Chrome {
 	c := Chrome{Canvas: ground, Surface: overlay.Darker(ground, lightDialogStep)}
 	c.deriveRamp()
 	return c
+}
+
+// paneChrome is the ramp of an overlay drawn on a pane's ground: the ground as
+// both the surface a panel fills with and the canvas a dialog fills with, the
+// cursor row a ramp step below it and the inset card a step above, as on the
+// constant ramp. A step with no room on its side, below a
+// black ground or above a white one, goes the other way, so the cursor row and
+// the card are never the ground itself.
+func paneChrome(ground color.Color) Chrome {
+	c := Chrome{
+		Canvas:  ground,
+		Surface: ground,
+		Panel:   stepOff(ground, chromeRamp.panel, overlay.Darker, overlay.Lighter),
+		Card:    stepOff(ground, chromeRamp.card, overlay.Lighter, overlay.Darker),
+	}
+	c.deriveRamp()
+	return c
+}
+
+// stepOff is the colour ratio:1 from ground the way step goes, or the way
+// other goes when step clamps short of most of the ratio.
+func stepOff(ground color.Color, ratio float64, step, other func(color.Color, float64) color.Color) color.Color {
+	if c := step(ground, ratio); overlay.ContrastRatio(c, ground) >= 1+(ratio-1)/2 {
+		return c
+	}
+	return other(ground, ratio)
 }
 
 // liftOnLight holds the palette's coloured inks to their floors on a light
