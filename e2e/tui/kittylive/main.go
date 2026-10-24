@@ -234,10 +234,15 @@ func refuseSteps() []step {
 			apc("a=T,i=43,f=100,t=f", []byte(p))
 			return "", nil
 		}},
-		{name: "temp-outside", desc: "t=t a file outside the temporary folders", refuse: true, run: func() (string, func() (string, bool)) {
-			p := filepath.Join(*dir, "x-tty-graphics-protocol.png")
-			write(p, checker(color.RGBA{0, 0, 0, 255}))
-			apc("a=T,i=44,f=100,t=t", []byte(p))
+		{name: "temp-unnamed", desc: "t=t a temporary file whose name lacks tty-graphics-protocol", refuse: true, run: func() (string, func() (string, bool)) {
+			f, err := os.CreateTemp("", "kittylive-*.png")
+			if err != nil {
+				fail("temp file: %v", err)
+			}
+			_, _ = f.Write(checker(color.RGBA{0, 0, 0, 255}))
+			_ = f.Close()
+			defer func() { _ = os.Remove(f.Name()) }()
+			apc("a=T,i=44,f=100,t=t", []byte(f.Name()))
 			return "", nil
 		}},
 	}
