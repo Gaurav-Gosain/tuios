@@ -813,6 +813,25 @@ func (m *OS) TMLKey(w *terminal.Window, key string) tea.Cmd {
 	return m.tmlResult(w, v, res)
 }
 
+// TMLPaste puts pasted text into the focused text field of a TML window's
+// surface. It reports whether a field took it. The state change goes to
+// the daemon through the wake, as a click's does.
+func (m *OS) TMLPaste(w *terminal.Window, text string) bool {
+	v := m.tmlViewOf(w)
+	if v == nil || v.surface == nil || v.confirm != nil {
+		return false
+	}
+	res, err := v.surface.Paste(text)
+	if err != nil {
+		clientLog("TML surface %s: paste: %v", v.id, err)
+	}
+	if len(res.Changed) == 0 && !res.View {
+		return false
+	}
+	m.queueTMLCmd(m.tmlResult(w, v, res))
+	return true
+}
+
 // TMLMouse gives a mouse event, in the window's content cells, to the
 // surface of a TML window. Its side effects run through the wake, since a
 // mouse path returns no command.
