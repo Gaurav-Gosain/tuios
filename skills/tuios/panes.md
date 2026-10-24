@@ -4,6 +4,55 @@ The part of the skill about panes as places to run work: making a session,
 opening panes, getting an exit code back, waiting without being fooled, and
 moving panes around with verbs rather than keybindings.
 
+## Your pane
+
+A pane that the daemon manages has these variables:
+
+```
+TUIOS_ENV=1
+TUIOS_PANE_ID=98db8226-1829-468e-89a8-41a2baa0ddab
+TUIOS_WINDOW_ID=98db8226-1829-468e-89a8-41a2baa0ddab
+TUIOS_SESSION=work
+TUIOS_SOCKET=/run/user/1000/tuios/tuios.sock
+TUIOS_HOST=laptop
+TUIOS_PANE_TOKEN=3f9a...
+TUIOS_PANE_GRANTS=admin
+```
+
+- `TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` hold the same uuid: your pane. Other
+  agents use it to reach you. Pass it to `-w` when you mean your own pane.
+- The CLI sends `TUIOS_PANE_TOKEN` to the daemon when it needs it. Do not
+  pass it yourself.
+- `TUIOS_SOCKET` names the daemon that runs your pane. A command refuses a
+  socket where nothing listens. To run a daemon of your own, with its own
+  socket and saved sessions, pass `--server NAME` or set `TUIOS_SERVER=NAME`.
+  Stop it with `tuios --server NAME kill-server`.
+- `TMUX` and `TMUX_PANE` are not set, even when tuios runs inside tmux. Do not
+  drive panes with `tmux` here. A tool that knows only tmux can run under the
+  shim (`tuios --skill tmux`).
+- `TUIOS_RESTORED=1` marks a pane that a daemon restart brought back. It is a
+  new shell in the old place.
+- `TUIOS_PANE_HOSTED=1`, with no `TUIOS_ENV`, marks a pane whose process runs
+  on another machine (`tuios --skill hosts`).
+- A standalone `tuios` has no daemon and no socket. Check `TUIOS_ENV` before
+  you call the daemon, and skip the call when it is not set.
+
+`tuios pane-grants` shows what your pane may do (`tuios --skill grants`).
+
+## Reading a pane
+
+```sh
+tuios capture-pane -s work -w build --scrollback --lines 40
+```
+
+- Without `--scrollback` you get the visible screen, which ends in the blank
+  rows below the cursor. `--trim` drops those rows.
+- `--lines` counts back from the last line with content. Capture a
+  full-screen program without `--lines`, because its screen has a fixed size.
+- A line longer than the pane comes back as several rows. `--unwrap` joins
+  them, so a search finds a long path or URL.
+- Leave `--ansi` off when you match text.
+
 ## A session of your own
 
 To set up a workspace instead of driving one that exists, create the session

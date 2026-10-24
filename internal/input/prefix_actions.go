@@ -95,6 +95,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("window_prefix_next", handlePrefixNextWindow)
 	d.Register("window_prefix_prev", handlePrefixPrevWindow)
 	d.Register("window_prefix_tiling", handleToggleTiling)
+	d.Register("window_prefix_float", handleToggleFloating)
 	d.Register("window_prefix_cancel", handlePrefixCancel)
 	d.registerPrefixTreeHandlers()
 

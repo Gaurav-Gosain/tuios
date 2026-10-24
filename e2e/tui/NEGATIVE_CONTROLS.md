@@ -8861,6 +8861,18 @@ each "nothing printed" check is the notice printed in the same fixture a step
 earlier. The artifact is `mail-notice-hooks.log`: each event and its output.
 
 Each control cuts one change, rebuilds, runs the test, and reverts the patch.
+
+## Asks of one agent take turns
+
+`TestAsksOfOneAgentTakeTurns` asks a stand-in agent, which takes 3 seconds
+over each question and reports `working` and `idle`, four questions against a
+real daemon. Two asks sent together must each get an answer that holds its own
+`DONE` line and no other question's. Then one ask is answered while a second
+comes with a ready timeout of 1 second: both must succeed, the second with
+`queued_behind` 1 and `waited_turn_ms` of a second or more. The pane must show
+each question taken and answered before the next. The artifact is
+`ask-turns.log`: each ask's JSON answer and the pane at the end.
+
 Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
 
 | Control | How | Test that fails | Verdict |
@@ -8963,3 +8975,32 @@ Run on 2026-10-24 on Linux with Go 1.27.1 against upstream main at efdc2a9c. Eac
 | No line passed to the editor | `standalone` and `daemon` ("the editor got [FILE], want it to end with [+2991 FILE]") | **caught** |
 
 Not covered end to end: the refusal in a browser client and in an SSH client from another machine, the removal when the client ends while the editor runs, the File editor setting, and the helix `FILE:LINE` form.
+| Asks take no turn | `askAgent` takes a no-op turn instead of `askTurns.take` | `ask ASK-THREE did not get its own answer: "GOT[ASK-THREEASK-FOUR]\nDONE[ASK-THREEASK-FOUR]"`: the two questions were typed into one line | **caught** |
+| The same, with the "sent together" half taken out of the test | as above | `ask ASK-TWO failed: exit status 1` (`not_ready` after its 1 second ready timeout) | **caught** |
+
+`TestACancelledAskLeavesTheLine` asks the same stand-in agent a question,
+then starts a second ask and kills its process while it waits its turn, then
+starts a third. The third must wait behind one ask, not two, and the pane must
+never show the cancelled question. The artifact is `ask-cancel.log`: the pane
+at the end. Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The ask never learns its caller went away | `askCancel` returns a channel that never closes | `the third ask waited behind 2 asks, want 1` and `the question of a caller that went away was typed` | **caught** |
+
+## Artifacts in the agents view, and the float toggle for TML
+
+`TestCockpitArtifacts` in `cockpit_artifacts_test.go`. An agent's pane shows a TML form as a popup. Opening the agents view moves the form into the view with the keys, and the person makes two choices there. A second agent's popup arrives while the view is open: its row gets the `new artifact` chip and moves to Needs you, and a click on the chip opens it in the view, where the person answers it. Closing the view lets the first form float again with the choices. `ctrl+b t f` docks it as a pane and floats it again, with the choices kept. A second client at 16 colours shows the form in its view. The person submits the form from the view, and the agent's `--wait` prints the answer with status 0. Run on 2026-10-24 on Linux against upstream main at 5a2e8221. With the fix it passes three runs of three.
+
+Each control is a text replacement in the branch's checkout, built to a separate binary and put back before the next.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Upstream main, with the step that waits for the popup's `dock` control left out | "the form moved into the agents view": the popup draws under the view, which shows no form | **caught** |
+| Upstream main as is | "the floating form": the popup has no `dock` control | **caught** |
+| `OpenInbox` does not call `cockpitAdoptFloating` | "the form moved into the agents view" | **caught** |
+| `CloseInbox` does not call `cockpitArtifactRelease` | Toggle 1: the popup does not get the focus back, so `ctrl+b t f` acts on another pane | **caught** |
+| `ToggleFloating` refuses TML windows as it refuses other popups | Toggle 1: the form stays a popup | **caught** |
+| `ckArtFormRow` returns nothing, so a row in Needs you for a form reads as working | "the row in Needs you does not say a form waits" | **caught** |
+
+Not covered: a TML surface in a session the client is not attached to. The view lists it and draws its last state, read-only, and says to attach.

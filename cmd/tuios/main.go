@@ -2656,6 +2656,7 @@ list-agents printed for the same selector.`,
   tuios send-agent-message --select 'group:fan/add-retry' 'main moved, rebase before you push'`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			sendMsgFrom = senderPane(sendMsgFrom)
 			if sendMsgSelect != "" {
 				if sendMsgTo != "" || sendMsgSession != "" || sendMsgReplyTo != 0 {
 					return fmt.Errorf("--select names the recipients in every session, so it takes no --window, --session or --reply-to")
@@ -2675,7 +2676,7 @@ list-agents printed for the same selector.`,
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgConfirm, "confirm", "", "With --select: the token list-agents printed, which sends to exactly the panes it listed")
 	sendAgentMessageCmd.Flags().StringVarP(&sendMsgSession, "session", "s", "", "Target session (default: most recently active)")
 	sendAgentMessageCmd.Flags().StringVarP(&sendMsgTo, "window", "w", "", "Recipient window by name or ID (default: post a session-wide notice)")
-	sendAgentMessageCmd.Flags().StringVar(&sendMsgFrom, "from", "", "The sending window, normally \"$TUIOS_PANE_ID\"")
+	sendAgentMessageCmd.Flags().StringVar(&sendMsgFrom, "from", "", "The sending window (default: this pane, $TUIOS_PANE_ID)")
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgSubject, "subject", "", "One-line summary, at most 120 characters")
 	sendAgentMessageCmd.Flags().Uint64Var(&sendMsgReplyTo, "reply-to", 0, "Answer this message id. The reply joins that message's thread")
 	sendAgentMessageCmd.Flags().StringArrayVar(&sendMsgAttach, "attach", nil, "Absolute path to a file to reference. Repeatable, at most 8")
@@ -2759,7 +2760,8 @@ quiet for --settle. The answer says which of the two ended the wait.
 Three things it will not do. It will not type at an agent on needs_input: such
 an agent is waiting on a prompt, most often a permission menu, and the question
 would be read as the answer. That fails with agent_blocked and nothing is typed.
-read the prompt with capture-pane and answer it yourself or ask the person.
+Read the prompt with peek-prompt and tell the person: only the person answers
+another agent's prompt.
 --allow-blocked overrides it, for a prompt you have read that takes free text.
 It will not type at an agent that is working, which is what --force overrides
 at the cost of interleaving with whatever the target is doing. --force does not
@@ -2790,6 +2792,7 @@ others still answer.`,
   tuios ask-agent --select 'group:fan/add-retry state:idle,done' 'summarise your change in one line'`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			askFrom = senderPane(askFrom)
 			if askSelect != "" {
 				if askWindow != "" || askSession != "" {
 					return fmt.Errorf("--select names the agents in every session, so it takes no --window or --session")
@@ -2809,7 +2812,7 @@ others still answer.`,
 	askAgentCmd.Flags().StringVar(&askConfirm, "confirm", "", "With --select: the token list-agents printed, which asks exactly the panes it listed")
 	askAgentCmd.Flags().StringVarP(&askSession, "session", "s", "", "Target session (default: most recently active)")
 	askAgentCmd.Flags().StringVarP(&askWindow, "window", "w", "", "The agent to ask, by name or ID. list-agents finds it")
-	askAgentCmd.Flags().StringVar(&askFrom, "from", "", "The asking window, normally \"$TUIOS_PANE_ID\". Without it there is no loop detection")
+	askAgentCmd.Flags().StringVar(&askFrom, "from", "", "The asking window (default: this pane, $TUIOS_PANE_ID). Outside a pane, without it there is no loop detection")
 	askAgentCmd.Flags().IntVar(&askReadyTimeout, "ready-timeout", 0, "Milliseconds to wait for the target to stop working (default 30000)")
 	askAgentCmd.Flags().IntVar(&askSettle, "settle", 0, "Milliseconds of silence that count as finished, for a pane that reports no state (default 2000)")
 	askAgentCmd.Flags().IntVar(&askTimeout, "timeout", 0, "Milliseconds to wait for the answer overall (default 300000)")

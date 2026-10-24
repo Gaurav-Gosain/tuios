@@ -237,12 +237,16 @@ var verbScopes = map[string]scopeKind{
 	"tml-open":    scopeWrite,
 	"tml-close":   scopeWrite,
 	"tml-input":   scopeDeny,
+	"tml-place":   scopeDeny,
 	"tml-patch":   scopeWrite,
 	"tml-replace": scopeWrite,
 	// tml-get checks the surface's session and the read grant itself
 	// (tmlReach), so the pane that opened a surface reads it with write.
 	"tml-get":  scopeOpen,
 	"tml-list": scopeRead,
+	// artifact-list checks the pane and the read grant itself, so a pane
+	// reads its own artifacts with no grant.
+	"artifact-list": scopeOpen,
 	// tml-validate reads only the document it is given.
 	"tml-validate":         scopeOpen,
 	"split-window":         scopeDeny,

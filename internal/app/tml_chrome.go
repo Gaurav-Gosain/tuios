@@ -181,10 +181,24 @@ func (m *OS) renderTMLDialogBox(window *terminal.Window, content string) string 
 		top += overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).Bold(true).Render(titleText)
 		used += lipgloss.Width(titleText)
 	}
-	top += gap + rule(w-used-1) + frame.Render(tr)
+	// The control that docks the surface as a pane, at the right of the top
+	// border, where a pane's title bar has its controls. It is recorded as a
+	// window control, so the click path is the one every control takes.
+	dock := " dock "
+	dockW := lipgloss.Width(dock)
+	var controls []WindowButtonRect
+	if fill := w - used - 2 - dockW; fill >= 1 {
+		top += gap + rule(fill) + overlay.Style(bg).Foreground(overlay.Readable(pal.AccentBright, bg)).Bold(true).Render(dock) + rule(1) + frame.Render(tr)
+		controls = []WindowButtonRect{{Action: WindowButtonFloat, X: window.X + 1 + w - 1 - dockW, W: dockW, Y: window.Y}}
+	} else {
+		top += gap + rule(w-used-1) + frame.Render(tr)
+	}
 
 	// Bottom border: the key tuios answers for in every popup.
 	hints := []overlay.Hint{{Key: "esc", Label: "close", Priority: overlay.HintEssential}}
+	if key := contextMenuHint(m.KeybindRegistry, "window_prefix_float", &m.Settings); key != "" {
+		hints = append(hints, overlay.Hint{Key: key, Label: "dock as a pane"})
+	}
 	strip, stripW := overlay.FitHintStrip(hints, max(w-3, 0), bg, pal)
 	bottomLine := ruleOf(bottomRule)
 	bottom := frame.Render(bl)
@@ -207,7 +221,7 @@ func (m *OS) renderTMLDialogBox(window *terminal.Window, content string) string 
 		out = append(out, left+overlay.Fill(l, w, bg)+right)
 	}
 	out = append(out, bottom)
-	m.recordWindowButtons(window.ID, nil)
+	m.recordWindowButtons(window.ID, controls)
 	return strings.Join(out, "\n")
 }
 

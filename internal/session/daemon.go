@@ -32,6 +32,8 @@ type Daemon struct {
 	manager *Manager
 	// tml holds the open TML surfaces. See tml_surface.go.
 	tml tmlHost
+	// artifacts is what each pane has shown the person. See artifacts.go.
+	artifacts artifactLog
 	// instance names this daemon run, fresh on every start. hello reports
 	// it, and a hub records it for each host, so a client attached to a
 	// session on another machine can tell which of that machine's hosts is
@@ -304,6 +306,9 @@ type Daemon struct {
 	// mail. Its zero value is ready, and off until SetMailWake. See
 	// mail_wake.go.
 	mailWake mailWaker
+	// askTurns keeps one ask-agent typing at a pane at a time. See
+	// ask_turns.go.
+	askTurns askTurns
 
 	// reviewNotes holds the review notes left on panes' changes. Its zero
 	// value is ready; Start loads what the last daemon saved. See

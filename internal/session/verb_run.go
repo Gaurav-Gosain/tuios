@@ -219,9 +219,9 @@ func (d *Daemon) waitCommandFinishedFor(sessionName, window string, commandSeq *
 
 // noShellIntegration is the refusal for a pane whose shell never marked a
 // command.
-func noShellIntegration(window string) *verbError {
+func noShellIntegration(sess *Session, windowID, window string) *verbError {
 	return hintedVerbError(ErrVerbNoShellIntegration, "the shell in window "+echoName(window)+" has not sent OSC 133 marks, so the daemon cannot tell where a command starts and ends", &VerbHint{
-		Command: "tuios wait-for window-output -w " + window + " --pattern <marker>",
+		Command: "tuios wait-for window-output " + paneArgs(sess, windowID) + " --pattern <marker>",
 		Detail:  "Nothing was typed. Turn on the shell's prompt integration (OSC 133), or type with send-text and wait for a marker the command prints.",
 	})
 }
@@ -315,14 +315,14 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 		}
 	}
 	if !facts.Seen {
-		return nil, noShellIntegration(windowLabelFor(w))
+		return nil, noShellIntegration(sess, w.ID, windowLabelFor(w))
 	}
 	// One run at a time in a pane. Without the claim two calls both pass the
 	// prompt check, both paste, and the shell reads one line made of both
 	// commands. The claim is held until this call ends.
 	if !pty.runClaim.CompareAndSwap(false, true) {
 		return nil, hintedVerbError(ErrVerbNotAtPrompt, "another run is typing or running in window "+echoName(windowLabelFor(w)), &VerbHint{
-			Command: "tuios wait-for command-finished -s " + sess.Name() + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
+			Command: "tuios wait-for command-finished " + paneArgs(sess, w.ID) + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
 			Detail:  "Nothing was typed. Wait for that command to finish, then run again, or run in another pane.",
 		})
 	}
@@ -340,7 +340,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 			msg += ": it is running " + strconv.Quote(facts.Running)
 		}
 		return nil, hintedVerbError(ErrVerbNotAtPrompt, msg, &VerbHint{
-			Command: "tuios wait-for command-finished -s " + sess.Name() + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
+			Command: "tuios wait-for command-finished " + paneArgs(sess, w.ID) + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
 			Detail:  "Nothing was typed. Wait for the running command to finish, then run again, or run in another pane.",
 		})
 	}
@@ -368,7 +368,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 				detail = "The command was typed and the shell has not reported it running. Look at the pane with capture-pane: the line may sit at the prompt, or the shell may have stopped sending OSC 133 marks."
 			}
 			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for the command to finish", &VerbHint{
-				Command: "tuios wait-for command-finished -s " + sess.Name() + " -w " + w.ID + " --command-seq " + strconv.FormatUint(baseline, 10),
+				Command: "tuios wait-for command-finished " + paneArgs(sess, w.ID) + " --command-seq " + strconv.FormatUint(baseline, 10),
 				Detail:  detail,
 			})
 		case <-gone:
@@ -406,7 +406,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 // the plain text the pane's last finished command printed, with the facts the
 // shell reported about it. It is plain only, because the rows are read out
 // of the emulator cell by cell and carry no styling.
-func captureLastCommandOutput(pty *PTY, window string, styled, unwrap, trim bool, start, end, lines int) (any, *verbError) {
+func captureLastCommandOutput(sess *Session, pty *PTY, window string, styled, unwrap, trim bool, start, end, lines int) (any, *verbError) {
 	if styled {
 		return nil, invalidParam("styled", "last-command-output is plain text; drop styled, ansi and resolved")
 	}
@@ -422,7 +422,13 @@ func captureLastCommandOutput(pty *PTY, window string, styled, unwrap, trim bool
 				Detail: "Run a command in the pane first, or read the screen with source recent.",
 			})
 		}
-		return nil, noShellIntegration(window)
+		windowID := ""
+		for _, w := range sess.GetState().Windows {
+			if w.PTYID == pty.ID {
+				windowID = w.ID
+			}
+		}
+		return nil, noShellIntegration(sess, windowID, window)
 	}
 	if trim {
 		output = trimCapture(output)

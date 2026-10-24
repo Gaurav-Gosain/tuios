@@ -40,6 +40,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.CockpitCompareOpen() {
 		return o, o.CockpitCompareKey(msg.String())
 	}
+	// A TML surface drawn in the view takes every key while the person is
+	// in it; esc it does not use gives them back.
+	if o.CockpitArtifactFocused() {
+		return o, o.CockpitArtifactKey(msg.String())
+	}
 	// A risky allow's first press waits for the same key again; any other
 	// key resets it.
 	o.InboxKeyPressed(msg.String())

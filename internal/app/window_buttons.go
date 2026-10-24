@@ -22,6 +22,9 @@ const (
 	WindowButtonClose
 	WindowButtonMinimize
 	WindowButtonZoom
+	// WindowButtonFloat moves a TML surface between a popup and a tiled
+	// pane. Only a TML window draws it: see tml_place.go.
+	WindowButtonFloat
 )
 
 // windowButtonsHaveZoom reports whether a window's bar carries the third
@@ -197,6 +200,12 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 		pieces = windowPillPieces(col, isTiling, &m.Settings)
 	}
 
+	if m.DrawsTML(window) && !window.IsPopup {
+		// A TML pane can float as a popup again: its control comes first,
+		// in the border's colour, beside the pill.
+		pieces = append([]windowButtonPiece{{WindowButtonNone, " "}, {WindowButtonFloat, lipgloss.NewStyle().Foreground(col).Bold(true).Render("float")},
+			{WindowButtonNone, " "}}, pieces...)
+	}
 	var pill strings.Builder
 	var hits []WindowButtonRect
 	offset := 0
