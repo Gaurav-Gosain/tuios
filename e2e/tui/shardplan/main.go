@@ -14,6 +14,9 @@
 //	    prints the tests of shard 3, one per line.
 //	go test -list '^Test' ./... | shardplan -shards 9 -max 11m
 //	    prints the estimated time of each shard and fails if one is over.
+//	testselect ... | shardplan -shards 9 -shard 3 -fill 8m
+//	    the same, but packs the tests into only as many shards as they need
+//	    at about 8 minutes each. The other shards print nothing.
 //	shardplan -update LOG...
 //	    rewrites durations.txt from go test -v output, such as gh run view --log.
 //
@@ -29,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"os"
 	"regexp"
 	"slices"
@@ -42,6 +46,7 @@ func main() {
 	shards := flag.Int("shards", 0, "number of shards")
 	shard := flag.Int("shard", 0, "print the tests of this shard (1-based)")
 	limit := flag.Duration("max", 0, "fail if a shard's estimated time is over this")
+	fill := flag.Duration("fill", 0, "use only as many shards as the tests need at about this much each")
 	update := flag.Bool("update", false, "rewrite the durations file from the go test -v logs given as arguments")
 	flag.Parse()
 
@@ -66,9 +71,16 @@ func main() {
 	if len(names) == 0 {
 		fail(fmt.Errorf("no test names on stdin: run go test -list with TUIOS_E2E set"))
 	}
-	plan := pack(names, known, *shards)
+	used := *shards
+	if *fill > 0 && *shard > 0 {
+		used = shardsNeeded(names, known, *fill, *shards)
+	}
+	plan := pack(names, known, used)
 
 	if *shard > 0 {
+		if *shard > used {
+			return
+		}
 		for _, name := range plan[*shard-1].names {
 			fmt.Println(name)
 		}
@@ -99,6 +111,18 @@ func main() {
 			"or refresh e2e/tui/shardplan/durations.txt (see its header).\n", *limit)
 		os.Exit(1)
 	}
+}
+
+// shardsNeeded is how many shards hold the tests at about fill each, at least
+// one and at most shards. A selection of a few tests then starts a few
+// runners, not all of them.
+func shardsNeeded(names []string, known map[string]float64, fill time.Duration, shards int) int {
+	total := 0.0
+	for _, s := range pack(names, known, 1) {
+		total += s.load
+	}
+	n := int(math.Ceil(total / fill.Seconds()))
+	return max(1, min(n, shards))
 }
 
 type shardLoad struct {

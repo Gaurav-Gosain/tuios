@@ -389,6 +389,16 @@ go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -timeout 40m .
 ```
 
+A pull request runs only the e2e tests its change can reach. `e2e/tui/testselect`
+reads the diff and `e2e/tui/testselect/testmap.txt`, which records the functions
+each test ran in a coverage run. The e2e-tui test map workflow refreshes the map
+every week. CI files, the harness, `go.mod` beyond library pins, and any path no
+rule names run the whole suite. Main always runs the whole suite.
+
+```bash
+cd e2e/tui && TUIOS_E2E=1 go test -list '^Test' . | go run ./testselect -base origin/main
+```
+
 A test that claims to cover a bug must fail on a build with the fix removed.
 `e2e/tui/NEGATIVE_CONTROLS.md` records those runs and the rules for them.
 

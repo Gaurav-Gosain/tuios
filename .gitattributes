@@ -4,3 +4,5 @@ Dockerfile linguist-detectable=false
 # Every PR appends its own section, so a rebase keeps both sides.
 e2e/tui/NEGATIVE_CONTROLS.md merge=union
 docs/release-notes/*.md merge=union
+# Written by the e2e-tui test map workflow.
+e2e/tui/testselect/testmap.txt linguist-generated=true -diff
