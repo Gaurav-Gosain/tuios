@@ -3,3 +3,4 @@ Dockerfile linguist-detectable=false
 *.nix linguist-detectable=false
 # Every PR appends its own section, so a rebase keeps both sides.
 e2e/tui/NEGATIVE_CONTROLS.md merge=union
+docs/release-notes/*.md merge=union
