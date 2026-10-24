@@ -118,6 +118,31 @@ binary, `tuios update` fetches the newest release and puts it in place
 that owns the binary, so use that instead; `tuios update` detects which you have
 and prints the right command rather than overwriting it.
 
+### Shell Completions
+
+`tuios completion <shell>` prints a completion script for bash, zsh, fish or
+PowerShell. Besides subcommands and flags, it completes values such as session
+names for `--session` and configured hosts for `--host`.
+
+```bash
+# Bash (needs the bash-completion package)
+tuios completion bash > ~/.local/share/bash-completion/completions/tuios
+
+# Zsh (the directory must be on your $fpath, before compinit runs)
+tuios completion zsh > "${fpath[1]}/_tuios"
+
+# Fish
+tuios completion fish > ~/.config/fish/completions/tuios.fish
+```
+
+```powershell
+# PowerShell: add this line to your $PROFILE
+tuios completion powershell | Out-String | Invoke-Expression
+```
+
+Start a new shell afterwards. Run `tuios completion <shell> --help` for more
+options, or see the [CLI reference](docs/CLI_REFERENCE.md#tuios-completion).
+
 **Requirements:** A terminal with true color support. Kitty graphics and sixel support recommended (Ghostty, Kitty, WezTerm).
 
 ## Features
