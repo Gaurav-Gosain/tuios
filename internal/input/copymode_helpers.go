@@ -37,19 +37,48 @@ func getCharType(content string) int {
 
 // getCellAtCursor returns the cell at the current cursor position
 func getCellAtCursor(cm *terminal.CopyMode, window *terminal.Window) *uv.Cell {
+	return getCellAtCol(cm, window, cm.CursorX)
+}
+
+// getCellAtCol returns the cell at column x of the cursor's row
+func getCellAtCol(cm *terminal.CopyMode, window *terminal.Window, x int) *uv.Cell {
 	absY := getAbsoluteY(cm, window)
 	scrollbackLen := window.ScrollbackLen()
 
 	if absY < scrollbackLen {
 		line := window.ScrollbackLine(absY)
-		if line != nil && cm.CursorX < len(line) {
-			return &line[cm.CursorX]
+		if line != nil && x < len(line) {
+			return &line[x]
 		}
 		return nil
 	}
 
 	screenY := absY - scrollbackLen
-	return window.Terminal.CellAt(cm.CursorX, screenY)
+	return window.Terminal.CellAt(x, screenY)
+}
+
+// firstNonBlankCol returns the column of the first nonblank character on the
+// cursor's row, the target of ^. A blank row gives column 0.
+func firstNonBlankCol(cm *terminal.CopyMode, window *terminal.Window) int {
+	for x := 0; x <= window.LastContentCol(); x++ {
+		if cell := getCellAtCol(cm, window, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
+			return x
+		}
+	}
+	return 0
+}
+
+// lastTextCol returns the column of the last nonblank character on the
+// cursor's row, the target of $, rather than the blank padding up to the pane
+// edge. A wide character answers with its first cell. A blank row gives
+// column 0.
+func lastTextCol(cm *terminal.CopyMode, window *terminal.Window) int {
+	for x := window.LastContentCol(); x > 0; x-- {
+		if cell := getCellAtCol(cm, window, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
+			return x
+		}
+	}
+	return 0
 }
 
 // extractLineTextFromCells builds text string from cell array

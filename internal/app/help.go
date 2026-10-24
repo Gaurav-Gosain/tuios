@@ -591,6 +591,7 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 	var bound []HelpBinding
 	for _, row := range []struct{ action, desc string }{
 		{config.ActionCopyModeLineStart, "Line start"},
+		{config.ActionCopyModeFirstNonBlank, "First nonblank"},
 		{config.ActionCopyModeLineEnd, "Line end"},
 	} {
 		if keys := registry.GetCopyModeKeys(row.action); len(keys) > 0 {

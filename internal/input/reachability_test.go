@@ -795,7 +795,9 @@ func modeName(m app.Mode) string {
 // sections count as handled through the reachability table, whose test
 // presses every key of them and sees its action run.
 func TestEveryDescribedActionIsHandled(t *testing.T) {
-	handled := map[string]bool{app.HoldModeAction: true}
+	// copy_mode_first_nonblank has no default key, so the copy_mode section
+	// below does not name it; runCopyModeAction runs it through its constant.
+	handled := map[string]bool{app.HoldModeAction: true, config.ActionCopyModeFirstNonBlank: true}
 	k := config.DefaultConfig().Keybindings
 	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists} {
 		for action := range section {

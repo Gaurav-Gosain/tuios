@@ -100,8 +100,10 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 	switch action {
 	case config.ActionCopyModeLineStart:
 		cm.CursorX = 0
+	case config.ActionCopyModeFirstNonBlank:
+		cm.CursorX = firstNonBlankCol(cm, window)
 	case config.ActionCopyModeLineEnd:
-		cm.CursorX = window.LastContentCol()
+		cm.CursorX = lastTextCol(cm, window)
 	default:
 		return false
 	}
@@ -239,9 +241,9 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	case "0":
 		cm.CursorX = 0
 	case "^":
-		cm.CursorX = 0 // Could be enhanced to skip leading whitespace
+		cm.CursorX = firstNonBlankCol(cm, window)
 	case "$":
-		cm.CursorX = window.LastContentCol()
+		cm.CursorX = lastTextCol(cm, window)
 
 	// Navigation: page movement
 	case "ctrl+u":
@@ -615,11 +617,14 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		updateVisualEnd(cm, window)
 
 	// Line movement
-	case "0", "^":
+	case "0":
 		cm.CursorX = 0
 		updateVisualEnd(cm, window)
+	case "^":
+		cm.CursorX = firstNonBlankCol(cm, window)
+		updateVisualEnd(cm, window)
 	case "$":
-		cm.CursorX = window.LastContentCol()
+		cm.CursorX = lastTextCol(cm, window)
 		updateVisualEnd(cm, window)
 
 	// Page movement
