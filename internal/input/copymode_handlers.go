@@ -90,6 +90,13 @@ func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Wi
 	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
 		return false
 	}
+	if action == config.ActionEditScrollback {
+		// The editor opens at the cursor, so the count and the selection
+		// stay as they are for when it closes.
+		fx.editScrollback = true
+		fx.action = action
+		return true
+	}
 	switch action {
 	case config.ActionCopyModeLineStart:
 		cm.CursorX = 0

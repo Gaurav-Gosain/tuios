@@ -853,6 +853,9 @@ var ActionDescriptions = map[string]string{
 	"toggle_scratch":  "Show or hide the scratch terminal",
 	"hints_all_panes": "Label the text on all panes to copy it",
 
+	// The scrollback in the editor (prefix E, ctrl+g in copy mode)
+	ActionEditScrollback: "Open the scrollback in the editor",
+
 	// Copy mode search (no default keybinding)
 	ActionCopyModeSearchForward:  "Enter copy mode and search forward",
 	ActionCopyModeSearchBackward: "Enter copy mode and search backward",

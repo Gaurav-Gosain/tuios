@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -34,7 +35,15 @@ func (m *OS) multiCopyPill() (string, bool) {
 func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	mc := m.MultiCopy
 	if !mc.Has(focused.ID) {
-		return copyModeLegend(focused.CopyMode.State)
+		legend := copyModeLegend(focused.CopyMode.State)
+		if focused.CopyMode.State == terminal.CopyModeNormal && m.KeybindRegistry != nil {
+			if keys := m.KeybindRegistry.GetCopyModeKeys(config.ActionEditScrollback); len(keys) > 0 {
+				// Before the last pair, so quit stays at the end.
+				edit := overlay.Hint{Key: keys[0], Label: "edit", Priority: overlay.HintOptional}
+				legend = slices.Insert(legend, len(legend)-1, edit)
+			}
+		}
+		return legend
 	}
 	format := overlay.Hint{Key: "tab", Label: "format: " + mc.Format}
 	if mc.Save != nil {

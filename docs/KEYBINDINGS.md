@@ -1162,6 +1162,45 @@ copy_mode_line_end = ["end", "ctrl+e"]
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
 
+### Open the scrollback in the editor
+
+`Ctrl+G` in copy mode opens the scrollback of the pane in your editor. The
+file has all the scrollback and the screen, as plain text. zellij does the
+same with `e`.
+
+| Key | Where | Action |
+| --- | --- | --- |
+| `Ctrl+G` | Copy mode | `edit_scrollback` |
+| `Ctrl+B E` | Any mode | `edit_scrollback` |
+
+The command palette entry is "Edit the scrollback in the editor".
+
+- tuios uses the File editor setting first. Then it uses `$EDITOR`, then
+  `$VISUAL`, then `vi`.
+- vi, vim, nvim, nano, emacs, kakoune and helix open at the line of the copy
+  cursor. Outside copy mode, they open at the top of the screen. Other
+  editors open at the start of the file.
+- In a session with a daemon, the text comes from the daemon. It has the
+  full scrollback, also when your client has only part of it.
+- The editor uses the terminal that tuios runs in. tuios comes back when the
+  editor exits.
+- The file is in a private folder. tuios removes the file when the editor
+  exits, and when the client stops.
+- A browser client or an SSH client from another machine cannot open the
+  editor. tuios shows a message.
+
+In copy mode, `e` and `E` move to the end of a word, as in vim. For this
+reason, the editor key is `Ctrl+G`. `Ctrl+G` also opens a reply in the editor.
+To use another key, set it in the `copy_mode` section:
+
+```toml
+[keybindings.copy_mode]
+edit_scrollback = ["ctrl+o"]
+```
+
+The tmux preset uses `Ctrl+B E` to make the splits equal. With that preset,
+the editor key is `Ctrl+B Ctrl+T E`.
+
 ### Pipe a yank through a command
 
 A yank can go through a command before it goes to the clipboard. tmux calls

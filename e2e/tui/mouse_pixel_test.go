@@ -199,7 +199,7 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 
 			// The editor runs on tuios's own terminal and exits.
 			before := strings.Count(out.String(), "\x1b[?1016h")
-			openPaletteRow(t, term, "edit scrollback", "Edit scrollback in $EDITOR")
+			openPaletteRow(t, term, "edit the scrollback", "Edit the scrollback in the editor")
 			if err := term.WaitForText("EDITORRAN", uiTimeout); err != nil {
 				t.Fatalf("the editor never ran: %v\n%s", err, term.Snapshot())
 			}

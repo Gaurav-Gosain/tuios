@@ -293,7 +293,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		copyRow,
 		// The scrollback browser and the paste buffer list share one for
 		// the same reason.
-		pair("Scrollback/buffers", part("prefix_scrollback", "Scrollback browser"), part("choose_buffer", "Paste buffers")),
+		pair("Scrollback/editor/buffers", part("prefix_scrollback", "Scrollback browser"), part(ActionEditScrollback, "Scrollback in editor"), part("choose_buffer", "Paste buffers")),
 		// One row for two keys: the leader's menu fills an 80x24 screen,
 		// and a row more pushes it off the bottom.
 		sidebarRow,

@@ -72,6 +72,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_quit", handlePrefixQuit)
 	d.Register("hints", handleOpenHints)
 	d.Register("toggle_scratch", handleToggleScratch)
+	d.Register(config.ActionEditScrollback, handleEditScrollback)
 	d.Register("hints_all_panes", handleOpenHintsAllPanes)
 	d.Register("display_panes", handleDisplayPanes)
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
@@ -362,6 +363,11 @@ func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handlePrefixScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	OpenScrollbackBrowser(o)
 	return o, nil
+}
+
+// handleEditScrollback opens the focused pane's scrollback in the editor.
+func handleEditScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.EditScrollbackInEditor()
 }
 
 // handlePrefixScreenshot opens capture mode from the leader. The entry is

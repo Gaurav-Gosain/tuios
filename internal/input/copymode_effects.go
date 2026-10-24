@@ -38,6 +38,9 @@ type copyModeEffects struct {
 	// action is the [keybindings.copy_mode] action the key ran, for the
 	// recent actions list.
 	action string
+	// editScrollback opens the scrollback in the editor. It reads the
+	// window and writes a file, so it runs after the lock is dropped.
+	editScrollback bool
 }
 
 type copyModeNotification struct {
@@ -120,6 +123,9 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 				cmd = tea.Batch(cmd, o.SaveToPasteBuffers(fx.clipboard))
 			}
 		}
+	}
+	if fx.editScrollback && o != nil {
+		cmd = tea.Batch(cmd, o.EditScrollbackInEditor())
 	}
 	return o, cmd
 }

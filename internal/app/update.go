@@ -2428,6 +2428,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case replyEditorDoneMsg:
 		return m, m.applyReplyEditorDone(msg)
 
+	case scrollbackFileMsg:
+		return m, m.openScrollbackEditor(msg)
+
+	case scrollbackEditorDoneMsg:
+		return m, m.applyScrollbackEditorDone(msg)
+
 	case ReviewDiffMsg:
 		m.applyReviewDiff(msg)
 		return m, nil

@@ -1371,6 +1371,9 @@ func DefaultConfig() *UserConfig {
 				// makes a window and t is the window prefix. y is the key the
 				// multifocus docs tell people to bind, so it stays free.
 				"prefix_transfers": {"u"},
+				// E opens the scrollback in the editor, one shift from the e
+				// that focuses the rail. Copy mode has it on ctrl+g.
+				ActionEditScrollback: {"E"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -3597,6 +3600,9 @@ var yieldingDefaults = map[string]bool{
 	// between machines.
 	"prefix_transfers": true,
 	"file_send":        true,
+	// E after the prefix and ctrl+g in copy mode, new with the scrollback
+	// editor keys.
+	ActionEditScrollback: true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,

@@ -23,6 +23,10 @@ const (
 	ActionCopyModeLineEnd   = "copy_mode_line_end"
 )
 
+// ActionEditScrollback writes the focused pane's scrollback to a file and
+// opens it in the editor. It is bound after the leader and in copy mode.
+const ActionEditScrollback = "edit_scrollback"
+
 // copyModeFixedKeys are the keys copy mode reads itself, in
 // internal/input/copymode_handlers.go and copymode_multi.go, besides the
 // digits of a count. A [keybindings.copy_mode] binding on one of them takes
@@ -89,9 +93,15 @@ func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 // getDefaultCopyModeKeybinds returns copy mode's bindable keys. ctrl+a and
 // ctrl+e are not defaults: ctrl+a is a common leader key, and ctrl+e scrolls
 // one line in tmux's vi copy mode. Bind them here if you want them.
+//
+// The editor is on ctrl+g. zellij puts it on e, which is the vim word-end
+// motion here, and E (WORD end) and ctrl+e (scroll a line in tmux and vim)
+// are taken the same way. ctrl+g is the key that opens a reply draft in the
+// editor, so one key means "this text in my editor" in both places.
 func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionCopyModeLineStart: {"home"},
 		ActionCopyModeLineEnd:   {"end"},
+		ActionEditScrollback:    {"ctrl+g"},
 	}
 }

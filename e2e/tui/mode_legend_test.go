@@ -286,6 +286,7 @@ var copyLegendItems = []legendItem{
 	{key: "n/N", label: "next"},
 	{key: "v", label: "visual"},
 	{key: "y", label: "yank"},
+	{key: "ctrl+g", label: "edit"},
 	{key: "q/esc", label: "quit"},
 }
 
