@@ -354,9 +354,13 @@ func spotlightNoThemeBeam(dim int) string {
 // to reach the host darker with the beam on, and darker again at the higher
 // setting. The second half is the report itself: the two settings used to draw
 // the same frame.
+//
+// The low end is 25, not 10. The test terminal has 256 colours, and one step
+// of the colour cube is about 16% of the light. A 10% dim of the terminal mode
+// border #91e592 lands on the same cube colour, 114, as the border itself.
 func TestSpotlightDimsAThemelessScreenByTheSetting(t *testing.T) {
 	_, _, plain := spotlightProbe(t, spotlightNoTheme)
-	_, _, low := spotlightProbe(t, spotlightNoThemeBeam(10))
+	_, _, low := spotlightProbe(t, spotlightNoThemeBeam(25))
 	_, _, high := spotlightProbe(t, spotlightNoThemeBeam(95))
 
 	if plain.Fg == low.Fg {
@@ -367,11 +371,11 @@ func TestSpotlightDimsAThemelessScreenByTheSetting(t *testing.T) {
 	lowLight := spotlightLight(t, low.Fg)
 	highLight := spotlightLight(t, high.Fg)
 	if lowLight >= plainLight {
-		t.Errorf("dim 10 left the far border at %d against %d with the beam off; "+
+		t.Errorf("dim 25 left the far border at %d against %d with the beam off; "+
 			"the light did not go down", lowLight, plainLight)
 	}
 	if highLight >= lowLight {
-		t.Errorf("dim 10 left the far border at %d and dim 95 at %d; the setting draws "+
+		t.Errorf("dim 25 left the far border at %d and dim 95 at %d; the setting draws "+
 			"the same frame at both ends", lowLight, highLight)
 	}
 }
