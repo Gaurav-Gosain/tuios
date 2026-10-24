@@ -91,7 +91,7 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	if n.Type == "form" {
 		// form.NAME reads a field's value. Editing comes with the input
 		// wave; until then a field holds its first value.
-		sc = sc.with("form", s.formValues(n, vars), 0)
+		sc = sc.with("form", s.formValues(n, ptr, vars), 0)
 		sc.ident = ""
 		b.scope = sc
 	}
@@ -123,10 +123,11 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 
 func clampInt(v, lo, hi int) int { return max(lo, min(hi, v)) }
 
-// formValues returns the first value of each field of a form, by name.
-func (s *Surface) formValues(form *tml.Node, vars map[string]any) map[string]any {
+// formValues returns the value of each field of a form, by name: the state
+// a field binds, what was typed into it, or its first value.
+func (s *Surface) formValues(form *tml.Node, formPtr string, vars map[string]any) map[string]any {
 	out := map[string]any{}
-	form.Walk(func(n *tml.Node, _ string) bool {
+	form.Walk(func(n *tml.Node, rel string) bool {
 		name := n.AttrString("name")
 		if name == "" || n.IsText() {
 			return true
@@ -135,6 +136,14 @@ func (s *Surface) formValues(form *tml.Node, vars map[string]any) map[string]any
 		if p := n.AttrString("bind"); p != "" {
 			if ptr, err := tml.PathPointer(p); err == nil {
 				v = s.store.Get(ptr)
+			}
+		} else {
+			key := n.ID()
+			if key == "" {
+				key = formPtr + rel
+			}
+			if t, ok := s.view.Text[key]; ok {
+				v = t
 			}
 		}
 		if v == nil {

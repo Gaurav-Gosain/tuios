@@ -361,12 +361,15 @@ func (m *OS) PasteIntoFocused(text string) bool {
 // characters, so text holding ESC[201~ cannot end the bracketed paste early
 // and have the rest run as typed input.
 func (m *OS) PasteIntoWindow(w *terminal.Window, text string) bool {
-	// A TML surface has no field that takes text yet, and its PTY only
-	// holds the place, so a paste there goes nowhere. Say so rather than
-	// lose it unseen.
+	// A TML surface takes a paste into its focused text field. Its PTY only
+	// holds the place, so a paste with no field to take it goes nowhere:
+	// say so rather than lose it unseen.
 	if m.DrawsTML(w) {
-		m.ShowNotification("This surface takes no pasted text.", "warning", m.Settings.NotificationDuration)
-		return false
+		if !m.TMLPaste(w, text) {
+			m.ShowNotification("Select a text field in the surface first.", "warning", m.Settings.NotificationDuration)
+			return false
+		}
+		return true
 	}
 	if w.InImplicitCopyMode() {
 		w.ExitCopyMode()
