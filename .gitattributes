@@ -4,3 +4,6 @@ Dockerfile linguist-detectable=false
 # Every PR appends its own section, so a rebase keeps both sides.
 e2e/tui/NEGATIVE_CONTROLS.md merge=union
 docs/release-notes/*.md merge=union
+# Generated from skills/tuios/*.md. Never merge it by hand: scripts/rebase.sh
+# regenerates it at each commit where a rebase conflicts on it.
+skills/tuios.tar.gz binary linguist-generated=true
