@@ -202,7 +202,8 @@ func defaultMarkLayout(t *testing.T) markLayout {
 // starts one column right of where it starts with the shipped marks, all in
 // one column: ✋ keeps one blank before its name and a narrow mark two.
 // Nothing is pushed past the rail's right edge or the title bar's corner. The
-// last frames are saved under artifactDir.
+// rail and cockpit frames are saved under artifactDir, as text and PNG, before
+// anything is asserted on them.
 //
 // How this could pass wrongly, written down first:
 //   - The mark could be found anywhere, the dock's message included, so the
@@ -232,6 +233,7 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the rail never drew the set's marks in front of the agent rows: %v\n%s", err, term.Snapshot())
 	}
+	railShot(t, term, "agent-marks-rail")
 	s := term.Screen()
 	cols, _ := s.Size()
 	railX := railColumn(s)
@@ -308,11 +310,11 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 		t.Errorf("ASSERTION: the title bar's corner is at column %d and the frame's bottom corner at %d\n%s",
 			corner, bottom, term.Snapshot())
 	}
-	saveArtifact(t, term, artifactDir(t), "agent-marks-rail")
 
 	// The cockpit lists the same three agents in its fleet column, each name
 	// where the shipped marks put it, each mark in the shipped mark's column.
 	s, cockpit := cockpitRows(t, term, "hand-pane", "work-pane", "rest-pane")
+	railShot(t, term, "agent-marks-cockpit")
 	for name, at := range cockpit {
 		if at[1] != want.ckName {
 			t.Errorf("ASSERTION: the cockpit starts %s at column %d, and at %d with the shipped marks\n%s", name, at[1], want.ckName, term.Snapshot())
@@ -336,8 +338,147 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 	if head := markedAt(s, "✋ 1"); len(head) == 0 || len(markedAt(s, "◆ 1")) == 0 {
 		t.Errorf("ASSERTION: the cockpit's counts do not wear the set's marks\n%s", term.Snapshot())
 	}
-	saveArtifact(t, term, artifactDir(t), "agent-marks-cockpit")
 	alive(t, term, "after the cockpit drew the set's marks")
+}
+
+// namesInBox is the first place each name is drawn inside a box of the screen,
+// rows top to bottom and columns left to right, both exclusive, as row and
+// cell column.
+func namesInBox(s tuitest.Screen, top, bottom, left, right int, names ...string) map[string][2]int {
+	out := map[string][2]int{}
+	for _, name := range names {
+		for _, at := range markedAt(s, name) {
+			if at[0] > top && at[0] < bottom && at[1] > left && at[1] < right {
+				out[name] = at
+				break
+			}
+		}
+	}
+	return out
+}
+
+// markCells is how many cells each mark the lists draw takes.
+var markCells = map[string]int{"✋": 2, "◆": 1, "○": 1}
+
+// markLeads holds the rows of one list to the rail's rule: every name in one
+// column, every mark the lead's width in front of it, ✋ in two cells and a
+// narrow mark in one, and the cell before each name blank. marks names the
+// mark each row wears, "" for none.
+func markLeads(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, list string, at map[string][2]int, marks map[string]string) {
+	t.Helper()
+	if len(at) != len(marks) {
+		t.Fatalf("ASSERTION: the %s lists %d of the %d panes: %v\n%s", list, len(at), len(marks), at, term.Snapshot())
+	}
+	col := at["hand-pane"][1]
+	for name, mark := range marks {
+		row, x := at[name][0], at[name][1]
+		if x != col {
+			t.Errorf("ASSERTION: the %s starts %s (mark %q) at column %d and hand-pane (mark ✋) at %d: the names are not in one column\n%s",
+				list, name, mark, x, col, term.Snapshot())
+			continue
+		}
+		c := s.Cell(col-3, row)
+		switch {
+		case mark == "" && c.Content != " " && c.Content != "":
+			t.Errorf("ASSERTION: the %s's %s row has %q in the mark column, want a blank\n%s", list, name, c.Content, term.Snapshot())
+		case mark != "" && (c.Content != mark || c.Width != markCells[mark]):
+			t.Errorf("ASSERTION: the %s's %s row has %q, %d cells, three columns before its name, want %q\n%s",
+				list, name, c.Content, c.Width, mark, term.Snapshot())
+		}
+		if g := s.Cell(col-1, row).Content; g != " " && g != "" {
+			t.Errorf("ASSERTION: the %s's %s row has %q in the blank before its name\n%s", list, name, g, term.Snapshot())
+		}
+	}
+}
+
+// TestAgentMarksLineUpInEveryList: the navigator and the aggregate view lead
+// their pane rows with the agent mark the way the rail does, so with ✋ in the
+// set their names sit in one column whether the row wears ✋, a one-cell mark
+// or no mark: three cells after the start of the mark column, the widest mark
+// and one blank. The navigator's preview puts its location line under the
+// name in its header. The frames are saved under artifactDir, as text and
+// PNG, before anything is asserted on them.
+//
+// How this could pass wrongly, written down first:
+//   - A name could be read off the rail, a title bar or the preview rather
+//     than the list. Each list is read only inside its own box: the
+//     navigator's Panes box, left of its Preview box, and the aggregate
+//     view's rows between its title and its hint, left of the rail.
+//   - The names could share a column because every row wears the same kind
+//     of mark. The list has to hold a ✋ row, two one-cell rows (◆ and ○) and
+//     a row with no mark at all (plain-a, a pane with no agent), and the cell
+//     three columns before each name has to be that row's mark.
+//   - The names could line up because the marks overdraw the blank in front
+//     of them. The cell before each name has to be blank.
+//   - The preview's location line could line up with a header that has no
+//     mark only by luck of the lead. Its first character has to be in the
+//     column of the header's name.
+//
+// Negative controls are in NEGATIVE_CONTROLS.md under "Agent-state marks from
+// the glyph set".
+func TestAgentMarksLineUpInEveryList(t *testing.T) {
+	term, base := marksClient(t, "[appearance]\nglyphs = \"hands\"\n", marksSet)
+	for _, name := range []string{"plain-a", "plain-b"} {
+		if out, err := tuiosCLI(t, base, "new-window", name, "-s", "home", "--", "/bin/sh", "-c", "sleep 900"); err != nil {
+			t.Fatalf("open %s: %v\n%s", name, err, out)
+		}
+	}
+	waitScreen(t, term, "the rail never listed the plain panes", "plain-a", "plain-b")
+	marks := map[string]string{"hand-pane": "✋", "work-pane": "◆", "rest-pane": "○", "plain-a": ""}
+	names := []string{"hand-pane", "work-pane", "rest-pane", "plain-a"}
+
+	openNavigator(t, term, names...)
+	railShot(t, term, "agent-marks-navigator")
+	s := term.Screen()
+	cols, rows := s.Size()
+	panes, preview := markedAt(s, "─ Panes ─"), markedAt(s, "╭─ Preview")
+	if len(panes) != 1 || len(preview) != 1 {
+		t.Fatalf("the navigator's Panes and Preview boxes are not on screen: %v %v\n%s", panes, preview, term.Snapshot())
+	}
+	markLeads(t, term, s, "navigator", namesInBox(s, panes[0][0], rows, -1, preview[0][1], names...), marks)
+
+	// The preview's header is the selected pane's mark and name, and the line
+	// under it is where the pane is, in the column of the name.
+	head := preview[0][0] + 1
+	line, at := markRowCells(s, head)
+	first := func(line string, at []int, from int) int {
+		for i, r := range line {
+			if at[i] > from && r != ' ' && r != '│' {
+				return at[i]
+			}
+		}
+		return -1
+	}
+	where, whereAt := markRowCells(s, head+1)
+	nameCol := first(line, at, preview[0][1])
+	if c := s.Cell(nameCol, head); strings.ContainsAny(c.Content, "✋◆○▲") {
+		nameCol = first(line, at, nameCol+c.Width)
+	}
+	if got := first(where, whereAt, preview[0][1]); nameCol < 0 || got != nameCol {
+		t.Errorf("ASSERTION: the preview's location line starts at column %d and its header's name at %d\n%s", got, nameCol, term.Snapshot())
+	}
+
+	sendKeys(t, term, tuitest.Esc)
+	windowManagementMode(t, term)
+	openAggregateView(t, term)
+	railShot(t, term, "agent-marks-aggregate")
+	s = term.Screen()
+	title, hint := markedAt(s, aggregateTitle), markedAt(s, "↵ jump")
+	if len(title) == 0 || len(hint) == 0 {
+		t.Fatalf("the aggregate view's title and hint are not on screen\n%s", term.Snapshot())
+	}
+	top := -1
+	for _, at := range title {
+		if at[0] < hint[0][0] {
+			top = at[0]
+		}
+	}
+	right := railColumn(s)
+	if right < 0 {
+		right = cols
+	}
+	markLeads(t, term, s, "aggregate view", namesInBox(s, top, hint[0][0], -1, right, names...), marks)
+	alive(t, term, "after the navigator and the aggregate view drew the set's marks")
 }
 
 // TestAgentMarksKeepTheirDefaults: with no glyph set the rail draws the
