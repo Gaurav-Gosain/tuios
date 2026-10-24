@@ -95,6 +95,11 @@ type latestState struct {
 type sessionLatest struct {
 	client string
 	timer  *time.Timer
+	// left is the last input of the latest client, set when that client
+	// leaves the session and cleared when it is back or another client takes
+	// over. While it is set, the session keeps the size it has. See
+	// pickLatest.
+	left time.Time
 }
 
 func (l *latestState) get(sessionID string) *sessionLatest {
@@ -153,7 +158,16 @@ func (d *Daemon) sessionSizedClients(sessionID string) []sizedClient {
 // holder has gone hands it to the client with the newest input, and with no
 // input anywhere to the client that attached last, which is the order tmux
 // uses.
-func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Time) string {
+//
+// Except when the holder had input and left, and no client still here has had
+// input since. Then the holder stays the latest, and kept is true: the session
+// keeps the size it has rather than taking an idle client's. A person who
+// switches to another session and back, with another client on this one that
+// nobody touched (a second window, a phone left attached), came back to a
+// session resized twice, every program in it redrawn twice, and drawn at the
+// other client's size until their next key. The first input at a client still
+// here, or the holder coming back, ends it.
+func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Time) (latest string, kept bool) {
 	d.latest.mu.Lock()
 	defer d.latest.mu.Unlock()
 	st := d.latest.get(sessionID)
@@ -171,7 +185,13 @@ func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Ti
 			best = c
 		}
 	}
+	if holder != nil {
+		st.left = time.Time{}
+	}
 	switch {
+	case holder == nil && !st.left.IsZero() && (best == nil || !best.activity.After(st.left)):
+		// The holder left, and nobody here has had input since.
+		kept = true
 	case holder == nil && best == nil:
 		st.client = ""
 	case holder == nil:
@@ -182,13 +202,30 @@ func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Ti
 		st.client = best.id
 	default:
 		d.armLatestTimer(sessionID, st, holder.activity.Add(latestHold).Sub(now))
-		return st.client
+		return st.client, false
+	}
+	if !kept {
+		st.left = time.Time{}
 	}
 	if st.timer != nil {
 		st.timer.Stop()
 		st.timer = nil
 	}
-	return st.client
+	return st.client, kept
+}
+
+// latestLeft records that a client left a session, with its last input. When
+// it was the session's latest client and had input, the session keeps its
+// size until a client still there has input after that. See pickLatest.
+func (d *Daemon) latestLeft(sessionID, clientID string, input time.Time) {
+	if input.IsZero() {
+		return
+	}
+	d.latest.mu.Lock()
+	defer d.latest.mu.Unlock()
+	if st := d.latest.sessions[sessionID]; st != nil && st.client == clientID {
+		st.left = input
+	}
 }
 
 // armLatestTimer runs the decision again when the holder's hold ends. Called
