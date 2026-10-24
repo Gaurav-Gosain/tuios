@@ -15,6 +15,23 @@
 =====
 # harness: codex
 # want: needs_input
+# how: measured. Live Codex 0.164.0 pane on 2026-10-24; path shortened.
+---
+  Folder access
+  /var/home/u/src/app
+
+  Trust this folder? Codex can read, edit, and run files here, subject to
+  your permission settings. Folder settings can run code automatically, even
+  without a model request. Continue only if you trust these files. Your
+  trust decision will be saved.
+
+› 1. Trust and continue
+  2. Back to Agent Command Center
+
+  enter continue · esc back
+=====
+# harness: codex
+# want: needs_input
 # how: derived. The update offer at start, herdr's startup_update.
 ---
   Update available! 0.51.0 -> 0.52.0

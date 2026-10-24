@@ -9090,3 +9090,17 @@ Second review, on 2026-10-25 on Linux. `refused` gained `chunked-file`: a t=f co
 | `kitty_link_far.go` and `hosted_resume.go` as after the first review, and the client's refusal of file media from remote panes cut | `refused` (the chunked command answered OK, and "the host was handed paths" with its path), `lone-esc` ("the text after a dropped command lost its first letter") | **caught** |
 | The far side as after the first review, the client's refusal kept | `refused` (answered OK, no path reaches the host: the client drops it), `lone-esc` | **caught**; the client's refusal stops the path alone |
 | The client's refusal cut, the far side fixed | none: the far side refuses the chunked command itself | **not caught** (either layer is enough) |
+## Codex 0.164 folder trust prompt
+
+The measured `codex.txt#2` fixture is the startup screen from a live Codex
+0.164.0 pane, with only its folder shortened. `TestScreenFixtures` reads the
+same bottom eight non-empty lines that the screen classifier sees. The legacy
+Codex trust fixture remains beside it as the positive compatibility half.
+
+The control was run on 2026-10-24 on Linux amd64 with Go 1.26.10, against
+upstream main at `fed94a1a`: add the measured fixture before widening the
+existing trust rule.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The Codex trust rule knows only the legacy question and footer | Leave `internal/harness/manifests/codex.toml` unchanged and add the measured fixture | `TestScreenFixtures/codex.txt#2` (`classified as none (rule -1), want needs_input`) | **caught** |
