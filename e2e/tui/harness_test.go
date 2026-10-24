@@ -378,6 +378,13 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	if gorace := os.Getenv("GORACE"); gorace != "" {
 		env = append(env, "GORACE="+gorace)
 	}
+	// GOCOVERDIR is forwarded for the same reason: the test map job runs each
+	// test against a tuios built with -cover, and a client that never sees the
+	// directory writes no coverage, which would make the test look like it
+	// never reached the client code.
+	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
+		env = append(env, "GOCOVERDIR="+dir)
+	}
 	env = append(env, o.env...)
 
 	cols, rows := o.cols, o.rows

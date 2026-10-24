@@ -9,6 +9,9 @@
 #
 # A run on a draft pull request skips every shard and still ends as success,
 # so the run's conclusion is not enough. The shards' own jobs are counted.
+# A pull request may also run only the tests its change can reach. The
+# "e2e-tui full suite" job passes only when every test ran, so it must pass
+# too: main runs the whole suite after a partial selection.
 #
 # Needs gh with GH_TOKEN, and read access to Actions.
 set -uo pipefail
@@ -22,9 +25,10 @@ runs=$(gh api "repos/$repo/actions/workflows/e2e-tui.yml/runs?head_sha=$sha&even
 
 while read -r id url; do
 	[ -n "$id" ] || continue
-	passed=$(gh api "repos/$repo/actions/runs/$id/jobs?per_page=100" \
-		--jq '[.jobs[] | select((.name | startswith("e2e-tui (shard ")) and .conclusion == "success")] | length' 2>/dev/null) || continue
-	if [ "$passed" = "$shards" ]; then
+	read -r passed full < <(gh api "repos/$repo/actions/runs/$id/jobs?per_page=100" \
+		--jq '[([.jobs[] | select((.name | startswith("e2e-tui (shard ")) and .conclusion == "success")] | length),
+			([.jobs[] | select(.name == "e2e-tui full suite" and .conclusion == "success")] | length)] | @tsv' 2>/dev/null) || continue
+	if [ "$passed" = "$shards" ] && [ "$full" = 1 ]; then
 		echo "$url"
 		exit 0
 	fi
