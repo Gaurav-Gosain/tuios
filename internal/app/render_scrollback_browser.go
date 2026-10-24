@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -35,7 +34,7 @@ func (m *OS) renderScrollbackBrowser() string {
 	// theme, or on any theme at all, got a dark blue panel with its own idea
 	// of every colour, and the search highlight here was a different yellow
 	// from the search highlight in a pane two keystrokes away.
-	pal := theme.UI()
+	pal := m.overlayUI()
 	accent := pal.AccentBright
 	dimFg := pal.FgMute
 	cursorRow := overlay.RowState{Cursor: true, Focused: true}
@@ -222,7 +221,7 @@ func (m *OS) renderScrollbackBrowser() string {
 			}
 		}
 	}
-	lines = append(lines, fitLine(browserFooterHints(hints, innerW, &m.Settings), innerW))
+	lines = append(lines, fitLine(browserFooterHints(hints, innerW, &m.Settings, pal), innerW))
 
 	// Pad to exact height
 	for len(lines) < innerH {
@@ -245,7 +244,7 @@ func (m *OS) renderScrollbackBrowser() string {
 	box := lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accent).
+		BorderForeground(browserFrameInk(pal)).
 		Render(content)
 
 	result := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
@@ -864,7 +863,7 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 	modal := lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accent).
+		BorderForeground(browserFrameInk(pal)).
 		Render(modalContent)
 
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, modal)
@@ -877,8 +876,17 @@ type browserHint struct {
 	desc string
 }
 
-func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings) string {
-	pal := theme.UI()
+// browserFrameInk is the colour the browser's frames are drawn in: the
+// overlay frame ink when the client sets one (overlay_border_color, or the
+// focused pane's border under pane_overlays), else the accent.
+func browserFrameInk(pal overlay.Palette) color.Color {
+	if !isNilColor(pal.Frame) {
+		return pal.Frame
+	}
+	return pal.AccentBright
+}
+
+func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings, pal overlay.Palette) string {
 	pillBg := pal.Card
 	pillFg := pal.Fg
 	descFg := pal.FgMute
