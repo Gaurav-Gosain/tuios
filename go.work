@@ -23,10 +23,10 @@ replace tuios.dev/progstatus v0.1.1-0.20261023124927-50c38920e301 => ./progstatu
 
 replace tuios.dev/shot v0.2.1-0.20261023124927-50c38920e301 => ./shot
 
-replace tuios.dev/sketch v0.3.2-0.20261023124928-adf889029b64 => ./sketch
-
 replace tuios.dev/swatch v0.1.1-0.20261023124927-50c38920e301 => ./swatch
 
 replace tuios.dev/tml v0.1.1-0.20261023124927-50c38920e301 => ./tml
 
 replace tuios.dev/vt v0.3.1-0.20261023124927-211d9f938c2a => ./vt
+
+replace tuios.dev/sketch v0.3.2-0.20261024084526-96661942c78e => ./sketch
