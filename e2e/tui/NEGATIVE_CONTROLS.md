@@ -1473,6 +1473,7 @@ person enables it.
 | `env` on `tab.create` and `pane.split` | `verbNewWindow`: `Env: env` cut from the window options | `TestHerdrSocketAPI` (the new pane never shows env-from-tab) | **caught** |
 | `env` on `workspace.create` | `verbNewSession`: `Env: env` cut from the window options | `TestHerdrSocketAPI` (the new pane never shows env-from-workspace) | **caught** |
 | The warning for a `plugin_action` key that no plugin has | `validateCommands`: the `validatePluginActionKeys` call cut | `TestHerdrPluginPalette` (never shows "1 config problem") | **caught** |
+| A plugin's pane tags another pane with metadata, as herdr-sidebar tags its preview panes | `herdrPane`: the `pluginPaneMetadataTarget` branch made `ok && false` | `TestHerdrPluginPanes` ("the plugin pane could not tag the pane it was opened from", with `a pane may report only for itself`) | **caught** |
 | A bare action id prefers the enabled plugin | `FindAction`: the enabled-only return cut | `TestHerdrPluginPalette` (run-1.env never holds the key's run: the id is ambiguous) | **caught** |
 
 ## send-keys in the pane's keyboard mode

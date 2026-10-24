@@ -76,6 +76,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
@@ -622,9 +623,44 @@ func (d *Daemon) herdrPane(cs *connState, method, paneID string) (window string,
 	// A scratch terminal, which herdr's lists leave out, reports this way
 	// too.
 	if _, part, ok := strings.Cut(paneID, ":p"); paneID != window && (!ok || part != herdrHex(window)) {
+		if target, ok := d.pluginPaneMetadataTarget(cs, method, window, paneID); ok {
+			return target, true, "", ""
+		}
 		return "", false, "forbidden", "a pane may report only for itself"
 	}
 	return window, false, "", ""
+}
+
+// pluginPaneMetadataTarget is the window a herdr plugin's own pane may tag
+// with metadata when it names another pane. herdr lets any client stamp
+// metadata on any pane, and plugins rely on it: herdr-sidebar marks each
+// preview pane it opens, and closes the pane again when the mark is refused.
+// A herdr plugin's event hooks and actions run outside every pane and may already
+// do this under mode open (the outside branch of herdrPane), so the plugin's
+// pane gets nothing its plugin lacks. Under strict the outside branch refuses
+// a plugin's command, and this refuses its pane the same way. Only metadata
+// is let through: agent state stays with the pane that reports it.
+func (d *Daemon) pluginPaneMetadataTarget(cs *connState, method, own, paneID string) (string, bool) {
+	if method != "pane.report_metadata" || d.plugins == nil || cs == nil || cs.viaLink || cs.paneOnly || d.manager.grants.strict() {
+		return "", false
+	}
+	d.plugins.mu.Lock()
+	rec, isPluginPane := d.plugins.panes[own]
+	d.plugins.mu.Unlock()
+	if !isPluginPane {
+		return "", false
+	}
+	// A native plugin's commands are held to its grants, which never let
+	// them report for a pane (checkPluginGrants), and a plugin turned off
+	// since it opened the pane has no rights left to lend it.
+	if e, herr := d.herdrPluginEntry(rec.pluginID); herr != nil || e.Plugin.Format == herdrplugin.FormatTuios {
+		return "", false
+	}
+	_, win, ierr := d.herdrFindPane(paneID)
+	if ierr != nil {
+		return "", false
+	}
+	return win.ID, true
 }
 
 // herdrReportVerb is the tuios verb a herdr pane report stands for, whose
