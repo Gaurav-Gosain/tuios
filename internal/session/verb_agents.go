@@ -619,7 +619,7 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	}
 	if !d.agents.checkRate(sess.Name(), sender) {
 		return nil, hintedVerbError(ErrVerbRateLimited, "this sender is over the message rate cap", &VerbHint{
-			Command: "tuios read-agent-messages",
+			Command: "tuios read-agent-messages " + sessionArg(sess),
 			Detail:  "A sender gets 10 messages back to back and 30 a minute after that. Hitting the cap almost always means two agents are answering each other in a loop; read the ring before sending again.",
 		})
 	}
@@ -1000,7 +1000,9 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		return nil, mapResolveErr(err, sess)
 	}
 	target := state.Windows[idx]
-	res, verr := d.askAgent(cs, sess, state, target, p, false)
+	gone, stop := askCancel(cs)
+	defer stop()
+	res, verr := d.askAgent(cs, sess, state, target, p, false, gone)
 	if verr != nil {
 		return nil, verr
 	}
@@ -1044,6 +1046,8 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 		return nil, verr
 	}
 	results := make([]map[string]any, len(panes))
+	gone, stop := askCancel(cs)
+	defer stop()
 	var wg sync.WaitGroup
 	for i, pane := range panes {
 		wg.Go(func() {
@@ -1058,7 +1062,7 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 				results[i] = row
 				return
 			}
-			res, verr := d.askAgent(cs, pane.sess, state, target, p, true)
+			res, verr := d.askAgent(cs, pane.sess, state, target, p, true, gone)
 			if verr != nil {
 				row["ok"] = false
 				row["error"] = verr
@@ -1090,7 +1094,9 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 }
 
 // askAgent is one ask of target in sess. fromAnySession is resolveSender's.
-func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool) (map[string]any, *verbError) {
+// gone closes when the caller went away: an ask that is still waiting then
+// leaves the line and types nothing.
+func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool, gone <-chan struct{}) (map[string]any, *verbError) {
 	from, fromLabel := "", ""
 	viaLink := cs != nil && cs.viaLink
 	switch {
@@ -1130,7 +1136,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 			detail += " Asks in flight: " + strings.Join(edges, ", ") + "."
 		}
 		return nil, hintedVerbError(ErrVerbLoopRefused, "this ask would close a loop with one already in flight", &VerbHint{
-			Command: "tuios send-agent-message -w " + shortWindowID(target.ID) + " '<what you wanted to ask>'",
+			Command: "tuios send-agent-message " + paneArgs(sess, target.ID) + " '<what you wanted to ask>'",
 			Detail:  detail,
 		})
 	}
@@ -1149,6 +1155,27 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		lines = askDefaultLines
 	}
 
+	// One ask types at a pane at a time. Another ask of the same pane waits
+	// for its turn, in the order the asks came, for up to timeout. See
+	// ask_turns.go.
+	turnStart := time.Now()
+	ahead, release := d.askTurns.take(d.ctx, gone, target.ID, timeout)
+	if release == nil {
+		if d.ctx.Err() != nil {
+			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		}
+		if closed(gone) {
+			return nil, askCallerGoneError()
+		}
+		return nil, hintedVerbError(ErrVerbNotReady, "other asks of this agent were still running when the timeout elapsed: "+strconv.Itoa(ahead)+" were ahead of this one", &VerbHint{
+			Param:   "timeout",
+			Command: "tuios send-agent-message -w " + shortWindowID(target.ID) + " '<what you wanted to ask>'",
+			Detail:  "Nothing was typed. Asks of one agent take turns, first come first served, and this one waited its whole timeout for its turn. Raise timeout, or leave a message instead: tuios tells the agent about its mail.",
+		})
+	}
+	defer release()
+	waitedTurn := time.Since(turnStart)
+
 	// Step one: do not type into an agent that is blocked on a prompt, because
 	// the text would answer the prompt. This holds with force too: force skips
 	// the wait for a working agent, and only allow_blocked says the caller knows
@@ -1164,7 +1191,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// with whatever the target is doing.
 	waitedFor := ""
 	if !p.Force {
-		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout, p.AllowBlocked)
+		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout, p.AllowBlocked, gone)
 		if verr != nil {
 			return nil, verr
 		}
@@ -1188,6 +1215,11 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	// holdTypingTarget.
 	if verr := d.recheckTyping(cs, "ask-agent", sess, target.ID); verr != nil {
 		return nil, verr
+	}
+	// A caller that went away while the ask waited gets nothing typed: no
+	// one would read the answer.
+	if closed(gone) {
+		return nil, askCallerGoneError()
 	}
 	// Pasted and submitted with a carriage return, the way fan types its
 	// prompt. See prompt_submit.go. The gate reads the pane first, so it can
@@ -1228,7 +1260,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		return nil, hintedVerbError(ErrVerbPromptStalled, gate.stalledMessage(stall)+"; its state is "+endState, &VerbHint{
 			Param:   "stall_timeout",
 			Verb:    "capture-pane",
-			Command: "tuios capture-pane -w " + shortWindowID(target.ID),
+			Command: "tuios capture-pane " + paneArgs(sess, target.ID),
 			Detail:  "The question was typed and Enter was sent, so do not send it again without looking. Read the pane with capture-pane. If the question sits in the agent's input box, press Enter there with send-keys. If the agent is still starting, wait for it with wait-for agent-state and ask again. An agent that is slow to show it is working can be given more time with stall_timeout.",
 		})
 	}
@@ -1239,8 +1271,12 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		"window":     target.ID,
 		"name":       windowLabelOf(target),
 		"waited_for": waitedFor,
-		"settled_by": settledBy,
-		"state":      endState,
+		// queued_behind is how many asks of the same agent were ahead of
+		// this one, and waited_turn_ms how long it waited for its turn.
+		"queued_behind":  ahead,
+		"waited_turn_ms": waitedTurn.Milliseconds(),
+		"settled_by":     settledBy,
+		"state":          endState,
 		// untrusted, as in read-agent-messages: this is another program's output.
 		"untrusted": true,
 		"reply":     reply,
@@ -1309,9 +1345,10 @@ func durationOr(ms int, fallback time.Duration) time.Duration {
 
 // agentBlockedError is the refusal ask-agent gives a pane on needs_input. It
 // names what the pane waits on when that is known, and the remedy is always
-// to look first: the prompt is on the pane's screen, and whoever answers it
-// should have read it.
-func agentBlockedError(w WindowState) *verbError {
+// to look first with peek-prompt. Answering another agent's prompt is the
+// person's call, so the hint sends the caller to the person, never to
+// send-keys.
+func agentBlockedError(sess *Session, w WindowState) *verbError {
 	what := "a prompt"
 	switch agentBlockedBy(w) {
 	case harness.PromptKindApproval:
@@ -1326,9 +1363,11 @@ func agentBlockedError(w WindowState) *verbError {
 		msg += ": " + note
 	}
 	return hintedVerbError(ErrVerbAgentBlocked, msg, &VerbHint{
-		Verb:    "capture-pane",
-		Command: "tuios capture-pane -w " + shortWindowID(w.ID),
-		Detail:  "Nothing was typed. Read the prompt with capture-pane first. Then answer it yourself with send-keys if answering it is yours to do, or ask the person with send-agent-message -w human. Pass allow_blocked only when you have read the prompt and it takes free text.",
+		Verb:    "peek-prompt",
+		Command: "tuios peek-prompt " + paneArgs(sess, w.ID),
+		Detail: "Nothing was typed. Read the prompt with peek-prompt. Do not type at it: only the person answers another agent's prompt. " +
+			"Tell the person which pane waits and on what, with tuios ask-human or tuios send-agent-message -w human. " +
+			"Pass allow_blocked only when you have read the prompt and it takes free text.",
 	})
 }
 
@@ -1342,7 +1381,7 @@ func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 		return nil
 	}
 	if st.Windows[i].AgentState == AgentStateNeedsInput {
-		return agentBlockedError(st.Windows[i])
+		return agentBlockedError(sess, st.Windows[i])
 	}
 	return nil
 }
@@ -1354,7 +1393,7 @@ func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 // waiting on does not help: the prompt stays until somebody answers it. With
 // allowBlocked, needs_input counts as at rest instead, which is what every
 // caller got before needs_input left agentRestStates.
-func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool) (string, *verbError) {
+func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool, gone <-chan struct{}) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
 		sess:    sess,
@@ -1375,7 +1414,7 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 			if allowBlocked {
 				return name, true
 			}
-			blocked = agentBlockedError(w)
+			blocked = agentBlockedError(sess, w)
 			return name, false
 		}
 		return name, d.agentReady(w, agentRestStates)
@@ -1391,19 +1430,25 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 	for {
 		select {
 		case <-deadline:
+			pane := paneArgs(sess, windowID)
+			notWaiting := "To not wait, run tuios queue " + pane + " 'TEXT': it types the text when the agent next comes to rest. " +
+				"Or leave a message with tuios send-agent-message " + pane + " 'TEXT'."
 			msg := "the target agent was still working when the ready timeout elapsed"
-			detail := "Typing at an agent mid-turn interleaves with what it is doing. Wait for it to come to rest, raise ready_timeout, leave a message with send-agent-message instead, or pass force to send anyway."
+			detail := "Nothing was typed. Text typed at an agent mid-turn mixes with its work. To wait for it, run the command below, or raise ready_timeout. " + notWaiting
 			if name, _ := check(); name == AgentStateUnknown.Name() {
 				msg = "the target agent's state was unknown when the ready timeout elapsed"
-				detail = "unknown means the pane went quiet and nothing on its screen said whether the agent is at its prompt or in the middle of a long call, so it is not treated as ready. Look at the pane with capture-pane, pass force to send anyway, or leave a message with send-agent-message."
+				detail = "Nothing was typed. unknown means the pane went quiet and nothing on its screen said whether the agent is at its prompt or in the middle of a long call, so it is not treated as ready. " +
+					"Look at the pane with tuios capture-pane " + pane + ". " + notWaiting
 			}
 			return "", hintedVerbError(ErrVerbNotReady, msg, &VerbHint{
 				Param:   "ready_timeout",
-				Command: "tuios wait-for agent-state -w " + shortWindowID(windowID) + " --until idle,needs_input,done",
+				Command: "tuios wait-for agent-state " + pane + " --until idle,needs_input,done",
 				Detail:  detail,
 			})
 		case <-d.ctx.Done():
 			return "", newVerbError(ErrVerbInternal, "daemon is shutting down")
+		case <-gone:
+			return "", askCallerGoneError()
 		case ev := <-sub.ch:
 			if ev.Type == EventSessionClosed {
 				return "", newVerbError(ErrVerbSessionNotFound, "the session was killed before the target was ready")
@@ -1596,4 +1641,56 @@ func tailLines(content string, before, maxLines int) (string, bool) {
 		truncated = true
 	}
 	return strings.TrimRight(strings.Join(added, "\n"), "\n \t"), truncated
+}
+
+// askCancel is a channel that closes when the caller on cs goes away: its
+// connection closes, or the hosted pane it calls for ends. A verb reads
+// nothing from its connection while it runs, so the watch peeks at it.
+// stop ends the watch. A caller with no connection never goes away.
+func askCancel(cs *connState) (<-chan struct{}, func()) {
+	if cs == nil {
+		return nil, func() {}
+	}
+	var gone <-chan struct{}
+	stopWatch := func() {}
+	if cs.conn != nil {
+		gone, stopWatch = watchPeerClose(cs.conn)
+	}
+	out := make(chan struct{})
+	quit := make(chan struct{})
+	go func() {
+		select {
+		case <-gone:
+		case <-cs.done:
+		case <-cs.hostedEnded:
+		case <-quit:
+			return
+		}
+		close(out)
+	}()
+	var once sync.Once
+	return out, func() {
+		once.Do(func() {
+			close(quit)
+			stopWatch()
+		})
+	}
+}
+
+// closed reports whether ch is closed. A nil channel never is.
+func closed(ch <-chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// askCallerGoneError ends an ask whose caller went away before it typed.
+func askCallerGoneError() *verbError {
+	return newVerbError(ErrVerbInternal, "the caller went away before the question was typed, so nothing was typed")
 }

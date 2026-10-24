@@ -102,7 +102,7 @@ func mapResolveErr(err error, sess *Session) *verbError {
 		hint := &VerbHint{
 			Param:   "window",
 			Verb:    "list-windows",
-			Command: "tuios list-windows --json",
+			Command: "tuios list-windows",
 			Detail:  "the window target matched no window. A window is addressable by its id, a unique id prefix, the index list-windows prints, or its exact name.",
 		}
 		if strings.Contains(msg, "ambiguous window") {
@@ -111,8 +111,10 @@ func mapResolveErr(err error, sess *Session) *verbError {
 			hint.Detail = "the window target matched more than one window, listed in the message. Pass the id, or give the windows different names with set-window --name."
 		}
 		if sess != nil {
-			hint.Available = windowTargets(sess.GetState())
-			hint.DidYouMean = closestMatch(targetFromError(msg), hint.Available)
+			state := sess.GetState()
+			hint.Command = "tuios list-windows " + sessionArg(sess)
+			hint.Available = windowChoices(state)
+			hint.DidYouMean = closestMatch(targetFromError(msg), windowTargets(state))
 		}
 		return hintedVerbError(ErrVerbWindowNotFound, msg, hint)
 	}
@@ -1176,7 +1178,7 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	}
 
 	if p.Source == captureLastCommand {
-		return captureLastCommandOutput(pty, p.Window, p.Styled || p.ANSI || p.Resolved, p.Unwrap, p.Trim, p.Start, p.End, p.Lines)
+		return captureLastCommandOutput(sess, pty, p.Window, p.Styled || p.ANSI || p.Resolved, p.Unwrap, p.Trim, p.Start, p.End, p.Lines)
 	}
 
 	scrollback := p.Scrollback || p.Source == "recent"
