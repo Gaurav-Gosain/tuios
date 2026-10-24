@@ -15,7 +15,7 @@ import (
 // commands to. With several clients attached that is one of them, the same
 // one run-command reaches.
 
-func (d *Daemon) verbPiP(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbPiP(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -27,7 +27,7 @@ func (d *Daemon) verbPiP(_ *connState, params json.RawMessage) (any, *verbError)
 	if p.Off && p.Window != "" {
 		return nil, invalidParam("off", "off unpins whatever is pinned, so it takes no window. Pass one or the other")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

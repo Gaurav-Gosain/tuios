@@ -236,7 +236,7 @@ It needs a running daemon. Press q or esc to leave it.`,
 			return explore.Run(configExplorer(sessionName, opts))
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: most recently active)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	return cmd
 }

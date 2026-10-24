@@ -337,7 +337,7 @@ func (d *Daemon) typeResume(sess *Session, target string) (resumePlan, error) {
 // and the pane must be sitting at its shell prompt. So it is not gated on the
 // person the way dismiss-attention is: an agent that coordinates others may
 // bring one back.
-func (d *Daemon) verbResumeAgent(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -346,7 +346,7 @@ func (d *Daemon) verbResumeAgent(_ *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

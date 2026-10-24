@@ -64,7 +64,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 			Detail: "Nothing was read. Only a client attached now, or a connection that holds a presence, can read a transcript, by passing its nonce. An agent never can.",
 		})
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

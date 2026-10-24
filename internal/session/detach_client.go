@@ -191,7 +191,7 @@ func (d *Daemon) verbDetachClient(cs *connState, params json.RawMessage) (any, *
 			detached = []string{target.clientID}
 		}
 	case p.Session != "":
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}

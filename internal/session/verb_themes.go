@@ -62,14 +62,14 @@ func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *ve
 	// The theme in effect for this session, read from what the session was told
 	// rather than from this process's active tint: the daemon does not draw, and
 	// its own tint is not the attached client's.
-	if sess := d.findTargetSession(p.Session); sess != nil {
+	if sess := d.findTargetSession(cs, p.Session); sess != nil {
 		out["session"] = sess.Name()
 		if v, source, ok := d.optionsFor(cs, sess).lookup("appearance.theme"); ok {
 			out["active"] = v
 			out["active_source"] = source
 		}
 	} else if p.Session != "" {
-		return nil, mustResolve(d, p.Session)
+		return nil, mustResolve(d, cs, p.Session)
 	}
 
 	// Omarchy, when it is installed or asked for. With no theme set, tuios

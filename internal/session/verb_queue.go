@@ -95,7 +95,7 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 		cs.mu.Unlock()
 		return nil, linkFilesRefusal(peer)
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -239,12 +239,12 @@ type listQueuedParams struct {
 
 // verbListQueued answers list-queued: one pane's queue, or every queue in the
 // session when window is omitted.
-func (d *Daemon) verbListQueued(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListQueued(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p listQueuedParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -326,7 +326,7 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	if p.HumanNonce != "" && !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, newVerbError(ErrVerbNotHuman, "human_nonce does not belong to a client attached right now. Nothing was dropped")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

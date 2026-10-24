@@ -246,11 +246,11 @@ func printableLine(s string) string {
 }
 
 // resolvePromptWindow resolves the session and window a peek or respond names.
-func (d *Daemon) resolvePromptWindow(sessionName, window string) (*Session, WindowState, *verbError) {
+func (d *Daemon) resolvePromptWindow(cs *connState, sessionName, window string) (*Session, WindowState, *verbError) {
 	if window == "" {
 		return nil, WindowState{}, invalidParam("window", "window is required: name the pane whose prompt to read")
 	}
-	sess, verr := d.resolveVerbSession(sessionName)
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, WindowState{}, verr
 	}
@@ -264,7 +264,7 @@ func (d *Daemon) resolvePromptWindow(sessionName, window string) (*Session, Wind
 
 // verbPeekPrompt answers what the prompt on a pane is and how it may be
 // answered.
-func (d *Daemon) verbPeekPrompt(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbPeekPrompt(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -272,7 +272,7 @@ func (d *Daemon) verbPeekPrompt(_ *connState, params json.RawMessage) (any, *ver
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, w, verr := d.resolvePromptWindow(p.Session, p.Window)
+	sess, w, verr := d.resolvePromptWindow(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
@@ -422,7 +422,7 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	if len(p.Value) > maxRespondText {
 		return nil, invalidParam("value", "value is longer than "+strconv.Itoa(maxRespondText)+" bytes")
 	}
-	sess, w, verr := d.resolvePromptWindow(p.Session, p.Window)
+	sess, w, verr := d.resolvePromptWindow(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
