@@ -847,7 +847,7 @@ func (d *Daemon) recapTestPatterns() []string {
 // verbAgentActivity answers agent-activity: the pane's entries after since
 // and since_seq, the newest limit of them, and with recap a summary of every
 // one of them.
-func (d *Daemon) verbAgentActivity(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbAgentActivity(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p agentActivityParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -862,7 +862,7 @@ func (d *Daemon) verbAgentActivity(_ *connState, params json.RawMessage) (any, *
 	if limit == 0 {
 		limit = agentActivityDefaultLimit
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

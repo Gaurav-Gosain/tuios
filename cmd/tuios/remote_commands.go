@@ -174,7 +174,7 @@ func verbErrorJSON(err error) map[string]any {
 // runSendKeys sends keystrokes to a running TUIOS session over the verb
 // protocol, and says where they went: the window the daemon wrote them to, or
 // the attached client. repeat 0 or 1 sends the sequence once.
-func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, jsonOutput bool) error {
+func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -192,6 +192,9 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 	// takes a call that does not use it.
 	if repeat > 1 {
 		params["repeat"] = repeat
+	}
+	if allowBlocked {
+		params["allow_blocked"] = true
 	}
 	raw2, err := t.client.Call("send-keys", t.params(params))
 	if err != nil {
@@ -749,18 +752,23 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 // runSendText writes text verbatim to a pane's PTY. Unlike send-keys it parses
 // nothing, so a trailing newline in the argument is the Enter that submits the
 // line, and one call is enough to type and run a command.
-func runSendText(sessionName, windowTarget, text string, jsonOutput bool) error {
+func runSendText(sessionName, windowTarget, text string, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	raw, err := t.client.Call("send-text", t.params(map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"text":    text,
-	}))
+	}
+	// Sent only when set, so a call without it works against an older daemon.
+	if allowBlocked {
+		params["allow_blocked"] = true
+	}
+	raw, err := t.client.Call("send-text", t.params(params))
 	if err != nil {
 		return t.explain("send-text", err)
 	}
@@ -789,7 +797,23 @@ type captureOptions struct {
 	lines                      int
 	lastCommand, unwrap, trim  bool
 	jsonOut                    bool
+	// capped is true when lines (and commands) are the default cap rather
+	// than the caller's own --lines.
+	capped bool
+	// commands asks for the last N shell commands, under lines in total.
+	commands         int
+	explicitCommands bool
 }
+
+// captureScrollbackCap is the most lines capture-pane --scrollback keeps when
+// no --lines is given, and captureDefaultCommands how many commands it keeps.
+// A full history is 10,000 lines or more, which floods an agent's context.
+// The cap lives here and not in the verb: the tmux shim, the MCP server and
+// the web client call capture-pane for the whole history.
+const (
+	captureScrollbackCap   = 2000
+	captureDefaultCommands = 3
+)
 
 func runCapturePane(o captureOptions) error {
 	t, err := dialTarget(o.session, o.window)
@@ -818,7 +842,22 @@ func runCapturePane(o captureOptions) error {
 	if o.trim {
 		params["trim"] = true
 	}
+	if o.commands > 0 {
+		params["commands"] = o.commands
+	}
 	raw, err := t.client.Call("capture-pane", t.params(params))
+	staleCommands := false
+	if call, ok := errors.AsType[*session.VerbCallError](err); ok && o.commands > 0 && call.Code == session.ErrVerbInvalidParams &&
+		call.Hint != nil && call.Hint.Param == "commands" && strings.Contains(call.Message, "has no parameter") {
+		if o.explicitCommands {
+			return reportVerbError(errStaleCommands, o.jsonOut)
+		}
+		// The default asked for commands, not the caller: fall back to the
+		// line cap, and say why in the note.
+		delete(params, "commands")
+		staleCommands = true
+		raw, err = t.client.Call("capture-pane", t.params(params))
+	}
 	if err != nil {
 		if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbInvalidParams &&
 			call.Hint != nil && (call.Hint.Param == "unwrap" || call.Hint.Param == "trim") {
@@ -835,17 +874,88 @@ func runCapturePane(o captureOptions) error {
 	if json.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
 		fmt.Fprintln(os.Stderr, "warning: "+errStaleCapture.Error()+".")
 	}
+	if (o.capped || o.explicitCommands) && !o.jsonOut {
+		if note := captureCapNote(raw, o.explicitCommands, staleCommands); note != "" {
+			fmt.Fprintln(os.Stderr, note)
+		}
+	}
 	if o.jsonOut {
 		return printVerbResultOn(t, raw, o.jsonOut)
 	}
 	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
 }
 
+// captureCapNote is the stderr line for a scrollback capture the default cap
+// or --commands shortened, or "" when it left nothing out. A daemon from
+// before lines_omitted does not say how many lines it left out, so a capture
+// of exactly the cap is reported without a count.
+func captureCapNote(raw json.RawMessage, explicit, stale bool) string {
+	var res struct {
+		Content           string            `json:"content"`
+		LinesOmitted      *int              `json:"lines_omitted"`
+		CommandMarks      *bool             `json:"command_marks"`
+		Commands          []json.RawMessage `json:"commands"`
+		CommandsAvailable int               `json:"commands_available"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return ""
+	}
+	const tail = " To get the whole history, use --lines 0."
+	omitted := 0
+	if res.LinesOmitted != nil {
+		omitted = *res.LinesOmitted
+	}
+	full := strings.Count(strings.TrimSuffix(res.Content, "\n"), "\n")+1 >= captureScrollbackCap
+	switch {
+	case res.CommandMarks != nil && *res.CommandMarks:
+		shown := len(res.Commands)
+		if res.CommandsAvailable <= shown && omitted == 0 {
+			return ""
+		}
+		note := fmt.Sprintf("note: capture-pane shows the last %d commands", shown)
+		if res.CommandsAvailable > shown {
+			note += fmt.Sprintf(" of %s", commas(res.CommandsAvailable))
+		}
+		note += "."
+		if omitted > 0 {
+			note += fmt.Sprintf(" It left out %s lines from the middle of their output.", commas(omitted))
+		}
+		return note + tail
+	case res.CommandMarks != nil:
+		if omitted == 0 && !explicit {
+			return ""
+		}
+		note := fmt.Sprintf("note: the shell in this pane sends no command marks, so capture-pane shows the last %s lines.", commas(captureScrollbackCap))
+		if omitted > 0 {
+			note += fmt.Sprintf(" It left out %s older lines.", commas(omitted))
+		}
+		return note + " Run 'tuios doctor shell' to turn the marks on." + tail
+	case stale:
+		if omitted == 0 && !(res.LinesOmitted == nil && full) {
+			return ""
+		}
+		return fmt.Sprintf("note: the running daemon is older than this tuios, so capture-pane shows the last %s lines. Run 'tuios restart-server' to update it.", commas(captureScrollbackCap)) + tail
+	case omitted > 0:
+		return fmt.Sprintf("note: capture-pane shows the last %s lines. It left out %s older lines.", commas(captureScrollbackCap), commas(omitted)) + tail
+	case res.LinesOmitted == nil && full:
+		return fmt.Sprintf("note: capture-pane shows the last %s lines. Older lines can be left out.", commas(captureScrollbackCap)) + tail
+	}
+	return ""
+}
+
+// errStaleCommands is what capture-pane --commands says when the daemon does
+// not know the commands parameter, worded like errStaleCapture.
+var errStaleCommands = errors.New("the running daemon is older than this tuios and does not know --commands. Run 'tuios restart-server' to update it")
+
 // errStaleCapture is what capture-pane says when the daemon does not know
 // unwrap or trim. Since v0.8.0 a daemon refuses a parameter it does not know,
 // and its own wording ("fix the name") points at the caller instead of at the
 // daemon.
 var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios restart-server' to update it")
+
+// errStaleWaitNew is what wait-for --new says when the daemon does not know
+// the new parameter, worded like errStaleCapture.
+var errStaleWaitNew = errors.New("the running daemon is older than this tuios and does not know --new. Run 'tuios restart-server' to update it")
 
 // printCapture writes a capture-pane result. A capture from this machine is
 // the content as it is. A capture from host is fenced with
@@ -1754,7 +1864,10 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64, fresh bool) error {
+	if fresh && condition != "window-output" {
+		return errors.New("--new goes with window-output")
+	}
 	if anySession && (sessionName != "" || windowTarget != "") {
 		return errors.New("--any-session watches every session, so it takes no --session or --window. Drop one or the other")
 	}
@@ -1795,11 +1908,30 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	if commandSeq != nil {
 		params["command_seq"] = *commandSeq
 	}
+	// Sent only when asked for, so a wait against an older daemon keeps
+	// working: it would refuse a parameter it does not know.
+	if fresh {
+		params["new"] = true
+	}
 
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
 	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
 	if err != nil {
+		if call, ok := errors.AsType[*session.VerbCallError](err); ok && fresh && call.Code == session.ErrVerbInvalidParams &&
+			call.Hint != nil && call.Hint.Param == "new" && strings.Contains(call.Message, "has no parameter") {
+			return reportVerbError(errStaleWaitNew, jsonOutput)
+		}
 		return reportVerbError(t.explain("wait-for", err), jsonOutput)
+	}
+	// A daemon older than v0.8.0 ignores unknown parameters, so it matched
+	// old output too. It omits the field that says new was used.
+	if fresh {
+		var echo struct {
+			New bool `json:"new"`
+		}
+		if json.Unmarshal(raw, &echo) == nil && !echo.New {
+			fmt.Fprintln(os.Stderr, "warning: "+errStaleWaitNew.Error()+". The match can be old output.")
+		}
 	}
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)

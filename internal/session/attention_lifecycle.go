@@ -576,12 +576,12 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 	}
 	switch p.Action {
 	case "unread":
-		return d.markAttentionUnread(p)
+		return d.markAttentionUnread(cs, p)
 	case "restore":
 		return d.markAttentionRestore(p)
 	}
 	if p.ID == "" {
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}
@@ -638,7 +638,7 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 // daemon forgets that the pane's turns were seen, so the next client to focus
 // it marks them seen again, and a finished item opens with marked_unread. It
 // acts on a pane of this machine that has finished a turn and is at rest.
-func (d *Daemon) markAttentionUnread(p markAttentionParams) (any, *verbError) {
+func (d *Daemon) markAttentionUnread(cs *connState, p markAttentionParams) (any, *verbError) {
 	if p.Kind != "" && p.Kind != AttentionFinished {
 		return nil, invalidParam("kind", "unread reopens a finished turn, so kind is finished or left out", AttentionFinished)
 	}
@@ -653,7 +653,7 @@ func (d *Daemon) markAttentionUnread(p markAttentionParams) (any, *verbError) {
 		}
 		sessionName, window = it.Session, it.Window
 	}
-	sess, verr := d.resolveVerbSession(sessionName)
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}

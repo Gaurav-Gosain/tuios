@@ -138,6 +138,8 @@ tuios list-windows --json | jq -r '.windows[] | "\(.index)\t\(.window_id)"' |
   done
 ```
 
+`capture-pane --scrollback` keeps the last 3 commands in at most 2000 lines, and `--commands N` keeps the last N. Give `--lines 0` only when you need the whole history.
+
 A person can do the same by hand with multi copy mode. They add the panes to
 multifocus, press `Ctrl+B [`, search once, press `V` and `y`. tuios copies the
 selected line of each pane as plain text, markdown or JSON. `Y` saves it to a
@@ -287,6 +289,8 @@ tuios capture-pane -s work -w build --scrollback --lines 60
 
 The echo shows `printf 'tests_done_%s\n' 1786700000`, which the pattern does not
 match; the output shows `tests_done_1786700000`, which it does.
+
+`--new` matches only output written after the wait starts, so an old marker does not match. Output from before the wait does not count, so do not use `--new` for a command that can finish at once.
 
 ### Running a command and getting its exit code
 

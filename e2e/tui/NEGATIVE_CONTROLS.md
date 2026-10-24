@@ -9064,3 +9064,105 @@ Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 Not covered end to end: the terminals row scrolled out of a short rail, and a peek of another session. The same `focusDrawn` check covers them.
 | The fix removed | upstream main at 43649994b | `dark-truecolor` and `light-truecolor`: "the cursor row on P1 differs from its neighbours only by its ground". `dark-16` passes, since main already draws reverse video there | **caught** |
 | The mark skips every cell | `CursorText` returns its span unchanged | `dark-truecolor` and `light-truecolor`, same message | **caught** |
+## A pane's command without -s uses the pane's session
+
+`TestAPaneCallWithoutSessionUsesThePaneSession` runs a probe pane in session
+`home` while session `other` is the most recent one. Both hold a window `x`.
+The probe unsets `TUIOS_SESSION` and calls `capture-pane`, `list-windows` and
+`send-text` with no `-s`. The positive half is the person's capture from
+outside every pane, which must read `other`'s `x`. Run on 2026-10-24 against a
+build of origin/main (c5e6439de).
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane's call without `-s` acted on the most recently active session, not its own | The `callerSession` step in `findTargetSession` | Build of origin/main | `TestAPaneCallWithoutSessionUsesThePaneSession` (the capture reads `OTHER_MARK`, the listing is `other`'s, and the text never reaches `home`'s `x`) | **caught** |
+## Typing from a pane: -w required, and no typing into a prompt
+
+`TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` runs a probe pane that holds
+admin and respond. It calls `send-text` and `send-keys` with no `-w`, and
+`send-text`, `send-keys` and `paste-buffer` into a pane on `needs_input`
+without `--allow-blocked`. The
+positive halves are in the same fixture: the same call with `-w` reaches a
+plain pane, `send-text --allow-blocked` reaches the waiting pane, and the
+person's `send-text`, from outside every pane, reaches it too.
+`TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` now checks that a pane with
+respond is refused without `--allow-blocked` and answers the prompt with it.
+Run on 2026-10-24 against a build of origin/main (c5e6439de).
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane's `send-text` and `send-keys` without `-w` typed into the person's focused pane | `typingNeedsWindow` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` ("a call without -w typed into the focused pane": `NOWIN_TEXTNOWIN` in the plain pane) | **caught** |
+| A pane with respond typed into a pane on needs_input with no sign it read the prompt | `typingBlocked` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` (`REFUSED_TEXT`, `QZ` and `BUFFER_TEXT` in the waiting pane's log), `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` (`SK3_EXIT=0`, `ANSWERED:y`) | **caught** |
+## wait-for window-output --new ignores old output
+
+`TestWaitForWindowOutputNewIgnoresOldOutput` prints `DONE-7` in a pane and
+proves it is on the screen with a plain wait. The negative half: a `--new`
+wait for the same pattern must time out. The positive half: a `--new` wait
+started before the pane prints `DONE-7` again must match, and its JSON must
+carry `"new": true`.
+
+Run on 2026-10-24 on Linux amd64, two runs of each binary.
+
+| Control | How | Result | Verdict |
+| --- | --- | --- | --- |
+| origin/main | binary built from origin/main | 2 runs of 2 fail: "unknown flag: --new" | **caught** |
+| new is ignored | `if fresh {` made `if fresh && false {` in `waitWindowOutput`, restored after, checked with sha256 | 2 runs of 2 fail: "wait-for --new matched the marker that was already on the screen after 3.7ms" | **caught** |
+
+With the change in place the test passes. The same cut binary also showed
+the stale-daemon warning, because the result no longer carries `new`.
+## ask-human from a pane shows needs_input, and a long question says what to do
+
+`TestAskHumanFromAPaneShowsNeedsInput` runs an agent script in a second pane on a real daemon with an attached client. The script reports working, then asks a question with `ask-human`. While the question waits, the test checks the pane's state and note, reports idle from the same pane, checks that the Inbox holds one ask item with its two answers, and answers it with `1` on the client. The asker must print the answer, and the pane must end on idle with its own note. Pane B, which holds admin and not respond, must then be able to type into the pane. Last, the script reports a real prompt and asks again with a short timeout. The pane must keep its own prompt during and after the wait.
+
+`TestAskHumanLongQuestionSaysWhatToDo` asks a 204-byte question with the CLI. The error must give the length, the limit and the `send-agent-message -w human` command, must not name `list-verbs`, and the question must not reach the Inbox.
+
+Each control cuts one change, rebuilds, runs the test twice, and restores the file, checked byte for byte with sha256. Run on 2026-10-24 on Linux amd64 against feat/ask-human-needs-input.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| origin/main | binary built from origin/main | `TestAskHumanFromAPaneShowsNeedsInput`: "while the question waits: the asking pane shows {State:working Message:refactoring the parser}"; `TestAskHumanLongQuestionSaysWhatToDo`: no length, no command, and "the error still points at list-verbs" | **caught** |
+| No Inbox dedupe | cut the `askShownLocked` check from `noteAgentState` | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: the Inbox holds an ask item and a question item for the pane, and the client never shows "1 needs you" | **caught** |
+| Reports not kept beneath the question | `askShadows` returns false | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: "the pane's idle report replaced the question at once" | **caught** |
+| The end takes the #1054 hold | `endAskShow` sets `promptHold` on the claim, as a report from outside the pane does | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: "B could not type into the pane after its question ended" | **caught** |
+| The question covers a real prompt | cut the `needs_input` guard from `showAsk` | `TestAskHumanFromAPaneShowsNeedsInput`, 2 runs of 2: "the question was laid over the pane's own prompt: {State:needs_input Message:Deploy now?}" | **caught** |
+
+With the change in place, both tests pass, and so do the four older ask-human tests in the file.
+
+Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestAskHuman' -v .` from `e2e/tui`. With `TUIOS_E2E_FRAMES` set, the run saves the Inbox frame while the question waits, the frame after the answer, and the CLI error.
+## capture-pane --scrollback keeps the last 3 commands
+
+Two tests cover the default of `capture-pane --scrollback` with no `--lines`.
+
+`TestCaptureScrollbackKeepsTheLastCommands` runs four short commands in a bash
+pane that sends OSC 133 marks. The default capture must hold the last three,
+each with its command line, and not the oldest one. Then the pane prints
+10,000 lines in one command. The capture must stay at 2000 lines or fewer,
+keep the two short commands whole, and keep the long command's command line,
+`BIG1` and `BIG10000`. `BIG5000` must go, and one `… N lines omitted …` line
+must replace the middle. The marker count, the stderr note and the JSON
+`lines_omitted` must agree, and kept plus omitted lines must add up to the
+command. The positive half: `--lines 0` gives every line.
+
+`TestCaptureScrollbackFallsBackToLinesWithoutMarks` prints 2500 numbered lines
+in a `/bin/sh` pane, which sends no marks. The positive half: `--lines 0` gives
+every line and no note. The capped half: the capture keeps the last 2000
+lines, and the stderr note says the shell sends no marks, gives the count and
+names `tuios doctor shell`. With `--json`, `lines_omitted` equals the whole
+history minus 2000 and `command_marks` is false. `--lines 50` gives 50 lines
+and no note.
+
+Run on 2026-10-24 on Linux amd64, two runs of each binary. Each cut was
+restored after its build and checked with sha256.
+
+| Control | How | Result | Verdict |
+| --- | --- | --- | --- |
+| origin/main | binary built from origin/main | 2 runs of 2: the fallback test fails with "CAP1 present=true, CAP2500 present=true, 2502 lines", the commands test with "the capture holds the fourth command back" | **caught** |
+| no default cap | `capped := false && ...` in the capture-pane command | 2 runs of 2, both tests fail as on origin/main | **caught** |
+| no default commands | `commands = 0` where the default sets `captureDefaultCommands` | 2 runs of 2: the fallback note lacks "no command marks", and the commands test fails with "the capture holds the fourth command back" | **caught** |
+| cut from the front | `head := 0` in `trimMiddle` | 2 runs of 2: the commands test fails with "the trimmed capture lacks" the long command's command line | **caught** |
+
+With the change in place both tests pass, and so does
+`TestScrollbackResizeCaptureCountsMatch`, which captures with `--scrollback`.
+An origin/main daemon with the new CLI keeps 2000 lines and prints a note to
+run `tuios restart-server`. `--commands` against it exits 1 with the same
+advice.

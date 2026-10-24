@@ -919,6 +919,9 @@ type PTY struct {
 	outputBuffer []byte
 	outputPos    int
 	outputSeq    int64
+	// outputTaps get a copy of every chunk appended after they were added.
+	// Guarded by outputMu. See output_tap.go.
+	outputTaps []*outputTap
 	// resizeMarks are the stream positions resizes took effect at, oldest
 	// first, kept while the ring still holds bytes either side of them plus
 	// the newest one behind the ring, which is the width the ring's first
@@ -1496,6 +1499,11 @@ type Session struct {
 	// express which of several sources should win, so the value carries the source
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
+
+	// askShows records, by window ID, the question from ask-human a pane
+	// shows as its agent state while its call waits, and the state beneath
+	// it. Read and written under stateMu. See askShow.
+	askShows map[string]askShow
 
 	// agentHarnessPIDs records, by window ID, the pid of the harness process
 	// whose hook last set the window's AgentSessionID, as the hook reported it.
@@ -4958,6 +4966,9 @@ func (p *PTY) readOutput() {
 			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
 			seq := p.appendToBuffer(data)
+			for _, tap := range p.outputTaps {
+				tap.add(data)
+			}
 			p.outputMu.Unlock()
 
 			// Broadcast to subscribers

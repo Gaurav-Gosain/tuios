@@ -115,6 +115,10 @@ with `--no-wait` and then wait for mail in steps, or come back with
 bytes and each answer to 60. A new question from your pane replaces your open
 one.
 
+While the call waits, your pane shows `needs_input` with the question as its
+note. Do not set it yourself. When the call returns, your pane shows its earlier
+state again, or the state you reported while it waited.
+
 For a free-form answer, write to the person and wait for the reply:
 
 ```sh

@@ -238,7 +238,7 @@ var (
 var sessionParam = verbParam{
 	Name:        "session",
 	Type:        "string",
-	Description: "Session name. Omit to target the most recently active session.",
+	Description: "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one.",
 }
 
 // windowParam is the window selector shared by window-targeted verbs.
@@ -730,7 +730,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"start-agent": {
 			description: "Start an agent in a new pane of a session and answer once it is ready for a prompt: its state reads idle or done, from a report, a hook, its screen or its title (unknown counts only for a harness that can never show idle). A pane on needs_input ends the wait at once with ready false and blocked_by, and is kept. With prompt, the first prompt is typed once it is ready, the way fan types it. A named session that does not exist is created. From another machine, address it with a host-qualified session and name the repository by repo_url.",
 			params: append([]verbParam{
-				{Name: "session", Type: "string", Description: "Session to open the pane in. Created when it does not exist. Omit for the most recently active session, or a new one named after the agent when there is none."},
+				{Name: "session", Type: "string", Description: "Session to open the pane in. Created when it does not exist. Omit from a pane for the pane's own session. Outside every pane, omit for the most recently active session, or a new one named after the agent when there is none."},
 				{Name: "agent", Type: "string", Required: true, Description: "The agent, as one string: a harness id or program name (claude, codex, gemini), or any program, with its arguments after it. Split the way a shell splits words and exec'd directly; nothing is expanded."},
 				{Name: "args", Type: "[]string", Description: "More arguments after the agent's own, as an argv. No shell parses them."},
 				{Name: "name", Type: "string", Description: "The window's name, which list-agents shows and -w takes, so the caller can address the agent as, say, reviewer."},
@@ -1410,7 +1410,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbCloseWorkspace,
 		},
 		"send-keys": {
-			description: "Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to that window's terminal; without one, to an attached client (the window manager) or else the focused window.",
+			description: "Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to that window's terminal; without one, to an attached client (the window manager) or else the focused window. From a pane, window is required.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
@@ -1418,6 +1418,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "literal", Type: "bool", Description: "Send the keys to the PTY without parsing them as key names.", Default: "false"},
 				{Name: "raw", Type: "bool", Description: "Treat every character as its own key instead of splitting on spaces and commas.", Default: "false"},
 				{Name: "repeat", Type: "int", Description: "Send the whole sequence this many times, 1 to 1000.", Default: "1"},
+				typingAllowBlockedParam,
 			},
 			returns: []verbParam{
 				{Name: "sent_to", Type: "string", Description: "window when the keys were written to a window's terminal, client when an attached client took them as the person's keys."},
@@ -1432,13 +1433,14 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSendKeys,
 		},
 		"send-text": {
-			description: "Send literal text to a window's PTY.",
+			description: "Send literal text to a window's PTY. From a pane, window is required.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
 				{Name: "text", Type: "string", Required: true, Description: "Text written verbatim to the PTY."},
 				{Name: "paste", Type: "bool", Description: "Send the text as a paste. Control characters other than tab, line feed and carriage return are removed. The text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on.", Default: "false"},
 				{Name: "submit", Type: "bool", Description: "Paste the text and submit it with the Enter key of the harness in the pane, after a short wait for the paste to be taken in, as ask-agent does.", Default: "false"},
+				typingAllowBlockedParam,
 			},
 			examples: []string{
 				`{"id":1,"verb":"send-text","params":{"session":"work","text":"echo hi\n"}}`,
@@ -1575,7 +1577,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "ansi", Type: "bool", Description: "Older spelling of styled.", Default: "false"},
 				{Name: "resolved", Type: "bool", Description: "Rewrite ANSI index colours (30-37, 90-97, 40-47, 100-107, 38;5;n<16, 48;5;n<16) to 24-bit RGB so the capture matches what a themed client paints. Indices above 15 and true colour pass through untouched.", Default: "false"},
 				{Name: "palette", Type: "[]string", Description: "The 16 hex colours (#rrggbb) the client's theme paints indices 0-15 with, used by resolved captures. Must be exactly 16 entries when present; absent means the xterm defaults.", Default: "xterm defaults"},
-				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Blank rows below the cursor do not count. Ignored when start or end is given."},
+				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Blank rows below the cursor do not count. Ignored when start or end is given. With commands, the most lines to keep in total (default 2000)."},
+				{Name: "commands", Type: "int", Description: "Capture the last N shell commands, found by the pane's OSC 133 marks, from the scrollback. Each command runs from its prompt to the next prompt. When the total is over lines, the longest outputs lose their middle, and one line says how many lines were left out. A pane with no marks, or on the alternate screen, gives the last lines lines instead, with command_marks false. Takes no start, end or unwrap."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
 				{Name: "unwrap", Type: "bool", Description: "Join the rows the terminal wrapped because a line was longer than the pane, so each line is one line as the program wrote it. A row that ends with a newline stays a line of its own. lines, start and end then count the joined lines.", Default: "false"},
@@ -1585,6 +1588,10 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "content", Type: "string", Description: "The captured text, one line per row, or per line with unwrap."},
 				{Name: "unwrapped", Type: "bool", Description: "True when unwrap joined the wrapped rows. Omitted otherwise."},
 				{Name: "trimmed", Type: "bool", Description: "True when trim dropped the blank lines at the end. Omitted otherwise."},
+				{Name: "lines_omitted", Type: "int", Description: "With lines: how many older lines the capture left out, 0 when it kept them all. With commands: how many lines it cut from the middle of the outputs. Omitted without lines or commands, and with start or end."},
+				{Name: "command_marks", Type: "bool", Description: "With commands: true when the marks cut the capture into commands, false when it gave the last lines lines instead."},
+				{Name: "commands", Type: "[]object", Description: "With commands and command_marks true: one entry per command captured, oldest first, with lines (kept), lines_omitted, finished, and cmdline and exit_code when the shell reported them."},
+				{Name: "commands_available", Type: "int", Description: "With commands and command_marks true: how many commands the scrollback holds under marks."},
 				{Name: "source", Type: "string", Description: "The buffer captured.", Accepted: captureSources},
 				{Name: "styled", Type: "bool", Description: "Whether content carries ANSI styling."},
 				{Name: "resolved", Type: "bool", Description: "Whether index colours were rewritten to 24-bit RGB."},
@@ -2061,11 +2068,12 @@ func buildVerbRegistry() map[string]verbEntry {
 			description: "Block until a condition matches, or fail with the timeout code.",
 			params: []verbParam{
 				{Name: "condition", Type: "string", Required: true, Description: "Condition to wait for.", Accepted: waitConditions},
-				{Name: "session", Type: "string", Description: "Session name. session-exists requires it: it is the session to wait for. For the other conditions, omit to target the most recently active session."},
+				{Name: "session", Type: "string", Description: "Session name. session-exists requires it: it is the session to wait for. For the other conditions, omit it from a pane for the pane's own session, and from outside every pane for the most recently active one."},
 				windowParam,
 				{Name: "any_session", Type: "bool", Description: "For agent-state only: watch every session on the daemon, including ones created during the wait. Takes no session or window. The result names the session that matched.", Default: "false"},
 				{Name: "pattern", Type: "string", Description: "Regular expression, required by window-output."},
 				{Name: "source", Type: "string", Description: "Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches.", Accepted: waitOutputSources, Default: "recent"},
+				{Name: "new", Type: "bool", Description: "For window-output: match only the output the pane writes after the wait starts. Text already on the screen or in the scrollback does not match. A program that redraws its screen writes its text again, and that text matches. Takes no source.", Default: "false"},
 				{Name: "idle", Type: "int", Description: "Milliseconds of silence that count as idle, for window-idle.", Default: "500"},
 				{Name: "until", Type: "string", Description: "Agent state(s) to wait for, comma-separated, required by agent-state. With no window, any window in the session reaching one of them matches.", Accepted: AgentStateNames},
 				{Name: "thread", Type: "int", Description: "Narrow agent-message to one thread. Pass any message id in the thread. A thread the ring holds nothing from never matches."},
@@ -2082,12 +2090,14 @@ func buildVerbRegistry() map[string]verbEntry {
 				`{"id":1,"verb":"wait-for","params":{"condition":"agent-state","any_session":true,"until":"needs_input"}}`,
 				`{"id":1,"verb":"wait-for","params":{"condition":"command-finished","session":"work","window":"build","command_seq":4,"timeout":600000}}`,
 				`{"id":1,"verb":"wait-for","params":{"condition":"agent-state","select":"group:fan/add-retry","until":"idle,done","every":true}}`,
+				`{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","window":"build","pattern":"BUILD OK","new":true}}`,
 			},
 			returns: []verbParam{
 				{Name: "condition", Type: "string", Description: "The condition that matched."},
 				{Name: "window", Type: "string", Description: "The window that matched, for a condition about a window."},
 				{Name: "exit_code", Type: "int", Description: "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine."},
 				{Name: "signal", Type: "int", Description: "For window-exit: the signal that ended the process. Omitted when it exited on its own."},
+				{Name: "new", Type: "bool", Description: "For window-output: true when the wait matched only output written after it started."},
 			},
 			handler: (*Daemon).verbWaitFor,
 		},

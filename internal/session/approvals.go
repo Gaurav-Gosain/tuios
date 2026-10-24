@@ -615,7 +615,7 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if slices.Contains(options, ApprovalAlways) && !approvalScopeShown(p.Scope) {
 		options = slices.DeleteFunc(slices.Clone(options), func(o string) bool { return o == ApprovalAlways })
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -758,7 +758,7 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		if p.Window == "" {
 			return nil, invalidParam("request_id", "request_id is required, or session and window to answer the pane's held prompt")
 		}
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}

@@ -81,7 +81,7 @@ func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *v
 	return map[string]any{"pid": os.Getpid(), "panes": run.panes, "manifest_bytes": run.manifestBytes}, nil
 }
 
-func (d *Daemon) verbTestQuiesce(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbTestQuiesce(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -91,7 +91,7 @@ func (d *Daemon) verbTestQuiesce(_ *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}

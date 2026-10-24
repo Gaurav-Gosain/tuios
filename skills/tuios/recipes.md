@@ -69,7 +69,6 @@ options on screen, and ask decisions with `ask-human` rather than a free-form
 message.
 
 ```sh
-tuios set-agent-state needs_input -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --kind question -m 'drop the v1 endpoint?'
 answer=$(tuios ask-human 'Drop the v1 endpoint?' -o drop -o keep --timeout 90000)
 ```
 

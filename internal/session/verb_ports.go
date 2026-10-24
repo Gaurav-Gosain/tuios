@@ -61,7 +61,7 @@ type portsCache struct {
 	rows []portRow
 }
 
-func (d *Daemon) verbListPorts(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListPorts(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 	}
@@ -70,7 +70,7 @@ func (d *Daemon) verbListPorts(_ *connState, params json.RawMessage) (any, *verb
 	}
 	only := ""
 	if p.Session != "" {
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}

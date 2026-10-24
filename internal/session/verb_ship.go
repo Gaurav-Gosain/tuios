@@ -227,7 +227,7 @@ func (d *Daemon) shipTarget(cs *connState, sessionName, window string) (*Session
 			sessionName, window = d.sessionOfWindow(own), own
 		}
 	}
-	sess, target, verr := d.resolveVerbPane(sessionName, window)
+	sess, target, verr := d.resolveVerbPane(cs, sessionName, window)
 	if verr != nil {
 		return nil, WindowState{}, reviewRepo{}, verr
 	}
@@ -800,7 +800,7 @@ func (d *Daemon) shipAskPerson(cs *connState, verb string, o shipOutbound, p shi
 		LogBasic("Asked the person to allow %s of %s for window %s (request %s)", verb, o.branch, shortWindowID(own), h.id)
 		hold = h
 	}
-	res := d.awaitAsk(cs, hold, wait)
+	res := d.awaitAsk(cs, hold, wait, false)
 	status, _ := res["status"].(string)
 	if status == AskPending || status == askEndShutdown {
 		return "", hintedVerbError(ErrVerbNotReady, "the person has not answered yet, so nothing was sent", &VerbHint{

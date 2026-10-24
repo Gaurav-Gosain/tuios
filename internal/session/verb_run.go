@@ -154,8 +154,8 @@ func commandFinishedData(sessionName, window string, ev streamEvent) map[string]
 // is already true when the command finished before the wait began, so a
 // caller that read command_seq before starting the command cannot miss it.
 // Without it, the next command to finish after the wait starts matches.
-func (d *Daemon) waitCommandFinishedFor(sessionName, window string, commandSeq *uint64, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitCommandFinishedFor(cs *connState, sessionName, window string, commandSeq *uint64, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -260,7 +260,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	if p.Timeout < 0 || p.Lines < 0 {
 		return nil, invalidParam("timeout", "timeout and lines cannot be negative")
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
+	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
