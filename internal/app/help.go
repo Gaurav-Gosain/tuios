@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -946,7 +945,7 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 		m.HelpCategory = len(categories) - 1
 	}
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	inSearch := m.HelpSearchMode
 
 	var bindings []HelpBinding

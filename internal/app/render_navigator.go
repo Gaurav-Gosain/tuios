@@ -102,7 +102,7 @@ func (m *OS) navigatorVisibleRows() int {
 // renderNavigator draws the navigator and returns the panel, its geometry and
 // the list rows' hit areas.
 func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	nav := &m.navigator
 	width, listW, previewW, lines, hints := m.navigatorGeometry()

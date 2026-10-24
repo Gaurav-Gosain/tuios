@@ -270,6 +270,13 @@
       ]
     },
     {
+      "path": "appearance.overlay_border_color",
+      "type": "string",
+      "description": "Colour of every overlay's frame: #89b4fa, a slot name such as bright_cyan, or a role such as accent. Empty keeps the overlay's own, or the focused pane's border under pane_overlays",
+      "default": "",
+      "color": true
+    },
+    {
       "path": "appearance.pane_background",
       "type": "string",
       "description": "Background behind pane content: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
@@ -279,6 +286,12 @@
         "theme"
       ],
       "color": true
+    },
+    {
+      "path": "appearance.pane_overlays",
+      "type": "bool",
+      "description": "Draw dialogs and panels like pane windows: framed in the focused pane's border colour, on the pane's background",
+      "default": "false"
     },
     {
       "path": "appearance.panel_padding",

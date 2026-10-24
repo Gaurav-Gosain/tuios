@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/adrg/xdg"
 )
@@ -401,7 +400,7 @@ func (m *OS) RenderTapeManager() string {
 		m.InitTapeManager()
 	}
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	width := m.panelWidth(tapeManagerWidth)
 

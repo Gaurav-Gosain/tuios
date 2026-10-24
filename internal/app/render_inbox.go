@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // inboxWidth is the Inbox overlay's preferred inner width: a row carries a
@@ -98,7 +97,7 @@ const inboxPeekMaxLines = 14
 // options, and the keys that answer it. What the peek says is in words; the
 // colours only repeat it.
 func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 	width := m.panelWidth(inboxWidth)
 	textW := max(width-2, 1)

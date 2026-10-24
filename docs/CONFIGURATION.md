@@ -647,10 +647,7 @@ omarchy: Tokyo Night, from /home/you/.local/state/omarchy/current. tuios follows
 
 ## Colour values
 
-Every colour key in tuios takes the same values: the backgrounds, the
-border colours, `scrollbar.tint`, `[appearance.selection]`, the dock's
-`fg` and `bg` keys, `[dock.tabs]`, the agent row's `fg`, and a theme
-file's `chrome` object.
+Every colour key in tuios takes the same values: the backgrounds, the border colours, `overlay_border_color`, `scrollbar.tint`, `[appearance.selection]`, the dock's `fg` and `bg` keys, `[dock.tabs]`, the agent row's `fg`, and a theme file's `chrome` object.
 
 | Value | Example | What it is |
 |---|---|---|
@@ -1197,15 +1194,37 @@ border_gradient_angle = 45
 
 The small dialogs, such as rename, confirm and new space, draw their frame in the pane border style, `appearance.border_style`. The larger panels, such as the command palette, the switchers, the Agents view and the settings page, have no frame unless `appearance.frame_panels` is on. Then they take the same frame.
 
+With `appearance.pane_overlays` on, a dialog or a panel looks like a pane window:
+
+- Every panel is framed, as if `frame_panels` were on.
+- The frame takes the focused pane's border colour, because an open dialog or panel is the focused thing. That is `appearance.border_focused_color` when it is set. Otherwise it is the theme's colour for the current mode (copy mode or a waiting agent) or the session's tint.
+- The frame and everything in it sit on the background of an empty pane cell. That is `appearance.pane_background` when it is set, else the terminal's own. The title and hints in the frame line share that background, as they do in a pane.
+- The selected row, the row under the pointer and input fields are steps of that background. On a navy pane, a selected row is a darker navy.
+- Pills keep their own colours.
+
+The scrollback browser and the copy-mode search bar follow the option too. The browser's frame takes the focused pane's border colour, and its selected row and key pills are steps of the pane's background. The search bar sits on the pane's background.
+
+The option is off by default. Then a dialog or a panel keeps its own shaded background, and its frame keeps its quiet ink. Some cases keep the shade even with the option on:
+
+- Under `hidden`, no frame is drawn, so the shade is a dialog's only edge.
+- At 16 colours every background is the terminal's own, so the option changes only the frame's colour.
+- With no theme, and a terminal that never reports its background, there is no colour to fill the overlay with or to step its rows from.
+
+`appearance.overlay_border_color` sets a colour for every dialog and panel frame, and for the scrollback browser's, with or without `pane_overlays`.
+
 | Option | Values | Default |
 |---|---|---|
 | `appearance.border_style` | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii`, `outer-half-block`, `inner-half-block`, `glyphs` | `rounded` |
 | `appearance.frame_panels` | `true` frames every panel in the border style, `false` leaves the panels without a frame | `false` |
+| `appearance.pane_overlays` | `true` draws dialogs and panels like pane windows, `false` keeps their own shaded background | `false` |
+| `appearance.overlay_border_color` | A colour for every dialog and panel frame: `#89b4fa`, a slot name such as `bright_cyan`, or a role such as `accent`. Empty keeps the frame's own colour, or the focused pane's border under `pane_overlays` | empty |
 
 ```toml
 [appearance]
 border_style = "double"
 frame_panels = true
+pane_overlays = true
+overlay_border_color = "accent"
 ```
 
 How each border style draws a dialog or a framed panel:

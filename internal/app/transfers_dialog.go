@@ -16,7 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The questions a copy asks: cancel a copy, answer a file that is there,
@@ -760,7 +759,7 @@ func conflictLines(row session.TransferRow) []string {
 // renderCopyDialog draws the open question, with its clickable rows.
 func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 	d := m.transfers.dialog
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(copyDialogWidth, m.GetRenderWidth())
 

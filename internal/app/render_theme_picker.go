@@ -67,7 +67,7 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 	if m.ThemePickerShade != themeShadeAll {
 		title += " · " + themeShadeNames[m.ThemePickerShade]
 	}
-	return renderLivePicker(livePickerPanel{
+	return m.renderLivePicker(livePickerPanel{
 		Title:    title,
 		Query:    m.ThemePickerQuery,
 		Items:    items,

@@ -70,7 +70,7 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.launcherItems()
 	filtered := FilterLauncherItems(items, m.LauncherQuery, m.launchHistory)
 
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Surface
 
 	width, visible, hints := m.launcherLayout()
