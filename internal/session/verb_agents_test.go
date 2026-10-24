@@ -232,8 +232,8 @@ func TestAskRefusesABlockedAgent(t *testing.T) {
 			t.Errorf("refusal did not say what the agent waits on: %v", e["message"])
 		}
 		hint, _ := e["hint"].(map[string]any)
-		if hint == nil || hint["verb"] != "capture-pane" {
-			t.Errorf("refusal did not point at capture-pane: %v", e["hint"])
+		if hint == nil || hint["verb"] != "peek-prompt" {
+			t.Errorf("refusal did not point at peek-prompt: %v", e["hint"])
 		}
 	}
 

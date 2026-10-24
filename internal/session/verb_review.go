@@ -738,11 +738,11 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if p.Now {
 		if target.AgentState == AgentStateNeedsInput {
-			return nil, agentBlockedError(target)
+			return nil, agentBlockedError(sess, target)
 		}
 		if !d.agentReady(target, fanReadyStates) || d.queue.count(target.ID) > 0 {
 			return nil, hintedVerbError(ErrVerbNotReady, "the agent in window "+shortWindowID(target.ID)+" is not at rest with nothing queued, so the notes were not sent", &VerbHint{
-				Command: "tuios review send -w " + shortWindowID(target.ID),
+				Command: "tuios review send " + paneArgs(sess, target.ID),
 				Detail:  "Nothing was sent. Leave now out to queue the notes: they are typed when the agent next comes to rest.",
 			})
 		}
