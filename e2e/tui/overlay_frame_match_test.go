@@ -95,7 +95,7 @@ func TestOverlayFramesMatchPaneBorders(t *testing.T) {
 		saveArtifact(t, term, art, "frame-colour-alone-rename")
 		want := stockTrueColor
 		want.frameFg = matchOverlay
-		wantStockDialog(t, term, art, "frame-colour-alone-rename", box, want)
+		wantStockDialog(t, term, art, "frame-colour-alone-rename", "the rename dialog", box, want)
 		closeRename(t, term)
 		alive(t, term, "after the lone frame colour check")
 	})
