@@ -37,6 +37,9 @@ concurrency:
 env:
   E2E_SHARDS: "10"
   E2E_SHARD_LIMIT: 11m
+  # A partial selection fills shards to about this much each and leaves the
+  # rest empty, so a small change does not start ten runners.
+  E2E_SHARD_FILL: 8m
 
 jobs:
   # ff-merge lands the exact commit that passed as the pull request head, so
@@ -76,8 +79,14 @@ jobs:
     name: e2e-tui shard plan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.select.outputs.mode }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # A pull request checks out the merge of its head into the base, so
+          # HEAD^1 is the base and HEAD^1..HEAD is exactly the change.
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup-go
         with:
@@ -91,6 +100,16 @@ jobs:
         run: |
           set -euo pipefail
           go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$E2E_SHARDS" -max "$E2E_SHARD_LIMIT"
+
+      # The shards make the same choice on their own. This copy says on the
+      # run what was chosen and why, and tells the full-suite job below
+      # whether every test ran.
+      - name: Select the tests this change can reach
+        id: select
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+        run: ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
 
   e2e-tui:
     runs-on: ubuntu-latest
@@ -121,7 +140,8 @@ jobs:
     name: e2e-tui (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: tested
     # tested is skipped on a pull request, so the shards must not wait for its
-    # success. A draft skips the shards.
+    # success. A draft skips the shards. The shards do not wait for the shard
+    # plan job either: each one selects and packs its own tests.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     timeout-minutes: 20
     env:
@@ -136,6 +156,8 @@ jobs:
 
       - uses: actions/checkout@v7
         if: env.TESTED_URL == ''
+        with:
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup-go
         if: env.TESTED_URL == ''
@@ -150,12 +172,59 @@ jobs:
           go-version-file: e2e/tui/go.mod
           cache-id: e2e
 
-      - name: Build the binary under test
+      # Every shard computes the same plan from the same test list, diff and
+      # durations file, so together they run each selected test once. A test
+      # that is not in the durations file yet counts as the mean.
+      #
+      # On a pull request, scripts/e2e-select.sh keeps only the tests the
+      # change can reach (see e2e/tui/testselect). Main, the nightly and a
+      # manual run always select every test. A partial selection is packed
+      # into as few shards as it needs, and the other shards stop here.
+      #
+      # Listing needs TUIOS_E2E as well: without it the suite's TestMain
+      # returns before it can print a name, and the shard would silently be
+      # empty.
+      - name: Choose this shard's tests
+        id: plan
         if: env.TESTED_URL == ''
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          if [ "$SHARDS" != "$E2E_SHARDS" ]; then
+            echo "The matrix has $SHARDS shards and E2E_SHARDS is $E2E_SHARDS. Make them the same." >&2
+            exit 1
+          fi
+          ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt" 2> "$RUNNER_TEMP/select.log"
+          cat "$RUNNER_TEMP/select.log" >&2
+          if grep -q '^mode=all$' "$GITHUB_OUTPUT"; then
+            names=$(go run ./shardplan -shards "$SHARDS" -shard "$SHARD" < "$RUNNER_TEMP/selected.txt")
+            if [ -z "$names" ]; then
+              echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
+              exit 1
+            fi
+          else
+            names=$(go run ./shardplan -shards "$SHARDS" -shard "$SHARD" -fill "$E2E_SHARD_FILL" < "$RUNNER_TEMP/selected.txt")
+          fi
+          printf '%s\n' "$names" | sed '/^$/d' > "$RUNNER_TEMP/names.txt"
+          if [ -s "$RUNNER_TEMP/names.txt" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            wc -l < "$RUNNER_TEMP/names.txt" | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No e2e tests in this shard::The change reaches no test this shard would run."
+            echo "This shard runs no tests: the change reaches none of the tests it would run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build the binary under test
+        if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
 
       - name: Run this shard of the end-to-end suite
-        if: env.TESTED_URL == ''
+        if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
@@ -164,31 +233,13 @@ jobs:
           # log and makes the artifact obvious.
           TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
           SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ strategy.job-total }}
-        # Every shard computes the same plan from the same test list and
-        # durations file, so together they run each test once. A test that is
-        # not in the file yet counts as the mean.
-        #
-        # Listing needs TUIOS_E2E as well: without it the suite's TestMain
-        # returns before it can print a name, and the shard would silently be
-        # empty.
-        #
         # -count=1 defeats Go's test cache, which otherwise can replay a stale
         # result across a change of binary. -race is deliberately absent: the
         # program under test is a child process, so the detector would
         # instrument only the harness.
         run: |
           set -euo pipefail
-          if [ "$SHARDS" != "$E2E_SHARDS" ]; then
-            echo "The matrix has $SHARDS shards and E2E_SHARDS is $E2E_SHARDS. Make them the same." >&2
-            exit 1
-          fi
-          names=$(go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$SHARDS" -shard "$SHARD")
-          if [ -z "$names" ]; then
-            echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
-            exit 1
-          fi
-          echo "$names" | wc -l | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
+          names=$(cat "$RUNNER_TEMP/names.txt")
           start=$SECONDS
           # A failure of tests listed in .github/flaky-tests.txt, and only of
           # those, gets one retry of those tests. Anything else fails the shard.
@@ -209,5 +260,18 @@ jobs:
         # The harness tears down its own process groups, but a hard job failure
         # can leave one behind, and a leaked daemon would poison a self-hosted
         # runner. Never fail the job on this.
-        if: always() && env.TESTED_URL == ''
+        if: always() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: pkill -f "$RUNNER_TEMP/tuios" || true
+
+  # Passes only when every test ran and passed. scripts/e2e-tested.sh looks
+  # for it, so the push to main skips the suite only after a pull request run
+  # of the whole suite on the same commit. After a partial selection this job
+  # is skipped, and main runs everything.
+  full-suite:
+    name: e2e-tui full suite
+    needs: [shard-plan, e2e-tui]
+    if: ${{ !cancelled() && needs.shard-plan.outputs.mode == 'all' && needs.e2e-tui.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo "Every end-to-end test ran on this commit and passed."

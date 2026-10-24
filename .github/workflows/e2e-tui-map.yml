@@ -1,0 +1,115 @@
+name: e2e-tui test map
+
+# Refreshes e2e/tui/testselect/testmap.txt, which says what each end-to-end
+# test reaches. Pull requests read it to run only the tests their change can
+# reach (see e2e/tui/testselect and e2e-tui.yml).
+#
+# Every test runs on its own against a tuios built with -cover and with the
+# coverflush tag, which writes the counters of processes the suite ends with a
+# signal. testselect -build turns the coverage into the map. When the map
+# changes, the job opens or updates a pull request from the ci/e2e-test-map
+# branch through the GitHub API. It never pushes to main.
+#
+# A pull request made with the job's token starts no workflows. Close and
+# reopen it to run CI. A change to the map runs the whole suite.
+
+on:
+  schedule:
+    # 02:37 UTC daily, clear of the race build, the fuzz campaign and the
+    # client tests.
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  SHARDS: "10"
+
+jobs:
+  collect:
+    name: collect (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    # Each test runs in a process of its own, and the coverage build is
+    # slower, so a shard takes longer than in e2e-tui.yml.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: e2e/tui/go.mod
+          cache-id: e2e-map
+
+      - name: Build tuios with coverage
+        run: |
+          go build -tags coverflush -cover \
+            -coverpkg=github.com/Gaurav-Gosain/tuios/...,tuios.dev/... \
+            -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+
+      - name: Run each test of this shard with coverage
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          go test -list '^Test' ./... | grep '^Test' |
+            go run ./shardplan -shards "$SHARDS" -shard "$SHARD" |
+            testselect/collect.sh "$RUNNER_TEMP/tuios" "$RUNNER_TEMP/map"
+          # Each shard writes its own list of failed tests, so the merged
+          # artifact keeps all of them.
+          if [ -f "$RUNNER_TEMP/map/failed.txt" ]; then
+            mv "$RUNNER_TEMP/map/failed.txt" "$RUNNER_TEMP/map/failed-$SHARD.txt"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-map-${{ matrix.shard }}
+          path: ${{ runner.temp }}/map
+          retention-days: 7
+
+  update:
+    name: update the test map
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BRANCH: ci/e2e-test-map
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: e2e/tui/go.mod
+          cache-id: e2e-plan
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-map-*
+          path: ${{ runner.temp }}/map
+          merge-multiple: true
+
+      - name: Write the map
+        working-directory: e2e/tui
+        run: go run ./testselect -build "$RUNNER_TEMP/map"
+
+      - name: Open or update the pull request
+        run: |
+          if git diff --quiet -- e2e/tui/testselect/testmap.txt; then
+            echo "The test map is unchanged."
+            exit 0
+          fi
+          ./scripts/e2e-map-pr.sh "$BRANCH"

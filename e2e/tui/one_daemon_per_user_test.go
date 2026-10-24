@@ -224,7 +224,7 @@ func TestADaemonAnOlderLinkStartedIsFoundNotSplit(t *testing.T) {
 		term := tuitest.StartT(t, []string{tuiosBin, "ls"},
 			tuitest.WithSize(400, 10),
 			tuitest.WithTerm("xterm-256color"),
-			tuitest.WithEnv(append(m.sshEnv(), "PATH="+os.Getenv("PATH"))...),
+			tuitest.WithEnv(append(m.sshEnv(), "PATH="+os.Getenv("PATH"), "GOCOVERDIR="+os.Getenv("GOCOVERDIR"))...),
 			tuitest.WithDir(workDirIn(t, m.base)))
 		if _, err := term.WaitExit(uiTimeout); err != nil {
 			t.Fatalf("tuios ls in a terminal did not exit: %v\n%s", err, term.Snapshot())
