@@ -246,9 +246,13 @@ func canonicalKey(name string) (string, bool) {
 }
 
 // parseColor reads #rgb or #rrggbb, with or without the hash and in quotes
-// or not, which is every way these formats write a colour.
+// or not, and alacritty's 0xrrggbb, which is every way these formats write a
+// colour.
 func parseColor(v string) (color.Color, bool) {
 	v = strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`))
+	if h, ok := strings.CutPrefix(v, "0x"); ok && len(h) == 6 {
+		v = h
+	}
 	if !strings.HasPrefix(v, "#") {
 		v = "#" + v
 	}
