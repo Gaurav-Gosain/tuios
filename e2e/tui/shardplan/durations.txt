@@ -585,6 +585,8 @@ TestKittyAttachDuringAStreamPrintsNoImageData 11.3
 TestKittyAttachDuringIDlessStreamPrintsNoImageData 28.6
 TestKittyComposedCharacterFollowsOptionGlyphs 0.5
 TestKittyDirectTransportDrawsWholeImage 18.8
+TestKittyFilesFromAPaneOnAHost 3.0
+TestKittyFilesLinkImpact 0.0
 TestKittyImageIDsForALateClient 4.8
 TestKittyImageNumberDeletePlacement 6.1
 TestKittyImageNumberReupload 8.6

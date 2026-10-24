@@ -21,3 +21,10 @@ func ownedByDaemonUser(dir string) bool {
 	}
 	return int(st.Uid) == os.Getuid()
 }
+
+// fileOwnedByDaemonUser reports whether the file fi describes belongs to the
+// user the daemon runs as.
+func fileOwnedByDaemonUser(fi os.FileInfo) bool {
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	return ok && int(st.Uid) == os.Getuid()
+}

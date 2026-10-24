@@ -201,6 +201,15 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 		if win.DaemonMode && cmd.Action == vt.KittyActionQuery {
 			return
 		}
+		// A path from a pane on another machine names a file over there.
+		// That machine's daemon reads it and sends the bytes
+		// (session/kitty_link_far.go); one that reaches this client anyway
+		// is never handed on, where this machine's terminal would read a
+		// file of this machine.
+		if win.ProcessElsewhere() && cmd.Medium.IsFile() {
+			kp.DropRemoteFileMedium(win.ID, cmd)
+			return
+		}
 
 		// A frame edit in a daemon pane is refused, when it is, by the
 		// daemon: its answer is in order with the rest, and this one would

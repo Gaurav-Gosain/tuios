@@ -9064,3 +9064,29 @@ Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 Not covered end to end: the terminals row scrolled out of a short rail, and a peek of another session. The same `focusDrawn` check covers them.
 | The fix removed | upstream main at 43649994b | `dark-truecolor` and `light-truecolor`: "the cursor row on P1 differs from its neighbours only by its ground". `dark-16` passes, since main already draws reverse video there | **caught** |
 | The mark skips every cell | `CursorText` returns its span unchanged | `dark-truecolor` and `light-truecolor`, same message | **caught** |
+## Kitty images named by path in a window on another machine
+
+`TestKittyFilesFromAPaneOnAHost` links two daemons on one machine through the ssh stand-in and opens a window on the far one with `new-window --host build`. In it, `kittylive` (a guest in `e2e/tui/kittylive`) walks every transmission medium and prints PASS or FAIL with the reply it read: the a=q probe, a=q for a file, t=d PNG and RGBA, t=f, t=f with O= and S=, t=t (the file must be deleted) and t=s (the object must be unlinked). The host terminal's stream must hold each file's exact bytes as a direct upload, and no path. The `icat` subtest runs the real `kitten icat` (skipped when it is not installed): `--detect-support` must pick memory or file, and both modes must reach the host. The `refused` subtest runs `kittylive -refuse`: a /proc path, /etc/passwd, a symlink into /proc, a t=t file whose name lacks the kitty marker, and a key in the far home's `~/.ssh` by path and by symlink must each get an error reply, and neither the key's nor /etc/passwd's bytes, nor any path, may reach the host. Run on 2026-10-24 on Linux.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (main at efdc2a9c4) | `media` ("5 FAIL, 3 pass": t=f and t=t answered `ENOTSUPPORTED:the path would be read on another machine`, the t=s object never unlinked), `icat` (icat refuses: no pixel size in the pane), `refused` ("the host was handed paths", the key's among them) | **caught** |
+| The link's read rules (`check` in `openKittyLinkMedium`) skipped | `refused` ("the key crossed the link") | **caught** |
+| The owner check skipped | `refused` ("a file of another user (/etc/passwd) crossed the link"). The reply alone was an error (the owner's emulator answered EBADPNG), which is why the host stream is checked | **caught** |
+| kitty's sensitive path check (`vt.KittySensitivePath`) skipped | none: /proc is also in the link's read deny list, so both /proc cases are still refused | **not caught** (covered twice) |
+
+After review, on 2026-10-24 on Linux. The `refused` run gained three shared memory objects that must survive (Linux only): one named by an a=q, a symlink in /dev/shm whose target must survive, and an object one byte larger than the frame. `split-marker` prints a marker prefix in two parts 0.3 s apart, then a real t=f command with no other escape between them; the pane must go on at once and the host must get the image. `TestKittyFilesStalledOwnerHoldsOnlyItsPane` stalls the owner's fetch of two 4.8 MB images with `TUIOS_E2E_KITTY_LINK_STALL`; a small image from a third pane must answer OK in a few seconds, and each stalled one must get an error reply with no path in it while the stall lasts. With the fixes the small image answered in 107 ms and the stalled ones EIO after 15 s.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `kitty_link_far.go` as before the review | `refused` (all three objects deleted: "still there: false"), `TestKittyFilesStalledOwnerHoldsOnlyItsPane` ("the small image never answered in 30 s while two large ones were stalled") | **caught** |
+| `kitty_link_far.go` and `kitty_link_near.go` as before the review | `split-marker` ("the pane stalled after a split marker prefix", 20 s) | **caught** |
+| `kitty_link_far.go` alone as before the review | `split-marker` passes: the near side's rescan from the ESC also finds the real marker | **not caught** (either fix is enough) |
+
+Second review, on 2026-10-25 on Linux. `refused` gained `chunked-file`: a t=f command sent with m=1 and a last chunk, which must get an error reply, with no path reaching the host. The host checks now run even when kittylive fails, so a path is reported whatever the guest was told. `lone-esc` prints a lone ESC, pauses past the hold, then a file command and text that starts with D; the text must arrive whole and no path may reach the host.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `kitty_link_far.go` and `hosted_resume.go` as after the first review, and the client's refusal of file media from remote panes cut | `refused` (the chunked command answered OK, and "the host was handed paths" with its path), `lone-esc` ("the text after a dropped command lost its first letter") | **caught** |
+| The far side as after the first review, the client's refusal kept | `refused` (answered OK, no path reaches the host: the client drops it), `lone-esc` | **caught**; the client's refusal stops the path alone |
+| The client's refusal cut, the far side fixed | none: the far side refuses the chunked command itself | **not caught** (either layer is enough) |

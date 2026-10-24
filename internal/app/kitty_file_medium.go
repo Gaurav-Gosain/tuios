@@ -113,3 +113,17 @@ func kittyShmHasPath() bool {
 // kittyInTempDir is vt.KittyInTempDir. It is a variable so a test, whose own
 // home is under /tmp, can narrow the temporary directories.
 var kittyInTempDir = vt.KittyInTempDir
+
+// DropRemoteFileMedium drops a file medium command from a pane whose process
+// runs on another machine, with the later chunks of a chunked one.
+func (kp *KittyPassthrough) DropRemoteFileMedium(windowID string, cmd *vt.KittyCommand) {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	kittyPassthroughLog("DropRemoteFileMedium: action=%c medium=%c from a pane on another machine", cmd.Action, cmd.Medium)
+	if cmd.More && (cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace) {
+		if kp.discardingChunks == nil {
+			kp.discardingChunks = make(map[string]bool)
+		}
+		kp.discardingChunks[windowID] = true
+	}
+}

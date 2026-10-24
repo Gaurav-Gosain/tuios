@@ -734,15 +734,17 @@ func TestKittyImagesFreedOnExitAndClose(t *testing.T) {
 }
 
 // A pane on another machine names a file for an upload. The path is a path
-// over there, and this machine's daemon, which answers for the pane, used to
-// open it here: OK, ENOENT and EBADF told the far pane which files exist on
-// this machine. The daemon now refuses every file upload from such a pane
-// without looking at the file.
+// over there. This machine's daemon, which draws the pane, used to open it
+// here: OK, ENOENT and EBADF told the far pane which files exist on this
+// machine. Later it refused every file upload from such a pane. Now the far
+// machine reads the path itself (kitty_link_far.go), so the answers are about
+// the far machine's files, as they are for a pane of its own.
 //
 // The stand-in runs in a pane on alpha and in a pane on this machine, in one
-// session. On alpha every file upload is refused. On this machine the file
-// that exists is OK and the one that does not is ENOENT, which is the
-// positive half: the refusal is about where the pane runs.
+// session. Both must get the same answers: OK for the file that exists, ENOENT
+// for the one that does not, and OK for the temporary file. None may be the
+// old refusal. The two machines share a disk here, so the files are the same;
+// TestKittyFilesFromAPaneOnAHost proves the bytes come from the far side.
 func TestKittyUploadFileFromAnotherMachine(t *testing.T) {
 	bin := buildImageNumbers(t)
 	f := startGlobalFleet(t)
@@ -784,18 +786,16 @@ func TestKittyUploadFileFromAnotherMachine(t *testing.T) {
 		return uploadReplies(t, screen)
 	}
 
-	far := run("alpha")
-	for _, key := range []string{"i=10", "i=11", "i=12"} {
-		if a, ok := far[key]; !ok || !strings.HasPrefix(a.msg, "ENOTSUPPORTED:") {
-			t.Errorf("a pane on alpha uploaded the file %s and was answered %q, want ENOTSUPPORTED", key, a.msg)
+	for name, answers := range map[string]map[string]uploadAnswer{"alpha": run("alpha"), "this machine": run("")} {
+		if a := answers["i=10"]; a.msg != "OK" {
+			t.Errorf("a pane on %s uploaded a file that exists and was answered %q, want OK", name, a.msg)
 		}
-	}
-	here := run("")
-	if a := here["i=10"]; a.msg != "OK" {
-		t.Errorf("a pane on this machine uploaded a file that exists and was answered %q, want OK", a.msg)
-	}
-	if a := here["i=11"]; !strings.HasPrefix(a.msg, "ENOENT:") {
-		t.Errorf("a pane on this machine uploaded a missing file and was answered %q, want ENOENT", a.msg)
+		if a := answers["i=11"]; !strings.HasPrefix(a.msg, "ENOENT:") {
+			t.Errorf("a pane on %s uploaded a missing file and was answered %q, want ENOENT", name, a.msg)
+		}
+		if a := answers["i=12"]; a.msg != "OK" {
+			t.Errorf("a pane on %s uploaded a temporary file and was answered %q, want OK", name, a.msg)
+		}
 	}
 }
 

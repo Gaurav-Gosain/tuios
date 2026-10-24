@@ -49,6 +49,10 @@ func (d *Daemon) verbOpenPane(cs *connState, params json.RawMessage) (any, *verb
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not start a pane on this machine: "+err.Error())
 	}
+	if spec.KittyMedia {
+		// Set before the pump starts, which is on the first attach.
+		hp.kittyLink = d.newKittyLinkFar(cs)
+	}
 
 	LogBasic("Client %s opened pane %s on this machine", cs.clientID, hp.id)
 	cs.takeover = func(br *bufio.Reader) {
@@ -66,6 +70,11 @@ func (d *Daemon) verbOpenPane(cs *connState, params json.RawMessage) (any, *verb
 		out["resume_token"] = hp.resumeToken
 		out["grace"] = int64(hp.grace / time.Second)
 	}
+	if hp.kittyLink != nil {
+		out["kitty_media_token"] = hp.kittyLink.token
+	}
+	// resize-pane takes xpixel and ypixel.
+	out["pixels"] = true
 	return out, nil
 }
 
@@ -126,6 +135,8 @@ func (d *Daemon) verbResizePane(_ *connState, params json.RawMessage) (any, *ver
 		Pane   string `json:"pane"`
 		Width  int    `json:"width"`
 		Height int    `json:"height"`
+		XPixel int    `json:"xpixel"`
+		YPixel int    `json:"ypixel"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -140,7 +151,7 @@ func (d *Daemon) verbResizePane(_ *connState, params json.RawMessage) (any, *ver
 		// caller closes the window on its own side.
 		return nil, newVerbError(ErrVerbUnknownPane, "this machine is not running a pane called "+echoName(p.Pane)+".")
 	}
-	if err := hp.resize(p.Width, p.Height); err != nil {
+	if err := hp.resize(p.Width, p.Height, p.XPixel, p.YPixel); err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not resize the pane: "+err.Error())
 	}
 	return map[string]any{"pane": p.Pane, "width": p.Width, "height": p.Height}, nil

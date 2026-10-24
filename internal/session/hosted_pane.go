@@ -99,6 +99,34 @@ type hostedPane struct {
 
 	// onEnd drops the pane from the daemon's registry when it ends.
 	onEnd func()
+
+	// stop is closed when the pane ends. Nil in a test that builds a pane
+	// by hand.
+	stop chan struct{}
+	// inMu serialises writes into the pty, so an answer this side writes to
+	// the process (kittyReply) is not cut into the owner's keystrokes.
+	inMu sync.Mutex
+	// kittyLink reads the files kitty graphics commands name, for the owner.
+	// Nil when the owner did not ask or the link may not read files. See
+	// kitty_link_far.go.
+	kittyLink *kittyLinkFar
+}
+
+// writeInput writes to the process's pty under inMu.
+func (hp *hostedPane) writeInput(p []byte) {
+	hp.inMu.Lock()
+	defer hp.inMu.Unlock()
+	_, _ = hp.pty.Write(p)
+}
+
+// lockedInput is the pty as the owner's keystrokes reach it: each write
+// under inMu.
+type lockedInput struct{ hp *hostedPane }
+
+func (w lockedInput) Write(p []byte) (int, error) {
+	w.hp.inMu.Lock()
+	defer w.hp.inMu.Unlock()
+	return w.hp.pty.Write(p)
 }
 
 // hostedPaneSpec is what the owning daemon asks for. The terminal type and the
@@ -126,6 +154,10 @@ type hostedPaneSpec struct {
 	Resumable bool `json:"resumable,omitempty"`
 	// Resume reattaches a pane opened with Resumable instead of spawning one.
 	Resume *hostedResume `json:"resume,omitempty"`
+	// KittyMedia asks this side to read the files kitty graphics commands in
+	// the pane name, and hand the owner their bytes (kitty_link_far.go). An
+	// older owner omits it, and the commands go to it as they are.
+	KittyMedia bool `json:"kitty_media,omitempty"`
 }
 
 // hostedResume is what a reattach names: the pane, its secret, and how many
@@ -161,7 +193,7 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 	}
 	// The id and the token exist before the process does, because the
 	// process's environment names the pane.
-	hp := &hostedPane{id: uuid.New().String()}
+	hp := &hostedPane{id: uuid.New().String(), stop: make(chan struct{})}
 	if grace > 0 {
 		hp.grace = grace
 		hp.resumeToken = newHostedCallsToken()
@@ -371,9 +403,12 @@ func (d *Daemon) closeHostedPanes() {
 }
 
 // resize changes the pty's size. It is driven by the owning layout on the
-// other machine, and nothing here has an opinion about it.
-func (hp *hostedPane) resize(width, height int) error {
-	return hp.pty.Resize(clampHostedDim(width), clampHostedDim(height))
+// other machine, and nothing here has an opinion about it. The pixel size
+// goes in the same call; an owner that sends none gets the fallback cell's
+// (see ptyspawn.SetWinsize), never zero, which kitten icat refuses.
+func (hp *hostedPane) resize(width, height, xpixel, ypixel int) error {
+	clampPx := func(v int) int { return min(max(v, 0), 65535) }
+	return ptyspawn.SetWinsize(hp.pty, clampHostedDim(width), clampHostedDim(height), clampPx(xpixel), clampPx(ypixel))
 }
 
 // close kills the process, releases the pty, ends the owner's connection and
@@ -382,6 +417,9 @@ func (hp *hostedPane) resize(width, height int) error {
 // whose shell exited.
 func (hp *hostedPane) close() {
 	hp.closeOnce.Do(func() {
+		if hp.stop != nil {
+			close(hp.stop)
+		}
 		hp.calls.close()
 		if hp.cmd != nil && hp.cmd.Process != nil {
 			_ = hp.cmd.Process.Kill()
@@ -444,7 +482,7 @@ func (d *Daemon) relayHostedPane(cs *connState, br *bufio.Reader, hp *hostedPane
 
 	// The owning daemon's keystrokes. br is used rather than the bare
 	// connection so a byte it buffered ahead of the reply is not lost.
-	_, _ = io.Copy(hp.pty, br)
+	_, _ = io.Copy(lockedInput{hp}, br)
 	close(done)
 	// The owning side hung up, or the link under it dropped. A pane with no
 	// grace goes with it: there is no second reader that could still be
