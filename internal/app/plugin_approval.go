@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The plugin approval dialog: a native plugin waits for the person's answer
@@ -293,7 +292,7 @@ const pluginApprovalMaxRuns = 4
 func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.pluginApproval
 	a := st.open
-	pal := theme.UI()
+	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(pluginApprovalWidth, m.GetRenderWidth())
 	inner := max(width-2, 1)

@@ -651,7 +651,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// the cursor rather than a block glyph drawn in the foreground colour,
 		// and the match count in the accent because it is the answer the search
 		// is for.
-		pal := theme.UI()
+		pal := m.overlayUI()
 		bg := pal.Surface
 		// The prompt names the direction the way vim and tmux do: / searches
 		// down, ? searches up.
