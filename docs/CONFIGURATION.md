@@ -1609,6 +1609,18 @@ A row that waits for a person keeps its attention mark in the gutter. The
 marker glyph is the `marker` role of the glyph set (see [GLYPHS.md](GLYPHS.md)).
 The option is on the settings page, in the Sidebar section.
 
+The focused pane's row in the terminals section carries the mark. Sometimes
+the rail does not show that row. The agents row of the pane then carries the
+mark in its gutter. This occurs in these cases:
+
+- `sections` does not include `terminals`.
+- The rail is narrow and lists an agent pane only in the agents section.
+- The terminals section has no room for the row.
+- The terminals section shows the panes of another session.
+
+The agents row uses the bar or the marker. With `underline` or `pill`, it
+uses the bar.
+
 ## The rail's section headers
 
 `appearance.sidebar.header_style` sets how a section header is drawn:

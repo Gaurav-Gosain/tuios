@@ -9047,3 +9047,15 @@ Run on 2026-10-24 on Linux amd64 with Go 1.27.1 against upstream main at 4364999
 | `focusedOverride` does not fall back to `border_focused_color` | `shared` ("the borders are #afffff and #91e592, want #ff00ff in both modes") | **caught** |
 | `modesApart` returns the terminal colour unchanged | `lightness-no-theme` and `lightness-catppuccin-mocha` ("under 0.08 apart in lightness") | **caught** |
 | Any of the above | `16` passes on main too: the two slots were already 14 and 10. It guards that the change keeps them apart | **not caught, by design** |
+## The agents row marks the focused pane
+
+`TestAgentRowMarksFocusWithoutTerminals` (in `rail_polish_test.go`) sets `sections = "sessions,agents"`, makes two panes, and reports both as `working`. The test requires the focus mark in the rail gutter of the focused agent row and a blank gutter on the other row. It then focuses the other pane and requires the mark to move. It runs at 16 colours and at truecolor, and saves a PNG of each frame.
+
+Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The fix removed | upstream main at 43649994b | both cases: "the focused agent row carries no focus mark" | **caught** |
+| The agent row keeps the compact-rail rule | `focusMark` set to `e.Focused && width <= sidebarCompactWidth && terminals in the layout`, which is the old rule | both cases: "the focused agent row carries no focus mark" | **caught** |
+
+Not covered end to end: the terminals row scrolled out of a short rail, and a peek of another session. The same `focusDrawn` check covers them.

@@ -527,9 +527,8 @@ type sidebarAgentEntry struct {
 	Foreign bool
 	// Host is the machine the pane's session is on, empty for this one.
 	Host string
-	// Focused marks the attached session's focused pane. On a compact rail the
-	// terminals section leaves agent panes to this section, so the focus mark
-	// goes on this row.
+	// Focused marks the attached session's focused pane. When the terminals
+	// section does not draw that pane's row, the focus mark goes on this row.
 	Focused bool
 	// Fold is set on the one entry that stands for the rows at rest the
 	// section folded away: how many, and FoldNames names them. It is no pane.
@@ -1859,6 +1858,21 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 	m.sidebarRecordAgentAnchor(agents, start[sidebarSectionAgents], count[sidebarSectionAgents])
 	m.sidebarRecordReveal()
+	// Whether this frame draws the focused pane's terminals row, which is the
+	// row that carries the focus mark. When it does not, the agents row of that
+	// pane carries the mark instead, so the rail never loses the pane you are
+	// in: the layout may leave terminals out, the compact rule may take the
+	// pane out of it, a short rail may scroll the row away, and a peek shows
+	// another session's panes in its place.
+	focusDrawn := false
+	if !peeking && !emptyPeek {
+		for i := range count[sidebarSectionTerminals] {
+			if terminals[start[sidebarSectionTerminals]+i].Focused {
+				focusDrawn = true
+				break
+			}
+		}
+	}
 
 	// The scroll thumb of every section with rows out of view, drawn in the
 	// edge rule's own cell beside the section's rows. It takes no column from
@@ -2262,7 +2276,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
-			row, bodyW := m.sidebarAgentRow(e, variant, cw, pal, st, tall)
+			row, bodyW := m.sidebarAgentRow(e, variant, cw, pal, st, tall, e.Focused && !focusDrawn)
 			// A working agent's name is where the shimmer sweeps. Recorded
 			// only for that state, so a rail with no working agent records
 			// nothing and the motion clock never starts. See shimmer.go.
@@ -3316,7 +3330,10 @@ func sidebarNoteSentence(name string) bool {
 //
 // It also returns how many columns the name and the tokens around it take, from
 // sidebarNameCol, which is the span the working shimmer sweeps.
-func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) (string, int) {
+//
+// focusMark puts the focus mark in the row's gutter. The caller sets it on the
+// focused pane's row when no terminals row on the rail marks that pane.
+func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall, focusMark bool) (string, int) {
 	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
@@ -3414,7 +3431,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		right += sidebarStyle(rowBg, pal.AccentBright).Render(mail)
 	}
 	// An agent row is only ever "current" through the pane it points at, which
-	// the terminals section already marks, so its gutter carries severity, and
+	// the terminals section usually marks, so its gutter carries severity, and
 	// below that the fact that the pane is somewhere else. The mark is drawn on
 	// foreign rows only, so it says "not from here" on a terminal with no colour
 	// and says which session on one with colour. It is the answer the prefix
@@ -3425,9 +3442,10 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 		}
 	}
-	// On a compact rail this is the pane's only row, so it carries the focus
-	// mark the terminals row would have.
-	if e.Focused && m.GetSidebarWidth() <= sidebarCompactWidth && sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
+	// When no terminals row marks the focused pane, this row carries the mark
+	// the terminals row would have. The state glyph and the bold name still
+	// say that the pane wants a human.
+	if focusMark {
 		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, m.rowGround(rowBg)), rowBg, pal, &m.Settings)
 	}
 	body := shown +
