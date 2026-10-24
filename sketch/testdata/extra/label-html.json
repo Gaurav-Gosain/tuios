@@ -1,0 +1,80 @@
+[
+ {
+  "src": "flowchart LR\n  A[\"List<T>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<T>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"a <u>underlined</u> word\"]\n  B[\"<u>all of it</u>\"]"
+ },
+ {
+  "src": "kanban\n  todo[Todo]\n    t1[<u>card</u>]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <cite>tagged</cite> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <dfn>tagged</dfn> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <var>tagged</var> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <kbd>tagged</kbd> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <samp>tagged</samp> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <tt>tagged</tt> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"plain <ins>tagged</ins> plain\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<span title=x>red</span> and <small>print</small><img src=x>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<b>bold</b> and <T>\"]"
+ },
+ {
+  "src": "flowchart TD\n  A[\"Call <code>render()</code> once\"]"
+ },
+ {
+  "src": "flowchart TD\n  A[\"<code>render()</code>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"H<sub>2</sub>O\"] --> B[\"x<sup>2</sup>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<b>H<sub>2</sub>O</b>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"x<sup>a<sub>b</sub>c</sup>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<sup>a<sub>b<sup>c</sup>d</sub>e</sup>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<sup>a<sub>b<br/>c</sub>d</sup>\"]"
+ },
+ {
+  "src": "stateDiagram-v2\n  s1\n  note right of s1 : <sub>2</sub>"
+ },
+ {
+  "src": "sequenceDiagram\n  Alice->>Bob: Map<K, V> and <kbd>Ctrl</kbd>+<kbd>C</kbd>\n  Bob-->>Alice: e = mc<sup>2</sup>"
+ },
+ {
+  "src": "classDiagram\n  class Box~T~\n  Box : +List<T> items\n  Box : +get() <code>T</code>"
+ },
+ {
+  "src": "mindmap\n  root((H<sub>2</sub>O))\n    <u>water</u>\n    <code>H2O</code>"
+ },
+ {
+  "src": "flowchart LR\n  A[\"<b>bold <code>mono <sub>low</sub></code></b> <i>it<ins>u</ins></i>\"]"
+ },
+ {
+  "src": "flowchart LR\n  A[\"a long label with <code>code</code> and <sup>sup</sup> that wraps over a few lines\"]"
+ }
+]

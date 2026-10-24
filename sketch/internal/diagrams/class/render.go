@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/class/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/class/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package class
 
@@ -151,7 +151,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	tinyHeight := js.Round(tiny * 1.4)
 	measurer := options.Measurer
 	if measurer == nil {
-		measurer = text.DefaultMeasurer(options.FontFamily, "")
+		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	pad := types.Or(options.Padding, 8)
 	// Keep annotations and cardinalities literal unless math is typeset.
@@ -512,9 +512,11 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	sides := map[int][]*End{}
 	var sideKeys []int
 	type cardItem struct {
-		text string
-		math *text.Label
-		x, y float64
+		text   string
+		math   *text.Label
+		x, y   float64
+		w, h   float64
+		parent int
 	}
 	var cards []cardItem
 	attach := func(i int, at int, item int, room float64, order int) *End {
@@ -703,7 +705,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	minY := 0.0
 	maxX := lay.Width
 	maxY := lay.Height
-	card := func(raw string, width, x, y float64, side int, after bool) {
+	card := func(parent int, raw string, width, x, y float64, side int, after bool) {
 		if raw == "" {
 			return
 		}
@@ -737,7 +739,7 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 				cy += 3 + h/2
 			}
 		}
-		cards = append(cards, cardItem{text: text.DecodeEntities(raw), math: m, x: cx, y: cy})
+		cards = append(cards, cardItem{text: text.DecodeEntities(raw), math: m, x: cx, y: cy, w: width, h: h, parent: parent})
 		minX = math.Min(minX, cx-width/2)
 		maxX = math.Max(maxX, cx+width/2)
 		minY = math.Min(minY, cy-h/2)
@@ -756,8 +758,10 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			view := views[ce.Src]
 			x := c.X + view.w/2
 			spread := math.Min(view.h/2-4, 8+float64(float64(k)*6))
-			card(edge.StartLabelRight, startRoom[i], x, c.Y-spread, 1, false)
-			card(edge.EndLabelLeft, endRoom[i], x, c.Y+spread, 1, true)
+			card(ce.Src, edge.StartLabelRight, startRoom[i], x, c.Y-spread, 1, false)
+			card(ce.Dst, edge.EndLabelLeft, endRoom[i], x, c.Y+spread, 1, true)
+			ce.LabelX = c.X + view.w/2 + LOOP + float64(k*8) + 4 + ce.LabelW/2
+			ce.LabelY = c.Y
 		} else if len(route) >= 6 {
 			last := len(route) - 3
 			from := starts[i]
@@ -770,8 +774,28 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			if to != nil {
 				toSide, toAfter = to.side, to.after
 			}
-			card(edge.StartLabelRight, startRoom[i], route[0], route[1], fromSide, fromAfter)
-			card(edge.EndLabelLeft, endRoom[i], route[last], route[last+1], toSide, toAfter)
+			card(ce.Src, edge.StartLabelRight, startRoom[i], route[0], route[1], fromSide, fromAfter)
+			card(ce.Dst, edge.EndLabelLeft, endRoom[i], route[last], route[last+1], toSide, toAfter)
+		}
+	}
+
+	if options.MaxWidth != nil && *options.MaxWidth > 0 && maxX-minX+float64(2*pad) > *options.MaxWidth {
+		available := *options.MaxWidth
+		cardNodes := make([]*layout.CNode, len(cards))
+		for i, item := range cards {
+			cardNodes[i] = layout.Cnode(item.w, item.h, item.parent)
+			cardNodes[i].X = item.x
+			cardNodes[i].Y = item.y
+		}
+		all := append(append(make([]*layout.CNode, 0, len(cnodes)+len(cardNodes)), cnodes...), cardNodes...)
+		if wrapped, ok := layout.WrapComponents(all, cedges, math.Max(1, available-float64(2*pad)), numberOption(conf, "nodeSpacing", NODE_SEP)); ok {
+			for i := range cards {
+				cards[i].x = cardNodes[i].X
+				cards[i].y = cardNodes[i].Y
+			}
+			minX, minY = 0, 0
+			maxX = wrapped.Width
+			maxY = wrapped.Height
 		}
 	}
 
@@ -952,8 +976,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 				Edx: -1,
 				Edy: 0,
 			}
-			ce.LabelX = c.X + view.w/2 + reach + 4 + ce.LabelW/2
-			ce.LabelY = c.Y
 		} else {
 			route := ce.Route
 			for k := 0; k+1 < len(route); k += 3 {

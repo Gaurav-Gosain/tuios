@@ -1,4 +1,4 @@
-// Ported from pele src/detect.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/detect.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package sketch
 
@@ -44,7 +44,7 @@ var detectors = []detector{
 	{typ: "mindmap", mt: "mindmap", kw: "mindmap"},
 	{typ: "architecture", mt: "architecture", kw: "architecture"},
 	{typ: "agentflow", mt: "agentflow", kw: "agentflow-beta", rest: wordEnd}, // agentflow-beta\b
-	{typ: "c4", mt: "c4", kw: "C4Context"},                                   // see detect
+	{typ: "c4", mt: "c4", kw: "C4Context"},                                   // see c4Keywords
 	{typ: "kanban", mt: "kanban", kw: "kanban"},
 	{typ: "class", mt: "classDiagram", kw: "classDiagram"},
 	{typ: "er", mt: "er", kw: "erDiagram"},
@@ -82,12 +82,13 @@ var detectors = []detector{
 	{typ: "usecase", mt: "usecase", kw: "usecase-beta", rest: func(r string) bool { return spaceOrEnd(r, -1) }},  // (?:\s|$)
 }
 
-// detectPrefix bounds the text a detector is run on. Every detector but C4's
-// reads only the keyword after the leading whitespace.
+// detectPrefix bounds the text a detector is run on. Every detector reads only
+// the keyword after the leading whitespace.
 const detectPrefix = 64
 
-// /^\s*C4Context|C4Container|.../ matches the last four anywhere.
-var c4Anywhere = []string{"C4Container", "C4Component", "C4Dynamic", "C4Deployment"}
+// /^\s*(?:C4Context|C4Container|...)/: the other four keywords of C4, besides
+// the one in its detector.
+var c4Keywords = []string{"C4Container", "C4Component", "C4Dynamic", "C4Deployment"}
 
 func detect(cleaned string) (Type, bool) {
 	d, ok := detectDiagram(cleaned)
@@ -111,8 +112,8 @@ func detectDiagram(cleaned string) (detected, bool) {
 			return detected{d.typ, d.mt}, true
 		}
 		if d.typ == "c4" {
-			for _, w := range c4Anywhere {
-				if strings.Contains(cleaned, w) {
+			for _, w := range c4Keywords {
+				if strings.HasPrefix(head, w) {
 					return detected{d.typ, d.mt}, true
 				}
 			}

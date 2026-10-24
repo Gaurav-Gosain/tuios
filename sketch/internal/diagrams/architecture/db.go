@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/architecture/db.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/architecture/db.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // An optional text of pele's model is "" here for none: pele reads each of them only for
 // its truthiness or as text, and an id is never empty.

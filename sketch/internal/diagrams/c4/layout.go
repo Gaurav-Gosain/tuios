@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/c4/layout.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/c4/layout.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package c4
 
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	"tuios.dev/sketch/internal/svg"
 	"tuios.dev/sketch/internal/text"
 )
 
@@ -14,7 +15,10 @@ const SHAPE_W = 216
 const SHAPE_MIN_H = 64
 const PAD_X = 14
 const PAD_Y = 12
-const GAP_X = 100
+
+// Room between two columns for the label of a line across them, clear of an arrowhead on either side,
+// with an arrowhead's length to spare for a word a little wider than the label room.
+const GAP_X = NARROW + LABEL_PAD + 3*svg.ARROW
 const GAP_Y = 88
 
 // GROUP_PAD is room for a relation to run along the inside of a boundary.

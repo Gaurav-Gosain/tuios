@@ -1,4 +1,4 @@
-// Ported from pele src/text/measurer.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/text/measurer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // The canvas measurer is browser only and is not ported. defaultMeasurer always
 // gives the metrics measurer, which is what pele uses outside a browser.
@@ -16,7 +16,14 @@ const (
 	Bold   = 1
 	Italic = 2
 	Mono   = 4
+	Sub    = 8
+	Sup    = 16
+	// Underline is the style of <u> and <ins>.
+	Underline = 32
 )
+
+// smaller is the approximate divisor for CSS font-size="smaller".
+const smaller = 1.2
 
 // TextMeasurer gives the width of text at a font size in a style.
 type TextMeasurer interface {
@@ -50,7 +57,8 @@ func isWide(c rune) bool {
 }
 
 func isZeroWidth(c rune) bool {
-	return (c >= 0x300 && c <= 0x36f) ||
+	return c == 0xad ||
+		(c >= 0x300 && c <= 0x36f) ||
 		(c >= 0x200b && c <= 0x200f) ||
 		(c >= 0xdc00 && c <= 0xdfff) ||
 		(c >= 0xfe00 && c <= 0xfe0f) ||
@@ -68,6 +76,10 @@ func (metrics) Width(text string, size float64, style int) float64 {
 		bold = unpack(BOLD)
 	})
 	mono := style&Mono != 0
+	eff := size
+	if style&(Sub|Sup) != 0 {
+		eff = size / smaller
+	}
 	table := regular
 	if style&Bold != 0 {
 		table = bold
@@ -102,7 +114,7 @@ func (metrics) Width(text string, size float64, style int) float64 {
 			units += 580
 		}
 	}
-	return (float64(units) * size) / 1000
+	return (float64(units) * eff) / 1000
 }
 
 // DefaultMeasurer is the measurer used when the host gives none.

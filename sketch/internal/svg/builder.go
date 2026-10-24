@@ -1,4 +1,4 @@
-// Ported from pele src/svg/builder.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/svg/builder.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 // Package svg writes the SVG that every diagram type shares: text, shapes,
 // edges, clusters and the root element.
@@ -281,8 +281,12 @@ func mathSvg(math *text.MathMarkup, box string, size float64, attrs string) stri
 }
 
 const (
-	BOLD   = ` font-weight="var(--_w)"`
-	ITALIC = ` font-style="italic"`
+	BOLD      = ` font-weight="var(--_w)"`
+	ITALIC    = ` font-style="italic"`
+	UNDERLINE = ` text-decoration="underline"`
+	MONO      = ` font-family="var(--_fm)"`
+	SUB       = ` baseline-shift="sub" font-size="smaller"`
+	SUP       = ` baseline-shift="super" font-size="smaller"`
 )
 
 func SpanStyle(style int) string {
@@ -293,13 +297,24 @@ func SpanStyle(style int) string {
 	if style&text.Italic != 0 {
 		s += ITALIC
 	}
+	if style&text.Mono != 0 {
+		s += MONO
+	}
+	if style&text.Underline != 0 {
+		s += UNDERLINE
+	}
+	if style&text.Sub != 0 {
+		s += SUB
+	} else if style&text.Sup != 0 {
+		s += SUP
+	}
 	return s
 }
 
 // SharedStyle is the emphasis every span of a label has. It is written once, on the text element, where a
 // CSS rule for the label reaches it.
 func SharedStyle(label text.Label) int {
-	shared := text.Bold | text.Italic
+	shared := text.Bold | text.Italic | text.Mono
 	any := false
 	for _, line := range label.Lines {
 		for _, span := range line {
@@ -323,6 +338,9 @@ func TextStyle(attrs string, shared int) string {
 	}
 	if shared&text.Italic != 0 && !strings.Contains(attrs, ` font-style="`) {
 		attrs += ITALIC
+	}
+	if shared&text.Mono != 0 && !strings.Contains(attrs, ` font-family="`) {
+		attrs += MONO
 	}
 	return attrs
 }

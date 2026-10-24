@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/common/scan.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/common/scan.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 //
 // The port reads UTF-8 bytes. A step past a character steps the whole character. pele
 // reads a character outside the BMP as two UTF-16 units, so the unit after one is a low

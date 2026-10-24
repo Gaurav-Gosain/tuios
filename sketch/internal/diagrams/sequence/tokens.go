@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/tokens.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/sequence/tokens.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 // Package sequence parses and draws Mermaid sequence diagrams.
 package sequence

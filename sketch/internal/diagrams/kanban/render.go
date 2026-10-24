@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/kanban/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/kanban/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package kanban
 
@@ -121,7 +121,7 @@ func fitLabel(raw string, markdown bool, measurer text.TextMeasurer, size, max f
 func textBlock(b *strings.Builder, label text.Label, x, y float64, attrs string, icons text.IconResolver, end bool) {
 	for i, line := range label.Lines {
 		cy := y + text.LineMiddle(label, i)
-		if len(line) == 1 && line[0].Icon == "" && line[0].Math == nil {
+		if len(line) == 1 && line[0].Icon == "" && line[0].Math == nil && line[0].Style&(text.Sub|text.Sup|text.Underline) == 0 {
 			svg.WriteStrings(b, `<text`, svg.TextStyle(attrs, line[0].Style), ` x="`, svg.Num(x), `" y="`, svg.Num(cy+float64(label.Size*0.35)), `"`)
 			if end {
 				b.WriteString(` text-anchor="end"`)
@@ -156,7 +156,7 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 	smallLine := js.Round(small * 1.5)
 	measurer := options.Measurer
 	if measurer == nil {
-		measurer = text.DefaultMeasurer(options.FontFamily, "")
+		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	pad := types.Or(options.Padding, 8)
 	icons := options.Icons

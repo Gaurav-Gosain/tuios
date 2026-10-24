@@ -11,7 +11,7 @@ the Mermaid contributors. pele is under the MIT licence, copyright kepano.
 the commit that the port follows:
 
 ```sh
-cd pele && git checkout 8fad23bd51783e4df1204e177a7fb0d2a30dcd13
+cd pele && git checkout e7f092a4de147cc32210913c20e36eaa5fcd0ef1
 npm ci && npm run build
 node /path/to/sketch/testdata/golden/gen.mjs /path/to/pele /path/to/sketch/testdata/golden
 ```
@@ -34,7 +34,7 @@ To write the gantt goldens again, run `gen.mjs` with `TZ=Asia/Dubai`.
 ## Extra cases
 
 `testdata/extra` holds cases that the corpus does not cover. Each JSON file is
-a list of `{"src": ..., "maxWidth": ..., "math": true}`, and `golden/` holds pele's SVG for
+a list of `{"src": ..., "maxWidth": ..., "idPrefix": ..., "autoDirection": ..., "math": true}`, and `golden/` holds pele's SVG for
 each case. `TestGoldenExtra` compares them. To write them again:
 
 ```sh

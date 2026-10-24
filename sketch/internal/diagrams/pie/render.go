@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/pie/render.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13.
+// Ported from pele src/diagrams/pie/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
 
 package pie
 
@@ -81,7 +81,7 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 	small := js.Round(size * 0.875)
 	measurer := options.Measurer
 	if measurer == nil {
-		measurer = text.DefaultMeasurer(options.FontFamily, "")
+		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	pad := types.Or(options.Padding, 8)
 
