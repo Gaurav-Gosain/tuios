@@ -76,7 +76,7 @@ func (d *Daemon) pluginAuthority(cs *connState) *paneAuth {
 
 // checkPluginGrants holds a call from a native plugin to its grants, across
 // every session.
-func (d *Daemon) checkPluginGrants(verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
+func (d *Daemon) checkPluginGrants(cs *connState, verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
 	if verb == "respond" {
 		return nil, deny("a plugin cannot answer a prompt. Only the person or a pane given respond does that")
 	}
@@ -111,7 +111,7 @@ func (d *Daemon) checkPluginGrants(verb string, pa *paneAuth, params json.RawMes
 		}
 	}
 	if typingVerbs[verb] {
-		return d.holdTypingTarget(verb, pa, params, deny)
+		return d.holdTypingTarget(cs, verb, pa, params, deny)
 	}
 	return params, nil
 }

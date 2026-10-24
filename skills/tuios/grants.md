@@ -65,9 +65,11 @@ Typing into another pane on `needs_input` is refused unless you hold
 A pane that something other than itself moved off `needs_input` is refused the
 same way, because its prompt can still be on the screen. This lasts until the
 pane reports for itself, comes to a prompt again, or runs another program.
+With `respond`, `send-text`, `send-keys` and `paste-buffer` into a pane on
+`needs_input` still need `--allow-blocked`, which says you read the prompt.
 A permission prompt is for the person. `queue` waits until the pane is at rest,
-so it is not refused for this. Without `respond`, `send-keys` with no window
-types into the focused pane, `PREFIX` is refused, and `run-command` may not
+so it is not refused for this. From a pane, `send-text` and `send-keys` need
+`-w`. Without `respond`, `PREFIX` is refused, and `run-command` may not
 type, press keys or run an action. A message you queue is checked against your
 grants again when it is typed, and dropped if they no longer cover the
 target. Your keys always go to the target's terminal, never to the

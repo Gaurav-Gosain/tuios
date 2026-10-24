@@ -135,7 +135,7 @@ func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *v
 			return nil, verr
 		}
 	}
-	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
+	sess, target, repo, verr := d.reviewTarget(cs, p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}

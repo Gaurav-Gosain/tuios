@@ -62,7 +62,7 @@ func (a *attentionStore) holdDetail(requestID string) (approvalHold, []string, b
 }
 
 // verbGetApproval answers get-approval: a running hold, whole.
-func (d *Daemon) verbGetApproval(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbGetApproval(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p getApprovalParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -72,7 +72,7 @@ func (d *Daemon) verbGetApproval(_ *connState, params json.RawMessage) (any, *ve
 	}
 	h, scope, ok := d.attention.holdDetail(p.RequestID)
 	if ok && p.Session != "" {
-		sess, verr := d.resolveVerbSession(p.Session)
+		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
 			return nil, verr
 		}

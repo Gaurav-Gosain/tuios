@@ -174,7 +174,7 @@ func verbErrorJSON(err error) map[string]any {
 // runSendKeys sends keystrokes to a running TUIOS session over the verb
 // protocol, and says where they went: the window the daemon wrote them to, or
 // the attached client. repeat 0 or 1 sends the sequence once.
-func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, jsonOutput bool) error {
+func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -192,6 +192,9 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 	// takes a call that does not use it.
 	if repeat > 1 {
 		params["repeat"] = repeat
+	}
+	if allowBlocked {
+		params["allow_blocked"] = true
 	}
 	raw2, err := t.client.Call("send-keys", t.params(params))
 	if err != nil {
@@ -749,18 +752,23 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 // runSendText writes text verbatim to a pane's PTY. Unlike send-keys it parses
 // nothing, so a trailing newline in the argument is the Enter that submits the
 // line, and one call is enough to type and run a command.
-func runSendText(sessionName, windowTarget, text string, jsonOutput bool) error {
+func runSendText(sessionName, windowTarget, text string, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	raw, err := t.client.Call("send-text", t.params(map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"text":    text,
-	}))
+	}
+	// Sent only when set, so a call without it works against an older daemon.
+	if allowBlocked {
+		params["allow_blocked"] = true
+	}
+	raw, err := t.client.Call("send-text", t.params(params))
 	if err != nil {
 		return t.explain("send-text", err)
 	}
