@@ -16,8 +16,8 @@ tuios set-agent-state none -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID"    # clear it
 The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored` and
 `unknown`. `unknown` is what the daemon writes to a pane it has lost track of:
 an agent is there and nothing says what it is doing, so `ask-agent` and `fan`
-do not type into it. With no `-w` the report lands on the focused window, which
-is wrong when you are not the focused pane.
+do not type into it. From inside a pane, a report with no `-s` and no `-w` is
+about that pane. From outside every pane, it lands on the focused window.
 
 `get-agent-state` and `list-agents` also report `needs_you` (true for
 `needs_input` and `errored`), `blocked_by` (`approval`, `question` or `auth`,

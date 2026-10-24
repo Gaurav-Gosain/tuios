@@ -182,15 +182,7 @@ func runAskAgentSelect(selector, from, text string, readyTimeout, settle, timeou
 		}
 	}
 	// The asks run at once, so the whole call takes as long as the slowest.
-	ready, overall := readyTimeout, timeout
-	if ready <= 0 {
-		ready = 30000
-	}
-	if overall <= 0 {
-		overall = 300000
-	}
-	grace := time.Duration(ready+overall)*time.Millisecond + 10*time.Second
-	raw, err := callWithSelection(client, "ask-agent", params, grace, c)
+	raw, err := callWithSelection(client, "ask-agent", params, askGrace(readyTimeout, timeout), c)
 	if err != nil {
 		return reportVerbError(explainVerbError("ask-agent", err), jsonOutput)
 	}

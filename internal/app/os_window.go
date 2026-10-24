@@ -13,8 +13,14 @@ import (
 )
 
 // ToggleFloating toggles the focused window between floating and tiled mode.
+// A TML surface moves between a popup and a tiled pane instead, with its
+// state, through the daemon: see tml_place.go.
 func (m *OS) ToggleFloating() {
 	fw := m.GetFocusedWindow()
+	if m.DrawsTML(fw) {
+		m.queueTMLCmd(m.tmlTogglePlacement(fw))
+		return
+	}
 	// A popup is always floating. Tiling one put it in the layout tree, where
 	// it took a slot from the panes and every peer read the tree back.
 	if fw == nil || fw.IsPopup || fw.IsScratch {
@@ -24,52 +30,62 @@ func (m *OS) ToggleFloating() {
 	fw.IsFloating = !fw.IsFloating
 
 	if fw.IsFloating {
-		// Lift the pane out of the tiling structure. The strip and the tree are
-		// asked the way a peer's sync asks them (ApplyStateSync): the BSP call
-		// used to be the only one here, and it does nothing under a scrolling
-		// layout, so the float kept its column and the strip laid an empty slot
-		// out where it had been, while every peer removed it.
-		if m.AutoTiling {
-			if m.UseScrollingLayout {
-				// Not ScrollingOnWindowRemoved: that is for a pane that closed
-				// and moves the focus to the strip's column, and the pane the
-				// user just floated is the pane they are still in.
-				sl := m.GetOrCreateScrollingLayout()
-				sl.RemoveWindow(m.GetWindowIntID(fw.ID))
-				m.ScrollingSetPositions()
-			} else if m.UseBSPLayout {
-				m.RemoveWindowFromBSPTree(fw)
-			} else {
-				// Master-stack has no tree to take the pane out of. The BSP
-				// call above ends in ApplyBSPLayout, which would lay the
-				// rest out as BSP.
-				m.TileAllWindows()
-			}
-		}
-		fw.SetTiled(false)
-		fw.InvalidateCache()
-		m.RecalcZOrder()
+		m.liftFromLayout(fw)
 		m.ShowNotification("Window: floating", "info", m.Settings.NotificationDuration)
 	} else {
-		// Re-add to tiling layout when unfloating
-		if m.AutoTiling {
-			if m.UseScrollingLayout {
-				intID := m.GetWindowIntID(fw.ID)
-				sl := m.GetOrCreateScrollingLayout()
-				if !sl.HasWindow(intID) {
-					sl.AddColumn(intID)
-				}
-				m.TileAllWindows()
-			} else if m.UseBSPLayout {
-				m.AddWindowToBSPTree(fw)
-			} else {
-				m.TileAllWindows()
-			}
-		}
-		fw.InvalidateCache()
-		m.RecalcZOrder()
+		m.addToLayout(fw)
 		m.ShowNotification("Window: tiled", "info", m.Settings.NotificationDuration)
 	}
+}
+
+// liftFromLayout takes a window that just floated out of the tiling
+// structure.
+func (m *OS) liftFromLayout(fw *terminal.Window) {
+	// Lift the pane out of the tiling structure. The strip and the tree are
+	// asked the way a peer's sync asks them (ApplyStateSync): the BSP call
+	// used to be the only one here, and it does nothing under a scrolling
+	// layout, so the float kept its column and the strip laid an empty slot
+	// out where it had been, while every peer removed it.
+	if m.AutoTiling {
+		if m.UseScrollingLayout {
+			// Not ScrollingOnWindowRemoved: that is for a pane that closed
+			// and moves the focus to the strip's column, and the pane the
+			// user just floated is the pane they are still in.
+			sl := m.GetOrCreateScrollingLayout()
+			sl.RemoveWindow(m.GetWindowIntID(fw.ID))
+			m.ScrollingSetPositions()
+		} else if m.UseBSPLayout {
+			m.RemoveWindowFromBSPTree(fw)
+		} else {
+			// Master-stack has no tree to take the pane out of. The BSP
+			// call above ends in ApplyBSPLayout, which would lay the
+			// rest out as BSP.
+			m.TileAllWindows()
+		}
+	}
+	fw.SetTiled(false)
+	fw.InvalidateCache()
+	m.RecalcZOrder()
+}
+
+// addToLayout puts a window that stopped floating into the tiling layout.
+func (m *OS) addToLayout(fw *terminal.Window) {
+	if m.AutoTiling {
+		if m.UseScrollingLayout {
+			intID := m.GetWindowIntID(fw.ID)
+			sl := m.GetOrCreateScrollingLayout()
+			if !sl.HasWindow(intID) {
+				sl.AddColumn(intID)
+			}
+			m.TileAllWindows()
+		} else if m.UseBSPLayout {
+			m.AddWindowToBSPTree(fw)
+		} else {
+			m.TileAllWindows()
+		}
+	}
+	fw.InvalidateCache()
+	m.RecalcZOrder()
 }
 
 // installPassthroughs registers every emulator callback for a window, under

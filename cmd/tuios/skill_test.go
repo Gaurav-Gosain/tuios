@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/skills"
 )
 
@@ -51,6 +52,61 @@ func TestSkillInlineCommandsResolve(t *testing.T) {
 			t.Errorf("the skill names %q, which the tree does not have: %v", name, err)
 		}
 	}
+}
+
+// TestSkillTableCommandsResolve resolves the commands the core shows in its
+// tables and prose, as `tuios ...` code spans, and the commands in the hint
+// the SessionStart hook gives an agent. An agent pastes these as they stand,
+// so they are held to the tree like the fenced ones.
+func TestSkillTableCommandsResolve(t *testing.T) {
+	spans := tuiosSpansIn(skills.Core())
+	spans = append(spans, tuiosSpansIn(integration.SessionStartHint("3a42ab8f", "work"))...)
+	if len(spans) < 20 {
+		t.Fatalf("expected the core and the hint to show many commands in code spans, found %d", len(spans))
+	}
+	for _, args := range spans {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root := newRootCommand()
+			cmd, rest, err := root.Find(args)
+			if err != nil {
+				t.Fatalf("no such command: %v", err)
+			}
+			if cmd == root && len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+				t.Fatalf("%q is not a tuios command", rest[0])
+			}
+			if err := cmd.ParseFlags(rest); err != nil {
+				t.Fatalf("flags rejected: %v", err)
+			}
+		})
+	}
+}
+
+// tuiosSpansIn extracts every `tuios ...` inline code span outside the shell
+// fences. A span may be a bare command name with its arguments left out, so
+// only the command and its flags are checked, not the argument count.
+func tuiosSpansIn(doc string) [][]string {
+	var found [][]string
+	inFence := false
+	for line := range strings.SplitSeq(doc, "\n") {
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		parts := strings.Split(line, "`")
+		for i := 1; i < len(parts); i += 2 {
+			for _, words := range shellCalls(parts[i]) {
+				// tuios --skill TOPIC is a root flag that takes a topic,
+				// which Find would read as a command.
+				if len(words) >= 2 && words[0] == "tuios" && words[1] != "--skill" {
+					found = append(found, words[1:])
+				}
+			}
+		}
+	}
+	return found
 }
 
 // tuiosCommandsIn extracts every `tuios ...` invocation from the skill's shell

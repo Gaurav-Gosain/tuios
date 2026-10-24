@@ -322,7 +322,9 @@ func TestAgentsOffRespondGrantStillHolds(t *testing.T) {
 
 	// A types y and Enter into B, from a shell in A.
 	// The quotes keep the typed line itself from matching the marker.
-	answer := tuiosBin + " send-keys -s rail -w PROMPTPANE 'y Enter'; echo RESP_\"EXIT\"=$?\n"
+	// Only the part of the refusal that names the grant reaches the pane:
+	// the whole message is long enough to scroll it off a small pane.
+	answer := "e=$(mktemp); " + tuiosBin + " send-keys -s rail -w PROMPTPANE 'y Enter' 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; echo RESP_\"EXIT\"=$s\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "rail", "-w", "AGENTPANE", answer); err != nil {
 		t.Fatalf("send-text into A: %v\n%s", err, out)
 	}
@@ -339,7 +341,6 @@ func TestAgentsOffRespondGrantStillHolds(t *testing.T) {
 	}
 	a, _ := tuiosCLI(t, base, "capture-pane", "-s", "rail", "-w", "AGENTPANE")
 	// The pane wraps the message, so it is read with its line breaks folded.
-	// Its start can scroll off a short pane; the end names the grant.
 	if flat := strings.Join(strings.Fields(a), " "); !strings.Contains(flat, "RESP_EXIT=1") || !strings.Contains(flat, "needs the respond grant") {
 		t.Errorf("ASSERTION: A was not refused for the respond grant:\n%s", a)
 	}

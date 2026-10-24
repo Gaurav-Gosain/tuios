@@ -116,7 +116,7 @@ func TestVerbErrorHints(t *testing.T) {
 			wantHint: map[string]string{
 				"param":   "window",
 				"verb":    "list-windows",
-				"command": "tuios list-windows --json",
+				"command": "tuios list-windows -s work",
 			},
 		},
 		{
