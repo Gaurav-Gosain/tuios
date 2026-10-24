@@ -13,6 +13,9 @@ status boards and yes/no questions.
    `error`, `info`, `series1` to `series6`. `#ff0000` is refused.
 3. Bindings read the state: `{state.passed}`, `{len(state.failures)}`,
    `{pct(state.ok, state.total)}`. No loops, no assignment.
+   A data attribute takes a state path with no braces: `rows="state.services"`.
+   A component that holds nothing takes its text in attributes:
+   `<stat label="Passed" value="{state.passed}"/>`.
 4. Actions run on a key or a click: `set('state.x', v)` and `toggle('state.x')`
    change the state; `emit('name', v)` tells you; `close(v)` ends the surface
    with a value; `copy(v)` copies; `pane('send-text', state.run)` acts on a
@@ -24,17 +27,95 @@ status boards and yes/no questions.
 
 ## Components
 
-| Group | Components |
-| --- | --- |
-| Layout | `row`, `col`, `grid`, `stack`, `spacer`, `scroll`, `split` |
-| Text | `text` (with `b`, `i`, `code`, `c role=`, `kbd`), `heading`, `code` |
-| Data | `table` (`rows`, `key`, `sort`, `select`, `on-select`, `column field title w align format`), `list`, `kv`, `stat`, `tree` |
-| Charts | `bar`, `line`, `area`, `sparkline`, `gauge`, `progress`, `histogram`, `heatmap`, `pie` |
-| Containers | `card`, `tabs` with `tab`, `modal`, `toast` |
-| Status | `badge`, `status`, `spinner`, `button` (`key`, `kind="primary"`, `on-press`) |
+<!-- BEGIN generated from tml/catalog.go: go generate ./skills -->
+Each line gives a component, its attributes and what it holds.
+`*` marks a required attribute. `a|b` lists the accepted values.
+`=path` marks a data attribute. It takes a state path such as `state.rows`, with no braces.
+Every component also takes as each grow h id if key max-h max-w min-h min-w pad show w.
+A field is a component with `name*`. Every field also takes bind=path disabled label on-change required value.
 
-Sizes: `w`, `h` take cells, `50%`, `fill` or `fill:2`; `pad`, `gap`, `align`,
-`justify`. A row of buttons wraps when it does not fit.
+Root:
+
+- `tml` accent on-key state title version*: holds components
+
+Layout:
+
+- `col`, `row` align=start|center|end|stretch gap justify=start|center|end|between|around on-press: holds components
+- `grid` cols* gap: holds components
+- `scroll` follow=start|end: holds components
+- `spacer`
+- `split` dir=h|v ratio: holds two components
+- `stack`: holds components
+
+Text:
+
+- `code` from lang lines: holds raw text
+- `diff` lang layout=unified|split: holds raw text
+- `heading` level role: holds text
+- `markdown`: holds raw text
+- `text` align=left|center|right on-press role wrap=word|char|none: holds text
+
+Inside text:
+
+- `a` href*: holds text
+- `b`, `i`, `s`, `u`: holds text
+- `c` role*: holds text
+- `kbd`: holds raw text
+
+Data:
+
+- `column` align=left|center|right field* format sort title
+- `item` k* role v
+- `kv`: holds `item`
+- `list` as items*=path on-key on-select select=none|single|multi: holds components
+- `stat` delta label* on-press role value*
+- `table` filter key on-key on-select rows*=path select=none|single|multi sort: holds `column`
+- `tree` children items*=path label on-select open select=none|single|multi
+
+Charts. Each also takes graphics=auto|kitty|cells|ascii role title:
+
+- `area` data*=path x y
+- `bar` data*=path dir=v|h x y
+- `gauge` label max value*
+- `heatmap` data*=path v x y
+- `histogram` bins values*=path
+- `line` axis data*=path x y
+- `pie` data*=path label style=pie|donut v
+- `sparkline` values*=path
+
+Media:
+
+- `image` alt* graphics=auto|kitty|cells|ascii on-press src*
+- `mermaid`: holds raw text
+
+Status:
+
+- `badge` on-press role: holds text
+- `progress` label role value*
+- `spinner` label
+- `status` label state*=working|needs_input|idle|done|errored|unknown
+
+Input:
+
+- `button` disabled key kind=default|primary|danger on-press submit: holds text
+- `checkbox`, `toggle` name*
+- `form` on-key on-submit: holds components
+- `input` max min name* numeric pattern placeholder
+- `select` name* options*=path
+- `slider` max min name* step
+- `textarea` name* placeholder rows
+
+Containers:
+
+- `card` fold meta on-press role title: holds components
+- `modal` open* title: holds components
+- `tab` id* title*: holds components
+- `tabs` on-change value=path: holds `tab`
+- `toast` role ttl: holds text
+<!-- END generated -->
+
+Sizes: `w` and `h` take cells, `50%`, `fill` or `fill:2`. A row of buttons
+wraps when it does not fit.
 
 ## Show it and get an answer
 
@@ -60,6 +141,27 @@ answer=$(tuios tml show deploy.tml --wait) # "yes", "no", or null when dismissed
 (esc), and 2 when a program closed it with `tuios tml close`. Only exit 0 is the
 person's answer.
 
+## Ask for input with a form
+
+```xml
+<tml version="1" title="New issue">
+  <state>{"labels": ["bug", "docs", "feature"]}</state>
+  <form on-submit="close(form)" pad="1">
+    <input name="title" label="Title" required="true" placeholder="One line"/>
+    <select name="label" label="Label" options="state.labels" value="bug"/>
+    <toggle name="urgent" label="Urgent" value="false"/>
+    <row gap="2">
+      <button kind="primary" submit="true" key="enter">Create</button>
+      <button key="esc" on-press="close(null)">Cancel</button>
+    </row>
+  </form>
+</tml>
+```
+
+A `submit="true"` button runs the form's `on-submit`. `form` holds each
+field's value under its `name`. With `--wait`, `close(form)` prints
+`{"title":"...","label":"bug","urgent":false}`.
+
 ## Own a live surface
 
 ```sh
@@ -80,15 +182,10 @@ op that no longer matches is refused: read with `tml get`, then patch again.
   Opening, changing and closing need the `write` grant.
 - A `pane()` action runs with the grants of the pane that opened the surface,
   never the person's. The first `send-text` into a pane, and every
-  `new-window`, asks the person (y/n). Name the pane by its name or id, not
-  a number. A yes covers the pane, not the text: your grants decide what may
-  be typed there.
-  A target that holds more than your pane is refused, as your own `send-text`
-  would be.
-- The window name says who opened it, first: "from api · Deploy". The owner
-  is your pane's name when no other pane has it, else "pane 3f2a91c0 (api)",
-  or "pane 3f2a91c0" when your pane has no name. The document and your
-  program's name cannot change the owner.
+  `new-window`, asks the person (y/n). Name the pane by its name or id.
+  A target that holds more than your pane is refused.
+- The window name starts with the owner pane, such as "from api · Deploy".
+  The document cannot change the owner.
 - A surface your pane opens does not take the focus. The person clicks it.
 - 100 patches a second per surface; past that, `rate_limited`. Put many
   operations in one patch.

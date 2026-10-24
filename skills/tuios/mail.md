@@ -186,18 +186,24 @@ This works with any agent, because it types at the target's keyboard. In order:
    waits on, and types nothing: your question would answer its prompt. Read the
    prompt with `peek-prompt` and ask the person. `--allow-blocked` types anyway,
    for a prompt you have read that takes free text.
-1. **Waits until the target is not mid-turn.** Still `working` or `unknown`
+1. **Waits for its turn.** Asks of one agent take turns, first come first
+   served. An ask that comes while another ask of the same agent runs waits
+   for it to finish, for up to `--timeout`, and then goes on. The reply says
+   how long it waited (`queued_behind`, `waited_turn_ms`). If the turn does not
+   come in time, the call fails with `not_ready`, and nothing is typed. If you
+   stop the call while it waits, it leaves the line and types nothing.
+2. **Waits until the target is not mid-turn.** Still `working` or `unknown`
    after `--ready-timeout` is `not_ready`, and nothing is sent. For `unknown`,
    look at the pane and pass `--force` if it is at its prompt.
-2. **Types the question and submits it** as one paste, bracketed when the
+3. **Types the question and submits it** as one paste, bracketed when the
    target asks for that, then a carriage return, the way the harness's manifest
    says.
-3. **Checks the target took it.** Within `--stall-timeout` (5 s) it must turn
+4. **Checks the target took it.** Within `--stall-timeout` (5 s) it must turn
    `working` or `needs_input`, finish a turn, or print something. Otherwise the
    call fails with `prompt_stalled`. The text was typed, so do not send it
    again: look at the pane, and if it sits in the input box press Enter with
    `send-keys`.
-4. **Waits until the target has dealt with it**, and returns what the pane
+5. **Waits until the target has dealt with it**, and returns what the pane
    printed. `settled_by` says how: `agent-state` (it reported rest, the honest
    answer), `idle` (silence for `--settle` ms, a guess), or `timeout` (the reply
    may be partial).

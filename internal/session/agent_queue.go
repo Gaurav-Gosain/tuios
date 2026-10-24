@@ -613,6 +613,14 @@ func (d *Daemon) deliverQueued(window string) {
 		q.mu.Unlock()
 		return
 	}
+	// An ask holds the pane's turn: it typed a question and reads the
+	// answer, or waits to. A prompt typed now would land in that answer.
+	// Look again after a rest.
+	if d.askTurns.busy(window) {
+		q.armLocked(d, window, pq, q.restFor())
+		q.mu.Unlock()
+		return
+	}
 	if ready, wait, look := q.restLocked(rest, q.typed[window].at, time.Now()); !ready {
 		// Not at rest, or not at a rest reached since the last entry was
 		// typed. Either a look is due later, or the pane's next state
