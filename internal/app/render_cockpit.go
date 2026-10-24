@@ -833,6 +833,9 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.hasItem && (r.agent < 0 || r.group == ckNeeds || r.group == ckSnoozed) {
 		g, gInk = l.ckItemMark(r.item)
 	}
+	if m.ckArtFormRow(r, e) != "" {
+		g, gInk = l.g(ckGlyphNeeds), pal.Attention
+	}
 	nameInk := pal.Fg
 	down := e.Host != "" && m.ckLinkDown(e.Host)
 	if r.group == ckIdle || r.group == ckEarlier || r.group == ckSnoozed || r.item.Stale || down {
@@ -1115,6 +1118,9 @@ func (m *OS) ckRowLine2(l ckLook, r ckRow, e sidebarAgentEntry) (verb, rest stri
 		}
 		return verb, rest, ink, nil
 	}
+	if title := m.ckArtFormRow(r, e); title != "" {
+		return "Form waiting", printableTitle(title), pal.Attention, nil
+	}
 	ink = pal.FgDim
 	if ctx := ckMeta(e, "context"); ctx != "" {
 		right = []ckSeg{{t: "ctx " + ctx, fg: pal.FgMute}}
@@ -1313,6 +1319,8 @@ func (m *OS) ckHasLine2(r ckRow, e sidebarAgentEntry) bool {
 		return true
 	case r.agent < 0:
 		return r.hasItem && r.item.Summary != ""
+	case m.ckArtFormRow(r, e) != "":
+		return true
 	case e.State == "working":
 		return ckMeta(e, "now") != "" || e.Message != "" || e.Subagents > 0
 	case sidebarAttention(e.State):
@@ -1340,6 +1348,9 @@ func (m *OS) drawCockpitStrip(c *ckCanvas, l ckLook, y, top int) int {
 		g, gInk := l.ckMark(e.State, e.DoneSeen)
 		if r.hasItem {
 			g, gInk = l.ckItemMark(r.item)
+		}
+		if m.ckArtFormRow(r, e) != "" {
+			g, gInk = l.g(ckGlyphNeeds), pal.Attention
 		}
 		bg, nameInk := l.panel, pal.FgDim
 		if r.key == sel.key {
@@ -1850,6 +1861,10 @@ func (m *OS) drawStatePill(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, 
 	g, ink := l.ckMark(e.State, e.DoneSeen)
 	words, bg := sidebarStateWords(e.State), l.panel
 	switch {
+	case m.ckArtFormRow(r, e) != "":
+		// The row is in Needs you for a form, not for the agent's state.
+		g, ink = l.g(ckGlyphNeeds), pal.Attention
+		words, bg = "form waiting", l.attnTint
 	case r.hasItem && r.group == ckNeeds:
 		g, ink = l.ckItemMark(r.item)
 		words, bg = "needs you", l.attnTint

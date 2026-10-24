@@ -241,6 +241,26 @@ func (m *OS) ckArtifactNew(e sidebarAgentEntry, waiting bool) bool {
 	return false
 }
 
+// ckArtFormRow is the title of the popup that put the row in Needs you,
+// "" for any other row: an agent row with no item, in Needs you, whose agent
+// does not need input itself and has a TML popup open. The row's mark, its
+// second line and the focus's badge say so, so the row never reads as
+// working in a group that says it needs you.
+func (m *OS) ckArtFormRow(r ckRow, e sidebarAgentEntry) string {
+	if r.agent < 0 || r.hasItem || r.group != ckNeeds || e.State == "needs_input" || e.Host != "" || e.WindowID == "" {
+		return ""
+	}
+	for _, v := range m.tml.views {
+		if v.caller != e.WindowID || v.surface == nil {
+			continue
+		}
+		if w := m.ckArtWindow(v.id); w != nil && w.IsPopup {
+			return cmpTitle(ckArtifact{Title: v.title, Kind: "form"})
+		}
+	}
+	return ""
+}
+
 // ckArtSelected is the place of the selected artifact in items: the one
 // selected before, else the first surface that is new, else the first open
 // one, else the newest.

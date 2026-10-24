@@ -9001,5 +9001,6 @@ Each control is a text replacement in the branch's checkout, built to a separate
 | `OpenInbox` does not call `cockpitAdoptFloating` | "the form moved into the agents view" | **caught** |
 | `CloseInbox` does not call `cockpitArtifactRelease` | Toggle 1: the popup does not get the focus back, so `ctrl+b t f` acts on another pane | **caught** |
 | `ToggleFloating` refuses TML windows as it refuses other popups | Toggle 1: the form stays a popup | **caught** |
+| `ckArtFormRow` returns nothing, so a row in Needs you for a form reads as working | "the row in Needs you does not say a form waits" | **caught** |
 
 Not covered: a TML surface in a session the client is not attached to. The view lists it and draws its last state, read-only, and says to attach.

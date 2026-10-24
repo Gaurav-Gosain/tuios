@@ -117,6 +117,10 @@ func TestCockpitArtifacts(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the agent with the new popup is not in Needs you: %v\n%s", err, term.Snapshot())
 	}
+	// The row says why it needs the person: a form, not its working state.
+	if row := lineWith(term.Screen(), "new artifact"); row < 0 || !strings.Contains(term.Screen().Line(row+1), "Form waiting") {
+		t.Fatalf("ASSERTION: the row in Needs you does not say a form waits\n%s", term.Snapshot())
+	}
 	saveTMLFrame(t, term, "3-chip")
 
 	// The chip opens the second agent's question in the view, and the
