@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -55,7 +56,8 @@ import (
 // bytes go on a bulk stream, which takes its turn behind every ordinary frame
 // on the link and keeps to a window (internal/federation/bulk.go). A keystroke
 // echo in another pane waits behind at most one 64 KiB frame. At most
-// kittyLinkSlots files are read at once on this machine.
+// kittyLinkSlots reads of a file run at once on this machine, and a slot is
+// held for one read, never while the owner is slow.
 //
 // What may be read, and why. The bytes leave this machine, so the rule is the
 // one a file read over the link follows, with kitty's own checks on top:
@@ -106,8 +108,62 @@ const kittyLinkOpenBudget = 5 * time.Second
 // fetching an image after the marker is sent.
 const kittyLinkStartBudget = 30 * time.Second
 
-// kittyLinkSlots is how many files the daemon reads for linked panes at once.
+// kittyLinkSlots is how many reads of files for linked panes run at once on
+// this machine. A slot is held for one open or one read of the file, never
+// while the bytes wait for the owner, so an owner that stops reading holds up
+// only its own pane.
 var kittyLinkSlots = make(chan struct{}, 2)
+
+// kittyLinkSlotBudget is how long one open or read waits for a slot.
+const kittyLinkSlotBudget = 10 * time.Second
+
+// kittyLinkStallBudget is how long a write of an image's bytes to the owner
+// may wait. An owner that stops reading for longer ends the transfer, and
+// the pane goes on.
+const kittyLinkStallBudget = 15 * time.Second
+
+// errKittyLinkBusy is a read that found no slot in kittyLinkSlotBudget.
+var errKittyLinkBusy = errors.New("too many images are being read")
+
+// takeKittyLinkSlot waits for a read slot, at most kittyLinkSlotBudget, and
+// returns the function that gives it back.
+func takeKittyLinkSlot(stop <-chan struct{}) (func(), error) {
+	t := time.NewTimer(kittyLinkSlotBudget)
+	defer t.Stop()
+	select {
+	case kittyLinkSlots <- struct{}{}:
+		return func() { <-kittyLinkSlots }, nil
+	case <-t.C:
+		return nil, errKittyLinkBusy
+	case <-stop:
+		return nil, errors.New("the pane closed")
+	}
+}
+
+// kittyLinkSlotReader reads r one slot at a time.
+type kittyLinkSlotReader struct{ r io.Reader }
+
+func (s kittyLinkSlotReader) Read(p []byte) (int, error) {
+	done, err := takeKittyLinkSlot(nil)
+	if err != nil {
+		return 0, err
+	}
+	defer done()
+	return s.r.Read(p)
+}
+
+// kittyLinkStallWriter gives each write to conn kittyLinkStallBudget.
+type kittyLinkStallWriter struct {
+	conn interface {
+		io.Writer
+		SetWriteDeadline(time.Time) error
+	}
+}
+
+func (w kittyLinkStallWriter) Write(p []byte) (int, error) {
+	_ = w.conn.SetWriteDeadline(time.Now().Add(kittyLinkStallBudget))
+	return w.conn.Write(p)
+}
 
 // kittyLinkFar is a hosted pane's file medium state. Nil on a pane whose
 // owner did not ask for it or whose link may not read files.
@@ -115,6 +171,10 @@ type kittyLinkFar struct {
 	token string
 	// check applies the link's read rules to an open file.
 	check func(f *os.File, path string) error
+	// allowed reports whether the machine the pane is for may still read
+	// files here. The config can change while the pane runs, so it is asked
+	// again before each open and each delete.
+	allowed func() bool
 
 	mu      sync.Mutex
 	pending *kittyLinkTransfer
@@ -140,9 +200,16 @@ func (d *Daemon) newKittyLinkFar(cs *connState) *kittyLinkFar {
 	if token == "" {
 		return nil
 	}
+	allowed := func() bool {
+		return cs == nil || !cs.viaLink || d.linkPolicy(cs).Allows(config.LinkAllowFiles)
+	}
 	return &kittyLinkFar{
-		token: token,
+		token:   token,
+		allowed: allowed,
 		check: func(f *os.File, path string) error {
+			if !allowed() {
+				return errors.New("this machine no longer lets the other one read files")
+			}
 			if verr := d.checkLinkRead(cs, path); verr != nil {
 				return verr
 			}
@@ -162,6 +229,12 @@ type kittyLinkFilter struct {
 	gen     uint64
 	deliver func([]byte)
 	handle  func(apc []byte)
+	// skip drops the output up to the next ESC: the rest of a command that
+	// could name a file, or of a marker, that came apart. See arm.
+	skip bool
+	// escSent is set when a lone ESC went out on the hold timeout, so an
+	// APC that the next read opens with '_' is skipped.
+	escSent bool
 }
 
 // feed passes one read of the process's output through the filter.
@@ -191,7 +264,26 @@ func (f *kittyLinkFilter) flush() {
 
 func (f *kittyLinkFilter) scan(data []byte) {
 	start, i := 0, 0
+	if f.escSent {
+		f.escSent = false
+		if len(data) > 0 && data[0] == '_' {
+			f.skip = true
+		}
+	}
 	for {
+		if f.skip {
+			j := bytes.IndexByte(data[i:], 0x1b)
+			if j < 0 {
+				return
+			}
+			i += j
+			f.skip = false
+			if i+1 < len(data) && data[i+1] == '\\' {
+				i += 2
+			}
+			start = i
+			continue
+		}
 		j := bytes.IndexByte(data[i:], 0x1b)
 		if j < 0 {
 			break
@@ -218,6 +310,14 @@ func (f *kittyLinkFilter) scan(data []byte) {
 			if i > start {
 				f.deliver(data[start:i])
 			}
+		case escSkip:
+			if i > start {
+				f.deliver(data[start:i])
+			}
+			f.skip = true
+			start = len(data)
+			i = len(data)
+			continue
 		}
 		i += n
 		start = i
@@ -227,7 +327,12 @@ func (f *kittyLinkFilter) scan(data []byte) {
 	}
 }
 
-// arm sends what is held as it is, when nothing more comes soon.
+// arm settles what is held when nothing more comes soon. A lone ESC goes
+// out. A graphics command whose keys say it names no file goes out. Anything
+// else that is held, the start of a command that may name a file or of a
+// marker, is dropped with the rest of it: sent as it is, a path would reach
+// the owner and the terminal there, and a marker prefix would confuse the
+// owner's scan.
 func (f *kittyLinkFilter) arm() {
 	gen := f.gen
 	time.AfterFunc(kittyLinkHoldMax, func() {
@@ -238,8 +343,26 @@ func (f *kittyLinkFilter) arm() {
 		}
 		h := f.held
 		f.held = nil
-		f.deliver(h)
+		switch {
+		case len(h) == 1:
+			f.deliver(h)
+			f.escSent = true
+		case kittyLinkHeldSafe(h):
+			f.deliver(h)
+		default:
+			f.skip = true
+		}
 	})
+}
+
+// kittyLinkHeldSafe reports whether held output, an incomplete escape, is a
+// graphics command whose keys are complete and name no file.
+func kittyLinkHeldSafe(h []byte) bool {
+	if len(h) < 3 || h[1] != '_' || h[2] != 'G' {
+		return false
+	}
+	ctrl, _, semi := bytes.Cut(h[3:], []byte{';'})
+	return semi && !kittyLinkFileKeys(ctrl)
 }
 
 type escKind int
@@ -249,6 +372,7 @@ const (
 	escMore                // cannot tell yet: hold from here
 	escFile                // a graphics command with a file medium, n bytes
 	escDrop                // a forged marker, n bytes, dropped
+	escSkip                // drop n bytes and the rest up to the next ESC
 )
 
 // classifyKittyLinkEscape looks at an escape sequence at the start of b.
@@ -271,17 +395,24 @@ func classifyKittyLinkEscape(b []byte) (escKind, int) {
 		}
 		ctrl, _, semi := bytes.Cut(body, []byte{';'})
 		if !semi {
-			if end < 0 && len(ctrl) <= kittyLinkMaxKeys {
+			switch {
+			case end >= 0:
+				// Keys and no payload: no path to read.
+				return escPass, 3
+			case len(ctrl) <= kittyLinkMaxKeys:
 				return escMore, 0
 			}
-			return escPass, 3
+			// Keys longer than any real command: dropped, so no path
+			// after them is sent on.
+			return escSkip, len(b)
 		}
 		if !kittyLinkFileKeys(ctrl) {
 			return escPass, 3
 		}
 		if end < 0 {
 			if len(b) > kittyLinkMaxCommand {
-				return escPass, 3
+				// Too long for a path: dropped, never sent on.
+				return escSkip, len(b)
 			}
 			return escMore, 0
 		}
@@ -289,7 +420,8 @@ func classifyKittyLinkEscape(b []byte) (escKind, int) {
 			return escMore, 0
 		}
 		if b[3+end+1] != '\\' {
-			return escPass, 3
+			// Cut off by another escape: dropped.
+			return escDrop, 3 + end
 		}
 		return escFile, 3 + end + 2
 	case 't':
@@ -304,7 +436,7 @@ func classifyKittyLinkEscape(b []byte) (escKind, int) {
 		end := bytes.IndexByte(b[len(p):], 0x1b)
 		if end < 0 {
 			if len(b) > kittyLinkMaxCommand {
-				return escDrop, len(b)
+				return escSkip, len(b)
 			}
 			return escMore, 0
 		}
@@ -390,25 +522,27 @@ func (hp *hostedPane) kittyFileCommand(apc []byte) {
 		return
 	}
 
-	select {
-	case kittyLinkSlots <- struct{}{}:
-	case <-hp.stop:
+	done, err := takeKittyLinkSlot(hp.stop)
+	if err != nil {
+		if errors.Is(err, errKittyLinkBusy) {
+			hp.kittyReply(cmd, "EBUSY:too many images are being read")
+		}
 		return
 	}
-	defer func() { <-kittyLinkSlots }()
-
 	m, msg := openKittyLinkMediumTimed(cmd, k.check)
+	done()
 	if msg != "" {
 		hp.kittyReply(cmd, msg)
 		return
 	}
 	keys := kittyLinkKeys(ctrl)
 
+	m.allowed = k.allowed
 	if cmd.Action == vt.KittyActionQuery {
-		// kitty reads the medium to answer a query, and deletes a
-		// temporary file or a shared memory object it read. The owner
-		// answers for its clients as it answers a query for t=d.
-		m.release(true)
+		// The owner answers for its clients as it answers a query for t=d.
+		// Nothing is deleted for a query: a query proves nothing about the
+		// object it names, and a printed text file can hold one.
+		m.release(false)
 		hp.deliver([]byte("\x1b_G" + keys + "\x1b\\"))
 		return
 	}
@@ -463,7 +597,9 @@ func (hp *hostedPane) kittyFileCommand(apc []byte) {
 	}
 	if result != nil {
 		debugLog("[DEBUG] kitty file over link: %v", result)
-		hp.kittyReply(cmd, "EIO:the image did not reach the terminal: "+kittyLinkErrText(result))
+		// The reason stays in the log: it names sockets and paths, and the
+		// reply goes into the pane's input.
+		hp.kittyReply(cmd, "EIO:the image did not reach the terminal")
 	}
 }
 
@@ -503,7 +639,7 @@ func kittyLinkErrText(err error) string {
 		err = errors.New(verr.Message)
 	}
 	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r == ';' {
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) || r == ';' || r == 0xfffd {
 			return ' '
 		}
 		return r
@@ -513,26 +649,43 @@ func kittyLinkErrText(err error) string {
 // kittyLinkMedium is an open file medium: the file positioned at its first
 // byte, and how many bytes it covers.
 type kittyLinkMedium struct {
-	f      *os.File
-	n      int64
-	path   string
-	medium vt.KittyGraphicsMedium
+	f *os.File
+	n int64
+	// name is the path the command gave, before symlinks; cmd is the command.
+	name string
+	cmd  *vt.KittyCommand
+	// allowed is asked again before a delete. Nil allows.
+	allowed func() bool
 }
 
-// release closes the file. After a read, a temporary file and a shared memory
-// object are deleted, as kitty deletes them, when the name still holds the
-// file that was read.
+// release closes the file. After an upload is read, a temporary file or a
+// shared memory object is deleted, as kitty deletes them, under the rules the
+// daemon keeps for a frame no client reads (kitty_medium.go): only for a=t or
+// a=T, only the name as given, which must be the very object read and not a
+// symlink, and only when it is the frame the command describes
+// (vt.KittyMediumIsFrame). The name is text the pane printed, and it can name
+// an object another program still uses.
 func (m *kittyLinkMedium) release(read bool) {
-	if read && (m.medium == vt.KittyMediumTempFile || m.medium == vt.KittyMediumSharedMemory) {
-		opened, oerr := m.f.Stat()
-		now, nerr := os.Lstat(m.path)
-		if oerr == nil && nerr == nil && os.SameFile(opened, now) {
-			if err := os.Remove(m.path); err != nil && !os.IsNotExist(err) {
-				debugLog("[DEBUG] kitty file over link: remove %s: %v", m.path, err)
-			}
-		}
+	defer func() { _ = m.f.Close() }()
+	cmd := m.cmd
+	if !read || cmd == nil ||
+		(cmd.Medium != vt.KittyMediumTempFile && cmd.Medium != vt.KittyMediumSharedMemory) ||
+		(cmd.Action != vt.KittyActionTransmit && cmd.Action != vt.KittyActionTransmitPlace) {
+		return
 	}
-	_ = m.f.Close()
+	if m.allowed != nil && !m.allowed() {
+		return
+	}
+	info, err := os.Lstat(m.name)
+	if err != nil || !vt.KittyMediumIsFrame(cmd, info) {
+		return
+	}
+	if opened, err := m.f.Stat(); err != nil || !os.SameFile(opened, info) {
+		return
+	}
+	if err := os.Remove(m.name); err != nil && !os.IsNotExist(err) {
+		debugLog("[DEBUG] kitty file over link: remove: %v", err)
+	}
 }
 
 // openKittyLinkMediumTimed is openKittyLinkMedium, bounded by
@@ -616,7 +769,8 @@ func openKittyLinkMedium(cmd *vt.KittyCommand, check func(*os.File, string) erro
 	if check != nil {
 		if err := check(f, resolved); err != nil {
 			_ = f.Close()
-			return nil, "EPERM:" + kittyLinkErrText(err)
+			debugLog("[DEBUG] kitty file over link: refused by the link's read rules: %v", err)
+			return nil, "EPERM:the file may not be read over this link"
 		}
 	}
 	offset := int64(max(cmd.Offset, 0))
@@ -638,14 +792,18 @@ func openKittyLinkMedium(cmd *vt.KittyCommand, check func(*os.File, string) erro
 			return nil, kittyLinkOpenError(err)
 		}
 	}
-	return &kittyLinkMedium{f: f, n: n, path: resolved, medium: cmd.Medium}, ""
+	return &kittyLinkMedium{f: f, n: n, name: path, cmd: cmd}, ""
 }
 
 func kittyLinkOpenError(err error) string {
 	if errors.Is(err, fs.ErrNotExist) {
 		return "ENOENT:Failed to open file for graphics transmission: no such file"
 	}
-	return "EBADF:Failed to open file for graphics transmission: " + kittyLinkErrText(err)
+	// Only the system's error name goes into the reply, never a path.
+	if errno, ok := errors.AsType[syscall.Errno](err); ok {
+		return "EBADF:Failed to open file for graphics transmission: " + kittyLinkErrText(errno)
+	}
+	return "EBADF:Failed to open file for graphics transmission"
 }
 
 // verbPaneKittyMedium turns this connection into the bytes of an image a
@@ -680,20 +838,22 @@ func (d *Daemon) verbPaneKittyMedium(cs *connState, params json.RawMessage) (any
 	m := t.medium
 	cs.takeover = func(_ *bufio.Reader) {
 		defer m.release(true)
-		_ = cs.conn.SetWriteDeadline(time.Time{})
-		bw := bufio.NewWriterSize(cs.conn, 64<<10)
-		var w io.Writer = bw
+		// Each write gets kittyLinkStallBudget and each read of the file
+		// takes a slot only for that read, so an owner that stops reading
+		// frees the slots at once and ends the transfer soon after.
+		bw := bufio.NewWriterSize(kittyLinkStallWriter{cs.conn}, 64<<10)
+		body := io.LimitReader(kittyLinkSlotReader{m.f}, m.n)
 		var err error
 		var n int64
 		if t.compress {
 			fw := getFlateWriter(bw)
-			n, err = io.CopyBuffer(fw, io.LimitReader(m.f, m.n), make([]byte, 64<<10))
+			n, err = io.CopyBuffer(fw, body, make([]byte, 64<<10))
 			if err == nil {
 				err = fw.Close()
 			}
 			putFlateWriter(fw)
 		} else {
-			n, err = io.CopyBuffer(w, io.LimitReader(m.f, m.n), make([]byte, 64<<10))
+			n, err = io.CopyBuffer(bw, body, make([]byte, 64<<10))
 		}
 		if err == nil && n < m.n {
 			err = io.ErrUnexpectedEOF

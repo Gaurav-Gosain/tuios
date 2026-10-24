@@ -49,6 +49,9 @@ type step struct {
 	run func() (expect string, after func() (string, bool))
 	// refuse says the reply must be an error.
 	refuse bool
+	// keeps says only the check after the reply decides: something the
+	// command names must still be there.
+	keeps bool
 }
 
 var (
@@ -113,6 +116,9 @@ func main() {
 		ok := strings.HasSuffix(reply, ";OK\x1b\\")
 		if s.refuse {
 			ok = reply != "" && !strings.Contains(reply, ";OK")
+		}
+		if s.keeps {
+			ok = true
 		}
 		note := ""
 		if after != nil {
@@ -189,10 +195,13 @@ func mediaSteps() []step {
 			if err != nil {
 				fail("temp file: %v", err)
 			}
-			_, _ = f.Write(checker(color.RGBA{108, 113, 196, 255}))
+			img := checker(color.RGBA{108, 113, 196, 255})
+			_, _ = f.Write(img)
 			_ = f.Close()
 			p := f.Name()
-			apc("a=T,i=5,f=100,t=t,c=16,r=4", []byte(p))
+			// S= says the object is this frame, which is what lets the
+			// terminal delete a file it did not make.
+			apc(fmt.Sprintf("a=T,i=5,f=100,t=t,S=%d,c=16,r=4", len(img)), []byte(p))
 			return "purple and white checkerboard above", func() (string, bool) {
 				gone := waitGone(p)
 				return fmt.Sprintf("; temp file deleted: %v", gone), gone
@@ -246,6 +255,9 @@ func refuseSteps() []step {
 			return "", nil
 		}},
 	}
+	if runtime.GOOS == "linux" {
+		steps = append(steps, shmKeepSteps()...)
+	}
 	if *deny != "" {
 		steps = append(steps, step{name: "link-deny", desc: "t=f a file the link's read rules deny", refuse: true, run: func() (string, func() (string, bool)) {
 			apc("a=T,i=45,f=100,t=f", []byte(*deny))
@@ -262,6 +274,47 @@ func refuseSteps() []step {
 		}})
 	}
 	return steps
+}
+
+// shmKeepSteps name shared memory objects that are not the frame a command
+// sends, or not one a terminal may delete. Each must still be there after.
+func shmKeepSteps() []step {
+	w, h := 64, 32
+	frame := bytes.Repeat([]byte{1, 2, 3, 4}, w*h)
+	keys := fmt.Sprintf("f=32,s=%d,v=%d,S=%d", w, h, len(frame))
+	kept := func(path string) (string, bool) {
+		_, err := os.Lstat(path)
+		_ = os.Remove(path)
+		return fmt.Sprintf("still there: %v", err == nil), err == nil
+	}
+	name := func(what string) string { return fmt.Sprintf("kittylive-%s-%d", what, os.Getpid()) }
+	return []step{
+		{name: "query-keeps-shm", desc: "a=q naming another program's object, as a printed file can", keeps: true, run: func() (string, func() (string, bool)) {
+			n := name("victim")
+			write("/dev/shm/"+n, frame)
+			apc("a=q,i=47,t=s,"+keys, []byte(n))
+			return "", func() (string, bool) { return kept("/dev/shm/" + n) }
+		}},
+		{name: "shm-symlink-keeps-target", desc: "t=s naming a symlink in /dev/shm: the target is not deleted", keeps: true, run: func() (string, func() (string, bool)) {
+			target, link := name("target"), name("link")
+			write("/dev/shm/"+target, frame)
+			_ = os.Remove("/dev/shm/" + link)
+			if err := os.Symlink("/dev/shm/"+target, "/dev/shm/"+link); err != nil {
+				fail("symlink: %v", err)
+			}
+			apc("a=t,i=48,t=s,"+keys, []byte(link))
+			return "", func() (string, bool) {
+				_ = os.Remove("/dev/shm/" + link)
+				return kept("/dev/shm/" + target)
+			}
+		}},
+		{name: "shm-other-size-keeps", desc: "t=s naming an object that is not the frame's size", keeps: true, run: func() (string, func() (string, bool)) {
+			n := name("bigger")
+			write("/dev/shm/"+n, append(append([]byte{}, frame...), 0))
+			apc("a=t,i=49,t=s,"+keys, []byte(n))
+			return "", func() (string, bool) { return kept("/dev/shm/" + n) }
+		}},
+	}
 }
 
 // apc sends one graphics command with payload base64 encoded.

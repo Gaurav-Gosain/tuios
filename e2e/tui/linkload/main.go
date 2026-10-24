@@ -9,6 +9,8 @@
 //	                            send the PNG at PATH until STOPFILE is gone:
 //	                            MODE file names the path (t=f), MODE stream
 //	                            sends the bytes (t=d), as icat does in each mode
+//	linkload send PATH OUT      send the PNG at PATH once by path (t=f) and
+//	                            wait for the reply
 //	linkload shape MBPS         copy stdin to stdout at MBPS megabytes a
 //	                            second, in 4 KiB steps: a link of that speed
 //
@@ -77,6 +79,13 @@ func main() {
 		roundTrip(out, in)
 		secs := time.Since(t0).Seconds()
 		result = map[string]any{"mb": mb, "seconds": secs, "mb_per_s": float64(mb) / secs}
+	case "send":
+		path = os.Args[3]
+		t0 := time.Now()
+		fmt.Fprintf(out, "\x1b_Ga=t,i=901,f=100,t=f;%s\x1b\\", base64.StdEncoding.EncodeToString([]byte(os.Args[2])))
+		_ = out.Flush()
+		reply := readAPC(in)
+		result = map[string]any{"reply": strings.TrimSuffix(strings.TrimPrefix(reply, "\x1b_G"), "\x1b\\"), "seconds": time.Since(t0).Seconds()}
 	case "images":
 		if len(os.Args) < 6 {
 			os.Exit(2)

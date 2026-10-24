@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -179,11 +180,54 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		}
 	})
 
+	// A marker prefix that the far pane prints in two parts, slower than
+	// the far side waits for the rest, and then a real image. The parts
+	// used to reach this side as they were, and the scan here, inside what
+	// it took for a marker, lost the ESC of the real one: the image never
+	// came and the pane waited 30 s.
+	t.Run("split-marker", func(t *testing.T) {
+		green, err := os.ReadFile(filepath.Join(pics, "green.png"))
+		if err != nil {
+			t.Fatalf("the media run left no green.png: %v", err)
+		}
+		clearPane(t, term)
+		host.mark("split")
+		// The real command comes right after the split prefix, with no
+		// other escape between them, which is the case the scan lost.
+		cmd := `printf '\033_tuios-kitty-'; sleep 0.3; printf 'medium;x\033_Ga=t,i=3,f=100,t=f,q=2;%s\033\\' "$(printf %s ` +
+			filepath.Join(pics, "green.png") + ` | base64 | tr -d '\n')"`
+		started := time.Now()
+		typeLine(t, term, cmd+`; echo "DONE""-split"`)
+		if err := term.WaitForText("DONE-split", 20*time.Second); err != nil {
+			t.Fatalf("the pane stalled after a split marker prefix: %v\n%s", err, term.Snapshot())
+		}
+		if took := time.Since(started); took > 10*time.Second {
+			t.Errorf("the pane went on %v after the image, want at once (the far side waits 30 s for a fetch that never comes)", took)
+		}
+		stream := host.bytes()
+		if i := bytes.Index(stream, []byte(phaseMark+"split")); i >= 0 {
+			stream = stream[i:]
+		}
+		paths, uploads := linkTransmits(t, stream)
+		if len(paths) > 0 {
+			t.Errorf("the host was handed paths %q", paths)
+		}
+		if !containsUpload(uploads, green) {
+			t.Errorf("the image after a split marker prefix never reached the host (uploads of %v bytes)", uploadSizes(uploads))
+		}
+	})
+
 	t.Run("refused", func(t *testing.T) {
 		host.mark("refused")
 		clearPane(t, term)
 		typeLine(t, term, live+" -refuse -dir "+pics+" -deny "+key)
-		waitLive(t, term, "ALL 6 PASS")
+		// Six refusals, and on Linux three shared memory objects that
+		// must survive.
+		want := "ALL 6 PASS"
+		if runtime.GOOS == "linux" {
+			want = "ALL 9 PASS"
+		}
+		waitLive(t, term, want)
 		saveArtifact(t, term, artifactDir(t), "refused")
 		stream := host.bytes()
 		if i := bytes.Index(stream, []byte(phaseMark+"refused")); i >= 0 {
@@ -308,4 +352,103 @@ func uploadSizes(uploads [][]byte) []int {
 		out[i] = len(u)
 	}
 	return out
+}
+
+// TestKittyFilesStalledOwnerHoldsOnlyItsPane is an owner that stops reading
+// two large images, while a third pane on the same far machine sends a small
+// one.
+//
+// The far machine reads at most two files at once. It held each slot from
+// the open until the owner had read the last byte, with no time limit on the
+// writes. Two images the owner stopped reading took both slots, and every
+// other pane's image on that machine waited until the owner read again.
+//
+// Now a slot covers one read of the file and each write has a budget. The
+// owner's stall is played by TUIOS_E2E_KITTY_LINK_STALL, which holds the
+// owner's fetch of any image over 1 MB while a file exists.
+//
+// How this could pass wrongly, written down first:
+//   - The large images could not stall at all. Each must end in an error
+//     reply, which only a stalled write gives.
+//   - The small image could beat the large ones to a slot. It starts two
+//     seconds after them, when both are stalled.
+//   - The stall could end before the check. It lasts 45 seconds.
+//
+// Negative control: with the far side as it was before this fix, the small
+// image waits for the whole stall, and the large ones never answer in it.
+func TestKittyFilesStalledOwnerHoldsOnlyItsPane(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("the stand-ins are unix programs")
+	}
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	stall := filepath.Join(base, "stall")
+	if err := os.WriteFile(stall, []byte("1000000"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_SIXEL_GRAPHICS=0", "TUIOS_E2E=1", "TUIOS_E2E_KITTY_LINK_STALL=" + stall}
+	load := filepath.Join(t.TempDir(), "linkload")
+	if out, err := exec.Command("go", "build", "-o", load, "./linkload").CombinedOutput(); err != nil {
+		t.Fatalf("build linkload: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("start the far daemon: %v\n%s", err, out)
+	}
+	host := newKittyHost()
+	term := startIn(t, base, startOpts{cols: 160, rows: 50, args: []string{"new", "home"}, env: env, out: host})
+	host.answerProbe(t, term)
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "the daemon never reported build up")
+
+	pics := filepath.Join(xdgDir(remote, "HOME"), "pictures")
+	if err := os.MkdirAll(pics, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	big := filepath.Join(pics, "big.png")
+	writeNoisePNG(t, big, 1200, 1000)
+	small, _ := writeIcatPNG(t, pics)
+
+	start := time.Now()
+	send := func(name, img string) string {
+		out := filepath.Join(pics, name+".json")
+		if o, err := tuiosCLIEnv(t, base, env, "new-window", name, "-s", "home", "--host", "build", "--no-focus", "--", load, "send", img, out); err != nil {
+			t.Fatalf("open %s: %v\n%s", name, err, o)
+		}
+		return out
+	}
+	bigs := []string{send("big1", big), send("big2", big)}
+	time.Sleep(2 * time.Second)
+	smallAt := time.Now()
+	smallOut := send("small", small)
+
+	res, ok := waitResult(smallOut, 30*time.Second)
+	if !ok {
+		t.Fatalf("the small image never answered in 30 s while two large ones were stalled: their slots held it")
+	}
+	took := time.Since(smallAt)
+	t.Logf("small image: %v in %v", res, took)
+	if res["reply"] != "i=901;OK" {
+		t.Errorf("the small image was answered %v, want OK", res["reply"])
+	}
+	if took > 8*time.Second {
+		t.Errorf("the small image took %v while the large ones were stalled, want a few seconds", took)
+	}
+	for _, out := range bigs {
+		res, ok := waitResult(out, 40*time.Second-time.Since(start))
+		if !ok {
+			t.Fatalf("a stalled large image never answered while the stall lasted: the transfer has no budget")
+		}
+		t.Logf("large image: %v", res)
+		if r, _ := res["reply"].(string); strings.HasSuffix(r, ";OK") {
+			t.Errorf("a large image the owner never read was answered OK")
+		}
+		// The reply goes into the pane's input: no socket, no path.
+		if r, _ := res["reply"].(string); strings.Contains(r, "/") {
+			t.Errorf("the reply %q names a path", r)
+		}
+	}
+	_ = os.Remove(stall)
+	alive(t, term, "after a stalled owner")
 }

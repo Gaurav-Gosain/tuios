@@ -819,17 +819,30 @@ between the two daemons (`kitty_link_far.go` on B, `kitty_link_near.go` on A):
    carries the command's other keys. B's pump then waits.
 5. A sees the marker, fetches the bytes with `pane-kitty-medium` on a bulk
    stream, and writes them after the marker as t=d chunks of 4096 characters.
-   Raw pixels cross compressed. When the bytes are sent, B deletes a t=t file
-   or a t=s object and its pump goes on.
+   Raw pixels cross compressed. When the bytes are sent, B's pump goes on.
+
+B deletes a t=t file or a t=s object after an upload (a=t or a=T) is read,
+under the rule the daemon keeps for frames no client reads: only the name as
+given, which must be the very object read and not a symlink, and only when it
+is the frame the command describes (`vt.KittyMediumIsFrame`). A query deletes
+nothing. A name is text the pane printed, and a printed file can name an
+object another program still uses.
+
+A command that B cannot classify within 50 ms (a program that printed half
+of it and paused) is dropped if it can name a file or start a marker. Sent on
+as it was, a path would reach A's clients and their terminals.
 
 The pump waiting keeps the order: the process's later output comes after the
 image, as it does in kitty. Other panes do not wait. Each pane has its own
 stream and pump, and the bytes ride a bulk stream, which writes behind every
 ordinary frame on the link and keeps to a window. At most two files are read
-at once on B.
+at once on B. A slot covers one read of the file, never a wait for A, and
+each write to A has 15 seconds. An A that stops reading ends its own
+transfer, with an EIO reply to the program, and holds up no other pane.
 
 The bytes leave B, so B reads only what the link may read with `file-read`:
-the machine needs the `files` capability, the read deny list applies (keys,
+the machine needs the `files` capability (asked again before each read and
+each delete, so a config change applies to a running pane), the read deny list applies (keys,
 credentials, shell start files, histories, tuios's own state), a file with
 other names (hard links) is refused, and `files_read_roots` narrows it. The
 kitty checks above apply as well, including the temporary folder rule for

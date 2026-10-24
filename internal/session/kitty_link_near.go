@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -114,7 +117,10 @@ func (x *kittyLinkNear) scan(data []byte) (cut int, ready bool) {
 				if data[i] == '\\' {
 					return i + 1, true
 				}
+				// The ESC that cut the body short may start the next
+				// marker: scan on from it, as one byte of the prefix.
 				x.body = nil
+				x.match = 1
 				continue
 			}
 			e := bytes.IndexByte(data[i:], 0x1b)
@@ -327,6 +333,7 @@ func (p *remotePane) fetchKittyMedium(token, id string) (io.ReadCloser, int64, e
 		_ = stream.Close()
 		return nil, 0, fmt.Errorf("pane-kitty-medium: %w", err)
 	}
+	kittyLinkStallForTest(resp.Result.Size)
 	var r io.Reader = br
 	if resp.Result.Compressed {
 		r = flate.NewReader(br)
@@ -337,4 +344,34 @@ func (p *remotePane) fetchKittyMedium(token, id string) (io.ReadCloser, int64, e
 type readCloser struct {
 	io.Reader
 	io.Closer
+}
+
+// kittyLinkStallForTest lets the end-to-end tests play an owner that stops
+// reading an image: with TUIOS_E2E=1 and TUIOS_E2E_KITTY_LINK_STALL naming a
+// file that holds a byte count, the fetch of an image larger than that waits
+// while the file exists, a minute at most, before it reads a byte. Ordinary
+// runs never set it.
+func kittyLinkStallForTest(size int64) {
+	if os.Getenv("TUIOS_E2E") != "1" {
+		return
+	}
+	path := os.Getenv("TUIOS_E2E_KITTY_LINK_STALL")
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	over, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+	if err != nil || size <= over {
+		return
+	}
+	deadline := time.Now().Add(time.Minute)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }

@@ -9074,3 +9074,11 @@ Not covered end to end: the terminals row scrolled out of a short rail, and a pe
 | The link's read rules (`check` in `openKittyLinkMedium`) skipped | `refused` ("the key crossed the link") | **caught** |
 | The owner check skipped | `refused` ("a file of another user (/etc/passwd) crossed the link"). The reply alone was an error (the owner's emulator answered EBADPNG), which is why the host stream is checked | **caught** |
 | kitty's sensitive path check (`vt.KittySensitivePath`) skipped | none: /proc is also in the link's read deny list, so both /proc cases are still refused | **not caught** (covered twice) |
+
+After review, on 2026-10-24 on Linux. The `refused` run gained three shared memory objects that must survive (Linux only): one named by an a=q, a symlink in /dev/shm whose target must survive, and an object one byte larger than the frame. `split-marker` prints a marker prefix in two parts 0.3 s apart, then a real t=f command with no other escape between them; the pane must go on at once and the host must get the image. `TestKittyFilesStalledOwnerHoldsOnlyItsPane` stalls the owner's fetch of two 4.8 MB images with `TUIOS_E2E_KITTY_LINK_STALL`; a small image from a third pane must answer OK in a few seconds, and each stalled one must get an error reply with no path in it while the stall lasts. With the fixes the small image answered in 107 ms and the stalled ones EIO after 15 s.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `kitty_link_far.go` as before the review | `refused` (all three objects deleted: "still there: false"), `TestKittyFilesStalledOwnerHoldsOnlyItsPane` ("the small image never answered in 30 s while two large ones were stalled") | **caught** |
+| `kitty_link_far.go` and `kitty_link_near.go` as before the review | `split-marker` ("the pane stalled after a split marker prefix", 20 s) | **caught** |
+| `kitty_link_far.go` alone as before the review | `split-marker` passes: the near side's rescan from the ESC also finds the real marker | **not caught** (either fix is enough) |

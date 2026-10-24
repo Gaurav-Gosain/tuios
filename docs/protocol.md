@@ -6289,6 +6289,11 @@ Claude and Codex credential files, the package and database credentials
 (`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
 `.vault-token`, `.pgpass`, `.my.cnf`, the Terraform credentials,
 `~/.config/rclone`, `~/.config/hub`, `~/.config/op`), `~/.local/share/keyrings`,
+shell and program histories, browser profiles (also the snap Firefox and
+Chromium profiles and every flatpak's `~/.var/app`), mail and chat state
+(Thunderbird, Signal, Discord, Slack, Telegram), the VS Code state folder,
+crypto wallets (Bitcoin, Electrum, Ethereum, Monero, Litecoin, Solana,
+Exodus), password managers,
 the Windows credential stores and DPAPI keys,
 `/proc` (every process's environment and memory), and the daemon's socket
 folder apart from its drop folder. On
