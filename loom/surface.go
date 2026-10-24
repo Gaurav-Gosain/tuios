@@ -202,7 +202,8 @@ func (s *Surface) View() *View { return cloneView(s.view) }
 
 func cloneView(v *View) *View {
 	return &View{Tabs: maps.Clone(v.Tabs), Sort: maps.Clone(v.Sort), Filter: maps.Clone(v.Filter), Fold: maps.Clone(v.Fold),
-		Focus: v.Focus, Cursor: maps.Clone(v.Cursor), Scroll: maps.Clone(v.Scroll), Split: maps.Clone(v.Split)}
+		Focus: v.Focus, Cursor: maps.Clone(v.Cursor), Scroll: maps.Clone(v.Scroll), Split: maps.Clone(v.Split),
+		Text: maps.Clone(v.Text), Caret: maps.Clone(v.Caret)}
 }
 
 // Patch applies a JSON Patch from the owner to the state. Only the boxes

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"tuios.dev/tml"
 )
@@ -57,6 +58,8 @@ func focusable(s *Surface, b *box) bool {
 		return !w.disabled
 	case *scrollWidget:
 		return w.over
+	case *fieldWidget:
+		return w.editable()
 	}
 	return len(s.actionsOf(b.src, "on-press")) > 0 && b.kind != "tml"
 }
@@ -69,11 +72,19 @@ func (s *Surface) Focus() string {
 	return s.view.Focus
 }
 
-// defaultFocus is the first table or list, else the first focusable box.
+// defaultFocus is the first table or list, else the first focusable box
+// that is not a text field. A text field takes the focus only from tab or a
+// click: with it focused a letter types, so a document whose buttons have
+// keys keeps them until the person goes into the field.
 func (s *Surface) defaultFocus() *box {
 	for _, b := range s.focus {
 		switch b.w.(type) {
 		case *tableWidget, *listWidget:
+			return b
+		}
+	}
+	for _, b := range s.focus {
+		if w, ok := b.w.(*fieldWidget); !ok || !w.editable() {
 			return b
 		}
 	}
@@ -114,9 +125,16 @@ func (s *Surface) Key(key string) (Result, error) {
 		return Result{}, nil
 	}
 	s.flush()
+	// A text field with the focus takes the keys that type and edit before
+	// a button's key, so a letter goes into the field.
+	if b, w := s.textField(); b != nil {
+		if res, ok, err := s.fieldKey(b, w, key); ok || err != nil {
+			return res, err
+		}
+	}
 	for _, b := range s.focus {
 		if bw, ok := b.w.(*buttonWidget); ok && bw.key != "" && strings.EqualFold(bw.key, key) && !bw.disabled && visible(b) {
-			return s.run(b, bw.press, nil)
+			return s.press(b, bw.press)
 		}
 	}
 	switch key {
@@ -208,7 +226,7 @@ func (s *Surface) keyOn(b *box, key string) (Result, bool, error) {
 		}
 	case *buttonWidget:
 		if press {
-			res, err := s.run(b, w.press, nil)
+			res, err := s.press(b, w.press)
 			return res, true, err
 		}
 	}
@@ -461,8 +479,14 @@ func (s *Surface) clickOn(b *box, pt image.Point) (Result, bool, error) {
 		}
 	case *buttonWidget:
 		if !w.disabled {
-			res, err := s.run(b, w.press, nil)
+			res, err := s.press(b, w.press)
 			return res, true, err
+		}
+	case *fieldWidget:
+		if w.editable() {
+			// The click puts the caret at the end of the text; the focus
+			// follows (Mouse).
+			return s.moveCaret(b, w, utf8.RuneCountInString(w.value)), true, nil
 		}
 	}
 	if acts := s.actionsOf(b.src, "on-press"); len(acts) > 0 && b.kind != "tml" {

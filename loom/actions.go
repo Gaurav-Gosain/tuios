@@ -40,12 +40,17 @@ type View struct {
 	Cursor map[string]string
 	Scroll map[string]int
 	Split  map[string]float64
+	// Text holds what was typed into a text field that binds no state
+	// path, and Caret the caret of each text field, in runes.
+	Text  map[string]string
+	Caret map[string]int
 }
 
 // newView returns an empty view.
 func newView() *View {
 	return &View{Tabs: map[string]string{}, Sort: map[string]SortSpec{}, Filter: map[string]string{},
-		Fold: map[string]bool{}, Cursor: map[string]string{}, Scroll: map[string]int{}, Split: map[string]float64{}}
+		Fold: map[string]bool{}, Cursor: map[string]string{}, Scroll: map[string]int{}, Split: map[string]float64{},
+		Text: map[string]string{}, Caret: map[string]int{}}
 }
 
 // Effect is an action that leaves the document: the host carries it out.
