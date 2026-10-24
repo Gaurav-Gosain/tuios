@@ -109,7 +109,13 @@ is then mailed to the asking pane from human, marked verified_human, so
 'tuios wait-for agent-message' picks it up. You can also come back with
 --request-id.
 
-From inside a pane the question is asked as that pane. It exits 0 with the
+From inside a pane the question is asked as that pane, and the pane shows
+needs_input with the question while the call waits.
+
+The question is one line of at most 160 bytes. Send the details to the person
+with 'tuios send-agent-message -w human', then ask a short question.
+
+It exits 0 with the
 answer on stdout, 2 when there is no answer yet, and 1 when the question ended
 without one (dismissed, superseded, or its pane closed).`,
 		Example: `  # Ask, and keep the answer
@@ -131,7 +137,7 @@ without one (dismissed, superseded, or its pane closed).`,
 			return runAskHuman(o)
 		},
 	}
-	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: most recently active)")
+	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVarP(&o.window, "window", "w", "", "The pane asking, where a late answer is mailed (default: your own pane)")
 	cmd.Flags().StringArrayVarP(&o.options, "option", "o", nil, "An answer the person can pick. Give 1 to 9")
 	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "Milliseconds to wait for the answer (default: 120000, at most one hour)")

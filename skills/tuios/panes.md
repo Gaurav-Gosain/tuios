@@ -288,6 +288,8 @@ tuios capture-pane -s work -w build --scrollback --lines 60
 The echo shows `printf 'tests_done_%s\n' 1786700000`, which the pattern does not
 match; the output shows `tests_done_1786700000`, which it does.
 
+`--new` matches only output written after the wait starts, so an old marker does not match. Output from before the wait does not count, so do not use `--new` for a command that can finish at once.
+
 ### Running a command and getting its exit code
 
 The simplest way needs no shell integration. Run the command as the program of

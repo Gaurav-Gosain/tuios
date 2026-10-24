@@ -77,9 +77,9 @@ has the whole model.
 
 ## Addressing things
 
-Sessions are addressed by name with `-s`. Omit it and the most recently active
-session is used, which is a guess when several are live. Inside a pane, pass
-`-s "$TUIOS_SESSION"`.
+Sessions are addressed by name with `-s`. Inside a pane, a command without
+`-s` acts on the pane's own session. Outside every pane, it acts on the most
+recently active session.
 
 Windows are addressed with `-w`, which takes, in order: the full uuid, the index
 `list-windows` prints (all digits), the exact window name (a name you gave,
@@ -125,9 +125,8 @@ tuios capture-pane -s "$TUIOS_SESSION" -w docs
 ```
 
 - **Always pass `-w`.** With `-w`, keys go to that window's program whatever
-  the person has focused. Without it they go to the person's client as if the
-  person pressed them, which is the focused window (often your own) or the
-  window manager.
+  the person has focused. From a pane, `send-text` and `send-keys`
+  without `-w` are refused.
 - `new-window` prints `3a42ab8f  docs`: the short id and the name. Either one
   is a `-w` target. `--print-id` prints only the full id, for
   `id=$(tuios new-window ... --print-id)`. A name you give beats any window's

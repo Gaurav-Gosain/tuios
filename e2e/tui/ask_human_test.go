@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -293,4 +296,264 @@ func TestAskHumanWaitsInTheInboxWhenNobodyIsThere(t *testing.T) {
 		t.Fatalf("coming back for the answer printed %q (%v), want merge", again, err)
 	}
 	alive(t, term, "after answering a question from the Inbox")
+}
+
+// askerScript is an agent in a pane that asks the person twice. It reports
+// for its own pane, with no --window, the way a harness hook does. While the
+// first question waits it reports idle from a second process in the pane.
+// Before the second it reports a real prompt of its own. $1 is the folder the
+// script and the test signal each other through.
+const askerScript = `#!/usr/bin/env bash
+T="$TUIOS_E2E_CLI"; D="$1"
+"$T" set-agent-state -s e2e-ctrlp working --message 'refactoring the parser'
+{ "$T" ask-human -s e2e-ctrlp --timeout 60000 'Ship the parser refactor?' -o ship -o hold; echo "exit=$?"; } > "$D/ask1" 2>&1 &
+until [ -e "$D/go-idle" ]; do sleep 0.1; done
+{ "$T" set-agent-state -s e2e-ctrlp idle --message 'tests pass'; echo "exit=$?"; } > "$D/idle" 2>&1
+wait
+: > "$D/asked1"
+until [ -e "$D/go-2" ]; do sleep 0.1; done
+"$T" set-agent-state -s e2e-ctrlp needs_input --kind approval --message 'approve Bash: make deploy'
+{ "$T" ask-human -s e2e-ctrlp --timeout 4000 'Deploy now?' -o yes -o no; echo "exit=$?"; } > "$D/ask2" 2>&1
+: > "$D/asked2"
+`
+
+// TestAskHumanFromAPaneShowsNeedsInput: while an ask-human call from inside a
+// pane waits, the pane shows needs_input with the question as its note, the
+// Inbox shows the one ask item, the person's answer reaches the asker, and
+// the pane then shows what the pane itself last reported.
+//
+// How it could pass wrongly, written down first:
+//   - needs_input could come from the pane's own reports and not from the
+//     question. The script reports only working and idle around the first
+//     question, and the note must be the question's text.
+//   - "One item" could be read before a second item lands. The count is read
+//     after the pane's idle report has been applied beneath the question, and
+//     again on the client as "1 needs you", with the frame saved.
+//   - The answer could reach the asker and the state still be stale. The test
+//     waits for the asker's output first, then reads the state.
+//   - The typing check could pass because nothing ever holds. Its negative
+//     control has the end of the question take the #1054 hold, as a report
+//     from outside the pane does, and the check fails.
+//   - The real-prompt half could pass because the question never showed at
+//     all. The question is read in list-attention while the pane's note is
+//     still the approval's.
+//
+// Negative control: on origin/main the pane stays working and the first state
+// check fails. With the askShownLocked check cut from noteAgentState, the
+// Inbox holds two items for the pane. With askShadows returning false, the
+// idle report shows at once. With endAskShow taking the #1054 prompt hold, as
+// a report from outside the pane does, pane B's send-text is refused. With the needs_input guard
+// cut from showAsk, the pane's note becomes "Deploy now?".
+func TestAskHumanFromAPaneShowsNeedsInput(t *testing.T) {
+	term, base := attachClientBase(t)
+	const sess = "e2e-ctrlp"
+	dir := t.TempDir()
+	script := filepath.Join(dir, "asker.sh")
+	if err := os.WriteFile(script, []byte(askerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "asker", "--no-focus"); err != nil {
+		t.Fatalf("new-window failed: %v\n%s", err, out)
+	}
+	ids := grantWindowIDs(t, base, sess)
+	if len(ids) != 2 {
+		t.Fatalf("want two windows, got %v", ids)
+	}
+	typist, asker := ids[0], ids[1]
+
+	type agentState struct {
+		State   string `json:"state"`
+		Message string `json:"message"`
+	}
+	state := func() agentState {
+		t.Helper()
+		out, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", sess, "-w", asker)
+		if err != nil {
+			t.Fatalf("get-agent-state: %v\n%s", err, out)
+		}
+		var r agentState
+		if err := json.Unmarshal([]byte(out), &r); err != nil {
+			t.Fatalf("get-agent-state json: %v\n%s", err, out)
+		}
+		return r
+	}
+	waitState := func(want agentState, when string) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for got := state(); got != want; got = state() {
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: %s: the asking pane shows %+v, want %+v", when, got, want)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	type item struct {
+		Kind    string   `json:"kind"`
+		Window  string   `json:"window"`
+		Summary string   `json:"summary"`
+		Options []string `json:"options"`
+	}
+	askerItems := func() []item {
+		t.Helper()
+		out, err := tuiosCLI(t, base, "list-attention", "-s", sess, "--json")
+		if err != nil {
+			t.Fatalf("list-attention: %v\n%s", err, out)
+		}
+		var res struct {
+			Items []item `json:"items"`
+		}
+		if err := json.Unmarshal([]byte(out), &res); err != nil {
+			t.Fatalf("list-attention json: %v\n%s", err, out)
+		}
+		var mine []item
+		for _, it := range res.Items {
+			if it.Window == asker {
+				mine = append(mine, it)
+			}
+		}
+		return mine
+	}
+	signal := func(name string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", asker,
+		"TUIOS_E2E_CLI="+tuiosBin+" bash "+script+" "+dir+"\n"); err != nil {
+		t.Fatalf("start the asker: %v\n%s", err, out)
+	}
+
+	// The question shows as the pane's state while the call waits.
+	waitState(agentState{"needs_input", "Ship the parser refactor?"}, "while the question waits")
+
+	// A report from the pane while it waits goes beneath the question.
+	signal("go-idle")
+	if got := waitFile(t, filepath.Join(dir, "idle"), func(s string) bool { return strings.Contains(s, "exit=") }, "the idle report"); !strings.Contains(got, "exit=0") {
+		t.Fatalf("the pane's idle report failed: %q", got)
+	}
+	if got := state(); got != (agentState{"needs_input", "Ship the parser refactor?"}) {
+		t.Errorf("ASSERTION: the pane's idle report replaced the question at once: %+v", got)
+	}
+	if mine := askerItems(); len(mine) != 1 || mine[0].Kind != "ask" || len(mine[0].Options) != 2 {
+		t.Errorf("ASSERTION: the Inbox holds %+v for the asking pane, want the one ask item with its two answers", mine)
+	}
+
+	// The person sees one item and answers it on a real client.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "1 needs you", "Asks", "Ship the parser refactor?")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the Inbox does not show the one question: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "ask-human-pane-needs-input")
+	time.Sleep(answerSettle)
+	if err := term.SendKeys("1"); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+	got := waitFile(t, filepath.Join(dir, "ask1"), func(s string) bool { return strings.Contains(s, "exit=") }, "the asker's answer")
+	if !strings.Contains(got, "ship") || !strings.Contains(got, "exit=0") {
+		t.Fatalf("ASSERTION: the asker got %q, want the answer ship and exit 0", got)
+	}
+
+	// The pane ends on what it reported while it waited, not on the state
+	// from before the question.
+	waitState(agentState{"idle", "tests pass"}, "after the answer")
+	waitFile(t, filepath.Join(dir, "asked1"), func(string) bool { return true }, "the first question's end")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "0 needs you", "tests pass") && !strings.Contains(s.Text(), "Ship the parser refactor?")
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the client still shows the question, or not the pane's own note: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "ask-human-pane-after-answer")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the Inbox: %v", err)
+	}
+
+	// Typing into the pane is as it was before the question: pane B, which
+	// holds admin and not respond, may type into it.
+	typistText := func() string {
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", typist)
+		return strings.Join(strings.Fields(out), " ")
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", typist,
+		"clear; "+tuiosBin+" send-text -s "+sess+" -w "+asker+" '# typed by B'; echo ST_\"EXIT\"=$?\n"); err != nil {
+		t.Fatalf("send-text into B failed: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for text := typistText(); !strings.Contains(text, "ST_EXIT="); text = typistText() {
+		if time.Now().After(deadline) {
+			t.Fatalf("B's line never finished:\n%s", text)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if text := typistText(); !strings.Contains(text, "ST_EXIT=0") {
+		t.Errorf("ASSERTION: B could not type into the pane after its question ended:\n%s", text)
+	}
+
+	// A pane already on a prompt keeps it while its question waits and after.
+	signal("go-2")
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		mine := askerItems()
+		if slices.ContainsFunc(mine, func(it item) bool { return it.Kind == "ask" && it.Summary == "Deploy now?" }) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the second question never reached the Inbox: %+v", mine)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if got := state(); got != (agentState{"needs_input", "approve Bash: make deploy"}) {
+		t.Errorf("ASSERTION: the question was laid over the pane's own prompt: %+v", got)
+	}
+	got = waitFile(t, filepath.Join(dir, "ask2"), func(s string) bool { return strings.Contains(s, "exit=") }, "the second question's timeout")
+	if !strings.Contains(got, "exit=2") {
+		t.Fatalf("the second ask-human ended %q, want exit 2 for no answer yet", got)
+	}
+	if got := state(); got != (agentState{"needs_input", "approve Bash: make deploy"}) {
+		t.Errorf("ASSERTION: the end of the question cleared the pane's own prompt: %+v", got)
+	}
+	alive(t, term, "after questions from a pane")
+}
+
+// TestAskHumanLongQuestionSaysWhatToDo: a question over the limit is refused
+// with its length, the limit, and the command that sends the details to the
+// person, not with a pointer to list-verbs.
+//
+// Negative control: on origin/main the error says "at most 160 bytes" and
+// ends with "call the 'list-verbs' verb", and the checks for the length and
+// the send-agent-message command fail.
+func TestAskHumanLongQuestionSaysWhatToDo(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-long", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	question := strings.Repeat("Should the retry policy back off? ", 6)
+	out, err := tuiosCLI(t, base, "ask-human", "-s", "e2e-long", question, "-o", "yes", "-o", "no")
+	if err == nil {
+		t.Fatalf("a %d-byte question was asked:\n%s", len(question), out)
+	}
+	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "ask-human-long-question.txt"), []byte(out), 0o644)
+	}
+	for _, want := range []string{
+		"the question is " + strconv.Itoa(len(question)) + " bytes, and the limit is 160 bytes",
+		"tuios send-agent-message -s e2e-long -w human",
+		"Nothing was asked.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ASSERTION: the error has no %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "list-verbs") {
+		t.Errorf("ASSERTION: the error still points at list-verbs:\n%s", out)
+	}
+	if list, _ := tuiosCLI(t, base, "list-attention", "-s", "e2e-long", "--json"); strings.Contains(list, "retry policy") {
+		t.Errorf("ASSERTION: the refused question reached the Inbox:\n%s", list)
+	}
 }

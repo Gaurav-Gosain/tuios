@@ -91,7 +91,7 @@ you can see when something you stashed earlier has gone.`,
 			return runStashPut(putSession, args[0], putJSON)
 		},
 	}
-	putCmd.Flags().StringVarP(&putSession, "session", "s", "", "Target session (default: most recently active)")
+	putCmd.Flags().StringVarP(&putSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	putCmd.Flags().BoolVar(&putJSON, "json", false, "Output result as JSON")
 	_ = putCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -114,7 +114,7 @@ deleted to make room, so the first row without it is the next one to go.`,
 			return runStashList(listSession, listJSON)
 		},
 	}
-	listCmd.Flags().StringVarP(&listSession, "session", "s", "", "Target session (default: most recently active)")
+	listCmd.Flags().StringVarP(&listSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output result as JSON")
 	_ = listCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -143,7 +143,7 @@ current directory. The path written is printed on a line of its own.`,
 			return runStashGet(getSession, args[0], out, getJSON)
 		},
 	}
-	getCmd.Flags().StringVarP(&getSession, "session", "s", "", "Target session (default: most recently active)")
+	getCmd.Flags().StringVarP(&getSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	getCmd.Flags().BoolVar(&getJSON, "json", false, "Output result as JSON")
 	_ = getCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 

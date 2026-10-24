@@ -177,7 +177,7 @@ Four verbs carry everything between agents and the person:
 | `tuios send-agent-message` | Leaves a message in a pane's inbox, or `human`'s, without touching its keyboard. Threads with `--reply-to`, files with `--attach` or the session stash |
 | `tuios read-agent-messages`, `tuios wait-for agent-message` | Read the inbox, or block until mail arrives |
 | `tuios ask-agent` | Types a question at an agent that is at its prompt, submits it, and returns what the pane printed. Refuses a pane on `needs_input` (`agent_blocked`), since the text would answer its prompt |
-| `tuios ask-human` | Puts a question with fixed answers in the Inbox and returns your answer |
+| `tuios ask-human` | Puts a question with fixed answers in the Inbox and returns your answer. While the call waits, the asking pane shows `needs_input` with the question as its note |
 
 What keeps it safe: every body an agent reads is fenced as untrusted data and
 `--from` is a claim; a pane cannot send as `human`, and your replies carry
@@ -344,7 +344,7 @@ reports each window's `agent_state`, so a cross-session view can read every
 pane's state in one call.
 
 Targeting follows the same rules as the other window verbs: `-s`/`--session`
-selects the session (default: most recently active), `-w`/`--window` selects the
+selects the session (default: the pane's own session, else the most recently active), `-w`/`--window` selects the
 window by id or name (default: the focused window).
 
 `set-agent-state` is tuios's contract, and the one to build on: it is

@@ -20,7 +20,7 @@ import (
 // and the client fires the ones that need a terminal, so a caller that only saw
 // one table would be told a hook does not exist when it does.
 
-func (d *Daemon) verbListHooks(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListHooks(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Event   string `json:"event"`
@@ -46,11 +46,11 @@ func (d *Daemon) verbListHooks(_ *connState, params json.RawMessage) (any, *verb
 	var sess *Session
 	if p.Session != "" {
 		var verr *verbError
-		if sess, verr = d.resolveVerbSession(p.Session); verr != nil {
+		if sess, verr = d.resolveVerbSession(cs, p.Session); verr != nil {
 			return nil, verr
 		}
 	} else {
-		sess = d.findTargetSession("")
+		sess = d.findTargetSession(cs, "")
 	}
 
 	rows := anySlice(d.hooks.Rows("session"))

@@ -123,7 +123,7 @@ picks it up where run left off.`,
 			return runInPane(sessionName, windowTarget, args, timeout, lines, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: most recently active)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	cmd.Flags().StringVarP(&windowTarget, "window", "w", "", "Target window by name or ID (default: focused)")
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "Milliseconds to wait for the command (default: 30000)")
 	cmd.Flags().IntVar(&lines, "lines", 0, "Keep only the last N lines of the output (0 keeps all)")

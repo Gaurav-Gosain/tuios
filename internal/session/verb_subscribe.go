@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // This file implements the subscribe and wait-for verbs on top of the event hub
@@ -101,6 +104,11 @@ var waitOutputCaptured atomic.Pointer[func(time.Duration)]
 // case where the final matching output event was dropped by the slow-subscriber
 // policy, so the wait still resolves without a caller-side poll loop.
 const waitOutputRecheck = 200 * time.Millisecond
+
+// newOutputCarry is how much of the output it has already checked a wait-for
+// window-output with new keeps, so a pattern that spans two reads still
+// matches.
+const newOutputCarry = 64 << 10
 
 // verbSubscribe opens a long-lived event stream on this connection. It registers
 // a hub subscription with the requested filter, returns a subscribed ack (with
@@ -322,10 +330,13 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		Window    string `json:"window"`
 		Pattern   string `json:"pattern"`
 		Source    string `json:"source"`
-		Until     string `json:"until"`
-		Idle      int    `json:"idle"`
-		Thread    uint64 `json:"thread"`
-		Timeout   int    `json:"timeout"`
+		// New makes window-output match only what the pane writes after
+		// the wait starts.
+		New     bool   `json:"new"`
+		Until   string `json:"until"`
+		Idle    int    `json:"idle"`
+		Thread  uint64 `json:"thread"`
+		Timeout int    `json:"timeout"`
 		// AnySession widens agent-state to every session on the daemon.
 		AnySession bool `json:"any_session"`
 		// CommandSeq makes command-finished match once the window has
@@ -338,6 +349,9 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.New && p.Condition != "window-output" {
+		return nil, invalidParam("new", "new only applies to the window-output condition")
 	}
 	if p.Every && p.Select == "" {
 		return nil, invalidParam("every", "every applies to a wait with select: it waits for every pane the selector matches")
@@ -386,17 +400,17 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 	case "session-exists":
 		return d.waitSessionExists(p.Session, deadline)
 	case "window-output":
-		return d.waitWindowOutput(p.Session, p.Window, p.Pattern, p.Source, deadline)
+		return d.waitWindowOutput(cs, p.Session, p.Window, p.Pattern, p.Source, p.New, deadline)
 	case "window-exit":
-		return d.waitWindowExit(p.Session, p.Window, deadline)
+		return d.waitWindowExit(cs, p.Session, p.Window, deadline)
 	case "window-idle":
-		return d.waitWindowIdle(p.Session, p.Window, p.Idle, deadline)
+		return d.waitWindowIdle(cs, p.Session, p.Window, p.Idle, deadline)
 	case "agent-state":
-		return d.waitAgentState(p.Session, p.Window, p.Until, deadline)
+		return d.waitAgentState(cs, p.Session, p.Window, p.Until, deadline)
 	case "agent-message":
-		return d.waitAgentMessage(p.Session, p.Window, p.Thread, deadline)
+		return d.waitAgentMessage(cs, p.Session, p.Window, p.Thread, deadline)
 	case waitCommandFinished:
-		return d.waitCommandFinishedFor(p.Session, p.Window, p.CommandSeq, deadline)
+		return d.waitCommandFinishedFor(cs, p.Session, p.Window, p.CommandSeq, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {
@@ -451,8 +465,8 @@ func (d *Daemon) waitSessionExists(name string, deadline <-chan time.Time) (any,
 }
 
 // waitWindowExit resolves when the target window's shell process exits.
-func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitWindowExit(cs *connState, sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -497,8 +511,8 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 
 // waitWindowIdle resolves when the target window produces no output for idleMs
 // milliseconds. Each output event resets the idle timer.
-func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitWindowIdle(cs *connState, sessionName, window string, idleMs int, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -555,12 +569,12 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 // It subscribes before the initial check, so a transition in the race window is
 // not missed, and re-reads the canonical state on every event rather than
 // trusting the payload, the waitSessionExists discipline.
-func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-chan time.Time) (any, *verbError) {
+func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string, deadline <-chan time.Time) (any, *verbError) {
 	states, verr := parseUntilStates(until)
 	if verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(sessionName)
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -784,9 +798,19 @@ func parseUntilStates(until string) (map[string]bool, *verbError) {
 // of the gap, so the last output of a burst is always checked. A gap marker or
 // dropped event cannot hang the wait because a low-rate backstop ticker also
 // re-checks.
-func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, deadline <-chan time.Time) (any, *verbError) {
+//
+// With fresh (the new parameter) it matches only what the pane writes after
+// the wait starts: a tap copies the pane's output from that moment, and the
+// pattern runs over that text with the escape sequences taken out. The screen
+// and the scrollback are never read, so a marker already on screen cannot
+// match. Text a program writes again counts, a full-screen redraw included:
+// the stream does not say which bytes repeat earlier ones.
+func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, source string, fresh bool, deadline <-chan time.Time) (any, *verbError) {
 	if pattern == "" {
 		return nil, invalidParam("pattern", "pattern is required for the window-output condition")
+	}
+	if fresh && source != "" {
+		return nil, invalidParam("new", "new matches the output written after the wait starts, so it takes no source. Drop source")
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -795,7 +819,7 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 			Detail: "pattern is a Go regular expression (RE2 syntax).",
 		})
 	}
-	sess, verr := d.resolveVerbSession(sessionName)
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
@@ -827,6 +851,41 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 		}
 		return re.MatchString(content)
 	}
+	// moved says whether a re-check could read something new.
+	moved := func() bool { return pty.currentCaptureState() != checked }
+	matched := map[string]any{"window": window, "pattern": pattern}
+
+	if fresh {
+		// The tap goes first, before the subscription and before anything
+		// else that takes time, so output written while the wait is being set
+		// up is already in it.
+		tap := pty.addOutputTap()
+		defer pty.removeOutputTap(tap)
+		// carry is the output read so far that has not matched, as written.
+		// The pattern runs over all of it, so a match split across two reads
+		// still matches. It keeps a tail, so a long build costs a bounded
+		// amount per check.
+		var carry []byte
+		matches = func() bool {
+			carry = append(carry, tap.take()...)
+			lastCheck = time.Now()
+			text := strings.ReplaceAll(ansi.Strip(string(carry)), "\r\n", "\n")
+			if re.MatchString(text) {
+				return true
+			}
+			if cut := len(carry) - newOutputCarry; cut > 0 {
+				// Cut after a newline where there is one, so the tail does not
+				// start inside an escape sequence.
+				if i := bytes.IndexByte(carry[cut:], '\n'); i >= 0 {
+					cut += i + 1
+				}
+				carry = append([]byte(nil), carry[cut:]...)
+			}
+			return false
+		}
+		moved = tap.pending
+		matched["new"] = true
+	}
 
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
@@ -837,7 +896,7 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 	defer d.events.unsubscribe(sub)
 
 	if matches() {
-		return waitMatched("window-output", map[string]any{"window": window, "pattern": pattern}), nil
+		return waitMatched("window-output", matched), nil
 	}
 
 	backstop := time.NewTicker(waitOutputRecheck)
@@ -868,22 +927,22 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 				continue
 			}
 			if matches() {
-				return waitMatched("window-output", map[string]any{"window": window, "pattern": pattern}), nil
+				return waitMatched("window-output", matched), nil
 			}
 		case <-deferred:
 			deferred = nil
-			if pty.currentCaptureState() == checked {
+			if !moved() {
 				continue
 			}
 			if matches() {
-				return waitMatched("window-output", map[string]any{"window": window, "pattern": pattern}), nil
+				return waitMatched("window-output", matched), nil
 			}
 		case <-backstop.C:
-			if pty.currentCaptureState() == checked {
+			if !moved() {
 				continue
 			}
 			if matches() {
-				return waitMatched("window-output", map[string]any{"window": window, "pattern": pattern}), nil
+				return waitMatched("window-output", matched), nil
 			}
 		}
 	}
@@ -905,8 +964,8 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 // A thread the ring holds nothing from simply never matches, and times out like
 // any other wait: the ring forgets, so a thread nobody has started and a thread
 // that has aged out are the same thing to a reader.
-func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, deadline <-chan time.Time) (any, *verbError) {
-	sess, verr := d.resolveVerbSession(sessionName)
+func (d *Daemon) waitAgentMessage(cs *connState, sessionName, window string, thread uint64, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
 		return nil, verr
 	}
