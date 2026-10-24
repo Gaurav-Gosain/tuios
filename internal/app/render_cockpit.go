@@ -888,11 +888,12 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		nameW = 13
 	}
 	c.text(x+2, y, right, ckSeg{t: g, fg: gInk})
-	// The name starts in the same column whichever mark the row wears: a
-	// two-cell mark's second cell is part of its gap (agentMarkGap).
-	nx := x + 5
-	if r.lines == 1 && w < 48 {
-		nx = x + 4
+	// The name starts in the same column whichever mark the row wears: past the
+	// set's widest mark and its gap (agentMarkLead). Where there is room the
+	// gap is two blanks, and a two-cell mark takes the first of them.
+	nx := x + 2 + agentMarkLead()
+	if r.lines != 1 || w >= 48 {
+		nx = max(nx, x+5)
 	}
 	c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})

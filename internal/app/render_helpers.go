@@ -55,9 +55,8 @@ func agentMarkGap(mark string) string {
 
 // agentMarkCellRight pads a mark at the end of a right-aligned column to
 // agentMarkWidth: the padding goes in front, so the marks end on the row's
-// edge and the figures before them stay in their own column. Nothing follows
-// such a mark for its second cell to stand in for, so the column is as wide as
-// the widest mark.
+// edge and the figures before them stay in their own column. The column is as
+// wide as the widest mark.
 func agentMarkCellRight(mark string) string {
 	if d := agentMarkWidth() - lipgloss.Width(mark); d > 0 {
 		return strings.Repeat(" ", d) + mark

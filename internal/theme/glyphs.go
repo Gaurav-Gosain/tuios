@@ -342,9 +342,8 @@ type glyphRole struct {
 }
 
 // markWidth is the width of an agent-state mark's role: one cell or two. A
-// row that leads with a mark gives it two cells with its gap, a two-cell
-// emoji's second cell being the gap, so the name after it stays in line with
-// the next row's.
+// row that leads with a mark gives it the set's widest mark and one blank, so
+// the name after it stays in line with the next row's whichever mark it wears.
 const markWidth = -1
 
 // MarkMaxWidth is the widest an agent-state mark may measure.
