@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	zwsp = "​"
-	shy  = "­"
+	zwsp = "\u200b"
+	shy  = "\u00ad"
 )
 
 func TestBreakHints(t *testing.T) {
