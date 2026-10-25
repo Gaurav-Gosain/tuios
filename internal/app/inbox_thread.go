@@ -347,6 +347,29 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		at[e.ID] = len(t.entries)
 		t.entries = append(t.entries, e)
 	}
+	// A result can arrive on a later page than the call it finishes. Fold it
+	// into retained calls too, otherwise a cached running card hides failures.
+	// Walk backwards to pair each result with its nearest preceding call.
+	results := make(map[string]string)
+	for i := len(t.entries) - 1; i >= 0; i-- {
+		e := &t.entries[i]
+		if e.ToolID == "" {
+			continue
+		}
+		switch e.Kind {
+		case "tool_result":
+			results[e.ToolID] = e.Status
+		case "tool_call":
+			if status, ok := results[e.ToolID]; ok {
+				e.Status = status
+				// A call can draw as several adjacent cards sharing one id (a
+				// multi-file patch), so keep the result until the group ends.
+				if i == 0 || t.entries[i-1].Kind != "tool_call" || t.entries[i-1].ToolID != e.ToolID {
+					delete(results, e.ToolID)
+				}
+			}
+		}
+	}
 	// The thread draws the newest; the page bound holds the rest.
 	if n := len(t.entries); n > 200 {
 		t.entries = append(t.entries[:0], t.entries[n-200:]...)

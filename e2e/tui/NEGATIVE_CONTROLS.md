@@ -9507,3 +9507,13 @@ Run on 2026-10-26 on Linux against upstream main at 4538d1d12. Linux cannot run 
 | The same sleep, with kittylive stopping its reader before its last line | `TestKittyFilesFromAPaneOnAHost/icat` | passes | fix holds |
 
 The `t=s` upload and icat's memory mode are expected only on Linux. tuios reads a shared memory object only from `/dev/shm`, and the far side answers `ENOTSUPPORTED` on other systems. That part is not a control: no Linux run can show it.
+| Superseded selections are not merged | `.../selections_that_supersede_one_another_are_merged`: "not merged: 11 reports" | **caught** |
+
+## A late tool result reaches the card that is still running
+
+`TestCockpitThreadFoldsALateToolResult` (in `cockpit_thread_late_result_test.go`) opens a Pi session in the Inbox with a command still running, then moves the thread to the page that holds its failed result. `TestThreadPageFoldsALaterResultIntoEveryCardOfACall` and its single-card control (in `internal/app`) cover a call that draws as several cards with one id, such as a patch that touches two files. Run on 2026-10-25 on Linux against upstream main at e48fc3b0.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| A later page's result is never folded into a retained call | `TestCockpitThreadFoldsALateToolResult`: "incremental failure left the retained tool running"; both unit tests fail too | **caught** |
+| The result is consumed by the first card of a call | `TestThreadPageFoldsALaterResultIntoEveryCardOfACall`: "card file-a is \"running\", want \"error\"" | **caught** |
