@@ -352,13 +352,14 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sid
 	return sidebarComposeRow(gutter, glyph, body, "", cw, bg)
 }
 
-// sidebarFileTreeRow draws one row of the tree style: the gutter, the indent
-// guides, the folder's open or closed mark, the file type's icon, and the name.
+// sidebarFileTreeRow draws one row of the tree style, in neo-tree's columns:
+// the gutter, two cells of guide per level, the open or closed mark, a space,
+// the file type's icon, a space, and the name.
 //
-// The mark column is what says a row is a folder that opens. It is drawn on
-// every row, blank on a file, so the icons and names of one folder line up.
-// With the icons off a file wears the glyph set's file mark there instead, so
-// the row still has one mark and the names still line up.
+// The mark column is blank on a file and on "..", so the icons and names of
+// one folder line up whatever kind each row is. The guides wear the rule ink,
+// never the name's, and the cursor's underline starts at the name: see
+// fileTreeNameCol.
 func (m *OS) sidebarFileTreeRow(row fileRowSpec, cw int, pal overlay.Palette, st sidebarRowState) string {
 	bg := sidebarRowBg(st, pal)
 	s := &m.Settings
@@ -367,15 +368,18 @@ func (m *OS) sidebarFileTreeRow(row fileRowSpec, cw int, pal overlay.Palette, st
 	if row.Guide != "" {
 		guide = sidebarStyle(bg, sidebarRuleInk(bg, pal)).Render(row.Guide)
 	}
-	used := 1 + lipgloss.Width(row.Guide)
+	gap := sidebarStyle(bg, nil).Render(" ")
+	col := m.fileTreeNameCol(row)
 
 	if row.Note {
 		ink := pal.FgMute
 		if row.Warn {
 			ink = pal.Warning
 		}
-		return sidebarFit(gutter+guide+sidebarStyle(bg, nil).Render(" ")+
-			sidebarStyle(bg, ink).Render(overlay.Truncate(row.Name, max(cw-used-2, 1))), cw, bg)
+		// A note stands where a name's mark would, under the folder's names.
+		at := 1 + lipgloss.Width(row.Guide) + 2
+		return sidebarFit(gutter+guide+gap+gap+
+			sidebarStyle(bg, ink).Render(overlay.Truncate(row.Name, max(cw-at-1, 1))), cw, bg)
 	}
 
 	shown := printableTitle(row.Name)
@@ -390,23 +394,21 @@ func (m *OS) sidebarFileTreeRow(row fileRowSpec, cw int, pal overlay.Palette, st
 		}
 		ink = pal.Fg
 	}
-	fold := " "
+	icons := fileIconsOn(s) && s.SidebarShowGlyphs
+	chevron := " "
 	switch {
-	case up:
-		// The way out of the root is not a folder that opens, so it wears
-		// no open or closed mark: the parent mark, in the icon's column.
-		if !fileIconsOn(s) && s.SidebarShowGlyphs {
-			fold = s.GetRailParentGlyph()
-		}
-	case row.Dir && row.Open:
-		fold = s.GetRailFoldOpenGlyph()
-	case row.Dir:
-		fold = s.GetRailFoldShutGlyph()
-	case !fileIconsOn(s) && s.SidebarShowGlyphs:
-		fold = s.GetRailFileGlyph()
+	case up || !row.Dir:
+	case icons && row.Open:
+		chevron = fileTreeChevronOpen
+	case icons:
+		chevron = fileTreeChevronShut
+	case row.Open:
+		chevron = s.GetRailFoldOpenGlyph()
+	default:
+		chevron = s.GetRailFoldShutGlyph()
 	}
-	marks := sidebarStyle(bg, ink).Render(fold)
-	if fileIconsOn(s) && s.SidebarShowGlyphs {
+	marks := sidebarStyle(bg, ink).Render(chevron) + gap
+	if icons {
 		mark := fileRowMark(row.Icon, row.Dir, up, s)
 		if row.Dir && row.Open && mark.Glyph == fileIconDir.Glyph {
 			mark.Glyph = fileTreeOpenDirGlyph
@@ -415,11 +417,21 @@ func (m *OS) sidebarFileTreeRow(row fileRowSpec, cw int, pal overlay.Palette, st
 		if mark.Hex != "" {
 			glyphInk = theme.FileIconInkOn(mark.Hex, m.sidebarGroundOr(bg))
 		}
-		marks += sidebarStyle(bg, glyphInk).Render(mark.Glyph)
+		marks += sidebarStyle(bg, glyphInk).Render(mark.Glyph) + gap
 	}
-	used += lipgloss.Width(marks) + 1
-	body := sidebarStyle(bg, ink).Render(overlay.Truncate(shown, max(cw-used-1, 1)))
-	return sidebarFit(gutter+guide+marks+sidebarStyle(bg, nil).Render(" ")+body, cw, bg)
+	body := sidebarStyle(bg, ink).Render(overlay.Truncate(shown, max(cw-col-1, 1)))
+	return sidebarFit(gutter+guide+marks+body, cw, bg)
+}
+
+// fileTreeNameCol is the column a tree row's name starts on. The cursor's
+// underline and weight start there, so the guides, the mark and the icon
+// keep their own look on the cursor row.
+func (m *OS) fileTreeNameCol(row fileRowSpec) int {
+	col := 1 + lipgloss.Width(row.Guide) + 2
+	if fileIconsOn(&m.Settings) && m.Settings.SidebarShowGlyphs {
+		col += 2
+	}
+	return col
 }
 
 // shortenHome writes a path under the home directory as ~/..., which is how the

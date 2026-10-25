@@ -2210,6 +2210,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st.Cursor = st.Cursor || isCursor(row.Kind, "", row.Key)
 				recordHit(row.Kind, "", row.Key, row.Index, 1)
 			}
+			if row.Tree {
+				// A tree row's name starts past its guides and marks, and only
+				// the name takes the cursor's underline.
+				rs := overlay.RowState{Cursor: st.Cursor, Focused: st.Focused, Hover: st.Hover}
+				lines = append(lines, compose(pal.CursorText(pal.Mark(m.sidebarFileRow(row, cw, pal, st), rs), rs, m.fileTreeNameCol(row))))
+				continue
+			}
 			lines = append(lines, compose(st.mark(pal, m.sidebarFileRow(row, cw, pal, st))))
 		}
 		if h := hidden[sidebarSectionFiles]; h > 0 {

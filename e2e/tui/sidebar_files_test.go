@@ -395,14 +395,15 @@ func TestRailFilesSectionFollowsTheDisk(t *testing.T) {
 // longListingFixture is fileViewFixture with forty files after the folders and
 // one more after those, so the listing is longer than the files section, and
 // a folder tree inside alpha for the tree style: alpha holds inner/ and
-// a1.txt, and inner holds deep.txt.
+// a1.txt, inner holds l2/ and deep.txt, and l2/l3/l4 holds leaf.txt, five
+// levels down.
 func longListingFixture(t *testing.T) string {
 	t.Helper()
 	dir := fileViewFixture(t)
-	if err := os.MkdirAll(filepath.Join(dir, "alpha", "inner"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "alpha", "inner", "l2", "l3", "l4"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	files := []string{"alpha/a1.txt", "alpha/inner/deep.txt", "zz-last.txt"}
+	files := []string{"alpha/a1.txt", "alpha/inner/deep.txt", "alpha/inner/l2/l3/l4/leaf.txt", "zz-last.txt"}
 	for i := range 40 {
 		files = append(files, fmt.Sprintf("f-%02d.txt", i))
 	}
@@ -518,9 +519,26 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			sendKeys(t, term, "l", "l")
 			waitForAll(t, term, uiTimeout, "inner open", "deep.txt")
 			snap := term.Screen().Text()
-			if !strings.Contains(snap, "│ └╴") || !strings.Contains(snap, "├╴") || !strings.Contains(snap, "▾") {
+			if !strings.Contains(snap, "│ └") || !strings.Contains(snap, "\uf47c") || !strings.Contains(snap, "\uf460") {
 				t.Errorf("ASSERTION: the open folders draw no indent guides or open mark:\n%s", term.Snapshot())
 			}
+			// Five levels down: l goes into each folder and opens it.
+			for _, next := range []string{"l3/", "l4/", "leaf.txt"} {
+				sendKeys(t, term, "l", "l")
+				waitForAll(t, term, uiTimeout, "the next level", next)
+			}
+			sendKeys(t, term, "l")
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner", "l2", "l3", "l4", "leaf.txt"))
+			copiesFrame(t, term, "rail-files-tree-deep")
+			// Back up and shut them: h on a name goes to its folder, h on an
+			// open folder closes it.
+			sendKeys(t, term, "h", "h", "h", "h", "h", "h")
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "l3/")
+			}, uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: h did not close l2: %v\n%s", err, term.Snapshot())
+			}
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner", "l2"))
 			sendKeys(t, term, "j")
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner", "deep.txt"))
 			copiesFrame(t, term, "rail-files-tree-open")

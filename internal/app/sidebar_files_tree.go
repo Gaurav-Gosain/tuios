@@ -39,7 +39,15 @@ const fileTreeMaxOpen = 64
 
 // fileTreeOpenDirGlyph is the nerd font mark of an open folder, drawn in place
 // of the icon table's closed folder on a folder the tree has open.
-const fileTreeOpenDirGlyph = ""
+const fileTreeOpenDirGlyph = "\ue5fe"
+
+// The expander marks neo-tree draws by default, used where the file icons
+// are: a nerd font chevron right for a closed folder and down for an open one.
+// Without the icons the glyph set's fold marks draw instead.
+const (
+	fileTreeChevronShut = "\uf460"
+	fileTreeChevronOpen = "\uf47c"
+)
 
 // fileTreeDir is one open folder's listing.
 type fileTreeDir struct {
@@ -583,8 +591,9 @@ func fileTreeNote(d *fileTreeDir) fileRowSpec {
 }
 
 // fileTreeGuide is the indent in front of a row of the tree: a guide down the
-// column of each folder above whose rows go on, and a corner at the row's own
-// folder. Two cells per level, so each corner sits under its folder's mark.
+// column of each folder above whose rows go on, and a corner on the last name
+// of the row's own folder. Two cells per level, so each guide sits under its
+// folder's open mark.
 //
 // The strings are kept by shape, so the thousands of rows of one folder share
 // one guide string rather than each building its own.
@@ -623,9 +632,12 @@ func (m *OS) fileTreeGuide(cont []bool, depth int, last bool) string {
 
 // buildTreeGuide draws the guide fileTreeGuide keeps.
 func (m *OS) buildTreeGuide(cont []bool, depth int, last bool) string {
-	bar, tee, corner, dash := "│", "├", "└", "╴"
+	// neo-tree's two marks: a bar down the column of a folder whose names go
+	// on below, and a corner on its last name. No tee and no dash, so the
+	// guides stay a quiet line and do not reach for the row's mark.
+	bar, corner := "│", "└"
 	if m.Settings.UseASCIIOnly {
-		bar, tee, corner, dash = "|", "|", "`", "-"
+		bar, corner = "|", "`"
 	}
 	var b strings.Builder
 	for _, c := range cont[:min(len(cont), depth-1)] {
@@ -639,8 +651,8 @@ func (m *OS) buildTreeGuide(cont []bool, depth int, last bool) string {
 	if last {
 		b.WriteString(corner)
 	} else {
-		b.WriteString(tee)
+		b.WriteString(bar)
 	}
-	b.WriteString(dash)
+	b.WriteByte(' ')
 	return b.String()
 }
