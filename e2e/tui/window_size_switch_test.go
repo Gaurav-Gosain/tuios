@@ -128,15 +128,16 @@ func TestWindowSizeLatestRoundTripKeepsSize(t *testing.T) {
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
 }
 
-// TestWindowSizeLatestSwitchBackTakesSize: the small client took ws, the big
-// client left for another session and typed there, and came back. Its input
-// is the newest, so ws is its size as soon as it is back, before its next
-// key.
+// TestWindowSizeLatestReturnKeepsItsInput: the small client typed, then the
+// big client typed after it and took ws. The big client leaves for another
+// session and comes back. It is the client ws kept its size for, so it comes
+// back with its input, still newer than the small client's, and ws stays its
+// size the whole way.
 //
-// NEGATIVE CONTROL: with handleAttach clearing the client's last input, the
-// big client comes back as one that never typed, the small client keeps ws at
-// 80x24, and waitWSSize fails.
-func TestWindowSizeLatestSwitchBackTakesSize(t *testing.T) {
+// NEGATIVE CONTROL: with handleAttach clearing the input of every client that
+// attaches, the big client comes back as one that never typed, the small
+// client's older input wins once the hold is over, and the sampler sees 80x24.
+func TestWindowSizeLatestReturnKeepsItsInput(t *testing.T) {
 	big, small, base := windowSizePair(t, "latest", "", nil)
 	if out, err := tuiosCLI(t, base, "new", wsOther, "--detach"); err != nil {
 		t.Fatalf("create session %s: %v: %s", wsOther, err, out)
@@ -145,12 +146,67 @@ func TestWindowSizeLatestSwitchBackTakesSize(t *testing.T) {
 	time.Sleep(wsHoldGap)
 	activity(t, small)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
-
-	switchClient(t, base, big, wsOther)
 	time.Sleep(wsHoldGap)
 	activity(t, big)
+	waitWSSize(t, base, wsBigCols, wsBigRows, "after input in the big client")
+	time.Sleep(wsHoldGap)
+
+	stop := make(chan struct{})
+	sizes := wsSizes(t, base, stop)
+	switchClient(t, base, big, wsOther)
 	time.Sleep(wsHoldGap)
 	switchClient(t, base, big, wsSession)
-	waitWSSize(t, base, wsBigCols, wsBigRows, "with the big client back, no key pressed")
+	// Past the hold, so a hand-over to the small client would have landed.
+	time.Sleep(2 * wsHoldGap)
+	close(stop)
+	if got, want := <-sizes, fmt.Sprintf("%dx%d", wsBigCols, wsBigRows); got != want {
+		t.Fatalf("over the round trip ws was %s, want only %s", got, want)
+	}
 	waitMark(t, small, true, "the small client, with the big one back")
+}
+
+// TestWindowSizeLatestLeftAloneNewClientTakesItsSize: the big client types in
+// ws and leaves it, by a switch or for good, and nobody else is attached. A
+// small terminal that attaches to ws on its own takes its own size at once,
+// as it does when nobody typed: ws keeps a size only for the clients that
+// were there when its latest client left.
+//
+// NEGATIVE CONTROL: with pickLatest keeping the size whoever is attached
+// (the anyAttachedBy check removed), ws stays 200x50 under the small client
+// until it types, and waitWSSize fails.
+func TestWindowSizeLatestLeftAloneNewClientTakesItsSize(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		leave func(t *testing.T, base string, big *tuitest.Terminal)
+	}{
+		{"switch", func(t *testing.T, base string, big *tuitest.Terminal) {
+			switchClient(t, base, big, wsOther)
+		}},
+		{"close", func(t *testing.T, base string, big *tuitest.Terminal) {
+			if err := big.Close(); err != nil {
+				t.Logf("close the big client: %v", err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[daemon]\nwindow_size = \"latest\"\n")
+			killDaemon(t, base)
+			for _, name := range []string{wsSession, wsOther} {
+				if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+					t.Fatalf("create session %s: %v: %s", name, err, out)
+				}
+			}
+			big := attachIn(t, base, wsSession, startOpts{cols: wsBigCols, rows: wsBigRows})
+			waitWSSize(t, base, wsBigCols, wsBigRows, "with the big client alone")
+			activity(t, big)
+			time.Sleep(wsHoldGap)
+
+			tc.leave(t, base, big)
+			waitNoClientOn(t, base, wsSession)
+			small := attachSmall(t, base, wsSession, startOpts{cols: wsSmallCols, rows: wsSmallRows})
+			waitWSSize(t, base, wsSmallCols, wsSmallRows, "with a small client attached alone, no key pressed")
+			waitMark(t, small, false, "the small client, alone in ws")
+		})
+	}
 }

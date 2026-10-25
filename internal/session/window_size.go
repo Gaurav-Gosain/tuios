@@ -100,6 +100,10 @@ type sessionLatest struct {
 	// over. While it is set, the session keeps the size it has. See
 	// pickLatest.
 	left time.Time
+	// leftSeq is the newest attach sequence when the latest client left. Only
+	// a client attached by then can keep the size: one that attaches later
+	// was not there to see it.
+	leftSeq uint64
 }
 
 func (l *latestState) get(sessionID string) *sessionLatest {
@@ -166,7 +170,9 @@ func (d *Daemon) sessionSizedClients(sessionID string) []sizedClient {
 // nobody touched (a second window, a phone left attached), came back to a
 // session resized twice, every program in it redrawn twice, and drawn at the
 // other client's size until their next key. The first input at a client still
-// here, or the holder coming back, ends it.
+// here, or the holder coming back, ends it. So does a session that has none
+// of the clients it had when the holder left: a terminal attached to it later,
+// on its own, takes its own size at once, as it does when no one typed.
 func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Time) (latest string, kept bool) {
 	d.latest.mu.Lock()
 	defer d.latest.mu.Unlock()
@@ -189,7 +195,8 @@ func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Ti
 		st.left = time.Time{}
 	}
 	switch {
-	case holder == nil && !st.left.IsZero() && (best == nil || !best.activity.After(st.left)):
+	case holder == nil && !st.left.IsZero() && anyAttachedBy(clients, st.leftSeq) &&
+		(best == nil || !best.activity.After(st.left)):
 		// The holder left, and nobody here has had input since.
 		kept = true
 	case holder == nil && best == nil:
@@ -214,6 +221,16 @@ func (d *Daemon) pickLatest(sessionID string, clients []sizedClient, now time.Ti
 	return st.client, kept
 }
 
+// anyAttachedBy reports whether one of the clients attached at or before seq.
+func anyAttachedBy(clients []sizedClient, seq uint64) bool {
+	for _, c := range clients {
+		if c.seq <= seq {
+			return true
+		}
+	}
+	return false
+}
+
 // latestLeft records that a client left a session, with its last input. When
 // it was the session's latest client and had input, the session keeps its
 // size until a client still there has input after that. See pickLatest.
@@ -225,7 +242,21 @@ func (d *Daemon) latestLeft(sessionID, clientID string, input time.Time) {
 	defer d.latest.mu.Unlock()
 	if st := d.latest.sessions[sessionID]; st != nil && st.client == clientID {
 		st.left = input
+		st.leftSeq = d.attachCount.Load()
 	}
+}
+
+// latestReturnInput is the last input a client had when it left a session it
+// was the latest client of, while the session has kept its size for it since,
+// and zero otherwise. A client that comes back takes it again. See
+// handleAttach.
+func (d *Daemon) latestReturnInput(sessionID, clientID string) time.Time {
+	d.latest.mu.Lock()
+	defer d.latest.mu.Unlock()
+	if st := d.latest.sessions[sessionID]; st != nil && st.client == clientID {
+		return st.left
+	}
+	return time.Time{}
 }
 
 // armLatestTimer runs the decision again when the holder's hold ends. Called

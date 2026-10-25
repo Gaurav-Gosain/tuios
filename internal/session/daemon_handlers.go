@@ -223,6 +223,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 			session.attachMu.Unlock()
 		}
 	}()
+	// Asked before cs.mu is taken: the latest state has a lock of its own.
+	returnInput := d.latestReturnInput(session.ID, cs.clientID)
 	cs.mu.Lock()
 	previousSession := cs.sessionID
 	cs.sessionID = session.ID
@@ -237,11 +239,15 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.attachSeq = d.attachCount.Add(1)
 	cs.viewOnly = payload.ViewOnly
 	cs.passive = payload.Passive
-	// lastActivity is left alone. It is when the person at this client last
-	// gave input, wherever that was, and a session switch is the same person
-	// on the same connection: one who typed in another session and came back
-	// is still the latest, and takes the size in the reply below rather than
-	// on the next key. A new connection starts with none. See window_size.go.
+	// A client that comes back to a session it was the latest client of, and
+	// that kept its size for it, takes back the input it had when it left: it
+	// is still the latest there, so the session stays its size rather than
+	// going to a client that typed before it. The time is the one recorded at
+	// the leave, since an attach elsewhere on the way cleared the client's
+	// own. Any other attach starts with none, so the key that switched a
+	// client into a session someone else holds does not count as input there.
+	// See window_size.go.
+	cs.lastActivity = returnInput
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
 	cs.mu.Unlock()

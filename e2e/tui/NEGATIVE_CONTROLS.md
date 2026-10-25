@@ -9451,3 +9451,13 @@ The test failed twice in CI after #1123, on shards that run it among other tests
 | `motionBudgetFrom` returns the end of the compose only, which is upstream main | "highlighted 5.134s / 2.372s / 5.348s after the pointer stopped; the budget is 1.5s", three runs out of three | **caught** under load |
 
 Without the busy loops, upstream main failed one run in three (2.6 s) with tuios at `GOMAXPROCS=1`, and passed with 0.5 to 1.4 s on two cores with two busy loops. The fixed build passed every run: 30 to 113 ms with no load or two busy loops, 43 to 99 ms with four.
+## window_size latest over a session switch
+
+`window_size_switch_test.go`: `TestWindowSizeLatestRoundTripKeepsSize`, `TestWindowSizeLatestReturnKeepsItsInput` and `TestWindowSizeLatestLeftAloneNewClientTakesItsSize` (switch and close), with `TestSwitchIntoASmallerSessionKeepsItsSize` in `switch_rail_test.go` as the other side of the attach rule. Run on 2026-10-25 on macOS with each control built from the branch with one line changed; every other test of the four passed on each.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `handleAttach` clears every attach's input (`cs.lastActivity = time.Time{}` for the returning holder too) | `ReturnKeepsItsInput`: "over the round trip ws was 200x50 80x24, want only 200x50" | **caught** |
+| `pickLatest` keeps the size whoever is attached (`anyAttachedBy` made `true`) | `LeftAloneNewClientTakesItsSize/switch` and `/close`: "the session is 200x50 under latest, want 80x24" | **caught** |
+| `handleAttach` keeps every attach's input (the branch's first commit) | `SwitchIntoASmallerSessionKeepsItsSize`: "the panes span 120 columns, want 80" | **caught** |
+| `pickLatest`'s kept case cut, so the leave hands the session over at once (main) | `RoundTripKeepsSize` and `ReturnKeepsItsInput`: "over the round trip ws was 200x50 80x24" | **caught** |
