@@ -861,6 +861,10 @@ type SidebarConfig struct {
 	// Background is the ground painted under the rail: off, theme or
 	// #RRGGBB, and empty follows appearance.background (default: empty).
 	Background string `toml:"background"`
+	// CursorBackground is the ground of the row under the rail's cursor
+	// while the rail has the keyboard: a colour, and empty keeps the
+	// palette's own (default: empty).
+	CursorBackground string `toml:"cursor_background"`
 	// AgentRow is the [appearance.sidebar.agent_row] table: the tokens an
 	// agent row draws and the value rules that colour them. Decoded as generic
 	// TOML and read by ParseSidebarAgentRow, so a wrong value in it is a
@@ -2702,6 +2706,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.WindowChromeBackground = cfg.Appearance.WindowChromeBackground
 	s.DockBackground = cfg.Appearance.DockBackground
 	s.SidebarBackground = cfg.Appearance.Sidebar.Background
+	s.SidebarCursorBackground = cfg.Appearance.Sidebar.CursorBackground
 
 	// A pointer because zero is a real value here: it turns the repeat window
 	// off, and a plain int could not tell that from an absent key.

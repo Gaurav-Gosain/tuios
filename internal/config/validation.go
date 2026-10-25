@@ -427,6 +427,8 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	validateScrollbar(cfg, result)
 	validateDockModeIcons(cfg, result)
 	validateBackgrounds(cfg, result)
+	warnColours(result, "appearance", "The cursor row keeps the theme's background",
+		"sidebar.cursor_background", cfg.Appearance.Sidebar.CursorBackground)
 }
 
 // validateBackgrounds warns about a background option that is neither a

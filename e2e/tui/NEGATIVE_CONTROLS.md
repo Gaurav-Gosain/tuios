@@ -9234,3 +9234,12 @@ Not covered: a TML surface in a session the client is not attached to. The view 
 | Upstream main at 22d63929 | Typing step 1: the field takes no typed text | **caught** |
 | `Surface.Key` checks the button keys before the focused text field | Typing step 3: the `y` of "today" presses Send | **caught** |
 | A paste into a TML window is refused as before | "the paste in the field" | **caught** |
+
+## The rail cursor row takes cursor_background
+
+`TestRailCursorShowsWithoutItsGround` (in `sidebar_keyboard_test.go`) has two more cases. Both set `appearance.sidebar.cursor_background = "#ff00ff"`. At truecolor, every cell of the cursor row between the gutter and the edge rule must be on `#ff00ff`. The test then saves the config file with `#00c0c0` and waits for the row to take the new colour. At 16 colours, no rail cell may carry `#ff00ff`, and the cursor row must still be in reverse video. Run on 2026-10-25 on Linux against upstream main at b2741f02a. Each control is a text replacement, built to a separate binary and put back before the next.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `railCursorBg` always returns nil, so the option does nothing | `cursor-bg-truecolor`: "cursor_background is set, but the cursor row is not on #ff00ff" | **caught** |
+| `railCursorBg` has no 16-colour check | passes: at 16 colours the reverse video drops every ground of the row, so the colour cannot show | **not caught**, the check is a guard only |

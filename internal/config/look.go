@@ -160,6 +160,7 @@ var lookKeys = []string{
 	"appearance.sidebar.position",
 	"appearance.sidebar.width",
 	"appearance.sidebar.background",
+	"appearance.sidebar.cursor_background",
 	"appearance.sidebar.density",
 	"appearance.sidebar.row_style",
 	"appearance.sidebar.header_style",

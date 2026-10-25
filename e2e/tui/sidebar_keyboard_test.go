@@ -113,6 +113,31 @@ func railRowMarkedOffGround(s tuitest.Screen, r int) bool {
 	return false
 }
 
+// railRowGroundIs reports whether rail row r stands on want: every cell
+// between the gutter and the edge rule carries it as its background.
+func railRowGroundIs(s tuitest.Screen, r int, want tuitest.Color) bool {
+	for x := 1; x < railWidth-1; x++ {
+		if s.Cell(x, r).Bg != want {
+			return false
+		}
+	}
+	return true
+}
+
+// railHasGround reports whether any cell of the rail carries want as its
+// background.
+func railHasGround(s tuitest.Screen, want tuitest.Color) bool {
+	_, rows := s.Size()
+	for r := range rows {
+		for x := range railWidth {
+			if s.Cell(x, r).Bg == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // TestRailCursorShowsWithoutItsGround (discussion 1094): with the rail's
 // background off, the keyboard cursor row has to differ from its neighbours
 // by more than the ground, which a see-through terminal can show as almost
@@ -120,6 +145,13 @@ func railRowMarkedOffGround(s tuitest.Screen, r int) bool {
 // next with j and back with k. Each step requires the mark on the cursor row
 // and on no other rail row. It runs on a dark terminal at truecolor and at 16
 // colours, and under a light theme at truecolor, and saves a PNG of each.
+//
+// Two more cases set appearance.sidebar.cursor_background (also discussion
+// 1094). At truecolor the cursor row must stand on that colour from the
+// gutter to the edge rule, and after the config file is rewritten with
+// another colour the row must take the new one with no restart. At 16
+// colours the option must paint nothing: the cursor stays reverse video, and
+// no rail cell carries the colour.
 //
 // How this could pass wrongly, written down first:
 //   - The cursor row could be found by its text, and the test would then
@@ -129,17 +161,25 @@ func railRowMarkedOffGround(s tuitest.Screen, r int) bool {
 //     other rail row must carry no mark.
 //   - The rail could paint a ground of its own, which hides the bug. The
 //     config sets the rail background off.
+//   - The option could paint every rail row, or only the text cells. The
+//     ground is read on every cell of the cursor row, and railBandRow still
+//     has to find exactly that row.
 //
 // Negative control: on main the truecolor cursor row differs only by its
 // ground, and the first wait fails in the dark and light truecolor cases.
 func TestRailCursorShowsWithoutItsGround(t *testing.T) {
+	magenta := tuitest.Color{Kind: tuitest.ColorRGB, R: 0xff, G: 0x00, B: 0xff}
+	cyan := tuitest.Color{Kind: tuitest.ColorRGB, R: 0x00, G: 0xc0, B: 0xc0}
 	cases := []struct {
 		name, theme string
 		depth       chromeDepth
+		cursorBg    bool // set cursor_background to magenta
 	}{
-		{"dark-truecolor", "", chromeDepths[2]},
-		{"dark-16", "", chromeDepths[0]},
-		{"light-truecolor", "catppuccin_latte", chromeDepths[2]},
+		{"dark-truecolor", "", chromeDepths[2], false},
+		{"dark-16", "", chromeDepths[0], false},
+		{"light-truecolor", "catppuccin_latte", chromeDepths[2], false},
+		{"cursor-bg-truecolor", "", chromeDepths[2], true},
+		{"cursor-bg-16", "", chromeDepths[0], true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -148,7 +188,10 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 				cfg += "theme = \"" + tc.theme + "\"\n"
 			}
 			cfg += "\n[appearance.sidebar]\nenabled = true\nwidth = " + strconv.Itoa(railWidth) + "\nbackground = \"off\"\n"
-			term, _ := railClient(t, "e2e", cfg, startOpts{cols: 120, rows: 30, env: tc.depth.env})
+			if tc.cursorBg {
+				cfg += "cursor_background = \"#ff00ff\"\n"
+			}
+			term, base := railClient(t, "e2e", cfg, startOpts{cols: 120, rows: 30, env: tc.depth.env})
 			renameWindow(t, term, "P1")
 			newWindow(t, term)
 			renameWindow(t, term, "P2")
@@ -199,6 +242,32 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 			saveArtifact(t, term, dir, "cursor-"+tc.name+"-p1")
 			if err != nil {
 				t.Fatalf("the cursor row on P1 differs from its neighbours only by its ground: %v\n%s", err, term.SnapshotStyled())
+			}
+			if tc.cursorBg {
+				scr := term.Screen()
+				r := railRowOf(scr, "P1")
+				truecolor := tc.depth.name == "truecolor"
+				if truecolor && !railRowGroundIs(scr, r, magenta) {
+					t.Fatalf("cursor_background is set, but the cursor row is not on #ff00ff:\n%s", term.SnapshotStyled())
+				}
+				if !truecolor && railHasGround(scr, magenta) {
+					t.Fatalf("cursor_background painted the rail at 16 colours:\n%s", term.SnapshotStyled())
+				}
+				if truecolor {
+					// Hot reload: a new colour in the file reaches the row
+					// with no restart. The file is read back rather than
+					// rebuilt from cfg, since the harness pins its looks in it.
+					body := readFileString(t, configPathIn(base))
+					saveConfigLikeAnEditor(t, base, strings.Replace(body, "#ff00ff", "#00c0c0", 1))
+					err := term.WaitFor(func(s tuitest.Screen) bool {
+						r := railRowOf(s, "P1")
+						return r >= 0 && railBandRow(s) == r && railRowGroundIs(s, r, cyan)
+					}, configWatchTimeout)
+					savePNG(t, term.Screen(), host, dir, "cursor-"+tc.name+"-reload")
+					if err != nil {
+						t.Fatalf("the cursor row did not take the reloaded cursor_background: %v\n%s", err, term.SnapshotStyled())
+					}
+				}
 			}
 			if err := term.SendKeys("j"); err != nil {
 				t.Fatalf("move the cursor down: %v", err)

@@ -915,6 +915,11 @@ var optionSpecs = []Option{
 		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
+		Path: "appearance.sidebar.cursor_background", Type: OptionString, Section: "sidebar",
+		Description: "Background of the row under the cursor while the rail has the keyboard: a colour (#rrggbb, 0-255, a slot name or a role name); empty keeps the theme's",
+		Default:     "", Color: true,
+	},
+	{
 		Path: "appearance.sidebar.sections", Type: OptionString, Section: "sidebar",
 		Description: "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat.",
 		Default:     SidebarDefaultSections,

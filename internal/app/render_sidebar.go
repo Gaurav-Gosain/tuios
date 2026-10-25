@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -152,6 +153,10 @@ type sidebarRowState struct {
 	Cursor  bool // the keyboard cursor is on this row
 	Hover   bool // the pointer is over this row
 	Focused bool // the rail owns the keyboard
+	// CursorBg is appearance.sidebar.cursor_background as written, empty
+	// when unset. It is a string so a row state stays cheap to build per row;
+	// sidebarRowBg resolves it against the palette the row is drawn with.
+	CursorBg string
 }
 
 // lit reports whether the row is drawing any band at all, which is what the
@@ -172,7 +177,19 @@ func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
 
 // railRowState reads the rail's focus once so a row site does not have to.
 func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
-	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.sidebarRailFocused()}
+	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.sidebarRailFocused(), CursorBg: m.Settings.SidebarCursorBackground}
+}
+
+// railCursorBg is the ground appearance.sidebar.cursor_background asks for on
+// pal, or nil when it is unset, not a colour, or the depth is 16 colours. At
+// 16 colours every ground is the terminal's own and the focused cursor is
+// reverse video (see sidebarRowState.mark), so a colour there would paint a
+// band the reverse video then inverts into something nobody chose.
+func railCursorBg(v string, pal overlay.Palette) color.Color {
+	if v == "" || pal.Depth == overlay.Depth16 {
+		return nil
+	}
+	return theme.ConfigColorOn(v, &pal)
 }
 
 // sidebarRowBg is the ground a row paints. Three steps, not one.
@@ -184,7 +201,7 @@ func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
 // of a highlighted row.
 //
 // The cursor on a focused rail takes Surface, the strongest of the three
-// grounds. The cursor on an unfocused rail drops to RowSel, so a rail that does
+// grounds, or appearance.sidebar.cursor_background when that is set. The cursor on an unfocused rail drops to RowSel, so a rail that does
 // not own the keyboard stops claiming that it does while still saying where the
 // cursor will be when it gets it back. The mouse wash takes RowSel too, and is
 // told apart from an unfocused cursor by extent rather than by strength.
@@ -195,6 +212,9 @@ func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
 func sidebarRowBg(st sidebarRowState, pal overlay.Palette) color.Color {
 	switch {
 	case st.Cursor && st.Focused:
+		if c := railCursorBg(st.CursorBg, pal); c != nil {
+			return c
+		}
 		return pal.Surface
 	case st.Cursor, st.Hover:
 		return pal.RowSel

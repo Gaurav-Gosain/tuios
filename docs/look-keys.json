@@ -494,6 +494,13 @@
       "color": true
     },
     {
+      "path": "appearance.sidebar.cursor_background",
+      "type": "string",
+      "description": "Background of the row under the cursor while the rail has the keyboard: a colour (#rrggbb, 0-255, a slot name or a role name); empty keeps the theme's",
+      "default": "",
+      "color": true
+    },
+    {
       "path": "appearance.sidebar.density",
       "type": "string",
       "description": "Space between the rail's sections: normal, or roomy for a blank row in front of each section after the first",

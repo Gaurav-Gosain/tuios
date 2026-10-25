@@ -648,9 +648,9 @@ omarchy: Tokyo Night, from /home/you/.local/state/omarchy/current. tuios follows
 ## Colour values
 
 Every colour key in tuios takes the same values: the backgrounds, the
-border colours, `scrollbar.tint`, `[appearance.selection]`, the dock's
-`fg` and `bg` keys, `[dock.tabs]`, the agent row's `fg`, and a theme
-file's `chrome` object.
+border colours, `scrollbar.tint`, `sidebar.cursor_background`,
+`[appearance.selection]`, the dock's `fg` and `bg` keys, `[dock.tabs]`,
+the agent row's `fg`, and a theme file's `chrome` object.
 
 | Value | Example | What it is |
 |---|---|---|
@@ -1620,6 +1620,25 @@ mark in its gutter. This occurs in these cases:
 
 The agents row uses the bar or the marker. With `underline` or `pill`, it
 uses the bar.
+
+## The rail's cursor row
+
+When the rail has the keyboard, the row under the cursor has a lighter
+background, and its text is bold and underlined in the accent colour.
+`appearance.sidebar.cursor_background` sets the background of that row.
+
+```toml
+[appearance.sidebar]
+cursor_background = "#3b4261"   # or a slot name, such as "blue", or a role, such as "accent"
+```
+
+The value is a [colour](#colour-values). Empty, the default, keeps the
+theme's background for the cursor row. The colour does not change the text
+colour, so choose a colour that your text is readable on. The option sets
+only the row under the cursor while the rail has the keyboard. The rows under
+the mouse pointer and the cursor of an unfocused rail keep their own
+background. At 16 colours, the option has no effect: the cursor row is in
+reverse video. The option is on the settings page, in the Sidebar section.
 
 ## The rail's section headers
 

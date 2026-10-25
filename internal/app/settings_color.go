@@ -135,6 +135,27 @@ var colorSettings = []colorSetting{
 		func(s *config.Settings, v string) { s.SidebarBackground = v },
 		(*config.Settings).SidebarBackgroundResolved),
 
+	// The rail's cursor row: a band on the rail, so it is a plain colour with
+	// none of the background keywords. Unset, the swatch shows the ground the
+	// palette gives the cursor.
+	{
+		Path:  "appearance.sidebar.cursor_background",
+		Label: "Sidebar cursor",
+		Desc:  "Background of the row under the cursor while the sidebar has the keyboard",
+		Unset: "(theme)",
+		apply: func(m *OS, v string) {
+			m.Settings.SidebarCursorBackground = v
+			m.MarkAllDirty()
+		},
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			pal := theme.GroundUI()
+			if c := railCursorBg(s.SidebarCursorBackground, pal); c != nil {
+				return c
+			}
+			return pal.Surface
+		},
+	},
+
 	// [appearance.selection]: the marks a pane paints over its own output.
 	//
 	// A foreground here may be left empty, which keeps the text the colour the

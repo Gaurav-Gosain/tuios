@@ -795,6 +795,12 @@ type Settings struct {
 	DockBackground         string
 	SidebarBackground      string
 
+	// SidebarCursorBackground is the ground of the rail's cursor row while
+	// the rail has the keyboard. Empty keeps the palette's Surface. It is
+	// a colour only, with no off or theme: the row is a band on the rail,
+	// not a surface of its own. See sidebarRowBg.
+	SidebarCursorBackground string
+
 	// ClockFormat is the Go time layout the clock overlay draws with. Empty takes
 	// DefaultClockFormat.
 	//
