@@ -10138,3 +10138,14 @@ origin/main at ecdeec289.
 | The branch before this review (c7fe27eed) | "the client kept its own order after the daemon answered" | **caught** |
 | The reply comparing against the drawn order (`sidebarSessionOrderFor`) | the same | **caught** |
 | The pending move and the daemon's order out of the rail cache key | none: another change (the cursor) redraws the rail in time in every run | **not caught** |
+## Nest mode gives the pane every key, the leader too
+
+`TestNestModeGivesEveryKeyToThePane` in `nest_mode_test.go` attaches a real client in terminal mode with the default keys, with `cat -v` in the pane. ctrl+b enter must make the dock pill say `NEST F12`. ctrl+b, alt+2, ctrl+p and x must then reach `cat -v` as `^B^[2^Px`, with the session on workspace 1, one pane and no palette. F12 must take `NEST F12` off the pill without reaching the pane, and ctrl+b c must then open a second pane. `TestNestModeHandsTheLeaderToANestedTmux` runs a tmux of its own (`-L`, `-f /dev/null`) in the pane: in nest mode ctrl+b c must open the tmux's window `W1` with no tuios pane added, ctrl+b d must print tmux's `[detached`, and after F12 ctrl+b c must open a tuios pane. `TestNestModeIsTheLeaderThenEnterInEveryPreset` runs the tmux, screen and zellij presets: each preset's leader then enter must turn nest mode on, and F12 off. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-26 on macOS, based on origin/main at 6d122034a.
+
+The fixed build passes.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The nest path in `HandleTerminalModeKey` (`if false && o.Nested()`), the dock pill kept | "ctrl+b alt+2 ctrl+p x did not reach cat -v as bytes"; the tmux test: "ctrl+b c did not open a window in the nested tmux"; each preset: "F12 did not turn nest mode off" | **caught** |
+| The exit key check (`if false && config.IsKeyPress(...)`) | all three: "F12 did not turn nest mode off" | **caught** |
+| The default key (`"nest": {"enter"}` removed from `DefaultConfig`) | all three: "ctrl+b enter did not turn nest mode on", and each preset's leader then enter | **caught** |

@@ -593,7 +593,10 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// front it would keep the panel's keys and move its own cursor behind the
 	// panel. The panel takes the keys in the mode handlers below, and the rail
 	// has them again when it closes, since its focus is left as it was.
-	if o.SidebarSessionFocused() && !o.AnyOverlayOpen() {
+	//
+	// In nest mode the rail pane gets every key the same way, the leader too,
+	// from HandleTerminalModeKey, which also reads the exit key first.
+	if o.SidebarSessionFocused() && !o.AnyOverlayOpen() && !o.Nested() {
 		if msg.String() == "alt+esc" {
 			o.BlurSidebarSession()
 			return o, nil

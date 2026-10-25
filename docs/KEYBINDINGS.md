@@ -120,6 +120,33 @@ shows `LOCK` and `UNLOCK`. When the dock is hidden, or
 `appearance.dock_prefix_indicator` is `"badge"`, the floating badge shows
 `PREFIX` and the open lock while a menu waits for a key.
 
+## Nest mode
+
+Nest mode gives every key to the program in the pane, the leader too, until
+you press one key to end it. It is tmux-matryoshka's prefix `Enter`, for a
+tmux in the pane, or a tuios on another machine, that uses the same leader.
+The `nest` action turns it on. Its default key is the leader, then `enter`,
+in every preset. To put it on a key of its own:
+
+```toml
+[keybindings.terminal_mode]
+nest = ["alt+shift+enter"]
+```
+
+- In terminal mode, every key goes to the focused pane: the leader, the keys
+  tuios binds and the hold key. A nested tmux gets its own `ctrl+b`.
+- `F12` ends nest mode. It does not go to the pane. Set
+  `keybindings.nest_exit_key` to use another key.
+- Overlays opened with the mouse, copy mode and the mouse itself do not
+  change.
+- Nest mode belongs to the client, not to the session. Another client on the
+  same session keeps its keys. It ends when the client leaves terminal mode,
+  and on detach.
+
+The mode pill in the dock shows `NEST F12`, and the focused pane's border
+takes the same colour. When the dock has no mode pill, the floating badge
+shows `NEST F12`.
+
 ## The full list
 
 `tuios keybinds list` shows every action and the keys that run it, as your

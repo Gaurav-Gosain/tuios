@@ -145,6 +145,18 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
+	// Nest mode gives the pane every key, the leader too, all but its exit
+	// key, which ends the mode and goes nowhere. It is after the overlays and
+	// copy mode, which keep their keys as they do under lock, and before the
+	// leader. See app/nest_mode.go.
+	if o.Nested() {
+		if config.IsKeyPress(producedKey(msg).String(), o.Settings.GetNestExitKey()) {
+			o.LeaveNest()
+			return o, nil
+		}
+		return typeIntoPane(msg, o, false)
+	}
+
 	// Check for prefix key in terminal mode. A leader the prefix_mode table
 	// binds, pressed after the leader, is that binding's and goes to
 	// HandlePrefixCommand below (issue #866). A menu lock mode holds open is

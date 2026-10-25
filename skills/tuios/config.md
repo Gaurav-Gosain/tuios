@@ -589,6 +589,11 @@ a repeatable action keeps its menu open until `esc`, with no time limit. That
 menu takes only repeatable keys. Any other key goes to the pane, and tuios
 locks again.
 
+`nest`, the leader then enter, is tmux-matryoshka's prefix Enter: every key
+goes to the pane, the leader too, until `keybindings.nest_exit_key` (`f12`).
+It is for a tmux in the pane with the same leader. The dock pill shows
+`NEST F12`.
+
 ### tmux keys with no default
 
 `last_workspace` (tmux `l`), `break_pane` (`!`), `last_session` (`L`) and

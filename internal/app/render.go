@@ -1008,8 +1008,8 @@ func (m *OS) focusedBorderColor(state color.Color) color.Color {
 }
 
 // focusedStateBorder is the focused pane's border for a state the theme
-// names a colour for: border.copy in copy mode, status.attention while the
-// pane's agent waits for input. Nil when the pane is in neither state, or
+// names a colour for: border.copy in copy mode, the info colour in nest
+// mode, status.attention while the pane's agent waits for input. Nil when the pane is in neither state, or
 // the theme names no colour for it, and the mode's colour is drawn.
 func (m *OS) focusedStateBorder(w *terminal.Window) color.Color {
 	if w == nil {
@@ -1019,6 +1019,12 @@ func (m *OS) focusedStateBorder(w *terminal.Window) color.Color {
 		if c := theme.BorderFocusedCopy(); c != nil {
 			return c
 		}
+	}
+	// Nest mode's border is the dock pill's colour, whatever the theme says:
+	// a client whose leader goes to the pane must not look like one whose
+	// leader works. See nest_mode.go.
+	if m.Nested() {
+		return theme.UI().Info
 	}
 	if c := theme.BorderFocusedAttention(); c != nil && m.windowMarkState(w) == "needs_input" {
 		return c

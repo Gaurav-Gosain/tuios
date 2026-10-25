@@ -686,6 +686,9 @@ type Settings struct {
 	// Lock is keybindings.lock: terminal mode gives every key but the leader
 	// to the focused pane.
 	Lock bool
+	// NestExitKey is keybindings.nest_exit_key, the key that ends nest mode.
+	// Empty is DefaultNestExitKey. See GetNestExitKey.
+	NestExitKey string
 
 	// PaneGap is the cells of empty space the tiler keeps between two neighbouring
 	// panes: i3's inner gap, and about the only spacing a terminal window manager
@@ -1062,6 +1065,18 @@ const DefaultScrollbackLines = 10000
 // asking "what does tuios bind when nobody said otherwise", which is one answer
 // for the whole program and not one per session.
 const DefaultLeaderKey = "ctrl+b"
+
+// DefaultNestExitKey is the key that ends nest mode when
+// keybindings.nest_exit_key is unset: F12, tmux-matryoshka's.
+const DefaultNestExitKey = "f12"
+
+// GetNestExitKey returns the key that ends nest mode.
+func (s *Settings) GetNestExitKey() string {
+	if s.NestExitKey == "" {
+		return DefaultNestExitKey
+	}
+	return s.NestExitKey
+}
 
 // Global is the process seed: the config file and the CLI flags are applied to
 // it once at startup, single-threaded, and every session copies it at

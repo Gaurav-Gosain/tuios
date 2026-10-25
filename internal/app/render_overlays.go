@@ -50,7 +50,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// opens and for a menu held after a repeatable action.
 	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
 	prefixBadge := (m.PrefixActive || unlockBadge) && !m.prefixPillShown()
-	if isRecording || prefixBadge {
+	// Nest mode goes on the badge when no mode pill can carry it.
+	nestBadge := m.Nested() && !m.modePillShown()
+	if isRecording || prefixBadge || nestBadge {
 		// The reading comes from the clock component, so the badge and a clock
 		// cell on the dock can never disagree, and so the format is the one
 		// [dock.clock] asked for rather than the one that used to be spelled
@@ -64,6 +66,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			statusText = "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime
 		} else if prefixBadge {
 			statusText = "PREFIX | " + currentTime
+		} else if nestBadge {
+			statusText = m.nestLabel() + " | " + currentTime
 		} else {
 			statusText = currentTime
 		}
@@ -83,6 +87,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			timeStyle = timeStyle.Background(pal.Warn).Foreground(theme.ContrastText(pal.Warn))
 		case prefixBadge:
 			timeStyle = timeStyle.Background(pal.Warning).Foreground(theme.ContrastText(pal.Warning))
+		case nestBadge:
+			timeStyle = timeStyle.Background(pal.Info).Foreground(theme.ContrastText(pal.Info))
 		}
 
 		renderedTime := timeStyle.Render(statusText)

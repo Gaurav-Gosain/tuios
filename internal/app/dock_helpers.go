@@ -767,6 +767,12 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		if m.lockPillShown() {
 			modeLabel = withLockIcon(modeLabel, m.Settings.GetDockLockIcon(false))
 		}
+	case m.Nested():
+		// Nest mode: tuios is off for this client. The pill says so in the
+		// info colour, which no other mode wears, and names the one key that
+		// turns it back on. See nest_mode.go.
+		modeInfo.Color = theme.UI().Info
+		modeLabel = m.nestLabel()
 	case m.SidebarFocused:
 		// The rail owns the keyboard: the mode pill is the authoritative "who has
 		// input" indicator, so it says so in accent, outranking the pane mode.

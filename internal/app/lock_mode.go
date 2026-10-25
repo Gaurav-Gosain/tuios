@@ -62,9 +62,10 @@ func (m *OS) MenuOpen() bool { return m.prefixArmed() }
 
 // Locked reports whether lock mode gives every key but the leader to the
 // focused pane: keybindings.lock is on, the client is in terminal mode, and
-// no leader menu is open.
+// no leader menu is open. Nest mode is locked too, and gives the pane the
+// leader as well. See nest_mode.go.
 func (m *OS) Locked() bool {
-	return m.Settings.Lock && m.Mode == TerminalMode && !m.prefixArmed()
+	return (m.Settings.Lock || m.nest) && m.Mode == TerminalMode && !m.prefixArmed()
 }
 
 // lockPillShown reports whether the dock's mode pill carries the lock state:

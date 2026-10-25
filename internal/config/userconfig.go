@@ -977,6 +977,11 @@ type KeybindingsConfig struct {
 	// Repeat) keeps its menu open until esc, and that menu takes only the
 	// repeatable actions. Unset is false, or the preset's.
 	Lock *bool `toml:"lock,omitempty"`
+	// NestExitKey is the key that ends nest mode, the mode the nest
+	// action turns on, in which the focused pane gets every key, the leader
+	// included, as tmux-matryoshka's prefix Enter does. Empty is
+	// DefaultNestExitKey.
+	NestExitKey string `toml:"nest_exit_key,omitempty"`
 	// Repeat lists the actions that stay armed after the leader, as tmux's
 	// bind -r does: the same key pressed again inside
 	// appearance.prefix_repeat_time runs the action again without the leader.
@@ -1416,6 +1421,9 @@ func DefaultConfig() *UserConfig {
 				"hints": {"F"},
 				// . as in the current folder: the path picker lists it.
 				"pick_path": {"."},
+				// enter, as tmux-matryoshka's prefix Enter. Free in every
+				// preset.
+				"nest": {"enter"},
 				// Q, as in tmux's display-panes, which is q there. q is the
 				// quit menu here, and the slip from Q to q opens a menu that
 				// asks first.
@@ -2927,6 +2935,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.KeyboardLayout = cfg.Keybindings.KeyboardLayout
 	s.OptionGlyphs = cfg.Keybindings.OptionGlyphs
 	s.Lock = cfg.Keybindings.Lock != nil && *cfg.Keybindings.Lock
+	s.NestExitKey = cfg.Keybindings.NestExitKey
 
 	// The motion level. A config that was not run through the load path (one
 	// built in code) can still carry the old boolean, so it is folded here as
@@ -3739,6 +3748,8 @@ var yieldingDefaults = map[string]bool{
 	"open_keybind_presets": true,
 	// / after the prefix, new in the release after v0.8.5.
 	"choose_tree": true,
+	// enter after the prefix, new with nest mode.
+	"nest": true,
 	// G after the prefix, new with the go-to picker.
 	"goto_picker": true,
 	// U after the prefix, new with the worktree key.

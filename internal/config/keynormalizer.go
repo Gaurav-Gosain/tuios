@@ -748,6 +748,20 @@ type leaderSet struct {
 
 var leaderCache atomic.Pointer[leaderSet]
 
+// IsKeyPress reports whether pressed, a key event's string in the canonical
+// form, is key as config.toml spells it, normalized as every binding table
+// is. It normalizes key on each call, so it is for a key read only inside a
+// mode of its own, as keybindings.nest_exit_key is in nest mode; the leader,
+// read on every press, has IsLeaderPress and its cache.
+func IsKeyPress(pressed, key string) bool {
+	for _, k := range (&KeyNormalizer{isMacOS: macOSHost}).NormalizeKey(key) {
+		if lookupForm(k) == pressed {
+			return true
+		}
+	}
+	return false
+}
+
 // IsLeaderPress reports whether pressed, a key event's string, is the leader
 // key spelled as leader in config.toml. pressed must be in the canonical form a
 // key event has (see CanonicalKey); it is not normalized here, because this

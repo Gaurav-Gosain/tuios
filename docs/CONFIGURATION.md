@@ -233,6 +233,22 @@ lock = true
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
 
+## Nest mode
+
+```toml
+[keybindings]
+nest_exit_key = "f12"
+
+[keybindings.prefix_mode]
+nest = ["enter"]
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `nest_exit_key` | `"f12"` | The key that ends nest mode. The `nest` action (the leader, then `enter`) turns nest mode on: every key goes to the pane, the leader too, until this key. |
+
+See [Nest mode](KEYBINDINGS.md#nest-mode).
+
 ## Opening links
 
 tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a

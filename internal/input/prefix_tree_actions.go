@@ -55,6 +55,16 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		forwardKeyToFocusedWindow(o.LeaderKeyPress(), o)
 		return o, nil
 	})
+	// Nest mode: every key to the pane, the leader too, until
+	// keybindings.nest_exit_key. tmux-matryoshka's prefix Enter, for a tmux
+	// or a tuios in the pane with the same leader. Unlike the actions above,
+	// it has a default key: the leader, then enter. See app/nest_mode.go.
+	d.Register("nest", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		if o.EnterNest() {
+			o.ShowNotification("Nest mode: every key goes to the pane, "+o.Settings.GetNestExitKey()+" leaves it", "info", o.Settings.NotificationDuration)
+		}
+		return o, nil
+	})
 	d.Register("move_workspace_left", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.MoveWorkspaceBy(-1)
 	})

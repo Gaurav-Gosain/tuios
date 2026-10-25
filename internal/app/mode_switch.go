@@ -14,6 +14,9 @@ func (m *OS) EnterTerminalMode() tea.Cmd {
 	}
 
 	m.Mode = TerminalMode
+	// Entering terminal mode by any path ends nest mode. EnterNest sets it
+	// after this. See nest_mode.go.
+	m.nest = false
 
 	// The raw reader is disabled. Bubbletea handles all input correctly,
 	// including:
@@ -34,6 +37,7 @@ func (m *OS) ExitTerminalMode() tea.Cmd {
 	}
 
 	m.Mode = WindowManagementMode
+	m.nest = false
 
 	// The raw reader is disabled. Bubbletea handles all input correctly.
 	return nil

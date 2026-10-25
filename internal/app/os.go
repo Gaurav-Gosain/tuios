@@ -373,7 +373,10 @@ type OS struct {
 	LastPrefixTime        time.Time      // Time when prefix was activated
 	// LockHeld is true while lock mode keeps a menu open after a repeatable
 	// action, until esc. See lock_mode.go.
-	LockHeld         bool
+	LockHeld bool
+	// nest is true while nest mode gives the focused pane every key, the
+	// leader too. See nest_mode.go.
+	nest             bool
 	HelpScrollOffset int    // Scroll offset for help menu
 	HelpCategory     int    // Current help category index (for left/right navigation)
 	HelpSearchMode   bool   // True when help search is active
