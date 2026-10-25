@@ -1659,14 +1659,20 @@ In the tree, the rail has these keys on a name:
 
 The file action keys (`a`, `r`, `d`, `y`, `x`, `p`, `Y`, `S`) act on the name
 under the cursor. A new file or a paste goes into the folder of that name. On
-an open folder, it goes into that folder. `folder_click` still applies: with
-`cd` or `both`, a folder row also types a cd into the pane.
+an open folder, it goes into that folder. With `folder_click = "cd"`, a folder
+row types a cd into the pane and does not open. With `both`, a folder row
+only opens, because a cd moves the root of the tree to that folder.
+
+In both styles, `g` and `G` on a file go to the first or last name of the
+list. Press the key again to go to the first or last row of the rail.
 
 tuios reads a folder only when you open it. It remembers the open folders of
 each session until tuios stops. You can open 64 folders at most. Each open
 folder shows its first 2000 names. tuios watches each open folder on this
 computer and shows a change without a key. A folder that is open under a
-folder on another computer shows a change when you open it again.
+folder on another computer shows a change when you open it again. When tuios
+sees that an open folder is gone, it closes the folder. A new folder with the
+same name starts closed.
 
 ## The rail's cursor row
 

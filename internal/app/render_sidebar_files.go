@@ -82,10 +82,63 @@ type fileRowSpec struct {
 // The ".." row is part of the same list rather than pinned above it, so it
 // scrolls with the names it belongs to and the section needs one offset like
 // every other. It comes first, which is where a person looks for the way out.
+//
+// The rows are built once per state of the listing and kept: a tree of 64
+// open folders of 2000 names is 128,000 rows, and the render and every j, k,
+// g and G read them. The slice is shared, so a caller must not change it.
 func (m *OS) sidebarFileRows() []fileRowSpec {
 	if !m.filesSectionEnabled() {
 		return nil
 	}
+	return m.fileRowsBuilt()
+}
+
+// fileRowsKey is everything sidebarFileRows draws from. The listings move Gen
+// and the tree's gen whenever their names change, so the two counters stand
+// for the names.
+type fileRowsKey struct {
+	want, dir, elsewhere, err string
+	spoofed, loading, capped  bool
+	tree, ascii               bool
+	gen, treeGen              uint64
+	// The root's names by identity as well: a listing replaced by one of the
+	// same generation (a section closed and opened again starts its count
+	// over) is still a new listing.
+	first *fileEntry
+	n     int
+}
+
+// fileRowsCache is the last rows built and the state they were built for.
+type fileRowsCache struct {
+	key   fileRowsKey
+	valid bool
+	rows  []fileRowSpec
+}
+
+// fileRowsBuilt is sidebarFileRows past the section's on switch, from the
+// cache when the listing has not moved.
+func (m *OS) fileRowsBuilt() []fileRowSpec {
+	v := &m.filesView
+	key := fileRowsKey{
+		want: v.Want, dir: v.Dir, elsewhere: v.Elsewhere, err: v.Err,
+		spoofed: v.Spoofed, loading: v.Loading, capped: v.Capped,
+		tree: m.filesTreeOn(), ascii: m.Settings.UseASCIIOnly,
+		gen: v.Gen, treeGen: m.filesTree.gen,
+		n: len(v.Entries),
+	}
+	if len(v.Entries) > 0 {
+		key.first = &v.Entries[0]
+	}
+	c := &m.filesRows
+	if c.valid && c.key == key {
+		return c.rows
+	}
+	c.key, c.valid, c.rows = key, true, m.buildFileRows()
+	return c.rows
+}
+
+// buildFileRows builds the section's rows from the listing.
+func (m *OS) buildFileRows() []fileRowSpec {
 	switch {
 	case m.filesView.Want == "":
 		// Nothing has ever been asked for, which on a fresh client means no pane
@@ -113,7 +166,15 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 		return []fileRowSpec{{Note: true, Name: "loading"}}
 	}
 
-	rows := make([]fileRowSpec, 0, len(m.filesView.Entries)+3)
+	n := len(m.filesView.Entries) + 3
+	if m.filesTreeOn() {
+		// Every open folder's names and its note, so the rows are one
+		// allocation rather than a slice grown and copied a dozen times.
+		for _, d := range m.filesTree.dirs {
+			n += len(d.Entries) + 1
+		}
+	}
+	rows := make([]fileRowSpec, 0, n)
 	if m.FileViewSpoofed() {
 		// First, above the way out, and in the warning ink. It is the one thing
 		// the section can say that changes what the rows below will do, so it

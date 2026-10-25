@@ -1578,7 +1578,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// See sidebar_files_watch.go. A change that names nothing is the
 		// root's: a daemon push and an older watch say only that.
 		root, dirs := m.fileWatch.takeDirty()
-		cmd := m.refreshChangedTree(dirs)
+		cmd := m.refreshChangedTree(dirs, root)
 		if root || len(dirs) == 0 {
 			cmd = tea.Batch(m.refreshChangedFolder(), cmd)
 		}

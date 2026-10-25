@@ -1625,6 +1625,8 @@ type OS struct {
 	// filesTree is the files section's tree: the open folders per session and
 	// the listing of each one on screen. See sidebar_files_tree.go.
 	filesTree fileTreeState
+	// filesRows is the files section's rows, kept until the listing moves.
+	filesRows fileRowsCache
 
 	// gitView is the rail's git section: the repository the focused pane is in
 	// and how far its branch has drifted. Derived state, never persisted and

@@ -77,6 +77,11 @@ type fileWatcher struct {
 	treeSeq  uint64
 	set      *dirwatch.Set
 	setDirs  map[string]bool
+	// treeMu serialises the goroutines that add and remove the set's
+	// watches. Those are syscalls on paths that can be hung mounts, so they
+	// run under treeMu and never under mu, which the daemon's push and the
+	// client's exit also take.
+	treeMu sync.Mutex
 
 	// dmu guards what changed since the loop last asked: the root, and the
 	// open folders by path. The watch goroutines write it, so it has a lock
@@ -317,17 +322,21 @@ func (m *OS) syncTreeWatch(dirs []string) {
 
 // retargetTree makes the set watch exactly dirs. It runs off the update
 // goroutine, because adding a watch is a syscall on a path that can be a hung
-// mount.
+// mount, and it holds mu only to read and write the bookkeeping.
 func (fw *fileWatcher) retargetTree(dirs []string, seq uint64, ch chan struct{}) {
+	fw.treeMu.Lock()
+	defer fw.treeMu.Unlock()
 	fw.mu.Lock()
-	defer fw.mu.Unlock()
 	if fw.stopped || seq != fw.treeSeq {
+		fw.mu.Unlock()
 		return
 	}
 	if len(dirs) == 0 {
-		if fw.set != nil {
-			fw.set.Close()
-			fw.set, fw.setDirs = nil, nil
+		set := fw.set
+		fw.set, fw.setDirs = nil, nil
+		fw.mu.Unlock()
+		if set != nil {
+			set.Close()
 		}
 		return
 	}
@@ -338,23 +347,50 @@ func (fw *fileWatcher) retargetTree(dirs []string, seq uint64, ch chan struct{})
 		})
 		if err != nil {
 			// Without a watch an open folder is read again when it opens.
+			fw.mu.Unlock()
 			return
 		}
 		fw.set, fw.setDirs = set, map[string]bool{}
 	}
+	set := fw.set
 	want := make(map[string]bool, len(dirs))
 	for _, d := range dirs {
 		want[d] = true
 	}
+	var drop []string
 	for d := range fw.setDirs {
 		if !want[d] {
-			fw.set.Remove(d)
+			drop = append(drop, d)
 			delete(fw.setDirs, d)
 		}
 	}
 	for _, d := range dirs {
-		if !fw.setDirs[d] && fw.set.Add(d) == nil {
-			fw.setDirs[d] = true
-		}
+		fw.setDirs[d] = true
 	}
+	fw.mu.Unlock()
+	// A set the client closed meanwhile refuses these, which is the answer.
+	for _, d := range drop {
+		set.Remove(d)
+	}
+	for _, d := range dirs {
+		_ = set.Add(d)
+	}
+}
+
+// rewatchTree watches an open folder again after it was read because it
+// changed. A folder deleted and made again under the same path lost its watch
+// with the old directory; this watches the new one. A folder still watched is
+// left alone, at the cost of one map lookup on Linux.
+func (m *OS) rewatchTree(dir string) {
+	fw := &m.fileWatch
+	go func() {
+		fw.treeMu.Lock()
+		defer fw.treeMu.Unlock()
+		fw.mu.Lock()
+		set, ok := fw.set, fw.setDirs[dir]
+		fw.mu.Unlock()
+		if set != nil && ok {
+			_ = set.Refresh(dir)
+		}
+	}()
 }

@@ -17,17 +17,27 @@ import (
 // that user runs, so a tree of open folders would starve an editor's watcher
 // of its own. One instance holds any number of watches against the far larger
 // max_user_watches limit, and one parked goroutine reads them all.
+//
+// A watch ends by itself when its directory is deleted or moved away: the
+// kernel drops it and sends IN_IGNORED. The set forgets the directory then and
+// reports it changed, so the caller reads it again and calls Refresh, which
+// watches whatever directory has the path by then.
 type Set struct {
 	file   *os.File
 	fd     int
 	done   chan struct{}
 	notify func(dir string)
 
-	mu   sync.Mutex
-	byWD map[int32]string
-	byID map[string]int32
-	once sync.Once
+	mu     sync.Mutex
+	byWD   map[int32]string
+	byID   map[string]int32
+	closed bool
+	once   sync.Once
 }
+
+// selfGone is the set of events that end a watch: the directory itself went,
+// or the kernel says it dropped the watch.
+const selfGone = unix.IN_DELETE_SELF | unix.IN_MOVE_SELF | unix.IN_IGNORED
 
 // NewSet starts an empty set. notify runs on the set's own goroutine with the
 // directory whose entries changed, and must not block.
@@ -52,6 +62,9 @@ func NewSet(notify func(dir string)) (*Set, error) {
 func (s *Set) Add(dir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return ErrUnsupported
+	}
 	if _, ok := s.byID[dir]; ok {
 		return nil
 	}
@@ -70,12 +83,16 @@ func (s *Set) Add(dir string) error {
 	return nil
 }
 
+// Refresh makes sure dir is watched: a directory whose watch the kernel ended
+// is watched again, and one still watched is left alone.
+func (s *Set) Refresh(dir string) error { return s.Add(dir) }
+
 // Remove stops watching dir. Removing a directory not in the set does nothing.
 func (s *Set) Remove(dir string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	wd, ok := s.byID[dir]
-	if !ok {
+	if !ok || s.closed {
 		return
 	}
 	delete(s.byID, dir)
@@ -104,21 +121,27 @@ func (s *Set) run() {
 		count := 0
 		for off := 0; off+unix.SizeofInotifyEvent <= n; {
 			wd := int32(binary.NativeEndian.Uint32(buf[off:]))
+			mask := binary.NativeEndian.Uint32(buf[off+4:])
 			nameLen := int(binary.NativeEndian.Uint32(buf[off+12:]))
 			off += unix.SizeofInotifyEvent + nameLen
-			if slices.Contains(seen[:count], wd) {
+			s.mu.Lock()
+			dir, ok := s.byWD[wd]
+			if ok && mask&selfGone != 0 {
+				// The kernel ends this watch, and may hand its number to the
+				// next one. The directory is forgotten so Refresh can watch
+				// whatever has the path by then.
+				delete(s.byWD, wd)
+				delete(s.byID, dir)
+			}
+			s.mu.Unlock()
+			if !ok || slices.Contains(seen[:count], wd) {
 				continue
 			}
 			if count < len(seen) {
 				seen[count] = wd
 				count++
 			}
-			s.mu.Lock()
-			dir, ok := s.byWD[wd]
-			s.mu.Unlock()
-			if ok {
-				s.notify(dir)
-			}
+			s.notify(dir)
 		}
 	}
 }
@@ -128,6 +151,9 @@ func (s *Set) run() {
 // once.
 func (s *Set) Close() {
 	s.once.Do(func() {
+		s.mu.Lock()
+		s.closed = true
+		s.mu.Unlock()
 		_ = s.file.Close()
 		<-s.done
 	})

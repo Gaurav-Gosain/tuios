@@ -9342,3 +9342,10 @@ The fixed build passes: the row was highlighted 14 to 211 ms after the pointer s
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `sidebarFilesCursorMove` and `sidebarFilesCursorJump` return false at once, so j and G step over the drawn rows only, as before | both subtests: "the gesture never produced the clipboard writes [.../zz-last.txt]; it wrote []" | **caught** |
+
+The tree subtest also deletes alpha/inner, which is open, and makes it again under the same path before the rail reads alpha. A file made in the new inner 1.5 s later must show. The cursor was on deep.txt, which is gone, so it must be on inner, and Y must copy inner's path.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `dirwatch.Set` keeps the watch descriptor of a folder that was deleted (`if false && ok && mask&selfGone != 0`), so `Refresh` never watches the new folder | tree: "a file made in the new inner never showed" | **caught** |
+| `sidebarPublishNav` does not call `sidebarFileFallback`, so a vanished file row sends the cursor to row 0 of the rail | tree: "the gesture never produced the clipboard writes [.../alpha/inner]; it wrote []" | **caught** |

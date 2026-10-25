@@ -473,8 +473,10 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			newWindow(t, term)
 			waitWindowCount(t, term, 1, "opening a shell for the listing")
 			if style == "tree" {
-				if o, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.files_style", "tree"); err != nil {
-					t.Fatalf("set the tree style: %v\n%s", err, o)
+				for key, val := range map[string]string{"files_style": "tree", "folder_click": "both"} {
+					if o, err := tuiosCLI(t, base, "set-config", "appearance.sidebar."+key, val); err != nil {
+						t.Fatalf("set %s: %v\n%s", key, err, o)
+					}
 				}
 			}
 			enterTerminalMode(t, term)
@@ -529,12 +531,38 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			}
 			waitForAll(t, term, uiTimeout, "the change in an open folder", "made-outside.txt")
 
-			// h on a name goes up to its folder, h on an open folder closes it.
-			sendKeys(t, term, "h")
-			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner"))
+			// inner deleted and made again under the same path, faster than the
+			// rail reads alpha: it stays open, its old watch is gone with the
+			// old folder, and a file made in the new one must still show.
+			inner := filepath.Join(dir, "alpha", "inner")
+			if err := os.RemoveAll(inner); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(inner, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "deep.txt")
+			}, uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: the rail kept the names of the deleted inner: %v\n%s", err, term.Snapshot())
+			}
+			time.Sleep(1500 * time.Millisecond)
+			if err := os.WriteFile(filepath.Join(inner, "after-replace.txt"), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("after-replace.txt", uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: a file made in the new inner never showed: %v\n%s", err, term.Snapshot())
+			}
+			// The cursor was on deep.txt, which is gone. It is on the nearest
+			// row above it now, inner, and not on the rail's first row.
+			copiedRowIs(t, term, out, inner)
+			copiesFrame(t, term, "rail-files-tree-replaced")
+
+			// h on an open folder closes it, and h on a closed one goes up to
+			// its folder.
 			sendKeys(t, term, "h")
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
-				return !strings.Contains(s.Text(), "deep.txt") && strings.Contains(s.Text(), "inner/")
+				return !strings.Contains(s.Text(), "after-replace.txt") && strings.Contains(s.Text(), "inner/")
 			}, uiTimeout); err != nil {
 				t.Fatalf("ASSERTION: h did not close inner: %v\n%s", err, term.Snapshot())
 			}
@@ -542,7 +570,8 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
 
 			// A click on a folder closes it, and a second one opens it again,
-			// with inner still closed.
+			// with inner still closed. folder_click is "both": a tree folder
+			// only opens, and the root stays where it is.
 			col, row, ok := findOnGrid(term.Screen(), "alpha/")
 			if !ok {
 				t.Fatalf("no alpha row:\n%s", term.Snapshot())
@@ -555,8 +584,8 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			}
 			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 			waitForAll(t, term, uiTimeout, "alpha open again", "inner/", "a1.txt")
-			if strings.Contains(term.Screen().Text(), "deep.txt") {
-				t.Errorf("ASSERTION: inner opened with alpha, and it was closed:\n%s", term.Snapshot())
+			if txt := term.Screen().Text(); strings.Contains(txt, "after-replace.txt") || strings.Contains(txt, "/alpha") {
+				t.Errorf("ASSERTION: inner opened with alpha, or the click typed a cd:\n%s", term.Snapshot())
 			}
 			copiesFrame(t, term, "rail-files-tree-click")
 			alive(t, term, "after browsing the files tree")

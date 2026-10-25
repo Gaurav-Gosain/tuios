@@ -38,6 +38,15 @@ func (s *Set) Add(dir string) error {
 	return nil
 }
 
+// Refresh makes sure dir is watched. A watcher here holds the directory it was
+// opened on, which is gone when the path was deleted and made again, and it
+// cannot tell, so the watch is opened afresh. The caller asks only after the
+// directory changed, so this is not on an idle path.
+func (s *Set) Refresh(dir string) error {
+	s.Remove(dir)
+	return s.Add(dir)
+}
+
 // Remove stops watching dir. Removing a directory not in the set does nothing.
 func (s *Set) Remove(dir string) {
 	s.mu.Lock()

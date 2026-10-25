@@ -2449,6 +2449,13 @@ func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTa
 			return
 		}
 	}
+	if haveTarget && isFileListRow(target.Kind) {
+		// A name that left the section (its folder closed or was deleted, or
+		// the style changed) hands the cursor to the nearest row it was under,
+		// not to the rail's first row: a d pressed next must not land on a
+		// session.
+		target = sidebarFileFallback(nav, target)
+	}
 	if haveTarget {
 		m.SidebarCursor = 0
 		for i, r := range nav {
@@ -2461,6 +2468,31 @@ func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTa
 	if m.SidebarCursor >= len(nav) {
 		m.SidebarCursor = max(len(nav)-1, 0)
 	}
+}
+
+// sidebarFileFallback is target when nav holds it, else the row of the
+// nearest folder above it that nav holds, else the files section's first row,
+// else target.
+func sidebarFileFallback(nav []sidebarNavRow, target sidebarNavRow) sidebarNavRow {
+	has := func(r sidebarNavRow) bool {
+		return slices.ContainsFunc(nav, func(n sidebarNavRow) bool { return sidebarNavRowsEqual(n, r) })
+	}
+	if has(target) {
+		return target
+	}
+	for key := fileTreeParentKey(target.WindowID); key != ""; key = fileTreeParentKey(key) {
+		for _, r := range nav {
+			if r.Kind == sidebarRowFileEntry && r.WindowID == key {
+				return r
+			}
+		}
+	}
+	for _, r := range nav {
+		if isFileListRow(r.Kind) {
+			return r
+		}
+	}
+	return target
 }
 
 // sidebarFileRowIndex is the index of the named entry in the files section, or

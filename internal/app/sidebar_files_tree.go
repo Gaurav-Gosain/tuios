@@ -50,6 +50,9 @@ type fileTreeDir struct {
 	// Req stamps the read in flight. A reply that does not carry it is for a
 	// read a newer one replaced, or for a folder that closed and opened again.
 	Req uint64
+	// Again says the folder changed while its first read was running, so it
+	// is read once more when that read lands, as the root is.
+	Again bool
 }
 
 // fileTreeState is the tree's runtime state. It is shared by both rail edges,
@@ -66,6 +69,9 @@ type fileTreeState struct {
 	req uint64
 	// gen moves whenever what the tree draws changes. The rail's cache folds it.
 	gen uint64
+	// guides keeps each indent guide drawn, by its shape. There are a few
+	// dozen shapes in any tree a rail can show.
+	guides map[string]string
 	// synced is what the last sync saw, so a sync on an idle client is one
 	// comparison.
 	synced fileTreeSync
@@ -170,6 +176,7 @@ func (m *OS) syncFileTree() tea.Cmd {
 		}
 		t.host = v.Host
 	}
+	m.fileTreeForgetGone()
 	visible := m.fileTreeVisible()
 	want := make(map[string]bool, len(visible))
 	for _, d := range visible {
@@ -198,6 +205,38 @@ func (m *OS) syncFileTree() tea.Cmd {
 	t.synced = fp
 	m.syncTreeWatch(visible)
 	return tea.Batch(cmds...)
+}
+
+// fileTreeForgetGone closes the open folders that are gone from a listing on
+// screen, so a folder deleted and later made again under the same name comes
+// back closed, as a new folder. Only a listing read cleanly says a name is
+// gone; one being read or one that failed says nothing.
+func (m *OS) fileTreeForgetGone() {
+	set := m.fileTreeOpenSet(false)
+	v := m.filesView
+	if len(set) == 0 || v.Dir == "" || v.Loading || v.Err != "" {
+		return
+	}
+	prefix := fileTreeKey(v.Host, "")
+	for key := range set {
+		dir, ok := strings.CutPrefix(key, prefix)
+		if !ok {
+			continue
+		}
+		parent, name := filepath.Dir(dir), filepath.Base(dir)
+		var entries []fileEntry
+		switch d := m.filesTree.dirs[parent]; {
+		case parent == v.Dir:
+			entries = v.Entries
+		case d != nil && !d.Loading && d.Err == "":
+			entries = d.Entries
+		default:
+			continue
+		}
+		if !slices.ContainsFunc(entries, func(e fileEntry) bool { return e.Dir && e.Name == name }) {
+			delete(set, key)
+		}
+	}
 }
 
 // fileTreeRead asks for one open folder's listing. A quiet read is a re-read
@@ -234,23 +273,58 @@ func (m *OS) HandleFileTreeList(msg fileTreeListMsg) tea.Cmd {
 	if d == nil || d.Req != msg.Req {
 		return nil
 	}
+	if msg.Quiet && msg.Err == "" {
+		// Read because it changed: the change may have been the folder itself
+		// being deleted and made again, which ends its watch.
+		m.rewatchTree(msg.Dir)
+	}
+	var again tea.Cmd
+	if d.Again {
+		d.Again = false
+		again = m.fileTreeRead(msg.Dir, true)
+	}
 	if msg.Quiet && !d.Loading && d.Err == msg.Err && d.Capped == msg.Capped && slices.Equal(d.Entries, msg.Entries) {
-		return nil
+		return again
 	}
 	d.Loading = false
 	d.Entries, d.Capped, d.Err = msg.Entries, msg.Capped, msg.Err
 	m.filesTree.gen++
 	// The new names can hold folders the person opened before: they come into
 	// view now, and are read now.
-	return m.syncFileTree()
+	if again == nil {
+		return m.syncFileTree()
+	}
+	return tea.Batch(again, m.syncFileTree())
 }
 
-// refreshChangedTree re-reads the open folders the watch said changed.
-func (m *OS) refreshChangedTree(dirs []string) tea.Cmd {
+// refreshChangedTree re-reads the open folders the watch said changed. A
+// folder in its first read is read again when that read lands. root says the
+// root changed too.
+//
+// An open folder whose read failed has no watch, so it cannot say it came
+// back. Its parent can: when a folder changes, the open folders under it that
+// failed are read again with it.
+func (m *OS) refreshChangedTree(dirs []string, root bool) tea.Cmd {
+	if root && m.filesView.Dir != "" {
+		dirs = append(dirs, m.filesView.Dir)
+	}
 	var cmds []tea.Cmd
-	for _, dir := range dirs {
-		if d := m.filesTree.dirs[dir]; d != nil && !d.Loading {
+	read := func(dir string) {
+		d := m.filesTree.dirs[dir]
+		switch {
+		case d == nil:
+		case d.Loading:
+			d.Again = true
+		default:
 			cmds = append(cmds, m.fileTreeRead(dir, true))
+		}
+	}
+	for _, dir := range dirs {
+		read(dir)
+		for child, d := range m.filesTree.dirs {
+			if d.Err != "" && !d.Loading && filepath.Dir(child) == dir {
+				read(child)
+			}
 		}
 	}
 	return tea.Batch(cmds...)
@@ -265,7 +339,7 @@ func (m *OS) refreshTreeAll() tea.Cmd {
 	for dir := range m.filesTree.dirs {
 		dirs = append(dirs, dir)
 	}
-	return m.refreshChangedTree(dirs)
+	return m.refreshChangedTree(dirs, false)
 }
 
 // fileTreeOpenDir opens a folder of the tree.
@@ -352,17 +426,18 @@ func (m *OS) fileViewEnterRow(index int, key string) tea.Cmd {
 }
 
 // fileTreeTake is the tree's answer to taking a folder row: it opens or
-// closes in place. folder_click still decides whether the pane is told to cd
-// there too, as it does in the list style.
+// closes in place.
+//
+// folder_click = "cd" still types the cd and opens nothing, because that is
+// all the person asked a folder row to do. "both" opens it and does not cd:
+// the tree follows the pane, so a cd would put the tree's root on the folder
+// just opened, and the open would be undone by the same click.
 func (m *OS) fileTreeTake(full string) tea.Cmd {
-	var cmd tea.Cmd
-	if m.Settings.SidebarFolderClick != config.SidebarFolderClickCd {
-		cmd = m.fileTreeToggleDir(full)
-	}
-	if m.Settings.SidebarFolderClick != config.SidebarFolderClickNavigate {
+	if m.Settings.SidebarFolderClick == config.SidebarFolderClickCd {
 		m.sendCdToOrigin(full)
+		return nil
 	}
-	return cmd
+	return m.fileTreeToggleDir(full)
 }
 
 // fileTreeUnderRoot reports whether full is a folder below the listed root,
@@ -510,10 +585,44 @@ func fileTreeNote(d *fileTreeDir) fileRowSpec {
 // fileTreeGuide is the indent in front of a row of the tree: a guide down the
 // column of each folder above whose rows go on, and a corner at the row's own
 // folder. Two cells per level, so each corner sits under its folder's mark.
+//
+// The strings are kept by shape, so the thousands of rows of one folder share
+// one guide string rather than each building its own.
 func (m *OS) fileTreeGuide(cont []bool, depth int, last bool) string {
 	if depth == 0 {
 		return ""
 	}
+	var shape [64]byte
+	n := 0
+	for _, c := range cont[:min(len(cont), depth-1, len(shape)-1)] {
+		shape[n] = '0'
+		if c {
+			shape[n] = '1'
+		}
+		n++
+	}
+	shape[n] = 'm'
+	if last {
+		shape[n] = 'l'
+	}
+	n++
+	if m.Settings.UseASCIIOnly {
+		shape[n] = 'a'
+		n++
+	}
+	if g, ok := m.filesTree.guides[string(shape[:n])]; ok {
+		return g
+	}
+	g := m.buildTreeGuide(cont, depth, last)
+	if m.filesTree.guides == nil {
+		m.filesTree.guides = map[string]string{}
+	}
+	m.filesTree.guides[string(shape[:n])] = g
+	return g
+}
+
+// buildTreeGuide draws the guide fileTreeGuide keeps.
+func (m *OS) buildTreeGuide(cont []bool, depth int, last bool) string {
 	bar, tee, corner, dash := "│", "├", "└", "╴"
 	if m.Settings.UseASCIIOnly {
 		bar, tee, corner, dash = "|", "|", "`", "-"
