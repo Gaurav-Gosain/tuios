@@ -27,6 +27,6 @@ replace tuios.dev/sketch v0.3.2-0.20261025071246-52fced49d853 => ./sketch
 
 replace tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078 => ./swatch
 
-replace tuios.dev/tml v0.1.2-0.20261025195311-3ba7597d2d99 => ./tml
+replace tuios.dev/loom v0.2.3-0.20261025213319-f88006395466 => ./loom
 
-replace tuios.dev/loom v0.2.3-0.20261025202807-48506c1ff0ec => ./loom
+replace tuios.dev/tml v0.1.2-0.20261025213319-f88006395466 => ./tml
