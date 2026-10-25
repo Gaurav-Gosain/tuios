@@ -10,25 +10,75 @@ This document provides a comprehensive overview of TUIOS's internal architecture
 - [Terminal Emulation Stack](#terminal-emulation-stack)
 - [Theme Color System](#theme-color-system)
 - [Rendering Pipeline](#rendering-pipeline)
+- [Multi-Client Architecture](#multi-client-architecture)
 - [SSH Server Architecture](#ssh-server-architecture)
 - [Core Components](#core-components)
 - [File transfers between machines](#file-transfers-between-machines)
+- [Performance Characteristics](#performance-characteristics)
 
 ## Overview
 
 TUIOS follows a layered architecture built on the Model-View-Update (MVU) pattern provided by Bubble Tea v2. The application is organized into distinct layers that handle user interaction, window management, terminal emulation, and rendering.
 
-Two things this page's diagrams predate, documented elsewhere:
+TUIOS runs as a daemon and its clients. The daemon (`internal/session`) owns the sessions, the PTYs and one VT emulator per pane, and it outlives every client. A client attaches to a session, sends it input, and draws what it streams. A plain `tuios` runs this way, because `startup.daemon` ships on. `tuios --standalone` runs one process that owns its PTYs and emulators itself and lives and dies with that process. The wire contract is in [protocol.md](protocol.md) and the attach contract in [REHYDRATION.md](REHYDRATION.md).
 
-- **The daemon.** In daemon mode the PTYs and emulators live in a separate
-  daemon process (`internal/session`), and clients render what the daemon
-  streams. The wire contract is in [protocol.md](protocol.md) and the
-  attach/repaint contract in [REHYDRATION.md](REHYDRATION.md).
-- **Two VT backends.** The emulator behind the `vt.Terminal` interface is
-  either the pure Go implementation or libghostty-vt behind `-tags ghostty`;
-  see [ghostty-vt.md](ghostty-vt.md).
+The emulator behind the `vt.Terminal` interface is either the pure Go implementation or libghostty-vt behind `-tags ghostty`. Exactly one of them is compiled into a binary. See [ghostty-vt.md](ghostty-vt.md).
 
 ## System Architecture
+
+```mermaid
+graph TB
+    subgraph "Clients"
+        TUI["tuios, tuios attach<br>Bubble Tea TUI"]
+        SSHS["tuios ssh<br>one app.OS per connection"]
+        WEBS["tuios-web<br>one app.OS per connection"]
+        CLI["CLI, agents, tuios mcp"]
+    end
+
+    SSHC[SSH client terminal] --> SSHS
+    BROWSER[Browser with xterm.js] --> WEBS
+
+    subgraph "Daemon: internal/session"
+        BIN[Binary frames]
+        VERBS[JSON verbs]
+        MGR["Sessions and windows<br>session state"]
+        PTYD["PTY per pane<br>64 KB ring and stream position"]
+        VTD[VT emulator per pane]
+        FED["Federation hub<br>internal/federation"]
+    end
+
+    SHELL[Shell or program]
+    FAR["Daemon on another machine"]
+
+    TUI <-->|unix socket| BIN
+    SSHS <-->|unix socket| BIN
+    WEBS <-->|unix socket| BIN
+    CLI -->|unix socket| VERBS
+    BIN --> MGR
+    VERBS --> MGR
+    MGR --> PTYD
+    PTYD <--> SHELL
+    PTYD --> VTD
+    FED <-->|"ssh, tuios stdio-proxy"| FAR
+
+    style MGR fill:#1d3557,color:#fff
+    style VTD fill:#2d6a4f,color:#fff
+    style FED fill:#457b9d,color:#fff
+```
+
+What runs where:
+
+- **The daemon** owns the sessions, their windows and workspaces, and a PTY per pane. Every byte a pane's PTY produces goes to the daemon's emulator for that pane, to a 64 KB ring that numbers each byte with a stream position, and to every client subscribed to the pane. The daemon's emulator answers the program's queries and holds the pane's state for the next attach. A client starts a daemon in the background when none is running. The SSH server and `tuios-web` start one in their own process.
+- **A TUI client** runs the whole window manager: the `app.OS` model, the layout, the input modes and the compositor. Each window holds a second emulator for its pane. It is filled from a snapshot of the daemon's emulator, then from the stream from the snapshot's position (see [REHYDRATION.md](REHYDRATION.md)). The client draws from this copy. Its emulator's replies to the program are dropped, because the daemon's emulator already answered. A key goes to the daemon as `MsgInput`, and the daemon writes it to the PTY.
+- **The SSH server and `tuios-web`** build one `app.OS` per connection with `internal/served`, attached to the daemon like a local client. They send the composed frame to the SSH client's terminal or to the browser. With `--ephemeral`, or when no daemon can be reached, that model runs standalone.
+- **The CLI, agents and `tuios mcp`** speak the JSON verb protocol on the same socket. The daemon tells the two protocols apart by a connection's first byte. Read verbs, input verbs and window creation act on daemon-owned state, with or without a client attached (see [protocol.md](protocol.md#how-verbs-interact-with-an-attached-client)).
+- **Other machines** are reached through federation. The local daemon dials each host in the `[hosts]` table over ssh and runs `tuios stdio-proxy` there. One ssh connection carries several multiplexed streams. A client reaches another machine's daemon through its own daemon with `open-host-connection` (`tuios attach --host`). A window whose process runs on another machine (`new-window --host`) has its PTY there and its emulator here: the far daemon runs no emulator for it.
+
+The daemon owns session state. A client keeps its own copy and pushes it back as it renders, and the daemon merges that push by version (see [protocol.md](protocol.md#who-owns-session-state)).
+
+### Inside a client
+
+This graph is one client's model. In a standalone session the window's PTY and shell are the client's own, as drawn. In a daemon session they are the daemon's, and the window's VT emulator is the copy the daemon's stream feeds.
 
 ```mermaid
 graph TB
@@ -114,7 +164,7 @@ graph TB
 **Terminal Emulation:**
 
 - **VT Emulator**: ANSI/VT100 escape sequence parser with kitty keyboard protocol (CSI u, fish 4.x compatible), mode 2026/2027, OSC 4/52
-- **PTY Interface**: Pseudo-terminal communication with shell. Thread-safe HasMouseMode/HasAllMotionMode/KittyKeyboardFlags via atomics.
+- **PTY Interface**: Pseudo-terminal communication with shell. Thread-safe HasMouseMode/HasAllMotionMode/KittyKeyboardFlags via atomics. In a daemon session the PTY is the daemon's, and a window sends its input through the daemon (`DaemonWriteFunc`).
 - **Scrollback Buffer**: 10,000 lines by default (`appearance.scrollback_lines`), on the client and on the daemon
 
 **Rendering Pipeline:**
@@ -125,38 +175,43 @@ graph TB
 
 ## Data Flow
 
+This is a daemon session. A standalone session has no daemon in the middle: the window writes to its own PTY, and its own emulator is the only one that parses the output.
+
 ```mermaid
 sequenceDiagram
     participant User
-    participant Input
-    participant OS as Window Manager
-    participant Window
-    participant VT as VT Emulator
+    participant OS as Client app.OS model
+    participant Window as Client window and emulator
+    participant Daemon
     participant PTY
+    participant DVT as Daemon emulator
     participant Shell
-    participant Render
 
-    User->>Input: Keyboard/Mouse Event
-    Input->>OS: Route Event
+    Note over Window,Daemon: On attach: snapshot of the daemon emulator,<br>then subscribe from the snapshot's stream position
+
+    User->>OS: Keyboard or mouse event
+    OS->>OS: Route by mode
 
     alt Terminal Mode
-        OS->>Window: Forward to Active Window
-        Window->>PTY: Write to stdin
-        PTY->>Shell: Execute Command
+        OS->>Window: Forward to active window
+        Window->>Daemon: MsgInput with pane id and bytes
+        Daemon->>PTY: Write to stdin
+        PTY->>Shell: Input
         Shell-->>PTY: Output (ANSI)
-        PTY-->>VT: Parse ANSI Stream
-        VT-->>Window: Update Screen Buffer
-        Window-->>OS: Mark Content Dirty
+        PTY-->>DVT: Parse into the daemon's screen
+        PTY-->>Daemon: Append to ring with stream position
+        Daemon-->>Window: MsgPTYOutput to every subscribed client
+        Window-->>Window: Parse into the client's screen
+        Window-->>OS: Mark content dirty
     else Window Management Mode
-        OS->>OS: Process WM Command
-        OS->>Window: Create/Close/Focus/Snap
+        OS->>OS: Process WM command
+        OS->>Daemon: Create or close a window
+        Daemon->>PTY: Spawn or kill the PTY
+        Daemon-->>OS: State sync
     end
 
-    OS->>Render: Generate View
-    Render->>Render: Cull Off-screen
-    Render->>Render: Apply Style Cache
-    Render->>Render: Compose Layers
-    Render-->>User: Display ANSI Output
+    OS->>OS: View: cull, style cache, compose layers
+    OS-->>User: Display ANSI output
 ```
 
 ### Event Flow
@@ -164,7 +219,7 @@ sequenceDiagram
 1. **Input Reception**: User generates keyboard or mouse event
 2. **Mode Routing**: Input handler determines current mode and routes appropriately
 3. **Action Processing**:
-   - **Terminal Mode**: Events sent to active window's PTY
+   - **Terminal Mode**: Events sent to active window's PTY, through the daemon in a daemon session
    - **Window Management Mode**: Commands modify window state
    - **Copy Mode**: Vim-style navigation and selection
 4. **State Update**: OS model updates based on commands
@@ -228,6 +283,8 @@ graph LR
 7. **Selection**: Copy mode overlays selection state
 8. **Styling**: Lipgloss styles applied
 9. **Composition**: Final layer composited for rendering
+
+In a daemon session steps 3 to 5 run twice. The daemon's emulator parses the PTY's bytes, and each client's emulator parses the same bytes from the stream. Steps 6 to 9 run on the client, from its own emulator.
 
 ## Theme Color System
 
@@ -554,8 +611,10 @@ graph TB
 
 By default `tuios ssh` attaches each connection to a session of the daemon, like
 a local `tuios attach`, so several connections can share one session and it
-outlives them (see [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-ssh)). The diagram
-above is `--ephemeral`, where each SSH connection receives:
+outlives them (see [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-ssh)). Either way
+`internal/served` builds the connection's `app.OS`, and `tuios-web` uses the
+same code for a browser. The diagram above is `--ephemeral`, or a connection
+made when no daemon can be reached, where each SSH connection receives:
 
 - Dedicated OS instance (window manager state)
 - Independent workspace configuration
@@ -575,7 +634,12 @@ This ensures:
 | Component             | File                            | Purpose                    | Key Responsibilities                                            |
 | --------------------- | ------------------------------- | -------------------------- | --------------------------------------------------------------- |
 | **Window Manager**    | `internal/app/os.go`            | Central state management   | Workspace orchestration, mode handling, window lifecycle        |
-| **Terminal Windows**  | `internal/terminal/window.go`   | Terminal session container | PTY lifecycle, VT emulator integration, content caching         |
+| **Daemon**            | `internal/session/daemon.go`    | Persistent server process  | Sessions, socket, binary frames and JSON verbs, state sync to clients |
+| **Daemon PTY**        | `internal/session/session.go`   | One pane in the daemon     | PTY, the daemon's VT emulator, output ring, stream subscribers  |
+| **Daemon Client**     | `internal/session/tuiclient.go` | A client's connection      | Attach, input, PTY subscriptions, terminal snapshots            |
+| **Served Model**      | `internal/served/served.go`     | SSH and web sessions       | One `app.OS` per remote connection, attached or ephemeral       |
+| **Federation**        | `internal/federation/`          | Links to other machines    | ssh links to other daemons, multiplexed streams, bulk transfers |
+| **Terminal Windows**  | `internal/terminal/window.go`   | Terminal session container | PTY lifecycle (standalone) or daemon stream, VT emulator integration, content caching |
 | **Input Handler**     | `internal/input/keyboard.go`    | Event dispatcher           | Modal routing, prefix commands, keyboard/mouse processing       |
 | **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
 | **VT Emulator**       | `vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol (CSI u, fish 4.x compatible), OSC 4/52, mode 2026/2027  |
@@ -584,7 +648,7 @@ This ensures:
 | **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
 | **Layout System**     | `internal/layout/tiling.go`     | Window positioning         | Grid calculations, tiling algorithms, snap positions            |
 | **BSP Tiling**        | `internal/layout/bsp.go`        | BSP tree management        | Binary space partitioning, spiral layout, split rotation        |
-| **SSH Server**        | `internal/server/ssh.go`        | Remote access              | Wish middleware, per-session isolation, authentication          |
+| **SSH Server**        | `internal/server/ssh.go`        | Remote access              | Wish middleware, one served model per connection, authentication |
 | **Config System**     | `internal/config/userconfig.go` | Configuration              | TOML parsing, keybinding validation, defaults management        |
 | **Keybind Registry**  | `internal/config/registry.go`   | Keybinding mapping         | Action lookup, conflict detection, help generation              |
 | **Style Cache**       | `internal/app/stylecache.go`    | Performance optimization   | Lipgloss style caching, LRU cache (40-60% allocation reduction) |
@@ -598,11 +662,14 @@ This ensures:
 **Startup Flow:**
 
 1. Parse CLI flags and load configuration
-2. Initialize Bubble Tea program
-3. Create OS model with default workspace (no windows initially)
-4. Enter main event loop
+2. With `startup.daemon` on and no `--standalone`, start a daemon if none is running and attach to a session. If no daemon can be started, the session runs standalone
+3. Initialize Bubble Tea program
+4. Create OS model. A daemon session takes its windows from the daemon. Each is filled from a snapshot, and the panes of the current workspace then follow the stream. A standalone session starts with the default workspace and no windows
+5. Enter main event loop
 
 **Window Creation Flow:**
+
+This is a standalone session. In a daemon session the client sends the create command to the daemon, which adds the window and spawns its PTY. The window reaches the client unplaced, and the client places it and subscribes to its stream (see [protocol.md](protocol.md#how-verbs-interact-with-an-attached-client)).
 
 1. User triggers new window command
 2. OS allocates window with PTY
@@ -1032,7 +1099,7 @@ is in [protocol.md](protocol.md#files-and-transfers).
 
 **Concurrency:**
 
-- Per-window PTY polling goroutines
+- Per-window PTY polling goroutines, in the daemon or in a standalone process
 - Context-based cancellation for cleanup
 - Mutex-protected shared state, atomic HasMouseMode/HasAllMotionMode/KittyKeyboardFlags for thread safety
 
