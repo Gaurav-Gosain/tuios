@@ -313,6 +313,10 @@ func DiffWorking(ctx context.Context, a, b string, stat bool, maxUntracked int64
 
 // HeadCommitCtx is HeadCommit bounded by ctx.
 func HeadCommitCtx(ctx context.Context, path string) (string, error) {
+	// A jj workspace's HEAD is @-; without a ".git" git has none for it.
+	if r := gitstate.Find(path); r.JJ {
+		return gitstate.JJCommit(ctx, r.Root, "@-", false)
+	}
 	out, err := runCtx(ctx, path, nil, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return "", err

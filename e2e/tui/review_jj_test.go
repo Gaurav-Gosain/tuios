@@ -126,3 +126,35 @@ func TestReviewJJConflict(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckpointJJRestore takes turn checkpoints in a plain session whose
+// pane is in a jj workspace with no ".git", and restores the first one. git
+// gets jj's git directory there, and needs the workspace as its work tree to
+// write files back.
+//
+// The test fails on a build whose GitEnv sets GIT_DIR alone: the restore
+// stops with "git checkout-index: fatal: this operation must be run in a work tree".
+func TestCheckpointJJRestore(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.JJRepo(t, false)
+	tr := newCheckpointTranscript(t, base, repo)
+	if out, err := tuiosCLIIn(t, base, repo, "new", "agent", "--detach"); err != nil {
+		t.Fatalf("new session in the workspace: %v: %s", err, out)
+	}
+	notes := filepath.Join(repo, "notes.txt")
+	for n, content := range []string{"first\n", "first\nsecond\n"} {
+		tr.ok("set-agent-state", "-s", "agent", "working")
+		if err := os.WriteFile(notes, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tr.ok("set-agent-state", "-s", "agent", "done", "-m", "turn")
+		tr.waitCheckpoints(n + 1)
+	}
+	if out, err := tr.run("checkpoint", "restore", "-s", "agent", "1"); err != nil {
+		t.Fatalf("ASSERTION: checkpoint restore 1: %v\n%s", err, out)
+	}
+	if got := readFile(t, notes); got != "first\n" {
+		t.Fatalf("ASSERTION: after restoring checkpoint 1, notes.txt is %q, want %q", got, "first\n")
+	}
+}

@@ -127,11 +127,11 @@ func Find(dir string) Repo {
 	return Repo{Root: groot, Main: main, GitDir: gitdir}
 }
 
-// GitEnv is what git needs to read a jj workspace with no ".git" of its
-// own: the git directory jj keeps its commits in. It is empty for a
-// colocated workspace, whose ".git" git finds by itself, and for git. git
-// run this way has no work tree and no index, so only commands that read
-// objects and refs work.
+// GitEnv is what git needs in a jj workspace with no ".git" of its own: the
+// git directory jj keeps its commits in, and the workspace as the work
+// tree. It is empty for a colocated workspace, whose ".git" git finds by
+// itself, and for git. The index there is no workspace's, so a caller that
+// needs one brings its own through GIT_INDEX_FILE.
 func (r Repo) GitEnv() []string {
 	if !r.JJ {
 		return nil
@@ -139,7 +139,7 @@ func (r Repo) GitEnv() []string {
 	if _, err := os.Lstat(filepath.Join(r.Root, ".git")); err == nil {
 		return nil
 	}
-	return []string{"GIT_DIR=" + r.GitDir}
+	return []string{"GIT_DIR=" + r.GitDir, "GIT_WORK_TREE=" + r.Root}
 }
 
 // JJCommit returns the commit the first revision of revset names in the jj

@@ -12946,6 +12946,7 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | Run on 2026-11-03: jj's `*` marker kept in the bookmark name, as before the review of #1470 | `TestRailGitJJ` | "the git section never showed repo, and feat with +2 above it and ↑3 ahead of trunk()": the row shows `feat*` | **caught** |
 | Run on 2026-11-03: `childproc.OwnGroup` and `WaitDelay` cut from `readJJ` | `TestJJTimeoutHoldsWithAHungChild` (unit, `internal/gitstate`) | readJJ returned after about 20 s, the fake jj's child, not within `countTimeout` | **caught** |
 | Run on 2026-11-04: jj's `??` marker kept in the bookmark name | `TestRailGitJJProblems` | "the git section never showed the divergent commit (◇) with the branch row named feat": the row shows `feat??` | **caught** |
+| Run on 2026-11-05: `GitEnv` with `GIT_DIR` alone, no `GIT_WORK_TREE` | `TestReviewJJConflict`, `TestCheckpointJJRestore` | "git update-index: fatal: this operation must be run in a work tree" in the review, and "git checkout-index: ..." in the restore | **caught** |
 
 The frames are `rail-jj-repo-row-*` under the test's artifact folder.
 
