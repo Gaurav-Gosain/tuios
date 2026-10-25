@@ -341,6 +341,7 @@ func (m *OS) centeredBoxLayer(box string, z int, id string) *lipgloss.Layer {
 // as surely as one set in the config file.
 func syncOverlaySettings(s *config.Settings) {
 	overlay.SetASCII(s.UseASCIIOnly)
+	overlay.SetNerdFonts(!s.NerdFontsOff())
 	b := s.OverlayBorder()
 	overlay.SetFrame(overlay.Frame{
 		TopLeft: b.TopLeft, TopRight: b.TopRight,

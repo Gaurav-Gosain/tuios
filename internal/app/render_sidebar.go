@@ -676,9 +676,9 @@ var chromeGlyphs = func() map[rune]bool {
 
 // printableTitle strips what a terminal cannot be trusted to render out of a
 // title before it is shown as chrome (sidebar rows, the window title badge, the
-// command palette, the dock): control characters and private-use codepoints
-// (nerd-font icons shells love to put in titles, which show as tofu boxes
-// without the right font), decorative symbol and emoji codepoints (an agent
+// command palette, the dock): control characters, private-use codepoints
+// while Nerd Fonts are off (nerd-font icons, which show as tofu boxes without
+// the right font; see printableRune), decorative symbol and emoji codepoints (an agent
 // setting a dingbat or emoji in its title otherwise tofus wherever we echo it),
 // plus everything non-ASCII when ASCII-only rendering is on. Titles are foreign
 // data; our own chrome glyphs are audited, so they are kept by codepoint.
@@ -722,12 +722,16 @@ func printableRune(r rune, ascii bool) bool {
 		// override reorders what follows it, so a name holding one reads as
 		// something it is not.
 		return false
-	case r >= 0xe000 && r <= 0xf8ff:
-		// BMP private use area.
-		return false
-	case r >= 0xf0000:
-		// Plane 15/16 private use.
-		return false
+	case r >= 0xe000 && r <= 0xf8ff, r >= 0xf0000:
+		// The private use area: the BMP block and planes 15 and 16. Nerd
+		// Font icons live here, and a person puts them in a session or
+		// workspace name on purpose. They are kept while Nerd Fonts are on,
+		// which is when tuios draws its own icons from the same font, so a
+		// terminal that shows those shows these. Each is one cell to
+		// ansi.StringWidth, the emulator and the host terminal alike, so
+		// keeping them moves no column. With Nerd Fonts off (ASCII mode, or
+		// a font with none) they would be tofu boxes, so they go.
+		return overlay.UseNerdFonts()
 	case r >= 0x25a0 && r <= 0x2bff && !chromeGlyphs[r]:
 		// Geometric Shapes through Miscellaneous Symbols and Arrows. Agents
 		// park spinners and status ornaments in here (Claude Code alone uses

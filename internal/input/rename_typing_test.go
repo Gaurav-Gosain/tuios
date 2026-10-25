@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // typeInto plays a string into the open rename editor one keypress at a time,
@@ -65,9 +66,11 @@ func TestRenameTakesNonASCII(t *testing.T) {
 }
 
 // TestRenameRefusesUnprintable keeps the reason the filter existed. A control
-// character, a private-use icon and a lone combining mark all reach the editor
-// as text; none of them may land in a name.
+// character, a lone combining mark and, with Nerd Fonts off, a private-use
+// icon all reach the editor as text; none of them may land in a name.
 func TestRenameRefusesUnprintable(t *testing.T) {
+	overlay.SetNerdFonts(false)
+	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	o := twoPaneOS(t)
 	o.BeginRenameWindow(o.Windows[0])
 	o.RenameBuffer = ""
@@ -83,6 +86,13 @@ func TestRenameRefusesUnprintable(t *testing.T) {
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "a\x00b"}, o)
 	if o.RenameBuffer != "ab" {
 		t.Fatalf("buffer = %q, want the control character dropped", o.RenameBuffer)
+	}
+
+	// With Nerd Fonts on, the font draws the icon, so the name takes it.
+	overlay.SetNerdFonts(true)
+	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "\ue0a0"}, o)
+	if o.RenameBuffer != "ab\ue0a0" {
+		t.Fatalf("buffer = %q, want the Nerd Font icon taken", o.RenameBuffer)
 	}
 }
 

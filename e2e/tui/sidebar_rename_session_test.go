@@ -93,5 +93,71 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 		t.Errorf("the rename landed on the attached session: ls lists %v", names)
 	}
 
+	// Nerd Font icons in a name (discussion 1094). They are private use
+	// area code points, and the rail and the dock used to drop them. A
+	// name set from the CLI has to reach the screen with its icon, in one
+	// cell, so the text after it does not move. U+E795 is the terminal
+	// icon from the BMP block, U+F0219 a Material Design icon from plane 15.
+	const sessIcon, wsIcon = "\ue795", "\U000f0219"
+	if out, err := tuiosCLI(t, base, "rename-session", "payments", sessIcon+" payments"); err != nil {
+		t.Fatalf("rename-session to a name with an icon: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-workspace-name", "-s", "alpha", "1", wsIcon+" home"); err != nil {
+		t.Fatalf("set-workspace-name with an icon: %v\n%s", err, out)
+	}
+	// iconBefore reports whether icon is drawn in the cell right before
+	// " "+word on some row, which is what one cell wide means on screen.
+	iconBefore := func(s tuitest.Screen, icon, word string) bool {
+		cols, rows := s.Size()
+		for r := range rows {
+			for x := 0; x+1+len(word) < cols; x++ {
+				if s.Cell(x, r).Content != icon || s.Cell(x+1, r).Content != " " {
+					continue
+				}
+				match := true
+				for i := range len(word) {
+					if s.Cell(x+2+i, r).Content != word[i:i+1] {
+						match = false
+						break
+					}
+				}
+				if match {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	err := term.WaitFor(func(s tuitest.Screen) bool {
+		return iconBefore(s, sessIcon, "payments") && iconBefore(s, wsIcon, "home")
+	}, uiTimeout)
+	saveArtifact(t, term, artifactDir(t), "nerd-font-names")
+	savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "nerd-font-names")
+	if err != nil {
+		t.Fatalf("the rail and the dock did not draw the names with their icons, one cell each: %v\n%s", err, term.Snapshot())
+	}
+
 	alive(t, term, "after renaming another session from the rail")
+
+	// With Nerd Fonts off the icon would be a tofu box, so it is still
+	// dropped. TERM=linux is the Linux console, which tuios knows has no
+	// Nerd Font glyphs. The dock there still names the workspace.
+	plain := startIn(t, base, startOpts{args: []string{"attach", "alpha"}, env: []string{"TERM=linux"}})
+	err = plain.WaitFor(func(s tuitest.Screen) bool {
+		if !strings.Contains(s.Text(), "home") {
+			return false
+		}
+		cols, rows := s.Size()
+		for r := range rows {
+			for x := range cols {
+				if c := s.Cell(x, r).Content; c == wsIcon || c == sessIcon {
+					return false
+				}
+			}
+		}
+		return true
+	}, uiTimeout)
+	if err != nil {
+		t.Fatalf("with Nerd Fonts off, the dock did not draw the workspace name without its icon: %v\n%s", err, plain.Snapshot())
+	}
 }

@@ -14,6 +14,8 @@ import (
 // TestSidebarSanitizesTitles checks a title carrying nerd-font private-use
 // icons and control characters reaches the rail laundered.
 func TestSidebarSanitizesTitles(t *testing.T) {
+	overlay.SetNerdFonts(false)
+	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	if got := printableTitle(" nvim \x1b]0;x\x07"); got != "nvim ]0;x" {
 		// The escape byte and the bell go; printable remnants of a title
 		// sequence stay (they are the shell's bug to fix, not tofu).

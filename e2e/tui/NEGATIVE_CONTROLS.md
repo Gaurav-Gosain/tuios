@@ -9273,3 +9273,11 @@ The fixed build passes.
 | The rail's workspace chord exception kept under lock | "q alt+1 alt+3 did not reach the rail pane" | **caught** |
 | `menuKey.unbound` sends with `forwardKeyToFocusedWindow`, as before the second review | "x y after ctrl+b left did not reach the rail pane as xy" | **caught** |
 | `menuKey.unbound` calls `typeIntoPane`, but `typeIntoPane` has no rail check | "x y after ctrl+b left did not reach the rail pane as xy" | **caught** |
+## Nerd Font icons in session and workspace names
+
+`TestRailRightClickRenamesTheSessionUnderThePointer` (in `sidebar_rename_session_test.go`) now also renames the session with `tuios rename-session` to a name that starts with U+E795, and names workspace 1 with `tuios set-workspace-name` to a name that starts with U+F0219. The rail and the dock must draw each icon in one cell, with the space and the word in the next cells. A second client then attaches with `TERM=linux`, which has no Nerd Font glyphs. Its dock must show the workspace name with no icon cell anywhere on the screen. Run on 2026-10-25 on Linux against upstream main at b2741f02a. Each control is a text replacement, built to a separate binary and put back before the next.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `printableRune` drops every private use code point, which is upstream main | "the rail and the dock did not draw the names with their icons, one cell each" | **caught** |
+| `printableRune` keeps every private use code point, also with Nerd Fonts off | "with Nerd Fonts off, the dock did not draw the workspace name without its icon" | **caught** |

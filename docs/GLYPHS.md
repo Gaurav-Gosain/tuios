@@ -198,6 +198,11 @@ draw:
   Font icons, so the chrome takes the `unicode` set and the dock, notification
   and context menu icons take their ASCII forms.
 
+The same rule applies to Nerd Font icons in names and titles: session names,
+workspace names and pane titles. tuios shows them, one cell each. On the Linux
+console and under `--ascii-only`, tuios removes them, because they show as
+empty boxes there.
+
 A glyph set in the config (`appearance.glyphs`, any value but the default) or
 `--ascii-only` always wins. `tuios list-glyphs` prints what the terminal it
 runs in would pick and why, and the client logs its choice with `--debug`.

@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
@@ -118,11 +119,23 @@ func TestRenameAppendGate(t *testing.T) {
 			t.Errorf("appending %q gave %q, want %q", in, m.RenameBuffer, before+in)
 		}
 	}
+	// A Nerd Font icon follows the font: kept while Nerd Fonts are on,
+	// refused while they are off, where it would draw as a tofu box.
+	overlay.SetNerdFonts(false)
+	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	for _, in := range []string{"\x1b", "\u0301", "\U0001f600", "\ue0a0", "\u25b6"} {
 		before := m.RenameBuffer
 		m.RenameAppend(in)
 		if m.RenameBuffer != before {
 			t.Errorf("appending %q was accepted: %q", in, m.RenameBuffer)
+		}
+	}
+	overlay.SetNerdFonts(true)
+	for _, in := range []string{"\ue0a0", "\U000f0219"} {
+		before := m.RenameBuffer
+		m.RenameAppend(in)
+		if m.RenameBuffer != before+in {
+			t.Errorf("appending %q with Nerd Fonts on gave %q, want %q", in, m.RenameBuffer, before+in)
 		}
 	}
 
