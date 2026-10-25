@@ -98,6 +98,11 @@ func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
 // FocusTerminalDirection moves terminal focus and refreshes its pane cache.
 func (m *OS) FocusTerminalDirection(direction string) int {
 	previous := m.FocusedWindow
+	// A key pointing from the focused rail back at the panes only leaves the
+	// rail, onto the pane it was entered from.
+	if m.LeaveRailToward(direction) {
+		return previous
+	}
 	if m.AutoTiling && m.UseScrollingLayout && (direction == "left" || direction == "right") {
 		if direction == "left" {
 			m.ScrollingFocusLeft()

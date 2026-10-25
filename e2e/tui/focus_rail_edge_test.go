@@ -20,7 +20,9 @@ import (
 // FocusTerminalDirection, alt+right on the rightmost pane leaves the pill on
 // Terminal mode and the test fails waiting for SIDEBAR. With the
 // LeaveRailToward check cut from handleSidebarKey, alt+left is swallowed by the
-// rail and the test fails waiting for the pill to drop SIDEBAR.
+// rail and the test fails waiting for the pill to drop SIDEBAR. With it cut
+// from FocusTerminalDirection, ctrl+b left moves pane focus while the rail
+// keeps the keyboard, and the test fails the same way.
 func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 	const session = "focus-rail-edge"
 	term, base := railClient(t, session, "[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 28\n", startOpts{cols: 140, rows: 40})
@@ -52,16 +54,12 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 	}
 	// The leftmost pane runs into the screen edge, and no rail is there.
 	send(t, term, tuitest.Alt(tuitest.Left))
-	if strings.Contains(term.Screen().Text(), "SIDEBAR") {
-		t.Fatalf("alt+left on the leftmost pane entered the rail on the right edge\n%s", term.Snapshot())
-	}
+	railStaysOut(t, term, "alt+left on the leftmost pane entered the rail on the right edge")
 	send(t, term, tuitest.Alt(tuitest.Right))
 	if cur = waitFocusChange(t, base, session, left); cur != rightmost.ID {
 		t.Fatalf("alt+right from the left pane went to %s, want the rightmost pane %s\n%s", cur[:8], rightmost.ID[:8], term.Snapshot())
 	}
-	if strings.Contains(term.Screen().Text(), "SIDEBAR") {
-		t.Fatalf("alt+right into a pane also entered the rail\n%s", term.Snapshot())
-	}
+	railStaysOut(t, term, "alt+right into a pane also entered the rail")
 
 	// Into the rail: the rightmost pane runs into the rail's edge.
 	send(t, term, tuitest.Alt(tuitest.Right))
@@ -73,19 +71,46 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 
 	// And back out, onto the pane it was entered from.
 	send(t, term, tuitest.Alt(tuitest.Left))
+	leaveRail(t, term, base, session, cur, "alt+left", "BACK")
+	saveFrame(t, term, "rail-left")
+
+	// The prefix arrows take the same path in and out. The rail swallows no
+	// prefix key, so leaving rests on FocusTerminalDirection alone.
+	send(t, term, tuitest.Ctrl('b'), tuitest.Right)
+	waitText(t, term, "the mode pill after ctrl+b right on the rightmost pane", "SIDEBAR")
+	send(t, term, tuitest.Ctrl('b'), tuitest.Left)
+	leaveRail(t, term, base, session, cur, "ctrl+b left", "PREFIX")
+	saveFrame(t, term, "rail-left-prefix")
+	alive(t, term, "after walking into and out of the rail")
+}
+
+// railStaysOut fails when the mode pill turns to SIDEBAR within a few frames,
+// so a key that wrongly entered the rail is caught after its frame lands.
+func railStaysOut(t *testing.T, term *tuitest.Terminal, what string) {
+	t.Helper()
+	if term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "SIDEBAR")
+	}, 500*time.Millisecond) == nil {
+		t.Fatalf("%s\n%s", what, term.Snapshot())
+	}
+}
+
+// leaveRail waits for the rail to give the keyboard back, then proves a pane
+// has it by echoing word-42, and that the pane is the one the rail was entered
+// from.
+func leaveRail(t *testing.T, term *tuitest.Terminal, base, session, from, key, word string) {
+	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "SIDEBAR")
 	}, uiTimeout); err != nil {
-		t.Fatalf("alt+left did not leave the rail: %v\n%s", err, term.Snapshot())
+		t.Fatalf("%s did not leave the rail: %v\n%s", key, err, term.Snapshot())
 	}
 	time.Sleep(insertGuard)
-	if err := term.SendKeys("echo BACK-$((6*7))", tuitest.Enter); err != nil {
+	if err := term.SendKeys("echo "+word+"-$((6*7))", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the pane's echo after leaving the rail", "BACK-42")
-	if _, f := focusedLayout(t, base, session); f != cur {
-		t.Fatalf("leaving the rail focused %s, want the pane it was entered from %s", f[:8], cur[:8])
+	waitText(t, term, "the pane's echo after "+key+" left the rail", word+"-42")
+	if _, f := focusedLayout(t, base, session); f != from {
+		t.Fatalf("%s left the rail onto %s, want the pane it was entered from %s", key, f[:8], from[:8])
 	}
-	saveFrame(t, term, "rail-left")
-	alive(t, term, "after walking into and out of the rail")
 }
