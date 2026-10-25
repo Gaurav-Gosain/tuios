@@ -1514,6 +1514,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	case m.sidebarFollowSession != "":
 		cursorTarget = sidebarNavRow{Kind: sidebarRowSession, SessionID: m.sidebarFollowSession}
 		haveCursorTarget = true
+	case m.sidebarCursorWantSet:
+		// A row the keyboard moved to that this frame may have to scroll to.
+		cursorTarget = m.sidebarCursorWant
+		haveCursorTarget = true
 	case m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav):
 		cursorTarget = m.SidebarNav[m.SidebarCursor]
 		haveCursorTarget = true
@@ -1873,10 +1877,22 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if m.sidebarRailFocused() && haveCursorTarget {
 		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessionRows, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {
+				// A section with rows below its fold spends its last line on
+				// the "+N" row, so only rows-1 of its rows are drawn. The
+				// cursor on the row under that line was not drawn at all
+				// (issue #1102), so the fold is a line higher than the budget
+				// unless the window already reaches the section's end.
+				fold := rows
+				if rows > 1 && rowsIn[sec] > rows && *scroll[sec] < rowsIn[sec]-rows {
+					fold = rows - 1
+				}
 				if idx < *scroll[sec] {
 					*scroll[sec] = idx
-				} else if idx >= *scroll[sec]+rows {
-					*scroll[sec] = idx - rows + 1
+				} else if idx >= *scroll[sec]+fold {
+					*scroll[sec] = idx - rows + 2
+					if idx == rowsIn[sec]-1 || rows == 1 {
+						*scroll[sec] = idx - rows + 1
+					}
 				}
 			}
 		}
@@ -2412,6 +2428,16 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 // across a relayout (reorder, switch, filter, peek). A follow request is
 // consumed here, once the row it named exists in the new layout.
 func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTarget bool) {
+	// A row the keyboard moved to that this frame could not draw (a name gone
+	// from the listing) leaves the cursor on the row it was on, not on the
+	// rail's first row.
+	if m.sidebarCursorWantSet {
+		m.sidebarCursorWantSet = false
+		if !slices.ContainsFunc(nav, func(r sidebarNavRow) bool { return sidebarNavRowsEqual(r, target) }) &&
+			m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav) {
+			target = m.SidebarNav[m.SidebarCursor]
+		}
+	}
 	m.SidebarNav = nav
 	m.sidebarFollowSession = ""
 	// A pending walk into or out of a folder outranks the tracked row, because

@@ -31,6 +31,8 @@ type secondaryRailView struct {
 	marqueeKey       string
 	marqueeSeen      bool
 	cursor           int
+	cursorWant       sidebarNavRow
+	cursorWantSet    bool
 	drag             sidebarDragState
 	edge             sidebarEdgeState
 	shimmer          []shimmerSpan
@@ -70,6 +72,8 @@ func (m *OS) swapSecondaryRail() {
 	m.SidebarMarqueeKey, s.marqueeKey = s.marqueeKey, m.SidebarMarqueeKey
 	m.sidebarMarqueeSeen, s.marqueeSeen = s.marqueeSeen, m.sidebarMarqueeSeen
 	m.SidebarCursor, s.cursor = s.cursor, m.SidebarCursor
+	m.sidebarCursorWant, s.cursorWant = s.cursorWant, m.sidebarCursorWant
+	m.sidebarCursorWantSet, s.cursorWantSet = s.cursorWantSet, m.sidebarCursorWantSet
 	m.SidebarDrag, s.drag = s.drag, m.SidebarDrag
 	m.SidebarEdge, s.edge = s.edge, m.SidebarEdge
 	m.motion.rail, s.shimmer = s.shimmer, m.motion.rail

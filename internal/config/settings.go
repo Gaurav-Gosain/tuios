@@ -219,6 +219,9 @@ type Settings struct {
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
 	SidebarFolderClick string
+	// SidebarFilesStyle is how the files section draws: "list", one folder at
+	// a time, or "tree", folders opened in place under one root.
+	SidebarFilesStyle string
 	// RailHeaderCase is how the rail's section headers read: "lowercase"
 	// keeps the quiet furniture look they have always had, "uppercase" draws
 	// the heading treatment (bold, secondary ink, the rule glyph and the
@@ -895,6 +898,7 @@ func DefaultSettings() Settings {
 		SidebarFileIcons:            true,
 		SidebarFileIconColors:       true,
 		SidebarFolderClick:          SidebarFolderClickNavigate,
+		SidebarFilesStyle:           SidebarFilesList,
 		SidebarFileActions:          true,
 		SidebarFileDelete:           SidebarFileDeleteTrash,
 		SidebarAgentRow:             DefaultSidebarAgentRow(),

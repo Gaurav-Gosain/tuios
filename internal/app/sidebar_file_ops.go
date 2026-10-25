@@ -165,26 +165,40 @@ func (m *OS) FileViewSpoofed() bool {
 // deleting the folder you are standing in from a row that means "go up" is the
 // kind of aim nobody takes on purpose.
 func (m *OS) fileActionTarget() (name, path string, ok bool) {
+	dir, e, ok := m.fileActionEntry()
+	if !ok {
+		return "", "", false
+	}
+	return e.Name, filepath.Join(dir, e.Name), true
+}
+
+// fileActionEntry is fileActionTarget as the folder that holds the entry and
+// the entry itself, which is what says whether it is a folder.
+func (m *OS) fileActionEntry() (dir string, e fileEntry, ok bool) {
 	if t := m.menuFile; t.Active() && t.Name != "" {
 		// The folder the menu was opened over, not the one on screen now. A
 		// reply already in flight can replace the listing between the
 		// right-click and the row being chosen, and the action has to run on
 		// what the user was pointing at.
-		return t.Name, filepath.Join(t.Dir, t.Name), true
+		return t.Dir, fileEntry{Name: t.Name, Dir: t.IsDir}, true
 	}
 	row, have := m.sidebarCursorRow()
 	if !have || row.Kind != sidebarRowFileEntry {
-		return "", "", false
+		return "", fileEntry{}, false
+	}
+	if m.filesTreeOn() {
+		// A row of the tree is addressed by its path from the root, and is
+		// looked up in the listing of the folder that holds it.
+		return m.fileTreeEntry(row.WindowID)
 	}
 	// The index the row carries comes from the listing the render drew, which
 	// can be one reply behind the one in memory. A row past the end is that
 	// race, and it names nothing.
 	i := row.WindowIndex
 	if i < 0 || i >= len(m.filesView.Entries) {
-		return "", "", false
+		return "", fileEntry{}, false
 	}
-	name = m.filesView.Entries[i].Name
-	return name, filepath.Join(m.filesView.Dir, name), true
+	return m.filesView.Dir, m.filesView.Entries[i], true
 }
 
 // fileActionRefuse says why an action cannot run, once, in the notification
@@ -218,9 +232,24 @@ func (m *OS) fileActionRefuse() bool {
 
 // fileActionDir is the folder an action that needs no name acts in: the one the
 // menu was opened over, or the one on screen. Same carry, same reason.
+//
+// In the tree the folder is the one the row is in, or the row itself when it
+// is an open folder: a new file made on an open folder's row goes into it, the
+// way neo-tree does it.
 func (m *OS) fileActionDir() string {
 	if t := m.menuFile; t.Active() {
+		if full := filepath.Join(t.Dir, t.Name); t.Name != "" && t.IsDir && m.filesTree.dirs[full] != nil {
+			return full
+		}
 		return t.Dir
+	}
+	if m.filesTreeOn() {
+		if dir, e, ok := m.fileActionEntry(); ok {
+			if full := filepath.Join(dir, e.Name); e.Dir && m.filesTree.dirs[full] != nil {
+				return full
+			}
+			return dir
+		}
 	}
 	return m.filesView.Dir
 }
@@ -247,7 +276,7 @@ func (m *OS) SidebarFileRename() bool {
 		}
 		return false
 	}
-	name, _, ok := m.fileActionTarget()
+	name, path, ok := m.fileActionTarget()
 	if !ok {
 		return false
 	}
@@ -257,7 +286,7 @@ func (m *OS) SidebarFileRename() bool {
 	}
 	m.filePrompt = filePromptState{
 		Kind:   filePromptRename,
-		Dir:    m.fileActionDir(),
+		Dir:    filepath.Dir(path),
 		Target: name,
 		Input:  name,
 	}
@@ -282,7 +311,7 @@ func (m *OS) SidebarFileDelete(permanent bool) {
 	}
 	m.filePrompt = filePromptState{
 		Kind:     filePromptConfirm,
-		Dir:      m.fileActionDir(),
+		Dir:      filepath.Dir(path),
 		Paths:    []string{path},
 		Trash:    !permanent && m.Settings.SidebarFileDelete == config.SidebarFileDeleteTrash && trashAvailable(),
 		Selected: fileConfirmRowCancel,
@@ -343,13 +372,14 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 		}
 		return nil
 	}
-	name, path, ok := m.fileActionTarget()
+	dir, e, ok := m.fileActionEntry()
 	if !ok {
 		return nil
 	}
+	path := filepath.Join(dir, e.Name)
 	editor := m.Settings.SidebarEditor
 	if otherHost := m.filesView.Host != ""; otherHost || m.AttachedHost != "" {
-		return m.handleFileEdit(remoteEditTarget(path, editor, m.fileTargetIsDir(name), otherHost))
+		return m.handleFileEdit(remoteEditTarget(path, editor, e.Dir, otherHost))
 	}
 	return func() tea.Msg {
 		return inspectEditTarget(path, editor)
@@ -410,18 +440,6 @@ func remoteEditTarget(path, editor string, isDir, otherHost bool) fileEditMsg {
 		return msg.refuse(editorCommandNote, err)
 	}
 	return msg
-}
-
-func (m *OS) fileTargetIsDir(name string) bool {
-	if t := m.menuFile; t.Active() && t.Name == name {
-		return t.IsDir
-	}
-	for _, e := range m.filesView.Entries {
-		if e.Name == name {
-			return e.Dir
-		}
-	}
-	return false
 }
 
 func looksLikeText(sample []byte) bool {

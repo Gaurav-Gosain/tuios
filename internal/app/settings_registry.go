@@ -128,6 +128,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.file_icons":             "File icons",
 	"appearance.sidebar.file_icon_colors":       "File icon colors",
 	"appearance.sidebar.folder_click":           "Click a folder",
+	"appearance.sidebar.files_style":            "Files style",
 	"appearance.sidebar.file_actions":           "File actions",
 	"appearance.sidebar.file_delete":            "Delete sends to",
 	"appearance.sidebar.agent_rest_fold":        "Fold agents at rest after",

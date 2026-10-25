@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,6 +68,52 @@ type fileWatcher struct {
 	// stopped is set when the client exits. The channel is closed then, so no
 	// watch may be made after it.
 	stopped bool
+
+	// The tree's open folders, watched through one dirwatch.Set. treeWant is
+	// what the update goroutine last asked for, joined, and is read and
+	// written only there. treeSeq orders the retargets, like latest does for
+	// the root. set and setDirs are guarded by mu.
+	treeWant string
+	treeSeq  uint64
+	set      *dirwatch.Set
+	setDirs  map[string]bool
+
+	// dmu guards what changed since the loop last asked: the root, and the
+	// open folders by path. The watch goroutines write it, so it has a lock
+	// of its own and is never held while mu is taken.
+	dmu       sync.Mutex
+	dirtyRoot bool
+	dirty     map[string]struct{}
+}
+
+// markRootDirty records that the root's entries changed.
+func (fw *fileWatcher) markRootDirty() {
+	fw.dmu.Lock()
+	fw.dirtyRoot = true
+	fw.dmu.Unlock()
+}
+
+// markDirty records that an open folder's entries changed.
+func (fw *fileWatcher) markDirty(dir string) {
+	fw.dmu.Lock()
+	if fw.dirty == nil {
+		fw.dirty = map[string]struct{}{}
+	}
+	fw.dirty[dir] = struct{}{}
+	fw.dmu.Unlock()
+}
+
+// takeDirty answers what changed since the last call, and forgets it.
+func (fw *fileWatcher) takeDirty() (root bool, dirs []string) {
+	fw.dmu.Lock()
+	defer fw.dmu.Unlock()
+	root = fw.dirtyRoot
+	fw.dirtyRoot = false
+	for d := range fw.dirty {
+		dirs = append(dirs, d)
+	}
+	clear(fw.dirty)
+	return root, dirs
 }
 
 func (m *OS) fileWatchChan() chan struct{} {
@@ -166,6 +214,7 @@ func (fw *fileWatcher) retarget(target fileWatchSpec, ch chan struct{}) {
 		return
 	}
 	w, err := dirwatch.Watch(dir, func() {
+		fw.markRootDirty()
 		select {
 		case ch <- struct{}{}:
 		default: // a change is already pending, and one read covers both
@@ -198,6 +247,10 @@ func (m *OS) stopFileWatch() {
 		_, _ = fw.remote.WatchDir("", "")
 		fw.remote, fw.dir = nil, ""
 	}
+	if fw.set != nil {
+		fw.set.Close()
+		fw.set, fw.setDirs = nil, nil
+	}
 	if fw.ch != nil {
 		close(fw.ch)
 	}
@@ -212,6 +265,7 @@ func (fw *fileWatcher) remoteDirChanged(dir string) {
 	if fw.stopped || fw.remote == nil || fw.dir != dir || fw.ch == nil {
 		return
 	}
+	fw.markRootDirty()
 	select {
 	case fw.ch <- struct{}{}:
 	default:
@@ -237,4 +291,70 @@ func (m *OS) refreshChangedFolder() tea.Cmd {
 	}
 	m.filesView.QuietReq++
 	return m.fileListCmd(v.Dir, v.Origin, v.Pinned, m.filesView.QuietReq)
+}
+
+// syncTreeWatch points the tree's watch at the open folders on screen. Only a
+// listing read from this machine's disk is watched: the daemon keeps one watch
+// per connection and it is the root's, so a folder open under a root on
+// another machine is read again only when it opens again or the root changes.
+func (m *OS) syncTreeWatch(dirs []string) {
+	if t := m.fileWatchTarget(); t.dir == "" || t.remote != nil {
+		dirs = nil
+	}
+	key := strings.Join(dirs, "\x00")
+	fw := &m.fileWatch
+	if key == fw.treeWant {
+		return
+	}
+	fw.treeWant = key
+	ch := m.fileWatchChan()
+	fw.mu.Lock()
+	fw.treeSeq++
+	seq := fw.treeSeq
+	fw.mu.Unlock()
+	go fw.retargetTree(slices.Clone(dirs), seq, ch)
+}
+
+// retargetTree makes the set watch exactly dirs. It runs off the update
+// goroutine, because adding a watch is a syscall on a path that can be a hung
+// mount.
+func (fw *fileWatcher) retargetTree(dirs []string, seq uint64, ch chan struct{}) {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if fw.stopped || seq != fw.treeSeq {
+		return
+	}
+	if len(dirs) == 0 {
+		if fw.set != nil {
+			fw.set.Close()
+			fw.set, fw.setDirs = nil, nil
+		}
+		return
+	}
+	if fw.set == nil {
+		set, err := dirwatch.NewSet(func(dir string) {
+			fw.markDirty(dir)
+			dirwatch.Nudge(ch)
+		})
+		if err != nil {
+			// Without a watch an open folder is read again when it opens.
+			return
+		}
+		fw.set, fw.setDirs = set, map[string]bool{}
+	}
+	want := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		want[d] = true
+	}
+	for d := range fw.setDirs {
+		if !want[d] {
+			fw.set.Remove(d)
+			delete(fw.setDirs, d)
+		}
+	}
+	for _, d := range dirs {
+		if !fw.setDirs[d] && fw.set.Add(d) == nil {
+			fw.setDirs[d] = true
+		}
+	}
 }

@@ -457,7 +457,7 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
-		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
+		m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
 	case sidebarRowDivider:
 		// A press arms the split drag; a second press inside the double-click
 		// window resets the split instead.
@@ -645,7 +645,7 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
-		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
+		m.queueSidebarCmd(m.fileViewEnterRow(hit.WindowIndex, hit.WindowID))
 	case sidebarRowDivider:
 		m.SidebarResetSplit()
 	case sidebarRowSession:
@@ -1069,6 +1069,14 @@ func (m *OS) fileMenuTargetFor(hit sidebarRowHit) fileMenuTarget {
 	case sidebarRowFileUp:
 		t.Up = true
 	case sidebarRowFileEntry:
+		if m.filesTreeOn() {
+			// A row of the tree carries its path from the root, and its folder
+			// is the one it is in.
+			if dir, e, ok := m.fileTreeEntry(hit.WindowID); ok {
+				t.Dir, t.Name, t.IsDir = dir, e.Name, e.Dir
+			}
+			break
+		}
 		// The row carries the entry's name in WindowID; see the note on
 		// fileRowSpec.Key.
 		for _, e := range m.filesView.Entries {

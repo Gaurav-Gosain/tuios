@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -387,6 +388,178 @@ func TestRailFilesSectionFollowsTheDisk(t *testing.T) {
 			}
 			saveArtifact(t, term, dirArt, "after-outside-change")
 			alive(t, term, "after the folder changed under the rail")
+		})
+	}
+}
+
+// longListingFixture is fileViewFixture with forty files after the folders and
+// one more after those, so the listing is longer than the files section, and
+// a folder tree inside alpha for the tree style: alpha holds inner/ and
+// a1.txt, and inner holds deep.txt.
+func longListingFixture(t *testing.T) string {
+	t.Helper()
+	dir := fileViewFixture(t)
+	if err := os.MkdirAll(filepath.Join(dir, "alpha", "inner"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := []string{"alpha/a1.txt", "alpha/inner/deep.txt", "zz-last.txt"}
+	for i := range 40 {
+		files = append(files, fmt.Sprintf("f-%02d.txt", i))
+	}
+	for _, name := range files {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// cursorToFirstName walks the rail's cursor down until Y copies a path, which
+// is the first name of the files listing: alpha. Y does nothing off a name.
+func cursorToFirstName(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, dir string) {
+	t.Helper()
+	from := len(clipboardWrites(out))
+	for range 40 {
+		sendKeys(t, term, "j", "Y")
+		time.Sleep(100 * time.Millisecond)
+		if len(clipboardWrites(out)) > from {
+			waitClipboardSequence(t, term, out, from, filepath.Join(dir, "alpha"))
+			return
+		}
+	}
+	t.Fatalf("Y on the rows of the listing wrote nothing to the clipboard\n%s", term.Snapshot())
+}
+
+// copiedRowIs presses Y and checks that the cursor's row is want, by the path
+// Y copies, and that the row is drawn, by its name on the screen.
+func copiedRowIs(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, want string) {
+	t.Helper()
+	from := len(clipboardWrites(out))
+	sendKeys(t, term, "Y")
+	waitClipboardSequence(t, term, out, from, want)
+	if err := term.WaitForText(filepath.Base(want), uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the cursor is on %s, and the rail does not draw it: %v\n%s",
+			filepath.Base(want), err, term.Snapshot())
+	}
+}
+
+// TestRailFilesSectionScrollsWithTheCursor is issue #1102: j and G moved the
+// keyboard cursor past the last name the files section drew, and the section
+// did not scroll, so the cursor went off the screen. It runs on both styles,
+// and the tree subtest then opens and closes folders the way neo-tree does:
+// l opens, h closes or goes up to the folder, a click toggles, and a file made
+// inside an open folder shows without a key.
+//
+// How this could pass wrongly, written down first:
+//   - The name could be on screen in the pane, not the rail. No name the test
+//     waits for is ever printed in the pane.
+//   - The cursor could be on another row while the name happens to be drawn.
+//     Y copies the cursor row's path, and the copy must be that name's path.
+//   - Fast keys could be dropped while a frame is pending. The walk sends all
+//     its keys at once.
+//   - A tree row could copy the wrong folder's path. deep.txt's path has two
+//     folders in it, and h must land on alpha by its own path.
+//
+// NEGATIVE CONTROL: with sidebarFilesCursorMove and sidebarFilesCursorJump
+// cut to return false, both subtests fail: G leaves the cursor off the
+// listing and Y copies no zz-last.txt.
+func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
+	for _, style := range []string{"list", "tree"} {
+		t.Run(style, func(t *testing.T) {
+			dir := longListingFixture(t)
+			out := &lockedBuffer{}
+			term, base := start(t, startOpts{daemonDefault: style == "tree", out: out})
+			waitBoot(t, term)
+			newWindow(t, term)
+			waitWindowCount(t, term, 1, "opening a shell for the listing")
+			if style == "tree" {
+				if o, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.files_style", "tree"); err != nil {
+					t.Fatalf("set the tree style: %v\n%s", err, o)
+				}
+			}
+			enterTerminalMode(t, term)
+			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+			leaveTerminalMode(t, term)
+			toggleSidebarViaPalette(t, term)
+			waitForAll(t, term, uiTimeout, "the listing", "alpha/", "zulu/")
+			sendKeys(t, term, "s")
+			cursorToFirstName(t, term, out, dir)
+			copiesFrame(t, term, "rail-files-"+style+"-top")
+
+			// G: the last name of the listing, which the section does not draw
+			// until it scrolls.
+			sendKeys(t, term, "G")
+			copiedRowIs(t, term, out, filepath.Join(dir, "zz-last.txt"))
+			copiesFrame(t, term, "rail-files-"+style+"-end")
+
+			// g goes to the first row, "..", and a walk of j sends every key
+			// at once, past the fold.
+			sendKeys(t, term, "g", "j")
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
+			// alpha, zulu, brief.txt, then the forty files.
+			for range 42 {
+				sendKeys(t, term, "j")
+			}
+			copiedRowIs(t, term, out, filepath.Join(dir, "f-39.txt"))
+			copiesFrame(t, term, "rail-files-"+style+"-walk")
+			if style == "list" {
+				alive(t, term, "after scrolling the files list")
+				return
+			}
+
+			// The tree. l on alpha opens it in place, under its row.
+			sendKeys(t, term, "g", "j")
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
+			sendKeys(t, term, "l")
+			waitForAll(t, term, uiTimeout, "alpha open", "inner/", "a1.txt")
+			// l on an open folder goes to its first name, and l opens that.
+			sendKeys(t, term, "l", "l")
+			waitForAll(t, term, uiTimeout, "inner open", "deep.txt")
+			snap := term.Screen().Text()
+			if !strings.Contains(snap, "│ └╴") || !strings.Contains(snap, "├╴") || !strings.Contains(snap, "▾") {
+				t.Errorf("ASSERTION: the open folders draw no indent guides or open mark:\n%s", term.Snapshot())
+			}
+			sendKeys(t, term, "j")
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner", "deep.txt"))
+			copiesFrame(t, term, "rail-files-tree-open")
+
+			// A file made in an open folder shows with no key pressed.
+			if err := os.WriteFile(filepath.Join(dir, "alpha", "inner", "made-outside.txt"), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			waitForAll(t, term, uiTimeout, "the change in an open folder", "made-outside.txt")
+
+			// h on a name goes up to its folder, h on an open folder closes it.
+			sendKeys(t, term, "h")
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner"))
+			sendKeys(t, term, "h")
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "deep.txt") && strings.Contains(s.Text(), "inner/")
+			}, uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: h did not close inner: %v\n%s", err, term.Snapshot())
+			}
+			sendKeys(t, term, "h")
+			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
+
+			// A click on a folder closes it, and a second one opens it again,
+			// with inner still closed.
+			col, row, ok := findOnGrid(term.Screen(), "alpha/")
+			if !ok {
+				t.Fatalf("no alpha row:\n%s", term.Snapshot())
+			}
+			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), "inner/")
+			}, uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: a click did not close alpha: %v\n%s", err, term.Snapshot())
+			}
+			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+			waitForAll(t, term, uiTimeout, "alpha open again", "inner/", "a1.txt")
+			if strings.Contains(term.Screen().Text(), "deep.txt") {
+				t.Errorf("ASSERTION: inner opened with alpha, and it was closed:\n%s", term.Snapshot())
+			}
+			copiesFrame(t, term, "rail-files-tree-click")
+			alive(t, term, "after browsing the files tree")
 		})
 	}
 }

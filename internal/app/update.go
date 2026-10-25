@@ -1574,8 +1574,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Batch(cmd, ListenForCwdChange(m.PendingCwdChange))
 
 	case fileDirChangedMsg:
-		// The listed folder changed on disk. See sidebar_files_watch.go.
-		return m, tea.Batch(m.refreshChangedFolder(), listenForFileChange(m.fileWatchChan(), msg.at))
+		// The listed folder, or a folder open in the tree, changed on disk.
+		// See sidebar_files_watch.go. A change that names nothing is the
+		// root's: a daemon push and an older watch say only that.
+		root, dirs := m.fileWatch.takeDirty()
+		cmd := m.refreshChangedTree(dirs)
+		if root || len(dirs) == 0 {
+			cmd = tea.Batch(m.refreshChangedFolder(), cmd)
+		}
+		return m, tea.Batch(cmd, listenForFileChange(m.fileWatchChan(), msg.at))
+	case fileTreeListMsg:
+		// A folder open in the tree, read on its own goroutine.
+		cmd := m.HandleFileTreeList(msg)
+		m.renderSkipped = false
+		return m, cmd
 	case NvimNavigationMsg:
 		m.onNvimNavigation(msg)
 		return m, ListenForNvimNavigation(m.PendingNvimNavigation)

@@ -30,6 +30,9 @@ func sidebarNavRowsEqual(a, b sidebarNavRow) bool {
 // sidebarCursorRow is the nav row the cursor is on, and whether the cursor is
 // valid (in range of the rows the last frame recorded).
 func (m *OS) sidebarCursorRow() (sidebarNavRow, bool) {
+	if m.sidebarCursorWantSet {
+		return m.sidebarCursorWant, true
+	}
 	if m.SidebarCursor < 0 || m.SidebarCursor >= len(m.SidebarNav) {
 		return sidebarNavRow{}, false
 	}
@@ -85,6 +88,7 @@ func (m *OS) FocusOtherSidebar() {
 // where it landed, so a browse down the sessions section previews row by row
 // exactly as hovering it does.
 func (m *OS) sidebarSetCursor(i int) {
+	m.sidebarCursorWantSet = false
 	m.SidebarCursor = i
 	row, ok := m.sidebarCursorRow()
 	if !ok || row.Kind != sidebarRowSession || row.SessionID == m.sidebarCurrentSessionID() {
@@ -131,23 +135,146 @@ func (m *OS) SidebarCursorMove(delta int) {
 	if len(m.SidebarNav) == 0 {
 		return
 	}
+	if m.sidebarFilesCursorMove(delta) {
+		return
+	}
 	m.sidebarSetCursor(max(min(m.SidebarCursor+delta, len(m.SidebarNav)-1), 0))
 }
 
-// SidebarCursorFirst and SidebarCursorLast jump to the ends of the rail.
-func (m *OS) SidebarCursorFirst() { m.sidebarSetCursor(0) }
+// SidebarCursorFirst and SidebarCursorLast jump to the ends of the rail. On a
+// name of the files section they jump to the ends of the listing first, which
+// the rail may not draw, and a second press goes on to the end of the rail.
+func (m *OS) SidebarCursorFirst() {
+	if m.sidebarFilesCursorJump(false) {
+		return
+	}
+	m.sidebarSetCursor(0)
+}
+
 func (m *OS) SidebarCursorLast() {
+	if m.sidebarFilesCursorJump(true) {
+		return
+	}
 	if n := len(m.SidebarNav); n > 0 {
 		m.sidebarSetCursor(n - 1)
 	}
 }
 
+// sidebarWantCursor moves the cursor to a row the last frame may not have
+// drawn. The next frame scrolls its section to it (issue #1102).
+func (m *OS) sidebarWantCursor(row sidebarNavRow) {
+	m.sidebarClearPeek()
+	m.sidebarCursorWant, m.sidebarCursorWantSet = row, true
+}
+
+// isFileListRow reports whether a row kind is a row of the files listing.
+func isFileListRow(kind sidebarRowKind) bool {
+	return kind == sidebarRowFileUp || kind == sidebarRowFileEntry
+}
+
+// fileNavRow is the nav row a row of the files section publishes.
+func fileNavRow(r fileRowSpec) sidebarNavRow {
+	return sidebarNavRow{Kind: r.Kind, WindowID: r.Key, WindowIndex: r.Index}
+}
+
+// sidebarFilesCursorMove steps the cursor over the names of the files section
+// rather than over the rows the last frame drew.
+//
+// The nav rows are the drawn rows, so a step past the last drawn name used to
+// leave the section for the next one while the names below the fold stayed
+// out of reach, and the section never scrolled (issue #1102). Here the step
+// lands on the next name of the whole listing, and the frame scrolls to it.
+// Past the listing's ends the step leaves the section the way it always has.
+func (m *OS) sidebarFilesCursorMove(delta int) bool {
+	cur, ok := m.sidebarCursorRow()
+	if !ok || !isFileListRow(cur.Kind) {
+		return false
+	}
+	rows := m.sidebarFileRows()
+	at := -1
+	for i, r := range rows {
+		if !r.Note && r.Kind == cur.Kind && r.Key == cur.WindowID {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return false
+	}
+	for j := at + delta; j >= 0 && j < len(rows); j += delta {
+		if rows[j].Note || rows[j].Kind == 0 {
+			continue
+		}
+		m.sidebarWantCursor(fileNavRow(rows[j]))
+		return true
+	}
+	// Off the end of the listing: on to the nav row past the section's last
+	// drawn name, or before its first.
+	edge := -1
+	for i, r := range m.SidebarNav {
+		if !isFileListRow(r.Kind) {
+			continue
+		}
+		if delta > 0 || edge < 0 {
+			edge = i
+		}
+	}
+	if edge < 0 {
+		return false
+	}
+	m.sidebarSetCursor(max(min(edge+delta, len(m.SidebarNav)-1), 0))
+	return true
+}
+
+// sidebarFilesCursorJump is g and G on a name of the files section: the first
+// or last name of the listing, or false when the cursor is on it already, so
+// the key goes on to the end of the rail.
+func (m *OS) sidebarFilesCursorJump(last bool) bool {
+	cur, ok := m.sidebarCursorRow()
+	if !ok || !isFileListRow(cur.Kind) {
+		return false
+	}
+	rows := m.sidebarFileRows()
+	pick := -1
+	for i, r := range rows {
+		if r.Note || r.Kind == 0 {
+			continue
+		}
+		if last || pick < 0 {
+			pick = i
+		}
+	}
+	if pick < 0 {
+		return false
+	}
+	target := fileNavRow(rows[pick])
+	if sidebarNavRowsEqual(target, cur) {
+		return false
+	}
+	m.sidebarWantCursor(target)
+	return true
+}
+
 // SidebarCursorExpand and SidebarCursorCollapse step the cursor one section
-// down and up. With the tree gone there is nothing left to expand, and the keys
+// down and up. The session tree they once walked is gone, and the keys
 // that walked its depth are the natural pair for walking the sections. The
 // config action names stay, so an older config file still resolves both keys.
-func (m *OS) SidebarCursorExpand()   { m.sidebarStepSection(1) }
-func (m *OS) SidebarCursorCollapse() { m.sidebarStepSection(-1) }
+//
+// On a name of the files section drawn as a tree they are the tree's own keys,
+// as in neo-tree: l opens a folder and h closes it or goes up to its folder.
+func (m *OS) SidebarCursorExpand() {
+	if m.fileTreeCursorExpand() {
+		return
+	}
+	m.sidebarStepSection(1)
+}
+
+func (m *OS) SidebarCursorCollapse() {
+	if m.fileTreeCursorCollapse() {
+		return
+	}
+	m.sidebarStepSection(-1)
+}
 
 // sidebarStepSection moves the cursor to the first row of the next (delta 1) or
 // previous (delta -1) section that has rows, stopping at the ends.
@@ -280,7 +407,7 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowFileUp:
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
-		m.queueSidebarCmd(m.FileViewEnter(row.WindowIndex))
+		m.queueSidebarCmd(m.fileViewEnterRow(row.WindowIndex, row.WindowID))
 	case sidebarRowDivider:
 		// Enter on the divider is the keyboard's double-click: the split goes
 		// back to the layout's own share.
@@ -480,6 +607,7 @@ func (m *OS) sidebarSetCursorToHit(hit sidebarRowHit) {
 		if sidebarNavRowsEqual(r, target) {
 			// The pointer, not the cursor, owns the preview while the mouse is
 			// steering, so this only re-homes the cursor.
+			m.sidebarCursorWantSet = false
 			m.SidebarCursor = i
 			return
 		}

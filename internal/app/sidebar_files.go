@@ -54,8 +54,8 @@ import (
 // It is not a file manager. It lists, it walks in and out, it hands a path to
 // the clipboard and a directory to a shell, and it does the seven file actions
 // named in sidebar_file_ops.go: create, rename, delete, copy, cut, paste and
-// send. That is the whole set. There is no multi-select, no tree and no
-// filter, because yeetui does all of that far better than twenty-six columns
+// send. That is the whole set. There is no multi-select and no
+// filter, because yeetui does both far better than twenty-six columns
 // ever will, and it runs in a pane. A drop of files is not the rail's: see
 // DropPaste.
 
@@ -299,6 +299,21 @@ func paneDir(w *terminal.Window) string {
 // section already showing the right directory, which is every message on an
 // idle client.
 func (m *OS) FilesSyncCmd() tea.Cmd {
+	root := m.filesSyncRoot()
+	// The tree hangs off the root's listing, so it is synced after it. It
+	// answers nil after one comparison on an idle client, like the root.
+	tree := m.syncFileTree()
+	switch {
+	case tree == nil:
+		return root
+	case root == nil:
+		return tree
+	}
+	return tea.Batch(root, tree)
+}
+
+// filesSyncRoot is FilesSyncCmd for the root listing.
+func (m *OS) filesSyncRoot() tea.Cmd {
 	if !m.filesSectionEnabled() {
 		return nil
 	}
@@ -490,68 +505,76 @@ func (m *OS) fileListCmd(dir, origin string, pinned bool, quiet uint64) tea.Cmd 
 	// shell is not in.
 	client, host := m.DaemonClient, m.AttachedHost
 	read := func() fileListMsg {
-		if client != nil {
-			listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, pinned)
-			switch {
-			case err == nil && listing.Err != "":
-				return fileListMsg{Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}
-			case err == nil:
-				entries := make([]fileEntry, 0, len(listing.Entries))
-				for _, e := range listing.Entries {
-					// Already in the daemon's order: directories first, then
-					// names. Sorting again here would be sorting a capped
-					// listing, which is an arbitrary subset of the directory.
-					entries = append(entries, fileEntry{
-						Name: e.Name, Dir: e.IsDir, Icon: fileIconFor(e.Name, e.IsDir),
-					})
-				}
-				return fileListMsg{
-					Dir: dir, Entries: entries,
-					Capped: listing.Capped, Spoofed: wasSpoofed || listing.Spoofed,
-				}
-			case host != "":
-				// A daemon on another machine that cannot answer is the end of
-				// it. Falling through to read this machine's disk would list a
-				// directory with nothing to do with the pane, which is the bug
-				// this replaced rather than a fallback.
-				return fileListMsg{Dir: dir, Err: "That machine could not list it."}
-			}
-			// A local daemon that could not answer falls through: a build older
-			// than this message answers with an error, and reading the disk here
-			// is the same disk it would have read.
-		}
-		spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
-		items, capped, err := readDirFunc(dir, fileViewMaxEntries)
-		if err != nil {
-			return fileListMsg{Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
-		}
-		entries := make([]fileEntry, 0, len(items))
-		for _, it := range items {
-			// Type() is what the directory read already returned, so this costs
-			// no stat. A symlink to a directory therefore reads as a file, which
-			// is the price of not stat'ing every name in a large tree. The icon
-			// is looked up off the same two facts and for the same reason.
-			dir := it.IsDir()
-			entries = append(entries, fileEntry{
-				Name: it.Name(),
-				Dir:  dir,
-				Icon: fileIconFor(it.Name(), dir),
-			})
-		}
-		sort.Slice(entries, func(i, j int) bool {
-			a, b := entries[i], entries[j]
-			if a.Dir != b.Dir {
-				return a.Dir
-			}
-			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
-		})
-		return fileListMsg{Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
+		return readListing(client, host, origin, dir, pinned, pgid, wasSpoofed)
 	}
 	return func() tea.Msg {
 		msg := read()
 		msg.Gen, msg.Quiet = gen, quiet
 		return msg
 	}
+}
+
+// readListing reads dir for the files section, through the daemon when there
+// is one, and answers with an unstamped fileListMsg. It runs off the update
+// goroutine: the list view's reads and the tree's reads of open folders both
+// call it, so the two cannot disagree about where a folder is read from.
+func readListing(client *session.TUIClient, host, origin, dir string, pinned bool, pgid int, wasSpoofed bool) fileListMsg {
+	if client != nil {
+		listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, pinned)
+		switch {
+		case err == nil && listing.Err != "":
+			return fileListMsg{Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}
+		case err == nil:
+			entries := make([]fileEntry, 0, len(listing.Entries))
+			for _, e := range listing.Entries {
+				// Already in the daemon's order: directories first, then
+				// names. Sorting again here would be sorting a capped
+				// listing, which is an arbitrary subset of the directory.
+				entries = append(entries, fileEntry{
+					Name: e.Name, Dir: e.IsDir, Icon: fileIconFor(e.Name, e.IsDir),
+				})
+			}
+			return fileListMsg{
+				Dir: dir, Entries: entries,
+				Capped: listing.Capped, Spoofed: wasSpoofed || listing.Spoofed,
+			}
+		case host != "":
+			// A daemon on another machine that cannot answer is the end of
+			// it. Falling through to read this machine's disk would list a
+			// directory with nothing to do with the pane, which is the bug
+			// this replaced rather than a fallback.
+			return fileListMsg{Dir: dir, Err: "That machine could not list it."}
+		}
+		// A local daemon that could not answer falls through: a build older
+		// than this message answers with an error, and reading the disk here
+		// is the same disk it would have read.
+	}
+	spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
+	items, capped, err := readDirFunc(dir, fileViewMaxEntries)
+	if err != nil {
+		return fileListMsg{Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
+	}
+	entries := make([]fileEntry, 0, len(items))
+	for _, it := range items {
+		// Type() is what the directory read already returned, so this costs
+		// no stat. A symlink to a directory therefore reads as a file, which
+		// is the price of not stat'ing every name in a large tree. The icon
+		// is looked up off the same two facts and for the same reason.
+		dir := it.IsDir()
+		entries = append(entries, fileEntry{
+			Name: it.Name(),
+			Dir:  dir,
+			Icon: fileIconFor(it.Name(), dir),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		if a.Dir != b.Dir {
+			return a.Dir
+		}
+		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+	})
+	return fileListMsg{Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
 }
 
 // spoofCheckApplies reports whether this client can honestly run the spoof
@@ -812,6 +835,12 @@ func (m *OS) RefreshFileView() tea.Cmd {
 	if !m.filesOn() || m.filesView.Want == "" {
 		return nil
 	}
+	if m.filesTreeOn() {
+		// The tree keeps its place: the root is read again without going back
+		// to the top, and every open folder with it, since an action can land
+		// in any of them.
+		return tea.Batch(m.readFileList(m.filesView.Want, m.filesView.Origin, m.filesView.Pinned), m.refreshTreeAll())
+	}
 	return m.requestFileList(m.filesView.Want, m.filesView.Origin, m.filesView.Pinned)
 }
 
@@ -868,6 +897,9 @@ func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
 		return nil
 	}
 	full := filepath.Join(dir, name)
+	if isDir && m.filesTreeOn() && m.fileTreeUnderRoot(full) {
+		return m.fileTreeTake(full)
+	}
 	if isDir {
 		var cmd tea.Cmd
 		if m.Settings.SidebarFolderClick != config.SidebarFolderClickCd {

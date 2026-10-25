@@ -1634,6 +1634,40 @@ mark in its gutter. This occurs in these cases:
 The agents row uses the bar or the marker. With `underline` or `pill`, it
 uses the bar.
 
+## The files section style
+
+`appearance.sidebar.files_style` sets how the rail's files section shows a
+folder:
+
+| Value | What it shows |
+|---|---|
+| `list` | One folder. `..` goes up, and a folder row goes into the folder. This is the default |
+| `tree` | One tree from the folder. A folder opens under its own row, with indent guides and an open or closed mark |
+
+```toml
+[appearance.sidebar]
+files_style = "tree"
+```
+
+In the tree, the rail has these keys on a name:
+
+| Key | What it does |
+|---|---|
+| `l`, `right` | Open the folder. On an open folder, go to its first name |
+| `h`, `left` | Close the open folder. On another name, go to its folder |
+| `enter`, a click | Open or close the folder. On a file, do what the list does |
+
+The file action keys (`a`, `r`, `d`, `y`, `x`, `p`, `Y`, `S`) act on the name
+under the cursor. A new file or a paste goes into the folder of that name. On
+an open folder, it goes into that folder. `folder_click` still applies: with
+`cd` or `both`, a folder row also types a cd into the pane.
+
+tuios reads a folder only when you open it. It remembers the open folders of
+each session until tuios stops. You can open 64 folders at most. Each open
+folder shows its first 2000 names. tuios watches each open folder on this
+computer and shows a change without a key. A folder that is open under a
+folder on another computer shows a change when you open it again.
+
 ## The rail's cursor row
 
 When the rail has the keyboard, the row under the cursor has a lighter

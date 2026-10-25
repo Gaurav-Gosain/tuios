@@ -204,6 +204,12 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.filesView.Loading)
 	mixI(m.SidebarScrollF)
 	mixU(m.filesView.Gen)
+	// The tree: its style, and every open, close and read of an open folder.
+	mixS(m.Settings.SidebarFilesStyle)
+	mixU(m.filesTree.gen)
+	if m.filesTreeOn() {
+		mixS(m.sidebarCurrentSessionID())
+	}
 	// The custom section: its rows change when its command's output does,
 	// which is the generation, and the section scrolls like the others.
 	if m.sidebarDrawing {
@@ -256,6 +262,12 @@ func (m *OS) sidebarSignature() uint64 {
 	// depend on it, so a focus change or a cursor move must rebuild.
 	mixB(m.sidebarRailFocused())
 	mixI(m.SidebarCursor)
+	// A row the keyboard moved to and this frame has to scroll to.
+	mixB(m.sidebarCursorWantSet)
+	if m.sidebarCursorWantSet {
+		mixI(int(m.sidebarCursorWant.Kind))
+		mixS(m.sidebarCursorWant.WindowID)
+	}
 
 	// The switch numbers are drawn state, on while show_numbers is set.
 	mixB(m.Settings.SidebarShowNumbers)

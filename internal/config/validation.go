@@ -384,6 +384,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		})
 	}
 	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)
+	checkEnum("sidebar.files_style", cfg.Appearance.Sidebar.FilesStyle, SidebarFilesStyles)
 	checkEnum("sidebar.file_delete", cfg.Appearance.Sidebar.FileDelete, SidebarFileDeletes)
 	validateSidebarSubagents(cfg.Appearance.Sidebar, result)
 	if cfg.Appearance.Sidebar.Workspaces != "" {

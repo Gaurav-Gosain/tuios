@@ -539,6 +539,20 @@ var SidebarFolderClicks = []string{
 	SidebarFolderClickNavigate, SidebarFolderClickCd, SidebarFolderClickBoth,
 }
 
+// Files section styles, for appearance.sidebar.files_style.
+//
+// List is the default and the style the section has always had: one folder,
+// a ".." row to go up, and a folder row that walks the listing into it. Tree
+// keeps one root and opens a folder in place under its row, the way neo-tree
+// does, so a person can look into two folders at once without losing either.
+const (
+	SidebarFilesList = "list"
+	SidebarFilesTree = "tree"
+)
+
+// SidebarFilesStyles lists the valid values for appearance.sidebar.files_style.
+var SidebarFilesStyles = []string{SidebarFilesList, SidebarFilesTree}
+
 // Rail header cases. See AppearanceConfig.RailHeaderCase.
 //
 // The rail's section headers are furniture: they frame their section without

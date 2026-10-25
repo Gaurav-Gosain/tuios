@@ -940,6 +940,11 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,
 	},
 	{
+		Path: "appearance.sidebar.files_style", Type: OptionString, Section: "sidebar",
+		Description: "How the files section draws: list shows one folder at a time, tree opens folders in place under one root",
+		Accepted:    SidebarFilesStyles, Default: SidebarFilesList,
+	},
+	{
 		Path: "appearance.sidebar.header_case", Type: OptionString, Section: "sidebar",
 		Description: "How the rail's section headers read: lowercase keeps the quiet furniture look, uppercase draws them as headings",
 		Accepted:    RailHeaderCases, Default: RailHeaderLowercase,

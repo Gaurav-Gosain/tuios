@@ -1622,6 +1622,9 @@ type OS struct {
 	// sections, which is every frame nobody has asked for a listing. See
 	// sidebar_files.go.
 	filesView fileViewState
+	// filesTree is the files section's tree: the open folders per session and
+	// the listing of each one on screen. See sidebar_files_tree.go.
+	filesTree fileTreeState
 
 	// gitView is the rail's git section: the repository the focused pane is in
 	// and how far its branch has drifted. Derived state, never persisted and
@@ -1833,6 +1836,13 @@ type OS struct {
 	sidebarFollowFile     bool
 	sidebarFollowFileName string
 	sidebarFollowFileGen  uint64
+	// sidebarCursorWant is a row the cursor was moved to that the last frame
+	// may not have drawn: the next name of a files section scrolled past it,
+	// or the folder a tree row belongs to. The next nav build scrolls the
+	// section to it and puts the cursor there. Until then it is the cursor
+	// row every key acts on. See sidebarWantCursor.
+	sidebarCursorWant    sidebarNavRow
+	sidebarCursorWantSet bool
 	// zoomRelayout asks the next retile to slide its panes rather than place
 	// them, because the zoom has just moved and the whole layout is going
 	// somewhere new.

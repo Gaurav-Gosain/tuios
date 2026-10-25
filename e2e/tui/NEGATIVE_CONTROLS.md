@@ -9335,3 +9335,10 @@ The fixed build passes: the row was highlighted 14 to 211 ms after the pointer s
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The motion budget counted from the start of the compose (`m.lastInteractionRender = composeStart`), which is upstream main | "the row under the pointer was highlighted 4.375s after the pointer stopped; the budget is 1.5s" | **caught** |
+## The files section scrolls with the keyboard cursor (#1102)
+
+`TestRailFilesSectionScrollsWithTheCursor` (in `sidebar_files_test.go`) lists a folder of 46 names in a files section of about 30 lines, in the list style and in the tree style. G must put the cursor on zz-last.txt, the last name, and a walk of 42 j keys sent at once must put it on f-39.txt. Each step checks the cursor row by the path Y copies and checks that the rail draws the name. Run on 2026-10-25 on Linux against origin/main at 73d59f3e1 plus the branch. The control is a text replacement, built to a separate binary and put back.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `sidebarFilesCursorMove` and `sidebarFilesCursorJump` return false at once, so j and G step over the drawn rows only, as before | both subtests: "the gesture never produced the clipboard writes [.../zz-last.txt]; it wrote []" | **caught** |
