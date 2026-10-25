@@ -9375,3 +9375,13 @@ upstream main at 8d463ac7f.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The `waitInputLive` call in `typeFirstPrompt`, which is upstream main | "the prompts were never sent", "the sheet never made a worktree on agent/lru-cache-safe with the task sent": `prompt_status` reads stalled | **caught** |
+## TML panes: minimize a popup, scroll a long document, no frame for a hidden surface
+
+Run on 2026-10-25 on Linux, based on `f527c102e`.
+
+| Bug | Control | Test (failure seen) | Result |
+| --- | --- | --- | --- |
+| A TML popup did not minimize: leader m m did nothing | the binary from `f527c102e`, before the fix | `TestTMLShowPopup` ("leader m m did not minimize the popup to the dock") | **caught** |
+| A document taller than its pane was cut, with no sign of more and no way to scroll | the same binary | `TestTMLShowPaneAndClose` ("the long pane shows no scroll bar") | **caught** |
+| A patch to a minimized TML pane composed a whole frame | injected: `markTMLDirty` treats every window as on the screen, and `handleTMLWake` skips the frame only when nothing changed | `TestIdleCostStaysLow/minimized_tml_surface` (ticks=20, tickerWakes=20, ctxsw=3975, against 0, 0 and about 400 with the fix) | **caught** |
+| The page ended short of the document's end, so G never showed the last box | injected in loom: no fallback to the natural height, and no gap for a dropped box | loom `TestPageScroll` ("the screen has no \"END\"") | **caught in `loom`** |

@@ -142,6 +142,19 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ctxsw: 400,
 		}, tmlPaneAtIdle, nil)
 	})
+	t.Run("minimized tml surface", func(t *testing.T) {
+		// A minimized TML pane whose owner patches it twice a second takes
+		// the patches and composes no frame: nothing on the screen changed.
+		// Before, each of the 20 patches composed a whole frame: 20 ticks,
+		// 20 ticker wakes and about 4000 context switches.
+		runIdleWindowOpts(t, "", startOpts{daemonDefault: true}, idleBudget{
+			wire:  idleWireBudget,
+			ticks: 2, work: 1,
+			tickerWakes: 1,
+			// About 400 measured, for the 20 patches.
+			ctxsw: 1200,
+		}, minimizedTMLPatched, nil)
+	})
 	t.Run("git section", func(t *testing.T) {
 		// The rail's git section reads the focused pane's repository every
 		// 2 s, and each reading composes a frame equal to the last one. That
@@ -208,6 +221,40 @@ func tmlPaneAtIdle(t *testing.T, term *tuitest.Terminal, base string) {
 	}, 3*uiTimeout); err != nil {
 		t.Fatalf("the window messages never went: %v\n%s", err, term.Snapshot())
 	}
+}
+
+// minimizedTMLPatched opens the TML test document as a pane, minimizes it,
+// and patches it twice a second until the test ends.
+func minimizedTMLPatched(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	tmlPaneAtIdle(t, term, base)
+	surface, _ := tmlSurfaceOf(t, base, "")
+	toWindowMode(t, term)
+	if err := term.SendKeys("m"); err != nil {
+		t.Fatalf("send m: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Failures") }, uiTimeout); err != nil {
+		t.Fatalf("m never minimized the TML pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Window management mode")
+	}, 3*uiTimeout); err != nil {
+		t.Fatalf("the mode message never went: %v\n%s", err, term.Snapshot())
+	}
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		for n := 0; ; n++ {
+			select {
+			case <-done:
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			_, _ = tuiosCLI(t, base, "tml", "patch", surface, fmt.Sprintf(`[{"op":"replace","path":"/passed","value":%d}]`, 500+n))
+		}
+	}()
+	t.Cleanup(func() { close(done); <-stopped })
 }
 
 // lateOutputAfter is how long after writeLate returns its pane writes

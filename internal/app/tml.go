@@ -56,6 +56,9 @@ type tmlClient struct {
 	// one, for the keys of the agents view, which lists and draws them too.
 	// UI goroutine only.
 	setGen, gen uint64
+	// shownDirty says a surface on the screen changed since the wake
+	// began. UI goroutine only.
+	shownDirty bool
 }
 
 // TMLClockMsg is the minute tick of the surfaces that call ago().
@@ -363,6 +366,8 @@ func (m *OS) handleTMLWake() tea.Cmd {
 	m.tml.cmds = nil
 	m.tml.mu.Unlock()
 	changed := false
+	setGen := m.tml.setGen
+	m.tml.shownDirty = false
 	for _, p := range pending {
 		if m.applyTMLSurface(p) {
 			changed = true
@@ -381,7 +386,10 @@ func (m *OS) handleTMLWake() tea.Cmd {
 			changed = true
 		}
 	}
-	if !changed {
+	// Nothing on the screen changed: a hidden surface took a patch, or
+	// nothing changed at all. The frame stays. A surface that opened or
+	// closed changes the agents view's list and the dock.
+	if !changed || !m.tml.shownDirty && setGen == m.tml.setGen {
 		m.renderSkipped = len(cmds) == 0
 	}
 	cmds = append(cmds, m.listenForTML(), m.tmlClockCmd())
@@ -568,13 +576,23 @@ func (m *OS) tmlViewOf(w *terminal.Window) *tmlView {
 	return m.tml.views[session.TMLSurfaceID(w.URI)]
 }
 
-// markTMLDirty marks the windows that draw a surface for a repaint.
+// markTMLDirty marks the windows that draw a surface for a repaint. A
+// window that is not on the screen, minimized or on another workspace, keeps
+// the frame on the screen: it draws the surface again when it shows. So a
+// patch to a hidden surface costs the patch and no frame.
 func (m *OS) markTMLDirty(id string) {
 	m.tml.gen++
+	if m.ShowInbox {
+		// The agents view may draw the surface.
+		m.tml.shownDirty = true
+	}
 	for _, w := range m.Windows {
 		if w != nil && w.Kind == session.WindowKindTML && session.TMLSurfaceID(w.URI) == id {
 			w.MarkContentDirty()
-			m.cachedViewContent = ""
+			if !w.Minimized && w.Workspace == m.CurrentWorkspace {
+				m.cachedViewContent = ""
+				m.tml.shownDirty = true
+			}
 		}
 	}
 }
