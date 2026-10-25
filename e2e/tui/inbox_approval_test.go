@@ -23,9 +23,13 @@ const permissionRequest = `{"hook_event_name":"PermissionRequest","session_id":"
 // item with the keys that answer it, 1 allows it once, and the hook exits with
 // Claude Code's allow decision on stdout. The item closes as answered.
 //
-// Negative control: without the [agents.approvals] table the hook prints
+// A Write is not held, and a or A on it says that only a held approval is
+// answered here.
+//
+// Negative controls: without the [agents.approvals] table the hook prints
 // nothing and exits at once, so the Inbox never shows answer keys and the
-// first wait fails.
+// first wait fails. With a and A doing nothing on an approval with no hold
+// (no cockpitUnheldApproval branch), the wait for their message fails.
 func TestInboxAnswersAHeldApproval(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -154,7 +158,34 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	if text := term.Snapshot(); strings.Contains(text, "] approve Write") {
 		t.Fatalf("the Inbox offers to answer a Write it cannot show:\n%s", text)
 	}
+
+	// a and A on that approval answer nothing, since no hold waits behind
+	// it, and they say so as the digits do. They once did nothing at all,
+	// so a person with no answer keys in the footer saw no reason why.
+	for _, key := range []string{"a", "A"} {
+		if err := term.SendKeys(key); err != nil {
+			t.Fatalf("press %s: %v", key, err)
+		}
+		if err := term.WaitForText(notHeldWords, uiTimeout); err != nil {
+			t.Fatalf("%s on an approval with no hold said nothing: %v\n%s", key, err, term.Snapshot())
+		}
+		saveFrame(t, term, "inbox-approval-not-held-"+key)
+		// The message stays up for a while. Wait it out, so the next key
+		// is seen to bring up its own.
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return !strings.Contains(s.Text(), notHeldWords)
+		}, 2*uiTimeout); err != nil {
+			t.Fatalf("the message after %s never went away: %v\n%s", key, err, term.Snapshot())
+		}
+	}
+	if !strings.Contains(term.Snapshot(), "1 needs you") {
+		t.Fatalf("a or A closed the approval with no hold:\n%s", term.Snapshot())
+	}
 }
+
+// notHeldWords is what an answer key says on an approval with no hold
+// (inboxNotHeldWords in internal/app).
+const notHeldWords = "1, 2 and 3 answer a held approval"
 
 // answerSettle is past the time a held approval must be on screen before a
 // key answers it (inboxAnswerSettle in internal/app).

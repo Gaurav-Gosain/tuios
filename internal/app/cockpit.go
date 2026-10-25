@@ -930,11 +930,28 @@ func (m *OS) cockpitHeldItem() (session.AttentionItem, bool) {
 	return session.AttentionItem{}, false
 }
 
+// cockpitUnheldApproval reports whether the row under the cursor is an
+// approval or a plan that no hold waits behind.
+func (m *OS) cockpitUnheldApproval() bool {
+	r, ok := m.cockpitSelected()
+	if !ok || !r.hasItem || r.item.RequestID != "" {
+		return false
+	}
+	return r.item.Kind == session.AttentionApproval || r.item.Kind == session.AttentionPlan
+}
+
 // CockpitAnswerLetter answers the held approval under the cursor with a
 // letter: a allows once, A always, r rejects. handled is false when no
 // approval waits, and the key then does what it does on any row.
 func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 	if _, ok := m.cockpitHeldItem(); !ok {
+		// An approval with no hold behind it is answered in its pane. a and
+		// A say so, as the digits do, instead of doing nothing in silence.
+		// r keeps its other meaning there: it replies.
+		if key != "r" && m.cockpitUnheldApproval() {
+			m.ShowNotification(inboxNotHeldWords, "info", m.Settings.NotificationDuration)
+			return nil, true
+		}
 		return nil, false
 	}
 	m.cockpitSync()

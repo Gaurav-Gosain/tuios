@@ -1408,7 +1408,7 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		return nil
 	}
 	if !inboxHeld(it) {
-		m.ShowNotification("1, 2 and 3 answer a held approval. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(inboxNotHeldWords, "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !slices.Contains(it.Options, decision) {
@@ -1430,6 +1430,10 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 	}
 	return m.inboxReplyCmd(it, decision)
 }
+
+// inboxNotHeldWords is what an answer key says on an item that no hold
+// waits behind, such as an approval the harness asks about in its pane.
+const inboxNotHeldWords = "1, 2 and 3 answer a held approval. Enter goes to the pane."
 
 // refuseRemoteAnswer refuses a key that send-keys typed when that key would
 // act as the person: answer a held approval or a question, or pass on held
