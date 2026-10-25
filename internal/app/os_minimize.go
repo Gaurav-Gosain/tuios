@@ -135,6 +135,7 @@ func (m *OS) RestoreWindow(i int) {
 func (m *OS) ToggleZoom() {
 	// A popup has its own box, centred over the layout. It does not zoom.
 	if fw := m.GetFocusedWindow(); fw != nil && fw.IsPopup {
+		m.ShowNotification("A popup cannot be zoomed.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.settleSizes(func() { m.toggleZoom() })
