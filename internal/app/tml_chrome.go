@@ -78,20 +78,21 @@ func (m *OS) isTMLPopup(w *terminal.Window) bool {
 
 // tmlInset is where the surface sits in a TML window's content box: inside
 // a margin, two cells at the sides and a row above and below when the window
-// has the room for it. A popup and a pane have the same margin, so a
-// document looks the same in both.
+// has the room for it. A small window keeps its rows and cells for the
+// document. A popup and a pane have the same margin, so a document looks the
+// same in both.
 func (m *OS) tmlInset(w *terminal.Window) (dx, dy, iw, ih int) {
 	cw, ch := max(w.ContentWidth(), 1), max(w.ContentHeight(), 1)
 	if !m.DrawsTML(w) {
 		return 0, 0, cw, ch
 	}
 	switch {
-	case cw >= 24:
+	case cw >= 40:
 		dx = 2
-	case cw >= 8:
+	case cw >= 16:
 		dx = 1
 	}
-	if ch >= 5 {
+	if ch >= 12 {
 		dy = 1
 	}
 	return dx, dy, cw - 2*dx, ch - 2*dy
