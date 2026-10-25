@@ -9391,3 +9391,14 @@ Run on 2026-10-25 on Linux, based on `f527c102e`.
 | A zoom and an unzoom moved the page place | injected in loom: the anchor lookup given no key | loom `TestPageKeepsItsPlaceAcrossWidths` ("a narrower width moved the top from p14 to p10") | **caught in `loom`** |
 | A narrow row of stats cut their labels; a pane had no view.placement | injected in loom: stats left out of `rowLines`; placement left out of the view variables | loom `TestPlacementAndStatRows` ("the screen has no \"passed\"", "no \"esc close\"") | **caught in `loom`** |
 | Text fields had no visible field on a dark ground; two fields read as one; a checkbox sat far from its label | the loom before the fix | loom `TestGolden/fields` and `TestGolden/deploy` at truecolor, 256, 16 and ASCII (the goldens now hold the box, the rule, the row between fields and `[x] Checked`) | **caught in `loom`** |
+
+## Mermaid diagrams stand one under the other in a pane
+
+`TestMermaidDiagramsStackInAPane` (in `mermaid_live_terminal_test.go`) runs `tuios mermaid` in a 120x60 pane on a kitty host with 10x20 cells, on a Markdown file with a tall, a wide and a small diagram. It rebuilds what the host shows from the host's stream, checks it and saves it as `diagrams.png`. The `other-cell-size` case runs the command under `./cellsize`, which makes the pane report 8x20 cells. `TestKittyOverflowCropKeepsThePicturesScale` has two `fraction` cases: a picture of 19.5 pixels a column and 39 a row. `TestNamedThemesKeepTextReadable` in `sketch/raster` measures each label of a picture with no background on the theme's background colour. Run on 2026-10-26 on Linux against upstream main at 8d463ac7f.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole branch, which is upstream main | stack test, all three cases: "picture 1 (95x1080) shows pixels 0 to 90 across", "shows pixel rows 216 to 1026, want its bottom row 1080", "picture 2 starts 0 rows after the end of picture 1" | **caught** |
+| `mermaid.Kitty` writes no `r=` | stack test, `other-cell-size`: "the tall diagram (96x1080) is not whole on screen" | **caught** |
+| `placeOne` cuts with whole pixels a cell again, with the rest of the branch | the stack test passes: the picture is padded to whole cells, so the division is exact. The overflow test, `fraction` cases: "41x4 cells show the source rectangle x=0,y=0,w=779,h=156, want ... w=800" | **caught** by the overflow test only |
+| `readableText` reads clear pixels as black (`backdrop(r.dst, b, color.NRGBA{})`) | `TestNamedThemesKeepTextReadable`: 117 findings marked "(no background)" | **caught** |

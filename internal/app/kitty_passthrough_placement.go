@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"runtime"
 	"slices"
 )
@@ -873,37 +874,43 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	// the whole bitmap into it, which on one axis alone is the stretch.
 	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 || p.ClipLeft > 0 ||
 		visibleCols < imageCols || visibleRows < p.Rows
-	pixelsPerRow := cellHeight
-	switch {
-	case p.Rows > 0 && p.ImagePixelHeight > 0:
-		pixelsPerRow = p.ImagePixelHeight / p.Rows
-	case p.Rows > 0 && p.SourceHeight > 0:
-		pixelsPerRow = p.SourceHeight / p.Rows
+	// The box shows the source rectangle (the whole image when the guest
+	// gave none) across imageCols by p.Rows cells, so the pixel edge of cell
+	// n is n * span / cells. It is worked out per edge, rounded, and never as
+	// a whole number of pixels per cell: 761 pixels over 96 columns is 7.93,
+	// and a truncated 7 cut the right 89 pixels off the picture and drifted
+	// each row of a scrolled one by most of a pixel.
+	spanW := sourceSpan(p.ImagePixelWidth, p.SourceX, p.SourceWidth)
+	spanH := sourceSpan(p.ImagePixelHeight, p.SourceY, p.SourceHeight)
+	colEdge := func(n int) int {
+		if imageCols > 0 && spanW > 0 {
+			return int(math.Round(float64(n) * float64(spanW) / float64(imageCols)))
+		}
+		return n * caps.CellWidth
 	}
-	pixelsPerCol := caps.CellWidth
-	switch {
-	case imageCols > 0 && p.ImagePixelWidth > 0:
-		pixelsPerCol = p.ImagePixelWidth / imageCols
-	case imageCols > 0 && p.SourceWidth > 0:
-		pixelsPerCol = p.SourceWidth / imageCols
+	rowEdge := func(n int) int {
+		if p.Rows > 0 && spanH > 0 {
+			return int(math.Round(float64(n) * float64(spanH) / float64(p.Rows)))
+		}
+		return n * cellHeight
 	}
 	switch {
 	case isClipping:
-		srcX := p.SourceX + p.ClipLeft*pixelsPerCol
-		srcY := p.SourceY + p.ClipTop*pixelsPerRow
-		srcW := p.SourceWidth
-		if srcW == 0 && pixelsPerCol > 0 {
-			srcW = imageCols * pixelsPerCol
+		srcX := p.SourceX + colEdge(p.ClipLeft)
+		srcY := p.SourceY + rowEdge(p.ClipTop)
+		srcW := spanW
+		if srcW == 0 {
+			srcW = colEdge(imageCols)
 		}
 		// The width shown is measured against the image's own cell footprint,
 		// not against the already-capped p.Cols. Comparing with the capped one
 		// made this a no-op in the case that matters: an image wider than its
 		// pane has p.Cols == visibleCols == the pane, so no crop was emitted
 		// and kitty scaled the full bitmap width into the pane instead.
-		if visibleCols < imageCols && pixelsPerCol > 0 {
-			srcW = visibleCols * pixelsPerCol
+		if visibleCols < imageCols {
+			srcW = colEdge(p.ClipLeft+visibleCols) - colEdge(p.ClipLeft)
 		}
-		srcH := visibleRows * pixelsPerRow
+		srcH := rowEdge(p.ClipTop+visibleRows) - rowEdge(p.ClipTop)
 		// Clamp against the image's native pixel height so we never request
 		// a source region that overflows the image. xterm-addon-image rejects
 		// such requests (real kitty silently clamps).

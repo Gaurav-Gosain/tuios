@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,11 @@ import (
 //   - The file sent again can have a header that does not read as a PNG. Its
 //     size is then unknown, and the size already known for the picture has to
 //     stay, or the crop is measured in the host's cell again.
+//   - A picture's scale need not be a whole number of pixels a cell. With
+//     fraction it is 19.5 pixels a column and 39 a row, and a crop worked out
+//     from a truncated 19 pixels a column cut the right of the picture off:
+//     41 columns showed 779 pixels, not 800. This was the cut edge on the
+//     diagrams of tuios mermaid.
 func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 	for _, tc := range []struct{ medium, how string }{
 		{"direct", ""}, {"file", ""}, {"file-zlib", ""}, {"file-at", ""}, {"temp", ""},
@@ -52,11 +58,15 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 		{"file", "resend"}, {"temp", "resend"}, {"direct", "resend"},
 		{"file", "same"}, {"temp", "same"},
 		{"file", "badhead"}, {"temp", "badhead"},
+		{"direct", "fraction"}, {"file", "fraction"},
 	} {
 		name := strings.TrimSuffix(tc.medium+"-"+tc.how, "-")
-		boxCols, boxRows, perCol, perRow := 100, 10, 20, 40
-		if tc.how == "natural" {
+		boxCols, boxRows, perCol, perRow := 100, 10, 20.0, 40.0
+		switch tc.how {
+		case "natural":
 			boxCols, boxRows, perCol, perRow = 200, 20, 10, 20
+		case "fraction":
+			perCol, perRow = 19.5, 39
 		}
 		t.Run(name, func(t *testing.T) {
 			bin := buildOverflow(t)
@@ -104,9 +114,9 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 					t.Fatalf("ASSERTION: the host is left showing %dx%d cells, want them clipped to fewer than %dx%d:\n  %s",
 						c.cols, c.rows, boxCols, boxRows, strings.Join(history, "\n  "))
 				}
-				wantW, wantH := c.cols*perCol, c.rows*perRow
+				wantW, wantH := int(math.Round(float64(c.cols)*perCol)), int(math.Round(float64(c.rows)*perRow))
 				if c.srcX != 0 || c.srcY != 0 || c.srcW != wantW || c.srcH != wantH {
-					t.Fatalf("ASSERTION: %dx%d cells show the source rectangle x=%d,y=%d,w=%d,h=%d, want x=0,y=0,w=%d,h=%d, %d pixels a column and %d a row:\n  %s",
+					t.Fatalf("ASSERTION: %dx%d cells show the source rectangle x=%d,y=%d,w=%d,h=%d, want x=0,y=0,w=%d,h=%d, %g pixels a column and %g a row:\n  %s",
 						c.cols, c.rows, c.srcX, c.srcY, c.srcW, c.srcH, wantW, wantH, perCol, perRow, strings.Join(history, "\n  "))
 				}
 			}

@@ -574,11 +574,16 @@ own text output.
 `tuios mermaid` builds its colours from your tuios theme. `[mermaid] theme`
 picks one of the named diagram themes instead. The `--theme` flag wins over it.
 
+`[mermaid] background` is `theme` (the default) or `none`. With `none`, a kitty
+or png picture has no background, so the diagram is on the background of your
+terminal. The `--background` flag wins over it.
+
 ```toml
 [mermaid]
 theme = "flexoki"   # tuios (the default), pele, flexoki, flexoki-dark, nord,
                     # everforest, gruvbox, rose-pine, catppuccin-mocha,
                     # catppuccin-latte, tokyo-night, dracula, solarized-light, kanagawa
+background = "none" # theme (the default) or none
 ```
 
 ## CharmTone themes

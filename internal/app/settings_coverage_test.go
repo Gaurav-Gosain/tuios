@@ -81,7 +81,8 @@ func TestSettingsPanelReachesEveryOption(t *testing.T) {
 var settingsUIExcluded = map[string]string{
 	// Read only by the tuios mermaid command. The window manager draws no
 	// diagrams, so a row would change nothing a person sees in it.
-	"mermaid.theme": "read only by tuios mermaid, which takes --theme too",
+	"mermaid.theme":      "read only by tuios mermaid, which takes --theme too",
+	"mermaid.background": "read only by tuios mermaid, which takes --background too",
 
 	// The deprecated flat spellings. Each is an alias of a nested path that has
 	// a row of its own, so a row here would be a second control for one value,

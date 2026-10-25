@@ -1438,6 +1438,11 @@ var optionSpecs = []Option{
 		Description: "Colours of tuios mermaid: tuios for the colours of your theme, or a named theme such as flexoki, nord or rose-pine",
 		Default:     "tuios",
 	},
+	{
+		Path: "mermaid.background", Type: OptionString, Section: "mermaid",
+		Description: "Background of a tuios mermaid picture: theme for the theme's colour, or none for the terminal's own background",
+		Accepted:    []string{"theme", "none"}, Default: "theme",
+	},
 
 	// [hints]. Read each time hints mode opens. hints.patterns is a list and
 	// is set in the file only, like [keybindings].

@@ -102,6 +102,11 @@ func frameFont() *shot.Frame {
 // text artifacts, so the frame can be looked at the way the terminal shows it.
 func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) {
 	t.Helper()
+	saveGridPNG(t, screenGrid(s, p), dir, name)
+}
+
+// screenGrid is the screen as a shot grid, in the palette p.
+func screenGrid(s tuitest.Screen, p *shot.Palette) *shot.Grid {
 	cols, rows := s.Size()
 	g := shot.NewGrid(cols, rows, p.FG, p.BG)
 	for y := range rows {
@@ -123,6 +128,12 @@ func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) 
 			g.Cells[y][x] = cell
 		}
 	}
+	return g
+}
+
+// saveGridPNG draws a grid in the frame font and writes it as dir/name.png.
+func saveGridPNG(t *testing.T, g *shot.Grid, dir, name string) {
+	t.Helper()
 	data, err := shot.RenderPNG(g, frameFont())
 	if err != nil {
 		t.Fatalf("render %s: %v", name, err)

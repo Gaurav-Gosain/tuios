@@ -1153,7 +1153,7 @@ func DefaultConfig() *UserConfig {
 		Hints:        defaultHintsConfig(),
 		Scratch:      defaultScratchConfig(),
 		PiP:          defaultPiPConfig(),
-		Mermaid:      MermaidConfig{Theme: "tuios"},
+		Mermaid:      MermaidConfig{Theme: "tuios", Background: "theme"},
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),
 		Keybindings: KeybindingsConfig{

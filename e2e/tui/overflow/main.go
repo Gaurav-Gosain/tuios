@@ -5,7 +5,7 @@
 // so a crop measured in the host's cell instead of in the picture's own scale
 // is half the size it should be.
 //
-// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend|same|badhead]
+// Usage: OVERFLOW_DIR=DIR overflow MEDIUM [later|natural|resend|same|badhead|fraction]
 //
 // A file medium is written under DIR, the test's own temporary directory, so
 // nothing is left behind in /tmp. Without it the system's is used.
@@ -31,7 +31,8 @@
 // places nothing either, so the picture stays where it was. With badhead it
 // places the picture, then sends other pixels with a=t from a file whose PNG
 // header cannot be read, so the picture's size has to come from what was
-// already known of it.
+// already known of it. With fraction the picture is 1950x390 pixels, 19.5 a
+// column and 39 a row of its 100x10 cells.
 package main
 
 import (
@@ -48,11 +49,14 @@ import (
 
 const (
 	imageID = 7
-	width   = 2000
-	height  = 400
 	cols    = 100
 	rows    = 10
 )
+
+// width and height are the picture's size. With fraction it is 1950x390, 19.5
+// pixels a column and 39 a row, so a crop worked out in whole pixels a cell
+// comes out short.
+var width, height = 2000, 400
 
 func main() {
 	medium := "direct"
@@ -64,6 +68,9 @@ func main() {
 		how = os.Args[2]
 	}
 	later := how == "later"
+	if how == "fraction" {
+		width, height = 1950, 390
+	}
 	data, err := picture(0)
 	if err != nil {
 		fmt.Printf("OVERFLOW-ERR %v\n", err)

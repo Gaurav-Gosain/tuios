@@ -4895,7 +4895,7 @@ Draw the Mermaid diagrams of a file in the terminal, or save them as SVG or PNG.
 
 **Usage:**
 ```bash
-tuios mermaid FILE [--format svg|png|kitty|text] [-o FILE] [--diagram N] [--theme NAME]
+tuios mermaid FILE [--format svg|png|kitty|text] [-o FILE] [--diagram N] [--theme NAME] [--background theme|none]
 ```
 
 FILE is a Mermaid source (`.mmd`), a Markdown file, or `-` for standard input.
@@ -4913,6 +4913,17 @@ charts, user journeys, kanban boards, git graphs, sankey diagrams, block
 diagrams, architecture diagrams and requirement diagrams. Another type is
 written as its source, with a note on stderr. A drawing wider than the terminal
 is written at its full width, with a note on stderr.
+
+A `kitty` picture is not wider than the terminal. It is two rows shorter than
+the terminal at most, so a tall diagram is drawn smaller. The picture takes a
+fixed box of cells, so the next diagram starts under it. A blank line goes
+between two diagrams.
+
+A `kitty` or `png` picture has the background colour of the theme.
+`--background none`, or `background = "none"` in `[mermaid]`, leaves the
+background clear, so the diagram is on the background of your terminal. The
+labels keep their contrast against the theme's background colour, so use a
+theme that matches your terminal. An SVG has no background.
 
 `-o FILE` saves to a file, as SVG or PNG from its extension. With more than one
 diagram, the files get `-2`, `-3` and so on. `--scale` sets the pixels per SVG

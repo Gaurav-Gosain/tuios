@@ -1,16 +1,26 @@
 package tuie2e
 
 import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"image"
+	"image/png"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/xpty"
+	"tuios.dev/shot"
 )
 
 // ttyState is the pty's line discipline as stty -g writes it, read from the
@@ -182,4 +192,298 @@ func TestMermaidLiveWritesNoTerminalControls(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The diagrams of a Markdown file, drawn in a tuios pane on a kitty host.
+//
+// Reported from a tall pane: the first diagram lost its top, the next one was
+// drawn over its end, and the right side of a diagram was cut at a straight
+// edge. Two causes, written down before the fix:
+//
+//   - tuios cut a picture it shows in part (scrolled, or at the bottom of the
+//     pane) with a whole number of pixels a cell. 761 pixels over 96 columns
+//     is 7.93, and the truncated 7 cut the right 89 pixels off and moved each
+//     row of the cut a little up the picture.
+//   - tuios mermaid gave the picture's width in cells and let the terminal
+//     work out the height from its cell size. A pane can report a cell size
+//     the host is not drawing (a daemon told by a client with another font).
+//     The picture then came out taller than the pane, so its top scrolled
+//     away before it was ever whole on screen.
+//
+// So the host view is rebuilt from what the host was told. The prompt comes
+// after the last diagram, so every picture still on screen has its bottom on
+// screen: each must show its picture to the right edge and to the bottom row.
+// The pictures must stand one under the other with a gap, and the prompt must
+// come after the last one. The frame is saved as a PNG with the pictures in it.
+//
+// How it could pass wrongly: with no picture on screen every check on the
+// pictures passes, so the count sent and the last diagram on screen are
+// checked first.
+//
+// The tall diagram is first drawn alone: it fits the pane, so it must be whole
+// on screen.
+//
+// Negative controls: see NEGATIVE_CONTROLS.md.
+func TestMermaidDiagramsStackInAPane(t *testing.T) {
+	cellsize := buildCellsize(t)
+	cases := []struct {
+		name   string
+		daemon bool
+		// wrap runs tuios mermaid in a pane that reports these cell pixels.
+		wrap string
+	}{
+		{name: "standalone"},
+		{name: "daemon", daemon: true},
+		{name: "other-cell-size", wrap: cellsize + " 8x20 "},
+	}
+	dir := t.TempDir()
+	md := filepath.Join(dir, "diagrams.md")
+	var tall, wide strings.Builder
+	tall.WriteString("flowchart TB\n")
+	for i := range 24 {
+		fmt.Fprintf(&tall, "    T%d[Step %d of the tall one] --> T%d\n", i, i, i+1)
+	}
+	wide.WriteString("flowchart LR\n")
+	for i := range 16 {
+		fmt.Fprintf(&wide, "    W%d[Wide %d] --> W%d\n", i, i, i+1)
+	}
+	doc := "# Diagrams\n\n```mermaid\n" + tall.String() + "```\n\nText.\n\n```mermaid\n" + wide.String() +
+		"```\n\n```mermaid\nflowchart LR\n    A[Small] --> B[Done]\n```\n"
+	if err := os.WriteFile(md, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			const cols, rows = 120, 60
+			host := newKittyHost()
+			term, base := start(t, startOpts{
+				cols: cols, rows: rows,
+				env:           []string{"TUIOS_SIXEL_GRAPHICS=0", "TUIOS_CELL_SIZE=10x20"},
+				out:           host,
+				daemonDefault: tc.daemon,
+			})
+			if tc.daemon {
+				killDaemon(t, base)
+			}
+			answerKittyProbe(t, term, host.probe, cols, rows)
+			waitBoot(t, term)
+			newWindow(t, term)
+			enterTerminalMode(t, term)
+			runInShell(t, term, "echo RE\"\"ADY", "READY", shellTimeout)
+			// The tall diagram alone fits the pane, so it must be whole on
+			// screen. A picture sized for cells the host is not drawing came
+			// out taller than the pane and lost its top.
+			runToExit(t, term, "clear")
+			host.mark("tall")
+			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark --diagram 1 "+md)
+			time.Sleep(time.Second)
+			alone := replayKittyHost(t, host.bytes(), "tall")
+			if len(alone.order) != 1 {
+				t.Fatalf("the host was sent %d pictures for one diagram", len(alone.order))
+			}
+			if p := alone.live[[2]int{alone.order[0], 1}]; p == nil {
+				t.Errorf("the tall diagram is not on screen\n%s", term.Snapshot())
+			} else if up := alone.uploads[p.id]; p.sy != 0 || p.sh < up.h-1 || p.sw < up.w-1 {
+				t.Errorf("the tall diagram (%dx%d) is not whole on screen: %+v\n%s", up.w, up.h, *p, term.Snapshot())
+			}
+
+			runToExit(t, term, "clear")
+			host.mark("mermaid")
+			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark "+md)
+			// The refresh passes that place the pictures run on the next frames.
+			time.Sleep(time.Second)
+
+			view := replayKittyHost(t, host.bytes(), "mermaid")
+			g := screenGrid(term.Screen(), shot.XTermPalette())
+			for _, p := range view.live {
+				g.Images = append(g.Images, p.shotImage(view))
+			}
+			saveGridPNG(t, g, artifactDir(t), "diagrams")
+
+			if len(view.uploads) != 3 {
+				t.Fatalf("the host was sent %d pictures, want the 3 diagrams", len(view.uploads))
+			}
+			// Every picture on screen at the end has its bottom on screen, as
+			// the prompt comes after the last one. So each must show its
+			// picture down to the last pixel row, and across its whole width.
+			for _, p := range view.live {
+				up := view.uploads[p.id]
+				if p.sx != 0 || p.sw < up.w-1 {
+					t.Errorf("picture %d (%dx%d) shows pixels %d to %d across, want all of them: %+v", p.id, up.w, up.h, p.sx, p.sx+p.sw, *p)
+				}
+				if p.sy+p.sh < up.h-1 {
+					t.Errorf("picture %d (%dx%d) shows pixel rows %d to %d, want its bottom row %d: %+v", p.id, up.w, up.h, p.sy, p.sy+p.sh, up.h, *p)
+				}
+			}
+			// The last diagram is small and fits whole.
+			if p := view.live[[2]int{view.order[len(view.order)-1], 1}]; p != nil && (p.sy != 0 || p.sh < view.uploads[p.id].h-1) {
+				t.Errorf("the small diagram is not whole on screen: %+v", *p)
+			}
+			// The pictures on screen at the end, top to bottom, stand apart.
+			live := slices.SortedFunc(maps.Values(view.live), func(a, b *hostPlacement) int { return a.row - b.row })
+			if len(live) == 0 || live[len(live)-1].id != view.order[len(view.order)-1] {
+				t.Fatalf("the last diagram is not on screen at the end\n%s", term.Snapshot())
+			}
+			for i := 1; i < len(live); i++ {
+				if gap := live[i].row - (live[i-1].row + live[i-1].r); gap < 1 {
+					t.Errorf("picture %d starts %d rows after the end of picture %d, want a gap of at least 1",
+						live[i].id, gap, live[i-1].id)
+				}
+			}
+			last := live[len(live)-1]
+			done := -1
+			for y := range rows {
+				if strings.Contains(term.Screen().Line(y), "DONE-RC=0") {
+					done = y
+				}
+			}
+			if done < last.row+last.r {
+				t.Errorf("the prompt is on row %d, inside the last picture (rows %d to %d)\n%s",
+					done, last.row, last.row+last.r-1, term.Snapshot())
+			}
+		})
+	}
+}
+
+var (
+	cellsizeOnce sync.Once
+	cellsizeBin  string
+	cellsizeErr  error
+)
+
+// buildCellsize compiles ./cellsize once per test binary.
+func buildCellsize(t *testing.T) string {
+	t.Helper()
+	cellsizeOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "cellsize")
+		if err != nil {
+			cellsizeErr = err
+			return
+		}
+		bin := filepath.Join(dir, "cellsize")
+		if out, err := exec.Command("go", "build", "-o", bin, "./cellsize").CombinedOutput(); err != nil {
+			cellsizeErr = fmt.Errorf("build cellsize: %v\n%s", err, out)
+			return
+		}
+		cellsizeBin = bin
+	})
+	if cellsizeErr != nil {
+		t.Fatal(cellsizeErr)
+	}
+	return cellsizeBin
+}
+
+// hostUpload is one picture the host was sent.
+type hostUpload struct {
+	png  []byte
+	w, h int
+}
+
+// hostPlacement is one a=p the host was given: its picture, the cell of its
+// top-left corner, its box in cells, and the part of the picture it shows.
+type hostPlacement struct {
+	id, pid        int
+	col, row, c, r int
+	sx, sy, sw, sh int
+}
+
+func (p *hostPlacement) shotImage(v *kittyHostView) shot.Image {
+	up := v.uploads[p.id]
+	img, _ := png.Decode(bytes.NewReader(up.png))
+	return shot.Image{Pixels: img, Source: image.Rect(p.sx, p.sy, p.sx+p.sw, p.sy+p.sh),
+		Col: p.col, Row: p.row, Cols: p.c, Rows: p.r}
+}
+
+// kittyHostView is what a kitty host holds after a stream: the pictures sent
+// after the phase mark, in order, and the placements still on screen.
+type kittyHostView struct {
+	uploads map[int]*hostUpload
+	order   []int
+	live    map[[2]int]*hostPlacement
+}
+
+// hostCmdRE is a graphics command with the cursor move tuios puts in front of
+// each placement.
+var hostCmdRE = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
+
+// replayKittyHost plays the host's stream from the phase mark the way kitty
+// keeps pictures and placements.
+func replayKittyHost(t *testing.T, stream []byte, phase string) *kittyHostView {
+	t.Helper()
+	if i := bytes.Index(stream, []byte(phaseMark+phase)); i >= 0 {
+		stream = stream[i:]
+	}
+	v := &kittyHostView{uploads: map[int]*hostUpload{}, live: map[[2]int]*hostPlacement{}}
+	var upID int
+	var data []byte
+	for _, m := range hostCmdRE.FindAllSubmatch(stream, -1) {
+		kv := map[string]int{}
+		action := ""
+		for f := range strings.SplitSeq(string(m[3]), ",") {
+			k, val, _ := strings.Cut(f, "=")
+			if k == "a" || k == "d" {
+				if k == "a" {
+					action = val
+				} else {
+					kv["d"] = int(val[0])
+				}
+				continue
+			}
+			kv[k], _ = strconv.Atoi(val)
+		}
+		switch {
+		case action == "t" || (action == "" && upID != 0):
+			if action == "t" {
+				upID, data = kv["i"], nil
+			}
+			data = append(data, m[4]...)
+			if kv["m"] == 0 {
+				raw, err := base64.StdEncoding.DecodeString(string(data))
+				if err != nil {
+					t.Fatalf("picture %d: %v", upID, err)
+				}
+				cfg, err := png.DecodeConfig(bytes.NewReader(raw))
+				if err != nil {
+					t.Fatalf("picture %d: %v", upID, err)
+				}
+				if v.uploads[upID] == nil {
+					v.order = append(v.order, upID)
+				}
+				v.uploads[upID] = &hostUpload{png: raw, w: cfg.Width, h: cfg.Height}
+				upID = 0
+			}
+		case action == "p":
+			up := v.uploads[kv["i"]]
+			if up == nil {
+				continue
+			}
+			row, _ := strconv.Atoi(string(m[1]))
+			col, _ := strconv.Atoi(string(m[2]))
+			p := &hostPlacement{id: kv["i"], pid: kv["p"], col: col - 1, row: row - 1, c: kv["c"], r: kv["r"],
+				sx: kv["x"], sy: kv["y"], sw: kv["w"], sh: kv["h"]}
+			if p.sw == 0 {
+				p.sw = up.w - p.sx
+			}
+			if p.sh == 0 {
+				p.sh = up.h - p.sy
+			}
+			v.live[[2]int{p.id, p.pid}] = p
+		case action == "d":
+			for k := range v.live {
+				switch rune(kv["d"]) {
+				case 'a', 'A':
+					delete(v.live, k)
+				case 'i', 'I':
+					if k[0] == kv["i"] {
+						delete(v.live, k)
+					}
+				case 'p', 'P':
+					if k[0] == kv["i"] && k[1] == kv["p"] {
+						delete(v.live, k)
+					}
+				}
+			}
+		}
+	}
+	return v
 }
