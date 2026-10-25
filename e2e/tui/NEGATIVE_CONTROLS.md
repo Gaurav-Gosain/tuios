@@ -9402,3 +9402,9 @@ Run on 2026-10-25 on Linux, based on `f527c102e`.
 | `mermaid.Kitty` writes no `r=` | stack test, `other-cell-size`: "the tall diagram (96x1080) is not whole on screen" | **caught** |
 | `placeOne` cuts with whole pixels a cell again, with the rest of the branch | the stack test passes: the picture is padded to whole cells, so the division is exact. The overflow test, `fraction` cases: "41x4 cells show the source rectangle x=0,y=0,w=779,h=156, want ... w=800" | **caught** by the overflow test only |
 | `readableText` reads clear pixels as black (`backdrop(r.dst, b, color.NRGBA{})`) | `TestNamedThemesKeepTextReadable`: 117 findings marked "(no background)" | **caught** |
+
+The stack test also checks that the small diagram keeps its own size, with its text at the terminal's text size. Run on 2026-10-26 against the branch before that rule, where a diagram could be drawn at up to twice its size to fill the pane.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `kittyScale` replaced by the old rule, up to twice the SVG size | stack test, all three cases: "the small diagram (215 units wide) takes 43 columns, want about 22" (54, want 27, in the 8x20 pane) | **caught** |

@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/png"
 	"maps"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -221,7 +222,8 @@ func TestMermaidLiveWritesNoTerminalControls(t *testing.T) {
 // checked first.
 //
 // The tall diagram is first drawn alone: it fits the pane, so it must be whole
-// on screen.
+// on screen. The small diagram must keep its own size, its text at the
+// terminal's text size, and not be made larger to fill the pane.
 //
 // Negative controls: see NEGATIVE_CONTROLS.md.
 func TestMermaidDiagramsStackInAPane(t *testing.T) {
@@ -231,10 +233,12 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 		daemon bool
 		// wrap runs tuios mermaid in a pane that reports these cell pixels.
 		wrap string
+		// cellW is the cell width the pane reports.
+		cellW float64
 	}{
-		{name: "standalone"},
-		{name: "daemon", daemon: true},
-		{name: "other-cell-size", wrap: cellsize + " 8x20 "},
+		{name: "standalone", cellW: 10},
+		{name: "daemon", daemon: true, cellW: 10},
+		{name: "other-cell-size", wrap: cellsize + " 8x20 ", cellW: 8},
 	}
 	dir := t.TempDir()
 	md := filepath.Join(dir, "diagrams.md")
@@ -252,6 +256,16 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 	if err := os.WriteFile(md, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The small diagram's own width, in diagram units.
+	svg, err := exec.Command(tuiosBin, "mermaid", "--diagram", "3", "--format", "svg", md).Output()
+	if err != nil {
+		t.Fatalf("draw the small diagram as SVG: %v", err)
+	}
+	m := regexp.MustCompile(`width="([0-9.]+)"`).FindSubmatch(svg)
+	if m == nil {
+		t.Fatalf("the small diagram's SVG has no width: %.200s", svg)
+	}
+	smallW, _ := strconv.ParseFloat(string(m[1]), 64)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			const cols, rows = 120, 60
@@ -315,9 +329,19 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 					t.Errorf("picture %d (%dx%d) shows pixel rows %d to %d, want its bottom row %d: %+v", p.id, up.w, up.h, p.sy, p.sy+p.sh, up.h, *p)
 				}
 			}
-			// The last diagram is small and fits whole.
-			if p := view.live[[2]int{view.order[len(view.order)-1], 1}]; p != nil && (p.sy != 0 || p.sh < view.uploads[p.id].h-1) {
-				t.Errorf("the small diagram is not whole on screen: %+v", *p)
+			// The last diagram is small and fits whole, with its text at the
+			// terminal's text size: 16px labels at four fifths of a 20 pixel
+			// cell is one pixel a diagram unit, so the box is its own width
+			// over the cell width the pane reports. It must not be blown up to
+			// fill the pane.
+			if p := view.live[[2]int{view.order[len(view.order)-1], 1}]; p != nil {
+				if p.sy != 0 || p.sh < view.uploads[p.id].h-1 {
+					t.Errorf("the small diagram is not whole on screen: %+v", *p)
+				}
+				want := int(math.Ceil(smallW / tc.cellW))
+				if p.c < want-1 || p.c > want+1 {
+					t.Errorf("the small diagram (%.0f units wide) takes %d columns, want about %d", smallW, p.c, want)
+				}
 			}
 			// The pictures on screen at the end, top to bottom, stand apart.
 			live := slices.SortedFunc(maps.Values(view.live), func(a, b *hostPlacement) int { return a.row - b.row })

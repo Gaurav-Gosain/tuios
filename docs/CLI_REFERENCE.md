@@ -4914,8 +4914,10 @@ diagrams, architecture diagrams and requirement diagrams. Another type is
 written as its source, with a note on stderr. A drawing wider than the terminal
 is written at its full width, with a note on stderr.
 
-A `kitty` picture is not wider than the terminal. It is two rows shorter than
-the terminal at most, so a tall diagram is drawn smaller. The picture takes a
+The text of a `kitty` picture has the size of the terminal's text, so the
+diagrams of a file have one text size. A small diagram is not made larger. A
+diagram that does not fit is made smaller: the picture is not wider than the
+terminal, and it is two rows shorter than the terminal at most. The picture takes a
 fixed box of cells, so the next diagram starts under it. A blank line goes
 between two diagrams.
 

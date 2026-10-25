@@ -60,9 +60,10 @@ func newMermaidCommand() *cobra.Command {
 FILE is a Mermaid source (.mmd), a Markdown file, or - for standard input.
 A Markdown file gives each of its mermaid code blocks.
 
-In a terminal that shows kitty graphics, the diagram is a picture. The
-picture fits the terminal: it is not wider than the terminal, and it is two
-rows shorter than the terminal at most. A blank line goes between two
+In a terminal that shows kitty graphics, the diagram is a picture. Its text
+has the size of the terminal's text. A diagram that does not fit is made
+smaller: it is not wider than the terminal, and it is two rows shorter than
+the terminal at most. A blank line goes between two
 diagrams. In other terminals the diagram is drawn with box-drawing characters
 and its labels as text. A diagram type with no text drawing yet is written as
 its source. A drawing wider than the terminal is written at its full width.
@@ -394,12 +395,12 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		return write(b.Bytes())
 	}
 
-	// kitty: as large as the terminal allows, and no larger than twice the SVG
-	// size. Two rows stay free under the picture: one for the gap or the
-	// prompt, and one because tuios keeps the last row of a pane clear of
-	// pictures.
+	// kitty: the diagram's text at the size of the terminal's own, and smaller
+	// only when the diagram does not fit. Two rows stay free under the
+	// picture: one for the gap or the prompt, and one because tuios keeps the
+	// last row of a pane clear of pictures.
 	maxRows := max(rows-2, 4)
-	scale := math.Min(2, math.Min(float64(cols*cellW)/math.Max(1, out.Width), float64(maxRows*cellH)/math.Max(1, out.Height)))
+	scale := kittyScale(out.Width, out.Height, cols, maxRows, cellW, cellH)
 	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: background, Readable: true})
 	if err != nil {
 		return fmt.Errorf("cannot draw diagram %d: %w", i+1, err)
@@ -414,6 +415,22 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		fmt.Fprintln(stdout)
 	}
 	return mermaid.Kitty(stdout, b.Bytes(), c, r)
+}
+
+// diagramFontSize is the size in SVG units of a diagram's body text. sketch
+// draws labels at 16px, as pele does.
+const diagramFontSize = 16
+
+// kittyScale is the pixels a diagram unit takes in a picture of the terminal.
+// Its body text gets the size of the terminal's own text, about four fifths of
+// a cell's height, so every diagram of a file has one text size. It is
+// smaller only where the diagram would be wider than cols cells or taller
+// than rows cells. A small diagram is not made larger than that.
+func kittyScale(width, height float64, cols, rows, cellW, cellH int) float64 {
+	text := 0.8 * float64(cellH) / diagramFontSize
+	fitW := float64(cols*cellW) / math.Max(1, width)
+	fitH := float64(rows*cellH) / math.Max(1, height)
+	return math.Min(text, math.Min(fitW, fitH))
 }
 
 // cellBox pads a picture to whole cells, so the box of c by r cells the
