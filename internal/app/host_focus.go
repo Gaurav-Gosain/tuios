@@ -32,9 +32,9 @@ func (m *OS) HostLooking() bool {
 	return m.hostFocus != hostFocusOut
 }
 
-// noteHostFocus records a focus event and, in a daemon session, returns the
-// command that reports it to the daemon. A repeat of the same focus sends
-// nothing.
+// noteHostFocus records a focus event, tells a focused local pane, and, in a
+// daemon session, returns the command that reports it to the daemon. A repeat
+// of the same focus sends nothing.
 func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 	next := hostFocusOut
 	if focused {
@@ -43,7 +43,15 @@ func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 	if m.hostFocus == next {
 		return nil
 	}
+	was := m.HostLooking()
 	m.hostFocus = next
+	// A local pane hears the change from here, unless it is the first report
+	// of focus: unknown already counted as looking. A daemon pane hears it
+	// from the daemon, which knows whether another client still shows the
+	// session (session.Daemon.reportHostFocus).
+	if w := m.GetFocusedWindow(); w != nil && !w.DaemonMode && was != m.HostLooking() {
+		m.reportPaneFocus(w, focused)
+	}
 	client := m.DaemonClient
 	if client == nil {
 		return nil

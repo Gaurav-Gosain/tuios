@@ -84,6 +84,10 @@ type Daemon struct {
 	// Connection tracking
 	clients   map[string]*connState
 	clientsMu sync.RWMutex
+	// hostFocusMu serializes host focus reports, so two clients that change
+	// focus at once cannot both see the session's focus flip. See
+	// handleClientFocus.
+	hostFocusMu sync.Mutex
 
 	// The read budgets large frames and large verb request lines are
 	// charged to, and the connections served now on the main socket and the

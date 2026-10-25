@@ -23,6 +23,15 @@ import (
 // directly, and the detach must not be taken back by the messages the client
 // handles on its way out.
 //
+// The host terminal's focus counts too: a pane hears CSI O when every host
+// terminal showing the session has lost focus, and CSI I when one gets it
+// back, once per change.
+//
+// Negative controls: without reportHostFocus the pane reads nothing at "the
+// host terminal lost focus". With handleClientFocus reporting each client's
+// change on its own, the pane reads a second CSI I at "the second host
+// terminal got focus".
+//
 // The log is copied to the artifact directory.
 func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 	base := t.TempDir()
@@ -91,6 +100,48 @@ func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 	time.Sleep(time.Second)
 	expect("after the client left", "")
 
-	attachIn(t, base, session, startOpts{cols: 120, rows: 40})
+	first := attachIn(t, base, session, startOpts{cols: 120, rows: 40})
 	expect("reattach", "^[[I")
+
+	// The host terminal's own focus. A person who moves from the terminal to
+	// another application is leaving the pane too, and comes back to it.
+	host := func(term *tuitest.Terminal, focused bool) {
+		t.Helper()
+		report := "\x1b[O"
+		if focused {
+			report = "\x1b[I"
+		}
+		if err := term.Type(report); err != nil {
+			t.Fatal(err)
+		}
+	}
+	quiet := func(step string) {
+		t.Helper()
+		time.Sleep(time.Second)
+		expect(step, "")
+	}
+	host(first, false)
+	expect("the host terminal lost focus", "^[[O")
+	host(first, false)
+	quiet("the host terminal lost focus again")
+	host(first, true)
+	expect("the host terminal got focus back", "^[[I")
+
+	// Two clients show the session. The pane has focus while either host
+	// terminal has it, so it hears about the change only when the last one
+	// goes and the first one comes back.
+	second := attachIn(t, base, session, startOpts{cols: 120, rows: 40})
+	// The second client reports focus as it attaches; that report is the
+	// reattach step's subject, not this one's.
+	time.Sleep(time.Second)
+	data, _ := os.ReadFile(logPath)
+	want = string(data)
+	host(second, true)
+	quiet("the second host terminal got focus")
+	host(first, false)
+	quiet("one of two host terminals lost focus")
+	host(second, false)
+	expect("both host terminals lost focus", "^[[O")
+	host(first, true)
+	expect("one host terminal got focus back", "^[[I")
 }

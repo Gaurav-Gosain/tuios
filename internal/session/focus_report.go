@@ -10,9 +10,10 @@ package session
 // goes out once.
 //
 // Only the focused state is reported on the set. A pane that is not told
-// assumes it has focus, which is what it did before. Later focus changes are
-// reported by the client as they happen (reportFocusChange in internal/app),
-// so this covers only the moment the mode goes on.
+// assumes it has focus, which is what it did before. Later moves between panes
+// are reported by the client as they happen (reportFocusChange in
+// internal/app), and changes of the host terminals' focus by the daemon
+// (reportHostFocus), so this covers only the moment the mode goes on.
 
 // SetHostShownProbe installs what reports whether the session is on a screen
 // someone could be looking at: an attached TUI client whose host terminal has
@@ -31,6 +32,22 @@ func (s *Session) paneHasFocus(windowID string) bool {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return s.state != nil && s.state.FocusedWindowID == windowID
+}
+
+// focusedPTY is the PTY of the pane keys go to, or nil when there is none.
+func (s *Session) focusedPTY() *PTY {
+	s.stateMu.RLock()
+	id := ""
+	if s.state != nil {
+		if w, ok := findWindowState(s.state, s.state.FocusedWindowID); ok {
+			id = w.PTYID
+		}
+	}
+	s.stateMu.RUnlock()
+	if id == "" {
+		return nil
+	}
+	return s.GetPTY(id)
 }
 
 // noteFocusReporting is called by vtWriter after each write to the emulator,
