@@ -421,9 +421,9 @@ type AttachPayload struct {
 	// renderer commands (for example a session shown in a sidebar rail).
 	// Command routing skips it; its viewport does not size the shared session.
 	Passive bool `json:"passive,omitempty"`
-	// Cwd is the start directory of a session this attach creates (CreateNew
-	// and no session by that name). See NewPayload.Cwd. An attach to a
-	// session that exists ignores it.
+	// Cwd is the start directory of a session this attach creates, whether
+	// unnamed/default or named with CreateNew. See NewPayload.Cwd. An attach
+	// to a session that exists ignores it.
 	Cwd string `json:"cwd,omitempty"`
 	// DetachOthers takes every other client off the session as this one
 	// attaches, as tuios attach -d asks. See detach_client.go. An older

@@ -419,8 +419,15 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The detached and verb paths send it too.
 	client.UseCallerTerm()
 	if host == "" && createNew {
-		// Only tuios new sets it. A session the attach finds is not moved.
+		// tuios new may supply --cwd. The daemon ignores the directory if
+		// this attach finds a session that already exists.
 		client.StartDir = newSessionDir
+	}
+	if host == "" && sessionName == "" && client.StartDir == "" {
+		// A bare local attach may create the default session. Its first
+		// window starts where this client was invoked, not where the daemon
+		// happened to start.
+		client.StartDir, _ = os.Getwd()
 	}
 	// The real host size, asked for here rather than left at a placeholder.
 	//

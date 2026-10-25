@@ -438,8 +438,8 @@ type SessionState struct {
 	Space string `json:"space,omitempty"`
 	// StartDir is the session's start directory (see Session.startDir), as
 	// it was when the state was saved. ResurrectionState stamps it, and a
-	// restore sets it again, so a session made with tuios new --cwd keeps
-	// its directory across a daemon restart. Only the save reads this field:
+	// restore sets it again, so the chosen start directory survives a daemon
+	// restart. Only the save reads this field:
 	// a client push may carry a copy of it into canonical state, and
 	// ResurrectionState writes the in-memory value over that copy before
 	// every save. Empty in state written before it existed, and such a
@@ -1258,11 +1258,11 @@ type Session struct {
 	persistMu sync.Mutex
 	// startDir is the directory a new local window starts in when nothing
 	// else names one: no cwd from the caller and no focused pane to inherit
-	// from. tuios new --cwd and the new-session verb's cwd set it, so every
-	// window of a session made for a project starts in the project, not in
-	// whatever directory the daemon was started from. Empty keeps the
-	// daemon's own directory. Saved as SessionState.StartDir and set again
-	// on a restore, so it survives a daemon restart.
+	// from. A bare local attach creating the default session, tuios new --cwd,
+	// and the new-session verb's cwd set it, so later windows start in the
+	// session's original directory. Empty keeps the daemon's own directory.
+	// Saved as SessionState.StartDir and set again on a restore, so it survives
+	// a daemon restart.
 	startDir atomic.Pointer[string]
 
 	// PTYs managed by this session

@@ -216,6 +216,8 @@ func runE2E(m *testing.M) int {
 type startOpts struct {
 	// cols and rows size the PTY. Zero means 120x40.
 	cols, rows int
+	// dir is the calling client's directory. Empty uses the harness workdir.
+	dir string
 	// args are extra tuios command-line flags, e.g. "--shared-borders".
 	args []string
 	// env are extra KEY=VALUE entries layered over the isolated defaults.
@@ -432,12 +434,16 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		}
 	})
 
+	clientDir := o.dir
+	if clientDir == "" {
+		clientDir = workDirIn(t, base)
+	}
 	opts := []tuitest.Option{
 		tuitest.WithSize(cols, rows),
 		tuitest.WithTerm("xterm-256color"),
 		tuitest.WithEnv(env...),
 		tuitest.WithLog(logFile),
-		tuitest.WithDir(workDirIn(t, base)),
+		tuitest.WithDir(clientDir),
 	}
 	if o.out != nil {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
