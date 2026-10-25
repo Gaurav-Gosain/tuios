@@ -9408,3 +9408,10 @@ The stack test also checks that the small diagram keeps its own size, with its t
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `kittyScale` replaced by the old rule, up to twice the SVG size | stack test, all three cases: "the small diagram (215 units wide) takes 43 columns, want about 22" (54, want 27, in the 8x20 pane) | **caught** |
+
+Then the rule changed again: a diagram is made smaller only to fit the width. A diagram taller than the pane keeps the text size and runs into the scrollback, and `--fit` also fits the height. The stack test checks that the tall diagram takes about its own width and height in cells (21x119 in the 10x20 pane), and draws it alone with `--fit`, where it must be whole on screen.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Fit to the height always (`if true` for `o.fit`) | stack test, all three cases: "the tall diagram (208 units wide) takes 10 columns, want about 21", "takes 54 rows, want about 119" | **caught** |
+| `ReserveImageSpace` in `vt` scrolls at most one screen again | stack test, all three cases: "picture 2 (208x2380) shows pixel rows 1240 to 2360, want its bottom row 2380", "picture 3 starts -9 rows after the end of picture 2" | **caught** |

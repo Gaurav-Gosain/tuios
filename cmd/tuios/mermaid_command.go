@@ -39,6 +39,7 @@ type mermaidOptions struct {
 	diagram    int
 	theme      string
 	background string
+	fit        bool
 }
 
 // liveOptions are the flags of the live view: --watch, --split and --demo.
@@ -61,11 +62,12 @@ FILE is a Mermaid source (.mmd), a Markdown file, or - for standard input.
 A Markdown file gives each of its mermaid code blocks.
 
 In a terminal that shows kitty graphics, the diagram is a picture. Its text
-has the size of the terminal's text. A diagram that does not fit is made
-smaller: it is not wider than the terminal, and it is two rows shorter than
-the terminal at most. A blank line goes between two
-diagrams. In other terminals the diagram is drawn with box-drawing characters
-and its labels as text. A diagram type with no text drawing yet is written as
+has the size of the terminal's text. A diagram wider than the terminal is made
+smaller to fit the width. A diagram taller than the terminal keeps its size
+and goes up into the scrollback: scroll up to see its top. With --fit it is
+also made smaller to fit the height. A blank line goes between two diagrams.
+In other terminals the diagram is drawn with box-drawing characters and its
+labels as text. A diagram type with no text drawing yet is written as
 its source. A drawing wider than the terminal is written at its full width.
 When the output is not a terminal, the command writes SVG.
 
@@ -93,6 +95,9 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 
   # Draw on the background of the terminal
   tuios mermaid flow.mmd --background none
+
+  # Make a tall diagram fit the terminal
+  tuios mermaid flow.mmd --fit
 
   # Write SVG from standard input
   echo 'flowchart LR; A-->B' | tuios mermaid - --format svg
@@ -139,6 +144,7 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 	cmd.Flags().IntVar(&o.rows, "rows", 0, "Height in cells, 0 for the terminal height")
 	cmd.Flags().IntVar(&o.diagram, "diagram", 0, "Draw only diagram N of the file, from 1")
 	cmd.Flags().StringVar(&o.theme, "theme", "", "Colour theme: tuios, or a name such as flexoki, nord or rose-pine")
+	cmd.Flags().BoolVar(&o.fit, "fit", false, "Make each kitty picture fit the terminal height too")
 	cmd.Flags().StringVar(&o.background, "background", "", "Background of a kitty or png picture: theme, or none for the terminal's own")
 	_ = cmd.RegisterFlagCompletionFunc("theme", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return mermaid.ThemeNames(), cobra.ShellCompDirectiveNoFileComp
@@ -396,10 +402,14 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 	}
 
 	// kitty: the diagram's text at the size of the terminal's own, and smaller
-	// only when the diagram does not fit. Two rows stay free under the
-	// picture: one for the gap or the prompt, and one because tuios keeps the
-	// last row of a pane clear of pictures.
-	maxRows := max(rows-2, 4)
+	// only when the diagram is wider than the terminal. A taller diagram runs
+	// into the scrollback. With --fit it is also made to fit the height, less
+	// two rows: one for the gap or the prompt, and one because tuios keeps
+	// the last row of a pane clear of pictures.
+	maxRows := 0
+	if o.fit {
+		maxRows = max(rows-2, 4)
+	}
 	scale := kittyScale(out.Width, out.Height, cols, maxRows, cellW, cellH)
 	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: background, Readable: true})
 	if err != nil {
@@ -424,23 +434,30 @@ const diagramFontSize = 16
 // kittyScale is the pixels a diagram unit takes in a picture of the terminal.
 // Its body text gets the size of the terminal's own text, about four fifths of
 // a cell's height, so every diagram of a file has one text size. It is
-// smaller only where the diagram would be wider than cols cells or taller
-// than rows cells. A small diagram is not made larger than that.
+// smaller only where the diagram would be wider than cols cells, or taller
+// than rows cells when rows is above 0, or larger than a picture can be. A
+// small diagram is not made larger than that.
 func kittyScale(width, height float64, cols, rows, cellW, cellH int) float64 {
-	text := 0.8 * float64(cellH) / diagramFontSize
-	fitW := float64(cols*cellW) / math.Max(1, width)
-	fitH := float64(rows*cellH) / math.Max(1, height)
-	return math.Min(text, math.Min(fitW, fitH))
+	width, height = math.Max(1, width), math.Max(1, height)
+	scale := math.Min(0.8*float64(cellH)/diagramFontSize, float64(cols*cellW)/width)
+	if rows > 0 {
+		scale = math.Min(scale, float64(rows*cellH)/height)
+	}
+	// raster.Draw refuses a side past 32768 pixels or 40 million pixels in all.
+	return math.Min(scale, math.Min(32000/math.Max(width, height), math.Sqrt(39e6/(width*height))))
 }
 
 // cellBox pads a picture to whole cells, so the box of c by r cells the
 // terminal draws it into has the picture's own aspect. The padding is the
 // diagram's background, or clear when there is none. The box is at most cols
-// by rows cells.
+// cells wide, and rows cells tall when rows is above 0.
 func cellBox(img image.Image, cellW, cellH, cols, rows int, background bool, th *sketch.Theme) (image.Image, int, int) {
 	b := img.Bounds()
 	c := min(max(int(math.Ceil(float64(b.Dx())/float64(cellW))), 1), max(cols, 1))
-	r := min(max(int(math.Ceil(float64(b.Dy())/float64(cellH))), 1), max(rows, 1))
+	r := max(int(math.Ceil(float64(b.Dy())/float64(cellH))), 1)
+	if rows > 0 {
+		r = min(r, rows)
+	}
 	w, h := c*cellW, r*cellH
 	if w == b.Dx() && h == b.Dy() {
 		return img, c, r

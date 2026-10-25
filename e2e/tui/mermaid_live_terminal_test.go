@@ -221,9 +221,11 @@ func TestMermaidLiveWritesNoTerminalControls(t *testing.T) {
 // pictures passes, so the count sent and the last diagram on screen are
 // checked first.
 //
-// The tall diagram is first drawn alone: it fits the pane, so it must be whole
-// on screen. The small diagram must keep its own size, its text at the
-// terminal's text size, and not be made larger to fill the pane.
+// Every diagram has its text at the terminal's text size. The small diagram
+// must keep its own size and not be made larger to fill the pane. The tall one
+// is taller than the pane: it keeps its size, runs into the scrollback, and
+// all its rows are reserved. The tall diagram is first drawn alone with --fit,
+// which makes it fit the pane, so it must be whole on screen.
 //
 // Negative controls: see NEGATIVE_CONTROLS.md.
 func TestMermaidDiagramsStackInAPane(t *testing.T) {
@@ -256,16 +258,9 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 	if err := os.WriteFile(md, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The small diagram's own width, in diagram units.
-	svg, err := exec.Command(tuiosBin, "mermaid", "--diagram", "3", "--format", "svg", md).Output()
-	if err != nil {
-		t.Fatalf("draw the small diagram as SVG: %v", err)
-	}
-	m := regexp.MustCompile(`width="([0-9.]+)"`).FindSubmatch(svg)
-	if m == nil {
-		t.Fatalf("the small diagram's SVG has no width: %.200s", svg)
-	}
-	smallW, _ := strconv.ParseFloat(string(m[1]), 64)
+	// The tall and the small diagram's own sizes, in diagram units.
+	tallW, tallH := svgSize(t, md, 1)
+	smallW, _ := svgSize(t, md, 3)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			const cols, rows = 120, 60
@@ -284,12 +279,12 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			newWindow(t, term)
 			enterTerminalMode(t, term)
 			runInShell(t, term, "echo RE\"\"ADY", "READY", shellTimeout)
-			// The tall diagram alone fits the pane, so it must be whole on
-			// screen. A picture sized for cells the host is not drawing came
-			// out taller than the pane and lost its top.
+			// With --fit the tall diagram fits the pane, so it must be whole
+			// on screen. A picture sized for cells the host is not drawing
+			// came out taller than the pane and lost its top.
 			runToExit(t, term, "clear")
 			host.mark("tall")
-			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark --diagram 1 "+md)
+			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark --fit --diagram 1 "+md)
 			time.Sleep(time.Second)
 			alone := replayKittyHost(t, host.bytes(), "tall")
 			if len(alone.order) != 1 {
@@ -298,7 +293,7 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			if p := alone.live[[2]int{alone.order[0], 1}]; p == nil {
 				t.Errorf("the tall diagram is not on screen\n%s", term.Snapshot())
 			} else if up := alone.uploads[p.id]; p.sy != 0 || p.sh < up.h-1 || p.sw < up.w-1 {
-				t.Errorf("the tall diagram (%dx%d) is not whole on screen: %+v\n%s", up.w, up.h, *p, term.Snapshot())
+				t.Errorf("with --fit the tall diagram (%dx%d) is not whole on screen: %+v\n%s", up.w, up.h, *p, term.Snapshot())
 			}
 
 			runToExit(t, term, "clear")
@@ -327,6 +322,28 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 				}
 				if p.sy+p.sh < up.h-1 {
 					t.Errorf("picture %d (%dx%d) shows pixel rows %d to %d, want its bottom row %d: %+v", p.id, up.w, up.h, p.sy, p.sy+p.sh, up.h, *p)
+				}
+			}
+			// The tall diagram keeps the text size of the others: 16px labels
+			// at four fifths of a 20 pixel cell is one pixel a diagram unit,
+			// so its box is its own width over the cell width the pane
+			// reports, and its own height over 20 pixels. It is taller than
+			// the pane, so its top is in the scrollback, and every row is
+			// reserved: its bottom is on screen and the next diagram starts
+			// under it (checked above).
+			if p := view.live[[2]int{view.order[0], 1}]; p == nil {
+				t.Errorf("the bottom of the tall diagram is not on screen\n%s", term.Snapshot())
+			} else {
+				up := view.uploads[p.id]
+				wantC, wantR := int(math.Ceil(tallW/tc.cellW)), int(math.Ceil(tallH/20))
+				if p.c < wantC-1 || p.c > wantC+1 {
+					t.Errorf("the tall diagram (%.0f units wide) takes %d columns, want about %d", tallW, p.c, wantC)
+				}
+				// The rows of the whole box, from the part on screen.
+				if p.sh <= 0 {
+					t.Errorf("the tall diagram shows no pixel rows: %+v", *p)
+				} else if got := int(math.Round(float64(p.r) * float64(up.h) / float64(p.sh))); got < wantR-1 || got > wantR+1 {
+					t.Errorf("the tall diagram (%.0f units high) takes %d rows, want about %d: %+v", tallH, got, wantR, *p)
 				}
 			}
 			// The last diagram is small and fits whole, with its text at the
@@ -367,6 +384,22 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			}
 		})
 	}
+}
+
+// svgSize is the size in diagram units of diagram n of the Markdown file md.
+func svgSize(t *testing.T, md string, n int) (w, h float64) {
+	t.Helper()
+	svg, err := exec.Command(tuiosBin, "mermaid", "--diagram", strconv.Itoa(n), "--format", "svg", md).Output()
+	if err != nil {
+		t.Fatalf("draw diagram %d as SVG: %v", n, err)
+	}
+	m := regexp.MustCompile(`width="([0-9.]+)" height="([0-9.]+)"`).FindSubmatch(svg)
+	if m == nil {
+		t.Fatalf("the SVG of diagram %d has no size: %.200s", n, svg)
+	}
+	w, _ = strconv.ParseFloat(string(m[1]), 64)
+	h, _ = strconv.ParseFloat(string(m[2]), 64)
+	return w, h
 }
 
 var (
