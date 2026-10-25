@@ -725,6 +725,19 @@ func (m *OS) windowCountForNotice() int {
 	return n
 }
 
+// panesMadeForNotice counts the windows windowCountForNotice counts, less
+// the TML surfaces: a program opens and closes those, so their coming and
+// going is no window the person made or closed.
+func (m *OS) panesMadeForNotice() int {
+	n := 0
+	for _, w := range m.Windows {
+		if !isScratch(w) && w.Kind != session.WindowKindTML {
+			n++
+		}
+	}
+	return n
+}
+
 // windowLabelsForNotice is the label of every window the created and closed
 // notices count, by window id.
 func (m *OS) windowLabelsForNotice() map[string]string {

@@ -2249,6 +2249,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			oldWindowCount := m.windowCountForNotice()
 			oldWorkspace := m.CurrentWorkspace
 			oldWindows := m.windowLabelsForNotice()
+			oldMade := m.panesMadeForNotice()
 
 			if err := m.ApplyStateSyncFrom(msg.State, msg.SourceID); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
@@ -2265,6 +2266,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 				// Show notifications for significant changes
 				newWindowCount := m.windowCountForNotice()
+				newMade := m.panesMadeForNotice()
 				newWorkspace := m.CurrentWorkspace
 
 				// Window count change notification. A window that moved to
@@ -2272,6 +2274,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// not made.
 				if note, ok := m.windowMoveNotice(msg.State, oldWindows); ok {
 					m.ShowNotification(note, "info", 2*time.Second)
+				} else if newMade == oldMade {
+					// Only TML surfaces came or went. A program put them on
+					// the screen, and the person did not make a window.
 				} else if newWindowCount > oldWindowCount {
 					m.ShowNotification(fmt.Sprintf("Window created (%d total)", newWindowCount), "info", 2*time.Second)
 				} else if newWindowCount < oldWindowCount {
