@@ -14,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -640,6 +641,7 @@ func dirHoldsOnly(root, dir string, removed map[string]bool) bool {
 // runStdin is runCtx with stdin.
 func runStdin(ctx context.Context, dir string, env []string, stdin string, args ...string) (string, error) {
 	cmd := childproc.Git(ctx, dir, args...)
+	cmd.Env = append(cmd.Env, gitstate.Find(dir).GitEnv()...)
 	cmd.Env = append(cmd.Env, env...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stdout, stderr bytes.Buffer

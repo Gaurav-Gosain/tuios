@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
 // Comparing the attempts of a fan: how much each one changed against its
@@ -47,7 +48,29 @@ type Numstat struct {
 // the index are hashed again. A worktree with no index, or one git cannot use
 // from a copy (a split index keeps part of itself beside the original), starts
 // from HEAD instead, which hashes every tracked file.
+//
+// In a jj workspace the working state is jj's working-copy commit, recorded
+// the way jj records it: git's index there is jj's export, and a sparse
+// workspace leaves every path outside its patterns in it as if deleted. jj
+// applies its own limit to new files, so nothing is reported skipped. A
+// conflicted file is read from disk, with its markers.
 func SnapshotTree(ctx context.Context, path string, maxUntracked int64) (string, []string, error) {
+	if r := gitstate.Find(path); r.JJ {
+		id, err := gitstate.JJCommit(ctx, r.Root, "@", true)
+		if err != nil {
+			return "", nil, err
+		}
+		// jj writes a conflicted commit's tree with a .jjconflict-* folder for
+		// each side, while the files on disk hold the conflict markers. The
+		// files are the working state, and jj reads markers written back as
+		// the same conflict.
+		tree, err := runCtx(ctx, path, nil, "rev-parse", "--verify", id+"^{tree}")
+		if err != nil {
+			return "", nil, err
+		}
+		tree, err = jjMaterialize(ctx, r.Root, strings.TrimSpace(tree))
+		return tree, nil, err
+	}
 	skipped, err := largeUntracked(ctx, path, maxUntracked)
 	if err != nil {
 		return "", nil, err
@@ -57,6 +80,57 @@ func SnapshotTree(ctx context.Context, path string, maxUntracked int64) (string,
 		return "", nil, err
 	}
 	return tree, skipped, nil
+}
+
+// jjMaterialize returns tree, jj's tree of the working-copy commit in the
+// workspace at root, with each conflicted file as it is on disk. Other paths
+// keep jj's entries, so a path a sparse workspace leaves off disk stays.
+func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
+	out, err := runCtx(ctx, root, nil, "ls-tree", "-r", "-z", "--name-only", tree)
+	if err != nil {
+		return "", err
+	}
+	var drop, write []string
+	seen := map[string]bool{}
+	for p := range strings.SplitSeq(out, "\x00") {
+		dir, rest, _ := strings.Cut(p, "/")
+		switch {
+		case p == "JJ-CONFLICT-README":
+			drop = append(drop, p)
+		case strings.HasPrefix(dir, ".jjconflict-") && rest != "":
+			drop = append(drop, p)
+			// A side that deletes the file leaves nothing on disk to write.
+			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rest))); err == nil && !seen[rest] {
+				seen[rest] = true
+				write = append(write, rest)
+			}
+		}
+	}
+	if len(drop) == 0 {
+		return tree, nil
+	}
+	tmp, err := os.CreateTemp("", "tuios-index-*")
+	if err != nil {
+		return "", err
+	}
+	index := tmp.Name()
+	_ = tmp.Close()
+	_ = os.Remove(index)
+	defer func() { _ = os.Remove(index) }()
+	env := []string{"GIT_INDEX_FILE=" + index}
+	if _, err := runCtx(ctx, root, env, "read-tree", tree); err != nil {
+		return "", err
+	}
+	if _, err := runStdin(ctx, root, env, strings.Join(drop, "\x00")+"\x00", "update-index", "--force-remove", "-z", "--stdin"); err != nil {
+		return "", err
+	}
+	if len(write) > 0 {
+		if _, err := runStdin(ctx, root, env, strings.Join(write, "\x00")+"\x00", "update-index", "--add", "-z", "--stdin"); err != nil {
+			return "", err
+		}
+	}
+	out, err = runCtx(ctx, root, env, "write-tree")
+	return strings.TrimSpace(out), err
 }
 
 // snapshotTreeExcluding is SnapshotTree with the paths in exclude, relative
@@ -286,6 +360,7 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 // can wait is killed.
 func runCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := childproc.Git(ctx, dir, args...)
+	cmd.Env = append(cmd.Env, gitstate.Find(dir).GitEnv()...)
 	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

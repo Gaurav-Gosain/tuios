@@ -468,6 +468,7 @@ func runEnv(dir string, env []string, args ...string) (string, error) {
 	// Git sets nothing interactive: a git that waits on a terminal for a
 	// credential or an editor would hang the daemon.
 	cmd := childproc.Git(context.Background(), dir, args...)
+	cmd.Env = append(cmd.Env, gitstate.Find(dir).GitEnv()...)
 	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

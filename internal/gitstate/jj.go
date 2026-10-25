@@ -1,6 +1,7 @@
 package gitstate
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // A jj workspace, colocated with git or not.
@@ -123,6 +125,49 @@ func Find(dir string) Repo {
 		main = filepath.Dir(commondir)
 	}
 	return Repo{Root: groot, Main: main, GitDir: gitdir}
+}
+
+// GitEnv is what git needs to read a jj workspace with no ".git" of its
+// own: the git directory jj keeps its commits in. It is empty for a
+// colocated workspace, whose ".git" git finds by itself, and for git. git
+// run this way has no work tree and no index, so only commands that read
+// objects and refs work.
+func (r Repo) GitEnv() []string {
+	if !r.JJ {
+		return nil
+	}
+	if _, err := os.Lstat(filepath.Join(r.Root, ".git")); err == nil {
+		return nil
+	}
+	return []string{"GIT_DIR=" + r.GitDir}
+}
+
+// JJCommit returns the commit the first revision of revset names in the jj
+// workspace at root. With snapshot jj first records the working copy as @,
+// as any jj command does, which writes an operation; without it nothing is
+// written and @ is as jj last recorded it.
+func JJCommit(ctx context.Context, root, revset string, snapshot bool) (string, error) {
+	args := []string{"--no-pager", "--color=never", "log", "--no-graph", "-r", revset, "-T", `commit_id ++ "\n"`}
+	if !snapshot {
+		args = append([]string{"--ignore-working-copy"}, args...)
+	}
+	cmd := childproc.CommandContext(ctx, "jj", args...)
+	cmd.Dir = root
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", errfmt.Errorf("jj log -r %s: %s", revset, msg)
+	}
+	id, _, _ := strings.Cut(string(out), "\n")
+	if id == "" {
+		return "", errfmt.Errorf("jj: %s names no commit", revset)
+	}
+	return id, nil
 }
 
 // readJJ returns the state of the jj workspace at root.

@@ -165,6 +165,10 @@ func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbE
 			}
 			return reviewRepo{root: canonRoot(root), repoRoot: repoRoot}, nil
 		}
+		// A jj workspace with no ".git" of its own.
+		if r := gitstate.Find(cwd); r.JJ {
+			return reviewRepo{root: canonRoot(r.Root), repoRoot: r.Main}, nil
+		}
 	}
 	return reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "no git repository is under window "+shortWindowID(target.ID), &VerbHint{
 		Param:  "window",

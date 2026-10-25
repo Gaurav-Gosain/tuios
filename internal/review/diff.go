@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -28,7 +29,8 @@ type Base struct {
 	// Uncommitted says the diff shows only what is not committed: asked for,
 	// or no base was found.
 	Uncommitted bool
-	// From says where the base came from: param, worktree, upstream or head.
+	// From says where the base came from: param, worktree, upstream, trunk
+	// (a jj workspace's fork point from trunk()) or head.
 	From string
 }
 
@@ -68,8 +70,15 @@ func ValidRef(ref string) error {
 // merge base with the upstream branch, then HEAD. A named or recorded base
 // is taken through the merge base with HEAD, so a base that moved on since
 // the branch left it does not show its own changes as removed.
+//
+// In a jj workspace HEAD is @-, a named base may also be a jj revset, and the
+// base when none is named or recorded is where the stack left trunk().
 func ResolveBase(ctx context.Context, dir, requested, recorded string, uncommitted bool) (Base, error) {
+	repo := gitstate.Find(dir)
 	head, headErr := revParse(ctx, dir, "HEAD^{commit}")
+	if repo.JJ {
+		head, headErr = gitstate.JJCommit(ctx, repo.Root, "@-", false)
+	}
 	headBase := func(from string) (Base, error) {
 		if headErr != nil {
 			empty, err := emptyTree(ctx, dir)
@@ -88,6 +97,9 @@ func ResolveBase(ctx context.Context, dir, requested, recorded string, uncommitt
 			return Base{}, &RefError{Ref: ref, Err: err}
 		}
 		sha, err := revParse(ctx, dir, ref+"^{commit}")
+		if err != nil && repo.JJ {
+			sha, err = gitstate.JJCommit(ctx, repo.Root, ref, false)
+		}
 		if err != nil {
 			return Base{}, &RefError{Ref: ref, Err: err}
 		}
@@ -106,6 +118,11 @@ func ResolveBase(ctx context.Context, dir, requested, recorded string, uncommitt
 			return b, nil
 		} else if ctx.Err() != nil {
 			return Base{}, err
+		}
+	}
+	if repo.JJ {
+		if sha, err := gitstate.JJCommit(ctx, repo.Root, "fork_point(trunk() | @)", false); err == nil {
+			return Base{Name: "trunk()", SHA: sha, From: "trunk"}, nil
 		}
 	}
 	if headErr == nil {
@@ -194,7 +211,8 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	if err != nil {
 		return nil, err
 	}
-	if opt.AgainstDir == "" && opt.Tree == "" {
+	// jj has no untracked files: everything new is in the working-copy commit.
+	if opt.AgainstDir == "" && opt.Tree == "" && !gitstate.Find(opt.Dir).JJ {
 		markUntracked(ctx, opt.Dir, files, spec)
 	}
 	for i := range files {
@@ -284,7 +302,7 @@ func streamUnified(ctx context.Context, dir string, args []string, files []File,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	cmd := childproc.Git(ctx, dir, args...)
-	cmd.Env = gitEnv(cmd.Env, nil)
+	cmd.Env = gitEnv(dir, cmd.Env, nil)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
@@ -431,7 +449,7 @@ func revParse(ctx context.Context, dir, rev string) (string, error) {
 // emptyTree is the hash of the empty tree in the repository's hash format.
 func emptyTree(ctx context.Context, dir string) (string, error) {
 	cmd := childproc.Git(ctx, dir, "hash-object", "-t", "tree", "--stdin")
-	cmd.Env = gitEnv(cmd.Env, nil)
+	cmd.Env = gitEnv(dir, cmd.Env, nil)
 	cmd.Stdin = strings.NewReader("")
 	out, err := cmd.Output()
 	if err != nil {
@@ -442,9 +460,11 @@ func emptyTree(ctx context.Context, dir string) (string, error) {
 
 // gitEnv is base, the environment childproc.Git set, with no optional locks
 // and extra. childproc.Git already left out the caller's index and
-// repository and set nothing interactive.
-func gitEnv(base, extra []string) []string {
+// repository and set nothing interactive. A jj workspace with no ".git" gets
+// jj's git directory.
+func gitEnv(dir string, base, extra []string) []string {
 	env := append(base, "GIT_OPTIONAL_LOCKS=0")
+	env = append(env, gitstate.Find(dir).GitEnv()...)
 	return append(env, extra...)
 }
 
@@ -487,7 +507,7 @@ func gitHead(ctx context.Context, dir string, extra []string, limit int, args ..
 	runCtx, stop := context.WithCancel(ctx)
 	defer stop()
 	cmd := childproc.Git(runCtx, dir, args...)
-	cmd.Env = gitEnv(cmd.Env, extra)
+	cmd.Env = gitEnv(dir, cmd.Env, extra)
 	var stdout, stderr bytes.Buffer
 	var head *headWriter
 	if limit > 0 {

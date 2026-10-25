@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -63,6 +64,10 @@ func headTree(ctx context.Context, dir string) (string, error) {
 // unstaged diff (index to working state) or the staged diff (HEAD to index).
 // Base.Name is "index" or "HEAD", and Base.SHA is a tree.
 func IndexOptions(ctx context.Context, dir, mode string) (Options, error) {
+	// git's index in a jj workspace is jj's export, not what anyone staged.
+	if gitstate.Find(dir).JJ {
+		return Options{}, errors.New("a jj workspace has no staging area: review it without index, or with uncommitted for the working-copy commit alone")
+	}
 	index, err := IndexTree(ctx, dir)
 	if err != nil {
 		return Options{}, err
@@ -437,7 +442,7 @@ func SetIndexEntries(ctx context.Context, dir string, entries []IndexEntry) erro
 // gitInput is git with stdin.
 func gitInput(ctx context.Context, dir, stdin string, args ...string) (string, error) {
 	cmd := childproc.Git(ctx, dir, args...)
-	cmd.Env = gitEnv(cmd.Env, nil)
+	cmd.Env = gitEnv(dir, cmd.Env, nil)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
