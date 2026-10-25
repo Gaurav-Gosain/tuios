@@ -613,9 +613,27 @@ func (w *fieldWidget) measure(_ *Surface, _ *box, maxW int) (int, int) {
 
 func (w *fieldWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	x := r.Min.X
+	focused := w.editable() && s.focused() == b
+	if w.kind == "checkbox" {
+		// The box goes before its label, next to it, as a checklist reads.
+		mark := "[ ]"
+		if w.on {
+			mark = "[x]"
+		}
+		l := line{{text: mark, st: style{fg: "accent-bright"}}}
+		if w.label != "" {
+			l = append(l, span{text: " " + w.label, st: style{fg: "fg"}})
+		}
+		c.drawLine(x, r.Min.Y, r.Dx(), l, alignLeft)
+		return
+	}
 	if w.label != "" {
 		lw := min(fieldLabelW, r.Dx()/2)
-		c.drawLine(x, r.Min.Y, lw-1, plainLine(w.label, style{fg: "dim"}), alignLeft)
+		label := style{fg: "dim"}
+		if focused {
+			label = style{fg: "accent", attrs: attrBold}
+		}
+		c.drawLine(x, r.Min.Y, lw-1, plainLine(w.label, label), alignLeft)
 		x += lw
 	}
 	right := r.Max.X
@@ -626,49 +644,7 @@ func (w *fieldWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	g := s.g
 	switch w.kind {
 	case "input", "textarea":
-		edge := style{fg: "edge"}
-		for row := 0; row < r.Dy(); row++ {
-			y := r.Min.Y + row
-			c.text(x, y, "▏", edge, 1)
-			if s.pal.Depth == ASCII {
-				c.text(x, y, "[", edge, 1)
-			}
-			lines := strings.Split(w.value, "\n")
-			if w.kind == "input" {
-				lines = []string{strings.ReplaceAll(w.value, "\n", " ")}
-			}
-			focused := w.editable() && s.focused() == b
-			switch {
-			case focused:
-				// The caret's line, and the lines around it as they fit.
-				text := []rune(w.value)
-				caretRow := strings.Count(string(text[:clampInt(w.caret, 0, len(text))]), "\n")
-				if w.kind == "input" {
-					caretRow = 0
-				}
-				first := max(caretRow-r.Dy()+1, 0)
-				i := first + row
-				if i == caretRow {
-					ls := lineStart(text, w.caret)
-					le := lineEnd(text, w.caret)
-					if w.kind == "input" {
-						ls, le = 0, len(text)
-					}
-					c.drawLine(x+1, y, right-x-3, caretLine(text[ls:le], w.caret-ls, right-x-3, style{fg: ink}), alignLeft)
-				} else if i < len(lines) {
-					c.drawLine(x+1, y, right-x-3, plainLine(lines[i], style{fg: ink}), alignLeft)
-				}
-			case w.value != "" && row < len(lines):
-				c.drawLine(x+1, y, right-x-3, plainLine(lines[row], style{fg: ink}), alignLeft)
-			case w.value == "" && row == 0:
-				c.drawLine(x+1, y, right-x-3, plainLine(w.placeholder, style{fg: "mute"}), alignLeft)
-			}
-			end := "▕"
-			if s.pal.Depth == ASCII {
-				end = "]"
-			}
-			c.text(right-1, y, end, edge, 1)
-		}
+		w.paintText(s, c, x, right, r, focused, ink)
 	case "select":
 		c.drawLine(x, r.Min.Y, right-x, line{
 			{text: g.left + " ", st: style{fg: "mute"}}, {text: w.value, st: style{fg: ink}}, {text: " " + g.right, st: style{fg: "mute"}},
@@ -681,12 +657,6 @@ func (w *fieldWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 			l = line{{text: g.hline + g.hline, st: style{fg: "mute"}}, {text: g.radioOff, st: style{fg: "mute"}}, {text: " off", st: style{fg: "mute"}}}
 		}
 		c.drawLine(x, r.Min.Y, right-x, l, alignLeft)
-	case "checkbox":
-		mark := "[ ]"
-		if w.on {
-			mark = "[x]"
-		}
-		c.drawLine(x, r.Min.Y, right-x, plainLine(mark, style{fg: "accent-bright"}), alignLeft)
 	case "slider":
 		if math.IsNaN(w.num) || math.IsInf(w.num, 0) {
 			w.num = w.lo
@@ -713,6 +683,62 @@ func (w *fieldWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 			c.text(x+i, r.Min.Y, glyph, st, 1)
 		}
 		c.textRight(right, r.Min.Y, val, style{fg: ink})
+	}
+}
+
+// paintText draws an input or a textarea from column x to right: a field
+// of its own on each of its rows, so the person sees where to type on any
+// ground. With grounds the field is a box in the surface role with a rule
+// under its last row. At 16 colours and in ASCII, which have no grounds,
+// each row is ruled. The rule is mute, and accent on the focused field.
+func (w *fieldWidget) paintText(s *Surface, c *canvas, x, right int, r Rect, focused bool, ink string) {
+	grounded := s.pal.grounded()
+	rule := "mute"
+	if focused {
+		rule = "accent"
+	}
+	lines := strings.Split(w.value, "\n")
+	if w.kind == "input" {
+		lines = []string{strings.ReplaceAll(w.value, "\n", " ")}
+	}
+	text := []rune(w.value)
+	caretRow := strings.Count(string(text[:clampInt(w.caret, 0, len(text))]), "\n")
+	if w.kind == "input" {
+		caretRow = 0
+	}
+	first := 0
+	if focused {
+		first = max(caretRow-r.Dy()+1, 0)
+	}
+	inner := right - x - 2
+	for row := 0; row < r.Dy(); row++ {
+		y := r.Min.Y + row
+		var ul uint8
+		if !grounded || row == r.Dy()-1 {
+			ul = attrUnderline
+		}
+		if grounded {
+			c.fill(rect(x, y, right-x, 1), "surface")
+		}
+		c.hline(x, y, right-x, " ", style{fg: rule, attrs: ul})
+		if s.pal.Depth == ASCII {
+			c.text(x, y, "[", style{fg: rule}, 1)
+			c.text(right-1, y, "]", style{fg: rule}, 1)
+		}
+		i := first + row
+		st := style{fg: ink, attrs: ul}
+		switch {
+		case focused && i == caretRow:
+			ls, le := lineStart(text, w.caret), lineEnd(text, w.caret)
+			if w.kind == "input" {
+				ls, le = 0, len(text)
+			}
+			c.drawLine(x+1, y, inner, caretLine(text[ls:le], w.caret-ls, inner, st), alignLeft)
+		case w.value != "" && i < len(lines):
+			c.drawLine(x+1, y, inner, plainLine(lines[i], st), alignLeft)
+		case w.value == "" && row == 0 && !focused:
+			c.drawLine(x+1, y, inner, plainLine(w.placeholder, style{fg: "mute", attrs: ul}), alignLeft)
+		}
 	}
 }
 

@@ -1,32 +1,32 @@
 === truecolor 59x14
 |╭─ Deploy ────────────────────── from claude in api-auth ─╮|
-|│                                                         │|
-|│  Service  api                                           │|
-|│  Diff     14 files, +320 -88                            │|
-|│  Risk     2 risky changes                               │|
-|│  Tag           ▏v0.11.0                              ▕  │|
-|│  Target        ‹ staging ›                              │|
-|│  Canary first  ●━━ on                                   │|
-|│  Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10  │|
-|│   enter  Deploy    esc  Cancel                          │|
-|│                                                         │|
-|│                                                         │|
-|│                                                         │|
+|│                                                       ┃ │|
+|│  Service  api                                         ┃ │|
+|│  Diff     14 files, +320 -88                          ┃ │|
+|│  Risk     2 risky changes                             ┃ │|
+|│                                                       ┃ │|
+|│  Tag            v0.11.0                               ┃ │|
+|│                                                       ┃ │|
+|│  Target        ‹ staging ›                            ┃ │|
+|│                                                       ┃ │|
+|│  Canary first  ●━━ on                                 │ │|
+|│                                                       │ │|
+|│  Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━  10 │ │|
 |╰─────────────────────────────────────────────────────────╯|
 --- styles
 |aabccccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addeeeeeeeddfffddddddddddddddddddddddddddddddddddddddddddda|
-|addeeeedddddffdffffffdffffdfffdddddddddddddddddddddddddddda|
-|addeeeedddddgdgggggdgggggggddddddddddddddddddddddddddddddda|
-|addeeedddddddddddhfffffffddddddddddddddddddddddddddddddhdda|
-|addeeeeeeddddddddidfffffffdidddddddddddddddddddddddddddddda|
-|addeeeeeedeeeeeddjaadffddddddddddddddddddddddddddddddddddda|
-|addeeeeeedeeeeeddaaaaaajkkkkkkkkkkkkkkkkkkkkkkkkkkkkddffdda|
-|addlmmmmmlnoooooonddpqqqprssssssrddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeeeeeddfffdddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeedddddffdffffffdffffdfffddddddddddddddddddddddddddeda|
+|addeeeedddddgdgggggdgggggggdddddddddddddddddddddddddddddeda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeedddddddddddhiiiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhdeda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeeeeddddddddjdfffffffdjddddddddddddddddddddddddddddeda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeeeedeeeeeddkaadffdddddddddddddddddddddddddddddddddjda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddjda|
+|addeeeeeedeeeeeddaaaaaaklllllllllllllllllllllllllllddffdjda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
@@ -35,47 +35,40 @@ d: bg=panel
 e: fg=dim bg=panel
 f: fg=fg bg=panel
 g: fg=warning bg=panel
-h: fg=edge bg=panel
-i: fg=mute bg=panel
-j: fg=accent-bright bg=panel
-k: fg=track bg=panel
-l: bg=accent bold
-m: fg=fg bg=accent bold
-n: bg=accent
-o: fg=fg bg=accent
-p: bg=surface bold
-q: fg=accent-bright bg=surface bold
-r: bg=surface
-s: fg=fg bg=surface
+h: bg=surface underline
+i: fg=fg bg=surface underline
+j: fg=mute bg=panel
+k: fg=accent-bright bg=panel
+l: fg=track bg=panel
 === 256 59x14
 |╭─ Deploy ────────────────────── from claude in api-auth ─╮|
-|│                                                         │|
-|│  Service  api                                           │|
-|│  Diff     14 files, +320 -88                            │|
-|│  Risk     2 risky changes                               │|
-|│  Tag           ▏v0.11.0                              ▕  │|
-|│  Target        ‹ staging ›                              │|
-|│  Canary first  ●━━ on                                   │|
-|│  Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10  │|
-|│   enter  Deploy    esc  Cancel                          │|
-|│                                                         │|
-|│                                                         │|
-|│                                                         │|
+|│                                                       ┃ │|
+|│  Service  api                                         ┃ │|
+|│  Diff     14 files, +320 -88                          ┃ │|
+|│  Risk     2 risky changes                             ┃ │|
+|│                                                       ┃ │|
+|│  Tag            v0.11.0                               ┃ │|
+|│                                                       ┃ │|
+|│  Target        ‹ staging ›                            ┃ │|
+|│                                                       ┃ │|
+|│  Canary first  ●━━ on                                 │ │|
+|│                                                       │ │|
+|│  Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━  10 │ │|
 |╰─────────────────────────────────────────────────────────╯|
 --- styles
 |aabccccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addeeeeeeeddfffddddddddddddddddddddddddddddddddddddddddddda|
-|addeeeedddddffdffffffdffffdfffdddddddddddddddddddddddddddda|
-|addeeeedddddgdgggggdgggggggddddddddddddddddddddddddddddddda|
-|addeeedddddddddddhfffffffddddddddddddddddddddddddddddddhdda|
-|addeeeeeeddddddddidfffffffdidddddddddddddddddddddddddddddda|
-|addeeeeeedeeeeeddjaadffddddddddddddddddddddddddddddddddddda|
-|addeeeeeedeeeeeddaaaaaajkkkkkkkkkkkkkkkkkkkkkkkkkkkkddffdda|
-|addlmmmmmlnoooooonddpqqqprssssssrddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeeeeeddfffdddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeedddddffdffffffdffffdfffddddddddddddddddddddddddddeda|
+|addeeeedddddgdgggggdgggggggdddddddddddddddddddddddddddddeda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeedddddddddddhiiiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhdeda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeeeeddddddddjdfffffffdjddddddddddddddddddddddddddddeda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addeeeeeedeeeeeddkaadffdddddddddddddddddddddddddddddddddjda|
+|adddddddddddddddddddddddddddddddddddddddddddddddddddddddjda|
+|addeeeeeedeeeeeddaaaaaaklllllllllllllllllllllllllllddffdjda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
@@ -84,47 +77,40 @@ d: bg=panel
 e: fg=dim bg=panel
 f: fg=fg bg=panel
 g: fg=warning bg=panel
-h: fg=edge bg=panel
-i: fg=mute bg=panel
-j: fg=accent-bright bg=panel
-k: fg=success-tint bg=panel
-l: bg=accent bold
-m: fg=fg bg=accent bold
-n: bg=accent
-o: fg=fg bg=accent
-p: bg=surface bold
-q: fg=accent-bright bg=surface bold
-r: bg=surface
-s: fg=fg bg=surface
+h: bg=surface underline
+i: fg=fg bg=surface underline
+j: fg=mute bg=panel
+k: fg=accent-bright bg=panel
+l: fg=success-tint bg=panel
 === 16 59x14
 |╭─ Deploy ────────────────────── from claude in api-auth ─╮|
-|│                                                         │|
-|│  Service  api                                           │|
-|│  Diff     14 files, +320 -88                            │|
-|│  Risk     2 risky changes                               │|
-|│  Tag           ▏v0.11.0                              ▕  │|
-|│  Target        ‹ staging ›                              │|
-|│  Canary first  ●━━ on                                   │|
-|│  Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10  │|
-|│   enter  Deploy   [esc Cancel]                          │|
-|│                                                         │|
-|│                                                         │|
-|│                                                         │|
+|│                                                       ┃ │|
+|│  Service  api                                         ┃ │|
+|│  Diff     14 files, +320 -88                          ┃ │|
+|│  Risk     2 risky changes                             ┃ │|
+|│                                                       ┃ │|
+|│  Tag            v0.11.0                               ┃ │|
+|│                                                       ┃ │|
+|│  Target        ‹ staging ›                            ┃ │|
+|│                                                       ┃ │|
+|│  Canary first  ●━━ on                                 │ │|
+|│                                                       │ │|
+|│  Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━  10 │ │|
 |╰─────────────────────────────────────────────────────────╯|
 --- styles
 |aabccccccbaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
-|a                                                         a|
-|a  ddddddd  eee                                           a|
-|a  dddd     ee eeeeee eeee eee                            a|
-|a  dddd     f fffff fffffff                               a|
-|a  ddd           geeeeeee                              g  a|
-|a  dddddd        g eeeeeee g                              a|
-|a  dddddd ddddd  haa ee                                   a|
-|a  dddddd ddddd  aaaaaahgggggggggggggggggggggggggggg  ee  a|
-|a  ijjjjjiijjjjjji  gkkk eeeeeeg                          a|
-|a                                                         a|
-|a                                                         a|
-|a                                                         a|
+|a                                                       d a|
+|a  ddddddd  eee                                         d a|
+|a  dddd     ee eeeeee eeee eee                          d a|
+|a  dddd     f fffff fffffff                             d a|
+|a                                                       d a|
+|a  ddd           ghhhhhhhgggggggggggggggggggggggggggggg d a|
+|a                                                       d a|
+|a  dddddd        i eeeeeee i                            d a|
+|a                                                       d a|
+|a  dddddd ddddd  jaa ee                                 i a|
+|a                                                       i a|
+|a  dddddd ddddd  aaaaaajiiiiiiiiiiiiiiiiiiiiiiiiiii  ee i a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
 b: bold
@@ -132,25 +118,24 @@ c: fg=fg bold
 d: fg=dim
 e: fg=fg
 f: fg=warning
-g: fg=mute
-h: fg=accent-bright
-i: bold reverse
-j: fg=accent bold reverse
-k: fg=accent-bright bold
+g: underline
+h: fg=fg underline
+i: fg=mute
+j: fg=accent-bright
 === ascii 59x14
 |+- Deploy ---------------------- from claude in api-auth -+|
-||                                                         ||
-||  Service  api                                           ||
-||  Diff     14 files, +320 -88                            ||
-||  Risk     2 risky changes                               ||
-||  Tag           [v0.11.0                              ]  ||
-||  Target        < staging >                              ||
-||  Canary first  O== on                                   ||
-||  Canary share  ======O============================  10  ||
-||   enter  Deploy   [esc Cancel]                          ||
-||                                                         ||
-||                                                         ||
-||                                                         ||
+||                                                       # ||
+||  Service  api                                         # ||
+||  Diff     14 files, +320 -88                          # ||
+||  Risk     2 risky changes                             # ||
+||                                                       # ||
+||  Tag           [v0.11.0                             ] # ||
+||                                                       # ||
+||  Target        < staging >                            # ||
+||                                                       # ||
+||  Canary first  O== on                                 | ||
+||                                                       | ||
+||  Canary share  ======O===========================  10 | ||
 |+---------------------------------------------------------+|
 --- styles
 |  aaaaaaaa                                                 |
@@ -159,13 +144,13 @@ k: fg=accent-bright bold
 |                                                           |
 |                                                           |
 |                                                           |
+|                  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb     |
 |                                                           |
 |                                                           |
 |                                                           |
-|   bbbbbbbbbbbbbbb   aaa                                   |
 |                                                           |
 |                                                           |
 |                                                           |
 |                                                           |
 a: bold
-b: bold reverse
+b: underline

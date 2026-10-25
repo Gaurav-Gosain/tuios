@@ -84,6 +84,11 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	b.maxH = parseSize(n.AttrString("max-h"))
 	b.pad = parsePad(n.AttrString("pad"))
 	b.gap = s.count(n, "gap", vars, 0, 0, 100)
+	if _, set := n.Attr("gap"); !set && n.Type == "form" {
+		// A form's fields stand a row apart, so two text fields read as
+		// two boxes, not one.
+		b.gap = 1
+	}
 	b.grow = s.count(n, "grow", vars, 0, 0, 100)
 	b.align = n.AttrString("align")
 	b.justify = n.AttrString("justify")

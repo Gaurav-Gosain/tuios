@@ -1,89 +1,149 @@
-=== truecolor 56x7
-|Tag           ▏v0.11.0                                 ▕|
-|Note          ▏Why this deploy                         ▕|
+=== truecolor 56x13
+|Tag            v0.11.0                                  |
+|                                                        |
+|Note           Why this deploy                          |
+|                                                        |
 |Target        ‹ staging ›                               |
+|                                                        |
 |Canary first  ●━━ on                                    |
+|                                                        |
 |Dry run       ──○ off                                   |
+|                                                        |
 |Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
-|Checked       [x]                                       |
+|                                                        |
+|[x] Checked                                             |
 --- styles
-|aaabbbbbbbbbbbcdddddddebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaabbbbbbbbbbcfffbffffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaaaabbbbbbbbfbdddddddbfbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbghhbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaabaaabbbbbbbfffbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbhhhhhhgiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiibbdd|
-|aaaaaaabbbbbbbgggbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-a: fg=dim bg=panel
+|aaabbbbbbbbbbbcdddddddeccccccccccccccccccccccccccccccccc|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffbbbbbbbbbbcgggcggggcggggggcccccccccccccccccccccccccc|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffffbbbbbbbbhbiiiiiiibhbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffffbfffffbbjkkbiibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|fffbfffbbbbbbbhhhbhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffffbfffffbbkkkkkkjlllllllllllllllllllllllllllllllbbii|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|jjjbiiiiiiibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=accent bg=panel bold
 b: bg=panel
-c: fg=edge bg=panel
-d: fg=fg bg=panel
-e: bg=panel reverse
-f: fg=mute bg=panel
-g: fg=accent-bright bg=panel
-h: fg=accent bg=panel
-i: fg=track bg=panel
-=== 256 56x7
-|Tag           ▏v0.11.0                                 ▕|
-|Note          ▏Why this deploy                         ▕|
+c: bg=surface underline
+d: fg=fg bg=surface underline
+e: bg=surface reverse underline
+f: fg=dim bg=panel
+g: fg=mute bg=surface underline
+h: fg=mute bg=panel
+i: fg=fg bg=panel
+j: fg=accent-bright bg=panel
+k: fg=accent bg=panel
+l: fg=track bg=panel
+=== 256 56x13
+|Tag            v0.11.0                                  |
+|                                                        |
+|Note           Why this deploy                          |
+|                                                        |
 |Target        ‹ staging ›                               |
+|                                                        |
 |Canary first  ●━━ on                                    |
+|                                                        |
 |Dry run       ──○ off                                   |
+|                                                        |
 |Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
-|Checked       [x]                                       |
+|                                                        |
+|[x] Checked                                             |
 --- styles
-|aaabbbbbbbbbbbcdddddddebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaabbbbbbbbbbcfffbffffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbc|
-|aaaaaabbbbbbbbfbdddddddbfbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbghhbddbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaabaaabbbbbbbfffbfffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-|aaaaaabaaaaabbhhhhhhgiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiibbdd|
-|aaaaaaabbbbbbbgggbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
-a: fg=dim bg=panel
+|aaabbbbbbbbbbbcdddddddeccccccccccccccccccccccccccccccccc|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffbbbbbbbbbbcgggcggggcggggggcccccccccccccccccccccccccc|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffffbbbbbbbbhbiiiiiiibhbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffffbfffffbbjkkbiibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|fffbfffbbbbbbbhhhbhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|ffffffbfffffbbkkkkkkjlllllllllllllllllllllllllllllllbbii|
+|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|jjjbiiiiiiibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+a: fg=accent bg=panel bold
 b: bg=panel
-c: fg=edge bg=panel
-d: fg=fg bg=panel
-e: bg=panel reverse
-f: fg=mute bg=panel
-g: fg=accent-bright bg=panel
-h: fg=accent bg=panel
-i: fg=success-tint bg=panel
-=== 16 56x7
-|Tag           ▏v0.11.0                                 ▕|
-|Note          ▏Why this deploy                         ▕|
+c: bg=surface underline
+d: fg=fg bg=surface underline
+e: bg=surface reverse underline
+f: fg=dim bg=panel
+g: fg=mute bg=surface underline
+h: fg=mute bg=panel
+i: fg=fg bg=panel
+j: fg=accent-bright bg=panel
+k: fg=accent bg=panel
+l: fg=success-tint bg=panel
+=== 16 56x13
+|Tag            v0.11.0                                  |
+|                                                        |
+|Note           Why this deploy                          |
+|                                                        |
 |Target        ‹ staging ›                               |
+|                                                        |
 |Canary first  ●━━ on                                    |
+|                                                        |
 |Dry run       ──○ off                                   |
+|                                                        |
 |Canary share  ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  10|
-|Checked       [x]                                       |
+|                                                        |
+|[x] Checked                                             |
 --- styles
-|aaa           bcccccccd                                b|
-|aaaa          bbbb bbbb bbbbbb                         b|
-|aaaaaa        b ccccccc b                               |
-|aaaaaa aaaaa  eff cc                                    |
-|aaa aaa       bbb bbb                                   |
-|aaaaaa aaaaa  ffffffebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  cc|
-|aaaaaaa       eee                                       |
-a: fg=dim
-b: fg=mute
-c: fg=fg
-d: reverse
-e: fg=accent-bright
-f: fg=accent
-=== ascii 56x7
+|aaa           bcccccccdbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                                                        |
+|eeee          bfffbffffbffffffbbbbbbbbbbbbbbbbbbbbbbbbbb|
+|                                                        |
+|eeeeee        g hhhhhhh g                               |
+|                                                        |
+|eeeeee eeeee  ijj hh                                    |
+|                                                        |
+|eee eee       ggg ggg                                   |
+|                                                        |
+|eeeeee eeeee  jjjjjjiggggggggggggggggggggggggggggggg  hh|
+|                                                        |
+|iii hhhhhhh                                             |
+a: fg=accent bold
+b: underline
+c: fg=fg underline
+d: reverse underline
+e: fg=dim
+f: fg=mute underline
+g: fg=mute
+h: fg=fg
+i: fg=accent-bright
+j: fg=accent
+=== ascii 56x13
 |Tag           [v0.11.0                                 ]|
+|                                                        |
 |Note          [Why this deploy                         ]|
+|                                                        |
 |Target        < staging >                               |
+|                                                        |
 |Canary first  O== on                                    |
+|                                                        |
 |Dry run       --( ) off                                 |
+|                                                        |
 |Canary share  ======O===============================  10|
-|Checked       [x]                                       |
+|                                                        |
+|[x] Checked                                             |
 --- styles
-|                      a                                 |
+|aaa            bbbbbbbcbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb |
+|                                                        |
+|               bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb |
 |                                                        |
 |                                                        |
 |                                                        |
 |                                                        |
 |                                                        |
 |                                                        |
-a: reverse
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+a: bold
+b: underline
+c: reverse underline
