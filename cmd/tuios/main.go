@@ -2671,10 +2671,13 @@ would accept a question right now.`,
 		Long: `Queue a message in the session's agent ring. With -w it goes to one pane's
 inbox. Without -w, it is a notice everyone in the session can read.
 
-It does not touch the recipient's keyboard, which is the point: a message can be
-left for an agent that is mid-turn, and it is there when that agent next reads
-its inbox. Nothing delivers it for you, so the recipient has to be one that
-checks. For an agent that does not, ask-agent types the question instead.
+It never types the message into the recipient's pane, which is the point: a
+message can be left for an agent that is mid-turn, and it is there when that
+agent next reads its inbox. tuios tells the recipient that mail waits: in its context during a
+turn when its hooks are installed, and with one typed line once it is at rest.
+The line holds the count and the command that reads the mail, never the body.
+'[agents.mail] wake = false' turns the typed line off. Use ask-agent when you
+need the answer now.
 
 --reply-to answers a message by its id. The reply joins that message's thread,
 and a reply to a reply joins the same one. A reply is the only acknowledgement
