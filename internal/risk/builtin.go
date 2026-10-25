@@ -127,7 +127,50 @@ func gitArgs(c command) (string, []string) {
 	return "", nil
 }
 
+// jjValueFlags are the jj flags, global or of the subcommands the rules
+// read, that take a value as the next word.
+var jjValueFlags = []string{
+	"-R", "--repository", "--at-op", "--at-operation", "--config", "--config-file", "--color",
+	"-r", "--revision", "--revisions", "-f", "--from", "-t", "--to", "--into", "-c", "--changes-in",
+	"--tool", "-b", "--bookmark", "--change", "--named", "--remote", "--name", "--sparse-patterns",
+	"--depth", "-m", "--message",
+}
+
+// jjOperands returns the words of a jj command line that are neither flags
+// nor a flag's value: the subcommand and its operands. jj takes its global
+// options anywhere on the line.
+func jjOperands(c command) []string {
+	if c.name() != "jj" {
+		return nil
+	}
+	var out []string
+	args := c.args()
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return append(out, args[i+1:]...)
+		case slices.Contains(jjValueFlags, a):
+			i++
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+		default:
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// jjIs reports whether ops start with the subcommand words.
+func jjIs(ops []string, words ...string) bool {
+	return len(ops) >= len(words) && slices.Equal(ops[:len(words)], words)
+}
+
 func forcePush(c command, _ Call) bool {
+	// jj pushes as --force-with-lease does: a bookmark rewritten here
+	// replaces the remote's. --dry-run only prints what would be sent.
+	if jjIs(jjOperands(c), "git", "push") {
+		return !slices.Contains(c.args(), "--dry-run")
+	}
 	sub, args := gitArgs(c)
 	if sub != "push" {
 		return false
@@ -149,6 +192,10 @@ func forcePush(c command, _ Call) bool {
 }
 
 func hardReset(c command, _ Call) bool {
+	// Every workspace's commits and working copy go back to that operation.
+	if jjIs(jjOperands(c), "op", "restore") {
+		return true
+	}
 	sub, args := gitArgs(c)
 	return sub == "reset" && slices.Contains(args, "--hard")
 }
@@ -163,6 +210,13 @@ func gitClean(c command, _ Call) bool {
 }
 
 func discardChanges(c command, _ Call) bool {
+	if ops := jjOperands(c); jjIs(ops, "abandon") {
+		return true
+	} else if jjIs(ops, "restore") {
+		// No paths restores every file.
+		paths := ops[1:]
+		return len(paths) == 0 || slices.ContainsFunc(paths, func(p string) bool { return p == "." || p == "root:" || p == `root:""` })
+	}
 	sub, args := gitArgs(c)
 	if sub != "checkout" && sub != "restore" {
 		return false
@@ -311,6 +365,15 @@ func writesOutside(c command, call Call) bool {
 			if !strings.Contains(dir, "://") && !strings.Contains(dir, "@") && outside(dir, call) {
 				return true
 			}
+		}
+	case "jj":
+		// jj git clone <source> <folder>, jj workspace add <folder>.
+		ops := jjOperands(c)
+		if jjIs(ops, "git", "clone") && len(ops) >= 4 && outside(ops[len(ops)-1], call) {
+			return true
+		}
+		if jjIs(ops, "workspace", "add") && len(ops) >= 3 && outside(ops[2], call) {
+			return true
 		}
 	case "cp", "mv", "ln", "install", "rsync":
 		if anyOutside(flagValues(args, "", "--target-directory"), call) {

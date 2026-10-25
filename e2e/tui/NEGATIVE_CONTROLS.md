@@ -12964,6 +12964,7 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | Run on 2026-11-07: `fanRowChanges` taking the merge base from `HEAD` | `TestFanCompareJJ` | "the untouched attempt: ... 1 files, want ... 0 files", and the working one 3 files, want 2 | **caught** |
 | Run on 2026-11-07: `spawnBranches` asking `git for-each-ref` alone | `TestCockpitSpawnJJBookmarks` | "the Base list never offered feat/b, feat/a and main, newest first" | **caught** |
 | Run on 2026-11-07: `Detached` left unset in `jjLabel` | `TestCockpitSpawnJJBookmarks` | "the sheet offers the description \"wip\" as the base" | **caught** |
+| Run on 2026-11-13: a build of main at a086dffc3105, without the jj risk rules | `TestRiskMarksJJCommands` | "\"jj git push -b feat/x\" is marked [], want \"force push\"", and the same for the other five risky jj commands | **caught** |
 
 The frames are `rail-jj-repo-row-*` under the test's artifact folder.
 

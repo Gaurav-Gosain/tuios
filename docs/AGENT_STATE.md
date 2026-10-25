@@ -3589,17 +3589,17 @@ x; fi` and `(cd build && rm -rf out)` read as `rm`:
 | Rule | Matches |
 | --- | --- |
 | recursive delete | `rm` with both `-r` (or `-R`, `--recursive`) and `-f` (or `--force`), in any order |
-| force push | `git push` with `--force`, `-f`, `--force-with-lease`, or a `+` refspec |
-| hard reset | `git reset --hard` |
+| force push | `git push` with `--force`, `-f`, `--force-with-lease`, or a `+` refspec; any `jj git push`, which moves a rewritten bookmark as `--force-with-lease` does |
+| hard reset | `git reset --hard`, `jj op restore` |
 | clean | `git clean -f`, `-fd`, `-fx` |
-| discard changes | `git checkout -- .`, `git checkout .`, `git restore .` |
+| discard changes | `git checkout -- .`, `git checkout .`, `git restore .`; `jj restore` with no paths or `.`, `jj abandon` |
 | pipe to shell | `curl` or `wget` piped to `sh`, `bash`, `zsh`, `python`, `node`, or to anything under `sudo`; or run by a shell, `eval` or `source` through a substitution, as in `bash <(curl ...)`, `sh -c "$(curl ...)"` and `eval "$(curl ...)"` |
 | sudo | any command under `sudo` or `doas` |
 | disk | `dd of=`, `mkfs`, a redirect to `/dev/sd*`, `/dev/nvme*` and the like |
 | wide permissions | `chmod -R 777`, `chown -R` on `/` or `~` |
 | database | `DROP TABLE`, `DROP DATABASE`, `TRUNCATE TABLE`, in any case |
 | infrastructure | `terraform apply` or `destroy`, `kubectl delete`, `docker system prune`, `npm publish`, `cargo publish` |
-| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i`, `curl -o`, `wget -O`, `tar -x -C`, `git clone` into a folder and the like naming a path outside the pane's root, or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside. See the pane's root below |
+| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i`, `curl -o`, `wget -O`, `tar -x -C`, `git clone` or `jj git clone` into a folder, `jj workspace add` and the like naming a path outside the pane's root, or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside. See the pane's root below |
 
 The pane's root is the first of these that is inside your home folder, not
 the home folder itself:
