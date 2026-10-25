@@ -207,8 +207,12 @@ jobs:
               echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
               exit 1
             fi
-          else
+          elif [ -s "$RUNNER_TEMP/selected.txt" ]; then
             names=$(go run ./shardplan -shards "$SHARDS" -shard "$SHARD" -fill "$E2E_SHARD_FILL" < "$RUNNER_TEMP/selected.txt")
+          else
+            # The change reaches no test, and shardplan refuses an empty
+            # list, so every shard runs nothing.
+            names=""
           fi
           printf '%s\n' "$names" | sed '/^$/d' > "$RUNNER_TEMP/names.txt"
           if [ -s "$RUNNER_TEMP/names.txt" ]; then
