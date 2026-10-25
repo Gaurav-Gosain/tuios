@@ -16,6 +16,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -271,6 +272,11 @@ func shipBranch(ctx context.Context, root string) (string, *verbError) {
 	if err != nil {
 		return "", shipGitFailed(ctx, err)
 	}
+	if branch == "" && gitstate.Find(root).JJ {
+		return "", hintedVerbError(ErrVerbNotWorktree, "the jj workspace "+root+" has no bookmark on @, or on @- when @ is empty, so there is no branch to ship", &VerbHint{
+			Detail: "Nothing was changed. Create one with jj bookmark create <name> -r @- (or -r @), then call again.",
+		})
+	}
 	if branch == "" {
 		return "", hintedVerbError(ErrVerbNotWorktree, "the work tree "+root+" has a detached HEAD, so there is no branch to ship", &VerbHint{
 			Detail: "Nothing was changed. Check out a branch in the work tree with git switch -c <name>, then call again.",
@@ -409,6 +415,10 @@ func shipMergeInto(repoRoot, recorded, into string) string {
 	if recorded != "" && worktree.BranchExists(repoRoot, recorded) {
 		return recorded
 	}
+	// A jj repository checks out no branch: a merge goes into trunk's bookmark.
+	if b, ok := worktree.JJTrunkBookmark(repoRoot); ok {
+		return b
+	}
 	b, _ := worktree.CurrentBranch(repoRoot)
 	return b
 }
@@ -439,6 +449,12 @@ func (d *Daemon) shipMerge(person bool, sessionName, root, repoRoot, recorded, i
 		return nil, verr
 	}
 	into = shipMergeInto(repoRoot, recorded, into)
+	if into == "" && gitstate.Find(repoRoot).JJ {
+		return nil, hintedVerbError(ErrVerbCheckoutDirty, "trunk() in "+repoRoot+" has no main, master or trunk bookmark and not exactly one other, and no bookmark to merge into was given", &VerbHint{
+			Param:  "into",
+			Detail: "Nothing was merged. Pass into with the bookmark to merge into.",
+		})
+	}
 	if into == "" {
 		return nil, hintedVerbError(ErrVerbCheckoutDirty, "the main checkout "+repoRoot+" has a detached HEAD, and no branch to merge into was given", &VerbHint{
 			Param:  "into",
