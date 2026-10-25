@@ -7958,6 +7958,32 @@ one test. Run on 2026-10-18, after the fourth review of #877.
 | A kill at the prompt does not block the next install | the kernel lock `HoldLock` in `newInstaller` becomes a guard file made with `O_EXCL` and removed on return | `TestPluginsInstallFromGit` ("install of main after a kill at the prompt: exit status 1") | **caught** |
 | The build runs in the folder the state file names | the build runs in the fetch folder, which moves into place after it | `TestPluginsInstallFromGit` ("the build ran in \".../plugins/%fetch-N\", want the folder the state file names") | **caught** |
 | The state write comes after the build | the state file is written before the build | `TestPluginsInstallFromGit` ("the state file does not name the build of main": it says `built = false`) | **caught** |
+
+### tuios plugins uninstall, and unknown subcommands
+
+`TestPluginsInstallFromGit` ends with three more steps, after step 8:
+
+9. `tuios plugins uninstal e2e.probe` fails with `unknown command`. Cobra
+   printed the help of a group command for an unknown word, and exited 0.
+10. A linked folder: `tuios plugins uninstall e2e.linked` is refused with a
+    message that names `unlink`, and the folder stays.
+11. `tuios plugins uninstall URL`, by the source: the output says the
+    plugin is disabled and its pane is closed. The lock entry, the state
+    entry, the plugin folder and the `enabled` entry are gone. The state
+    file stays. The session has one window less. No process runs in the
+    removed folder (Linux, from `/proc`). The artifact is `uninstall.txt`.
+
+Each control cut the wiring, built the binary, and ran the one test. Run on
+2026-10-25.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole change | a build of `origin/main` at 657bacdfd | `TestPluginsInstallFromGit` ("tuios plugins uninstal: <nil>, want an unknown command error", and each uninstall check) | **caught** |
+| Group commands refuse an unknown word | the `rejectUnknownSubcommands` call in `newRootCommand` | `TestPluginsInstallFromGit` ("tuios plugins uninstal: <nil>, want an unknown command error") | **caught** |
+| `plugin.disable` with `close_panes` closes the panes | `panes_closed` is 0 and `closePluginPanes` is not called | `TestPluginsInstallFromGit` ("the session has 2 windows after the uninstall, want 1", "processes still run in the removed folder") | **caught** |
+| Uninstall disables the plugin first | the `disableForUninstall` call | `TestPluginsInstallFromGit` ("config.toml still enables e2e.probe", "processes still run in the removed folder") | **caught** |
+| Uninstall drops the lock entry | the `UpdateLock` call does nothing | `TestPluginsInstallFromGit` ("plugins.lock or the state file still names e2e.probe", "plugins list still shows e2e.probe") | **caught** |
+| Uninstall removes the plugin folder | the `os.RemoveAll` call | `TestPluginsInstallFromGit` (".../plugins/e2e.probe is still there after the uninstall") | **caught** |
 | Old build folders go after the switch | the `collect` call in `restart` | `TestPluginsInstallFromGit` (".../plugins/e2e.probe holds [three folders], want [two]") | **caught** |
 | A failed or killed reinstall leaves the old plugin running | the plugin is stopped before the build | `TestPluginsInstallFromGit` ("plugins run ping after a failed build: exit status 1") | **caught** |
 | Discover uses the state's folder only for the lock's commit | `State.Live` takes the state's folder whatever its commit | `TestPluginsInstallFromGit` ("with the state ahead of plugins.lock, the plugin does not run from the folder of main") | **caught** |

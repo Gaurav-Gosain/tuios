@@ -2105,6 +2105,7 @@ find a plugin runs nothing. A plugin runs only when its id is in `enabled`.
 `tuios plugins install SOURCE` writes `plugins.lock` beside `config.toml`.
 It pins each installed plugin to one commit. Keep the file with your config,
 and run `tuios plugins install` on a new machine to get the same commits.
+`tuios plugins uninstall ID` removes the plugin from the file.
 
 An enabled plugin runs its commands with your rights, outside every pane.
 Enable only plugins that you trust.
@@ -2117,6 +2118,7 @@ tuios plugins enable example.notes
 tuios plugins disable example.notes
 tuios plugins link ~/src/my-herdr-plugin
 tuios plugins install owner/repo        # also adds the id to enabled
+tuios plugins uninstall example.notes   # also removes the id from enabled
 ```
 
 You must run them from a terminal outside tuios. A change to the file that

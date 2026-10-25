@@ -6,6 +6,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -333,6 +334,110 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	checkStartup(state("dir"))
 	_ = os.WriteFile(filepath.Join(art, "plugins.lock"), []byte(readLock()), 0o644)
 	_ = os.WriteFile(filepath.Join(art, "state.toml"), []byte(readState()), 0o644)
+
+	// A word that names no subcommand fails. Cobra used to print the help
+	// of tuios plugins and exit 0.
+	if out, err := tuiosCLI(t, base, "plugins", "uninstal", id); err == nil || !strings.Contains(out, `unknown command "uninstal" for "tuios plugins"`) {
+		t.Errorf("tuios plugins uninstal: %v, want an unknown command error\n%s", err, out)
+	}
+
+	// uninstall refuses a linked folder, and leaves it alone.
+	linked := t.TempDir()
+	linkedManifest := filepath.Join(linked, "herdr-plugin.toml")
+	if err := os.WriteFile(linkedManifest, []byte("id = \"e2e.linked\"\nname = \"Linked\"\nversion = \"1.0.0\"\nmin_herdr_version = \"0.9.3\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "link", linked); err != nil {
+		t.Fatalf("plugins link: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "plugins", "uninstall", "e2e.linked"); err == nil || !strings.Contains(out, "tuios plugins unlink e2e.linked") {
+		t.Errorf("uninstall of a linked folder: %v, want a refusal that names unlink\n%s", err, out)
+	}
+	if _, err := os.Stat(linkedManifest); err != nil {
+		t.Errorf("uninstall of a linked folder touched it: %v", err)
+	}
+
+	// uninstall, by the source it was installed from: the plugin's
+	// processes stop, its pane closes, and its lock entry, state entry and
+	// build folders go. Nothing else in the data folder goes.
+	windows := func() int {
+		out, _ := tuiosCLI(t, base, "list-windows", "--json", "--session", "probe")
+		var res struct {
+			Windows []json.RawMessage `json:"windows"`
+		}
+		_ = json.Unmarshal([]byte(out), &res)
+		return len(res.Windows)
+	}
+	panesBefore := windows()
+	if panesBefore < 2 {
+		t.Fatalf("the session has %d windows before the uninstall, want the shell and the plugin pane", panesBefore)
+	}
+	realManaged, _ := filepath.EvalSymlinks(managed)
+	out, err = tuiosCLI(t, base, "plugins", "uninstall", url)
+	_ = os.WriteFile(filepath.Join(art, "uninstall.txt"), []byte(out), 0o644)
+	if err != nil {
+		t.Fatalf("plugins uninstall %s: %v\n%s", url, err, out)
+	}
+	for _, want := range []string{"is disabled. Its processes are stopped", "Its pane is closed", "removed from plugins.lock", "The folder " + managed + " is removed", "e2e.probe is uninstalled"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the uninstall output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(readLock(), id) || strings.Contains(readState(), id) {
+		t.Errorf("plugins.lock or the state file still names %s:\n%s\n%s", id, readLock(), readState())
+	}
+	if _, err := os.Stat(managed); !os.IsNotExist(err) {
+		t.Errorf("%s is still there after the uninstall: %v", managed, err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "tuios", "plugins", "%state.toml")); err != nil {
+		t.Errorf("the uninstall removed the state file: %v", err)
+	}
+	if cfg, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")); regexp.MustCompile(`(?m)^enabled = .*` + regexp.QuoteMeta(id)).Match(cfg) {
+		t.Errorf("config.toml still enables %s:\n%s", id, cfg)
+	}
+	if n := windows(); n != panesBefore-1 {
+		t.Errorf("the session has %d windows after the uninstall, want %d: the plugin pane did not close", n, panesBefore-1)
+	}
+	out, _ = tuiosCLI(t, base, "plugins", "list", "--json")
+	for _, e := range listEntries(out) {
+		if e.ID == id {
+			t.Errorf("plugins list still shows %s after the uninstall:\n%s", id, out)
+		}
+	}
+	if runtime.GOOS == "linux" && realManaged != "" {
+		// No process of the plugin, startup or pane, runs in its folder.
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			left := procsIn(realManaged)
+			if len(left) == 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Errorf("processes still run in the removed folder: %v", left)
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// procsIn lists the pids whose working folder is in dir, from /proc.
+func procsIn(dir string) []string {
+	ents, _ := os.ReadDir("/proc")
+	var out []string
+	for _, e := range ents {
+		if _, err := strconv.Atoi(e.Name()); err != nil {
+			continue
+		}
+		cwd, err := os.Readlink(filepath.Join("/proc", e.Name(), "cwd"))
+		// The folder of a process whose folder was removed reads
+		// "<path> (deleted)".
+		cwd = strings.TrimSuffix(cwd, " (deleted)")
+		if err == nil && (cwd == dir || strings.HasPrefix(cwd, dir+string(filepath.Separator))) {
+			out = append(out, e.Name())
+		}
+	}
+	return out
 }
 
 // listEntry is one plugin of plugins list --json.

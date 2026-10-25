@@ -119,6 +119,9 @@ type herdrPluginIn struct {
 	Env        map[string]string   `json:"env"`
 	PaneID     string              `json:"pane_id"`
 	Source     *herdrplugin.Source `json:"source"`
+	// ClosePanes, on plugin.disable, closes the plugin's open panes too.
+	// tuios plugins uninstall sets it, because it removes their folder.
+	ClosePanes bool `json:"close_panes"`
 }
 
 func decodePluginIn(params json.RawMessage, required ...string) (*herdrPluginIn, *herdrError) {
@@ -227,7 +230,39 @@ func (d *Daemon) herdrPluginSetEnabled(cs *connState, params json.RawMessage, on
 	if on {
 		kind = "plugin_enabled"
 	}
-	return map[string]any{"type": kind, "plugin": pluginRecord(*e)}, nil
+	res := map[string]any{"type": kind, "plugin": pluginRecord(*e)}
+	if !on && in.ClosePanes {
+		res["panes_closed"] = d.closePluginPanes(cs, id)
+	}
+	return res, nil
+}
+
+// closePluginPanes closes the open panes plugin id opened, and returns how
+// many it closed. A pane that will not close is logged and forgotten.
+func (d *Daemon) closePluginPanes(cs *connState, id string) int {
+	h := d.plugins
+	h.mu.Lock()
+	var wins []string
+	for w, p := range h.panes {
+		if p.pluginID == id {
+			wins = append(wins, w)
+		}
+	}
+	h.mu.Unlock()
+	closed := 0
+	for _, w := range wins {
+		if sess := d.sessionHoldingWindow(w); sess != nil {
+			if _, herr := d.herdrVerb(cs, "close-window", herdrWin(sess, w), "pane_close_failed"); herr != nil {
+				log.Printf("[PLUGINS] the pane %s of %s did not close: %s", w, id, herr.msg)
+			} else {
+				closed++
+			}
+		}
+		h.mu.Lock()
+		delete(h.panes, w)
+		h.mu.Unlock()
+	}
+	return closed
 }
 
 func cmpHerr(a, b *herdrError) *herdrError {

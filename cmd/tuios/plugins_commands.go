@@ -35,13 +35,13 @@ func newPluginsCommand() *cobra.Command {
 		Short:   "List, enable and run herdr plugins",
 		Long: `List, enable and run herdr plugins (herdr-plugin.toml).
 
-tuios finds plugins in five places: the folders [plugins] dirs names, the tuios plugins folder, plugins.lock, herdr's plugins.json and herdr's managed checkouts. Finding a plugin runs nothing. A plugin runs only after you enable it. tuios plugins install enables the plugin it installs.
+tuios finds plugins in five places: the folders [plugins] dirs names, the tuios plugins folder, plugins.lock, herdr's plugins.json and herdr's managed checkouts. Finding a plugin runs nothing. A plugin runs only after you enable it. tuios plugins install enables the plugin it installs. tuios plugins uninstall removes it.
 
-An enabled plugin runs its commands with your rights, outside every pane, as it does in herdr. Enable only plugins you trust. You must run install, enable, disable, link, unlink and build from a terminal outside tuios.`,
+An enabled plugin runs its commands with your rights, outside every pane, as it does in herdr. Enable only plugins you trust. You must run install, uninstall, enable, disable, link, unlink and build from a terminal outside tuios.`,
 	}
 	cmd.AddCommand(newPluginsListCommand(), newPluginsInfoCommand(),
 		newPluginsEnableCommand(true), newPluginsEnableCommand(false),
-		newPluginsInstallCommand(), newPluginsApproveCommand(),
+		newPluginsInstallCommand(), newPluginsUninstallCommand(), newPluginsApproveCommand(),
 		newPluginsLinkCommand(), newPluginsUnlinkCommand(), newPluginsBuildCommand(),
 		newPluginsRunCommand(), newPluginsOpenCommand(), newPluginsLogCommand())
 	return cmd

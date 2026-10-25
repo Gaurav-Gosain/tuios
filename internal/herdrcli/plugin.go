@@ -59,7 +59,9 @@ func parsePlugin(sub string, args []string, getenv Env, cwd string) (*Call, *Usa
 			}
 		}
 		return call("cli:plugin", "plugin.link", p), nil
-	case "install", "update", "uninstall":
+	case "uninstall":
+		return local("cli:plugin", "herdr plugin uninstall does not run in tuios. Run tuios plugins uninstall ID from a terminal outside tuios"), nil
+	case "install", "update":
 		return local("cli:plugin", "herdr plugin "+sub+" downloads from the network, which tuios does not do. Clone the plugin and run tuios plugins link DIR from a terminal outside tuios"), nil
 	case "action":
 		return parsePluginAction(args)

@@ -905,6 +905,17 @@ folders of the plugin. When a build fails or you stop it, the plugin runs
 from its old folder. When tuios cannot restart the plugin, it keeps the old
 folders and tells you to restart the daemon.
 
+**Uninstall a plugin.** `tuios plugins uninstall ID` undoes the install.
+It disables the plugin, stops its processes and closes its panes. Then it
+removes the plugin from `plugins.lock` and from the state file, removes its
+approval, and removes `$XDG_DATA_HOME/tuios/plugins/<id>/`. Instead of the
+id, you can give the source you installed from, such as
+`alexarthurs/herdr-sidebar`. tuios keeps the config and state folders of
+the plugin. For a plugin installed from a local folder, tuios keeps that
+folder. tuios refuses a plugin that it did not install. For a linked
+folder or a folder in `[plugins] dirs`, use `tuios plugins unlink ID`. Run
+the command from a terminal outside tuios.
+
 `tuios plugins install` with no source installs each plugin in
 `plugins.lock` at its pinned commit. Use it on a new machine that has your
 config folder. It does not enable a plugin. `[plugins] enabled` does that.
@@ -1199,8 +1210,8 @@ tuios reads all 113 manifests of the 115 most starred herdr plugins. These
 parts of a plugin do not run yet:
 
 - `[[link_handlers]]`.
-- `herdr plugin install`, `update` and `uninstall`: use `tuios plugins install`.
-  `tuios plugins update` and `uninstall` are not there yet.
+- `herdr plugin install`, `update` and `uninstall`: use `tuios plugins install`
+  and `tuios plugins uninstall`. `tuios plugins update` is not there yet.
 - A client of herdr's terminal protocol (`terminal.attach`, `herdr agent
   attach`), such as the phone and web clients.
 - The methods in [What tuios does not answer](#what-tuios-does-not-answer).

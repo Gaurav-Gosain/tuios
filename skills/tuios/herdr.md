@@ -69,7 +69,8 @@ terminal-code, vim-herdr-navigation, herdr-splits.nvim, herdr-nvim-nav,
 herdr-nvim, herdr-file-viewer, herdr-sidebar, herdr-plus and
 herdr-auto-title. A plugin's `[[link_handlers]]` do not run.
 `plugin install` fails: the person runs `tuios plugins install SOURCE` from a
-terminal outside tuios.
+terminal outside tuios. `plugin uninstall` fails too: the person runs
+`tuios plugins uninstall ID`.
 
 ## What it may do
 

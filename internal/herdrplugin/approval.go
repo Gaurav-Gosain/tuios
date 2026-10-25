@@ -124,6 +124,22 @@ func writeApproval(path string, x approval) error {
 	a := readApprovals(path)
 	a.Approval = slices.DeleteFunc(a.Approval, func(y approval) bool { return y.ID == x.ID })
 	a.Approval = append(a.Approval, x)
+	return saveApprovals(path, a)
+}
+
+// Forget drops every answer for the plugin id, for tuios plugins
+// uninstall. A plugin installed again later is asked about again.
+func Forget(path, id string) error {
+	a := readApprovals(path)
+	n := len(a.Approval)
+	a.Approval = slices.DeleteFunc(a.Approval, func(y approval) bool { return y.ID == id })
+	if len(a.Approval) == n {
+		return nil
+	}
+	return saveApprovals(path, a)
+}
+
+func saveApprovals(path string, a approvals) error {
 	data, err := toml.Marshal(a)
 	if err != nil {
 		return err
