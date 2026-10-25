@@ -322,6 +322,23 @@ func HeadCommitCtx(ctx context.Context, path string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// WorkRevs names, for git, the work at path and base: HEAD and base as they
+// are, or in a jj workspace the commit holding the work and base's commit,
+// which jj resolves, since git there may have no refs to.
+func WorkRevs(ctx context.Context, path, base string) (head, from string, err error) {
+	r := gitstate.Find(path)
+	if !r.JJ {
+		return "HEAD", base, nil
+	}
+	if head, err = jjWorkHead(ctx, r.Root); err != nil {
+		return "", "", err
+	}
+	if from, err = gitstate.JJCommit(ctx, r.Root, base, false); err != nil {
+		return "", "", err
+	}
+	return head, from, nil
+}
+
 // MergeBaseCtx is MergeBase bounded by ctx.
 func MergeBaseCtx(ctx context.Context, path, a, b string) (string, error) {
 	if strings.HasPrefix(a, "-") || strings.HasPrefix(b, "-") {
@@ -336,7 +353,11 @@ func MergeBaseCtx(ctx context.Context, path, a, b string) (string, error) {
 
 // AheadCtx is Ahead bounded by ctx.
 func AheadCtx(ctx context.Context, path, base string) (int, error) {
-	out, err := runCtx(ctx, path, nil, "rev-list", "--count", base+"..HEAD")
+	head, from, err := WorkRevs(ctx, path, base)
+	if err != nil {
+		return 0, err
+	}
+	out, err := runCtx(ctx, path, nil, "rev-list", "--count", from+".."+head)
 	if err != nil {
 		return 0, err
 	}
@@ -345,6 +366,9 @@ func AheadCtx(ctx context.Context, path, base string) (int, error) {
 
 // ChangesCtx is Changes bounded by ctx.
 func ChangesCtx(ctx context.Context, path string) (int, error) {
+	if gitstate.Find(path).JJ {
+		return jjChanges(ctx, path)
+	}
 	out, err := runCtx(ctx, path, nil, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return 0, err

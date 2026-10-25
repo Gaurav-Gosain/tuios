@@ -1,12 +1,14 @@
 package worktree
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
 // Whether a worktree's branch has landed in its base.
@@ -30,6 +32,10 @@ import (
 // onto commit) and that commit is in the branch past the commit it started
 // at. With no reflog, the branch reads as not merged. So the check can miss a
 // merged branch, never claim one that is not.
+//
+// In a jj workspace the branch tip is the commit holding the work, and the
+// reflog's part is played by the session's bookmark: the branch made commits
+// when the bookmark is on one that changes something, past where it started.
 
 // mergedCacheCap bounds the cache. The listing is polled, and a key that no
 // longer matches any tip is dead weight; clearing the whole map when it fills
@@ -44,52 +50,78 @@ var (
 // Merged reports the ref the worktree's branch is merged into, or "" when it
 // is not merged into any.
 //
-// base is the ref the branch was made from. Empty means the branch the main
-// checkout at repoRoot has checked out. start is the commit the branch began
+// branch is the worktree's branch as the session records it; only a jj
+// workspace reads it. base is the ref the branch was made from. Empty means
+// the branch the main checkout at repoRoot has checked out, or in jj the
+// bookmark on trunk(). start is the commit the branch began
 // at, empty when it was not recorded. The base is checked, then its upstream
 // when it has one, as git last fetched it: Merged never fetches.
 //
 // The answer is cached per branch tip, base tips and start, so a listing
 // polled every few seconds runs only rev-parse (two calls when the base has
-// an upstream) per worktree until something moves.
-func Merged(path, repoRoot, start, base string) (string, error) {
-	if base == "" {
-		out, err := run(repoRoot, "symbolic-ref", "--quiet", "--short", "HEAD")
+// an upstream) per worktree until something moves. In jj it is cached per
+// operation log state, which is a directory read.
+func Merged(path, repoRoot, branch, start, base string) (string, error) {
+	var refs, tips []string
+	var key string
+	r := gitstate.Find(path)
+	if r.JJ {
+		// The main workspace is where trunk is, not a branch that lands in it.
+		if r.Root == r.Main {
+			return "", nil
+		}
+		// Every jj commit and bookmark moves with the operation log, so the
+		// log's heads stand in for the tips: a hit runs no jj at all.
+		ops, err := r.JJOps()
 		if err != nil {
 			return "", err
 		}
-		base = strings.TrimSpace(out)
-	}
-	if base == "" || strings.HasPrefix(base, "-") {
-		return "", nil
-	}
-	refs := []string{base}
-	tips, err := revParse(path, "HEAD", base+"^{commit}", base+"@{upstream}^{commit}")
-	if err == nil {
-		up, uerr := run(path, "rev-parse", "--abbrev-ref", base+"@{upstream}")
-		if uerr == nil && strings.TrimSpace(up) != "" {
-			refs = append(refs, strings.TrimSpace(up))
-		} else {
-			tips = tips[:2]
-		}
+		key = path + "\x00" + branch + "\x00" + start + "\x00" + base + "\x00" + ops
 	} else {
-		// No upstream, or base is not a branch. The plain pair is enough.
-		if tips, err = revParse(path, "HEAD", base+"^{commit}"); err != nil {
-			return "", err
+		if base == "" {
+			out, err := run(repoRoot, "symbolic-ref", "--quiet", "--short", "HEAD")
+			if err != nil {
+				return "", err
+			}
+			base = strings.TrimSpace(out)
 		}
+		if base == "" || strings.HasPrefix(base, "-") {
+			return "", nil
+		}
+		refs = []string{base}
+		var err error
+		tips, err = revParse(path, "HEAD", base+"^{commit}", base+"@{upstream}^{commit}")
+		if err == nil {
+			up, uerr := run(path, "rev-parse", "--abbrev-ref", base+"@{upstream}")
+			if uerr == nil && strings.TrimSpace(up) != "" {
+				refs = append(refs, strings.TrimSpace(up))
+			} else {
+				tips = tips[:2]
+			}
+		} else {
+			// No upstream, or base is not a branch. The plain pair is enough.
+			if tips, err = revParse(path, "HEAD", base+"^{commit}"); err != nil {
+				return "", err
+			}
+		}
+		key = path + "\x00" + start + "\x00" + base + "\x00" + strings.Join(tips, "\x00")
 	}
-	key := path + "\x00" + start + "\x00" + base + "\x00" + strings.Join(tips, "\x00")
 	mergedMu.Lock()
 	into, hit := mergedCache[key]
 	mergedMu.Unlock()
 	if hit {
 		return into, nil
 	}
+	if r.JJ {
+		var err error
+		if refs, tips, err = jjMergedTips(context.Background(), r.Root, base); err != nil {
+			return "", err
+		}
+	}
 
 	into = ""
-	head := tips[0]
 	for i, ref := range refs {
-		if mergedInto(path, start, head, tips[i+1]) {
+		if mergedInto(path, branch, start, tips[0], tips[i+1]) {
 			into = ref
 			break
 		}
@@ -105,13 +137,16 @@ func Merged(path, repoRoot, start, base string) (string, error) {
 
 // mergedInto reports whether head has changes of its own and target already
 // holds them. Any git failure, a conflict among them, reads as not merged.
-func mergedInto(path, start, head, target string) bool {
+func mergedInto(path, branch, start, head, target string) bool {
 	mb, err := MergeBase(path, head, target)
 	if err != nil {
 		return false
 	}
 	if mb == head {
 		// The base holds the tip. Merged only when the branch made commits.
+		if r := gitstate.Find(path); r.JJ {
+			return jjMadeCommits(context.Background(), r.Root, branch, start)
+		}
 		return madeCommits(path, start, head)
 	}
 	// The branch has commits the base does not. Its net change against the

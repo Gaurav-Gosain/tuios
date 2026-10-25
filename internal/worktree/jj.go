@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -18,7 +19,7 @@ import (
 // what git does by branch and by staging is done here by bookmark and by the
 // working-copy commit:
 //
-//   - the branch is the bookmark on @, or on @- when @ is empty, which is
+//   - the branch is the bookmark on @, else on @- when @ is empty, which is
 //     where "jj commit" leaves the work;
 //   - a commit is "jj commit", and the bookmarks on the parent it was made on
 //     move to it, as a git branch moves with a commit made on it;
@@ -29,6 +30,10 @@ import (
 //
 // The jj commands that change something snapshot the working copy first, as
 // every jj command does.
+
+// jjDir is jj's own directory as git status lists it: jj ignores it for git,
+// and it is not the work's.
+const jjDir = ".jj/"
 
 // jjRun runs jj in the workspace at root and returns its stdout. A failure
 // carries jj's own stderr.
@@ -74,7 +79,8 @@ func jjBranch(ctx context.Context, root string) (string, error) {
 			parent = name
 		}
 	}
-	if atEmpty {
+	// A bookmark on @ is the branch even on an empty @: a fresh workspace's.
+	if at == "" && atEmpty {
 		return parent, nil
 	}
 	return at, nil
@@ -181,6 +187,11 @@ func JJTrunkBookmark(dir string) (string, bool) {
 	return "", false
 }
 
+// Worktree sessions in a jj repository are jj workspaces. A workspace has no
+// branch of its own, so the session's branch is a bookmark made on the new
+// workspace's working-copy commit, which follows the work as jj rewrites it.
+// Forgetting a workspace loses nothing: its commits stay in the repository.
+
 // jjDetect is DetectEither for a jj workspace, the main one included.
 func jjDetect(root, mainRoot string) (Info, bool) {
 	// The rail's reading, cached on jj's operation log, so a detection that
@@ -190,4 +201,127 @@ func jjDetect(root, mainRoot string) (Info, bool) {
 		branch = st.Branch
 	}
 	return Info{Repo: filepath.Base(mainRoot), RepoRoot: mainRoot, Branch: branch, Path: root}, true
+}
+
+// jjAdd is Add for a jj repository: a workspace at path named after branch,
+// on the bookmark branch when it exists, else on base (trunk() when empty)
+// with the bookmark made on the new workspace's working copy.
+func jjAdd(root, path, branch, base string) (bool, error) {
+	ctx := context.Background()
+	name := Slug(branch)
+	rev, created := jjBookmark(branch), false
+	if !jjBookmarkExists(ctx, root, branch) {
+		rev, created = base, true
+		if rev == "" {
+			rev = "trunk()"
+		}
+	}
+	if _, err := jjRun(ctx, root, "workspace", "add", "--name", name, "-r", rev, path); err != nil {
+		return false, err
+	}
+	if created {
+		if _, err := jjRun(ctx, root, "--ignore-working-copy", "bookmark", "create", branch, "-r", name+"@"); err != nil {
+			return true, err
+		}
+	}
+	return created, nil
+}
+
+func jjBookmarkExists(ctx context.Context, root, branch string) bool {
+	_, err := gitstate.JJCommit(ctx, root, jjBookmark(branch), false)
+	return err == nil
+}
+
+// jjWorkHead is the commit holding the work in the workspace at root: @ when
+// it changes something, else @-, where jj commit leaves the work. git's HEAD
+// there is @-, or nothing at all without a ".git".
+func jjWorkHead(ctx context.Context, root string) (string, error) {
+	return gitstate.JJCommit(ctx, root, "coalesce(@ ~ empty(), @-)", false)
+}
+
+// jjMergedTips is what Merged compares in the workspace at root: the base's
+// name, and the commit holding the work then the base's commit. jj resolves
+// the base, since a store git does not read has no refs for git to. With no
+// base it is trunk() itself: the bookmarks on it include any branch already
+// fast-forwarded there.
+func jjMergedTips(ctx context.Context, root, base string) (refs, tips []string, err error) {
+	head, err := jjWorkHead(ctx, root)
+	if err != nil {
+		return nil, nil, err
+	}
+	ref, rev := base, jjBookmark(base)
+	if base == "" {
+		ref, rev = "trunk()", "trunk()"
+	}
+	tip, err := gitstate.JJCommit(ctx, root, rev, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	return []string{ref}, []string{head, tip}, nil
+}
+
+// jjMadeCommits reports whether the bookmark branch, the session's own, is on
+// a commit that changes something and that start does not hold. jj keeps no
+// reflog of a bookmark, so the bookmark tuios made the workspace with is what
+// tells the workspace's commits from the ones its base brought.
+func jjMadeCommits(ctx context.Context, root, branch, start string) bool {
+	if branch == "" {
+		return false
+	}
+	revset := jjBookmark(branch) + " ~ empty()"
+	if start != "" {
+		revset = "(" + revset + ") ~ ::" + start
+	}
+	out, err := jjRun(ctx, root, "--ignore-working-copy", "log", "--no-graph", "-r", revset, "-T", `commit_id ++ "\n"`)
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// jjChanges counts the paths the working-copy commit changes.
+func jjChanges(ctx context.Context, path string) (int, error) {
+	tree, _, err := SnapshotTree(ctx, path, 0)
+	if err != nil {
+		return 0, err
+	}
+	parent, err := HeadCommitCtx(ctx, path)
+	if err != nil {
+		return 0, err
+	}
+	out, err := runCtx(ctx, path, nil, "diff-tree", "-r", "--name-only", parent, tree)
+	if err != nil {
+		return 0, err
+	}
+	return len(strings.Fields(out)), nil
+}
+
+// jjStatusEnv is an index of the working-copy commit for git status to read
+// the workspace against: git's own index there is jj's export, or there is
+// none. done removes it.
+func jjStatusEnv(ctx context.Context, path string) (env []string, done func(), err error) {
+	tree, _, err := SnapshotTree(ctx, path, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	tmp, err := os.CreateTemp("", "tuios-jj-index-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	index := tmp.Name()
+	_ = tmp.Close()
+	_ = os.Remove(index)
+	done = func() { _ = os.Remove(index) }
+	env = []string{"GIT_INDEX_FILE=" + index}
+	if _, err := runCtx(ctx, path, env, "read-tree", tree); err != nil {
+		done()
+		return nil, nil, err
+	}
+	return env, done, nil
+}
+
+// jjRemove forgets the workspace at path and deletes its directory. The
+// forget snapshots the working copy first, so the work is in its commit.
+func jjRemove(path string) error {
+	if _, err := jjRun(context.Background(), path, "workspace", "forget"); err != nil {
+		return err
+	}
+	return os.RemoveAll(path)
 }

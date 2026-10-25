@@ -170,17 +170,33 @@ func JJCommit(ctx context.Context, root, revset string, snapshot bool) (string, 
 	return id, nil
 }
 
-// readJJ returns the state of the jj workspace at root.
-func readJJ(root, repoDir string) (State, bool) {
+// jjOps names the operation log's heads in the repository directory. jj
+// writes a new head for every operation, so the names change exactly when
+// a commit, a bookmark or the working copy jj recorded does.
+func jjOps(repoDir string) (string, error) {
 	heads, err := os.ReadDir(filepath.Join(repoDir, "op_heads", "heads"))
 	if err != nil {
-		return State{}, false
+		return "", err
 	}
 	names := make([]string, len(heads))
 	for i, h := range heads {
 		names[i] = h.Name()
 	}
-	ops := strings.Join(names, " ")
+	return strings.Join(names, " "), nil
+}
+
+// JJOps is jjOps for the jj repository r is in: a key that changes when
+// anything jj records does.
+func (r Repo) JJOps() (string, error) {
+	return jjOps(filepath.Join(r.Main, ".jj", "repo"))
+}
+
+// readJJ returns the state of the jj workspace at root.
+func readJJ(root, repoDir string) (State, bool) {
+	ops, err := jjOps(repoDir)
+	if err != nil {
+		return State{}, false
+	}
 
 	mu.Lock()
 	prev, had := jjCache[root]
@@ -295,10 +311,11 @@ func summarizeJJ(out string) State {
 		}
 	}
 
-	// Empty commits on top say nothing, however many there are. Trunk ends
-	// the walk, so a stack of nothing but empty commits is named by trunk.
+	// Empty commits on top say nothing, however many there are, unless one
+	// carries a bookmark, as a fresh workspace's does. Trunk ends the walk, so
+	// a stack of nothing but empty commits is named by trunk.
 	start := at
-	for start.empty && start.side == 'A' && len(start.parents) == 1 {
+	for start.empty && len(start.bookmarks) == 0 && start.side == 'A' && len(start.parents) == 1 {
 		p := byID[start.parents[0]]
 		if p == nil {
 			break
