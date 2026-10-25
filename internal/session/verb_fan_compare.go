@@ -357,8 +357,13 @@ func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo, ma
 		}
 		base = head
 	}
+	head, base, err := worktree.WorkRevs(ctx, wt.Path, base)
+	if err != nil {
+		row.Note = err.Error()
+		return
+	}
 	from := base
-	if sha, err := worktree.MergeBaseCtx(ctx, wt.Path, "HEAD", base); err == nil && sha != "" {
+	if sha, err := worktree.MergeBaseCtx(ctx, wt.Path, head, base); err == nil && sha != "" {
 		row.BaseSHA = sha
 		from = sha
 	} else if ctx.Err() != nil {

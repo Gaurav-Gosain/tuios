@@ -57,7 +57,7 @@ func benchOne(path string) {
 	if _, err := Ahead(path, "main"); err != nil {
 		panic(err)
 	}
-	if _, err := Merged(path, path, "", "main"); err != nil {
+	if _, err := Merged(path, path, "", "", "main"); err != nil {
 		panic(err)
 	}
 }

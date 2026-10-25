@@ -12947,6 +12947,14 @@ colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
 | Run on 2026-11-03: `childproc.OwnGroup` and `WaitDelay` cut from `readJJ` | `TestJJTimeoutHoldsWithAHungChild` (unit, `internal/gitstate`) | readJJ returned after about 20 s, the fake jj's child, not within `countTimeout` | **caught** |
 | Run on 2026-11-04: jj's `??` marker kept in the bookmark name | `TestRailGitJJProblems` | "the git section never showed the divergent commit (◇) with the branch row named feat": the row shows `feat??` | **caught** |
 | Run on 2026-11-05: `GitEnv` with `GIT_DIR` alone, no `GIT_WORK_TREE` | `TestReviewJJConflict`, `TestCheckpointJJRestore` | "git update-index: fatal: this operation must be run in a work tree" in the review, and "git checkout-index: ..." in the restore | **caught** |
+| Run on 2026-11-07: main `663b2c44c572`, a build without jj worktrees | `TestWorktreeJJSession` | "... is not a jj workspace: stat .../feat-jj/.jj: no such file" | **caught** |
+| Run on 2026-11-07: the cache lookup in `worktree.Merged` moved after `jjMergedTips` | `TestWorktreeJJSession` | "a repeated listing ran the merged check's jj again" | **caught** |
+| Run on 2026-11-07: the main-workspace check removed from `worktree.Merged` | `TestWorktreeJJSession` | "main on main reads as merged before any work" | **caught** |
+| Run on 2026-11-07: the squash check cut from `jjMerge` | `TestShipJJRefusals` | "ship merge --squash = <nil>", and the refused squash moved main | **caught** |
+| Run on 2026-11-07: the commit check cut from `jjPush` | `TestShipJJRefusals` | "the push never refused the moved bookmark" | **caught** |
+| Run on 2026-11-07: `fanRowChanges` taking the merge base from `HEAD` | `TestFanCompareJJ` | "the untouched attempt: ... 1 files, want ... 0 files", and the working one 3 files, want 2 | **caught** |
+| Run on 2026-11-07: `spawnBranches` asking `git for-each-ref` alone | `TestCockpitSpawnJJBookmarks` | "the Base list never offered feat/b, feat/a and main, newest first" | **caught** |
+| Run on 2026-11-07: `Detached` left unset in `jjLabel` | `TestCockpitSpawnJJBookmarks` | "the sheet offers the description \"wip\" as the base" | **caught** |
 
 The frames are `rail-jj-repo-row-*` under the test's artifact folder.
 

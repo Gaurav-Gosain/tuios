@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
 // FileStat is one file a worktree changed against a base.
@@ -132,7 +133,16 @@ func clipLine(s string) string {
 // ending in /. Removing the worktree deletes them, and git stash does not
 // keep them.
 func IgnoredFiles(ctx context.Context, path string, max int) ([]string, int, error) {
-	out, err := runCtx(ctx, path, nil, "status", "--porcelain", "--ignored", "--untracked-files=normal")
+	var env []string
+	if gitstate.Find(path).JJ {
+		var done func()
+		var err error
+		if env, done, err = jjStatusEnv(ctx, path); err != nil {
+			return nil, 0, err
+		}
+		defer done()
+	}
+	out, err := runCtx(ctx, path, env, "status", "--porcelain", "--ignored", "--untracked-files=normal")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -140,7 +150,7 @@ func IgnoredFiles(ctx context.Context, path string, max int) ([]string, int, err
 	n := 0
 	for line := range strings.SplitSeq(out, "\n") {
 		name, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "!! ")
-		if !ok {
+		if !ok || name == jjDir {
 			continue
 		}
 		n++

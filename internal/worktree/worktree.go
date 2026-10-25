@@ -143,6 +143,9 @@ func readHead(gitdir, commonDir, root string) string {
 // either. It is the one detection that runs git, because the caller is about
 // to run git anyway to add a worktree.
 func Root(dir string) (string, error) {
+	if r := gitstate.Find(dir); r.JJ {
+		return r.Main, nil
+	}
 	out, err := run(dir, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", errfmt.Errorf("%s is not inside a git repository: %w", dir, err)
@@ -193,6 +196,9 @@ func ValidBranch(name string) error {
 
 // BranchExists reports whether repoRoot has a local branch by that name.
 func BranchExists(repoRoot, branch string) bool {
+	if r := gitstate.Find(repoRoot); r.JJ {
+		return jjBookmarkExists(context.Background(), r.Root, branch)
+	}
 	_, err := run(repoRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	return err == nil
 }
@@ -209,6 +215,9 @@ func Add(repoRoot, path, branch, base string) (created bool, err error) {
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // a folder in the user's own tree, with ordinary permissions
 		return false, err
+	}
+	if r := gitstate.Find(repoRoot); r.JJ {
+		return jjAdd(r.Root, path, branch, base)
 	}
 	// "--" ends the options, so a base or a path that starts with "-",
 	// such as --force, is never read as one.
@@ -234,6 +243,9 @@ func Add(repoRoot, path, branch, base string) (created bool, err error) {
 // Changes counts the paths in a worktree that differ from HEAD, untracked
 // files included. Zero means nothing would be lost by removing it.
 func Changes(path string) (int, error) {
+	if gitstate.Find(path).JJ {
+		return jjChanges(context.Background(), path)
+	}
 	out, err := run(path, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return 0, err
@@ -264,7 +276,15 @@ func statusEntries(path string) (ignored, untracked []string, err error) {
 // count of all of them minus the ignored is the count a plain status, which
 // knows nothing of ignored trees, would have printed.
 func statusRecords(path string) (ignored, untracked []string, records int, err error) {
-	out, err := run(path, "status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching")
+	var env []string
+	if gitstate.Find(path).JJ {
+		var done func()
+		if env, done, err = jjStatusEnv(context.Background(), path); err != nil {
+			return nil, nil, 0, err
+		}
+		defer done()
+	}
+	out, err := runEnv(path, env, "status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching")
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -273,7 +293,7 @@ func statusRecords(path string) (ignored, untracked []string, records int, err e
 			continue
 		}
 		records++
-		if entry, ok := strings.CutPrefix(record, "!! "); ok {
+		if entry, ok := strings.CutPrefix(record, "!! "); ok && entry != jjDir {
 			ignored = append(ignored, entry)
 		} else if entry, ok := strings.CutPrefix(record, "?? "); ok {
 			untracked = append(untracked, entry)
@@ -293,6 +313,12 @@ func ChangeCounts(path string) (changes, ignored int, err error) {
 		return 0, 0, err
 	}
 	changes = records - len(entries)
+	// jj's working copy is a commit: what differs from it is jj's to say.
+	if gitstate.Find(path).JJ {
+		if changes, err = jjChanges(context.Background(), path); err != nil {
+			return 0, 0, err
+		}
+	}
 	for _, entry := range entries {
 		c, err := countFiles(filepath.Join(path, entry))
 		if err != nil {
@@ -381,6 +407,10 @@ func findNestedRepo(dir string) (bool, error) {
 // keeping the branch keeps them; on a detached HEAD nothing holds them once
 // the worktree is gone.
 func OwnCommits(path string) (int, error) {
+	// jj keeps every commit, a forgotten workspace's included.
+	if gitstate.Find(path).JJ {
+		return 0, nil
+	}
 	out, err := run(path, "rev-list", "--count", "HEAD", "--not", "--branches", "--tags", "--remotes")
 	if err != nil {
 		return 0, err
@@ -390,7 +420,11 @@ func OwnCommits(path string) (int, error) {
 
 // Ahead counts the commits on the worktree's HEAD that base does not have.
 func Ahead(path, base string) (int, error) {
-	out, err := run(path, "rev-list", "--count", base+"..HEAD")
+	head, from, err := WorkRevs(context.Background(), path, base)
+	if err != nil {
+		return 0, err
+	}
+	out, err := run(path, "rev-list", "--count", from+".."+head)
 	if err != nil {
 		return 0, err
 	}
@@ -411,6 +445,9 @@ func Stash(path, message string) error {
 // branch is never touched: it stays in the repository with every commit the
 // worktree made.
 func Remove(repoRoot, path string, force bool) error {
+	if gitstate.Find(path).JJ {
+		return jjRemove(path)
+	}
 	args := []string{"worktree", "remove"}
 	if force {
 		args = append(args, "--force")
@@ -423,6 +460,23 @@ func Remove(repoRoot, path string, force bool) error {
 // Diff is the worktree's uncommitted change against HEAD, followed by the
 // untracked files git diff does not show. With stat it is the summary form.
 func Diff(path string, stat bool) (string, error) {
+	// jj tracks every file, and its uncommitted change is @ against @-.
+	if gitstate.Find(path).JJ {
+		ctx := context.Background()
+		tree, _, err := SnapshotTree(ctx, path, 0)
+		if err != nil {
+			return "", err
+		}
+		parent, err := HeadCommitCtx(ctx, path)
+		if err != nil {
+			return "", err
+		}
+		args := []string{"diff", parent, tree}
+		if stat {
+			args = append(args, "--stat")
+		}
+		return run(path, args...)
+	}
 	args := []string{"diff", "HEAD"}
 	if stat {
 		args = append(args, "--stat")
@@ -453,7 +507,11 @@ func Diff(path string, stat bool) (string, error) {
 
 // Log lists the commits the worktree made on top of base, one line each.
 func Log(path, base string) (string, error) {
-	return run(path, "log", "--oneline", base+"..HEAD")
+	head, from, err := WorkRevs(context.Background(), path, base)
+	if err != nil {
+		return "", err
+	}
+	return run(path, "log", "--oneline", from+".."+head)
 }
 
 // run executes git in dir and returns its stdout. A failure carries git's own

@@ -25,13 +25,10 @@ import (
 // commits past the ones the receiver is assumed to have.
 var ErrEmptyBundle = errors.New("no commits to bundle")
 
-// HeadCommit is the full hash of HEAD in the worktree at path.
+// HeadCommit is the full hash of HEAD in the worktree at path, @- in a jj
+// workspace.
 func HeadCommit(path string) (string, error) {
-	out, err := run(path, "rev-parse", "--verify", "HEAD^{commit}")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
+	return HeadCommitCtx(context.Background(), path)
 }
 
 // CurrentBranch is the branch HEAD points at in the worktree at path, read

@@ -443,16 +443,23 @@ func spawnInfoCmd(gen uint64, folder string) tea.Cmd {
 }
 
 // spawnBranches are the repository's local branches, the most recent first,
-// at most 30.
+// at most 30. In jj they are the local bookmarks, newest commit first.
 func spawnBranches(root string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := childproc.Git(ctx, root, "for-each-ref", "--sort=-committerdate", "--count=30",
-		"--format=%(refname:short)", "refs/heads").Output()
+	cmd := childproc.Git(ctx, root, "for-each-ref", "--sort=-committerdate", "--count=30",
+		"--format=%(refname:short)", "refs/heads")
+	if gitstate.Find(root).JJ {
+		cmd = childproc.CommandContext(ctx, "jj", "--ignore-working-copy", "--no-pager", "--color=never", "log", "--no-graph",
+			"-r", "latest(bookmarks(), 30)", "-T", `local_bookmarks.map(|b| b.name()).join("\n") ++ "\n"`)
+		cmd.Dir = root
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
-	return strings.Fields(string(out))
+	names := strings.Fields(string(out))
+	return names[:min(len(names), 30)]
 }
 
 // applySpawnInfo takes what the opening command read.

@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -613,7 +614,7 @@ func (c worktreeChanges) fill() {
 	// Merged into its base, or into the base's upstream. Cached per
 	// tip in the worktree package, so a polled listing runs git
 	// again only when a branch moves.
-	into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.StartCommit, wt.Base)
+	into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.Branch, wt.StartCommit, wt.Base)
 	row["merged"] = into != ""
 	if into != "" {
 		row["merged_into"] = into
@@ -673,6 +674,11 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 			})
 		}
 		out["changes"] = changes
+		// A jj workspace's work is its working-copy commit, which forgetting
+		// the workspace keeps: nothing to stash, nothing to lose.
+		if gitstate.Find(info.Path).JJ {
+			changes = 0
+		}
 		if own, err := worktree.OwnCommits(info.Path); err == nil {
 			out["own_commits"] = own
 			if own > 0 && !p.Force {
