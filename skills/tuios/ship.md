@@ -64,6 +64,20 @@ again every minute while a client is attached. The rail shows it on the
 session's agent rows (`PR #12 open pass`), and it is `pr` in
 `worktree ls --json` and `ls --json`.
 
+## In a jj workspace
+
+jj checks out no branch and has no staging area, so ship goes by bookmark.
+The branch is the bookmark on `@`, else on `@-` when `@` is empty. Without
+one, ship refuses: create it with `jj bookmark create <name> -r @-`.
+
+- `ship commit` runs `jj commit`. The bookmarks on the commit it was made
+  on move to the new commit, trunk's excepted.
+- `ship merge` only fast-forwards the target's bookmark, trunk's by default.
+  A branch the target moved past is refused with the `jj rebase` to run.
+  `--squash` is refused: squash with `jj squash` first.
+- `ship push` runs `jj git push` of the bookmark, and is refused when the
+  bookmark moved after the person allowed the push.
+
 ## Grants
 
 From a pane, `ship-commit` and `ship-merge` need `write` on a pane that holds
