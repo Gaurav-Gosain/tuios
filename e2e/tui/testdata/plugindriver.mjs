@@ -21,6 +21,8 @@ import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import assert from "node:assert/strict";
+import { appendFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const [harness, file] = process.argv.slice(2);
 const mod = await import(pathToFileURL(file).href);
@@ -29,19 +31,28 @@ let idle = true;
 
 let dispatch;
 if (harness === "pi" || harness === "omp") {
+  let sessionId = harness + "-e2e", sessionFile = "", leaf;
   const ctx = {
     mode: "tui",
     isIdle: () => idle,
-    sessionManager: { getSessionId: () => harness + "-e2e", getSessionFile: () => "" },
+    sessionManager: { getSessionId: () => sessionId, getSessionFile: () => sessionFile, getLeafId: () => leaf },
   };
   if (harness === "omp") ctx.agent = { kind: "main" };
   mod.default({ on: (name, fn) => handlers.set(name, fn) });
   dispatch = async (line) => {
+    ctx.mode = line.mode ?? "tui";
+    if (typeof line.sessionId === "string") sessionId = line.sessionId;
+    if (typeof line.sessionFile === "string") sessionFile = line.sessionFile;
+    if ("leaf" in line) leaf = line.leaf;
     if (harness === "omp") {
       ctx.agent.kind = line.agentKind ?? "main";
       ctx.mode = line.mode ?? "tui";
     }
-    return handlers.get(line.type)?.(line.event ?? {}, ctx);
+    const result = await handlers.get(line.type)?.(line.event ?? {}, ctx);
+    if (line.persistenceDelay) await sleep(line.persistenceDelay);
+    if ("persistLeaf" in line) leaf = line.persistLeaf;
+    if (line.persistRecord) appendFileSync(sessionFile, JSON.stringify(line.persistRecord) + "\n");
+    return result;
   };
 } else if (harness === "amp") {
   await mod.default({
@@ -85,4 +96,5 @@ for await (const text of createInterface({ input: process.stdin })) {
   const line = JSON.parse(text);
   if (typeof line.idle === "boolean") idle = line.idle;
   await dispatch(line);
+  if (line.ack) console.log("DRIVER-ACK " + line.ack);
 }

@@ -24,6 +24,9 @@ type AgentSessionReport struct {
 	foreignPane bool
 	// HarnessIsCaller is AgentReport.HarnessIsCaller.
 	HarnessIsCaller bool
+	// TranscriptOnly is a metadata update for the conversation already in
+	// the pane, never a request to replace it with a different conversation.
+	TranscriptOnly bool
 }
 
 // errAgentSessionUnchanged tells mutateState that the report named the id the
@@ -75,6 +78,10 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		}
 		if w.AgentHarness != "" && w.AgentHarness != r.Harness {
 			reason = agentRefusedForeignHarness
+			return errAgentReportRefused(reason)
+		}
+		if r.TranscriptOnly && w.AgentSessionID != "" && w.AgentSessionID != r.SessionID {
+			reason = agentRefusedForeignSession
 			return errAgentReportRefused(reason)
 		}
 		owner := s.agentHarnessPIDs[w.ID].pid

@@ -9476,3 +9476,18 @@ Without the busy loops, upstream main failed one run in three (2.6 s) with tuios
 | The projection cache never hit | `TestPiReadKeepsItsProjectionBySizeAndTime`: "a file with the same size and time was read again" | **caught** |
 | A record past `lineMax` fails the whole view | `TestPiReadBounds/long_record`: "transcript too large to read whole" | **caught** |
 | `{pi_agent}` left unexpanded | `TestPiAgentPlaceholder`: `Root()` is empty in five of its six cases | **caught** |
+
+## The entry a Pi session has selected is followed
+
+`TestPiTranscriptFollowsSelectedBranch` and `TestPiTranscriptExtension` (in `agent_transcript_pi_lifecycle_test.go`) drive the real hook, the daemon, the Inbox and the generated Pi extension, which runs under a Node stand-in for Pi's extension API that supplies only lifecycle events and appends to the session file the way Pi does. Run on 2026-10-25 on Linux against upstream main at e48fc3b0.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The reader is never given the selected entry (`verb_agent_transcript.go`) | `TestPiTranscriptFollowsSelectedBranch`: "same-file branch selection did not reset the conversation" | **caught** |
+| No `transcript` event when an existing join's selection changes | the same test: "no Pi transcript event: stream read timed out" | **caught** |
+| The extension has no `session_tree` handler | `TestPiTranscriptExtension/the_extension_follows_a_session_through_a_resume...`: "Pi conversation never showed \"ABANDONED-BRANCH\"" | **caught** |
+| `session_start` never starts the file watch (the `startWatching` call) | `.../a_message_is_shown_once_it_is_persisted...` and `.../a_custom_message_appended_at_rest_is_shown`: the new message "never showed" | **caught** |
+| An entry the daemon already has is reported again | `.../a_selection_already_reported_spawns_nothing`: "reported again 2 times" | **caught** |
+| Shutdown waits for the whole backlog (`DRAIN_MS` at 60 s) | `.../a_slow_daemon_cannot_hold_up_shutdown`: "report backlog made Pi shutdown take 3.37s" | **caught** |
+| Superseded selections are not merged | `.../selections_that_supersede_one_another_are_merged`: "want the start and one merged selection, got 11 reports" | **caught** |
+| `enqueue` returns before it queues anything | `.../a_slow_daemon_cannot_hold_up_shutdown`: "the slow daemon was sent 0 reports, so the backlog was never built", and `.../selections_that_supersede_one_another_are_merged`: "want the start and one merged selection, got 0 reports" | **caught** |

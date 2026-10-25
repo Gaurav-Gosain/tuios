@@ -54,6 +54,9 @@ type transcriptJoin struct {
 	// (harness.ReaderJSONL) gives a turn state. Every other format is joined
 	// for the person to read, and its growth raises the transcript event.
 	format string
+	// leaf is Pi's selected tree entry; nil means an older integration did
+	// not report a selection. Like the path, it stays in daemon memory only.
+	leaf *string
 	// doc says the file is read whole, so its growth is told by its size and
 	// time (docSize, docMod) rather than by an offset: the harness rewrites it
 	// whole, or it is a tree of entries (Pi) of which one branch is shown.
@@ -123,6 +126,12 @@ func (s *Session) JoinAgentTranscript(windowID, harnessID, path string, exact bo
 // JoinAgentTranscriptAs is JoinAgentTranscript for a transcript in the named
 // format, the reader of the harness's manifest.
 func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string, exact bool) error {
+	return s.joinAgentTranscriptLeaf(windowID, harnessID, format, path, exact, nil)
+}
+
+// joinAgentTranscriptLeaf is JoinAgentTranscriptAs with the entry of a tree the
+// harness has selected, nil when it reports none.
+func (s *Session) joinAgentTranscriptLeaf(windowID, harnessID, format, path string, exact bool, leaf *string) error {
 	if format == "" {
 		format = harness.ReaderJSONL
 	}
@@ -136,12 +145,16 @@ func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string
 
 	s.transcripts.mu.Lock()
 	if prev, ok := s.transcripts.joins[windowID]; ok {
-		if prev.reader.Path() == abs {
+		if prev.reader.Path() == abs && prev.harness == harnessID && prev.format == format {
 			// Already joined to this file. Upgrading a searched join to an exact
 			// one is worth recording; rejoining is not, because it would throw
 			// away the read offset and re-read the tail window.
 			prev.exact = prev.exact || exact
+			changed := setTranscriptLeaf(prev, leaf)
 			s.transcripts.mu.Unlock()
+			if changed {
+				s.docEvent(windowID, prev)
+			}
 			return nil
 		}
 		if prev.exact && !exact {
@@ -154,6 +167,7 @@ func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string
 		windowID: windowID, harness: harnessID, format: format, reader: transcript.NewReader(abs), exact: exact,
 		doc: transcriptview.IsDocument(format, abs) || transcriptview.IsTree(format),
 	}
+	setTranscriptLeaf(j, leaf)
 	if s.transcripts.joins == nil {
 		s.transcripts.joins = make(map[string]*transcriptJoin)
 	}
@@ -170,6 +184,17 @@ func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string
 	}
 	s.readAgentTranscript(windowID)
 	return nil
+}
+
+// setTranscriptLeaf copies optional selection metadata under transcripts.mu.
+// An old hook with no selection must not erase one supplied by a newer hook.
+func setTranscriptLeaf(j *transcriptJoin, leaf *string) bool {
+	if leaf == nil || (j.leaf != nil && *j.leaf == *leaf) {
+		return false
+	}
+	value := *leaf
+	j.leaf = &value
+	return true
 }
 
 // JoinAgentSession binds a window to one session of a harness's store (the

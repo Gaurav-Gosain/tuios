@@ -20,6 +20,16 @@
     "want": {"state": "done", "agent_session_id": "pi-1"}
   },
   {
+    "name": "agent_start with selected transcript",
+    "payload": {"hook_event_name": "agent_start", "session_id": "pi-1", "transcript_path": "/home/u/.pi/agent/sessions/project/session.jsonl", "transcript_leaf": "u1"},
+    "want": {"state": "working", "agent_session_id": "pi-1", "transcript_path": "/home/u/.pi/agent/sessions/project/session.jsonl", "transcript_leaf": "u1"}
+  },
+  {
+    "name": "state-neutral transcript rewind before root",
+    "payload": {"hook_event_name": "transcript_update", "session_id": "pi-1", "transcript_path": "/home/u/.pi/agent/sessions/project/session.jsonl", "transcript_leaf": ""},
+    "want": {"session_only": true, "agent_session_id": "pi-1", "transcript_path": "/home/u/.pi/agent/sessions/project/session.jsonl", "transcript_leaf": ""}
+  },
+  {
     "name": "unknown event",
     "payload": {"hook_event_name": "tool_call", "session_id": "pi-1"},
     "skip": "event not mapped"

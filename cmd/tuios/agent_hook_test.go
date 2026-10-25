@@ -24,7 +24,10 @@ type fakeDaemon struct {
 	// noActivityVerb stands in for a daemon from before
 	// report-agent-activity, which answers it unknown_verb.
 	noActivityVerb bool
-	resolved       map[string]any
+	// noTranscript models a daemon with identity-only reports but no Pi leaf
+	// or transcript-path parameters on that verb.
+	noTranscript bool
+	resolved     map[string]any
 }
 
 // oldSetAgentStateParams are the params set-agent-state took before the hook
@@ -53,7 +56,16 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 			if f.old {
 				return json.RawMessage(`{"verbs":[]}`), nil
 			}
-			return json.RawMessage(`{"verbs":[{"verb":"set-agent-session"}]}`), nil
+			names := []string{"session", "window", "harness", "agent_session_id", "harness_pid"}
+			if !f.noTranscript {
+				names = append(names, "transcript_path", "transcript_leaf")
+			}
+			var params []map[string]string
+			for _, name := range names {
+				params = append(params, map[string]string{"name": name})
+			}
+			out, _ := json.Marshal(map[string]any{"verbs": []any{map[string]any{"verb": "set-agent-session", "params": params}}})
+			return out, nil
 		}
 		names := oldSetAgentStateParams
 		if !f.old {
@@ -88,6 +100,31 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		return json.RawMessage(`{"applied":true,"agent_session_id":"` + p["agent_session_id"].(string) + `"}`), nil
 	}
 	return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
+}
+
+// Wire compatibility: an empty selected leaf must survive as an explicit
+// field, but an older daemon must receive neither optional transcript field.
+func TestPiTranscriptHookNegotiatesLeaf(t *testing.T) {
+	for _, old := range []bool{false, true} {
+		t.Run(map[bool]string{false: "current", true: "older"}[old], func(t *testing.T) {
+			h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{noTranscript: old}}
+			h.run(t, agentHookOptions{}, `{"hook_event_name":"transcript_update","session_id":"pi-1","transcript_path":"/synthetic/pi.jsonl","transcript_leaf":""}`, "pi")
+			var report map[string]any
+			for _, call := range h.daemon.calls {
+				if call.verb == "set-agent-session" {
+					report = call.params
+				}
+			}
+			if report == nil || report["agent_session_id"] != "pi-1" {
+				t.Fatalf("Pi leaf update did not use the identity-only wire path: %v\n%s", h.daemon.calls, h.stderr.String())
+			}
+			_, hasLeaf := report["transcript_leaf"]
+			_, hasPath := report["transcript_path"]
+			if hasLeaf == old || hasPath == old || (!old && report["transcript_leaf"] != "") || len(h.daemon.reports()) != 0 {
+				t.Fatalf("Pi leaf capability negotiation: %v", report)
+			}
+		})
+	}
 }
 
 // activities are the report-agent-activity calls the hook made.

@@ -414,9 +414,9 @@ var targets = []*Target{
 		},
 	},
 	{
-		// Version 2 reports a blocking prompt (ui_prompt_start) as
-		// needs_input and its answer (ui_prompt_end) as the end of the block.
-		ID: Pi, Name: "Pi", Binary: "pi", Version: 2, Reports: ReportsState,
+		// Version 3 reports the selected transcript leaf, including tree
+		// navigation with no file append, and serializes report delivery.
+		ID: Pi, Name: "Pi", Binary: "pi", Version: 3, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/pi (TypeScript extensions load from ~/.pi/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".pi", "agent") },
 		File:      filepath.Join("extensions", "tuios-agent-state.ts"),

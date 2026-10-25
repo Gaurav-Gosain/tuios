@@ -272,6 +272,9 @@ type Options struct {
 	// Session names the session in a format whose store holds many
 	// (FormatOpenCode), as the harness's plugin reported it.
 	Session string
+	// Leaf selects a Pi tree entry. Nil uses the last complete entry; a
+	// present empty string selects the empty branch before its first entry.
+	Leaf *string
 }
 
 // Page is one read.

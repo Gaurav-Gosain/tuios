@@ -609,12 +609,14 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 // reportHookEvent sends what one hook event reports, once the pane is found.
 func reportHookEvent(out agentHookOutcome, client verbCaller, hio agentHookIO) agentHookOutcome {
 	if out.Report.SessionOnly {
-		res, err := reportHookSession(client, out.Session, out.Window, out.Harness, out.HarnessPID, out.Report.SessionID)
+		res, dropped, err := reportHookSession(client, out.Session, out.Window, out.Harness, out.HarnessPID, *out.Report)
+		out.Unsupported = dropped
 		if err != nil {
 			out.Error = err.Error()
 			return out
 		}
 		out.Applied, out.Reason = &res.Applied, res.Reason
+		out.TranscriptRefused = res.TranscriptRefused
 		return out
 	}
 	// An event set-agent-state does not take goes with report-agent-activity:
@@ -779,7 +781,7 @@ type hookReportResult struct {
 // the ones every daemon takes. activity is the hook event for the pane's
 // activity ring; a daemon from before it drops it, and the report goes
 // without it.
-var hookFields = []string{"kind", "agent_session_id", "transcript_path", "if_state", "harness_pid", "activity", "agent_cwd", "session_start"}
+var hookFields = []string{"kind", "agent_session_id", "transcript_path", "transcript_leaf", "if_state", "harness_pid", "activity", "agent_cwd", "session_start"}
 
 // setAgentStateParams asks the daemon which params its set-agent-state takes.
 //
@@ -873,6 +875,9 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 	if r.SessionStart && r.SessionID != "" {
 		extra["session_start"] = true
 	}
+	if r.TranscriptLeaf != nil {
+		extra["transcript_leaf"] = *r.TranscriptLeaf
+	}
 	var dropped []string
 	if len(extra) > 0 {
 		known, err := setAgentStateParams(client)
@@ -908,42 +913,69 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 // daemon older than the verb would answer unknown_verb, which costs nothing,
 // but the hook asks list-verbs first anyway so --explain can say why nothing
 // was stored.
-func reportHookSession(client verbCaller, sess, window, harness string, harnessPID int, sessionID string) (hookReportResult, error) {
+func reportHookSession(client verbCaller, sess, window, harness string, harnessPID int, r integration.Report) (hookReportResult, []string, error) {
 	raw, err := client.Call("list-verbs", map[string]any{"verb": "set-agent-session"})
 	if err != nil {
-		return hookReportResult{}, fmt.Errorf("could not ask the daemon whether it has set-agent-session: %w", err)
+		return hookReportResult{}, nil, fmt.Errorf("could not ask the daemon whether it has set-agent-session: %w", err)
 	}
 	var verbs struct {
 		Verbs []struct {
-			Verb string `json:"verb"`
+			Verb   string `json:"verb"`
+			Params []struct {
+				Name string `json:"name"`
+			} `json:"params"`
 		} `json:"verbs"`
 	}
 	if err := json.Unmarshal(raw, &verbs); err != nil {
-		return hookReportResult{}, err
+		return hookReportResult{}, nil, err
 	}
 	known := false
+	fields := map[string]bool{}
 	for _, v := range verbs.Verbs {
 		known = known || v.Verb == "set-agent-session"
+		if v.Verb == "set-agent-session" {
+			for _, p := range v.Params {
+				fields[p.Name] = true
+			}
+		}
 	}
 	if !known {
-		return hookReportResult{}, errors.New("the running daemon predates set-agent-session, so the session was not reported. It works once the daemon restarts")
+		return hookReportResult{}, nil, errors.New("the running daemon predates set-agent-session, so the session was not reported. It works once the daemon restarts")
 	}
 	params := map[string]any{
 		"session":          sess,
 		"window":           window,
 		"harness":          harness,
-		"agent_session_id": sessionID,
+		"agent_session_id": r.SessionID,
 	}
 	if harnessPID > 1 {
 		params["harness_pid"] = harnessPID
 	}
+	var dropped []string
+	for _, key := range []string{"transcript_path", "transcript_leaf"} {
+		var value any
+		if key == "transcript_path" && r.TranscriptPath != "" {
+			value = r.TranscriptPath
+		}
+		if key == "transcript_leaf" && r.TranscriptLeaf != nil {
+			value = *r.TranscriptLeaf
+		}
+		if value == nil {
+			continue
+		}
+		if fields[key] {
+			params[key] = value
+		} else {
+			dropped = append(dropped, key)
+		}
+	}
 	raw, err = client.Call("set-agent-session", params)
 	if err != nil {
-		return hookReportResult{}, err
+		return hookReportResult{}, dropped, err
 	}
 	var res hookReportResult
 	if err := json.Unmarshal(raw, &res); err != nil {
-		return hookReportResult{}, err
+		return hookReportResult{}, dropped, err
 	}
-	return res, nil
+	return res, dropped, nil
 }

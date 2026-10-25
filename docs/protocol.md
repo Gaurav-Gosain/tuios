@@ -4938,12 +4938,12 @@ the session has no value of its own.
 ### set-agent-state
 
 Record the agent state a pane reports. Params: `session`, `window`, `state`
-(required), `message`, `source` (default `report`), `harness`, and five fields
+(required), `message`, `source` (default `report`), `harness`, and fields
 a hook reporter adds, each optional. Without `window`, a caller in a pane
 reports about its own pane, and its own session when `session` is omitted. A
 caller outside every pane reports about the focused window, as before.
 
-The five hook fields:
+The optional hook fields:
 
 - `kind`: `approval` or `question`, what a `needs_input` state waits for. Only
   valid with `needs_input`. Stored as the window's `agent_kind` and reported by
@@ -4955,6 +4955,14 @@ The five hook fields:
 - `transcript_path`: the transcript file the harness writes. For a harness whose
   manifest has a transcript reader, the window is joined to exactly that file.
   It is held in daemon memory and never synced.
+- `transcript_leaf`: the entry of a tree-structured transcript, which today is
+  Pi's, that the harness has selected. It needs `transcript_path` and a harness
+  whose manifest names a tree reader, or the call is `invalid_params`. At most
+  128 ASCII letters, digits, `_` or `-`. A present empty string selects the empty
+  branch before the first entry. Omitting it keeps the selection already
+  reported, or shows the branch that ends at the last complete entry for an
+  older integration. It stays in daemon memory, never in persisted window state
+  or events.
 - `if_state`: comma-separated states. The report applies only while the window
   is in one of them.
 - `harness_pid`: the pid of the harness process that ran the hook. Read only
@@ -5038,7 +5046,17 @@ pane's agent state, the source that holds it, or its harness attribution. It is
 what `tuios agent-hook` sends for a harness whose hooks can name the
 conversation but cannot be trusted with its state, so the pane's screen rules
 keep deciding the state. Params: `session`, `window`, `harness` (required),
-`agent_session_id` (required, at most 256 bytes), `harness_pid`.
+`agent_session_id` (required, at most 256 bytes), `harness_pid`, and optional
+`transcript_path` and `transcript_leaf`.
+
+The transcript fields use the same checks and meanings as in `set-agent-state`.
+They name the conversation already in the pane: a different session id is
+refused with `foreign_session`, even at rest, so a delayed old report cannot
+replace the current conversation. An accepted leaf change raises `transcript`
+even when the file did not change. It does not change the state, its time, its
+source, the prompt or the completion count. A rejected path is explained in
+`transcript_refused`, and a refusal for the same conversation keeps the previous
+join.
 
 ```json
 {"verb": "set-agent-session", "params": {"session": "work", "window": "build", "harness": "qwen", "agent_session_id": "5f1c", "harness_pid": 4100}}
@@ -5073,7 +5091,8 @@ already grants any socket caller, the one field and no state.
 
 Wire compatibility: a new verb. An older daemon answers `unknown_verb`, and
 `tuios agent-hook` asks `list-verbs` first and sends nothing to a daemon
-without it.
+without it. The optional transcript fields are sent only when `list-verbs` names
+them; an older daemon gets the identity report without them.
 
 ### report-agent-activity
 
@@ -6611,6 +6630,15 @@ with no file (`--no-session`) has no transcript to read, and an accepted new
 session identity with no usable file clears the previous conversation rather
 than showing stale history.
 
+The version 3 Pi integration reports the exact file and the entry Pi has
+selected, which includes `/tree` navigation that appends nothing to the file,
+and the reader shows that branch. Update the integration through your normal
+management and reload or restart Pi to load it. An older integration reports no
+selection, so the reader keeps showing the branch that ends at the last complete
+entry and cannot see a rewind that exists only in memory. An entry named before
+its line is written gives an empty view until the line is complete, never
+another branch.
+
 Pi reads are bounded: a file over 32 MiB or with more than 100,000 entries is
 refused, and a record over 16 MiB is left out, as the other readers skip a
 line that long. The daemon keeps what it parsed for a short time, keyed by the
@@ -7024,7 +7052,7 @@ Event types:
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
 | `agent-activity` | One entry of an agent pane's activity ring, as [agent-activity](#agent-activity) returns it. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `entry` |
-| `transcript` | The transcript that a pane is joined to grew. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. An event for a document or for a Pi session carries no `cursor`: read with the cursor of your last reply. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
+| `transcript` | The transcript that a pane is joined to grew, or the entry a Pi session has selected changed. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. An event for a document or for a Pi session carries no `cursor`: read with the cursor of your last reply. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
 | `transfer` | A copy the daemon runs (see [Files and transfers](#files-and-transfers)) changed. `action` is `created`, `state`, `ended` or `removed`, and `transfer` is its row as `transfer-list` returns it. `removed` says a copy that ended left the list, by `transfer-clear` or 30 minutes after it ended, and carries its last row. A state is said once per change; a folder copy going between `running` and `verifying` for each file is not a change. A copy the daemon takes back from its journal at start says `state` once. | `action`, `transfer` |
 | `transfer-progress` | A copy's row while its bytes move, at most four a second per copy. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action` (`progress`), `transfer` |
 | `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |

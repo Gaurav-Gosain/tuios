@@ -146,6 +146,9 @@ type Report struct {
 	// over. See Manifest.SharedServer in internal/harness.
 	SessionStart   bool   `json:"session_start,omitempty"`
 	TranscriptPath string `json:"transcript_path,omitempty"`
+	// TranscriptLeaf is Pi's selected tree entry. A present empty string
+	// means the empty branch; nil means an older hook did not report it.
+	TranscriptLeaf *string `json:"transcript_leaf,omitempty"`
 	// Cwd is the folder the harness names in the hook payload. The daemon
 	// keeps the first one of a session as the agent's start folder.
 	Cwd string `json:"agent_cwd,omitempty"`

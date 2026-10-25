@@ -24,6 +24,10 @@ type docKey struct {
 	path string
 	size int64
 	mod  time.Time
+	// leaf is the selected entry of a Pi tree, which is a different view of the
+	// same file. hasLeaf tells an empty leaf from none.
+	leaf    string
+	hasLeaf bool
 }
 
 type docEntry struct {

@@ -503,6 +503,9 @@ func TestQwenApprovalFromTheInbox(t *testing.T) {
 // named in the environment.
 type pluginDriver struct {
 	stdin io.WriteCloser
+	// outFile is what the driver prints, where it answers an event that
+	// carries an ack.
+	outFile string
 }
 
 // pluginLoadDeadline is a failsafe, not a budget. The driver says when the
@@ -548,7 +551,7 @@ func realNode() (string, error) {
 
 // startPlugin renders harness's plugin with tuios integration install and
 // starts it under the driver script, which knows each harness's API shape.
-func startPlugin(t *testing.T, base, harness, session, window string) *pluginDriver {
+func startPlugin(t *testing.T, base, harness, session, window string, reportCommand ...string) *pluginDriver {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not installed")
@@ -577,7 +580,11 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 		file = filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "opencode", "plugins", "tuios-agent-state.js")
 	}
 	installHarness := strings.TrimSuffix(harness, "-v2")
-	if out, err := tuiosCLIEnv(t, base, env, "integration", "install", installHarness, "--command", tuiosBin); err != nil {
+	command := tuiosBin
+	if len(reportCommand) > 0 {
+		command = reportCommand[0]
+	}
+	if out, err := tuiosCLIEnv(t, base, env, "integration", "install", installHarness, "--command", command); err != nil {
 		t.Fatalf("integration install %s: %v\n%s", harness, err, out)
 	}
 	if harness == "opencode-v2" {
@@ -636,7 +643,7 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 		data, _ := os.ReadFile(errFile)
 		return string(data)
 	}
-	d := &pluginDriver{}
+	d := &pluginDriver{outFile: outFile}
 	start := time.Now()
 	deadline := start.Add(pluginLoadDeadline)
 	for !printed("DRIVER-READY") {
@@ -675,6 +682,20 @@ func (d *pluginDriver) emit(t *testing.T, event map[string]any) {
 	if _, err := d.stdin.Write(append(line, '\n')); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
+}
+
+// waitAck waits for the driver to print the ack an event carried. The driver
+// prints it after the plugin's handler for that event returned, so a handler
+// that waits on its own reports has finished by then.
+func (d *pluginDriver) waitAck(t *testing.T, ack string) {
+	t.Helper()
+	for end := time.Now().Add(uiTimeout); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		data, _ := os.ReadFile(d.outFile)
+		if slices.Contains(strings.Split(string(data), "\n"), "DRIVER-ACK "+ack) {
+			return
+		}
+	}
+	t.Fatalf("the plugin driver never acknowledged %q", ack)
 }
 
 // TestOpenCodeV2PluginReportsOnlyItsSession exercises the installed plugin and

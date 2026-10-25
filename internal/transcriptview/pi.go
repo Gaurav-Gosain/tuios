@@ -23,14 +23,18 @@ const FormatPi = "pi-jsonl"
 // ErrPiTree reports invalid or unavailable ancestry, without naming any content.
 var ErrPiTree = errors.New("transcriptview: Pi branch is unavailable or invalid")
 
+var errPiPending = errors.New("transcriptview: selected Pi entry is not complete yet")
+
 // piNodesMax bounds the metadata index as well as the snapshot's byte bound.
 const piNodesMax = 100000
 
-// piRead reads the conversation on the branch that ends at the last complete
-// entry of a Pi session file. The projection of that branch is kept for a short
-// time like a document's records (docCache), so paging through a long session,
-// or a burst of events, does not read and parse the whole file again. The key
-// is the file's size and modification time, so an appended file is read again.
+// piRead reads the conversation on the branch that ends at the selected entry
+// of a Pi session file, or at its last complete entry when none is selected.
+// The projection of that branch is kept for a short time like a document's
+// records (docCache), so paging through a long session, or a burst of events,
+// does not read and parse the whole file again. The key is the file's size and
+// modification time and the selected entry, so an appended file, or another
+// branch of it, is read again.
 func piRead(path string, opts Options) (Page, error) {
 	f, err := transcript.OpenRegular(path)
 	if err != nil {
@@ -48,7 +52,11 @@ func piRead(path string, opts Options) (Page, error) {
 		return Page{}, ErrTooLarge
 	}
 	key := docKey{path: path, size: info.Size(), mod: info.ModTime()}
+	if opts.Leaf != nil {
+		key.leaf, key.hasLeaf = *opts.Leaf, true
+	}
 	var lines []byte
+	var pending bool
 	if e, ok := docs.get(key); ok {
 		defer docs.release(e)
 		lines = e.lines
@@ -61,12 +69,17 @@ func piRead(path string, opts Options) (Page, error) {
 		if len(data) > scanMax {
 			return Page{}, ErrTooLarge
 		}
-		lines, err = piProject(data)
-		if err != nil {
+		lines, err = piProject(data, opts.Leaf)
+		pending = errors.Is(err, errPiPending)
+		if err != nil && !pending {
 			clear(lines)
 			return Page{}, err
 		}
-		if e := docs.put(key, lines); e != nil {
+		// An entry the hook named before its line is written is a moment, so the
+		// empty view it gives is not kept.
+		if pending {
+			defer clear(lines)
+		} else if e := docs.put(key, lines); e != nil {
 			defer docs.release(e)
 		} else {
 			defer clear(lines)
@@ -110,6 +123,7 @@ func piRead(path string, opts Options) (Page, error) {
 		return ""
 	}
 	page.Cursor, page.Older = wrap(page.Cursor), wrap(page.Older)
+	page.Reset = page.Reset || pending
 	return page, err
 }
 
@@ -132,7 +146,7 @@ func piPrefix(lines []byte, at cursorPos) string {
 // that ancestry is kept. A record longer than lineMax keeps its place in the
 // ancestry but is left out of the view, as the other readers skip such a line,
 // so one huge tool result does not hide the whole conversation.
-func piProject(data []byte) ([]byte, error) {
+func piProject(data []byte, leaf *string) ([]byte, error) {
 	type node struct {
 		parent     string
 		start, end int
@@ -179,6 +193,16 @@ func piProject(data []byte) ([]byte, error) {
 	}
 	if header == nil {
 		return nil, ErrPiTree
+	}
+	if leaf != nil {
+		last = *leaf
+		if last != "" {
+			if _, ok := nodes[last]; !ok {
+				// The hook may name an entry before its append completes. Clear
+				// the old branch, never substitute a sibling's history.
+				return append([]byte(nil), header...), errPiPending
+			}
+		}
 	}
 	var chain []node
 	seen := make(map[string]bool)

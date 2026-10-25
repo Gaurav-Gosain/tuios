@@ -80,7 +80,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	}
 	w := st.Windows[idx]
 	reg := d.agentMatcher.registry
-	path, harnessID, format, session, joined := sess.transcriptJoinOf(w.ID)
+	path, harnessID, format, session, leaf, joined := sess.transcriptViewOf(w.ID)
 	if !joined {
 		if w.AgentHarness != "" && (reg == nil || reg.TranscriptFor(w.AgentHarness) == nil) {
 			return nil, unsupportedHarnessError(w.AgentHarness)
@@ -103,6 +103,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		CleanLines: maskSecretLines,
 		Format:     format,
 		Session:    session,
+		Leaf:       leaf,
 	})
 	if err != nil {
 		if errors.Is(err, transcriptview.ErrNoFile) {
@@ -154,13 +155,24 @@ func unsupportedHarnessError(harnessID string) *verbError {
 // transcriptJoinOf returns the file a window is joined to, its harness and
 // its format.
 func (s *Session) transcriptJoinOf(windowID string) (path, harnessID, format, session string, ok bool) {
+	path, harnessID, format, session, _, ok = s.transcriptViewOf(windowID)
+	return
+}
+
+// transcriptViewOf snapshots identity and selection together, so a concurrent
+// session replacement never pairs one file with another conversation's leaf.
+func (s *Session) transcriptViewOf(windowID string) (path, harnessID, format, session string, leaf *string, ok bool) {
 	s.transcripts.mu.Lock()
 	defer s.transcripts.mu.Unlock()
 	j, ok := s.transcripts.joins[windowID]
 	if !ok {
-		return "", "", "", "", false
+		return "", "", "", "", nil, false
 	}
-	return j.reader.Path(), j.harness, j.format, j.session, true
+	if j.leaf != nil {
+		value := *j.leaf
+		leaf = &value
+	}
+	return j.reader.Path(), j.harness, j.format, j.session, leaf, true
 }
 
 // noteTranscriptGrowth raises a transcript event when the joined file grew

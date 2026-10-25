@@ -153,6 +153,11 @@ and gives up after 500ms, so a dead daemon never slows the harness.
 now runs the same reporter. Outside tuios, with `TUIOS_ENV` unset, it reports
 nothing.
 
+Pi's version 3 integration also tells Tuios which entry of the session tree Pi
+has selected, `/tree` changes included, so the Inbox shows that branch. Reload Pi
+after updating its managed integration. Only the person reads the conversation:
+this gives an agent no way to read another pane's transcript.
+
 To report the same things by hand from another harness's hooks:
 
 ```sh

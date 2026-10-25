@@ -175,11 +175,22 @@ func piTurnStart(id, event string, p fields) (Decision, bool) {
 // because the extension says whether Pi is idle.
 func translatePi(in Input, p fields) Decision {
 	event := eventName(in, p)
+	var leaf *string
+	if s, ok := p["transcript_leaf"].(string); ok {
+		leaf = &s
+	}
 	if d, ok := piTurnStart(Pi, event, p); ok {
+		d.Report.TranscriptLeaf = leaf
+		d.Report.TranscriptPath = p.str("transcript_path")
 		return d
 	}
-	r := Report{SessionID: p.str("session_id")}
+	r := Report{SessionID: p.str("session_id"), TranscriptPath: p.str("transcript_path"), TranscriptLeaf: leaf}
 	switch event {
+	case "transcript_update":
+		if r.SessionID == "" || r.TranscriptPath == "" || leaf == nil {
+			return skip(Pi, event, "the transcript update needs a session, file and selected leaf")
+		}
+		r.SessionOnly = true
 	case "agent_settled":
 		r.State = "done"
 	case "ui_prompt_start":
