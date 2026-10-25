@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
@@ -77,6 +78,9 @@ func CommitAll(ctx context.Context, dir, message string) (string, error) {
 	if strings.TrimSpace(message) == "" {
 		return "", errors.New("the commit message is empty")
 	}
+	if r := gitstate.Find(dir); r.JJ {
+		return jjCommitAll(ctx, r.Root, message)
+	}
 	n, err := ChangesCtx(ctx, dir)
 	if err != nil {
 		return "", err
@@ -140,6 +144,9 @@ func MergeBranch(ctx context.Context, repoRoot, branch, into string, mode MergeM
 	}
 	if branch == into {
 		return res, errfmt.Errorf("%s cannot be merged into itself", branch)
+	}
+	if r := gitstate.Find(repoRoot); r.JJ {
+		return jjMerge(ctx, r.Root, branch, into, mode)
 	}
 	head, err := CurrentBranch(repoRoot)
 	if err != nil {
@@ -342,6 +349,9 @@ func Push(ctx context.Context, dir string, t PushTarget, commit string) error {
 	if commit == "" {
 		return errfmt.Errorf("push of %q to %q: no commit to push", t.Branch, t.Remote)
 	}
+	if r := gitstate.Find(dir); r.JJ {
+		return jjPush(ctx, r.Root, t, commit)
+	}
 	if _, err := runCtx(ctx, dir, nil, "push", "--porcelain", t.Remote, commit+":refs/heads/"+t.Branch); err != nil {
 		return err
 	}
@@ -366,6 +376,9 @@ func RemoteBranchCommit(ctx context.Context, dir string, t PushTarget) string {
 
 // BranchCommitCtx is the commit branch points at in the repository at dir.
 func BranchCommitCtx(ctx context.Context, dir, branch string) (string, error) {
+	if r := gitstate.Find(dir); r.JJ {
+		return gitstate.JJCommit(ctx, r.Root, jjBookmark(branch), false)
+	}
 	out, err := runCtx(ctx, dir, nil, "rev-parse", "--verify", "refs/heads/"+branch+"^{commit}")
 	if err != nil {
 		return "", err
