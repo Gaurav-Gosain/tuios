@@ -51,7 +51,8 @@ FAIL internal/session    LOGLINE-TestAttachRace</code></tab>
       <button key="f" on-press="set('state.failed', 0)">Mark fixed</button>
       <button key="q" kind="primary" on-press="close('rerun')">Rerun and close</button>
       <spacer/>
-      <text role="mute"><kbd>enter</kbd> pick   <kbd>tab</kbd> next   <kbd>esc</kbd> close</text>
+      <text role="mute" if="view.placement != 'popup'"><kbd>enter</kbd> pick   <kbd>tab</kbd> next</text>
+      <text role="mute" if="view.placement == 'popup'"><kbd>enter</kbd> pick   <kbd>tab</kbd> next   <kbd>esc</kbd> close</text>
     </row>
   </col>
 </tml>
@@ -119,6 +120,9 @@ func TestTMLShowPopup(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "with the popup open")
 	saveTMLFrame(t, term, "1-popup")
+	if !screenHas(term.Screen(), "next   esc close") {
+		t.Fatalf("the popup does not show its esc close hint:\n%s", term.Snapshot())
+	}
 
 	// The keys reach the surface: the table has the focus, down moves its
 	// cursor to the second row by time, and enter runs its on-select, a
@@ -174,6 +178,15 @@ func TestTMLShowPopup(t *testing.T) {
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Picked: TestAttachReplay", uiTimeout); err != nil {
 		t.Fatalf("a click on the Summary tab never came back: %v\n%s", err, term.Snapshot())
+	}
+
+	// A popup does not zoom, and a notice says so.
+	leaveTerminalMode(t, term)
+	if err := term.SendKeys("z"); err != nil {
+		t.Fatalf("send z: %v", err)
+	}
+	if err := term.WaitForText("A popup cannot be zoomed.", uiTimeout); err != nil {
+		t.Fatalf("z on the popup said nothing: %v\n%s", err, term.Snapshot())
 	}
 
 	// Detach. The daemon keeps the surface, with the state the person set.
@@ -242,6 +255,12 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "with the pane open")
 	saveTMLFrame(t, term, "1-pane")
+	// The document shows "esc close" only in a popup, by view.placement:
+	// esc does not close a pane. A program opened the surface, so no
+	// "Window created" notice says the person made a window.
+	if txt := term.Screen().Text(); strings.Contains(txt, "esc close") || strings.Contains(txt, "Window created") {
+		t.Fatalf("the pane shows a hint that does not hold, or a window notice:\n%s", term.Snapshot())
+	}
 
 	listed, err := tuiosCLI(t, base, "list-windows", "-s", "e2e-tmlpane", "--json")
 	if err != nil {

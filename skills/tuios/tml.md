@@ -188,6 +188,8 @@ op that no longer matches is refused: read with `tml get`, then patch again.
   The document cannot change the owner.
 - A surface your pane opens does not take the focus. The person clicks it.
 - An `input` with `bind="state.x"` takes typed text, and a `submit` button closes with `form`: `<form on-submit="close(form.note)">`.
+- `view.placement` is `popup` or `pane`. esc closes a popup, not a pane:
+  `<text if="view.placement == 'popup'">esc close</text>`.
 - A document taller than its pane scrolls, with a bar at the right. The
   focused table, list or field takes the keys first. Put what the person
   must see first at the top.

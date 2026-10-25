@@ -613,7 +613,14 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		v.surface.SetPalette(m.tmlPalette())
 		v.palKey = key
 	}
-	// A popup's surface sits inside a margin; see tmlInset.
+	// The document reads where it is as view.placement: esc closes a popup
+	// and not a pane, so a hint can say so only where it is true.
+	placement := "pane"
+	if m.isTMLPopup(window) {
+		placement = "popup"
+	}
+	v.surface.SetPlacement(placement)
+	// The surface sits inside a margin; see tmlInset.
 	dx, dy, iw, ih := m.tmlInset(window)
 	fullW, fullH := cw, ch
 	cw, ch = max(iw, 1), max(ih, 1)
