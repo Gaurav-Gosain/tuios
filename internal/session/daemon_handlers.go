@@ -135,6 +135,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}
 
 	var session *Session
+	var created bool
 	var err error
 
 	// Where this client's output lands: see nested_attach.go. A forced attach
@@ -148,15 +149,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}
 
 	if payload.SessionName == "" {
-		session, err = d.manager.GetDefaultSession(cfg, payload.Width, payload.Height)
+		session, created, err = d.manager.GetDefaultSession(cfg, payload.Width, payload.Height)
 	} else if payload.CreateNew {
-		var created bool
 		session, created, err = d.manager.GetOrCreateSession(payload.SessionName, cfg, payload.Width, payload.Height)
-		// Only a session this attach made takes the directory: an attach
-		// to one that exists must not move where its windows start.
-		if err == nil && created && payload.Cwd != "" && checkWindowCwd(payload.Cwd) == nil {
-			session.SetStartDir(absStartDir(payload.Cwd))
-		}
 	} else {
 		session = d.manager.GetSession(payload.SessionName)
 		if session == nil {
@@ -172,6 +167,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to get/create session: %w", err)
+	}
+	// Only a session this attach made takes the directory: an attach to one
+	// that exists must not move where its windows start.
+	if created && payload.Cwd != "" && checkWindowCwd(payload.Cwd) == nil {
+		session.SetStartDir(absStartDir(payload.Cwd))
 	}
 	// Refused when the target is the client's own session, or is shown,
 	// through a chain of clients, inside it.

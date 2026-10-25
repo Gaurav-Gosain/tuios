@@ -9281,3 +9281,22 @@ The fixed build passes.
 | --- | --- | --- |
 | `printableRune` drops every private use code point, which is upstream main | "the rail and the dock did not draw the names with their icons, one cell each" | **caught** |
 | `printableRune` keeps every private use code point, also with Nerd Fonts off | "with Nerd Fonts off, the dock did not draw the workspace name without its icon" | **caught** |
+
+## Bare default session starts in the caller's directory
+
+`TestBareDefaultSessionStartsInCallersDirectory` starts an empty daemon in one
+directory, runs bare `tuios` from a second directory, and checks the first
+window's cwd. A later client attaches from a third directory and opens another
+window with cwd inheritance off; that window must retain the session's first
+start directory. Run on Linux amd64 with `TUIOS_E2E=1` and a binary from the
+same revision as the test.
+
+| Control | Result | Verdict |
+| --- | --- | --- |
+| Baseline before the fix | First window starts in the daemon's directory | **caught** |
+| Omit the local client's caller cwd | First window starts in the daemon's directory | **caught** |
+| Omit the new default session's start directory | First window starts in the daemon's directory | **caught** |
+| Apply the caller cwd to an existing session | Second client's new window starts in the third directory | **caught** |
+
+Each change was built in a separate Go overlay, leaving the source tree intact.
+With the fix, the test passes and saves frames for both clients.

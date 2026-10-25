@@ -646,16 +646,21 @@ func newerPick(used, bestUsed, active, bestActive time.Time, s, best *Session) b
 }
 
 // GetDefaultSession returns the session the person used last, creating one if
-// none exist. It used to return the first session a range over the map gave,
-// which Go randomises, so a bare attach landed on any session at all.
-func (m *Manager) GetDefaultSession(cfg *SessionConfig, width, height int) (*Session, error) {
+// none exist. The bool reports whether it created the session. It used to
+// return the first session a range over the map gave, which Go randomises,
+// so a bare attach landed on any session at all.
+func (m *Manager) GetDefaultSession(cfg *SessionConfig, width, height int) (*Session, bool, error) {
 	if session := m.LastUsedSession(); session != nil {
-		return session, nil
+		return session, false, nil
 	}
 
 	// No sessions, create default with generated name
 	name := m.GenerateSessionName()
-	return m.CreateSession(name, cfg, width, height)
+	session, err := m.CreateSession(name, cfg, width, height)
+	if err != nil {
+		return nil, false, err
+	}
+	return session, true, nil
 }
 
 // Shutdown stops all sessions and cleans up.
