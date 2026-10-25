@@ -38,6 +38,10 @@ func runPrefix(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) (*app.OS, t
 		return o, nil
 	}
 	action := lookupAction(o, msg, func(key string) string { return lookup(o.KeybindRegistry, key) })
+	if k.refuses(o, action) {
+		k.unbound(msg, o)
+		return o, nil
+	}
 	m, cmd, ran := dispatchAction(action, msg, o)
 	if ran {
 		k.ran(m, action)
@@ -59,6 +63,10 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	if o.KeybindRegistry != nil {
 		action := lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction)
+		if k.refuses(o, action) {
+			k.unbound(msg, o)
+			return o, nil
+		}
 		if app.PrefixWorkActions[action] {
 			if cmd, handled := runPrefixWork(action, o); handled {
 				if !k.ran(o, action) {

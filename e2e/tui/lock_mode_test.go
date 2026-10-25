@@ -56,6 +56,9 @@ func lockedSession(t *testing.T, name, config string) (*tuitest.Terminal, string
 //     without the leader move focus again, and the dock says unlocked. esc
 //     locks again, so the h and alt+2 after it reach cat -v as h^[2 and
 //     focus does not move.
+//     ctrl+g p h l again, then x: x is close in the pane menu, and a held
+//     menu takes only repeatable keys, so x and the alt+2 after it reach
+//     cat -v as x^[2, no pane closes, and the client is locked again.
 //  3. ctrl+g p d splits the pane, which is not a repeatable action, so the
 //     client locks again at once: alt+2 after it goes to the pane and the
 //     session stays on workspace 1.
@@ -66,7 +69,9 @@ func lockedSession(t *testing.T, name, config string) (*tuitest.Terminal, string
 // Negative control: on a build without lock mode the first alt+2 switches
 // to workspace 2 and step 1 fails. Without the menu hold (menuKey.ran
 // returning false), the l after ctrl+g p h goes to the pane and the wait for
-// focus to move back right fails. Both runs are in NEGATIVE_CONTROLS.md.
+// focus to move back right fails. Without the filter on a held menu
+// (menuKey.refuses returning false), x closes pane b and step 2b fails. The
+// runs are in NEGATIVE_CONTROLS.md.
 func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 	const sess = "lockkeys"
 	term, base := lockedSession(t, sess, "\n[keybindings]\npreset = \"zellij\"\n")
@@ -148,6 +153,25 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 	}
 	stays(1, b, "h alt+2 after esc")
 
+	// 2b. A held menu takes only the repeatable keys. x is close in the pane
+	// menu, which inherits the window prefix: it must close nothing and reach
+	// cat -v, and the client locks again, so alt+2 after it goes there too.
+	send(tuitest.Ctrl('g'), "p", "h")
+	waitFocus(a, "ctrl+g p h, the second time")
+	send("l")
+	waitFocus(b, "l after the second ctrl+g p h")
+	send("x", tuitest.Alt('2'), tuitest.Enter)
+	if err := term.WaitForText("x^[2", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: x alt+2 in the held pane menu did not reach cat -v: %v\n%s", err, term.Snapshot())
+	}
+	stays(1, b, "x alt+2 in the held pane menu")
+	if n := windowCount(t, base, sess); n != 2 {
+		t.Fatalf("ASSERTION: x in the held pane menu closed a pane: %d windows, want 2\n%s", n, term.Snapshot())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return dockLock(s) == "locked" }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: x in the held pane menu did not lock again: %v\n%s", err, term.Snapshot())
+	}
+
 	// 3. One action that does not repeat, then locked again.
 	send(tuitest.Ctrl('g'), "p", "d")
 	waitForSettledGeometryIn(t, base, sess, 3)
@@ -157,4 +181,177 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 	c := focusedIn(t, base, sess)
 	send(tuitest.Alt('2'))
 	stays(1, c, "alt+2 after ctrl+g p d")
+}
+
+// windowCount is the number of windows the daemon reports for sess now.
+func windowCount(t *testing.T, base, sess string) int {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", sess)
+	if err != nil {
+		t.Fatalf("list-windows: %v\n%s", err, out)
+	}
+	rects, ok := parseWindows(out)
+	if !ok {
+		t.Fatalf("list-windows: cannot parse\n%s", out)
+	}
+	return len(rects)
+}
+
+// TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys is lock mode with the tuios
+// leader, and the floating badge in place of the dock pill.
+//
+// ctrl+b left moves focus, and the leader menu is held so right moves it
+// back. The badge says unlocked while it is held. Two seconds later, well
+// past the repeat window, x would still be the leader menu's close key. A
+// held menu takes only repeatable actions, so x must reach cat -v, no pane
+// closes, and the badge goes away. Last, the hold key (hold_window_mode,
+// left alt) is a key like any other under lock: a pane that asked for
+// releases sees its press and its release.
+//
+// Negative control: with menuKey.refuses returning false, x closes pane b and
+// the window count check fails. Without the unlock badge, the wait for the
+// badge to say unlocked fails. With ReleaseHoldKey not gated on a hold in
+// progress, the pane sees the press and not the release. The runs are in
+// NEGATIVE_CONTROLS.md.
+func TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys(t *testing.T) {
+	const sess = "lockleader"
+	term, base := lockedSession(t, sess, "\n[appearance]\ndock_prefix_indicator = \"badge\"\n\n[keybindings]\nlock = true\n\n"+holdModeConfig)
+	a := waitForSettledGeometryIn(t, base, sess, 1)[0].ID
+	b := newWindowIn(t, base, sess)
+	waitForSettledGeometryIn(t, base, sess, 2)
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", sess, b); err != nil {
+		t.Fatalf("focus b: %v\n%s", err, out)
+	}
+	send := func(keys ...any) {
+		t.Helper()
+		if err := term.SendKeys(keys...); err != nil {
+			t.Fatalf("send %v: %v", keys, err)
+		}
+	}
+	waitFocus := func(want, what string) {
+		t.Helper()
+		var got string
+		deadline := time.Now().Add(uiTimeout)
+		for time.Now().Before(deadline) {
+			if got = focusedIn(t, base, sess); got == want {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("ASSERTION: %s: focus is on %s, want %s\n%s", what, got, want, term.Snapshot())
+	}
+
+	send("cat -v", tuitest.Enter)
+	time.Sleep(500 * time.Millisecond)
+
+	send(tuitest.Ctrl('b'), tuitest.Left)
+	waitFocus(a, "ctrl+b left")
+	send(tuitest.Right)
+	waitFocus(b, "right after ctrl+b left, without the leader")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "PREFIX "+unlockGlyph) || strings.Contains(s.Text(), "PREFIX UNLOCK")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the badge does not say unlocked while the leader menu is held: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "unlocked-badge")
+
+	time.Sleep(2 * time.Second)
+	send("x", tuitest.Alt('2'), tuitest.Enter)
+	if err := term.WaitForText("x^[2", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: x alt+2 in the held leader menu did not reach cat -v: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(700 * time.Millisecond)
+	if n := windowCount(t, base, sess); n != 2 {
+		t.Fatalf("ASSERTION: x in the held leader menu closed a pane: %d windows, want 2\n%s", n, term.Snapshot())
+	}
+	if got := focusedIn(t, base, sess); got != b {
+		t.Fatalf("ASSERTION: focus moved to %s, want %s", got, b)
+	}
+	if got := currentWorkspace(t, base, sess); got != 1 {
+		t.Fatalf("ASSERTION: the session is on workspace %d, want 1", got)
+	}
+	if strings.Contains(term.Snapshot(), "PREFIX") {
+		t.Fatalf("ASSERTION: the badge still shows after x\n%s", term.Snapshot())
+	}
+
+	// The hold key is a key lock gives the pane, its release included. A
+	// pane that asked for every key and for releases (CSI > 11 u) must see
+	// the press and the release of left alt, then z.
+	send(tuitest.Ctrl('c'))
+	time.Sleep(300 * time.Millisecond)
+	send("clear; stty raw -echo; printf '\\033[>11u'; cat -v", tuitest.Enter)
+	time.Sleep(time.Second)
+	send(tuitest.Key(kittyLeftAltPress), tuitest.Key(kittyLeftAltRelease), "z")
+	if err := term.WaitForText("^[[57443;3u^[[57443;3:3u^[[122u", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the hold key's press and release did not both reach the pane: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestLockModeGivesTheRailPaneItsWorkspaceChords is lock mode with a rail
+// session pane focused. alt+1 and alt+3 are workspace chords, which lock gives
+// the pane the user types into: the rail's pane, not the focused pane of the
+// attached session.
+//
+// Negative control: with the rail's workspace chord exception kept under lock,
+// alt+1 alt+3 go to the attached session's pane and the wait for them in the
+// rail session fails. The run is in NEGATIVE_CONTROLS.md.
+func TestLockModeGivesTheRailPaneItsWorkspaceChords(t *testing.T) {
+	const cfg = `[startup]
+open_default_window = true
+[appearance.sidebar]
+position = "left"
+enabled = true
+width = 38
+sections = "sessions"
+[appearance.sidebar.left]
+session = "lockrail-side"
+[keybindings]
+lock = true
+`
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, cfg)
+	for _, name := range []string{"lockrail", "lockrail-side"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("new %s: %v\n%s", name, err, out)
+		}
+	}
+	for _, sess := range []string{"lockrail", "lockrail-side"} {
+		for _, keys := range [][]string{{"--literal", "cat -v"}, {"Enter"}} {
+			if out, err := tuiosCLI(t, base, append([]string{"send-keys", "-s", sess}, keys...)...); err != nil {
+				t.Fatalf("send to %s: %v\n%s", sess, err, out)
+			}
+		}
+	}
+	term := startIn(t, base, startOpts{cols: 138, rows: 40, args: []string{"attach", "lockrail"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(time.Second)
+	// A click on the rail's pane gives it the keyboard.
+	mousePress(t, term, 15, 5, tuitest.MouseLeft, 0)
+	mouseRelease(t, term, 15, 5, tuitest.MouseLeft, 0)
+	time.Sleep(500 * time.Millisecond)
+	if err := term.SendKeys("q", tuitest.Alt('1'), tuitest.Alt('3'), tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, err := tuiosCLI(t, base, "capture-pane", "-s", "lockrail-side")
+		if err == nil && strings.Contains(out, "q^[1^[3") {
+			break
+		}
+		if time.Now().After(deadline) {
+			center, _ := tuiosCLI(t, base, "capture-pane", "-s", "lockrail")
+			t.Fatalf("ASSERTION: q alt+1 alt+3 did not reach the rail pane: %v\nrail:\n%s\ncenter:\n%s\n%s", err, out, center, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if out, err := tuiosCLI(t, base, "capture-pane", "-s", "lockrail"); err != nil || strings.Contains(out, "^[1") {
+		t.Fatalf("ASSERTION: the workspace chords reached the attached session's pane: %v\n%s", err, out)
+	}
+	if got := currentWorkspace(t, base, "lockrail"); got != 1 {
+		t.Fatalf("ASSERTION: the session is on workspace %d, want 1", got)
+	}
+	railShot(t, term, "locked-rail")
 }

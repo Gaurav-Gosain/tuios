@@ -9255,4 +9255,18 @@ The fixed build passes three runs of three.
 | The locked path in `HandleTerminalModeKey` (`if o.Locked() { ... typeIntoPane }`) made `if false && ...`, the dock indicator kept | "alt+2 alt+n ctrl+p did not reach cat -v as bytes" | **caught** |
 | `menuKey.ran` returns false at once, so no menu is held | "l after ctrl+g p h, without the leader: focus is on <a>, want <b>" | **caught** |
 
-Not covered end to end: the hold key under lock, a declared menu held by a repeatable action, and the timed repeat window skipped while locked.
+Not covered end to end: a declared menu held by a repeatable action, and the timed repeat window skipped while locked.
+
+### Held menus, the hold key, the badge and the rail pane
+
+Review findings on #1081. `TestLockModeGivesEveryKeyToThePane` gains step 2b: ctrl+g p h, l, then x and alt+2 must reach `cat -v` as `x^[2`, with two panes left and the client locked. `TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys` runs `keybindings.lock = true` with the tuios leader, `dock_prefix_indicator = "badge"` and left alt as the hold key. ctrl+b left, right, then two seconds, then x and alt+2 must reach `cat -v` as `x^[2` with two panes left. The badge must show `PREFIX` and the unlock glyph while the menu is held. In a pane that set `CSI > 11 u`, left alt pressed and let go, then z, must reach `cat -v` as `^[[57443;3u^[[57443;3:3u^[[122u`. `TestLockModeGivesTheRailPaneItsWorkspaceChords` focuses a left rail session pane under lock. q, alt+1 and alt+3 must reach the rail pane's `cat -v` as `q^[1^[3` and not the attached session's pane. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-25 on Linux.
+
+The fixed build passes.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The PR before these fixes (2e3e784) | step 2b: "x alt+2 in the held pane menu did not reach cat -v"; the leader test: "the badge does not say unlocked" | **caught** |
+| `menuKey.refuses` returns false, so a held menu keeps its full table | both "x alt+2 in the held ... menu did not reach cat -v". x closed pane b: the frame shows one pane | **caught** |
+| `unlockBadge` made `false` | "the badge does not say unlocked while the leader menu is held" | **caught** |
+| `ReleaseHoldKey` not gated on a hold in progress | "the hold key's press and release did not both reach the pane" | **caught** |
+| The rail's workspace chord exception kept under lock | "q alt+1 alt+3 did not reach the rail pane" | **caught** |

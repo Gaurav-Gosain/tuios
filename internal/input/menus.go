@@ -51,6 +51,10 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	action := lookupAction(o, msg, func(key string) string { return o.KeybindRegistry.GetMenuAction(name, key) })
+	if k.refuses(o, action) {
+		k.unbound(msg, o)
+		return o, nil
+	}
 	m, cmd, ran := dispatchAction(action, msg, o)
 	if ran {
 		if menu.Sticky && m.Menu == "" && !m.PrefixActive {

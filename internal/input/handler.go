@@ -598,7 +598,8 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Keep leader chords and workspace navigation in the window manager.
 		// Every other key belongs to the pane actually visible in the rail.
 		key := withoutChordText(msg).String()
-		workspaceChord := strings.HasPrefix(key, "alt+") && len(key) == len("alt+1") && key[len(key)-1] >= '1' && key[len(key)-1] <= '9'
+		// Lock mode gives the workspace chords to the pane, so to this one.
+		workspaceChord := !o.Locked() && strings.HasPrefix(key, "alt+") && len(key) == len("alt+1") && key[len(key)-1] >= '1' && key[len(key)-1] <= '9'
 		if !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !workspaceChord {
 			if w := o.SidebarSessionWindow(); w != nil {
 				raw, released := paneKeyBytes(paneMsg(msg, o), w, o, true)

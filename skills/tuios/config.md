@@ -562,6 +562,12 @@ resize_pane_down_5 = ["alt+down"]
 next_workspace = ["n"]          # runs once
 ```
 
+`keybindings.lock = true` is zellij's locked mode. In terminal mode every key
+but the leader goes to the pane. The zellij preset turns it on. With lock on,
+a repeatable action keeps its menu open until `esc`, with no time limit. That
+menu takes only repeatable keys. Any other key goes to the pane, and tuios
+locks again.
+
 ### tmux keys with no default
 
 `last_workspace` (tmux `l`), `break_pane` (`!`), `last_session` (`L`) and

@@ -147,8 +147,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Check for prefix key in terminal mode. A leader the prefix_mode table
 	// binds, pressed after the leader, is that binding's and goes to
-	// HandlePrefixCommand below (issue #866).
-	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !leaderBoundInPrefix(msg, o) {
+	// HandlePrefixCommand below (issue #866). A menu lock mode holds open is
+	// the exception: there the leader always opens a fresh leader menu.
+	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && (o.LockHeld || !leaderBoundInPrefix(msg, o)) {
 		leaderWhileHeld(o)
 		// Leader twice sends the leader itself to the pane, as tmux does with
 		// prefix prefix. It is encoded like any forwarded key: CSI u for a

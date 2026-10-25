@@ -46,7 +46,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// placed beside the meters it behaves like, so the two cannot double up.
 	// An armed leader shows on the dock's mode pill when the dock has one.
 	// The badge stays the way to see it with the dock hidden.
-	prefixBadge := m.PrefixActive && !m.prefixPillShown()
+	// In lock mode the badge also says unlocked, for every menu the leader
+	// opens and for a menu held after a repeatable action.
+	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
+	prefixBadge := (m.PrefixActive || unlockBadge) && !m.prefixPillShown()
 	if isRecording || prefixBadge {
 		// The reading comes from the clock component, so the badge and a clock
 		// cell on the dock can never disagree, and so the format is the one
@@ -57,6 +60,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		if isRecording {
 			statusText = config.TapeRecordingIndicator + " | " + currentTime
+		} else if unlockBadge {
+			statusText = "PREFIX " + m.Settings.GetDockLockIcon(false) + " | " + currentTime
 		} else if prefixBadge {
 			statusText = "PREFIX | " + currentTime
 		} else {

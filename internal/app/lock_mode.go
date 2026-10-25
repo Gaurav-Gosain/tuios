@@ -12,9 +12,12 @@ package app
 //
 // The one state of its own is LockHeld. A repeatable action (keybindings.repeat)
 // run from a menu keeps that menu open until esc, so a focus or resize move
-// can be pressed again and again. That replaces the timed repeat window while
-// lock is on: zellij's modes stay until esc, and a deadline would relock in
-// the middle of a run of moves.
+// can be pressed again and again. A held menu takes only the repeatable
+// actions, as tmux's -r does. Any other key closes it, the client locks again,
+// and the key goes to the pane, so the menu's other keys (close, kill, quit)
+// never stay live behind a run of moves. That replaces the timed repeat window
+// while lock is on: zellij's modes stay until esc, and a deadline would relock
+// in the middle of a run of moves.
 
 // MenuState is which leader menu waits for a key: the leader itself, one of
 // its sub-prefixes, or a declared menu.

@@ -102,7 +102,11 @@ preset.
 - A repeatable action keeps its menu open. These are the actions in
   `keybindings.repeat`, such as focus moves and resize steps. Press the key
   again to move again. You do not press the leader again.
+- The open menu then takes only repeatable keys. Any other key closes the
+  menu and goes to the pane, and tuios locks again. For example, `x` after
+  `ctrl+b left right` goes to the pane. It does not close a pane.
 - Press `esc` to close the menu and lock again. `ctrl+c` also closes it.
+- Press the leader to close the menu and open a new leader menu.
 - A key that the open menu does not bind closes the menu. The key goes to the
   pane.
 - To go to window mode, press the leader, then `esc`.
@@ -111,7 +115,9 @@ preset.
 
 The mode pill in the dock shows a lock when tuios is locked. It shows an open
 lock while the leader or a menu waits for a key. Without Nerd Fonts, the pill
-shows `LOCK` and `UNLOCK`.
+shows `LOCK` and `UNLOCK`. When the dock is hidden, or
+`appearance.dock_prefix_indicator` is `"badge"`, the floating badge shows
+`PREFIX` and the open lock while a menu waits for a key.
 
 ## The full list
 
@@ -2067,6 +2073,11 @@ prev_workspace = ["p"]
 
 An action in the list repeats only when a key runs it after the leader. tuios
 warns about an entry with no such key, and about a misspelt action.
+
+With `keybindings.lock` on, there is no repeat window in terminal mode. A
+repeatable action keeps its menu open until you press `esc`, with no time
+limit. The open menu takes only repeatable keys. Any other key goes to the
+pane, and tuios locks again. See [Lock mode](#lock-mode).
 
 Workspace switching on `opt+1` to `opt+9` works with no configuration on a
 US or ABC keyboard layout. It also works in a terminal that reports Alt with

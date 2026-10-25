@@ -946,7 +946,8 @@ type KeybindingsConfig struct {
 	// to the focused pane except the leader: no terminal_mode key, no global
 	// key, no workspace chord and no hold key. The leader unlocks for one
 	// action, and tuios locks again when it is done. A repeatable action (see
-	// Repeat) keeps its menu open until esc. Unset is false, or the preset's.
+	// Repeat) keeps its menu open until esc, and that menu takes only the
+	// repeatable actions. Unset is false, or the preset's.
 	Lock *bool `toml:"lock,omitempty"`
 	// Repeat lists the actions that stay armed after the leader, as tmux's
 	// bind -r does: the same key pressed again inside

@@ -210,7 +210,7 @@ lock = true
 
 | Key | Default | What it does |
 |---|---|---|
-| `lock` | `false` | `true` gives every key to the pane in terminal mode, except the leader. The leader unlocks for one action, and then tuios locks again. A repeatable action keeps its menu open until you press `esc`. The zellij preset sets `true`. |
+| `lock` | `false` | `true` gives every key to the pane in terminal mode, except the leader. The leader unlocks for one action, and then tuios locks again. A repeatable action keeps its menu open until you press `esc`. That menu takes only repeatable keys, and any other key goes to the pane. The zellij preset sets `true`. |
 
 See [Lock mode](KEYBINDINGS.md#lock-mode).
 

@@ -43,6 +43,15 @@ func (k menuKey) leaves(msg tea.KeyPressMsg) bool {
 	return s == "esc" || s == "ctrl+c"
 }
 
+// refuses reports whether a menu lock mode holds open turns down action. A
+// held menu takes only the repeatable actions, as a tmux key table entered
+// after a -r binding does: its other keys, most of them one press from
+// closing or killing something, must not stay live behind a run of moves.
+// The caller closes the menu and gives the key to the pane.
+func (k menuKey) refuses(o *app.OS, action string) bool {
+	return k.held && !prefixRepeats(o, action)
+}
+
 // ran finishes a key that ran action. In lock mode a repeatable action keeps
 // the menu it ran in open until esc, unless the action opened a menu of its
 // own. It reports whether it held the menu, in which case the timed repeat
@@ -57,9 +66,9 @@ func (k menuKey) ran(o *app.OS, action string) bool {
 	return true
 }
 
-// unbound finishes a key the menu does not bind. A held menu closes and the
-// key goes to the pane, as a sticky menu does, so a letter typed after a run
-// of moves is not lost. It reports whether it forwarded the key.
+// unbound finishes a key the menu does not bind, or one a held menu refuses.
+// A held menu closes and the key goes to the pane, as a sticky menu does, so
+// a letter typed after a run of moves is not lost. It reports whether it forwarded the key.
 func (k menuKey) unbound(msg tea.KeyPressMsg, o *app.OS) bool {
 	if !k.held || o.Mode != app.TerminalMode {
 		return false

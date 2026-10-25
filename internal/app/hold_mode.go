@@ -120,9 +120,14 @@ func (m *OS) PressHoldKey(key tea.KeyPressMsg) bool {
 	return true
 }
 
-// ReleaseHoldKey ends the momentary mode if the released key is the trigger. It
-// reports whether it was.
+// ReleaseHoldKey ends the momentary mode if the released key is the trigger
+// of a hold in progress. It reports whether it was. With no hold active the
+// release is not tuios's: lock mode, for one, gives the trigger's press to the
+// pane, and the pane must see its release too or it reads a key held forever.
 func (m *OS) ReleaseHoldKey(key tea.KeyPressMsg) bool {
+	if !m.hold.active {
+		return false
+	}
 	trigger := m.HoldModeKey()
 	if trigger == "" || !strings.EqualFold(key.Keystroke(), trigger) {
 		return false
