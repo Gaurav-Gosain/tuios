@@ -22,7 +22,10 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	st.ck.edW = w
 	pal := l.pal
 	right := x + w
-	when := "sent now"
+	// What a reply does when it is sent: it is typed into the pane at once,
+	// or held until the agent rests. It says nothing about a reply that went
+	// before.
+	when := "typed at once"
 	if e.State == "working" {
 		when = "typed when it rests"
 	}

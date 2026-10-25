@@ -68,6 +68,18 @@ const promptSubmitQuiet = 80 * time.Millisecond
 // promptSubmitPoll is how often the wait looks at the pane's output clock.
 const promptSubmitPoll = 10 * time.Millisecond
 
+// inputLiveMaxWait bounds the wait for a harness that pastes in brackets to
+// turn bracketed paste on before its first prompt is typed. See waitInputLive.
+const inputLiveMaxWait = 15 * time.Second
+
+// inputLiveQuiet is how long the pane must stay silent after it turns
+// bracketed paste on, so the input box it is drawing is in place when the
+// paste arrives.
+const inputLiveQuiet = 150 * time.Millisecond
+
+// inputLivePoll is how often waitInputLive looks at the pane's modes.
+const inputLivePoll = 20 * time.Millisecond
+
 // promptPane is what submitPrompt needs from a pane. *PTY implements it, and a
 // test implements it to record the bytes.
 type promptPane interface {
@@ -240,6 +252,45 @@ func waitPasteTaken(ctx context.Context, pane promptPane, pastedAt time.Time, qu
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("the prompt was pasted and not submitted: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+// waitInputLive waits until the application in the pane can take a prompt:
+// it has turned bracketed paste on and then been quiet for quiet. It returns
+// at once for a pane that has bracketed paste on and is quiet, so a prompt to
+// an agent long at rest costs nothing, and it returns when maxWait passes
+// whatever the pane shows, so a harness that never turns the mode on still
+// gets its prompt, as it did before this wait.
+//
+// The agent state alone does not say the input box is live. Claude Code runs
+// its SessionStart hook, which reports idle, before its input box is mounted.
+// Keys that arrive then go to its early-input capture: the text is put in the
+// box when it mounts, and the Enter is dropped. So the prompt sat in the box
+// unsent (measured on Claude Code 2.1.310: bracketed paste was still off when
+// the idle report came). The input box turns bracketed paste on when it
+// mounts, so the mode is the sign it is live. Only a harness whose profile
+// pastes in brackets waits for it: that profile says the harness turns the
+// mode on.
+func waitInputLive(ctx context.Context, pane promptPane, in harness.InputProfile, quiet, maxWait time.Duration) error {
+	if !in.BracketedPaste {
+		return nil
+	}
+	deadline := time.Now().Add(maxWait)
+	ticker := time.NewTicker(inputLivePoll)
+	defer ticker.Stop()
+	for {
+		now := time.Now()
+		if !now.Before(deadline) {
+			return nil
+		}
+		if pane.BracketedPasteOn() && now.UnixNano()-pane.LastOutput() >= int64(quiet) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the prompt was not typed: %w", ctx.Err())
 		case <-ticker.C:
 		}
 	}

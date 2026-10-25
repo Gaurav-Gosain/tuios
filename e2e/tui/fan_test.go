@@ -20,12 +20,16 @@ import (
 
 // fanFixture is an isolation root, a repository, and a fake claude on PATH.
 // The fake sets the window title real Claude Code sets at rest ("✳ Claude
-// Code"), which is the evidence the claude-code manifest reads as idle: a
-// quiet pane alone is not ready for a harness that can show it is at its
-// prompt. When it reads a prompt it sets the spinner title real Claude Code sets
-// while a turn runs, which the manifest reads as working: that is the evidence
-// fan waits for before it records the prompt as sent rather than stalled, and
-// for this harness output alone is not. The agent timers are shortened so
+// Code") and sends the SessionStart hook, which report idle: a quiet pane
+// alone is not ready for a harness that can show it is at its prompt. When it
+// reads a prompt it sets the spinner title real Claude Code sets while a turn
+// runs and sends the UserPromptSubmit hook, which report working: that is the
+// evidence fan waits for before it records the prompt as sent rather than
+// stalled, and for this harness output alone is not.
+//
+// Negative control: with the waitInputLive call cut from typeFirstPrompt, the
+// prompt is typed while the fake drops keys, TestFanTypesPromptWhenReady and
+// TestCockpitSpawnSheet read stalled, and both fail. The agent timers are shortened so
 // detection takes seconds rather than the shipped half minute.
 func fanFixture(t *testing.T) (base, repo string) {
 	t.Helper()
@@ -36,8 +40,20 @@ func fanFixture(t *testing.T) (base, repo string) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude ready\n" +
-		"while IFS= read -r line; do printf '\\033]0;\\342\\240\\220 Claude Code\\007'; echo \"GOT: $line\"; sleep 1; printf '\\033]0;\\342\\234\\263 Claude Code\\007'; done\n"
+	// hook is the shell line that sends a Claude Code hook event, the way
+	// the hooks tuios installs for Claude Code do.
+	hook := func(event string) string {
+		return "printf '%s' '{\"hook_event_name\":\"" + event + "\",\"session_id\":\"fake\"}' | '" + tuiosBin + "' agent-hook claude-code >/dev/null 2>&1; "
+	}
+	// The fake starts the way Claude Code does: its SessionStart hook reports
+	// idle before its input box is live, and what is typed in that gap is
+	// lost. It drops the keys, which loses the Enter as Claude Code's
+	// early-input capture does (the text it keeps for the box would be the
+	// same stall). Its box turns bracketed paste on when it is live.
+	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude starting\n" +
+		hook("SessionStart") + "\n" +
+		"sleep 2\nstty -icanon min 0 time 1\ncat >/dev/null\nstty icanon\nprintf '\\033[?2004h'\necho fake claude ready\n" +
+		"while IFS= read -r line; do printf '\\033]0;\\342\\240\\220 Claude Code\\007'; " + hook("UserPromptSubmit") + "echo \"GOT: $line\"; sleep 1; printf '\\033]0;\\342\\234\\263 Claude Code\\007'; " + hook("Stop") + "done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +151,7 @@ func TestFanReportsAStalledPrompt(t *testing.T) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude ready\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
+	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007\\033[?2004h'\necho fake claude ready\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

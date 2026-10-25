@@ -9359,3 +9359,17 @@ The fixed build passes, and saves the thumbnail and the image view with the host
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `FlushIfDrawn` never called, which is upstream main | "the first paste placed no thumbnail (label at {row:49 col:6})" after 5 s | **caught** |
+
+## The first prompt waits for the agent's input box
+
+The fake claude in `fanFixture` (`fan_test.go`) sends the SessionStart hook,
+which reports idle, and then drops every key for 2 s before it turns bracketed
+paste on. Claude Code 2.1.310 starts the same way: its SessionStart hook reports
+idle before its input box is live, and the Enter typed in that gap is lost.
+`TestFanTypesPromptWhenReady` (fan) and `TestCockpitSpawnSheet` (the spawn
+sheet) must read the prompt as sent. Run on 2026-10-25 on Linux against
+upstream main at 8d463ac7f.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `waitInputLive` call in `typeFirstPrompt`, which is upstream main | "the prompts were never sent", "the sheet never made a worktree on agent/lru-cache-safe with the task sent": `prompt_status` reads stalled | **caught** |

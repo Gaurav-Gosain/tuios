@@ -150,8 +150,10 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	// One started in the repository's main checkout is the judge
 	// judge-fan starts: it says it is ready, and on its task it reports
 	// the verdict of DESIGN.md frame (g).
+	// Each turns bracketed paste on first, as the real ones do when their
+	// input box is live: a first prompt waits for it.
 	for _, a := range []string{"claude", "codex", "gemini", "opencode", "goose"} {
-		files[a] = "#!/bin/sh\nif [ \"$PWD\" = '" + repo + "' ]; then\n" + frameAJudge + "\nfi\n" +
+		files[a] = "#!/bin/sh\nprintf '\\033[?2004h'\nif [ \"$PWD\" = '" + repo + "' ]; then\n" + frameAJudge + "\nfi\n" +
 			"if [ -n \"$1\" ]; then cat \"$1\"; else echo " + a + " ready; fi\nwhile :; do sleep 900; done\n"
 	}
 	for name, body := range files {

@@ -375,8 +375,35 @@ func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout
 // ready for it, and waits for the pane to show it took it. It returns the
 // prompt status (PromptSent, PromptStalled or PromptNotSent), a note for any
 // but sent, and when the prompt was typed.
+//
+// It first waits for the agent's input box to be live. See waitInputLive.
 func (d *Daemon) typeFirstPrompt(sess *Session, windowID, text string) (string, string, int64) {
+	if pty, err := d.resolvePTYForTarget(sess, windowID); err == nil && d.harnessKnown(sess, windowID) {
+		if err := waitInputLive(d.ctx, pty, d.inputProfileFor(sess, windowID), inputLiveQuiet, inputLiveMaxWait); err != nil {
+			return PromptNotSent, "Could not write to the agent's pane: " + err.Error(), 0
+		}
+	}
 	return d.typePromptPastes(sess, windowID, []string{text})
+}
+
+// harnessKnown reports whether a manifest claims the harness running in a
+// window. Only such a harness waits for its input box before its first prompt:
+// its manifest says whether it turns bracketed paste on, and a program no
+// manifest describes would wait the whole inputLiveMaxWait for a mode it may
+// never turn on.
+func (d *Daemon) harnessKnown(sess *Session, windowID string) bool {
+	reg := d.agentMatcher.registry
+	if reg == nil || sess == nil {
+		return false
+	}
+	sess.stateMu.RLock()
+	defer sess.stateMu.RUnlock()
+	for i := range sess.state.Windows {
+		if sess.state.Windows[i].ID == windowID {
+			return reg.Lookup(sess.state.Windows[i].AgentHarness) != nil
+		}
+	}
+	return false
 }
 
 // typePromptPastes is typeFirstPrompt for a prompt typed as several pastes
