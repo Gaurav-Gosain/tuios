@@ -207,6 +207,10 @@ jobs:
               echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
               exit 1
             fi
+          elif grep -q '^mode=none$' "$GITHUB_OUTPUT"; then
+            # The change reaches no e2e test, so the list is empty and
+            # shardplan would refuse it. Every shard stops here.
+            names=""
           else
             names=$(go run ./shardplan -shards "$SHARDS" -shard "$SHARD" -fill "$E2E_SHARD_FILL" < "$RUNNER_TEMP/selected.txt")
           fi
