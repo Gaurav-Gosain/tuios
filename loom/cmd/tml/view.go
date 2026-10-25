@@ -12,7 +12,9 @@ import (
 // view opens the document full screen until the person quits or the
 // document closes. closed says a close action ended it, with value.
 func view(doc *tml.Node, depth loom.Depth) (value any, closed bool, err error) {
-	s, err := loom.New(doc, &loom.Options{Palette: loom.DefaultPalette(depth)})
+	// esc quits, as it closes a popup, so the document reads its placement
+	// as one.
+	s, err := loom.New(doc, &loom.Options{Palette: loom.DefaultPalette(depth), Placement: "popup"})
 	if err != nil {
 		return nil, false, err
 	}

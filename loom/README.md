@@ -76,7 +76,12 @@ A row that holds a button wraps when its children do not fit side by side:
 whole buttons go to the next line instead of a cut label. A spacer goes with
 the child after it, so a hint at the right stays at the right on its line.
 
-A binding can read `view.width`, `view.height` and `view.band`. The band is
+A binding can read `view.width`, `view.height`, `view.band` and
+`view.placement`. The host sets the placement with `Options.Placement` or
+`SetPlacement`. tuios sets `popup` for a popup and `pane` for a pane, and
+the `tml` command sets `popup`. Use it to show only the keys that work, such
+as `<text if="view.placement == 'popup'">esc close</text>`, since esc
+closes a popup and not a pane. The band is
 `narrow` below 72 cells, `medium` below 120 and `wide` from 120. Use it to
 change the layout with the width, such as `if="view.band == 'wide'"`.
 

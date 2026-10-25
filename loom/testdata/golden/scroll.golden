@@ -12,8 +12,8 @@
 |aaaaabbbbdbbaaaabbbbbbbc|
 a: fg=fg bg=panel
 b: bg=panel
-c: fg=edge bg=panel
-d: fg=mute bg=panel
+c: fg=mute bg=panel
+d: fg=dim bg=panel
 === 256 24x5
 |four     │  one        ┃|
 |five     │  two        ┃|
@@ -28,8 +28,8 @@ d: fg=mute bg=panel
 |aaaaabbbbdbbaaaabbbbbbbc|
 a: fg=fg bg=panel
 b: bg=panel
-c: fg=edge bg=panel
-d: fg=mute bg=panel
+c: fg=mute bg=panel
+d: fg=dim bg=panel
 === 16 24x5
 |four     │  one        ┃|
 |five     │  two        ┃|
@@ -37,13 +37,14 @@ d: fg=mute bg=panel
 |seven    ┃  four       │|
 |eight    ┃  five       │|
 --- styles
-|aaaa     b  aaa        b|
-|aaaa     b  aaa        b|
-|aaa      b  aaaaa      b|
-|aaaaa    b  aaaa       b|
-|aaaaa    b  aaaa       b|
+|aaaa     b  aaa        c|
+|aaaa     b  aaa        c|
+|aaa      c  aaaaa      c|
+|aaaaa    c  aaaa       b|
+|aaaaa    c  aaaa       b|
 a: fg=fg
 b: fg=mute
+c: fg=dim
 === ascii 24x5
 |four     |  one        #|
 |five     |  two        #|

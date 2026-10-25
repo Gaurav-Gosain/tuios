@@ -40,6 +40,11 @@ type Options struct {
 	// Off by default: a click on a link comes back as a "link" Effect, so
 	// the host can ask the person first, as TML requires.
 	Hyperlinks bool
+	// Placement says where the host shows the surface, such as "popup" or
+	// "pane". A binding reads it as view.placement, so a document can show
+	// the keys that work where it is, such as "esc close" in a popup only.
+	// SetPlacement changes it.
+	Placement string
 }
 
 // Surface is one TML document drawn into a cell buffer: the tree, the state
@@ -209,7 +214,8 @@ func (s *Surface) View() *View { return cloneView(s.view) }
 func cloneView(v *View) *View {
 	return &View{Tabs: maps.Clone(v.Tabs), Sort: maps.Clone(v.Sort), Filter: maps.Clone(v.Filter), Fold: maps.Clone(v.Fold),
 		Focus: v.Focus, Cursor: maps.Clone(v.Cursor), Scroll: maps.Clone(v.Scroll), Split: maps.Clone(v.Split),
-		Text: maps.Clone(v.Text), Caret: maps.Clone(v.Caret), Page: v.Page}
+		Text: maps.Clone(v.Text), Caret: maps.Clone(v.Caret), Page: v.Page,
+		PageAnchor: v.PageAnchor, PageRow: v.PageRow}
 }
 
 // Patch applies a JSON Patch from the owner to the state. Only the boxes
@@ -267,6 +273,17 @@ func (s *Surface) Replace(doc *tml.Node, keepState bool) error {
 		store = st
 	}
 	return s.setDoc(doc, store)
+}
+
+// SetPlacement changes where the host shows the surface, which a binding
+// reads as view.placement. A change makes the next Render build the tree
+// again; the same placement does nothing.
+func (s *Surface) SetPlacement(p string) {
+	if p == s.opts.Placement {
+		return
+	}
+	s.opts.Placement = p
+	s.full = true
 }
 
 // NeedsClock reports whether a binding calls ago(). Then the host calls
@@ -539,7 +556,7 @@ func (s *Surface) markView(key string) {
 func (s *Surface) vars(sc *scope) map[string]any {
 	m := map[string]any{
 		"state": s.store.State(),
-		"view":  map[string]any{"width": float64(s.w), "height": float64(s.h), "band": band(s.w)},
+		"view":  map[string]any{"width": float64(s.w), "height": float64(s.h), "band": band(s.w), "placement": s.opts.Placement},
 	}
 	sc.vars(m)
 	return m

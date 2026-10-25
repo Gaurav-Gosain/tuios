@@ -99,6 +99,8 @@ func (c goldenCase) render(t testing.TB, d Depth) *Buffer {
 	if !c.frame {
 		return s.Render(c.w, c.h)
 	}
+	// A framed case is a popup, so view.placement says so.
+	s.SetPlacement("popup")
 	out := NewBuffer(c.w, c.h)
 	owner := ""
 	if c.owner {

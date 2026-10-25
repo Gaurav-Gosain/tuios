@@ -45,10 +45,13 @@ func paintBar(s *Surface, c *canvas, r Rect, content, off int) {
 	if content > r.Dy() {
 		top = (r.Dy() - thumb) * off / (content - r.Dy())
 	}
+	// The track is a rule in mute, which reads on a dark ground where edge
+	// does not, and the thumb is dim, a step brighter, so the two differ at
+	// 16 colours too, where edge and mute are one slot.
 	for y := 0; y < r.Dy(); y++ {
-		g, st := s.g.scrollTrack, style{fg: "edge"}
+		g, st := s.g.scrollTrack, style{fg: "mute"}
 		if y >= top && y < top+thumb {
-			g, st = s.g.scrollTh, style{fg: "mute"}
+			g, st = s.g.scrollTh, style{fg: "dim"}
 		}
 		c.text(x, r.Min.Y+y, g, st, 1)
 	}
@@ -105,7 +108,13 @@ func (s *Surface) layoutPage() {
 		s.placeRoot(0, w, page)
 	}
 	pw.over, pw.content = true, page
-	off := clampInt(s.view.Page, 0, page-s.h)
+	// The place is the box that was at the top, so a new width that
+	// reflows the page, such as a zoom, keeps the same content in view.
+	off := s.view.Page
+	if b := s.placedBox(s.root, s.view.PageAnchor); b != nil {
+		off = b.rect.Min.Y + min(s.view.PageRow, max(b.rect.Dy()-1, 0))
+	}
+	off = clampInt(off, 0, page-s.h)
 	// After tab, or a key the focused box took, bring the focus into view:
 	// the person sees what their key did.
 	if s.focusMoved || s.reveal {
@@ -121,9 +130,66 @@ func (s *Surface) layoutPage() {
 		}
 	}
 	s.view.Page = off
+	s.view.PageAnchor, s.view.PageRow = "", 0
+	if b := s.boxAt(s.root, off); b != nil {
+		s.view.PageAnchor, s.view.PageRow = b.key, off-b.rect.Min.Y
+	}
 	if off != 0 {
 		s.placeRoot(off, w, page)
 	}
+}
+
+// placedBox finds the box with key that the last layout placed, inside b,
+// or nil. The boxes inside a box that scrolls are left out: their rows move
+// with its scroll.
+func (s *Surface) placedBox(b *box, key string) *box {
+	if key == "" {
+		return nil
+	}
+	for _, k := range b.kids {
+		if k.hidden || k.pgen != s.gen {
+			continue
+		}
+		if k.key == key {
+			return k
+		}
+		if scrolls(k) {
+			continue
+		}
+		if f := s.placedBox(k, key); f != nil {
+			return f
+		}
+	}
+	return nil
+}
+
+// boxAt finds the innermost box inside b that the last layout placed over
+// page row y, or on a gap or padding row, the first box under it. It returns
+// nil when there is none. It does not go inside a box that scrolls.
+func (s *Surface) boxAt(b *box, y int) *box {
+	var below *box
+	for _, k := range b.kids {
+		if k.hidden || k.pgen != s.gen || k.rect.Empty() {
+			continue
+		}
+		if y < k.rect.Min.Y {
+			if below == nil {
+				below = k
+			}
+			continue
+		}
+		if y >= k.rect.Max.Y {
+			continue
+		}
+		if scrolls(k) {
+			return k
+		}
+		if in := s.boxAt(k, y); in != nil {
+			return in
+		}
+		return k
+	}
+	return below
 }
 
 // pageHeight is the document's natural height at width w.
@@ -217,6 +283,7 @@ func (s *Surface) scrollPage(off int) {
 		return
 	}
 	s.view.Page = off
+	s.view.PageAnchor = ""
 	s.relayout = true
 }
 

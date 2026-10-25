@@ -15,36 +15,35 @@
 |╰────────────────────────────────────────────────────────────────╯|
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addgggdeeeeeedddhdeeeeeedddideeeeeeeddddddddddddaaaaaaajdcccccdfda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addiiiiiiibiiibiiiibiiiibidddddddddddddddddddddddddddddddddddddfda|
-|addddddddddddddddddddddddddddddddddkkkkkkddddddddddddddddddddddfda|
-|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddddddddddfda|
-|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddfda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addfdccccccccbbhdddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addddfffffffddddddddddddddffffddddddddddddddddddddddddddiiiidkdlda|
-|addmnoooooooooooooooonnnnnppppppppppppppnnnnnnnnnnnnnnnnnpppppdlda|
-|addddeeeeeeeeeeeedddddddddqqqqqqqqqqqqqddddddddddddddddddqqqqqdlda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addfffdeeeeeedddgdeeeeeedddhdeeeeeeeddddddddddddaaaaaaaidcccccdeda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addhhhhhhhbhhhbhhhhbhhhhbhdddddddddddddddddddddddddddddddddddddeda|
+|addddddddddddddddddddddddddddddddddjjjjjjddddddddddddddddddddddeda|
+|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddddddddddeda|
+|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddeda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addkdccccccccbbgdddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addddkkkkkkkddddddddddddddkkkkddddddddddddddddddddddddddhhhhdjdkda|
+|addlmnnnnnnnnnnnnnnnnmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodkda|
+|addddeeeeeeeeeeeedddddddddpppppppppppppddddddddddddddddddpppppdkda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
 d: bg=panel
 e: fg=dim bg=panel
-f: fg=mute bg=panel
-g: fg=success bg=panel bold
-h: fg=error bg=panel bold
-i: fg=dim bg=panel bold
-j: fg=track bg=panel
-k: fg=accent-bright bg=panel
-l: fg=edge bg=panel
-m: fg=accent bg=surface
-n: bg=surface
-o: fg=dim bg=surface
-p: fg=fg bg=surface bold
-q: fg=fg bg=panel
+f: fg=success bg=panel bold
+g: fg=error bg=panel bold
+h: fg=dim bg=panel bold
+i: fg=track bg=panel
+j: fg=accent-bright bg=panel
+k: fg=mute bg=panel
+l: fg=accent bg=surface
+m: bg=surface
+n: fg=dim bg=surface
+o: fg=fg bg=surface bold
+p: fg=fg bg=panel
 === 256 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                              ┃ │|
@@ -62,36 +61,35 @@ q: fg=fg bg=panel
 |╰────────────────────────────────────────────────────────────────╯|
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addgggdeeeeeedddhdeeeeeedddideeeeeeeddddddddddddaaaaaaajdcccccdfda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addiiiiiiibiiibiiiibiiiibidddddddddddddddddddddddddddddddddddddfda|
-|addddddddddddddddddddddddddddddddddkkkkkkddddddddddddddddddddddfda|
-|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddddddddddfda|
-|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddfda|
-|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addfdccccccccbbhdddddddddddddddddddddddddddddddddddddddddddddddfda|
-|addddfffffffddddddddddddddffffddddddddddddddddddddddddddiiiidkdlda|
-|addmnoooooooooooooooonnnnnppppppppppppppnnnnnnnnnnnnnnnnnpppppdlda|
-|addddeeeeeeeeeeeedddddddddqqqqqqqqqqqqqddddddddddddddddddqqqqqdlda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addfffdeeeeeedddgdeeeeeedddhdeeeeeeeddddddddddddaaaaaaaidcccccdeda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addhhhhhhhbhhhbhhhhbhhhhbhdddddddddddddddddddddddddddddddddddddeda|
+|addddddddddddddddddddddddddddddddddjjjjjjddddddddddddddddddddddeda|
+|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddddddddddeda|
+|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddddddeda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addkdccccccccbbgdddddddddddddddddddddddddddddddddddddddddddddddeda|
+|addddkkkkkkkddddddddddddddkkkkddddddddddddddddddddddddddhhhhdjdkda|
+|addlmnnnnnnnnnnnnnnnnmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodkda|
+|addddeeeeeeeeeeeedddddddddpppppppppppppddddddddddddddddddpppppdkda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
 d: bg=panel
 e: fg=dim bg=panel
-f: fg=mute bg=panel
-g: fg=success bg=panel bold
-h: fg=error bg=panel bold
-i: fg=dim bg=panel bold
-j: fg=success-tint bg=panel
-k: fg=accent-bright bg=panel
-l: fg=edge bg=panel
-m: fg=accent bg=surface
-n: bg=surface
-o: fg=dim bg=surface
-p: fg=fg bg=surface bold
-q: fg=fg bg=panel
+f: fg=success bg=panel bold
+g: fg=error bg=panel bold
+h: fg=dim bg=panel bold
+i: fg=success-tint bg=panel
+j: fg=accent-bright bg=panel
+k: fg=mute bg=panel
+l: fg=accent bg=surface
+m: bg=surface
+n: fg=dim bg=surface
+o: fg=fg bg=surface bold
+p: fg=fg bg=panel
 === 16 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
 |│                                                              ┃ │|
@@ -109,27 +107,27 @@ q: fg=fg bg=panel
 |╰────────────────────────────────────────────────────────────────╯|
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
-|a                                                              e a|
-|a  fff dddddd   g dddddd   h ddddddd            aaaaaaae ccccc e a|
-|a                                                              e a|
-|a  hhhhhhhbhhhbhhhhbhhhhbh                                     e a|
-|a                                  iiiiii                      e a|
-|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii              e a|
-|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii      e a|
-|a                                                              e a|
-|a  e ccccccccbbg                                               e a|
-|a    eeeeeee              eeee                          hhhh i e a|
-|a  ajkkkkkkkkkkkkkkkkjjjjjlllllllllllllljjjjjjjjjjjjjjjjjlllll e a|
-|a    dddddddddddd         mmmmmmmmmmmmm                  mmmmm e a|
+|a                                                              d a|
+|a  eee dddddd   f dddddd   g ddddddd            aaaaaaah ccccc d a|
+|a                                                              d a|
+|a  gggggggbgggbggggbggggbg                                     d a|
+|a                                  iiiiii                      d a|
+|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii              d a|
+|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii      d a|
+|a                                                              d a|
+|a  h ccccccccbbf                                               d a|
+|a    hhhhhhh              hhhh                          gggg i h a|
+|a  ajkkkkkkkkkkkkkkkkjjjjjlllllllllllllljjjjjjjjjjjjjjjjjlllll h a|
+|a    dddddddddddd         mmmmmmmmmmmmm                  mmmmm h a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
 b: bold
 c: fg=fg bold
 d: fg=dim
-e: fg=mute
-f: fg=success bold
-g: fg=error bold
-h: fg=dim bold
+e: fg=success bold
+f: fg=error bold
+g: fg=dim bold
+h: fg=mute
 i: fg=accent-bright
 j: reverse
 k: fg=dim reverse

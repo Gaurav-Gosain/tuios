@@ -76,7 +76,8 @@
       <button key="e" on-press="emit('edit')" if="view.band != 'narrow'">Open in editor</button>
       <button key="c" on-press="copy(state.failures)" if="view.band == 'wide'">Copy names</button>
       <spacer/>
-      <text role="mute"><kbd>s</kbd> sort   <kbd>tab</kbd> next   <kbd>esc</kbd> close</text>
+      <text role="mute" if="view.placement != 'popup'"><kbd>s</kbd> sort   <kbd>tab</kbd> next</text>
+      <text role="mute" if="view.placement == 'popup'"><kbd>s</kbd> sort   <kbd>tab</kbd> next   <kbd>esc</kbd> close</text>
     </row>
   </col>
 </tml>

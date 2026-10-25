@@ -754,3 +754,64 @@ func TestPageScroll(t *testing.T) {
 		screenHas(t, p.Render(40, 12), "END")
 	}
 }
+
+// TestPageKeepsItsPlaceAcrossWidths checks that the page keeps the same
+// content at the top when a new width reflows it, as a zoom and an unzoom
+// do, and when a patch makes the content above it taller.
+func TestPageKeepsItsPlaceAcrossWidths(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`<tml version="1"><state>{"head": "short"}</state><col gap="1"><text>{state.head}</text>`)
+	for i := range 30 {
+		fmt.Fprintf(&b, `<text>p%02d a paragraph long enough to wrap in a narrow surface</text>`, i)
+	}
+	b.WriteString(`</col></tml>`)
+	s := mustSurface(t, b.String())
+	top := func(w, h int) string {
+		t.Helper()
+		for _, r := range rows(s.Render(w, h)) {
+			if i := strings.Index(r, "p"); i >= 0 && len(r) >= i+3 && r[i+1] >= '0' && r[i+1] <= '9' {
+				return r[i : i+3]
+			}
+		}
+		t.Fatal("no paragraph on the screen")
+		return ""
+	}
+	s.Render(80, 10)
+	s.scrollPage(30)
+	want := top(80, 10)
+	if got := top(30, 10); got != want {
+		t.Fatalf("a narrower width moved the top from %s to %s", want, got)
+	}
+	if got := top(80, 10); got != want {
+		t.Fatalf("the width back moved the top from %s to %s", want, got)
+	}
+	long := strings.Repeat("a long head line ", 20)
+	if err := s.Patch([]tml.Op{{Op: "replace", Path: "/head", Value: []byte(strconv.Quote(long))}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := top(80, 10); got != want {
+		t.Fatalf("a taller head moved the top from %s to %s", want, got)
+	}
+}
+
+// TestPlacementAndStatRows checks view.placement, which a document reads to
+// show esc close in a popup only, and a row of stats that wraps whole stats
+// when it is narrow instead of cutting their labels.
+func TestPlacementAndStatRows(t *testing.T) {
+	s := mustSurface(t, `<tml version="1"><col><text if="view.placement == 'popup'">esc close</text><text>body</text></col></tml>`)
+	if strings.Contains(strings.Join(rows(s.Render(30, 4)), "\n"), "esc close") {
+		t.Fatal("esc close shows with no placement")
+	}
+	s.SetPlacement("popup")
+	screenHas(t, s.Render(30, 4), "esc close")
+	s.SetPlacement("pane")
+	if strings.Contains(strings.Join(rows(s.Render(30, 4)), "\n"), "esc close") {
+		t.Fatal("esc close shows in a pane")
+	}
+
+	st := mustSurface(t, `<tml version="1"><row gap="3"><stat label="passed" value="412"/><stat label="failed" value="3"/><stat label="skipped" value="9"/></row></tml>`)
+	buf := st.Render(24, 6)
+	for _, want := range []string{"passed", "failed", "skipped"} {
+		screenHas(t, buf, want)
+	}
+}

@@ -304,13 +304,14 @@ func (s *Surface) lineHeight(kids []*box, widths []int) int {
 	return h
 }
 
-// rowLines splits a row that holds a button into lines when its children
-// do not fit side by side at their natural widths: an action bar wraps
-// whole buttons to the next line instead of cutting their labels. A spacer
+// rowLines splits a row that holds a button or a stat into lines when its
+// children do not fit side by side at their natural widths: an action bar
+// wraps whole buttons, and a row of stats whole stats, to the next line
+// instead of cutting their labels. A spacer
 // goes with the child after it, so a hint pushed to the right stays at the
 // right on its own line. nil means one line, laid out as before.
 func (s *Surface) rowLines(b *box, inner int) [][]*box {
-	if len(b.kids) < 2 || !slices.ContainsFunc(b.kids, func(k *box) bool { return k.kind == "button" }) {
+	if len(b.kids) < 2 || !slices.ContainsFunc(b.kids, func(k *box) bool { return k.kind == "button" || k.kind == "stat" }) {
 		return nil
 	}
 	natural := func(k *box) int {

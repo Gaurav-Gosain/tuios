@@ -45,8 +45,12 @@ type View struct {
 	Text  map[string]string
 	Caret map[string]int
 	// Page is how many rows a document taller than its surface is
-	// scrolled down.
-	Page int
+	// scrolled down. PageAnchor is the key of the box at the top of the
+	// page and PageRow the row of it there, so the place stays on the same
+	// content when a new width reflows the page.
+	Page       int
+	PageAnchor string
+	PageRow    int
 }
 
 // newView returns an empty view.

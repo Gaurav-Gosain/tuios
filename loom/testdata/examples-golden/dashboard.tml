@@ -24,7 +24,7 @@
     <row gap="2">
       <button key="r" on-press="emit('rerun', state.failures)">Rerun failed</button>
       <button key="o" on-press="emit('log')">Open log</button>
-      <spacer/><text role="mute">esc close</text>
+      <spacer/><text role="mute" if="view.placement == 'popup'">esc close</text>
     </row>
   </col>
 </tml>
