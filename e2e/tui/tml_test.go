@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -140,6 +141,28 @@ func TestTMLShowPopup(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "2-picked")
 
+	// The popup minimizes to the dock and comes back as a popup, with its
+	// cursor row. A command popup does not minimize; a surface waits for an
+	// answer, so it does.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "m", "m"); err != nil {
+		t.Fatalf("send leader m m: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !screenHas(s, "Rerun and close") && strings.Contains(dockRows(s), "Test run")
+	}, uiTimeout); err != nil {
+		t.Fatalf("leader m m did not minimize the popup to the dock: %v\n%s", err, term.Snapshot())
+	}
+	saveTMLFrame(t, term, "2b-minimized")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "m", "1"); err != nil {
+		t.Fatalf("send leader m 1: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Picked: TestAttachReplay", "Rerun and close")
+	}, uiTimeout); err != nil {
+		t.Fatalf("leader m 1 did not bring the popup back: %v\n%s", err, term.Snapshot())
+	}
+	saveTMLFrame(t, term, "2c-restored")
+
 	// A click on a tab title switches the tab.
 	col, row := tmlLocate(t, term, "Log")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
@@ -251,6 +274,8 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 		t.Fatalf("tuios tml close: %v\n%s", err, out)
 	}
 	waitWindowCount(t, term, 1, "after tuios tml close")
+
+	tmlLongPaneScrolls(t, term, base, "e2e-tmlpane")
 	if out, err := tuiosCLI(t, base, "tml", "close", opened.Surface); err == nil {
 		t.Fatalf("a second close of the same surface succeeded:\n%s", out)
 	} else if !strings.Contains(out, "no open surface") {
@@ -276,13 +301,17 @@ func TestTMLShowRefusesABadDocument(t *testing.T) {
 	}
 }
 
-// tmlSurfaceOf waits for list-windows to name a surface in session and
-// returns it with its window.
+// tmlSurfaceOf waits for list-windows to name a surface in session, or in
+// the default session when session is "", and returns it with its window.
 func tmlSurfaceOf(t *testing.T, base, sess string) (string, string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {
-		out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
+		args := []string{"list-windows", "--json"}
+		if sess != "" {
+			args = append(args, "-s", sess)
+		}
+		out, err := tuiosCLI(t, base, args...)
 		var res struct {
 			Windows []struct {
 				WindowID string `json:"window_id"`
@@ -413,4 +442,109 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	case <-time.After(uiTimeout):
 		t.Fatalf("esc on the placeholder did not close the far surface\n%s", term.Snapshot())
 	}
+}
+
+// tmlLongDoc is a report taller than any pane: a heading, 40 numbered lines
+// that read the state, and a mark at the end.
+func tmlLongDoc() string {
+	var b strings.Builder
+	b.WriteString(`<tml version="1" title="Long report"><state>{"n": 1}</state><col pad="1" gap="1"><heading level="1">TOP-MARK report</heading>`)
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&b, `<text>LINE-%02d of the report, count {state.n}</text>`, i)
+	}
+	b.WriteString(`<card title="Totals"><kv><item k="passed" v="412"/></kv></card><text>BOTTOM-MARK</text></col></tml>`)
+	return b.String()
+}
+
+// tmlLongPaneScrolls opens tmlLongDoc as a pane in sess and scrolls it: the
+// pane shows a scroll bar, the keys and the wheel move the page, and the
+// position stays across a patch, a minimize and a restore.
+//
+// Negative control: without the page in loom, the document is cut after
+// the lines that fit, and nothing brings BOTTOM-MARK into view.
+func tmlLongPaneScrolls(t *testing.T, term *tuitest.Terminal, base, sess string) {
+	t.Helper()
+	doc := writeTMLDoc(t, base, "long.tml", tmlLongDoc())
+	out, err := tuiosCLI(t, base, "tml", "show", doc, "--pane", "--json", "-s", sess)
+	if err != nil {
+		t.Fatalf("tuios tml show --pane: %v\n%s", err, out)
+	}
+	var opened struct {
+		Surface string `json:"surface"`
+	}
+	if err := json.Unmarshal([]byte(out), &opened); err != nil {
+		t.Fatalf("tuios tml show --pane printed %q: %v", out, err)
+	}
+	if err := term.WaitForText("TOP-MARK", uiTimeout); err != nil {
+		t.Fatalf("the long pane never drew: %v\n%s", err, term.Snapshot())
+	}
+	col, row := tmlLocate(t, term, "TOP-MARK")
+	if !strings.Contains(term.Screen().Line(row), "┃") {
+		t.Fatalf("the long pane shows no scroll bar:\n%s", term.Snapshot())
+	}
+	saveTMLFrame(t, term, "5-long-top")
+	// A click gives the pane the focus. The document has no focusable box,
+	// so G takes the page to its end.
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	time.Sleep(200 * time.Millisecond)
+	if err := term.SendKeys("G"); err != nil {
+		t.Fatalf("send G: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "BOTTOM-MARK") && !screenHas(s, "TOP-MARK")
+	}, uiTimeout); err != nil {
+		t.Fatalf("G did not scroll the pane to its end: %v\n%s", err, term.Snapshot())
+	}
+	saveTMLFrame(t, term, "6-long-end")
+	// k and the wheel scroll back up.
+	if err := term.SendKeys("k", "k", "k", "k", "k", "k"); err != nil {
+		t.Fatalf("send k: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "BOTTOM-MARK") }, uiTimeout); err != nil {
+		t.Fatalf("k did not scroll the pane up: %v\n%s", err, term.Snapshot())
+	}
+	_, lineRow := tmlLocate(t, term, "LINE-")
+	wheelAt(t, term, col, lineRow, tuitest.MouseWheelUp, 2)
+	time.Sleep(300 * time.Millisecond)
+	first := tmlFirstLine(t, term)
+	// A patch, a minimize and a restore keep the place.
+	if out, err := tuiosCLI(t, base, "tml", "patch", opened.Surface, `[{"op":"replace","path":"/n","value":42}]`); err != nil {
+		t.Fatalf("tuios tml patch: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("count 42", uiTimeout); err != nil {
+		t.Fatalf("the patch never reached the pane: %v\n%s", err, term.Snapshot())
+	}
+	if got := tmlFirstLine(t, term); got != first {
+		t.Fatalf("the patch moved the pane from %s to %s\n%s", first, got, term.Snapshot())
+	}
+	leaveTerminalMode(t, term)
+	if err := term.SendKeys("m"); err != nil {
+		t.Fatalf("send m: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !screenHas(s, "count 42") && strings.Contains(dockRows(s), "Long report")
+	}, uiTimeout); err != nil {
+		t.Fatalf("m did not minimize the long pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("!"); err != nil {
+		t.Fatalf("send !: %v", err)
+	}
+	if err := term.WaitForText("count 42", uiTimeout); err != nil {
+		t.Fatalf("! did not restore the long pane: %v\n%s", err, term.Snapshot())
+	}
+	if got := tmlFirstLine(t, term); got != first {
+		t.Fatalf("a minimize and a restore moved the pane from %s to %s\n%s", first, got, term.Snapshot())
+	}
+	saveTMLFrame(t, term, "7-long-restored")
+}
+
+// tmlFirstLine is the first LINE-NN on the screen.
+func tmlFirstLine(t *testing.T, term *tuitest.Terminal) string {
+	t.Helper()
+	text := term.Screen().Text()
+	i := strings.Index(text, "LINE-")
+	if i < 0 || i+7 > len(text) {
+		t.Fatalf("no LINE- on the screen:\n%s", term.Snapshot())
+	}
+	return text[i : i+7]
 }

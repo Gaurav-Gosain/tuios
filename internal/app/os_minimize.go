@@ -4,21 +4,24 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // MinimizeWindow minimizes the window at the specified index.
 //
-// A popup cannot be minimized. Minimizing puts a pane on the dock as a pill the
-// user picks up again later, and a popup has no later: it holds one command and
-// closes when the command exits, which would leave a pill for a pane that is
-// gone. Close it instead.
+// A command popup cannot be minimized. Minimizing puts a pane on the dock as a
+// pill the user picks up again later, and a command popup has no later: it
+// holds one command and closes when the command exits, which would leave a
+// pill for a pane that is gone. Close it instead. A TML popup has a later: its
+// surface stays until it is answered or closed, so it goes to the dock as any
+// pane does and comes back as a popup.
 func (m *OS) MinimizeWindow(i int) {
 	// A scratch pane is not minimized either: the scratch key hides its
 	// whole group, and a pane parked on the dock of a group's workspace would
 	// be out of reach once the group hides.
-	if i >= 0 && i < len(m.Windows) && (m.Windows[i].IsPopup || m.Windows[i].IsScratch) {
+	if i >= 0 && i < len(m.Windows) && (m.Windows[i].IsPopup && m.Windows[i].Kind != session.WindowKindTML || m.Windows[i].IsScratch) {
 		return
 	}
 	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized {
@@ -44,8 +47,9 @@ func (m *OS) MinimizeWindow(i int) {
 			m.FocusNextVisibleWindow()
 		}
 
-		// Retile remaining windows if in tiling mode
-		if m.AutoTiling {
+		// Retile remaining windows if in tiling mode. A popup holds no
+		// place in the layout, so the layout stays as it is.
+		if m.AutoTiling && !window.IsPopup {
 			if m.UseScrollingLayout {
 				// Remove from scrolling layout and retile
 				intID := m.GetWindowIntID(window.ID)
@@ -87,7 +91,7 @@ func (m *OS) RestoreWindow(i int) {
 		if m.AutoTiling {
 			window.Minimized = false
 
-			if m.UseScrollingLayout {
+			if m.UseScrollingLayout && !window.IsPopup {
 				// Re-add to scrolling layout
 				intID := m.GetWindowIntID(window.ID)
 				sl := m.GetOrCreateScrollingLayout()
