@@ -2,6 +2,8 @@ package tuie2e
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -230,7 +232,10 @@ func fleetRowWith(s tuitest.Screen, want string) int {
 
 // saveCockpitFrames saves the screen as text and as a PNG drawn by
 // tuios.dev/shot, in the font named by TUIOS_E2E_FONT_DIR when it is set.
-func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string) {
+//
+// pics are the kitty pictures the host shows (hostPictures), drawn over the
+// cells as the host draws them.
+func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics ...shot.Image) {
 	t.Helper()
 	dir := artifactDir(t)
 	saveArtifact(t, term, dir, name)
@@ -238,6 +243,7 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string) {
 	p := shot.XTermPalette()
 	cols, rows := s.Size()
 	g := shot.NewGrid(cols, rows, p.FG, p.BG)
+	g.Images = pics
 	for y := range rows {
 		for x := range cols {
 			c := s.Cell(x, y)
@@ -599,6 +605,186 @@ func TestCockpitReplyAreaAndImageView(t *testing.T) {
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	waitText(t, term, "the closed area after Send", "Write a reply.")
 	alive(t, term, "after the reply area and the image view")
+}
+
+// TestCockpitReplyClipboardImageFirstPaste pastes a clipboard image into the
+// reply with ctrl+v, on a host with kitty graphics, and opens it. The
+// thumbnail and the image view each show their picture on the first try,
+// with no other key or click to bring it out.
+//
+// The picture is prepared off the update loop, and it lands in a frame whose
+// cells equal the last one: the box was drawn blank a frame earlier. The
+// renderer writes nothing for such a frame, and the picture was queued
+// behind it, so it waited for the next key or click. The screen is let go
+// quiet before the paste, so no other frame can carry the picture out.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with FlushIfDrawn
+// returning at once, no thumbnail is placed after the paste.
+func TestCockpitReplyClipboardImageFirstPaste(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	useShippedLooks(base)
+	for _, s := range []string{"home", "docs"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	for _, args := range [][]string{
+		{"set-window", "-s", "docs", "-w", "0", "--name", "docs-cli"},
+		{"set-agent-state", "idle", "-s", "docs", "-w", "docs-cli", "--harness", "claude-code"},
+	} {
+		if out, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	// A wl-paste that offers one PNG and no text stands in for the
+	// clipboard, so the person's own clipboard is never read.
+	bin := t.TempDir()
+	clip := filepath.Join(bin, "clip.png")
+	if err := os.WriteFile(clip, gradientPNG(t, 640, 360), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\ncase \"$*\" in\n*--list-types*) echo image/png ;;\n*) cat '" + clip + "' ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(bin, "wl-paste"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	host := &lockedBuffer{}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 200, rows: 55, shippedLooks: true, out: host,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "PATH=" + bin + ":" + os.Getenv("PATH"), "WAYLAND_DISPLAY=wayland-e2e"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	row, col := findText(t, term, "Write a reply.")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	waitText(t, term, "the open reply editor", "Type your reply.")
+	waitBufferQuiet(t, host, 1500*time.Millisecond)
+
+	mark := len(host.String())
+	if err := term.SendKeys(tuitest.Ctrl('v')); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the image chip", "Image 1.png  640×360", "click to view", "[Image #1 · 640×360 png]")
+	// The thumbnail is placed on the box above its #1 label, with no other
+	// input.
+	var label struct{ row, col int }
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		label.row = -1
+		for i, line := range strings.Split(s.Text(), "\n") {
+			if before, _, ok := strings.Cut(line, "#1"); ok && !strings.Contains(line, "[Image") {
+				label.row, label.col = i, len([]rune(before))
+			}
+		}
+		want := fmt.Sprintf("\x1b[%d;%dH\x1b_Ga=p,i=", label.row-draftThumbRows+1, label.col+1)
+		return label.row >= 0 && strings.Contains(host.String()[mark:], want)
+	}, 5*time.Second); err != nil {
+		saveCockpitFrames(t, term, "clipboard-thumb-missing", hostPictures(t, []byte(host.String()))...)
+		t.Fatalf("ASSERTION: the first paste placed no thumbnail (label at %+v): %v\n%s", label, err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "clipboard-thumb-200x55", hostPictures(t, []byte(host.String()))...)
+
+	// The chip opens the image view, and its picture is placed with no
+	// other input.
+	row, col = findText(t, term, "Image 1.png  640×360")
+	mark = len(host.String())
+	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+	waitText(t, term, "the image view", "pasted by you for docs-cli", "Click outside the picture to close it.")
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		for _, pic := range hostPictures(t, []byte(host.String())) {
+			if pic.Cols > 40 && pic.Rows > draftThumbRows {
+				return strings.Contains(host.String()[mark:], "a=p,")
+			}
+		}
+		return false
+	}, 5*time.Second); err != nil {
+		saveCockpitFrames(t, term, "clipboard-view-missing", hostPictures(t, []byte(host.String()))...)
+		t.Fatalf("ASSERTION: the image view placed no picture: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "clipboard-view-200x55", hostPictures(t, []byte(host.String()))...)
+	alive(t, term, "after the clipboard image")
+}
+
+// waitBufferQuiet waits until the client has written nothing to the host for
+// quiet: a notification's countdown, say, has run out. waitHostQuiet is the
+// same for a sixelHost.
+func waitBufferQuiet(t *testing.T, host *lockedBuffer, quiet time.Duration) {
+	t.Helper()
+	last, since := -1, time.Now()
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if n := len(host.String()); n != last {
+			last, since = n, time.Now()
+		} else if time.Since(since) >= quiet {
+			return
+		}
+	}
+	t.Fatalf("the client never stopped writing to the host")
+}
+
+// placedAPC is one kitty graphics command, with the cursor move just before
+// it, which is where a placement goes.
+var placedAPC = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
+
+// hostPictures replays the kitty graphics in stream as the host does and
+// returns the pictures placed at the end, for a frame.
+func hostPictures(t *testing.T, stream []byte) []shot.Image {
+	t.Helper()
+	type placed struct {
+		row, col, cols, rows int
+	}
+	data := map[uint32][]byte{}
+	decoded := map[uint32]image.Image{}
+	live := map[gfxKey]placed{}
+	var sending uint32
+	for _, m := range placedAPC.FindAllSubmatch(stream, -1) {
+		p := kittyParams(string(m[3]))
+		id := atoiU32(p["i"])
+		switch p["a"] {
+		case "t", "T":
+			sending = id
+			data[id] = append([]byte(nil), m[4]...)
+		case "":
+			// A chunk after the first names no image: it is the one being
+			// sent.
+			data[sending] = append(data[sending], m[4]...)
+		case "p":
+			r, _ := strconv.Atoi(string(m[1]))
+			c, _ := strconv.Atoi(string(m[2]))
+			cols, _ := strconv.Atoi(p["c"])
+			rows, _ := strconv.Atoi(p["r"])
+			live[gfxKey{id, atoiU32(p["p"])}] = placed{row: r - 1, col: c - 1, cols: cols, rows: rows}
+		case "d":
+			keep := map[gfxKey]bool{}
+			for k := range live {
+				keep[k] = true
+			}
+			del(keep, p, id)
+			for k := range live {
+				if !keep[k] {
+					delete(live, k)
+				}
+			}
+		}
+	}
+	var out []shot.Image
+	for k, pl := range live {
+		img, ok := decoded[k.img]
+		if !ok {
+			raw, err := base64.StdEncoding.DecodeString(string(data[k.img]))
+			if err == nil {
+				img, err = png.Decode(bytes.NewReader(raw))
+			}
+			if err != nil {
+				t.Errorf("ASSERTION: image %d is placed but its picture does not decode: %v", k.img, err)
+				continue
+			}
+			decoded[k.img] = img
+		}
+		out = append(out, shot.Image{Pixels: img, Col: pl.col, Row: pl.row, Cols: pl.cols, Rows: pl.rows})
+	}
+	return out
 }
 
 // gradientPNG is a w by h PNG of soft colour bands, a picture that reads as

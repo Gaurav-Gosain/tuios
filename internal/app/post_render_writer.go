@@ -34,6 +34,10 @@ type PostRenderWriter struct {
 	// not for WriteHost, because it answers for the frame being written. See
 	// FrameHook.
 	frameHook FrameHook
+	// frameOwed is set while a frame the client composed has not reached
+	// the renderer's Write yet. Data queued while it is clear has no frame
+	// coming to carry it. See FlushIfDrawn.
+	frameOwed bool
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -93,6 +97,9 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 	pending := w.pending
 	w.pending = nil
 	out := p
+	if frame {
+		w.frameOwed = false
+	}
 	if frame && w.frameHook != nil {
 		var after []byte
 		if out, after = w.frameHook(p); len(after) > 0 {
@@ -134,6 +141,32 @@ func (w *PostRenderWriter) QueuePostRender(data []byte) {
 	w.mu.Lock()
 	w.pending = append(w.pending, data...)
 	w.mu.Unlock()
+}
+
+// FrameComposed records that the client composed a frame that differs from
+// the last one, so the renderer has a frame to write.
+func (w *PostRenderWriter) FrameComposed() {
+	w.mu.Lock()
+	w.frameOwed = true
+	w.mu.Unlock()
+}
+
+// FlushIfDrawn writes the queued data now when no frame is owed: the screen
+// already shows the frame the data was queued for.
+//
+// The renderer writes nothing for a frame equal to the one it wrote last. A
+// picture that is prepared off the update loop, such as a reply's image
+// preview, arrives in such a frame: its cells were drawn blank a frame
+// earlier. The data queued for it then waited for the next frame that
+// changed a cell, so the picture showed only after the next key or click.
+func (w *PostRenderWriter) FlushIfDrawn() {
+	w.mu.Lock()
+	owed := w.frameOwed || len(w.pending) == 0
+	w.mu.Unlock()
+	if owed {
+		return
+	}
+	_, _ = w.write(nil, false)
 }
 
 // ClearPending discards all pending data. Used when screen is cleared

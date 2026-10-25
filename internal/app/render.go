@@ -1167,6 +1167,9 @@ func (m *OS) View() tea.View {
 		// client with that section at about 110 context switches a second.
 		if content != m.cachedViewContent {
 			composed = true
+			if m.PostRenderWriter != nil {
+				m.PostRenderWriter.FrameComposed()
+			}
 		}
 		m.cachedViewContent = content
 		if composed && !m.quietFrame {
@@ -1268,6 +1271,11 @@ func (m *OS) View() tea.View {
 	// and prevents tearing between text and graphics updates.
 	if !m.renderSkipped {
 		m.flushGraphicsForView()
+		// A frame equal to the last one is not written, so nothing would
+		// carry what the graphics queued for it.
+		if !composed && m.PostRenderWriter != nil {
+			m.PostRenderWriter.FlushIfDrawn()
+		}
 	}
 
 	return view

@@ -9349,3 +9349,13 @@ The tree subtest also deletes alpha/inner, which is open, and makes it again und
 | --- | --- | --- |
 | `dirwatch.Set` keeps the watch descriptor of a folder that was deleted (`if false && ok && mask&selfGone != 0`), so `Refresh` never watches the new folder | tree: "a file made in the new inner never showed" | **caught** |
 | `sidebarPublishNav` does not call `sidebarFileFallback`, so a vanished file row sends the cursor to row 0 of the rail | tree: "the gesture never produced the clipboard writes [.../alpha/inner]; it wrote []" | **caught** |
+
+## A clipboard image shows on the first paste
+
+`TestCockpitReplyClipboardImageFirstPaste` (in `cockpit_test.go`) runs a 200x55 client on a host with kitty graphics, with a fake `wl-paste` that offers one PNG. It lets the screen go quiet, presses ctrl+v in the agents view's reply, and checks that the thumbnail is placed on its box with no other input. A click on the chip then opens the image view, which must place its picture with no other input. Run on 2026-10-25 on Linux against upstream main at 8d463ac7f.
+
+The fixed build passes, and saves the thumbnail and the image view with the host's pictures drawn in.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `FlushIfDrawn` never called, which is upstream main | "the first paste placed no thumbnail (label at {row:49 col:6})" after 5 s | **caught** |
