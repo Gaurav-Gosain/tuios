@@ -111,6 +111,8 @@ func (m *OS) FocusTerminalDirection(direction string) int {
 		if focused := m.GetFocusedWindow(); focused != nil {
 			focused.InvalidateCache()
 		}
+	} else {
+		m.enterRailAtEdge(direction)
 	}
 	return previous
 }

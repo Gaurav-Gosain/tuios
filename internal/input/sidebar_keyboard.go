@@ -87,6 +87,13 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return m, cmd
 		}
 
+		// A terminal focus key pointing back at the panes leaves the rail, so
+		// the key that walked into it from the outermost pane walks back out.
+		focus := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
+		if dir, ok := strings.CutPrefix(focus, "terminal_focus_"); ok && o.LeaveRailToward(dir) {
+			return o, nil
+		}
+
 		// esc leaves the rail when nothing else claims it. The scope swallows
 		// unbound keys, so a config that resolves no rail action (one written
 		// before this section existed, or a rebound exit) would otherwise trap

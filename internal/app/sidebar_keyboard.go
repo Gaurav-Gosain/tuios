@@ -117,6 +117,59 @@ func (m *OS) ExitSidebarFocus() {
 	}
 }
 
+// railEdgeToward is the screen edge a focus direction runs into. Up and down
+// run into no rail.
+func railEdgeToward(direction string) (sidebarEdge, bool) {
+	switch direction {
+	case "left":
+		return sidebarLeft, true
+	case "right":
+		return sidebarRight, true
+	}
+	return 0, false
+}
+
+// enterRailAtEdge gives the keyboard to the rail on the edge a focus key ran
+// into from the outermost pane, so the focus keys walk on into the rail
+// instead of stopping. A hidden rail is not revealed: there is nothing on that
+// edge to walk into.
+func (m *OS) enterRailAtEdge(direction string) {
+	edge, ok := railEdgeToward(direction)
+	if !ok || m.sidebarWidthFor(m.sidebarPreferredWidth()) == 0 {
+		return
+	}
+	if m.legacySidebarEdge() == edge {
+		m.EnterSidebarFocus()
+		return
+	}
+	if m.secondarySidebarWidth() > 0 {
+		m.EnterSidebarFocus()
+		m.FocusOtherSidebar()
+	}
+}
+
+// LeaveRailToward returns the keyboard to the panes when a focus key points
+// from the focused rail back at them, the way enterRailAtEdge came in. It
+// reports whether it left.
+func (m *OS) LeaveRailToward(direction string) bool {
+	if !m.SidebarFocused {
+		return false
+	}
+	edge := m.legacySidebarEdge()
+	if m.sidebarFocusSecondary {
+		edge = sidebarLeft
+		if m.legacySidebarEdge() == sidebarLeft {
+			edge = sidebarRight
+		}
+	}
+	away, ok := railEdgeToward(direction)
+	if !ok || away == edge {
+		return false
+	}
+	m.ExitSidebarFocus()
+	return true
+}
+
 // sidebarCurrentSessionNavIndex is the cursor position of the attached session's
 // row, or 0 when it is not among the rows the last frame recorded.
 func (m *OS) sidebarCurrentSessionNavIndex() int {
