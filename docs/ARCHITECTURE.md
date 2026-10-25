@@ -22,7 +22,7 @@ TUIOS follows a layered architecture built on the Model-View-Update (MVU) patter
 
 TUIOS runs as a daemon and its clients. The daemon (`internal/session`) owns the sessions, the PTYs and one VT emulator per pane, and it outlives every client. A client attaches to a session, sends it input, and draws what it streams. A plain `tuios` runs this way, because `startup.daemon` ships on. `tuios --standalone` runs one process that owns its PTYs and emulators itself and lives and dies with that process. The wire contract is in [protocol.md](protocol.md) and the attach contract in [REHYDRATION.md](REHYDRATION.md).
 
-The emulator behind the `vt.Terminal` interface is either the pure Go implementation or libghostty-vt behind `-tags ghostty`. Exactly one of them is compiled into a binary. See [ghostty-vt.md](ghostty-vt.md).
+The emulator behind the `vt.Terminal` interface is either the pure Go implementation or libghostty-vt behind `-tags ghostty`. Exactly one of them backs the panes of a binary. See [ghostty-vt.md](ghostty-vt.md).
 
 ## System Architecture
 
