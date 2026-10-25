@@ -68,8 +68,9 @@ them is refused. `agent-activity` (one entry of
 a pane's activity ring, as `entry`: a prompt, a tool call, its result or a
 finished turn) is opt-in: it arrives only when `--types` names it, and a
 resumed stream does not replay it, so read `tuios agent-log` after a gap.
-`transcript` (a pane's joined transcript grew, with the `cursor` of
-`agent-transcript`) is opt-in in the same way. It is for a client that shows
+`transcript` (a pane's joined transcript grew; a linear log's event carries the
+`cursor` of `agent-transcript`, a document's or Pi's carries none, so read with
+the cursor of your last reply) is opt-in in the same way. It is for a client that shows
 the conversation to the person. `transfer-progress` (a copy's row while its bytes
 move, at most four a second) and `transfer-file` (one file of a copy ended) are
 opt-in in the same way. `layout-changed` (the panes on `workspace` opened,

@@ -54,8 +54,9 @@ type transcriptJoin struct {
 	// (harness.ReaderJSONL) gives a turn state. Every other format is joined
 	// for the person to read, and its growth raises the transcript event.
 	format string
-	// doc says the harness rewrites the file whole, so its growth is told by
-	// its size and time (docSize, docMod) rather than by an offset.
+	// doc says the file is read whole, so its growth is told by its size and
+	// time (docSize, docMod) rather than by an offset: the harness rewrites it
+	// whole, or it is a tree of entries (Pi) of which one branch is shown.
 	doc     bool
 	docSize int64
 	docMod  time.Time
@@ -151,7 +152,7 @@ func (s *Session) JoinAgentTranscriptAs(windowID, harnessID, format, path string
 	}
 	j := &transcriptJoin{
 		windowID: windowID, harness: harnessID, format: format, reader: transcript.NewReader(abs), exact: exact,
-		doc: transcriptview.IsDocument(format, abs),
+		doc: transcriptview.IsDocument(format, abs) || transcriptview.IsTree(format),
 	}
 	if s.transcripts.joins == nil {
 		s.transcripts.joins = make(map[string]*transcriptJoin)

@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/google/uuid"
 	"tuios.dev/vt"
 )
@@ -1570,6 +1571,17 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 	if verr != nil {
 		return nil, verr
 	}
+	// An accepted new identity must never retain the previous conversation's
+	// history if its replacement is absent or refused by the path allowlist.
+	// A tree of entries is joined only by the file the hook names, so nothing
+	// else would replace it.
+	var treeWindow, previousSession string
+	if p.AgentSessionID != "" && d.transcriptIsTree(p.Harness) {
+		st := sess.GetState()
+		if idx, err := findWindowStateIndex(st.Windows, target); err == nil {
+			treeWindow, previousSession = st.Windows[idx].ID, st.Windows[idx].AgentSessionID
+		}
+	}
 
 	report := AgentReport{
 		State:      state,
@@ -1656,6 +1668,10 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 		} else if path := d.sessionTranscriptPath(p.Harness, sid); path != "" {
 			transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, path, "")
 		}
+	}
+	if applied && treeWindow != "" && previousSession != p.AgentSessionID && (p.TranscriptPath == "" || transcriptRefused != "") {
+		sess.DropAgentTranscript(treeWindow)
+		sess.emit(SessionEvent{Type: EventTranscript, Window: treeWindow})
 	}
 	// state is the effective state, so a report a higher-ranked source outranked
 	// reports what the pane actually shows rather than what was asked for.
@@ -1853,6 +1869,15 @@ func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any
 		}
 		target = id
 	}
+	// An accepted new identity must never retain the previous conversation's
+	// history, and this verb names no file to replace it with.
+	var treeWindow, previousSession string
+	if d.transcriptIsTree(harnessID) {
+		st := sess.GetState()
+		if idx, err := findWindowStateIndex(st.Windows, target); err == nil {
+			treeWindow, previousSession = st.Windows[idx].ID, st.Windows[idx].AgentSessionID
+		}
+	}
 	stored, applied, reason, err := sess.applyAgentSession(target, AgentSessionReport{
 		Harness:     harnessID,
 		SessionID:   sid,
@@ -1872,6 +1897,10 @@ func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any
 	if reason != "" {
 		out["reason"] = reason
 	}
+	if applied && treeWindow != "" && previousSession != stored {
+		sess.DropAgentTranscript(treeWindow)
+		sess.emit(SessionEvent{Type: EventTranscript, Window: treeWindow})
+	}
 	return out, nil
 }
 
@@ -1884,6 +1913,17 @@ const maxAgentSessionIDLen = 256
 // the manifest rule kinds, so a hook and a screen rule describe a block in the
 // same words.
 var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQuestion, harness.PromptKindAuth}
+
+// transcriptIsTree says whether the harness's manifest names a reader for a
+// tree of entries, such as Pi's, rather than a log read from an offset.
+func (d *Daemon) transcriptIsTree(harnessID string) bool {
+	reg := d.agentMatcher.registry
+	if harnessID == "" || reg == nil {
+		return false
+	}
+	tr := reg.TranscriptFor(harnessID)
+	return tr != nil && transcriptview.IsTree(tr.Reader)
+}
 
 // joinReportedTranscript binds a window to the transcript file its harness
 // named in a hook. This is the exact join the transcript source was built for:

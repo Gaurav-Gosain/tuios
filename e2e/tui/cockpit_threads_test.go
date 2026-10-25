@@ -52,6 +52,12 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		rewrite, rewritten string
 	}{
 		{
+			name: "pi", harness: "pi", fixture: "pi-session.jsonl", sessionID: "pi-fixture",
+			file: filepath.Join(".pi", "agent", "sessions", "--work-project--", "2026-10-22_pi-fixture.jsonl"),
+			want: []string{"b is three. One test fails.", "Command failed with exit code 1", "edit", "const b = 3;", "Rate limit reached."},
+			once: "Set b to three.",
+		},
+		{
 			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
 			file: filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
 			want: []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted"},
@@ -131,6 +137,9 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				hook.Env = append(hook.Env, key+"="+xdgDir(base, key))
 			}
 			payload := hookPayload(path, c.sessionID)
+			if c.harness == "pi" {
+				payload, _ = json.Marshal(map[string]any{"hook_event_name": "session_start", "session_id": c.sessionID, "transcript_path": path})
+			}
 			if c.payload != "" {
 				payload = []byte(c.payload)
 			}

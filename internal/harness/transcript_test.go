@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -94,6 +95,32 @@ verify = ["lastPrompt"]
 				t.Fatalf("want error containing %q, got none", tc.wantErr)
 			case !strings.Contains(err.Error(), tc.wantErr):
 				t.Fatalf("error %q does not contain %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// The folder a Pi hook may name a transcript in follows Pi's own rule for its
+// agent folder, the one the extension install already honours: PI_CODING_AGENT_DIR
+// with a leading ~ expanded, else ~/.pi/agent. A relative value names no folder
+// the daemon could check a path against, so it gives no root.
+func TestPiAgentPlaceholder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tr := Transcript{Reader: "pi-jsonl", Dir: "{pi_agent}/sessions", Glob: "*/*.jsonl"}
+	tests := []struct{ name, env, want string }{
+		{"unset", "", filepath.Join(home, ".pi", "agent", "sessions")},
+		{"blank", "  ", filepath.Join(home, ".pi", "agent", "sessions")},
+		{"absolute", "/srv/pi-agent", "/srv/pi-agent/sessions"},
+		{"home shorthand", "~/work/pi", filepath.Join(home, "work", "pi", "sessions")},
+		{"bare home", "~", filepath.Join(home, "sessions")},
+		{"relative", "pi-agent", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PI_CODING_AGENT_DIR", tc.env)
+			if got := tr.Root(); got != tc.want {
+				t.Fatalf("Root() = %q, want %q", got, tc.want)
 			}
 		})
 	}

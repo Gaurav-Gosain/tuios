@@ -70,6 +70,7 @@ var knownReaders = map[string]struct{}{
 	"amp-thread":       {},
 	"opencode-service": {},
 	"cursor-jsonl":     {},
+	"pi-jsonl":         {},
 }
 
 // KnownReaders returns the reader names a manifest may give.
@@ -276,10 +277,11 @@ func (t Transcript) Root() string {
 func DashPath(cwd string) string { return strings.ReplaceAll(cwd, "/", "-") }
 
 // knownPlaceholders is what ExpandDir understands.
-var knownPlaceholders = map[string]struct{}{"{home}": {}, "{state}": {}, "{cwd:dashes}": {}}
+var knownPlaceholders = map[string]struct{}{"{home}": {}, "{state}": {}, "{pi_agent}": {}, "{cwd:dashes}": {}}
 
-// expandBase resolves the two placeholders that name a fixed folder: {home},
-// and {state}, the XDG state folder ($XDG_STATE_HOME, or ~/.local/state).
+// expandBase resolves the placeholders that name a fixed folder: {home};
+// {state}, the XDG state folder ($XDG_STATE_HOME, or ~/.local/state); and
+// {pi_agent}, Pi's agent folder (see piAgentDir).
 func expandBase(dir, home string) string {
 	if strings.Contains(dir, "{state}") {
 		state := os.Getenv("XDG_STATE_HOME")
@@ -288,13 +290,32 @@ func expandBase(dir, home string) string {
 		}
 		dir = strings.ReplaceAll(dir, "{state}", state)
 	}
+	if strings.Contains(dir, "{pi_agent}") {
+		dir = strings.ReplaceAll(dir, "{pi_agent}", piAgentDir(home))
+	}
 	return strings.ReplaceAll(dir, "{home}", home)
+}
+
+// piAgentDir is Pi's agent folder, the way Pi itself finds it:
+// $PI_CODING_AGENT_DIR with a leading ~ expanded, else ~/.pi/agent. It reads
+// the daemon's environment, as {state} does. A relative value is returned
+// as it is, and Root then gives "" for it, since no path can be checked
+// against a folder that depends on where the daemon runs.
+func piAgentDir(home string) string {
+	v := strings.TrimSpace(os.Getenv("PI_CODING_AGENT_DIR"))
+	switch {
+	case v == "":
+		return filepath.Join(home, ".pi", "agent")
+	case v == "~" || strings.HasPrefix(v, "~/"):
+		return filepath.Join(home, strings.TrimPrefix(v, "~"))
+	}
+	return v
 }
 
 // baseless is dir without its fixed-folder placeholders, for the checks of
 // which placeholders a dir names.
 func baseless(dir string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(dir, "{home}", ""), "{state}", "")
+	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(dir, "{home}", ""), "{state}", ""), "{pi_agent}", "")
 }
 
 // placeholders returns the placeholders a template uses, erroring on one this

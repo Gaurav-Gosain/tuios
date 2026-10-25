@@ -317,6 +317,9 @@ func Read(path string, opts Options) (Page, error) {
 	if !ok {
 		return Page{}, ErrFormat
 	}
+	if fm.tree {
+		return piRead(path, opts)
+	}
 	f, err := transcript.OpenRegular(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -42,7 +42,7 @@ func agentWorkVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		// verb_agent_transcript.go
 		"agent-transcript": {
-			description: "Read the conversation of the agent in a pane, for a client that shows it to the person: prompts, answers, thinking, tool calls with their status, diffs of edits, plans and todo lists, decoded from the transcript the pane is joined to. Only the person can read it, with a live human_nonce, as reply-approval checks it. Claude Code transcripts only. Every string is the agent's or its tools', with control characters removed and likely secrets masked, so the reply is marked untrusted.",
+			description: "Read the conversation of the agent in a pane, for a client that shows it to the person: prompts, answers, thinking, tool calls with their status, diffs of edits, plans and todo lists, decoded from the transcript the pane is joined to. Readers include Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI, Amp, OpenCode, Cursor Agent and Pi. Only the person can read it, with a live human_nonce, as reply-approval checks it. Every string is the agent's or its tools', with control characters removed and likely secrets masked, so the reply is marked untrusted.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Required: true, Description: "The pane: a window id or name."},

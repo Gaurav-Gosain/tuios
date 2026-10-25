@@ -117,6 +117,9 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		if errors.Is(err, transcriptview.ErrTooLarge) {
 			return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(p.Window)+" is too large to read")
 		}
+		if errors.Is(err, transcriptview.ErrPiTree) {
+			return nil, newVerbError(ErrVerbInternal, "the Pi session tree is invalid or unavailable")
+		}
 		// The error would name the file, which is the person's project and
 		// session, so it is not passed on.
 		return nil, newVerbError(ErrVerbInternal, "could not read the transcript")

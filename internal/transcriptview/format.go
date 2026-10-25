@@ -58,6 +58,11 @@ type format struct {
 	// harness wrote a document once and writes lines now. Empty applies doc
 	// to every file.
 	docExt string
+	// tree says the file is a tree of entries (Pi), where sibling entries are
+	// different conversations and the reader follows one branch. Like a
+	// document it is read whole, so its growth is told by its size and time
+	// and an offset into it is not a position in the conversation.
+	tree bool
 	// identity reads the session's identity from the start of a file
 	// (identity.go): the folder the agent ran in and when the session
 	// started. It is how a file found by search is given to a pane. Nil means
@@ -79,6 +84,7 @@ var formats = map[string]format{
 	FormatCopilot: {line: copilotLine, identity: copilotIdentity},
 	FormatAmp:     {line: ampLine, doc: ampDoc},
 	FormatCursor:  {line: cursorLine},
+	FormatPi:      {line: piLine, tree: true},
 }
 
 // lookupFormat returns the format a name names, FormatClaude for "".
@@ -88,6 +94,13 @@ func lookupFormat(name string) (format, bool) {
 	}
 	f, ok := formats[name]
 	return f, ok
+}
+
+// IsTree reports whether the named format is a tree of entries, read whole
+// with one branch followed, so the daemon tells its growth by size and time.
+func IsTree(name string) bool {
+	f, ok := lookupFormat(name)
+	return ok && f.tree
 }
 
 // Known reports whether this build decodes the format a manifest names.

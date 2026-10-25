@@ -9461,3 +9461,18 @@ Without the busy loops, upstream main failed one run in three (2.6 s) with tuios
 | `pickLatest` keeps the size whoever is attached (`anyAttachedBy` made `true`) | `LeftAloneNewClientTakesItsSize/switch` and `/close`: "the session is 200x50 under latest, want 80x24" | **caught** |
 | `handleAttach` keeps every attach's input (the branch's first commit) | `SwitchIntoASmallerSessionKeepsItsSize`: "the panes span 120 columns, want 80" | **caught** |
 | `pickLatest`'s kept case cut, so the leave hands the session over at once (main) | `RoundTripKeepsSize` and `ReturnKeepsItsInput`: "over the round trip ws was 200x50 80x24" | **caught** |
+## A Pi session is read as a tree
+
+`TestPersonReadsPiTranscript` and `TestPiTranscriptSafety` (in `agent_transcript_pi_test.go` and `agent_transcript_pi_safety_test.go`), and the `pi` row of `TestCockpitThreadOtherHarnesses`, drive the real hook, the daemon, the human-only read and the Inbox on a Pi session that holds an abandoned sibling branch. `TestPiReadKeepsItsProjectionBySizeAndTime` and `TestPiReadBounds` (in `internal/transcriptview`) and `TestPiAgentPlaceholder` (in `internal/harness`) are unit tests for the parts a daemon test cannot see: the cache, the size bounds and the folder placeholder. Run on 2026-10-25 on Linux against upstream main at e48fc3b0.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Upstream main, where no reader is registered for Pi | "unsupported_harness: transcript pi cannot be read" in the first two, and "pi thread never showed the answer" in the cockpit row | **caught** |
+| `piProject` bypassed, so the file's own order is read | `TestPersonReadsPiTranscript`: "Pi transcript exposed \"ABANDONED-BRANCH\"" | **caught** |
+| The join no longer treats a tree like a document (`IsTree`) | `TestPersonReadsPiTranscript`: "a Pi transcript event carried an offset cursor" | **caught** |
+| Neither `DropAgentTranscript` call in `set-agent-state` and `set-agent-session` runs | `TestPiTranscriptSafety/a_replaced_conversation_is_never_shown_again`: "a refused path kept the previous conversation" | **caught** |
+| Each text or thinking block its own entry | `TestPiTranscriptSafety/secrets_and_controls_never_reach_a_client`: "split text blocks: PEM body reached the client", with the unsplit key control still masked | **caught** |
+| No decoder for the commands the person ran (`bashExecution`) | `TestPersonReadsPiTranscript`: "direct shell statuses: []" | **caught** |
+| The projection cache never hit | `TestPiReadKeepsItsProjectionBySizeAndTime`: "a file with the same size and time was read again" | **caught** |
+| A record past `lineMax` fails the whole view | `TestPiReadBounds/long_record`: "transcript too large to read whole" | **caught** |
+| `{pi_agent}` left unexpanded | `TestPiAgentPlaceholder`: `Root()` is empty in five of its six cases | **caught** |
