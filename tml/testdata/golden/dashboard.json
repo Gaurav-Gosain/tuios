@@ -140,6 +140,7 @@
             {
               "type": "text",
               "role": "mute",
+              "if": "view.placement == 'popup'",
               "children": [
                 "esc close"
               ]
