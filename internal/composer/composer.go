@@ -108,9 +108,11 @@ type Model struct {
 	// automated says a key that did not come from the keyboard touched the
 	// draft. The host must not send such a draft as the person.
 	automated bool
-	// notice is a line under the editor that says what just happened. The
-	// next edit clears it.
+	// notice is a line under the editor that says what went wrong, and info
+	// one that says what happened when nothing went wrong. The next edit
+	// clears both.
 	notice string
+	info   string
 
 	// pager is the open block, nil when none is.
 	pager *pager
@@ -191,8 +193,13 @@ func (m *Model) Empty() bool {
 // Notice is the line under the editor, empty for none.
 func (m *Model) Notice() string { return m.notice }
 
-// SetNotice puts a line under the editor until the next edit.
-func (m *Model) SetNotice(s string) { m.notice = s }
+// SetNotice puts a line under the editor until the next edit, in the
+// warning colour. Use it for a problem the person has to act on.
+func (m *Model) SetNotice(s string) { m.notice, m.info = s, "" }
+
+// SetInfo puts a quiet line under the editor until the next edit. Use it
+// when nothing went wrong, such as a key that had nothing to act on.
+func (m *Model) SetInfo(s string) { m.info = s }
 
 // Blocks is how many blocks the draft holds, pastes and images.
 func (m *Model) Blocks() int {
@@ -417,7 +424,7 @@ func thousands(n int) string {
 // edited clears what an edit makes stale: the notice and the column up and
 // down aim for.
 func (m *Model) edited() {
-	m.notice = ""
+	m.notice, m.info = "", ""
 	m.goal = -1
 }
 

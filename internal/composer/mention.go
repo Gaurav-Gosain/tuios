@@ -10,8 +10,10 @@ import (
 //
 // Typing @ at the start of the draft or after a space opens a list under the
 // editor: panes, agents and files whose names match what follows the @, up to
-// the cursor. tab puts the selected one in place of the @ and the query, up
-// and down choose, and esc, a space, or deleting the @ closes the list.
+// the cursor. tab or enter puts the selected one in place of the @ and the
+// query, as a click on it does. up and down (ctrl+p and ctrl+n) choose, and
+// esc, a space, or deleting the @ closes the list. While the list is open it
+// takes these keys before the editor does, so enter does not send.
 //
 // What is put in is text the agent reads: a pane's or an agent's address,
 // such as work/api, or a file's path relative to the pane's folder. Nothing is
@@ -64,6 +66,12 @@ type mention struct {
 	// at is the index of the @ cell.
 	at  int
 	sel int
+	// query is the text the selection was made in. A new query starts the
+	// selection at the best entry again.
+	query string
+	// row is the frame line the list's first entry was drawn on, -1 when
+	// the frame drew no entry, and top the index of that entry.
+	row, top int
 }
 
 // SetCompleter gives the composer the host's completer. Nil turns @
@@ -116,7 +124,10 @@ func (m *Model) syncMention() {
 		return
 	}
 	if m.mention == nil || m.mention.at != at {
-		m.mention = &mention{at: at}
+		m.mention = &mention{at: at, row: -1}
+	}
+	if q := m.mentionQuery(); q != m.mention.query {
+		m.mention.query, m.mention.sel = q, 0
 	}
 }
 
@@ -147,30 +158,61 @@ func (m *Model) mentionKey(key string) bool {
 			m.mention.sel = (m.mention.sel + 1) % len(items)
 		}
 		return true
-	case "tab":
-		if len(items) == 0 {
-			return true
+	case "tab", "enter":
+		if len(items) > 0 {
+			m.insertMention(items[min(m.mention.sel, len(items)-1)])
 		}
-		it := items[min(m.mention.sel, len(items)-1)]
-		text := it.Insert
-		if it.Kind == MentionFolder {
-			text = "@" + text
-		} else {
-			text += " "
-		}
-		m.edited()
-		ins := segment(nil, clean(text))
-		at := m.mention.at
-		m.change(at, m.cur-at, ins, at+len(ins))
-		m.mention = nil
-		m.syncMention()
 		return true
 	}
 	return false
 }
 
-// renderMentions draws the open list, under the editor.
-func (m *Model) renderMentions(width int, in inks) []string {
+// insertMention puts it in place of the @ and the query, and closes the list,
+// or keeps it open in a folder.
+func (m *Model) insertMention(it Mention) {
+	text := it.Insert
+	if it.Kind == MentionFolder {
+		text = "@" + text
+	} else {
+		text += " "
+	}
+	m.edited()
+	ins := segment(nil, clean(text))
+	at := m.mention.at
+	m.change(at, m.cur-at, ins, at+len(ins))
+	m.mention = nil
+	m.syncMention()
+}
+
+// MentionAt is the entry of the open list drawn on line row of the last
+// frame, counted from its first line, and false when no entry is there.
+func (m *Model) MentionAt(row int) (int, bool) {
+	if m.mention == nil || m.mention.row < 0 || row < m.mention.row {
+		return 0, false
+	}
+	i := m.mention.top + row - m.mention.row
+	n := len(m.mentions())
+	if row-m.mention.row >= mentionRows || i >= n {
+		return 0, false
+	}
+	return i, true
+}
+
+// PickMention puts entry i of the open list in, as tab does on it. It
+// reports whether there was such an entry.
+func (m *Model) PickMention(i int) bool {
+	items := m.mentions()
+	if i < 0 || i >= len(items) {
+		return false
+	}
+	m.endHistoryWalk()
+	m.goal = -1
+	m.insertMention(items[i])
+	return true
+}
+
+// renderMentions draws the open list, under the editor, from frame line row.
+func (m *Model) renderMentions(width, row int, in inks) []string {
 	items := m.mentions()
 	if m.mention == nil {
 		return nil
@@ -178,12 +220,17 @@ func (m *Model) renderMentions(width int, in inks) []string {
 	st := &in.st
 	bg := in.surface
 	pad := on(bg).Render(strings.Repeat(" ", gutter))
+	m.mention.row = -1
 	if len(items) == 0 {
 		dim := on(bg).Foreground(st.readable(st.Dim, bg))
 		return []string{fill(pad+dim.Render("No pane, agent or file matches."), width, bg)}
 	}
 	sel := min(m.mention.sel, len(items)-1)
+	// The selected entry is marked in the gutter as well as by its ground,
+	// so it reads at 16 colours, where there are no grounds.
+	marker := on(bg).Foreground(st.readable(st.Accent, bg)).Bold(true).Render(st.arrow("›", ">")) + on(bg).Render(" ")
 	top := max(0, min(sel-mentionRows+1, len(items)-mentionRows))
+	m.mention.row, m.mention.top = row, top
 	out := make([]string, 0, mentionRows)
 	for i := top; i < len(items) && i < top+mentionRows; i++ {
 		it := items[i]
@@ -197,7 +244,11 @@ func (m *Model) renderMentions(width int, in inks) []string {
 			row += s.Foreground(st.readable(st.Dim, ground)).Render("  " + it.Note)
 		}
 		row = ansi.Truncate(row, width-gutter, "…")
-		out = append(out, pad+st.row(row, width-gutter, selected, bg))
+		lead := pad
+		if selected {
+			lead = marker
+		}
+		out = append(out, lead+st.row(row, width-gutter, selected, bg))
 	}
 	return out
 }

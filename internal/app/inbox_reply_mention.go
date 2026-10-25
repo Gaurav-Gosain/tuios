@@ -36,6 +36,9 @@ type replyMentions struct {
 	m *OS
 	// dir is the target pane's folder, empty for no files.
 	dir string
+	// window is the pane the reply is for, which the list leaves out: an
+	// agent is not told about itself.
+	window string
 	// folders are the read folders, by path relative to dir, and asked those
 	// out to the daemon.
 	folders map[string][]mentionFile
@@ -68,7 +71,7 @@ type mentionFolderMsg struct {
 
 // newReplyMentions is the completer for a reply to a pane.
 func (m *OS) newReplyMentions(sessionID, windowID string) *replyMentions {
-	c := &replyMentions{m: m, folders: map[string][]mentionFile{}, asked: map[string]bool{}}
+	c := &replyMentions{m: m, window: windowID, folders: map[string][]mentionFile{}, asked: map[string]bool{}}
 	// A client served to someone elsewhere (tuios-web, the SSH server) runs
 	// on the daemon's machine, and its file-list call reads that machine's
 	// folders. The person is not at that machine, so the list offers no
@@ -93,7 +96,7 @@ func (c *replyMentions) Version() uint64 { return c.version }
 func (c *replyMentions) Mentions(query string) []composer.Mention {
 	sig := c.m.sidebarSignature()
 	if c.names == nil || c.namesAt != sig {
-		c.names, c.namesAt = c.m.mentionNames(), sig
+		c.names, c.namesAt = c.m.mentionNames(c.window), sig
 	}
 	if c.last != nil && c.lastQuery == query && c.lastVersion == c.version && c.lastNames == sig {
 		return c.last
@@ -150,8 +153,9 @@ func (c *replyMentions) Mentions(query string) []composer.Mention {
 }
 
 // mentionNames are the panes and agents, as the list offers them: agents
-// with their state, then the panes that run no agent.
-func (m *OS) mentionNames() []composer.Mention {
+// with their state, then the panes that run no agent. The pane skip is left
+// out.
+func (m *OS) mentionNames(skip string) []composer.Mention {
 	tree := m.BuildSessionTree()
 	var out []composer.Mention
 	agents := map[string]bool{}
@@ -159,32 +163,47 @@ func (m *OS) mentionNames() []composer.Mention {
 		if e.Host != "" {
 			continue
 		}
-		addr := mentionAddress(e.SessionLabel, e.SessionID, agentName(e))
 		agents[e.WindowID] = true
-		out = append(out, composer.Mention{Kind: composer.MentionAgent, Label: addr, Insert: addr, Note: sidebarStateWords(e.State)})
+		if e.WindowID == skip {
+			continue
+		}
+		addr, insert := mentionAddress(e.SessionLabel, e.SessionID, agentName(e))
+		out = append(out, composer.Mention{Kind: composer.MentionAgent, Label: addr, Insert: insert, Note: sidebarStateWords(e.State)})
 	}
 	for _, s := range tree.Sessions {
 		if s.Host != "" {
 			continue
 		}
 		for _, w := range s.Children {
-			if agents[w.ID] || w.Title == "" {
+			if agents[w.ID] || w.Title == "" || w.ID == skip {
 				continue
 			}
-			addr := mentionAddress(s.Title, s.ID, printableTitle(w.Title))
-			out = append(out, composer.Mention{Kind: composer.MentionPane, Label: addr, Insert: addr})
+			addr, insert := mentionAddress(s.Title, s.ID, printableTitle(w.Title))
+			out = append(out, composer.Mention{Kind: composer.MentionPane, Label: addr, Insert: insert})
 		}
 	}
 	return out
 }
 
-// mentionAddress is a pane's address as tuios takes it: session/window.
-func mentionAddress(label, id, name string) string {
+// mentionAddress is a pane's address as tuios takes it, session/window, as
+// the list shows it and as it is put in the reply. The reply quotes each
+// part that needs it as a shell word, so an agent can pass the two parts to
+// -s and -w as they are.
+func mentionAddress(label, id, name string) (shown, insert string) {
 	sess := label
 	if sess == "" {
 		sess = id
 	}
-	return sess + "/" + name
+	return sess + "/" + name, shellWord(sess) + "/" + shellWord(name)
+}
+
+// shellWord is s as one shell word: as it is when it needs no quotes, and in
+// single quotes when it holds a space or a character the shell reads.
+func shellWord(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[](){}<>|&;#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // replyMentionCmd reads the folder the open @ list needs, when it has not

@@ -415,7 +415,7 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the reply editor", "Reply to", "Type your reply.", "ctrl+v paste image")
+	waitText(t, term, "the reply editor", "Reply to", "Type your reply.", "ctrl+v image")
 	if err := term.SendKeys("echo i9m6 "); err != nil {
 		t.Fatal(err)
 	}

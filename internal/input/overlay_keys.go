@@ -63,6 +63,7 @@ func closeHelp(o *app.OS) {
 	o.HelpCategory = -1
 	o.HelpSearchQuery = ""
 	o.HelpSearchMode = false
+	o.HelpClosed()
 }
 
 // handleHelpOverlayKey handles a key while the help overlay is open. Help is

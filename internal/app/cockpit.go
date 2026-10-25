@@ -1112,6 +1112,14 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 			n, _ := strconv.Atoi(i)
 			return m.cockpitOpenImage(n)
 		}
+		if i, ok := strings.CutPrefix(action, "mention:"); ok {
+			n, _ := strconv.Atoi(i)
+			if ed := m.Inbox.reply.editor; ed != nil && ed.comp.PickMention(n) {
+				// A folder keeps the list open, on the folder's files.
+				return m.replyMentionCmd()
+			}
+			return nil
+		}
 		if id, ok := strings.CutPrefix(action, "fold:"); ok {
 			if t := m.cockpitThread(); t != nil {
 				if t.folded == nil {
@@ -1301,8 +1309,13 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		return nil, true
 	case config.ActionInboxHelp:
+		ck := &m.Inbox.ck
+		back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
 		m.CloseInbox()
 		m.OpenHelpAtCategory(HelpCategoryAgents)
+		// The view opens again on this agent when the help closes.
+		ck.back = &back
+		m.helpBackToAgents = true
 		return nil, true
 	case config.ActionInboxTabPrev, config.ActionInboxTabNext:
 		d := 1

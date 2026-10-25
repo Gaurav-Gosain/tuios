@@ -77,6 +77,11 @@ func (m *Model) Drawn() uint64 { return m.drawn }
 
 // render draws a frame the cache does not hold.
 func (m *Model) render(width int, st Styles, surface color.Color) []string {
+	// While the @ list is open its selected entry is the one lit row: the
+	// draft is drawn on the panel's own ground, as a plain caret line.
+	if m.mention != nil {
+		st.Field = surface
+	}
 	in := newInks(st, surface)
 	m.places = m.places[:0]
 	m.caretOK = false
@@ -116,15 +121,21 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 		}
 		out = append(out, fill(b.String(), width, in.field))
 	}
-	out = append(out, m.renderMentions(width, in)...)
+	out = append(out, m.renderMentions(width, len(out), in)...)
 	if m.hsearch != nil {
 		out = append(out, m.renderHistorySearch(width, in)...)
 	}
-	if m.notice != "" {
-		warn := st.readable(st.Warning, surface)
-		for _, l := range wrapWords(m.notice, width-gutter) {
+	// A problem is in the warning colour. A line that only says what
+	// happened is quiet.
+	line, ink := m.notice, st.Warning
+	if line == "" {
+		line, ink = m.info, st.Dim
+	}
+	if line != "" {
+		fg := st.readable(ink, surface)
+		for _, l := range wrapWords(line, width-gutter) {
 			out = append(out, fill(on(surface).Render(strings.Repeat(" ", gutter))+
-				on(surface).Foreground(warn).Render(l), width, surface))
+				on(surface).Foreground(fg).Render(l), width, surface))
 		}
 	}
 	return out

@@ -371,11 +371,14 @@ type OS struct {
 	LastPrefixTime        time.Time      // Time when prefix was activated
 	// LockHeld is true while lock mode keeps a menu open after a repeatable
 	// action, until esc. See lock_mode.go.
-	LockHeld               bool
-	HelpScrollOffset       int                           // Scroll offset for help menu
-	HelpCategory           int                           // Current help category index (for left/right navigation)
-	HelpSearchMode         bool                          // True when help search is active
-	HelpSearchQuery        string                        // Current search query in help menu
+	LockHeld         bool
+	HelpScrollOffset int    // Scroll offset for help menu
+	HelpCategory     int    // Current help category index (for left/right navigation)
+	HelpSearchMode   bool   // True when help search is active
+	HelpSearchQuery  string // Current search query in help menu
+	// helpBackToAgents says the help was opened from the agents view, which
+	// opens again when the help closes. See HelpClosed.
+	helpBackToAgents       bool
 	CurrentWorkspace       int                           // Current active workspace (1-9)
 	NumWorkspaces          int                           // Total number of workspaces
 	WorkspaceFocus         map[int]int                   // Remembers focused window per workspace

@@ -462,8 +462,8 @@ func (m *OS) InboxReplyCancel() {
 	}
 }
 
-// InboxReplySend queues the reply. An empty reply sends nothing and keeps
-// the editor open. A reply with invisible characters, or larger than the
+// InboxReplySend queues the reply. An empty reply sends nothing, keeps the
+// editor open and says so. A reply with invisible characters, or larger than the
 // daemon takes, stays open with a line that says why.
 func (m *OS) InboxReplySend() tea.Cmd {
 	ed := m.Inbox.reply.editor
@@ -471,6 +471,8 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		return nil
 	}
 	if ed.comp.Empty() {
+		// enter or Send on an empty draft says why nothing happened.
+		ed.comp.SetInfo("The reply is empty. Type a message to send it.")
 		return nil
 	}
 	if ed.comp.Automated() || m.ProcessingRemoteKeys {
@@ -915,8 +917,18 @@ func (m *OS) inboxReplyHints() ([]overlay.Hint, bool) {
 	if ed == nil {
 		return nil, false
 	}
-	return composerHints(ed.comp.Hints(overlay.UseASCII())), true
+	// The reply area's own line shows send, new line and image, so the
+	// footer keeps the other keys. Hints is the composer's cached slice: it
+	// is copied before it is cut.
+	hints := slices.DeleteFunc(slices.Clone(ed.comp.Hints(overlay.UseASCII())), func(h composer.Hint) bool {
+		return replyAreaHints[h.Label]
+	})
+	return composerHints(hints), true
 }
+
+// replyAreaHints are the labels of the composer's keys the reply area's own
+// line already shows.
+var replyAreaHints = map[string]bool{"send": true, "new line": true, "paste image": true}
 
 // sidebarAgentQueuedFigure is what a rail agent row shows at its right edge
 // in place of the elapsed time while messages wait in the pane's queue, empty

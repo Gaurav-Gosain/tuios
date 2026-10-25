@@ -13,6 +13,7 @@ type frameKey struct {
 	cur, top int
 	width    int
 	notice   string
+	info     string
 	pager    *pager
 	pagerTop int
 	ascii    bool
@@ -36,7 +37,7 @@ type frameKey struct {
 // changes a colour or a flag of st with them.
 func (m *Model) frameKey(width int, st *Styles, surface color.Color) frameKey {
 	k := frameKey{
-		ver: m.ver, cur: m.cur, top: m.top, width: width, notice: m.notice,
+		ver: m.ver, cur: m.cur, top: m.top, width: width, notice: m.notice, info: m.info,
 		pager: m.pager, ascii: st.ASCII, plain: st.Plain, sigil: st.Sigil,
 	}
 	if m.pager != nil {

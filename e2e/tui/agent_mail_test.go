@@ -324,7 +324,7 @@ func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
 }
 
 // mailDraftTakesImagesAndMentions checks that the mail editor has what the
-// Inbox reply has: a pasted image shows as a picture, and @ lists the agents.
+// Inbox reply has: a pasted image shows as a picture, and @ opens the list.
 // It leaves the draft empty. The harness's host has kitty graphics, so the
 // thumbnail is a kitty picture placed on the blank box the strip leaves. The
 // mail draft used to get neither: the strip named the image in words
@@ -362,11 +362,15 @@ func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host 
 	}, uiTimeout); err != nil {
 		t.Fatalf("the mail draft placed no picture on the thumbnail box (label at %+v): %v\n%s", label, err, term.Snapshot())
 	}
-	// The list opens on an @ that starts a word.
+	// The list opens on an @ that starts a word. It leaves out the agent
+	// the draft is for, which is the only agent here.
 	if err := term.SendKeys(" @"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the @ list of agents", "e2e-ctrlp/WORKER")
+	waitText(t, term, "the @ list", "tab insert", "No pane, agent or file matches.")
+	if strings.Contains(term.Screen().Text(), "e2e-ctrlp/WORKER") {
+		t.Fatalf("the @ list offers the agent the draft is for\n%s", term.Snapshot())
+	}
 	saveFrame(t, term, "mail-new-mention-image")
 	if err := term.SendKeys(tuitest.Backspace, tuitest.Backspace, tuitest.Backspace); err != nil {
 		t.Fatal(err)

@@ -9415,3 +9415,30 @@ Then the rule changed again: a diagram is made smaller only to fit the width. A 
 | --- | --- | --- |
 | Fit to the height always (`if true` for `o.fit`) | stack test, all three cases: "the tall diagram (208 units wide) takes 10 columns, want about 21", "takes 54 rows, want about 119" | **caught** |
 | `ReserveImageSpace` in `vt` scrolls at most one screen again | stack test, all three cases: "picture 2 (208x2380) shows pixel rows 1240 to 2360, want its bottom row 2380", "picture 3 starts -9 rows after the end of picture 2" | **caught** |
+## The agents view: the reply editor's @ list
+
+`TestCockpitReplyMentions` (in `cockpit_test.go`) works the reply editor of
+the agents view at 160x45, in truecolor and at 16 colours. The reply is for
+docs-cli. The test opens and closes the help, checks the footer, presses
+enter on an empty draft, types `@`, checks the marker and the grounds, moves
+the selection with down and ctrl+p, filters, inserts with enter, closes the
+list with esc and by deleting the @, clicks a pane whose name has a space,
+passes the quoted name to `capture-pane -w`, and closes the editor with a
+draft in it. At 16 colours it stops after the selection checks. Run on
+2026-10-25.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|-----|-------------|-----|-----------------|---------|
+| The selected entry looks like the others | the Card ground in `replyStyles` | `st.Selected = l.pal.Card` left out | `TestCockpitReplyMentions/truecolor` ("the selected entry's ground is the ground of the others") | **caught** |
+| The selection has no marker | the marker in `renderMentions` | the selected row gets the plain pad | `TestCockpitReplyMentions/16` ("the first entry does not carry the marker alone") | **caught** |
+| The draft line keeps its lit ground while the list is open | `st.Field = surface` in `render` | the line left out | `TestCockpitReplyMentions/truecolor` ("the draft line keeps a lit ground while the list is open") | **caught** |
+| Enter on the open list sends the reply | enter in the list's keys | `case "tab", "enter":` back to `case "tab":` | `TestCockpitReplyMentions/truecolor` ("waiting for the inserted mention") | **caught** |
+| The list offers the agent the reply is for | the skip in `mentionNames` | the skip made false | `TestCockpitReplyMentions/truecolor` ("the list offers the agent the reply is for") | **caught** |
+| A pane name with a space goes in unquoted | `shellWord` in `mentionAddress` | the address put in as shown | `TestCockpitReplyMentions/truecolor` ("waiting for the clicked mention") | **caught** |
+| ? leaves the agents view for good | `HelpClosed` | it never opens the view | `TestCockpitReplyMentions/truecolor` ("waiting for the agents view after the help") | **caught** |
+| The footer repeats the reply area's keys | the filter in `inboxReplyHints` | nothing filtered | `TestCockpitReplyMentions/truecolor` ("the footer repeats the reply area's keys") | **caught** |
+| enter on an empty draft does nothing and says nothing | the line in `InboxReplySend` | the `SetInfo` call left out | `TestCockpitReplyMentions/truecolor` ("waiting for the empty-reply notice") | **caught** |
+| A kept draft is not shown in the closed reply area | the draft line in `drawReplyArea` | the draft check made false | `TestCockpitReplyMentions/truecolor` ("waiting for the kept draft in the closed area") | **caught** |
+
+The colour of a quiet line (`SetInfo`) is checked by eye in the frames, not
+by the test.

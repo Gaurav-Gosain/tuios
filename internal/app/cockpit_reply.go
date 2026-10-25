@@ -51,7 +51,13 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		c.fill(x, y, w, h, l.panel)
 		c.text(x+2, y, right-16, ckSeg{t: "Reply to ", fg: pal.FgMute}, ckSeg{t: name, fg: pal.FgDim, attrs: ckBold})
 		c.textR(right-2, y, ckSeg{t: when, fg: pal.FgDim})
-		c.text(x+2, y+1, right-2, ckSeg{t: " ", bg: pal.FgMute}, ckSeg{t: " Write a reply.", fg: pal.FgMute})
+		prompt := []ckSeg{{t: " ", bg: pal.FgMute}, {t: " Write a reply.", fg: pal.FgMute}}
+		// A draft kept for this agent shows here, so the person knows r
+		// brings it back.
+		if d := st.reply.drafts[inboxDraftKey(e.SessionID, e.WindowID)]; d != nil && !d.Empty() {
+			prompt = []ckSeg{{t: "Draft: ", fg: pal.FgMute}, {t: ansi.Truncate(ckDraftLine(d), max(w-11, 1), "…"), fg: pal.FgDim}}
+		}
+		c.text(x+2, y+1, right-2, prompt...)
 		c.text(x+2, y1-1, right-14, hints...)
 		bx := c.textR(right-2, y1-1, send)
 		c.mark(pal, bx, y1-1, right-2-bx, 1, ckOn)
@@ -60,7 +66,7 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	}
 
 	inner := max(w-4, 8)
-	body := ed.comp.Render(inner, composerStyles(pal), l.panel)
+	body := ed.comp.Render(inner, replyStyles(l), l.panel)
 	images := ckDraftImages(ed.comp)
 	h := 3 + len(body)
 	if len(images) > 0 {
@@ -104,6 +110,10 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	cut := max(len(body)-max(fy-row, 0), 0)
 	for i, s := range body[cut:] {
 		c.draw(x+2, row+i, inner, s)
+		// An entry of the @ list takes a click.
+		if j, ok := ed.comp.MentionAt(cut + i); ok {
+			st.ck.hits = append(st.ck.hits, ckHit{x0: x + 2, y0: top + row + i, x1: x + 2 + inner, y1: top + row + i + 1, kind: ckHitAction, action: "mention:" + strconv.Itoa(j)})
+		}
 	}
 	// The pictures the draft shows are placed relative to the layer.
 	ed.at.x, ed.at.y, ed.at.ok = x+2, row-cut, cut == 0
@@ -113,6 +123,22 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	c.mark(pal, sx, fy, right-2-sx, 1, ckOn)
 	st.ck.hits = append(st.ck.hits, ckHit{x0: sx, y0: top + fy, x1: right - 2, y1: top + fy + 1, kind: ckHitAction, action: "send"})
 	return y - 1
+}
+
+// ckDraftLine is a kept draft as one line: its words, with the line breaks
+// and runs of spaces closed up.
+func ckDraftLine(d *composer.Model) string {
+	return printableTitle(strings.Join(strings.Fields(composer.JoinParts(d.Parts())), " "))
+}
+
+// replyStyles are the composer's styles on the reply area's panel. The
+// palette's list cursor is the panel's own grey, so the @ list's selected
+// entry takes the input field's ground, which the draft gives up while the
+// list is open.
+func replyStyles(l ckLook) composer.Styles {
+	st := composerStyles(l.pal)
+	st.Selected = l.pal.Card
+	return st
 }
 
 // ckDraftImages are the images a draft holds, in order.

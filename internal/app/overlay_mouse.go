@@ -603,6 +603,7 @@ func (m *OS) closeOverlay(kind string) {
 		m.HelpSearchMode = false
 		m.HelpSearchQuery = ""
 		m.HelpScrollOffset = 0
+		m.HelpClosed()
 	case "settings":
 		m.CloseSettings()
 	case "keybinds":

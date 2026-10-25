@@ -171,7 +171,7 @@ func (m *Model) endHistoryWalk() {
 // no history to search.
 func (m *Model) OpenHistorySearch() bool {
 	if len(m.hist) == 0 {
-		m.notice = "Nothing was sent to this agent yet."
+		m.info = "Nothing was sent to this agent yet."
 		return false
 	}
 	m.hsearch = &histSearch{}

@@ -277,6 +277,7 @@ const HelpCategorySidebar = "Sidebar"
 // usual auto-selection.
 func (m *OS) OpenHelpAtCategory(name string) {
 	m.ShowHelp = true
+	m.helpBackToAgents = false
 	m.HelpScrollOffset = 0
 	m.HelpSearchMode = false
 	m.HelpSearchQuery = ""
@@ -287,6 +288,16 @@ func (m *OS) OpenHelpAtCategory(name string) {
 			return
 		}
 	}
+}
+
+// HelpClosed is called after the help overlay closes. Help opened from the
+// agents view opens that view again, on the agent it was on.
+func (m *OS) HelpClosed() {
+	if !m.helpBackToAgents {
+		return
+	}
+	m.helpBackToAgents = false
+	m.OpenInbox("")
 }
 
 // HelpStepCategory moves the help's section strip by delta under the list

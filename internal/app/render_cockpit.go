@@ -247,7 +247,7 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 	if ed := st.reply.editor; ed != nil {
 		// At the width the last frame drew it, so the composer's own cache
 		// answers, and Drawn moves only when the draft or the cursor did.
-		ed.comp.Render(max(ck.edW-4, 8), composerStyles(l.pal), l.panel)
+		ed.comp.Render(max(ck.edW-4, 8), replyStyles(l), l.panel)
 		key.editor = ed.comp.Drawn() + 1
 	}
 	// A state that moves with the clock or the keyboard is drawn afresh.
