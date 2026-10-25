@@ -1180,8 +1180,20 @@ func (m *OS) View() tea.View {
 		// Cleared here rather than on the motion path so a frame composed for
 		// any other reason (a keystroke, pane output) counts too, and it starts
 		// the motion frame budget over for the same reason.
+		//
+		// The budget runs from the end of the compose, not its start. Motion
+		// that arrived while this frame was composed is waiting in Bubble
+		// Tea's queue, and it holds positions older than the one this frame
+		// drew. Counted from the start, a compose that took longer than a
+		// frame period (a wide screen with a panel up, a slow machine, or a
+		// high max_fps) had spent the whole budget, so the first of those
+		// stale events composed again, and so did the next: every event drew
+		// a frame and the highlight trailed the pointer by seconds (issue
+		// #1058). Counted from the end, the queued events drain without a
+		// frame, and the next frame is at most one period plus one compose
+		// behind the pointer.
 		m.pointerMotionPending = false
-		m.lastInteractionRender = composeStart
+		m.lastInteractionRender = time.Now()
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
 		return true

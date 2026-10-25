@@ -9300,3 +9300,12 @@ same revision as the test.
 
 Each change was built in a separate Go overlay, leaving the source tree intact.
 With the fix, the test passes and saves frames for both clients.
+## Settings hover keeps up with the pointer (#1058)
+
+`TestSettingsHoverKeepsUpWithThePointer` (in `settings_hover_lag_test.go`) runs a 400x100 client with `max_fps = 240`, so a frame of the settings panel takes longer to compose than one frame period. It sweeps the pointer over ten settings rows for 3 s, one report every 2 ms, then stops it on a row the sweep never touched. That row must carry the cursor marker within 1.5 s. Run on 2026-10-25 on Linux against upstream main at 73d59f3e1.
+
+The fixed build passes: the row was highlighted 14 to 211 ms after the pointer stopped, over six runs.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The motion budget counted from the start of the compose (`m.lastInteractionRender = composeStart`), which is upstream main | "the row under the pointer was highlighted 4.375s after the pointer stopped; the budget is 1.5s" | **caught** |

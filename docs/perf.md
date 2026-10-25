@@ -4490,3 +4490,42 @@ View per event):
 A settings frame at 320x80 still costs about 5.7 ms. `renderSettings` is 1.9
 ms of that, mostly `ansi.StringWidth` in the row layout. With one frame per
 period, that cost no longer builds a queue.
+
+## 2026-10 the motion budget starts when the frame ends (#1058)
+
+On v0.11.0, hover over the settings panel still trailed the pointer on a wide
+screen. The motion budget counted one frame period from the start of the last
+compose. A compose that took longer than one period had used up the whole
+budget before it returned, so the next motion event composed again. That
+event was already old: it had waited in Bubble Tea's queue during the
+compose. So every event composed a frame, as before #1059, and the queue
+grew for as long as the pointer moved.
+
+A settings frame at 320x80 costs about 6 ms here, and a rail hover frame
+about 2 ms. A frame period is 16.7 ms at the default 60 fps and 6.9 ms at
+144 fps. So the panel crosses the period first, on a slower machine, a wider
+screen or a higher `max_fps`, and the rail does not.
+
+### What changed
+
+The budget counts from the end of the compose. The events that queued during
+the compose drain without a frame, and the next frame is at most one period
+plus one compose behind the pointer.
+
+### Numbers
+
+`drive.py` as in the section above, 500 reports a second for 4 s, settings
+open. Lag is the time from the last report to the last frame byte.
+
+| Size | max_fps | | lag | client CPU | frames written |
+|---|---|---|---|---|---|
+| 320x80 | 60 | before | 13 ms | 47% | 219 |
+| | | after | 19 ms | 38% | 176 |
+| 320x80 | 240 | before | 7638 ms | 143% | 1633 |
+| | | after | 14 ms | 82% | 358 |
+| 400x100 | 144 | before | 5950 to 12072 ms | 127 to 149% | 947 to 1118 |
+| | | after | 20 to 509 ms | 70 to 77% | 181 to 212 |
+
+At 60 fps this machine composes inside the period, and the two builds behave
+the same. `TestSettingsHoverKeepsUpWithThePointer` drives the 400x100,
+240 fps case through the real binary.
