@@ -270,10 +270,14 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return typeIntoPane(msg, o, nvimNavigation)
 }
 
-// typeIntoPane sends a key to the focused pane, and to the multifocus set's
-// panes unless the key is a focus move nvim navigation forwards. With no pane
-// focused it goes back to window mode.
+// typeIntoPane sends a key to the pane the user types into: a rail session
+// pane that has the keyboard, or else the focused pane and the multifocus
+// set's panes, unless the key is a focus move nvim navigation forwards. With
+// no pane focused it goes back to window mode.
 func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS, tea.Cmd) {
+	if typeIntoRailPane(msg, o) {
+		return o, nil
+	}
 	focusedWindow := o.GetFocusedWindow()
 	// A TML window takes the key itself: its surface is drawn by this
 	// client, and its PTY only holds the place. See app/tml.go.
@@ -320,6 +324,22 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 		o.Mode = app.WindowManagementMode
 	}
 	return o, nil
+}
+
+// typeIntoRailPane sends a key to the rail session pane that has the
+// keyboard. It reports whether a rail session had the keyboard, in which case
+// the key is the rail's and goes nowhere else.
+func typeIntoRailPane(msg tea.KeyPressMsg, o *app.OS) bool {
+	if !o.SidebarSessionFocused() {
+		return false
+	}
+	if w := o.SidebarSessionWindow(); w != nil {
+		raw, released := paneKeyBytes(paneMsg(msg, o), w, o, true)
+		if len(raw) > 0 && o.WriteSidebarSession(raw) && !released {
+			o.NotePaneKeyDown(msg.Code, w.ID)
+		}
+	}
+	return true
 }
 
 // recordTerminalKey records a keystroke that is being forwarded to the focused

@@ -309,9 +309,15 @@ func TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys(t *testing.T) {
 // the pane the user types into: the rail's pane, not the focused pane of the
 // attached session.
 //
+// Then ctrl+b left holds the leader menu, and x y Enter must reach the rail
+// pane as xy: x is a key the held menu refuses, and it goes to the pane the
+// user types into.
+//
 // Negative control: with the rail's workspace chord exception kept under lock,
 // alt+1 alt+3 go to the attached session's pane and the wait for them in the
-// rail session fails. The run is in NEGATIVE_CONTROLS.md.
+// rail session fails. With menuKey.unbound sending to the focused pane of the
+// attached session, x goes there and the wait for xy fails. The runs are in
+// NEGATIVE_CONTROLS.md.
 func TestLockModeGivesTheRailPaneItsWorkspaceChords(t *testing.T) {
 	const cfg = `[startup]
 open_default_window = true
@@ -369,6 +375,32 @@ lock = true
 	}
 	if got := currentWorkspace(t, base, "lockrail"); got != 1 {
 		t.Fatalf("ASSERTION: the session is on workspace %d, want 1", got)
+	}
+
+	// A key a held menu refuses goes to the rail pane too. ctrl+b left holds
+	// the leader menu, and x is a key it refuses: x and the y after it must
+	// both reach the rail pane's cat -v as xy, and nothing the center.
+	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Left); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.SendKeys("x", "y", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		out, err := tuiosCLI(t, base, "capture-pane", "-s", "lockrail-side")
+		if err == nil && strings.Contains(out, "xy") {
+			break
+		}
+		if time.Now().After(deadline) {
+			center, _ := tuiosCLI(t, base, "capture-pane", "-s", "lockrail")
+			t.Fatalf("ASSERTION: x y after ctrl+b left did not reach the rail pane as xy: %v\nrail:\n%s\ncenter:\n%s\n%s", err, out, center, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if out, err := tuiosCLI(t, base, "capture-pane", "-s", "lockrail"); err != nil || strings.Contains(out, "x") {
+		t.Fatalf("ASSERTION: the key the held menu refused reached the attached session's pane: %v\n%s", err, out)
 	}
 	railShot(t, term, "locked-rail")
 }

@@ -73,7 +73,10 @@ func (k menuKey) unbound(msg tea.KeyPressMsg, o *app.OS) bool {
 	if !k.held || o.Mode != app.TerminalMode {
 		return false
 	}
-	forwardKeyToFocusedWindow(msg, o)
+	// typeIntoPane, so the key reaches the pane the user types into (a rail
+	// session pane too), the multifocus peers and a TML window, and is
+	// recorded and noted like any typed key.
+	typeIntoPane(msg, o, false)
 	return true
 }
 

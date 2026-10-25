@@ -601,12 +601,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Lock mode gives the workspace chords to the pane, so to this one.
 		workspaceChord := !o.Locked() && strings.HasPrefix(key, "alt+") && len(key) == len("alt+1") && key[len(key)-1] >= '1' && key[len(key)-1] <= '9'
 		if !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !workspaceChord {
-			if w := o.SidebarSessionWindow(); w != nil {
-				raw, released := paneKeyBytes(paneMsg(msg, o), w, o, true)
-				if len(raw) > 0 && o.WriteSidebarSession(raw) && !released {
-					o.NotePaneKeyDown(msg.Code, w.ID)
-				}
-			}
+			typeIntoRailPane(msg, o)
 			return o, nil
 		}
 	}
