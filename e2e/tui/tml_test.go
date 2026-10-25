@@ -120,7 +120,7 @@ func TestTMLShowPopup(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "with the popup open")
 	saveTMLFrame(t, term, "1-popup")
-	if !screenHas(term.Screen(), "next   esc close") {
+	if !strings.Contains(term.Screen().Text(), "next esc close") {
 		t.Fatalf("the popup does not show its esc close hint:\n%s", term.Snapshot())
 	}
 
