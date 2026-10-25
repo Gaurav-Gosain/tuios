@@ -1,5 +1,7 @@
 package app
 
+import "github.com/Gaurav-Gosain/tuios/internal/config"
+
 // Lock mode: zellij's locked mode, as keybindings.lock.
 //
 // With lock on, terminal mode gives the focused pane every key but the
@@ -69,4 +71,28 @@ func (m *OS) Locked() bool {
 // lock is on and the client is in terminal mode, where it applies.
 func (m *OS) lockPillShown() bool {
 	return m.Settings.Lock && m.Mode == TerminalMode
+}
+
+// heldWhichKey is the which-key panel of a menu lock mode holds open. The
+// held menu takes only repeatable actions, so the panel lists only those
+// rows, and says that esc closes it and any other key goes to the pane. A
+// row stands for the first action it was built from (Keybinding.Action).
+func (m *OS) heldWhichKey(title string, groups []config.KeybindingGroup) (string, []config.KeybindingGroup) {
+	var out []config.KeybindingGroup
+	for _, g := range groups {
+		var rows []config.Keybinding
+		for _, b := range g.Bindings {
+			if !b.Submenu && m.KeybindRegistry != nil && m.KeybindRegistry.PrefixRepeats(b.Action) {
+				rows = append(rows, b)
+			}
+		}
+		if len(rows) > 0 {
+			out = append(out, config.KeybindingGroup{Title: g.Title, Bindings: rows})
+		}
+	}
+	out = append(out, config.KeybindingGroup{Title: "Close", Bindings: []config.Keybinding{
+		{Key: "esc", Description: "Close and lock", Action: "lock_close"},
+		{Key: "other", Description: "Close, lock and type", Action: "lock_type"},
+	}})
+	return title + " (repeat)", out
 }

@@ -104,7 +104,8 @@ preset.
   again to move again. You do not press the leader again.
 - The open menu then takes only repeatable keys. Any other key closes the
   menu and goes to the pane, and tuios locks again. For example, `x` after
-  `ctrl+b left right` goes to the pane. It does not close a pane.
+  `ctrl+b left right` goes to the pane. It does not close a pane. The
+  which-key panel of the open menu shows only the repeatable keys and `esc`.
 - Press `esc` to close the menu and lock again. `ctrl+c` also closes it.
 - Press the leader to close the menu and open a new leader menu.
 - A key that the open menu does not bind closes the menu. The key goes to the

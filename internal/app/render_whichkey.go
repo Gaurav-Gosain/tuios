@@ -481,6 +481,9 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 // renderWhichKey draws the which-key panel and returns it with its position.
 func (m *OS) renderWhichKey() (string, int, int) {
 	title, groups := m.whichKeyMenu()
+	if m.LockHeld {
+		title, groups = m.heldWhichKey(title, groups)
+	}
 
 	// The panel spends four rows on a blank pad above and below, the title
 	// and its rule, and keeps a row clear of the screen's edge. The room

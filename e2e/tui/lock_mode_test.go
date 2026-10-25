@@ -206,11 +206,13 @@ func windowCount(t *testing.T, base, sess string) int {
 // held menu takes only repeatable actions, so x must reach cat -v, no pane
 // closes, and the badge goes away. Last, the hold key (hold_window_mode,
 // left alt) is a key like any other under lock: a pane that asked for
-// releases sees its press and its release.
+// releases sees its press and its release. While the menu is held, the
+// which-key panel lists only the repeatable keys, with esc to close.
 //
 // Negative control: with menuKey.refuses returning false, x closes pane b and
 // the window count check fails. Without the unlock badge, the wait for the
-// badge to say unlocked fails. With ReleaseHoldKey not gated on a hold in
+// badge to say unlocked fails. With the full leader table in the held
+// hint, the hint check fails. With ReleaseHoldKey not gated on a hold in
 // progress, the pane sees the press and not the release. The runs are in
 // NEGATIVE_CONTROLS.md.
 func TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys(t *testing.T) {
@@ -254,6 +256,21 @@ func TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys(t *testing.T) {
 		t.Fatalf("ASSERTION: the badge does not say unlocked while the leader menu is held: %v\n%s", err, term.Snapshot())
 	}
 	railShot(t, term, "unlocked-badge")
+
+	// The which-key panel of the held menu lists only the keys that still
+	// work, the focus moves, and says what esc and any other key do. Close
+	// window (x) and Create window (c) are leader keys the held menu refuses.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "(repeat)") && strings.Contains(text, "Focus pane") &&
+			strings.Contains(text, "Close and lock")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the held leader menu's hint does not list its repeat keys and esc: %v\n%s", err, term.Snapshot())
+	}
+	if text := term.Screen().Text(); strings.Contains(text, "Close window") || strings.Contains(text, "Create window") {
+		t.Fatalf("ASSERTION: the held leader menu's hint lists keys it refuses\n%s", term.Snapshot())
+	}
+	railShot(t, term, "held-hint")
 
 	time.Sleep(2 * time.Second)
 	send("x", tuitest.Alt('2'), tuitest.Enter)
