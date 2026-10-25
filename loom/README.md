@@ -64,6 +64,14 @@ Layout works like flex boxes for cells. `w` and `h` take cells, a percentage,
 tables, lists, text, cards and tabs give rows back first. A box never draws
 outside its parent.
 
+A document taller than its surface scrolls as a page. When the column is
+short, tables, lists and scroll boxes give rows back first. When text, a
+card or another box would still be cut, loom lays the document out on a
+taller page and shows one window of it, with a scroll bar in the last
+column. The page offset is view state (`View.Page`), so it stays across
+patches, replaces and resizes, and loom clamps it when the document gets
+shorter. A fragment, such as a dock cell, never scrolls as a page.
+
 A row that holds a button wraps when its children do not fit side by side:
 whole buttons go to the next line instead of a cut label. A spacer goes with
 the child after it, so a hint at the right stays at the right on its line.
@@ -103,6 +111,12 @@ to a budget.
 A button's `key` works from anywhere on the surface, except while a text
 field has the focus. `tab` and `shift+tab` move the focus. The focused table
 or list takes the arrow keys, `enter` and `s` (sort by the next column).
+
+On a page that does not fit, the keys the focused box does not take move
+the page: `up`, `down`, `k`, `j`, `pgup`, `pgdown`, `space`, `home`, `end`,
+`g` and `G`. They come before the root's `on-key`. The wheel over a box that
+does not scroll moves the page three rows. When the focused box takes a key,
+or `tab` moves the focus, the page brings the focus into view.
 
 A text field takes the focus from `tab` or a click, never by default. It then
 takes every key that types or edits: printable keys, `space`, `backspace`,

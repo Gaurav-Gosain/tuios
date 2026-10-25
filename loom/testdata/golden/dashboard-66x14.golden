@@ -1,154 +1,159 @@
 === truecolor 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
-|│                                                                │|
-|│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
-|│                                                                │|
-|│  Seconds per run, last 7                                       │|
-|│                                  ▅▅▅▅▅▅                        │|
-|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████                │|
-|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
-|│                                                                │|
-|│  ▾ Failures  3                                                 │|
-|│    PACKAGE               TEST                          TIME ▼  │|
-|│  ▌ internal/session      TestAttachRace                 2.21s  │|
-|│                                                                │|
+|│                                                              ┃ │|
+|│  412 passed   3 failed   9 skipped            ━━━━━━━━ 99.3% ┃ │|
+|│                                                              ┃ │|
+|│  Seconds per run, last 7                                     ┃ │|
+|│                                  ▅▅▅▅▅▅                      ┃ │|
+|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████              ┃ │|
+|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████      ┃ │|
+|│                                                              ┃ │|
+|│  ▾ Failures  3                                               ┃ │|
+|│    PACKAGE              TEST                          TIME ▼ │ │|
+|│  ▌ internal/session     TestAttachRace                 2.21s │ │|
+|│    internal/app         TestDockClick                  840ms │ │|
 |╰────────────────────────────────────────────────────────────────╯|
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addfffdeeeeeedddgdeeeeeedddhdeeeeeeedddddddddddddaaaaaaaidcccccdda|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddjjjjjjdddddddddddddddddddddddda|
-|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjdddddddddddddddda|
-|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjdddddddda|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addkdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddkkkkkkkdddddddddddddddkkkkddddddddddddddddddddddddddhhhhdjdda|
-|addlmnnnnnnnnnnnnnnnnmmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodda|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addgggdeeeeeedddhdeeeeeedddideeeeeeeddddddddddddaaaaaaajdcccccdfda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addiiiiiiibiiibiiiibiiiibidddddddddddddddddddddddddddddddddddddfda|
+|addddddddddddddddddddddddddddddddddkkkkkkddddddddddddddddddddddfda|
+|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddddddddddfda|
+|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddfda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addfdccccccccbbhdddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addddfffffffddddddddddddddffffddddddddddddddddddddddddddiiiidkdlda|
+|addmnoooooooooooooooonnnnnppppppppppppppnnnnnnnnnnnnnnnnnpppppdlda|
+|addddeeeeeeeeeeeedddddddddqqqqqqqqqqqqqddddddddddddddddddqqqqqdlda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
 d: bg=panel
 e: fg=dim bg=panel
-f: fg=success bg=panel bold
-g: fg=error bg=panel bold
-h: fg=dim bg=panel bold
-i: fg=track bg=panel
-j: fg=accent-bright bg=panel
-k: fg=mute bg=panel
-l: fg=accent bg=surface
-m: bg=surface
-n: fg=dim bg=surface
-o: fg=fg bg=surface bold
+f: fg=mute bg=panel
+g: fg=success bg=panel bold
+h: fg=error bg=panel bold
+i: fg=dim bg=panel bold
+j: fg=track bg=panel
+k: fg=accent-bright bg=panel
+l: fg=edge bg=panel
+m: fg=accent bg=surface
+n: bg=surface
+o: fg=dim bg=surface
+p: fg=fg bg=surface bold
+q: fg=fg bg=panel
 === 256 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
-|│                                                                │|
-|│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
-|│                                                                │|
-|│  Seconds per run, last 7                                       │|
-|│                                  ▅▅▅▅▅▅                        │|
-|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████                │|
-|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
-|│                                                                │|
-|│  ▾ Failures  3                                                 │|
-|│    PACKAGE               TEST                          TIME ▼  │|
-|│  ▌ internal/session      TestAttachRace                 2.21s  │|
-|│                                                                │|
+|│                                                              ┃ │|
+|│  412 passed   3 failed   9 skipped            ━━━━━━━━ 99.3% ┃ │|
+|│                                                              ┃ │|
+|│  Seconds per run, last 7                                     ┃ │|
+|│                                  ▅▅▅▅▅▅                      ┃ │|
+|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████              ┃ │|
+|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████      ┃ │|
+|│                                                              ┃ │|
+|│  ▾ Failures  3                                               ┃ │|
+|│    PACKAGE              TEST                          TIME ▼ │ │|
+|│  ▌ internal/session     TestAttachRace                 2.21s │ │|
+|│    internal/app         TestDockClick                  840ms │ │|
 |╰────────────────────────────────────────────────────────────────╯|
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaadeeeedeeeeeedeedeeeeeeeedaa|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addfffdeeeeeedddgdeeeeeedddhdeeeeeeedddddddddddddaaaaaaaidcccccdda|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addhhhhhhhbhhhbhhhhbhhhhbhddddddddddddddddddddddddddddddddddddddda|
-|addddddddddddddddddddddddddddddddddjjjjjjdddddddddddddddddddddddda|
-|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjdddddddddddddddda|
-|addjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjddjjjjjjdddddddda|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addkdccccccccbbgddddddddddddddddddddddddddddddddddddddddddddddddda|
-|addddkkkkkkkdddddddddddddddkkkkddddddddddddddddddddddddddhhhhdjdda|
-|addlmnnnnnnnnnnnnnnnnmmmmmmoooooooooooooommmmmmmmmmmmmmmmmooooodda|
-|adddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addgggdeeeeeedddhdeeeeeedddideeeeeeeddddddddddddaaaaaaajdcccccdfda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addiiiiiiibiiibiiiibiiiibidddddddddddddddddddddddddddddddddddddfda|
+|addddddddddddddddddddddddddddddddddkkkkkkddddddddddddddddddddddfda|
+|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddddddddddfda|
+|addkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddkkkkkkddddddfda|
+|addddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addfdccccccccbbhdddddddddddddddddddddddddddddddddddddddddddddddfda|
+|addddfffffffddddddddddddddffffddddddddddddddddddddddddddiiiidkdlda|
+|addmnoooooooooooooooonnnnnppppppppppppppnnnnnnnnnnnnnnnnnpppppdlda|
+|addddeeeeeeeeeeeedddddddddqqqqqqqqqqqqqddddddddddddddddddqqqqqdlda|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent bg=panel
 b: bg=panel bold
 c: fg=fg bg=panel bold
 d: bg=panel
 e: fg=dim bg=panel
-f: fg=success bg=panel bold
-g: fg=error bg=panel bold
-h: fg=dim bg=panel bold
-i: fg=success-tint bg=panel
-j: fg=accent-bright bg=panel
-k: fg=mute bg=panel
-l: fg=accent bg=surface
-m: bg=surface
-n: fg=dim bg=surface
-o: fg=fg bg=surface bold
+f: fg=mute bg=panel
+g: fg=success bg=panel bold
+h: fg=error bg=panel bold
+i: fg=dim bg=panel bold
+j: fg=success-tint bg=panel
+k: fg=accent-bright bg=panel
+l: fg=edge bg=panel
+m: fg=accent bg=surface
+n: bg=surface
+o: fg=dim bg=surface
+p: fg=fg bg=surface bold
+q: fg=fg bg=panel
 === 16 66x14
 |╭─ go test ./... ────────────────────── from claude in api-auth ─╮|
-|│                                                                │|
-|│  412 passed   3 failed   9 skipped             ━━━━━━━━ 99.3%  │|
-|│                                                                │|
-|│  Seconds per run, last 7                                       │|
-|│                                  ▅▅▅▅▅▅                        │|
-|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████                │|
-|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████        │|
-|│                                                                │|
-|│  ▾ Failures  3                                                 │|
-|│    PACKAGE               TEST                          TIME ▼  │|
-|│  ▌ internal/session      TestAttachRace                 2.21s  │|
-|│                                                                │|
+|│                                                              ┃ │|
+|│  412 passed   3 failed   9 skipped            ━━━━━━━━ 99.3% ┃ │|
+|│                                                              ┃ │|
+|│  Seconds per run, last 7                                     ┃ │|
+|│                                  ▅▅▅▅▅▅                      ┃ │|
+|│  ▃▃▃▃▃▃  ▁▁▁▁▁▁  ▅▅▅▅▅▅  ▂▂▂▂▂▂  ██████  ██████              ┃ │|
+|│  ██████  ██████  ██████  ██████  ██████  ██████  ██████      ┃ │|
+|│                                                              ┃ │|
+|│  ▾ Failures  3                                               ┃ │|
+|│    PACKAGE              TEST                          TIME ▼ │ │|
+|│  ▌ internal/session     TestAttachRace                 2.21s │ │|
+|│    internal/app         TestDockClick                  840ms │ │|
 |╰────────────────────────────────────────────────────────────────╯|
 --- styles
 |aabccbccccbcccccbaaaaaaaaaaaaaaaaaaaaaa dddd dddddd dd dddddddd aa|
-|a                                                                a|
-|a  eee dddddd   f dddddd   g ddddddd             aaaaaaah ccccc  a|
-|a                                                                a|
-|a  gggggggbgggbggggbggggbg                                       a|
-|a                                  iiiiii                        a|
-|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii                a|
-|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii        a|
-|a                                                                a|
-|a  h ccccccccbbf                                                 a|
-|a    hhhhhhh               hhhh                          gggg i  a|
-|a  ajkkkkkkkkkkkkkkkkjjjjjjlllllllllllllljjjjjjjjjjjjjjjjjlllll  a|
-|a                                                                a|
+|a                                                              e a|
+|a  fff dddddd   g dddddd   h ddddddd            aaaaaaae ccccc e a|
+|a                                                              e a|
+|a  hhhhhhhbhhhbhhhhbhhhhbh                                     e a|
+|a                                  iiiiii                      e a|
+|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii              e a|
+|a  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii  iiiiii      e a|
+|a                                                              e a|
+|a  e ccccccccbbg                                               e a|
+|a    eeeeeee              eeee                          hhhh i e a|
+|a  ajkkkkkkkkkkkkkkkkjjjjjlllllllllllllljjjjjjjjjjjjjjjjjlllll e a|
+|a    dddddddddddd         mmmmmmmmmmmmm                  mmmmm e a|
 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
 a: fg=accent
 b: bold
 c: fg=fg bold
 d: fg=dim
-e: fg=success bold
-f: fg=error bold
-g: fg=dim bold
-h: fg=mute
+e: fg=mute
+f: fg=success bold
+g: fg=error bold
+h: fg=dim bold
 i: fg=accent-bright
 j: reverse
 k: fg=dim reverse
 l: fg=dim bold reverse
+m: fg=fg
 === ascii 66x14
 |+- go test ./... ---------------------- from claude in api-auth -+|
-||                                                                ||
-||  412 passed   3 failed   9 skipped             [######] 99.3%  ||
-||                                                                ||
-||  Seconds per run, last 7                                       ||
-||                                  ######                        ||
-||                  ######          ######  ######                ||
-||  ######  ######  ######  ######  ######  ######  ######        ||
-||                                                                ||
-||  v Failures  3                                                 ||
-||    PACKAGE               TEST                          TIME v  ||
-||  > internal/session      TestAttachRace                 2.21s  ||
-||                                                                ||
+||                                                              # ||
+||  412 passed   3 failed   9 skipped            [######] 99.3% # ||
+||                                                              # ||
+||  Seconds per run, last 7                                     # ||
+||                                  ######                      # ||
+||                  ######          ######  ######              # ||
+||  ######  ######  ######  ######  ######  ######  ######      # ||
+||                                                              # ||
+||  v Failures  3                                               # ||
+||    PACKAGE              TEST                          TIME v | ||
+||  > internal/session     TestAttachRace                 2.21s | ||
+||    internal/app         TestDockClick                  840ms | ||
 |+----------------------------------------------------------------+|
 --- styles
 |  aaaaaaaaaaaaaaa                                                 |
 |                                                                  |
-|   aaa          a          a                              aaaaa   |
+|   aaa          a          a                             aaaaa    |
 |                                                                  |
 |   aaaaaaaaaaaaaaaaaaaaaaa                                        |
 |                                                                  |
@@ -156,8 +161,8 @@ l: fg=dim bold reverse
 |                                                                  |
 |                                                                  |
 |     aaaaaaaaaaa                                                  |
-|                                                         aaaa     |
-|    bbbbbbbbbbbbbbbbbbbbbbbccccccccccccccbbbbbbbbbbbbbbbbbccccc   |
+|                                                        aaaa      |
+|    bbbbbbbbbbbbbbbbbbbbbbccccccccccccccbbbbbbbbbbbbbbbbbccccc    |
 |                                                                  |
 |                                                                  |
 a: bold

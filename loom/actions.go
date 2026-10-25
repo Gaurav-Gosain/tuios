@@ -44,6 +44,9 @@ type View struct {
 	// path, and Caret the caret of each text field, in runes.
 	Text  map[string]string
 	Caret map[string]int
+	// Page is how many rows a document taller than its surface is
+	// scrolled down.
+	Page int
 }
 
 // newView returns an empty view.

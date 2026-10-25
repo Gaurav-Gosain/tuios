@@ -16,6 +16,10 @@ type item struct {
 	// elastic gives way first when space is short: a chart, which still
 	// says what it says narrower, before text, which a cut loses.
 	elastic bool
+	// give is how many rows a column item gives way before the elastic
+	// items and text: the rows of the tables, lists and scroll boxes in it,
+	// which keep every row and show the rest when they scroll.
+	give int
 }
 
 // distribute shares avail cells among items and returns each one's size.
@@ -55,10 +59,10 @@ func distribute(avail int, items []item) []int {
 			break
 		}
 	}
-	// Shrink what may shrink, in proportion to its size: the elastic
-	// items first, then the rest.
-	for pass := 0; pass < 2 && free < 0; pass++ {
-		free = shrinkItems(items, out, free, pass == 0)
+	// Shrink what may shrink, in proportion to its size: the boxes that
+	// scroll first, then the elastic items, then the rest.
+	for pass := 0; pass < 3 && free < 0; pass++ {
+		free = shrinkItems(items, out, free, pass)
 	}
 	return out
 }
@@ -93,15 +97,30 @@ func (s *Surface) dropNarrowCharts(kids []*box, items []item, out []int) {
 	}
 }
 
-// shrinkItems takes -free cells back from the items that may shrink, only
-// the elastic ones when elastic is set, and returns what is still free.
-func shrinkItems(items []item, out []int, free int, elastic bool) int {
-	may := func(it item) bool { return it.shrink && (!elastic || it.elastic) }
+// shrinkItems takes -free cells back from the items that may shrink, and
+// returns what is still free. Pass 0 takes from the scrollers only, pass 1
+// from the elastic items only, and pass 2 from all of them.
+func shrinkItems(items []item, out []int, free int, pass int) int {
+	may := func(it item) bool {
+		switch pass {
+		case 0:
+			return it.shrink && it.give > 0
+		case 1:
+			return it.shrink && it.elastic
+		}
+		return it.shrink
+	}
+	floor := func(it item) int {
+		if pass == 0 {
+			return max(it.lo, it.base-it.give, 0)
+		}
+		return max(it.lo, 0)
+	}
 	for round := 0; free < 0 && round < 4; round++ {
 		total := 0
 		for i, it := range items {
-			if may(it) && out[i] > it.lo {
-				total += out[i] - max(it.lo, 0)
+			if may(it) && out[i] > floor(it) {
+				total += out[i] - floor(it)
 			}
 		}
 		if total == 0 {
@@ -109,10 +128,10 @@ func shrinkItems(items []item, out []int, free int, elastic bool) int {
 		}
 		need := -free
 		for i, it := range items {
-			if !may(it) || out[i] <= it.lo {
+			if !may(it) || out[i] <= floor(it) {
 				continue
 			}
-			room := out[i] - max(it.lo, 0)
+			room := out[i] - floor(it)
 			cut := min(room, (need*room+total-1)/total)
 			out[i] -= cut
 			free += cut
@@ -411,20 +430,28 @@ func (s *Surface) gridCols(b *box) int {
 	return min(v.n, 24)
 }
 
-// layoutRoot places the whole tree in the surface.
+// layoutRoot places the whole tree in the surface. A document that does not
+// fit scrolls as a page: see page.go.
 func (s *Surface) layoutRoot() {
-	s.focus = s.focus[:0]
 	s.gen++
 	s.root.rect = rect(0, 0, s.w, s.h)
 	s.root.ground = s.ground()
+	s.placeRoot(0, s.w, s.h)
+	s.layoutPage()
+}
+
+// placeRoot places the root's children in a w by h page whose top is off
+// rows above the surface's.
+func (s *Surface) placeRoot(off, w, h int) {
+	s.focus = s.focus[:0]
 	// The document's one top box fills the surface, unless it asks for a
 	// height of its own.
 	if len(s.root.kids) == 1 && s.root.kids[0].height.kind == sizeAuto {
 		k := s.root.kids[0]
-		s.place(k, rect(0, 0, s.colChildWidth(s.root, k, s.w), s.h))
+		s.place(k, rect(0, -off, s.colChildWidth(s.root, k, w), h))
 		return
 	}
-	s.placeCol(s.root, s.root.rect)
+	s.placeCol(s.root, rect(0, -off, w, h))
 }
 
 // place gives b its rectangle and places its children inside it.
@@ -432,10 +459,11 @@ func (s *Surface) place(b *box, r Rect) {
 	// A box never reaches past its parent's content area, so siblings
 	// never overlap and a box can repaint alone. Inside a scroll the
 	// children move past the edges and the clip cuts them instead.
+	b.pw = r.Dx()
 	if p := b.parent; p != nil && p != s.root && !scrolls(p) {
 		r = r.Intersect(viewport(p))
 	}
-	b.rect = r
+	b.rect, b.pgen = r, s.gen
 	if b.ground == "" && b.parent != nil {
 		b.ground = b.parent.ground
 	}
@@ -562,11 +590,48 @@ func (s *Surface) colHeights(kids []*box, widths []int, in Rect, gap int) []int 
 			if shrinks(k) {
 				it.shrink = true
 				it.lo = max(it.lo, min(it.base, 3))
+				it.give = s.give(k, widths[i], it.base)
 			}
 		}
 		items[i] = it
 	}
 	return distribute(avail, items)
+}
+
+// give returns how many of its h rows b gives back without cutting
+// anything: a table, list or scroll box down to three rows, and a column of
+// boxes what its children give. A row and the rest give nothing, so they
+// shrink only after the elastic items.
+func (s *Surface) give(b *box, w, h int) int {
+	if b.hidden {
+		return 0
+	}
+	switch b.kind {
+	case "table", "list", "scroll":
+		return max(h-min(h, 3), 0)
+	case "col", "form", "tab", "card", "tabs":
+	default:
+		return 0
+	}
+	if cw, ok := b.w.(*cardWidget); ok && (cw.folded || cw.modal) {
+		return 0
+	}
+	if b.height.kind != sizeAuto {
+		return 0
+	}
+	inner := max(w-b.padW(), 0)
+	if cw, ok := b.w.(*cardWidget); ok {
+		inner = max(inner-cw.indent, 0)
+	}
+	total := 0
+	for _, k := range b.kids {
+		if k.height.kind != sizeAuto {
+			continue
+		}
+		_, kh := s.measure(k, s.colChildWidth(b, k, inner))
+		total += s.give(k, s.colChildWidth(b, k, inner), kh)
+	}
+	return min(total, h)
 }
 
 func shrinks(b *box) bool {

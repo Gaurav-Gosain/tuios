@@ -118,7 +118,8 @@ func (s *Surface) setFocus(b *box) {
 
 // Key handles a key press, named as tuios names keys: up, down, enter,
 // tab, shift+tab, esc, r, ctrl+b. A button whose key matches takes it
-// first, then the focused node, then the root's on-key. Local actions run
+// first, then the focused node, then the page when the document does not
+// fit (see page.go), then the root's on-key. Local actions run
 // at once; actions for the owner and the host come back as Effects.
 func (s *Surface) Key(key string) (Result, error) {
 	if s.root == nil {
@@ -160,8 +161,15 @@ func (s *Surface) Key(key string) (Result, error) {
 	}
 	if b := s.focused(); b != nil {
 		if res, ok, err := s.keyOn(b, key); ok || err != nil {
+			if pw := s.pageOf(); pw != nil && pw.over && res.View {
+				s.reveal, s.relayout = true, true
+			}
 			return res, err
 		}
+	}
+	// A key the focused box did not use scrolls a page that does not fit.
+	if s.pageKey(key) {
+		return Result{View: true}, nil
 	}
 	if acts := s.actionsOf(s.doc, "on-key"); len(acts) > 0 {
 		return s.run(s.root, acts, map[string]any{"key": key})
@@ -381,6 +389,15 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 				}
 				return Result{View: true}, nil
 			}
+		}
+		// Over anything else, the wheel scrolls a page that does not fit.
+		if pw := s.pageOf(); pw != nil && pw.over {
+			d := 3
+			if m.Button == WheelUp {
+				d = -3
+			}
+			s.scrollPage(s.view.Page + d)
+			return Result{View: true}, nil
 		}
 		return Result{}, nil
 	}

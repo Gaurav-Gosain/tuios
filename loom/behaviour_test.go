@@ -1,6 +1,7 @@
 package loom
 
 import (
+	"fmt"
 	"image"
 	"os"
 	"runtime"
@@ -633,5 +634,123 @@ func TestDamageAcrossInput(t *testing.T) {
 	a := s.Damage()
 	if len(a) != 0 {
 		t.Fatalf("damage read twice: %v", a)
+	}
+}
+
+// pageDoc is a report of n paragraphs with a button under them, too tall
+// for a short surface.
+func pageDoc(n int) string {
+	var b strings.Builder
+	b.WriteString(`<tml version="1"><state>{"n": 1, "rows": [{"k": "a"}, {"k": "b"}, {"k": "c"}, {"k": "d"}, {"k": "e"}, {"k": "f"}]}</state><col gap="1"><text>TOP</text>`)
+	for i := range n {
+		fmt.Fprintf(&b, `<text>para-%d count {state.n}</text>`, i)
+	}
+	b.WriteString(`<table id="t" rows="state.rows" key="k" select="single"><column field="k" title="K"/></table><button key="q">BOTTOM</button></col></tml>`)
+	return b.String()
+}
+
+// TestPageScroll checks the page: a document that does not fit scrolls as a
+// whole with a bar in the last column, the keys the focused box does not
+// take move it, the focused box's keys bring it into view, and the offset
+// stays across a patch and a resize and is clamped when the document gets
+// shorter. A document that fits once its table gives rows back does not
+// scroll.
+func TestPageScroll(t *testing.T) {
+	s := mustSurface(t, pageDoc(12))
+	buf := s.Render(30, 10)
+	screenHas(t, buf, "TOP")
+	if r := rows(buf); !strings.HasSuffix(r[0], "┃") || !strings.HasSuffix(r[9], "│") {
+		t.Fatalf("no scroll bar in the last column:\n%s", strings.Join(r, "\n"))
+	}
+	// The table has the focus by default, and takes up and down: the page
+	// follows its cursor down to it.
+	if _, err := s.Key("down"); err != nil {
+		t.Fatal(err)
+	}
+	buf = s.Render(30, 10)
+	screenHas(t, buf, "b")
+	if strings.Contains(strings.Join(rows(buf), "\n"), "TOP") {
+		t.Fatalf("the page did not follow the table's cursor:\n%s", strings.Join(rows(buf), "\n"))
+	}
+	// pgup is the table's too; home goes to its first row. Tab to the
+	// button, which takes no j: j scrolls the page.
+	s.Key("tab")
+	s.Render(30, 10)
+	before := s.View().Page
+	s.Key("g")
+	if got := s.View().Page; got != 0 {
+		t.Fatalf("g left the page at %d", got)
+	}
+	s.Key("j")
+	s.Key("j")
+	if got := s.View().Page; got != 2 {
+		t.Fatalf("j j moved the page to %d, want 2 (it was %d)", got, before)
+	}
+	// The wheel over text scrolls the page.
+	s.Render(30, 10)
+	if _, err := s.Mouse(Mouse{X: 2, Y: 3, Button: WheelDown}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.View().Page; got != 5 {
+		t.Fatalf("the wheel moved the page to %d, want 5", got)
+	}
+	// A patch and a resize keep the offset.
+	if err := s.Patch([]tml.Op{{Op: "replace", Path: "/n", Value: []byte("7")}}); err != nil {
+		t.Fatal(err)
+	}
+	buf = s.Render(30, 10)
+	screenHas(t, buf, "count 7")
+	if got := s.View().Page; got != 5 {
+		t.Fatalf("a patch moved the page to %d", got)
+	}
+	s.Render(40, 12)
+	if got := s.View().Page; got != 5 {
+		t.Fatalf("a resize moved the page to %d", got)
+	}
+	// G goes to the end; a shorter document clamps the offset.
+	s.Render(30, 10)
+	s.Key("G")
+	s.Render(30, 10)
+	end := s.View().Page
+	screenHas(t, s.Render(30, 10), "BOTTOM")
+	short, _, err := tml.Check([]byte(pageDoc(4)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Replace(short, true); err != nil {
+		t.Fatal(err)
+	}
+	s.Render(30, 10)
+	if got := s.View().Page; got >= end || got < 0 {
+		t.Fatalf("the shorter document left the page at %d (was %d)", got, end)
+	}
+	screenHas(t, s.Render(30, 10), "BOTTOM")
+
+	// A dashboard that fits once its table gives rows back has no page.
+	d := fileSurface(t, "testdata/examples/dashboard.tml")
+	d.Render(58, 15)
+	if d.pageOf().over {
+		t.Fatal("a dashboard that fits scrolls as a page")
+	}
+	if _, err := d.Key("j"); err != nil {
+		t.Fatal(err)
+	}
+	if d.View().Page != 0 {
+		t.Fatal("j scrolled a page that fits")
+	}
+
+	// The end of the page is the end of the document at any length: a box
+	// that a short page drops takes its gap with it.
+	for _, n := range []int{10, 40, 80} {
+		var b strings.Builder
+		b.WriteString(`<tml version="1"><col pad="1" gap="1">`)
+		for i := range n {
+			fmt.Fprintf(&b, `<text>line %d</text>`, i)
+		}
+		b.WriteString(`<card title="Totals"><kv><item k="passed" v="412"/></kv></card><text>END</text></col></tml>`)
+		p := mustSurface(t, b.String())
+		p.Render(40, 12)
+		p.Key("G")
+		screenHas(t, p.Render(40, 12), "END")
 	}
 }
