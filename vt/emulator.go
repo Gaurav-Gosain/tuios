@@ -787,6 +787,10 @@ func (e *Emulator) CursorPosition() uv.Position {
 	return uv.Pos(x, y)
 }
 
+// maxReserveScroll bounds the rows ReserveImageSpace scrolls for one picture:
+// the default scrollback, as rows past it are gone anyway.
+const maxReserveScroll = DefaultScrollbackSize
+
 // ReserveImageSpace reserves space for an image by moving cursor and outputting placeholders.
 // This ensures subsequent output appears below the image rather than on top of it.
 func (e *Emulator) ReserveImageSpace(rows, cols int) {
@@ -800,9 +804,12 @@ func (e *Emulator) ReserveImageSpace(rows, cols int) {
 	endY := startY + rows
 	scrollCount := 0
 	if endY > height {
-		// clamp: rows beyond the viewport cannot be shown, and a hostile r=
-		// could otherwise drive ~1e9 ScrollUp calls while holding the IO lock.
-		scrollCount = min(endY-height, height)
+		// Clamped to maxReserveScroll: a hostile r= could otherwise drive
+		// ~1e9 ScrollUp calls while holding the IO lock. The clamp is not the
+		// screen height: a picture taller than the screen, a long diagram,
+		// runs into the scrollback, and every row of it has to be reserved
+		// or the next output is drawn over its bottom.
+		scrollCount = min(endY-height, maxReserveScroll)
 		// Scroll with a blank pen. ScrollUp fills the rows it exposes with the
 		// pen background (background-colour erase), which is right for a scroll
 		// the guest caused by printing, but this one is ours: the guest emitted

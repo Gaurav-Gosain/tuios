@@ -614,7 +614,9 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 	endY := startY + rows
 	scrollCount := 0
 	if endY > height {
-		scrollCount = min(endY-height, height)
+		// As the pure emulator: a picture taller than the screen runs into
+		// the scrollback, so every row is reserved, up to maxReserveScroll.
+		scrollCount = min(endY-height, maxReserveScroll)
 	}
 	finalY := startY + rows - scrollCount
 	if finalY >= height {
