@@ -21,12 +21,12 @@ replace tuios.dev/progstatus v0.1.1-0.20261023124927-50c38920e301 => ./progstatu
 
 replace tuios.dev/shot v0.2.1-0.20261023124927-50c38920e301 => ./shot
 
-replace tuios.dev/vt v0.3.1-0.20261023124927-211d9f938c2a => ./vt
-
-replace tuios.dev/sketch v0.3.2-0.20261025071246-52fced49d853 => ./sketch
-
 replace tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078 => ./swatch
 
 replace tuios.dev/loom v0.2.3-0.20261025213319-f88006395466 => ./loom
 
 replace tuios.dev/tml v0.1.2-0.20261025213319-f88006395466 => ./tml
+
+replace tuios.dev/sketch v0.4.1-0.20261025215526-aff13ec4aa2d => ./sketch
+
+replace tuios.dev/vt v0.3.2-0.20261025215544-bc5aaa40ee15 => ./vt
