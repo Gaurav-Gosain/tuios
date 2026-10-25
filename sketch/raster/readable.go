@@ -36,8 +36,11 @@ func over(fg, bg color.NRGBA) color.NRGBA {
 }
 
 // backdrop is the commonest colour in a box of the image, from a grid of at
-// most 16 by 8 samples.
-func backdrop(img *image.RGBA, b box) (color.NRGBA, bool) {
+// most 16 by 8 samples. A pixel not yet painted over in full is read over
+// ground: an image drawn without a background is shown on the diagram's
+// background colour, and read as the black of its clear pixels a theme's dark
+// text would turn white on a light theme.
+func backdrop(img *image.RGBA, b box, ground color.NRGBA) (color.NRGBA, bool) {
 	r := image.Rect(int(b.x0), int(b.y0), int(math.Ceil(b.x1)), int(math.Ceil(b.y1))).Intersect(img.Bounds())
 	if r.Empty() {
 		return color.NRGBA{}, false
@@ -48,7 +51,15 @@ func backdrop(img *image.RGBA, b box) (color.NRGBA, bool) {
 	for y := r.Min.Y; y < r.Max.Y; y += sy {
 		for x := r.Min.X; x < r.Max.X; x += sx {
 			c := img.RGBAAt(x, y)
-			k := color.NRGBA{c.R, c.G, c.B, 255}
+			// RGBA is premultiplied, so the ground adds its share of what
+			// the pixel leaves uncovered.
+			left := 255 - uint32(c.A)
+			k := color.NRGBA{
+				uint8(uint32(c.R) + uint32(ground.R)*left/255),
+				uint8(uint32(c.G) + uint32(ground.G)*left/255),
+				uint8(uint32(c.B) + uint32(ground.B)*left/255),
+				255,
+			}
 			count[k]++
 			if count[k] > n {
 				best, n = k, count[k]
@@ -75,7 +86,8 @@ func (r *renderer) readableText(p path, st state) state {
 	if b.empty() {
 		return st
 	}
-	bg, ok := backdrop(r.dst, b)
+	ground, _ := parseColor(r.resolve("var(--_bg)"))
+	bg, ok := backdrop(r.dst, b, ground)
 	if !ok || ratio(over(c, bg), bg) >= TextFloor {
 		return st
 	}

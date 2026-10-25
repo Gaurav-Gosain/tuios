@@ -25,7 +25,8 @@ import (
 // text colour that does not read fails. pele also writes its background
 // colour on series fills, which pele's own default series fail. Every golden is then measured
 // again with Options.Readable, which must lift theme text off any fill the
-// diagram sets.
+// diagram sets, and once more with Readable and no Background, as the picture
+// is shown on a terminal of the theme's background colour.
 const (
 	FloorText  = 4.5
 	FloorOther = 3.0
@@ -73,7 +74,8 @@ func TestNamedThemesKeepTextReadable(t *testing.T) {
 			var bad []finding
 			labels := 0
 			for _, f := range files {
-				for _, readable := range []bool{false, true} {
+				for _, pass := range []struct{ readable, clear bool }{{false, false}, {true, false}, {true, true}} {
+					readable := pass.readable
 					data, err := os.ReadFile(f)
 					if err != nil {
 						t.Fatal(err)
@@ -81,7 +83,7 @@ func TestNamedThemesKeepTextReadable(t *testing.T) {
 					if !readable && reAuthored.Match(data) {
 						continue
 					}
-					checkContrast(t, string(data), &th, readable, func(c, bg color.NRGBA, authored bool) {
+					checkContrast(t, string(data), &th, readable, pass.clear, func(c, bg color.NRGBA, authored bool) {
 						if authored || (!readable && !onGround(bg, grounds)) {
 							return
 						}
@@ -94,6 +96,9 @@ func TestNamedThemesKeepTextReadable(t *testing.T) {
 							name := filepath.Base(f)
 							if readable {
 								name += " (readable)"
+							}
+							if pass.clear {
+								name += " (no background)"
 							}
 							bad = append(bad, finding{name, hexOf(c) + " on " + hexOf(bg), r, floor})
 						}
@@ -123,8 +128,9 @@ func hexOf(c color.NRGBA) string {
 }
 
 // checkContrast draws svg in a theme and calls see for each run of text with
-// its colour and the colour behind it.
-func checkContrast(t *testing.T, svg string, th *sketch.Theme, readable bool, see func(c, bg color.NRGBA, authored bool)) {
+// its colour and the colour behind it. With clear the image has no background
+// and is measured as shown on the theme's background colour.
+func checkContrast(t *testing.T, svg string, th *sketch.Theme, readable, clear bool, see func(c, bg color.NRGBA, authored bool)) {
 	t.Helper()
 	if err := loadFaces(); err != nil {
 		t.Fatal(err)
@@ -145,7 +151,10 @@ func checkContrast(t *testing.T, svg string, th *sketch.Theme, readable bool, se
 	}
 	r, st := newRenderer(root, dst, th, m)
 	r.readable = readable
-	r.paintBackground()
+	if !clear {
+		r.paintBackground()
+	}
+	ground := nrgba(th.Bg)
 	r.probe = func(r *renderer, p path, st state) {
 		c, ok := st.paintColor(st.fill, st.fillOpacity)
 		if !ok || st.opacity < 0.99 {
@@ -160,7 +169,7 @@ func checkContrast(t *testing.T, svg string, th *sketch.Theme, readable bool, se
 		if b.empty() || strings.TrimSpace(hexOf(c)) == "" {
 			return
 		}
-		bg, ok := backdrop(r.dst, b)
+		bg, ok := backdrop(r.dst, b, ground)
 		if !ok {
 			return
 		}
