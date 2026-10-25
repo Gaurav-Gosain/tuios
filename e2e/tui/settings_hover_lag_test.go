@@ -33,9 +33,11 @@ const hoverLagBudget = 1500 * time.Millisecond
 //     sweeps blank space and no frame is composed for it. The band is checked
 //     to be rows of the panel before the sweep: hovering its ends must move the
 //     marker there.
-//   - A machine fast enough to compose a frame inside 4 ms would not show the
-//     bug at all. The negative control in NEGATIVE_CONTROLS.md is a run on such
-//     a machine against the build without the fix.
+//   - A machine fast enough to compose and write a frame inside 4 ms would
+//     not show the bug at all. The negative controls in NEGATIVE_CONTROLS.md
+//     name the load each one needed: none for a budget counted from the start
+//     of the compose, and a loaded machine for one counted from the end of the
+//     compose but not of the write.
 func TestSettingsHoverKeepsUpWithThePointer(t *testing.T) {
 	base := spotlightConfigFile(t, hoverLagConfig)
 	term := startIn(t, base, startOpts{cols: 400, rows: 100})

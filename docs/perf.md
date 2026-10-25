@@ -4529,3 +4529,35 @@ open. Lag is the time from the last report to the last frame byte.
 At 60 fps this machine composes inside the period, and the two builds behave
 the same. `TestSettingsHoverKeepsUpWithThePointer` drives the 400x100,
 240 fps case through the real binary.
+
+## 2026-10 the motion budget also waits for the frame's write (#1058)
+
+After the change above, `TestSettingsHoverKeepsUpWithThePointer` still failed
+in CI now and then, with the hover 5 to 6 s behind the pointer. A trace of the
+client on a loaded machine showed why. Bubble Tea writes a frame from its own
+goroutine and holds a lock while it parses, diffs and writes it. The event
+loop takes the same lock to store the view of every message. So the loop
+stopped for the whole write, which at 400x100 on a loaded machine is about as
+long as the compose. When it came back, the budget counted from the end of
+the compose had run out, and the first queued event composed again. The loop
+took one or two events per compose and write, and the reports piled up in
+the input reader.
+
+### What changed
+
+The frame writers (`PostRenderWriter`, `FrameHookWriter`) note when they
+finish writing a frame. The motion budget runs from the later of the end of
+the compose and the end of that write (`motionBudgetFrom`).
+
+### Numbers
+
+`drive.py`, 400x100, `max_fps = 240`, settings open, 500 reports a second
+for 4 s. The client runs on two cores with four busy loops on them.
+
+| | lag | frames written |
+|---|---|---|
+| before | 5186 to 6384 ms | 168 to 217 |
+| after | 27 to 56 ms | 102 to 121 |
+
+At 320x80 and 60 fps with no load, both builds write 177 frames, with 8 and
+13 ms of lag.

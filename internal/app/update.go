@@ -2004,10 +2004,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the frame period (see nextWake) and draws the last position the
 		// pointer reached. A pointer at rest never sets it, so the idle tick
 		// stays idle. A press, a release or a key is not motion and draws at
-		// once.
+		// once. The period runs from the end of the last frame, written: see
+		// motionBudgetFrom.
 		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion {
 			now := time.Now()
-			if now.Sub(m.lastInteractionRender) < m.framePeriod() {
+			if now.Sub(m.motionBudgetFrom()) < m.framePeriod() {
 				m.renderSkipped = true
 				m.pointerMotionPending = true
 			} else {

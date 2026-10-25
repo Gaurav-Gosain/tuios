@@ -9442,3 +9442,12 @@ draft in it. At 16 colours it stops after the selection checks. Run on
 
 The colour of a quiet line (`SetInfo`) is checked by eye in the frames, not
 by the test.
+### The write that follows the frame
+
+The test failed twice in CI after #1123, on shards that run it among other tests, at 5.2 s and 5.9 s. The cause was real. Bubble Tea writes a frame under a lock that its event loop also takes for every message. While a 400x100 frame is parsed, diffed and written, the loop stops. On a loaded machine that write takes as long as the compose, so a budget counted from the end of the compose had run out when the loop came back. The budget now runs from the end of the write too (`motionBudgetFrom`). The controls ran the test binary and tuios on two cores with four busy loops on the same cores, on 2026-10-26 on Linux, against upstream main at 796dffbd3.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `motionBudgetFrom` returns the end of the compose only, which is upstream main | "highlighted 5.134s / 2.372s / 5.348s after the pointer stopped; the budget is 1.5s", three runs out of three | **caught** under load |
+
+Without the busy loops, upstream main failed one run in three (2.6 s) with tuios at `GOMAXPROCS=1`, and passed with 0.5 to 1.4 s on two cores with two busy loops. The fixed build passed every run: 30 to 113 ms with no load or two busy loops, 43 to 99 ms with four.

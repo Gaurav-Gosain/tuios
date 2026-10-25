@@ -536,6 +536,9 @@ type OS struct {
 	// Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
 	lastInteractionRender time.Time
+	// frameWritten is when the renderer last finished writing a frame. See
+	// motionBudgetFrom.
+	frameWritten frameWrittenClock
 	// pointerMotionPending is set when a motion event dropped its frame to the
 	// frame budget. It is the term that flushes that position: hover and the
 	// mouse-anchored beam have no tick of their own. False whenever the pointer

@@ -123,7 +123,7 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 	}
 	// A pointer move held back by the frame budget goes out on the next frame.
 	if m.pointerMotionPending {
-		at(m.lastInteractionRender.Add(m.framePeriod()))
+		at(m.motionBudgetFrom().Add(m.framePeriod()))
 	}
 	// What the idle gate finds by looking.
 	if m.tickPolledWork() {
