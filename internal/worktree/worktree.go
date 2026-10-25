@@ -75,6 +75,10 @@ func DetectEither(dir string) (info Info, main, ok bool) {
 	if dir == "" || dir == "." {
 		return Info{}, false, false
 	}
+	if r := gitstate.Find(dir); r.JJ {
+		info, ok := jjDetect(r.Root, r.Main)
+		return info, ok && r.Root == r.Main, ok
+	}
 	gitdir, commonDir, root, found := gitstate.Locate(dir)
 	if !found {
 		return Info{}, false, false

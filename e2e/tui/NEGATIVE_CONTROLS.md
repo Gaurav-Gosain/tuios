@@ -12484,3 +12484,18 @@ late, each was put right, and the board never showed it.
 | A client the new image cannot serve stops at the handshake's refusal | `session.ProtocolRefused(msg.err)` cut from `handleDaemonReconnectResult` | `TestAttachedClientIsToldToReattach`: "the client took 15.06s to exit after the upgrade: it waited for a daemon it cannot talk to instead of stopping at its answer" | **caught** |
 | A run removes the other-protocol build it made | the branch head before `runE2E` removed `otherProtocolDir` (fbe41763f), run on 2026-11-04 | `TestAttachedClientIsToldToReattach` passes and leaves a `tuios-e2e-other-protocol*` directory of about 64 MB in the temp directory: 10 before, 11 after. With the fix the count stays at 11 | **caught** (by the count, not by a test) |
 | `TestUpgradeReattachLeavesAltScreenPaneAlone` still holds the alternate-screen fix of #1463 when the first client follows the upgrade | the alternate-screen fix (bfbfb3d78) taken out of a build carrying this branch, run on 2026-11-03 | "the program heard winch 25 117 and winch 26 118", and the pane's grid changed | **caught** |
+## The rail in a jj workspace
+
+`TestRailGitJJ` and `TestRailGitJJProblems` read the git section on a pane in a
+colocated jj workspace. `TestRailJJRepoRow` draws the repository's row for a
+session in the main jj workspace, with a second workspace's session under it,
+colocated and not, and folds it. Run on 2026-11-02 on macOS with jj 0.46.0:
+
+| Control | Test | Where it fails | Verdict |
+|---|---|---|---|
+| A build of main at 2efd8ca0d575 | `TestRailGitJJ` | "the git section never showed repo, and feat with +2 above it and ↑3 ahead of trunk()" | **caught** |
+| A build of main at 2efd8ca0d575 | `TestRailGitJJProblems` | "the repository row never showed the divergent commit (◇)" | **caught** |
+| A build of main at 2efd8ca0d575 | `TestRailJJRepoRow/plain`, `/colocated` | "the rows are not \"mainsess main\" with \"featsess feat\" under it" | **caught** |
+| `gitstate.Branch` as on main: git's HEAD only | `TestRailJJRepoRow/plain`, `/colocated` | the same: the main workspace's row shows nothing when not colocated and a bare hash when colocated | **caught** |
+
+The frames are `rail-jj-repo-row-*` under the test's artifact folder.

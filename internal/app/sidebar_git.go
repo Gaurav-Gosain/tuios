@@ -184,6 +184,19 @@ func dirtyFigure(d gitstate.Dirty) string {
 	return out
 }
 
+// problemFigure is the conflicted and divergent commits of a jj stack. It
+// outranks the dirt on the repository row: you know you edited something,
+// while jj keeps a conflict or a divergence without telling you.
+func problemFigure(st gitstate.State) string {
+	switch {
+	case st.Conflicts > 0:
+		return "✕" + strconv.Itoa(st.Conflicts)
+	case st.Divergent > 0:
+		return "◇" + strconv.Itoa(st.Divergent)
+	}
+	return ""
+}
+
 // gitRows is what the section draws, top to bottom.
 func (m *OS) gitRows() []gitRowSpec {
 	if !m.gitView.Found {
@@ -197,12 +210,19 @@ func (m *OS) gitRows() []gitRowSpec {
 		// eight columns can hold beside a name, and splitting them puts each
 		// figure against the thing it is actually about: what is changed here,
 		// and how far this branch has drifted from where it came from.
-		rows = append(rows, gitRowSpec{Kind: gitRowRepo, Name: st.Repo, Right: dirtyFigure(m.gitView.Dirty)})
+		right := problemFigure(st)
+		if right == "" {
+			right = dirtyFigure(m.gitView.Dirty)
+		}
+		rows = append(rows, gitRowSpec{Kind: gitRowRepo, Name: st.Repo, Right: right})
 	}
 	if st.Branch != "" {
 		row := gitRowSpec{Kind: gitRowBranch, Name: st.Branch}
 		if st.HasUpstream() {
 			row.Right = divergence(st.Ahead, st.Behind)
+		}
+		if st.Unbookmarked > 0 {
+			row.Right = strings.TrimSpace("+" + strconv.Itoa(st.Unbookmarked) + " " + row.Right)
 		}
 		rows = append(rows, row)
 	}
