@@ -232,6 +232,9 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 // the pane comes between a takeover and the other conversation's next report.
 // A conversation that never sent a SessionStart is refused throughout. Once
 // codex exits and the pane is back at its shell, the guard forgets them all.
+// A PermissionRequest in a turn Codex's automatic reviewer decides (#1183)
+// leaves the pane working and the Inbox empty, and one in a turn the person
+// reviews is an approval.
 //
 // Negative controls: with shared_server removed from the codex manifest, or
 // the daemon not reading it, the other conversation's approval lands on the
@@ -292,6 +295,53 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 
 	hook(foreignApproval)
 	refused("other PermissionRequest mid-turn", "working")
+
+	// #1183: with approvals_reviewer = "auto_review", Codex's own reviewer
+	// decides every PermissionRequest, so the pane stays working and nothing
+	// asks the person. The rollout's last turn_context says who reviews: after
+	// /approvals switches back to the person, the next request is an approval.
+	rollout := filepath.Join(t.TempDir(), "rollout.jsonl")
+	turnContext := func(reviewer string) string {
+		return `{"timestamp":"2026-10-26T09:00:00.000Z","type":"turn_context","payload":{"cwd":"/work","approval_policy":"on-request","approvals_reviewer":"` + reviewer + `","model":"gpt-5"}}` + "\n"
+	}
+	appendRollout := func(lines ...string) {
+		t.Helper()
+		f, err := os.OpenFile(rollout, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatalf("open the rollout: %v", err)
+		}
+		defer func() { _ = f.Close() }()
+		for _, l := range lines {
+			if _, err := f.WriteString(l); err != nil {
+				t.Fatalf("write the rollout: %v", err)
+			}
+		}
+	}
+	reviewed := func(command string) string {
+		return `{"hook_event_name":"PermissionRequest","session_id":"cx-pane","transcript_path":"` + rollout + `","tool_name":"Bash","tool_input":{"command":"` + command + `"}}`
+	}
+	appendRollout(turnContext("auto_review"),
+		`{"timestamp":"2026-10-26T09:00:01.000Z","type":"response_item","payload":{"type":"function_call_output","output":"{\"type\":\"turn_context\"}"}}`+"\n")
+	hook(`{"hook_event_name":"PreToolUse","session_id":"cx-pane","tool_name":"Bash","tool_input":{"command":"gh pr list"}}`)
+	hook(reviewed("gh pr list"))
+	// The report would land within a socket round trip; give it a moment.
+	time.Sleep(500 * time.Millisecond)
+	if st := readAgentState(t, base, "e2e-agent", win); st.State != "working" || st.AgentSession != "cx-pane" {
+		log.save(t)
+		t.Fatalf("an auto-reviewed PermissionRequest moved the pane: %+v", st)
+	}
+	if out := inbox(); strings.Contains(out, "gh pr list") {
+		log.save(t)
+		t.Fatalf("the Inbox lists an auto-reviewed request:\n%s", out)
+	}
+	log.add("%-44s state=working", "auto-reviewed PermissionRequest")
+	appendRollout(turnContext("user"))
+	hook(reviewed("gh pr merge"))
+	if st := waitAgentState(t, base, "e2e-agent", win, "needs_input", "codex", log, "PermissionRequest for the person"); !strings.Contains(st.Message, "gh pr merge") {
+		t.Fatalf("the approval for the person names the wrong call: %+v", st)
+	}
+	hook(`{"hook_event_name":"PostToolUse","session_id":"cx-pane","tool_name":"Bash","tool_input":{"command":"gh pr merge"},"tool_response":{"exit_code":0}}`)
+	waitAgentState(t, base, "e2e-agent", win, "working", "codex", log, "pane PostToolUse")
 
 	hook(`{"hook_event_name":"Stop","session_id":"cx-pane","last_assistant_message":"The build passes."}`)
 	waitAgentState(t, base, "e2e-agent", win, "done", "codex", log, "pane Stop")

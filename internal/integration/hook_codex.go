@@ -1,6 +1,12 @@
 package integration
 
-import "strings"
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"os"
+	"strings"
+)
 
 // The Codex event map. Sources: the Codex hooks guide
 // (https://developers.openai.com/codex/hooks, which now redirects to
@@ -15,7 +21,8 @@ import "strings"
 //	                      session_start unless the source is compact
 //	UserPromptSubmit      working
 //	PreToolUse            working
-//	PermissionRequest     needs_input, kind approval
+//	PermissionRequest     needs_input, kind approval, unless Codex's
+//	                      automatic reviewer decides the request
 //	PostToolUse           working, only if the pane is in needs_input
 //	Stop                  done
 //	Interrupt             idle (the person stopped the turn)
@@ -34,7 +41,16 @@ import "strings"
 //
 // PermissionRequest runs before Codex's own reviewer may approve the call
 // itself, so it is a state and never a decision point: the hook prints
-// nothing, and a pane an auto-review approved is moved on by PostToolUse.
+// nothing. With approvals_reviewer = "auto_review" and an on-request or
+// granular approval policy, Codex hands every such request to its automatic
+// reviewer, which allows or denies it without a person (codex-rs/ext/
+// guardian-reviewer, routes_approval_policy_to_guardian). Reporting
+// needs_input there raised an approval alert for every tool call the reviewer
+// then allowed (#1183), so the event reports nothing for such a turn. The
+// payload does not say who reviews; the rollout does, in the turn_context
+// record Codex writes at the start of each turn (codexAutoReviews). A prompt
+// that does reach the person is still read from the screen, the title and
+// Codex's notification.
 //
 // The legacy notify command (a top-level `notify` in config.toml) hands its
 // JSON as the last argument instead, with "type": "agent-turn-complete" and a
@@ -78,6 +94,9 @@ func translateCodex(in Input, p fields) Decision {
 		r.Activity = toolActivity(ActivityTool, p)
 		return send(Codex, event, withModel(r, p))
 	case "PermissionRequest":
+		if codexAutoReviews(p.str("transcript_path")) {
+			return skip(Codex, event, "Codex's automatic reviewer decides this request")
+		}
 		msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
 		return send(Codex, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg}, p))
 	case "PostToolUse":
@@ -112,4 +131,90 @@ func withModel(r Report, p fields) Report {
 		r.Activity.Model = Clip(p.str("model"))
 	}
 	return r
+}
+
+// codexTurnContextMax bounds how far back from the end of a rollout
+// codexAutoReviews looks for the turn's turn_context record. A turn whose tool
+// output pushed the record further back than this reports as before.
+const codexTurnContextMax = 8 << 20
+
+// codexAutoReviews reports whether the Codex turn the rollout at path is on
+// sends its approval requests to the automatic reviewer: the last turn_context
+// record names approvals_reviewer auto_review (or its old name,
+// guardian_subagent) with an approval policy of on-request or granular, the
+// two that Codex routes to the reviewer. Anything it cannot read or does not
+// recognise answers false, so the request is reported as an approval, as it
+// was before: a missed prompt is worse than a needless one.
+func codexAutoReviews(path string) bool {
+	if path == "" {
+		return false
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	line := lastTurnContext(f, info.Size())
+	if line == nil {
+		return false
+	}
+	var rec struct {
+		Type    string `json:"type"`
+		Payload struct {
+			ApprovalPolicy    json.RawMessage `json:"approval_policy"`
+			ApprovalsReviewer string          `json:"approvals_reviewer"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(line, &rec) != nil || rec.Type != "turn_context" {
+		return false
+	}
+	switch rec.Payload.ApprovalsReviewer {
+	case "auto_review", "guardian_subagent":
+	default:
+		return false
+	}
+	var policy string
+	if json.Unmarshal(rec.Payload.ApprovalPolicy, &policy) == nil {
+		return policy == "on-request"
+	}
+	var granular map[string]json.RawMessage
+	if json.Unmarshal(rec.Payload.ApprovalPolicy, &granular) == nil {
+		_, ok := granular["granular"]
+		return ok
+	}
+	return false
+}
+
+// lastTurnContext returns the last whole line of the rollout that is a
+// turn_context record, reading back from the end in growing windows up to
+// codexTurnContextMax. Codex writes each record as compact JSON, so the
+// record's own type field is the only place the unescaped text below occurs:
+// inside a string its quotes would be escaped.
+func lastTurnContext(r io.ReaderAt, size int64) []byte {
+	marker := []byte(`"type":"turn_context"`)
+	for window := int64(64 << 10); ; window *= 4 {
+		window = min(window, size, codexTurnContextMax)
+		buf := make([]byte, window)
+		if _, err := r.ReadAt(buf, size-window); err != nil && err != io.EOF {
+			return nil
+		}
+		if i := bytes.LastIndex(buf, marker); i >= 0 {
+			start := bytes.LastIndexByte(buf[:i], '\n') + 1
+			// A line cut at the window's start is read again from a wider one.
+			if start > 0 || window == size {
+				end := len(buf)
+				if j := bytes.IndexByte(buf[i:], '\n'); j >= 0 {
+					end = i + j
+				}
+				return buf[start:end]
+			}
+		}
+		if window == size || window == codexTurnContextMax {
+			return nil
+		}
+	}
 }

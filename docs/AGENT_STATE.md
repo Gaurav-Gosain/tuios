@@ -3922,7 +3922,11 @@ and when the pane is not a pane id, the hook prints nothing.
 
 Codex maps the same events the same way, plus `Interrupt` to `idle`, with the
 same activity (its `apply_patch` files come from the patch's header lines, and
-the model from every event). Gemini CLI maps `BeforeAgent` and `BeforeTool` to
+the model from every event). One Codex event differs: a `PermissionRequest`
+reports nothing when Codex's automatic reviewer decides it. That is a turn
+whose rollout names `approvals_reviewer = "auto_review"` with the `on-request`
+or granular approval policy. The reviewer allows or denies the call without
+you. A prompt that does reach you shows from the screen and the title. Gemini CLI maps `BeforeAgent` and `BeforeTool` to
 `working` (`BeforeTool` with its tool name as activity), `AfterTool` to `working` only
 from `needs_input`, `Notification` `ToolPermission` to `needs_input` kind
 `approval`, `AfterAgent` to `done`, and `SessionStart` and `SessionEnd` as
