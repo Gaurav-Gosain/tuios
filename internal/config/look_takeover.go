@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Take-over.
@@ -480,7 +482,7 @@ func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved) {
 	// config.toml goes last: it wins over every other file, so the config
 	// the watcher reloads in between never holds it without the rest.
 	main := absPath(p.Main)
-	slices.SortStableFunc(out, func(a, b fileWrite) int {
+	sortx.SortStableFunc(out, func(a, b fileWrite) int {
 		switch {
 		case a.abs == main && b.abs != main:
 			return 1

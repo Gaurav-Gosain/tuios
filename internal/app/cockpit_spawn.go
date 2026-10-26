@@ -23,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -280,7 +281,7 @@ func (m *OS) spawnSortAgents(s *spawnSheet) {
 		}
 		return len(spawnCommon)
 	}
-	slices.SortStableFunc(s.agents, func(a, b spawnAgent) int {
+	sortx.SortStableFunc(s.agents, func(a, b spawnAgent) int {
 		return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(b.seen, a.seen), cmp.Compare(common(a), common(b)), cmp.Compare(a.cmd, b.cmd))
 	})
 	find := func(id string) int {
@@ -358,7 +359,7 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		free := 1 - min(max(x.load/float64(max(x.cores, 1)), 0), 1)
 		return cores*free - 0.5*float64(x.working)
 	}
-	slices.SortStableFunc(ms, func(a, b spawnMachine) int {
+	sortx.SortStableFunc(ms, func(a, b spawnMachine) int {
 		first := func(x, _ bool) int {
 			if x {
 				return -1

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -58,7 +58,7 @@ func rankOptions(options []optionRow, query string) []optionHit {
 			break
 		}
 	}
-	slices.SortStableFunc(hits, func(a, b optionHit) int {
+	sortx.SortStableFunc(hits, func(a, b optionHit) int {
 		if a.field != b.field {
 			return a.field - b.field
 		}

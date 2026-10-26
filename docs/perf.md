@@ -3364,6 +3364,13 @@ text drawings. The build before it measured 46,141,602 and 42,841,586 bytes
 so it adds 32,768 and 17,168 bytes. No dependency was added. The new budgets
 leave 4,198 bytes of room.
 
+Six more cold sorts over struct elements went through internal/sortx: the CLI
+option search, the look take-over's config write, the spawn sheet's agents and
+machines, and hint mode's Find and settle. With Go 1.26.10, as CI builds it,
+the cut is 53,248 bytes on linux/amd64 and 67,104 on darwin/arm64. Sorts on
+render, key, event or broadcast paths, and over a type a hot path also sorts,
+keep slices.
+
 To raise the ceiling, do it on purpose in its own commit: change `ceiling` in
 `scripts/binary-size.sh`, record the new value and the reason here, and say in
 the commit message what grew and why it is worth the bytes. A Go version bump

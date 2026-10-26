@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // The built-in pattern names. They are what a config file writes in
@@ -160,7 +162,7 @@ func (m *Matcher) Find(line string) []Match {
 	var taken []candidate
 	taken = settle(taken, collect(m.custom, line))
 	taken = settle(taken, collect(m.builtin, line))
-	slices.SortFunc(taken, func(a, b candidate) int { return a.start - b.start })
+	sortx.SortFunc(taken, func(a, b candidate) int { return a.start - b.start })
 	out := make([]Match, 0, len(taken))
 	for _, c := range taken {
 		out = append(out, Match{Start: c.start, End: c.end, Kind: c.kind})
@@ -214,7 +216,7 @@ func collect(patterns []pattern, line string) []candidate {
 // settle adds the candidates that do not overlap anything already taken,
 // longest claim first.
 func settle(taken, cands []candidate) []candidate {
-	slices.SortStableFunc(cands, func(a, b candidate) int {
+	sortx.SortStableFunc(cands, func(a, b candidate) int {
 		if la, lb := a.claimEnd-a.claimStart, b.claimEnd-b.claimStart; la != lb {
 			return lb - la
 		}
