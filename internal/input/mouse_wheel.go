@@ -45,7 +45,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if wm := msg.Mouse(); !o.OverlayActive() {
 		if w := o.SidebarSessionPaneAt(wm.X, wm.Y); w != nil {
 			if !horizontal {
-				if w.Terminal != nil && w.Terminal.HasMouseMode() {
+				if paneTakesMouse(o, w) {
 					if tx, ty, inside := w.ScreenToTerminal(wm.X, wm.Y); inside {
 						event := uv.MouseWheelEvent{X: tx, Y: ty, Button: uv.MouseButton(wm.Button), Mod: uv.KeyMod(wm.Mod)}
 						for range max(o.Settings.ScrollLines, 1) {
@@ -149,7 +149,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// This allows applications like vim, less, htop to handle their own scrolling
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode() {
+		if paneTakesMouse(o, focusedWindow) {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
 			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
@@ -184,7 +184,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				if focusedWindow.InCopyMode() {
 					// Already in copy mode: scroll up
 					scrollCopyModeUp(focusedWindow, &o.Settings)
-				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
+				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !paneTakesMouse(o, focusedWindow) && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
 					// No mouse tracking, not alt screen, and there is history to
 					// show: turn the wheel and the view scrolls. Copy mode is the
 					// only thing that can render scrollback, so it is switched on

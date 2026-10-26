@@ -1,6 +1,7 @@
 package input
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -35,6 +36,31 @@ func sendMouseToWindow(o *app.OS, win *terminal.Window, event uv.MouseEvent) {
 	} else {
 		win.Terminal.SendMouseAt(event, at)
 	}
+}
+
+// paneTakesMouse reports whether a press, release or wheel over w's content
+// goes to w rather than to tuios: the program in w asked for mouse reporting,
+// or w is a TML window this client draws.
+//
+// A TML window's placeholder program also asks for reporting, but its shell
+// can start after the client has drawn the surface from the daemon's push.
+// On macOS that gap was long enough for the first click on a new form to be
+// taken as the start of a text selection, so the field never got the caret.
+// The surface takes the mouse from its first frame.
+func paneTakesMouse(o *app.OS, w *terminal.Window) bool {
+	return w != nil && w.Terminal != nil && (o.DrawsTML(w) || w.Terminal.HasMouseMode())
+}
+
+// paneWantsMotion is guestWantsMotion for w, with a TML window taken to track
+// motion while a button is held, as its placeholder asks (DECSET 1002).
+func paneWantsMotion(o *app.OS, w *terminal.Window, button tea.MouseButton) bool {
+	if w == nil || w.Terminal == nil {
+		return false
+	}
+	if o.DrawsTML(w) && button != tea.MouseNone {
+		return true
+	}
+	return guestWantsMotion(w.Terminal, button)
 }
 
 // Hit testing helpers

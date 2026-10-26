@@ -100,7 +100,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// A docked session is a real pane, not a list of sidebar rows. Send
 		// tracking motion to its guest before the rail hover path consumes it.
 		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
-			if w.Terminal != nil && guestWantsMotion(w.Terminal, mouse.Button) {
+			if paneWantsMotion(o, w, mouse.Button) {
 				if tx, ty, inside := w.ScreenToTerminal(mouse.X, mouse.Y); inside {
 					sendMouseToWindow(o, w, uv.MouseMotionEvent{X: tx, Y: ty, Button: uv.MouseButton(mouse.Button), Mod: uv.KeyMod(mouse.Mod)})
 				}
@@ -231,7 +231,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Mode == app.TerminalMode && (mouse.Button != tea.MouseNone || !pipOwns(mouse.X, mouse.Y, o)) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
-			if guestWantsMotion(focusedWindow.Terminal, mouse.Button) {
+			if paneWantsMotion(o, focusedWindow, mouse.Button) {
 				// Convert to terminal-relative coordinates (0-based)
 				termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 				// Check if motion is within terminal content area

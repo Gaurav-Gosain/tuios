@@ -62,7 +62,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// center pane must not receive a release for a press it never saw.
 	if mouse := msg.Mouse(); mouse.Button != tea.MouseRight {
 		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
-			if w.Terminal != nil && w.Terminal.HasMouseMode() {
+			if paneTakesMouse(o, w) {
 				if tx, ty, inside := w.ScreenToTerminal(mouse.X, mouse.Y); inside {
 					sendMouseToWindow(o, w, uv.MouseReleaseEvent{X: tx, Y: ty, Button: uv.MouseButton(mouse.Button), Mod: uv.KeyMod(mouse.Mod)})
 				}
@@ -168,7 +168,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode() {
+		if paneTakesMouse(o, focusedWindow) {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
 			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
