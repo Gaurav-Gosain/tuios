@@ -178,6 +178,19 @@ func (m *OS) sessionWorktreeInfo(name string) *session.WorktreeInfo {
 	return info
 }
 
+// sessionDeletableWorktree is the worktree record a delete-worktree surface
+// may act on: a linked worktree, never the repository's main checkout, which
+// the daemon's remove-worktree refuses. The quit menu, the close dialog and
+// the session menu read this, so they offer the delete row only where it can
+// run.
+func (m *OS) sessionDeletableWorktree(name string) *session.WorktreeInfo {
+	info := m.sessionWorktreeInfo(name)
+	if info == nil || info.Main {
+		return nil
+	}
+	return info
+}
+
 // worktreeRepoRoot finds the main checkout a repository's group header stands
 // for. Empty without a daemon, or when no cached session names the repository,
 // which for a row on screen means the listing changed since it was drawn.

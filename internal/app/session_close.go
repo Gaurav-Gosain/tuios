@@ -46,7 +46,7 @@ const (
 // sessions, and the dialog's destructive extra would have nothing to point at.
 func (m *OS) sessionCloseRowCount() int {
 	if m.SessionCloseWindow == "" && m.SessionCloseWorkspace == 0 &&
-		m.sessionWorktreeInfo(m.sessionCloseTarget()) != nil {
+		m.sessionDeletableWorktree(m.sessionCloseTarget()) != nil {
 		return 3
 	}
 	return 2
@@ -457,7 +457,7 @@ func (m *OS) worktreeTollCmd(name string) tea.Cmd {
 // unloaded, or when the dialog is not on a session.
 func (m *OS) worktreeTollLine() string {
 	t := m.SessionCloseWorktreeToll
-	if t == nil || !t.Loaded || m.sessionWorktreeInfo(m.sessionCloseTarget()) == nil {
+	if t == nil || !t.Loaded || m.sessionDeletableWorktree(m.sessionCloseTarget()) == nil {
 		return ""
 	}
 	if t.Gone {

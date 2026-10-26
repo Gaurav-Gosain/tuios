@@ -111,11 +111,13 @@ func (d *Daemon) worktreeTarget(cs *connState, name string) (*Session, *Worktree
 	return sess, info, nil
 }
 
-// worktreeSessionNames lists the sessions that are in a worktree.
+// worktreeSessionNames lists the sessions that are in a worktree. The main
+// checkout is not one a worktree verb can act on, so it stays out of the
+// hints.
 func (d *Daemon) worktreeSessionNames() []string {
 	var out []string
 	for _, s := range d.manager.ListSessions() {
-		if s.Worktree != nil {
+		if s.Worktree != nil && !s.Worktree.Main {
 			out = append(out, s.Name)
 		}
 	}
@@ -319,6 +321,7 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			"fan_id":        wt.FanID,
 			"managed":       wt.Managed,
 			"gone":          wt.Gone,
+			"main":          wt.Main,
 			"state":         state,
 			"harness":       harnessID,
 			"windows":       s.WindowCount,

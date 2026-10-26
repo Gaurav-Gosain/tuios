@@ -133,7 +133,7 @@ func (m *OS) buildQuitMenuItems(others []string, busy bool) []QuitMenuItem {
 	}
 	// The attached session's worktree can go with it. Warn unconditionally:
 	// the row takes a directory, not just a session, whatever is running.
-	if m.sessionWorktreeInfo(m.SessionName) != nil {
+	if m.sessionDeletableWorktree(m.SessionName) != nil {
 		items = append(items, QuitMenuItem{Label: "Delete worktree and quit", Key: "w", Kind: QuitDeleteWorktree, Warn: true})
 	}
 	return items

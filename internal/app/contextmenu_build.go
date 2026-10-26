@@ -387,7 +387,7 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	if attached {
 		killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !hasOthers)
 		killQuitAction := "kill_session_quit"
-		if m.sessionWorktreeInfo(m.SessionName) != nil {
+		if m.sessionDeletableWorktree(m.SessionName) != nil {
 			killQuitAction = "prefix_close_session"
 		}
 		killQuit := m.item(glyphClose, "Kill session and quit", killQuitAction, false)

@@ -68,8 +68,9 @@ func Detect(dir string) (Info, bool) {
 // own git directory, which Detect deliberately reports nothing for, because
 // the sessions it groups are the ones a repository was split into, not the
 // repository itself; the rail's group_main option wants the repository itself
-// in the group too, and this is what it reads. A linked worktree is the answer
-// with main, and a directory outside any repository is no answer at all.
+// in the group too, and this is what it reads. A linked worktree is the
+// answer with main false, and a directory outside any repository is no
+// answer at all.
 func DetectEither(dir string) (info Info, main, ok bool) {
 	dir = filepath.Clean(dir)
 	if dir == "" || dir == "." {
