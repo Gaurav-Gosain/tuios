@@ -1735,6 +1735,37 @@ one core (`taskset -c 2`), compared with `benchstat`, on an Intel Core Ultra 9
 | `EmulatorString` allocs/op | 409 | 17 | -95.8% |
 | `EmulatorString` B/op | 72.5 KiB | 42.4 KiB | -41.5% |
 
+**A printable ASCII byte skips the grapheme segmenter in loom** (`loom/canvas.go`).
+`nextGrapheme` cuts one character at a time for `canvas.text`, `width`,
+`truncate` and `atomize`, and ran `ansi.FirstGraphemeCluster` on every one of
+them, plain ASCII included. It was about 36% of the `BenchmarkRenderTable200`
+profile, and a table is mostly ASCII text. A printable ASCII byte (0x20 to
+0x7e) followed by another byte below 0x80, or by the end of the string, is a
+one-cell cluster of itself, because UAX #29 joins across that boundary only
+for CR, LF, Extend, ZWJ, SpacingMark, Prepend and the like, and none of them
+is printable ASCII. `nextGrapheme` now answers that case first, without the
+segmenter. Control bytes, DEL and any byte at or above 0x80 on either side
+still take the old path, so the control, invalid UTF-8 and width clamp rules
+are unchanged, including the segmenter joining a lone lead byte onto the ASCII
+byte before it (`"a\xc2"`).
+`TestNextGraphemeAgreesWithTheSegmenter` holds `nextGrapheme` to a copy of the
+old function on the cluster, the width and the remainder, over every byte
+below 0x80, every pair of them, every one followed by each byte from 0x80 to
+0xff and by a set of non-ASCII starts, and seeded random strings consumed to
+the end. `TestNextGraphemeBudget` requires the change to take at most half the
+time of the segmenter path over a 4000 byte ASCII line.
+
+Method: `BenchmarkRenderTable200` built as two test binaries, the base and the
+change, run alternately for ten rounds at a fixed `-test.benchtime 300x` with
+`-test.cpu 1` under `nice` and `taskset` on one core, compared with
+`benchstat`. Intel Core Ultra 9 185H, Linux (WSL2), Go 1.26.10.
+
+| | before | after | |
+|---|---|---|---|
+| `RenderTable200` CPU per op | 823.0 us | 525.3 us | -36.2% (p<0.001) |
+| `RenderTable200` allocs/op | 1,748 | 1,748 | `~` |
+| `RenderTable200` B/op | 45.54 KiB | 45.54 KiB | `~` |
+
 ### Measured and deliberately not changed
 
 - **Storing each scrollback line at its exact size.** A styled line grows

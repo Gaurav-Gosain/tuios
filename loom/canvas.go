@@ -181,6 +181,13 @@ func (c *canvas) hline(x, y, n int, g string, st style) {
 // A control character has width 0 and is dropped by callers. Invalid UTF-8
 // becomes U+FFFD.
 func nextGrapheme(s *string) (string, int) {
+	// A printable ASCII byte before another ASCII byte or the end of the
+	// string never joins its neighbour, so it is a one-cell cluster of its own
+	// and skips the segmenter.
+	if t := *s; t != "" && t[0] >= 0x20 && t[0] < 0x7f && (len(t) == 1 || t[1] < 0x80) {
+		*s = t[1:]
+		return t[:1], 1
+	}
 	g, w := ansi.FirstGraphemeCluster(*s, ansi.GraphemeWidth)
 	if g == "" {
 		// Defensive: never loop on input the segmenter cannot cut.
