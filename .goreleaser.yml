@@ -482,7 +482,7 @@ aurs:
   - name: tuios-sketch-bin
     ids:
       - sketch-archive
-    homepage: https://tuios.dev
+    homepage: https://tuios.dev/
     description: "Draw Mermaid diagrams in the terminal, or as SVG or PNG"
     maintainers:
       - "Gaurav Gosain <itsgauravgosain@gmail.com>"
@@ -502,7 +502,7 @@ aurs:
   - name: tuios-plot-bin
     ids:
       - tplot-archive
-    homepage: https://tuios.dev
+    homepage: https://tuios.dev/
     description: "Draw charts in the terminal from CSV, TSV or JSON"
     maintainers:
       - "Gaurav Gosain <itsgauravgosain@gmail.com>"
@@ -521,7 +521,7 @@ aurs:
   - name: tuios-tml-bin
     ids:
       - tml-archive
-    homepage: https://tuios.dev
+    homepage: https://tuios.dev/
     description: "Show TML documents in the terminal"
     maintainers:
       - "Gaurav Gosain <itsgauravgosain@gmail.com>"
@@ -649,7 +649,7 @@ homebrew_casks:
       owner: Gaurav-Gosain
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: https://tuios.dev
+    homepage: https://tuios.dev/
     description: "Draw Mermaid diagrams in the terminal, or as SVG or PNG"
     commit_author:
       name: goreleaserbot
@@ -671,7 +671,7 @@ homebrew_casks:
       owner: Gaurav-Gosain
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: https://tuios.dev
+    homepage: https://tuios.dev/
     description: "Draw charts in the terminal from CSV, TSV or JSON"
     commit_author:
       name: goreleaserbot
@@ -693,7 +693,7 @@ homebrew_casks:
       owner: Gaurav-Gosain
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: https://tuios.dev
+    homepage: https://tuios.dev/
     description: "Show TML documents in the terminal"
     commit_author:
       name: goreleaserbot
