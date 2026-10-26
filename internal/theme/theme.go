@@ -409,7 +409,10 @@ func bordersOn(hostBg color.Color) borderSet {
 		b.unfocused = slotAt16(8, neutralBorderOn(hostBg))
 	default:
 		if c := chromeFurniture(RoleBorderUnfocused); c != nil {
-			b.unfocused = borderInk(c)
+			// A theme that names its unfocused border chose it, so it is
+			// kept as named, like a configured colour. The focused borders
+			// still move out from it.
+			b.unfocused, uFixed = borderInk(c), true
 		} else {
 			// Light pinkish red: the theme's regular red, which gives a softer,
 			// more muted tone for unfocused windows than bright red.
