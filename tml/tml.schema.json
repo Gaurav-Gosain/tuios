@@ -4988,7 +4988,7 @@
     },
     "kv": {
       "additionalProperties": false,
-      "description": "Key and value pairs in two aligned columns.",
+      "description": "Key and value pairs in two aligned columns. A long value wraps under its value column.",
       "properties": {
         "as": {
           "description": "The name of the element inside each. Default item.",
@@ -5765,7 +5765,7 @@
     },
     "mermaid": {
       "additionalProperties": false,
-      "description": "A Mermaid diagram. Until the renderer lands, it shows the source.",
+      "description": "A Mermaid diagram, drawn as text to fit the width. A diagram that cannot be drawn shows its source under a note.",
       "properties": {
         "as": {
           "description": "The name of the element inside each. Default item.",

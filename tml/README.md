@@ -235,7 +235,7 @@ parser keeps an unknown component in the tree, and the validator reports it.
 | --- | --- | --- | --- |
 | `column` | A column of a table. | `align` **`field`** `format` `sort` `title` | nothing |
 | `item` | One pair of a kv. | **`k`** `role` `v` | nothing |
-| `kv` | Key and value pairs in two aligned columns. | none | `item` only |
+| `kv` | Key and value pairs in two aligned columns. A long value wraps under its value column. | none | `item` only |
 | `list` | Repeats its children once per element of a state array. | `as` **`items`** `on-key` `on-select` `select` | block components |
 | `stat` | A labelled number, the KPI tile. | `delta` **`label`** `on-press` `role` **`value`** | nothing |
 | `table` | Rows of a state array, sorted, filtered and scrolled locally. | `filter` `key` `on-key` `on-select` **`rows`** `select` `sort` | `column` only |
@@ -259,7 +259,7 @@ parser keeps an unknown component in the tree, and the validator reports it.
 | Component | What it is | Attributes (required in bold) | Holds |
 | --- | --- | --- | --- |
 | `image` | An image. Without graphics it falls back to block art, then to alt. | **`alt`** `graphics` `on-press` **`src`** | nothing |
-| `mermaid` | A Mermaid diagram. Until the renderer lands, it shows the source. | none | text, kept as written |
+| `mermaid` | A Mermaid diagram, drawn as text to fit the width. A diagram that cannot be drawn shows its source under a note. | none | text, kept as written |
 
 #### Status
 

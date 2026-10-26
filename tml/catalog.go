@@ -441,7 +441,7 @@ var table = [...]Component{
 		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
 		{Name: "v", Type: TString, Bind: true, Doc: "The value."},
 	}},
-	{Name: "kv", Group: "data", Doc: "Key and value pairs in two aligned columns.", Content: ContentOnly, Children: []string{"item"}, MinChildren: 1, Block: true},
+	{Name: "kv", Group: "data", Doc: "Key and value pairs in two aligned columns. A long value wraps under its value column.", Content: ContentOnly, Children: []string{"item"}, MinChildren: 1, Block: true},
 	{Name: "list", Group: "data", Doc: "Repeats its children once per element of a state array.", Content: ContentBlocks, Block: true, Attrs: []AttrSpec{
 		{Name: "as", Type: TIdent, Doc: "The name of the element inside the list. Default item."},
 		{Name: "items", Type: TData, Required: true, Doc: "The state array."},
@@ -544,7 +544,7 @@ var table = [...]Component{
 		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
 		{Name: "src", Type: TSrc, Required: true, Doc: "A file: path or a data:image URI."},
 	}},
-	{Name: "mermaid", Group: "media", Doc: "A Mermaid diagram. Until the renderer lands, it shows the source.", Content: ContentRaw, Block: true},
+	{Name: "mermaid", Group: "media", Doc: "A Mermaid diagram, drawn as text to fit the width. A diagram that cannot be drawn shows its source under a note.", Content: ContentRaw, Block: true},
 	{Name: "badge", Group: "status", Doc: "A short coloured tag.", Content: ContentInline, Block: true, Attrs: []AttrSpec{
 		{Name: "on-press", Type: TAction, Doc: "Runs on enter or a click."},
 		{Name: "role", Type: TRole, Bind: true, Doc: "A theme role colour."},
