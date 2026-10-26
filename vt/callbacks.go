@@ -67,7 +67,10 @@ type Callbacks struct {
 	ClipboardSet func(selection, content string)
 
 	// ClipboardQuery callback. Called when a guest app queries clipboard via OSC 52.
-	// Returns the current clipboard content for the given selection.
+	// Returns the current clipboard content for the given selection. The
+	// answer is written to the guest's input, base64 encoded. Leave this nil
+	// to answer with empty content, which is xterm's default, unless the
+	// person chose to share the clipboard with the guest.
 	ClipboardQuery func(selection string) string
 
 	// Notify callback. Called when a guest app requests a desktop notification
