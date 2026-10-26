@@ -189,8 +189,28 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 		if mode != imagePasteAction {
 			limit = imageClipKeyTimeout
 		}
+		// On macOS the type ask is osascript, whose start alone takes longer
+		// than the key's bound (#1179). pbpaste answers in milliseconds
+		// whether there is text. Text means the text paste, at once. No
+		// text means no text paste waits, so the type ask gets the full
+		// bound, and a slow answer does not stop the key from asking again.
+		nothingWaits := false
+		if mode != imagePasteAction {
+			if hasText, ok := clip.darwinHasText(ctx, imageClipKeyTimeout); ok {
+				if hasText && mode == imagePasteKey {
+					msg.fallback = true
+					return msg
+				}
+				limit = imageClipTypesTimeout
+				nothingWaits = !hasText || mode == imagePasteEmpty
+			}
+		}
 		types, err := clip.typesWithin(ctx, limit)
 		if err != nil && mode != imagePasteAction {
+			if nothingWaits && !errors.Is(err, errClipTypesUnsupported) {
+				msg.fallback = mode == imagePasteKey
+				return msg
+			}
 			msg.fallback = mode == imagePasteKey
 			msg.keyProbeOff = true
 			return msg

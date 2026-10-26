@@ -233,6 +233,26 @@ func (c *imageClipboard) Types(ctx context.Context) ([]string, error) {
 	return c.typesWithin(ctx, imageClipTypesTimeout)
 }
 
+// darwinHasText reports whether the macOS clipboard holds text, through
+// pbpaste. ok is false when this is not macOS, pbpaste is missing, or it did
+// not answer within limit. pbpaste is asked for no bytes at all: the first
+// byte it writes is the answer, and it is killed there.
+func (c *imageClipboard) darwinHasText(ctx context.Context, limit time.Duration) (hasText, ok bool) {
+	if c.backend != imageClipDarwin || !c.env.lookPath("pbpaste") {
+		return false, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	out, err := c.env.run(ctx, 0, "pbpaste")
+	switch {
+	case errors.Is(err, errClipboardTooLarge):
+		return true, true
+	case err != nil:
+		return false, false
+	}
+	return len(out) > 0, true
+}
+
 // errClipTypesUnsupported is a tool that says it cannot list the clipboard
 // here, such as wl-paste on a compositor without the data-control protocol.
 var errClipTypesUnsupported = errors.New("the clipboard tool cannot list the clipboard here")
