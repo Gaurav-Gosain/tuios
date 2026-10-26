@@ -19,7 +19,6 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -36,23 +35,6 @@ func gitArgs(name string, args []string) []string {
 		return args
 	}
 	return append([]string{"-c", "core.fsmonitor=false"}, args...)
-}
-
-// WithGitSettings adds the settings of gitArgs to env, for a program the
-// daemon runs that runs git itself, such as gh. They go in as
-// GIT_CONFIG_COUNT entries after any env already has.
-func WithGitSettings(env []string) []string {
-	n := 0
-	for _, kv := range env {
-		if v, ok := strings.CutPrefix(kv, "GIT_CONFIG_COUNT="); ok {
-			if c, err := strconv.Atoi(v); err == nil && c > 0 {
-				n = c
-			}
-		}
-	}
-	i := strconv.Itoa(n)
-	return append(env, "GIT_CONFIG_COUNT="+strconv.Itoa(n+1),
-		"GIT_CONFIG_KEY_"+i+"=core.fsmonitor", "GIT_CONFIG_VALUE_"+i+"=false")
 }
 
 // Command is exec.Command for a program that must not open a window.

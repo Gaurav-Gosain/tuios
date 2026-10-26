@@ -314,10 +314,10 @@ func ApplyToIndex(ctx context.Context, dir, patch string, zeroContext bool) erro
 }
 
 // StageFile stages the whole of each path: its change, its removal, or the
-// untracked file.
+// untracked file. It stages as git add -A would, without looking inside a
+// submodule's work tree (worktree.StageAll).
 func StageFile(ctx context.Context, dir string, paths ...string) error {
-	_, err := git(ctx, dir, nil, append([]string{"add", "-A"}, pathspec(paths)...)...)
-	return err
+	return worktree.StageAll(ctx, dir, nil, pathspec(paths)[1:], nil)
 }
 
 // UnstageFile puts each path's index entry back as HEAD has it, or removes
@@ -435,9 +435,8 @@ func SetIndexEntries(ctx context.Context, dir string, entries []IndexEntry) erro
 
 // gitInput is git with stdin.
 func gitInput(ctx context.Context, dir, stdin string, args ...string) (string, error) {
-	cmd := childproc.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	cmd.Env = gitEnv(nil)
+	cmd := childproc.Git(ctx, dir, args...)
+	cmd.Env = gitEnv(cmd.Env, nil)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

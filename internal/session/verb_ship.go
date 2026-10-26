@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -340,7 +341,7 @@ func (d *Daemon) verbShipCommit(cs *connState, params json.RawMessage) (any, *ve
 			Detail:  "Nothing was committed. Give the commit message.",
 		})
 	}
-	ctx, cancel := context.WithTimeout(d.ctx, shipTimeout)
+	ctx, cancel := d.shipContext(cs, shipTimeout)
 	defer cancel()
 	d.shipMu.Lock()
 	defer d.shipMu.Unlock()
@@ -396,7 +397,10 @@ func shipMergeInto(repoRoot, recorded, into string) string {
 // shipMerge merges the branch checked out at root into into, in the main
 // checkout at repoRoot. sessionName names the worktree's session in the
 // result. ship-merge and keep-fan both call it.
-func (d *Daemon) shipMerge(sessionName, root, repoRoot, recorded, into, mode, message string) (map[string]any, *verbError) {
+//
+// person says the person called it, so git runs with the repository's own
+// configuration and hooks (childproc.AsPerson).
+func (d *Daemon) shipMerge(person bool, sessionName, root, repoRoot, recorded, into, mode, message string) (map[string]any, *verbError) {
 	if root == "" || repoRoot == "" || canonRoot(root) == canonRoot(repoRoot) {
 		return nil, hintedVerbError(ErrVerbNotWorktree, "the pane is in the main checkout "+repoRoot+", not a linked worktree, so there is no branch to merge", &VerbHint{
 			Verb:    "list-worktrees",
@@ -405,6 +409,9 @@ func (d *Daemon) shipMerge(sessionName, root, repoRoot, recorded, into, mode, me
 		})
 	}
 	ctx, cancel := context.WithTimeout(d.ctx, shipTimeout)
+	if person {
+		ctx = childproc.AsPerson(ctx)
+	}
 	defer cancel()
 	d.shipMu.Lock()
 	defer d.shipMu.Unlock()
@@ -504,7 +511,7 @@ func (d *Daemon) verbShipMerge(cs *connState, params json.RawMessage) (any, *ver
 	if verr := d.shipPaneRefusal(cs, "ship-merge", target); verr != nil {
 		return nil, verr
 	}
-	res, verr := d.shipMerge(sess.Name(), repo.root, repo.repoRoot, repo.recorded, p.Into, p.Mode, p.Message)
+	res, verr := d.shipMerge(d.shipCallerIsPerson(cs), sess.Name(), repo.root, repo.repoRoot, repo.recorded, p.Into, p.Mode, p.Message)
 	if verr != nil {
 		return nil, verr
 	}
@@ -688,6 +695,19 @@ const (
 	shipAllow = "allow"
 	shipDeny  = "deny"
 )
+
+// shipContext is a context for a ship verb's git, bounded by timeout. When
+// the person called the verb, git runs with the repository's own
+// configuration and hooks, as their own git would. A pane's call runs git
+// with the settings of childproc.Git, so the repository it controls names no
+// program the daemon runs.
+func (d *Daemon) shipContext(cs *connState, timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(d.ctx, timeout)
+	if d.shipCallerIsPerson(cs) {
+		ctx = childproc.AsPerson(ctx)
+	}
+	return ctx, cancel
+}
 
 // shipCallerIsPerson reports whether the caller on cs counts as the person
 // for an outbound ship verb: a local process outside every pane, on a
@@ -931,7 +951,7 @@ func (d *Daemon) verbShipPush(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	if verr := d.shipPush(o); verr != nil {
+	if verr := d.shipPush(d.shipCallerIsPerson(cs), o); verr != nil {
 		return nil, verr
 	}
 	res := map[string]any{
@@ -950,9 +970,13 @@ func (d *Daemon) verbShipPush(cs *connState, params json.RawMessage) (any, *verb
 	return res, nil
 }
 
-// shipPush pushes the resolved branch.
-func (d *Daemon) shipPush(o shipOutbound) *verbError {
+// shipPush pushes the resolved branch. person says the person called it
+// (shipMerge).
+func (d *Daemon) shipPush(person bool, o shipOutbound) *verbError {
 	ctx, cancel := context.WithTimeout(d.ctx, shipPushTimeout)
+	if person {
+		ctx = childproc.AsPerson(ctx)
+	}
 	defer cancel()
 	d.shipMu.Lock()
 	defer d.shipMu.Unlock()
@@ -1034,10 +1058,10 @@ func (d *Daemon) verbShipPR(cs *connState, params json.RawMessage) (any, *verbEr
 	if verr != nil {
 		return nil, verr
 	}
-	if verr := d.shipPush(o); verr != nil {
+	if verr := d.shipPush(d.shipCallerIsPerson(cs), o); verr != nil {
 		return nil, verr
 	}
-	ctx, cancel = context.WithTimeout(d.ctx, shipGhTimeout)
+	ctx, cancel = d.shipContext(cs, shipGhTimeout)
 	defer cancel()
 	created := false
 	if o.existing == nil {

@@ -16,6 +16,7 @@ package worktree
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -159,7 +160,7 @@ func ValidBranch(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("branch name is empty")
 	}
-	cmd := childproc.Command("git", "check-ref-format", "--branch", name)
+	cmd := childproc.Git(context.Background(), "", "check-ref-format", "--branch", name)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%q is not a valid branch name", name)
 	}
@@ -418,11 +419,9 @@ func run(dir string, args ...string) (string, error) {
 
 // runEnv is run with extra environment entries.
 func runEnv(dir string, env []string, args ...string) (string, error) {
-	cmd := childproc.Command("git", args...)
-	cmd.Dir = dir
-	// Nothing here is interactive, and a git that waits on a terminal for a
+	// Git sets nothing interactive: a git that waits on a terminal for a
 	// credential or an editor would hang the daemon.
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true")
+	cmd := childproc.Git(context.Background(), dir, args...)
 	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

@@ -17,10 +17,13 @@ import (
 // MergeBranch merges a branch into the branch the main checkout has checked
 // out, and Push sends a branch to a remote.
 //
-// Every git call here runs with the person's own configuration. Unlike a
+// When the person calls a ship verb, its ctx carries childproc.AsPerson and
+// every git call here runs with the person's own configuration. Unlike a
 // checkpoint, no identity is set and no signing flag is passed: the commit is
 // the person's, made the way their git makes one, hooks included, and its
-// message is what the caller gave with nothing added. Nothing is ever forced:
+// message is what the caller gave with nothing added. A pane's call runs git
+// with the settings of childproc.Git: no hooks, and no program the
+// repository's own config names. Nothing is ever forced:
 // a merge that conflicts is aborted and a push that is not a fast-forward is
 // refused by git and reported.
 
@@ -86,7 +89,7 @@ func CommitAll(ctx context.Context, dir, message string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := runCtx(ctx, dir, nil, "add", "-A"); err != nil {
+	if err := StageAll(ctx, dir, nil, nil, nil); err != nil {
 		_, _ = runCtx(context.WithoutCancel(ctx), dir, nil, "read-tree", strings.TrimSpace(saved))
 		return "", err
 	}

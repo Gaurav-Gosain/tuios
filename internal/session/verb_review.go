@@ -128,6 +128,11 @@ func (d *Daemon) resolveVerbPane(cs *connState, sessionName, window string) (*Se
 // paneRepo is the repository under a pane: the session's worktree when the
 // pane is in it, else the repository holding the pane's directory. A pane on
 // another machine has its repository there, and is refused.
+//
+// The pane's directory is its shell's, as the kernel holds it. Where that
+// cannot be read, as on native Windows, it is the folder the window started
+// in. It is never the pane's OSC 7 report: any program in the pane can print
+// one, and the daemon runs git here on every checkpoint.
 func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbError) {
 	if target.Host != "" {
 		return reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "window "+shortWindowID(target.ID)+" runs on "+echoName(target.Host)+", and its repository is there, not here", &VerbHint{
@@ -135,7 +140,7 @@ func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbE
 			Detail:  "Nothing was read. Reviewing a pane on another machine is not supported yet: attach to that machine and review it there, or bring its work here with tuios worktree pull and review that.",
 		})
 	}
-	cwd := target.Cwd
+	cwd := sess.windowStartDir(target.ID)
 	if pty := sess.GetPTY(target.PTYID); pty != nil {
 		if live, ok := pty.ProcessCwd(); ok && live != "" {
 			cwd = live

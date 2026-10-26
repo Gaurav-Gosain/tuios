@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
 
@@ -76,7 +77,7 @@ func (s *syncSource) initDev(dir string) error {
 	s.kind = sourceDev
 	s.srcDir = dir
 	git := func(args ...string) (string, error) {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := childproc.Git(context.Background(), dir, args...)
 		out, err := cmd.Output()
 		return string(out), err
 	}

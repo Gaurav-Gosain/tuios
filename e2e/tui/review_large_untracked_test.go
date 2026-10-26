@@ -39,7 +39,7 @@ func TestReviewDoesNotReadLargeUntrackedFiles(t *testing.T) {
 	}
 	repo := testutil.GitRepo(t)
 	filtered := filepath.Join(base, "filtered.log")
-	testutil.Git(t, repo, "config", "filter.probe.clean", "echo %f >> '"+filtered+"'; cat")
+	testutil.Git(t, repo, "config", "--global", "filter.probe.clean", "echo %f >> '"+filtered+"'; cat")
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.bin filter=probe\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

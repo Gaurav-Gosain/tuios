@@ -4719,6 +4719,14 @@ of a session here whose process runs on another machine is refused with
 `not_repo`. Attach to that machine and review there, or bring the work here
 with `tuios worktree pull HOST:SESSION` and review that.
 
+**Programs the repository names.** tuios runs git for checkpoints, reviews,
+counts, diffs and new worktrees with no hooks. A filter, textconv or diff
+program that only the repository's own config names does not run. tuios then
+reads those files as they are on disk. A filter that your global config names,
+such as Git LFS's, still runs. The pane's directory is the folder its shell is
+in. Where tuios cannot read that folder, as on native Windows, it is the folder
+the pane started in. An OSC 7 report does not change it.
+
 **Notes.** A note sits on a line (`FILE:LINE`, on the new side, or with
 `side: old` on a removed line numbered as in the base) or on a whole hunk (by
 its header). It keeps the text of its line, filled in from the file when the
@@ -4946,7 +4954,9 @@ email, signing setup and hooks make the commit. tuios sets no identity and
 adds nothing to the message. Without `-m`, the message is the pane's last
 prompt, or the line its last turn ended with. When a hook or signing refuses
 the commit, the index goes back to what it was. A commit is refused while the
-agent is `working` or `needs_input`, unless you pass `--force`.
+agent is `working` or `needs_input`, unless you pass `--force`. A call from
+inside a pane runs git with no hooks, and with no program that only the
+repository's own config names.
 
 **Merge.** The branch merges into the base the worktree was made from, in the
 main checkout. That checkout must have the base checked out and no

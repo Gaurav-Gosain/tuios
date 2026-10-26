@@ -16,6 +16,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -208,11 +209,15 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	return spawnInfoCmd(s.gen, s.folder)
 }
 
-// spawnFolder is the directory "this folder" means: the focused pane's, or
-// the client's own when the pane has not said where it is.
+// spawnFolder is the directory "this folder" means: the folder the focused
+// pane's shell is in, or the client's own when that cannot be read. The sheet
+// runs git there and Start makes a worktree of it, so an OSC 7 report alone
+// never chooses it (paneShellDir).
 func (m *OS) spawnFolder() string {
-	if w := m.GetFocusedWindow(); w != nil && m.paneIsLocal(w) && w.Cwd != "" {
-		return w.Cwd
+	if w := m.GetFocusedWindow(); w != nil && m.paneIsLocal(w) {
+		if dir, ok := paneShellDir(w, true); ok {
+			return dir
+		}
 	}
 	dir, _ := os.Getwd()
 	return dir
@@ -425,7 +430,7 @@ func spawnInfoCmd(gen uint64, folder string) tea.Cmd {
 func spawnBranches(root string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", root, "for-each-ref", "--sort=-committerdate", "--count=30",
+	out, err := childproc.Git(ctx, root, "for-each-ref", "--sort=-committerdate", "--count=30",
 		"--format=%(refname:short)", "refs/heads").Output()
 	if err != nil {
 		return nil

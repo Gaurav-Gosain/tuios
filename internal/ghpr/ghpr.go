@@ -125,10 +125,14 @@ func run(ctx context.Context, dir string, args ...string) (string, error) {
 	}
 	cmd := childproc.CommandContext(ctx, path, args...)
 	cmd.Dir = dir
-	// gh runs git in dir, which a pane controls (childproc.WithGitSettings).
-	cmd.Env = childproc.WithGitSettings(append(os.Environ(),
+	// gh runs git in dir, which a pane controls (childproc.GitEnv).
+	env, err := childproc.GitEnv(ctx, dir, append(os.Environ(),
 		"GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GH_PAGER=", "PAGER=cat",
-		"NO_COLOR=1", "CLICOLOR=0", "GIT_TERMINAL_PROMPT=0"))
+		"NO_COLOR=1", "CLICOLOR=0"))
+	if err != nil {
+		return "", err
+	}
+	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

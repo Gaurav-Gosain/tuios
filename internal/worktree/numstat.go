@@ -124,27 +124,57 @@ func copyIndex(ctx context.Context, path, dest string) bool {
 // addAndWriteTree stages every file of the worktree at path into the index env
 // names and writes it as a tree.
 func addAndWriteTree(ctx context.Context, path string, env []string, exclude []string) (string, error) {
-	if len(exclude) == 0 {
-		if _, err := runCtx(ctx, path, env, "add", "--all", "--", "."); err != nil {
-			return "", err
-		}
-	} else {
-		// The exclusions go on standard input, so any number of them fits,
-		// each matched literally.
-		specs := []string{"."}
-		for _, p := range exclude {
-			specs = append(specs, ":(exclude,literal)"+p)
-		}
-		stdin := strings.Join(specs, "\x00") + "\x00"
-		if _, err := runStdin(ctx, path, env, stdin, "add", "--all", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
-			return "", err
-		}
+	if err := StageAll(ctx, path, env, nil, exclude); err != nil {
+		return "", err
 	}
 	out, err := runCtx(ctx, path, env, "write-tree")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// StageAll stages in the worktree at dir what git add --all would: each
+// changed, removed and untracked file that is not ignored, under the
+// pathspecs in specs ("." when there are none). The paths in exclude,
+// relative to dir, are left out and never read. env is added to git's
+// environment, so GIT_INDEX_FILE there names the index it stages into.
+//
+// It lists the paths with ls-files and stages them with update-index. git add
+// looks inside each submodule's work tree with a git of its own, which reads
+// that repository's own config, so its filters would run outside the settings
+// childproc.Git gives. ls-files and update-index read only a submodule's
+// commit.
+func StageAll(ctx context.Context, dir string, env, specs, exclude []string) error {
+	if len(specs) == 0 {
+		specs = []string{"."}
+	}
+	args := append([]string{"ls-files", "-z", "--modified", "--deleted", "--others", "--exclude-standard", "--"}, specs...)
+	out, err := runCtx(ctx, dir, env, args...)
+	if err != nil {
+		return err
+	}
+	skip := make(map[string]bool, len(exclude))
+	for _, p := range exclude {
+		skip[filepath.ToSlash(p)] = true
+	}
+	var in strings.Builder
+	seen := map[string]bool{}
+	for p := range strings.SplitSeq(out, "\x00") {
+		// A path that ends in a slash is a repository inside the work tree
+		// that is not a submodule; git add records only a warning for it.
+		if p == "" || skip[p] || seen[p] || strings.HasSuffix(p, "/") {
+			continue
+		}
+		seen[p] = true
+		in.WriteString(p)
+		in.WriteByte(0)
+	}
+	if in.Len() == 0 {
+		return nil
+	}
+	_, err = runStdin(ctx, dir, env, in.String(), "update-index", "--add", "--remove", "-z", "--stdin")
+	return err
 }
 
 // WorkingNumstat counts what the worktree at path changed against base, a
@@ -255,9 +285,7 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 // runCtx is runEnv bounded by ctx: a git that takes longer than the caller
 // can wait is killed.
 func runCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	cmd := childproc.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true")
+	cmd := childproc.Git(ctx, dir, args...)
 	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

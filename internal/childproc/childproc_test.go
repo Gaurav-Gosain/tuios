@@ -1,6 +1,7 @@
 package childproc
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 // folders a pane controls, and a repository's core.fsmonitor names a program
 // git runs on status. That program would run as a child of the daemon,
 // outside every pane. Neither git started here nor git started by a program
-// given WithGitSettings may run it.
+// given GitEnv may run it.
 //
 // The first git, started plainly, is the positive control: it runs the
 // program, so the harness can see a run.
@@ -54,9 +55,13 @@ func TestGitRunsNoFSMonitor(t *testing.T) {
 		t.Fatal("git started by childproc ran the repository's core.fsmonitor")
 	}
 	plain := exec.Command("git", "status")
-	plain.Env = WithGitSettings(os.Environ())
+	env, err := GitEnv(context.Background(), repo, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain.Env = env
 	git(plain)
 	if _, err := os.Stat(marker); err == nil {
-		t.Fatal("git started with WithGitSettings ran the repository's core.fsmonitor")
+		t.Fatal("git started with GitEnv ran the repository's core.fsmonitor")
 	}
 }

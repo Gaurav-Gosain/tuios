@@ -283,9 +283,8 @@ func markUntracked(ctx context.Context, dir string, files []File, spec []string)
 func streamUnified(ctx context.Context, dir string, args []string, files []File, lim Limits) (bool, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	cmd := childproc.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	cmd.Env = gitEnv(nil)
+	cmd := childproc.Git(ctx, dir, args...)
+	cmd.Env = gitEnv(cmd.Env, nil)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
@@ -431,9 +430,8 @@ func revParse(ctx context.Context, dir, rev string) (string, error) {
 
 // emptyTree is the hash of the empty tree in the repository's hash format.
 func emptyTree(ctx context.Context, dir string) (string, error) {
-	cmd := childproc.CommandContext(ctx, "git", "hash-object", "-t", "tree", "--stdin")
-	cmd.Dir = dir
-	cmd.Env = gitEnv(nil)
+	cmd := childproc.Git(ctx, dir, "hash-object", "-t", "tree", "--stdin")
+	cmd.Env = gitEnv(cmd.Env, nil)
 	cmd.Stdin = strings.NewReader("")
 	out, err := cmd.Output()
 	if err != nil {
@@ -442,17 +440,11 @@ func emptyTree(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// gitEnv is the environment git runs with: nothing interactive, no optional
-// locks, and never the caller's index.
-func gitEnv(extra []string) []string {
-	env := make([]string, 0, len(os.Environ())+4)
-	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "GIT_INDEX_FILE=") || strings.HasPrefix(kv, "GIT_DIR=") || strings.HasPrefix(kv, "GIT_WORK_TREE=") {
-			continue
-		}
-		env = append(env, kv)
-	}
-	env = append(env, "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_OPTIONAL_LOCKS=0")
+// gitEnv is base, the environment childproc.Git set, with no optional locks
+// and extra. childproc.Git already left out the caller's index and
+// repository and set nothing interactive.
+func gitEnv(base, extra []string) []string {
+	env := append(base, "GIT_OPTIONAL_LOCKS=0")
 	return append(env, extra...)
 }
 
@@ -462,15 +454,14 @@ const gitWaitDelay = 2 * time.Second
 // git runs one git command in dir, bounded by ctx, and returns its stdout. A
 // failure carries git's own message.
 func git(ctx context.Context, dir string, extra []string, args ...string) (string, error) {
-	cmd := childproc.CommandContext(ctx, "git", args...)
+	cmd := childproc.Git(ctx, dir, args...)
 	// A child of git, such as git-remote-https on a remote that stopped
 	// answering, keeps the output pipes open after the context kills git.
 	// Without a delay, Run would wait for that child and the timeout would
 	// not hold.
 	cmd.WaitDelay = gitWaitDelay
 	cmd.Cancel = killTree(cmd)
-	cmd.Dir = dir
-	cmd.Env = gitEnv(extra)
+	cmd.Env = gitEnv(cmd.Env, extra)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

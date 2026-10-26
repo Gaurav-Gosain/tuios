@@ -9578,3 +9578,20 @@ that report an agent. Run on 2026-10-26.
 |-----|-------------|-----|-----------------|---------|
 | The capture shows another view than the person's | the view report in `tmlViewChange` | it returns nil at once | `TestTMLShowPaneAndClose` ("the captured line \"▌ internal/session  TestAttachRace ...\" is not on the screen": the cursor row of a new view) | **caught** |
 | A surface from an agent pane names a hash | the agent name in `tmlAgentName` | it returns "" at once | `TestTMLOwnerNameMustBeUnique` ("from pane 7ed13d20 · Agent" for the claude pane) | **caught** |
+
+### git runs no program the pane's repository names
+
+`TestGitRunsNoProgramOfThePaneRepository` gives the pane's repository a clean
+and a smudge filter, a textconv and `diff.external` in its own config, and
+three hooks in `.git/hooks`. Each appends its name to a marker file. A
+checkpoint on a state change, `tuios review`, `tuios fan`, `tuios fan compare`
+and `tuios worktree diff` each run, and the marker must stay empty.
+`TestSpawnSheetIgnoresAReportedFolder` prints an OSC 7 report for a second
+repository with the same probes, opens the New agent sheet and starts an
+agent from it. `TestCheckpointIgnoresAReportedFolderWithoutProcessCwd` does
+the same with `TUIOS_E2E_NO_PROCESS_CWD=1`, as on native Windows, and takes a
+checkpoint. Run on 2026-10-26 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Every part of the fix (a binary built from `origin/main`) | `TestGitRunsNoProgramOfThePaneRepository`: the checkpoint runs `clean`, `hook-post-index-change` and `hook-reference-transaction`; review, fan, fan compare and worktree diff run the filter, and fan runs `hook-post-checkout` and `smudge`; worktree diff runs `external` and shows no a.txt. `TestSpawnSheetIgnoresAReportedFolder`: the sheet says "from otherrepo / main", its read runs `clean`, and Start makes a worktree of the other repository and runs `hook-post-checkout`. `TestCheckpointIgnoresAReportedFolderWithoutProcessCwd`: the checkpoint is taken in the reported repository, not the one the pane started in, and runs `clean`, `hook-post-index-change` and `hook-reference-transaction` | **caught** |

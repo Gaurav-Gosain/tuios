@@ -263,6 +263,32 @@ func (m *OS) paneDir(w *terminal.Window) string {
 	return paneDir(w)
 }
 
+// paneShellDir is the folder a local pane's shell is in, as the kernel holds
+// it, for a reader that runs git there. Any program in the pane can print an
+// OSC 7 report, and a repository can name programs git runs, so a report
+// chooses no folder here: it is taken only when it names the shell's own
+// folder, for its spelling. ok is false when the shell's folder cannot be
+// read: no process, or a platform such as native Windows. fresh reads it now
+// instead of taking the read the window title made up to a second ago.
+func paneShellDir(w *terminal.Window, fresh bool) (string, bool) {
+	if w == nil {
+		return "", false
+	}
+	var dir string
+	if fresh {
+		dir, _ = terminal.ShellCWD(w.ShellPgid)
+	} else {
+		dir = w.CWD()
+	}
+	if dir == "" {
+		return "", false
+	}
+	if w.Cwd != "" && sameDir(dir, w.Cwd) {
+		return w.Cwd, true
+	}
+	return dir, true
+}
+
 // paneDir is the directory a pane is in.
 //
 // A shell announces it over OSC 7, and that is the answer when there is one: it

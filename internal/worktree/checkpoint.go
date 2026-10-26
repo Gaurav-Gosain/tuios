@@ -638,9 +638,7 @@ func dirHoldsOnly(root, dir string, removed map[string]bool) bool {
 
 // runStdin is runCtx with stdin.
 func runStdin(ctx context.Context, dir string, env []string, stdin string, args ...string) (string, error) {
-	cmd := childproc.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true")
+	cmd := childproc.Git(ctx, dir, args...)
 	cmd.Env = append(cmd.Env, env...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stdout, stderr bytes.Buffer

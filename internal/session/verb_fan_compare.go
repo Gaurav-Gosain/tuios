@@ -808,7 +808,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 				recorded = b
 			}
 		}
-		res, verr := d.shipMerge(kept.Name(), info.Path, info.RepoRoot, recorded, p.Into, p.MergeMode, "")
+		res, verr := d.shipMerge(d.shipCallerIsPerson(cs), kept.Name(), info.Path, info.RepoRoot, recorded, p.Into, p.MergeMode, "")
 		if verr != nil {
 			if verr.Hint != nil {
 				verr.Hint.Detail += " No sibling was removed."

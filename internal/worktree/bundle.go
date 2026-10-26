@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -118,7 +119,7 @@ func WorkingPatch(path, dest string) (int, error) {
 	if _, err := runEnv(path, env, "read-tree", "HEAD"); err != nil {
 		return 0, err
 	}
-	if _, err := runEnv(path, env, "add", "--all", "--", "."); err != nil {
+	if err := StageAll(context.Background(), path, env, nil, nil); err != nil {
 		return 0, err
 	}
 	names, err := runEnv(path, env, "diff", "--cached", "--name-only", "HEAD")

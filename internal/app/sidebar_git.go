@@ -80,7 +80,7 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 	if !m.gitSectionEnabled() {
 		return nil
 	}
-	want := m.filesWantDir()
+	want := m.gitWantDir()
 	if want == "" {
 		// No pane, or a pane that has never said where it is. The section has
 		// nothing to be about, and holding the last repository on screen would
@@ -105,6 +105,20 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 		}
 		return msg
 	}
+}
+
+// gitWantDir is the folder the section reads: the files section's, except
+// that for a local pane it is the folder the shell is in, which an OSC 7
+// report cannot move (paneShellDir). Where the shell's folder cannot be read,
+// such as on native Windows, it is the reported one.
+func (m *OS) gitWantDir() string {
+	w := m.GetFocusedWindow()
+	if w != nil && m.paneIsLocal(w) && !(m.filesView.Pinned && m.filesView.Origin == w.ID) {
+		if dir, ok := paneShellDir(w, false); ok {
+			return dir
+		}
+	}
+	return m.filesWantDir()
 }
 
 // ApplyGitState takes a reading, unless the focus has moved on since it was

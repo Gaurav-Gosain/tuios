@@ -1,8 +1,10 @@
 # Ship: commit, merge, push and open a pull request
 
 `tuios ship` takes the work in a pane's worktree to a merged change. git runs
-with the person's own identity, signing and hooks. tuios adds nothing to a
-commit message and never forces a merge or a push.
+with the person's own identity, signing and hooks. A call from a pane runs git
+with no hooks, and with no program that only the repository's own config
+names. tuios adds nothing to a commit message and never forces a merge or a
+push.
 
 ```sh
 tuios ship commit -s api-feat-retry -m 'Add a retry with backoff'

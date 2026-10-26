@@ -2601,7 +2601,8 @@ git runs in the daemon with your own environment: your name, email, signing
 setup and hooks. tuios sets no identity and adds no trailer. `ship commit`
 stages every change, untracked files included and ignored files not. When a
 hook or the signing program refuses the commit, the index goes back to what
-it was.
+it was. A call from inside a pane runs git with no hooks, and with no program
+that only the repository's own config names.
 
 `ship merge` merges into the main checkout. That checkout must have the
 target branch checked out and no uncommitted change to a tracked file. When
