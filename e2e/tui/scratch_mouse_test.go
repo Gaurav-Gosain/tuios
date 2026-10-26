@@ -343,3 +343,101 @@ func TestFloatMouseResizeKeepsTheTiles(t *testing.T) {
 	}
 	alive(t, term, "after the float resizes")
 }
+
+// The state the report ended in: the tiled pane at the float's row and
+// height. It takes a float with an edge on a tiled pane's line, or within the
+// one row the line match allows without shared borders, and a drag of that
+// edge. The tiled pane's edge went with it. A float in its tiled slot has its
+// top and bottom on the tiled pane's lines. Moved one row down, its top is
+// still in reach of the match and no longer held as a screen edge. Run on the
+// shipped looks and on own borders with the dock on top, the settings of the
+// report.
+func TestFloatEdgeResizeKeepsTheTile(t *testing.T) {
+	looks := []struct {
+		name    string
+		shipped bool
+		config  string
+	}{
+		{name: "shipped looks", shipped: true},
+		{name: "own borders", config: "[appearance]\nshared_borders = false\ndockbar_position = \"top\"\n"},
+	}
+	// down is how far the float moves before the resize. bottom picks a left
+	// drag on the bottom border, 5 rows up, instead of an alt+right drag from
+	// the top-left quarter, 15 rows down. The top border is the title bar, a
+	// move handle, so the top edge has only the alt+right drag.
+	cases := []struct {
+		name   string
+		down   int
+		bottom bool
+	}{
+		{name: "top in its slot"},
+		{name: "top one row below its slot", down: 1},
+		{name: "bottom border in its slot", bottom: true},
+	}
+	for _, l := range looks {
+		for _, c := range cases {
+			name := l.name + "/" + c.name
+			t.Run(name, func(t *testing.T) {
+				base := t.TempDir()
+				if l.config != "" {
+					writeConfig(t, base, l.config)
+				}
+				term := startIn(t, base, startOpts{cols: 160, rows: 45, shippedLooks: l.shipped, args: []string{"new", "work"}})
+				waitBoot(t, term)
+				newWindow(t, term)
+				newWindow(t, term)
+				enableTiling(t, term)
+				time.Sleep(500 * time.Millisecond)
+				if err := term.SendKeys(tuitest.Ctrl('b'), "t", "f"); err != nil {
+					t.Fatalf("float the pane: %v", err)
+				}
+				if err := term.WaitForText("Window: floating", uiTimeout); err != nil {
+					t.Fatalf("the pane never floated: %v\n%s", err, term.Snapshot())
+				}
+				time.Sleep(500 * time.Millisecond)
+				float, tile := floatAndTile(t, base, "after the float")
+				t.Logf("after the float: float %v, tile %v", float, tile)
+				if c.down > 0 {
+					col := float.X + 10
+					mouseDrag(t, term, col, float.Y, col, float.Y+c.down, tuitest.MouseLeft, tuitest.ModAlt)
+					time.Sleep(800 * time.Millisecond)
+					var gotTile floatRect
+					float, gotTile = floatAndTile(t, base, "after the move")
+					t.Logf("after the move: float %v, tile %v", float, gotTile)
+					if float.Y != tile.Y+c.down || gotTile != tile {
+						t.Fatalf("the move left the float at %v and the tile at %v, want the float at y=%d and the tile at %v",
+							float, gotTile, tile.Y+c.down, tile)
+					}
+				}
+				frame := "float-edge-" + strings.NewReplacer(" ", "-", "/", "-").Replace(name)
+				saveFrame(t, term, frame+"-0-before")
+
+				before := float
+				if c.bottom {
+					col, row := before.X+before.W/2, before.Y+before.H-1
+					mouseDrag(t, term, col, row, col, row-5, tuitest.MouseLeft, 0)
+				} else {
+					col, row := before.X+4, before.Y+1
+					mouseDrag(t, term, col, row, col, row+15, tuitest.MouseRight, tuitest.ModAlt)
+				}
+				time.Sleep(900 * time.Millisecond)
+				float, gotTile := floatAndTile(t, base, "after the edge drag")
+				t.Logf("after the edge drag: float %v, tile %v", float, gotTile)
+				saveFrame(t, term, frame+"-1-after")
+				switch {
+				case c.bottom && (float.Y != before.Y || float.H != before.H-5):
+					t.Errorf("the bottom border drag by -5 took the float from %v to %v, want y=%d h=%d\n%s",
+						before, float, before.Y, before.H-5, term.Snapshot())
+				case !c.bottom && float.Y < before.Y+14:
+					t.Errorf("the top drag by 15 took the float from %v to %v, want its top at about y=%d\n%s",
+						before, float, before.Y+15, term.Snapshot())
+				}
+				if gotTile != tile {
+					t.Fatalf("the edge drag on the float moved the tiled pane from %v to %v\n%s",
+						tile, gotTile, term.Snapshot())
+				}
+				alive(t, term, "after the edge drag")
+			})
+		}
+	}
+}
