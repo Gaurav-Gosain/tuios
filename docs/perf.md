@@ -3612,6 +3612,36 @@ benchmark's repeated reads used to find it in the cache.
 `TestHistoryCaptureBudget` holds the locked part of a history save to 4 MB.
 Both fail on the tree before this change, at 258 MB and 24.7 MB.
 
+## 2026-10 copy-mode search, one-byte cells
+
+Measured on an Intel Core Ultra 9 185H with `GOMAXPROCS=6` under
+`taskset -c 0-5`, on a shared host at a load average of 5 to 6. The base and
+branch test binaries were built with `go test -c` and run alternately, 16
+rounds each, as `<bin> -test.run '^$'
+-test.bench '^BenchmarkCopyModeSearch(Key|Typing)$' -test.benchmem
+-test.count 1`, and compared with benchstat on the pooled rounds.
+
+`searchLine.add` runs once per cell of the whole history on every search key,
+and about 63% of `CopyModeSearchKey` was in it. A cell of one ASCII byte, the
+common cell, now appends its byte (folded as before) and its index and
+returns, skipping the decode loop and the fill loop. The text, the cell
+indexes and the columns are the ones the generic path builds. A wide cell
+whose content is one ASCII byte takes the fast path and records the same
+entries; empty, sixel, multi-byte and combining cells take the generic path.
+
+| Benchmark | before | after |
+|---|---|---|
+| `CopyModeSearchKey` | 8.959 ms | 6.990 ms (-21.97%, p=0.000) |
+| `CopyModeSearchTyping` | 29.35 ms | 24.87 ms (-15.24%, p=0.003) |
+
+B/op and allocs/op are identical (386.6 KiB and 505 per key, 8.111 MiB and
+17.65k per 16 keys). Single 8-round runs gave a Typing p between 0.007 and
+0.105 on this host, so the Key result is the firm one.
+
+The copy-mode search tests in `internal/input` pin the behaviour,
+`TestMultiCopyCountBeforeYankTakesEverySelection` pins the case fold, and the
+e2e `TestCopyModeSearchColumnInScrollback` pins the columns.
+
 ## 2026-10 emulator allocations, scroll window, idle ticker, memory trim
 
 Measured on a shared 4-core Xeon at 2.1 GHz with `GOMAXPROCS=2`, three runs

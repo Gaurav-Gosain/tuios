@@ -59,6 +59,17 @@ func (l *searchLine) add(content []byte, width, col int) {
 	}
 	k := int32(len(l.cols))
 	l.cols = append(l.cols, int32(col))
+	if len(content) == 1 && content[0] < utf8.RuneSelf {
+		// The common cell, one ASCII byte: the generic loop below with
+		// its decode and fill loop skipped, same text and same cell.
+		c := content[0]
+		if l.fold && 'A' <= c && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		l.text = append(l.text, c)
+		l.cell = append(l.cell, k)
+		return
+	}
 	if len(content) == 0 || bytes.HasPrefix(content, sixelLead) {
 		l.text = append(l.text, ' ')
 		l.cell = append(l.cell, k)
