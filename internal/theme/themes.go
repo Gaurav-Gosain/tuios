@@ -44,6 +44,7 @@ func EnsureRegistry() {
 	ensureRegistryOnce.Do(func() {
 		newBuiltinRegistry()
 		registerCharmToneThemes()
+		registerGiltTheme()
 		registerOmarchyThemes()
 		rememberBuiltins()
 		if themesDir, err := GetThemesDir(); err == nil {

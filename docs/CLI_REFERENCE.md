@@ -198,6 +198,7 @@ With no theme set, tuios uses the terminal's own colors.
 **Popular themes include:**
 - `charmtone`: Charm's CharmTone colours on a dark ground, with a Charple accent
 - `charmtone-light`: CharmTone on a light ground
+- `gilt`: Cool obsidian, warm parchment and a gold accent
 - `tokyonight`: A clean, dark theme with vibrant colors
 - `dracula`: Dark theme with purple accent
 - `nord`: An arctic, north-bluish color palette

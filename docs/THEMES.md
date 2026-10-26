@@ -76,6 +76,9 @@ instead. Enter applies the theme. The glyph picker works the same way.
 chrome uses the Charple accent. See
 [CharmTone themes](CONFIGURATION.md#charmtone-themes).
 
+`gilt` is a dark theme of cool obsidian, warm parchment and gold. Its chrome
+accent is gold.
+
 Leaving the theme unset disables theming entirely and TUIOS uses your terminal's
 own colors. An unknown theme name logs a warning and leaves the colors as they
 were, rather than failing to start.
