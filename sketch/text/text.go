@@ -48,12 +48,69 @@ type Options struct {
 
 // Draw draws a parsed diagram as lines of text.
 func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
+	c, err := drawFit(d, opt)
+	if err != nil {
+		return nil, err
+	}
+	return c.lines(opt.Color), nil
+}
+
+// Role is the part of a drawing a cell belongs to. A host that draws the
+// cells itself picks a colour for each role. Options.Color has no effect on
+// the roles.
+type Role uint8
+
+// The roles of a cell. RoleSeries is the first of SeriesRoles roles, one per
+// data series of a chart: series i has the role RoleSeries + i%SeriesRoles.
+const (
+	RoleNone   Role = roleNone   // a gap: the host's own ground
+	RoleLine   Role = roleLine   // a line or arrow between boxes
+	RoleBox    Role = roleBox    // the border of a box
+	RoleText   Role = roleText   // a label
+	RoleNote   Role = roleNote   // a note
+	RoleFrame  Role = roleFrame  // a frame around a group, an axis or a grid
+	RoleTitle  Role = roleTitle  // a title
+	RoleHead   Role = roleHead   // a heading inside a box
+	RoleCrit   Role = roleCrit   // a part marked critical
+	RoleSeries Role = roleSeries // the first data series
+)
+
+// SeriesRoles is the count of series roles.
+const SeriesRoles = seriesRoles
+
+// Cell is one cell of a drawing.
+type Cell struct {
+	// Rune is the character, ' ' for a gap. It is 0 on the cell after a
+	// wide character, which that character covers.
+	Rune rune
+	// Role picks the colour of the character.
+	Role Role
+	// Bg is the role whose colour fills the ground of the cell, RoleNone
+	// for the host's own ground. Only series roles fill a ground.
+	Bg Role
+}
+
+// DrawCells draws a parsed diagram as rows of cells, for a host that colours
+// the cells itself. It fits the width the way Draw does, and gives the same
+// rows as Draw: row i of DrawCells is line i of Draw. Rows have no trailing
+// gaps, so they can differ in length.
+func DrawCells(d *sketch.Diagram, opt Options) ([][]Cell, error) {
+	c, err := drawFit(d, opt)
+	if err != nil {
+		return nil, err
+	}
+	return c.rows(), nil
+}
+
+// drawFit draws a diagram within opt.Cols, narrowing the layout when the
+// first drawing is too wide.
+func drawFit(d *sketch.Diagram, opt Options) (*canvas, error) {
 	switch d.Type {
 	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley", "railroad", "swimlane", "usecase", "agentflow":
 	default:
 		return nil, ErrUnsupported
 	}
-	lines, err := draw(d, opt, sketch.RenderOptions{}, false)
+	c, err := draw(d, opt, sketch.RenderOptions{}, false)
 	if err == ErrTooWide {
 		// pele draws narrower when it is told the width there is: a flowchart
 		// that runs across turns to run down, and spacing tightens. A cell is
@@ -62,19 +119,30 @@ func Draw(d *sketch.Diagram, opt Options) ([]string, error) {
 		turn := true
 		// A graph still too wide loses the columns that hold only gaps and
 		// horizontal lines.
-		lines, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
+		c, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
 		// A class diagram puts its groups of classes that are not joined in
 		// rows that fit the width. A cell can take fewer units than 8, so the
 		// rows are asked for narrower until they fit, a few times at most.
 		for try := 0; err == ErrTooWide && d.Type == "class" && try < 4; try++ {
 			w *= 0.8
-			lines, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
+			c, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
+		}
+		// Labels take more cells than the units the layout gives them, so a
+		// layout that fits 8 units a cell can still be too wide in cells: a
+		// flowchart with long labels then runs across where running down
+		// would fit. Ask for narrower layouts, which turn it sooner.
+		for _, units := range []float64{6, 5, 4} {
+			if err != ErrTooWide {
+				break
+			}
+			w := float64(opt.Cols) * units
+			c, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
 		}
 	}
-	return lines, err
+	return c, err
 }
 
-func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool) ([]string, error) {
+func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool) (*canvas, error) {
 	layout, err := d.Layout(ro)
 	if err != nil {
 		return nil, err
@@ -153,7 +221,7 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 	if err != nil {
 		return nil, err
 	}
-	return c.lines(opt.Color), nil
+	return c, nil
 }
 
 // Roles of a cell, which pick its colour.
@@ -561,6 +629,49 @@ func (c *canvas) lines(color bool) []string {
 		out = out[1:]
 	}
 	for len(out) > 0 && strings.TrimSpace(stripSGR(out[len(out)-1])) == "" {
+		out = out[:len(out)-1]
+	}
+	return out
+}
+
+// rows gives the cells that lines writes, row for row: the same rows
+// dropped, without the gaps at the end of each row.
+func (c *canvas) rows() [][]Cell {
+	out := make([][]Cell, 0, c.h)
+	for y := 0; y < c.h; y++ {
+		if y > 0 && c.plain(y) && c.plain(y-1) {
+			continue
+		}
+		row := make([]Cell, c.w)
+		end := 0
+		for x := 0; x < c.w; x++ {
+			p := &c.cells[y*c.w+x]
+			if p.wide {
+				row[x] = Cell{Role: Role(p.role)}
+				end = x + 1
+				continue
+			}
+			g := p.glyph()
+			row[x] = Cell{Rune: g, Role: Role(p.role), Bg: Role(p.bg)}
+			if g != ' ' || p.bg != roleNone {
+				end = x + 1
+			}
+		}
+		out = append(out, row[:end:end])
+	}
+	// Drop blank rows at the start and the end, as lines does.
+	blank := func(row []Cell) bool {
+		for _, p := range row {
+			if p.Rune != 0 && p.Rune != ' ' {
+				return false
+			}
+		}
+		return true
+	}
+	for len(out) > 0 && blank(out[0]) {
+		out = out[1:]
+	}
+	for len(out) > 0 && blank(out[len(out)-1]) {
 		out = out[:len(out)-1]
 	}
 	return out
