@@ -38,16 +38,13 @@ type NotificationMsg struct {
 // ListenForNotification creates a command that waits for the next guest
 // notification and delivers it to the Update loop as a NotificationMsg.
 func ListenForNotification(ch chan NotificationMsg) tea.Cmd {
-	if ch == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		notif, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return notif
-	}
+	return listenNotificationUntil(nil, ch)
+}
+
+// listenNotificationUntil is ListenForNotification for a session that ends: the
+// command returns nil once stop is closed.
+func listenNotificationUntil(stop <-chan struct{}, ch chan NotificationMsg) tea.Cmd {
+	return listenOnce(stop, ch, func(notif NotificationMsg) tea.Msg { return notif })
 }
 
 // ensureNotificationChan lazily creates the notification channel. It is only

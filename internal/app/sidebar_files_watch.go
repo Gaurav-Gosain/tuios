@@ -133,9 +133,14 @@ func (m *OS) fileWatchChan() chan struct{} {
 // after last, the previous message. A change made while it waits is covered
 // by the read that follows, and a change after that wakes the next listener,
 // so a burst always ends with one read of the final state.
-func listenForFileChange(ch chan struct{}, last time.Time) tea.Cmd {
+func listenForFileChange(stop <-chan struct{}, ch chan struct{}, last time.Time) tea.Cmd {
 	return func() tea.Msg {
-		if _, ok := <-ch; !ok {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return nil
+			}
+		case <-stop:
 			return nil
 		}
 		time.Sleep(max(fileWatchSettle, time.Until(last.Add(fileWatchGap))))

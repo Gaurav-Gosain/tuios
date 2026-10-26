@@ -258,7 +258,7 @@ func (m *OS) startDaemonRestart() tea.Cmd {
 	r.phase = restartStopping
 	r.steps = make(chan tea.Msg, 8)
 	go runRestartCommand(r.plan.Binary, restartplan.Digest(&r.plan), r.gen, r.steps)
-	return listenRestart(r.steps)
+	return listenRestart(m.stopSignal(), r.steps)
 }
 
 // runRestartCommand runs restart-server --yes and sends each step it writes.
@@ -296,9 +296,16 @@ func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 	ch <- restartEndMsg{gen: gen, err: err, stderr: stderr.String()}
 }
 
-// listenRestart waits for the next step.
-func listenRestart(ch <-chan tea.Msg) tea.Cmd {
-	return func() tea.Msg { return <-ch }
+// listenRestart waits for the next step. It returns nil once stop is closed.
+func listenRestart(stop <-chan struct{}, ch <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg := <-ch:
+			return msg
+		case <-stop:
+			return nil
+		}
+	}
 }
 
 // handleRestartMsg applies one message of the restart.
@@ -334,7 +341,7 @@ func (m *OS) handleRestartMsg(msg tea.Msg) tea.Cmd {
 			rep := msg.rep
 			r.done = &rep
 		}
-		return listenRestart(r.steps)
+		return listenRestart(m.stopSignal(), r.steps)
 
 	case restartEndMsg:
 		if msg.gen != r.gen {

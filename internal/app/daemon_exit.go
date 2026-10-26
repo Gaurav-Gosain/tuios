@@ -36,16 +36,13 @@ func (m *OS) daemonExitChan() chan tea.Msg {
 // DaemonDisconnectedMsg handler arms it again whenever the client survives a
 // drop, such as a host link that reconnects, so the next drop is heard too.
 func ListenForDaemonExit(ch chan tea.Msg) tea.Cmd {
-	if ch == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		msg, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return msg
-	}
+	return listenDaemonExitUntil(nil, ch)
+}
+
+// listenDaemonExitUntil is ListenForDaemonExit for a session that ends: the
+// command returns nil once stop is closed.
+func listenDaemonExitUntil(stop <-chan struct{}, ch chan tea.Msg) tea.Cmd {
+	return listenOnce(stop, ch, func(msg tea.Msg) tea.Msg { return msg })
 }
 
 // QueueDaemonDisconnect reports that the daemon connection is gone. It is safe

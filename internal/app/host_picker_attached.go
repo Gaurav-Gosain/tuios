@@ -53,7 +53,13 @@ func (m *OS) attachedHostsChan() chan AttachedHostsMsg {
 
 // ListenForAttachedHosts waits for one attached-hosts answer.
 func ListenForAttachedHosts(ch chan AttachedHostsMsg) tea.Cmd {
-	return listenOnce(ch, func(msg AttachedHostsMsg) tea.Msg { return msg })
+	return listenAttachedHostsUntil(nil, ch)
+}
+
+// listenAttachedHostsUntil is ListenForAttachedHosts for a session that ends:
+// the command returns nil once stop is closed.
+func listenAttachedHostsUntil(stop <-chan struct{}, ch chan AttachedHostsMsg) tea.Cmd {
+	return listenOnce(stop, ch, func(msg AttachedHostsMsg) tea.Msg { return msg })
 }
 
 // refreshAttachedHosts asks the attached daemon for its hosts, off the UI

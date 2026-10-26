@@ -470,17 +470,23 @@ func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 			}
 		}
 	}()
-	return listenThread(ch, key)
+	return listenThread(m.stopSignal(), ch, key)
 }
 
 // listenThread waits for one delivery from the transcript subscription.
-func listenThread(ch <-chan tea.Msg, key string) tea.Cmd {
+// It returns nil once stop is closed, which is how a session that has ended
+// lets go of it.
+func listenThread(stop <-chan struct{}, ch <-chan tea.Msg, key string) tea.Cmd {
 	return func() tea.Msg {
-		msg, ok := <-ch
-		if !ok {
-			return threadWatchEnded{key: key}
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return threadWatchEnded{key: key}
+			}
+			return msg
+		case <-stop:
+			return nil
 		}
-		return msg
 	}
 }
 
@@ -500,7 +506,7 @@ func (m *OS) applyThreadGrew(msg threadGrewMsg) tea.Cmd {
 	if ts.watchKey != msg.key || ts.events == nil {
 		return nil
 	}
-	listen := listenThread(ts.events, msg.key)
+	listen := listenThread(m.stopSignal(), ts.events, msg.key)
 	t := ts.byKey[msg.key]
 	if t == nil {
 		return listen

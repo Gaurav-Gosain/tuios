@@ -25,7 +25,13 @@ type NvimNavigationMsg struct {
 }
 
 func ListenForNvimNavigation(ch chan NvimNavigationMsg) tea.Cmd {
-	return listenOnce(ch, func(msg NvimNavigationMsg) tea.Msg { return msg })
+	return listenNvimNavigationUntil(nil, ch)
+}
+
+// listenNvimNavigationUntil is ListenForNvimNavigation for a session that ends:
+// the command returns nil once stop is closed.
+func listenNvimNavigationUntil(stop <-chan struct{}, ch chan NvimNavigationMsg) tea.Cmd {
+	return listenOnce(stop, ch, func(msg NvimNavigationMsg) tea.Msg { return msg })
 }
 
 func (m *OS) ensureNvimNavigationChan() chan NvimNavigationMsg {

@@ -168,6 +168,9 @@ func (m *OS) listenSidebarSession() tea.Cmd {
 	// closes it and clears the OS field; reading that field later could race
 	// with shutdown or leave a listener parked on a nil channel forever.
 	events, states, done := m.sidebarSessionEvents, m.sidebarSessionStateEvents, m.sidebarSessionDone
+	// Cleanup closes stop too. A listener a mid-run Cleanup left to be re-armed
+	// would otherwise capture the nil done channel and park for ever.
+	stop := m.stopSignal()
 	return func() tea.Msg {
 		select {
 		case event := <-events:
@@ -177,6 +180,8 @@ func (m *OS) listenSidebarSession() tea.Cmd {
 		case event := <-states[sidebarRight]:
 			return sidebarSessionNotice{event}
 		case <-done:
+			return nil
+		case <-stop:
 			return nil
 		}
 	}

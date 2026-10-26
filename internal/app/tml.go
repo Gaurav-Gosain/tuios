@@ -338,7 +338,7 @@ func (m *OS) initTML() {
 // listenForTML arms the listener for the next wake.
 func (m *OS) listenForTML() tea.Cmd {
 	m.initTML()
-	return listenOnce(m.tml.wake, func(struct{}) tea.Msg { return TMLWakeMsg{} })
+	return listenOnce(m.stopSignal(), m.tml.wake, func(struct{}) tea.Msg { return TMLWakeMsg{} })
 }
 
 // signalTML wakes the UI goroutine. It never blocks.

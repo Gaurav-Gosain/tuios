@@ -68,16 +68,13 @@ type tapeDetectState struct {
 // ListenForCwdChange waits for the next working-directory change and delivers it
 // to the Update loop as a CwdChangedMsg.
 func ListenForCwdChange(ch chan CwdChangedMsg) tea.Cmd {
-	if ch == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		msg, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return msg
-	}
+	return listenCwdChangeUntil(nil, ch)
+}
+
+// listenCwdChangeUntil is ListenForCwdChange for a session that ends: the
+// command returns nil once stop is closed.
+func listenCwdChangeUntil(stop <-chan struct{}, ch chan CwdChangedMsg) tea.Cmd {
+	return listenOnce(stop, ch, func(msg CwdChangedMsg) tea.Msg { return msg })
 }
 
 // ensureCwdChangeChan lazily creates the cwd-change channel. Called only on the

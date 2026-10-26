@@ -157,6 +157,12 @@ type KittyPassthrough struct {
 	// keep at most one pending frame; newer frames replace older ones.
 	asyncFrameCh chan asyncFrame
 
+	// asyncStop ends asyncFrameWriter. A session that ends inside a long-lived
+	// server has to give the goroutine back, and nothing closes asyncFrameCh
+	// because the render path may still be sending to it.
+	asyncStop     chan struct{}
+	asyncStopOnce sync.Once
+
 	// frozenThisPass is scratch space for RefreshAllPlacements: the set of
 	// windows whose placements are held untouched this pass because an
 	// interactive resize is in progress. Reused across frames to avoid a
@@ -535,6 +541,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
 		asyncFrameCh:      make(chan asyncFrame, 1),
+		asyncStop:         make(chan struct{}),
 		resizeFreezeSize:  make(map[string][2]int),
 	}
 	go kp.asyncFrameWriter()
@@ -685,9 +692,16 @@ func (kp *KittyPassthrough) chargePacing(cost time.Duration) {
 
 // asyncFrameWriter drains asyncFrameCh and writes video frames to hostOut
 // in a background goroutine so the VT callback and render loop stay
-// responsive during high-fps video playback.
+// responsive during high-fps video playback. It returns once stopAsyncWriter
+// has run; a frame still queued by then is dropped.
 func (kp *KittyPassthrough) asyncFrameWriter() {
-	for frame := range kp.asyncFrameCh {
+	for {
+		var frame asyncFrame
+		select {
+		case <-kp.asyncStop:
+			return
+		case frame = <-kp.asyncFrameCh:
+		}
 		if kp.hostOut == nil {
 			continue
 		}
@@ -698,6 +712,15 @@ func (kp *KittyPassthrough) asyncFrameWriter() {
 		// degradation; the drain loop keeps running for the next one.
 		kp.writeFrameSafely(frame)
 	}
+}
+
+// stopAsyncWriter ends asyncFrameWriter. It is safe to call more than once, on a
+// nil receiver, and on a value that never started a writer.
+func (kp *KittyPassthrough) stopAsyncWriter() {
+	if kp == nil || kp.asyncStop == nil {
+		return
+	}
+	kp.asyncStopOnce.Do(func() { close(kp.asyncStop) })
 }
 
 // writeFrameSafely writes one async video frame, recovering from any panic so a
