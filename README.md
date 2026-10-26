@@ -407,10 +407,10 @@ Thank you to everyone who helps build tuios. To join them, read the [contributin
 <br>
 <a href="https://github.com/syz51" title="syz51"><img src="https://avatars.githubusercontent.com/u/54097388?s=128&amp;v=4" width="64" height="64" alt="syz51" title="syz51"></a>
 <a href="https://github.com/NotAFlightRisk" title="NotAFlightRisk"><img src="https://avatars.githubusercontent.com/u/23277273?s=128&amp;v=4" width="64" height="64" alt="NotAFlightRisk" title="NotAFlightRisk"></a>
+<a href="https://github.com/AdrielVelazquez" title="AdrielVelazquez"><img src="https://avatars.githubusercontent.com/u/3443378?s=128&amp;v=4" width="64" height="64" alt="AdrielVelazquez" title="AdrielVelazquez"></a>
 <a href="https://github.com/fonnesbeck" title="fonnesbeck"><img src="https://avatars.githubusercontent.com/u/81476?s=128&amp;v=4" width="64" height="64" alt="fonnesbeck" title="fonnesbeck"></a>
 <a href="https://github.com/LeeSamuel14" title="LeeSamuel14"><img src="https://avatars.githubusercontent.com/u/37692342?s=128&amp;v=4" width="64" height="64" alt="LeeSamuel14" title="LeeSamuel14"></a>
 <a href="https://github.com/masshirodev" title="masshirodev"><img src="https://avatars.githubusercontent.com/u/21976638?s=128&amp;v=4" width="64" height="64" alt="masshirodev" title="masshirodev"></a>
-<a href="https://github.com/AdrielVelazquez" title="AdrielVelazquez"><img src="https://avatars.githubusercontent.com/u/3443378?s=128&amp;v=4" width="64" height="64" alt="AdrielVelazquez" title="AdrielVelazquez"></a>
 <a href="https://github.com/noomz" title="noomz"><img src="https://avatars.githubusercontent.com/u/24957?s=128&amp;v=4" width="64" height="64" alt="noomz" title="noomz"></a>
 <a href="https://github.com/ShalokShalom" title="ShalokShalom"><img src="https://avatars.githubusercontent.com/u/6344099?s=128&amp;v=4" width="64" height="64" alt="ShalokShalom" title="ShalokShalom"></a>
 <a href="https://github.com/agammann" title="agammann"><img src="https://avatars.githubusercontent.com/u/161159040?s=128&amp;v=4" width="64" height="64" alt="agammann" title="agammann"></a>
