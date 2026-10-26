@@ -3208,6 +3208,23 @@ tuios set-session-space -s work payments
 tuios set-session-space
 ```
 
+### `tuios set-session-order`
+
+Put the sessions in an order. Every client attached to the daemon lists them in it, at once: the sidebar, the session switcher and `tuios ls`. Moving a session up or down on the sidebar does the same. The order survives a daemon restart.
+
+Every name must be a live session. A session you leave out, and one made later, goes after the named ones in creation order.
+
+**Usage:**
+```bash
+tuios set-session-order <session>... [flags]
+```
+
+**Examples:**
+```bash
+# List work first, then notes, then everything else
+tuios set-session-order work notes
+```
+
 ### `tuios set-workspace-name`
 
 Name a workspace so the dock and the sidebar show the label instead of the

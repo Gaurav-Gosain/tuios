@@ -1936,6 +1936,18 @@ func buildVerbRegistry() map[string]verbEntry {
 			examples: []string{`{"id":1,"verb":"set-workspace-name","params":{"session":"work","workspace":2,"name":"review"}}`},
 			handler:  (*Daemon).verbSetWorkspaceName,
 		},
+		"set-session-order": {
+			description: "Put the sessions in an order. Every client lists them in it: the rail, the session switcher, tuios ls. It survives a daemon restart. A session the list leaves out, and one made later, goes after the named ones in creation order.",
+			params: []verbParam{
+				{Name: "order", Type: "[]string", Required: true, Description: "Session names in their new order. Every name must be a live session, or nothing changes. Repeats are dropped."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always session_order_set."},
+				{Name: "order", Type: "[]string", Description: "Every session's name, in the order the daemon lists them now."},
+			},
+			examples: []string{`{"id":1,"verb":"set-session-order","params":{"order":["work"]}}`},
+			handler:  (*Daemon).verbSetSessionOrder,
+		},
 		"set-workspace-order": {
 			description: "Put the workspaces in an order, renumbering them: a workspace's number is its position. Each workspace takes its panes, name, focus and layout to its new number.",
 			params: []verbParam{

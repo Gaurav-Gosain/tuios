@@ -233,6 +233,7 @@ var verbCapabilities = map[string][]string{
 	"rename-session":      {config.LinkAllowWrite},
 	"set-session-accent":  {config.LinkAllowWrite},
 	"set-session-space":   {config.LinkAllowWrite},
+	"set-session-order":   {config.LinkAllowWrite},
 	"set-workspace-name":  {config.LinkAllowWrite},
 	"set-workspace-order": {config.LinkAllowWrite},
 	"set-agent-state":     {config.LinkAllowWrite},

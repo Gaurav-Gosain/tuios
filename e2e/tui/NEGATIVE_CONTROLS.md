@@ -10091,3 +10091,18 @@ writes `held.png`, `needs-you.png` and `off.png`.
 | --- | --- | --- |
 | The keys `dropStaleDuplicateKeys` returns left out of `RetiredKeybinds` (its result ignored, as before the change) | `the doctor does not report , taken from swap_down by prefix_settings` | **caught** |
 | The sort of the dropped keys removed, so they keep the map walk's order | `run 2: the dropped keys are ["swap_right x" "swap_down ," "swap_up c" "swap_left d"], want ["swap_down ," "swap_left d" "swap_right x" "swap_up c"] in that order`; a second run failed at run 1 in another order | **caught** |
+## The session order is the daemon's
+
+`TestSessionOrderIsTheDaemons` in `session_order_test.go` makes sessions alpha, bravo and charlie, and attaches two real clients with the rail open: A to alpha, B to bravo. Both must list alpha, bravo, charlie. On A, ctrl+b e and shift+down twice move alpha to the bottom of A's rail. B, which nobody touched, must list bravo, charlie, alpha within two seconds, and `tuios ls` the same. Then `tuios set-session-order charlie alpha` must move both rails to charlie, alpha, bravo. `TestSessionOrderAnOlderClientDoesNotUndoIt` sets bravo, charlie, alpha, then attaches a client with `TUIOS_SESSION_ORDER_LEGACY=1`, which behaves as a build from before the order. On bravo it moves bravo to the bottom of its own rail and opens a pane in bravo. `tuios ls` must still list bravo, charlie, alpha, and a new client started after it, which reads the state file the older one wrote, must list the same. `TestSessionOrderSurvivesTheDaemon` sets charlie, alpha, bravo, which is neither the creation order nor the name order, runs kill-server, starts a daemon that restores the three, and must list charlie, alpha, bravo first. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-26 on macOS, based on origin/main at 6d122034a.
+
+The fixed build passes three runs of three.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (origin/main at 6d122034a) | "client B does not list the order A set"; the other two at their first `set-session-order` | **caught** |
+| `TUIOS_SESSION_ORDER_LEGACY` not read, so the older client sends its order | the older client test: "tuios ls lists [charlie alpha bravo], want [bravo charlie alpha]" | **caught** |
+| `retainDaemonExclusive` does not keep the rank (`incoming.Rank = canonical.Rank` cut) | the older client test: the push from the older client takes bravo's rank, "tuios ls lists [charlie alpha bravo]" | **caught** |
+| `sidebarSessionOrderFor` applies the kept order over the daemon's (`if false && ...`) | the older client test: "a new client lists another order than the daemon's" | **caught** |
+| The restore drops the rank (`Rank: state.Rank` cut from `daemon_resurrect.go`) | "after a restart: tuios ls lists [alpha bravo charlie trigger]" | **caught** |
+| `Manager.ListSessions` ignores the ranks (`0 * session.rank()`) | all three: the listing stays in creation order | **caught** |
+| `commitSessionOrder` does not send the order (no `queueSidebarCmd`) | "client B does not list the order A set" | **caught** |

@@ -1820,6 +1820,31 @@ func runSetSessionSpace(sessionName, space string) error {
 	})
 }
 
+// runSetSessionOrder puts the daemon's sessions in an order every client
+// lists, and prints the order that stands.
+//
+// The verb names no session, so it is called as it is, not through
+// callAndReport, which adds one and so has the verb refuse the call.
+func runSetSessionOrder(order []string) error {
+	t, err := dialSessionTarget("")
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+	raw, err := t.client.Call("set-session-order", map[string]any{"order": order})
+	if err != nil {
+		return t.explain("set-session-order", err)
+	}
+	var res struct {
+		Order []string `json:"order"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("Sessions in order: %s.\n", strings.Join(res.Order, ", "))
+	return nil
+}
+
 // runSetWorkspaceName labels a workspace. The number stays its identity.
 func runSetWorkspaceName(sessionName string, workspace int, name string) error {
 	return callAndReport("set-workspace-name", map[string]any{

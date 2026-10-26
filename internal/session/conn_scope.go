@@ -272,6 +272,7 @@ var verbScopes = map[string]scopeKind{
 	"rename-session":       scopeDeny,
 	"set-session-accent":   scopeDeny,
 	"set-session-space":    scopeDeny,
+	"set-session-order":    scopeDeny,
 	"set-workspace-name":   scopeDeny,
 	"set-workspace-order":  scopeDeny,
 	"resume-agent":         scopeDeny,

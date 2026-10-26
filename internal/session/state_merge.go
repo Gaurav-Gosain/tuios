@@ -63,6 +63,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// canonical wins the same way: no client sync can file a session under a
 	// space or take it out.
 	incoming.Space = canonical.Space
+	// The rank is written only by set-session-order, the same way.
+	incoming.Rank = canonical.Rank
 	// The worktree record is written by detection and by the worktree verbs,
 	// both daemon-side, so canonical wins the same way Restored does.
 	incoming.Worktree = canonical.Worktree

@@ -746,6 +746,11 @@ func (m *OS) SidebarToggleHostCollapsed(host string) {
 // sidebarSessionOrderFor is the user's drag order for one machine's sessions:
 // SidebarOrder for this machine, and the per-host order for any other.
 func (m *OS) sidebarSessionOrderFor(host string) []string {
+	// The attached machine's daemon keeps the order every client shows, and
+	// its listing is already in it. See session_order.go.
+	if host == m.attachedMachine() && m.sessionOrderFromDaemon() {
+		return nil
+	}
 	if host == federation.LocalHostName {
 		return m.SidebarOrder
 	}

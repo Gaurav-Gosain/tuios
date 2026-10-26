@@ -2244,6 +2244,25 @@ global session cannot be in a space.`,
 	setSessionSpaceCmd.Flags().StringVarP(&setSessionSpaceSession, "session", "s", "", "Target session (default: this pane's session, else the most recently active)")
 	_ = setSessionSpaceCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	setSessionOrderCmd := &cobra.Command{
+		Use:   "set-session-order <session>...",
+		Short: "Put the sessions in an order every client lists",
+		Long: `Put the sessions in an order. Every client attached to the daemon lists
+them in it, at once: the sidebar, the session switcher and 'tuios ls'. Moving
+a session up or down on the sidebar does the same. The order survives a
+daemon restart.
+
+Every name must be a live session. A session you leave out, and one made
+later, goes after the named ones in creation order.`,
+		Example: `  # List work first, then notes, then everything else
+  tuios set-session-order work notes`,
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completeSessionNames,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runSetSessionOrder(args)
+		},
+	}
+
 	var setWorkspaceNameSession string
 	setWorkspaceNameCmd := &cobra.Command{
 		Use:   "set-workspace-name <workspace> [name]",
@@ -3035,7 +3054,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newTaskCommand(), newReviewCommand(), newCheckpointCommand(), newShipCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
-	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setWorkspaceNameCmd, newNoteCommand())
+	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setSessionOrderCmd, setWorkspaceNameCmd, newNoteCommand())
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newPiPCommand(), newCallCommand(), newPaneViewCommand())
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd, themeCmd)

@@ -76,7 +76,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarDragActive() {
 		mouse := msg.Mouse()
 		o.SidebarRelease(mouse.X, mouse.Y)
-		return o, nil
+		// A drag that moved a session sends the new order to the daemon.
+		return o, o.TakeSidebarCmd()
 	}
 	if o.SidebarSplitActive() {
 		mouse := msg.Mouse()

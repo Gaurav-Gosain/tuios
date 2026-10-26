@@ -160,7 +160,7 @@ func (d *Daemon) adoptSession(rec handoffSession, panes []handoffPane) ([]*PTY, 
 	if height <= 0 {
 		height = 24
 	}
-	sess, err := d.manager.CreateSession(st.Name, &SessionConfig{restoreID: rec.ID, Space: st.Space}, width, height)
+	sess, err := d.manager.CreateSession(st.Name, &SessionConfig{restoreID: rec.ID, Space: st.Space, Rank: st.Rank}, width, height)
 	if err != nil {
 		return nil, err
 	}

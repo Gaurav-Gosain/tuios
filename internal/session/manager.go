@@ -559,14 +559,25 @@ func (m *Manager) ListSessions() []SessionInfo {
 
 	// Order the sessions themselves, not their Info snapshots: Info truncates
 	// Created to whole seconds, so two sessions made in the same second tied and
-	// took the map's random iteration order. Sort on the full-precision timestamp,
-	// with the name as a final tiebreak, so the list is stable everywhere it is
-	// read (sidebar, switcher, palette).
+	// took the map's random iteration order. The placed sessions come first,
+	// by rank (set-session-order), then the rest on the full-precision
+	// timestamp, with the name as a final tiebreak, so the list is stable
+	// everywhere it is read (sidebar, switcher, palette) and is the same order
+	// on every client.
 	ordered := make([]*Session, 0, len(m.sessions))
+	ranks := make(map[*Session]int, len(m.sessions))
 	for _, session := range m.sessions {
 		ordered = append(ordered, session)
+		ranks[session] = session.rank()
 	}
 	sort.Slice(ordered, func(i, j int) bool {
+		ri, rj := ranks[ordered[i]], ranks[ordered[j]]
+		if ri != rj {
+			if ri == 0 || rj == 0 {
+				return rj == 0
+			}
+			return ri < rj
+		}
 		if ordered[i].Created.Equal(ordered[j].Created) {
 			return ordered[i].Name() < ordered[j].Name()
 		}

@@ -451,6 +451,16 @@ type SessionState struct {
 	// request to leave. Empty is what every older client and every state file
 	// written before it reads back as.
 	Space string `json:"space,omitempty"`
+	// Rank is the session's place in the session order every client lists:
+	// 1 is first. Zero is a session nobody placed, which lists after every
+	// placed one, in creation order. One order for the daemon, so a session
+	// moved up on one client's rail moves on every rail, the phone's over SSH
+	// too, and stays there across a daemon restart.
+	//
+	// Daemon-owned: only set-session-order writes it, so a client sync never
+	// moves it. Zero is what every older client and every state file written
+	// before it reads back as.
+	Rank int `json:"rank,omitempty"`
 	// StartDir is the session's start directory (see Session.startDir), as
 	// it was when the state was saved. ResurrectionState stamps it, and a
 	// restore sets it again, so the chosen start directory survives a daemon
@@ -1755,6 +1765,9 @@ type SessionConfig struct {
 	// sets it from the state file, because the client sync the restore goes
 	// through keeps the new session's own value.
 	Space string
+	// Rank is the session's place in the session order, set by a restore
+	// from the state file for the reason Space is. See SessionState.Rank.
+	Rank int
 	// restoreID is the id a restored session had before the daemon
 	// restarted, from its state file. A session made with it keeps that id,
 	// so a client's ids for it stay valid. Empty, or an id already in use,
@@ -1962,6 +1975,7 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	}
 	if cfg != nil {
 		session.state.Space = cfg.Space
+		session.state.Rank = cfg.Rank
 	}
 
 	session.setName(name)
@@ -3177,6 +3191,22 @@ func (s *Session) SetSpace(space string) error {
 	})
 }
 
+// SetRank records the session's place in the session order, propagated and
+// persisted exactly as SetDisplayName is. Zero takes it out of the order.
+func (s *Session) SetRank(rank int) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.Rank = rank
+		return nil
+	})
+}
+
+// rank is the session's place in the session order, zero for none.
+func (s *Session) rank() int {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.state.Rank
+}
+
 // MarkRestored records that this session was rebuilt from saved state. It runs
 // through mutateState rather than being written into the state the restore
 // pushes, because a client sync always takes the daemon's value for this field
@@ -3719,7 +3749,7 @@ func (s *Session) Info() SessionInfo {
 	windows := s.windowSummaries()
 
 	s.stateMu.RLock()
-	displayName, accent, space := s.state.DisplayName, s.state.Accent, s.state.Space
+	displayName, accent, space, rank := s.state.DisplayName, s.state.Accent, s.state.Space, s.state.Rank
 	note := s.state.Note
 	currentWorkspace := s.state.CurrentWorkspace
 	restored := s.state.Restored
@@ -3753,6 +3783,7 @@ func (s *Session) Info() SessionInfo {
 		Restored:         restored,
 		Global:           s.isGlobal(),
 		Space:            space,
+		Rank:             rank,
 		Dir:              dir,
 		Branch:           branch,
 		Worktree:         s.worktreeListing(),

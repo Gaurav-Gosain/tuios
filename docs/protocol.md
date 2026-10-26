@@ -3848,6 +3848,26 @@ Response:
 
 Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes. Any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space. Its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
 
+### set-session-order
+
+Put the sessions in an order. The daemon keeps one order for all its clients: `list-sessions` is sorted by it, so the sidebar, the session switcher and `tuios ls` list the sessions the same way on every client, and it is saved and restored with the sessions. Moving a session on the sidebar sends this verb. The daemon tells every listing client at once, without waiting for the listing's next look. `list-sessions` carries `rank` (1 first) on every session the order places.
+
+Params: `order` (required), the session names in their new order. Every name must be a live session, or nothing changes and the call is refused with `session_not_found`. Repeats are dropped. A session the list leaves out, and one made later, goes after the named ones in creation order.
+
+Request:
+
+```json
+{"verb": "set-session-order", "params": {"order": ["work", "notes"]}}
+```
+
+Response:
+
+```json
+{"result": {"type": "session_order_set", "order": ["work", "notes", "scratch"]}}
+```
+
+`order` in the result is every session, in the order the daemon lists them now. Only this verb writes a session's rank: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
+
 ### new-worktree
 
 Create a git worktree of a repository and a session in it. The worktree goes

@@ -236,7 +236,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func makeSidebarReorderHandler(delta int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(delta)
-		return o, nil
+		return o, o.TakeSidebarCmd()
 	}
 }
 

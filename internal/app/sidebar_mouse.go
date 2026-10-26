@@ -806,10 +806,10 @@ func (m *OS) sidebarRelease(x, y int) bool {
 	if d.Dragging {
 		if d.Host {
 			m.SidebarHostOrder = d.Order
+			m.saveSidebarState()
 		} else {
-			m.setSidebarSessionOrder(m.attachedMachine(), d.Order)
+			m.commitSessionOrder(d.Order)
 		}
-		m.saveSidebarState()
 		return true
 	}
 
