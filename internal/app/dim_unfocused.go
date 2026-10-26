@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -53,7 +54,7 @@ func paneDim(isFocused bool, s *config.Settings) int {
 }
 
 // dimCell fills dst with src carried toward the pane's ground and returns it,
-// or returns src unchanged when there is nothing this can honestly dim.
+// or returns src unchanged when there is nothing to dim.
 //
 // dimText says whether the text is carried toward the ground along with the
 // background. False, appearance.dim_foreground off, leaves the guest's text in
@@ -64,12 +65,17 @@ func paneDim(isFocused bool, s *config.Settings) int {
 // a run ends, so a run's style is built once and the blend is paid once for it.
 // A run is typically a whole word or a whole line.
 //
-// A cell carrying the terminal's default colour is left alone unless a theme is
-// set. Untheme, tuios emits colour indices and the host terminal decides what
-// they look like, so there is no RGB here to carry anywhere; guessing one would
-// replace the user's own palette with ours on the panes they are not looking
-// at, which is a stranger result than not dimming.
-func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, dimText bool, memo *blendMemo) *uv.Cell {
+// fg and bg are the colours the host paints a cell that names none with, and
+// pal is the host's sixteen when no theme is set (nil with a theme, whose
+// sixteen the emulator has already written into the cells as RGB). A colour
+// this cannot read channels off, because the host never said what it is,
+// is not guessed at: the text takes SGR 2 instead, which the host dims by an
+// amount of its own choosing.
+//
+// A cell with no background of its own keeps none. It already shows the
+// ground the dim carries toward, and spelling that ground out would put an
+// opaque block over a terminal drawn with a translucent background.
+func dimCell(dst, src *uv.Cell, fg, bg color.Color, pal *[16]color.Color, t float64, dimText bool, memo *blendMemo) *uv.Cell {
 	if src == nil {
 		return src
 	}
@@ -84,33 +90,51 @@ func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, dimText bool, mem
 	// holding a nil pointer, and color.Color's RGBA has a value receiver, so
 	// calling it through one panics rather than returning zeros. Every RGBA
 	// call on a cell style in this package screens for that first.
-	cellFg, cellBg := src.Style.Fg, src.Style.Bg
-	if isNilColor(cellFg) {
-		cellFg = fg
-	}
-	if isNilColor(cellBg) {
-		cellBg = bg
-	}
-	if isNilColor(cellFg) && isNilColor(cellBg) {
+	cellFg, cellBg := hostInk(src.Style.Fg, fg, pal), hostInk(src.Style.Bg, bg, pal)
+	ownBg := !isNilColor(src.Style.Bg)
+	if !dimText && !ownBg {
 		return src
 	}
 	*dst = *src
-	// The fg goes to the cell's own ground where it has one, so a cell painted
-	// on a block of colour dims into that block rather than into the pane
-	// behind it and keeps the block readable as a block.
-	if dimText && !isNilColor(cellFg) {
+	if dimText {
+		// The fg goes to the cell's own ground where it has one, so a cell
+		// painted on a block of colour dims into that block rather than into
+		// the pane behind it and keeps the block readable as a block.
 		toward := cellBg
 		if isNilColor(toward) {
 			toward = bg
 		}
-		if !isNilColor(toward) {
+		if !isNilColor(cellFg) && !isNilColor(toward) {
 			dst.Style.Fg = memo.mix(cellFg, toward, t)
+		} else {
+			dst.Style.Attrs |= uv.AttrFaint
 		}
 	}
-	if !isNilColor(cellBg) && !isNilColor(bg) {
+	if ownBg && !isNilColor(cellBg) && !isNilColor(bg) {
 		dst.Style.Bg = memo.mix(cellBg, bg, t)
 	}
 	return dst
+}
+
+// hostInk is c as the host paints it: def for a cell that names no colour,
+// the host's own slot for one of the sixteen when pal is set, and nil when
+// the host never said what that slot is. Any other colour is its own answer.
+func hostInk(c, def color.Color, pal *[16]color.Color) color.Color {
+	if isNilColor(c) {
+		return def
+	}
+	if pal == nil {
+		return c
+	}
+	switch v := c.(type) {
+	case ansi.BasicColor:
+		return pal[v&15]
+	case ansi.IndexedColor:
+		if v < 16 {
+			return pal[v]
+		}
+	}
+	return c
 }
 
 // dimGlyphCell is dimCell for a cell of an image drawn as glyphs. Both of its
@@ -139,16 +163,37 @@ func dimGlyphCell(dst, src *uv.Cell, bg color.Color, t float64, memo *blendMemo)
 	return dst
 }
 
-// paneDimGround is the pair an unfocused pane's cells are dimmed toward. A
-// painted pane background is the pane's own background, so it is what the dim
-// carries toward when one is set, theme or not. Its foreground may be nil (a
-// colour literal with no theme), and dimCell then leaves default-coloured text
-// alone, as it does untheme. With no pane background it is dimGround.
-func (m *OS) paneDimGround() (fg, bg color.Color) {
-	if g := m.paneGround(); g.on() {
-		return g.fg, g.bg
+// paneDimGround is what an unfocused pane's cells are dimmed toward and
+// from: the background the dim carries toward, the foreground a cell that
+// names no colour is painted with, and with no theme the host's sixteen.
+//
+// A painted pane background is the pane's own background, so it is what the
+// dim carries toward when one is set, theme or not. With a theme the rest is
+// the theme's own pair. With no theme it is what the host terminal said about
+// its colours (see host_colors.go). A colour the host did not answer for is
+// nil, and dimCell draws text it cannot blend with SGR 2 instead.
+func (m *OS) paneDimGround() (fg, bg color.Color, pal *[16]color.Color) {
+	g := m.paneGround()
+	if g.on() {
+		fg, bg = g.fg, g.bg
 	}
-	return dimGround()
+	if theme.Current() != nil {
+		tfg, tbg := dimGround()
+		if bg == nil {
+			bg = tbg
+		}
+		if fg == nil {
+			fg = tfg
+		}
+		return fg, bg, nil
+	}
+	if bg == nil {
+		bg = m.host.bg
+	}
+	if fg == nil {
+		fg = m.host.fg
+	}
+	return fg, bg, &m.host.ansi
 }
 
 // dimGround is the pair a dimmed cell is carried toward: the pane's own

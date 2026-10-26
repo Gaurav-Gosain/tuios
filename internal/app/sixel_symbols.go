@@ -562,7 +562,7 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 				pi.dimResolved = true
 				if w := m.windowByID(pi.e.windowID); w != nil {
 					if d := w.CachedContentDim(); d > 0 {
-						if _, pi.dimBg = m.paneDimGround(); pi.dimBg != nil {
+						if _, pi.dimBg, _ = m.paneDimGround(); pi.dimBg != nil {
 							pi.dim = float64(d) / 100
 						}
 					}

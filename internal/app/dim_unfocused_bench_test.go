@@ -42,7 +42,7 @@ func BenchmarkDimUnfocusedRuns(b *testing.B) {
 					m = nil
 				}
 				for i := range cells {
-					_ = dimCell(&scratch, &cells[i], fg, bg, 0.35, true, m)
+					_ = dimCell(&scratch, &cells[i], fg, bg, nil, 0.35, true, m)
 				}
 			}
 		})

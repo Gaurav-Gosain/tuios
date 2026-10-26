@@ -561,21 +561,21 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	}
 
 	// The dim and the ground it carries toward, resolved once for the pane
-	// rather than per cell. dimT is zero for a focused pane, for an unset
-	// option, and for an untheme where there is no known ground to carry to,
-	// and a zero dimT makes the cell loop below identical to what it was.
+	// rather than per cell. dimT is zero for a focused pane and for an unset
+	// option, and a zero dimT makes the cell loop below identical to what it
+	// was. A pane whose colours are not known still dims: see dimCell.
 	var (
 		dimScratch   uv.Cell
 		dimMemo      blendMemo
 		dimFg, dimBg color.Color
+		dimPal       *[16]color.Color
 		dimT         float64
 		dimText      bool
 	)
 	if dim > 0 {
-		if dimFg, dimBg = m.paneDimGround(); dimBg != nil {
-			dimT = float64(dim) / 100
-			dimText = m.Settings.DimForeground
-		}
+		dimFg, dimBg, dimPal = m.paneDimGround()
+		dimT = float64(dim) / 100
+		dimText = m.Settings.DimForeground
 	}
 
 	// The pane background, for the two things drawn here against it rather
@@ -946,7 +946,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// own entry and the focused pane's entries are untouched.
 				styleCell := cell
 				if dimT > 0 {
-					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT, dimText, &dimMemo)
+					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimPal, dimT, dimText, &dimMemo)
 				}
 				if isCursorPos {
 					styleCell = paneGroundCell(&groundScratch, styleCell, ground)
