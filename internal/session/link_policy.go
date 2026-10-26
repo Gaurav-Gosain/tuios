@@ -291,6 +291,19 @@ var verbCapabilities = map[string][]string{
 	"verify-fan":     {config.LinkAllowOpen, config.LinkAllowWrite},
 	"mark-attention": {config.LinkAllowRespond},
 
+	// The task cards. The listing carries titles and holders, which list
+	// reaches; a card's prompt is what a pane will be told to do, so a
+	// change needs write.
+	"list-tasks":     {config.LinkAllowList},
+	"get-task":       {config.LinkAllowList},
+	"add-task":       {config.LinkAllowWrite},
+	"claim-task":     {config.LinkAllowWrite},
+	"finish-task":    {config.LinkAllowWrite},
+	"set-task-stage": {config.LinkAllowWrite},
+	"block-task":     {config.LinkAllowWrite},
+	"release-task":   {config.LinkAllowWrite},
+	"remove-task":    {config.LinkAllowWrite},
+
 	// The checkpoints. The listing carries states and the agent's prompts,
 	// which list reaches. The diff carries file contents, and a restore
 	// writes files, so both need write, as review-diff does.

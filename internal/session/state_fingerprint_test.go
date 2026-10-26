@@ -31,6 +31,7 @@ func fingerprintFixture() *SessionState {
 			2: nil,
 		},
 		Options: map[string]string{"a": "1", "b": "2", "c": "3", "d": "4", "e": "5"},
+		Tasks:   []TaskState{{ID: "t1", Title: "one", Stage: TaskStageTodo}},
 		Version: 7,
 	}
 }
@@ -122,6 +123,13 @@ func TestStateFingerprintNoticesEveryChange(t *testing.T) {
 		// The painted ground a client reports for its panes. A push that
 		// changes only this is otherwise never sent.
 		"pane report bg": func(s *SessionState) { s.PaneReportBg = "#123456" },
+		// A task card is daemon-owned, and the rail will draw it.
+		"task added": func(s *SessionState) {
+			s.Tasks = append(s.Tasks, TaskState{ID: "t2", Title: "two", Stage: TaskStageTodo})
+		},
+		"task stage":   func(s *SessionState) { s.Tasks[0].Stage = TaskStageDoing },
+		"task holder":  func(s *SessionState) { s.Tasks[0].Holder = "win-1" },
+		"task blocked": func(s *SessionState) { s.Tasks[0].Blocked = &TaskBlock{Reason: "waiting", By: "shell"} },
 	}
 
 	for what, mutate := range cases {

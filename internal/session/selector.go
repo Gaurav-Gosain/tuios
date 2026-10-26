@@ -31,6 +31,7 @@ import (
 //	host:G       the machine, "local" for this one, a glob
 //	name:G       the window's name, a glob
 //	cwd:DIR      the working directory is DIR or under it; ~ is the home dir
+//	task:G       a task card the pane holds, by id, a glob (task.go)
 //
 // A glob is path.Match syntax: * and ? do not cross a slash, so group:fan/*
 // matches every group under fan/.
@@ -52,11 +53,12 @@ const (
 	SelectorHost    = "host"
 	SelectorName    = "name"
 	SelectorCwd     = "cwd"
+	SelectorTask    = "task"
 )
 
 // SelectorKeys lists the keys a selector takes, in the order the docs give
 // them.
-var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd}
+var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask}
 
 // selectorMaxLen bounds a selector's text. A selector is typed by a person or
 // written by an agent, and one longer than this is not a selector.
@@ -91,6 +93,9 @@ type SelectorTarget struct {
 	Cwd      string
 	Group    string
 	NeedsYou bool
+	// Tasks are the ids of the task cards the pane holds. Only a pane of
+	// this machine fills it, so a task term matches nothing else.
+	Tasks []string
 }
 
 // ParseSelector reads a selector. homeDir expands a leading ~ in a cwd term;
@@ -255,6 +260,8 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 		return glob(host)
 	case SelectorName:
 		return glob(t.Name)
+	case SelectorTask:
+		return slices.ContainsFunc(t.Tasks, glob)
 	case SelectorCwd:
 		// t.Cwd is the folder the pane last reported, which the pane sets
 		// itself with cd or an OSC 7 it prints. A cwd: term only narrows

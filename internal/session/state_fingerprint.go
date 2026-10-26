@@ -77,6 +77,28 @@ func StateFingerprint(s *SessionState) uint64 {
 	str(s.PaneReportBg)
 	str(s.PaneReportFg)
 	str(s.PaneReportPalette)
+	// The task cards, which only the task verbs write. A card's history only
+	// grows at its end, so its length and its newest entry stand for it.
+	num(len(s.Tasks))
+	for i := range s.Tasks {
+		tk := &s.Tasks[i]
+		str(tk.ID)
+		str(tk.Title)
+		str(tk.Stage)
+		str(strconv.FormatInt(tk.StageAt, 10))
+		str(tk.Holder)
+		flag(tk.Blocked != nil)
+		if tk.Blocked != nil {
+			str(tk.Blocked.Reason)
+			str(tk.Blocked.By)
+		}
+		str(tk.Fan)
+		num(len(tk.History))
+		if n := len(tk.History); n > 0 {
+			str(tk.History[n-1].Action)
+			str(strconv.FormatInt(tk.History[n-1].At, 10))
+		}
+	}
 
 	// Windows are ordered, and the order is meaningful (it is the z-order the
 	// peer rebuilds its list in), so they are hashed as they stand.

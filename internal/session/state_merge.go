@@ -65,6 +65,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	incoming.Worktree = canonical.Worktree
 	// The window moves are recorded by a move between sessions, daemon-side.
 	incoming.WindowMoves = canonical.WindowMoves
+	// The task cards are written only by the task verbs, so canonical wins
+	// and no client sync can add, change or drop one. See task.go.
+	incoming.Tasks, incoming.NextTaskID = canonical.Tasks, canonical.NextTaskID
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}

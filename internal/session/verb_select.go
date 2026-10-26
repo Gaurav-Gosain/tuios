@@ -76,7 +76,8 @@ func (d *Daemon) parseVerbSelector(text string) (*Selector, *verbError) {
 }
 
 // paneSelectorTarget is what a selector reads from one pane of this machine.
-func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string) SelectorTarget {
+// tasks are the cards the pane holds, from heldTasks.
+func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, tasks []string) SelectorTarget {
 	return SelectorTarget{
 		Host:     localAttentionHost,
 		Session:  sess.Name(),
@@ -86,6 +87,7 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string) 
 		Cwd:      w.Cwd,
 		Group:    group,
 		NeedsYou: w.AgentState.NeedsYou(),
+		Tasks:    tasks,
 	}
 }
 
@@ -103,12 +105,13 @@ func (d *Daemon) selectPanes(sel *Selector, all bool) []selectedPane {
 		if st.Worktree != nil {
 			group = st.Worktree.Group
 		}
+		held := heldTasks(st.Tasks)
 		for i := range st.Windows {
 			w := st.Windows[i]
 			if !all && !isAgentWindow(w) {
 				continue
 			}
-			if sel.Match(d.paneSelectorTarget(sess, w, group)) {
+			if sel.Match(d.paneSelectorTarget(sess, w, group, held[w.ID])) {
 				out = append(out, selectedPane{sess: sess, window: w, group: group})
 			}
 		}

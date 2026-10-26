@@ -249,7 +249,7 @@ var windowParam = verbParam{
 }
 
 // selectorSyntax is the one sentence every select param shares.
-const selectorSyntax = "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home)."
+const selectorSyntax = "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home), task (a task card the pane holds, by id, glob)."
 
 // selectWriteParams are the two params a write addressed by selector takes.
 // what says what the write does to the panes the selector matches.
@@ -333,7 +333,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "window", Type: "string", Description: "The caller's pane."},
 				{Name: "session", Type: "string", Description: "The session of the caller's pane."},
 				{Name: "via", Type: "string", Description: "How the pane was found: pid from the kernel, env from the process's TUIOS_PANE_ID while the pane was being created, token from pane_token.", Accepted: []string{"pid", "env", "token"}},
-				{Name: "grants", Type: "[]string", Description: "The grants the pane holds now. admin implies read, write and fan; respond is never implied.", Accepted: config.PaneGrantNames},
+				{Name: "grants", Type: "[]string", Description: "The grants the pane holds now. admin implies read, write, fan, files and task; respond is never implied.", Accepted: config.PaneGrantNames},
 				{Name: "explicit", Type: "bool", Description: "True when the pane was given grants of its own, false when it holds the default."},
 				{Name: "mode", Type: "string", Description: "[agents.permissions] mode: open gives a pane started with no grants admin, strict gives it default_grants.", Accepted: config.PaneModes},
 				{Name: "default_grants", Type: "[]string", Description: "What a pane started with no grants of its own holds now."},
@@ -2601,6 +2601,7 @@ func buildVerbRegistry() map[string]verbEntry {
 	// The verbs of the agent review, triage, queue and approval work, kept in
 	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(table, agentWorkVerbs())
+	maps.Copy(table, taskVerbs())
 	// The checkpoint verbs. See verb_checkpoint.go.
 	maps.Copy(table, checkpointVerbs())
 	// The ship verbs. See verb_ship.go.

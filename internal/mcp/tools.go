@@ -380,6 +380,8 @@ var EventTypes = []string{
 	"transfer", "transfer-progress", "transfer-file",
 	// What a person did on a TML surface. Opt-in.
 	"tml-event",
+	// A session's task cards.
+	"task-claimed", "task-finished", "task-changed",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

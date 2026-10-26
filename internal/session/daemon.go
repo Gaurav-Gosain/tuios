@@ -1257,6 +1257,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.attention.noteSessionEvent(name, ev)
 			return
 		}
+		// A task card the change let go, with its pane or its agent.
+		if ev.Type == eventTaskReleased {
+			d.publishReleased(s, []TaskRow{*ev.taskRow}, ev.taskReason)
+			return
+		}
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.
 		d.activity.noteSessionEvent(s, ev)

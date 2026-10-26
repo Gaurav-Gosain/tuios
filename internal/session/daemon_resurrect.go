@@ -346,6 +346,10 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	sess.RestoreMasterLayouts(masterLayouts)
 	// The herdr tab keys are daemon-owned in the same way.
 	sess.RestoreWorkspaceTabKeys(tabKeys, nextTabKey)
+	// The task cards are daemon-owned in the same way. Every holder is let
+	// go: clearLiveAgent took every agent above, and a holder's pane may not
+	// have come back.
+	d.restoreTasks(sess, state.Tasks, state.NextTaskID)
 	// Whether the rail is shown is daemon-owned in the same way. See
 	// RestoreSidebar.
 	sess.RestoreSidebar(state.Sidebar)

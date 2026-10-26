@@ -357,6 +357,12 @@ type SerializedBSPTree struct {
 // SessionState represents the complete serializable state of a session.
 type SessionState struct {
 	Name string `json:"name"`
+	// Tasks are the session's task cards, oldest first, and NextTaskID
+	// numbers the next one. Daemon-owned: only the task verbs write them,
+	// and retainDaemonExclusive keeps them through a client sync. They are
+	// saved, so a card and its history survive a restart. See task.go.
+	Tasks      []TaskState `json:"tasks,omitempty"`
+	NextTaskID uint64      `json:"next_task_id,omitempty"`
 	// DisplayName is an optional user-facing label. Name stays the identity: it
 	// keys the session map, names the resurrection file, is exported as
 	// TUIOS_SESSION into every pane, and is what every verb's session parameter
@@ -3042,6 +3048,8 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceOrder != nil {
 		stateCopy.WorkspaceOrder = slices.Clone(s.state.WorkspaceOrder)
 	}
+	// A card's history and block are never written in place (TaskState.note).
+	stateCopy.Tasks = slices.Clone(s.state.Tasks)
 	stateCopy.WindowMoves = slices.Clone(s.state.WindowMoves)
 	if s.state.WorkspaceMasterRatio != nil {
 		stateCopy.WorkspaceMasterRatio = maps.Clone(s.state.WorkspaceMasterRatio)
@@ -3491,6 +3499,9 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 // channel sends; it never re-enters the session.
 func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 	events := diffLifecycle(before, snapshotLifecycle(s.state))
+	// A task card held by a pane that closed, or whose agent left, is let
+	// go here, in the change that closed it. See releasedTaskEvents.
+	events = append(events, releasedTaskEvents(s, s.state, events, time.Now().UnixNano())...)
 	moving := s.movingWindow
 	s.movingWindow = ""
 	for _, ev := range events {

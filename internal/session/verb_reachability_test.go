@@ -49,6 +49,17 @@ type exampleOutcome struct {
 // panes, so a verb that needs one of those answers with an error, and that
 // error is the honest expectation rather than a skip.
 var exampleOutcomes = map[string]exampleOutcome{
+	// The fixture's session is made fresh for each example and holds no
+	// task card. The verbs are proved in task_test.go.
+	"block-task#0":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"block-task#1":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"claim-task#0":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"claim-task#1":     {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"finish-task#0":    {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"get-task#0":       {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"release-task#0":   {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"remove-task#0":    {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"set-task-stage#0": {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	// A client-owned surface with no client attached.
 	"list-dock-components#0": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	// The fixture daemon reads no config file. The verb is proved in

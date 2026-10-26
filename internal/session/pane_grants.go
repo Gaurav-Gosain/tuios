@@ -41,9 +41,13 @@ import (
 //   - files: copy files with tuios cp. A copy's ends on this machine are in
 //     the pane's own folder, and its ends on a host are under that host's
 //     home. The pane sees and controls only the copies it started.
+//   - task: add, claim, finish, stage, block and release the task cards of
+//     its own session (task.go). A pane claims only for itself and acts only
+//     on the card it holds; remove-task needs admin.
 //   - admin: everything else a pane could do before grants existed, which is
 //     every verb on every session, the listings across sessions, and the
-//     binary protocol (attach, input). It implies read, write, fan and files.
+//     binary protocol (attach, input). It implies read, write, fan, files and
+//     task.
 //
 // Every pane may also report its own state, meta and conversation id, ask
 // the person as itself, hold its own approval prompt, and call the verbs that
@@ -95,6 +99,9 @@ const (
 	// own folder or a host's home, and the transfer verbs on the copies the
 	// pane started. See transferGrantCheck in transfer_grants.go.
 	GrantFiles
+	// GrantTask writes the task cards of the pane's own session. See
+	// task.go.
+	GrantTask
 )
 
 // grantNone is the name a caller uses for the empty set.
@@ -106,6 +113,7 @@ var grantByName = map[string]Grants{
 	config.PaneGrantFan:     GrantFan,
 	config.PaneGrantRespond: GrantRespond,
 	config.PaneGrantFiles:   GrantFiles,
+	config.PaneGrantTask:    GrantTask,
 	config.PaneGrantAdmin:   GrantAdmin,
 }
 
@@ -141,7 +149,7 @@ func parseGrantsParam(names []string) (Grants, *verbError) {
 // expand adds what admin implies.
 func (g Grants) expand() Grants {
 	if g&GrantAdmin != 0 {
-		g |= GrantRead | GrantWrite | GrantFan | GrantFiles
+		g |= GrantRead | GrantWrite | GrantFan | GrantFiles | GrantTask
 	}
 	return g
 }
@@ -800,6 +808,16 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 				return ""
 			}
 			return "session " + echoName(target) + " is not the pane's own session or in its fan group, and starting agents there needs the admin grant"
+		}
+	case scopeTask:
+		if !pa.grants.Has(GrantTask) {
+			return nil, deny(verb + " writes the task cards, which needs the task grant")
+		}
+		reach = func(target string) string {
+			if target == pa.session {
+				return ""
+			}
+			return "session " + echoName(target) + " is not the pane's own session, and its task cards need the admin grant"
 		}
 	case scopeMail, scopeWrite:
 		if verb == "respond" {

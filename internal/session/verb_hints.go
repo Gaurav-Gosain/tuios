@@ -62,7 +62,7 @@ var (
 		EventSessionCreated, EventSessionClosed, EventClientSessionChanged, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
 		EventAgentActivity, EventTranscript, EventTransfer, EventTransferProgress, EventTransferFile,
-		EventTML,
+		EventTML, EventTaskClaimed, EventTaskFinished, EventTaskChanged,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames
@@ -127,6 +127,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbWholeFileOnly, "review-stage stages a rename, a binary file or a very large file only whole. Nothing was changed. Leave hunk and lines out."},
 	{ErrVerbNoNotes, "send-review found no unsent review notes for the pane, so nothing was sent. Add one with review-note first."},
 	{ErrVerbNoBuffer, "No paste buffer has the name given, or there are no paste buffers when none was named. Nothing was read, pasted or deleted. list-buffers shows the names."},
+	{ErrVerbTaskHeld, "claim-task named a card another pane holds. Nothing changed. Claim another with next, or wait for task-changed released."},
+	{ErrVerbNoTask, "The task card named does not exist in the session, or claim-task next found no card to take: every open card is held or blocked. The hint points at tuios task ls."},
 	{ErrVerbQueueFull, "The pane's delivery queue holds as many messages as [agents.queue] max allows. Nothing was queued. Wait for the agent to take one, or drop one with cancel-queued."},
 	{ErrVerbRiskUnacknowledged, "An allow for an approval that matches a risk rule was refused because risk_ack did not name exactly the rules it matched. Nothing was answered. Read the rules with get-approval, or answer in the pane."},
 	{ErrVerbAgentsDisabled, "The verb is an agent feature, and the agent features are off: [agents] enabled = false. Nothing was done. Set agents.enabled = true in the config to use it."},

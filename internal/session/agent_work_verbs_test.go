@@ -38,6 +38,15 @@ var agentWorkVerbTable = []struct {
 	{"verify-fan", scopeLaunch, []string{config.LinkAllowOpen, config.LinkAllowWrite}, false},
 	{"keep-fan", scopeDeny, []string{config.LinkAllowWrite}, false},
 	{"mark-attention", scopeDeny, []string{config.LinkAllowRespond}, false},
+	{"add-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"list-tasks", scopeRead, []string{config.LinkAllowList}, false},
+	{"get-task", scopeRead, []string{config.LinkAllowList}, false},
+	{"claim-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"finish-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"set-task-stage", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"block-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"release-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"remove-task", scopeTask, []string{config.LinkAllowWrite}, false},
 }
 
 func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {

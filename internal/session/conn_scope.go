@@ -99,6 +99,9 @@ const (
 	// scopeBufferWrite changes the paste buffers. Refused under read_only
 	// and under scope own; a pane needs the write grant.
 	scopeBufferWrite
+	// scopeTask writes the task cards of one session (task.go). Nothing is
+	// typed. Refused under read_only; a pane needs the task grant.
+	scopeTask
 )
 
 // verbScopes classifies every verb. A verb missing here is treated as
@@ -320,10 +323,22 @@ var verbScopes = map[string]scopeKind{
 	// or from outside every pane.
 	"set-fan-verdict": scopeLaunch,
 	// judge-fan starts an agent, which is a launch.
-	"judge-fan":      scopeLaunch,
-	"send-review":    scopeWrite,
-	"queue-prompt":   scopeWrite,
-	"cancel-queued":  scopeWrite,
+	"judge-fan":     scopeLaunch,
+	"send-review":   scopeWrite,
+	"queue-prompt":  scopeWrite,
+	"cancel-queued": scopeWrite,
+
+	// The task cards (task.go). The listing and one card read the session;
+	// every change is the task grant's.
+	"list-tasks":     scopeRead,
+	"get-task":       scopeRead,
+	"add-task":       scopeTask,
+	"claim-task":     scopeTask,
+	"finish-task":    scopeTask,
+	"set-task-stage": scopeTask,
+	"block-task":     scopeTask,
+	"release-task":   scopeTask,
+	"remove-task":    scopeTask,
 	"verify-fan":     scopeLaunch,
 	"keep-fan":       scopeDeny,
 	"mark-attention": scopeDeny,
@@ -694,6 +709,9 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	}
 	if sc.readOnly && (kind == scopeWrite || kind == scopeLaunch) {
 		return nil, scopeForbidden(verb, "the connection is read-only, and "+verb+" types into a pane or starts one")
+	}
+	if sc.readOnly && kind == scopeTask {
+		return nil, scopeForbidden(verb, "the connection is read-only, and "+verb+" changes the task cards")
 	}
 	if sc.readOnly && kind == scopeBufferWrite {
 		return nil, scopeForbidden(verb, "the connection is read-only, and "+verb+" changes the paste buffers")

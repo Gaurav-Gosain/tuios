@@ -43,14 +43,19 @@ const (
 	// and it sees, pauses, resumes and cancels the copies it started. Admin
 	// implies it.
 	PaneGrantFiles = "files"
+	// PaneGrantTask adds, claims, finishes, stages, blocks and releases the
+	// task cards of its own session. A pane acts only on the card it holds,
+	// and claims only for itself. Admin implies it.
+	PaneGrantTask = "task"
 	// PaneGrantAdmin is everything else a pane could do before grants
 	// existed: every session, the listings across sessions, windows,
-	// layouts, options, attach and the rest. It implies read, write and fan.
+	// layouts, options, attach and the rest. It implies read, write, fan,
+	// files and task.
 	PaneGrantAdmin = "admin"
 )
 
 // PaneGrantNames is every grant, in the order they are documented.
-var PaneGrantNames = []string{PaneGrantRead, PaneGrantWrite, PaneGrantFan, PaneGrantRespond, PaneGrantFiles, PaneGrantAdmin}
+var PaneGrantNames = []string{PaneGrantRead, PaneGrantWrite, PaneGrantFan, PaneGrantRespond, PaneGrantFiles, PaneGrantTask, PaneGrantAdmin}
 
 // Permission modes, the values of mode.
 const (

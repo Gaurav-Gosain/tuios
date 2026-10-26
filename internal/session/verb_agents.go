@@ -218,12 +218,13 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 		group = state.Worktree.Group
 	}
 	agents := make([]map[string]any, 0, len(state.Windows))
+	held := heldTasks(state.Tasks)
 	for i := range state.Windows {
 		w := state.Windows[i]
 		if !all && !isAgentWindow(w) {
 			continue
 		}
-		if sel != nil && !sel.Match(d.paneSelectorTarget(sess, w, group)) {
+		if sel != nil && !sel.Match(d.paneSelectorTarget(sess, w, group, held[w.ID])) {
 			continue
 		}
 		claim := sess.agentClaimFor(w.ID)

@@ -98,6 +98,8 @@ func (d *Daemon) checkPluginGrants(cs *connState, verb string, pa *paneAuth, par
 			need, name = GrantWrite, "write"
 		case scopeLaunch:
 			need, name = GrantFan, "fan"
+		case scopeTask:
+			need, name = GrantTask, "task"
 		case scopeSelf:
 			return nil, deny(verb + " reports for the caller's own pane, and a plugin has no pane")
 		default:
