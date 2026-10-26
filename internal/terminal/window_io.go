@@ -184,13 +184,21 @@ func (w *Window) outputWriter() {
 		}
 	}()
 
-	if w.outputDone == nil || w.outputChan == nil {
+	if w.outputDone == nil || w.outputQ == nil {
 		return
 	}
 
 	// Grown by the first output and kept after that. Made up front it was
 	// 256 KiB for every pane, including the ones that never print.
 	var batch []byte
+	// trim fires once a queue the backlog grew has stayed empty for
+	// outputQueueTrimAfter. Made the first time a grown queue drains.
+	var trim *time.Timer
+	defer func() {
+		if trim != nil {
+			trim.Stop()
+		}
+	}()
 
 	for {
 		var epoch uint64
@@ -201,51 +209,76 @@ func (w *Window) outputWriter() {
 		// A drain sentinel is answered whatever its epoch: it asks about queue
 		// position, not about whether the bytes around it are still wanted.
 		var drained chan struct{}
+		// Checked before every pop, not only when the queue is empty, so a
+		// closed window does not work through the chunks still queued.
 		select {
 		case <-w.outputDone:
 			return
-		case chunk, ok := <-w.outputChan:
-			if !ok {
+		default:
+		}
+		chunk, ok, closed := w.outputQ.pop()
+		if !ok {
+			if closed {
 				return
 			}
-			w.queuedBytes.Add(-int64(len(chunk.data)))
-			if chunk.drained != nil {
-				close(chunk.drained)
-				continue
+			// Wait only after a pop found the queue empty: the next push
+			// leaves a token on wake.
+			var trimC <-chan time.Time
+			if w.outputQ.oversized() {
+				if trim == nil {
+					trim = time.NewTimer(outputQueueTrimAfter)
+				} else {
+					trim.Reset(outputQueueTrimAfter)
+				}
+				trimC = trim.C
 			}
-			if chunk.epoch != w.outputEpoch.Load() {
-				continue
+			select {
+			case <-w.outputDone:
+				return
+			case <-w.outputQ.wake():
+			case <-trimC:
+				w.outputQ.trim()
 			}
-			epoch = chunk.epoch
-			if chunk.isResize() {
-				w.applyStreamResize(chunk)
-				continue
-			}
-			batch = append(batch[:0], chunk.data...)
+			continue
 		}
+		w.queuedBytes.Add(-int64(len(chunk.data)))
+		if chunk.drained != nil {
+			close(chunk.drained)
+			continue
+		}
+		if chunk.epoch != w.outputEpoch.Load() {
+			continue
+		}
+		epoch = chunk.epoch
+		if chunk.isResize() {
+			w.applyStreamResize(chunk)
+			continue
+		}
+		batch = append(batch[:0], chunk.data...)
 
 		for len(batch) < maxBatch {
 			select {
-			case more, ok := <-w.outputChan:
-				if !ok {
-					goto write
-				}
-				w.queuedBytes.Add(-int64(len(more.data)))
-				if more.drained != nil {
-					drained = more.drained
-					goto write
-				}
-				if more.epoch != epoch {
-					continue
-				}
-				if more.isResize() {
-					resize = more
-					goto write
-				}
-				batch = append(batch, more.data...)
+			case <-w.outputDone:
+				return
 			default:
+			}
+			more, ok, _ := w.outputQ.pop()
+			if !ok {
 				goto write
 			}
+			w.queuedBytes.Add(-int64(len(more.data)))
+			if more.drained != nil {
+				drained = more.drained
+				goto write
+			}
+			if more.epoch != epoch {
+				continue
+			}
+			if more.isResize() {
+				resize = more
+				goto write
+			}
+			batch = append(batch, more.data...)
 		}
 
 	write:
@@ -260,7 +293,7 @@ func (w *Window) outputWriter() {
 		// line, so a full 256KiB batch holds the exclusive lock for tens of
 		// milliseconds. The compositor must take the read side of this same
 		// lock on every window on every frame, and sync.RWMutex parks readers
-		// behind a queued writer. A pane whose outputChan always has more data
+		// behind a queued writer. A pane whose output queue always has more data
 		// therefore re-queues the writer immediately and starves the renderer
 		// indefinitely: frames stop, and the keystroke echo the user is waiting
 		// for is never composited, however promptly the input itself was
@@ -650,23 +683,22 @@ func (w *Window) WriteOutput(data []byte) {
 
 // WriteOutputAsync writes output data to the terminal emulator without blocking.
 // Used in daemon mode to process PTY output received from the daemon.
-// Data is queued to a channel and written in order by the outputWriter goroutine.
+// Data is queued and written in order by the outputWriter goroutine.
 //
 // The window takes ownership of data: the caller must not write to it after
 // the call, because the bytes are read later on the writer goroutine.
 func (w *Window) WriteOutputAsync(data []byte) {
-	// outputChan is set once at construction and never nilled, so reading it
+	// outputQ is set once at construction and never nilled, so reading it
 	// here is safe. w.Terminal must NOT be read: Close() nils it under ioMu,
 	// so an unlocked read would race teardown. The closed flag below is the
 	// real lifecycle guard, and outputWriter drops the batch under ioMu if
 	// Terminal is already gone.
-	if w.outputChan == nil {
+	if w.outputQ == nil {
 		return
 	}
 	// Close() runs on the UI goroutine while this runs on the daemon readLoop
-	// goroutine. outputChan is never closed (only outputDone is), so the send
-	// below cannot panic; the closed flag and the outputDone case just stop
-	// queuing into a channel whose reader is already gone.
+	// goroutine. The closed flag, and the queue Close closes, stop queuing
+	// for a writer that is already gone.
 	if w.closed.Load() {
 		return
 	}
@@ -678,14 +710,13 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	if !w.waitForQueueRoom(int64(len(data))) {
 		return
 	}
-	// Queue to channel, non-blocking with buffered channel
-	select {
-	case <-w.outputDone:
-		// Writer goroutine has stopped, drop data
-	case w.outputChan <- chunk:
+	// Queue the chunk without blocking. A full queue drops it, as the
+	// channel's default case did. The queue holds outputQueueSlots chunks and
+	// maxQueuedBytes is 16 MiB, so chunks averaging under 4 KiB reach the
+	// slot bound before the byte bound holds the sender, and are dropped
+	// there.
+	if w.outputQ.push(chunk) {
 		w.queuedBytes.Add(int64(len(data)))
-	default:
-		// Channel full: drop data (shouldn't happen with large buffer)
 	}
 }
 
@@ -721,14 +752,16 @@ func (w *Window) waitForQueueRoom(n int64) bool {
 // bounded scrollback window, and the queue of a pane that outpaced its client
 // can hold far more scrollback than the snapshot brings back.
 func (w *Window) DrainPendingOutput() {
-	if w.outputChan == nil || w.closed.Load() {
+	if w.outputQ == nil || w.closed.Load() {
 		return
 	}
 	done := make(chan struct{})
-	select {
-	case w.outputChan <- outputChunk{drained: done}:
-	case <-w.outputDone:
-		return
+	for !w.outputQ.push(outputChunk{drained: done}) {
+		select {
+		case <-w.outputDone:
+			return
+		case <-time.After(queueRoomPoll):
+		}
 	}
 	select {
 	case <-done:
@@ -740,15 +773,10 @@ func (w *Window) DrainPendingOutput() {
 // the order it arrived among the bytes around it. StreamOwnsSize says whether
 // this is the pane's only route to a new grid size.
 func (w *Window) ResizeFromStream(width, height int) {
-	if w.outputChan == nil || w.closed.Load() || width <= 0 || height <= 0 {
+	if w.outputQ == nil || w.closed.Load() || width <= 0 || height <= 0 {
 		return
 	}
-	chunk := outputChunk{epoch: w.outputEpoch.Load(), width: width, height: height}
-	select {
-	case <-w.outputDone:
-	case w.outputChan <- chunk:
-	default:
-	}
+	w.outputQ.push(outputChunk{epoch: w.outputEpoch.Load(), width: width, height: height})
 }
 
 // ResizeEmulatorToSnapshot takes the emulator to the size a daemon snapshot was
@@ -1051,7 +1079,7 @@ func (w *Window) Close() {
 		return
 	}
 
-	// Mark closed before touching outputChan so the external sender
+	// Mark closed before stopping the output queue so the external sender
 	// (WriteOutputAsync on the daemon readLoop goroutine) stops queuing.
 	// CompareAndSwap makes Close idempotent: a second (or concurrent) call
 	// returns early instead of double-closing outputDone below.
@@ -1062,15 +1090,19 @@ func (w *Window) Close() {
 	// Disable terminal features before closing
 	w.disableTerminalFeatures()
 
-	// Stop daemon output writer goroutine if running. outputChan has an
-	// external sender (WriteOutputAsync), so it is never closed; closing
-	// outputDone stops outputWriter and renderCoalescer, which select on it.
+	// Stop daemon output writer goroutine if running. Closing outputDone
+	// stops outputWriter and renderCoalescer, which select on it; closing the
+	// queue makes a late WriteOutputAsync, ResizeFromStream or drain sentinel
+	// queue nothing.
 	// The field is deliberately NOT nilled: both goroutines re-read it on
 	// every select iteration, and a nil channel blocks forever (leaking the
 	// goroutines, the 8ms ticker, and the whole Window/Emulator). The CAS
 	// above guarantees this close runs exactly once.
 	if w.outputDone != nil {
 		close(w.outputDone)
+	}
+	if w.outputQ != nil {
+		w.outputQ.close()
 	}
 
 	// Cancel all goroutines first

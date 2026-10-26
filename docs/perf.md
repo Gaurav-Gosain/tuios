@@ -1853,7 +1853,9 @@ five patterns, which would otherwise fail only on first use).
   allocations.
 - **`outputChan`**, 4096 slots and about 224 KB per pane at attach. The
   producer drops data when it is full, so shrinking it trades memory for silent
-  loss until backpressure is redesigned.
+  loss until backpressure is redesigned. Revisited in "2026-10 the client's
+  output queue": the bound and the drop rule stay, and the slots are no longer
+  reserved up front.
 - **`RestoreTerminalStates`**, serial `GetTerminalState` round trips at about
   0.2 ms per pane on top of about 2 ms fixed, and **`ensureAttachTarget`**, an
   extra verb connection of 0.4 to 0.6 ms at attach.
@@ -4035,6 +4037,74 @@ trim.
   subscribers. Those runs also used the two-lock drain, so part of the cost
   was the harness. The one-second trim keeps the steady flood at the
   old cost.
+
+## 2026-10 the client's output queue
+
+Each daemon pane on the client made its output queue whole with the pane: a
+channel of 4096 chunks, 56 bytes a slot, about 229 KB before the pane printed
+anything. The startup-pass ledger kept `outputChan` because shrinking it
+traded memory for silent loss. This entry keeps the 4096-slot bound and the
+drop rule and only stops reserving the slots up front, as the daemon's
+subscriber queue entry above did for its channel.
+
+### What changed
+
+- `outputQueue` (`internal/terminal/output_queue.go`) replaces
+  `Window.outputChan`. It is a ring behind a mutex that starts empty, doubles
+  from 16 slots with the backlog, and stops at the same 4096. A chunk the
+  bound refuses is dropped, as before. Its method set is the one `ptyQueue`
+  has: `push`, `pop`, `oversized`, `trim`, `len`, `close` and a wake channel.
+- `outputWriter` takes chunks until the queue is empty and only then waits on
+  the one-slot wake channel. A push that makes the queue non-empty leaves a
+  token there. The order, the batch cut at a resize or a drain sentinel,
+  `queuedBytes`, `maxQueuedBytes` and the epochs are unchanged.
+- A queue that grew past 16 slots gives its array back after it has stayed
+  empty for one second. The writer arms a timer for that only when the queue
+  is oversized and empty, and stops it when it returns.
+- `DrainPendingOutput` waits for a free slot at the bound, polling at
+  `queueRoomPoll` as `waitForQueueRoom` does, so its sentinel is never
+  dropped. `Close` closes the queue, so a late sender queues nothing.
+- A window not built by `NewDaemonWindow` has no queue, and the daemon-only
+  paths stay no-ops for it.
+
+### Numbers
+
+`TestIdleDaemonPanesReserveNoOutputQueue` builds 50 daemon windows at 120x36
+with 1000 lines of scrollback and reads `HeapAlloc` after two `runtime.GC()`
+calls, before and after, with the windows reachable.
+`TestFloodedDaemonPanesGiveBackTheirQueue` builds 20 windows at 12x6 with 1
+line of scrollback. Each window has its writer stalled with `LockIO`, takes
+one chunk, settles 200 ms, is sent 5000 more chunks of one numbered line
+("N\r\n") so the queue grows to its bound, and is released and drained with
+`DrainPendingOutput`. After all 20, the test idles 1.5 s and reads the heap
+the same way. The figures below are the logged per-window readings of those
+two tests, three runs each, main and branch interleaved (main, branch, main,
+branch, main, branch), run as `nice -n 10 taskset -c 0-11 go test -count=1 -v
+-run '^(TestIdleDaemonPanesReserveNoOutputQueue|TestFloodedDaemonPanesGiveBackTheirQueue)$'
+./internal/terminal/`. The branch runs are in the branch worktree. The main
+runs are in a detached worktree of 14b4b4ec8 with only
+`daemon_window_memory_test.go` copied in from the branch;
+`output_queue_test.go` stays out of it because it needs the new type. The
+budgets in the test file fail on main, and the readings are the logged values.
+
+| per window | main | branch |
+|---|---|---|
+| idle, 50 windows | 281780, 281997, 281890 B | 52468, 52584, 52361 B |
+| after a burst and 1.5 s idle, 20 windows | 313731, 313101, 313184 B | 84016, 83946, 84089 B |
+
+An idle pane saves about 229 KB. After the same burst and idle second, a
+branch window holds about 229 KB less than a main window, the grown array given
+back; an idle branch window holds about 229 KB less than an idle main window.
+
+### Invariants held
+
+- Chunks reach the emulator in the order they arrived, and the 4097th chunk
+  queued behind a stalled writer is dropped, as with the channel.
+- A drain sentinel is never dropped: at the bound it waits for room, then
+  blocks until everything queued before it is applied, and returns when the
+  window closes.
+- The writer holds the queue lock only for a push or a pop, never across an
+  emulator write.
 
 ## 2026-10 allocations on the output path
 
