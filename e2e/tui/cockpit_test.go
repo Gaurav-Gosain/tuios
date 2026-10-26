@@ -273,8 +273,17 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 		regular, err1 := os.ReadFile(regularPath)
 		bold, err2 := os.ReadFile(boldPath)
 		if err1 == nil && err2 == nil {
+			// TUIOS_E2E_FONT_FALLBACK lists more font files, split by the
+			// path list separator, for glyphs the main font has no glyph
+			// for, such as Hangul, CJK and emoji.
+			var fallback []shot.Font
+			for _, path := range filepath.SplitList(os.Getenv("TUIOS_E2E_FONT_FALLBACK")) {
+				if data, err := os.ReadFile(path); err == nil {
+					fallback = append(fallback, shot.Font{Data: data})
+				}
+			}
 			f = shot.BuildFrame(shot.FrameSpec{Frame: "window", Title: "tuios", Padding: 28, Radius: 10, Shadow: true, Controls: "macos",
-				Font: shot.Font{Data: regular}, BoldFont: shot.Font{Data: bold}}, shot.FrameInputs{Palette: p})
+				Font: shot.Font{Data: regular}, BoldFont: shot.Font{Data: bold}, Fallback: fallback}, shot.FrameInputs{Palette: p})
 			if missing, err := shot.MissingGlyphs(g, f); err == nil && len(missing) > 0 {
 				t.Errorf("ASSERTION: the font has no glyph for %q", string(missing))
 			}

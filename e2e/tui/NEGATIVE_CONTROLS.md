@@ -9669,3 +9669,21 @@ the same cores as the test, `-count=50`.
 | The whole change (main) | 4 of 50 runs: "the paste in the field" three times, with the field at `y:ship it very soon (signed)`, and typing step 3 once | **caught** |
 
 The fixed build passes 100 of 100 runs under the same load.
+## Wide text in the agent thread and the Live box
+
+The codex case of `TestCockpitThreadOtherHarnesses` adds an agent message of
+Hangul, Hangul mixed with ASCII, a syllable written as conjoining jamo, and
+CJK, kana and an emoji to the rollout. It also prints Hangul in the agent's
+pane, so that the Live box draws it. Each line must show on screen whole. A
+row of wide text must also end at the right edge with the ground of the row
+under it. Run on 2026-10-26 and 2026-10-27 on Linux (#1184).
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| Main before #1197, at `d95fe65c3` | the Live box never shows the Hangul line. The thread never shows any of the four wide lines: every wide cell is blank | **caught** |
+| Main with #1197, at `9b41ceb34`: grapheme width in the cockpit canvas and the overlay rows cut | the jamo row "한글 자모" is drawn short of the right edge: the side column ground starts four cells early | **caught** |
+
+The fixed build passes. With `TUIOS_E2E_FRAMES` set, the case writes
+`thread-codex-live.png` and `thread-codex.png`. Set `TUIOS_E2E_FONT_FALLBACK`
+to a list of font files that have Hangul and CJK, so that the frames draw
+them.

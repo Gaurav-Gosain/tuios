@@ -108,6 +108,7 @@ func (p Palette) CursorText(span string, st RowState, skip int) string {
 	}
 	width := ansi.StringWidth(span)
 	scr := uv.NewScreenBuffer(width, 1)
+	scr.Method = ansi.GraphemeWidth // cut by cluster, as the frame does
 	uv.NewStyledString(span).Draw(scr, scr.Bounds())
 	line := scr.Line(0)
 	for x := skip; x < len(line); x++ {
@@ -151,6 +152,7 @@ func restyleRow(s string, width int, fn func(*uv.Cell)) string {
 		return s
 	}
 	scr := uv.NewScreenBuffer(width, 1)
+	scr.Method = ansi.GraphemeWidth // cut by cluster, as the frame does
 	uv.NewStyledString(s).Draw(scr, scr.Bounds())
 	line := scr.Line(0)
 	for x := range line {

@@ -50,6 +50,13 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		// open, which writes a message again with new text, and rewritten
 		// the text the thread then shows in place of want[0].
 		rewrite, rewritten string
+		// wide is a message of wide text that goes into the transcript after
+		// the first prompt, and pane a line of wide text the agent's pane
+		// prints for the Live box. Each line of wideWant must show on screen
+		// whole: a wide cell drawn into the thread or the Live box once
+		// blanked itself (#1184).
+		wide, pane string
+		wideWant   []string
 	}{
 		{
 			name: "pi", harness: "pi", fixture: "pi-session.jsonl", sessionID: "pi-fixture",
@@ -59,9 +66,12 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		},
 		{
 			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
-			file: filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
-			want: []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted"},
-			once: "Make run take two and add notes.",
+			file:     filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
+			want:     []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted"},
+			once:     "Make run take two and add notes.",
+			wide:     "실행 함수가 이제 두 값을 받습니다.\n\nTestRun 테스트 1개 실패 (exit 1)\n\n\u1112\u1161\u11ab\u1100\u1173\u11af 자모\n\n中文 漢字 かな 🚀",
+			pane:     "안녕하세요 Live 한글 中文 🚀",
+			wideWant: []string{"실행 함수가 이제 두 값을 받습니다.", "TestRun 테스트 1개 실패 (exit 1)", "\u1112\u1161\u11ab\u1100\u1173\u11af 자모", "中文 漢字 かな 🚀"},
 		},
 		{
 			name: "gemini", harness: "gemini-cli", fixture: "gemini-chat.jsonl", sessionID: "11111111-2222-4333-8444-555555555555",
@@ -116,6 +126,15 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if c.wide != "" {
+				msg, _ := json.Marshal(c.wide)
+				line := `{"timestamp":"2026-10-18T09:00:02.500Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":` + string(msg) + `}]}}` + "\n" +
+					`{"timestamp":"2026-10-18T09:00:02.500Z","type":"event_msg","payload":{"type":"agent_message","message":` + string(msg) + `}}` + "\n"
+				marker := []byte(`"type":"user_message"`)
+				at := bytes.Index(fixture, marker)
+				at += bytes.IndexByte(fixture[at:], '\n') + 1
+				fixture = append(fixture[:at:at], append([]byte(line), fixture[at:]...)...)
+			}
 			path := filepath.Join(xdgDir(base, "HOME"), c.file)
 			if c.harness == "opencode" {
 				path = filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "opencode", "service.json")
@@ -160,7 +179,16 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				t.Fatalf("report working: %v\n%s", err, out)
 			}
 
-			term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 160, rows: 50, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+			cols, attach := 160, "home"
+			if c.pane != "" {
+				// The Live box is drawn from 170 columns, and it draws a
+				// pane of the session the client shows.
+				cols, attach = 180, "api"
+				if out, err := tuiosCLI(t, base, "send-text", "-s", "api", "-w", "agent", "printf '%s\\n' '"+c.pane+"'\n"); err != nil {
+					t.Fatalf("print in the pane: %v\n%s", err, out)
+				}
+			}
+			term := startIn(t, base, startOpts{args: []string{"attach", attach}, cols: cols, rows: 50, shippedLooks: true, env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 				t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 			}
@@ -175,9 +203,30 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			// been on screen.
 			seen := map[string]bool{}
 			count := 0
+			want := append(append([]string{}, c.want...), c.wideWant...)
+			if c.pane != "" {
+				if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Count(s.Text(), c.pane) >= 1 }, uiTimeout); err != nil {
+					t.Errorf("ASSERTION: the Live box never showed %q whole: %v\n%s", c.pane, err, term.Snapshot())
+				}
+				saveCockpitFrames(t, term, "thread-"+c.name+"-live")
+			}
+			short := ""
 			for range 20 {
-				text := term.Screen().Text()
-				for _, w := range c.want {
+				scr := term.Screen()
+				text := scr.Text()
+				// A row of wide text fills the row: its last cell has the
+				// ground of the row under it. A row cut into more cells
+				// than the terminal shows ends short of the edge.
+				cols, rows := scr.Size()
+				for y := range rows - 1 {
+					line := scr.Line(y)
+					for _, w := range c.wideWant {
+						if strings.Contains(line, w) && scr.Cell(cols-1, y).Bg != scr.Cell(cols-1, y+1).Bg {
+							short = line
+						}
+					}
+				}
+				for _, w := range want {
 					if strings.Contains(text, w) {
 						seen[w] = true
 					}
@@ -185,7 +234,7 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				if n := strings.Count(text, c.once); n > count {
 					count = n
 				}
-				if len(seen) == len(c.want) && count > 0 {
+				if len(seen) == len(want) && count > 0 {
 					break
 				}
 				if err := term.SendKeys("K"); err != nil {
@@ -193,10 +242,13 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				}
 				_ = term.WaitStable(uiTimeout)
 			}
-			for _, w := range c.want {
+			for _, w := range want {
 				if !seen[w] {
 					t.Errorf("ASSERTION: the %s thread never showed %q\n%s", c.name, w, term.Snapshot())
 				}
+			}
+			if short != "" {
+				t.Errorf("ASSERTION: the %s thread drew %q short of the right edge\n%s", c.name, short, term.Snapshot())
 			}
 			if count != 1 {
 				t.Errorf("ASSERTION: the %s thread showed %q %d times on one screen, want once\n%s", c.name, c.once, count, term.Snapshot())
