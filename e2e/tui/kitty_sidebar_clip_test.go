@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -436,5 +437,225 @@ func TestKittyImageStopsAtAShortPaneBottom(t *testing.T) {
 	if want := bottomRow - 1; got.row+drawnRows-1 != want {
 		t.Errorf("image spans rows %d..%d; its last row should be %d, the pane's last content row "+
 			"above the rule at %d", got.row, got.row+drawnRows-1, want, bottomRow)
+	}
+}
+
+// hostRect is one placement the host is showing, in screen cells.
+type hostRect struct{ col, row, cols, rows int }
+
+func (r hostRect) has(col, row int) bool {
+	return col >= r.col && col < r.col+r.cols && row >= r.row && row < r.row+r.rows
+}
+
+// hostImageRects replays every placement and delete in a host stream and
+// returns the rectangles the host is still drawing at its end, every image
+// and every placement id. An a=p with no c= or r= is counted as one cell on
+// that axis, which can only make an overlap harder to find, never easier.
+func hostImageRects(stream []byte) []hostRect {
+	type key struct{ image, placement string }
+	live := map[key]hostRect{}
+	row, col := 0, 0
+	for _, m := range movedPlacementRE.FindAllSubmatch(stream, -1) {
+		if len(m[1]) > 0 {
+			row, _ = strconv.Atoi(string(m[1]))
+			col, _ = strconv.Atoi(string(m[2]))
+		}
+		keys := map[string]string{}
+		for kv := range strings.SplitSeq(string(m[3]), ",") {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				keys[k] = v
+			}
+		}
+		switch keys["a"] {
+		case "p":
+			r := hostRect{col: col - 1, row: row - 1, cols: 1, rows: 1}
+			if n, err := strconv.Atoi(keys["c"]); err == nil && n > 0 {
+				r.cols = n
+			}
+			if n, err := strconv.Atoi(keys["r"]); err == nil && n > 0 {
+				r.rows = n
+			}
+			live[key{keys["i"], keys["p"]}] = r
+		case "d":
+			switch keys["d"] {
+			case "a", "A", "":
+				clear(live)
+			case "i", "I":
+				for k := range live {
+					if k.image == keys["i"] && (keys["p"] == "" || k.placement == keys["p"]) {
+						delete(live, k)
+					}
+				}
+			}
+		}
+	}
+	out := make([]hostRect, 0, len(live))
+	for _, r := range live {
+		out = append(out, r)
+	}
+	slices.SortFunc(out, func(a, b hostRect) int {
+		if a.row != b.row {
+			return a.row - b.row
+		}
+		return a.col - b.col
+	})
+	return out
+}
+
+// paintedRects is paintedFrame for every rectangle the host is drawing.
+func paintedRects(s tuitest.Screen, rects []hostRect) string {
+	lines := strings.Split(s.Text(), "\n")
+	for _, r := range rects {
+		for y := r.row; y < r.row+r.rows && y < len(lines); y++ {
+			runes := []rune(lines[y])
+			for len(runes) < r.col+r.cols {
+				runes = append(runes, ' ')
+			}
+			for x := r.col; x < r.col+r.cols; x++ {
+				runes[x] = '▓'
+			}
+			lines[y] = string(runes)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// TestKittyImageStaysUnderPopovers opens things over a pane that shows a kitty
+// image and checks that the host is never told to draw the image on a cell
+// they cover. The host paints an image over the finished frame, so an image
+// that is not cut around a popover is drawn on top of it, whatever tuios
+// composed there.
+//
+// Two kinds of cover, because they reach the passthrough by two roads. A
+// popup is a window, ranked above the tiles by the floating band rather than
+// by its own z. The rename dialog is not a window at all: it is a layer of
+// chrome. Each must leave the clear part of the image showing, and closing it
+// must give the whole image back.
+//
+// How this could pass wrongly, written down first:
+//   - the image might never be placed: the test waits for a placement first;
+//   - the image might be hidden whole: the test needs part of it still drawn;
+//   - the cover might not be on the image: the test needs a covered cell that
+//     the image drew on before the cover opened.
+//
+// Negative controls: on a build without the fix both cases fail with the
+// image drawn over the cover. With only WindowZ set from the raw Z again, the
+// popup case fails. See NEGATIVE_CONTROLS.md.
+func TestKittyImageStaysUnderPopovers(t *testing.T) {
+	for _, cover := range []string{"popup", "rename"} {
+		t.Run(cover, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[appearance]\nsidebar_enabled = false\n\n[startup]\nopen_default_window = true\ntiled = true\n")
+			host := newKittyHost()
+			term := startIn(t, base, startOpts{
+				cols: 120, rows: 40,
+				args: []string{"new", "kio"},
+				env:  []string{"TUIOS_SIXEL_GRAPHICS=0"},
+				out:  host,
+			})
+			host.answerProbe(t, term)
+			waitWindowCount(t, term, 1, "the first pane")
+			art := artifactDir(t)
+
+			enterTerminalMode(t, term)
+			if err := term.SendKeys("\x15"); err != nil {
+				t.Fatalf("clear prompt line: %v", err)
+			}
+			time.Sleep(insertGuard)
+			rows, cols := reportedPaneSize(t, term, "A")
+			frame := kittyFrameFile(t, t.TempDir(), cols*cellW, rows*cellH)
+			typeLine(t, term, "clear; cat "+frame)
+			var before []hostRect
+			deadline := time.Now().Add(uiTimeout)
+			for len(before) == 0 && time.Now().Before(deadline) {
+				time.Sleep(200 * time.Millisecond)
+				before = hostImageRects(host.bytes())
+			}
+			if len(before) == 0 {
+				t.Fatalf("the image was never placed on the host\n%s", term.Snapshot())
+			}
+			leaveTerminalMode(t, term)
+			time.Sleep(time.Second)
+			before = hostImageRects(host.bytes())
+			plain := term.Screen()
+			beforeText := strings.Split(plain.Text(), "\n")
+			_ = os.WriteFile(filepath.Join(art, "1-before.txt"), []byte(paintedRects(plain, before)), 0o644)
+
+			var popupBox hostRect
+			var popupID string
+			switch cover {
+			case "popup":
+				res := openPopup(t, base, "--width", "40", "--height", "10",
+					"--", "sh", "-c", "printf 'POPUP-IS-HERE\\n'; sleep 120")
+				if err := term.WaitForText("POPUP-IS-HERE", uiTimeout); err != nil {
+					t.Fatalf("the popup never printed: %v\n%s", err, term.Snapshot())
+				}
+				popupID = res.WindowID
+				r := rectFor(t, waitForSettledGeometryIn(t, base, "kio", 2), popupID)
+				popupBox = hostRect{r.X, r.Y, r.Width, r.Height}
+			case "rename":
+				if err := term.SendKeys("r"); err != nil {
+					t.Fatalf("open the rename dialog: %v", err)
+				}
+				if err := term.WaitForText("rename", uiTimeout); err != nil {
+					t.Fatalf("the rename dialog never opened: %v\n%s", err, term.Snapshot())
+				}
+			}
+			time.Sleep(1500 * time.Millisecond)
+			during := hostImageRects(host.bytes())
+			s := term.Screen()
+			_ = os.WriteFile(filepath.Join(art, "2-covered.txt"), []byte(paintedRects(s, during)), 0o644)
+			t.Logf("before:\n%s\n\nwith the %s open (image cells drawn as ▓):\n%s",
+				paintedRects(plain, before), cover, paintedRects(s, during))
+
+			// The covered cells: the popup's box when the daemon can say where
+			// it is, and every cell whose text the cover changed besides.
+			nowText := strings.Split(s.Text(), "\n")
+			covered := 0
+			for y := range min(len(nowText), len(beforeText)) {
+				a, b := []rune(beforeText[y]), []rune(nowText[y])
+				for x := range max(len(a), len(b)) {
+					inBox := popupBox.cols > 0 && popupBox.has(x, y)
+					changed := x >= len(a) || x >= len(b) || a[x] != b[x]
+					if !inBox && !changed {
+						continue
+					}
+					wasImage := slices.ContainsFunc(before, func(r hostRect) bool { return r.has(x, y) })
+					if !wasImage {
+						continue
+					}
+					covered++
+					for _, r := range during {
+						if r.has(x, y) {
+							t.Fatalf("the image is drawn over the %s at column %d row %d (placement %+v)",
+								cover, x, y, r)
+						}
+					}
+				}
+			}
+			if covered == 0 {
+				t.Fatalf("the %s covers no cell of the image; nothing was tested", cover)
+			}
+			if len(during) == 0 {
+				t.Errorf("the image was hidden whole; the part the %s leaves clear must still show", cover)
+			}
+
+			// Closing the cover gives the whole image back.
+			if popupID != "" {
+				if out, err := tuiosCLI(t, base, "close-window", "-s", "kio", popupID); err != nil {
+					t.Fatalf("close the popup: %v\n%s", err, out)
+				}
+				waitWindowCount(t, term, 1, "the popup closed")
+			} else if err := term.SendKeys(tuitest.Esc); err != nil {
+				t.Fatalf("close the %s: %v", cover, err)
+			}
+			time.Sleep(1500 * time.Millisecond)
+			after := hostImageRects(host.bytes())
+			_ = os.WriteFile(filepath.Join(art, "3-after.txt"), []byte(paintedRects(term.Screen(), after)), 0o644)
+			if !slices.Equal(after, before) {
+				t.Errorf("after the %s closed the host draws %v, want the image back as %v\n%s",
+					cover, after, before, paintedRects(term.Screen(), after))
+			}
+		})
 	}
 }

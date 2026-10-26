@@ -650,6 +650,11 @@ type OS struct {
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
+	// kittyChrome is the rectangle of every chrome layer the last composed
+	// frame drew above all panes: popovers, dialogs, the rail, the dock,
+	// tooltips. A kitty image is painted by the host over the finished frame,
+	// so it is cut around these. Reused across frames.
+	kittyChrome []cellRect
 	// Scrollback lengths snapshotted before a placement refresh takes the
 	// passthrough lock. The refresh callbacks run under kp.mu/sp.mu and must
 	// not take a window's ioMu there: the PTY reader holds ioMu while

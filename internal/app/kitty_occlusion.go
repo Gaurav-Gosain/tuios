@@ -1,5 +1,11 @@
 package app
 
+import (
+	"charm.land/lipgloss/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
+
 // What a window on top of an image leaves of it.
 //
 // A kitty image is not drawn by tuios. The host terminal paints it over the
@@ -173,6 +179,21 @@ func occludersAboveInto(
 			continue
 		}
 		dst = append(dst, cellRect{info.WindowX, info.WindowY, info.Width, info.Height})
+	}
+	return dst
+}
+
+// chromeRectsAbovePanes appends to dst the rectangle of every layer drawn
+// above all panes: anything above the floating band, which is every popover,
+// dialog, panel and the rail and the dock. The windows themselves are not
+// here; occludersAboveInto handles them by rank. A frame with no such layer
+// adds nothing, so an image no chrome covers costs no extra work.
+func chromeRectsAbovePanes(dst []cellRect, layers []*lipgloss.Layer) []cellRect {
+	for _, l := range layers {
+		if l == nil || l.GetZ() <= config.ZIndexFloatingTop || l.Width() <= 0 || l.Height() <= 0 {
+			continue
+		}
+		dst = append(dst, cellRect{l.GetX(), l.GetY(), l.Width(), l.Height()})
 	}
 	return dst
 }

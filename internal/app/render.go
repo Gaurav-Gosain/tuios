@@ -448,6 +448,8 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 
 		// The part of this client's pane area a smaller session leaves.
 		layers = m.renderLeftover(layers)
+
+		m.kittyChrome = chromeRectsAbovePanes(m.kittyChrome[:0], layers[paneLayers:])
 	} else {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
 		// so last frame's hit geometry must not linger and mis-route a click.
@@ -1336,10 +1338,11 @@ func (m *OS) flushGraphicsForView() {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).
 		m.KittyPassthrough.SetOverlayActive(hideImages)
-		// Chrome that leaves the panes showing. Set every frame, and nil
-		// once capture mode closes, so the images get their full rectangle
-		// back on the next refresh.
-		m.KittyPassthrough.SetChromeOccluders(m.pipOccluders(m.captureOccluders()))
+		// Chrome that leaves the panes showing: popovers, dialogs, the
+		// rail, the dock, capture mode's marquee. Set every frame from the
+		// layers the frame drew, so an image gets its full rectangle back on
+		// the refresh after the chrome closes.
+		m.KittyPassthrough.SetChromeOccluders(m.pipOccluders(m.kittyChrome))
 	}
 
 	// The launcher's own icons run past the hide above rather than through it.
@@ -1456,6 +1459,10 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 				if announcedW <= 0 || announcedH <= 0 {
 					announcedW, announcedH = w.ContentWidth(), w.ContentHeight()
 				}
+				// WindowZ is the rank the pane is drawn at, not its raw Z. A
+				// float or a popup is lifted into a band above every tile, so
+				// its raw Z can be below the Z of the tile it covers, and the
+				// image in that tile was then drawn over it.
 				backing[n] = WindowPositionInfo{
 					WindowX:            w.X + view.dx,
 					WindowY:            w.Y + view.dy,
@@ -1469,7 +1476,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 					ScrollbackLen:      scrollbackLen,
 					ScrollOffset:       w.ScrollbackOffset,
 					IsBeingManipulated: w.IsBeingManipulated,
-					WindowZ:            w.Z,
+					WindowZ:            HitZ(w),
 					IsAltScreen:        w.IsAltScreen(),
 					ScreenWidth:        screenWidth,
 					ScreenHeight:       screenHeight,

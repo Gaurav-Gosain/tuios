@@ -9623,3 +9623,20 @@ The control is main at 6d122034a, run on 2026-10-26 on Linux.
 | The whole change | `session_border=true` on all six schemes: terminal mode stands nearer the ground than window mode, or is less saturated (Nord: window L 0.866 chroma 0.295, terminal L 0.766 chroma 0.140). `session_border=false` on the three light schemes: the window mode border has about 5:1, under twice the unfocused border's 3:1 | **caught** |
 
 The fixed build passes all twelve cases.
+
+## Kitty images under popups and dialogs
+
+`TestKittyImageStaysUnderPopovers` shows a kitty image in a full pane, opens
+a popup and then the rename dialog over it, and replays the host stream. No
+placement may cover a cell the popup or the dialog drew, part of the image
+must still show, and the whole image must come back when the cover closes.
+Run on 2026-10-26 on Linux, against main at `9b4c9b8ef`.
+
+| Control: what was changed | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change (main) | popup: "the image is drawn over the popup at column 40 row 15". rename: "the image is drawn over the rename at column 43 row 18". Both with the image placed whole at 118x36 | **caught** |
+| `WindowZ` set from `w.Z` instead of `HitZ(w)` in `GetKittyGraphicsCmd` | popup: "the image is drawn over the popup at column 40 row 15". rename passes | **caught** |
+
+The fixed build passes both cases. With `TUIOS_E2E_FRAMES` set, each case
+writes `1-before.txt`, `2-covered.txt` and `3-after.txt`: the screen with
+the cells the host draws the image on marked.
