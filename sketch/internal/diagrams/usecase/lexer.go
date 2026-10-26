@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/usecase/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // The port reads UTF-8 bytes. Every character the lexer tells apart is ASCII; any other
 // character is a run of bytes of 0x80 and above, which the lexer reads as pele reads a
@@ -159,6 +159,7 @@ func units(src string, from, to int) int {
 
 // lineColumn is the line and the column, in UTF-16 units, of a byte offset.
 func lineColumn(src string, offset int) (int, int) {
+	src, offset = types.Written(src, offset)
 	line := 1
 	lineStart := 0
 	for i := 0; i < offset; i++ {
@@ -177,8 +178,14 @@ func lineColumn(src string, offset int) (int, int) {
 
 func locationText(src string, start, end int) string {
 	line, column := lineColumn(src, start)
-	from := units(src, 0, start)
-	return "line " + strconv.Itoa(line) + ", column " + strconv.Itoa(column) + " [" + strconv.Itoa(from) + "," + strconv.Itoa(from+units(src, start, end)) + ")"
+	from, to := writtenUnits(src, start), writtenUnits(src, end)
+	return "line " + strconv.Itoa(line) + ", column " + strconv.Itoa(column) + " [" + strconv.Itoa(from) + "," + strconv.Itoa(to) + ")"
+}
+
+// writtenUnits is the offset in UTF-16 units, in the source as written, of a byte offset of src.
+func writtenUnits(src string, offset int) int {
+	src, offset = types.Written(src, offset)
+	return units(src, 0, offset)
 }
 
 // stringEnd is the end of a quoted string that opens at `at`, or -1 when the line ends first.
@@ -207,8 +214,8 @@ func startsToken(src string, from int) bool {
 // skipped before one did.
 func lexError(src string, offset int, length int) *types.PeleError {
 	line, column := lineColumn(src, offset)
-	from := units(src, 0, offset)
-	skipped := units(src, offset, offset+length)
+	from := writtenUnits(src, offset)
+	skipped := writtenUnits(src, offset+length) - from
 	ch := ""
 	if offset < len(src) {
 		r, _ := utf8.DecodeRuneInString(src[offset:])

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/info/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/info/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package info
 
@@ -11,7 +11,7 @@ import (
 )
 
 // version is the version of pele that sketch ports, which pele reads from its package.json.
-const version = "1.9.0"
+const version = "1.10.0"
 
 func renderInfo(model *InfoModel, _ types.Config, options types.RenderOptions) types.Rendered {
 	size := types.Or(options.FontSize, 16)

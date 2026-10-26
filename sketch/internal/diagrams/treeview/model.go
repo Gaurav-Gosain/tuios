@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treeview/model.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/treeview/model.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package treeview
 
@@ -82,8 +82,10 @@ func populate(ast *TreeViewAst, db *TreeViewDb) {
 // readTreeView reads the source to a syntax tree, accepting box-drawing input. Errors name lines of the original text.
 func readTreeView(source string) *TreeViewAst {
 	pre := preprocessBoxDrawing(source)
-	if len(pre.lineMap) == 0 {
-		return parseTreeView(pre.text)
+	// The parser already located errors in unchanged text. It locates them in the source
+	// as written only when it reads that very string, as pele's === finds it.
+	if pre.text == source {
+		return parseTreeView(source)
 	}
 	defer func() {
 		r := recover()
@@ -94,17 +96,37 @@ func readTreeView(source string) *TreeViewAst {
 		if !ok {
 			panic(r)
 		}
-		message := err.Message
-		if head := strings.IndexByte(message, '\n'); head == -1 {
-			message = remapErrorLines(message, pre.lineMap)
-		} else {
-			message = remapErrorLines(message[:head], pre.lineMap) + message[head:]
+		line, ok := pre.lineMap[err.Line]
+		if !ok {
+			panic(r)
 		}
-		line := err.Line
-		if original, ok := pre.lineMap[err.Line]; ok {
-			line = original
+		at := 0
+		if err.Column > 0 {
+			original := source[lineStart(source, line):]
+			if column := pre.columns[err.Line]; column != nil {
+				at = column(err.Column - 1)
+			} else {
+				at = unitsToBytes(original, err.Column-1)
+			}
 		}
-		panic(types.NewPeleError(message, err.Code, types.ErrorInfo{Type: err.Type, Line: line, Column: err.Column, Snippet: err.Snippet}))
+		written := types.Locate(source, lineStart(source, line)+at)
+		head := strings.IndexByte(err.Message, '\n')
+		if head == -1 {
+			head = len(err.Message)
+		}
+		rest := err.Message[head:]
+		if err.Snippet != "" {
+			rest = strings.Replace(rest, err.Snippet, written.Snippet, 1)
+		}
+		message := remapErrorLines(err.Message[:head], map[int]int{err.Line: written.Line}) + rest
+		info := types.ErrorInfo{Type: err.Type, Line: written.Line}
+		if err.Column > 0 {
+			info.Column = written.Column
+		}
+		if err.Snippet != "" {
+			info.Snippet = written.Snippet
+		}
+		panic(types.NewPeleError(message, err.Code, info))
 	}()
 	return parseTreeView(pre.text)
 }

@@ -1,4 +1,4 @@
-// Ported from pele src/core.ts and src/index.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/core.ts and src/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // mount() and enableZoom() are browser only and are not ported. pele throws a
 // PeleError; the port panics with one inside and returns it as an error here.
@@ -115,6 +115,8 @@ func tagErrors(found detected) {
 			if pe.MermaidType == "" {
 				pe.MermaidType = string(found.mt)
 			}
+			pe.Message = text.WrittenCodes(pe.Message)
+			pe.Snippet = text.WrittenCodes(pe.Snippet)
 		}
 		panic(e)
 	}
@@ -141,7 +143,7 @@ func parseSource(src string, limit, maxEdges int, extra Config) parsed {
 	if js.Len(src) > limit {
 		types.Throw("Diagram source is longer than the limit of "+strconv.Itoa(limit)+" characters.", types.CodeLimit, types.ErrorInfo{})
 	}
-	pre := preprocess(src)
+	pre := preprocess(src, nil)
 	found, ok := detectDiagram(pre.text)
 	if !ok {
 		types.Throw("No diagram type detected for the given text.", types.CodeUnsupported, types.ErrorInfo{})
@@ -161,17 +163,45 @@ func parseSource(src string, limit, maxEdges int, extra Config) parsed {
 			config[k] = v
 		}
 	}
+	keepComments := diagram.KeepComments
 	source := pre.text
-	if diagram.KeepComments {
+	if keepComments {
 		source = pre.withComments
 	}
-	model := parseModel(found, diagram, encodeEntities(source)+"\n", config, pre, maxEdges)
+	model := parseModel(found, diagram, encodeEntities(source, nil)+"\n", config, pre, maxEdges, &inSource{text: src, keepComments: keepComments})
 	return parsed{found.typ, found.mt, diagram, model, config}
 }
 
-func parseModel(found detected, diagram *types.Diagram, source string, config Config, pre preprocessed, maxEdges int) any {
+func parseModel(found detected, diagram *types.Diagram, source string, config Config, pre preprocessed, maxEdges int, origin types.Origin) any {
 	defer tagErrors(found)
+	types.Locating(source, origin)
+	defer types.DoneLocating(source)
 	return diagram.Parse(source, config, pre.title, pre.lineOffset, types.ParseLimits{MaxEdges: maxEdges})
+}
+
+// inSource maps an offset of the parsed text to the source as written. It records
+// the edits of preprocessing only when an error needs a position.
+type inSource struct {
+	text         string
+	keepComments bool
+	steps        [][]types.Edit
+	source       string
+	done         bool
+}
+
+func (s *inSource) Find(at int) (string, int) {
+	if !s.done {
+		s.done = true
+		pre := preprocess(s.text, &s.steps)
+		kept := pre.withComments
+		if !s.keepComments {
+			kept = cleanupComments(pre.withComments, &s.steps)
+		}
+		encodeEntities(kept, &s.steps)
+		// Match the line break appended for parsing.
+		s.source = normalizeLineBreaks(s.text) + "\n"
+	}
+	return s.source, types.InputOffset(s.steps, at)
 }
 
 // Detect gives the type of diagram the text describes.
@@ -181,7 +211,7 @@ func Detect(src string) (typ Type, ok bool) {
 			typ, ok = "", false
 		}
 	}()
-	return detect(preprocess(src).text)
+	return detect(preprocess(src, nil).text)
 }
 
 // Supports reports whether the text is a diagram of a type sketch draws.

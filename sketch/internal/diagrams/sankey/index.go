@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sankey/index.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/sankey/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 // Package sankey draws Mermaid's sankey diagram: flows between nodes as bands as wide as
 // their values, with the nodes in columns.
@@ -14,7 +14,7 @@ var Sankey = &types.Diagram{
 		if title != nil && *title != "" {
 			db.title = *title
 		}
-		parseSankey(prepareTextForParsing(source), db)
+		parseSankey(prepareTextForParsing(source, nil), db, source)
 		return db
 	},
 	Render: func(model any, config types.Config, options types.RenderOptions) types.Rendered {

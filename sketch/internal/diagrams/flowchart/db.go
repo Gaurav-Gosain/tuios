@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/db.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/flowchart/db.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package flowchart
 
@@ -386,7 +386,7 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 	}
 
 	if max := db.options.MaxEdges; max > 0 && len(db.Edges) >= max {
-		throwFlow("Edge limit exceeded. "+strconv.Itoa(len(db.Edges))+" edges found, but the limit is "+strconv.Itoa(max)+".", types.CodeLimit)
+		throwFlow("Edge limit exceeded. The limit is "+strconv.Itoa(max)+".", types.CodeLimit)
 	}
 	db.Edges = append(db.Edges, edge)
 	db.pairCount[pair] = count + 1

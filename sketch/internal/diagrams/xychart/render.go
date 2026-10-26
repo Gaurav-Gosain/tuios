@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/xychart/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/xychart/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package xychart
 
@@ -160,13 +160,16 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 			bars++
 		}
 	}
-	lo := model.yAxis.min
-	hi := model.yAxis.max
-	exact := model.hasSetYAxis && !math.IsInf(lo, 0) && !math.IsNaN(lo) && !math.IsInf(hi, 0) && !math.IsNaN(hi) && lo != hi
-	if exact {
-		lo, _ = finite(lo)
-		hi, _ = finite(hi)
-	} else {
+	lo, ok := finite(model.yAxis.min)
+	if !ok {
+		lo = math.Inf(1)
+	}
+	hi, ok := finite(model.yAxis.max)
+	if !ok {
+		hi = math.Inf(-1)
+	}
+	exact := model.hasSetYAxis && !math.IsInf(lo, 0) && !math.IsInf(hi, 0) && lo != hi
+	if !exact {
 		lo = math.Inf(1)
 		hi = math.Inf(-1)
 		for _, plot := range plots {

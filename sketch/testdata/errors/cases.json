@@ -1,0 +1,379 @@
+[
+ {
+  "src": "flowchart TD\nA[a#35;b] --> -->"
+ },
+ {
+  "src": "flowchart TD\na@{shape: \"#35;x\"}"
+ },
+ {
+  "src": "---\ntitle: T\n---\n\n%% A comment\nflowchart TD\n  A --> B\n  C --> --> D"
+ },
+ {
+  "src": "flowchart TD\n  A{a}  \n\n  C --> --> D"
+ },
+ {
+  "src": "flowchart TD\r\n  A[#quot;x#quot;] --> B\r\n  %% c\r\n  C --> --> D"
+ },
+ {
+  "src": "%%{init: {\"theme\": \"dark\"}}%%\nflowchart TD\n  A[#9829;] --> B\n  C -->"
+ },
+ {
+  "src": "  \n\nflowchart TD\n  A -- #35; --> B $$$ ]"
+ },
+ {
+  "src": "flowchart TD\n  style A fill:#f9f;\n  A[#35;] --> B --> ]"
+ },
+ {
+  "src": "flowchart LR\nN0 --> N1\nN1 --> N2\nN2 --> N3\nN3 --> N4\nN4 --> N5\nN5 --> N6\nN6 --> N7\nN7 --> N8\nN8 --> N9\nN9 --> N10\nN10 --> N11\n",
+  "maxEdges": 10
+ },
+ {
+  "src": "agentflow-beta LR\n  N0 --> N1\n  N1 --> N2\n  N2 --> N3\n  N3 --> N4\n  N4 --> N5\n  N5 --> N6\n  N6 --> N7\n  N7 --> N8\n  N8 --> N9\n  N9 --> N10\n  N10 --> N11\n",
+  "maxEdges": 10
+ },
+ {
+  "src": "---\ntitle: T\n---\nagentflow-beta TB\n  a@{ shape: rounded }  \n  b -.-> c"
+ },
+ {
+  "src": "%%{init:\n{}\n}%%\nagentflow-beta\na[\"#35;\"] --> b@{shape: bad}"
+ },
+ {
+  "src": "%%{init:\n{}\n}%%\nagentflow-beta\na[\"#35;\"] --> b@{shape: [bad}"
+ },
+ {
+  "src": "pie\n \"#35;x &amp;y\" : -1"
+ },
+ {
+  "src": "pie\n \"dogs\" : -60.67"
+ },
+ {
+  "src": "radar-beta\n axis a[\"#35;x &amp;y\"], b\n curve c{ b: 1 }"
+ },
+ {
+  "src": "venn-beta\nset A\nunion A,\"B#35;x\""
+ },
+ {
+  "src": "venn-beta\nset \"B#x\"\nset A\nunion A,\"B#35;x\""
+ },
+ {
+  "src": "venn-beta\nset A,B"
+ },
+ {
+  "src": "venn-beta\nset A $"
+ },
+ {
+  "src": "venn-beta\nset A%% note\nset B:5%% note\nunion A,B%% note"
+ },
+ {
+  "src": "sankey\na,b,1\nb,c,abc\n"
+ },
+ {
+  "src": "sankey\na,b,1\nb,c,\n"
+ },
+ {
+  "src": "sankey\na,b,1\nb,c,Infinity\n"
+ },
+ {
+  "src": "sankey\na,b,1\nb,c,1e400\n"
+ },
+ {
+  "src": "sankey\na,b,1\nb,c,-\n"
+ },
+ {
+  "src": "sankey\n\na,b,1\n\nb,c,abc"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%% c\nsankey\n\n\na,b,1\n\n\nb,c\n\n  "
+ },
+ {
+  "src": "sankey\na,b\n"
+ },
+ {
+  "src": "sankey\na,b,50%\nb,c, 2e1 kWh\n"
+ },
+ {
+  "src": "sequenceDiagram\n  autonumber 5%% comment"
+ },
+ {
+  "src": "sequenceDiagram\n  A->>B:%% comment"
+ },
+ {
+  "src": "quadrantChart\nquadrant-1 A:%% note"
+ },
+ {
+  "src": "quadrantChart\nquadrant-1 A%% note"
+ },
+ {
+  "src": "xychart-beta\ntitle Sales:%% note\nbar [1,2]"
+ },
+ {
+  "src": "xychart-beta\nx-axis [a, b]\nbar [1,2]%% note"
+ },
+ {
+  "src": "journey\n  Task: 5: Me;%% c\n"
+ },
+ {
+  "src": "timeline\n  2024 :%% c\n"
+ },
+ {
+  "src": "gantt\ndateFormat YYYY-MM-DD\nA%% label : 2026-10-24, 1d"
+ },
+ {
+  "src": "sequenceDiagram\ntitle\nA->>B: Hi\nB->>A: Bye"
+ },
+ {
+  "src": "sequenceDiagram\ntitle: \nA->>B: Hi\nB->>A: Bye"
+ },
+ {
+  "src": "C4Context\ntitle\nPerson(a, \"Alice\")\nPerson(b, \"Bob\")"
+ },
+ {
+  "src": "gantt\ntitle\nsection Work\nTask :2026-01-01, 1d"
+ },
+ {
+  "src": "journey\ntitle\nsection Work\nTask: 5: Me"
+ },
+ {
+  "src": "timeline\ntitle\n2024 : Event\n2025 : Next"
+ },
+ {
+  "src": "venn-beta\ntitle\nset A\nset title\ntitle Kept\nset B"
+ },
+ {
+  "src": "treeView-beta\n├── \n"
+ },
+ {
+  "src": "treeView-beta\n├── a\n   b\n"
+ },
+ {
+  "src": "---\ntitle: T\n---\ntreeView-beta\n└─ \"bad"
+ },
+ {
+  "src": "---\ntitle: T\n---\ntreeView-beta\n├── \n"
+ },
+ {
+  "src": "treeView-beta\n└─ \"ok\"\t\"bad"
+ },
+ {
+  "src": "treeView-beta\n└── \"ok\"\t\t\"bad"
+ },
+ {
+  "src": "---\ntitle: T\n---\ntreeView-beta\n\"bad\nhello ─ world\nx\ny"
+ },
+ {
+  "src": "%% c\ntreeView-beta\n├── a#35;b\n│   └── \"c"
+ },
+ {
+  "src": "usecase-beta\njson P@{\"a\":\"#35;\", \"b\":}"
+ },
+ {
+  "src": "usecase-beta\njson P@{\"a\":}"
+ },
+ {
+  "src": "usecase-beta\nA \"b"
+ },
+ {
+  "src": "usecase-beta\nnote for Ghost \"x\""
+ },
+ {
+  "src": "---\ntitle: T\n---\n%% c\nusecase-beta\nactor A[\"#35;\"]\nA \"b"
+ },
+ {
+  "src": "---\ntitle: T\n---\nusecase-beta\nactor #35;\nnote for Ghost \"x\""
+ },
+ {
+  "src": "usecase-beta\nactor A\nA --> B\nstyle Z fill:red"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nstateDiagram-v2\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nstateDiagram-v2\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nclassDiagram\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nclassDiagram\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nerDiagram\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nerDiagram\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ngitGraph\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ngitGraph\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nmindmap\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nmindmap\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nblock\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nblock\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nrequirementDiagram\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nrequirementDiagram\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\npacket\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\npacket\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nkanban\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nkanban\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\narchitecture-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\narchitecture-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nishikawa-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nishikawa-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\neventmodeling\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\neventmodeling\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nwardley-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nwardley-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nrailroad-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nrailroad-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nswimlane-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nswimlane-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ncynefin-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ncynefin-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntreemap-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntreemap-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nsequenceDiagram\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nsequenceDiagram\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nquadrantChart\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nquadrantChart\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nxychart-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nxychart-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntimeline\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntimeline\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\njourney\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\njourney\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ngantt\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ngantt\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nC4Context\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nC4Context\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\npie\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\npie\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nradar-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nradar-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nvenn-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nvenn-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nsankey\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nsankey\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nusecase-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nusecase-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nagentflow-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nagentflow-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nflowchart TD\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\nflowchart TD\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntreeView-beta\n  A[\"#35;\"] %% c\n  ]]] ((( --> $$$"
+ },
+ {
+  "src": "---\ntitle: T\n---\n%%{init: {\"wrap\": true}}%%\n%% a comment\ntreeView-beta\n  #quot;x#quot;\n\n  @@@ : ; ]"
+ }
+]

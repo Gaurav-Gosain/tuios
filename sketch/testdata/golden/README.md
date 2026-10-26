@@ -11,7 +11,7 @@ the Mermaid contributors. pele is under the MIT licence, copyright kepano.
 the commit that the port follows:
 
 ```sh
-cd pele && git checkout e7f092a4de147cc32210913c20e36eaa5fcd0ef1
+cd pele && git checkout 4eff76f98c73b6817800a05773517f35832e4e92
 npm ci && npm run build
 node /path/to/sketch/testdata/golden/gen.mjs /path/to/pele /path/to/sketch/testdata/golden
 ```
@@ -44,3 +44,13 @@ TZ=Asia/Dubai node testdata/extra/gen.mjs /path/to/pele testdata/extra/golden
 A case with `"math": true` is drawn with `fakeMath`, the fixed math resolver in
 `gen.mjs`. `TestGoldenExtra` gives the same resolver in Go, `goldenMath`.
 Change both together.
+
+## Errors
+
+`testdata/errors/cases.json` holds sources with errors, and `want.json` holds
+the error pele gives for each. `TestGoldenErrors` compares them. To write them
+again:
+
+```sh
+TZ=Asia/Dubai node testdata/errors/gen.mjs /path/to/pele
+```

@@ -1,4 +1,4 @@
-// Ported from pele src/util/chars.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/util/chars.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 // Package util holds pele's small shared helpers: character tests, the YAML
 // subset for front matter, and URL sanitising.

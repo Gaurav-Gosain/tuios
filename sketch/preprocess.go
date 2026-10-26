@@ -1,4 +1,4 @@
-// Ported from pele src/preprocess.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/preprocess.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // RE_DIRECTIVE uses a lookahead, which Go's regexp lacks: matchDirective is a
 // hand-written matcher that takes the same text.
@@ -39,11 +39,37 @@ var (
 	unsafeKeys = map[string]bool{"__proto__": true, "constructor": true, "prototype": true}
 )
 
-func cleanupComments(text string) string {
-	if strings.Contains(text, "%%") {
-		text = reComment.ReplaceAllString(text, "")
+// steps records the edits of each step when it is not nil, so an offset in the
+// output maps back to the input (types.InputOffset).
+type steps = *[][]types.Edit
+
+func record(st steps, edits []types.Edit) {
+	if st != nil {
+		*st = append(*st, edits)
 	}
-	return js.TrimStart(text)
+}
+
+func removeAll(text string, re *lazyre.Regexp, st steps) string {
+	if st != nil {
+		record(st, types.Replacements(text, re.Re(), 0))
+	}
+	return re.ReplaceAllString(text, "")
+}
+
+func cleanupComments(text string, st steps) string {
+	if strings.Contains(text, "%%") {
+		text = removeAll(text, reComment, st)
+	}
+	trimmed := js.TrimStart(text)
+	record(st, []types.Edit{{From: 0, To: len(text) - len(trimmed), Length: 0}})
+	return trimmed
+}
+
+func normalizeLineBreaks(text string) string {
+	if strings.Contains(text, "\r") {
+		return reCRLF.ReplaceAllString(text, "\n")
+	}
+	return text
 }
 
 func isLineBreak(ch rune) bool { return ch == '\n' || ch == '\r' }
@@ -318,7 +344,7 @@ func numbers(v any) any {
 	return v
 }
 
-func directives(text string, config Config) string {
+func directives(text string, config Config, st steps) string {
 	if !strings.Contains(text, "%%{") {
 		return text
 	}
@@ -337,20 +363,22 @@ func directives(text string, config Config) string {
 		}
 	}
 	var out strings.Builder
+	var edits []types.Edit
 	last := 0
 	for _, d := range findDirectives(text) {
 		out.WriteString(text[last:d.start])
+		edits = append(edits, types.Edit{From: d.start, To: d.end})
 		last = d.end
 	}
+	record(st, edits)
 	out.WriteString(text[last:])
 	return out.String()
 }
 
-func preprocess(source string) preprocessed {
-	text := source
-	if strings.Contains(text, "\r") {
-		text = reCRLF.ReplaceAllString(text, "\n")
-	}
+// preprocess reads the front matter and directives. st, when not nil, records the
+// edits from the normalized source to withComments.
+func preprocess(source string, st steps) preprocessed {
+	text := normalizeLineBreaks(source)
 	// A tag needs a closing bracket, so nothing after the last one can match.
 	lastClose := -1
 	if strings.Contains(text, "<") {
@@ -403,11 +431,12 @@ func preprocess(source string) preprocessed {
 				lineOffset++
 			}
 			text = text[front.length:]
+			record(st, []types.Edit{{From: 0, To: front.length}})
 		}
 	}
 
-	text = directives(text, config)
-	return preprocessed{text: cleanupComments(text), title: title, config: config, withComments: text, lineOffset: lineOffset}
+	text = directives(text, config, st)
+	return preprocessed{text: cleanupComments(text, nil), title: title, config: config, withComments: text, lineOffset: lineOffset}
 }
 
 var (
@@ -430,7 +459,9 @@ func lineEndFrom(text string, from int) (int, int) {
 // Does what Mermaid's `text.replace(/keyword.*:\S*#.*;/g, drop the last character)` does:
 // on a line where the keyword is followed by a colon, a color-like `#`, and later a semicolon,
 // the last semicolon goes. Mermaid's regex backtracks without bound; this is one pass.
-func dropColorSemicolons(text, keyword string) string {
+func dropColorSemicolons(text, keyword string, st steps) string {
+	var edits []types.Edit
+	defer func() { record(st, edits) }()
 	from := strings.Index(text, keyword)
 	if from == -1 {
 		return text
@@ -458,6 +489,7 @@ func dropColorSemicolons(text, keyword string) string {
 		if hash != -1 {
 			semi := lastIndexFrom(text, ";", lineEnd-1)
 			if semi > hash {
+				edits = append(edits, types.Edit{From: semi, To: semi + 1})
 				out.WriteString(text[last:semi])
 				last = semi + 1
 			}
@@ -475,15 +507,29 @@ func dropColorSemicolons(text, keyword string) string {
 }
 
 // Mermaid hides `#name;` entity codes behind placeholder characters so `#` and `;` survive parsing.
-func encodeEntities(text string) string {
+func encodeEntities(text string, st steps) string {
 	if !strings.Contains(text, "#") {
 		return text
 	}
-	return reEntity.ReplaceAllStringFunc(dropColorSemicolons(dropColorSemicolons(text, "style"), "classDef"), func(s string) string {
-		inner := s[1 : len(s)-1]
+	text = dropColorSemicolons(dropColorSemicolons(text, "style", st), "classDef", st)
+	var out strings.Builder
+	var edits []types.Edit
+	last := 0
+	for _, m := range reEntity.Re().FindAllStringIndex(text, -1) {
+		inner := text[m[0]+1 : m[1]-1]
+		code := "ﬂ°" + inner + "¶ß"
 		if reIntEnt.MatchString(inner) {
-			return "ﬂ°°" + inner + "¶ß"
+			code = "ﬂ°°" + inner + "¶ß"
 		}
-		return "ﬂ°" + inner + "¶ß"
-	})
+		out.WriteString(text[last:m[0]])
+		out.WriteString(code)
+		edits = append(edits, types.Edit{From: m[0], To: m[1], Length: len(code), Out: code})
+		last = m[1]
+	}
+	record(st, edits)
+	if last == 0 {
+		return text
+	}
+	out.WriteString(text[last:])
+	return out.String()
 }

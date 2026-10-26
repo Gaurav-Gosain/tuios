@@ -1,8 +1,6 @@
-// Ported from pele src/diagrams/common/scan.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/common/scan.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
-// The port reads UTF-8 bytes. A step past a character steps the whole character. pele
-// reads a character outside the BMP as two UTF-16 units, so the unit after one is a low
-// surrogate: unitAfter gives 0xdc00 for it, which matches none of the tests.
+// The port reads UTF-8 bytes. A step past a character steps the whole character.
 
 package common
 
@@ -59,17 +57,8 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// unitAfter is the UTF-16 unit after the character at q, as charCodeAt(q + 1) reads it.
-func unitAfter(src string, q int) rune {
-	if q < len(src) && src[q] >= 0xf0 {
-		return 0xdc00
-	}
-	return codeAt(src, q+sizeAt(src, q))
-}
-
 // SkipTrivia skips comments and whitespace. Stops at a line break that starts a token, which is a NEWLINE.
-// Jison compiles `\%%` to a single `%`, so one percent sign starts a comment, and the second
-// comment rule takes any character before `%%` with it, a line break included.
+// Jison compiles `\%%` to `%`, so a single `%` starts a comment.
 func SkipTrivia(src string, from int) int {
 	n := len(src)
 	p := from
@@ -77,8 +66,6 @@ func SkipTrivia(src string, from int) int {
 		c := codeAt(src, p)
 		if c == 37 && codeAt(src, p+1) != 123 {
 			p = LineEnd(src, p)
-		} else if q := p + sizeAt(src, p); c != 125 && unitAfter(src, p) == 37 && codeAt(src, q+1) == 37 {
-			p = LineEnd(src, q+2)
 		} else if c == 10 {
 			return p
 		} else if util.IsSpace(c) {

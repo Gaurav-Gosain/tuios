@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/architecture/index.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/architecture/index.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 // Package architecture draws Mermaid's architecture diagram: services and junctions on a
 // grid, in groups, joined by edges that leave from the sides the source names.

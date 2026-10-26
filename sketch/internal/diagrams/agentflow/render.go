@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/agentflow/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package agentflow
 
@@ -525,7 +525,7 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 		if internal && deref(node.Label) != "" && !(options.Links != nil && !*options.Links) {
 			// The label is a note name, but it still ends up in an href, so it gets the same check as a URL.
 			name := text.DecodeEntities(*node.Label)
-			_, safe := util.LinkUrl(util.SanitizeUrl(name), options)
+			safe := util.InternalLink(name, options)
 			target := svg.Esc(name)
 			href := ""
 			if safe {

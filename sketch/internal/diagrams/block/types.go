@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/block/types.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/block/types.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // An optional field of pele's block is "" or nil here for none, where pele reads it only
 // for its truthiness or as text. The numbers that pele reads with `?? 1` or `?? -1` start

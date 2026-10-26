@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/c4/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/c4/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // The port reads UTF-8 bytes, and offsets are byte offsets. Every character the lexer
 // matches is ASCII, except whitespace and line ends, which are read as whole characters.
@@ -129,6 +129,29 @@ func keyword(word string) int {
 var DIRECTIONS = [4]string{"TB", "BT", "RL", "LR"}
 
 // spaceAt is the length in bytes of the whitespace character at q, or 0 if there is none.
+// bareTitle matches /title[^\S\r\n]*(?=[\r\n]|$)\s*/y at p and returns its end, or -1. It
+// takes the line breaks too, because the grammar rejects blank statements.
+func bareTitle(src string, p int) int {
+	if !strings.HasPrefix(src[p:], "title") {
+		return -1
+	}
+	q := p + 5
+	for q < len(src) && src[q] != '\r' && src[q] != '\n' {
+		s := spaceAt(src, q)
+		if s == 0 {
+			break
+		}
+		q += s
+	}
+	if q < len(src) && src[q] != '\r' && src[q] != '\n' {
+		return -1
+	}
+	for s := spaceAt(src, q); s > 0; s = spaceAt(src, q) {
+		q += s
+	}
+	return q
+}
+
 func spaceAt(src string, q int) int {
 	if q < 0 || q >= len(src) {
 		return 0
@@ -308,8 +331,14 @@ func tokenize(src string) Tokens {
 					}
 				}
 			}
-			if c == 116 && statement("title", T_title) {
-				continue
+			if c == 116 {
+				if e := bareTitle(src, p); e >= 0 {
+					p = e
+					continue
+				}
+				if statement("title", T_title) {
+					continue
+				}
 			}
 			if c == 97 {
 				if statement("accDescription", T_accDescription) {

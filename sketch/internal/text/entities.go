@@ -1,4 +1,4 @@
-// Ported from pele src/text/entities.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/text/entities.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package text
 
@@ -105,6 +105,16 @@ func restorePlaceholders(text string) string {
 		return text
 	}
 	return out.String() + text[last:]
+}
+
+var rePlaceholder = lazyre.New(`ﬂ°°?(\w+)¶ß`)
+
+// WrittenCodes turns the placeholders back into the `#name;` codes the author wrote.
+func WrittenCodes(text string) string {
+	if !strings.Contains(text, CLOSE) {
+		return text
+	}
+	return rePlaceholder.ReplaceAllString(text, "#$1;")
 }
 
 // DecodeEntities turns Mermaid's `#35;` / `#quot;` codes (as hidden by encodeEntities) and HTML entities into characters.

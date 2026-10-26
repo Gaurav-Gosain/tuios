@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/db.ts and diagnostics.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/agentflow/db.ts and diagnostics.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // pele's AgentflowDb also keeps where each statement sits (mappings) and builds a semantic
 // model for tools; sketch reads neither, so the port leaves them out, and its diagnostics
@@ -30,6 +30,8 @@ type AgentflowDbOptions struct {
 	Direction string
 	// Lines of front matter before the text the parser sees, added to every reported line.
 	LineOffset int
+	// Source is the text the parser sees, where errors are located. "" locates them by LineOffset.
+	Source string
 }
 
 var TOOL_SHAPES = map[string]bool{"subroutine": true, "subprocess": true, "subproc": true, "framed-rectangle": true, "tool": true}
@@ -288,6 +290,7 @@ type AgentflowDb struct {
 	AccTitle           string
 	AccDescr           string
 	LineOffset         int
+	source             string
 
 	subgraphLookup map[string]*AgentSubgraph
 	globalNodes    map[string]bool
@@ -307,6 +310,7 @@ func NewAgentflowDb(options AgentflowDbOptions) *AgentflowDb {
 		Classes:        newStrMap[*AgentClassDef](),
 		Tooltips:       map[string]string{},
 		LineOffset:     options.LineOffset,
+		source:         options.Source,
 		subgraphLookup: map[string]*AgentSubgraph{},
 		globalNodes:    map[string]bool{},
 		members:        map[string]bool{},
@@ -339,9 +343,8 @@ func (db *AgentflowDb) metadata(id string, source string, loc Loc) any {
 		}
 		if !ok {
 			at := ""
-			line, column := 0, 0
+			line, column := db.errorAt(loc)
 			if loc.FirstLine != 0 {
-				line, column = loc.FirstLine+db.LineOffset, loc.FirstColumn+1
 				at = " (" + strconv.Itoa(line) + ":" + strconv.Itoa(column) + ")"
 			}
 			panic(types.NewPeleError(`Metadata of "`+id+`" is not valid YAML. `+err.Error()+at, types.CodeSyntax,
@@ -355,11 +358,36 @@ func (db *AgentflowDb) metadata(id string, source string, loc Loc) any {
 	return stripPrototypeKeys(parsed)
 }
 
-func (db *AgentflowDb) shapeError(message string, loc Loc) {
-	line, column := 0, 0
-	if loc.FirstLine != 0 {
-		line, column = loc.FirstLine+db.LineOffset, loc.FirstColumn+1
+// errorAt is the line and column of loc in the source as written. A zero Loc has none.
+func (db *AgentflowDb) errorAt(loc Loc) (int, int) {
+	if loc.FirstLine == 0 {
+		return 0, 0
 	}
+	source := db.source
+	if source == "" {
+		return loc.FirstLine + db.LineOffset, loc.FirstColumn + 1
+	}
+	start := 0
+	for line := 1; line < loc.FirstLine; line++ {
+		if i := strings.IndexByte(source[start:], '\n'); i >= 0 {
+			start += i + 1
+		} else {
+			start = 0
+		}
+	}
+	// The column counts UTF-16 units; Locate takes a byte offset.
+	at := start
+	for units := 0; units < loc.FirstColumn && at < len(source); {
+		r, size := utf8.DecodeRuneInString(source[at:])
+		units += utf16.RuneLen(r)
+		at += size
+	}
+	l := types.Locate(source, at)
+	return l.Line, l.Column
+}
+
+func (db *AgentflowDb) shapeError(message string, loc Loc) {
+	line, column := db.errorAt(loc)
 	panic(types.NewPeleError(message, types.CodeSemantic, types.ErrorInfo{Type: "agentflow", Line: line, Column: column}))
 }
 
@@ -565,7 +593,7 @@ func (db *AgentflowDb) AddSingleLink(start, end string, link *LinkInfo, id strin
 	}
 
 	if max := db.options.MaxEdges; max > 0 && len(db.Edges) >= max {
-		types.Throw("Edge limit exceeded. "+strconv.Itoa(len(db.Edges))+" edges found, but the limit is "+strconv.Itoa(max)+".",
+		types.Throw("Edge limit exceeded. The limit is "+strconv.Itoa(max)+".",
 			types.CodeLimit, types.ErrorInfo{Type: "agentflow"})
 	}
 	db.Edges = append(db.Edges, edge)

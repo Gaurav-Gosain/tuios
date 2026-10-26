@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/state/parser.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/state/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // pele's StateBuilder interface, the calls Mermaid's grammar makes on its
 // `yy` object, is the *StateDb here: it has no other implementation.

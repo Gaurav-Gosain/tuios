@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/gantt/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/gantt/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // As in the other lexers, the port reads UTF-8 bytes: code() decodes the character at a
 // byte offset, and a step past a character that may not be ASCII steps the whole
@@ -40,6 +40,7 @@ const (
 	kwValue           // \s[^#\n;]+
 	kwMarker          // \s[^\n;]+
 	kwLine            // \s[^\n]+
+	kwTitle           // [^\S\r\n][^\n]+
 )
 
 type keywordRule struct {
@@ -64,7 +65,7 @@ func KEYWORDS(c rune) []keywordRule {
 			{"topaxis", kwBoundary, T_topAxis},
 			{"tickinterval", kwValue, T_tickInterval},
 			{"todaymarker", kwMarker, T_todayMarker},
-			{"title", kwLine, T_title},
+			{"title", kwTitle, T_title},
 		}
 	case 101:
 		return []keywordRule{{"excludes", kwValue, T_excludes}}
@@ -240,6 +241,9 @@ func (l *lexer) atRule(rule keywordRule) int {
 		}
 		return q
 	}
+	if rule.kind == kwTitle && q < l.n && (l.src[q] == '\r' || l.src[q] == '\n') {
+		return -1
+	}
 	q = l.space(q)
 	if q < 0 {
 		return -1
@@ -247,7 +251,7 @@ func (l *lexer) atRule(rule keywordRule) int {
 	e := q
 	for e < l.n {
 		c := l.src[e]
-		if c == '\n' || (rule.kind != kwLine && c == ';') || (rule.kind == kwValue && c == '#') {
+		if c == '\n' || (rule.kind != kwLine && rule.kind != kwTitle && c == ';') || (rule.kind == kwValue && c == '#') {
 			break
 		}
 		e++
@@ -256,6 +260,26 @@ func (l *lexer) atRule(rule keywordRule) int {
 		return -1
 	}
 	return e
+}
+
+// bareTitle matches /title[^\S\r\n]*(?=[\r\n]|$)/iy at p: a title with no text, which
+// pele skips. Returns the end of the match, or -1.
+func (l *lexer) bareTitle() int {
+	if !hasFold(l.src, l.p, "title") {
+		return -1
+	}
+	q := l.p + 5
+	for q < l.n {
+		c := l.code(q)
+		if c == '\r' || c == '\n' || !util.IsSpace(c) {
+			break
+		}
+		q += sizeAt(l.src, q)
+	}
+	if q < l.n && l.src[q] != '\r' && l.src[q] != '\n' {
+		return -1
+	}
+	return q
 }
 
 func (l *lexer) keyword(c rune) bool {
@@ -290,6 +314,11 @@ func (l *lexer) keyword(c rune) bool {
 		}
 		if e := l.spaced("click"); e >= 0 {
 			l.state = S_click
+			l.p = e
+			return true
+		}
+	case 116:
+		if e := l.bareTitle(); e >= 0 {
 			l.p = e
 			return true
 		}
@@ -377,9 +406,6 @@ func tokenize(src string) Tokens {
 				} else {
 					l.p = l.until('\n', p+2)
 				}
-			} else if c != 125 && d == 37 {
-				// Any character but `}` followed by `%` starts a comment that runs to the end of the line.
-				l.p = l.until('\n', p+sizeAt(src, p)+1)
 			} else if c == 10 {
 				e := p + 1
 				for l.code(e) == 10 {

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/usecase/json.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/usecase/json.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // The text is read as UTF-16 units, as pele reads it, so that offsets in messages agree.
 // JSON.parse is js.ParseJSON, a port of V8's parser with its messages.
@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"tuios.dev/sketch/internal/js"
+	sktext "tuios.dev/sketch/internal/text"
 	"tuios.dev/sketch/internal/types"
 )
 
@@ -466,10 +467,18 @@ func parseOrderedJson(source string, origin func() (int, int)) OrderedJson {
 	parsed, err := js.ParseJSON(text)
 	if err != nil {
 		message := err.Error()
+		// Reparse restored entity codes so error messages and positions match the source.
+		shown := text
+		if written := sktext.WrittenCodes(source); written != source {
+			shown = js.UTF16(written)
+			if _, again := js.ParseJSON(shown); again != nil {
+				message = again.Error()
+			}
+		}
 		line, column := origin()
-		l, c, ok := locationFromMessage(message, text, float64(line), float64(column))
+		l, c, ok := locationFromMessage(message, shown, float64(line), float64(column))
 		if !ok {
-			l, c = locationAt(text, float64(walkOffset(text)), float64(line), float64(column))
+			l, c = locationAt(shown, float64(walkOffset(shown)), float64(line), float64(column))
 		}
 		panic(jsonError("Invalid JSON: "+message, l, c))
 	}

@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treeview/boxDrawing.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/treeview/boxDrawing.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // pele indexes lines in UTF-16 code units. Every box character is one unit, so the port keeps
 // byte offsets for slicing and counts units only where an index is a number: the column of a
@@ -86,6 +86,9 @@ const INDENT_UNIT = "    "
 type PreprocessResult struct {
 	text    string
 	lineMap map[int]int
+	// columns maps, per output line, a UTF-16 index of the rewritten line to a byte offset in
+	// the original line.
+	columns map[int]func(at int) int
 }
 
 func isBoxDrawingFormat(lines []string) bool {
@@ -167,13 +170,58 @@ func remapErrorLines(message string, lineMap map[int]int) string {
 	return out.String()
 }
 
-func fail(line int, message string) {
+// lineStart is the byte offset of a line, from 1, as text.indexOf('\n', at) + 1 finds it.
+func lineStart(text string, line int) int {
+	at := 0
+	for n := 1; n < line; n++ {
+		if i := strings.IndexByte(text[at:], '\n'); i >= 0 {
+			at += i + 1
+		} else {
+			at = 0
+		}
+	}
+	return at
+}
+
+// unitsToBytes is the byte offset of the UTF-16 index at in s.
+func unitsToBytes(s string, at int) int {
+	i := 0
+	for units := 0; units < at && i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		units++
+		if r >= 0x10000 {
+			units++
+		}
+		i += size
+	}
+	return i
+}
+
+// beforeTabs undoes four-space tab expansion: the byte offset in line of byte offset at of
+// the expanded line.
+func beforeTabs(line string, at int) int {
+	i := 0
+	for n := 0; i < len(line) && n < at; {
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if r == '\t' {
+			n += 4
+		} else {
+			n += size
+		}
+		i += size
+	}
+	return i
+}
+
+func fail(input string, index int, message string) {
+	line := types.Locate(input, lineStart(input, index+1)).Line
 	panic(types.NewPeleError("Line "+strconv.Itoa(line)+": "+message, types.CodeSyntax, types.ErrorInfo{Type: "treeView", Line: line}))
 }
 
 func preprocessBoxDrawing(input string) PreprocessResult {
+	columns := map[int]func(int) int{}
 	if !hasBoxChar(input) {
-		return PreprocessResult{text: input}
+		return PreprocessResult{text: input, columns: columns}
 	}
 	lines := strings.Split(input, "\n")
 
@@ -185,7 +233,7 @@ func preprocessBoxDrawing(input string) PreprocessResult {
 		}
 	}
 	if keywordIdx == -1 {
-		return PreprocessResult{text: input}
+		return PreprocessResult{text: input, columns: columns}
 	}
 
 	passes := func(line string) bool { return js.Trim(line) == "" || commentLine(line) || metadataLine(line) }
@@ -199,29 +247,32 @@ func preprocessBoxDrawing(input string) PreprocessResult {
 		contentLines = append(contentLines, strings.ReplaceAll(line, "\t", "    "))
 	}
 	if !isBoxDrawingFormat(contentLines) {
-		return PreprocessResult{text: input}
+		return PreprocessResult{text: input, columns: columns}
 	}
 
 	segmentWidth := inferSegmentWidth(contentLines)
 	var out strings.Builder
 	count := 0
 	lineMap := map[int]int{}
-	keep := func(text string, index int) {
+	keep := func(text string, index int, column func(int) int) {
 		if count > 0 {
 			out.WriteByte('\n')
 		}
 		out.WriteString(text)
 		count++
 		lineMap[count] = index + 1
+		if column != nil {
+			columns[count] = column
+		}
 	}
 
 	for i := 0; i <= keywordIdx; i++ {
-		keep(lines[i], i)
+		keep(lines[i], i, nil)
 	}
 	for i := keywordIdx + 1; i < len(lines); i++ {
 		line := lines[i]
 		if passes(line) {
-			keep(line, i)
+			keep(line, i, nil)
 			continue
 		}
 		if decorationOnly(line) {
@@ -245,19 +296,22 @@ func preprocessBoxDrawing(input string) PreprocessResult {
 			}
 			content := js.TrimEnd(normalized[pos:])
 			if content == "" {
-				fail(i+1, "Empty node — expected a filename or directory name after the box-drawing prefix")
+				fail(input, i, "Empty node — expected a filename or directory name after the box-drawing prefix")
 			}
-			keep(strings.Repeat(INDENT_UNIT, depth)+content, i)
+			indent := strings.Repeat(INDENT_UNIT, depth)
+			keep(indent+content, i, func(at int) int {
+				return beforeTabs(line, pos+unitsToBytes(normalized[pos:], max(at-len(indent), 0)))
+			})
 		} else if boxOnly(normalized) {
 			continue
 		} else if hasBoxChar(normalized) {
 			// A name that happens to contain a box character, such as "Section ─ A.txt", is a root item.
-			keep(line, i)
+			keep(line, i, nil)
 		} else if c, _ := utf8.DecodeRuneInString(normalized); normalized != "" && js.IsSpace(c) {
-			fail(i+1, "Unexpected indentation without box-drawing characters. In box-drawing format, use ├── or └── prefixes for indented nodes.")
+			fail(input, i, "Unexpected indentation without box-drawing characters. In box-drawing format, use ├── or └── prefixes for indented nodes.")
 		} else {
-			keep(line, i)
+			keep(line, i, nil)
 		}
 	}
-	return PreprocessResult{text: out.String(), lineMap: lineMap}
+	return PreprocessResult{text: out.String(), lineMap: lineMap, columns: columns}
 }

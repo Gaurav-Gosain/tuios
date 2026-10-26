@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/timeline/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/timeline/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // The port reads UTF-8 bytes. Where pele steps one unit past a whitespace character
 // that ends a keyword, the port steps the whole character.
@@ -126,16 +126,27 @@ func tokenize(src string) common.ScanTokens {
 				continue
 			}
 		}
-		// `\s` after a keyword also takes a line break, so `title` alone on a line takes the next line as its text.
-		if s := spaceAt(src, p+5); common.KeywordAt(src, p, "title") && s > 0 && p+5+s < n && codeAt(src, p+5+s) != 10 {
-			emit(T_title, common.LineEnd(src, p+5+s))
-			continue
+		if common.KeywordAt(src, p, "title") {
+			// Unlike Mermaid, ignore bare titles.
+			e = p + 5
+			for codeAt(src, e) != 10 && util.IsSpace(codeAt(src, e)) {
+				e += sizeAt(src, e)
+			}
+			if e >= n || codeAt(src, e) == 10 {
+				p = e
+				continue
+			}
+			if s := spaceAt(src, p+5); s > 0 && codeAt(src, p+5) != 13 {
+				emit(T_title, common.LineEnd(src, p+5+s))
+				continue
+			}
 		}
 		e = common.Accessibility(src, p, &out, T_acc_title)
 		if e != p {
 			p = e
 			continue
 		}
+		// Like Mermaid, a bare section uses the next line as its name.
 		if s := spaceAt(src, p+7); common.KeywordAt(src, p, "section") && s > 0 {
 			from := p + 7 + s
 			e = from

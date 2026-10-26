@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/er/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/er/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package er
 
@@ -478,7 +478,7 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		display = text.DecodeEntities(display)
 		if strings.Contains(classes+" ", " internal-link ") && name != "" && (options.Links == nil || *options.Links) {
 			// The name ends up in an href, so it gets the same check as a URL.
-			_, safe := util.LinkUrl(util.SanitizeUrl(display), options)
+			safe := util.InternalLink(display, options)
 			target := svg.Esc(display)
 			href := ""
 			if safe {

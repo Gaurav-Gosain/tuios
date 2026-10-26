@@ -1,7 +1,7 @@
 package sketch
 
 // Ported from pele tests/support/inert.ts, tests/support/xml.ts and the flowchart
-// part of tests/render/security.test.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// part of tests/render/security.test.ts, and the internal links of tests/util/url.test.ts, at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 import (
 	"errors"
@@ -12,9 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
+	"tuios.dev/sketch/internal/util"
 )
 
 var (
@@ -39,6 +41,12 @@ func badAmp(s string) bool {
 
 // assertWellFormed checks that a string is well-formed XML: balanced tags, quoted attributes, escaped text.
 func assertWellFormed(xml string) error {
+	if i := strings.IndexFunc(xml, func(r rune) bool {
+		return r <= 0x08 || r == 0x0b || r == 0x0c || (r >= 0x0e && r <= 0x1f) || r == 0x7f || r == 0xfffe || r == 0xffff
+	}); i >= 0 {
+		r, _ := utf8.DecodeRuneInString(xml[i:])
+		return fmt.Errorf("character U+%04X near %q", r, xml[max(0, i-20):min(len(xml), i+20)])
+	}
 	var stack []string
 	i := 0
 	for i < len(xml) {
@@ -294,6 +302,15 @@ var PAYLOADS = []string{
 	"]]><script>alert(1)</script>",
 	"--><script>alert(1)</script>",
 	"\u0000\u0001\u0008\u000b\u001f",
+	// pele writes lone surrogates here. Go strings hold UTF-8, so the port takes the bytes
+	// of an encoded surrogate, which are not valid UTF-8 and become U+FFFD on the way in.
+	"a\ufffeb\uffffc\xed\xa0\x80d\xed\xb0\x80e#65534;f",
+	"u\u0001rl(//evil.example/x)",
+	"u\ufffeRL(//evil.example/x)",
+	"u\xed\xa0\x80rl(//evil.example/x)",
+	"java\ufffescript:alert(1)",
+	"java\xed\xb0\x80script:alert(1)",
+	"file\uffff:///etc/passwd",
 	"__proto__",
 	"constructor",
 	"toString",
@@ -304,6 +321,8 @@ var PAYLOADS = []string{
 	"file:///etc/passwd",
 	"//evil.example/share",
 	`\\evil.example\share`,
+	"#92;#92;nevil.example/share",
+	"\t/#92;nevil.example/share",
 	"smb://evil.example/share",
 	"obsidian://open?vault=x",
 	`\"><script>`,
@@ -475,6 +494,28 @@ func TestSankeyGradientsAreInert(t *testing.T) {
 	}
 	if !strings.Contains(out.Data, "<linearGradient") {
 		t.Fatal("an idPrefix of word characters gives no gradient")
+	}
+}
+
+// TestInternalLinkHref: a note name goes into the href as written, so it gets the
+// check of a URL, and the check of the name as a browser reads it after Esc().
+func TestInternalLinkHref(t *testing.T) {
+	about := RenderOptions{LinkSchemes: []string{"about"}}
+	for _, head := range []string{"flowchart TD", "agentflow-beta TB", "erDiagram"} {
+		out, err := Render(head+"\n  A[\"javascript:alert(1)\"]:::internal-link", about)
+		if err != nil || strings.Contains(out.Data, " href=") {
+			t.Errorf("%s: an internal link to a script with about allowed: %v\n%s", head, err, out.Data)
+		}
+	}
+	for _, name := range []string{"Note", `Folder\note`, "Note%23heading", "👩‍💻", "Note#heading", "  Note  "} {
+		if !util.InternalLink(name, RenderOptions{}) {
+			t.Errorf("%q: not linked", name)
+		}
+	}
+	for _, name := range []string{"javascript:alert(1)", "java\ufffescript:alert(1)", `\\nevil.example`, "\t/\\nevil.example", "/\t/evil.example"} {
+		if util.InternalLink(name, about) {
+			t.Errorf("%q: linked", name)
+		}
 	}
 }
 

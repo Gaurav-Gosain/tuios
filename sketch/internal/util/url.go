@@ -1,4 +1,4 @@
-// Ported from pele src/util/url.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/util/url.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // `new URL()` is approximated for http and https: the scheme and host are
 // lowercased and an empty path becomes "/". decodeURIComponent is ported as is.
@@ -25,11 +25,12 @@ var (
 	reInvalidProtocol = lazyre.New(`(?im)^([^\w]*)(javascript|data|vbscript)`)
 	reHTMLEntities    = lazyre.New(`&#(\w+)(;)?`)
 	reHTMLCtrlEntity  = lazyre.New(`(?i)&(newline|tab);`)
-	reCtrl            = lazyre.New(`[\x{0}-\x{1F}\x{7F}-\x{9F}\x{2000}-\x{200D}\x{FEFF}]`)
-	reScheme          = lazyre.New(`(?im)^` + js.Dot + `+(:|&colon;)`)
-	reWSEscape        = lazyre.New(`(\\|%5[cC])((%(6[eE]|72|74))|[nrt])`)
-	reSchemeName      = lazyre.New(`(?i)^([a-z][a-z0-9+.-]*):`)
-	reNetworkPath     = lazyre.New(`^[\\/]{2}`)
+	// pele also strips lone surrogates, which valid UTF-8 cannot hold.
+	reCtrl        = lazyre.New(`[\x{0}-\x{1F}\x{7F}-\x{9F}\x{2000}-\x{200D}\x{FEFF}\x{FFFE}\x{FFFF}]`)
+	reScheme      = lazyre.New(`(?im)^` + js.Dot + `+(:|&colon;)`)
+	reWSEscape    = lazyre.New(`(\\|%5[cC])((%(6[eE]|72|74))|[nrt])`)
+	reSchemeName  = lazyre.New(`(?i)^([a-z][a-z0-9+.-]*):`)
+	reNetworkPath = lazyre.New(`^[\\/]{2}`)
 )
 
 // decodeURIComponent, or false where JavaScript throws a URIError.
@@ -235,6 +236,30 @@ func ImageUrl(u string, options types.RenderOptions) (string, bool) {
 		schemes = imageSchemes
 	}
 	return allow(u, schemes)
+}
+
+// InternalLink reports whether a note name may be written as an href. The href keeps
+// the original name, so sanitizing alone is not enough.
+func InternalLink(name string, options types.RenderOptions) bool {
+	u := SanitizeUrl(name)
+	if u == BLANK {
+		return false
+	}
+	if _, ok := LinkUrl(u, options); !ok {
+		return false
+	}
+	// Match character removal by Esc() and the browser: Esc() drops what XML does not
+	// allow, a browser drops tabs and line breaks and then leading C0 controls and spaces.
+	seen := strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' || r <= 0x08 || r == 0x0b || r == 0x0c ||
+			(r >= 0x0e && r <= 0x1f) || r == 0x7f || r == 0xfffe || r == 0xffff {
+			return -1
+		}
+		return r
+	}, name)
+	seen = strings.TrimLeft(seen, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f ")
+	_, ok := LinkUrl(seen, options)
+	return ok
 }
 
 func Linked(body, u, id string, links *[]types.LinkInfo, options types.RenderOptions, attrs string) string {

@@ -1,0 +1,1001 @@
+[
+ {
+  "message": "Parse error on line 2:\nA[a#35;b] --> -->\n--------------^\nExpecting 'NODE_STRING', got 'LINK'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 2,
+  "column": 15,
+  "snippet": "A[a#35;b] --> -->\n--------------^"
+ },
+ {
+  "message": "No such shape: #35;x.",
+  "code": "semantic",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Parse error on line 8:\n  C --> --> D\n--------^\nExpecting 'NODE_STRING', got 'LINK'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 8,
+  "column": 9,
+  "snippet": "  C --> --> D\n--------^"
+ },
+ {
+  "message": "Parse error on line 4:\n  C --> --> D\n--------^\nExpecting 'NODE_STRING', got 'LINK'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 4,
+  "column": 9,
+  "snippet": "  C --> --> D\n--------^"
+ },
+ {
+  "message": "Parse error on line 4:\n  C --> --> D\n--------^\nExpecting 'NODE_STRING', got 'LINK'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 4,
+  "column": 9,
+  "snippet": "  C --> --> D\n--------^"
+ },
+ {
+  "message": "Parse error on line 5:\n\n^\nExpecting 'NODE_STRING', got 'EOF'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 5,
+  "column": 1,
+  "snippet": "\n^"
+ },
+ {
+  "message": "Parse error on line 4:\n  A -- #35; --> B $$$ ]\n------------------^\nExpecting 'SEMI', 'NEWLINE', 'EOF', got 'NODE_STRING'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 4,
+  "column": 19,
+  "snippet": "  A -- #35; --> B $$$ ]\n------------------^"
+ },
+ {
+  "message": "Lexical error on line 3. Unrecognized text.\n  A[#35;] --> B --> ]\n--------------------^",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 3,
+  "column": 21,
+  "snippet": "  A[#35;] --> B --> ]\n--------------------^"
+ },
+ {
+  "message": "Edge limit exceeded. The limit is 10.",
+  "code": "limit",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Edge limit exceeded. The limit is 10.",
+  "code": "limit",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Parse error on line 6:\n  b -.-> c\n-------^\nExpecting 'NODE_STRING', got 'TAGEND'",
+  "code": "syntax",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 6,
+  "column": 8,
+  "snippet": "  b -.-> c\n-------^"
+ },
+ {
+  "message": "No such shape: bad.",
+  "code": "semantic",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 5,
+  "column": 16,
+  "snippet": ""
+ },
+ {
+  "message": "Metadata of \"b\" is not valid YAML. YAML: unexpected end of the stream within a flow collection (5:16)",
+  "code": "syntax",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 5,
+  "column": 16,
+  "snippet": ""
+ },
+ {
+  "message": "\"#35;x &amp;y\" has invalid value: -1. Negative values are not allowed in pie charts. All slice values must be >= 0.",
+  "code": "semantic",
+  "type": "pie",
+  "mermaidType": "pie",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "\"dogs\" has invalid value: -60.67. Negative values are not allowed in pie charts. All slice values must be >= 0.",
+  "code": "semantic",
+  "type": "pie",
+  "mermaidType": "pie",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Missing entry for axis #35;x &amp;y",
+  "code": "semantic",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "unknown set identifier: B#35;x",
+  "code": "semantic",
+  "type": "venn",
+  "mermaidType": "venn",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "unknown set identifier: B#35;x",
+  "code": "semantic",
+  "type": "venn",
+  "mermaidType": "venn",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Parse error on line 2:\nset A,B\n-----^\nExpecting 'EOF', 'NEWLINE', 'TITLE', 'SET', 'UNION', 'TEXT', 'INDENT_TEXT', 'STYLE', got 'COMMA'",
+  "code": "syntax",
+  "type": "venn",
+  "mermaidType": "venn",
+  "line": 2,
+  "column": 6,
+  "snippet": "set A,B\n-----^"
+ },
+ {
+  "message": "Lexical error on line 2. Unrecognized text.\nset A $\n------^",
+  "code": "syntax",
+  "type": "venn",
+  "mermaidType": "venn",
+  "line": 2,
+  "column": 7,
+  "snippet": "set A $\n------^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 3:\nb,c,abc\n----^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 5,
+  "snippet": "b,c,abc\n----^"
+ },
+ {
+  "message": "Parse error on line 3:\nb,c,\n----^\nExpecting 'DQUOTE', 'NON_ESCAPED_TEXT', got 'EOF'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 5,
+  "snippet": "b,c,\n----^"
+ },
+ {
+  "message": "Parse error on line 3:\nb,c,Infinity\n----^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 5,
+  "snippet": "b,c,Infinity\n----^"
+ },
+ {
+  "message": "Parse error on line 3:\nb,c,1e400\n----^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 5,
+  "snippet": "b,c,1e400\n----^"
+ },
+ {
+  "message": "Parse error on line 3:\nb,c,-\n----^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 3,
+  "column": 5,
+  "snippet": "b,c,-\n----^"
+ },
+ {
+  "message": "Parse error on line 5:\nb,c,abc\n----^\nExpecting a number",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 5,
+  "column": 5,
+  "snippet": "b,c,abc\n----^"
+ },
+ {
+  "message": "Parse error on line 11:\nb,c\n---^\nExpecting 'COMMA', 'NEWLINE', 'EOF', got 'EOF'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 11,
+  "column": 4,
+  "snippet": "b,c\n---^"
+ },
+ {
+  "message": "Parse error on line 2:\na,b\n---^\nExpecting 'COMMA', 'NEWLINE', 'EOF', got 'EOF'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 2,
+  "column": 4,
+  "snippet": "a,b\n---^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 2:\n  autonumber 5%% comment\n-------------^\nExpecting 'NEWLINE', 'NUM', 'off', got 'ACTOR'",
+  "code": "syntax",
+  "type": "sequence",
+  "mermaidType": "sequence",
+  "line": 2,
+  "column": 14,
+  "snippet": "  autonumber 5%% comment\n-------------^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 2:\nquadrant-1 A:%% note\n------------^\nExpecting 'NEWLINE', 'SEMI', 'EOF', got 'COLON'",
+  "code": "syntax",
+  "type": "quadrantChart",
+  "mermaidType": "quadrantChart",
+  "line": 2,
+  "column": 13,
+  "snippet": "quadrant-1 A:%% note\n------------^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 2:\ntitle Sales:%% note\n-----------^\nExpecting 'title', 'X_AXIS', 'Y_AXIS', 'LINE', 'BAR', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', got 'COLON'",
+  "code": "syntax",
+  "type": "xychart",
+  "mermaidType": "xychart",
+  "line": 2,
+  "column": 12,
+  "snippet": "title Sales:%% note\n-----------^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 2:\n  Task: 5: Me;%% c\n-------------^\nExpecting 'EOF', 'SPACE', 'NEWLINE', 'title', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', 'section', 'taskName', got 'INVALID'",
+  "code": "syntax",
+  "type": "journey",
+  "mermaidType": "journey",
+  "line": 2,
+  "column": 14,
+  "snippet": "  Task: 5: Me;%% c\n-------------^"
+ },
+ {
+  "message": "Parse error on line 2:\n  2024 :%% c\n-------^\nExpecting 'EOF', 'SPACE', 'NEWLINE', 'title', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', 'section', 'period', 'event', got 'INVALID'",
+  "code": "syntax",
+  "type": "timeline",
+  "mermaidType": "timeline",
+  "line": 2,
+  "column": 8,
+  "snippet": "  2024 :%% c\n-------^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Line 2: Empty node — expected a filename or directory name after the box-drawing prefix",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 2,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Line 3: Unexpected indentation without box-drawing characters. In box-drawing format, use ├── or └── prefixes for indented nodes.",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 3,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Lexical error on line 5. Unrecognized text.\n└─ \"bad\n---^",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 5,
+  "column": 4,
+  "snippet": "└─ \"bad\n---^"
+ },
+ {
+  "message": "Line 5: Empty node — expected a filename or directory name after the box-drawing prefix",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 5,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Lexical error on line 2. Unrecognized text.\n└─ \"ok\"\t\"bad\n--------^",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 2,
+  "column": 9,
+  "snippet": "└─ \"ok\"\t\"bad\n--------^"
+ },
+ {
+  "message": "Lexical error on line 2. Unrecognized text.\n└── \"ok\"\t\t\"bad\n----------^",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 2,
+  "column": 11,
+  "snippet": "└── \"ok\"\t\t\"bad\n----------^"
+ },
+ {
+  "message": "Lexical error on line 5. Unrecognized text.\n\"bad\n^",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 5,
+  "column": 1,
+  "snippet": "\"bad\n^"
+ },
+ {
+  "message": "Lexical error on line 4. Unrecognized text.\n│   └── \"c\n--------^",
+  "code": "syntax",
+  "type": "treeView",
+  "mermaidType": "treeView",
+  "line": 4,
+  "column": 9,
+  "snippet": "│   └── \"c\n--------^"
+ },
+ {
+  "message": "Invalid JSON: Unexpected token '}', \"{\"a\":\"#35;\", \"b\":}\" is not valid JSON (line 2, column 25)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 2,
+  "column": 25,
+  "snippet": ""
+ },
+ {
+  "message": "Invalid JSON: Unexpected token '}', \"{\"a\":}\" is not valid JSON (line 2, column 13)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 2,
+  "column": 13,
+  "snippet": ""
+ },
+ {
+  "message": "Error lexing usecase diagram: unexpected character: ->\"<- at offset: 15, skipped 1 characters. at line 2, column 3 [15,16)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 2,
+  "column": 3,
+  "snippet": ""
+ },
+ {
+  "message": "Note target 'Ghost' is unresolved at line 2, column 10 [22,27)",
+  "code": "semantic",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 2,
+  "column": 10,
+  "snippet": ""
+ },
+ {
+  "message": "Error lexing usecase diagram: unexpected character: ->\"<- at offset: 53, skipped 1 characters. at line 7, column 3 [53,54)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 7,
+  "column": 3,
+  "snippet": ""
+ },
+ {
+  "message": "Error parsing usecase diagram: Expecting: one of these possible Token sequences:\n  1. [IDENTIFIER]\n  2. [PLAIN_STRING]\n  3. [MARKDOWN_STRING]\nbut found: 'ﬂ°°' at line 5, column 7 [36,39)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 5,
+  "column": 7,
+  "snippet": ""
+ },
+ {
+  "message": "Class/style target 'Z' is unresolved or anonymous at line 4, column 7 [35,36)",
+  "code": "semantic",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 4,
+  "column": 7,
+  "snippet": ""
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n---^\nExpecting 'EOF', got 'SQS'",
+  "code": "syntax",
+  "type": "class",
+  "mermaidType": "classDiagram",
+  "line": 7,
+  "column": 4,
+  "snippet": "  A[\"#35;\"] %% c\n---^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n---^",
+  "code": "syntax",
+  "type": "class",
+  "mermaidType": "classDiagram",
+  "line": 7,
+  "column": 4,
+  "snippet": "  #quot;x#quot;\n---^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n------------^\nExpecting 'EOF', 'NEWLINE', 'title', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', 'SUBGRAPH', 'direction_tb', 'direction_bt', 'direction_rl', 'direction_lr', 'CLASSDEF', 'CLASS', 'STYLE', 'UNICODE_TEXT', 'NUM', 'ENTITY_NAME', 'DECIMAL_NUM', 'ENTITY_ONE', got '%'",
+  "code": "syntax",
+  "type": "er",
+  "mermaidType": "er",
+  "line": 7,
+  "column": 13,
+  "snippet": "  A[\"#35;\"] %% c\n------------^"
+ },
+ {
+  "message": "Parse error on line 9:\n  @@@ : ; ]\n--^\nExpecting 'EOF', 'NEWLINE', 'title', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', 'SUBGRAPH', 'direction_tb', 'direction_bt', 'direction_rl', 'direction_lr', 'CLASSDEF', 'CLASS', 'STYLE', 'UNICODE_TEXT', 'NUM', 'ENTITY_NAME', 'DECIMAL_NUM', 'ENTITY_ONE', got '@'",
+  "code": "syntax",
+  "type": "er",
+  "mermaidType": "er",
+  "line": 9,
+  "column": 3,
+  "snippet": "  @@@ : ; ]\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n---^",
+  "code": "syntax",
+  "type": "gitGraph",
+  "mermaidType": "gitGraph",
+  "line": 7,
+  "column": 4,
+  "snippet": "  A[\"#35;\"] %% c\n---^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "gitGraph",
+  "mermaidType": "gitGraph",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Parse error on line 8:\n  ]]] ((( --> $$$\n--------^\nExpecting 'NODE_DESCR', got 'NODE_DEND'",
+  "code": "syntax",
+  "type": "mindmap",
+  "mermaidType": "mindmap",
+  "line": 8,
+  "column": 9,
+  "snippet": "  ]]] ((( --> $$$\n--------^"
+ },
+ {
+  "message": "There can be only one root. No parent could be found for (\"@@@ : ; ]\")",
+  "code": "semantic",
+  "type": "mindmap",
+  "mermaidType": "mindmap",
+  "line": 0,
+  "column": 0,
+  "snippet": ""
+ },
+ {
+  "message": "Lexical error on line 8. Unrecognized text.\n  ]]] ((( --> $$$\n---------^",
+  "code": "syntax",
+  "type": "block",
+  "mermaidType": "block",
+  "line": 8,
+  "column": 10,
+  "snippet": "  ]]] ((( --> $$$\n---------^"
+ },
+ {
+  "message": "Lexical error on line 9. Unrecognized text.\n  @@@ : ; ]\n------^",
+  "code": "syntax",
+  "type": "block",
+  "mermaidType": "block",
+  "line": 9,
+  "column": 7,
+  "snippet": "  @@@ : ; ]\n------^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n----------------^\nExpecting 'STYLE_SEPARATOR', 'END_ARROW_L', 'LINE', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "requirement",
+  "mermaidType": "requirement",
+  "line": 7,
+  "column": 17,
+  "snippet": "  A[\"#35;\"] %% c\n----------------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "requirement",
+  "mermaidType": "requirement",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n--^",
+  "code": "syntax",
+  "type": "packet",
+  "mermaidType": "packet",
+  "line": 7,
+  "column": 3,
+  "snippet": "  A[\"#35;\"] %% c\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "packet",
+  "mermaidType": "packet",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Parse error on line 8:\n  ]]] ((( --> $$$\n--------^\nExpecting 'NODE_DESCR', got 'NODE_DEND'",
+  "code": "syntax",
+  "type": "kanban",
+  "mermaidType": "kanban",
+  "line": 8,
+  "column": 9,
+  "snippet": "  ]]] ((( --> $$$\n--------^"
+ },
+ {
+  "message": "Lexical error on line 9. Unrecognized text.\n  @@@ : ; ]\n--^",
+  "code": "syntax",
+  "type": "kanban",
+  "mermaidType": "kanban",
+  "line": 9,
+  "column": 3,
+  "snippet": "  @@@ : ; ]\n--^"
+ },
+ {
+  "message": "Lexical error on line 8. Unrecognized text.\n  ]]] ((( --> $$$\n--^",
+  "code": "syntax",
+  "type": "architecture",
+  "mermaidType": "architecture",
+  "line": 8,
+  "column": 3,
+  "snippet": "  ]]] ((( --> $$$\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "architecture",
+  "mermaidType": "architecture",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n---^",
+  "code": "syntax",
+  "type": "eventmodeling",
+  "mermaidType": "eventmodeling",
+  "line": 7,
+  "column": 4,
+  "snippet": "  A[\"#35;\"] %% c\n---^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "eventmodeling",
+  "mermaidType": "eventmodeling",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Lexical error on line 8. Unrecognized text.\n  ]]] ((( --> $$$\n--------------^",
+  "code": "syntax",
+  "type": "wardley",
+  "mermaidType": "wardley",
+  "line": 8,
+  "column": 15,
+  "snippet": "  ]]] ((( --> $$$\n--------------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "wardley",
+  "mermaidType": "wardley",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n---^",
+  "code": "syntax",
+  "type": "railroad",
+  "mermaidType": "railroad",
+  "line": 7,
+  "column": 4,
+  "snippet": "  A[\"#35;\"] %% c\n---^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "railroad",
+  "mermaidType": "railroad",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n------------^\nExpecting 'SEMI', 'NEWLINE', 'EOF', got 'NODE_STRING'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "swimlane",
+  "line": 7,
+  "column": 13,
+  "snippet": "  A[\"#35;\"] %% c\n------------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n---^",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "swimlane",
+  "line": 7,
+  "column": 4,
+  "snippet": "  #quot;x#quot;\n---^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n--^",
+  "code": "syntax",
+  "type": "cynefin",
+  "mermaidType": "cynefin",
+  "line": 7,
+  "column": 3,
+  "snippet": "  A[\"#35;\"] %% c\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "cynefin",
+  "mermaidType": "cynefin",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n---^",
+  "code": "syntax",
+  "type": "treemap",
+  "mermaidType": "treemap",
+  "line": 7,
+  "column": 4,
+  "snippet": "  A[\"#35;\"] %% c\n---^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "treemap",
+  "mermaidType": "treemap",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n----------------^\nExpecting 'SOLID_OPEN_ARROW', 'DOTTED_OPEN_ARROW', 'SOLID_ARROW', 'DOTTED_ARROW', 'SOLID_CROSS', 'DOTTED_CROSS', 'SOLID_POINT', 'DOTTED_POINT', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "sequence",
+  "mermaidType": "sequence",
+  "line": 7,
+  "column": 17,
+  "snippet": "  A[\"#35;\"] %% c\n----------------^"
+ },
+ {
+  "message": "Parse error on line 7:\n  #quot;x#quot;\n---------------^\nExpecting 'SOLID_OPEN_ARROW', 'DOTTED_OPEN_ARROW', 'SOLID_ARROW', 'DOTTED_ARROW', 'SOLID_CROSS', 'DOTTED_CROSS', 'SOLID_POINT', 'DOTTED_POINT', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "sequence",
+  "mermaidType": "sequence",
+  "line": 7,
+  "column": 16,
+  "snippet": "  #quot;x#quot;\n---------------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n---^",
+  "code": "syntax",
+  "type": "quadrantChart",
+  "mermaidType": "quadrantChart",
+  "line": 7,
+  "column": 4,
+  "snippet": "  A[\"#35;\"] %% c\n---^"
+ },
+ {
+  "message": "Parse error on line 7:\n  #quot;x#quot;\n---------------^\nExpecting 'point_start', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "quadrantChart",
+  "mermaidType": "quadrantChart",
+  "line": 7,
+  "column": 16,
+  "snippet": "  #quot;x#quot;\n---------------^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n--^\nExpecting 'title', 'X_AXIS', 'Y_AXIS', 'LINE', 'BAR', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', got 'ALPHA'",
+  "code": "syntax",
+  "type": "xychart",
+  "mermaidType": "xychart",
+  "line": 7,
+  "column": 3,
+  "snippet": "  A[\"#35;\"] %% c\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "xychart",
+  "mermaidType": "xychart",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n----------------^\nExpecting 'taskData', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "journey",
+  "mermaidType": "journey",
+  "line": 7,
+  "column": 17,
+  "snippet": "  A[\"#35;\"] %% c\n----------------^"
+ },
+ {
+  "message": "Parse error on line 7:\n  #quot;x#quot;\n---------------^\nExpecting 'taskData', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "journey",
+  "mermaidType": "journey",
+  "line": 7,
+  "column": 16,
+  "snippet": "  #quot;x#quot;\n---------------^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n----------------^\nExpecting 'taskData', got 'NL'",
+  "code": "syntax",
+  "type": "gantt",
+  "mermaidType": "gantt",
+  "line": 7,
+  "column": 17,
+  "snippet": "  A[\"#35;\"] %% c\n----------------^"
+ },
+ {
+  "message": "Parse error on line 7:\n  #quot;x#quot;\n---------------^\nExpecting 'taskData', got 'NL'",
+  "code": "syntax",
+  "type": "gantt",
+  "mermaidType": "gantt",
+  "line": 7,
+  "column": 16,
+  "snippet": "  #quot;x#quot;\n---------------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n--^",
+  "code": "syntax",
+  "type": "c4",
+  "mermaidType": "c4",
+  "line": 7,
+  "column": 3,
+  "snippet": "  A[\"#35;\"] %% c\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "c4",
+  "mermaidType": "c4",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  A[\"#35;\"] %% c\n--^",
+  "code": "syntax",
+  "type": "pie",
+  "mermaidType": "pie",
+  "line": 7,
+  "column": 3,
+  "snippet": "  A[\"#35;\"] %% c\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "pie",
+  "mermaidType": "pie",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Lexical error on line 8. Unrecognized text.\n  ]]] ((( --> $$$\n------^",
+  "code": "syntax",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 8,
+  "column": 7,
+  "snippet": "  ]]] ((( --> $$$\n------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "radar",
+  "mermaidType": "radar",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n--^\nExpecting 'EOF', 'NEWLINE', 'TITLE', 'SET', 'UNION', 'TEXT', 'INDENT_TEXT', 'STYLE', got 'IDENTIFIER'",
+  "code": "syntax",
+  "type": "venn",
+  "mermaidType": "venn",
+  "line": 7,
+  "column": 3,
+  "snippet": "  A[\"#35;\"] %% c\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n--^",
+  "code": "syntax",
+  "type": "venn",
+  "mermaidType": "venn",
+  "line": 7,
+  "column": 3,
+  "snippet": "  #quot;x#quot;\n--^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n----^\nExpecting 'COMMA', 'NEWLINE', 'EOF', got 'DQUOTE'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 7,
+  "column": 5,
+  "snippet": "  A[\"#35;\"] %% c\n----^"
+ },
+ {
+  "message": "Parse error on line 7:\n  #quot;x#quot;\n---------------^\nExpecting 'COMMA', 'NEWLINE', 'EOF', got 'NEWLINE'",
+  "code": "syntax",
+  "type": "sankey",
+  "mermaidType": "sankey",
+  "line": 7,
+  "column": 16,
+  "snippet": "  #quot;x#quot;\n---------------^"
+ },
+ {
+  "message": "Error parsing usecase diagram: Expecting: one of these possible Token sequences:\n  1. [NEWLINE]\n  2. [EOF]\nbut found: '%' at line 7, column 13 [82,83)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 7,
+  "column": 13,
+  "snippet": ""
+ },
+ {
+  "message": "Error parsing usecase diagram: Redundant input, expecting EOF but found: ﬂ° at line 7, column 3 [72,74)",
+  "code": "syntax",
+  "type": "usecase",
+  "mermaidType": "usecase",
+  "line": 7,
+  "column": 3,
+  "snippet": ""
+ },
+ {
+  "message": "Lexical error on line 8. Unrecognized text.\n  ]]] ((( --> $$$\n--^",
+  "code": "syntax",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 8,
+  "column": 3,
+  "snippet": "  ]]] ((( --> $$$\n--^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n---^",
+  "code": "syntax",
+  "type": "agentflow",
+  "mermaidType": "agentflow",
+  "line": 7,
+  "column": 4,
+  "snippet": "  #quot;x#quot;\n---^"
+ },
+ {
+  "message": "Parse error on line 7:\n  A[\"#35;\"] %% c\n------------^\nExpecting 'SEMI', 'NEWLINE', 'EOF', got 'NODE_STRING'",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 7,
+  "column": 13,
+  "snippet": "  A[\"#35;\"] %% c\n------------^"
+ },
+ {
+  "message": "Lexical error on line 7. Unrecognized text.\n  #quot;x#quot;\n---^",
+  "code": "syntax",
+  "type": "flowchart",
+  "mermaidType": "flowchart-v2",
+  "line": 7,
+  "column": 4,
+  "snippet": "  #quot;x#quot;\n---^"
+ },
+ {
+  "ok": true
+ },
+ {
+  "ok": true
+ }
+]

@@ -1,4 +1,4 @@
-// Ported from pele src/svg/builder.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/svg/builder.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 // Package svg writes the SVG that every diagram type shares: text, shapes,
 // edges, clusters and the root element.
@@ -24,12 +24,32 @@ func needsEsc(s string) bool {
 			return true
 		case c <= 0x08 || c == 0x0b || c == 0x0c || (c >= 0x0e && c <= 0x1f) || c == 0x7f:
 			return true
+		case nonCharAt(s, i):
+			return true
 		}
 	}
 	return false
 }
 
-// Esc escapes text for XML and drops the control characters XML does not allow.
+// nonCharAt reports whether U+FFFE or U+FFFF starts at byte i. Valid UTF-8 holds no
+// surrogate, the other characters RE_INVALID_XML names.
+func nonCharAt(s string, i int) bool {
+	return s[i] == 0xef && i+2 < len(s) && s[i+1] == 0xbf && (s[i+2] == 0xbe || s[i+2] == 0xbf)
+}
+
+// InvalidXML is RE_INVALID_XML.test(s): a character XML does not allow, or DEL.
+// Removing these characters in Esc() can make validated values unsafe.
+func InvalidXML(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c <= 0x08 || c == 0x0b || c == 0x0c || (c >= 0x0e && c <= 0x1f) || c == 0x7f || nonCharAt(s, i) {
+			return true
+		}
+	}
+	return false
+}
+
+// Esc escapes text for XML and drops invalid XML characters and DEL.
 func Esc(s string) string {
 	if !needsEsc(s) {
 		return s
@@ -48,6 +68,8 @@ func Esc(s string) string {
 		case c == '"':
 			b.WriteString("&quot;")
 		case c <= 0x08 || c == 0x0b || c == 0x0c || (c >= 0x0e && c <= 0x1f) || c == 0x7f:
+		case nonCharAt(s, i):
+			i += 2
 		default:
 			b.WriteByte(c)
 		}

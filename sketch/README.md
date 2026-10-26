@@ -6,7 +6,7 @@ It is a port of [pele](https://github.com/obsidianmd/pele), the Mermaid
 renderer by [kepano](https://github.com/kepano) of
 [Obsidian](https://obsidian.md), under the MIT licence. The layout, the
 shapes, the safety rules and the test corpus are pele's work. The port
-follows pele v1.9.0, commit `e7f092a4de147cc32210913c20e36eaa5fcd0ef1`.
+follows pele v1.10.0, commit `4eff76f98c73b6817800a05773517f35832e4e92`.
 [LICENSE](LICENSE) has the notice of pele and of the port.
 [raster/fonts/NOTICE](raster/fonts/NOTICE) has the licences of the fonts that
 sketch/raster draws text in: Arimo (SIL Open Font License 1.1) and Go Mono.
@@ -76,7 +76,11 @@ other than http, https, mailto or tel.
 `testdata/extra` holds more cases that pele drew, which its corpus does not
 cover, such as Chinese and Japanese labels that wrap, and the label tags,
 break hints, class rows, sankey gradients, state curves and quadrant labels of
-pele v1.9.0. They match too.
+pele v1.9.0, and the comments, bare titles, sankey values and chart bounds of
+pele v1.10.0. They match too.
+`testdata/errors` holds sources that pele refuses, and the error pele gives for
+each: the message, the code, and the line, column and snippet in the source as
+written. sketch gives the same errors.
 The cases of `math-typeset.json` are drawn with a fixed math resolver, the
 same one in `gen.mjs` and in `golden_test.go`.
 

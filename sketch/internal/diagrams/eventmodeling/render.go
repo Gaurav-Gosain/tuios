@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/eventmodeling/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/eventmodeling/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package eventmodeling
 
@@ -6,7 +6,6 @@ import (
 	"math"
 	"slices"
 	"strings"
-	"unicode/utf16"
 
 	"tuios.dev/sketch/internal/diagrams/common"
 	"tuios.dev/sketch/internal/js"
@@ -63,13 +62,17 @@ type Band struct {
 func hardWrap(raw string, columns int) []string {
 	var out []string
 	for _, line := range strings.Split(text.DecodeEntities(raw), "\n") {
-		if js.Len(line) <= columns {
+		// Count code points, as Array.from does, so an emoji is never split.
+		var chars []rune
+		if js.Len(line) > columns {
+			chars = []rune(line)
+		}
+		if chars == nil || len(chars) <= columns {
 			out = append(out, line)
 			continue
 		}
-		units := utf16.Encode([]rune(line))
-		for i := 0; i < len(units); i += columns {
-			out = append(out, string(utf16.Decode(units[i:min(i+columns, len(units))])))
+		for i := 0; i < len(chars); i += columns {
+			out = append(out, string(chars[i:min(i+columns, len(chars))]))
 		}
 	}
 	return out

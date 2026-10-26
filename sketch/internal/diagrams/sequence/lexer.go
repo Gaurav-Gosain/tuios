@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sequence/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/sequence/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // As in the flowchart lexer, the port reads UTF-8 bytes: code() decodes the
 // character at a byte offset, and a step past a character that may not be
@@ -391,7 +391,15 @@ func tokenize(src string) Tokens {
 		if legacy {
 			q++
 		}
-		if !isSpace(code(q)) {
+		e := q
+		for e < n && code(e) != 10 && isSpace(code(e)) {
+			e += size(e)
+		}
+		if e >= n || code(e) == 10 {
+			p = e
+			return true
+		}
+		if sep := code(q); !isSpace(sep) || sep == 13 {
 			return false
 		}
 		next := q + size(q)
@@ -483,10 +491,6 @@ func tokenize(src string) Tokens {
 			return
 		}
 		if c == 35 || (c == 37 && code(p+1) != 123) {
-			p = eol(p)
-			return
-		}
-		if c != 125 && code(p+1) == 37 && code(p+2) == 37 {
 			p = eol(p)
 			return
 		}

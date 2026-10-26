@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/flowchart/parser.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/flowchart/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package flowchart
 
@@ -63,10 +63,14 @@ func parseFlowchart(source string, db *FlowDb) {
 
 	fail := func(expected string) {
 		t := typesT[i]
-		if t == T_ERROR {
-			panic(types.SyntaxError("flowchart", src, starts[i], "", true))
+		at := starts[i]
+		if src != source {
+			at = types.InputOffset([][]types.Edit{types.Replacements(source, RE_BRACE_TRAIL.Re(), 2)}, at)
 		}
-		panic(types.SyntaxError("flowchart", src, starts[i], "Expecting "+expected+", got '"+TOKEN_NAMES[t]+"'", false))
+		if t == T_ERROR {
+			panic(types.SyntaxError("flowchart", source, at, "", true))
+		}
+		panic(types.SyntaxError("flowchart", source, at, "Expecting "+expected+", got '"+TOKEN_NAMES[t]+"'", false))
 	}
 
 	expect := func(typ int, also string) string {

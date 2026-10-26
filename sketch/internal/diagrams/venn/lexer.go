@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/venn/lexer.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/venn/lexer.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // Offsets are byte offsets. pele reads UTF-16 code units; every test here is of an ASCII
 // character, so a byte stands for a unit, except where JavaScript white space outside ASCII
@@ -146,6 +146,14 @@ func (l *VennLexer) color(at int, parts int) int {
 	return i
 }
 
+func (l *VennLexer) afterLineFeed(at int) bool {
+	k := at - 1
+	for l.charAt(k) == 32 || l.charAt(k) == 9 {
+		k--
+	}
+	return l.charAt(k) == 10
+}
+
 func (l *VennLexer) lineEnd(from int) int {
 	if from >= len(l.src) {
 		return len(l.src)
@@ -173,16 +181,17 @@ func (l *VennLexer) next() int {
 			return T_EOF
 		}
 		c := int(src[i])
-		// A comment runs to the end of the line. It also takes the character before it along,
-		// whatever that is: a line break, or the last letter of a word. A character outside the
-		// BMP is two units in pele, and the one after its first unit is never a %.
-		r, size := utf8.DecodeRuneInString(src[i:])
 		if c == 37 && l.charAt(i+1) == 37 && l.charAt(i+2) != 123 {
 			l.at = l.lineEnd(i + 2)
 			continue
 		}
-		if r != 125 && r < 0x10000 && l.charAt(i+size) == 37 && l.charAt(i+size+1) == 37 {
-			l.at = l.lineEnd(i + size + 1)
+		if l.lineStart && l.word(i, "title") && l.afterLineFeed(i) && js.Trim(src[min(i+5, n):l.lineEnd(i+5)]) == "" {
+			// Skip a bare title like a comment, so it doesn't end indented text.
+			j := l.lineEnd(i + 5)
+			for l.charAt(j) == 10 || l.charAt(j) == 13 {
+				j++
+			}
+			l.at = j
 			continue
 		}
 		if l.lineStart {
@@ -228,7 +237,7 @@ func (l *VennLexer) next() int {
 		}
 
 		if ((c|32) >= 97 && (c|32) <= 122) || c == 95 {
-			if l.word(i, "title") {
+			if sep := l.charAt(i + 5); l.word(i, "title") && sep != 10 && sep != 13 {
 				if ok, size := l.spaceAt(i + 5); ok {
 					start := i + 5 + size
 					end := start

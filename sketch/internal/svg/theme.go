@@ -1,4 +1,4 @@
-// Ported from pele src/svg/theme.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/svg/theme.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package svg
 
@@ -109,7 +109,7 @@ func ResolveStyle(declarations []string) ResolvedStyle {
 		}
 		prop := strings.ToLower(js.Trim(decl[:at]))
 		value := js.Trim(reImportant.ReplaceAllString(decl[at+1:], ""))
-		if value == "" || reUnsafe.MatchString(value) {
+		if value == "" || reUnsafe.MatchString(value) || InvalidXML(value) {
 			continue
 		}
 		if shapeProps[prop] {

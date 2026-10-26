@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/sankey/render.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/sankey/render.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 
 package sankey
 
@@ -132,8 +132,8 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 	chartHeight := numberOption(conf, "height", 400, 1, 10000)
 	nodeWidth := math.Min(numberOption(conf, "nodeWidth", 10, 1, 200), chartWidth)
 	showValues := conf["showValues"] != false
-	prefix := textOption(conf, "prefix")
-	suffix := textOption(conf, "suffix")
+	prefix := text.DecodeEntities(textOption(conf, "prefix"))
+	suffix := text.DecodeEntities(textOption(conf, "suffix"))
 	outlined := conf["labelStyle"] == "outlined"
 	alignment := "justify"
 	if a, ok := conf["nodeAlignment"].(string); ok && (a == "left" || a == "right" || a == "center") {
@@ -378,7 +378,7 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 			`L`, num(x1), `,`, num(link.targetY+half),
 			`C`, mid, `,`, num(link.targetY+half), ` `, mid, `,`, num(link.sourceY+half), ` `, num(x0), `,`, num(link.sourceY+half),
 			`Z" `, paint, `>`,
-			`<title>`, from, ` → `, to, `: `, svg.EscText(prefix), js.Num(rounded(link.value)), svg.EscText(suffix), `</title></path>`)
+			`<title>`, from, ` → `, to, `: `, svg.Esc(prefix), js.Num(rounded(link.value)), svg.Esc(suffix), `</title></path>`)
 	}
 
 	title := text.LayoutLabel(model.title, false, measurer, size, common.TitleRoom(options), text.Bold)

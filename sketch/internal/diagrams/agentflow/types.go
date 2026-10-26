@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/agentflow/types.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/agentflow/types.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // pele's model also records where each statement sits and a semantic model for tools that
 // read a diagram's meaning. Nothing in sketch reads them, so the port leaves them out; the

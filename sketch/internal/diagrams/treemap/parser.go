@@ -1,4 +1,4 @@
-// Ported from pele src/diagrams/treemap/parser.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/diagrams/treemap/parser.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // The token patterns are hand matchers. CLASS_DEF and RE_CLASS_DEF match the same text: the
 // name takes two or more word characters, and `\s+` after it may cross a line break.

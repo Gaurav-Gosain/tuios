@@ -1,4 +1,4 @@
-// Ported from pele src/text/icons.ts at e7f092a4de147cc32210913c20e36eaa5fcd0ef1.
+// Ported from pele src/text/icons.ts at 4eff76f98c73b6817800a05773517f35832e4e92.
 //
 // pele keeps the resolver of the render in progress in module state. The port
 // carries it on the measurer instead (WithIcons), so that renders can run at
