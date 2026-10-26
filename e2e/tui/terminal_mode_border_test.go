@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,4 +196,84 @@ border_focused_color_terminal = "#0088ff"
 			t.Errorf("at 16 colours the borders are %+v and %+v, want two different palette slots", window, terminal)
 		}
 	})
+}
+
+// markerPaneEdge is the left border cell of the pane showing marker: the nearest
+// vertical rule left of the marker on its row.
+func markerPaneEdge(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
+	_, rows := s.Size()
+	for r := range rows {
+		before, _, ok := strings.Cut(s.Line(r), marker)
+		if !ok {
+			continue
+		}
+		for c := len([]rune(before)) - 1; c >= 0; c-- {
+			if cell := s.Cell(c, r); cell.Content == "│" {
+				return cell, true
+			}
+		}
+	}
+	return tuitest.Cell{}, false
+}
+
+// TestFocusedBorderStandsOutOnTheHostGround is the rest of discussion #850:
+// on ghostty's Nord theme with no tuios theme, the focused border sat at
+// nearly the lightness of the unfocused one, and with session_border on the
+// focused border could not be told apart between window and terminal mode.
+//
+// Each border is held by OKLab lightness, the part of a colour that reads
+// without telling hues apart: the two focused borders differ from each other,
+// and each of them stands further from the ground than the unfocused border.
+//
+// Frames: <subtest>/window.png and terminal.png under artifactDir, drawn with
+// the Nord palette.
+func TestFocusedBorderStandsOutOnTheHostGround(t *testing.T) {
+	ground := overlay.Lightness(tuiColor(tuitest.Color{Kind: tuitest.ColorRGB, R: 0x2e, G: 0x34, B: 0x40}))
+	for _, sessionBorder := range []bool{false, true} {
+		t.Run(fmt.Sprintf("session_border=%v", sessionBorder), func(t *testing.T) {
+			term := startNordPanes(t, fmt.Sprintf("theme = \"none\"\nsession_border = %v\n", sessionBorder), false, "start")
+			dir := artifactDir(t)
+			// An attached client starts in terminal mode. The dock of the
+			// shipped looks names no mode, so each switch is given a beat
+			// rather than waited on by text.
+			if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+				t.Fatalf("send alt+esc: %v", err)
+			}
+			time.Sleep(800 * time.Millisecond)
+			saveArtifact(t, term, dir, "window")
+			savePNG(t, term.Screen(), nordPalette(), dir, "window")
+			read := func(marker string) float64 {
+				t.Helper()
+				cell, ok := markerPaneEdge(term.Screen(), marker)
+				if !ok || cell.Fg.Kind != tuitest.ColorRGB {
+					t.Fatalf("no RGB border left of %s (%+v)\n%s", marker, cell.Fg, term.Snapshot())
+				}
+				c, _ := cellRGB(cell.Fg)
+				return overlay.Lightness(c)
+			}
+			lw, lu := read("PLAINBX"), read("PLAINAX")
+
+			if err := term.SendKeys("i"); err != nil {
+				t.Fatalf("send i: %v", err)
+			}
+			time.Sleep(800 * time.Millisecond)
+			saveArtifact(t, term, dir, "terminal")
+			savePNG(t, term.Screen(), nordPalette(), dir, "terminal")
+			lt := read("PLAINBX")
+			t.Logf("OKLab lightness on a ground of %.3f: window %.3f, terminal %.3f, unfocused %.3f", ground, lw, lt, lu)
+
+			if math.Abs(lw-lt) < 0.08 {
+				t.Errorf("the window mode border (L %.3f) and the terminal mode border (L %.3f) are under 0.08 apart", lw, lt)
+			}
+			for _, focused := range []struct {
+				mode string
+				l    float64
+			}{{"window", lw}, {"terminal", lt}} {
+				if math.Abs(focused.l-ground)-math.Abs(lu-ground) < 0.1 {
+					t.Errorf("the %s mode border (L %.3f) stands under 0.1 further from the ground (L %.3f) than the unfocused border (L %.3f)",
+						focused.mode, focused.l, ground, lu)
+				}
+			}
+		})
+	}
 }

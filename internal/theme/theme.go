@@ -326,21 +326,7 @@ func BorderUnfocused() color.Color { return BorderUnfocusedOn(nil) }
 // measured against the host's ground the way a theme's border is measured
 // against the theme's. A nil ground keeps the fixed colour.
 func BorderUnfocusedOn(hostBg color.Color) color.Color {
-	// A configured colour is returned as chosen: measurement was overridden on
-	// purpose, the same way the scrollbar treats a configured tint.
-	if unfocused := borderOverride(borderUnfocused); unfocused != nil {
-		return unfocused
-	}
-	t := Current()
-	if t == nil {
-		return slotAt16(1, hostBorderInk(lipgloss.Color("#FAAAAA"), hostBg))
-	}
-	if c := chromeFurniture(RoleBorderUnfocused); c != nil {
-		return borderInk(c)
-	}
-	// Light pinkish red: the theme's regular red, which gives a softer, more
-	// muted tone for unfocused windows than bright red.
-	return slotAt16(1, borderInk(t.Red))
+	return bordersOn(hostBg).unfocused
 }
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
@@ -349,20 +335,7 @@ func BorderFocusedWindow() color.Color { return BorderFocusedWindowOn(nil) }
 // BorderFocusedWindowOn is BorderFocusedWindow on a known host background.
 // See BorderUnfocusedOn.
 func BorderFocusedWindowOn(hostBg color.Color) color.Color {
-	if focused := focusedOverride(borderFocusedWindow); focused != nil {
-		return focused
-	}
-	return focusedWindowDefault(hostBg)
-}
-
-// focusedWindowDefault is the window mode border when no key sets it.
-func focusedWindowDefault(hostBg color.Color) color.Color {
-	t := Current()
-	if t == nil {
-		return slotAt16(14, hostBorderInk(lipgloss.Color("#AFFFFF"), hostBg))
-	}
-	// Light cyan for window mode: use bright cyan
-	return slotAt16(14, borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan)))
+	return bordersOn(hostBg).window
 }
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
@@ -371,21 +344,89 @@ func BorderFocusedTerminal() color.Color { return BorderFocusedTerminalOn(nil) }
 // BorderFocusedTerminalOn is BorderFocusedTerminal on a known host
 // background. See BorderUnfocusedOn.
 func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
+	return bordersOn(hostBg).terminal
+}
+
+// BorderFocusedTerminalBeside is the terminal mode border for a pane whose
+// window mode border is window rather than the default, as it is when
+// appearance.session_border puts the session's colour there. The default is
+// moved in lightness away from window, so the two modes stay apart whatever
+// the session's colour is. A configured colour is returned as chosen.
+func BorderFocusedTerminalBeside(window, hostBg color.Color) color.Color {
 	if focused := focusedOverride(borderFocusedTerminal); focused != nil {
 		return focused
 	}
-	if Depth() == overlay.Depth16 {
+	b := bordersOn(hostBg)
+	if Depth() == overlay.Depth16 || window == nil {
+		return b.terminal
+	}
+	return modesApart(window, b.terminal, b.ground, -1)
+}
+
+// borderSet is the three pane borders and the ground they are measured on.
+type borderSet struct {
+	window, terminal, unfocused, ground color.Color
+}
+
+// bordersOn resolves the three borders together, because each default is
+// placed against the other two. Configured colours are returned as chosen and
+// only the defaults move.
+func bordersOn(hostBg color.Color) borderSet {
+	t := Current()
+	var b borderSet
+	var wFixed, tFixed, uFixed bool
+	if c := focusedOverride(borderFocusedWindow); c != nil {
+		b.window, wFixed = c, true
+	} else if t == nil {
+		b.window = slotAt16(14, hostBorderInk(lipgloss.Color("#AFFFFF"), hostBg))
+	} else {
+		// Light cyan for window mode: use bright cyan
+		b.window = slotAt16(14, borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan)))
+	}
+	switch c := focusedOverride(borderFocusedTerminal); {
+	case c != nil:
+		b.terminal, tFixed = c, true
+	case Depth() == overlay.Depth16:
 		// Bright green against the window mode's bright cyan: two slots, so
 		// the terminal's palette keeps them apart.
-		return overlay.Slot(10)
+		b.terminal = overlay.Slot(10)
+	case t == nil:
+		b.terminal = hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg)
+	default:
+		// Light green for terminal mode: use bright green
+		b.terminal = borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 	}
-	t := Current()
+	switch c := borderOverride(borderUnfocused); {
+	case c != nil:
+		// A configured colour is returned as chosen: measurement was
+		// overridden on purpose, the same way the scrollbar treats a
+		// configured tint.
+		b.unfocused, uFixed = c, true
+	case t == nil:
+		b.unfocused = slotAt16(1, hostBorderInk(lipgloss.Color("#FAAAAA"), hostBg))
+	default:
+		if c := chromeFurniture(RoleBorderUnfocused); c != nil {
+			b.unfocused = borderInk(c)
+		} else {
+			// Light pinkish red: the theme's regular red, which gives a softer,
+			// more muted tone for unfocused windows than bright red.
+			b.unfocused = slotAt16(1, borderInk(t.Red))
+		}
+	}
 	if t == nil {
-		return modesApart(focusedWindowDefault(hostBg), hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg), hostBg)
+		b.ground = hostBg
+	} else {
+		b.ground = TerminalBg()
 	}
-	// Light green for terminal mode: use bright green
-	terminal := borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
-	return modesApart(focusedWindowDefault(hostBg), terminal, TerminalBg())
+	if b.ground == nil {
+		// A nil ground is taken as dark, the way the no-theme colours are
+		// picked.
+		b.ground = color.Black
+	}
+	if Depth() == overlay.Depth16 {
+		return b
+	}
+	return spaceBorders(b, wFixed, tFixed, uFixed)
 }
 
 // modeLightnessGap is the least OKLab lightness between the two default
@@ -396,51 +437,133 @@ func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
 // eye.
 const modeLightnessGap = 0.1
 
-// modesApartMemo keeps the last few answers of modesApart, which is asked on
-// every frame and converts to OKLab and measures contrast on each call.
-var modesApartMemo struct {
+// focusLightnessGap is how much further from the ground, in OKLab lightness,
+// each default focused border stands than the unfocused one. Unspaced, the
+// terminal mode border sat within 0.06 of the unfocused border on no theme
+// over a Nord terminal, on nord and on catppuccin mocha, so focus was told by
+// hue alone, the failure modeLightnessGap describes.
+const focusLightnessGap = 0.12
+
+// spaceBordersMemo keeps the last few answers of spaceBorders, which is asked
+// on every frame and converts to OKLab and measures contrast many times.
+var spaceBordersMemo struct {
 	sync.Mutex
-	keys [4][3][4]uint32
-	out  [4]color.Color
+	keys [4][5][4]uint32
+	out  [4]borderSet
 	next int
 }
 
-// modesApart is the terminal mode border moved in lightness, hue and chroma
-// kept, until it sits modeLightnessGap from the window mode border. It goes
-// darker first: on a dark ground that is where a saturated green keeps its
-// chroma, and on a light ground it is the side with more contrast. It goes
-// lighter when darker would leave the gamut or fall under the mark floor on
-// ground, and it stays as it is when neither works. A nil ground is taken as
-// dark, the way the no-theme colours are picked.
-func modesApart(window, terminal, ground color.Color) color.Color {
-	key := [3][4]uint32{rgbaKey(window), rgbaKey(terminal), rgbaKey(ground)}
-	m := &modesApartMemo
+// spaceBorders moves the default borders apart in lightness, hue and chroma
+// kept. The unfocused border goes toward the ground until each focused border
+// stands focusLightnessGap further out, but never under the mark floor. When
+// the floor stops it, the window mode border goes further out instead. The
+// terminal mode border is then placed modeLightnessGap from the window mode
+// one, on the side that keeps it clear of the unfocused border.
+func spaceBorders(b borderSet, wFixed, tFixed, uFixed bool) borderSet {
+	fixed := uint32(0)
+	for i, f := range []bool{wFixed, tFixed, uFixed} {
+		if f {
+			fixed |= 1 << i
+		}
+	}
+	key := [5][4]uint32{rgbaKey(b.window), rgbaKey(b.terminal), rgbaKey(b.unfocused), rgbaKey(b.ground), {fixed}}
+	m := &spaceBordersMemo
 	m.Lock()
 	defer m.Unlock()
 	for i, k := range m.keys {
-		if m.out[i] != nil && k == key {
+		if m.out[i].window != nil && k == key {
 			return m.out[i]
 		}
 	}
-	out := terminal
-	lw := overlay.Lightness(window)
-	if math.Abs(lw-overlay.Lightness(terminal)) < modeLightnessGap {
-		if ground == nil {
-			ground = color.Black
+
+	lg := overlay.Lightness(b.ground)
+	// out is +1 when standing out from the ground means lighter.
+	out := 1.0
+	if lg > 0.5 {
+		out = -1
+	}
+	dist := func(c color.Color) float64 { return (overlay.Lightness(c) - lg) * out }
+	at := func(c color.Color, d float64) (color.Color, bool) {
+		l := lg + d*out
+		moved := overlay.WithLightness(c, l)
+		// A colour out of gamut at l comes back clamped, at another lightness.
+		return moved, math.Abs(overlay.Lightness(moved)-l) <= 0.02 && ContrastRatio(moved, b.ground) >= MarkFloor
+	}
+	// pull moves the unfocused border toward the ground until it is at most
+	// limit from it, or as near the limit as the mark floor allows.
+	pull := func(limit float64) {
+		if uFixed || dist(b.unfocused) <= limit {
+			return
 		}
-		for _, l := range []float64{lw - modeLightnessGap, lw + modeLightnessGap} {
-			c := overlay.WithLightness(terminal, l)
-			// A colour out of gamut at l comes back clamped, at another lightness.
-			if math.Abs(overlay.Lightness(c)-l) > 0.02 || ContrastRatio(c, ground) < MarkFloor {
-				continue
+		for d := limit; d < dist(b.unfocused); d += 0.01 {
+			if c, ok := at(b.unfocused, d); ok {
+				b.unfocused = c
+				return
 			}
-			out = c
-			break
 		}
 	}
-	m.keys[m.next], m.out[m.next] = key, out
+
+	// Room is kept for the terminal mode border on the ground's side of the
+	// window mode one when it will have to move, since that is where a
+	// saturated colour keeps its chroma.
+	reserve := 0.0
+	if !tFixed && math.Abs(overlay.Lightness(b.window)-overlay.Lightness(b.terminal)) < modeLightnessGap {
+		reserve = modeLightnessGap
+	}
+	pull(min(dist(b.window)-reserve, dist(b.terminal)) - focusLightnessGap)
+	if need := dist(b.unfocused) + focusLightnessGap; !wFixed && dist(b.window) < need {
+		if c, ok := at(b.window, need); ok {
+			b.window = c
+		}
+	}
+	if !tFixed {
+		b.terminal = modesApart(b.window, b.terminal, b.ground, dist(b.unfocused)+focusLightnessGap)
+	}
+	pull(min(dist(b.window), dist(b.terminal)) - focusLightnessGap)
+
+	m.keys[m.next], m.out[m.next] = key, b
 	m.next = (m.next + 1) % len(m.out)
-	return out
+	return b
+}
+
+// modesApart is the terminal mode border moved in lightness, hue and chroma
+// kept, until it sits modeLightnessGap from the window mode border. It tries
+// the ground's side first: on a dark ground that is where a saturated green
+// keeps its chroma, and on a light ground it is the side with more contrast.
+// It tries the far side when the near side would crowd the unfocused border. A side is taken only when the colour stays in
+// gamut, clears the mark floor on ground, and stands at least least from the
+// ground; a negative least asks for no distance. When no side does all of
+// that, the first side that keeps the gamut and the floor is taken, and when
+// none keeps those either, terminal stays as it is.
+func modesApart(window, terminal, ground color.Color, least float64) color.Color {
+	lw, lg := overlay.Lightness(window), overlay.Lightness(ground)
+	out := 1.0
+	if lg > 0.5 {
+		out = -1
+	}
+	// The epsilon keeps a colour placed exactly at least, by the same
+	// arithmetic, from failing on rounding.
+	far := func(c color.Color) bool { return least < 0 || (overlay.Lightness(c)-lg)*out >= least-0.01 }
+	if math.Abs(lw-overlay.Lightness(terminal)) >= modeLightnessGap && far(terminal) {
+		return terminal
+	}
+	var fallback color.Color
+	for _, l := range []float64{lw - modeLightnessGap*out, lw + modeLightnessGap*out} {
+		c := overlay.WithLightness(terminal, l)
+		if math.Abs(overlay.Lightness(c)-l) > 0.02 || ContrastRatio(c, ground) < MarkFloor {
+			continue
+		}
+		if far(c) {
+			return c
+		}
+		if fallback == nil {
+			fallback = c
+		}
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return terminal
 }
 
 // rgbaKey is c's channels as a memo key, all zero for nil.

@@ -1206,6 +1206,12 @@ border_focused_color_terminal = "#ff9e64"
 - On many themes the cyan and the green have the same lightness. The default
   terminal mode colour then moves darker, or lighter when darker is too faint.
   You can then see the mode without the hue.
+- The default unfocused border is darker than both focused borders on a dark
+  background, and lighter on a light one. You can see focus without the hue.
+- With `appearance.session_border` on, the focused border in window mode uses
+  the session colour. In terminal mode it uses the terminal mode colour. That
+  colour moves in lightness away from the session colour, so the two modes
+  look different.
 - At 16 colours the default borders use bright cyan and bright green, the
   slots of your terminal's palette.
 - The settings page has a row for each key, in the Appearance section.

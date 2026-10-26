@@ -227,10 +227,15 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			// Copy mode or an agent that waits, in a colour the theme names
 			// for it, outranks the mode and the session.
 			borderColorObj = stateColor
-		case isFocused && m.Mode == TerminalMode:
+		case isFocused && m.Mode == TerminalMode && tinted:
 			// The mode colour outranks the session's. This border says the keys
 			// are going into the guest, which is the more urgent fact and the
-			// one a person checks before typing.
+			// one a person checks before typing. It is held apart in lightness
+			// from the session's colour, which is the window mode border here:
+			// a session that drew a green would otherwise look the same in
+			// both modes.
+			borderColorObj = theme.BorderFocusedTerminalBeside(tint, m.host.bg)
+		case isFocused && m.Mode == TerminalMode:
 			borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
 		case isFocused && tinted:
 			borderColorObj = tint
