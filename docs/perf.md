@@ -4106,6 +4106,85 @@ back; an idle branch window holds about 229 KB less than an idle main window.
 - The writer holds the queue lock only for a push or a pop, never across an
   emulator write.
 
+## 2026-10 the catch-up ring grows with the output
+
+Every pane reserved a 64 KiB catch-up ring (`outputBuffer`) when it was
+installed, whether or not it ever printed more than a prompt. A pane at a shell
+prompt holds about 100 bytes of it. At 50 idle panes that was 3.1 MiB of the
+daemon's heap, held for as long as the panes live.
+
+### What changed
+
+- The ring starts nil. `appendToBuffer` grows it before it stores a chunk that
+  does not fit the room left: to the smallest power of two, at least 1 KiB,
+  that holds the bytes kept plus the chunk, capped at `outputRingMax` (64 KiB,
+  the bound as before). Only then do the tail-keep and half-buffer shift run,
+  on the ring's current length. A ring at 64 KiB never grows and behaves as it
+  did.
+- The resize-mark prune and the graphics span prune measure the ring as
+  `max(len(outputBuffer), outputRingMax)`, so a ring that is still short drops
+  the marks and spans the full ring would, and keeps the ones it keeps.
+
+### Numbers
+
+Heap: a throwaway test in the `session` package, not kept in the tree. It
+builds the in-process test daemon (`newTestDaemonSession`), reads
+`runtime.MemStats.HeapAlloc` after two `runtime.GC()` calls, adds 50 windows
+with `sh -c "sleep 1; printf 'ring-probe> '; sleep 30"`, waits 3 s, collects
+twice again and reads `HeapAlloc` once more. The figure is the difference. It
+also sums `cap(outputBuffer)` over the 50 panes. Three runs of each of main and
+branch, interleaved, `nice -n 10` on cores 6 to 11.
+
+| | main | branch |
+|---|---|---|
+| heap added by 50 panes | 9.05, 9.05, 9.06 MB | 5.83, 5.83, 5.84 MB |
+| rings, summed `cap(outputBuffer)` | 3,276,800 B | 51,200 B |
+| saved per pane, from the heap figures | | about 64.5 KB |
+
+Right after the window is added the ring has no array; once the prompt is
+printed it holds 1 KiB.
+
+Output path: `go test -run '^$' -bench 'BenchmarkPTY(OutputChunk|Broadcast)$'
+-benchmem`, six runs of each test binary (main and branch) interleaved,
+`nice -n 10` on cores 6 to 11, benchstat. Both benchmarks build their `PTY` with
+a 64 KiB ring, so the ring never grows in them; they measure the `max` in the
+two prunes and nothing else.
+
+| | main | branch | |
+|---|---|---|---|
+| OutputChunk, 0 subscribers | 965 ns | 869 ns | ~ (p=0.13) |
+| OutputChunk, 1 subscriber | 966 ns | 903 ns | ~ (p=0.065) |
+| OutputChunk, 4 subscribers | 985 ns | 888 ns | -9.9% (p=0.009) |
+| Broadcast, 1 subscriber | 348 ns | 313 ns | -10.1% (p=0.015) |
+| Broadcast, 4 subscribers | 489 ns | 477 ns | ~ (p=0.49) |
+| Broadcast, 16 subscribers | 1.04 µs | 1.12 µs | ~ (p=0.12) |
+
+Four of six rows show no change. Two read as faster at p below 0.05, but the
+runs spread by 8% to 28% on a machine in use and the code on this path differs
+by one comparison, so they are not claimed as a gain. Bytes and allocations
+per op are the same on both (0 B and 0 allocs, 1 B at 16 subscribers).
+
+`TestAnIdlePaneHoldsNoCatchUpRing` holds the budget. It adds one window to the
+test daemon, reads `cap(outputBuffer)` under `outputMu` right away and wants 0,
+then polls for up to 10 s until `outputBuffer[:outputPos]` holds the prompt
+and wants a capacity of at most 4096. On main it reads 65,536 at both points.
+`TestAGrowingRingHoldsWhatTheFixedRingHolds` holds the invariant. It is a
+seeded differential over 240 pairs of `PTY` values, one with a 64 KiB ring and
+one with none, driven by the same appends (chunks of 1 B to 80 KiB, or small
+appends that cross every size from 1 KiB to 64 KiB) and at least two
+`Resize` calls while the growing ring is short. After every append the
+returned position, `outputSeq`, `outputPos`, `outputBuffer[:outputPos]` and
+the whole `resizeMarks` slice must be equal.
+
+### Invariants held
+
+- After any sequence of appends, `outputSeq`, `outputPos` and
+  `outputBuffer[:outputPos]` equal what the fixed 64 KiB ring holds, as do the
+  resize marks. The catch-up and replay code is unchanged.
+- The ring is reassigned only inside `appendToBuffer`, and every append and
+  `broadcast` pair already holds `streamMu`, which is what lets `broadcast`
+  read the ring's length without `outputMu`.
+
 ## 2026-10 allocations on the output path
 
 The kernel hands the daemon's read loop one line at a time when lines are

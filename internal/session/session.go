@@ -921,6 +921,13 @@ type PTY struct {
 	// buffer holds the stream's last outputPos bytes ending at outputSeq. It is
 	// what lets a resubscribing client be resumed where it left off instead of
 	// being handed the buffer from the top.
+	// The ring starts empty and grows with the output, by powers of two from
+	// 1 KiB, until it reaches outputRingMax; from there it is a fixed ring that
+	// shifts in half steps. It holds what a ring of outputRingMax would hold at
+	// every point, so a pane that prints only a prompt keeps a few KiB, not 64.
+	// The slice header is written by appendToBuffer under outputMu, and only
+	// with streamMu held, which is how broadcast reads its length without
+	// outputMu.
 	outputMu     sync.RWMutex
 	outputBuffer []byte
 	outputPos    int
@@ -2466,30 +2473,29 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	}
 
 	pty := &PTY{
-		ID:           id,
-		sessionID:    s.ID,
-		host:         sp.host,
-		pty:          ptyInstance,
-		cmd:          cmd,
-		ctx:          ctx,
-		cancel:       cancel,
-		terminal:     terminal,
-		width:        width,
-		height:       height,
-		spawnW:       width,
-		spawnH:       height,
-		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
-		subscribers:  make(map[string]*ptySubscriber),
-		paceWake:     make(chan struct{}, 1),
-		vtWriteChan:  make(chan vtChunk, 256),
-		vtDone:       make(chan struct{}),
-		respWake:     make(chan struct{}, 1),
-		onExit:       sp.onExit,
-		exitedAlone:  s.notePaneExitedAlone,
-		ownShell:     len(sp.command) == 0 && !sp.closeOnExit && sp.host == "",
-		debug:        debugEnabled(),
-		rawLog:       newPTYLogger(id),
-		spawnedAt:    time.Now(),
+		ID:          id,
+		sessionID:   s.ID,
+		host:        sp.host,
+		pty:         ptyInstance,
+		cmd:         cmd,
+		ctx:         ctx,
+		cancel:      cancel,
+		terminal:    terminal,
+		width:       width,
+		height:      height,
+		spawnW:      width,
+		spawnH:      height,
+		subscribers: make(map[string]*ptySubscriber),
+		paceWake:    make(chan struct{}, 1),
+		vtWriteChan: make(chan vtChunk, 256),
+		vtDone:      make(chan struct{}),
+		respWake:    make(chan struct{}, 1),
+		onExit:      sp.onExit,
+		exitedAlone: s.notePaneExitedAlone,
+		ownShell:    len(sp.command) == 0 && !sp.closeOnExit && sp.host == "",
+		debug:       debugEnabled(),
+		rawLog:      newPTYLogger(id),
+		spawnedAt:   time.Now(),
 	}
 	if sp.keepOpen {
 		pty.keepOpen = newExitNote()
@@ -5087,17 +5093,34 @@ func (p *PTY) vtWriter() {
 	}
 }
 
+// outputRingMax is the most the catch-up ring holds.
+const outputRingMax = 64 * 1024
+
 // appendToBuffer records a chunk in the catch-up buffer and returns the stream
-// position it ends at.
+// position it ends at. Callers hold streamMu, so the ring may be reassigned
+// here while broadcast reads its length.
 func (p *PTY) appendToBuffer(data []byte) int64 {
 	p.unbroadcast.Add(int64(len(data)))
 	p.outputSeq += int64(len(data))
 	// Marks the ring has rolled past stop being split points, but the newest
 	// of them is still the width the ring's first byte was laid out at, so a
 	// catch-up can start a rolled client at it.
-	bufStart := p.outputSeq - int64(len(p.outputBuffer))
+	// A ring that is still growing prunes as the full ring would, so it keeps
+	// the marks the full ring keeps.
+	bufStart := p.outputSeq - int64(max(len(p.outputBuffer), outputRingMax))
 	for len(p.resizeMarks) > 1 && p.resizeMarks[1].seq <= bufStart {
 		p.resizeMarks = p.resizeMarks[1:]
+	}
+	// Grow before anything shifts: a ring below its bound gets room for this
+	// chunk, so it never drops a byte the full ring would still hold.
+	if len(p.outputBuffer)-p.outputPos < len(data) && len(p.outputBuffer) < outputRingMax {
+		size := 1024
+		for size < p.outputPos+len(data) && size < outputRingMax {
+			size *= 2
+		}
+		grown := make([]byte, min(size, outputRingMax))
+		copy(grown, p.outputBuffer[:p.outputPos])
+		p.outputBuffer = grown
 	}
 	bufLen := len(p.outputBuffer)
 	// If data is bigger than the buffer, keep only the tail
@@ -5157,7 +5180,9 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.reads++
 	p.unbroadcast.Add(-int64(len(chunk.data)))
 	segs, saw := p.gfx.scan(chunk.data, seq)
-	p.gfx.pruneSpans(seq - int64(len(p.outputBuffer)))
+	// Read without outputMu: appendToBuffer reassigns the ring only with
+	// streamMu held, and so does every caller of broadcast.
+	p.gfx.pruneSpans(seq - int64(max(len(p.outputBuffer), outputRingMax)))
 	if saw {
 		p.graphicsAt.Store(time.Now().UnixNano())
 	}
