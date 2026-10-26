@@ -2173,6 +2173,27 @@ call per key. What is left of a first frame and a jump to the end is chroma
 tokenising the lines on screen (`regexp2` and `chroma.matchRules`, about 80%
 of the bytes), which is upstream.
 
+The footer's hints were fitted by building the strip for every prefix with
+`reviewHintStrip` and measuring it, so n hints cost O(n^2) styled renders on
+every review frame. `reviewHints` now renders each hint once, measures each
+render, and fits by summing widths plus two cells per join against the same room
+and margin, so its output is byte-identical. Eight interleaved rounds of the
+base and branch test binaries (`-benchtime=300x`, cores 12-17 of an Intel Core
+Ultra 9 185H, benchstat):
+
+| `ReviewFrame` | before | after | |
+|---|---|---|---|
+| `unified/cached` allocs/op | 7557 | 6122 | -19% |
+| `unified/cached` B/op | 824 KiB | 780 KiB | -5.4% |
+| `unified/cached` time | 1.28 ms | 1.10 ms | -14% (p=0.005) |
+| `split/cached` allocs/op | 8949 | 7514 | -16% |
+| `split/cached` B/op | 1047 KiB | 1003 KiB | -4.2% |
+| `split/cached` time | 1.73 ms | 1.57 ms | -9.4% (p=0.038) |
+
+The time spread is 10 to 13% per side on a shared laptop, so the allocation
+figures are the firm ones; the time rows are the measured medians with their
+p-values.
+
 ### Measured and deliberately not changed
 
 - **`applyInboxEvents`** now costs 11 us, 7.4 KiB and 43 allocations for a

@@ -502,9 +502,10 @@ func reviewFrame(w, h int, title string, body []string, border, bg color.Color) 
 	return strings.Join(lines, "\n")
 }
 
-// reviewHintStrip draws key hints the way every footer does, keys bright and
-// labels muted, on the overlay's ground like the rest of the frame.
-func reviewHintStrip(hints []overlay.Hint, pal overlay.Palette) string {
+// reviewHintParts returns one rendered string per hint, keys bright and labels
+// muted on the overlay's ground, with the Enter glyph mapped and no joins, so
+// reviewHints can measure each hint and reviewHintStrip can join them.
+func reviewHintParts(hints []overlay.Hint, pal overlay.Palette) []string {
 	key := lipgloss.NewStyle().Foreground(pal.AccentBright).Background(pal.Surface).Bold(true)
 	label := lipgloss.NewStyle().Foreground(pal.FgDim).Background(pal.Surface)
 	parts := make([]string, 0, len(hints))
@@ -515,28 +516,45 @@ func reviewHintStrip(hints []overlay.Hint, pal overlay.Palette) string {
 		}
 		parts = append(parts, key.Render(k)+label.Render(" "+h.Label))
 	}
-	return strings.Join(parts, reviewSpaces(2, pal.Surface))
+	return parts
+}
+
+// reviewHintStrip draws key hints the way every footer does, joining the
+// hints of reviewHintParts with two spaces on the overlay's ground.
+func reviewHintStrip(hints []overlay.Hint, pal overlay.Palette) string {
+	return strings.Join(reviewHintParts(hints, pal), reviewSpaces(2, pal.Surface))
 }
 
 // reviewHints draws key hints in width cells: as many as fit, in order, with
 // the last one always shown. A cell of margin is kept on both sides; with it
 // on the left only, a strip that fitted to the cell ran into the frame's
-// right edge.
+// right edge. Each hint is rendered once and fitted by the width of its own
+// render, so the strip is the one reviewHintStrip would draw for the hints
+// that fit.
 func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 	if len(hints) == 0 {
 		return reviewSpaces(width, pal.Surface)
 	}
-	last := hints[len(hints)-1]
-	room := width - 2 - ansi.StringWidth(reviewHintStrip([]overlay.Hint{last}, pal))
-	var fit []overlay.Hint
-	for _, h := range hints[:len(hints)-1] {
-		try := append(append([]overlay.Hint{}, fit...), h)
-		if ansi.StringWidth(reviewHintStrip(try, pal))+2 > room {
+	parts := reviewHintParts(hints, pal)
+	n := len(parts) - 1
+	room := width - 2 - ansi.StringWidth(parts[n])
+	// used is the width of the hints kept so far with their joins.
+	used := 0
+	keep := make([]string, 0, len(parts))
+	for _, p := range parts[:n] {
+		w := ansi.StringWidth(p)
+		next := w
+		if len(keep) > 0 {
+			next = used + 2 + w
+		}
+		if next+2 > room {
 			continue
 		}
-		fit = try
+		used = next
+		keep = append(keep, p)
 	}
-	strip := reviewSpaces(1, pal.Surface) + reviewHintStrip(append(fit, last), pal)
+	keep = append(keep, parts[n])
+	strip := reviewSpaces(1, pal.Surface) + strings.Join(keep, reviewSpaces(2, pal.Surface))
 	return strip + reviewSpaces(width-ansi.StringWidth(strip), pal.Surface)
 }
 
