@@ -162,7 +162,7 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 		if f.randomPassword {
 			a.announce = randomPasswordText(f, a)
 		} else if n := utf8.RuneCountInString(a.password); n < minWebPasswordRunes {
-			fmt.Fprintf(w, "Warning: the password is %d characters long. tuios-web does not slow down wrong guesses, so a short password can be guessed over the network. Use --random-password, or a password of at least %d characters.\n",
+			fmt.Fprintf(w, "Warning: the password is %d characters long. Someone on the network can guess a short password. Use --random-password, or a password of at least %d characters.\n",
 				n, minWebPasswordRunes)
 		}
 	case f.noAuth:
