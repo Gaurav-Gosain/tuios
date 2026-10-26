@@ -164,8 +164,11 @@ func (c *ckCanvas) draw(x, y, w int, s string) {
 		}
 		cp := *src
 		if cp.Content == "" && cp.Width == 0 {
-			// The second cell of a wide character.
-			c.buf.SetCell(x+i, y, &cp)
+			// The second cell of a wide character. The copy of the wide
+			// character itself already wrote this column through SetCell,
+			// which marks the continuation with a zero-width cell; setting
+			// the placeholder again would split the wide cell we just drew
+			// and blank it, so skip it.
 			continue
 		}
 		if cp.Style.Bg == nil {
