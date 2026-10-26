@@ -118,11 +118,12 @@ pid_at() {
 
 buildtags=''
 if [ "$backend" = ghostty ]; then
-    command -v "${ZIG:-zig}" >/dev/null || die "zig not found, and the ghostty backend needs it to build libghostty-vt.
+    cache=${GHOSTTY_VT_CACHE:-$ROOT/.ghostty-vt}
+    # A cached build needs no zig. ghostty-lib.sh checks the version when it must build.
+    [ -f "$cache/native/.commit" ] || command -v "${ZIG:-zig}" >/dev/null || die "zig not found, and the ghostty backend needs it to build libghostty-vt.
 Install Zig 0.16.x from https://ziglang.org/download, or build the pure Go
 emulator instead with: $0 pure"
 
-    cache=${GHOSTTY_VT_CACHE:-$ROOT/.ghostty-vt}
     if [ -d "$cache/native" ]; then
         say "==> libghostty-vt"
     else

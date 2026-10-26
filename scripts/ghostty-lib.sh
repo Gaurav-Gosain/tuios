@@ -44,6 +44,14 @@ CACHE="${GHOSTTY_VT_CACHE:-$ROOT/.ghostty-vt}"
 SRC="$CACHE/src"
 OUT="$CACHE/$TARGET"
 
+# The CPU is stamped alongside the commit so an archive left over from an
+# older, native build is rebuilt rather than trusted.
+STAMP="$OUT/.commit"
+if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$GHOSTTY_COMMIT $CPU" ]; then
+    echo "$OUT (cached)"
+    exit 0
+fi
+
 # ZIG names the zig binary to use. It defaults to the first zig on PATH.
 ZIG="${ZIG:-zig}"
 export ZIG
@@ -69,14 +77,6 @@ fi
 if [ "$(git -C "$SRC" rev-parse HEAD)" != "$GHOSTTY_COMMIT" ]; then
     git -C "$SRC" fetch origin "$GHOSTTY_COMMIT"
     git -C "$SRC" checkout -q "$GHOSTTY_COMMIT"
-fi
-
-# The CPU is stamped alongside the commit so an archive left over from an
-# older, native build is rebuilt rather than trusted.
-STAMP="$OUT/.commit"
-if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$GHOSTTY_COMMIT $CPU" ]; then
-    echo "$OUT (cached)"
-    exit 0
 fi
 
 rm -rf "$OUT"
