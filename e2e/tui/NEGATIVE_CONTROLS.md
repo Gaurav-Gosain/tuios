@@ -9687,3 +9687,13 @@ The fixed build passes. With `TUIOS_E2E_FRAMES` set, the case writes
 `thread-codex-live.png` and `thread-codex.png`. Set `TUIOS_E2E_FONT_FALLBACK`
 to a list of font files that have Hangul and CJK, so that the frames draw
 them.
+## The pane navigator opens ready to type
+
+`TestNavigatorOpensReadyToType` in `navigator_test.go` writes `panes.navigator_search = true`, makes sessions home and work with a pane logs in work that prints a marker, and attaches a real client to home. ctrl+b / then esc with nothing typed must close the navigator. ctrl+b / then the marker typed at once, with no / first, must find logs on a row, in the preview and in the search line, and enter must switch to work with logs focused. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-26 on macOS, based on origin/main at 6d122034a.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The fix removed (origin/main at 6d122034a) | "the marker typed right after prefix / was not a search" | **caught** |
+| `OpenNavigator` does not read `navigator_search` (`false && ...`) | "the marker typed right after prefix / was not a search" | **caught** |
+| The esc rule cut (`if false && o.NavigatorTypeFirst() ...`) | "esc with nothing typed did not close the navigator" | **caught** |
+

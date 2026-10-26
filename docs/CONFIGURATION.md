@@ -407,7 +407,7 @@ display = "follow"
 
 `[panes]` sets `label_keys`, the keys that the pane labels (`Ctrl+B Q`) use. The default is `1234567890`. Letters `a` to `z` and digits are allowed. See [KEYBINDINGS.md](KEYBINDINGS.md#pane-labels).
 
-`[panes]` also sets `navigator_layout`, the layout the pane navigator (`Ctrl+B /`) opens in: `tree`, `flat` or `cards`. The default is `tree`. Press `v` in the navigator to change the layout. See [KEYBINDINGS.md](KEYBINDINGS.md#the-pane-navigator).
+`[panes]` also sets `navigator_layout`, the layout the pane navigator (`Ctrl+B /`) opens in: `tree`, `flat` or `cards`. The default is `tree`. Press `v` in the navigator to change the layout. `navigator_search = true` opens it ready to type a search, and `esc` with nothing typed closes it. See [KEYBINDINGS.md](KEYBINDINGS.md#the-pane-navigator).
 
 `[scratch]` sets the size of the box in which `Ctrl+B g` shows the scratch terminal. The old `session` key is no longer used. See [SESSIONS.md](SESSIONS.md#the-scratch-terminal).
 

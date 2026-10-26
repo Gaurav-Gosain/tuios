@@ -321,6 +321,14 @@ title, folder, running command, session and workspace. It also reads the last
 matching line on its row. `esc` stops the search and keeps the results. A
 second `esc` clears the search.
 
+To open the navigator ready to type, so `Ctrl+B /` then a name finds a pane,
+set this in `config.toml`. `esc` with nothing typed then closes it.
+
+```toml
+[panes]
+navigator_search = true
+```
+
 The current session's panes are read from your client, and the preview of
 those panes is live. The other sessions are read when the navigator opens.
 Their preview shows the screen as it was then, with its colors. The preview

@@ -21,6 +21,10 @@ type PanesConfig struct {
 	// panes when it opens: tree, flat or cards (default: tree). The v key
 	// changes it while the navigator is open.
 	NavigatorLayout string `toml:"navigator_layout"`
+	// NavigatorSearch opens the pane navigator with the search line ready to
+	// type, so prefix / then the name finds a pane (default: false, the list).
+	// esc with nothing typed then closes it.
+	NavigatorSearch bool `toml:"navigator_search"`
 }
 
 // The pane navigator's layouts.

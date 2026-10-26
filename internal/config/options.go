@@ -1485,6 +1485,11 @@ var optionSpecs = []Option{
 		Accepted:    NavigatorLayouts,
 		Default:     NavigatorLayoutTree,
 	},
+	{
+		Path: "panes.navigator_search", Type: OptionBool, Section: "panes",
+		Description: "Open the pane navigator ready to type a search",
+		Default:     "false",
+	},
 
 	// [scratch]. Read each time toggle_scratch creates or shows the scratch
 	// terminal. A show resizes the popup to the size in force.

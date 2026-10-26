@@ -211,6 +211,10 @@ type navigatorState struct {
 	// layout is how the list is drawn: config.NavigatorLayoutTree, Flat or
 	// Cards.
 	layout string
+	// typeFirst is set when the navigator opened on the search line
+	// (panes.navigator_search). esc with nothing typed then closes it, as
+	// esc in the list does.
+	typeFirst bool
 }
 
 // NavigatorLoadedMsg is the answer of a detail load.
@@ -225,6 +229,10 @@ func (m *OS) NavigatorOpen() bool { return m.navigator.open }
 // NavigatorSearching reports whether the keyboard is in the search line.
 func (m *OS) NavigatorSearching() bool { return m.navigator.searching }
 
+// NavigatorTypeFirst reports whether the navigator opened on the search
+// line (panes.navigator_search).
+func (m *OS) NavigatorTypeFirst() bool { return m.navigator.typeFirst }
+
 // NavigatorQuery is the search typed so far.
 func (m *OS) NavigatorQuery() string { return m.navigator.query }
 
@@ -235,12 +243,15 @@ func (m *OS) OpenNavigator() tea.Cmd {
 		return nil
 	}
 	m.navigator.gen++
+	typeFirst := m.UserConfig != nil && m.UserConfig.Panes.NavigatorSearch
 	m.navigator = navigatorState{
-		open:     true,
-		gen:      m.navigator.gen,
-		expanded: map[string]bool{},
-		sessions: m.navigatorSessions(),
-		layout:   m.navigatorLayoutChoice(),
+		open:      true,
+		gen:       m.navigator.gen,
+		expanded:  map[string]bool{},
+		sessions:  m.navigatorSessions(),
+		layout:    m.navigatorLayoutChoice(),
+		searching: typeFirst,
+		typeFirst: typeFirst,
 	}
 	m.navigatorCursorToCurrent()
 	m.MarkAllDirty()

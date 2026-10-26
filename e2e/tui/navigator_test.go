@@ -599,3 +599,63 @@ func TestNavigatorSaysWhatItDidNotRead(t *testing.T) {
 		}
 	})
 }
+
+// TestNavigatorOpensReadyToType: with panes.navigator_search on, prefix /
+// opens the navigator on its search line, so the marker typed at once finds
+// the logs pane in the other session, with no / first, and enter goes there.
+// esc with nothing typed closes it in one press.
+//
+// How it could pass wrongly, written down first:
+//   - The typed text could reach the list as keys instead of the query: the
+//     list binds no key to the marker's letters, but n, e and d are not all
+//     free there, and a list key would move or fold, not search. The wait
+//     needs the marker on a row, in the preview and in the search line.
+//   - The jump could leave the focus where it was: list-windows reads the
+//     focused pane of work after enter.
+//
+// Negative control: with OpenNavigator not reading navigator_search, the
+// navigator opens on the list, the typed marker never reaches the search
+// line, and the wait for it fails. With the esc rule cut, the first esc
+// only leaves the search line, and the wait for the navigator to close
+// fails. The runs are in NEGATIVE_CONTROLS.md.
+func TestNavigatorOpensReadyToType(t *testing.T) {
+	base, logs := navigatorSessions(t)
+	writeConfig(t, base, "[panes]\nnavigator_search = true\n")
+	term := attachIn(t, base, "home", startOpts{cols: 140, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	toggleSidebarViaPalette(t, term)
+	waitRailCurrent(t, term, "home")
+
+	// esc with nothing typed closes it at once.
+	sendKeys(t, term, tuitest.Ctrl('b'), "/")
+	waitScreen(t, term, "the navigator never showed", "Panes", "home", "work")
+	saveFrame(t, term, "navigator-ready-to-type")
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Panes") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc with nothing typed did not close the navigator: %v\n%s", err, term.Snapshot())
+	}
+
+	// Typed at once, the marker is the search.
+	sendKeys(t, term, tuitest.Ctrl('b'), "/")
+	waitScreen(t, term, "the navigator never showed", "Panes", "work")
+	if err := term.SendKeys(navMarker); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Count(text, navMarker) >= 3 && strings.Contains(text, "logs")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the marker typed right after prefix / was not a search: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Enter)
+	waitRailCurrent(t, term, "work")
+	deadline := time.Now().Add(uiTimeout)
+	for focusedIn(t, base, "work") != logs {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: enter switched to work but left the focus on %s, not logs\n%s", focusedIn(t, base, "work"), term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}

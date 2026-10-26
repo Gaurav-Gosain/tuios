@@ -27,7 +27,9 @@ func handleChooseTree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 //
 // In the search line every printable key is text, the movement keys that are
 // not letters still move, enter goes to the row, and esc leaves the search:
-// the first esc keeps the query, and a second clears it.
+// the first esc keeps the query, and a second clears it. A navigator that
+// opened on the search line (panes.navigator_search) closes on an esc with
+// nothing typed, as the list does.
 func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if o.NavigatorSearching() {
@@ -36,6 +38,10 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		switch key {
 		case "esc":
+			if o.NavigatorTypeFirst() && o.NavigatorQuery() == "" {
+				o.CloseNavigator()
+				return o, nil
+			}
 			o.NavigatorSearch(false)
 		case "enter":
 			o.NavigatorActivateSelected()
