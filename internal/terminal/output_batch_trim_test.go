@@ -140,9 +140,7 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 	}
 
 	w := windows[0]
-	// One line of scrollback cannot show the burst; with room for all of it,
-	// every line can be checked, so a chunk lost or reordered after the
-	// give-back fails as well as a tail that never came.
+	// One line of scrollback cannot show the burst, so ask for room for all of it.
 	burst := chunks * batchTrimLines
 	w.LockIO()
 	w.SetScrollbackMaxLines(burst + 16)
@@ -158,13 +156,19 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 		t.Fatalf("after the burst that followed the give-back the pane ends %q, want its last line %q",
 			got[max(0, len(got)-7):], want)
 	}
-	if len(got) < burst {
-		t.Fatalf("after the burst that followed the give-back the pane holds %d lines, want all %d of the burst",
-			len(got), burst)
+	// The backend sets how many lines the pane keeps: the pure Go emulator
+	// honours the limit above, libghostty fixes its depth at creation. Either
+	// way the lines the pane holds must be one unbroken run ending at the
+	// burst's last line, so a chunk lost or reordered after the give-back fails.
+	if len(got) < 1024 {
+		t.Fatalf("after the burst that followed the give-back the pane holds %d lines, want at least %d",
+			len(got), 1024)
 	}
-	for i, line := range got[len(got)-burst:] {
-		if want := strconv.Itoa(first + i); line != want {
-			t.Fatalf("line %d of the burst that followed the give-back is %q, want %q", i+1, line, want)
+	last := first + burst - 1
+	for i, line := range got {
+		if want := strconv.Itoa(last - (len(got) - 1 - i)); line != want {
+			t.Fatalf("line %d of %d held after the burst that followed the give-back is %q, want %q",
+				i+1, len(got), line, want)
 		}
 	}
 }
