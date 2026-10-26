@@ -245,16 +245,35 @@ func TestHerdrSendTextPastes(t *testing.T) {
 }
 
 // TestHerdrAgentPromptSubmitsAPaste: agent.prompt types the prompt the way
-// ask-agent does, one paste and then the harness's Enter, not raw text.
+// ask-agent does, one paste and then the harness's Enter, not raw text. As in
+// herdr 0.9.5, a working agent gets the prompt too (its harness queues it),
+// and only a blocked agent is refused, with agent_blocked and nothing typed.
 func TestHerdrAgentPromptSubmitsAPaste(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	sess, w := pasteProbePane(t, d, "prompt")
-	result(t, callP(dialVerb(t, sp), t, "set-agent-state", map[string]any{"session": "prompt", "window": w, "state": "idle", "harness": "claude-code"}))
-	res := herdrOK(t, "agent.prompt", herdrDial(t, sp, "agent.prompt", map[string]any{"target": herdrPaneID(sess.ID, w), "text": "fix it\nthen test\n"}))
+	pane := herdrPaneID(sess.ID, w)
+	setState := func(state string) {
+		result(t, callP(dialVerb(t, sp), t, "set-agent-state", map[string]any{"session": "prompt", "window": w, "state": state, "harness": "claude-code"}))
+	}
+	setState("idle")
+	res := herdrOK(t, "agent.prompt", herdrDial(t, sp, "agent.prompt", map[string]any{"target": pane, "text": "fix it\nthen test\n"}))
 	if res["type"] != "agent_prompted" {
 		t.Errorf("agent.prompt answered %v", res)
 	}
 	waitScreen(t, sess, w, "^[[200~fix it", "then test^[[201~")
+
+	setState("working")
+	herdrOK(t, "agent.prompt to a working agent", herdrDial(t, sp, "agent.prompt", map[string]any{"target": pane, "text": "queued"}))
+	waitScreen(t, sess, w, "^[[200~queued^[[201~")
+
+	setState("needs_input")
+	if code := herdrCode(herdrDial(t, sp, "agent.prompt", map[string]any{"target": pane, "text": "answer"})); code != "agent_blocked" {
+		t.Errorf("agent.prompt to a blocked agent answered %q, want agent_blocked", code)
+	}
+	time.Sleep(500 * time.Millisecond)
+	if text := waitScreen(t, sess, w, "queued"); strings.Contains(text, "answer") {
+		t.Errorf("agent.prompt typed into a blocked agent:\n%s", text)
+	}
 }
 
 // TestHerdrLeavesScratchTerminalsOut: a scratch terminal is not a herdr

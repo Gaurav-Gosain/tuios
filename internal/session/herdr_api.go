@@ -1289,17 +1289,22 @@ func (d *Daemon) herdrAgentWait(cs *connState, in *herdrIn) (*herdrResult, *herd
 	})
 }
 
-// herdrAgentPrompt types a prompt into an agent at rest and presses Enter,
-// as herdr does. An agent that works or waits on a prompt is refused with
-// agent_not_idle, and nothing is typed.
+// herdrAgentPrompt types a prompt into an agent and presses Enter, as herdr
+// does. Like herdr (validate_agent_prompt), it refuses only an agent that
+// waits on a prompt, with agent_blocked, because the Enter would answer the
+// prompt. A working agent gets the prompt typed: the harness queues it for
+// its next turn (Claude Code and Codex both do), and herdr clients such as
+// herdr-projects rely on that. tuios's own ask-agent keeps its stricter rule.
 func (d *Daemon) herdrAgentPrompt(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	return d.herdrAgent(cs, in, func(id string) (*herdrResult, *herdrError) {
 		res, herr := d.herdrAgentResult(cs, "agent_prompted", id)
 		if herr != nil {
 			return nil, herr
 		}
-		if s := res.Agent.AgentStatus; s == "working" || s == "blocked" {
-			return nil, herdrErr("agent_not_idle", "agent "+res.Agent.PaneID+" is "+s+". Nothing was typed")
+		// send-text refuses a blocked pane only for a caller in a pane, so
+		// the check is made here for every caller.
+		if res.Agent.AgentStatus == "blocked" {
+			return nil, herdrErr("agent_blocked", "agent "+res.Agent.PaneID+" is blocked and needs interactive input. Nothing was typed")
 		}
 		// send-text submit is the prompt path ask-agent types with: one
 		// paste, a wait for it to be taken in, and the harness's submit key.

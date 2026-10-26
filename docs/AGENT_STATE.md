@@ -700,7 +700,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `agent.list`, `agent.get` | `list-windows` | a target is a pane id, a terminal id, or one agent's label or name |
 | `agent.wait` | `wait-for agent-state` | |
 | `agent.start` | `start-agent` grant, then `send-text` and `send-keys` | needs `fan` on the session (what `start-agent` needs) and `write` for the typing. Types the agent's command at the shell prompt of a pane, and names the pane after the agent. See below |
-| `agent.prompt` | `send-text` with `submit` | types the prompt as `ask-agent` does. An agent that works or waits on a prompt fails with `agent_not_idle` |
+| `agent.prompt` | `send-text` with `submit` | types the prompt as `ask-agent` does. As in herdr, a working agent gets the prompt, and its harness queues it for the next turn. An agent that waits on a prompt fails with `agent_blocked`, and nothing is typed. `tuios ask-agent` still refuses a working agent |
 | `agent.rename` | `set-window` | names the pane that holds the agent. No `name` clears it. `agent.get` and the other agent methods then find the agent by the new name |
 | `agent.explain` | `explain-agent-detect` | `explain` is what tuios's detector reports for the pane. It is tuios's report, not herdr's |
 | `workspace.report_metadata` | `set-session-accent` grant | the tokens show under `tokens` in `workspace.list`, `workspace.get` and the snapshot, until a `ttl_ms` runs out or the session closes. herdr's limits and words apply. A token is keyed by its name: a later report replaces it, and `null` clears it. A report with a `seq` at or below the last one from its `source` changes nothing. tuios keeps the tokens in memory and does not draw them |
