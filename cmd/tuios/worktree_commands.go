@@ -283,7 +283,7 @@ The branches are a stem, then stem-2, stem-3 and so on. The stem is 'fan/'
 and the first words of the prompt, or --name.
 
 --grants says what every agent may do through tuios: read, write, fan,
-files, respond, admin, or none. Without it they hold the default of
+files, task, respond, admin, or none. Without it they hold the default of
 [agents.permissions]. A fan run from a pane without admin gives them that
 pane's own grants.
 
@@ -359,7 +359,7 @@ pull HOST:SESSION' brings its work here.`,
 	fanCmd.Flags().BoolVar(&fanJSON, "json", false, "Output result as JSON")
 	fanCmd.Flags().StringVar(&fanHost, "host", "", "Run the fan-out on this machine from the [hosts] table")
 	fanCmd.Flags().BoolVar(&fanClone, "clone", false, "With --host, clone the repository there when the host has no checkout")
-	fanCmd.Flags().StringSliceVar(&fanGrants, "grants", nil, "What every agent may do through tuios, comma separated: read, write, fan, files, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
+	fanCmd.Flags().StringSliceVar(&fanGrants, "grants", nil, "What every agent may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	_ = fanCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
 	_ = fanCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	_ = fanCmd.MarkFlagRequired("agent")
