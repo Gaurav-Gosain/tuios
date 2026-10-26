@@ -81,6 +81,26 @@ func clientWorkspace(t *testing.T, base string) int {
 	return int(ws)
 }
 
+// clientMode is the mode of the client that took the last input, from
+// GetSessionInfo: "terminal" or "window_management".
+func clientMode(t *testing.T, base string) string {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "run-command", "--json", "GetSessionInfo")
+	if err != nil {
+		t.Fatalf("GetSessionInfo: %v\n%s", err, out)
+	}
+	var res map[string]any
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("GetSessionInfo json: %v\n%s", err, out)
+	}
+	info := res
+	if d, ok := res["data"].(map[string]any); ok {
+		info = d
+	}
+	mode, _ := info["mode"].(string)
+	return mode
+}
+
 // cwdOnWorkspace waits for a pane on workspace ws of session sess to report
 // want as its directory, and returns the last directory a pane there
 // reported.
@@ -161,30 +181,38 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	runInShell(t, term, "cd '"+elsewhere+"' && echo HOME-$((6*7))", "HOME-42", shellTimeout)
 
 	// 1. A switch by key opens one pane, in the directory of the pane the
-	// switch came from.
-	toWindowMode(t, term)
+	// switch came from. The switch is made in terminal mode, so the pane
+	// takes typing when it arrives, with no "i" (#1173). The shell
+	// computing the marker shows the keys reached the new pane.
 	sendKeys(t, term, tuitest.Alt("2"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to workspace 2")
 	if got := cwdOnWorkspace(t, base, sess, 2, elsewhere); got != elsewhere {
 		t.Errorf("ASSERTION: the pane on workspace 2 is in %q, want %q, the folder of the pane the switch came from", got, elsewhere)
 	}
+	if got := clientMode(t, base); got != "terminal" {
+		t.Fatalf("ASSERTION: after a switch in terminal mode the new pane arrived in %q mode, want terminal (#1173)\n%s", got, term.Snapshot())
+	}
+	runInShell(t, term, "echo NEW-$((7*7))", "NEW-49", shellTimeout)
 
 	// 2. A switch from a workspace with no pane takes the session's start
 	// directory. The pane on 2 exits, and return_when_empty is off, so the
 	// session stays on 2 with nothing focused. opt+5 opens the next workspace,
 	// which is that empty 2, and opens its pane there.
-	enterTerminalMode(t, term)
 	if err := term.SendKeys("exit", tuitest.Enter); err != nil {
 		t.Fatalf("type exit: %v", err)
 	}
 	waitPanesOn(t, term, base, sess, 2, 0, "the shell on workspace 2 exits")
-	// The splash on an empty workspace is window mode already.
+	// The splash on an empty workspace is window mode already, and a switch
+	// made in window mode leaves the new pane in window mode.
 	sendKeys(t, term, tuitest.Alt("5"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to a new workspace from an empty workspace")
 	if got := cwdOnWorkspace(t, base, sess, 2, start); got != start {
 		t.Errorf("ASSERTION: the pane on workspace 2 is in %q, want the session's start directory %q", got, start)
+	}
+	if got := clientMode(t, base); got != "window_management" {
+		t.Errorf("ASSERTION: after a switch in window mode the new pane arrived in %q mode, want window_management", got)
 	}
 
 	// 3. move_and_follow brings its own pane: workspace 7 holds that pane

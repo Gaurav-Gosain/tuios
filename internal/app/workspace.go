@@ -32,13 +32,16 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	if fw := m.GetFocusedWindow(); fw != nil && fw.Workspace == from && !fw.IsScratch {
 		fromPane = fw
 	}
+	// The switch to an empty workspace leaves terminal mode. The pane it
+	// opens there takes it back (#1173).
+	typing := m.Mode == TerminalMode
 	m.switchToWorkspace(workspace, -1)
 	// A switch to a new workspace from the empty one on screen stays on it,
 	// and is still a switch to a new workspace: it opens the pane one opens.
 	if asked != from && workspace == from {
 		from = 0
 	}
-	m.openPaneOnEmptyWorkspace(from, workspace, fromPane)
+	m.openPaneOnEmptyWorkspace(from, workspace, fromPane, typing)
 }
 
 // workspaceTabKey is the tab key of workspace ws as this client last adopted
@@ -66,8 +69,8 @@ func (m *OS) newWorkspaceSlot(workspace int) int {
 	for ws := 1; ws <= m.NumWorkspaces; ws++ {
 		// A pane asked for and on its way counts as there: opt+2 opt+3 with
 		// new_window_when_empty opens both.
-		at, asked := m.paneRequests[ws]
-		if m.GetWorkspaceWindowCount(ws) > 0 || (asked && time.Since(at) < paneRequestTimeout) {
+		req, asked := m.paneRequests[ws]
+		if m.GetWorkspaceWindowCount(ws) > 0 || (asked && time.Since(req.at) < paneRequestTimeout) {
 			last = ws
 		}
 	}
@@ -123,7 +126,11 @@ func (m *OS) cycleWorkspace(step int) {
 // workspaces.new_window_when_empty is on. The pane starts in fromPane's
 // directory, else in the session's start directory. A minimized pane counts
 // as a pane: the workspace is not empty, only its panes are out of view.
-func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Window) {
+//
+// typing is whether the switch was made in terminal mode. The switch left
+// it, since an empty workspace has nothing to type into, and the pane opened
+// here enters it again when it arrives and takes the focus.
+func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Window, typing bool) {
 	if m.UserConfig == nil || !m.UserConfig.Workspaces.NewWindowWhenEmpty {
 		return
 	}
@@ -146,7 +153,10 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		// opens one pane per workspace whatever reaches it (see
 		// ErrWorkspaceHasPane), which covers a request slower than the
 		// timeout and a second client.
-		if at, ok := m.paneRequests[workspace]; ok && time.Since(at) < paneRequestTimeout {
+		// The latest switch decides the mode the pane arrives in.
+		if req, ok := m.paneRequests[workspace]; ok && time.Since(req.at) < paneRequestTimeout {
+			req.typing = typing
+			m.paneRequests[workspace] = req
 			return
 		}
 		cwdFrom, sshFrom := "", ""
@@ -170,16 +180,30 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 			return
 		}
 		if m.paneRequests == nil {
-			m.paneRequests = make(map[int]time.Time)
+			m.paneRequests = make(map[int]paneRequest)
 		}
-		m.paneRequests[workspace] = time.Now()
+		m.paneRequests[workspace] = paneRequest{at: time.Now(), typing: typing}
 		return
 	}
 	dir := ""
 	if fromPane != nil {
 		dir = fromPane.CWD()
 	}
+	before := len(m.Windows)
 	m.addLocalWindow(dir, "", nil)
+	if typing && len(m.Windows) > before && m.FocusedWindow == len(m.Windows)-1 && m.Mode == WindowManagementMode {
+		m.EnterTerminalMode()
+	}
+}
+
+// paneRequest is a request for the pane on an empty workspace, in flight.
+type paneRequest struct {
+	// at is when the request went out.
+	at time.Time
+	// typing is set when the switch that asked was made in terminal mode.
+	// The pane enters terminal mode when it arrives, if this client still
+	// shows the workspace and still is in window management mode.
+	typing bool
 }
 
 // paneRequestTimeout is how long a request for a pane on an empty workspace
@@ -191,8 +215,12 @@ const paneRequestTimeout = 5 * time.Second
 // window on. When that workspace is on screen with nothing focused, which is
 // where a push this client sent before the pane arrived leaves it, the pane
 // takes the focus, as the daemon gives it when the workspace is still shown.
+// A pane asked for by a switch made in terminal mode enters terminal mode
+// when it is the focused pane on the workspace on screen. A pane that arrives
+// on a workspace this client has left, or after the request timed out, leaves
+// the mode alone.
 func (m *OS) settlePaneRequests() {
-	for ws := range m.paneRequests {
+	for ws, req := range m.paneRequests {
 		idx := -1
 		for i, w := range m.Windows {
 			if w.Workspace == ws && !w.IsScratch {
@@ -204,8 +232,15 @@ func (m *OS) settlePaneRequests() {
 			continue
 		}
 		delete(m.paneRequests, ws)
-		if ws == m.CurrentWorkspace && m.FocusedWindow < 0 {
+		if ws != m.CurrentWorkspace {
+			continue
+		}
+		if m.FocusedWindow < 0 {
 			m.FocusWindow(idx)
+		}
+		if req.typing && time.Since(req.at) < paneRequestTimeout &&
+			m.FocusedWindow == idx && m.Mode == WindowManagementMode {
+			m.EnterTerminalMode()
 		}
 	}
 }
@@ -214,8 +249,8 @@ func (m *OS) settlePaneRequests() {
 // has not arrived, for GetSessionInfo.
 func (m *OS) PaneRequestsInFlight() []int {
 	out := []int{}
-	for ws, at := range m.paneRequests {
-		if time.Since(at) < paneRequestTimeout {
+	for ws, req := range m.paneRequests {
+		if time.Since(req.at) < paneRequestTimeout {
 			out = append(out, ws)
 		}
 	}

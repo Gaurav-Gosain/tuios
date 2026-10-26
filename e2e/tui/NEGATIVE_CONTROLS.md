@@ -9640,3 +9640,17 @@ Run on 2026-10-26 on Linux, against main at `9b4c9b8ef`.
 The fixed build passes both cases. With `TUIOS_E2E_FRAMES` set, each case
 writes `1-before.txt`, `2-covered.txt` and `3-after.txt`: the screen with
 the cells the host draws the image on marked.
+
+## Terminal mode on a pane a switch to an empty workspace opens (#1173)
+
+`TestEmptyWorkspaceOpensAPane` now makes its first switch to an empty
+workspace in terminal mode. When the pane arrives, GetSessionInfo must say
+terminal mode, and the shell must compute a marker from keys typed with no
+`i`. The second switch is made in window mode, and the pane must arrive in
+window mode. Run on 2026-10-26 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change (main, `internal/app/workspace.go` and `os.go` from `origin/main` through `go build -overlay`) | "after a switch in terminal mode the new pane arrived in \"window_management\" mode, want terminal (#1173)" | **caught** |
+
+The fixed build passes, three runs in a row.

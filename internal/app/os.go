@@ -1020,7 +1020,7 @@ type OS struct {
 	// workspace before the pane arrives asks for nothing more. A sync that
 	// shows a window there clears the entry, and an entry older than
 	// paneRequestTimeout counts as gone. See openPaneOnEmptyWorkspace.
-	paneRequests map[int]time.Time
+	paneRequests map[int]paneRequest
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// KeyboardFlags is the flag set the host answered the enhancement query
