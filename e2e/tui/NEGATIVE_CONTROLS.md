@@ -9654,3 +9654,18 @@ window mode. Run on 2026-10-26 on Linux.
 | The whole change (main, `internal/app/workspace.go` and `os.go` from `origin/main` through `go build -overlay`) | "after a switch in terminal mode the new pane arrived in \"window_management\" mode, want terminal (#1173)" | **caught** |
 
 The fixed build passes, three runs in a row.
+## Keys typed fast into a TML field reach the daemon in order
+
+`TestTMLInputTyping` types bursts of keys into a TML text field. Each key
+sends its own tml-input. Before the fix each call dialed its own connection
+at once, so a later key could reach the daemon before an earlier one. The
+daemon then kept an older value, and its next push put that value back in
+the field. The last key of a burst was lost, mostly the space of "y: ". Run
+on 2026-10-26 on Linux against main at `859cef306`, with four busy loops on
+the same cores as the test, `-count=50`.
+
+| Control: what was changed | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change (main) | 4 of 50 runs: "the paste in the field" three times, with the field at `y:ship it very soon (signed)`, and typing step 3 once | **caught** |
+
+The fixed build passes 100 of 100 runs under the same load.

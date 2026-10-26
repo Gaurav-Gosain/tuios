@@ -113,6 +113,12 @@ type tmlView struct {
 	// not flicker back to the one before it. deferred holds that push.
 	inflight int
 	deferred *session.TMLSurfacePayload
+	// sent closes when the last tml-input this view made has its answer.
+	// The next one waits for it, so the daemon applies the inputs in the
+	// order the person made them. Each call dials its own connection, and
+	// without the wait a later keystroke could reach the daemon first and
+	// an earlier value would win. Guarded by tmlClient.mu.
+	sent chan struct{}
 	// content is the last frame, for the size in w and h.
 	content string
 	w, h    int
@@ -1104,11 +1110,18 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 			params["value"] = json.RawMessage(raw)
 		}
 	}
+	done := make(chan struct{})
 	m.tml.mu.Lock()
 	v.inflight++
+	prev := v.sent
+	v.sent = done
 	m.tml.mu.Unlock()
 	return func() tea.Msg {
+		if prev != nil {
+			<-prev
+		}
 		raw, err := call("tml-input", params, tmlInputTimeout)
+		close(done)
 		m.tml.mu.Lock()
 		v.inflight--
 		m.tml.mu.Unlock()
