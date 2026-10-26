@@ -11,6 +11,8 @@ package vt_test
 import (
 	"strings"
 	"testing"
+
+	"tuios.dev/vt"
 )
 
 func TestConform_OSCReplyKeepsTheQueryTerminator(t *testing.T) {
@@ -68,4 +70,77 @@ func TestConform_OSCDynamicColorItems(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The selection field of an OSC 52 reply holds only selection characters.
+//
+// xterm reads the field one character at a time and keeps only the ones that
+// name a selection: c, p, q, s and the cut buffers 0 to 7, each once, in the
+// order given. An empty field means s0. The reply carries what was kept, so
+// the field a guest sends cannot put any other text into the reply. These run
+// under the pure Go emulator by default and under libghostty-vt with -tags
+// ghostty.
+func TestConform_OSC52SelectionField(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		field string // the selection field of the query
+		want  string // the selection field of the reply
+	}{
+		{"clipboard", "c", "c"},
+		{"several selections", "ps01", "ps01"},
+		{"every selection", "cpqs01234567", "cpqs01234567"},
+		{"empty means s0", "", "s0"},
+		{"a repeat is kept once", "ccpc", "cp"},
+		{"text and spaces", "c touch /tmp/x ", "cp"},
+		{"carriage returns", "c\rtouch /tmp/x\r", "cp"},
+		{"nothing that names a selection", " xyz ", ""},
+		{"DEL", "c\x7f", "c"},
+		{"an 8-bit CSI", "c\x9bJ", "c"},
+		{"a UTF-8 CSI", "c\u009bJ", "c"},
+		{"other UTF-8", "cé中", "c"},
+		{"cut buffers past 7", "89c", "c"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, term := range []string{"\x07", "\x1b\\"} {
+				emu := vt.New(20, 4)
+				done := guestReplies(emu)
+				if _, err := emu.Write([]byte("\x1b]52;" + tc.field + ";?" + term)); err != nil {
+					t.Fatal(err)
+				}
+				want := "\x1b]52;" + tc.want + ";" + term
+				if got := done(); got != want {
+					t.Errorf("field %q ended with %q: reply = %q, want %q", tc.field, term, got, want)
+				}
+			}
+		})
+	}
+	t.Logf("ran on the %s backend", vt.Backend)
+}
+
+// The clipboard callbacks get the same selection field the reply carries.
+func TestConform_OSC52CallbackSelection(t *testing.T) {
+	const field = "c touch /tmp/x \x7f\x9b"
+	var queried, set []string
+	emu := vt.New(20, 4)
+	emu.SetCallbacks(vt.Callbacks{
+		ClipboardQuery: func(sel string) string {
+			queried = append(queried, sel)
+			return "hi"
+		},
+		ClipboardSet: func(sel, _ string) { set = append(set, sel) },
+	})
+	done := guestReplies(emu)
+	if _, err := emu.Write([]byte("\x1b]52;" + field + ";?\x07\x1b]52;" + field + ";aGk=\x07")); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := done(), "\x1b]52;cp;aGk=\x07"; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+	if len(queried) != 1 || queried[0] != "cp" {
+		t.Errorf("ClipboardQuery got %q, want [\"cp\"]", queried)
+	}
+	if len(set) != 1 || set[0] != "cp" {
+		t.Errorf("ClipboardSet got %q, want [\"cp\"]", set)
+	}
+	t.Logf("ran on the %s backend", vt.Backend)
 }

@@ -561,7 +561,7 @@ func (t *GhosttyTerminal) handleClipboardOSC(payload []byte) {
 	if len(parts) < 3 {
 		return
 	}
-	selection := string(parts[1])
+	selection := clipboardSelection(parts[1])
 	data := string(parts[2])
 	if data == "?" {
 		t.callUnlocked(func() {

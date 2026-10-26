@@ -375,7 +375,7 @@ func (e *Emulator) handleClipboard(data []byte) {
 		return
 	}
 
-	selection := string(parts[1])
+	selection := clipboardSelection(parts[1])
 	payload := string(parts[2])
 
 	if payload == "?" {
@@ -400,6 +400,28 @@ func (e *Emulator) handleClipboard(data []byte) {
 			e.cb.ClipboardSet(selection, string(decoded))
 		}
 	}
+}
+
+// clipboardSelection reads the selection field of an OSC 52 the way xterm
+// does. An empty field means s0. Otherwise only the characters that name a
+// selection are kept (c, p, q, s and the cut buffers 0 to 7), each once and
+// in the order given. The field goes back to the guest in a query's reply,
+// so nothing else from it may pass.
+func clipboardSelection(field []byte) string {
+	if len(field) == 0 {
+		return "s0"
+	}
+	const names = "cpqs01234567"
+	var kept [len(names)]byte
+	n := 0
+	for _, c := range field {
+		if bytes.IndexByte([]byte(names), c) < 0 || bytes.IndexByte(kept[:n], c) >= 0 {
+			continue
+		}
+		kept[n] = c
+		n++
+	}
+	return string(kept[:n])
 }
 
 // handleHyperlink handles OSC 8: "8;<params>;<uri>".
