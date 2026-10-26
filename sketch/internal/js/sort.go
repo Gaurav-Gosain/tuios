@@ -3,6 +3,7 @@ package js
 import (
 	"math"
 	"slices"
+	"sort"
 )
 
 // Sort is Array.prototype.sort with a comparator, as V8 runs it. A comparator
@@ -10,7 +11,9 @@ import (
 // is consistent, any stable sort gives the same order. When it is not, as with
 // a NaN that equals everything, the order depends on the algorithm: Sort
 // follows V8's for arrays under 64 elements, where V8's TimSort is one run
-// sorted by binary insertion. A longer array is sorted by slices.SortStableFunc.
+// sorted by binary insertion. A longer array is sorted by sort.SliceStable, which
+// runs the same algorithm as slices.SortStableFunc and gives the same order,
+// through one copy shared by every element type.
 func Sort[T any](a []T, cmp func(x, y T) float64) {
 	order := func(x, y T) float64 {
 		if v := cmp(x, y); !math.IsNaN(v) {
@@ -23,15 +26,7 @@ func Sort[T any](a []T, cmp func(x, y T) float64) {
 		return
 	}
 	if n >= 64 {
-		slices.SortStableFunc(a, func(x, y T) int {
-			switch v := order(x, y); {
-			case v < 0:
-				return -1
-			case v > 0:
-				return 1
-			}
-			return 0
-		})
+		sort.SliceStable(a, func(i, j int) bool { return order(a[i], a[j]) < 0 })
 		return
 	}
 	// CountAndMakeRun: the run at the start, reversed when it is strictly descending.

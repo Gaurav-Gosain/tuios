@@ -5,6 +5,7 @@ package requirement
 import (
 	"math"
 	"slices"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -233,15 +234,7 @@ func spreadEnds(cnodes []*layout.CNode, cedges []*layout.CEdge, views []NodeView
 			span = views[node].h - 2*END_MARGIN
 		}
 		step := math.Max(0, math.Min(END_STEP, span/float64(len(list)-1)))
-		slices.SortStableFunc(list, func(a, b end) int {
-			switch {
-			case a.toward < b.toward:
-				return -1
-			case a.toward > b.toward:
-				return 1
-			}
-			return 0
-		})
+		sort.SliceStable(list, func(i, j int) bool { return list[i].toward < list[j].toward })
 		for j := range list {
 			offset := float64((float64(j) - float64(len(list)-1)/2) * step)
 			if vertical {

@@ -3404,6 +3404,18 @@ the cut is 53,248 bytes on linux/amd64 and 67,104 on darwin/arm64. Sorts on
 render, key, event or broadcast paths, and over a type a hot path also sorts,
 keep slices.
 
+The sketch stable sorts over struct elements cut 65,536 bytes from linux/amd64
+and 51,632 from darwin/arm64. js.Sort (arrays of 64 or more elements), the
+requirement diagram's end lists and the text flowchart's end lists now go
+through sort.SliceStable, which is compiled once, where each used to compile
+its own copy of slices.SortStableFunc. The order is the same, ties included,
+because both run the same algorithm. Each call allocates about 3 times, and
+the layout runs once per source and width in loom, once per Show, Resize or
+Redraw of the area for text diagrams (internal/mermaid/live.go), never per
+compositor frame. On origin/main at dfc93341d (Go 1.26.10, as CI builds it)
+the build measured 47,972,514 and 44,528,114 bytes, and the branch measured
+47,906,978 and 44,476,482. The binary stays under the 50 MB ceiling.
+
 To raise the ceiling, do it on purpose in its own commit: change `ceiling` in
 `scripts/binary-size.sh`, record the new value and the reason here, and say in
 the commit message what grew and why it is worth the bytes. A Go version bump

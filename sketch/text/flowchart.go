@@ -3,6 +3,7 @@ package text
 import (
 	"math"
 	"slices"
+	"sort"
 
 	"tuios.dev/sketch"
 	"tuios.dev/sketch/internal/types"
@@ -333,15 +334,7 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		} else {
 			joined = nil
 		}
-		slices.SortStableFunc(list, func(a, b graphEnd) int {
-			switch {
-			case a.at < b.at:
-				return -1
-			case a.at > b.at:
-				return 1
-			}
-			return 0
-		})
+		sort.SliceStable(list, func(i, j int) bool { return list[i].at < list[j].at })
 		lo, hi := b.x0+1, b.x1-1
 		scale := col
 		if sd == 1 || sd == 3 {
