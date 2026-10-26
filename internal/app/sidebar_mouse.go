@@ -460,7 +460,9 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
-		m.SidebarToggleRepoCollapsed(hit.SessionID)
+		if !m.sidebarRepoGotoMain(hit.SessionID) {
+			m.SidebarToggleRepoCollapsed(hit.SessionID)
+		}
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -646,7 +648,9 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
-		m.SidebarToggleRepoCollapsed(hit.SessionID)
+		if !m.sidebarRepoGotoMain(hit.SessionID) {
+			m.SidebarToggleRepoCollapsed(hit.SessionID)
+		}
 	case sidebarRowHost:
 		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case sidebarRowFiles:

@@ -166,7 +166,16 @@ func (m *OS) sessionWorktreeInfo(name string) *session.WorktreeInfo {
 	if m.DaemonClient == nil || name == "" {
 		return nil
 	}
-	return m.DaemonClient.SessionWorktree(name)
+	info := m.DaemonClient.SessionWorktree(name)
+	// A main-checkout record is a record only for a rail that has opted into
+	// it (group_main). With the option off, every surface here reads it as no
+	// record, which is what they saw before main checkouts were detected at
+	// all; without this, the quit menu and the close dialog would grow rows
+	// that offer to delete the repository's own working tree.
+	if info != nil && info.Main && !m.Settings.SidebarGroupMain {
+		return nil
+	}
+	return info
 }
 
 // worktreeRepoRoot finds the main checkout a repository's group header stands

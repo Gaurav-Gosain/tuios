@@ -29,9 +29,14 @@ import (
 const sidebarWorktreeGoneTag = "gone"
 
 // worktreeRef adapts the daemon's record to the shared row model, which knows
-// nothing about internal/session.
-func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
+// nothing about internal/session. A main-checkout record is a record only for
+// a rail that has opted into it: group_main off reads it as no record at all,
+// which is exactly the shape the sessions had before it existed.
+func (m *OS) worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 	if info == nil {
+		return nil
+	}
+	if info.Main && !m.Settings.SidebarGroupMain {
 		return nil
 	}
 	ref := &sessiontree.WorktreeRef{
@@ -40,6 +45,7 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 		Group:    info.Group,
 		FanID:    info.FanID,
 		Gone:     info.Gone,
+		Main:     info.Main,
 		PR:       info.PR.Badge(),
 		Path:     info.Path,
 		RepoRoot: info.RepoRoot,
@@ -60,6 +66,32 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 		}
 	}
 	return ref
+}
+
+// sidebarRepoGotoMain opens the repo group's session in the main checkout —
+// the one whose directory is the repository itself, usually on main or
+// master — and reports whether there was one. It is what a repo header's
+// activation does once group_main gathers the main checkout in; without it,
+// or when the group holds no main-checkout session, the header keeps its
+// fold gesture.
+func (m *OS) sidebarRepoGotoMain(repo string) bool {
+	if !m.Settings.SidebarGroupMain {
+		return false
+	}
+	for _, n := range m.BuildSessionTree().Sessions {
+		if n.Kind == sessiontree.KindSession && n.Host == "" &&
+			n.Worktree != nil && n.Worktree.Repo == repo && n.Worktree.Main {
+			// Open the group, so the session the header pointed at is on
+			// screen under it rather than hidden behind a count.
+			if m.SidebarRepoCollapsed(repo) {
+				m.SidebarToggleRepoCollapsed(repo)
+			}
+			m.sidebarSwitchSession(n.ID)
+			m.sidebarFollowSession = n.ID
+			return true
+		}
+	}
+	return false
 }
 
 // sidebarSessionRows is the sessions section's own row list: the attached

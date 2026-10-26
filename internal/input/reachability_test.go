@@ -449,6 +449,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"restart_daemon":        "command palette row, rail machine menu row, settings row, version notice",
 	"paste_clipboard":       "context menu row",
 	"repo_new_worktree":     "rail repo header menu row",
+	"repo_toggle_fold":      "rail repo header menu row",
 	"session_new_worktree":  "rail session row menu row",
 	"rename_session":        "context menu row",
 	"screenshot_window":     "context menu row",

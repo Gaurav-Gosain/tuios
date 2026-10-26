@@ -969,6 +969,11 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFilesStyles, Default: SidebarFilesList,
 	},
 	{
+		Path: "appearance.sidebar.group_main", Type: OptionBool, Section: "sidebar",
+		Description: "Gather the repository's main checkout under the repo row with its worktrees; the repo header then opens the main checkout's session",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.sidebar.header_case", Type: OptionString, Section: "sidebar",
 		Description: "How the rail's section headers read: lowercase keeps the quiet furniture look, uppercase draws them as headings",
 		Accepted:    RailHeaderCases, Default: RailHeaderLowercase,

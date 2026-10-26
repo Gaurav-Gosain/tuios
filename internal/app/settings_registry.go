@@ -133,6 +133,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.folder_click":           "Click a folder",
 	"appearance.sidebar.files_style":            "Files style",
 	"appearance.sidebar.file_actions":           "File actions",
+	"appearance.sidebar.group_main":             "Main checkout in sessions tree",
 	"appearance.sidebar.file_delete":            "Delete sends to",
 	"appearance.sidebar.agent_rest_fold":        "Fold agents at rest after",
 	"appearance.sidebar.subagent_rows":          "Show subagents as",

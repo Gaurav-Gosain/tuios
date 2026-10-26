@@ -87,6 +87,47 @@ func Detect(dir string) (Info, bool) {
 	}, true
 }
 
+// DetectMain is Detect's twin for the repository's main checkout: the
+// directory whose .git is the repository's own git directory. Detect
+// deliberately reports nothing here, because the sessions it groups are the
+// ones a repository was split into, not the repository itself; the rail's
+// group_main option wants the repository itself in the group too, and this is
+// what it reads. A linked worktree and a directory outside any repository are
+// both false — Detect's answer and no answer respectively.
+func DetectMain(dir string) (Info, bool) {
+	dir = filepath.Clean(dir)
+	if dir == "" || dir == "." {
+		return Info{}, false
+	}
+	gitdir, commonDir, root, ok := gitstate.Locate(dir)
+	// The two git directories differ in a linked worktree, which is Detect's
+	// answer to give, not this one's.
+	if !ok || gitdir != commonDir {
+		return Info{}, false
+	}
+	// A submodule also answers gitdir == commonDir: its .git file names a
+	// gitdir under modules/ that carries no commondir pointer, and that
+	// gitdir is not a working tree. The entry being a directory is what says
+	// main checkout — the mirror of Detect's worktrees check.
+	if st, err := os.Stat(filepath.Join(root, ".git")); err != nil || !st.IsDir() {
+		return Info{}, false
+	}
+	repoRoot := commonDir
+	if filepath.Base(commonDir) == ".git" {
+		repoRoot = filepath.Dir(commonDir)
+	}
+	branch := readHead(gitdir)
+	if branch == "" {
+		return Info{}, false
+	}
+	return Info{
+		Repo:     filepath.Base(repoRoot),
+		RepoRoot: repoRoot,
+		Branch:   branch,
+		Path:     root,
+	}, true
+}
+
 // readHead names the branch a gitdir's HEAD points at, or "detached@<hash>".
 // root is the worktree, where git is asked when the refs are in reftable.
 func readHead(gitdir, commonDir, root string) string {

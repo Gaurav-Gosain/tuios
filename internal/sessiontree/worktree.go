@@ -29,6 +29,11 @@ type WorktreeRef struct {
 	// Gone says the worktree directory no longer exists. The session is still
 	// listed, because a shell whose directory was removed under it still runs.
 	Gone bool
+	// Main says the session sits in the repository's main checkout, the
+	// directory holding the shared .git, rather than in a worktree split off
+	// it. Its repo row points here: activating the header opens this session.
+	// Hidden entirely when the rail's group_main is off.
+	Main bool
 	// PR is the short form of the branch's pull request ("PR #12 open
 	// pass"), empty when there is none. The agent rows of the session draw
 	// it as their pr token.

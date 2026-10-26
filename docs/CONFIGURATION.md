@@ -1705,6 +1705,30 @@ as the files section: the folder that the shell in the pane is in. Press
 folder, and `Enter` to type the path. See
 [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
 
+## The main checkout in the sessions tree
+
+`appearance.sidebar.group_main` gathers the repository's main checkout — the
+session whose directory is the repository itself, usually on `main` or
+`master` — under the repo row with its worktrees. It is `false` by default,
+which leaves the main checkout's sessions flat in the list and groups only
+the worktrees split off the repository.
+
+```toml
+[appearance.sidebar]
+group_main = true
+```
+
+With it on, a session in the main checkout is one of the group's children,
+labelled by its branch like the rest, and the repo header points at it:
+`enter` or a click on the header opens the main checkout's session instead of
+folding the group, and opens the group first when it was folded. The fold
+gesture stays on the header's right-click menu, as `Fold group` and
+`Unfold group`. The option is on the settings page, in the Sidebar section.
+
+Independent of the option, the daemon now records the main checkout the way
+it records a worktree, so `tuios worktree ls` and the worktree verbs see it
+alongside the worktrees it was split into.
+
 ## The files section style
 
 `appearance.sidebar.files_style` sets how the rail's files section shows a

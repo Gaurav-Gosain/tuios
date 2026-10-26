@@ -908,6 +908,13 @@ type SidebarConfig struct {
 	// SubagentHideFinished hides a finished subagent's row this long after it
 	// ended: a duration, or off (default: off).
 	SubagentHideFinished string `toml:"subagent_hide_finished"`
+	// GroupMain gathers the repository's main checkout — the session whose
+	// directory is the repository itself, usually on main or master — under
+	// the repo row with its worktrees (default: false, the main checkout's
+	// sessions stay flat). With it on, the repo header's activation goes to
+	// the main checkout's session; the fold gesture moves to the header's
+	// right-click menu.
+	GroupMain *bool `toml:"group_main"`
 	// Custom is the [appearance.sidebar.custom] table: the command whose
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
@@ -2690,6 +2697,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
 	// Anything but count draws rows, the default; validation names a typo.
 	s.SidebarSubagents = ResolveSidebarSubagentView(cfg.Appearance.Sidebar, primary)
+	if sb.GroupMain != nil {
+		s.SidebarGroupMain = *sb.GroupMain
+	}
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}

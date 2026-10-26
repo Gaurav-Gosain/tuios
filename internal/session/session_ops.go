@@ -458,6 +458,8 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 		if info, ok := worktree.Detect(detectIn); ok {
 			detected = &WorktreeInfo{Info: info}
+		} else if info, ok := worktree.DetectMain(detectIn); ok {
+			detected = &WorktreeInfo{Info: info, Main: true}
 		}
 	}
 

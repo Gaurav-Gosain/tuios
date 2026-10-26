@@ -263,6 +263,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("repo_new_worktree", handleRepoNewWorktree)
 	// The third way in, by key: the repository of the focused pane's folder.
 	d.Register("new_worktree", handleNewWorktree)
+	d.Register("repo_toggle_fold", handleRepoToggleFold)
 
 	// The rail's file actions. They are dispatched by key from HandleSidebarKey,
 	// which reads its own scope, and they are registered here because the files
@@ -1258,6 +1259,14 @@ func handleRepoNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // pane's folder, or says why it cannot.
 func handleNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginWorktreePromptForFocusedPane()
+	return o, nil
+}
+
+// handleRepoToggleFold folds or opens the repository's group the menu was
+// opened on: the fold gesture a repo header's activation gives up when
+// group_main points the header at the main checkout's session.
+func handleRepoToggleFold(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.SidebarToggleRepoCollapsed(o.TakeMenuRepo())
 	return o, nil
 }
 

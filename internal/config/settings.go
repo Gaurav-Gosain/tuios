@@ -276,6 +276,11 @@ type Settings struct {
 	// Zero never folds. From appearance.sidebar.agent_rest_fold.
 	SidebarAgentRestFold time.Duration
 
+	// SidebarGroupMain gathers the repository's main checkout under the repo
+	// row with its worktrees, and points the header's activation at it. From
+	// appearance.sidebar.group_main.
+	SidebarGroupMain bool
+
 	// SidebarSubagents is how the rail draws the subagents under an agent
 	// row: rows or the count, tree lines, the heading line that folds them,
 	// the fields, the row cap and when a finished row goes. From the

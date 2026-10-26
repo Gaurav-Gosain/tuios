@@ -441,11 +441,20 @@ func (m *OS) repoHeaderMenu(repo string) (string, []ContextMenuItem) {
 	if title == "" {
 		title = "Repository"
 	}
+	// The header's plain activation goes to the main checkout's session once
+	// group_main gathers it in, so the fold gesture lives here instead.
+	fold := "Fold group"
+	icon := glyphUp
+	if m.SidebarRepoCollapsed(repo) {
+		fold = "Unfold group"
+		icon = glyphDown
+	}
 	return title, []ContextMenuItem{
 		// Live only while some cached session names the repository, which for a
 		// header on screen is every moment but the one where the listing changed
 		// since it was drawn.
 		m.item(glyphNew, "New worktree...", "repo_new_worktree", m.worktreeRepoRoot(repo) == ""),
+		m.item(icon, fold, "repo_toggle_fold", false),
 	}
 }
 
