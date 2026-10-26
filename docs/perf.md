@@ -3390,8 +3390,19 @@ The scrim costs about what the spotlight does, a quarter of a millisecond on a
 full 207x55 frame, and only on frames drawn while a modal is open; a modal left
 open over quiet panes draws none. The compositor rows are within noise.
 
-The shimmer asks for at most 15 frames a second, and only while a working
-agent's row is on screen. Each is a frame with nothing dirty plus the pass. A
+The shimmer asks for at most 8 frames a second (it was 15), and only while a
+working agent's row is on screen. A tick that finds a frame composed within the
+last interval for another reason, such as pane output, draws nothing, because
+that frame carried the band already. Frames sent to the host a second, counted
+as synchronized-output ends on a pty capture, with one agent marked working:
+
+| Case | Before | After |
+|---|---|---|
+| shimmer only | 8.4 | 4.4 |
+| shimmer and a pane that prints 10 times a second | 17.4 | 10.0 |
+
+The shimmer only figure is below the rate asked for because a frame equal to the
+last one is not sent, and the band is off the name for part of each sweep. Each is a frame with nothing dirty plus the pass. A
 hovered overflowing rail row (the marquee) costs more per frame, because the
 rail is never served from its cache while it scrolls
 (`BenchmarkSidebarAgentsRebuild`, about 345 µs).

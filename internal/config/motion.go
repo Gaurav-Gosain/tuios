@@ -71,10 +71,13 @@ const (
 	OverlayFadeFrame = time.Second / 60
 )
 
-// ShimmerFrame is the interval between frames of the working-row shimmer: 15
-// frames a second. The band moves a column or less per frame at that rate, so
-// more frames would draw the same picture again.
-const ShimmerFrame = time.Second / 15
+// ShimmerFrame is the interval between frames of the working-row shimmer: 8
+// frames a second. The band is ten columns wide and crosses a name at about
+// 16 columns a second, so it moves two columns per frame and still reads as
+// one smooth sweep. Each frame is a full frame to the host, and a host that
+// shows partial frames shows the cursor jumping to the rail and back, so a
+// faster shimmer costs more than it gains.
+const ShimmerFrame = time.Second / 8
 
 // Modal dim. appearance.modal_dim is the percent the screen behind a modal
 // overlay is darkened by; zero turns it off.

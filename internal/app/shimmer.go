@@ -40,7 +40,7 @@ import (
 // drawn (see composeLayersIn). The rail's rows stay cached: the span of each
 // working name is recorded when the rows are built and kept with them, and the
 // pass rewrites the style of those cells and no others. A frame drawn for the
-// shimmer re-renders no pane and rebuilds no rail, and the clock asks for 15 of
+// shimmer re-renders no pane and rebuilds no rail, and the clock asks for 8 of
 // them a second.
 
 const (

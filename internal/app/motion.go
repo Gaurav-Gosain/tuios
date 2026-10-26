@@ -55,6 +55,9 @@ type motionState struct {
 	// The next is due one interval after it, not one interval after the
 	// frame was handled. See nextMotionWait.
 	due time.Time
+	// drawn is when the last motion frame asked for a draw. A frame composed
+	// after it, for any other reason, already carried the shimmer.
+	drawn time.Time
 
 	// scrim, fade and shimmer are the shades each pass carries cells with.
 	// Separate, because each carries toward a different colour or by a
@@ -152,7 +155,17 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 	// and asks for one last frame when the sweep has just ended so its light
 	// does not stay on the screen.
 	flash := m.markCopyFlashPane()
-	need := m.motion.fading > 0 || m.shimmerActive() || flash
+	now := time.Now()
+	shimmer := m.shimmerActive()
+	// A shimmer frame is cheap to compute and dear to send. When a pane's
+	// output drew a frame within the last interval, that frame carried the
+	// band already, so this tick draws nothing.
+	coalesce := shimmer && m.motion.fading == 0 && !flash && !m.themeFx.running() &&
+		m.copyFlash == nil && m.shimmerCovered(now)
+	need := m.motion.fading > 0 || (shimmer && !coalesce) || flash
+	if need {
+		m.motion.drawn = now
+	}
 	// A transition still asks for a frame on the tick it ends, so the last
 	// one drawn is the new theme on the whole screen.
 	need = m.expireThemeTransition(time.Now()) || need
@@ -160,6 +173,16 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 		m.retireFades(time.Now())
 	}
 	m.renderSkipped = !need
+}
+
+// shimmerCovered reports whether a frame that something else asked for was
+// composed within the last shimmer interval. A frame the motion clock asked
+// for is composed within a few milliseconds of the request, so only a frame
+// composed later than that margin after it counts.
+func (m *OS) shimmerCovered(now time.Time) bool {
+	const margin = 15 * time.Millisecond
+	last := m.frameRate.lastFrame
+	return last.After(m.motion.drawn.Add(margin)) && now.Sub(last) < config.ShimmerFrame
 }
 
 // trackModalOverlays compares the modal overlays that are up with the ones
