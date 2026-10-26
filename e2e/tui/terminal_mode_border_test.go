@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"strings"
 	"testing"
@@ -220,71 +221,118 @@ func markerPaneEdge(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
 // on ghostty's Nord theme with no tuios theme, the focused border sat at
 // nearly the lightness of the unfocused one, and with session_border on the
 // focused border could not be told apart between window and terminal mode.
+// A follow-up found the same on light grounds, and terminal mode reading
+// quieter than window mode with session_border on.
 //
-// With no theme, the unfocused border is a neutral grey near the ground.
-// Each border is held by OKLab lightness, the part of a colour that reads
-// without telling hues apart: the two focused borders differ from each other,
-// and each of them stands further from the ground than the unfocused border.
+// It runs on three dark host schemes and their light pairs. Each border is
+// held by OKLab lightness, the part of a colour that reads without telling
+// hues apart:
+//   - The two focused borders differ from each other by 0.08 or more.
+//   - Each focused border stands 0.1 further from the ground than the
+//     unfocused one: lighter on a dark ground, darker on a light one.
+//   - With no theme the unfocused border is a neutral grey, and each focused
+//     border has at least twice its contrast on the ground.
+//   - With session_border on, terminal mode is the louder of the two: it
+//     stands further from the ground than the session colour, and is at
+//     least as saturated.
 //
 // Frames: <subtest>/window.png and terminal.png under artifactDir, drawn with
-// the Nord palette.
+// the scheme's palette.
 func TestFocusedBorderStandsOutOnTheHostGround(t *testing.T) {
-	ground := overlay.Lightness(tuiColor(tuitest.Color{Kind: tuitest.ColorRGB, R: 0x2e, G: 0x34, B: 0x40}))
-	for _, sessionBorder := range []bool{false, true} {
-		t.Run(fmt.Sprintf("session_border=%v", sessionBorder), func(t *testing.T) {
-			term := startNordPanes(t, fmt.Sprintf("theme = \"none\"\nsession_border = %v\n", sessionBorder), false, "start")
-			dir := artifactDir(t)
-			// An attached client starts in terminal mode. The dock of the
-			// shipped looks names no mode, so each switch is given a beat
-			// rather than waited on by text.
-			if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-				t.Fatalf("send alt+esc: %v", err)
-			}
-			time.Sleep(800 * time.Millisecond)
-			saveArtifact(t, term, dir, "window")
-			savePNG(t, term.Screen(), nordPalette(), dir, "window")
-			read := func(marker string) float64 {
-				t.Helper()
-				cell, ok := markerPaneEdge(term.Screen(), marker)
-				if !ok || cell.Fg.Kind != tuitest.ColorRGB {
-					t.Fatalf("no RGB border left of %s (%+v)\n%s", marker, cell.Fg, term.Snapshot())
-				}
-				c, _ := cellRGB(cell.Fg)
-				return overlay.Lightness(c)
-			}
-			lw, lu := read("PLAINBX"), read("PLAINAX")
-			if !sessionBorder {
-				// With no theme the unfocused border is a neutral grey: a
-				// hue there reads as loud as focus, and red reads as an
-				// alert.
-				edge, _ := markerPaneEdge(term.Screen(), "PLAINAX")
-				fg := edge.Fg
-				if spread := max(fg.R, fg.G, fg.B) - min(fg.R, fg.G, fg.B); spread > 24 {
-					t.Errorf("the unfocused border is #%02x%02x%02x, a hue rather than a neutral", fg.R, fg.G, fg.B)
-				}
-			}
+	schemes := []hostScheme{nordScheme, nordLightScheme, mochaScheme, latteScheme, tokyoNightScheme, tokyoDayScheme}
+	for _, scheme := range schemes {
+		for _, sessionBorder := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/session_border=%v", scheme.name, sessionBorder), func(t *testing.T) {
+				focusedBorderOn(t, scheme, sessionBorder)
+			})
+		}
+	}
+}
 
-			if err := term.SendKeys("i"); err != nil {
-				t.Fatalf("send i: %v", err)
-			}
-			time.Sleep(800 * time.Millisecond)
-			saveArtifact(t, term, dir, "terminal")
-			savePNG(t, term.Screen(), nordPalette(), dir, "terminal")
-			lt := read("PLAINBX")
-			t.Logf("OKLab lightness on a ground of %.3f: window %.3f, terminal %.3f, unfocused %.3f", ground, lw, lt, lu)
+// focusedBorderOn is one case of TestFocusedBorderStandsOutOnTheHostGround.
+func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
+	ground := overlay.Lightness(scheme.ground())
+	// out is +1 where standing out from the ground means lighter.
+	out := 1.0
+	if ground > 0.5 {
+		out = -1
+	}
+	dist := func(l float64) float64 { return (l - ground) * out }
+	term := startHostPanes(t, scheme, fmt.Sprintf("theme = \"none\"\nsession_border = %v\n", sessionBorder), false, "start")
+	dir := artifactDir(t)
+	// An attached client starts in terminal mode. The dock of the shipped
+	// looks names no mode, so each switch is given a beat rather than waited
+	// on by text.
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("send alt+esc: %v", err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	saveArtifact(t, term, dir, "window")
+	savePNG(t, term.Screen(), scheme.palette(), dir, "window")
+	read := func(marker string) (color.Color, tuitest.Color) {
+		t.Helper()
+		cell, ok := markerPaneEdge(term.Screen(), marker)
+		if !ok || cell.Fg.Kind != tuitest.ColorRGB {
+			t.Fatalf("no RGB border left of %s (%+v)\n%s", marker, cell.Fg, term.Snapshot())
+		}
+		c, _ := cellRGBOn(cell.Fg, scheme)
+		return c, cell.Fg
+	}
+	cw, _ := read("PLAINBX")
+	cu, fu := read("PLAINAX")
+	if !sessionBorder {
+		// With no theme the unfocused border is a neutral grey: a hue there
+		// reads as loud as focus, and red reads as an alert.
+		if spread := max(fu.R, fu.G, fu.B) - min(fu.R, fu.G, fu.B); spread > 24 {
+			t.Errorf("the unfocused border is #%02x%02x%02x, a hue rather than a neutral", fu.R, fu.G, fu.B)
+		}
+	}
 
-			if math.Abs(lw-lt) < 0.08 {
-				t.Errorf("the window mode border (L %.3f) and the terminal mode border (L %.3f) are under 0.08 apart", lw, lt)
+	if err := term.SendKeys("i"); err != nil {
+		t.Fatalf("send i: %v", err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	saveArtifact(t, term, dir, "terminal")
+	savePNG(t, term.Screen(), scheme.palette(), dir, "terminal")
+	ct, _ := read("PLAINBX")
+	lw, lt, lu := overlay.Lightness(cw), overlay.Lightness(ct), overlay.Lightness(cu)
+	t.Logf("OKLab L on a ground of %.3f: window %v %.3f, terminal %v %.3f, unfocused %v %.3f; chroma window %.3f, terminal %.3f",
+		ground, cw, lw, ct, lt, cu, lu, overlay.Chroma(cw), overlay.Chroma(ct))
+
+	if math.Abs(lw-lt) < 0.08 {
+		t.Errorf("the window mode border (L %.3f) and the terminal mode border (L %.3f) are under 0.08 apart", lw, lt)
+	}
+	for _, focused := range []struct {
+		mode string
+		l    float64
+	}{{"window", lw}, {"terminal", lt}} {
+		if dist(focused.l)-dist(lu) < 0.1 {
+			t.Errorf("the %s mode border (L %.3f) stands under 0.1 further from the ground (L %.3f) than the unfocused border (L %.3f)",
+				focused.mode, focused.l, ground, lu)
+		}
+	}
+	if !sessionBorder {
+		// A one-cell line is read by its contrast. On a light ground the
+		// lightness step alone left the focused border at 1.7 times the
+		// unfocused border's contrast.
+		g := scheme.ground()
+		cru := overlay.ContrastRatio(cu, g)
+		for _, focused := range []struct {
+			mode string
+			c    color.Color
+		}{{"window", cw}, {"terminal", ct}} {
+			if cr := overlay.ContrastRatio(focused.c, g); cr < 2*cru-0.1 {
+				t.Errorf("the %s mode border has %.2f:1 on the ground, under twice the unfocused border's %.2f:1", focused.mode, cr, cru)
 			}
-			for _, focused := range []struct {
-				mode string
-				l    float64
-			}{{"window", lw}, {"terminal", lt}} {
-				if math.Abs(focused.l-ground)-math.Abs(lu-ground) < 0.1 {
-					t.Errorf("the %s mode border (L %.3f) stands under 0.1 further from the ground (L %.3f) than the unfocused border (L %.3f)",
-						focused.mode, focused.l, ground, lu)
-				}
-			}
-		})
+		}
+	}
+	if sessionBorder {
+		if dist(lt)-dist(lw) < 0.08 {
+			t.Errorf("with session_border the terminal mode border (L %.3f) does not stand further from the ground than the window mode one (L %.3f)", lt, lw)
+		}
+		if overlay.Chroma(ct) < overlay.Chroma(cw)-0.01 {
+			t.Errorf("with session_border the terminal mode border (chroma %.3f) is less saturated than the window mode one (chroma %.3f)",
+				overlay.Chroma(ct), overlay.Chroma(cw))
+		}
 	}
 }

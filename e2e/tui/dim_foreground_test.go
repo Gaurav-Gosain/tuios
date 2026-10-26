@@ -103,45 +103,95 @@ func TestDimForeground(t *testing.T) {
 	})
 }
 
-// nordANSI and the two defaults below are the host of discussion #850: ghostty
-// on its Nord theme, with no tuios theme. hostterm answers OSC 10, 11 and 4
-// with them, and the frames are drawn with them, since they are what the host
-// paints an index and the default colours in.
-var nordANSI = [16]string{
-	"#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
-	"#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+// hostScheme is a host terminal's own colours: its default pair and its
+// sixteen. hostterm answers OSC 10, 11 and 4 with them, and the frames are
+// drawn with them, since they are what the host paints an index and the
+// default colours in.
+type hostScheme struct {
+	name   string
+	bg, fg string
+	ansi   [16]string
 }
 
-const nordBg, nordFg = "#2e3440", "#d8dee9"
+// nordScheme is the host of discussion #850: ghostty on its Nord theme, with
+// no tuios theme.
+var nordScheme = hostScheme{"nord", "#2e3440", "#d8dee9", [16]string{
+	"#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+	"#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+}}
 
-// nordPalette is the Nord host as a renderer palette.
-func nordPalette() *shot.Palette {
-	p := &shot.Palette{FG: hexColor(nordFg), BG: hexColor(nordBg)}
-	for i, hex := range nordANSI {
+// The light schemes the reporter of #850 also uses, close to how ghostty
+// ships them, and the dark pairs of the two that are not Nord. With no tuios
+// theme the borders depend on the background alone; the sixteen are there so
+// the frames look like the real thing.
+var (
+	nordLightScheme = hostScheme{"nord-light", "#e5e9f0", "#414858", [16]string{
+		"#3b4252", "#bf616a", "#96b17f", "#c5a565", "#81a1c1", "#b48ead", "#7bb3c3", "#a5abb6",
+		"#4c566a", "#bf616a", "#96b17f", "#c5a565", "#81a1c1", "#b48ead", "#82afae", "#eceff4",
+	}}
+	mochaScheme = hostScheme{"catppuccin-mocha", "#1e1e2e", "#cdd6f4", [16]string{
+		"#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#bac2de",
+		"#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8",
+	}}
+	latteScheme = hostScheme{"catppuccin-latte", "#eff1f5", "#4c4f69", [16]string{
+		"#5c5f77", "#d20f39", "#40a02b", "#df8e1d", "#1e66f5", "#ea76cb", "#179299", "#acb0be",
+		"#6c6f85", "#d20f39", "#40a02b", "#df8e1d", "#1e66f5", "#ea76cb", "#179299", "#bcc0cc",
+	}}
+	tokyoNightScheme = hostScheme{"tokyonight", "#1a1b26", "#c0caf5", [16]string{
+		"#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#a9b1d6",
+		"#414868", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5",
+	}}
+	tokyoDayScheme = hostScheme{"tokyonight-day", "#e1e2e7", "#3760bf", [16]string{
+		"#e9e9ed", "#f52a65", "#587539", "#8c6c3e", "#2e7de9", "#9854f1", "#007197", "#6172b0",
+		"#a1a6c5", "#f52a65", "#587539", "#8c6c3e", "#2e7de9", "#9854f1", "#007197", "#3760bf",
+	}}
+)
+
+// palette is the scheme as a renderer palette.
+func (h hostScheme) palette() *shot.Palette {
+	p := &shot.Palette{FG: hexColor(h.fg), BG: hexColor(h.bg)}
+	for i, hex := range h.ansi {
 		p.ANSI[i] = hexColor(hex)
 	}
 	return p
 }
 
-// nordHostArgs is the hostterm command line that plays the Nord host, or one
-// that answers no colour question when mute is set.
-func nordHostArgs(host string, mute bool) []string {
+// ground is the scheme's background as a colour.
+func (h hostScheme) ground() color.Color {
+	c := hexColor(h.bg)
+	return color.RGBA{R: c.R, G: c.G, B: c.B, A: 0xff}
+}
+
+// hostArgs is the hostterm command line that plays the scheme, or one that
+// answers no colour question when mute is set.
+func (h hostScheme) hostArgs(host string, mute bool) []string {
 	if mute {
 		return []string{host, "run", "-mute", "--"}
 	}
-	parts := make([]string, len(nordANSI))
-	for i, hex := range nordANSI {
+	parts := make([]string, len(h.ansi))
+	for i, hex := range h.ansi {
 		parts[i] = fmt.Sprintf("%d=%s", i, hex)
 	}
-	return []string{host, "run", "-bg", nordBg, "-fg", nordFg, "-ansi", strings.Join(parts, ","), "--"}
+	return []string{host, "run", "-bg", h.bg, "-fg", h.fg, "-ansi", strings.Join(parts, ","), "--"}
 }
 
-// startNordPanes attaches to a daemon session from the Nord host with appearance
-// set to body, opens a second pane, and prints two markers in each: one in the
+// nordANSI, nordBg and nordFg are the Nord scheme's colours, for the dim test.
+var nordANSI = nordScheme.ansi
+
+const nordBg, nordFg = "#2e3440", "#d8dee9"
+
+// startNordPanes is startHostPanes on the Nord host.
+func startNordPanes(t *testing.T, body string, mute bool, name string) *tuitest.Terminal {
+	t.Helper()
+	return startHostPanes(t, nordScheme, body, mute, name)
+}
+
+// startHostPanes attaches to a daemon session from the host scheme with
+// appearance set to body, opens a second pane, and prints two markers in each: one in the
 // terminal's default colour, as a shell prompt is, and one in SGR 31, which the
 // host resolves through its own palette. Pane A is left unfocused. The frame is
 // saved under artifactDir as name, drawn with the host's palette.
-func startNordPanes(t *testing.T, body string, mute bool, name string) *tuitest.Terminal {
+func startHostPanes(t *testing.T, scheme hostScheme, body string, mute bool, name string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -156,7 +206,7 @@ func startNordPanes(t *testing.T, body string, mute bool, name string) *tuitest.
 		args:         []string{"attach", "nord"},
 		shippedLooks: true,
 		env:          []string{"COLORTERM=truecolor"},
-		wrap:         nordHostArgs(host, mute),
+		wrap:         scheme.hostArgs(host, mute),
 	})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
@@ -184,17 +234,21 @@ func startNordPanes(t *testing.T, body string, mute bool, name string) *tuitest.
 	time.Sleep(time.Second)
 	dir := artifactDir(t)
 	saveArtifact(t, term, dir, name)
-	savePNG(t, term.Screen(), nordPalette(), dir, name)
+	savePNG(t, term.Screen(), scheme.palette(), dir, name)
 	return term
 }
 
 // cellRGB is a cell colour as the Nord host paints it, and whether the cell
 // named one at all.
-func cellRGB(c tuitest.Color) (color.Color, bool) {
+func cellRGB(c tuitest.Color) (color.Color, bool) { return cellRGBOn(c, nordScheme) }
+
+// cellRGBOn is cellRGB on another host scheme.
+func cellRGBOn(c tuitest.Color, h hostScheme) (color.Color, bool) {
 	if c.Kind == tuitest.ColorDefault {
 		return nil, false
 	}
-	s := resolveCell(c, nordPalette(), nordPalette().FG)
+	p := h.palette()
+	s := resolveCell(c, p, p.FG)
 	return color.RGBA{R: s.R, G: s.G, B: s.B, A: 0xff}, true
 }
 

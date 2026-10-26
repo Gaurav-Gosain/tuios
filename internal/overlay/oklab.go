@@ -105,6 +105,10 @@ func okChroma(c color.Color) float64 {
 	return math.Hypot(v.a, v.b)
 }
 
+// Chroma is c's chroma in OKLab: 0 for a grey, about 0.3 for the most
+// saturated sRGB colours.
+func Chroma(c color.Color) float64 { return okChroma(c) }
+
 // MixColors blends a toward b by t in 0..1, in OKLab. t at 0 is a, t at 1 is
 // b, and the result is rounded to the nearest 8-bit colour.
 func MixColors(a, b color.Color, t float64) color.Color {
@@ -182,6 +186,53 @@ func FixLightness(c, bg color.Color, floor float64) color.Color {
 		}
 	}
 	return best
+}
+
+// inGamut reports whether c converts to sRGB without clamping a channel.
+func (c lab) inGamut() bool {
+	l := c.l + 0.3963377774*c.a + 0.2158037573*c.b
+	m := c.l - 0.1055613458*c.a - 0.0638541728*c.b
+	s := c.l - 0.0894841775*c.a - 1.2914855480*c.b
+	l, m, s = l*l*l, m*m*m, s*s*s
+	const eps = 1e-4
+	for _, v := range [3]float64{
+		+4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
+		-1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
+		-0.0041960863*l - 0.7034186147*m + 1.7076147010*s,
+	} {
+		if v < -eps || v > 1+eps {
+			return false
+		}
+	}
+	return true
+}
+
+// Vivid is c's hue at OKLab lightness l with the most chroma sRGB holds there,
+// up to maxChroma. Unlike WithLightness it never clamps a channel, so the
+// result sits at l. A grey stays a grey.
+func Vivid(c color.Color, l, maxChroma float64) color.Color {
+	v := toLab(c)
+	v.l = math.Max(0, math.Min(1, l))
+	ch := math.Hypot(v.a, v.b)
+	if ch < 1e-4 {
+		v.a, v.b = 0, 0
+		return v.rgba()
+	}
+	ua, ub := v.a/ch, v.b/ch
+	lo, hi := 0.0, maxChroma
+	if (lab{v.l, ua * hi, ub * hi}).inGamut() {
+		lo = hi
+	} else {
+		for range 20 {
+			mid := (lo + hi) / 2
+			if (lab{v.l, ua * mid, ub * mid}).inGamut() {
+				lo = mid
+			} else {
+				hi = mid
+			}
+		}
+	}
+	return lab{v.l, ua * lo, ub * lo}.rgba()
 }
 
 // Lightness is c's OKLab lightness, 0 for black and 1 for white.

@@ -9611,3 +9611,15 @@ back before the next.
 The artifacts `tasks-claim-and-restart.txt` and `tasks-release-with-pane.txt`
 hold each pane's claim output, the card histories after the pane closed and
 the agent left, and the listings after the restart and after the client sync.
+
+## Border prominence by mode and on light grounds (discussion #850)
+
+`TestFocusedBorderStandsOutOnTheHostGround` runs on Nord, Catppuccin Mocha
+and TokyoNight, and on their light pairs, with `session_border` off and on.
+The control is main at 6d122034a, run on 2026-10-26 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change | `session_border=true` on all six schemes: terminal mode stands nearer the ground than window mode, or is less saturated (Nord: window L 0.866 chroma 0.295, terminal L 0.766 chroma 0.140). `session_border=false` on the three light schemes: the window mode border has about 5:1, under twice the unfocused border's 3:1 | **caught** |
+
+The fixed build passes all twelve cases.

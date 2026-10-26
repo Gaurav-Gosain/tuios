@@ -347,20 +347,83 @@ func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
 	return bordersOn(hostBg).terminal
 }
 
-// BorderFocusedTerminalBeside is the terminal mode border for a pane whose
-// window mode border is window rather than the default, as it is when
-// appearance.session_border puts the session's colour there. The default is
-// moved in lightness away from window, so the two modes stay apart whatever
-// the session's colour is. A configured colour is returned as chosen.
-func BorderFocusedTerminalBeside(window, hostBg color.Color) color.Color {
+// SessionBorderModes is the focused border in each mode when
+// appearance.session_border puts the session's colour, tint, on the window
+// mode border.
+//
+// Terminal mode is the louder of the two, because it says the keys go into
+// the pane: it stands modeLightnessGap further from the ground than window
+// mode, and has at least its chroma. The terminal mode default keeps its
+// lightness and takes as much chroma as the session colour has, where sRGB
+// holds it. The session colour moves toward the ground to make the gap, and
+// gives up chroma it has over terminal mode. When the mark floor stops the
+// session colour, terminal mode moves out instead. A configured terminal mode
+// colour is returned as chosen, with the session colour as it is.
+func SessionBorderModes(tint, hostBg color.Color) (window, terminal color.Color) {
 	if focused := focusedOverride(borderFocusedTerminal); focused != nil {
-		return focused
+		return tint, focused
 	}
 	b := bordersOn(hostBg)
-	if Depth() == overlay.Depth16 || window == nil {
-		return b.terminal
+	if Depth() == overlay.Depth16 || tint == nil {
+		return tint, b.terminal
 	}
-	return modesApart(window, b.terminal, b.ground, -1)
+	key := [3][4]uint32{rgbaKey(tint), rgbaKey(b.terminal), rgbaKey(b.ground)}
+	m := &sessionModesMemo
+	m.Lock()
+	defer m.Unlock()
+	for i, k := range m.keys {
+		if m.out[i][0] != nil && k == key {
+			return m.out[i][0], m.out[i][1]
+		}
+	}
+
+	lg := overlay.Lightness(b.ground)
+	out := 1.0
+	if lg > 0.5 {
+		out = -1
+	}
+	dist := func(c color.Color) float64 { return (overlay.Lightness(c) - lg) * out }
+	ok := func(c color.Color) bool { return ContrastRatio(c, b.ground) >= MarkFloor }
+	// at is c's hue at distance d from the ground, with at most chroma ch.
+	at := func(c color.Color, d, ch float64) color.Color {
+		return overlay.Vivid(c, lg+d*out, ch)
+	}
+
+	terminal = at(b.terminal, dist(b.terminal), max(overlay.Chroma(tint), overlay.Chroma(b.terminal)))
+	window = tint
+	if want := dist(terminal) - modeLightnessGap; dist(tint) > want {
+		// The session colour toward the ground, down to the mark floor.
+		window = nil
+		for d := want; d < dist(tint); d += 0.01 {
+			if c := at(tint, d, overlay.Chroma(terminal)); ok(c) {
+				window = c
+				break
+			}
+		}
+		if window == nil {
+			window = tint
+		}
+	}
+	if need := dist(window) + modeLightnessGap; dist(terminal) < need {
+		// The floor held the session colour, so terminal mode moves out.
+		terminal = at(b.terminal, need, max(overlay.Chroma(tint), overlay.Chroma(b.terminal)))
+	}
+	if overlay.Chroma(window) > overlay.Chroma(terminal) {
+		window = at(window, dist(window), overlay.Chroma(terminal))
+	}
+
+	m.keys[m.next], m.out[m.next] = key, [2]color.Color{window, terminal}
+	m.next = (m.next + 1) % len(m.out)
+	return window, terminal
+}
+
+// sessionModesMemo keeps the last few answers of SessionBorderModes, which is
+// asked on every frame and searches in OKLab.
+var sessionModesMemo struct {
+	sync.Mutex
+	keys [4][3][4]uint32
+	out  [4][2]color.Color
+	next int
 }
 
 // borderSet is the three pane borders and the ground they are measured on.
@@ -432,7 +495,7 @@ func bordersOn(hostBg color.Color) borderSet {
 	if Depth() == overlay.Depth16 {
 		return b
 	}
-	return spaceBorders(b, wFixed, tFixed, uFixed)
+	return spaceBorders(b, wFixed, tFixed, uFixed, t == nil)
 }
 
 // modeLightnessGap is the least OKLab lightness between the two default
@@ -450,6 +513,12 @@ const modeLightnessGap = 0.1
 // hue alone, the failure modeLightnessGap describes.
 const focusLightnessGap = 0.12
 
+// focusContrastFactor is how many times the unfocused border's contrast on
+// the ground each default focused border has. On a dark ground the lightness
+// step gives far more than this; on a light one it gave 1.7 times, and the
+// focused border read as a slightly darker unfocused one.
+const focusContrastFactor = 2.0
+
 // spaceBordersMemo keeps the last few answers of spaceBorders, which is asked
 // on every frame and converts to OKLab and measures contrast many times.
 var spaceBordersMemo struct {
@@ -465,9 +534,15 @@ var spaceBordersMemo struct {
 // the floor stops it, the window mode border goes further out instead. The
 // terminal mode border is then placed modeLightnessGap from the window mode
 // one, on the side that keeps it clear of the unfocused border.
-func spaceBorders(b borderSet, wFixed, tFixed, uFixed bool) borderSet {
+//
+// vivid is set for the no-theme colours, which are tuios's own rather than a
+// theme's. Their focused borders then take as much of their hue as sRGB holds
+// at their lightness, up to noThemeChroma. Moved dark onto a light ground,
+// the pale cyan and green kept a chroma of 0.04 and 0.06, which is a grey
+// beside the grey unfocused border.
+func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 	fixed := uint32(0)
-	for i, f := range []bool{wFixed, tFixed, uFixed} {
+	for i, f := range []bool{wFixed, tFixed, uFixed, vivid} {
 		if f {
 			fixed |= 1 << i
 		}
@@ -522,14 +597,54 @@ func spaceBorders(b borderSet, wFixed, tFixed, uFixed bool) borderSet {
 			b.window = c
 		}
 	}
+	// The same lightness step is a smaller step in contrast on a light
+	// ground, where every border sits in the darker half and the unfocused
+	// one is held dark by the mark floor. A one-cell line is read by its
+	// contrast, so each focused border also gets focusContrastFactor times
+	// the unfocused border's.
+	least := dist(b.unfocused) + focusLightnessGap
+	if wantCR := ContrastRatio(b.unfocused, b.ground) * focusContrastFactor; !wFixed {
+		for d := max(dist(b.window), least); d <= 1; d += 0.01 {
+			c, ok := at(b.window, d)
+			if !ok {
+				continue
+			}
+			if ContrastRatio(c, b.ground) >= wantCR {
+				b.window = c
+				break
+			}
+		}
+		if ContrastRatio(b.window, b.ground) >= wantCR {
+			least = max(least, dist(b.window))
+		}
+	}
 	if !tFixed {
-		b.terminal = modesApart(b.window, b.terminal, b.ground, dist(b.unfocused)+focusLightnessGap)
+		b.terminal = modesApart(b.window, b.terminal, b.ground, least)
 	}
 	pull(min(dist(b.window), dist(b.terminal)) - focusLightnessGap)
+	if vivid {
+		if !wFixed {
+			b.window = vividAt(b.window, noThemeChroma)
+		}
+		if !tFixed {
+			b.terminal = vividAt(b.terminal, noThemeChroma)
+		}
+	}
 
 	m.keys[m.next], m.out[m.next] = key, b
 	m.next = (m.next + 1) % len(m.out)
 	return b
+}
+
+// noThemeChroma is the chroma the no-theme focused borders reach for. It is
+// the green's own on a dark ground, saturated enough to read as a colour and
+// short of a neon.
+const noThemeChroma = 0.15
+
+// vividAt is c at its own lightness with as much chroma as sRGB holds there,
+// up to the larger of limit and what c already has.
+func vividAt(c color.Color, limit float64) color.Color {
+	return overlay.Vivid(c, overlay.Lightness(c), max(limit, overlay.Chroma(c)))
 }
 
 // modesApart is the terminal mode border moved in lightness, hue and chroma

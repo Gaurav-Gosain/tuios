@@ -428,18 +428,20 @@ const sessionBorderQuiet = 0.55
 // It is measured against the terminal's own background for the same reason
 // sessionTint is: a hue from the theme's sixteen is legible on some grounds and
 // a smudge on others, and which is which is not a thing to decide by eye.
-// It answers both strengths at once so the caller does not have to know how far
-// back an unfocused border is pulled.
-func (m *OS) sessionBorderTint() (focused, unfocused color.Color, ok bool) {
+// It answers the focused border in each mode and the unfocused one at once,
+// so the caller does not have to know how they are placed (see
+// theme.SessionBorderModes).
+func (m *OS) sessionBorderTint() (window, terminal, unfocused color.Color, ok bool) {
 	if !m.Settings.SessionBorder {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 	bg := m.terminalBg()
 	tint := m.sessionTint(m.SessionName, bg)
 	if tint == nil {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	return tint, overlay.MixColors(tint, bg, sessionBorderQuiet), true
+	window, terminal = theme.SessionBorderModes(tint, m.host.bg)
+	return window, terminal, overlay.MixColors(window, bg, sessionBorderQuiet), true
 }
 
 // rowGround is what a rail row is actually drawn on: the band under the
