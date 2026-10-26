@@ -6613,6 +6613,17 @@ The control was run on 2026-10-16 on the branch fix/start-server-pprof.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The flag not handed on | a build of main at 8a69099b, where `startDaemonBackground` runs `daemon` with no flags | `TestStartServerPassesPprofToTheDaemon`: "the daemon start-server started never served /debug/pprof on 127.0.0.1:59545: … connect: connection refused" | **caught** |
+
+## tuios ssh serves --pprof
+
+`TestSSHServesPprof` starts `tuios ssh --pprof ADDR` in daemon and ephemeral mode and reads the heap profile, then checks the process listens on exactly the SSH and profile ports. `TestSSHWithoutPprofOpensNoProfileListener` starts it without the flag and checks it listens on the SSH port only.
+
+The control was run on 2026-10-26 on the branch fix/ssh-pprof.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The call cut | startPprofServer() removed from the ssh command | `TestSSHServesPprof/daemon`: "ASSERTION: tuios ssh (daemon) never served /debug/pprof on 127.0.0.1:39865: … connect: connection refused"; `TestSSHServesPprof/ephemeral`: the same | **caught** |
+| A default listener | startPprofServer listening on 127.0.0.1:6060 when the flag is empty | `TestSSHWithoutPprofOpensNoProfileListener/daemon`: "ASSERTION: tuios ssh (daemon) without --pprof listens on [6060 38499], want only the SSH port 38499" | **caught** |
 ## Panes do not inherit the agent tool call that started the daemon
 
 `TestPanesDoNotInheritTheAgentThatStartedTheDaemon` starts the daemon with

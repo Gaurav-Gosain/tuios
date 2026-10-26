@@ -58,6 +58,11 @@ To let your own key in, use your public key file:
   # Serve the network with no authentication (trusted networks only)
   tuios ssh --host 0.0.0.0 --no-auth`,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// This process holds every connection's emulator, compositor and
+			// frame buffers and, in daemon mode, the daemon itself, so it is the
+			// process a memory question is about. --pprof is a persistent flag
+			// that ssh used to accept and ignore.
+			startPprofServer()
 			return runSSHServer(sshServerFlags{
 				host:           sshHost,
 				port:           sshPort,
