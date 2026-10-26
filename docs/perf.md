@@ -1702,6 +1702,39 @@ and `taskset`, compared with `benchstat`.
 | `RenderSymbolScreen` allocs/op | 10,238 | 20 | -99.8% |
 | `RenderSymbolScreen` B/op | 282.6 KiB | 206.7 KiB | -26.9% |
 
+**The screen text is written into one builder** (`grid.go`). `grid.String`
+joined `row.String()` for every row. `uv.Line.String` allocates a
+`strings.Builder` and a `bytes.Buffer` per row and runs `Cell.Equal` against
+`EmptyCell` on every cell, which compares colour interfaces. Tape waits poll
+it (`tape_script.go`, `os_tape_executor.go`), on both backends, so a 207x55
+screen of text cost about 400 allocations on every tick. `writeLineText` now
+writes each row into one builder local to `String` with the rules of
+`uv.Line.String` cell by cell: a zero cell is skipped without releasing
+anything, a cell that `isBlankCell` accepts is one pending blank, any other
+cell releases the pending blanks and writes its content, and blanks still
+pending at the end of the row are dropped. The blanks are counted, not buffered, and `isBlankCell`
+holds exactly when `Equal(&uv.EmptyCell)` does for the pinned ultraviolet, so a
+styled blank, a linked blank and an unstyled empty cell of width 1 all still
+count as text. `String` keeps its state local and writes no field of the grid,
+because both callers run it under a read lock beside other readers.
+`TestGridStringMatchesTheLines` holds the result to the rows' `uv.Line.String`
+joined with newlines, on random grids and on fixed rows with every one of those
+cells before content and at the row's end; `TestGridStringBudget` bounds the
+allocations of a 207x55 screen of text at 40.
+
+Method: `BenchmarkEmulatorString` (`Emulator.String()` on a 207x55 screen of
+printable ASCII lines with some styled runs) built as two test binaries, the
+base and the change, built with Go 1.26.10 and run alternately for ten
+rounds at a fixed `-test.benchtime 500x` with `-test.cpu 1` under `nice` on
+one core (`taskset -c 2`), compared with `benchstat`, on an Intel Core Ultra 9
+185H under WSL2.
+
+| | before | after | |
+|---|---|---|---|
+| `EmulatorString` CPU per op | 149.5 us | 77.6 us | -48.1% (p<0.001) |
+| `EmulatorString` allocs/op | 409 | 17 | -95.8% |
+| `EmulatorString` B/op | 72.5 KiB | 42.4 KiB | -41.5% |
+
 ### Measured and deliberately not changed
 
 - **Storing each scrollback line at its exact size.** A styled line grows

@@ -799,6 +799,10 @@ func (g *grid) anyRow(y, end int) bool {
 // It runs under a read lock, alongside other readers, so it must not write to
 // the grid. A row that has not been written is all blanks, and a line's text
 // drops trailing blanks, so its text is empty.
+//
+// Every row is written into the one builder by writeLineText rather than
+// through uv.Line.String, which builds a strings.Builder and a bytes.Buffer
+// for each row. Callers poll this while a tape waits on text.
 func (g *grid) String() string {
 	var b strings.Builder
 	for y, row := range g.rows {
@@ -806,10 +810,37 @@ func (g *grid) String() string {
 			b.WriteByte('\n')
 		}
 		if row != nil {
-			b.WriteString(row.String())
+			writeLineText(&b, row)
 		}
 	}
 	return b.String()
+}
+
+// writeLineText writes what uv.Line.String returns for line, without a
+// builder of its own.
+//
+// uv.Line.String skips a cell equal to the zero Cell, holds back a cell equal
+// to EmptyCell as a pending space, and writes any other cell's content after
+// the pending spaces. Spaces still pending at the end are dropped. A cell
+// that is not zero but has no content, such as an unstyled empty cell of
+// width 1, is not a blank: it releases the pending spaces. The spaces are
+// counted, not buffered.
+func writeLineText(b *strings.Builder, line uv.Line) {
+	pending := 0
+	for i := range line {
+		c := &line[i]
+		if c.IsZero() {
+			continue
+		}
+		if isBlankCell(c) {
+			pending++
+			continue
+		}
+		for ; pending > 0; pending-- {
+			b.WriteByte(' ')
+		}
+		b.WriteString(c.Content)
+	}
 }
 
 // Render returns the grid as styled text, one line per row, with a cluster
