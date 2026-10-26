@@ -5310,7 +5310,9 @@ every pane, are held to nothing new.
 | `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
 | `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)), and type into a pane waiting on a prompt |
-| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach. Includes `read`, `write` and `fan`, never `respond` |
+| `files` | Copy files with `tuios cp`, inside the pane's own folder, and see and control its own copies |
+| `task` | Add, claim, finish, stage, block and release the task cards of its own session (`tuios task`). It claims only for itself and changes only the card it holds |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
 
 Whatever it holds, a pane can always report about itself (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `ask-human`, `request-approval`, on its

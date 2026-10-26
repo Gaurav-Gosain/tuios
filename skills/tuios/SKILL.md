@@ -37,6 +37,7 @@ command here runs as written. Change only the pane names and the quoted text.
 | Ask the person, and wait for the answer | `tuios ask-human 'Deploy to staging?' -o yes -o no --timeout 90000` |
 | Show the person a form, a table or a dashboard, and wait for the answer | `tuios tml show FILE --wait`. `tuios --skill tml` has the components. |
 | See how a TML surface looks, before and after you show it | `tuios tml render FILE`, then `tuios capture-pane -s "$TUIOS_SESSION" -w WINDOW` on the open surface |
+| Take the next task card, and finish it | `tuios task claim --next` then `tuios task done ID`. `tuios --skill tasks` has the rest. |
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 
 `new-window` prints the short id and the name (`3a42ab8f  tests`). With
@@ -101,7 +102,7 @@ tell the person.
 `tuios --skill TOPIC` prints one topic, and `tuios --skill all` prints all.
 
 - Panes and state: `panes`, `state`, `events`, `stream`, `clients`
-- Agents: `mail`, `inbox`, `fleet`, `recipes`, `checkpoints`, `ship`
+- Agents: `mail`, `inbox`, `fleet`, `tasks`, `recipes`, `checkpoints`, `ship`
 - Rules: `grants`, `errors`, `agents-off`
 - Results, dashboards and forms for the person: `tml`
 - Other machines: `hosts`, `files`

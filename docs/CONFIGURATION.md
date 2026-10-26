@@ -2407,6 +2407,17 @@ mode = "strict"
 grants = ["read", "write", "fan", "files"]
 ```
 
+`task` lets a pane add, claim and finish the task cards of its own session
+(`tuios task`) without `admin`. A pane claims only for itself and changes only
+the card it holds. `admin` includes `task`. Under `strict`, give it to the
+panes that take work from a conductor:
+
+```toml
+[agents.permissions]
+mode = "strict"
+grants = ["read", "write", "fan", "task"]
+```
+
 The daemon reads the table when it starts and again when the file changes. A
 change that gives panes less reaches every pane on the default at its next
 call. A change that gives more, such as `strict` to `open`, waits, because a

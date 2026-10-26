@@ -232,31 +232,41 @@ shows what it holds.
 
 ## A conductor
 
-A pane that hands the next task to each agent that finishes, and leaves
-everything else in the Inbox for the person. It never answers a prompt: it holds
-no `respond`, and approvals are the person's.
+A pane that hands the next task card to each agent that finishes, and leaves
+everything else in the Inbox for the person. The cards are the daemon's, so a
+task is not lost when the conductor's pane closes, and a card whose agent went
+away is let go for the next one to take (`tuios --skill tasks`). It never
+answers a prompt: it holds no `respond`, and approvals are the person's.
 
 ```sh
 #!/bin/sh
-# conductor.sh: run in a tuios pane beside the fleet. tasks.txt holds one task per line.
-tuios subscribe --types attention | while read -r ev; do
+# conductor.sh: run in a tuios pane beside the fleet. Add the work first:
+#   tuios task add -p '<the prompt>' <the title>
+tuios subscribe --types task-changed,attention | while read -r ev; do
+  [ "$(printf '%s' "$ev" | jq -r '.type')" = attention ] || continue
   [ "$(printf '%s' "$ev" | jq -r '.action')" = open ] || continue
   [ "$(printf '%s' "$ev" | jq -r '.attention.kind')" = finished ] || continue
   sess=$(printf '%s' "$ev" | jq -r '.attention.session')
   win=$(printf '%s' "$ev" | jq -r '.attention.window')
-  task=$(head -n 1 tasks.txt)
-  if [ -z "$task" ]; then
-    tuios send-agent-message -s "$TUIOS_SESSION" -w human --from "$TUIOS_PANE_ID" 'every task is handed out'
+  # The card the agent held, if any, is done.
+  held=$(tuios task ls -s "$sess" --json | jq -r --arg w "$win" '.tasks[] | select(.holder.window==$w) | .id')
+  [ -n "$held" ] && tuios task done -s "$sess" "$held"
+  if ! line=$(tuios task claim -s "$sess" --next -w "$win"); then
+    tuios send-agent-message -s "$TUIOS_SESSION" -w human --from "$TUIOS_PANE_ID" 'every task card is handed out'
     continue
   fi
-  tail -n +2 tasks.txt > tasks.next && mv tasks.next tasks.txt
-  tuios ask-agent -s "$sess" -w "$win" --from "$TUIOS_PANE_ID" "$task" &
+  id=${line%% *}
+  prompt=$(tuios task get -s "$sess" "$id" --json | jq -r .prompt)
+  tuios ask-agent -s "$sess" -w "$win" --from "$TUIOS_PANE_ID" "$prompt" &
 done
 ```
 
-Give the conductor only what it needs: `--grants read,write,fan` from the pane
-that starts it. `ask-agent` refuses a pane on `needs_input`, so a task never
-lands on a prompt. If the stream drops, start it again with `--after-seq` and
+The conductor claims cards for other panes and finishes them, which a pane may
+do only with `admin`. Run it from a shell outside every pane, or from a pane
+that holds `admin`. To keep the conductor narrower, let each worker claim its
+own card with `tuios task claim --next` and finish it with `tuios task done`:
+a worker needs only `read` and `task`. `ask-agent` refuses a pane on `needs_input`, so a
+task never lands on a prompt. If the stream drops, start it again with `--after-seq` and
 `--boot-id` from the last event (`tuios --skill events`). Do not make a
 conductor reply to mail automatically without a bound: that is how two agents
 loop.

@@ -99,6 +99,8 @@ Every type, and what it reports:
 | `host-changed` | A host link connects or drops |
 | `transfer`, `transfer-progress` | A copy the daemon runs is created, changes state, ends, or leaves the list (`action` `removed`, after `transfer-clear` or 30 minutes after it ended); its progress, opt-in (`tuios --skill files`) |
 | `transfer-file` | One file of a copy ended: `file` has `id`, `rel`, `state` (`done`, `same`, `skipped`, `conflict` or `failed`), `sha256`, `code`, `error`. Opt-in |
+| `task-claimed`, `task-finished` | A pane took a task card, or finished it: `task` is the card's row, `window` the pane (`tuios --skill tasks`) |
+| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released` or `removed` (`action`). A release tuios made carries `reason`: `pane closed`, `agent left` or `restart` |
 | `tml-event` | A person ran an `emit` on a TML surface, or the surface closed: `tml` has `surface`, `name`, `value`, `reason` (on a close) and `version`. Opt-in |
 | `gap` | Events were lost. See below |
 

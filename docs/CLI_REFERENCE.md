@@ -2446,6 +2446,69 @@ tuios queue rm q3
 tuios queue rm --all -w build
 ```
 
+### `tuios task`
+
+Hand out a session's work as task cards. A card is one unit of work: a title,
+the prompt for the pane that takes it, a stage, and the pane that holds it. The
+daemon keeps the cards with the session, so they outlive the pane that added
+them. After a daemon restart they come back with every holder let go. A card is
+also let go when its pane closes or its agent leaves the pane. See
+[Task verbs](protocol.md#task-verbs).
+
+The stages are `todo`, `plan`, `doing`, `verify`, `review`, `shipped` and
+`done`. `claim` moves a card in `todo` or `plan` to `doing`, and `done` moves
+it to `done` and lets it go.
+
+**Usage:**
+```bash
+tuios task add [-p PROMPT] [--stage STAGE] TITLE... [flags]
+tuios task ls [--stage STAGE] [--open] [flags]
+tuios task get ID [flags]
+tuios task claim ID | --next [-w <window>] [flags]
+tuios task done ID [flags]
+tuios task stage ID STAGE [flags]
+tuios task block ID REASON... | --clear [flags]
+tuios task release ID [flags]
+tuios task rm ID [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Session of the cards (default: this pane's session, else the most recently active)
+- `-p, --prompt <text>` (`add`): What the pane that takes the card is to do, at most 16 KiB; `-` reads it from standard input
+- `--stage <stage>` (`add`, `ls`): The stage it starts in; for `ls`, only the cards in it
+- `--open` (`ls`): Leave out the cards that are done
+- `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done
+- `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
+- `--clear` (`block`): Lift the block
+- `--json`: Output the verb result as JSON
+
+The words of `TITLE` and `REASON` are joined with spaces. `ls` prints one line
+per card: its id, stage (with `!` when it is blocked), the pane that holds it,
+its age, and its title. `claim` prints the card's id and title on its first
+line, so a script can read the id with `cut -d' ' -f1`; with nothing to take it
+fails with `no_task`, and a card another pane holds fails with `task_held`.
+
+From inside a pane, changing a card needs the `task` grant. A pane claims
+only for itself and finishes, stages, blocks or releases only the card it
+holds, unless it holds `admin`. `rm` from a pane needs `admin`.
+
+**Examples:**
+```bash
+# A conductor adds the work
+tuios task add -p 'Read api/retry.go and add a jitter option, with a test.' make the backoff jitter configurable
+
+# A worker pane takes the next card, and finishes it
+tuios task claim --next
+tuios task done t1
+
+# Stuck on something, then free again
+tuios task block t1 waiting on the staging key
+tuios task block t1 --clear
+
+# What is open
+tuios task ls --open
+```
+
 ### `tuios review`
 
 Show what the agent in a pane changed, leave notes on its lines, and send the
@@ -4635,7 +4698,8 @@ them, however it was made:
 | `fan` | Write in its fan group and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, without the person, and type into a pane waiting on a prompt |
 | `files` | Copy files with `tuios cp`: a copy whose ends on this machine are inside the folder of the pane, and whose ends on a host are under its home folder or are its receive folder. It sees and controls only its own copies |
-| `admin` | Everything else, as every pane could before grants, such as `run-command` and `attach`. Includes `read`, `write`, `fan` and `files`, never `respond` |
+| `task` | Add, claim, finish, stage, block and release the task cards of its own session with `tuios task`. It claims only for itself and changes only the card it holds |
+| `admin` | Everything else, as every pane could before grants, such as `run-command`, `attach` and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
 
 A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`,
 `queue`) into another pane only when that pane holds nothing it does not,

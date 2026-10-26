@@ -21,6 +21,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `repo_not_found`, `not_repo`, `no_notes`, `hunk_changed`, `index_changed`,
 `whole_file_only`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
+`task_held`, `no_task`,
 `no_buffer`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
 `no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `source_changed`,
 `cross_device`, `disk_full`, `no_transfer`, `same_session`, `pane_not_movable`,
@@ -56,6 +57,8 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `rate_limited` | Stop sending. Two agents are probably answering each other. |
 | `no_keyboard` | `human` has no pane. Use `ask-human` or mail to `human`. |
 | `queue_full` | The pane already holds `[agents.queue] max` queued messages. Wait for the agent to take them, or drop one with `tuios queue rm`. |
+| `task_held` | Another pane holds the card you claimed. Nothing changed. Take another with `tuios task claim --next`, or wait for `task-changed` released. |
+| `no_task` | No card has that id, or `claim --next` found none open: every card is held, blocked or done. `tuios task ls` lists them. Stop, or wait for `task-changed` added. |
 | `no_buffer` | From the paste buffer verbs: no buffer has that name, or there are no buffers. Nothing was read, pasted or deleted. `tuios list-buffers` shows the names. |
 | `busy` | The daemon had no room for the request now: other large requests held its memory, or the pane has not read the last large input. From `transfer-start`: another copy writes that path now. Nothing was done. Try again after a short wait, or when that copy ends. |
 | `too_many_connections` | The daemon already serves as many connections as it takes, and closed yours. Nothing was done. Close some clients or commands, then try again. |

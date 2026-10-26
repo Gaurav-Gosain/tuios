@@ -9595,3 +9595,19 @@ checkpoint. Run on 2026-10-26 on Linux.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | Every part of the fix (a binary built from `origin/main`) | `TestGitRunsNoProgramOfThePaneRepository`: the checkpoint runs `clean`, `hook-post-index-change` and `hook-reference-transaction`; review, fan, fan compare and worktree diff run the filter, and fan runs `hook-post-checkout` and `smudge`; worktree diff runs `external` and shows no a.txt. `TestSpawnSheetIgnoresAReportedFolder`: the sheet says "from otherrepo / main", its read runs `clean`, and Start makes a worktree of the other repository and runs `hook-post-checkout`. `TestCheckpointIgnoresAReportedFolderWithoutProcessCwd`: the checkpoint is taken in the reported repository, not the one the pane started in, and runs `clean`, `hook-post-index-change` and `hook-reference-transaction` | **caught** |
+## Task cards (#1093)
+
+Run on 2026-10-26 on macOS against `tasks-store` rebased on upstream main at
+`12dedac04`. Each control is a text replacement in `internal/session`, run and put
+back before the next.
+
+| Control: what was changed | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The restore does not put the cards back after its state push (`restoreTasks` call in `daemon_resurrect.go` cut) | `TestTaskCardsAreClaimedOnceAndSurviveARestart` | "after the restart the session holds 0 cards, want 2" | **caught** |
+| The state change that closes a pane or ends its agent lets no card go (the `releasedTaskEvents` append in `emitLifecycleLocked`, `session.go`, cut) | `TestTaskCardsAreReleasedWithTheirPane` | "t1 never read ["released" "pane closed"]", after the 10 s wait | **caught** |
+| A client sync drops the cards (`incoming.Tasks, incoming.NextTaskID = canonical…` in `state_merge.go` cut) | `TestTaskCardsAreReleasedWithTheirPane` | "after a client sync the session holds 0 cards, want 3", once the attached client has pushed | **caught** |
+| The selector reads no cards from a pane (`Tasks: tasks` in `paneSelectorTarget`, `verb_select.go`, cut) | `TestTaskCardsAreReleasedWithTheirPane` | "list-agents --select task:t1 = [], want the one pane …" | **caught** |
+
+The artifacts `tasks-claim-and-restart.txt` and `tasks-release-with-pane.txt`
+hold each pane's claim output, the card histories after the pane closed and
+the agent left, and the listings after the restart and after the client sync.
