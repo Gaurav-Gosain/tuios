@@ -84,6 +84,41 @@ func (d *Daemon) harnessOutsidePane(cs *connState, sess *Session, target string,
 	return harnessDaemonAbove(harnessPID, root)
 }
 
+// harnessLeftPane says whether a hook report about window target of sess
+// comes from a process in that pane whose harness no longer runs there.
+//
+// A harness runs its hook as a child and does not wait for it. A hook started
+// just before the harness quits reaches the daemon after it: the process is
+// still in the pane, on its terminal, but the harness it named is no longer
+// its ancestor. Or the hook started after the quit, was given to init or a
+// subreaper, and named that as its harness, or nothing at all. Its report set
+// the pane's state with a harness record that could never read as exited, so
+// the agent row stayed until the pane closed.
+//
+// The harness is taken to run in the pane only when it is the caller or an
+// ancestor of it (callerRunsHarness) and is itself in the pane. A caller
+// outside the pane is left alone: an agent in a container, or under a tmux
+// server, is not judged by this pane's processes. So is anything that cannot
+// be read.
+func (d *Daemon) harnessLeftPane(cs *connState, sess *Session, target string, harnessPID int) bool {
+	if cs == nil || cs.viaLink || cs.paneOnly || cs.peerPID <= 1 || cs.peerPID == os.Getpid() {
+		return false
+	}
+	_, root := sess.paneProcess(target)
+	if root <= 1 {
+		return false
+	}
+	if in, known := processInPane(cs.peerPID, root); !known || !in {
+		return false
+	}
+	if harnessPID > 1 && callerRunsHarness(cs, harnessPID) {
+		if in, known := processInPane(harnessPID, root); !known || in {
+			return false
+		}
+	}
+	return true
+}
+
 // paneProcess returns the id of the window target names and the pid of the
 // process its pane runs. The pid is 0 for a pane on another machine, one whose
 // process has exited, and a target that names no window.

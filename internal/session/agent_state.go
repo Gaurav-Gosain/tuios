@@ -146,6 +146,11 @@ type AgentReport struct {
 	// then is the pid known to name a process of this machine, and only then
 	// may its exit clear the pane. See harnessProc.
 	HarnessIsCaller bool
+	// harnessGone is set by the daemon when the report comes from a process
+	// in the pane whose harness no longer runs there (harnessLeftPane): a
+	// hook that landed after its harness quit. The harness record is then
+	// taken for exited, so the claim lapses once the pane is at its shell.
+	harnessGone bool
 	// SessionStart marks the report of a conversation starting or resuming,
 	// as the hook's SessionStart sends it. It only matters with SharedServer.
 	SessionStart bool
@@ -559,7 +564,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			if w.AgentSessionHarness == "" {
 				w.AgentSessionHarness = next.harness
 			}
-			s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller)
+			s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller, r.harnessGone)
 		}
 		// A pane cleared to none has no agent to describe, and metadata left
 		// behind would be drawn for whatever agent starts in it next. Nor a

@@ -27,6 +27,8 @@ type AgentSessionReport struct {
 	// TranscriptOnly is a metadata update for the conversation already in
 	// the pane, never a request to replace it with a different conversation.
 	TranscriptOnly bool
+	// harnessGone is AgentReport's.
+	harnessGone bool
 }
 
 // errAgentSessionUnchanged tells mutateState that the report named the id the
@@ -87,7 +89,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		owner := s.agentHarnessPIDs[w.ID].pid
 		if w.AgentSessionID == r.SessionID && w.AgentSessionHarness == r.Harness {
 			if r.HarnessPID > 1 && owner != r.HarnessPID {
-				s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller)
+				s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller, r.harnessGone)
 			}
 			return errAgentSessionUnchanged
 		}
@@ -99,7 +101,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 		w.AgentSessionID = r.SessionID
 		w.AgentSessionHarness = r.Harness
 		stored = r.SessionID
-		s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller)
+		s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller, r.harnessGone)
 		// A person pointing the pane at a conversation clears the Codex
 		// guard, so the next SessionStart arms it afresh.
 		delete(s.agentSharedGuards, w.ID)
@@ -120,22 +122,27 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 // setAgentHarnessPID records the harness pid a window's session id came from,
 // forgetting it when the pid is unknown. Its start time is read only for a
 // pid the caller runs under (isCaller), so only that pid's exit can clear the
-// pane (harnessProc). Called with stateMu held.
-func (s *Session) setAgentHarnessPID(windowID string, pid int, isCaller bool) {
-	if pid <= 1 {
+// pane (harnessProc). gone records a harness that had already left the pane
+// when the report came (harnessLeftPane), pid known or not. Called with
+// stateMu held.
+func (s *Session) setAgentHarnessPID(windowID string, pid int, isCaller, gone bool) {
+	if pid <= 1 && !gone {
 		delete(s.agentHarnessPIDs, windowID)
 		return
 	}
 	// A pid already recorded keeps its start time: a later report naming it
 	// from outside the harness would otherwise stop its exit clearing the pane.
-	if old, ok := s.agentHarnessPIDs[windowID]; ok && old.pid == pid && old.timed {
+	if old, ok := s.agentHarnessPIDs[windowID]; ok && pid > 1 && old.pid == pid && old.timed {
 		return
 	}
 	if s.agentHarnessPIDs == nil {
 		s.agentHarnessPIDs = make(map[string]harnessProc)
 	}
-	h := harnessProc{pid: pid}
-	if isCaller {
+	h := harnessProc{pid: max(pid, 0)}
+	switch {
+	case gone:
+		h.gone = true
+	case isCaller:
 		h = readHarnessProc(pid)
 	}
 	s.agentHarnessPIDs[windowID] = h

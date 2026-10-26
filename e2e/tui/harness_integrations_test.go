@@ -1239,6 +1239,11 @@ func fakeClaudePID(t *testing.T, scenario string) int {
 //     its harness_pid and conversation, then the agent crashes. The pid was
 //     recorded from the harness's own hook, so the outside report must not
 //     forget that it can tell when the harness exits, and the row has to go.
+//   - late-report: a hook the agent started reaches the daemon after the
+//     agent has left, from a process it left behind in the pane, as Pi's
+//     session_start report does after a quick quit. The report names a
+//     harness that is no longer its ancestor, so no start time was read,
+//     and its row stayed for the life of the pane.
 //   - protocol-pane: a start-agent --protocol pane, whose pane process is the
 //     protocol program rather than a shell, so it reads as at its shell while
 //     the agent runs. A harness process under it reports through its hook
@@ -1285,6 +1290,9 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		// outside reports from outside the running agent with its harness_pid
 		// and conversation, before the agent leaves.
 		outside bool
+		// late is a payload a process the agent leaves behind reports once
+		// the agent has exited.
+		late string
 	}{
 		{name: "session-end", end: sessionEnd},
 		{name: "session-end-typed", end: sessionEnd, typed: true},
@@ -1295,6 +1303,7 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		{name: "host-pid", hostPID: true},
 		{name: "outside-same-pid", outside: true},
 		{name: "protocol-pane", protocol: true},
+		{name: "late-report", end: sessionEnd, late: cc("", `"hook_event_name":"SessionStart","source":"resume"`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
@@ -1324,6 +1333,11 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 			}
 			lines := []string{
 				cc("", `"hook_event_name":"SessionStart","source":"startup"`),
+			}
+			if tc.late != "" {
+				lines = append(lines, "late "+tc.late)
+			}
+			lines = append(lines,
 				cc("", `"hook_event_name":"UserPromptSubmit","prompt":"Run the tests and read the rail."`),
 				cc("", `"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"go test ./...","description":"Run the tests"},"tool_use_id":"toolu_01x1"`),
 				cc("", `"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"go test ./...","description":"Run the tests"},"tool_response":{"stdout":"ok","stderr":"","interrupted":false},"tool_use_id":"toolu_01x1","duration_ms":40`),
@@ -1331,7 +1345,7 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				cc("", `"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"internal/app/render_sidebar.go"},"tool_response":{"type":"text"},"tool_use_id":"toolu_01x2","duration_ms":3`),
 				cc("", `"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"Hello.","background_tasks":[],"session_crons":[]`),
 				"wait rest",
-			}
+			)
 			if tc.end != "" {
 				lines = append(lines, tc.end)
 			}
@@ -1499,6 +1513,30 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the agents section still lists the pane after its agent left it, with the shell running: %v\nagents section: %q\ndaemon listing:\n%s\n%s",
 					err, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
+			}
+			if tc.late != "" {
+				// The late hook is the second SessionStart in the log, and it
+				// has to have been taken: a refused one would pass for free.
+				var last string
+				for end := time.Now().Add(uiTimeout); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+					data, _ := os.ReadFile(hookLog)
+					if starts := strings.Count(string(data), `"event":"SessionStart"`); starts >= 2 {
+						last = string(data)[strings.LastIndex(string(data), `"event":"SessionStart"`):]
+						break
+					}
+				}
+				if last == "" {
+					t.Fatalf("the late hook never ran")
+				}
+				if !strings.Contains(strings.SplitN(last, "\n", 2)[0], `"applied":true`) {
+					t.Fatalf("the late hook was not applied, so it shows nothing: %s", last)
+				}
+				time.Sleep(ticks)
+				saveFrame(t, term, "agent-exit-"+tc.name+"-late")
+				if st := readAgentState(t, base, session, windowID(t, base, session, "pilot")); st.State != "none" || shown(term.Screen()) {
+					t.Fatalf("a hook that landed after its agent left put the row back for good: the pane is %+v\nagents section: %q\ndaemon listing:\n%s\n%s",
+						st, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
+				}
 			}
 			if !tc.note {
 				return

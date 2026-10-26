@@ -1605,6 +1605,7 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 		SharedServer: d.agentMatcher.registry.SharedServer(p.Harness),
 	}
 	report.foreignPane = d.harnessOutsidePane(cs, sess, target, p.HarnessPID)
+	report.harnessGone = p.AgentSessionID != "" && d.harnessLeftPane(cs, sess, target, p.HarnessPID)
 	report.fromPane = ownPane || d.reportFromOwnPane(cs, sess, target)
 	// The identity guard is read before the report applies, because it is
 	// about the pane as the report found it, and applyAgentReport checks
@@ -1895,6 +1896,7 @@ func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any
 
 		HarnessIsCaller: callerRunsHarness(cs, p.HarnessPID),
 		TranscriptOnly:  p.TranscriptPath != "" || p.TranscriptLeaf != nil,
+		harnessGone:     d.harnessLeftPane(cs, sess, target, p.HarnessPID),
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)

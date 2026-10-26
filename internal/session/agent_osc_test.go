@@ -30,7 +30,7 @@ func attributeHarness(t *testing.T, sess *Session, windowID, harnessID string) {
 		for i := range st.Windows {
 			if st.Windows[i].ID == windowID {
 				st.Windows[i].AgentHarness = harnessID
-				sess.setAgentHarnessPID(windowID, os.Getpid(), true)
+				sess.setAgentHarnessPID(windowID, os.Getpid(), true, false)
 				return nil
 			}
 		}

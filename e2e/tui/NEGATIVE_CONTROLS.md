@@ -7750,6 +7750,16 @@ Upstream main fails both new cases with the pane at `none`: `host-pid` ("a host 
 
 Not covered end to end: an agent actually in another pid namespace. `host-pid` stands in for it with a pid the reporter does not descend from, which is what the daemon sees of one. Nor a platform that does not give the peer's pid, where no harness pid is timed and a report claim stays until it is cleared.
 
+### Follow-up: a hook that lands after its agent quit
+
+The `late-report` case joins the test for discussion 850, where a Pi row stayed in the agents section after a quick quit. The stand-in starts a process that waits for it to exit and then runs a `SessionStart` hook from the pane, as Pi's `session_start` report does when the quit beats it to the daemon. The hook names a harness that is no longer its ancestor, or none, so the old daemon read no start time and the claim never lapsed. The test waits for the late hook to be applied, holds the pane at its shell for three detection ticks, and requires the pane at `none`. Run on 2026-10-26 on Linux against upstream main at 99607164e. The fixed build passes all ten cases, and `late-report` passes 5 of 5 runs.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The whole fix: upstream main, where `harnessLeftPane` does not exist | `late-report`, 3 of 3 runs ("the agents section still lists the pane after its agent left it, with the shell running") | **caught** |
+
+The same race was run with the real Pi 1.4.0 and the shipped extension, with the hook made to land after the quit by a wrapper that sleeps 2 s before it runs `tuios agent-hook`. Upstream main left a stale row in 5 of 30 cycles (source `report`, state `idle`, only the shell in the pane). The fixed build left none in 30 cycles.
+
 ## Two paste tests that pressed Enter before the paste landed
 
 `TestPasteBuffersKeepYanksAndPasteThem` sent Enter once the buffer chooser closed. The chooser closes before the paste lands, because the client reads the buffer from the daemon first. On CI the Enter ran `echo CHOSEN-` alone, and the buffer went to the next prompt. The test now waits for `echo CHOSEN-pbalpha42` on the line before it sends Enter.
