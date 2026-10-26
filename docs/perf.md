@@ -1642,8 +1642,8 @@ byte over two million random pairs of nil, basic, indexed, RGBA, theme-resolved
 and truecolor colours with random attributes, and
 `TestPaletteSGRChangesAllocateNothing` pins the fast path at zero allocations.
 Themed ANSI 0 to 15 resolve to RGBA and truecolor is RGB, so both still go to
-uv, and the ghostty backend renders through `uv.Line.Render` and gets nothing
-from this.
+uv, and the ghostty backend renders through `grid.Render` as well, so it gets
+the same gain.
 
 `TestCompositorSkipsCleanWindows` compared one dirty pane against half of all
 nine dirty. With a pane this cheap to render the frame's fixed cost dominated
@@ -1660,6 +1660,44 @@ allocations against 199.
 | `ClientFrame/panes-9/compose` allocs/op | 42.49k | 11.78k | -72%, B/op -17% |
 | `RenderTerminalUnfocused` allocs/op | 127 | 13 | CPU `~` |
 | `KeystrokeFrame/panes-4` | | | `~` |
+
+**Cell pairs that cannot join skip the grapheme segmenter** (`emulator.go`).
+`grid.Render` asks `clustersJoin` about every pair of neighbouring non-blank
+cells, to know where a cluster break is needed, and for anything but two ASCII
+bytes that concatenated the pair and ran `ansi.FirstGraphemeCluster` on it. A
+screen of box drawing, blocks, braille and Powerline separators is nothing but
+such pairs. `neverJoins` now answers for U+0020 to U+02FF, U+2100 to U+2BFF and
+U+E000 to U+F8FF: UAX #29 joins across a boundary only when one side is CR or
+LF, Hangul jamo, Extend, ZWJ, SpacingMark, Prepend, a regional indicator or an
+Indic conjunct class, and no rune in those ranges is any of them. When the last
+rune of the left cell and the first rune of the right cell are both in them the
+pair is answered without the concatenation or the segmenter. The first range
+starts at U+0020 so that CR, which joins LF, is never taken. Both backends
+render through `grid.Render`, the ghostty one by returning the active
+buffer's render, so this reaches both.
+`TestClusterJoinAgreesWithTheSegmenter` holds `clustersJoin` to the segmenter
+over every ordered pair of single-rune cells in the three ranges, each of them
+against the runes that do join in both orders, those runes against each other,
+and 1,592 multi-rune pairs (8 named ones, such as a ZWJ tail before an extended
+pictographic, plus 24 multi-rune cells paired 66 ways).
+`TestClusterJoinAgreesWithTheSegmenterAtRangeEdges` covers the runes just
+outside the ranges, where combining blocks that do join sit, beside every rune
+inside them, and cells whose first rune joins the cell before while their last
+rune never joins. `TestRenderingASymbolScreenSkipsTheSegmenter` bounds the
+allocations of a symbol screen at 400 against 10,238 before.
+
+Method: `BenchmarkRenderSymbolScreen` (a 207x55 screen of box drawing frames,
+block bars, braille, a Powerline separator and ASCII text, every row full,
+coloured by indexed foregrounds only so every pen change stays on `penDiff`'s
+table) built as two test binaries, the base and the change, run alternately for
+eight rounds at a fixed `-test.benchtime 200x` with `-test.cpu 1` under `nice`
+and `taskset`, compared with `benchstat`.
+
+| | before | after | |
+|---|---|---|---|
+| `RenderSymbolScreen` CPU per op | 1225 us | 608 us | -50.4% (p<0.001) |
+| `RenderSymbolScreen` allocs/op | 10,238 | 20 | -99.8% |
+| `RenderSymbolScreen` B/op | 282.6 KiB | 206.7 KiB | -26.9% |
 
 ### Measured and deliberately not changed
 

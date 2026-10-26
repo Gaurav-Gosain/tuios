@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -368,8 +369,30 @@ func clustersJoin(a, b string) bool {
 		// a text screen.
 		return false
 	}
+	last, _ := utf8.DecodeLastRuneInString(a)
+	first, _ := utf8.DecodeRuneInString(b)
+	if neverJoins(last) && neverJoins(first) {
+		// Symbol screens are made of these pairs, and asking the segmenter
+		// concatenates and runs it for each one.
+		return false
+	}
 	cl, _ := ansi.FirstGraphemeCluster(a+b, ansi.GraphemeWidth)
 	return len(cl) > len(a)
+}
+
+// neverJoins reports whether r is in a range where no rune can take part in a
+// rule that joins two clusters. UAX #29 joins across a boundary only when one
+// of the two runes is CR or LF, Hangul jamo, Extend, ZWJ, SpacingMark,
+// Prepend, a Regional_Indicator or an Indic conjunct class, and nothing in
+// U+0020 to U+02FF (Latin), U+2100 to U+2BFF (letterlike symbols, arrows,
+// maths, box drawing, blocks, shapes, dingbats, braille) or U+E000 to U+F8FF
+// (the private use area, where Powerline and icon fonts live) has any of
+// them. The range starts at U+0020 and not at zero so that CR, which joins LF,
+// stays out whatever the ASCII check above it does.
+func neverJoins(r rune) bool {
+	return r >= 0x20 && r <= 0x2FF ||
+		r >= 0x2100 && r <= 0x2BFF ||
+		r >= 0xE000 && r <= 0xF8FF
 }
 
 // Render renders a snapshot of the terminal screen as a string with styles and
