@@ -3897,7 +3897,9 @@ the same way, by reading the directory. `list-sessions` carries the record as
 
 ### list-worktrees
 
-List the sessions whose directory is a git worktree.
+List the sessions whose directory is a git worktree. A session in the
+repository's main checkout reads as a row with `main` true; no worktree verb
+acts on such a row.
 
 Params: `repo` (filter by repository name), `group` (filter by fan-out stem),
 `changes` (run git in each and report `changes`, `ahead`, `merged` and
@@ -3915,7 +3917,7 @@ Response:
 {"result": {"type": "worktree_list", "total": 1, "worktrees": [
   {"session": "api-feat-retry", "repo": "api", "repo_root": "/src/api", "branch": "feat/retry",
    "path": "/home/u/.local/share/tuios/worktrees/api/feat-retry", "base": "main", "group": "",
-   "managed": true, "gone": false, "state": "working", "harness": "claude-code", "windows": 1,
+   "managed": true, "gone": false, "main": false, "state": "working", "harness": "claude-code", "windows": 1,
    "attached": false, "prompt_status": "", "prompt_note": "", "changes": 3, "ahead": 1,
    "merged": false}]}}
 ```
