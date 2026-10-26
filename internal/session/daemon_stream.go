@@ -26,6 +26,13 @@ var (
 	streamFloodBytes    = 4096
 )
 
+// streamBatchKeep is the batch capacity a stream keeps across an idle spell.
+// A larger batch is let go once the stream has stayed idle for queueTrimAfter,
+// and the next output grows a new one. It is the batch's counterpart to
+// queueKeep, for a flood of large chunks that fills the batch without growing
+// the queue.
+const streamBatchKeep = 32 * 1024
+
 // streamPTYOutput streams raw PTY bytes to a subscriber with batching.
 // Multiple queued chunks are coalesced into a single connection write to
 // reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
@@ -55,9 +62,10 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	}()
 
 	const maxBatch = 256 * 1024
-	// Grown by the first output and kept after that. Made up front it was
-	// 256 KiB for every client and pane pair, including panes that never
-	// print.
+	// Grown by the first output. Made up front it was 256 KiB for every
+	// client and pane pair, including panes that never print. A flood grows
+	// it to maxBatch, so it is let go once the stream has stayed idle for
+	// queueTrimAfter, unless it is no larger than streamBatchKeep.
 	var batch []byte
 	queue := &sub.out
 	// take accounts for a chunk taken off the stream, so broadcast can tell
@@ -73,8 +81,8 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	var windowStart time.Time
 	windowBytes := 0
 	var hold *time.Timer
-	// trim fires once a queue the backlog grew has stayed empty for
-	// queueTrimAfter. Made the first time a grown queue drains.
+	// trim fires once a queue the backlog grew, or a batch a flood grew, has
+	// stayed empty for queueTrimAfter. Made the first time either drains.
 	var trim *time.Timer
 	// resize is a value, not a pointer: taking the address of the receive
 	// variables made them escape, one allocation per chunk.
@@ -98,7 +106,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 			// Wait only after a pop found the queue empty: the next push
 			// leaves a token on wake (subscriber_queue.go).
 			var trimC <-chan time.Time
-			if queue.oversized() {
+			if queue.oversized() || cap(batch) > streamBatchKeep {
 				if trim == nil {
 					trim = time.NewTimer(queueTrimAfter)
 				} else {
@@ -114,6 +122,9 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 			case <-queue.wake:
 			case <-trimC:
 				queue.trim()
+				if cap(batch) > streamBatchKeep {
+					batch = nil
+				}
 			}
 			continue
 		}

@@ -1383,7 +1383,10 @@ taking the address of the receive variables made them escape.
 window's `outputWriter` each made a 256 KiB batch buffer when their goroutine
 started, so every client and pane subscription on the daemon, and every daemon
 window on the client, held 256 KiB whether or not the pane ever printed. Both
-start from a nil slice now; the first output grows it and the capacity is kept.
+start from a nil slice now; the first output grows it. The capacity was kept for
+the life of the stream when this entry was written; "2026-10 the output batch
+buffers" below lets a batch past 32 KiB go once the stream has been idle for a
+second.
 
 | heap after GC, per idle instance | before | after |
 |---|---|---|
@@ -4044,7 +4047,8 @@ a limit and not a reservation.
   token there.
 - A queue that grew past 16 slots gives its array back after it has stayed
   empty for one second (`queueTrimAfter`). The attach stream trims on a timer
-  it arms only for such a queue. `stream-pane` trims on its one-second tick.
+  it arms for such a queue, and also for a batch larger than 32 KiB ("2026-10
+  the output batch buffers" below). `stream-pane` trims on its one-second tick.
 
 ### Numbers
 
@@ -4118,8 +4122,9 @@ subscriber queue entry above did for its channel.
   token there. The order, the batch cut at a resize or a drain sentinel,
   `queuedBytes`, `maxQueuedBytes` and the epochs are unchanged.
 - A queue that grew past 16 slots gives its array back after it has stayed
-  empty for one second. The writer arms a timer for that only when the queue
-  is oversized and empty, and stops it when it returns.
+  empty for one second. The writer arms a timer for that when the queue is
+  empty and either oversized or holding a batch larger than 32 KiB ("2026-10
+  the output batch buffers" below), and stops it when it returns.
 - `DrainPendingOutput` waits for a free slot at the bound, polling at
   `queueRoomPoll` as `waitForQueueRoom` does, so its sentinel is never
   dropped. `Close` closes the queue, so a late sender queues nothing.
@@ -4243,6 +4248,76 @@ the whole `resizeMarks` slice must be equal.
 - The ring is reassigned only inside `appendToBuffer`, and every append and
   `broadcast` pair already holds `streamMu`, which is what lets `broadcast`
   read the ring's length without `outputMu`.
+
+## 2026-10 the output batch buffers
+
+Both stream writers coalesce what is queued into one batch of up to 256 KiB,
+and the batch kept its capacity for as long as the stream lived. The two queue
+entries above give a grown queue back after a second, but only for a queue past
+16 slots. A flood of large chunks fills the batch without growing the queue:
+16 chunks of 16 KiB make one 256 KiB batch and leave the queue at 16 slots, so
+the trim timer never armed and each stream kept about 256 KiB for life. That is
+one buffer for every client and pane pair on the daemon and one for every
+daemon pane on the client. This revokes "the first output grows it and the
+capacity is kept" in "The output batch buffers grow on first use" above, which
+is amended in place.
+
+### What changed
+
+- `streamPTYOutput` and `outputWriter` arm the same one-second trim timer when
+  the queue is empty and either the queue is oversized or the batch is larger
+  than 32 KiB (`streamBatchKeep`, `outputBatchKeep`).
+- When the timer fires, the queue is trimmed as before and a batch past 32 KiB
+  is set to nil. The next chunk grows a new one.
+- The batch is let go only on the timer, between batches, with the queue empty.
+  A stream that is never idle for a second keeps its buffer, as the queue
+  trim does.
+
+### Numbers
+
+Heap is `HeapAlloc` after two `runtime.GC()` calls (the daemon's frame buffers
+sit in a sync.Pool and survive one GC), read before the stream or windows
+exist and again with them reachable, minus the first. Run as a throwaway
+program on cores 6-11, three runs each, main and branch interleaved.
+
+Daemon: one subscriber stream on `streamPTYOutput`, 16 chunks of 16 KiB of
+numbered lines pushed onto its queue with the frame interval set to one second.
+The queue stays at 16 slots. Read 200 ms after the batch went out, and again
+1.5 s after that.
+
+Client: 6 daemon windows at 12x6 with 1 line of scrollback, each with its
+writer stalled by `LockIO`, sent 15 chunks of 16 KiB of numbered lines, released
+and drained with `DrainPendingOutput`. The queue stays at 16 slots. Read
+straight after the drain, and again 1.5 s later; figures are bytes per window.
+
+| | main | branch |
+|---|---|---|
+| daemon stream, 200 ms after the flood | 279816, 279832, 279848 B | 280224, 280144, 280224 B |
+| daemon stream, 1.7 s after the flood | 280056, 279848, 279864 B | 1744, 1776, 1856 B |
+| client window, straight after the drain | 311244, 335878, 335876 B | 336105, 325752, 336140 B |
+| client window, 1.5 s later | 311262, 335916, 335913 B | 57630, 56813, 57646 B |
+
+The early readings match on both sides, so a batch is still kept for the
+second. The client window keeps about 57 KB that the daemon stream does not: the
+emulator, its scrollback and the screen buffers a window needs once it has
+printed.
+
+`stream_batch_trim_test.go` (session) and `output_batch_trim_test.go`
+(terminal) hold these as budgets. Each takes its baseline once the heap has
+stayed within 16 KiB for three seconds, so garbage and timers left by earlier
+tests are not counted. The early reading is taken 475 ms in, late inside the
+600 ms guard, so a batch let go before the second is up fails it. A second
+burst must then arrive whole and in order: the daemon test compares the frame
+payloads with the burst, and the client test gives the window room for the whole
+burst and checks every line of it.
+
+### Measured and deliberately not changed
+
+- **Letting the batch go at every drain.** The two queue entries rejected the
+  same thing for the array: a bursty pane regrows it at every burst. The batch
+  goes on the same one-second timer for the same reason.
+- **A timer for every idle stream.** The timer arms only for an oversized queue
+  or an oversized batch, so a stream that never flooded arms none.
 
 ## 2026-10 allocations on the output path
 

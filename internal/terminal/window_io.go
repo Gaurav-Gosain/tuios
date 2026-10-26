@@ -62,6 +62,11 @@ const (
 	// proportionally shorter worst-case stall for the renderer.
 	maxVTChunk = 8 * 1024
 
+	// outputBatchKeep is the batch capacity outputWriter keeps across an idle
+	// spell. A larger batch is let go once the pane has stayed idle for
+	// outputQueueTrimAfter, and the next output grows a new one.
+	outputBatchKeep = 32 * 1024
+
 	// queueRoomPoll is how often a sender blocked on a full queue looks again.
 	queueRoomPoll = time.Millisecond
 )
@@ -188,11 +193,14 @@ func (w *Window) outputWriter() {
 		return
 	}
 
-	// Grown by the first output and kept after that. Made up front it was
-	// 256 KiB for every pane, including the ones that never print.
+	// Grown by the first output. Made up front it was 256 KiB for every pane,
+	// including the ones that never print. A flood grows it to maxBatch, so it
+	// is let go once the pane has stayed idle for outputQueueTrimAfter, unless
+	// it is no larger than outputBatchKeep.
 	var batch []byte
-	// trim fires once a queue the backlog grew has stayed empty for
-	// outputQueueTrimAfter. Made the first time a grown queue drains.
+	// trim fires once a queue the backlog grew, or a batch a flood grew, has
+	// stayed empty for outputQueueTrimAfter. Made the first time either
+	// drains.
 	var trim *time.Timer
 	defer func() {
 		if trim != nil {
@@ -224,7 +232,7 @@ func (w *Window) outputWriter() {
 			// Wait only after a pop found the queue empty: the next push
 			// leaves a token on wake.
 			var trimC <-chan time.Time
-			if w.outputQ.oversized() {
+			if w.outputQ.oversized() || cap(batch) > outputBatchKeep {
 				if trim == nil {
 					trim = time.NewTimer(outputQueueTrimAfter)
 				} else {
@@ -238,6 +246,9 @@ func (w *Window) outputWriter() {
 			case <-w.outputQ.wake():
 			case <-trimC:
 				w.outputQ.trim()
+				if cap(batch) > outputBatchKeep {
+					batch = nil
+				}
 			}
 			continue
 		}
