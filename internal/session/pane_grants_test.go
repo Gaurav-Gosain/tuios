@@ -901,7 +901,16 @@ func TestThePluginTokenHoldsTheCaller(t *testing.T) {
 		t.Errorf("a caller with a plugin's token was confirmed as the person")
 	}
 
-	env["TUIOS_PLUGIN_TOKEN"] = "00" + env["TUIOS_PLUGIN_TOKEN"][2:]
+	// Flip one hex digit rather than writing a fixed prefix: a token whose
+	// first byte is already 00 would survive that untouched, and the daemon
+	// would rightly take it. (Once in 256 daemon starts, drawn on CI.)
+	tampered := []byte(env["TUIOS_PLUGIN_TOKEN"])
+	if tampered[0] == '0' {
+		tampered[0] = '1'
+	} else {
+		tampered[0] = '0'
+	}
+	env["TUIOS_PLUGIN_TOKEN"] = string(tampered)
 	bad, err := DialVerbClientAt(sp, "test")
 	if err != nil {
 		t.Fatal(err)
