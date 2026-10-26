@@ -202,6 +202,13 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	// detail returns the first changed lines of each attempt's files, which
+	// are file contents: over a link it needs what review-diff needs.
+	if p.Detail {
+		if verr := d.checkLinkPolicy(cs, linkCapReadOut, "compare-fan with detail"); verr != nil {
+			return nil, verr
+		}
+	}
 	_, info, verr := d.fanTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr

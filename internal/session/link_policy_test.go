@@ -3,12 +3,14 @@ package session
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -605,5 +607,190 @@ func TestALinkReadsNoCredentialCarrier(t *testing.T) {
 	// denied folder counts once, and nothing is named.
 	if n, _ := walk["denied"].(float64); n != 5 {
 		t.Errorf("ASSERTION: the walk counts %v entries left out, want 5", walk["denied"])
+	}
+}
+
+// TestALowClassLinkReadsAndWritesNoFile: a machine allowed only list and mail
+// may not read a file on this machine, overwrite one, or read a worktree's
+// file contents, by any verb those classes reach.
+//
+// The ways this can fail, written down first:
+//   - stash-put with a path and no content makes this daemon open the path
+//     itself, and stash-get hands the bytes back;
+//   - screenshot with out writes the picture to any path the caller names;
+//   - compare-fan with detail returns the first lines of each changed file,
+//     untracked files included;
+//   - the fix refuses too much: a content put over a link, an empty file
+//     sent as content, a link screenshot into the screenshot folder, the
+//     counts of compare-fan, and every one of these on the machine's own
+//     socket keep working.
+func TestALowClassLinkReadsAndWritesNoFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the worktree fixture runs git with sh")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	resetDenyKeysCache(t)
+	const secret = "FAKE-PRIVATE-KEY\n"
+	const owner = "ssh-ed25519 AAAA owner@laptop\n"
+	key := filepath.Join(home, ".ssh", "id_ed25519")
+	authorized := filepath.Join(home, ".ssh", "authorized_keys")
+	if err := os.MkdirAll(filepath.Dir(key), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for p, body := range map[string]string{key: secret, authorized: owner} {
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d, sp, repo := worktreeFixture(t)
+	makeSessionWithWindow(t, d, "work")
+	d.SetLinkPolicies(map[string]config.HostConfig{
+		"phone":  {Allow: []string{"list", "mail"}},
+		"viewer": {Allow: []string{"list"}},
+		"writer": {Allow: []string{"list", "write"}},
+	})
+	phone := dialLink(t, sp)
+	result(t, linkPeer(t, phone, "phone"))
+	local := dialVerb(t, sp)
+
+	t.Run("stash-put", func(t *testing.T) {
+		mustRefuse(t, callP(phone, t, "file-read", map[string]any{"path": key}), ErrVerbForbidden, "file-read from a link that may not read files")
+		resp := callP(phone, t, "stash-put", map[string]any{"session": "work", "path": key})
+		if res, ok := resp["result"].(map[string]any); ok {
+			got := callP(phone, t, "stash-get", map[string]any{"session": "work", "path": res["path"]})
+			t.Fatalf("ASSERTION: a link that may not read files stashed %s by its path: %v", key, got["result"])
+		}
+		mustRefuse(t, resp, ErrVerbForbidden, "stash-put by path over a link")
+		if n, _ := result(t, callP(phone, t, "stash-list", map[string]any{"session": "work"}))["total"].(float64); n != 0 {
+			t.Errorf("ASSERTION: a refused put left %v entries in the stash", n)
+		}
+
+		// The CLI sends the bytes, and an empty file as empty content.
+		sent := result(t, callP(phone, t, "stash-put", map[string]any{"session": "work", "path": "laptop:/tmp/notes.txt", "content": base64.StdEncoding.EncodeToString([]byte("notes\n"))}))
+		if b, _ := sent["bytes"].(float64); b != 6 {
+			t.Errorf("a content put over a link stored %v bytes, want 6", sent["bytes"])
+		}
+		empty := result(t, callP(phone, t, "stash-put", map[string]any{"session": "work", "path": key, "content": ""}))
+		if b, _ := empty["bytes"].(float64); b != 0 {
+			t.Errorf("ASSERTION: an empty file sent over a link stored %v bytes, want 0: the path was read", empty["bytes"])
+		}
+		// On this machine a path put still copies the file.
+		mine := result(t, callP(local, t, "stash-put", map[string]any{"session": "work", "path": key}))
+		if b, _ := mine["bytes"].(float64); int(b) != len(secret) {
+			t.Errorf("a local path put stored %v bytes, want %d", mine["bytes"], len(secret))
+		}
+	})
+
+	t.Run("screenshot", func(t *testing.T) {
+		viewer := dialLink(t, sp)
+		result(t, linkPeer(t, viewer, "viewer"))
+		mustRefuse(t, callP(viewer, t, "send-text", map[string]any{"session": "work", "text": "x"}), ErrVerbForbidden, "send-text from a link that may only list")
+		resp := callP(viewer, t, "screenshot", map[string]any{"session": "work", "out": authorized, "format": "txt"})
+		if got, err := os.ReadFile(authorized); err != nil || string(got) != owner {
+			t.Errorf("ASSERTION: a screenshot from a link changed %s: %q, %v", authorized, got, err)
+		}
+		mustRefuse(t, resp, ErrVerbForbidden, "screenshot with out over a link")
+
+		shot := result(t, callP(viewer, t, "screenshot", map[string]any{"session": "work", "format": "txt"}))
+		if p, _ := shot["path"].(string); p == "" {
+			t.Errorf("a link screenshot without out wrote nothing: %v", shot)
+		}
+		out := filepath.Join(home, "shots", "local.txt")
+		result(t, callP(local, t, "screenshot", map[string]any{"session": "work", "out": out, "format": "txt"}))
+		if _, err := os.Stat(out); err != nil {
+			t.Errorf("a local screenshot with out did not write it: %v", err)
+		}
+	})
+
+	t.Run("compare-fan", func(t *testing.T) {
+		names := fakeFan(t, d, local, repo, "fan/leak", 1, "")
+		const env = "AWS_SECRET_ACCESS_KEY=FAKE-SECRET-0123456789\n"
+		writeIn(t, worktreePath(t, d, names[0]), "deploy.env", env)
+
+		leaks := func(resp map[string]any) bool {
+			raw, _ := json.Marshal(resp)
+			return strings.Contains(string(raw), "FAKE-SECRET")
+		}
+		resp := callP(phone, t, "compare-fan", map[string]any{"session": names[0], "detail": true})
+		if leaks(resp) {
+			t.Errorf("ASSERTION: compare-fan with detail returned a worktree file's contents to a link that may only list")
+		}
+		mustRefuse(t, resp, ErrVerbForbidden, "compare-fan with detail from a link that may only list")
+		counts := rowsOf(t, result(t, callP(phone, t, "compare-fan", map[string]any{"session": names[0]})))
+		if len(counts) != 1 || counts[0]["files"] == nil {
+			t.Errorf("compare-fan without detail over a link lost its counts: %v", counts)
+		}
+
+		writer := dialLink(t, sp)
+		result(t, linkPeer(t, writer, "writer"))
+		if !leaks(result(t, callP(writer, t, "compare-fan", map[string]any{"session": names[0], "detail": true}))) {
+			t.Errorf("compare-fan with detail from a link that may write lost its lines")
+		}
+		if !leaks(result(t, callP(local, t, "compare-fan", map[string]any{"session": names[0], "detail": true}))) {
+			t.Errorf("compare-fan with detail on this machine lost its lines")
+		}
+	})
+}
+
+// TestNoLowClassVerbTakesAPathOrReturnsAFile holds the verbs a link reaches
+// with list or mail, or with nothing, to the rule the classes rest on: they
+// read listings, panes and the mailbox, and no file on this machine. A
+// parameter that names a path or an output file, or a result that carries a
+// file's bytes, is a way past files and write. Each one here is checked in
+// its handler, and the reason says how. A new one fails this test until it is
+// checked too.
+func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
+	checked := map[string]string{
+		"file-stat.path":                 "checkLinkRead",
+		"file-list.dir":                  "checkLinkRead",
+		"read-dir.dir":                   "checkLinkRead",
+		"wait-dir.dir":                   "checkLinkRead",
+		"stash-get.path":                 "opens only an entry of the session's stash",
+		"stash-put.path":                 "over a link only names the stored file: content is required and the path is never opened",
+		"screenshot.out":                 "refused over a link",
+		"send-agent-message.attachments": "over a link only a stashed file may be attached",
+		"link-peer.ssh_auth_sock":        "an agent socket, followed only for a link that may act as the person",
+		"stash-get.content":              "the bytes of a stash entry, which a link fills only with content",
+		"capture-pane.content":           "pane text, which list reaches",
+		"peek-prompt.lines":              "pane text, which list reaches",
+		"show-buffer.data":               "a paste buffer, which list reaches as it reaches the panes",
+		"show-buffer.data_b64":           "a paste buffer, which list reaches as it reaches the panes",
+	}
+	pathy := []string{"path", "paths", "dir", "file", "files", "out", "output", "cwd", "sock", "attachments", "dest", "src", "root"}
+	carries := []string{"content", "data", "data_b64", "lines"}
+	high := []string{config.LinkAllowFiles, config.LinkAllowWrite, config.LinkAllowOpen, config.LinkAllowRespond}
+	seen := map[string]bool{}
+	for verb, caps := range verbCapabilities {
+		if slices.ContainsFunc(expandRelay(caps), func(c string) bool { return slices.Contains(high, c) }) {
+			continue
+		}
+		entry := verbRegistry()[verb]
+		for _, p := range entry.params {
+			if !slices.ContainsFunc(strings.Split(p.Name, "_"), func(w string) bool { return slices.Contains(pathy, w) }) {
+				continue
+			}
+			key := verb + "." + p.Name
+			seen[key] = true
+			if checked[key] == "" {
+				t.Errorf("ASSERTION: %s takes %q, which looks like a path on this machine, and a link reaches it with %v", verb, p.Name, caps)
+			}
+		}
+		for _, r := range entry.returns {
+			if !slices.Contains(carries, r.Name) {
+				continue
+			}
+			key := verb + "." + r.Name
+			seen[key] = true
+			if checked[key] == "" {
+				t.Errorf("ASSERTION: %s returns %q, which can carry a file's bytes, and a link reaches it with %v", verb, r.Name, caps)
+			}
+		}
+	}
+	for key := range checked {
+		if !seen[key] {
+			t.Errorf("the list names %s, which no list or mail verb has", key)
+		}
 	}
 }

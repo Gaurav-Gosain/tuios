@@ -1683,7 +1683,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "scrollback", Type: "bool", Description: "Put the pane's history above the screen in the picture.", Default: "false"},
 				{Name: "lines", Type: "int", Description: "Bound the history rows to the last N. Needs scrollback."},
 				{Name: "cursor", Type: "bool", Description: "Draw the cursor cell.", Default: "false"},
-				{Name: "out", Type: "string", Description: "Write here instead of generating a name under screenshot.directory."},
+				{Name: "out", Type: "string", Description: "Write here instead of generating a name under screenshot.directory. A linked machine cannot set it."},
 			},
 			returns: []verbParam{
 				{Name: "path", Type: "string", Description: "The file that was written."},
@@ -2536,7 +2536,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			params: []verbParam{
 				sessionParam,
 				{Name: "path", Type: "string", Required: true, Description: "Absolute path to an existing regular file on the daemon's host. The daemon opens and copies it as the user that started it. With content, the daemon does not open it. It only names the stored file."},
-				{Name: "content", Type: "string", Description: "The file's bytes, base64, for a file on another machine. At most 8 MB decoded. The path then gives the extension and the source label."},
+				{Name: "content", Type: "string", Description: "The file's bytes, base64, for a file on another machine. At most 8 MB decoded. The path then gives the extension and the source label. From a linked machine, content is required."},
 			},
 			returns: []verbParam{
 				{Name: "path", Type: "string", Description: "The stored path. Attach this, or hand it to another agent."},

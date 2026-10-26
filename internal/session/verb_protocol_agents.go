@@ -199,7 +199,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Any session of the fan. Omit for the most recently active session."},
 				{Name: "changes", Type: "bool", Description: "Count the changed files and lines of each attempt, a few git calls per sibling.", Default: "true"},
-				{Name: "detail", Type: "bool", Description: "With changes, also list each attempt's files (file_list, at most 8, most changed first) and its first changed lines (lines, at most 6). Two more git calls per sibling.", Default: "false"},
+				{Name: "detail", Type: "bool", Description: "With changes, also list each attempt's files (file_list, at most 8, most changed first) and its first changed lines (lines, at most 6). Two more git calls per sibling. From a linked machine, detail needs write in its policy.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "group", Type: "string", Description: "The fan's group."},
