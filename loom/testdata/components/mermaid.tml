@@ -1,0 +1,15 @@
+<!-- 60x24 -->
+<tml version="1">
+  <col gap="1">
+    <mermaid>
+flowchart LR
+  T[Axis tilted] --> J[June: north leans in]
+  T --> D[December: south leans in]
+  J --> S[Summer]
+    </mermaid>
+    <mermaid>
+flowchart LR
+  A[open --> B
+    </mermaid>
+  </col>
+</tml>

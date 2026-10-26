@@ -388,6 +388,14 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 					s.scrollBy(p, key)
 				}
 				return Result{View: true}, nil
+			case *mermaidWidget:
+				// A diagram that fits leaves the wheel to the page.
+				if w := p.w.(*mermaidWidget); w.over {
+					for range 3 {
+						s.scrollBy(p, key)
+					}
+					return Result{View: true}, nil
+				}
 			}
 		}
 		// Over anything else, the wheel scrolls a page that does not fit.
@@ -424,7 +432,7 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 	return Result{}, nil
 }
 
-// scrollBy moves a table's view or a scroll box by one row.
+// scrollBy moves a table's view, a scroll box or a diagram by one row.
 func (s *Surface) scrollBy(b *box, key string) {
 	d := 1
 	if key == "up" {
@@ -442,6 +450,9 @@ func (s *Surface) scrollBy(b *box, key string) {
 		}
 	case *scrollWidget:
 		s.view.Scroll[b.key] = max(w.offset(s, b)+d, 0)
+	case *mermaidWidget:
+		off, _ := lookup(s.view.Scroll, b)
+		s.view.Scroll[b.key] = clampInt(off+d, 0, max(w.content-w.view, 0))
 	}
 	s.markView(b.key)
 }

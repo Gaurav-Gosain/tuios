@@ -1,0 +1,222 @@
+=== truecolor 60x24
+|                     ┌─────────────┐                        |
+|                     │ Axis tilted │                        |
+|                     └─────────────┘                        |
+|             ┌─────────────┘ └──────────────┐               |
+|             ▼                              ▼               |
+| ┌──────────────────────┐     ┌──────────────────────────┐  |
+| │ June: north leans in │     │ December: south leans in │  |
+| └──────────────────────┘     └──────────────────────────┘  |
+|             │                                              |
+|             ▼                                              |
+|        ┌────────┐                                          |
+|        │ Summer │                                          |
+|        └────────┘                                          |
+|                                                            |
+|Cannot draw the diagram: Parse error on line 4. Expecting '…|
+| flowchart LR                                               |
+|   A[open --> B                                             |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaabaccccaccccccabaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaadddddddddddddddaddddddddddddddddaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeaaaaaaaaaaaaaaa|
+|abbbbbbbbbbbbbbbbbbbbbbbbaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaa|
+|abacccccacccccacccccaccabaaaaabacccccccccacccccacccccaccabaa|
+|abbbbbbbbbbbbbbbbbbbbbbbbaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaa|
+|aaaaaaaaaaaaadaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaabbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaabaccccccabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaabbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|ffffffaffffafffaffffffffafffffafffffaffaffffaffafffffffffaff|
+|ghhhhhhhhhghhggggggggggggggggggggggggggggggggggggggggggggggg|
+|ggghhhhhhghhhghggggggggggggggggggggggggggggggggggggggggggggg|
+|gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel
+c: fg=fg bg=panel
+d: fg=dim bg=panel
+e: fg=fg bg=panel bold
+f: fg=warning bg=panel
+g: bg=canvas
+h: fg=fg bg=canvas
+=== 256 60x24
+|                     ┌─────────────┐                        |
+|                     │ Axis tilted │                        |
+|                     └─────────────┘                        |
+|             ┌─────────────┘ └──────────────┐               |
+|             ▼                              ▼               |
+| ┌──────────────────────┐     ┌──────────────────────────┐  |
+| │ June: north leans in │     │ December: south leans in │  |
+| └──────────────────────┘     └──────────────────────────┘  |
+|             │                                              |
+|             ▼                                              |
+|        ┌────────┐                                          |
+|        │ Summer │                                          |
+|        └────────┘                                          |
+|                                                            |
+|Cannot draw the diagram: Parse error on line 4. Expecting '…|
+| flowchart LR                                               |
+|   A[open --> B                                             |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+--- styles
+|aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaabaccccaccccccabaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaadddddddddddddddaddddddddddddddddaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeaaaaaaaaaaaaaaa|
+|abbbbbbbbbbbbbbbbbbbbbbbbaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaa|
+|abacccccacccccacccccaccabaaaaabacccccccccacccccacccccaccabaa|
+|abbbbbbbbbbbbbbbbbbbbbbbbaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaa|
+|aaaaaaaaaaaaadaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaabbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaabaccccccabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaabbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|ffffffaffffafffaffffffffafffffafffffaffaffffaffafffffffffaff|
+|ghhhhhhhhhghhggggggggggggggggggggggggggggggggggggggggggggggg|
+|ggghhhhhhghhhghggggggggggggggggggggggggggggggggggggggggggggg|
+|gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+a: bg=panel
+b: fg=accent bg=panel
+c: fg=fg bg=panel
+d: fg=dim bg=panel
+e: fg=fg bg=panel bold
+f: fg=warning bg=panel
+g: bg=canvas
+h: fg=fg bg=canvas
+=== 16 60x24
+|                     ┌─────────────┐                        |
+|                     │ Axis tilted │                        |
+|                     └─────────────┘                        |
+|             ┌─────────────┘ └──────────────┐               |
+|             ▼                              ▼               |
+| ┌──────────────────────┐     ┌──────────────────────────┐  |
+| │ June: north leans in │     │ December: south leans in │  |
+| └──────────────────────┘     └──────────────────────────┘  |
+|             │                                              |
+|             ▼                                              |
+|        ┌────────┐                                          |
+|        │ Summer │                                          |
+|        └────────┘                                          |
+|                                                            |
+|Cannot draw the diagram: Parse error on line 4. Expecting '…|
+| flowchart LR                                               |
+|   A[open --> B                                             |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+--- styles
+|                     aaaaaaaaaaaaaaa                        |
+|                     a bbbb bbbbbb a                        |
+|                     aaaaaaaaaaaaaaa                        |
+|             ccccccccccccccc cccccccccccccccc               |
+|             d                              d               |
+| aaaaaaaaaaaaaaaaaaaaaaaa     aaaaaaaaaaaaaaaaaaaaaaaaaaaa  |
+| a bbbbb bbbbb bbbbb bb a     a bbbbbbbbb bbbbb bbbbb bb a  |
+| aaaaaaaaaaaaaaaaaaaaaaaa     aaaaaaaaaaaaaaaaaaaaaaaaaaaa  |
+|             c                                              |
+|             d                                              |
+|        aaaaaaaaaa                                          |
+|        a bbbbbb a                                          |
+|        aaaaaaaaaa                                          |
+|                                                            |
+|eeeeee eeee eee eeeeeeee eeeee eeeee ee eeee ee eeeeeeeee ee|
+| bbbbbbbbb bb                                               |
+|   bbbbbb bbb b                                             |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+a: fg=accent
+b: fg=fg
+c: fg=dim
+d: fg=fg bold
+e: fg=warning
+=== ascii 60x24
+|                     +-------------+                        |
+|                     | Axis tilted |                        |
+|                     +-------------+                        |
+|             +-------------+ +--------------+               |
+|             v                              v               |
+| +----------------------+     +--------------------------+  |
+| | June: north leans in |     | December: south leans in |  |
+| +----------------------+     +--------------------------+  |
+|             |                                              |
+|             v                                              |
+|        +--------+                                          |
+|        | Summer |                                          |
+|        +--------+                                          |
+|                                                            |
+|Cannot draw the diagram: Parse error on line 4. Expecting '~|
+| flowchart LR                                               |
+|   A[open --> B                                             |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+--- styles
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|             a                              a               |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|             a                                              |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+|                                                            |
+a: bold

@@ -49,7 +49,18 @@ answer=$(tml confirm.tml)               # the value of close(), as JSON
 | Status | `badge`, `status`, `spinner`, `button` |
 | Forms | `input` and `textarea` take typed text, with a caret and the readline keys. `submit` buttons and `enter` in an input run the form's `on-submit`. The other fields show their label and value. |
 
-`markdown`, `diff` and `mermaid` show their source. `image` shows its alt text.
+`mermaid` draws the diagram as text through
+[tuios.dev/sketch](https://pkg.go.dev/tuios.dev/sketch), fitted to the width,
+in the theme's roles. A diagram taller than its box scrolls with the wheel. A
+diagram wider than the box at its narrowest layout is cut at the right edge,
+under a note. A diagram that sketch cannot draw shows its source as code,
+under a note that says why. loom keeps each drawing by source and width, so a
+redraw does no layout.
+
+A long `kv` value wraps under its value column. `table` cells and `stat`
+tiles stay on one row and end in an ellipsis when they are cut.
+
+`markdown` and `diff` show their source. `image` shows its alt text.
 Nothing is left out without a mark.
 
 Columns and areas get an axis when they have the room. A line with more than

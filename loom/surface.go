@@ -67,6 +67,8 @@ type Surface struct {
 	mode  plot.Mode
 
 	cache map[*tml.Node]*compiled
+	// sketches keeps the Mermaid diagrams drawn, by source and width.
+	sketches *sketchCache
 
 	root  *box
 	byPtr map[string][]*box

@@ -10,6 +10,7 @@ require (
 	golang.org/x/image v0.45.0
 	tuios.dev/plot v0.2.2-0.20261023124927-50c38920e301
 	tuios.dev/shot v0.2.0
+	tuios.dev/sketch v0.4.1-0.20261026053458-aa6a0a97194a
 	tuios.dev/tml v0.1.0
 )
 

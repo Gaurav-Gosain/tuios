@@ -118,8 +118,10 @@ func (s *Surface) buildLeaf(b *box, vars map[string]any) widget {
 			delta: s.str(n, "delta", vars), role: s.roleOr(n, vars, "fg"), press: s.actionsOf(n, "on-press")}
 	case "kv":
 		return s.buildKV(b, vars)
-	case "code", "markdown", "diff", "mermaid":
+	case "code", "markdown", "diff":
 		return s.buildCode(b, vars)
+	case "mermaid":
+		return s.buildMermaid(b, vars)
 	case "button":
 		kind := n.AttrString("kind")
 		return &buttonWidget{label: s.plainText(n, vars), key: n.AttrString("key"), primary: kind == "primary",
@@ -322,10 +324,14 @@ func tileBar(s *Surface) string {
 	return "▎"
 }
 
-// kvWidget is key and value pairs in two aligned columns.
+// kvWidget is key and value pairs in two aligned columns. A long value
+// wraps onto more rows under its value column.
 type kvWidget struct {
 	keys, vals []string
 	roles      []string
+
+	cacheW int
+	lines  [][]line // each value wrapped at the value column of cacheW
 }
 
 func (s *Surface) buildKV(b *box, vars map[string]any) widget {
@@ -353,28 +359,51 @@ func (w *kvWidget) keyW() int {
 	return n + 2
 }
 
+// linesFor wraps each value in the value column of a widget w cells wide.
+func (w *kvWidget) linesFor(width int) (int, [][]line) {
+	kw := min(w.keyW(), width/2)
+	if w.lines == nil || w.cacheW != width {
+		w.lines = make([][]line, len(w.vals))
+		for i, v := range w.vals {
+			w.lines[i] = wrap([]span{{text: v, st: style{fg: w.roles[i]}}}, max(width-kw, 1), wrapWord)
+		}
+		w.cacheW = width
+	}
+	return kw, w.lines
+}
+
 func (w *kvWidget) measure(_ *Surface, _ *box, maxW int) (int, int) {
 	vw := 0
 	for _, v := range w.vals {
 		vw = max(vw, width(v))
 	}
-	return min(w.keyW()+vw, maxW), len(w.keys)
+	_, lines := w.linesFor(maxW)
+	h := 0
+	for _, l := range lines {
+		h += len(l)
+	}
+	return min(w.keyW()+vw, maxW), h
 }
 
 func (w *kvWidget) paint(_ *Surface, _ *box, c *canvas, r Rect) {
-	kw := min(w.keyW(), r.Dx()/2)
+	kw, lines := w.linesFor(r.Dx())
+	y := r.Min.Y
 	for i := range w.keys {
-		y := r.Min.Y + i
 		if y >= r.Max.Y {
 			return
 		}
 		c.drawLine(r.Min.X, y, kw-1, plainLine(w.keys[i], style{fg: "dim"}), alignLeft)
-		c.drawLine(r.Min.X+kw, y, r.Dx()-kw, plainLine(w.vals[i], style{fg: w.roles[i]}), alignLeft)
+		for _, l := range lines[i] {
+			if y >= r.Max.Y {
+				return
+			}
+			c.drawLine(r.Min.X+kw, y, r.Dx()-kw, l, alignLeft)
+			y++
+		}
 	}
 }
 
-// codeWidget is preformatted text: code, and for now markdown, diff and
-// mermaid source.
+// codeWidget is preformatted text: code, and for now markdown and diff.
 type codeWidget struct {
 	lines  []string
 	from   int
