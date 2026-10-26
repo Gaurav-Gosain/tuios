@@ -1269,6 +1269,28 @@ tuios daemon [flags]
 
 **Note:** This is primarily for debugging. The daemon starts automatically in the background when you run `tuios new` or `tuios attach`. Use this command to run the daemon in the foreground with debug logging.
 
+### `tuios daemon-app`
+
+macOS only. Write a small app, TUIOS Daemon, that starts the daemon. Panes of
+a daemon that the app started keep local network access after the terminal
+quits. See [Local Network Access on macOS](SESSIONS.md#local-network-access-on-macos).
+
+**Usage:**
+```bash
+tuios daemon-app install [--login] [--force] [--binary PATH] [--path PATH]
+tuios daemon-app status
+tuios daemon-app uninstall [--path PATH]
+```
+
+**Flags of `install`:**
+- `--login`: Also write a LaunchAgent that opens the app at login
+- `--force`: Replace an app that is already there. This removes its Local Network permission
+- `--binary <path>`: The tuios that the app starts. The default is the tuios on `PATH`
+- `--path <path>`: Where to write the app. The default is `~/Applications/TUIOS Daemon.app`
+
+When the app is installed, each new daemon starts through it. Set
+`TUIOS_NO_DAEMON_APP=1` to start a daemon directly.
+
 ### Workflow Example
 
 ```bash

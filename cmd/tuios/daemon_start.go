@@ -89,6 +89,12 @@ var spawnDaemon = func() error { return startDaemonBackground() }
 // that starts a daemon on the way to attaching keeps its own --pprof, and
 // handing the address on would make the two processes race to bind it.
 func startDaemonBackground(daemonArgs ...string) error {
+	// On macOS, the TUIOS Daemon app (when installed) starts the daemon, so
+	// its panes keep local network access after the terminal quits.
+	if handled, err := startDaemonThroughApp(daemonArgs); handled {
+		return err
+	}
+
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
