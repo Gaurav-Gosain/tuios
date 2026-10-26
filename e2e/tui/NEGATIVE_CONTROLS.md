@@ -7277,6 +7277,7 @@ editor's caret, hidden, after the person types. Run on 2026-10-18.
 | The renderer shows the parked cursor | The frame hook's handling, `cursorPark.frame` | Passes every frame through unchanged | `TestHiddenCursorParksAtGuestCursor` ("at (90,10) visible=true"), `TestRichRowReplyAndRecap` ("at (17,33) visible=true") | **caught** |
 | A visibility change without a frame never reaches the host | The write in `cursorPark.set` | Not written | `TestHiddenCursorParksAtGuestCursor` ("after the guest hid its cursor again without drawing: ... visible=true") | **caught** |
 | A draft's caret does not take the cursor | The open draft in `imeCaret` (now `draftCaret`) | Branch skipped | `TestRichRowReplyAndRecap` ("in the reply editor: the host cursor is at (80,39)") | **caught** (first version of the fix) |
+| A guest's hide or show changes the host cursor shape (#1140) | The pane's shape on the parked cursor in `viewCursor` | The parked cursor handed over as a blinking block | `TestHiddenCursorParksAtGuestCursor` ("sent the host 2 cursor shapes, want none": CSI 2 SP q and CSI 1 SP q after the mark), with every position wait passing | **caught** (run 2026-10-26) |
 
 The exit path, where the frame that leaves the alternate screen must show the
 cursor again, is not checked here. The local client writes its own reset with

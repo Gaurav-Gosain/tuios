@@ -408,8 +408,15 @@ func waitHostCursorWithin(t *testing.T, term *tuitest.Terminal, col, row int, vi
 // With cursorPark.frame passing frames through, the renderer shows the parked
 // cursor and the first wait times out. With the write in cursorPark.set
 // removed, the show and the hide without a frame never reach the host.
+//
+// The guest's hides and shows must also leave the host cursor's shape alone
+// (#1140). v0.10.1 sent DECSCUSR 0 with every hide and the pane's shape with
+// every show, so a guest that hid its cursor around each redraw restarted the
+// host's blink on every frame. Control: with the parked cursor handed to the
+// renderer in the default shape, the waits pass and the shape check fails.
 func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
-	term, _ := start(t, startOpts{cols: 120, rows: 40})
+	stream := &hostStream{}
+	term, _ := start(t, startOpts{cols: 120, rows: 40, out: stream})
 	waitBoot(t, term)
 	newWindow(t, term)
 	newWindow(t, term)
@@ -420,6 +427,7 @@ func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
 	runInShell(t, term,
 		`clear; printf '\033[?25l\033[6;12H'IME""CARET'\033[10;30H'; sleep 5; printf '\033[?25h'; sleep 5; printf '\033[?25l'; sleep 60`,
 		"IMECARET", shellTimeout)
+	stream.mark("guest-hides")
 	word, top, ok := textCell(term.Screen(), "IMECARET")
 	if !ok {
 		t.Fatalf("the word is not on the screen\n%s", term.Snapshot())
@@ -438,6 +446,14 @@ func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
 	saveFrame(t, term, "ime-cursor-hidden")
 	waitHostCursor(t, term, col, row, true, "after the guest showed its cursor again")
 	waitHostCursor(t, term, col, row, false, "after the guest hid its cursor again without drawing")
+
+	all := stream.bytes()
+	if m := markRE.FindIndex(all); m == nil {
+		t.Fatal("the guest-hides mark is not in the stream")
+	} else if n := decscusrCount(all[m[1]:]); n > 0 {
+		t.Errorf("the guest's hides and shows sent the host %d cursor shapes, want none\nDECSCUSR the host was sent:\n%s",
+			n, cursorTrail(all))
+	}
 
 	alive(t, term, "after the hidden cursor checks")
 }
