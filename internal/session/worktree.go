@@ -267,13 +267,7 @@ func (s *Session) refreshWorktree(cwd string) {
 	if cwd == "" {
 		return
 	}
-	detected, ok := worktree.Detect(cwd)
-	main := false
-	if !ok {
-		if d, okMain := worktree.DetectMain(cwd); okMain {
-			detected, ok, main = d, true, true
-		}
-	}
+	detected, main, ok := worktree.DetectEither(cwd)
 	switch {
 	case !ok && current == nil:
 		return

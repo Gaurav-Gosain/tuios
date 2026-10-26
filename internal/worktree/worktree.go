@@ -55,21 +55,43 @@ type Info struct {
 // this package means: the sessions the rail groups are the ones a repository
 // was split into, not the repository itself.
 func Detect(dir string) (Info, bool) {
+	info, main, ok := DetectEither(dir)
+	if main {
+		return Info{}, false
+	}
+	return info, ok
+}
+
+// DetectEither is the one walk up from dir that Detect's answer and the
+// main checkout's share: a single Locate, answering either question. main says the answer is the
+// repository's main checkout — the directory whose .git is the repository's
+// own git directory, which Detect deliberately reports nothing for, because
+// the sessions it groups are the ones a repository was split into, not the
+// repository itself; the rail's group_main option wants the repository itself
+// in the group too, and this is what it reads. A linked worktree is the answer
+// with main, and a directory outside any repository is no answer at all.
+func DetectEither(dir string) (info Info, main, ok bool) {
 	dir = filepath.Clean(dir)
 	if dir == "" || dir == "." {
-		return Info{}, false
+		return Info{}, false, false
 	}
-	gitdir, commonDir, root, ok := gitstate.Locate(dir)
-	// The two git directories are the same in the main checkout, and when a
-	// ".git" file's gitdir has no commondir pointer. Neither is a linked
-	// worktree.
-	if !ok || gitdir == commonDir {
-		return Info{}, false
+	gitdir, commonDir, root, found := gitstate.Locate(dir)
+	if !found {
+		return Info{}, false, false
 	}
-	// Only a gitdir under <common>/worktrees/<name> is a linked worktree. A
-	// submodule also uses a ".git" file, and its gitdir sits under modules/.
-	if filepath.Base(filepath.Dir(gitdir)) != "worktrees" {
-		return Info{}, false
+	main = gitdir == commonDir
+	// The entry under root tells the two apart. A submodule also answers
+	// gitdir == commonDir: its .git file names a gitdir under modules/ that
+	// carries no commondir pointer, and that gitdir is not a working tree, so
+	// only a .git directory says main checkout. Only a gitdir under
+	// <common>/worktrees/<name> is a linked worktree; a gitdir under modules/
+	// is the submodule again.
+	if main {
+		if st, err := os.Stat(filepath.Join(root, ".git")); err != nil || !st.IsDir() {
+			return Info{}, false, false
+		}
+	} else if filepath.Base(filepath.Dir(gitdir)) != "worktrees" {
+		return Info{}, false, false
 	}
 	repoRoot := commonDir
 	if filepath.Base(commonDir) == ".git" {
@@ -77,55 +99,14 @@ func Detect(dir string) (Info, bool) {
 	}
 	branch := readHead(gitdir, commonDir, root)
 	if branch == "" {
-		return Info{}, false
+		return Info{}, false, false
 	}
 	return Info{
 		Repo:     gitstate.RepoName(commonDir),
 		RepoRoot: repoRoot,
 		Branch:   branch,
 		Path:     root,
-	}, true
-}
-
-// DetectMain is Detect's twin for the repository's main checkout: the
-// directory whose .git is the repository's own git directory. Detect
-// deliberately reports nothing here, because the sessions it groups are the
-// ones a repository was split into, not the repository itself; the rail's
-// group_main option wants the repository itself in the group too, and this is
-// what it reads. A linked worktree and a directory outside any repository are
-// both false — Detect's answer and no answer respectively.
-func DetectMain(dir string) (Info, bool) {
-	dir = filepath.Clean(dir)
-	if dir == "" || dir == "." {
-		return Info{}, false
-	}
-	gitdir, commonDir, root, ok := gitstate.Locate(dir)
-	// The two git directories differ in a linked worktree, which is Detect's
-	// answer to give, not this one's.
-	if !ok || gitdir != commonDir {
-		return Info{}, false
-	}
-	// A submodule also answers gitdir == commonDir: its .git file names a
-	// gitdir under modules/ that carries no commondir pointer, and that
-	// gitdir is not a working tree. The entry being a directory is what says
-	// main checkout — the mirror of Detect's worktrees check.
-	if st, err := os.Stat(filepath.Join(root, ".git")); err != nil || !st.IsDir() {
-		return Info{}, false
-	}
-	repoRoot := commonDir
-	if filepath.Base(commonDir) == ".git" {
-		repoRoot = filepath.Dir(commonDir)
-	}
-	branch := readHead(gitdir)
-	if branch == "" {
-		return Info{}, false
-	}
-	return Info{
-		Repo:     filepath.Base(repoRoot),
-		RepoRoot: repoRoot,
-		Branch:   branch,
-		Path:     root,
-	}, true
+	}, main, true
 }
 
 // readHead names the branch a gitdir's HEAD points at, or "detached@<hash>".

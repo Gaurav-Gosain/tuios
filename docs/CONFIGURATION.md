@@ -1707,9 +1707,10 @@ folder, and `Enter` to type the path. See
 
 ## The main checkout in the sessions tree
 
-`appearance.sidebar.group_main` gathers the repository's main checkout — the
-session whose directory is the repository itself, usually on `main` or
-`master` — under the repo row with its worktrees. It is `false` by default,
+`appearance.sidebar.group_main` gathers the repository's main checkout under
+the repo row with its worktrees. The main checkout is the session whose
+directory is the repository itself, usually on `main` or `master`. The option
+is `false` by default,
 which leaves the main checkout's sessions flat in the list and groups only
 the worktrees split off the repository.
 

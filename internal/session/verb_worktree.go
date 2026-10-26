@@ -97,6 +97,17 @@ func (d *Daemon) worktreeTarget(cs *connState, name string) (*Session, *Worktree
 			Available: d.worktreeSessionNames(),
 		})
 	}
+	// The main checkout rides the record for the listing's sake, but it is not
+	// a worktree: git refuses to remove it, and a remove that first stashed
+	// its changes would be stashing a working tree nobody asked to touch.
+	if info.Main {
+		return nil, nil, hintedVerbError(ErrVerbNotWorktree, "session "+sess.Name()+" is in the repository's main checkout, which is not a worktree", &VerbHint{
+			Param:     "session",
+			Verb:      "list-worktrees",
+			Command:   "tuios worktree ls",
+			Available: d.worktreeSessionNames(),
+		})
+	}
 	return sess, info, nil
 }
 

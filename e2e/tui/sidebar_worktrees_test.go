@@ -130,3 +130,84 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 
 	alive(t, term, "after folding a worktree group")
 }
+
+// TestSidebarGroupsMainCheckout drives the same grouping with the main
+// checkout gathered in: with group_main on, the session whose directory is the
+// repository itself sits under the repo row with the worktrees, a click on
+// the header opens that session instead of folding, and the fold gesture
+// lives on the header's right-click menu.
+func TestSidebarGroupsMainCheckout(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	writeConfig(t, base, "[appearance.sidebar]\ngroup_main = true\n")
+
+	// The control that starts the daemon and the session this client attaches
+	// to, then the main checkout's own session, made from the repository
+	// itself, and one worktree of the same repository.
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLIIn(t, base, repo, "new", "mainsess", "--detach"); err != nil {
+		t.Fatalf("create the main checkout's session: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new feat/one: %v: %s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	toggleSidebarViaPalette(t, term)
+
+	// The repo row holds both the worktree and the main checkout, each labelled
+	// by its branch.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railLineWith(s, "· repo") >= 0 &&
+			railLineWith(s, "feat/one") >= 0 &&
+			railLineWith(s, "─ main") >= 0
+	}, bootTimeout); err != nil {
+		t.Fatalf("the rail never grouped the main checkout with the worktrees: %v\n%s", err, term.Snapshot())
+	}
+	header := railLineWith(term.Screen(), "· repo")
+	if main := railLineWith(term.Screen(), "─ main"); main <= header {
+		t.Errorf("the main checkout's row is not under the repo header\n%s", term.Snapshot())
+	}
+
+	// group_main points the header's activation at the main checkout's
+	// session: the click opens it and leaves the group on screen.
+	col, row := findOnScreen(t, term, "· repo")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
+		t.Fatalf("the header click did not open the main checkout's session: %v\n%s", err, term.Snapshot())
+	}
+	if railLineWith(term.Screen(), "feat/one") < 0 {
+		t.Errorf("opening the main checkout's session folded the group\n%s", term.Snapshot())
+	}
+
+	// The fold gesture moved to the header's right-click menu.
+	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
+	if err := term.WaitForText("Fold group", uiTimeout); err != nil {
+		t.Fatalf("the header's menu offered no fold: %v\n%s", err, term.Snapshot())
+	}
+	col, row = findOnScreen(t, term, "Fold group")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		if strings.Contains(text, "feat/one") || strings.Contains(text, "─ main") {
+			return false
+		}
+		line := railLineWith(s, "repo")
+		return line >= 0 && strings.Contains(s.Line(line), "2")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the menu's fold did not fold the group into a row carrying its count: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "rail-group-main")
+
+	alive(t, term, "after grouping the main checkout")
+}

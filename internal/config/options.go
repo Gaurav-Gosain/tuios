@@ -970,7 +970,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.group_main", Type: OptionBool, Section: "sidebar",
-		Description: "Gather the repository's main checkout under the repo row with its worktrees; the repo header then opens the main checkout's session",
+		Description: "Gather the repository's main checkout under the repo row with its worktrees. The repo header then opens the main checkout's session",
 		Default:     "false",
 	},
 	{
