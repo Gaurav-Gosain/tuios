@@ -221,6 +221,7 @@ func markerPaneEdge(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
 // nearly the lightness of the unfocused one, and with session_border on the
 // focused border could not be told apart between window and terminal mode.
 //
+// With no theme, the unfocused border is a neutral grey near the ground.
 // Each border is held by OKLab lightness, the part of a colour that reads
 // without telling hues apart: the two focused borders differ from each other,
 // and each of them stands further from the ground than the unfocused border.
@@ -252,6 +253,16 @@ func TestFocusedBorderStandsOutOnTheHostGround(t *testing.T) {
 				return overlay.Lightness(c)
 			}
 			lw, lu := read("PLAINBX"), read("PLAINAX")
+			if !sessionBorder {
+				// With no theme the unfocused border is a neutral grey: a
+				// hue there reads as loud as focus, and red reads as an
+				// alert.
+				edge, _ := markerPaneEdge(term.Screen(), "PLAINAX")
+				fg := edge.Fg
+				if spread := max(fg.R, fg.G, fg.B) - min(fg.R, fg.G, fg.B); spread > 24 {
+					t.Errorf("the unfocused border is #%02x%02x%02x, a hue rather than a neutral", fg.R, fg.G, fg.B)
+				}
+			}
 
 			if err := term.SendKeys("i"); err != nil {
 				t.Fatalf("send i: %v", err)

@@ -403,7 +403,10 @@ func bordersOn(hostBg color.Color) borderSet {
 		// configured tint.
 		b.unfocused, uFixed = c, true
 	case t == nil:
-		b.unfocused = slotAt16(1, hostBorderInk(lipgloss.Color("#FAAAAA"), hostBg))
+		// A neutral just past the mark floor on the host's ground. The pale
+		// red this used to be read as loud as a focused border, and red says
+		// alert. Bright black is the neutral of the sixteen.
+		b.unfocused = slotAt16(8, neutralBorderOn(hostBg))
 	default:
 		if c := chromeFurniture(RoleBorderUnfocused); c != nil {
 			b.unfocused = borderInk(c)
@@ -599,6 +602,47 @@ func BorderFocusedAttention() color.Color {
 		return borderInk(c)
 	}
 	return nil
+}
+
+// neutralBorderFloor is the contrast neutralBorderOn aims for.
+const neutralBorderFloor = MarkFloor + 0.3
+
+// neutralBorderMemo keeps the last answer of neutralBorderOn, which is asked
+// on every frame and measures contrast up to fifty times.
+var neutralBorderMemo struct {
+	sync.Mutex
+	key [4]uint32
+	ink color.Color
+}
+
+// neutralBorderOn is the ground carried toward its own high-contrast ink just
+// far enough to clear the mark floor: a grey in the ground's own hue, the
+// quietest colour a border can be and still be seen. It aims a little above
+// the floor, so the step down to 256 colours does not take it under. A nil
+// ground is taken as black.
+func neutralBorderOn(ground color.Color) color.Color {
+	if ground == nil {
+		ground = color.Black
+	}
+	key := rgbaKey(ground)
+	m := &neutralBorderMemo
+	m.Lock()
+	defer m.Unlock()
+	if m.ink != nil && m.key == key {
+		return m.ink
+	}
+	ink := ContrastText(ground)
+	out := ink
+	const steps = 50
+	for i := 1; i <= steps; i++ {
+		c := overlay.MixColors(ground, ink, float64(i)/steps)
+		if ContrastRatio(c, ground) >= neutralBorderFloor {
+			out = c
+			break
+		}
+	}
+	m.key, m.ink = key, out
+	return out
 }
 
 // hostBorderInkMemo keeps the last few answers of hostBorderInk. The border

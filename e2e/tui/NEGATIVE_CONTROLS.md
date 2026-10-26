@@ -9537,6 +9537,7 @@ build without the fix: main at 99607164e, run on 2026-10-26 on Linux.
 | --- | --- | --- |
 | The whole dim fix | `background-off` and `background-theme`: default and red text not dimmed. `background-colour`: default text not dimmed, red blended from xterm's red to `#6f2624`. `host-answers-nothing`: the text not faint | **caught** |
 | The whole border fix | `session_border=false`: terminal mode border at L 0.848, unfocused at L 0.815. `session_border=true`: window mode at L 0.866, terminal mode at L 0.848 | **caught** |
+| The neutral unfocused border | `session_border=false`: the unfocused border is `#faaaaa`, a hue rather than a neutral | **caught** |
 
 The fixed build passes all six cases. Its frames are drawn with the Nord
 palette as `dim.png`, `window.png` and `terminal.png` under the artifact
