@@ -36,6 +36,7 @@ command here runs as written. Change only the pane names and the quoted text.
 | Read the prompt an agent waits on | `tuios peek-prompt -s "$TUIOS_SESSION" -w deploy` |
 | Ask the person, and wait for the answer | `tuios ask-human 'Deploy to staging?' -o yes -o no --timeout 90000` |
 | Show the person a form, a table or a dashboard, and wait for the answer | `tuios tml show FILE --wait`. `tuios --skill tml` has the components. |
+| See how a TML surface looks, before and after you show it | `tuios tml render FILE`, then `tuios capture-pane -s "$TUIOS_SESSION" -w WINDOW` on the open surface |
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 
 `new-window` prints the short id and the name (`3a42ab8f  tests`). With

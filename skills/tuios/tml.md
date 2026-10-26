@@ -25,6 +25,34 @@ status boards and yes/no questions.
 5. Limits: 256 KiB from a pane, 5,000 nodes, depth 32, state 1 MiB, a patch
    64 KiB, 8 open surfaces per pane.
 
+## Look at it before and after you show it
+
+You cannot see the person's screen. Read the surface as text instead:
+
+```sh
+tuios tml render dash.tml                   # drawn at the terminal's width, or 100
+tuios tml render dash.tml --width 80 --height 24 --tab log
+tuios tml render dash.tml --state '{"runs":12}'
+tuios capture-pane -s "$TUIOS_SESSION" -w WINDOW   # an open surface, as drawn
+```
+
+`tml render` opens nothing. It exits 1 and prints the problems when the
+document is not valid. `capture-pane` on a surface's window gives the surface
+at the window's size, with its state and the tab the person has open, and
+adds `surface` to the `--json` result. Read the output, fix what is wrong, and
+render again. Look for text cut with `…`, empty charts, and rows that wrap.
+
+Make it look good:
+
+- Show data with real components: `line`, `bar`, `sparkline`, `gauge`,
+  `table`, `stat`, `kv` and `mermaid`. Do not draw ASCII art in `code`. It
+  does not fit a narrow pane and reads as noise.
+- Keep text short. One idea per line. A long value in `kv` or a table column
+  is cut at the pane's edge.
+- Put sections in `tabs`, one subject on each tab. Put the most important
+  numbers on the first tab, at the top.
+- Give each chart a `title` and a height (`h`).
+
 ## Components
 
 <!-- BEGIN generated from tml/catalog.go: go generate ./skills -->
@@ -134,6 +162,7 @@ wraps when it does not fit.
 
 ```sh
 tuios tml validate deploy.tml              # check it first: each problem names the fix
+tuios tml render deploy.tml                # read how it looks
 answer=$(tuios tml show deploy.tml --wait) # "yes", "no", or null when dismissed
 ```
 
@@ -185,6 +214,7 @@ op that no longer matches is refused: read with `tml get`, then patch again.
   `new-window`, asks the person (y/n). Name the pane by its name or id.
   A target that holds more than your pane is refused.
 - The window name starts with the owner pane, such as "from api · Deploy".
+  The owner is the pane's name, else the agent in it, such as "from claude".
   The document cannot change the owner.
 - A surface your pane opens does not take the focus. The person clicks it.
 - An `input` with `bind="state.x"` takes typed text, and a `submit` button closes with `form`: `<form on-submit="close(form.note)">`.

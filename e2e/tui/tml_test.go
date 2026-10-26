@@ -281,6 +281,10 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 	if err := term.WaitForText("Picked: TestAttachReplay", uiTimeout); err != nil {
 		t.Fatalf("the keys never reached the pane's surface: %v\n%s", err, term.Snapshot())
 	}
+	// capture-pane reads the surface as drawn, with the state the keys set,
+	// not the placeholder line the pane's PTY runs.
+	tmlCaptureMatches(t, term, base, "e2e-tmlpane", opened.WindowID, "capture-run",
+		[]string{"Summary", "Picked: TestAttachReplay", "TestAttachRace"}, nil)
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
 	}
@@ -294,6 +298,9 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 	}
 	waitWindowCount(t, term, 1, "after tuios tml close")
 
+	tmlCaptureFollowsTheTab(t, term, base, "e2e-tmlpane")
+	waitWindowCount(t, term, 1, "after the chart closed")
+
 	tmlLongPaneScrolls(t, term, base, "e2e-tmlpane")
 	if out, err := tuiosCLI(t, base, "tml", "close", opened.Surface); err == nil {
 		t.Fatalf("a second close of the same surface succeeded:\n%s", out)
@@ -301,6 +308,110 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 		t.Fatalf("a second close did not say the surface is gone:\n%s", out)
 	}
 	alive(t, term, "after the pane closed")
+}
+
+// tmlChartDoc has tabs that bind no state path, so the open tab is the
+// client's view state, and a line chart on the first tab.
+const tmlChartDoc = `<tml version="1" title="Build times">
+  <state>{"days": [{"d": "Mon", "s": 41}, {"d": "Tue", "s": 38}, {"d": "Wed", "s": 52}, {"d": "Thu", "s": 35}, {"d": "Fri", "s": 30}]}</state>
+  <col pad="1" gap="1">
+    <tabs>
+      <tab id="chart" title="Chart"><line data="state.days" x="d" y="s" title="CHART-TITLE build seconds" h="8"/></tab>
+      <tab id="notes" title="Notes"><text>NOTES-TAB-BODY</text></tab>
+    </tabs>
+  </col>
+</tml>
+`
+
+// tmlCaptureMatches runs capture-pane on a TML window until the capture holds
+// every want, holds no notWant, and each of its lines is on the screen, which
+// is what makes it the surface as drawn. It saves the capture as name.txt in
+// the test's artifact folder and returns it.
+func tmlCaptureMatches(t *testing.T, term *tuitest.Terminal, base, sess, win, name string, want, notWant []string) string {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	var out, why string
+	for {
+		var err error
+		out, err = tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", win)
+		why = ""
+		switch {
+		case err != nil:
+			why = fmt.Sprintf("capture-pane failed: %v", err)
+		case strings.Contains(out, "This pane shows a TML surface"):
+			why = "capture-pane returned the placeholder line"
+		}
+		for _, w := range want {
+			if why == "" && !strings.Contains(out, w) {
+				why = fmt.Sprintf("the capture lacks %q", w)
+			}
+		}
+		for _, w := range notWant {
+			if why == "" && strings.Contains(out, w) {
+				why = fmt.Sprintf("the capture holds %q", w)
+			}
+		}
+		if why == "" {
+			screen := term.Screen().Text()
+			for line := range strings.SplitSeq(out, "\n") {
+				if l := strings.TrimSpace(line); l != "" && !strings.Contains(screen, l) {
+					why = fmt.Sprintf("the captured line %q is not on the screen", l)
+					break
+				}
+			}
+		}
+		if why == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s\ncapture:\n%s\nscreen:\n%s", why, out, term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir(t), name+".txt"), []byte(out), 0o644); err != nil {
+		t.Fatalf("save the capture: %v", err)
+	}
+	return out
+}
+
+// tmlCaptureFollowsTheTab opens tmlChartDoc as a pane, captures its chart,
+// clicks the second tab and captures again. The tabs bind no state path, so
+// the capture follows the tab only through the open tabs the client
+// reports with tml-input.
+func tmlCaptureFollowsTheTab(t *testing.T, term *tuitest.Terminal, base, sess string) {
+	t.Helper()
+	doc := writeTMLDoc(t, base, "chart.tml", tmlChartDoc)
+	out, err := tuiosCLI(t, base, "tml", "show", doc, "--pane", "--json", "-s", sess)
+	if err != nil {
+		t.Fatalf("tuios tml show --pane: %v\n%s", err, out)
+	}
+	var opened struct {
+		Surface  string `json:"surface"`
+		WindowID string `json:"window_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &opened); err != nil || opened.WindowID == "" {
+		t.Fatalf("tuios tml show --pane printed %q (%v)", out, err)
+	}
+	if err := term.WaitForText("CHART-TITLE", uiTimeout); err != nil {
+		t.Fatalf("the pane never drew the chart: %v\n%s", err, term.Snapshot())
+	}
+	capture := tmlCaptureMatches(t, term, base, sess, opened.WindowID, "capture-chart",
+		[]string{"Chart", "Notes", "CHART-TITLE"}, []string{"NOTES-TAB-BODY"})
+	if !strings.ContainsAny(capture, "⠁⠂⠄⡀⠈⠐⠠⢀⣀⠉⠒⠤") {
+		t.Fatalf("the capture has no chart line:\n%s", capture)
+	}
+	saveTMLFrame(t, term, "2-chart")
+	col, row := tmlLocate(t, term, "Notes")
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("NOTES-TAB-BODY", uiTimeout); err != nil {
+		t.Fatalf("the click never opened the tab: %v\n%s", err, term.Snapshot())
+	}
+	tmlCaptureMatches(t, term, base, sess, opened.WindowID, "capture-notes",
+		[]string{"NOTES-TAB-BODY"}, []string{"CHART-TITLE"})
+	saveTMLFrame(t, term, "3-notes")
+	if out, err := tuiosCLI(t, base, "tml", "close", opened.Surface); err != nil {
+		t.Fatalf("tuios tml close: %v\n%s", err, out)
+	}
 }
 
 // TestTMLShowRefusesABadDocument checks that the command names each problem

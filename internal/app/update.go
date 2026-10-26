@@ -1785,6 +1785,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case TMLClockMsg:
 		return m, m.handleTMLClock()
 
+	case TMLViewFlushMsg:
+		return m, m.handleTMLViewFlush(msg.id)
+
 	case TMLActionFailedMsg:
 		m.ShowNotification(msg.Text, "warning", m.Settings.NotificationDuration)
 		return m, nil

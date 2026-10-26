@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
 
 // The chrome tuios draws around a TML surface.
@@ -56,9 +57,10 @@ func tmlWindowParts(w *terminal.Window) (owner, title string, ok bool) {
 	return tmlNameParts(w.CustomName)
 }
 
-// tmlRailLabel is the rail's label for a TML window: the owner, then the
-// title. A rail row is cut at its end, so the owner goes first, where the
-// cut cannot reach it and a title cannot stand in for it.
+// tmlRailLabel is the rail's label for a TML window: the document's title,
+// then the owner. A rail row is cut at its end, so the title is held to
+// tmlRailTitleCells, and the owner stays in sight on a rail of the usual
+// width.
 func tmlRailLabel(w *terminal.Window) (string, bool) {
 	owner, title, ok := tmlWindowParts(w)
 	if !ok {
@@ -67,8 +69,11 @@ func tmlRailLabel(w *terminal.Window) (string, bool) {
 	if title == "" {
 		return "from " + owner, true
 	}
-	return "from " + owner + " · " + title, true
+	return overlay.Truncate(title, tmlRailTitleCells) + " · " + owner, true
 }
+
+// tmlRailTitleCells caps the title part of a TML window's rail label.
+const tmlRailTitleCells = 24
 
 // isTMLPopup reports whether w is a popup that draws a TML surface as a
 // dialog.
@@ -76,55 +81,14 @@ func (m *OS) isTMLPopup(w *terminal.Window) bool {
 	return w != nil && w.IsPopup && !w.Tiled && m.DrawsTML(w)
 }
 
-// tmlInset is where the surface sits in a TML window's content box: inside
-// a margin, two cells at the sides and a row above and below when the window
-// has the room for it. A small window keeps its rows and cells for the
-// document. A popup and a pane have the same margin, so a document looks the
-// same in both.
+// tmlInset is where the surface sits in a TML window's content box: the
+// margin of tmldraw.Inset, for a window this client draws as TML.
 func (m *OS) tmlInset(w *terminal.Window) (dx, dy, iw, ih int) {
 	cw, ch := max(w.ContentWidth(), 1), max(w.ContentHeight(), 1)
 	if !m.DrawsTML(w) {
 		return 0, 0, cw, ch
 	}
-	switch {
-	case cw >= 40:
-		dx = 2
-	case cw >= 16:
-		dx = 1
-	}
-	if ch >= 12 {
-		dy = 1
-	}
-	return dx, dy, cw - 2*dx, ch - 2*dy
-}
-
-// tmlPad puts the surface's lines into the content box with the margin of
-// tmlInset, on the pane's own ground.
-func tmlPad(body string, dx, dy, cw, ch int) string {
-	if dx == 0 && dy == 0 {
-		return body
-	}
-	side := strings.Repeat(" ", dx)
-	blank := strings.Repeat(" ", cw)
-	lines := strings.Split(body, "\n")
-	out := make([]string, 0, ch)
-	for range dy {
-		out = append(out, blank)
-	}
-	inner := cw - 2*dx
-	for _, l := range lines {
-		if len(out) >= ch-dy {
-			break
-		}
-		if w := ansi.StringWidth(l); w < inner {
-			l += strings.Repeat(" ", inner-w)
-		}
-		out = append(out, side+l+side)
-	}
-	for len(out) < ch {
-		out = append(out, blank)
-	}
-	return strings.Join(out, "\n")
+	return tmldraw.Inset(cw, ch)
 }
 
 // renderTMLDialogBox frames a TML popup's content as a dialog. content is

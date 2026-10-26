@@ -1207,9 +1207,18 @@ func (d *Daemon) verbCapturePane(cs *connState, params json.RawMessage) (any, *v
 		return nil, verr
 	}
 
-	pty, err := d.resolvePTYForTarget(sess, p.Window)
-	if err != nil {
-		return nil, mapResolveErr(err, sess)
+	win, pty, verr := d.resolveWindowPTY(sess, p.Window)
+	if verr != nil {
+		return nil, verr
+	}
+
+	if win.Kind == WindowKindTML && p.Source != captureLastCommand {
+		// The PTY runs only the placeholder line, so the surface is drawn
+		// instead, whatever source, scrollback or commands asked for: a
+		// surface has no history. See tml_capture.go.
+		if out, verr := d.captureTMLPane(win, pty, p.Styled || p.ANSI || p.Resolved, p.Resolved, p.Palette, p.Trim, p.Start, p.End, p.Lines); verr != nil || out != nil {
+			return out, verr
+		}
 	}
 
 	if p.Source == captureLastCommand {

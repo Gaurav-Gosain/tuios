@@ -1184,6 +1184,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "value", Type: "any", Description: "With close: the value. Omit when the person dismissed the surface."},
 				{Name: "events", Type: "[]object", Description: "The emit actions the person ran, each {name, value}. Each becomes a tml-event for the owner."},
 				{Name: "actions", Type: "[]object", Description: "The pane() actions the person ran, each {verb, params}: focus, new-window or send-text. Each runs with the grants of the pane that opened the surface, never the person's."},
+				{Name: "view", Type: "object", Description: "The client's view state, as loom keeps it: open tabs, cursor rows, scroll places, sorts, filters and folds, without typed text. capture-pane draws the surface with the last view reported."},
 			},
 			returns: []verbParam{
 				{Name: "version", Type: "int", Description: "The surface's version after the change."},
@@ -1613,7 +1614,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbRemovePush,
 		},
 		"capture-pane": {
-			description: "Capture a pane's content.",
+			description: "Capture a pane's content. On a window that shows a TML surface, the content is the surface drawn at the window's size, with its state and the open tab, and the result adds surface.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,

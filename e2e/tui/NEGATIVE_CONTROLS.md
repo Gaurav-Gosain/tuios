@@ -9554,3 +9554,15 @@ directory.
 | The grabbed pane in the corner drag (`focusedWindow = o.Windows[o.DraggedWindowIndex]` in `handleMouseMotion`) | `TestFloatMouseResizeKeepsTheTiles`, the drag across a peer's focus change: the float stops at w=52 h=32, want w=56 h=36 | **caught** |
 
 The tiled pane does not move in the peer-sync control: it fills the pane area, so the tiling path holds each of its edges. The cut shows as a float that stops resizing.
+
+### capture-pane on a TML surface, and the agent as its owner
+
+`TestTMLShowPaneAndClose` reads the surface with capture-pane and checks that
+each captured line is on the screen, before and after a click on a tab that
+binds no state path. `TestTMLOwnerNameMustBeUnique` opens surfaces from panes
+that report an agent. Run on 2026-10-26.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|-----|-------------|-----|-----------------|---------|
+| The capture shows another view than the person's | the view report in `tmlViewChange` | it returns nil at once | `TestTMLShowPaneAndClose` ("the captured line \"▌ internal/session  TestAttachRace ...\" is not on the screen": the cursor row of a new view) | **caught** |
+| A surface from an agent pane names a hash | the agent name in `tmlAgentName` | it returns "" at once | `TestTMLOwnerNameMustBeUnique` ("from pane 7ed13d20 · Agent" for the claude pane) | **caught** |

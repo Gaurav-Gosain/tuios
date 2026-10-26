@@ -4801,6 +4801,7 @@ tuios tml get SURFACE
 tuios tml list [-s SESSION]
 tuios tml close SURFACE [VALUE]
 tuios tml validate FILE
+tuios tml render FILE [--width N] [--height N] [--state JSON] [--tab ID] [--ansi]
 ```
 
 FILE is a TML text or TML JSON file, or `-` for standard input.
@@ -4832,6 +4833,17 @@ From a pane, these commands need the `write` grant, and `tml patch`,
 button's `pane('send-text', ...)` runs with the opening pane's grants, and tuios
 asks the person before a surface first types into a pane. `tml validate` prints each problem with its line, the node and the fix,
 and exits with status 1 when the document has errors. It needs no daemon.
+
+`tml render` prints the document drawn as text, as tuios draws it in a pane,
+and opens nothing. The width is the terminal's width, or 100 when standard
+output is not a terminal. Without `--height` the document gets the rows it
+takes. `--state` replaces the state, `--tab` opens a tab by its id, and `--ansi`
+keeps the colours as ANSI escape sequences. It exits with status 1 and prints
+the problems when the document is not valid. It needs no daemon.
+
+`tuios capture-pane` on a TML window prints the surface as drawn, at the
+window's size, with its state and the view of the client that last reported
+one: the open tab, the cursor rows and the scroll place.
 
 **Flags of `tml show`:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)

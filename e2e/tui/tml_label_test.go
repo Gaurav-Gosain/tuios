@@ -535,7 +535,9 @@ func TestTMLQuestionWaitsForRoom(t *testing.T) {
 // name. A pane with the fan grant names the agents it starts, so neither
 // name can stand alone as the owner: both surfaces read their pane's id, with
 // the name in brackets. A pane with a name of its own still reads the name
-// alone.
+// alone. A pane with no name that runs an agent reads the agent's name, such
+// as "claude", with the folder it started in when another pane runs the same
+// agent.
 //
 // Negative control, in NEGATIVE_CONTROLS.md: tmlNameIsOwnersAlone always
 // true (the copied names read "from api" and "from pane 0123abcd").
@@ -561,9 +563,25 @@ func TestTMLOwnerNameMustBeUnique(t *testing.T) {
 	copied := newWin("api", "--grants", "write")
 	idLike := newWin("pane 0123abcd", "--grants", "write")
 	own := newWin("deployer", "--grants", "write")
-	term := startIn(t, base, startOpts{cols: 140, rows: 36, args: []string{"attach", sess}})
-	waitWindowCount(t, term, 5, "five panes")
-	for win, title := range map[string]string{copied: "Copied", idLike: "IdLike", own: "Own"} {
+	// Panes with no name that run an agent read the agent's name, and the
+	// folder they started in when two run the same agent.
+	alpha, beta := filepath.Join(base, "alpha"), filepath.Join(base, "beta")
+	for _, dir := range []string{alpha, beta} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claude := newWin("--grants", "write")
+	codexA := newWin("--grants", "write", "--cwd", alpha)
+	codexB := newWin("--grants", "write", "--cwd", beta)
+	term := startIn(t, base, startOpts{cols: 160, rows: 40, args: []string{"attach", sess}})
+	waitWindowCount(t, term, 8, "eight panes")
+	// Every agent reports before any surface opens, so the two codex panes
+	// see each other.
+	for win, h := range map[string]string{claude: "claude-code", codexA: "codex", codexB: "codex"} {
+		tmlRunIn(t, base, sess, win, fmt.Sprintf("%s set-agent-state working --harness %s", tuiosBin, h))
+	}
+	for win, title := range map[string]string{copied: "Copied", idLike: "IdLike", own: "Own", claude: "Agent", codexA: "CodexA", codexB: "CodexB"} {
 		doc := writeTMLDoc(t, base, title+".tml", `<tml version="1" title="`+title+`"><col pad="1"><text>`+title+`</text></col></tml>`)
 		tmlRunIn(t, base, sess, win, fmt.Sprintf("%s tml show %s --pane > /dev/null 2>&1", tuiosBin, doc))
 	}
@@ -571,6 +589,9 @@ func TestTMLOwnerNameMustBeUnique(t *testing.T) {
 		"Copied": "from pane " + copied[:8] + " (api) · Copied",
 		"IdLike": "from pane " + idLike[:8] + " (pane 0123abcd) · IdLike",
 		"Own":    "from deployer · Own",
+		"Agent":  "from claude · Agent",
+		"CodexA": "from codex in alpha · CodexA",
+		"CodexB": "from codex in beta · CodexB",
 	}
 	deadline := time.Now().Add(shellTimeout)
 	for {

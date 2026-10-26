@@ -43,9 +43,9 @@ it with your theme's colours. Keys and the mouse work in it. The daemon keeps
 the surface, so it stays when you detach.
 
 A document is TML text (an XML subset) or TML JSON. Run tuios tml validate to
-check one.`,
+check one, and tuios tml render to see it as text before you show it.`,
 	}
-	cmd.AddCommand(newTMLShowCommand(), newTMLCloseCommand(), newTMLValidateCommand(),
+	cmd.AddCommand(newTMLShowCommand(), newTMLCloseCommand(), newTMLValidateCommand(), newTMLRenderCommand(),
 		newTMLPatchCommand(), newTMLReplaceCommand(), newTMLGetCommand(), newTMLListCommand())
 	return cmd
 }

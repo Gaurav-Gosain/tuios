@@ -2611,6 +2611,14 @@ it: `ops`, a JSON Patch on the state from its local actions, `events`, the
 the client's attach nonce, and fails with `not_human` without one. A program
 uses `tml-patch`, `tml-replace` and `tml-close` instead.
 
+A client also sends `view`, its loom view state (open tabs, cursor rows,
+scroll places, sorts, filters and folds, without typed text), when it
+changed, at most once every 250 ms. The daemon keeps the last one, up to
+16 KiB, and `capture-pane` on the surface's window draws the surface with it.
+A `capture-pane` on a TML window draws the surface with loom at the window's
+size, whatever `source` asks for, and adds `surface` and `surface_version`
+to the result.
+
 ### tml-patch
 
 Change a surface's state with a JSON Patch (RFC 6902). Params: `surface` and
