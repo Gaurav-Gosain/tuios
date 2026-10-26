@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -72,13 +73,30 @@ func main() {
 		*dir = d
 		defer func() { _ = os.RemoveAll(d) }()
 	}
-	saved, _ := exec.Command("stty", "-g").CombinedOutput()
+	// stty reads the terminal from its stdin, so it is given this one.
+	get := exec.Command("stty", "-g")
+	get.Stdin = os.Stdin
+	saved, _ := get.Output()
 	stty("-icanon", "-echo", "min", "0", "time", "1")
-	defer stty(strings.TrimSpace(string(saved)))
+	// The reader stops, and the terminal is put back, before the last line
+	// is printed. Whoever waits for that line types next, and a key that
+	// arrived while this program still read the terminal was its, not the
+	// shell's: a test's "clear" was lost that way on macOS.
+	var stop atomic.Bool
+	stopped := make(chan struct{})
+	finish := func() {
+		stop.Store(true)
+		select {
+		case <-stopped: // a read returns within a tenth of a second (time 1)
+		case <-time.After(time.Second):
+		}
+		stty(strings.TrimSpace(string(saved)))
+	}
 	replies := make(chan byte, 1<<16)
 	go func() {
+		defer close(stopped)
 		buf := make([]byte, 256)
-		for {
+		for !stop.Load() {
 			n, err := os.Stdin.Read(buf)
 			for _, c := range buf[:n] {
 				replies <- c
@@ -144,6 +162,7 @@ func main() {
 			fmt.Println()
 		}
 	}
+	finish()
 	if failed == 0 {
 		fmt.Printf("\x1b[1;32mALL %d PASS\x1b[0m\n", passed)
 	} else {

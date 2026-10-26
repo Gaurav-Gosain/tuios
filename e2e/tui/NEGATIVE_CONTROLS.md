@@ -9492,3 +9492,18 @@ Without the busy loops, upstream main failed one run in three (2.6 s) with tuios
 | Shutdown waits for the whole backlog (`DRAIN_MS` at 60 s) | `.../a_slow_daemon_cannot_hold_up_shutdown`: "report backlog made Pi shutdown take 3.37s" | **caught** |
 | Superseded selections are not merged | `.../selections_that_supersede_one_another_are_merged`: "want the start and one merged selection, got 11 reports" | **caught** |
 | `enqueue` returns before it queues anything | `.../a_slow_daemon_cannot_hold_up_shutdown`: "the slow daemon was sent 0 reports, so the backlog was never built", and `.../selections_that_supersede_one_another_are_merged`: "want the start and one merged selection, got 0 reports" | **caught** |
+
+## Three tests that failed every time on macOS (#1139)
+
+Run on 2026-10-26 on Linux against upstream main at 4538d1d12. Linux cannot run the macOS timing, so each control slows down the step that macOS was slow at. Each control is a text replacement, built to a separate binary and put back before the next.
+
+| Control: what was changed | Test | Where it fails | Verdict |
+| --- | --- | --- | --- |
+| The TML placeholder starts with `sleep 2`, with the input fix removed | `TestTMLInputTyping` | Typing step 1, the macOS failure: the click came before the placeholder turned on mouse reporting | **caught** |
+| The same placeholder delay, with the input fix | `TestTMLInputTyping` | passes | fix holds |
+| `worktree.Push` sleeps one second between the push and the upstream config, with the old test | `TestShipPushSendsTheCommitThePersonAllowed` | `feat/ship@{upstream}` exits 128, the macOS failure | **caught** |
+| The same delay, with the test that waits for "Pushed feat/ship" | `TestShipPushSendsTheCommitThePersonAllowed` | passes | fix holds |
+| kittylive sleeps one second after its last line, with the old kittylive | `TestKittyFilesFromAPaneOnAHost/icat` | "the pane did not clear", the macOS failure: kittylive read the typed `clear` | **caught** |
+| The same sleep, with kittylive stopping its reader before its last line | `TestKittyFilesFromAPaneOnAHost/icat` | passes | fix holds |
+
+The `t=s` upload and icat's memory mode are expected only on Linux. tuios reads a shared memory object only from `/dev/shm`, and the far side answers `ENOTSUPPORTED` on other systems. That part is not a control: no Linux run can show it.

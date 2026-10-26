@@ -125,7 +125,15 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		}
 		png := junk[4000 : len(junk)-4000]
 		teal := bytes.Repeat([]byte{42, 161, 152, 255}, 64*32)
-		for name, want := range map[string][]byte{"t=f": green, "t=f with O= and S=": png, "t=s": teal} {
+		wantUploads := map[string][]byte{"t=f": green, "t=f with O= and S=": png}
+		// tuios reads a shared memory object only from /dev/shm, and the far
+		// side answers ENOTSUPPORTED elsewhere. macOS has no /dev/shm, and Go
+		// has no shm_open there without cgo, so kittylive sends no t=s
+		// command off Linux.
+		if runtime.GOOS == "linux" {
+			wantUploads["t=s"] = teal
+		}
+		for name, want := range wantUploads {
 			if !containsUpload(uploads, want) {
 				t.Errorf("%s: the host never received the file's %d bytes as a direct upload (got uploads of %v bytes)", name, len(want), uploadSizes(uploads))
 			}
@@ -156,7 +164,13 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		if snap := term.Snapshot(); !strings.Contains(snap, "MODE-MEMORY") && !strings.Contains(snap, "MODE-FILE") {
 			t.Errorf("icat did not pick file or memory transfer for a pane on another machine:\n%s", snap)
 		}
-		for _, mode := range []string{"file", "memory"} {
+		// Memory mode is a POSIX shared memory object, which the far side
+		// reads only on Linux (see the media run).
+		modes := []string{"file", "memory"}
+		if runtime.GOOS != "linux" {
+			modes = modes[:1]
+		}
+		for _, mode := range modes {
 			runTagged(t, term, mode, kitten+" icat --stdin=no --transfer-mode="+mode+" "+path)
 		}
 		saveArtifact(t, term, artifactDir(t), "icat")
@@ -175,8 +189,8 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 				got++
 			}
 		}
-		if got < 2 {
-			t.Errorf("the host received %d of the 2 images icat sent by file and by memory (uploads of %v bytes; the PNG is %d)", got, uploadSizes(uploads), len(img))
+		if got < len(modes) {
+			t.Errorf("the host received %d of the %d images icat sent in modes %v (uploads of %v bytes; the PNG is %d)", got, len(modes), modes, uploadSizes(uploads), len(img))
 		}
 	})
 

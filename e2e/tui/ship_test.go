@@ -480,6 +480,20 @@ func TestShipPushSendsTheCommitThePersonAllowed(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+	// The ref is on the origin before git push returns, and the daemon sets
+	// the upstream after that, so the check waits for the command's answer,
+	// which comes only once both are done.
+	pushOut := filepath.Join(f.fakes, "pane-push.txt")
+	for {
+		data, _ := os.ReadFile(pushOut)
+		if strings.Contains(string(data), "Pushed feat/ship") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tuios ship push never said the push was done. It printed:\n%s", data)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	if up := testutil.Git(t, f.worktree, "rev-parse", "--abbrev-ref", "feat/ship@{upstream}"); up != "origin/feat/ship" {
 		t.Errorf("the branch's upstream is %q after the push, want origin/feat/ship", up)
 	}
