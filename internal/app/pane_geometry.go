@@ -197,6 +197,9 @@ func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int))
 		numMin:  lo,
 		numMax:  hi,
 		meter: func(m *OS) float64 {
+			if hi <= lo {
+				return 0
+			}
 			return float64(clampInt(get(m), lo, hi)-lo) / float64(hi-lo)
 		},
 		differs: differsFromDefault(path, func(m *OS) string { return strconv.Itoa(get(m)) }),

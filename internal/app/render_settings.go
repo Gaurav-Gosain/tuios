@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"math"
 	"strconv"
 	"strings"
 
@@ -526,8 +527,11 @@ const settingsMeterCells = 6
 // can this go", which a second number does not answer any faster than the first
 // one did.
 func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette) string {
+	if math.IsNaN(fraction) {
+		fraction = 0
+	}
 	fraction = min(max(fraction, 0), 1)
-	filled := int(fraction*float64(settingsMeterCells) + 0.5)
+	filled := min(max(int(fraction*float64(settingsMeterCells)+0.5), 0), settingsMeterCells)
 	// A value off the floor always shows at least one cell, so nudging a
 	// setting up from zero does something visible on the row as well as on the
 	// screen behind it.

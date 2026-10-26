@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -51,5 +52,31 @@ func TestTheGaugeDoesNotFollowTheScrollbarStyle(t *testing.T) {
 			t.Errorf("the gauge is not a fixed width across values and styles: got %v", widths)
 			break
 		}
+	}
+}
+
+func TestSettingsMeterBoundsAndNaN(t *testing.T) {
+	pal := overlay.Palette{}
+	bg := pal.Surface
+
+	for _, f := range []float64{-1.0, 0, 0.5, 1.0, 2.0, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		out := settingsMeter(f, true, bg, pal)
+		w := lipgloss.Width(out)
+		// settingsMeterCells + 1 space = 7 cells
+		if w != settingsMeterCells+1 {
+			t.Errorf("settingsMeter(%v) width = %d, want %d", f, w, settingsMeterCells+1)
+		}
+	}
+}
+
+func TestPercentItemEqualBounds(t *testing.T) {
+	item := percentItem("test.path", 20, 20, func(m *OS) int { return 20 }, func(m *OS, v int) {})
+	if item.meter == nil {
+		t.Fatal("expected item.meter to be non-nil")
+	}
+	m := &OS{}
+	got := item.meter(m)
+	if got != 0 {
+		t.Errorf("item.meter with lo == hi = %v, want 0", got)
 	}
 }
