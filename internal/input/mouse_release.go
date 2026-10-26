@@ -331,8 +331,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.FlushPTYBuffersAfterResize()
 		}
 
+		// A resize of a floating pane leaves the tiling as it was: no column
+		// width to record and no layout to read back from the geometry.
+		tiledResize := wasResizing && resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) &&
+			o.ResizesWithTiling(o.Windows[resizedWindowIndex])
+
 		// In scrolling mode, capture resized width into the column BEFORE retiling
-		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
+		if tiledResize && o.UseScrollingLayout {
 			// Only when the width moved. A press and release with no motion
 			// between them is a click, and recording the width it left alone
 			// would turn a column sized as a share of the screen into a fixed
@@ -354,7 +359,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Mark layout as custom if resizing in tiling mode (BSP only)
-		if wasResizing && o.AutoTiling && !o.UseScrollingLayout {
+		if tiledResize && !o.UseScrollingLayout {
 			// Master-stack keeps its layout as ratios, so the drag is written
 			// into them before the retile below recomputes the rectangles.
 			o.SyncMasterStackFromGeometry()
@@ -373,7 +378,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// For BSP shared borders: always re-tile to restore the Tiled flag that
 		// a drag cleared (untilePaneForDrag). A gesture that never moved never
 		// cleared it, and the retile then finds nothing to change.
-		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
+		if tiledResize && o.UseScrollingLayout {
 			o.ScrollingSetPositions()
 		} else if o.PanesBorderless() {
 			o.TileAllWindows()

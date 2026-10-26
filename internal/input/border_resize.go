@@ -51,6 +51,18 @@ func armBorderResize(x, y int, o *app.OS) bool {
 	// Scrolling columns drawing their own borders have the right drag for
 	// their width. Under shared borders the divider between two columns is
 	// drawn, and the resize pointer offered over it, so it has to be one.
+	// A pane floated out of the tiling keeps its own frame as the grab, the
+	// same as with tiling off. The tiled branches below skip every floating
+	// pane, so a press on its edge fell through to a move. Popups keep the
+	// tiled behaviour: the scratch terminal and its kind are not resized by
+	// hand over the tiles.
+	if o.AutoTiling {
+		if idx := findClickedWindow(x, y, o); idx >= 0 {
+			if w := o.Windows[idx]; w.IsFloating && !w.IsPopup && !w.IsScratch {
+				return armFloatingBorderResize(x, y, o)
+			}
+		}
+	}
 	if o.AutoTiling && o.UseScrollingLayout {
 		if !o.PanesBorderless() {
 			return false
@@ -319,14 +331,15 @@ func applyBorderResize(o *app.OS, mx, my int) {
 		return
 	}
 
-	if o.AutoTiling && o.UseScrollingLayout {
+	tiled := o.ResizesWithTiling(w)
+	if tiled && o.UseScrollingLayout {
 		// Measured from where the column stood at the press. The strip may
 		// move under the pointer during the drag, and a width measured from
 		// the column's current edge would chase it.
 		o.ScrollingResizeColumnVisual(w, mx+grab-o.PreResizeState.X, false)
 		return
 	}
-	if o.AutoTiling {
+	if tiled {
 		treeInSync := o.AdjustTilingNeighborsVisual(w, newX, newY, newW, newH)
 		if o.SharedBorders && !treeInSync {
 			o.MarkBSPSyncPending()

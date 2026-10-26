@@ -370,6 +370,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return o, nil
 		}
 
+		// The pane the press grabbed, as in the drag above. A peer's sync
+		// can move the focus mid-gesture, and the rest of the resize then
+		// went to the focused pane with the grabbed pane's starting
+		// rectangle: a tiled pane took a floating pane's row and height.
+		if o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
+			focusedWindow = o.Windows[o.DraggedWindowIndex]
+		}
+
 		xOffset := mouse.X - o.ResizeStartX
 		yOffset := mouse.Y - o.ResizeStartY
 
@@ -378,8 +386,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		newWidth := focusedWindow.Width
 		newHeight := focusedWindow.Height
 
+		// A floating pane resizes alone even with tiling on. The tiling
+		// branches below hold edges on the screen boundary and move the
+		// tiled panes that share the dragged edge's line.
+		tiled := o.ResizesWithTiling(focusedWindow)
+
 		// In scrolling mode, only allow width resize (columns fill full height)
-		if o.UseScrollingLayout {
+		if tiled && o.UseScrollingLayout {
 			yOffset = 0
 		}
 
@@ -473,7 +486,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// In tiling mode (except scrolling), block resizing edges at the
 		// content-region boundaries
-		if o.AutoTiling && !o.UseScrollingLayout {
+		if tiled && !o.UseScrollingLayout {
 			const edgeTolerance = 2 // Small tolerance for detecting screen edges
 
 			// Check which edges are at content-region boundaries
@@ -530,7 +543,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			if o.SharedBorders && !treeInSync {
 				o.MarkBSPSyncPending()
 			}
-		} else if o.UseScrollingLayout {
+		} else if tiled && o.UseScrollingLayout {
 			// Scrolling mode: compute width from horizontal drag delta. All
 			// strip math runs against the content width beside the sidebar band,
 			// matching ScrollingSetPositions.

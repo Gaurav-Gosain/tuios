@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -184,4 +186,160 @@ func TestScratchStaysShownUnderHover(t *testing.T) {
 		t.Fatalf("the keys after the hover did not reach the scratch terminal (%v):\n%s", err, pane)
 	}
 	t.Logf("the scratch terminal after the hover:\n%s", term.Snapshot())
+}
+
+// floatRect is one row of list-windows --json for session work: where the
+// daemon says a pane is.
+type floatRect struct {
+	ID       string `json:"window_id"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	W        int    `json:"width"`
+	H        int    `json:"height"`
+	Floating bool   `json:"floating"`
+}
+
+func (r floatRect) String() string {
+	return fmt.Sprintf("x=%d y=%d w=%d h=%d", r.X, r.Y, r.W, r.H)
+}
+
+// floatAndTile is the floating pane and the one tiled pane of session work,
+// read once the daemon has a state with exactly one of each.
+func floatAndTile(t *testing.T, base, what string) (float, tile floatRect) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	var out string
+	for time.Now().Before(deadline) {
+		var err error
+		out, err = tuiosCLI(t, base, "list-windows", "--json", "--session", "work")
+		if err == nil {
+			var res struct {
+				Windows []floatRect `json:"windows"`
+			}
+			if json.Unmarshal([]byte(out), &res) == nil && len(res.Windows) == 2 &&
+				res.Windows[0].Floating != res.Windows[1].Floating {
+				for _, w := range res.Windows {
+					if w.Floating {
+						float = w
+					} else {
+						tile = w
+					}
+				}
+				return float, tile
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("%s: no state with one floating and one tiled pane:\n%s", what, out)
+	return float, tile
+}
+
+// The report: in tiling mode with one tiled pane, a pane floated with the
+// leader, t, f. The alt+right drag that resizes a pane did nothing to the
+// float on the first try, and once it did resize, it also resized the tiled
+// pane behind it, which took the float's row and height. The resize ran the
+// tiling path for a pane that is not in the tiling: that path holds an edge
+// that sits on the screen boundary still (the float starts in the slot it was
+// tiled in, so most of its edges are on a boundary) and moves every tiled pane
+// that shares a line with the edge it drags. A left drag on the float's own
+// edge took the same path, and a press there moved the float instead. A peer's
+// sync that moved the focus mid-resize handed the rest of the gesture to the
+// tiled pane.
+func TestFloatMouseResizeKeepsTheTiles(t *testing.T) {
+	term, base := scratchOverTiles(t, 2)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "t", "f"); err != nil {
+		t.Fatalf("float the pane: %v", err)
+	}
+	if err := term.WaitForText("Window: floating", uiTimeout); err != nil {
+		t.Fatalf("the pane never floated: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(500 * time.Millisecond)
+	float, tile := floatAndTile(t, base, "after the float")
+	t.Logf("after the float: float %v, tile %v", float, tile)
+	saveFrame(t, term, "float-resize-0-floated")
+
+	// Two drags, each from inside the float toward its middle: first from the
+	// bottom-right quarter, which shrinks the far edges, then from the
+	// top-left quarter, which shrinks the near ones.
+	for i, d := range []struct {
+		name    string
+		topLeft bool
+		dx, dy  int
+	}{
+		{name: "bottom-right", dx: -12, dy: -6},
+		{name: "top-left", topLeft: true, dx: 8, dy: 4},
+	} {
+		before := float
+		fromX, fromY := before.X+before.W-4, before.Y+before.H-3
+		wantW, wantH := before.W+d.dx, before.H+d.dy
+		if d.topLeft {
+			fromX, fromY = before.X+4, before.Y+3
+			wantW, wantH = before.W-d.dx, before.H-d.dy
+		}
+		mouseDrag(t, term, fromX, fromY, fromX+d.dx, fromY+d.dy, tuitest.MouseRight, tuitest.ModAlt)
+		time.Sleep(900 * time.Millisecond)
+		var gotTile floatRect
+		float, gotTile = floatAndTile(t, base, "after the "+d.name+" drag")
+		t.Logf("after the %s drag: float %v, tile %v", d.name, float, gotTile)
+		saveFrame(t, term, fmt.Sprintf("float-resize-%d-%s", i+1, d.name))
+		if float.W != wantW || float.H != wantH {
+			t.Errorf("the %s drag by %d,%d took the float from %v to %v, want w=%d h=%d\n%s",
+				d.name, d.dx, d.dy, before, float, wantW, wantH, term.Snapshot())
+		}
+		if gotTile != tile {
+			t.Fatalf("the %s drag on the float moved the tiled pane from %v to %v\n%s",
+				d.name, tile, gotTile, term.Snapshot())
+		}
+	}
+
+	// A left drag on the float's bottom edge, a line the tiled pane also ends
+	// on when the float is in the slot it was tiled in.
+	before := float
+	col, row := before.X+before.W/2, before.Y+before.H-1
+	mouseDrag(t, term, col, row, col, row-5, tuitest.MouseLeft, 0)
+	time.Sleep(900 * time.Millisecond)
+	float, gotTile := floatAndTile(t, base, "after the bottom edge drag")
+	t.Logf("after the bottom edge drag: float %v, tile %v", float, gotTile)
+	saveFrame(t, term, "float-resize-3-bottom-edge")
+	if float.H != before.H-5 || float.Y != before.Y {
+		t.Errorf("the bottom edge drag by -5 took the float from %v to %v, want y=%d h=%d\n%s",
+			before, float, before.Y, before.H-5, term.Snapshot())
+	}
+	if gotTile != tile {
+		t.Fatalf("the bottom edge drag on the float moved the tiled pane from %v to %v\n%s",
+			tile, gotTile, term.Snapshot())
+	}
+
+	// A second client moves the focus to the tiled pane while the float is
+	// mid-resize. The rest of the gesture still belongs to the float.
+	peer := attachIn(t, base, "work", startOpts{cols: 160, rows: 45})
+	time.Sleep(time.Second)
+	before = float
+	col, row = before.X+before.W-4, before.Y+before.H-3
+	mousePress(t, term, col, row, tuitest.MouseRight, tuitest.ModAlt)
+	for i := 1; i <= 4; i++ {
+		mouseMotion(t, term, col+i, row+i, tuitest.MouseRight, tuitest.ModAlt)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := peer.SendKeys("\t"); err != nil {
+		t.Fatalf("peer tab: %v", err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	for i := 5; i <= 8; i++ {
+		mouseMotion(t, term, col+i, row+i, tuitest.MouseRight, tuitest.ModAlt)
+	}
+	mouseRelease(t, term, col+8, row+8, tuitest.MouseRight, tuitest.ModAlt)
+	time.Sleep(900 * time.Millisecond)
+	float, gotTile = floatAndTile(t, base, "after the resize across a peer's sync")
+	t.Logf("after the resize across a peer's sync: float %v, tile %v", float, gotTile)
+	saveFrame(t, term, "float-resize-4-peer-sync")
+	if float.W != before.W+8 || float.H != before.H+8 {
+		t.Errorf("the resize across a peer's sync took the float from %v to %v, want w=%d h=%d\n%s",
+			before, float, before.W+8, before.H+8, term.Snapshot())
+	}
+	if gotTile != tile {
+		t.Fatalf("the resize across a peer's sync moved the tiled pane from %v to %v\n%s",
+			tile, gotTile, term.Snapshot())
+	}
+	alive(t, term, "after the float resizes")
 }

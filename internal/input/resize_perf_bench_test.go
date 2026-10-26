@@ -89,6 +89,7 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 	// handleMouseClick would have on press.
 	focused := m.GetFocusedWindow()
 	m.Resizing = true
+	m.DraggedWindowIndex = m.FocusedWindow
 	m.ResizeCorner = app.BottomRight
 	m.PreResizeState = terminal.Window{
 		Width:  focused.Width,

@@ -55,6 +55,7 @@ func pair(m *app.OS) (int, int) {
 func startDrag(m *app.OS) (startX, startY int) {
 	win := m.Windows[0]
 	m.FocusedWindow = 0
+	m.DraggedWindowIndex = 0
 	m.Resizing = true
 	m.InteractionMode = true
 	m.ResizeCorner = app.BottomRight

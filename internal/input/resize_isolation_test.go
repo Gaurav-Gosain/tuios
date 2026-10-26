@@ -344,6 +344,9 @@ func TestMouseResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 				}
 				m.Resizing = true
 				m.InteractionMode = true
+				// The press records the pane it grabbed, and the motion
+				// resizes that pane.
+				m.DraggedWindowIndex = c.pane - 1
 				m.PreResizeState = terminal.Window{
 					ID: win.ID, X: win.X, Y: win.Y, Z: win.Z,
 					Width: win.Width, Height: win.Height,
@@ -425,6 +428,7 @@ func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 
 			win := m.Windows[0]
 			startX, startY := win.X+win.Width, win.Y+win.Height
+			m.DraggedWindowIndex = 0
 			m.Resizing = true
 			m.InteractionMode = true
 			m.ResizeCorner = app.BottomRight

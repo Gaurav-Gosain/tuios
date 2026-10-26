@@ -194,6 +194,16 @@ func (m *OS) SetFocusedWindowHeightPercent(pct int) {
 	}
 }
 
+// ResizesWithTiling reports whether a resize of w moves the tiling's split
+// lines. A floating pane sits over the tiling and owns no split, so it resizes
+// alone, the way every pane does with tiling off. Asking AutoTiling alone sent a
+// floating pane through the split scan: its edges on the screen boundary were
+// held still, and the tiled panes that shared a line with the edge it moved
+// were moved with it.
+func (m *OS) ResizesWithTiling(w *terminal.Window) bool {
+	return m.AutoTiling && w != nil && !w.IsFloating
+}
+
 // resizeOp defines how a window should be resized during tiling adjustments
 type resizeOp func(m *OS, win *terminal.Window, width, height int)
 
@@ -219,6 +229,13 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	oldBottom := resized.Y + resized.Height
 	newRight := newX + newWidth
 	newBottom := newY + newHeight
+
+	// A floating pane is on no split line. Its old edges can still lie on a
+	// tiled pane's edge (it floats out of the slot it was tiled in), and moving
+	// that line would resize the tiled pane behind it.
+	if resized.IsFloating {
+		return newX, newY, newRight, newBottom
+	}
 
 	const minWidth = config.DefaultWindowWidth
 	const minHeight = config.DefaultWindowHeight
