@@ -229,7 +229,7 @@ export default defineConfig({
       // here opens the unthemed server as its control, and a second client at
       // a different size would resize that server's session under it.
       name: 'appearance',
-      testMatch: /appearance\.spec\.mjs/,
+      testMatch: /(appearance|graphics)\.spec\.mjs/,
       use: {
         baseURL: APPEARANCE_BASE_URL,
         hasTouch: false,

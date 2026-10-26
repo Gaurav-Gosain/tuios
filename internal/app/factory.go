@@ -297,7 +297,8 @@ func NewOS(opts OSOptions) *OS {
 		Caps:         caps,
 	})
 	os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
-		ForceEnable: opts.ForceGraphicsEnabled,
+		// A known kitty host can carry sixel without forcing native sixel.
+		ForceEnable: opts.ForceGraphicsEnabled && !caps.KittyGraphics,
 		Output:      opts.GraphicsOutput,
 		Caps:        caps,
 		Symbols:     symbolKind(seed.ImageSymbols, caps.Term),

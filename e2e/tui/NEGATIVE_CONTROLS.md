@@ -9987,3 +9987,23 @@ With `TUIOS_E2E_FRAMES` set, the test writes `step-NN.txt` and `step-NN.styled.t
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `next_agent` and `prev_agent` dropped from `yieldingDefaults` | `explain says J after the prefix runs [next_agent], want swap_down` | **caught** |
+## Browser sixel pictures clear and scroll (#587)
+
+`clienttests/graphics.spec.mjs` sends a 120x96 red sixel through a real
+pane's shell and reads the browser's composited screenshot, including both
+the native sixel canvas and the kitty overlay. Each case first proves the
+picture is visible, then requires zero red pixels after clear or scrolling.
+Run on 2026-10-26 against main at `6307241`.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole change (main) | Both cases: expected 0 red pixels after clear/scroll, received 11520 | **caught** |
+| `webHostCaps` restored from main, including `SixelGraphics: true`; fixed factory kept | Both cases: expected 0, received 11520 | **caught** |
+| `NewOS` restores the unconditional sixel `ForceEnable: opts.ForceGraphicsEnabled`; web native sixel remains off | Both cases: expected 0, received 11520 | **caught** |
+
+The two partial controls use `go build -overlay` and leave the working tree
+fixed. The fixed browser cases pass three consecutive runs; the full browser
+suite passes all 34 tests. The native `TestSixelShowsClippedAndClears`,
+`TestSixelScrollsWithThePane` and `TestSixelFallbacks` cases also pass.
+Browser artifacts are `image.png`, `after-clear.png` and `after-scroll.png`
+under each test's results directory.

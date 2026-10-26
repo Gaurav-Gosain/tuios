@@ -675,12 +675,9 @@ const (
 
 // createTUIOSHandler creates a TUIOS instance for each web session.
 //
-// Graphics: sip's page runs webterm, which draws kitty graphics in its own
-// overlay and sixel through @xterm/addon-image (sip's static/terminal.js asks
-// for both with graphics: { kitty, sixel }). The kitty and sixel passthroughs
-// are forced on here, and their output goes through the sip session's PTY
-// slave, so APC sequences from child processes (chafa -f kitty, kitten icat
-// and the rest) flow through the same pipe as bubbletea's text output.
+// Graphics: sip's page runs webterm's kitty overlay. Sixel pictures are
+// converted to kitty too, so rewritten cells can move and clear them. Output
+// goes through the sip session's PTY slave, in the same pipe as the text.
 func createTUIOSHandler(sess sip.Session) *app.OS {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
@@ -693,9 +690,8 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 	hostCaps := webHostCaps(cellSize(pty))
 
 	// The kind says the rest: read-only config, no desktop, graphics forced on
-	// because stdin is not a TTY here. Kitty and sixel output is routed
-	// through the sip PTY slave, the same pipe as the text, so the browser's
-	// image addon renders it.
+	// because stdin is not a TTY here. Kitty output, including converted
+	// sixel, reaches the browser's overlay through the sip PTY slave.
 	opts := app.OSOptions{
 		Client:         app.ClientBrowser,
 		ShowKeys:       interfaceFlags.ShowKeys,
@@ -744,15 +740,15 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 func pickWebSession([]string) string { return "web" }
 
 // webHostCaps is the browser terminal one connection draws to. sip's page
-// draws kitty graphics in webterm's overlay and sixel through the xterm.js
-// image addon, so both protocols render. KittyAnimation stays false because
-// the browser overlay has no a=f frame-edit path, and KittyFileTransfer stays
-// false because the browser cannot read server-local paths. The palette is the
-// one the browser draws with; see browserPalette.
+// draws graphics in webterm's kitty overlay. Sixel is converted to kitty:
+// xterm.js's native sixel addon does not clear images when cells are rewritten.
+// KittyAnimation stays false because the overlay has no a=f frame-edit path.
+// KittyFileTransfer stays false because the browser cannot read server-local
+// paths. The palette is the browser's; see browserPalette.
 func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
 	caps := &app.HostCapabilities{
 		KittyGraphics: true,
-		SixelGraphics: true,
+		SixelGraphics: false,
 		TrueColor:     true,
 		TerminalName:  "tuios-web",
 		CellWidth:     cellWidth,
