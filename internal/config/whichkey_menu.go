@@ -215,7 +215,6 @@ var leaderToolRows = []menuRow{
 	{parts: []menuPart{{"prefix_command_palette", "Command palette"}}, desc: "Command palette"},
 	{parts: []menuPart{{"reload_config", "Reload config"}}, desc: "Reload config"},
 	{parts: []menuPart{{"send_prefix", "Send the leader"}}, desc: "Send the leader"},
-	{parts: []menuPart{{"nest", "Nest: all keys to the pane"}}, desc: "Nest: all keys to the pane"},
 	{parts: []menuPart{{"launcher", "Launcher"}}, desc: "Launcher"},
 	{parts: []menuPart{{"prefix_settings", "Settings"}}, desc: "Settings"},
 	{parts: []menuPart{{"prefix_keybinds", "Keybindings"}}, desc: "Keybindings"},
@@ -278,10 +277,10 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	// both leave for window mode.
 	if st.Daemon {
 		sessions.rows = append(sessions.rows, row("prefix_detach", "Detach session"), row("prefix_quit", "Quit menu"))
-		modes.rows = append(modes.rows, row("prefix_exit_mode", "Window mode"))
+		modes.rows = append(modes.rows, pair("Window/nest mode", part("prefix_exit_mode", "Window mode"), part("nest", "Nest mode")))
 	} else {
 		sessions.rows = append(sessions.rows, row("prefix_quit", "Quit application"))
-		modes.rows = append(modes.rows, pair("Window mode", part("prefix_detach", "Window mode"), part("prefix_exit_mode", "Window mode")))
+		modes.rows = append(modes.rows, pair("Window/nest mode", part("prefix_detach", "Window mode"), part("prefix_exit_mode", "Window mode"), part("nest", "Nest mode")))
 	}
 	// With multifocus on, the copy-mode key enters multi copy mode, and the
 	// menu says so: this is where a multifocus user finds out it exists.
@@ -580,9 +579,11 @@ func numberedLabel(keys []string) string {
 	return strings.Join(pieces, "/")
 }
 
-// keyNames is how a which-key row spells a named key.
+// keyNames is how a which-key row spells a named key. enter is the ↵ arrow,
+// as the arrows are arrows: one cell, so the leader's menu still fits 80x24
+// with nest on the window mode line (Esc/↵).
 var keyNames = map[string]string{
-	"esc": "Esc", "escape": "Esc", "tab": "Tab", "enter": "Enter", "return": "Enter",
+	"esc": "Esc", "escape": "Esc", "tab": "Tab", "enter": "↵", "return": "↵",
 	"space": "Space", "backspace": "Backspace", "delete": "Delete", "insert": "Insert",
 	"home": "Home", "end": "End", "pgup": "PgUp", "pgdown": "PgDn",
 	"left": "←", "right": "→", "up": "↑", "down": "↓",
