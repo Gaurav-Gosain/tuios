@@ -237,6 +237,13 @@ cross: a flick and its momentum tail are tens of events, and a fifth of the
 screen each sent the strip to its end before the fingers had left the glass.
 Raise it if you only ever scroll the strip with a wheel.
 
+`appearance.niri_scroll_snap = true` lines the strip up on the nearest column
+when the scroll stops, as niri does at the end of a gesture: the left edge of
+the screen goes to the start of the closest column, or to the end of the strip
+when that is closer. A terminal does not say when a gesture ends, so the strip
+snaps after it has been still for a moment. It works for a wheel, a trackpad
+and a finger on tuios-web. The default is `false`.
+
 ### Column commands
 
 These have no default keybinding. Run them from the command palette, or bind the

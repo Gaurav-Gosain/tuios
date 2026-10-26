@@ -670,6 +670,11 @@ type Settings struct {
 	// Set via appearance.niri_scroll_cells config
 	NiriScrollCells int
 
+	// NiriScrollSnap lines the strip up on the nearest column once a wheel,
+	// a trackpad or a finger has stopped moving it, as niri does at the end
+	// of a gesture. Set via appearance.niri_scroll_snap config
+	NiriScrollSnap bool
+
 	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
 	// prefix command, in milliseconds. Zero turns it off. See
 	// PrefixRepeatTimeDefault.

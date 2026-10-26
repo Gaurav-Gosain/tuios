@@ -409,6 +409,7 @@ type AppearanceConfig struct {
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
 	NiriScrollCells      int    `toml:"niri_scroll_cells"`      // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
+	NiriScrollSnap       bool   `toml:"niri_scroll_snap"`       // Snap the strip to the nearest column when a wheel or a drag stops (default: false)
 	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
 	// prefix command, in milliseconds, so ctrl+b then left left left walks
 	// three columns. Zero turns it off. This is tmux's repeat-time.
@@ -2910,6 +2911,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ShowCPU = cfg.Appearance.ShowCPU
 	s.ShowRAM = cfg.Appearance.ShowRAM
 	s.NiriReverseScroll = cfg.Appearance.NiriReverseScroll
+	s.NiriScrollSnap = cfg.Appearance.NiriScrollSnap
 	s.NiriScrollCells = clampPercent(cfg.Appearance.NiriScrollCells, NiriScrollCellsMin, NiriScrollCellsMax, NiriScrollCellsDefault)
 
 	if cfg.Appearance.ScrollbackLines > 0 {

@@ -361,6 +361,24 @@ func (s *ScrollingLayout) ClampViewport(screenWidth int) {
 	}
 }
 
+// SnapViewport lines the viewport up on the nearest column: its left edge
+// goes to the start of the column closest to it, or to the strip's far end
+// when that is closer, so the last columns are not pushed back off it.
+func (s *ScrollingLayout) SnapViewport(screenWidth int) {
+	if len(s.Columns) == 0 {
+		return
+	}
+	maxScroll := max(s.TotalStripWidth(screenWidth)-screenWidth, 0)
+	best := maxScroll
+	for i := range s.Columns {
+		if x := s.columnX(i, screenWidth); abs(x-s.ViewportX) < abs(best-s.ViewportX) {
+			best = x
+		}
+	}
+	s.ViewportX = best
+	s.ClampViewport(screenWidth)
+}
+
 // scrollPeek is the cells of the neighbouring column kept on screen beside the
 // focused one, so the strip says there is more of it in the direction you are
 // travelling. Small on purpose: it is a hint that the strip continues, not a

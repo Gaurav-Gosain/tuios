@@ -625,6 +625,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.new_window_follow_ssh"),
 			opt("appearance.niri_reverse_scroll"),
 			opt("appearance.niri_scroll_cells"),
+			opt("appearance.niri_scroll_snap"),
 			opt("appearance.niri_click_reveals"),
 			opt("appearance.niri_hover_reveals"),
 			opt("appearance.prefix_repeat_time"),

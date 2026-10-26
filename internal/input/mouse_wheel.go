@@ -152,7 +152,9 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			case tea.MouseWheelRight:
 				o.ScrollingScrollViewport(1 * dir)
 			}
-			return o, nil
+			// With niri_scroll_snap on, the strip lines up on a column once
+			// the steps stop. See app/strip_snap.go.
+			return o, o.ScheduleStripSnap()
 		}
 	}
 

@@ -417,6 +417,9 @@ func runWebServer() error {
 	// A notification's link opens the Inbox on its item. See inboxlink.go.
 	installInboxLink(&sipConfig)
 
+	// A horizontal finger drag scrolls the strip. See strip_touch.go.
+	installStripTouch(&sipConfig, config.Global.NiriScrollCells, config.Global.NiriReverseScroll)
+
 	server := sip.NewServer(sipConfig)
 
 	// Log startup mode

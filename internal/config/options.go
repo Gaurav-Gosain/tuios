@@ -440,6 +440,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.niri_scroll_snap", Type: OptionBool, Section: "appearance",
+		Description: "Snap the strip to the nearest column when a scroll stops",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.max_fps", Type: OptionInt, Section: "appearance",
 		Description: fmt.Sprintf("Highest frame rate tuios draws at. Your terminal and monitor can show fewer frames. "+
 			"A value above what they can show does not make tuios smoother. "+

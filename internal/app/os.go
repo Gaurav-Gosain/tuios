@@ -884,6 +884,10 @@ type OS struct {
 	// goroutine, like ExitReason.
 	QuitRequested bool
 
+	// stripSnapGen counts the wheel steps that moved the strip, so a snap
+	// timer fires only for the last one. See strip_snap.go.
+	stripSnapGen uint64
+
 	// clickReveal is a press that focused a pane, held until the button comes
 	// up so the release can tell a click from the start of a drag. See
 	// ArmClickReveal.

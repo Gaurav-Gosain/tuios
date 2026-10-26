@@ -107,6 +107,20 @@ gigabytes together.
 - A window with too many cells keeps its columns and loses rows. A window that
   is 1200 columns wide gets 208 rows.
 
+## Scroll the strip with a finger
+
+With the worker engine renderer (`?renderer=engine`, or Renderer in the
+settings panel), a finger dragged sideways scrolls the strip of the
+`scrolling` layout. The strip follows the finger. A tap, a vertical swipe and
+a long press keep their meaning: click, scroll and right click.
+
+- The drag moves the strip in steps of `appearance.niri_scroll_cells`, the
+  same steps as `Alt` with the wheel.
+- `appearance.niri_scroll_snap = true` lines the strip up on the nearest
+  column when the finger lifts. See
+  [LAYOUT_MODES.md](LAYOUT_MODES.md#scrolling-layout).
+- In another layout, the drag reaches the pane as a sideways wheel with `Alt`.
+
 ## Open the agents view from a notification
 
 A push notification from the `[notify]` table links to the Inbox item when

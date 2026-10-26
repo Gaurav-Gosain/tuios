@@ -2426,6 +2426,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionOrderAppliedMsg:
 		return m, m.applySessionOrderResult(msg)
 
+	case StripSnapMsg:
+		m.SnapStrip(msg)
+		return m, nil
+
 	case listingRefreshedMsg:
 		m.refreshSwitcherItems()
 		return m, nil

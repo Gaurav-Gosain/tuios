@@ -10193,3 +10193,12 @@ false outright.
 | --- | --- | --- |
 | The rail pane's nest path in `routeKey` (`if false && ...`) | "F12 did not end nest mode from the rail pane" (`^Bx` still reaches the pane, through the terminal handler) | **caught** |
 | `PanelOwnsKeyboard()` back to main's old list of six panels, where the two meet in `routeKey` | `TestNavigatorOpensOverTheFocusedRail`: "the navigator opened over the focused rail did not take the keys" | **caught** |
+## Scroll the strip with a finger, and snap it to a column
+
+`TestStripSnapsToTheNearestColumn` in `strip_snap_test.go` runs the scrolling layout with three columns of 55 cells on a 100-cell screen, `niri_scroll_cells = 3` and `niri_scroll_snap = true`. One `Alt` wheel step (3 cells) must snap back to the first column, so the frame is the frame before the step. Ten steps (30 cells) must line the strip up on BRAVO at the left edge, with none of ALPHA on screen. `clienttests/strip-touch.spec.mjs` runs tuios-web with `?renderer=engine` on a phone viewport. A drag to the left must hand `window.sip.send` at least two `Alt` wheel-right reports (`CSI < 75`), a drag to the right wheel-left reports (`CSI < 74`), and a vertical drag none. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-26 on macOS, based on origin/main at 6d122034a.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `SnapStrip` does nothing (`if true \|\| ...`) | "one step did not snap back to the first column" | **caught** |
+| tuios-web without the page script (`installStripTouch` not called) | the browser test: "a drag to the left sends steps", received 0 | **caught** |
+
