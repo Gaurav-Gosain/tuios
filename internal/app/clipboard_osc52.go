@@ -10,9 +10,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A program in a pane sets the clipboard with OSC 52. The pane always keeps
-// its own copy (terminal.Window.setClipboard), so the program reads back what
-// it wrote. Whether the host clipboard gets it too is
+// A program in a pane sets the clipboard with OSC 52. The pane keeps no copy:
+// an OSC 52 query gets empty content back, as in xterm, because the answer is
+// written to the pane's input. Whether the host clipboard gets the write is
 // appearance.selection.osc52_write:
 //
 //   - off: never.

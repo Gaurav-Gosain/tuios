@@ -107,17 +107,6 @@ func (w *Window) IsAltScreen() bool { return w.isAltScreen.Load() }
 // SetAltScreen records whether the application is using the alternate screen buffer.
 func (w *Window) SetAltScreen(v bool) { w.isAltScreen.Store(v) }
 
-// clipboard returns the last clipboard content set via OSC 52.
-func (w *Window) clipboard() string {
-	if p := w.clipboardContent.Load(); p != nil {
-		return *p
-	}
-	return ""
-}
-
-// setClipboard records the last clipboard content set via OSC 52.
-func (w *Window) setClipboard(content string) { w.clipboardContent.Store(&content) }
-
 // Cache for local terminal environment variables (detect once, reuse for local windows)
 // SSH sessions will detect per-connection based on their environment
 var (
@@ -356,7 +345,6 @@ type Window struct {
 	DaemonResizeFunc  func(w, h int) error     // Callback for resizing daemon PTY
 	DaemonCloseFunc   func()                   // Callback when window is closed (to notify daemon)
 	OnProcessExit     func()                   // Callback when PTY process exits (to close window)
-	clipboardContent  atomic.Pointer[string]   // Written by VT callback on PTY goroutine, read on UI goroutine (OSC 52)
 	ClipboardSetFunc  func(string)             // Callback to propagate clipboard to host
 	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
 	BellFunc          func()                   // Callback for guest bell (BEL)
@@ -751,14 +739,13 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 			}
 		},
 		ClipboardSet: func(_ string, content string) {
-			window.setClipboard(content)
 			if window.ClipboardSetFunc != nil {
 				window.ClipboardSetFunc(content)
 			}
 		},
-		ClipboardQuery: func(_ string) string {
-			return window.clipboard()
-		},
+		// No ClipboardQuery: an OSC 52 query is answered with empty content,
+		// as xterm answers by default. The answer is written to the pane's
+		// input, so it must not carry text a program in the pane chose.
 		Notify: func(title, body string) {
 			if window.NotifyFunc != nil {
 				window.NotifyFunc(title, body)
