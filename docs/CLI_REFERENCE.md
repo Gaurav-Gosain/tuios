@@ -5307,7 +5307,9 @@ connects. The browser asks for the user name and the password.
   can still read it from `/proc`. Use `--password-file` instead.
 
 There is no flag that takes the password itself. Other users can see command
-line arguments in `ps`.
+line arguments in `ps`. A password from a file or from `TUIOS_WEB_PASSWORD`
+that is shorter than 12 characters gets a warning at start, because
+tuios-web does not slow down wrong guesses.
 
 - On `localhost`: the password is optional. With no password, other users on
   this machine can connect. tuios-web prints one line at start to say so. Use

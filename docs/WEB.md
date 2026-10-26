@@ -33,6 +33,9 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
 - tuios-web also reads the password from `TUIOS_WEB_PASSWORD`. It does not
   pass this variable to panes. But your own processes can still read it from
   `/proc`. Use `--password-file` instead.
+- A password from a file or from `TUIOS_WEB_PASSWORD` that is shorter than
+  12 characters gets a warning at start, because tuios-web does not slow down
+  wrong guesses. Use `--random-password`, or a longer password.
 - A host other than `localhost` needs a password. TLS encrypts the connection,
   but it does not check who connects. Use `--no-auth` only on a network you
   trust.

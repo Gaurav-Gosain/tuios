@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/sip"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
@@ -48,6 +49,13 @@ import (
 
 // webPasswordEnv names the environment variable that can carry the password.
 const webPasswordEnv = "TUIOS_WEB_PASSWORD"
+
+// minWebPasswordRunes is the length, in characters, below which a password
+// from --password-file or TUIOS_WEB_PASSWORD gets a warning at start. sip
+// answers a wrong password at once and keeps no count of failures, so a short
+// password can be guessed at line rate. The start goes on: refusing it would
+// break setups that work today.
+const minWebPasswordRunes = 12
 
 // defaultWebUser is the Basic Auth user name when --user is not given.
 const defaultWebUser = "tuios"
@@ -153,6 +161,9 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 	case a.password != "":
 		if f.randomPassword {
 			a.announce = randomPasswordText(f, a)
+		} else if n := utf8.RuneCountInString(a.password); n < minWebPasswordRunes {
+			fmt.Fprintf(w, "Warning: the password is %d characters long. tuios-web does not slow down wrong guesses, so a short password can be guessed over the network. Use --random-password, or a password of at least %d characters.\n",
+				n, minWebPasswordRunes)
 		}
 	case f.noAuth:
 		fmt.Fprintf(w, "\nWarning: tuios-web does not ask for a password. %s can open a shell as %s.\n\n",
