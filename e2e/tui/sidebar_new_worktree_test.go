@@ -165,11 +165,15 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 	alive(t, term, "after making a worktree from the rail")
 }
 
-// TestRailWorktreeRefusals opens the dialog from a worktree session's row, the
-// other way in, and drives the three ways it ends without a new session: an
-// empty branch the dialog refuses itself, a branch the daemon refuses, whose
-// notification has to say which step failed, and esc. The daemon's ls is the
-// authority that nothing was made.
+// TestRailWorktreeRefusals opens the dialog from a worktree session's
+// row, the other way in, and drives the three ways it ends without a new
+// session: an empty branch the dialog refuses itself, a branch the daemon
+// refuses, whose notification has to say which step failed, and esc. The
+// daemon's ls is the authority that nothing was made.
+//
+// Then the third way in, the new_worktree key (leader U): refused from a pane
+// in no repository, and from a pane in the repository it makes the session,
+// groups it under the repository on the rail, and attaches to it.
 func TestRailWorktreeRefusals(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -253,5 +257,64 @@ func TestRailWorktreeRefusals(t *testing.T) {
 		t.Errorf("a cancelled dialog left a worktree on disk: %v", err)
 	}
 
-	alive(t, term, "after the worktree dialog's refusals")
+	// The key from the plain session's pane, which is in no repository: a
+	// message, and no dialog.
+	leaderKey(t, term, "U")
+	if err := term.WaitForText("This pane is not in a git repository.", uiTimeout); err != nil {
+		t.Fatalf("the key did not say the pane is in no repository: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "Worktree of repo") {
+		t.Fatalf("the key opened the dialog from a pane in no repository:\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "worktree-key-no-repo")
+
+	// A pane in a subfolder of the repository: the key finds the repository
+	// from any folder in it, not only from its top. The new pane takes the
+	// focus, so the key acts on it.
+	sub := filepath.Join(repo, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("make a subfolder in the repository: %v", err)
+	}
+	if out, err := tuiosCLI(t, base, "new-window", "-s", "plain", "--cwd", sub); err != nil {
+		t.Fatalf("open a pane in the repository: %v: %s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, uiTimeout); err != nil {
+		t.Fatalf("the pane in the repository never showed: %v\n%s", err, term.Snapshot())
+	}
+	leaderKey(t, term, "U")
+	if err := term.WaitForText("Worktree of repo", uiTimeout); err != nil {
+		t.Fatalf("the key did not open the dialog on the pane's repository: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("feat/key"); err != nil {
+		t.Fatalf("type the branch: %v", err)
+	}
+	if err := term.WaitForText("repo-feat-key", uiTimeout); err != nil {
+		t.Fatalf("the dialog did not derive the session name: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "worktree-key-dialog")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("submit the dialog: %v", err)
+	}
+
+	// The daemon made the session, the client is attached to it, and the rail
+	// shows it as the current row under the repository's group.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		got := attachedSessions(base)
+		return len(got) == 1 && got[0] == "repo-feat-key"
+	}, uiTimeout); err != nil {
+		t.Fatalf("the client is not attached to repo-feat-key (ls: %v, attached: %v): %v\n%s",
+			sessionNames(t, base), attachedSessions(base), err, term.Snapshot())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		group, row := railLineWith(s, "· repo"), railLineWith(s, "feat/key")
+		return group >= 0 && row > group && strings.Contains(s.Line(row), "─ feat/key") && strings.Contains(s.Line(row), "▎")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rail never showed feat/key as the current row in the repo group: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := exec.Command("git", "-C", filepath.Join(base, "worktrees", "repo", "feat-key"), "branch", "--show-current").CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "feat/key" {
+		t.Errorf("the worktree on disk is not on feat/key: %v: %s", err, out)
+	}
+	saveFrame(t, term, "worktree-key-created")
+
+	alive(t, term, "after the worktree dialog's refusals and the worktree key")
 }

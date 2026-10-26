@@ -77,6 +77,9 @@ and reports `merged`: true when the branch has commits of its own and its base,
 or the upstream of the base, already holds them. `merged_into` names that ref.
 A merge commit, a fast-forward, a rebase and a squash all count. No fetch runs.
 
+A person makes the same from the client: `Ctrl+B U` (action `new_worktree`)
+asks for a branch name and uses the repository of the focused pane's folder.
+
 ## Fan-out
 
 One prompt across several agents, each in its own worktree:

@@ -258,6 +258,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Both open the same dialog; see worktree_prompt.go for the verb behind it.
 	d.Register("session_new_worktree", handleSessionNewWorktree)
 	d.Register("repo_new_worktree", handleRepoNewWorktree)
+	// The third way in, by key: the repository of the focused pane's folder.
+	d.Register("new_worktree", handleNewWorktree)
 
 	// The rail's file actions. They are dispatched by key from HandleSidebarKey,
 	// which reads its own scope, and they are registered here because the files
@@ -1223,6 +1225,13 @@ func handleSessionNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // group header the menu was opened on.
 func handleRepoNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginWorktreePromptForRepo(o.TakeMenuRepo())
+	return o, nil
+}
+
+// handleNewWorktree opens the worktree dialog on the repository of the focused
+// pane's folder, or says why it cannot.
+func handleNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginWorktreePromptForFocusedPane()
 	return o, nil
 }
 

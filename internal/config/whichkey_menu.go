@@ -183,7 +183,9 @@ var leaderPaneRows = []menuRow{
 // and quit rows menuSections adds for the session kind.
 var leaderSessionRows = []menuRow{
 	{parts: []menuPart{{"prev_session", "Previous session"}, {"next_session", "Next session"}}, desc: "Prev/next session"},
-	{parts: []menuPart{{"prefix_session_switcher", "Sessions"}}, desc: "Sessions"},
+	// The worktree key shares the switcher's row: a row more makes the
+	// leader's menu too tall for a 120x40 screen.
+	{parts: []menuPart{{"prefix_session_switcher", "Sessions"}, {"new_worktree", "New worktree"}}, desc: "Sessions/new worktree"},
 	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}}, desc: "Workspaces"},
 	{parts: []menuPart{{"choose_tree", "Find a pane"}}, desc: "Find a pane"},
 	{parts: []menuPart{{"goto_picker", "Go to anything"}}, desc: "Go to anything"},

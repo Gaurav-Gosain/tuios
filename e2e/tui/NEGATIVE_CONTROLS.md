@@ -5220,6 +5220,18 @@ cut is to the wiring, and the logs are `/tmp/wt-ctl-<name>.log`.
 | `wrap-create`: the verb's error is returned without `failed to create the worktree` | `TestRailWorktreeRefusals` ("the daemon's refusal did not say which step failed") | **caught** |
 | `route-key`: the `WorktreePromptOpen` route cut from `routeKey` | both ("did not derive the session name", "did not refuse an empty branch") | **caught** |
 | `attach`: the `SwitchToSession` call cut from `handleWorktreeCreated` | `TestRailRightClickMakesAWorktree` ("the rail never showed the created worktree as the attached session") | **caught** |
+
+`TestRailWorktreeRefusals` also drives the `new_worktree` key (leader `U`).
+From a pane in no repository it must show a message and no dialog. From a pane
+in a subfolder of the repository it must open the dialog on the repository and
+make a session that is attached and grouped under the repository on the rail.
+The frames are `worktree-key-no-repo`, `worktree-key-dialog` and
+`worktree-key-created`. Run on 2026-10-26 on branch `feat/new-worktree-key`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `default-key`: the default `U` binding of `new_worktree` removed | "the key did not say the pane is in no repository" | **caught** |
+| `repo-root`: `BeginWorktreePromptForFocusedPane` opens the dialog on the parent of the repository | "the key did not open the dialog on the pane's repository" | **caught** |
 The `ClearDropZone` calls (press, release, lost release) have no control. Without them a stale highlight shows on a press until the first motion recomputes it, and the last drop's target pane is kept alive until the next drag; no test here makes two drags in one session or inspects memory.
 ### Rail git section on one line
 

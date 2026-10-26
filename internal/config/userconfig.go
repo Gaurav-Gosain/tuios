@@ -1343,6 +1343,11 @@ func DefaultConfig() *UserConfig {
 				// G for go to, one shift from the g that shows the scratch
 				// terminal.
 				"goto_picker": {"G"},
+				// U makes a worktree of the focused pane's repository, herdr's
+				// leader+G. G is the go-to picker here, ctrl+g is the zellij
+				// preset's leader, and the multifocus docs suggest Y. U is
+				// free in every preset.
+				"new_worktree": {"U"},
 				// /, which searches everywhere else too. tmux puts its tree on
 				// s, which is the scrollback browser here.
 				"choose_tree":       {"/"},
@@ -3636,6 +3641,8 @@ var yieldingDefaults = map[string]bool{
 	"choose_tree": true,
 	// G after the prefix, new with the go-to picker.
 	"goto_picker": true,
+	// U after the prefix, new with the worktree key.
+	"new_worktree": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
 	// V after the prefix, new in the release after v0.8.2.

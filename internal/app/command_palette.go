@@ -1169,6 +1169,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "New worktree: a branch and a session in this pane's repository",
+			Shortcut: "prefix+U",
+			Bind:     "new_worktree",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.BeginWorktreePromptForFocusedPane()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Hints: label text on the pane to copy it",
 			Shortcut: "prefix+F",
 			Bind:     "hints",

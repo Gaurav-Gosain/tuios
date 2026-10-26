@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -103,6 +104,53 @@ func (m *OS) BeginWorktreePromptForRepo(repo string) {
 		return
 	}
 	m.openWorktreePrompt(root)
+}
+
+// BeginWorktreePromptForFocusedPane opens the dialog on the repository the
+// focused pane's directory is in: the new_worktree key, herdr's leader+G. The
+// repository is found by gitstate.Locate, which reads .git entries walking up
+// and never runs git, so it is cheap enough for the Update goroutine. From a
+// linked worktree the answer is its main checkout, the root the verb would
+// resolve too, so the dialog's repository name and derived session name match
+// what the daemon makes.
+//
+// A pane on another machine is refused: its directory is on that machine, and
+// reading it here would look at some other folder or none.
+func (m *OS) BeginWorktreePromptForFocusedPane() {
+	w := m.GetFocusedWindow()
+	if w == nil {
+		m.ShowNotification("No pane is focused.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	if !m.paneIsLocal(w) {
+		m.ShowNotification("This pane is on another machine. Run tuios worktree new on that machine.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	root := repoRootOf(m.paneDir(w))
+	if root == "" {
+		m.ShowNotification("This pane is not in a git repository.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	m.openWorktreePrompt(root)
+}
+
+// repoRootOf is the main checkout of the repository dir is in, or "" when dir
+// is empty or in no repository. The shared git directory of a main checkout
+// or a linked worktree is <root>/.git. Anything else (a submodule, whose git
+// directory sits under the parent's .git/modules) answers with the work tree
+// the .git entry was found in, which the daemon resolves again anyway.
+func repoRootOf(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	_, common, top, ok := gitstate.Locate(dir)
+	if !ok {
+		return ""
+	}
+	if filepath.Base(common) == ".git" {
+		return filepath.Dir(common)
+	}
+	return top
 }
 
 // openWorktreePrompt captures the repository and opens on an empty branch.

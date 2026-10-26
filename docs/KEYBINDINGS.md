@@ -576,6 +576,19 @@ The action is `toggle_scratch`, and `[scratch]` sets the size of the box. See
 [SESSIONS.md](SESSIONS.md#the-scratch-terminal). To add more scratch terminals
 on keys of their own, see [Command keys](#command-keys).
 
+## New worktree
+
+`Ctrl+B U` makes a worktree of the repository of the focused pane's folder.
+A small dialog asks for the branch name. `tab` moves to the session name.
+Leave the session name empty to use the name the dialog shows. `enter` makes a
+new branch in a new worktree and a session in it. The session is grouped under
+its repository in the sidebar, and tuios switches to it. This is what
+`tuios worktree new` does. `esc` closes the dialog.
+
+If the focused pane is not in a git repository, a message says so. The action
+is `new_worktree`, and the command palette has it too. A right-click on a
+session or a repository in the sidebar opens the same dialog.
+
 ## Picture in picture
 
 `p` in window mode pins the focused pane as the picture-in-picture view, a
