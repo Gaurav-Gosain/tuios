@@ -82,7 +82,7 @@ The script wraps this; run it directly when you want the build without the
 install.
 
 ```sh
-./scripts/ghostty-lib.sh            # needs zig >= 0.16; caches in .ghostty-vt/
+./scripts/ghostty-lib.sh            # needs Zig 0.16.x (set ZIG to pick a binary); caches in .ghostty-vt/
 PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
 ```
 

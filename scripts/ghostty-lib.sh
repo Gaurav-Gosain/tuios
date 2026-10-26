@@ -25,6 +25,11 @@ set -eu
 # newer ones, and the mismatch is silent.
 GHOSTTY_COMMIT=27e8b3fa85d9cf8c7cd5ae2ced348bcb0a4fba9c
 
+# The zig series this ghostty commit builds with. Ghostty compares major and
+# minor exactly, and a newer zig fails mid-build on removed std APIs. Change it
+# with GHOSTTY_COMMIT, from minimum_zig_version in build.zig.zon.
+ZIG_SERIES=0.16
+
 # The archive outlives the machine that built it: CI restores it from a cache
 # shared by heterogeneous runners, and release binaries link it and then run on
 # whatever a user has. A native build bakes in the builder's CPU, so an archive
@@ -39,7 +44,24 @@ CACHE="${GHOSTTY_VT_CACHE:-$ROOT/.ghostty-vt}"
 SRC="$CACHE/src"
 OUT="$CACHE/$TARGET"
 
-command -v zig >/dev/null || { echo "ghostty-lib.sh: zig not found (need zig >= 0.16)" >&2; exit 1; }
+# ZIG names the zig binary to use. It defaults to the first zig on PATH.
+ZIG="${ZIG:-zig}"
+export ZIG
+command -v "$ZIG" >/dev/null || { echo "ghostty-lib.sh: zig not found. Zig $ZIG_SERIES.x is required. Set ZIG to a $ZIG_SERIES binary or put it on PATH." >&2; exit 1; }
+zig_found=$("$ZIG" version 2>/dev/null) || zig_found=unknown
+case "$zig_found" in
+"$ZIG_SERIES".*) ;;
+*)
+    cat >&2 <<MSG
+ghostty-lib.sh: Zig $ZIG_SERIES.x is required, but $ZIG reports $zig_found.
+The pinned Ghostty does not build with other Zig versions.
+Get Zig $ZIG_SERIES from https://ziglang.org/download or with anyzig or zvm.
+Then put it first on PATH, or set ZIG to its path:
+  ZIG=/path/to/zig-$ZIG_SERIES/zig $0 $TARGET
+MSG
+    exit 1
+    ;;
+esac
 
 if [ ! -d "$SRC/.git" ]; then
     git clone --filter=blob:none https://github.com/ghostty-org/ghostty "$SRC"
@@ -64,7 +86,7 @@ TFLAG=""
 # emit-xcframework on when an xcodebuild is merely on PATH, which the Command
 # Line Tools install a stub for. It then fails the build on any mac without
 # full Xcode. Saying no also skips the universal build the packaging needs.
-(cd "$SRC" && zig build -Demit-lib-vt -Demit-xcframework=false -Doptimize=ReleaseFast -Dcpu="$CPU" $TFLAG --prefix "$OUT/dist")
+(cd "$SRC" && "$ZIG" build -Demit-lib-vt -Demit-xcframework=false -Doptimize=ReleaseFast -Dcpu="$CPU" $TFLAG --prefix "$OUT/dist")
 
 mkdir -p "$OUT/lib" "$OUT/pkgconfig"
 cp -r "$OUT/dist/include" "$OUT/include"
