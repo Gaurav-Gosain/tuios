@@ -112,6 +112,7 @@ var settingLabels = map[string]string{
 	"hints.alphabet":                      "Hint letters",
 	"panes.label_keys":                    "Pane label keys",
 	"panes.navigator_layout":              "Navigator layout",
+	"path_picker.hidden_files":            "Path picker hidden files",
 	"hints.open":                          "Ctrl opens a hint",
 	"hints.dim":                           "Dim around hints",
 	"hints.all_panes":                     "Hints on all panes",

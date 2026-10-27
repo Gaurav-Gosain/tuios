@@ -47,6 +47,9 @@ type UserConfig struct {
 	// Panes is the [panes] table: the keys display_panes labels the panes
 	// with. See panes.go.
 	Panes PanesConfig `toml:"panes"`
+	// PathPicker is the [path_picker] table: what the path picker lists.
+	// See path_picker.go.
+	PathPicker PathPickerConfig `toml:"path_picker"`
 	// Scratch is the [scratch] table: the size of the scratch terminal that
 	// toggle_scratch shows in a popup. See scratch.go.
 	Scratch ScratchConfig `toml:"scratch"`
@@ -1387,6 +1390,8 @@ func DefaultConfig() *UserConfig {
 				"prefix_agents_settings": {"A"},
 				// F, as in tmux-fingers. f searches files.
 				"hints": {"F"},
+				// . as in the current folder: the path picker lists it.
+				"pick_path": {"."},
 				// Q, as in tmux's display-panes, which is q there. q is the
 				// quit menu here, and the slip from Q to q opens a menu that
 				// asks first.
@@ -1892,6 +1897,7 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 			"terminal_scroll_page_up":   {"shift+pgup"},
 			"terminal_scroll_page_down": {"shift+pgdown"},
 			"terminal_paste_host":       {"ctrl+shift+v", "super+v", "shift+super+v", "middle"},
+			"pick_path":                 {"opt+;"},
 		}
 	}
 	return map[string][]string{
@@ -1920,6 +1926,10 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		// chord was dead for as long as it was written the other way round, and
 		// nothing said so until the reachability table pressed it.
 		"terminal_paste_host": {"ctrl+shift+v", "super+v", "shift+super+v", "middle"},
+		// alt+; is free in bash, zsh and fish, and no preset binds it. The
+		// picker types a path at the prompt, so its key has to work while
+		// typing into the shell.
+		"pick_path": {"alt+;"},
 	}
 }
 
@@ -3665,6 +3675,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 var yieldingDefaults = map[string]bool{
 	"hints":          true,
 	"toggle_scratch": true,
+	// alt+; and prefix ., new in the release after v0.10.1.
+	"pick_path": true,
 	// Q after the prefix, new in the release after v0.8.5.
 	"display_panes": true,
 	// U in window mode, new with the keybind presets.

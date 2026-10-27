@@ -9863,3 +9863,12 @@ passes both, and the build of main they are based on fails both.
 | `RepoName` in `gitstate.Read`, back to the base name of the shared git directory's parent | `TestRailGitReftable` (the git section names the test's directory, not `delta`) | **caught** |
 | The `.bare` and `git` names in `RepoName` | `TestReftableWorktrees` (`alpha-one is ".bare"`, `gamma-three is "git"`) | **caught** |
 | The `.git` suffix rule in `RepoName` | `TestReftableWorktrees` (`beta-two is "beta.git"`); `TestRailGitReftable` | **caught** |
+## Path picker
+
+`TestPathPickerTypesAPath` opens the picker with `alt+;` at a shell prompt,
+filters, walks into a folder with `Tab`, and types a file name with a space
+with `Enter`. The shell then reads the file. Run on 2026-10-27 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `PathPickerAccept` returns before `w.Paste` | the wait for `cat 'zulu/release notes.md'` on the shell line times out | **caught** |

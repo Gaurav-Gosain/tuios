@@ -1208,6 +1208,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Path: pick a file or folder and type its path",
+			Shortcut: "alt+;",
+			Bind:     "pick_path",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenPathPicker()
+			},
+		},
+		{
 			Name:     "Panes: label the panes and focus one",
 			Shortcut: "prefix+Q",
 			Bind:     "display_panes",

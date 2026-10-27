@@ -1967,6 +1967,11 @@ type OS struct {
 	// for a drag offset or a place in the click-to-raise order.
 	ContextMenu *ContextMenu
 
+	// pathPicker is the open path picker, or nil. Like the context menu it is
+	// anchored, to the focused pane's cursor, and is not one of the draggable
+	// overlay kinds. See path_picker.go.
+	pathPicker *pathPicker
+
 	// menuWorkspace carries the workspace a pill menu was opened on across the
 	// gap between the menu closing and its row's action being dispatched. See
 	// TakeMenuWorkspace.

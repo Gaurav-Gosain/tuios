@@ -186,7 +186,7 @@ func (m *OS) CaptureOverOverlay() bool { return m.Capture.Active && m.Capture.Ov
 // the panes: every one that owns the keyboard while it is up. Copy mode and
 // the scrollback browser are views of a pane and are not counted.
 func (m *OS) OverlayOnScreen() bool {
-	return m.review.open || m.AnyOverlayOpen() || m.ContextMenuActive() ||
+	return m.review.open || m.AnyOverlayOpen() || m.ContextMenuActive() || m.PathPickerOpen() ||
 		m.Renaming() || m.ShowTapeReview || m.ShowTapeManager ||
 		m.ShowLogs || m.ShowCacheStats
 }

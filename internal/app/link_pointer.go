@@ -100,7 +100,7 @@ func (m *OS) PointerSeen() (x, y int) {
 // under it.
 func (m *OS) TrackLinkPointer(x, y int) {
 	if m.Dragging || m.Resizing || m.ScrollbarDragging ||
-		m.AnyOverlayOpen() || m.ContextMenuActive() ||
+		m.AnyOverlayOpen() || m.ContextMenuActive() || m.PathPickerOpen() ||
 		m.SidebarBandContains(x, y) || m.InDockBand(y) {
 		m.clearLinkHover()
 		return

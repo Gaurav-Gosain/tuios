@@ -709,6 +709,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// The context menu is placed last so it sits above everything else it may
 	// have been opened on top of, and so its recorded bounds are from the frame
 	// the user is actually looking at.
+	layers = m.placePathPicker(layers)
 	layers = m.placeContextMenu(layers)
 	m.forgetClosedOverlayAnchors()
 

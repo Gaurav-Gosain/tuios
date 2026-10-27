@@ -47,7 +47,7 @@ func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 	// why this hides the terminal one rather than moving it: leaving it on put a
 	// blinking hardware cursor in the pane behind the panel, next to the caret
 	// the panel had already drawn.
-	if m.AnyOverlayOpen() {
+	if m.AnyOverlayOpen() || m.pathPicker != nil {
 		return nil, false
 	}
 

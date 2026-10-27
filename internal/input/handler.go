@@ -519,6 +519,13 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleContextMenuKey(msg, o)
 	}
 
+	// The path picker owns the keyboard the same way, from either mode: it
+	// opens from terminal mode, and a key meant for its filter must not reach
+	// the shell it is about to type into. See path_picker_input.go.
+	if o.PathPickerOpen() {
+		return handlePathPickerKey(msg, o)
+	}
+
 	// The review overlay covers the screen and owns every key while it is up,
 	// in either mode. It is opened from the Inbox and the rail, so it is
 	// checked ahead of both. See review_input.go.

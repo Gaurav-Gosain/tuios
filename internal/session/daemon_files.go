@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // The daemon's half of the rail's file section.
@@ -50,6 +51,9 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	if host := d.windowHost(cs.sessionID, payload.WindowID); host != "" {
 		return d.reply(cs, msg, MsgDirListing, d.remoteListing(host, dir, payload.Max))
 	}
+	// "~" is this machine's home. Only the daemon that owns the disk knows
+	// it, so a client asking for a pane on another machine sends it as typed.
+	dir = ExpandHome(dir)
 
 	if verr := d.checkLinkRead(cs, dir); verr != nil {
 		return d.reply(cs, msg, MsgDirListing, &DirListingPayload{Dir: payload.Dir, Err: verr.Message})
@@ -63,6 +67,19 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 		out.Spoofed = d.paneIsSpoofed(cs.sessionID, payload.WindowID, dir)
 	}
 	return d.reply(cs, msg, MsgDirListing, out)
+}
+
+// ExpandHome turns a leading "~" into the home folder of the user this
+// process runs as. Any other path, and a "~user" form, comes back as it is.
+func ExpandHome(dir string) string {
+	if dir != "~" && !strings.HasPrefix(dir, "~/") {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return dir
+	}
+	return filepath.Join(home, dir[1:])
 }
 
 // spoofCheckWanted reports whether a listing should be judged against the

@@ -37,6 +37,8 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 	case o.ShowSessionClose, o.DaemonRestartOpen(), o.HintsOpen(), o.PaneLabelsOpen(),
 		o.ShowQuitMenu, o.ContextMenuActive():
 		return nil
+	case o.PathPickerOpen():
+		return o.PathPickerType
 	case o.ReviewOpen():
 		if !o.ReviewEditing() {
 			return nil

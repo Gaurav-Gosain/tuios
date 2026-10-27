@@ -576,7 +576,7 @@ func readListing(client *session.TUIClient, host, origin, dir string, pinned boo
 		// is the same disk it would have read.
 	}
 	spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
-	items, capped, err := readDirFunc(dir, fileViewMaxEntries)
+	items, capped, err := readDirFunc(session.ExpandHome(dir), fileViewMaxEntries)
 	if err != nil {
 		return fileListMsg{Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
 	}

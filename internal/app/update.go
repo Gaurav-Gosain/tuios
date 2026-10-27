@@ -1652,6 +1652,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, nil
 
+	case pathPickerListMsg:
+		m.HandlePathPickerList(msg)
+		m.renderSkipped = false
+		return m, nil
+
 	case fileSearchMsg:
 		m.handleFileSearch(msg)
 		m.renderSkipped = false

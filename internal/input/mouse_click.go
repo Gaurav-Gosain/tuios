@@ -37,6 +37,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// The path picker is modal to the mouse the same way: a press on a row
+	// types that path, and a press anywhere else closes it. Either way the
+	// press stops here.
+	if o.PathPickerClick(X, Y) {
+		return o, nil
+	}
+
 	// Ctrl or shift + right-click opens the context menu on a pane, on the press
 	// itself. This is the only way in over a pane whose app requested mouse
 	// tracking, where the right button belongs to that app; elsewhere a plain

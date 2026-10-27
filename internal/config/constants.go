@@ -1538,6 +1538,10 @@ const (
 	// is served by letting another panel cover it.
 	ZIndexContextMenu = 1500
 
+	// ZIndexPathPicker is the z-index for the path picker. It is anchored at
+	// a pane's cursor like the context menu, and sits just under it.
+	ZIndexPathPicker = 1490
+
 	// ZIndexScreensaver is the z-index for the idle screen saver. It is above
 	// everything, notifications included: the saver covers the screen, and a
 	// message drawn over an animation of that same screen would only look like

@@ -411,6 +411,8 @@ display = "follow"
 
 `[panes]` also sets `navigator_layout`, the layout the pane navigator (`Ctrl+B /`) opens in: `tree`, `flat` or `cards`. The default is `tree`. Press `v` in the navigator to change the layout. `navigator_search = true` opens it ready to type a search, and `esc` with nothing typed closes it. See [KEYBINDINGS.md](KEYBINDINGS.md#the-pane-navigator).
 
+`[path_picker]` sets `hidden_files`. With `true`, the path picker (`Alt+;`) shows the names that start with a dot when it opens. The default is `false`. `Alt+H` in the picker shows or hides them. See [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
+
 `[scratch]` sets the size of the box in which `Ctrl+B g` shows the scratch terminal. The old `session` key is no longer used. See [SESSIONS.md](SESSIONS.md#the-scratch-terminal).
 
 `[pip]` sets the size (`width`, `height`, border included, default 40x12) and the first `corner` (default `bottom-right`) of the picture-in-picture view that `p` pins. See [SESSIONS.md](SESSIONS.md#picture-in-picture).
@@ -1677,6 +1679,14 @@ mark in its gutter. This occurs in these cases:
 
 The agents row uses the bar or the marker. With `underline` or `pill`, it
 uses the bar.
+
+## Pick a path from the files
+
+The path picker types a path at the cursor of a pane. It lists the same folder
+as the files section: the folder that the shell in the pane is in. Press
+`Alt+;` in terminal mode, or `Ctrl+B .`. Type to filter, `Tab` to open a
+folder, and `Enter` to type the path. See
+[KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
 
 ## The files section style
 

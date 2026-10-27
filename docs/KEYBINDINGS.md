@@ -641,6 +641,41 @@ spotlight off. The actions are `toggle_spotlight` and
 `prefix_toggle_spotlight`, and `[spotlight]` sets the size and the dimming.
 The key was `b` in earlier versions.
 
+## Pick a path
+
+`Alt+;` in terminal mode opens the path picker at the cursor of the focused
+pane. `Ctrl+B .` opens it too. The picker lists the folder that the shell in
+the pane is in. Folders come first, then files. Type to filter the names.
+Press `Enter` to type the path of the selected name at the cursor.
+
+| Key | What it does |
+| --- | --- |
+| Text | Filter the names |
+| `Up`, `Down`, `Ctrl+P`, `Ctrl+N` | Move the selection |
+| `Tab` | Open the selected folder. On a file, complete the name |
+| `Shift+Tab`, `Backspace` with no filter text | Go up one folder |
+| `/` at the start | Start an absolute path |
+| `~/` at the start | Start a path in the home folder |
+| `Enter` | Type the path and close the picker |
+| `Alt+H` | Show or hide the hidden files |
+| `Esc` | Close the picker and type nothing |
+
+The filter line shows the path that you built, for example `src/app/`. A
+click on a name types its path. The mouse wheel moves the selection.
+
+The path is relative to the folder of the pane. A path that starts with `/`
+or `~/` stays absolute. tuios puts a path with a space or a special character
+in quotes. When the program in the pane turned on bracketed paste, tuios
+sends the path as a paste. Else it types the path.
+
+The picker works in a pane on another machine. The daemon on that machine
+lists the folder, with the same read rules as the sidebar's files section.
+When the shell in the pane runs ssh to another machine, the picker does not
+open.
+
+The action is `pick_path`. `path_picker.hidden_files = true` shows the hidden
+files when the picker opens. The default is `false`.
+
 ## Paste an image
 
 `Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios

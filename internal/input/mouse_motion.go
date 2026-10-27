@@ -56,6 +56,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ContextMenuHover(mouse.X, mouse.Y)
 		return o, nil
 	}
+	if o.PathPickerOpen() {
+		o.PathPickerHover(mouse.X, mouse.Y)
+		return o, nil
+	}
 
 	// A pressed or dragged sidebar session row owns the pointer until release:
 	// the motion either commits the press to a reorder drag or advances the

@@ -273,8 +273,9 @@ func (d *Daemon) verbReadDir(cs *connState, params json.RawMessage) (any, *verbE
 	if p.Dir == "" {
 		return nil, invalidParam("dir", "read-dir needs a directory to list.")
 	}
-	if verr := d.checkLinkRead(cs, filepath.Clean(p.Dir)); verr != nil {
+	dir := ExpandHome(filepath.Clean(p.Dir))
+	if verr := d.checkLinkRead(cs, dir); verr != nil {
 		return nil, verr
 	}
-	return listDir(filepath.Clean(p.Dir), p.Max), nil
+	return listDir(dir, p.Max), nil
 }

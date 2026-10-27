@@ -96,7 +96,7 @@ func (m *OS) KeysGoToBindings() bool {
 // over the screen. A paste then never reaches a pane, since none of them
 // would get a key typed in its place.
 func (m *OS) OverlayOwnsKeyboard() bool {
-	return m.SidebarFocused || m.AnyOverlayOpen() || m.ContextMenuActive() ||
+	return m.SidebarFocused || m.AnyOverlayOpen() || m.ContextMenuActive() || m.PathPickerOpen() ||
 		m.ReviewOpen() || m.Renaming() || m.CaptureActive() ||
 		m.ShowScrollbackBrowser || m.ShowTapeReview || m.ShowTapeManager ||
 		m.ShowLogs || m.ShowCacheStats

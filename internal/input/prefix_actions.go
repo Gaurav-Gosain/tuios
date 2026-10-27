@@ -76,6 +76,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register(config.ActionClearScrollback, handleClearScrollback)
 	d.Register("hints_all_panes", handleOpenHintsAllPanes)
 	d.Register("display_panes", handleDisplayPanes)
+	d.Register("pick_path", handleOpenPathPicker)
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
 	d.Register(config.ActionCopyModeSearchBackward, handleCopyModeSearchBackward)
 

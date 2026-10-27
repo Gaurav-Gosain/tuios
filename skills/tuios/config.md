@@ -135,6 +135,12 @@ on each pane of the workspace, and a typed label focuses that pane.
 `panes.label_keys` sets the keys (default `1234567890`). It is for the person
 at the keyboard: to focus a pane, use `focus-window`.
 
+The path picker (`Alt+;` in terminal mode or `Ctrl+B .`, the `pick_path`
+action) lists the folder of the focused pane's shell at its cursor, and
+`Enter` types the chosen path there. `path_picker.hidden_files` shows the
+names that start with a dot. It is for the person at the keyboard: to type
+into a pane, use `send-text`.
+
 The pane navigator (`Ctrl+B /`, the `choose_tree` action) is a tree of every
 session, workspace and pane, with a preview and a search over names, folders,
 commands and screen text. `panes.navigator_layout` sets the layout it opens in:

@@ -23,6 +23,17 @@ func wheelIsHorizontal(b tea.MouseButton) bool {
 func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	horizontal := wheelIsHorizontal(msg.Button)
 
+	// The path picker scrolls under the pointer. A wheel anywhere else is
+	// swallowed while it is up, so the pane it types into does not scroll
+	// away from the prompt under it.
+	if o.PathPickerOpen() {
+		wm := msg.Mouse()
+		if !horizontal {
+			o.PathPickerWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp)
+		}
+		return o, nil
+	}
+
 	// Scroll the floating overlay panel under the cursor (help, settings,
 	// palette, theme picker, session/layout lists).
 	if o.OverlayActive() {

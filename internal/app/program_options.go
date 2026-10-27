@@ -206,7 +206,7 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// only do if it is told the pointer moved. This filter is a whitelist that
 	// drops every motion event it does not recognise, so a hover handler added
 	// anywhere downstream is dead until the event is allowed through here.
-	if m.ContextMenuActive() {
+	if m.ContextMenuActive() || m.PathPickerOpen() {
 		return msg
 	}
 

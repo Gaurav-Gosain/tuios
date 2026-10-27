@@ -441,7 +441,7 @@ func (m *OS) pointerOverLeftover(x, y int) bool {
 	if !p.In(v.frame) || p.In(v.clip) {
 		return false
 	}
-	if m.ContextMenuActive() || m.AnyOverlayOpen() || m.OverlayActive() ||
+	if m.ContextMenuActive() || m.PathPickerOpen() || m.AnyOverlayOpen() || m.OverlayActive() ||
 		m.Renaming() || m.CaptureActive() || m.ReviewOpen() || m.ShowScrollbackBrowser {
 		return false
 	}
@@ -471,7 +471,7 @@ func (m *OS) pointerOverPanes(x, y int) bool {
 	if !image.Pt(x, y).In(m.sessionView.clip) {
 		return false
 	}
-	if m.ContextMenuActive() || m.AnyOverlayOpen() || m.OverlayActive() ||
+	if m.ContextMenuActive() || m.PathPickerOpen() || m.AnyOverlayOpen() || m.OverlayActive() ||
 		m.Renaming() || m.CaptureActive() || m.ReviewOpen() || m.ShowScrollbackBrowser {
 		return false
 	}

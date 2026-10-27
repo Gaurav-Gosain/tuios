@@ -303,7 +303,9 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// and a row more pushes it off the bottom.
 		sidebarRow,
 		row("prefix_explore", "Focus sidebar"),
-		row("prefix_file_search", "Search files"),
+		// The path picker shares the file search's row, for the same height
+		// reason.
+		pair("Search files/pick a path", part("prefix_file_search", "Search files"), part("pick_path", "Pick a path")),
 	)
 	return []menuSection{
 		{title: "Workspaces", rows: leaderWorkspaceRows},
