@@ -110,6 +110,15 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Test
+        # internal/app and internal/session run their tests one after another
+        # for over three minutes each, and the job waits for the slowest
+        # package. scripts/go-test-lanes.sh splits the tests of those two
+        # across four go test processes that run side by side.
+        #
+        # TestTheSuiteWritesNothingOutsideItsOwnTree runs the whole suite a
+        # second time, at the same time as this one. It runs in the isolation
+        # job below instead, on a runner of its own.
+        #
         # No -race here. internal/app takes over ten minutes under the detector
         # on a developer machine and longer on a runner, and a job that times
         # out is a job somebody switches off. The race build runs nightly
@@ -126,8 +135,35 @@ jobs:
           pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/..."
           # $pkgs is split on purpose: one argument per pattern.
           # shellcheck disable=SC2086
-          go test $pkgs -count=1 -timeout 20m 2>&1 | tee "$RUNNER_TEMP/unit.log" ||
+          SPLIT="./internal/app ./internal/session" LOG="$RUNNER_TEMP/unit.log" \
+            scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- $pkgs ||
             scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $pkgs
+
+  isolation:
+    name: go test isolation guard
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    # TestTheSuiteWritesNothingOutsideItsOwnTree runs the suite of
+    # ./internal/... ./cmd/... ./pkg/... in a seeded home and fails when a test
+    # wrote to that home. It took about as long as the rest of the unit job
+    # together, so it has a runner of its own.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: go.mod
+          cache-id: unit
+
+      - name: Allow user namespaces
+        # The child suite holds TestOwnerForgetsAnEmptiedGroup, as the unit job
+        # does.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: The suite writes nothing outside its own tree
+        run: go test -count=1 -timeout 20m -v -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
 
   windows:
     name: go test (windows)

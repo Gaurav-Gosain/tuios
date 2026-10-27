@@ -143,10 +143,14 @@ jobs:
                      / tuios.dev\/vt( |$)/ {print $1}' |
                 sort -u)
               echo "$pkgs"
+              # internal/session and internal/app take over three minutes each
+              # one test after another. scripts/go-test-lanes.sh splits their
+              # tests across four go test processes that run side by side.
               # $pkgs is split on purpose: one argument per package.
               # shellcheck disable=SC2086
-              PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
-                go test -tags ghostty -count=1 -short $pkgs
+              PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" GOFLAGS=-tags=ghostty \
+                SPLIT="./internal/app ./internal/session" LOG="$RUNNER_TEMP/ghostty.log" \
+                scripts/go-test-lanes.sh -count=1 -short -- $pkgs
 
           - name: Pure build unaffected
             run: CGO_ENABLED=0 go build ./... ./vt/...
