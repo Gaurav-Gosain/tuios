@@ -19,6 +19,7 @@ type Store struct {
 	size    int
 	lim     Limits
 	doc     *Node // the tree whose each, list and data the patches may grow
+	patched bool  // root was produced by a patch: it is not the map passed to NewStore and holds no nil map or slice
 }
 
 // NewStore returns a store holding state. state may be nil. The store keeps
@@ -56,7 +57,8 @@ func StoreFor(doc *Node, lim *Limits) (*Store, error) {
 	return s, nil
 }
 
-// State returns the state. The caller must not change it.
+// State returns the state. The caller must not change it, nor a map or slice
+// in it: successive versions share the containers a patch did not touch.
 func (s *Store) State() map[string]any { return s.root }
 
 // Version counts the changes applied. It starts at 0.
@@ -85,7 +87,14 @@ func (s *Store) Apply(ops []Op) ([]string, error) {
 	if s.root == nil {
 		s.root, s.lim = map[string]any{}, (*Limits)(nil).resolve()
 	}
-	next, _, err := applyPatch(s.root, s.size, ops, s.lim)
+	// The first patch copies the root: it may be the caller's map, and may
+	// hold nil maps and slices that a patch must see as empty. Later roots
+	// are the store's own, and a patch copies only the paths it writes.
+	root := any(s.root)
+	if !s.patched {
+		root = deepCopy(s.root)
+	}
+	next, _, err := applyPatch(root, s.size, ops, s.lim)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +111,7 @@ func (s *Store) Apply(ops []Op) ([]string, error) {
 			return nil, &PatchError{-1, CodeLimit, "after the patch: " + over[0]}
 		}
 	}
-	s.root, s.size = m, size
+	s.root, s.size, s.patched = m, size, true
 	s.version++
 	var changed []string
 	for _, op := range ops {
@@ -199,7 +208,8 @@ func cappedSize(v any, limit int) int {
 		case bool:
 			n += 5
 		case float64:
-			n += len(strconv.FormatFloat(x, 'g', -1, 64))
+			var buf [32]byte
+			n += len(strconv.AppendFloat(buf[:0], x, 'g', -1, 64))
 		case string:
 			n += len(x) + 2 + strings.Count(x, `"`) + strings.Count(x, `\`)
 		case []any:

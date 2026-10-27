@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -91,14 +93,43 @@ func escapePointer(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
 }
 
+// maxPathCopyOps is the longest patch applyPatch applies by copying only the
+// containers on each op's path. Each op clones its own path, so a long patch
+// would clone the same containers again and again; past this length one full
+// copy costs less and bounds the work.
+const maxPathCopyOps = 8
+
 // applyPatch applies ops to doc and returns the new document and its size
 // as compact JSON. It is atomic: on an error, doc is unchanged and the
 // result is nil. size is doc's size. The running size is checked after every
 // operation, so a patch of copies cannot grow the state past
 // lim.StateBytes before the check runs.
+//
+// A short patch does not copy doc. Each op writes only into the containers
+// on its own path, down to the op's parent, so applyPatch clones those
+// before the op and the result shares every other container with doc. A
+// move is not taken that way: its remove shifts array indexes before its
+// add, so the path its add writes along is not the path as written.
+// A move, or a patch of more than maxPathCopyOps ops, copies the whole tree.
+//
+// On the path-copy route doc must hold no typed-nil map or slice off the
+// patch's paths: they stay nil in the result, where a full copy makes them
+// empty. A Store guarantees this by copying its root on its first patch.
 func applyPatch(doc any, size int, ops []Op, lim Limits) (any, int, error) {
-	cur := deepCopy(doc)
+	pathCopy := len(ops) <= maxPathCopyOps
+	for _, op := range ops {
+		if op.Op == "move" {
+			pathCopy = false
+		}
+	}
+	cur := doc
+	if !pathCopy {
+		cur = deepCopy(doc)
+	}
 	for i, op := range ops {
+		if pathCopy && op.Op != "test" {
+			cur = clonePath(cur, op.Path)
+		}
 		next, nsize, err := applyOp(cur, size, op, lim)
 		if err != nil {
 			var pe *PatchError
@@ -111,6 +142,65 @@ func applyPatch(doc any, size int, ops []Op, lim Limits) (any, int, error) {
 		cur, size = next, nsize
 	}
 	return cur, size, nil
+}
+
+// clonePath returns doc with the container at every level of path's parent
+// cloned, shallowly, and linked into its cloned parent: the containers
+// applyOp may write into for an op at path. A nil map or slice is cloned as
+// an empty one, as deepCopy does. It stops without an error where get would
+// fail, so applyOp reports the error.
+func clonePath(doc any, path string) any {
+	toks, err := splitPointer(path)
+	if err != nil || len(toks) == 0 {
+		return doc
+	}
+	root, ok := cloneContainer(doc)
+	if !ok {
+		return doc
+	}
+	cur := root
+	for _, tok := range toks[:len(toks)-1] {
+		switch c := cur.(type) {
+		case map[string]any:
+			child, ok := c[tok]
+			if !ok {
+				return root
+			}
+			if child, ok = cloneContainer(child); !ok {
+				return root
+			}
+			c[tok], cur = child, child
+		case []any:
+			idx, ok := arrayIndex(tok, len(c), false)
+			if !ok {
+				return root
+			}
+			child, ok := cloneContainer(c[idx])
+			if !ok {
+				return root
+			}
+			c[idx], cur = child, child
+		}
+	}
+	return root
+}
+
+// cloneContainer copies a map or slice one level deep. The second result is
+// false for a scalar.
+func cloneContainer(v any) (any, bool) {
+	switch x := v.(type) {
+	case map[string]any:
+		if x == nil {
+			return map[string]any{}, true
+		}
+		return maps.Clone(x), true
+	case []any:
+		if x == nil {
+			return []any{}, true
+		}
+		return slices.Clone(x), true
+	}
+	return v, false
 }
 
 func overLimit(size int, lim Limits) error {

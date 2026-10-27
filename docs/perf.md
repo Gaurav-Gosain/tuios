@@ -4895,3 +4895,60 @@ for 4 s. The client runs on two cores with four busy loops on them.
 
 At 320x80 and 60 fps with no load, both builds write 177 frames, with 8 and
 13 ms of lag.
+
+## 2026-10 tuios.dev/tml patch path copy
+
+A patch to a tml store no longer copies the whole state to change one value.
+`Store.Set`, which runs once per keystroke in a form, takes about a third of
+the time on a 200-row table state. On Go 1.26.10, `TestStoreSetBudget` counts
+20 allocations per `Store.Set` instead of 421, and loom's `BenchmarkStoreApply`
+counts 21 instead of 422.
+
+### What changed
+
+- `applyPatch` clones only the maps and arrays on each operation's path, from
+  the root down to the operation's parent, and shares every other container
+  with the state it started from. A patch of more than 8 operations, or one
+  with a `move`, copies the whole tree as before: each operation clones its
+  own path, so a long patch would clone the same containers again and again,
+  and a `move` removes before it adds, which shifts the array indexes its add
+  path names.
+- A store copies its root once, on its first patch, so the caller's map is
+  never shared and nil maps and slices become empty ones as before. Later
+  versions of the state share the containers a patch did not touch, so a
+  caller must not change a map or slice it got from `State`.
+- Results, sizes and errors are the same as before for every patch. A
+  differential test against the full-copy code holds this, and a chain of
+  patches leaves every earlier state unchanged.
+- `cappedSize` measures a float without allocating its string. This matters
+  under the race detector and on Go 1.27 (about 400 allocations per patch on
+  this state there), and not in a normal Go 1.26.10 build.
+
+### Numbers
+
+Intel Core Ultra 9 185H, Linux (WSL2), Go 1.26.10, one core, other work on the
+machine. loom's `BenchmarkStoreApply` and `BenchmarkPatchOneBinding` as test
+binaries built from the base and from the branch, run alternately eight times
+each (1 s per run), compared with `benchstat`:
+
+| | before | after |
+|---|---:|---:|
+| `BenchmarkStoreApply` time | 99.7 µs | 34.0 µs |
+| `BenchmarkStoreApply` allocations | 422 | 21 |
+| `BenchmarkStoreApply` bytes | 70.0 KiB | 1.0 KiB |
+| `BenchmarkPatchOneBinding` time | 20.9 µs | 16.0 µs |
+| `BenchmarkPatchOneBinding` allocations | 52 | 52 |
+
+`BenchmarkPatchOneBinding` times the redraw only, with the patch outside the
+timer, so its allocations do not move; its time difference is within the
+spread of the runs (22% and 14%).
+
+The cost still grows with the state. After the patch, `Store.Apply` walks the
+whole new tree to measure its size, and for a store made from a document it
+walks the tree again to check the document's limits. This change removes the
+copy and its allocations, not those walks.
+
+### Measured and deliberately not changed
+
+- The `cappedSize` and measure walks, which keep the cost of a keystroke
+  proportional to the size of the state.
