@@ -289,6 +289,13 @@ type NewWindowOptions struct {
 	// WindowState.Kind. With no Command, its program is the placeholder.
 	Kind string
 	URI  string
+	// Cols and Rows are the content size the client that asked will give the
+	// pane, zero when it did not say. The process starts at that size. A
+	// shell started at the session's size and then resized once the client
+	// placed the pane took a SIGWINCH while it was still starting, and zsh
+	// then drew its prompt twice (#1205). A popup ignores them: it has a
+	// size of its own.
+	Cols, Rows int
 }
 
 // WindowKinds are the kinds a window can be. Empty is "terminal".
@@ -344,6 +351,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// its window's box, and the session's box would undo this at once.
 	if opts.Popup {
 		ptyWidth, ptyHeight = popupContentSize(width, height, s.LayoutReserve(), opts.PopupWidth, opts.PopupHeight)
+		width, height = ptyWidth+2, ptyHeight+2
+	} else if opts.Cols > 0 && opts.Rows > 0 {
+		// The box is the PTY's plus a border, for the reason a popup's is.
+		// The PTY is never larger than the session.
+		ptyWidth, ptyHeight = min(opts.Cols, ptyWidth+2), min(opts.Rows, ptyHeight+2)
 		width, height = ptyWidth+2, ptyHeight+2
 	}
 

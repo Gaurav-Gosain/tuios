@@ -42,15 +42,15 @@ func focusedWindowID(state *SessionState) (string, error) {
 // (for read verbs and NewWindow) or an error. Rendering-dependent verbs return
 // errNeedsClient.
 func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []string, onExit func(ptyID string)) (map[string]any, error) {
-	return d.executeDaemonCommandEnv(sess, commandType, args, "", 0, nil, onExit)
+	return d.executeDaemonCommandEnv(sess, commandType, args, NewWindowOptions{}, onExit)
 }
 
 // executeDaemonCommandEnv is executeDaemonCommand with what a NewWindow takes
-// on top: the directory it starts in, the workspace it goes on (zero is the
-// session's current one), and environment entries its process gets on top of
-// an ordinary pane's. An ssh split uses env for the agent socket; see
-// SSHFollowArgv. Other commands ignore all three.
-func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args []string, cwd string, workspace int, env []string, onExit func(ptyID string)) (map[string]any, error) {
+// on top, in base: the directory it starts in, the workspace it goes on (zero
+// is the session's current one), environment entries its process gets on top
+// of an ordinary pane's, and the size its pane will have. An ssh split uses
+// Env for the agent socket; see SSHFollowArgv. Other commands ignore base.
+func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args []string, base NewWindowOptions, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":
 		name := ""
@@ -65,8 +65,9 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 		if len(args) > 1 {
 			command = args[1:]
 		}
-		win, err := sess.AddDaemonWindowWith(
-			NewWindowOptions{Focus: true, Command: command, Name: name, Cwd: cwd, Workspace: workspace, Env: env}, onExit)
+		opts := base
+		opts.Focus, opts.Command, opts.Name = true, command, name
+		win, err := sess.AddDaemonWindowWith(opts, onExit)
 		if err != nil {
 			return nil, err
 		}

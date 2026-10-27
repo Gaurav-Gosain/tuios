@@ -690,7 +690,10 @@ func (m *OS) addDaemonWindow(dir, name, sshFrom string, command []string) *OS {
 		}
 		m.PreselectionDir = layout.PreselectionNone
 	}
-	if err := m.DaemonClient.SendNewWindowIntent(dir, ws, sshFrom, "NewWindow", args...); err != nil {
+	// The size the pane will be placed at, so the daemon starts its process
+	// at it. See newPaneBox. Zero when this client cannot tell.
+	cols, rows, _ := m.newPaneContentSize()
+	if err := m.DaemonClient.SendNewWindowIntentSized(dir, ws, cols, rows, sshFrom, "NewWindow", args...); err != nil {
 		m.LogError("Failed to ask the daemon for a new window: %v", err)
 		m.windowIntentErr = err
 		m.CancelPendingSplit()
@@ -711,6 +714,14 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 	m.LogInfo("Creating new window: %s (workspace %d)", title, m.CurrentWorkspace)
 
 	x, y, width, height := m.NewWindowPlacement()
+	// In a tiled layout the pane is born at its tile's size, so the process
+	// starts at the size it keeps. See newPaneBox. NewWindowIn gives the
+	// process the box less a border on each side.
+	if m.AutoTiling {
+		if cols, rows, ok := m.newPaneContentSize(); ok {
+			width, height = cols+2, rows+2
+		}
+	}
 
 	window, err := terminal.NewWindowIn(dir, newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
 	if err != nil {

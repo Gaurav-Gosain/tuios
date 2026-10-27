@@ -3,6 +3,9 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -151,4 +154,96 @@ func parseWindows(jsonOut string) ([]winRect, bool) {
 		rects = append(rects, winRect{ID: w.ID, X: w.X, Y: w.Y, Width: w.Width, Height: w.Height})
 	}
 	return rects, true
+}
+
+// TestNewPaneShellStartsAtItsSize opens panes into a tiled layout with zsh
+// as the shell and checks that each new pane's shell starts at the size its
+// tile gives it and takes no SIGWINCH while it starts (#1205).
+//
+// The shell was started at the session's size, or at the floating placement
+// box, and resized once the client tiled the pane. zsh started in that window
+// took the SIGWINCH during startup and drew its prompt again under PROMPT_SP's
+// "%" mark, with empty rows above it. The rc file is the reporter's: it logs
+// the size at start, every SIGWINCH and every prompt, and sleeps 0.1 s so the
+// resize lands while the shell is still starting.
+//
+// A pane that is split gets a SIGWINCH, which is right: its tile shrank. Only
+// the new pane is held to none. The log is saved as an artifact.
+func TestNewPaneShellStartsAtItsSize(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		animations bool
+	}{
+		{"daemon", []string{"new", "winch"}, false},
+		{"daemon-animated", []string{"new", "winch"}, true},
+		{"standalone", nil, false},
+		{"standalone-animated", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			logPath := filepath.Join(base, "zsize.log")
+			rc := "zmodload zsh/datetime\n" +
+				"_log() { print -r -- \"$EPOCHREALTIME $$ $1 $(stty size)\" >> " + logPath + " }\n" +
+				"_log start\nTRAPWINCH() { _log WINCH }\nprecmd() { _log precmd }\nsleep 0.1\nPS1='%% '\n"
+			if err := os.WriteFile(filepath.Join(base, ".zshrc"), []byte(rc), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			term := startIn(t, base, startOpts{cols: 160, rows: 45, args: tc.args, animations: tc.animations,
+				env: []string{"SHELL=/usr/bin/zsh", "ZDOTDIR=" + base}})
+			if tc.args != nil {
+				killDaemon(t, base)
+			}
+			waitBoot(t, term)
+			newWindow(t, term)
+			enableTiling(t, term)
+			// Panes made before this point were not made into a tiled layout.
+			time.Sleep(1500 * time.Millisecond)
+			readLog := func() []string {
+				data, _ := os.ReadFile(logPath)
+				if s := strings.TrimSpace(string(data)); s != "" {
+					return strings.Split(s, "\n")
+				}
+				return nil
+			}
+			// Each pane is judged on the log lines from its own keypress to the
+			// next one. The SIGWINCH of the pane it split is the right answer
+			// to the split, and comes from another pid.
+			var segments [][]string
+			for range 3 {
+				mark := len(readLog())
+				newWindow(t, term)
+				time.Sleep(1500 * time.Millisecond)
+				segments = append(segments, readLog()[mark:])
+			}
+			all := strings.Join(readLog(), "\n")
+			if err := os.WriteFile(filepath.Join(artifactDir(t), "zsize.log"), []byte(all+"\n"), 0o644); err != nil {
+				t.Logf("could not save the log: %v", err)
+			}
+			for i, seg := range segments {
+				pid, start, winch := "", "", 0
+				for _, line := range seg {
+					f := strings.Fields(line)
+					if len(f) < 5 {
+						continue
+					}
+					switch {
+					case f[2] == "start" && pid == "":
+						pid, start = f[1], f[3]+"x"+f[4]
+					case f[2] == "WINCH" && f[1] == pid:
+						winch++
+					}
+				}
+				if pid == "" {
+					t.Fatalf("pane %d: its shell logged no start\n%s", i+1, all)
+				}
+				if winch != 0 {
+					t.Errorf("new pane %d (pid %s) started at %s and took %d SIGWINCH; a new pane's "+
+						"shell must start at its tile's size\n%s", i+1, pid, start, winch, all)
+				}
+			}
+			alive(t, term, "after opening panes")
+		})
+	}
 }

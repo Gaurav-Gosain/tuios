@@ -1645,6 +1645,14 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState, firstSeen []*term
 		x, y, width, height := m.NewWindowPlacement()
 		if w.IsPopup {
 			x, y, width, height = m.popupRect(w)
+		} else if bw, bh, tiled, ok := m.newPaneBox(); ok && w.Workspace == m.CurrentWorkspace && !w.IsFloating {
+			// The box the layout is about to give it, which is the size
+			// the daemon started its process at when this client asked for
+			// the window. The floating placement box first and the tile
+			// after were two resizes of a shell that was still starting,
+			// and zsh drew its prompt twice (#1205).
+			width, height = bw, bh
+			w.Tiled = tiled
 		}
 		w.X, w.Y = x, y
 		// Resize rather than assigning the size and telling the daemon by hand:

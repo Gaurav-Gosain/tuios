@@ -855,11 +855,17 @@ func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan cha
 	}
 
 	// Resize PTY after process starts to ensure size is properly set
-	// Some PTY implementations require the process to be running before accepting resize
-	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
-		// Not a critical error, continue
-		_ = err
-	}
+	// Some PTY implementations require the process to be running before accepting resize.
+	//
+	// Through SetWinsize, with the pixels Spawn gave it: a bare Resize writes
+	// zero pixels, and the next real announcement then changes the winsize
+	// at the same cell size, which SIGWINCHes a shell that may still be
+	// starting (#1205).
+	_ = ptyspawn.SetWinsize(ptyInstance, terminalWidth, terminalHeight, 0, 0)
+	// The PTY has this size now, so a Resize to it tells the guest nothing.
+	// Unseeded, the first layout announced the size the pane was born at,
+	// and tellGuest SIGWINCHes the shell on every announcement.
+	window.SeedAnnouncedSize(terminalWidth, terminalHeight)
 
 	_, cancel := context.WithCancel(context.Background())
 

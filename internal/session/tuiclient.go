@@ -1429,11 +1429,20 @@ func (c *TUIClient) SendIntentIn(cwd, commandType string, args ...string) error 
 // current one. An empty sshFrom follows none. See
 // ExecuteCommandPayload.SSHFrom.
 func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, commandType string, args ...string) error {
+	return c.SendNewWindowIntentSized(cwd, workspace, 0, 0, sshFrom, commandType, args...)
+}
+
+// SendNewWindowIntentSized is SendNewWindowIntent for a client that knows the
+// size the pane will have: cols and rows are its content size, and the daemon
+// starts the process at it. See ExecuteCommandPayload.Cols.
+func (c *TUIClient) SendNewWindowIntentSized(cwd string, workspace, cols, rows int, sshFrom, commandType string, args ...string) error {
 	return c.sendNewWindow(&ExecuteCommandPayload{
 		CommandType: commandType,
 		Args:        args,
 		Cwd:         cwd,
 		Workspace:   workspace,
+		Cols:        cols,
+		Rows:        rows,
 		SSHFrom:     sshFrom,
 	})
 }

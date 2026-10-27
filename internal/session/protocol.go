@@ -851,6 +851,12 @@ type ExecuteCommandPayload struct {
 	// current one. A client in a scratch group sends the group's workspace,
 	// which is never the session's current one. An older daemon ignores it.
 	Workspace int `json:"workspace,omitempty"`
+	// Cols and Rows are the size a NewWindow's pane will have once the
+	// client places it. The daemon starts the process at this size, so a
+	// shell is not resized while it starts. Zero leaves the session's size.
+	// An older daemon ignores them.
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 	// SSHFrom names the window a NewWindow follows into ssh. When that
 	// window's pane runs an ssh or mosh client, the new window runs the same
 	// client to the same destination instead of a shell. When it does not,

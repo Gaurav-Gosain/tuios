@@ -175,7 +175,10 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				data = map[string]any{"window_id": win.ID, "name": win.Title}
 			}
 		} else {
-			data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, payload.Cwd, payload.Workspace, newWindowEnv, onExit)
+			data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, NewWindowOptions{
+				Cwd: payload.Cwd, Workspace: payload.Workspace, Env: newWindowEnv,
+				Cols: payload.Cols, Rows: payload.Rows,
+			}, onExit)
 		}
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())

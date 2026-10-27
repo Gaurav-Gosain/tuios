@@ -41,7 +41,18 @@ func InsetCells(n, cell, before, after int) int {
 // announcement (Resize, ResizeVisual). One formula, so what the guest is told
 // and what it gets to draw in cannot drift apart.
 func (w *Window) contentSize(width, height int) (int, int) {
-	d := 2 * w.BorderOffset()
+	return ContentSize(width, height, w.Tiled)
+}
+
+// ContentSize is the drawable box inside an outer rectangle for a pane with
+// or without its own border (tiled is true for a borderless tile; see
+// BorderOffset). It is contentSize for a pane that does not exist yet, so a
+// caller can spawn a process at the size its pane will have.
+func ContentSize(width, height int, tiled bool) (int, int) {
+	d := 2
+	if tiled {
+		d = 0
+	}
 	cw, ch := max(width-d, 1), max(height-d, 1)
 	if in := pixelInsets.Load(); in != nil {
 		cw = InsetCells(cw, in.CellWidth, in.Left, in.Right)
