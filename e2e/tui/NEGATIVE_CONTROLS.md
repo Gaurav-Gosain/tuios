@@ -9969,3 +9969,14 @@ The fixed build passes 12 of 12 runs under the same load. The first draft of
 the test waited a fixed 1.5 s and used zsh. The CI runners have no zsh, so no
 pane was made. A draft that made the next pane right after the prompt caught
 only 5 of 48 cases: the client resized the new pane after its prompt.
+## Next and previous agent walk the rail's order
+
+`TestCycleAgentsWalksTheRailOrder` makes two working agents in `alpha` and one in `bravo` waiting on an approval, so the rail's default needs-you order (`bravo/ag-b1`, `alpha/ag-a1`, `alpha/ag-a2`) differs from the order the panes were opened in. It checks the rail draws that order, then presses `alt+shift+j` and `alt+shift+k` in terminal mode from `alpha`'s plain shell, and the leader's `J` and `K`, and after each press reads the attached session from `ls --json` and its focused pane from `list-windows`. Each press moves to the next row, crossing sessions both ways, and next past the last and previous before the first wrap. A line typed at the end runs in the focused pane, so the keys never left terminal mode. Each control was built into its own binary from the feature commit and the test run against it; the unmodified binary passed. Run on 2026-10-27 on macOS.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `m.sidebarSortAgents(agents)` removed from `railAgentOrder`, leaving tree order | step 1: `want bravo/ag-b1 focused, have attached [alpha] with 5b4890ae-… focused there` (it went to `ag-a1`, first in tree order) | **caught** |
+| The wrap in `CycleAgent` clamped: `next = min(max(i+delta, 0), n-1)` | step 4, next past the last: `want bravo/ag-b1 focused, have attached [alpha] with 25163ad7-… focused there` | **caught** |
+| `next_agent` and `prev_agent` dropped from `isTerminalSafeAction` | step 1: `want bravo/ag-b1 focused, have attached [alpha] with d3ed3ea6-… focused there` (the chord went to the shell) | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, the test writes `step-NN.txt` and `step-NN.styled.txt` for each press and `cycle-agents.txt`, the walk step by step, under `TestCycleAgentsWalksTheRailOrder/`.
