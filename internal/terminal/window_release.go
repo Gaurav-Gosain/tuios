@@ -14,9 +14,17 @@ type altScreenReleaser interface {
 	ReleaseAltScreen()
 }
 
+// scrollbackCacheReleaser is an emulator that can drop the decoded history
+// lines its scrollback keeps for readers. The pure Go emulator is one.
+// libghostty-vt keeps its own cache and is not.
+type scrollbackCacheReleaser interface {
+	ReleaseScrollbackCache()
+}
+
 // TryReleaseEmulatorScratch drops the emulator's buffers that nothing on
-// screen reads: the reflow scratch a resize keeps for the next one, and the
-// alternate screen's cells while the main screen is shown. Neither changes
+// screen reads: the reflow scratch a resize keeps for the next one, the
+// alternate screen's cells while the main screen is shown, and the decoded
+// history lines a scrolled pane left in the scrollback cache. None changes
 // what the pane draws, so the pane is not marked dirty.
 //
 // It takes ioMu only if it is free. The caller is the UI goroutine, which
@@ -32,6 +40,9 @@ func (w *Window) TryReleaseEmulatorScratch() bool {
 	}
 	if r, ok := w.Terminal.(altScreenReleaser); ok {
 		r.ReleaseAltScreen()
+	}
+	if r, ok := w.Terminal.(scrollbackCacheReleaser); ok {
+		r.ReleaseScrollbackCache()
 	}
 	return true
 }

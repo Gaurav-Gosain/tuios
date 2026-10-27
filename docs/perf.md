@@ -4964,3 +4964,51 @@ copy and its allocations, not those walks.
 
 - The `cappedSize` and measure walks, which keep the cost of a keystroke
   proportional to the size of the state.
+
+## 2026-10 the client drops the decoded scrollback lines
+
+Scrolling a pane back decodes every history row it shows into a fresh line
+and keeps it in the scrollback's line cache (up to 256 lines or 65,536 cells,
+about 7.3 MB at 112 bytes a cell). After the pane is scrolled down again
+nothing reads the cache, and it was held for the pane's life.
+
+### What changed
+
+- `Emulator.ReleaseScrollbackCache` drops the main screen's cache map and its
+  cell count under the cache lock. It leaves the ring and the generation
+  alone, and a line already handed out stays valid.
+- The client's emulator release (`TryReleaseEmulatorScratch`, at most once
+  every 30 s, only after a frame changed) calls it beside the reflow scratch
+  and alternate screen releases.
+
+### Numbers
+
+`GOTOOLCHAIN=go1.26.10`. End to end, `TestClientReleasesScrollbackCache` runs
+two clients over the real daemon, each with four tiled panes in a 240x72
+terminal. The panes are 118x68, 118x33, 58x33 and 58x33, as `stty size` prints
+them in the test. Both clients scroll every pane back to its oldest line, page
+down through about 200 lines and return, and the test compares the heap gap
+between the client that releases and the one that keeps the cache. Run with
+`-v` on this branch, the gap went from -120 KiB before the scrolling to
+8120 KiB after it, so the releasing client held 8240 KiB (2060 KiB a pane)
+less.
+
+Cost: after a release the next render decodes the lines of a scrolled pane
+again. A throwaway program outside the tree (`GOTOOLCHAIN=go1.26.10`, one
+emulator per pane size with 600 lines of scrollback) calls
+`ReleaseScrollbackCache` and then `ScrollbackLine` for as many lines as the
+pane has rows, 200 times per pane. The median time and allocation of one
+decode of a screen of history:
+
+| pane | rows | median | p90 | allocated |
+|---|---|---|---|---|
+| 118x68 | 68 | 464 us | 1.16 ms | 910 KiB |
+| 118x33 | 33 | 69 us | 370 us | 442 KiB |
+| 58x33 | 33 | 30 us | 208 us | 215 KiB |
+| 58x33 | 33 | 30 us | 221 us | 215 KiB |
+
+The four panes together are 593 us at the median, once every 30 s while a
+pane stays scrolled.
+
+The libghostty backend's `scrollCache` (`vt/ghostty_scrollback.go`) holds the
+same kind of cache and is not covered.

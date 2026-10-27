@@ -3357,6 +3357,18 @@ The controls were run on 2026-10-16 on macOS on the branch perf/client-release-s
 
 The first version of the test drew CORNER and then waited. With the alternate screen check cut it passed: the client draws a pane again only when the pane changes, so the screen kept the frame drawn before the release. The second write, AGAIN, is what makes the client draw the pane from the emulator after the release.
 
+## Client scrollback cache released by the maintenance tick
+
+`TestClientReleasesScrollbackCache` is built like `TestClientReleasesEmulatorScratch`: two daemons with `--pprof` and `TUIOS_CLEANUP_SECONDS=3600`, one client on each with `--pprof`, one with `TUIOS_CLEANUP_SECONDS=1` and the other with 3600. Each client opens four tiled panes in a 240x72 terminal. Each pane prints its size from `stty size` (118x68, 118x33, 58x33 and 58x33) and then 400 numbered lines. Once both clients show no notice and are stable, and three seconds later, the test reads the heap gap between the clients as its baseline (the least of five readings of each). Both clients then focus each pane with `focus-window`, enter copy mode with the leader and `[`, jump to the oldest line with `gg`, page down with Ctrl+F one screen at a time until the pane has drawn 200 lines of history (136 on the 68-row pane, 198 on the others), and go back with `G` and `q`. Settled again and three seconds later, the gap must have grown over the baseline by a quarter of the cells of the history each pane drew (1705 KiB in all). A quarter of one screen (430 KiB) is not enough: with nothing released the gap moves by up to about 400 KiB between runs. Every pane is then scrolled back and down again on both clients, and each screen must draw byte for byte, styles included, as on the client that kept its lines.
+
+Run on 2026-10-27 on Linux. The call-site cut is the build without the release: on it the gap grew by 352, 128, 176 and -216 KiB over four runs. With a release that drops the cache map and its count, it grew by 7912 and 7952 KiB, and the test passed.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No scrollback cache release on the tick | `TryReleaseEmulatorScratch`: the `ReleaseScrollbackCache` call cut | `TestClientReleasesScrollbackCache`: "the client released -224 KiB of decoded history across 4 panes, want at least 1705 KiB (a quarter of the cells of the history each pane drew)" | **caught** |
+| A release that drops the history too | `ReleaseScrollbackCache` (`vt/emulator.go`): also calls `sb.Clear()` | `TestClientReleasesScrollbackCache`: "the releasing client never scrolled back to HIST-1-END": the release emptied the ring before the first scroll | **caught** |
+| The positive half | this branch | none | **guard** |
+
 ## A Mac config.toml on Linux, and keys tuios cannot read (issue #556)
 
 `TestMacConfigWorksOnLinux` loads the 25 `opt+` keys and the leader of the

@@ -8,14 +8,16 @@ import (
 )
 
 // emulatorReleaseEvery is how often the client drops its panes' spare
-// emulator buffers. It is the daemon's cleanup interval, which holds the same
-// buffers for the same panes and drops them in its cleanup sweep.
+// emulator buffers. It is the daemon's cleanup interval, and the daemon's sweep
+// drops the same reflow scratch and alternate screen for the same panes. It
+// does not drop the decoded scrollback lines, which only the client releases.
 var emulatorReleaseEvery = session.CleanupEvery()
 
 // releaseEmulatorScratch drops, at most once every emulatorReleaseEvery, the
 // buffers each pane's emulator keeps that nothing on screen reads: the reflow
-// scratch from its last resize and the alternate screen's cells while the main
-// screen is shown. The maintenance tick calls it. The release draws nothing
+// scratch from its last resize, the alternate screen's cells while the main
+// screen is shown, and the decoded history lines a scrolled pane left behind.
+// The maintenance tick calls it. The release draws nothing
 // and marks nothing dirty, so the tick still composes no frame.
 //
 // It runs on an interval rather than after a resize or when a program leaves
