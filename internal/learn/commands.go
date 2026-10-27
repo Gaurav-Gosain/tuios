@@ -171,9 +171,11 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 }
 
 // reset puts the tour back where it started: no windows, workspace 1, tiling
-// on, window mode, the starting theme, and no overlay open.
+// on, window mode, the starting theme, the shipped keys, the rail closed, and
+// no overlay, beam or picture-in-picture.
 func (m *Model) reset() {
 	o := m.OS
+	o.HideShownScratch()
 	for i := len(o.Windows) - 1; i >= 0; i-- {
 		o.DeleteWindow(i)
 	}
@@ -189,6 +191,21 @@ func (m *Model) reset() {
 	o.ShowLogs = false
 	if o.ShowQuitMenu {
 		o.CloseQuitMenu()
+	}
+	if o.ShowInbox {
+		o.CloseInbox()
+	}
+	if o.ShowAgentMail {
+		o.CloseAgentMail()
+	}
+	o.ClosePresetPicker()
+	o.CloseGotoPicker()
+	o.CloseHints()
+	o.SetSpotlight(false)
+	o.UnpinPiP()
+	if o.SidebarActive() {
+		o.ExitSidebarFocus()
+		o.ToggleSidebar()
 	}
 	o.PrefixActive = false
 	o.WorkspacePrefixActive = false
@@ -210,6 +227,9 @@ func (m *Model) reset() {
 	if m.theme != "" && m.theme != take(o).Theme {
 		_ = o.SetTheme(m.theme)
 	}
+	// A lesson can switch to another preset. The next one starts on the
+	// shipped keys.
+	_ = o.LearnApplyPreset(config.PresetTuios)
 	o.MarkAllDirty()
 }
 

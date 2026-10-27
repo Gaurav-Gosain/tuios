@@ -2,8 +2,12 @@ package app
 
 import (
 	"maps"
+	"slices"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // Learn mode is the guided tour at tuios.dev/learn, where tuios runs as
@@ -141,4 +145,38 @@ func (m *OS) handleLearnQuit() {
 		m.CloseQuitMenu()
 	}
 	m.showLearnNote(learnNoteQuit)
+}
+
+// LearnApplyPreset puts a keybind preset in use in this tab only, in Learn
+// mode, where there is no config file to write it to. The keys come from the
+// same fill a config.toml with that preset gets on load, so the tour shows
+// the keys tuios gives a person who picks it. tuios brings back the shipped
+// keys.
+func (m *OS) LearnApplyPreset(name string) tea.Cmd {
+	if !m.LearnMode || m.UserConfig == nil || !slices.Contains(config.Presets(), name) {
+		return nil
+	}
+	if name == m.currentPreset() {
+		return nil
+	}
+	src := "[keybindings]\n"
+	if name != config.PresetTuios {
+		src += "preset = " + strconv.Quote(name) + "\n"
+	}
+	parsed, err := config.ParseUserConfig([]byte(src))
+	if err != nil {
+		m.ShowNotification("Keys not changed: "+err.Error(), "error", 0)
+		return nil
+	}
+	// The rest of the tab's config stays: the tour's pinned look and any
+	// option a lesson set.
+	cfg := *m.UserConfig
+	cfg.Keybindings = parsed.Keybindings
+	cmd := m.ApplyReloadedConfig(&cfg)
+	text := "The " + name + " keys are in use."
+	if name != config.PresetTuios {
+		text += " Press " + m.Settings.LeaderKey + " ctrl+t for the tuios keys it moved."
+	}
+	m.ShowNotification(text, "success", m.Settings.NotificationWarningDuration)
+	return cmd
 }

@@ -30,6 +30,14 @@ const (
 	OverlaySidebar           = "sidebar"
 	OverlayLogs              = "logs"
 	OverlayScreensaver       = "screensaver"
+	OverlayAgents            = "agents"
+	OverlayMail              = "mail"
+	OverlayPresets           = "presets"
+	OverlayGoto              = "goto"
+	OverlayHints             = "hints"
+	OverlaySpotlight         = "spotlight"
+	OverlayScratch           = "scratch"
+	OverlayPaneLabels        = "paneLabels"
 )
 
 // Setting names in the setting event: the looks the settings page changes
@@ -38,6 +46,17 @@ const (
 	SettingGlyphs      = "glyphs"
 	SettingBorderStyle = "borderStyle"
 )
+
+// keysSnap is the keymap in use: the preset, the leader and lock mode.
+type keysSnap struct {
+	Preset string // "tuios", "tmux", "screen" or "zellij"
+	Leader string // such as "ctrl+b"
+	Lock   bool   // keybindings.lock: every key but the leader goes to the pane
+}
+
+func (k keysSnap) toMap() map[string]any {
+	return map[string]any{"preset": k.Preset, "leader": k.Leader, "lock": k.Lock}
+}
 
 // rect is a window's place and size in cells.
 type rect struct{ X, Y, W, H int }
@@ -80,6 +99,8 @@ type Snapshot struct {
 	Windows    []windowSnap // every workspace, in the app's order
 	Glyphs     string       // the glyph set, "default" for the shipped one
 	Border     string       // the border style, such as "rounded"
+	Keys       keysSnap
+	PiP        string // the window picture-in-picture shows, "" for none
 	// Moving is true while an animation is running, when window rects are
 	// still on their way. Moves are reported once it is false again.
 	Moving bool
@@ -100,6 +121,11 @@ func take(o *app.OS) Snapshot {
 		Glyphs:    o.Settings.GlyphSet,
 		Border:    o.Settings.BorderStyle,
 		Moving:    len(o.Animations) > 0,
+		Keys:      keysSnap{Preset: config.PresetTuios, Leader: o.Settings.LeaderKey, Lock: o.Settings.Lock},
+		PiP:       o.PiPWindowID(),
+	}
+	if o.UserConfig != nil && o.UserConfig.Keybindings.Preset != "" {
+		s.Keys.Preset = o.UserConfig.Keybindings.Preset
 	}
 	if s.Glyphs == "" {
 		s.Glyphs = "default"
@@ -144,6 +170,14 @@ func take(o *app.OS) Snapshot {
 	ov[OverlayLogs] = o.ShowLogs
 	ov[OverlayScrollback] = o.ShowScrollbackBrowser
 	ov[OverlayScreensaver] = o.ScreensaverActive()
+	ov[OverlayAgents] = o.ShowInbox
+	ov[OverlayMail] = o.ShowAgentMail
+	ov[OverlayPresets] = o.PresetPickerOpen()
+	ov[OverlayGoto] = o.GotoPickerOpen()
+	ov[OverlayHints] = o.HintsOpen()
+	ov[OverlaySpotlight] = o.SpotlightOn()
+	ov[OverlayScratch] = o.InScratchView()
+	ov[OverlayPaneLabels] = o.PaneLabelsOpen()
 	if b, ok := o.ScrollbackBrowser.(*scrollback.Browser); ok && o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
@@ -243,6 +277,8 @@ func (s Snapshot) ToMap() map[string]any {
 		"tape":           s.Tape,
 		"glyphs":         s.Glyphs,
 		"borderStyle":    s.Border,
+		"keys":           s.Keys.toMap(),
+		"pip":            s.PiP,
 		"cols":           s.Cols,
 		"rows":           s.Rows,
 	}
@@ -317,6 +353,12 @@ func diff(prev, now Snapshot) []Event {
 	}
 	if prev.Border != now.Border {
 		add(EventSetting, "", map[string]any{"name": SettingBorderStyle, "from": prev.Border, "to": now.Border})
+	}
+	if prev.Keys != now.Keys {
+		add(EventKeys, "", map[string]any{"from": prev.Keys.toMap(), "to": now.Keys.toMap()})
+	}
+	if prev.PiP != now.PiP {
+		add(EventPiP, now.PiP, map[string]any{"from": prev.PiP, "to": now.PiP})
 	}
 
 	names := make([]string, 0, len(now.Overlays))

@@ -44,6 +44,8 @@ const (
 	EventAgent          = "agent"
 	EventTapeStart      = "tape.start"
 	EventTapeFinish     = "tape.finish"
+	EventKeys           = "keys"
+	EventPiP            = "pip"
 	EventShellStart     = webshell.EventCommandStart
 	EventShellCommand   = webshell.EventCommand
 	EventShellCwd       = webshell.EventCwd

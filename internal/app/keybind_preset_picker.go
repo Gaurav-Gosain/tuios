@@ -86,6 +86,12 @@ func (m *OS) PresetPickerApply() tea.Cmd {
 	if p.selected < 0 || p.selected >= len(names) || m.UserConfig == nil {
 		return nil
 	}
+	if m.LearnMode {
+		// The tour has no config file to write. The preset changes the keys
+		// of this tab, so a lesson can show them at work.
+		p.open = false
+		return m.LearnApplyPreset(names[p.selected])
+	}
 	if m.ConfigReadOnly {
 		m.ShowNotification("This client cannot change the keys. Run tuios keybinds preset on the server.", "warning", m.Settings.NotificationWarningDuration)
 		return nil

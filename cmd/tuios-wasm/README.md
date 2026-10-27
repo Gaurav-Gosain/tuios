@@ -100,6 +100,8 @@ Events come in a fixed order for one key press: `key` first, then any
 | `overlay.close` | `{name}` | an overlay closed |
 | `notification` | `{message, level}` | a message in the dock. `level` is `"info"`, `"success"`, `"warning"` or `"error"`. Learn mode's notes are `"info"` |
 | `agent` | `{id, from, to, message, kind, harness}` | a pane's agent state: `""`, `"working"`, `"needs_input"`, `"idle"`, `"done"`, `"errored"` or `"unknown"`. `kind` is `"approval"` or `"question"` for `needs_input` |
+| `keys` | `{from, to}` | the keymap changed. Each side is `{preset, leader, lock}`: the preset (`"tuios"`, `"tmux"`, `"screen"` or `"zellij"`), the leader key, and whether lock mode is on |
+| `pip` | `{from, to}` | the window picture-in-picture shows changed. `to` is `""` when it is off |
 | `tape.start` | `{name?}` | a tape started playing |
 | `tape.finish` | `{}` | the tape finished |
 | `shell.start` | `{command, line, cwd}` | the fake shell started a command. `command` is the first word |
@@ -110,7 +112,9 @@ Events come in a fixed order for one key press: `key` first, then any
 Overlay names: `help`, `whichkey`, `commandPalette`, `launcher`, `settings`,
 `themePicker`, `keybinds`, `copyMode`, `search` (copy mode or scrollback
 search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
-`sidebar`, `logs`, `screensaver`.
+`sidebar`, `logs`, `screensaver`, `agents` (the agents view), `mail`,
+`presets` (the keybind preset picker), `goto` (the go-to picker), `hints`,
+`paneLabels`, `spotlight` and `scratch` (the scratch pane is up).
 
 ## State
 
@@ -138,6 +142,8 @@ search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
   tape: false,               // a tape is playing
   glyphs: "default",         // the glyph set
   borderStyle: "rounded",
+  keys: { preset: "tuios", leader: "ctrl+b", lock: false },
+  pip: "",                   // the window picture-in-picture shows
   cols: 120, rows: 36
 }
 ```
@@ -165,7 +171,7 @@ races a key. An unknown command or a bad argument does nothing.
 | `agent` | `state`, `message?`, `kind?` | set the focused pane's agent state, without waiting for the fake agent |
 | `tape` | `script`, `name?` | play a tape script |
 | `celebrate` | `"big"?`, `"still"?`, `"x,y"?` or a window id | confetti drawn by tuios in terminal cells. `still` is a static sparkle for reduced motion |
-| `reset` | | no windows, workspace 1, tiling on in bsp, window mode, the starting theme, no overlay |
+| `reset` | | no windows, workspace 1, tiling on in bsp, window mode, the starting theme, the shipped keys, the rail closed, no overlay, beam or picture-in-picture |
 
 ## Learn mode
 
@@ -173,6 +179,8 @@ The browser build runs in Learn mode (`app.OSOptions.LearnMode`):
 
 - Nothing quits. The quit keys, the quit menu, Ctrl+C in window mode and any
   other quit show a note in the dock instead, and every pane stays open.
+- The keybind preset picker (`U` in window mode) changes the keys of the tab
+  at once. Nothing is written, and `reset` brings back the shipped keys.
 - An action that needs a daemon, a real process, the network or the host's
   files shows a note instead of an error. `tuios.unavailable()` lists them.
   Sessions (switcher, detach, new session), screenshots, tape recording and
