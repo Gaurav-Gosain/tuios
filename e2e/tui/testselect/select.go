@@ -72,6 +72,10 @@ var global = []*regexp.Regexp{
 	regexp.MustCompile(`^scripts/(e2e-tested|retry-flaky)\.sh$`),
 }
 
+// committedMap is the map in the repository. scripts/e2e-select.sh may pass
+// a newer one from the map workflow instead.
+const committedMap = "e2e/tui/testselect/testmap.txt"
+
 // buildInputs are the non-Go files the go command compiles into a package.
 var buildInputs = regexp.MustCompile(`\.(s|S|c|cc|cpp|cxx|h|hh|hpp|hxx|m|f|F|for|f90|swig|swigcxx|syso)$`)
 
@@ -97,7 +101,7 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 	for _, c := range changes {
 		p := c.path
 		switch {
-		case p == mapPath:
+		case p == mapPath || p == committedMap:
 			return everything(p + " is the test map")
 		case matchAny(global, p):
 			return everything(p + " is a CI file")

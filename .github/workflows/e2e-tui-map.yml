@@ -1,25 +1,28 @@
 name: e2e-tui test map
 
-# Refreshes e2e/tui/testselect/testmap.txt, which says what each end-to-end
-# test reaches. Pull requests read it to run only the tests their change can
-# reach (see e2e/tui/testselect and e2e-tui.yml).
+# Builds the end-to-end test map, which says what each end-to-end test
+# reaches. Pull requests read it to run only the tests their change can reach
+# (see e2e/tui/testselect, scripts/e2e-select.sh and e2e-tui.yml).
 #
 # Every test runs on its own against a tuios built with -cover and with the
 # coverflush tag, which writes the counters of processes the suite ends with a
-# signal. testselect -build turns the coverage into the map. When the map
-# changes, the job opens or updates a pull request from the ci/e2e-test-map
-# branch through the GitHub API. It never pushes to main.
+# signal. testselect -build turns the coverage into the map, and the update
+# job uploads it as the e2e-test-map artifact. scripts/e2e-select.sh reads the
+# newest one a run on main made, and the map committed at
+# e2e/tui/testselect/testmap.txt when there is none.
 #
-# A pull request made with the job's token starts no workflows. Close and
-# reopen it to run CI. A change to the map runs the whole suite.
+# The job used to open a pull request with the map. GitHub refuses that to a
+# workflow token in this repository, so the committed map stayed as it was
+# when it was added, and every test added since ran on every change.
 
 on:
   schedule:
-    # 02:37 UTC on Mondays, clear of the race build, the fuzz campaign and
-    # the client tests. The map is about a megabyte, so a weekly refresh keeps
-    # the history small. A test that a newer change made reach more code
-    # still runs on main, which always runs the whole suite.
-    - cron: "37 2 * * 1"
+    # 01:37 UTC every day, the quietest hour of the week's runs, and clear of
+    # the race build at 03:17. A test added during the day is new to the map,
+    # and runs on every change, until the next night. A test that a newer
+    # change made reach more code still runs on main, which always runs the
+    # whole suite.
+    - cron: "37 1 * * *"
   workflow_dispatch:
 
 permissions:
@@ -84,12 +87,6 @@ jobs:
     needs: collect
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: write
-      pull-requests: write
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      BRANCH: ci/e2e-test-map
     steps:
       - uses: actions/checkout@v7
 
@@ -106,12 +103,15 @@ jobs:
 
       - name: Write the map
         working-directory: e2e/tui
-        run: go run ./testselect -build "$RUNNER_TEMP/map"
-
-      - name: Open or update the pull request
         run: |
-          if git diff --quiet -- e2e/tui/testselect/testmap.txt; then
-            echo "The test map is unchanged."
-            exit 0
-          fi
-          ./scripts/e2e-map-pr.sh "$BRANCH"
+          go run ./testselect -build "$RUNNER_TEMP/map"
+          grep -c '^test ' testselect/testmap.txt | xargs printf 'The map holds %s tests.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The name is what scripts/e2e-select.sh downloads. A pull request
+      # reads only a map that a run on main made.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-map
+          path: e2e/tui/testselect/testmap.txt
+          retention-days: 30
+          if-no-files-found: error

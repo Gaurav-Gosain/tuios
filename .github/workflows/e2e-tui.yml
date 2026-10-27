@@ -81,6 +81,10 @@ jobs:
   shard-plan:
     name: e2e-tui shard plan
     runs-on: ubuntu-latest
+    # actions: read lets scripts/e2e-select.sh download the newest test map.
+    permissions:
+      contents: read
+      actions: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -110,6 +114,7 @@ jobs:
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
@@ -117,6 +122,10 @@ jobs:
 
   e2e-tui:
     runs-on: ubuntu-latest
+    # actions: read lets scripts/e2e-select.sh download the newest test map.
+    permissions:
+      contents: read
+      actions: read
     # The suite spawns multiplexer daemons and shells. The job timeout is a
     # backstop; every individual wait inside the suite has its own deadline, so
     # a hang is reported as the assertion that timed out rather than as a job
@@ -203,6 +212,7 @@ jobs:
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
+          GH_TOKEN: ${{ github.token }}
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
         run: |
