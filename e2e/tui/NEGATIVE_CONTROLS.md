@@ -10118,3 +10118,23 @@ The fixed build passes three runs of three.
 | The restore keeping the saved rank (`Rank: state.Rank`) | "tuios ls lists [charlie alpha delta], want [charlie delta alpha]" | **caught** |
 
 The controls fail at the burst, before the two drags, which cover the drag the review asked for. The per-machine `sessionOrderLocal` and the one lock for a whole order have no e2e: the first needs an older daemon on another machine, and the second is a race between two callers.
+
+### Adversarial review of #1191
+
+A second review, by an agent that read only the code, found the rows below.
+`TestSessionOrderRestoredSessionDoesNotTie` now also restarts the daemon in
+full after the resurrect: bravo, saved with rank 2 and in no order set since,
+must not take delta's place. `TestSessionOrderBuildsOnAnotherClientsMove`
+moves alpha down, puts it back on top from another client, presses shift+down
+twice in one burst, and then reads the sidebar state file: the client must
+keep no order of its own once the daemon has answered.
+`TestSessionOrderSkipsAnEndedSession` sends an order with a gone name, refused
+without `skip_missing` and set with it. Run on 2026-10-27 on macOS, based on
+origin/main at ecdeec289.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `unrankSavedSessions` not called | "after a full restart: tuios ls lists [charlie bravo alpha delta trigger], want [charlie delta] first" | **caught** |
+| The branch before this review (c7fe27eed) | "the client kept its own order after the daemon answered" | **caught** |
+| The reply comparing against the drawn order (`sidebarSessionOrderFor`) | the same | **caught** |
+| The pending move and the daemon's order out of the rail cache key | none: another change (the cursor) redraws the rail in time in every run | **not caught** |

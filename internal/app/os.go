@@ -1753,12 +1753,13 @@ type OS struct {
 	// machine, keyed by host name, kept apart from SidebarOrder so a drag while
 	// attached on build cannot write build's names over this machine's order.
 	SidebarHostSessionOrder map[string][]string
-	// sessionOrderLocal holds, by machine, the daemons that turned
-	// set-session-order down as a verb they do not know: older daemons, whose
-	// rail order stays this client's. sessionOrderPush is, by machine, the
+	// sessionOrderLocal holds, by machine, the build of a daemon that turned
+	// set-session-order down, as a verb it does not know or one a link does
+	// not allow: its rail order stays this client's until that machine runs
+	// another build. sessionOrderPush is, by machine, the
 	// order sent and not answered yet, and the one waiting behind it. See
 	// session_order.go.
-	sessionOrderLocal map[string]bool
+	sessionOrderLocal map[string]string
 	sessionOrderPush  map[string]*sessionOrderPush
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural

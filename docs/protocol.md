@@ -3852,7 +3852,7 @@ Surrounding whitespace is trimmed first. A space name then follows the session n
 
 Put the sessions in an order. The daemon keeps one order for all its clients: `list-sessions` is sorted by it, so the sidebar, the session switcher and `tuios ls` list the sessions the same way on every client, and it is saved and restored with the sessions. Moving a session on the sidebar sends this verb. The daemon tells every listing client at once, without waiting for the listing's next look. `list-sessions` carries `rank` (1 first) on every session the order places.
 
-Params: `order` (required), the session names in their new order. Every name must be a live session, or nothing changes and the call is refused with `session_not_found`. Repeats are dropped. A session the list leaves out, and one made later, goes after the named ones in creation order.
+Params: `order` (required), the session names in their new order. Every name must be a live session, or nothing changes and the call is refused with `session_not_found`. Repeats are dropped. A session the list leaves out, and one made later, goes after the named ones in creation order. `skip_missing` leaves out a name that is no live session instead, and the result lists it under `missing`. The sidebar sets it, since another client may have ended a session it drew.
 
 Request:
 

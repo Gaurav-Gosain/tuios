@@ -305,11 +305,17 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	mixU(wsFold)
 
-	// Session identity and the user's drag-defined order.
+	// Session identity and the user's drag-defined order, and whose order
+	// the rail draws: the daemon's, or this client's while a move of its own
+	// is on its way (see session_order.go). A failed move flips the second
+	// with nothing else changing.
 	mixS(m.SessionName)
 	for _, o := range m.SidebarOrder {
 		mixS(o)
 	}
+	attached := m.attachedMachine()
+	mixB(m.sessionOrderPending(attached))
+	mixB(m.sessionOrderFromDaemon(attached))
 
 	// The worktree groups. Which repositories are folded decides which rows the
 	// sessions section draws at all, and the attached session's own record is

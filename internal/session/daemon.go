@@ -61,9 +61,9 @@ type Daemon struct {
 	// progress. See handoff.go.
 	handoffArgs func(manifestFD int) []string
 	handoffMu   sync.Mutex
-	// sessionOrderMu holds one set-session-order, and a restore that reads
-	// the ranks, from start to end, so two clients' orders cannot interleave.
-	// See verb_session_order.go.
+	// sessionOrderMu holds one set-session-order from start to end, so two
+	// clients' orders cannot interleave, and a restore from reading the ranks
+	// to making the session. See verb_session_order.go.
 	sessionOrderMu sync.Mutex
 	// adopting is set while a new daemon image rebuilds the sessions its
 	// predecessor handed over. See handoff_adopt.go.

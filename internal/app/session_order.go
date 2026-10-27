@@ -4,8 +4,10 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -35,6 +37,10 @@ type sessionOrderPush struct {
 	sending bool
 	// next is the newest order made while one was out, nil for none.
 	next []string
+	// dial reaches that machine's daemon. It is kept from the move, so a
+	// waiting move still goes there after the client moved to another
+	// machine.
+	dial agentMailDial
 }
 
 // SessionOrderAppliedMsg reports how a session order sent to the daemon
@@ -49,9 +55,9 @@ type SessionOrderAppliedMsg struct {
 // daemon's session order: it keeps its own order, applies it over the
 // listing, and never sends one. It is TUIOS_SESSION_ORDER_LEGACY=1, so the
 // mixed-version case can be tested without an old build.
-func legacySessionOrder() bool {
+var legacySessionOrder = sync.OnceValue(func() bool {
 	return os.Getenv("TUIOS_SESSION_ORDER_LEGACY") == "1"
-}
+})
 
 // commitSessionOrder shows order on the rail and hands it to the daemon that
 // holds the attached session, now or after the move that is out.
@@ -59,7 +65,7 @@ func (m *OS) commitSessionOrder(order []string) {
 	host := m.attachedMachine()
 	m.setSidebarSessionOrder(host, order)
 	m.saveSidebarState()
-	if m.DaemonClient == nil || m.sessionOrderLocal[host] || legacySessionOrder() {
+	if m.DaemonClient == nil || m.sessionOrderIsLocal(host) || legacySessionOrder() {
 		return
 	}
 	if m.sessionOrderPush == nil {
@@ -75,7 +81,32 @@ func (m *OS) commitSessionOrder(order []string) {
 		return
 	}
 	push.sending = true
-	m.queueSidebarCmd(sessionOrderCmd(m.verbDialer(), m.DaemonClient, host, order))
+	push.dial = m.verbDialer()
+	m.queueSidebarCmd(sessionOrderCmd(push.dial, m.DaemonClient, host, order))
+}
+
+// sessionOrderIsLocal reports whether host's daemon turned the order down,
+// and still runs the build that did. A daemon upgraded since gets the order
+// again.
+func (m *OS) sessionOrderIsLocal(host string) bool {
+	build, ok := m.sessionOrderLocal[host]
+	if !ok {
+		return false
+	}
+	if host == m.attachedMachine() && m.DaemonClient != nil && m.DaemonClient.DaemonVersion() != build {
+		delete(m.sessionOrderLocal, host)
+		return false
+	}
+	return true
+}
+
+// storedSessionOrder is the order this client keeps for host's sessions,
+// whether or not the rail draws it now.
+func (m *OS) storedSessionOrder(host string) []string {
+	if host == federation.LocalHostName {
+		return m.SidebarOrder
+	}
+	return m.SidebarHostSessionOrder[host]
 }
 
 // sessionOrderPending reports whether a move on host's rail is on its way to
@@ -95,7 +126,7 @@ func sessionOrderCmd(dial agentMailDial, client *session.TUIClient, host string,
 			return SessionOrderAppliedMsg{Host: host, Order: order, Err: err}
 		}
 		defer func() { _ = c.Close() }()
-		if _, err := c.Call("set-session-order", map[string]any{"order": order}); err != nil {
+		if _, err := c.Call("set-session-order", map[string]any{"order": order, "skip_missing": true}); err != nil {
 			return SessionOrderAppliedMsg{Host: host, Order: order, Err: err}
 		}
 		_, _ = client.RefreshSessionList()
@@ -115,23 +146,29 @@ func (m *OS) applySessionOrderResult(msg SessionOrderAppliedMsg) tea.Cmd {
 	push.sending, push.next = false, nil
 	if msg.Err != nil {
 		var call *session.VerbCallError
-		if errors.As(msg.Err, &call) && call.Code == session.ErrVerbUnknownVerb {
-			// An older daemon: the order stays this client's, as it was.
+		if errors.As(msg.Err, &call) && (call.Code == session.ErrVerbUnknownVerb || call.Code == session.ErrVerbForbidden) {
+			// An older daemon, or a link that does not allow the verb: the
+			// order stays this client's, as it was before the daemon kept one.
 			if m.sessionOrderLocal == nil {
-				m.sessionOrderLocal = map[string]bool{}
+				m.sessionOrderLocal = map[string]string{}
 			}
-			m.sessionOrderLocal[host] = true
+			build := ""
+			if m.DaemonClient != nil {
+				build = m.DaemonClient.DaemonVersion()
+			}
+			m.sessionOrderLocal[host] = build
 			return nil
 		}
-		m.ShowNotification("Session order failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		m.LogWarn("Session order: %v", msg.Err)
+		m.ShowNotification("The session order did not reach the daemon.", "error", m.Settings.NotificationDuration*2)
 	}
-	if next != nil && host == m.attachedMachine() && m.DaemonClient != nil {
+	if next != nil && push.dial != nil && m.DaemonClient != nil {
 		push.sending = true
-		return sessionOrderCmd(m.verbDialer(), m.DaemonClient, host, next)
+		return sessionOrderCmd(push.dial, m.DaemonClient, host, next)
 	}
 	// The daemon's order is in the listing now. The copy kept here goes,
 	// unless a later move replaced it while this one was in flight.
-	if msg.Err == nil && slices.Equal(m.sidebarSessionOrderFor(host), msg.Order) {
+	if msg.Err == nil && slices.Equal(m.storedSessionOrder(host), msg.Order) {
 		m.setSidebarSessionOrder(host, nil)
 		m.saveSidebarState()
 	}
@@ -143,5 +180,5 @@ func (m *OS) applySessionOrderResult(msg SessionOrderAppliedMsg) tea.Cmd {
 // sessions keeps an order its listing carries, in which case it is the order
 // the rail shows once no move of this client's is on its way to it.
 func (m *OS) sessionOrderFromDaemon(host string) bool {
-	return m.DaemonClient != nil && !m.sessionOrderLocal[host] && !legacySessionOrder() && m.DaemonClient.SessionOrderSet()
+	return m.DaemonClient != nil && !m.sessionOrderIsLocal(host) && !legacySessionOrder() && m.DaemonClient.SessionOrderSet()
 }

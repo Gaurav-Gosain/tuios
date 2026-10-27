@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -353,8 +354,13 @@ func TestSessionOrderTakesQuickMoves(t *testing.T) {
 // ordered charlie, delta, so charlie holds alpha's old rank 1. tuios resurrect
 // alpha must list charlie, delta, alpha.
 //
+// Then a full restart, which restores every saved session in name order:
+// bravo, saved with rank 2 and in no order set since, must not take delta's
+// place.
+//
 // Negative control: with restoredRank keeping the saved rank, alpha ties with
-// charlie and lists between charlie and delta. The run is in
+// charlie and lists between charlie and delta. With the ranks left in the
+// saved files, bravo lists second after the restart. The runs are in
 // NEGATIVE_CONTROLS.md.
 func TestSessionOrderRestoredSessionDoesNotTie(t *testing.T) {
 	base := t.TempDir()
@@ -411,4 +417,113 @@ func TestSessionOrderRestoredSessionDoesNotTie(t *testing.T) {
 	// attaches, so being listed again is the proof here.
 	waitForSessionInfo(t, base, "alpha")
 	wantLsOrder(t, base, "after alpha is restored", "charlie", "delta", "alpha")
+
+	// A full restart restores every saved session in name order. bravo was
+	// never in the order set since, so it must not take delta's place.
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	_ = daemon.Wait()
+	if out, err := tuiosCLI(t, base, "new", "trigger", "--detach"); err != nil {
+		t.Fatalf("start a fresh daemon: %v\n%s", err, out)
+	}
+	waitForSessionInfo(t, base, "bravo")
+	wantLsOrder(t, base, "after a full restart", "charlie", "delta")
+}
+
+// TestSessionOrderBuildsOnAnotherClientsMove: a move made after another
+// client moved the order builds on the daemon's order, not on the one this
+// client sent before. A presses shift+down on alpha, another client puts
+// alpha back on top, and A presses shift+down twice in one burst: alpha must
+// end third, below bravo and charlie.
+//
+// Then the client must keep no order of its own in the sidebar state file.
+//
+// Negative control: with the reply comparing its order against the drawn
+// one, the client keeps its copy in the state file. The run is in
+// NEGATIVE_CONTROLS.md.
+func TestSessionOrderBuildsOnAnotherClientsMove(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[startup]\nopen_default_window = true\n")
+	names := []string{"alpha", "bravo", "charlie", "delta"}
+	for _, name := range names {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", name, err, out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if out, err := tuiosCLI(t, base, append([]string{"set-session-order"}, names...)...); err != nil {
+		t.Fatalf("set-session-order: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", "alpha"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	clientShows(t, base, "alpha")
+	toggleSidebarViaPalette(t, term)
+	want := func(what string, order ...string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return railOrder(s, order...) }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: the rail does not list %v: %v\n%s", what, order, err, term.Snapshot())
+		}
+		wantLsOrder(t, base, what, order...)
+	}
+	want("setup", names...)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatalf("ctrl+b e: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.SendKeys("\x1b[1;2B"); err != nil {
+		t.Fatalf("shift+down: %v", err)
+	}
+	want("one shift+down", "bravo", "alpha", "charlie", "delta")
+	if out, err := tuiosCLI(t, base, append([]string{"set-session-order"}, names...)...); err != nil {
+		t.Fatalf("the other client's move: %v\n%s", err, out)
+	}
+	want("another client puts alpha back on top", names...)
+	if err := term.SendKeys("\x1b[1;2B", "\x1b[1;2B"); err != nil {
+		t.Fatalf("shift+down twice: %v", err)
+	}
+	want("two quick shift+down after the other client's move", "bravo", "charlie", "alpha", "delta")
+
+	// Once the daemon has answered, this client keeps no order of its own:
+	// the one it drew is the daemon's now. A copy left in the sidebar state
+	// file would be drawn again for this machine's group from another one.
+	path := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sidebar.json")
+	deadline := time.Now().Add(uiTimeout)
+	var data []byte
+	for time.Now().Before(deadline) {
+		data, _ = os.ReadFile(path)
+		var st struct {
+			Order []string `json:"order"`
+		}
+		if json.Unmarshal(data, &st) == nil && len(st.Order) == 0 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("ASSERTION: the client kept its own order after the daemon answered: %s", data)
+}
+
+// TestSessionOrderSkipsAnEndedSession: the rail sends the names it drew, and
+// another client may have ended one of them since. With skip_missing the
+// order is set without it, and the missing name is reported.
+func TestSessionOrderSkipsAnEndedSession(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	for _, name := range []string{"alpha", "bravo", "charlie"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", name, err, out)
+		}
+	}
+	out, err := tuiosCLI(t, base, "call", "set-session-order", `{"order":["charlie","gone","alpha"]}`)
+	if err == nil {
+		t.Fatalf("ASSERTION: an order with a gone name was taken without skip_missing\n%s", out)
+	}
+	out, err = tuiosCLI(t, base, "call", "set-session-order", `{"order":["charlie","gone","alpha"],"skip_missing":true}`)
+	if err != nil || !strings.Contains(out, "gone") {
+		t.Fatalf("ASSERTION: skip_missing did not set the order and report the gone name: %v\n%s", err, out)
+	}
+	wantLsOrder(t, base, "after skip_missing", "charlie", "alpha", "bravo")
 }
