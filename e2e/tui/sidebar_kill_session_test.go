@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // TestRailRightClickKillsTheSessionUnderThePointer drives the destructive path
@@ -17,6 +18,18 @@ import (
 // and unrecoverable: the menu row used to dispatch an action that addressed the
 // attached session, so the one thing this test would catch is a user killing the
 // session they were sitting in.
+//
+// After that it makes and kills a session from the CLI, and each change must
+// reach the rail within sessionChangeOnRail (issue #1225).
+//
+// How it could pass wrongly, and what stops it: a client that refreshes its
+// listing on input would show the change without the push, so the test sends
+// no key or click between the command and the rail showing it.
+//
+// The rail with charlie and after charlie is gone is saved under artifactDir.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Session listing push on a
+// session change").
 func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -85,5 +98,40 @@ func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 		t.Errorf("the daemon still lists bravo, or lost alpha:\n%s", out)
 	}
 
+	// A script makes and ends a session right after the rail's own kill
+	// (issue #1225): the rail must show each change at once. The kill above
+	// has just sent a listing push, so a push that waits out listingPushGap
+	// (3 seconds) keeps the old list on screen for that long.
+	railShowsWithin := func(what string, want func(string) bool) {
+		t.Helper()
+		start := time.Now()
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return want(s.Text()) }, uiTimeout); err != nil {
+			t.Fatalf("the rail never showed %s: %v\n%s", what, err, term.Snapshot())
+		}
+		took := time.Since(start)
+		t.Logf("the rail showed %s %v after the command returned", what, took.Round(time.Millisecond))
+		if took > sessionChangeOnRail {
+			t.Errorf("ASSERTION: the rail showed %s %v after the command returned, want under %v\n%s",
+				what, took.Round(time.Millisecond), sessionChangeOnRail, term.Snapshot())
+		}
+	}
+	if out, err := tuiosCLI(t, base, "new", "charlie", "--detach"); err != nil {
+		t.Fatalf("create charlie: %v: %s", err, out)
+	}
+	railShowsWithin("the new session charlie", func(text string) bool { return strings.Contains(text, "charlie") })
+	saveArtifact(t, term, artifactDir(t), "charlie-made")
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "charlie-made")
+	if out, err := tuiosCLI(t, base, "kill-session", "charlie"); err != nil {
+		t.Fatalf("kill charlie: %v: %s", err, out)
+	}
+	railShowsWithin("charlie gone", func(text string) bool { return !strings.Contains(text, "charlie") })
+	saveArtifact(t, term, artifactDir(t), "charlie-gone")
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "charlie-gone")
+
 	alive(t, term, "after killing another session from the rail")
 }
+
+// sessionChangeOnRail is how soon a session made or ended by the CLI must
+// reach the rail: well under listingPushGap (3 seconds), and loose enough for
+// a loaded machine.
+const sessionChangeOnRail = 1500 * time.Millisecond

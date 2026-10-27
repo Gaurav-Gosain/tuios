@@ -1082,7 +1082,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	// point somewhere from the start. See ssh_agent_follow.go.
 	d.agentEnsureSession(s.ID)
 	s.setIdleWakes(&d.wakes)
-	d.wakes.listing.Set()
+	d.wakes.sessionsChanged()
 	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
 	// change the daemon made itself shows up in a live TUI without the verb that
@@ -1358,7 +1358,7 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 // PTYs are closed and their windows are gone, but the socket stays open, so the
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
-	d.wakes.listing.Set()
+	d.wakes.sessionsChanged()
 	// The session's ssh agent link goes with it.
 	d.agentForgetSession(s.ID)
 	d.displayForgetSession(s.ID)

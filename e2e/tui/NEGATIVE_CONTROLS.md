@@ -10237,3 +10237,14 @@ Found while testing the branch under load: the page timed the long press by when
 | The hold check cut (`if (false \|\| ...)`) | "a hold is sip's, and the page sends nothing" | **caught** |
 
 A code-only review of the fix found one more case: when the first move stays inside the slop and the page is busy, Chrome hands the later moves on as one event whose `timeStamp` is the last of them, and the hold was read off that. The script now takes the first sample past the slop from `getCoalescedEvents()`. A browser test for it (two small moves, then twelve through 1100 ms of a busy page) was tried and left out: under CDP how Chrome splits the moves into batches is not fixed, and the code before this change failed it in only 2 to 3 runs of 10. A debug build logged all ten runs taking the drag on the first sample past the slop, 70 to 160 ms after the press.
+## Session listing push on a session change
+
+`TestRailRightClickKillsTheSessionUnderThePointer` kills `bravo` from the rail. Then it runs `tuios new charlie --detach` and `tuios kill-session charlie`. After each command, with no key or click, the rail must show the change within 1.5 seconds (issue #1225). The kill of `bravo` and the creation of `charlie` each send a listing push just before the next command. Run on 2026-10-27 on Linux, on branch `fix/listing-push-on-session-change` from `main` (`3d91716c0`).
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| None: `main` itself | "the rail showed charlie gone 2.953s after the command returned" | **caught** |
+| A session change never brings an armed timer forward (`if armed {` for `if armed && !armedAt.After(at) {` in `listingNotifier`) | "the rail showed charlie gone 2.946s after the command returned" | **caught** |
+| The positive half | none: three runs showed charlie in 100 to 103 ms and charlie gone in 102 to 103 ms | **guard** |
+
+With `TUIOS_E2E_FRAMES` set, the test writes `charlie-made.png` and `charlie-gone.png`.

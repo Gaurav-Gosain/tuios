@@ -29,6 +29,11 @@ type idleWakes struct {
 	// listing wakes listingNotifier: something a client's session listing
 	// shows may have changed. See daemon_listing_push.go.
 	listing wakeLatch
+	// listingNow asks listingNotifier to look at the listing without waiting
+	// out listingPushGap: a session was made or ended, which a script that
+	// runs tuios kill-session or tuios new wants to see on the rail at once
+	// (issue #1225). See sessionsChanged.
+	listingNow wakeLatch
 
 	// detectTicks, stallTicks, cleanupTicks and listingTicks count the timer
 	// fires of agentMonitor, stallMonitor, cleanupLoop and listingNotifier.
@@ -43,6 +48,14 @@ func (w *idleWakes) init() {
 	w.stall.init()
 	w.cleanup.init()
 	w.listing.init()
+	w.listingNow.init()
+}
+
+// sessionsChanged is a session made or ended. The listing push goes out after
+// listingPushSettle, not after listingPushGap.
+func (w *idleWakes) sessionsChanged() {
+	w.listing.Set()
+	w.listingNow.Set()
 }
 
 // activity is a pane printing or taking input.

@@ -24,6 +24,12 @@ import (
 //
 // The push is never more frequent than the poll was: one every
 // listingPushGap at most, the first listingPushSettle after a quiet spell.
+// A session made or ended is the exception. It raises the listingNow latch
+// too, and the notifier looks listingPushSettle after it, gap or not: a
+// script that kills a session wants its row gone from the rail at once, and
+// the push sent for the command that came just before it would otherwise hold
+// the next one back for the whole gap (issue #1225). A burst of them still
+// costs one look, because each waits listingPushSettle for the rest.
 
 const (
 	// listingPushGap is the shortest gap between two looks at the listing.
@@ -40,6 +46,9 @@ func (d *Daemon) listingNotifier() {
 	timer.Stop()
 	defer timer.Stop()
 	armed := false
+	// armedAt is when the armed timer fires, so a session change can bring
+	// it forward and never push it back.
+	var armedAt time.Time
 	var last uint64
 	var lastLook time.Time
 	var buf bytes.Buffer
@@ -58,7 +67,19 @@ func (d *Daemon) listingNotifier() {
 			if next := lastLook.Add(listingPushGap); next.After(at) {
 				at = next
 			}
-			armed = true
+			armed, armedAt = true, at
+			timer.Reset(time.Until(at))
+		case <-d.wakes.listingNow.C():
+			if !d.wakes.listingNow.Take() {
+				continue
+			}
+			at := time.Now().Add(listingPushSettle)
+			if armed && !armedAt.After(at) {
+				continue
+			}
+			// Reset on a running timer is safe since Go 1.23: no stale fire
+			// is left in its channel.
+			armed, armedAt = true, at
 			timer.Reset(time.Until(at))
 		case <-timer.C:
 			armed = false
