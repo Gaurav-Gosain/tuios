@@ -1757,10 +1757,11 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 // insertSyncedWindow puts a daemon-created pane into the BSP tree by splitting
 // the pane that was focused when it was asked for. A split key (ctrl+b | / -)
 // or a preselection records the side and the pane before the request, because
-// the daemon makes the window and it arrives through a state sync. Without a
-// recorded side the tree's scheme picks the axis. The recorded request is
-// cleared whether or not it applies. TileAllWindows runs afterwards and,
-// finding every window already in the tree, only re-applies the layout.
+// the daemon makes the window and it arrives through a state sync. A window
+// asked for from outside the client takes the client's preselection here
+// instead. Without either the tree's scheme picks the axis. The recorded
+// request is cleared whether or not it applies. TileAllWindows runs afterwards
+// and, finding every window already in the tree, only re-applies the layout.
 //
 // focusBefore is the focus before the sync that brought the window, which is
 // the shared focus every client of the session holds, so a peer that did not
@@ -1769,6 +1770,17 @@ func (m *OS) insertSyncedWindow(win *terminal.Window, focusBefore string) {
 	dir := m.pendingSplitDir
 	targetID := m.pendingSplitTarget
 	m.CancelPendingSplit()
+	// A window this client did not ask for, such as one from tuios
+	// new-window in a script (issue #1228), has no recorded split. This
+	// client's preselection still belongs to the pane focusBefore names, so it
+	// decides the side, and is spent only once it has placed a window. A split
+	// this client recorded keeps priority: addDaemonWindow already moved the
+	// preselection into it.
+	fromPreselection := false
+	if targetID == "" && dir == layout.PreselectionNone && m.PreselectionDir != layout.PreselectionNone {
+		dir = m.PreselectionDir
+		fromPreselection = true
+	}
 	if targetID == "" {
 		targetID = focusBefore
 	}
@@ -1793,6 +1805,9 @@ func (m *OS) insertSyncedWindow(win *terminal.Window, focusBefore string) {
 	}
 	if dir != layout.PreselectionNone {
 		tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
+		if fromPreselection {
+			m.PreselectionDir = layout.PreselectionNone
+		}
 		return
 	}
 	tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())

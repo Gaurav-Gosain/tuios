@@ -9895,3 +9895,17 @@ start is off screen, `o` brings the start row back with the cursor on it, and
 
 With `TUIOS_E2E_FRAMES` set, the test writes `other-end-v.png`,
 `other-end-V-before.png` and `other-end-V-after.png`.
+## External new-window takes the preselection (issue #1228)
+
+The `cli_*` cases of `TestBSPNewWindowSplitsTheFocusedPane` lay out three tiled
+panes over a daemon session and focus the full-height left pane. They set the
+preselection with `tuios run-command Preselect SIDE` and make the window with
+`tuios new-window --cwd DIR`, from outside the client. The new pane must split
+the focused pane on the preselected side, and the other panes must not move.
+Run on 2026-10-27 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The preselection fallback in `insertSyncedWindow` (a binary built from main before the fix) | `cli_spiral_preselect_left`: "the new pane is not left of the focused pane", new pane at (0,23) 80x23 below the focused pane. `cli_alternate_preselect_up`: "the new pane is not above the focused pane", new pane at (40,0) 40x46 beside it. `cli_spiral_no_preselection` passes on both binaries | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, each `cli_*` case writes `before.png` and `after.png`.

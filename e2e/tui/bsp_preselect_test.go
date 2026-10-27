@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // Discussion #347: in a BSP layout, a new window always split the last pane in
@@ -21,25 +22,39 @@ import (
 // preselects a side, and presses n. The new pane must sit inside the box the
 // focused pane had, on the chosen side, and the two other panes must not move.
 //
-// NEGATIVE CONTROL: against main before the fix every case fails with "the
+// The cli cases do the same from outside the client, with tuios run-command
+// Preselect and tuios new-window --cwd (issue #1228).
+//
+// NEGATIVE CONTROL: against main before the fix every key case fails with "the
 // new pane is not inside the focused pane's old box", because the new pane
-// splits the bottom-right pane instead.
+// splits the bottom-right pane instead. Against main before the fix for issue
+// #1228, cli_spiral_preselect_left fails with "the new pane is not left of the
+// focused pane" and cli_alternate_preselect_up with "the new pane is not above
+// the focused pane"; see NEGATIVE_CONTROLS.md.
 
 type preselectCase struct {
 	name   string
 	scheme string // palette row that sets the tree's scheme, or empty for spiral
 	key    any    // the preselect chord, or nil for none
 	side   string // left, right, up, down, or "" for any side
+	// cli asks for the window with tuios new-window from outside the client,
+	// and sets the preselection with tuios run-command, the way a script
+	// does (issue #1228). The window then arrives through a state sync that
+	// no request of this client's prepared.
+	cli bool
 }
 
 func TestBSPNewWindowSplitsTheFocusedPane(t *testing.T) {
 	cases := []preselectCase{
-		{"spiral_no_preselection", "", nil, ""},
-		{"spiral_preselect_left", "", tuitest.Alt('h'), "left"},
-		{"longest_side_preselect_up", "Set tiling scheme: longest side", tuitest.Alt('k'), "up"},
-		{"alternate_preselect_down", "Set tiling scheme: alternate", tuitest.Alt('j'), "down"},
-		{"smart_split_preselect_right", "Set tiling scheme: smart split", tuitest.Alt('l'), "right"},
-		{"smart_split_no_preselection", "Set tiling scheme: smart split", nil, ""},
+		{"spiral_no_preselection", "", nil, "", false},
+		{"spiral_preselect_left", "", tuitest.Alt('h'), "left", false},
+		{"longest_side_preselect_up", "Set tiling scheme: longest side", tuitest.Alt('k'), "up", false},
+		{"alternate_preselect_down", "Set tiling scheme: alternate", tuitest.Alt('j'), "down", false},
+		{"smart_split_preselect_right", "Set tiling scheme: smart split", tuitest.Alt('l'), "right", false},
+		{"smart_split_no_preselection", "Set tiling scheme: smart split", nil, "", false},
+		{"cli_spiral_no_preselection", "", nil, "", true},
+		{"cli_spiral_preselect_left", "", "left", "left", true},
+		{"cli_alternate_preselect_up", "Set tiling scheme: alternate", "up", "up", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,18 +94,39 @@ func runPreselectCase(t *testing.T, tc preselectCase) {
 
 	dir := artifactDir(t)
 	if tc.key != nil {
-		send(t, term, tc.key)
-		if err := term.WaitForText("Preselection: "+tc.side, uiTimeout); err != nil {
-			t.Fatalf("no preselection message for %s: %v\n%s", tc.side, err, term.Snapshot())
+		if tc.cli {
+			// run-command returns once the client has run the command. The
+			// client shows its own "Remote:" message over the preselection
+			// one, so there is no message to wait for here.
+			if out, err := tuiosCLI(t, base, "run-command", "-s", session, "Preselect", tc.side); err != nil {
+				t.Fatalf("run-command Preselect %s: %v\n%s", tc.side, err, out)
+			}
+		} else {
+			send(t, term, tc.key)
+			if err := term.WaitForText("Preselection: "+tc.side, uiTimeout); err != nil {
+				t.Fatalf("no preselection message for %s: %v\n%s", tc.side, err, term.Snapshot())
+			}
 		}
 	}
 	saveArtifact(t, term, dir, "before")
+	if tc.cli {
+		savePNG(t, term.Screen(), shot.XTermPalette(), dir, "before")
+	}
 
-	send(t, term, "n")
-	waitWindowCount(t, term, 4, "after n")
+	if tc.cli {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", session, "--cwd", workDirIn(t, base)); err != nil {
+			t.Fatalf("new-window: %v\n%s", err, out)
+		}
+	} else {
+		send(t, term, "n")
+	}
+	waitWindowCount(t, term, 4, "after the new window")
 	after := waitForSettledGeometryIn(t, base, session, 4)
 	time.Sleep(500 * time.Millisecond)
 	saveArtifact(t, term, dir, "after")
+	if tc.cli {
+		savePNG(t, term.Screen(), shot.XTermPalette(), dir, "after")
+	}
 
 	var added winRect
 	afterByID := map[string]winRect{}
