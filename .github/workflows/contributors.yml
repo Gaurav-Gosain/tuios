@@ -1,6 +1,7 @@
-# Keeps the README's contributors grid current. The job redraws the grid with
-# scripts/contributors.sh and, when the README changes, opens or updates a pull
-# request from the chore/contributors branch. It never pushes to main.
+# Keeps the README's contributors mosaic current. The job redraws
+# assets/contributors.svg with scripts/contributors.sh and, when it changes,
+# opens or updates a pull request from the chore/contributors branch. It never
+# pushes to main.
 name: contributors
 
 on:
@@ -27,12 +28,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Redraw the grid
-        run: ./scripts/contributors.sh "${GITHUB_REPOSITORY}" README.md
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: go.mod
+          cache-id: contributors
+
+      - name: Redraw the mosaic
+        run: ./scripts/contributors.sh "${GITHUB_REPOSITORY}"
 
       - name: Open or update the pull request
         run: |
-          if git diff --quiet -- README.md; then
+          if git diff --quiet -- assets/contributors.svg; then
             echo "contributors unchanged"
             exit 0
           fi
