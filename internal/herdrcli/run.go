@@ -22,6 +22,9 @@ const (
 	// agentStartDefault is how long agent start waits for the agent, as in
 	// herdr, when --timeout is not given.
 	agentStartDefault = 30 * time.Second
+	// agentStartRetry is the pause before agent start asks again about a
+	// pane that does not hold an agent yet.
+	agentStartRetry = 250 * time.Millisecond
 )
 
 // Options are what Main needs from its process.
@@ -222,10 +225,16 @@ func waitAgentStart(path string, c *Call, started map[string]any) map[string]any
 		if err != nil {
 			return map[string]any(err)
 		}
-		// An error is the wait's timeout, or a pane that went away, which
-		// never comes ready either.
+		// The pane does not hold an agent yet: the agent has not started,
+		// or tuios has not identified it. Ask again until the deadline, as
+		// herdr waits through a startup. Any other error is the wait's
+		// timeout, or a pane that went away, which never comes ready either.
 		result, ok := resp["result"].(map[string]any)
 		if !ok {
+			if e, _ := resp["error"].(map[string]any); e["code"] == "agent_not_found" {
+				time.Sleep(min(agentStartRetry, max(time.Until(deadline), 0)))
+				continue
+			}
 			return timedOut
 		}
 		agent, _ := result["agent"].(map[string]any)

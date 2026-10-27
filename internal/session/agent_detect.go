@@ -806,6 +806,19 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 				s.setAgentClaim(w.ID, agentClaim{
 					source: AgentSourceDetect, harness: det.harness, identity: det.tier, auto: true,
 				})
+			} else if w.AgentHarness == "" && det.harness != "" && claim.source != AgentSourceReport {
+				// A pane's own sequence set the state first and named no
+				// harness: Codex sends an OSC 7501 idle before it runs a
+				// hook. The state stays the sequence's, but the pane is the
+				// harness its process is. Without it the pane has no screen
+				// rules, and the herdr front lists no agent in it. A report
+				// is a caller's word, and one that named no harness is left
+				// as it is.
+				out.changed++
+				if !write {
+					continue
+				}
+				w.AgentHarness = det.harness
 			}
 		case detected && owned:
 			// Still here. A miss count from an editor it opened is forgotten.

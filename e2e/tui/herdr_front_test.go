@@ -521,6 +521,67 @@ step focus "$H" workspace focus "$WS"
 	alive(t, term, "after the bridge sequence")
 }
 
+// TestHerdrFrontStartsCodexAndPi starts a codex and a pi through "$HERDR_BIN_PATH"
+// agent start, as herdr-projects starts its reviewers (#1200). Both are
+// stand-ins that reach ready the way the real ones do. The codex sends an
+// OSC 7501 idle at once, as Codex does, a report that names no harness. The
+// pi is not a process tuios knows for a second, then reports idle through
+// herdr. Each start must answer the agent idle, and agent list must name both.
+//
+// Negative controls: with agent_not_found ending waitAgentStart at once, the
+// codex start fails with timeout in about a second. With the detector's
+// harness fill taken out of detectionPass, codex stays at idle with no
+// harness, agent list leaves it out, and its start fails with timeout at the
+// deadline.
+func TestHerdrFrontStartsCodexAndPi(t *testing.T) {
+	term, base := herdrFrontClient(t)
+	ids := crushPanes(t, base, "bridge", "codexpane", "pipane")
+	stubs := filepath.Join(base, "stubs")
+	if err := os.MkdirAll(stubs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// The script stays in the foreground, so its process is named codex.
+	codex := "#!/bin/sh\nprintf '\\033]7501;state=idle:app=codex\\033\\\\'\necho STUB-CODEX-UP\nwhile :; do read -r _ || sleep 1; done\n"
+	// exec gives the process another name, so only the report says pi.
+	pi := "#!/bin/sh\nexec sh -c 'sleep 1; \"$HERDR_BIN_PATH\" pane report-agent \"$HERDR_PANE_ID\" --source stub --agent pi --state idle --seq 1; echo STUB-PI-UP; sleep 300'\n"
+	for name, body := range map[string]string{"codex": codex, "pi": pi} {
+		if err := os.WriteFile(filepath.Join(stubs, name), []byte(body), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, w := range []string{"codexpane", "pipane"} {
+		typeIn(t, base, w, "PATH="+stubs+":$PATH; export PATH; echo "+strings.ToUpper(w)+"-READY")
+		waitJoined(t, base, w, strings.ToUpper(w)+"-READY")
+	}
+
+	steps := runHerdrSteps(t, base, "bridge", "reviewers", `
+step codex "$H" agent start reviewer-codex --kind codex --pane `+ids["codexpane"]+` --timeout 8000
+step pi "$H" agent start reviewer-pi --kind pi --pane `+ids["pipane"]+` --timeout 8000
+step list "$H" agent list
+`)
+	for _, kind := range []string{"codex", "pi"} {
+		steps[kind].ok(t, "agent start --kind "+kind)
+		start := steps[kind].json(t, "agent start --kind "+kind)
+		if dig(start, "result", "agent", "agent") != kind || dig(start, "result", "agent", "agent_status") != "idle" {
+			t.Fatalf("agent start --kind %s did not answer an idle %s:\n%s", kind, kind, steps[kind].out)
+		}
+	}
+	steps["list"].ok(t, "agent list")
+	listed := map[string]string{}
+	agents, _ := dig(steps["list"].json(t, "agent list"), "result", "agents").([]any)
+	for _, a := range agents {
+		m, _ := a.(map[string]any)
+		name, _ := m["name"].(string)
+		agent, _ := m["agent"].(string)
+		listed[name] = agent
+	}
+	if listed["reviewer-codex"] != "codex" || listed["reviewer-pi"] != "pi" {
+		t.Fatalf("agent list does not name both reviewers: %v\n%s", listed, steps["list"].out)
+	}
+	saveFrame(t, term, "herdr-front-codex-pi")
+	alive(t, term, "after the reviewers started")
+}
+
 // shq quotes s for the POSIX sh the step scripts run in.
 func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
