@@ -269,7 +269,30 @@ func (s *shell) promptText() string {
 	if b := branchAt(s.cwd); b != "" {
 		branch = " " + purple + b + reset
 	}
-	return cyan + bold + prettyPath(s.cwd) + reset + branch + " " + mark + " "
+	return cyan + bold + promptPath(s.cwd) + reset + branch + " " + mark + " "
+}
+
+// promptPath is the folder as the prompt shows it. A long one is cut the way
+// fish cuts it, to the first letter of each folder but the last, so a
+// worktree's prompt leaves room for the command:
+// ~/.local/share/tuios/worktrees/hello/shout is ~/.l/s/t/w/h/shout.
+func promptPath(dir string) string {
+	p := prettyPath(dir)
+	if len(p) <= 28 {
+		return p
+	}
+	parts := strings.Split(p, "/")
+	for i := 0; i < len(parts)-1; i++ {
+		part := parts[i]
+		n := 1
+		if strings.HasPrefix(part, ".") {
+			n = 2
+		}
+		if len(part) > n {
+			parts[i] = part[:n]
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // OSC 133 marks, the ones a configured real shell prints: where a prompt
