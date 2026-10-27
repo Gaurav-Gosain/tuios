@@ -688,7 +688,9 @@ func (m *OS) inboxChanged() {
 // inboxAttached reports whether an item is in the session this client is
 // attached to, whose transitions the state sync already alerts on.
 func (m *OS) inboxAttached(it session.AttentionItem) bool {
-	return it.Host == "" && m.AttachedHost == "" && m.IsDaemonSession && it.Session == m.sidebarCurrentSessionID()
+	// Learn mode's pretend agents run in the one session the tour has, and
+	// the rail alerts on them as on any pane of it.
+	return it.Host == "" && m.AttachedHost == "" && (m.IsDaemonSession || m.LearnMode) && it.Session == m.sidebarCurrentSessionID()
 }
 
 // inboxSeenUnderEyes dismisses a finished item for the pane this client is
@@ -696,6 +698,11 @@ func (m *OS) inboxAttached(it session.AttentionItem) bool {
 // the rule the rail applies to its own unread mark.
 func (m *OS) inboxSeenUnderEyes(it session.AttentionItem) tea.Cmd {
 	if it.Kind != session.AttentionFinished || !m.inboxAttached(it) {
+		return nil
+	}
+	if m.LearnMode && m.ShowInbox {
+		// The agents view covers the pane: the New agent sheet leaves the
+		// focus on the last attempt it started, which no one has seen.
 		return nil
 	}
 	if w := m.GetFocusedWindow(); w != nil && w.ID == it.Window {
@@ -1814,27 +1821,22 @@ func (m *OS) InboxDismiss() tea.Cmd {
 // marks a dismiss the client sends on its own, which shows nothing when it
 // cannot be sent or fails.
 func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
 		if !silent {
 			m.ShowNotification("Dismissing needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
 		}
 		return nil
 	}
-	nonce := m.DaemonClient.HumanNonce()
+	nonce := m.inboxNonce()
 	if nonce == "" {
 		if !silent {
 			m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
 		}
 		return nil
 	}
-	build := m.DaemonClient.ClientVersion()
+	call := m.inboxCaller()
 	return func() tea.Msg {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return InboxDismissedMsg{Err: err, Silent: silent}
-		}
-		defer func() { _ = client.Close() }()
-		_, err = client.CallWithTimeout("dismiss-attention", map[string]any{"id": id, "human_nonce": nonce}, 5*time.Second)
+		_, err := call("dismiss-attention", map[string]any{"id": id, "human_nonce": nonce}, 5*time.Second)
 		return InboxDismissedMsg{Err: err, Silent: silent}
 	}
 }

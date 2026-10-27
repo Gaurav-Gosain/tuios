@@ -209,6 +209,13 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	m.spawnRank(s)
 	ck.spawn = s
 	m.cockpitTouch()
+	if m.LearnMode && m.learnSpawn != nil {
+		// No programs and no git in the browser: the tour says what the
+		// sheet offers.
+		info := m.learnSpawn()
+		s.folder = info.Folder
+		return m.learnSpawnInfoCmd(s.gen, info)
+	}
 	return spawnInfoCmd(s.gen, s.folder)
 }
 
@@ -340,6 +347,11 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		local.load, local.loadOK = l.Load1, l.Known()
 	} else {
 		local.load, local.loadOK = spawnLoadAvg()
+	}
+	if m.LearnMode && m.learnSpawn != nil {
+		// A browser tab has no cores or load to rank by, and its host name
+		// is the runtime's.
+		local.name, local.cores, local.load, local.loadOK = cmp.Or(m.learnSpawn().Machine, local.name), 0, 0, false
 	}
 	ms := []spawnMachine{local}
 	for _, h := range m.FederationHosts {

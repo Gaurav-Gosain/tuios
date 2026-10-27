@@ -662,7 +662,7 @@ func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 			}
 		}
 		slices.SortStableFunc(tries, func(a, b ckRow) int {
-			return ckFanOrder(list[a.agent].SessionID, list[b.agent].SessionID)
+			return ckFanOrder(m.ckAgentSession(list[a.agent]), m.ckAgentSession(list[b.agent]))
 		})
 		tries[len(tries)-1].last = true
 		out = append(out, ckRow{kind: ckRowFan, group: r.group, agent: tries[0].agent, count: m.ckFanSize(f), key: "f:" + f})

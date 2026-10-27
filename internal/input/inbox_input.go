@@ -75,11 +75,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
 	switch action {
 	case config.ActionInboxMark:
-		o.NoteAction(action)
+		noteInboxAction(o, action)
 		o.InboxAgentsToggleMark()
 		return o, nil
 	case config.ActionInboxMarkAll:
-		o.NoteAction(action)
+		noteInboxAction(o, action)
 		o.InboxAgentsMarkAll()
 		return o, nil
 	}
@@ -104,7 +104,7 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// The cockpit's own actions: a A r on an approval, n, tab, the moves.
 	if cmd, handled := o.CockpitKey(action); handled {
-		o.NoteAction(action)
+		noteInboxAction(o, action)
 		return o, cmd
 	}
 	if action == "" {
@@ -121,11 +121,11 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if app.InboxWorkActions[action] {
 		cmd, handled := o.InboxWorkAction(action)
 		if handled {
-			o.NoteAction(action)
+			noteInboxAction(o, action)
 		}
 		return o, cmd
 	}
-	o.NoteAction(action)
+	noteInboxAction(o, action)
 	switch action {
 	case config.ActionInboxSelect:
 		o.InboxStartSelect()
@@ -217,7 +217,7 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if action == "" {
 		return o, nil
 	}
-	o.NoteAction(action)
+	noteInboxAction(o, action)
 	switch action {
 	case config.ActionPeekBack:
 		o.InboxPeekBack()
@@ -235,4 +235,14 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.InboxPeekRefresh()
 	}
 	return o, nil
+}
+
+// noteInboxAction records an action of the agents view as run: for a crash
+// report, and for the browser build's tour, which hears it as it hears a
+// keybinding's.
+func noteInboxAction(o *app.OS, action string) {
+	o.NoteAction(action)
+	if o.OnAction != nil {
+		o.OnAction(action)
+	}
 }

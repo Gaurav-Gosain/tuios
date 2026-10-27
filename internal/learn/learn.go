@@ -47,6 +47,8 @@ const (
 	EventTapeFinish      = "tape.finish"
 	EventKeys            = "keys"
 	EventPiP             = "pip"
+	EventAgentsSelect    = "agents.select"
+	EventAgentsTab       = "agents.tab"
 	EventShellStart      = webshell.EventCommandStart
 	EventShellCommand    = webshell.EventCommand
 	EventShellCwd        = webshell.EventCwd
@@ -92,6 +94,8 @@ type Model struct {
 	rest     Snapshot
 	theme    string // the theme the tour started with, for reset
 	tapeName string
+	// fleet answers the agents view in place of a daemon. See fleet.go.
+	fleet *fleet
 }
 
 // New wraps o for the tour. emit receives every event; it may be called from
@@ -113,6 +117,11 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	o.OnNotification = func(message, level string) {
 		m.emit(Event{Type: EventNotification, Data: map[string]any{"message": message, "level": level}})
 	}
+	m.fleet = newFleet(send)
+	m.fleet.spawn = func(msg spawnAgentsMsg) { send(msg) }
+	m.fleet.close = func(windows []string) { send(closeWindowsMsg{windows: windows}) }
+	o.SetInboxVerbCaller(m.fleet.call, func() string { return learnNonce })
+	o.SetLearnSpawnInfo(spawnInfo)
 	webshell.SetEventSink(m.fromGuest)
 	m.last = take(o)
 	m.rest = m.last
@@ -141,6 +150,8 @@ func (m *Model) fromGuest(e webshell.Event) {
 		})
 	case webshell.EventTapePlay:
 		m.send(playTapeMsg{name: str("name"), script: str("script")})
+	case webshell.EventAgentChanged:
+		m.fleet.changed(e.WindowID)
 	default:
 		m.emit(Event{Type: e.Type, WindowID: e.WindowID, Data: e.Data})
 	}
@@ -172,7 +183,7 @@ type commandDoneMsg struct{}
 
 // Init starts the app and tells the page the tour is ready.
 func (m *Model) Init() tea.Cmd {
-	cmd := m.OS.Init()
+	cmd := tea.Batch(m.OS.Init(), m.OS.LearnInboxFeed(m.fleet.feed))
 	m.emit(Event{Type: EventReady, State: m.State().ToMap()})
 	return cmd
 }
@@ -196,6 +207,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case playTapeMsg:
 		m.tapeName = msg.name
 		_, cmd = m.OS.Update(app.PlayTapeMsg{Name: msg.name, Script: msg.script})
+	case spawnAgentsMsg:
+		m.spawnAgents(msg)
+		_, cmd = m.OS.Update(commandDoneMsg{})
+	case closeWindowsMsg:
+		for _, id := range msg.windows {
+			m.OS.LearnSetFanAttempt(id, app.LearnFanAttempt{})
+			_ = m.OS.CloseWindow(id)
+		}
+		_, cmd = m.OS.Update(commandDoneMsg{})
 	default:
 		next, c := m.OS.Update(msg)
 		if n, ok := next.(*app.OS); ok {

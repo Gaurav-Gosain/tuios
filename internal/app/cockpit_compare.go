@@ -134,7 +134,7 @@ func (m *OS) ckFanSession() string {
 	if !ok || e.Host != "" || m.ckWorktreeOf(e).group == "" {
 		return ""
 	}
-	return e.SessionID
+	return m.ckAgentSession(e)
 }
 
 // CockpitCompare is c: it opens the comparison of the fan under the cursor.
@@ -508,12 +508,18 @@ func (m *OS) ckCompareGo() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	for _, e := range m.Inbox.ck.agents {
-		if e.Host == "" && e.SessionID == a.Session {
-			if m.cockpitSelectKey("a:" + agentKey(e)) {
-				m.CockpitCompareClose()
-				return m.CockpitGo()
-			}
+	// The attempt's row, by its agent: an attempt whose turn finished is
+	// drawn as its finished item, whose row key is the item's.
+	for i, r := range m.cockpitRows() {
+		if !r.selectable() || r.agent < 0 || r.agent >= len(m.Inbox.ck.agents) {
+			continue
+		}
+		if e := m.Inbox.ck.agents[r.agent]; e.Host == "" && m.ckAgentSession(e) == a.Session {
+			m.cockpitSetCursor(i)
+			m.cockpitTouch()
+			m.cockpitSync()
+			m.CockpitCompareClose()
+			return m.CockpitGo()
 		}
 	}
 	cp.note = "The pane of " + a.Session + " is not in the list."

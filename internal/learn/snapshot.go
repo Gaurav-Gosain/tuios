@@ -38,6 +38,10 @@ const (
 	OverlaySpotlight         = "spotlight"
 	OverlayScratch           = "scratch"
 	OverlayPaneLabels        = "paneLabels"
+	OverlayPeek              = "peek"
+	OverlayNewAgent          = "newAgent"
+	OverlayCompare           = "compare"
+	OverlayReply             = "reply"
 )
 
 // Setting names in the setting event: the looks the settings page changes
@@ -56,6 +60,17 @@ type keysSnap struct {
 
 func (k keysSnap) toMap() map[string]any {
 	return map[string]any{"preset": k.Preset, "leader": k.Leader, "lock": k.Lock}
+}
+
+// agentsSnap is the agents view's cursor: the pane of the agent under it and
+// the focus tab, both "" while the view is closed.
+type agentsSnap struct {
+	Selected string
+	Tab      string // "thread", "changes", "checkpoints", "artifacts" or "pane"
+}
+
+func (a agentsSnap) toMap() map[string]any {
+	return map[string]any{"selected": a.Selected, "tab": a.Tab}
 }
 
 // rect is a window's place and size in cells.
@@ -101,6 +116,8 @@ type Snapshot struct {
 	Border     string       // the border style, such as "rounded"
 	Keys       keysSnap
 	PiP        string // the window picture-in-picture shows, "" for none
+	// Agents is the agents view's cursor while it is open.
+	Agents agentsSnap
 	// Moving is true while an animation is running, when window rects are
 	// still on their way. Moves are reported once it is false again.
 	Moving bool
@@ -124,6 +141,7 @@ func take(o *app.OS) Snapshot {
 		Keys:      keysSnap{Preset: config.PresetTuios, Leader: o.Settings.LeaderKey, Lock: o.Settings.Lock},
 		PiP:       o.PiPWindowID(),
 	}
+	s.Agents.Selected, s.Agents.Tab = o.CockpitSelection()
 	if o.UserConfig != nil && o.UserConfig.Keybindings.Preset != "" {
 		s.Keys.Preset = o.UserConfig.Keybindings.Preset
 	}
@@ -178,6 +196,10 @@ func take(o *app.OS) Snapshot {
 	ov[OverlaySpotlight] = o.SpotlightOn()
 	ov[OverlayScratch] = o.InScratchView()
 	ov[OverlayPaneLabels] = o.PaneLabelsOpen()
+	ov[OverlayPeek] = o.ShowInbox && o.InboxPeeking()
+	ov[OverlayNewAgent] = o.CockpitSpawnOpen()
+	ov[OverlayCompare] = o.CockpitCompareOpen()
+	ov[OverlayReply] = o.CockpitReplyOpen()
 	if b, ok := o.ScrollbackBrowser.(*scrollback.Browser); ok && o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
@@ -250,6 +272,7 @@ func (s Snapshot) ToMap() map[string]any {
 			"x": w.X, "y": w.Y, "width": w.W, "height": w.H,
 			"minimized": w.Minimized, "zoomed": w.Zoomed, "floating": w.Floating,
 			"agent": w.Agent, "agentMessage": w.AgentNote,
+			"agentKind": w.AgentKind, "harness": w.Harness,
 		})
 	}
 	var usedList []any
@@ -279,6 +302,7 @@ func (s Snapshot) ToMap() map[string]any {
 		"borderStyle":    s.Border,
 		"keys":           s.Keys.toMap(),
 		"pip":            s.PiP,
+		"agentsView":     s.Agents.toMap(),
 		"cols":           s.Cols,
 		"rows":           s.Rows,
 	}
@@ -362,6 +386,16 @@ func diff(prev, now Snapshot) []Event {
 	}
 	if prev.PiP != now.PiP {
 		add(EventPiP, now.PiP, map[string]any{"from": prev.PiP, "to": now.PiP})
+	}
+	if prev.Agents.Selected != now.Agents.Selected {
+		w, _ := now.window(now.Agents.Selected)
+		add(EventAgentsSelect, now.Agents.Selected, map[string]any{
+			"from": prev.Agents.Selected, "to": now.Agents.Selected,
+			"title": w.Title, "agent": w.Agent, "kind": w.AgentKind, "harness": w.Harness,
+		})
+	}
+	if prev.Agents.Tab != now.Agents.Tab {
+		add(EventAgentsTab, "", map[string]any{"from": prev.Agents.Tab, "to": now.Agents.Tab})
 	}
 
 	names := make([]string, 0, len(now.Overlays))

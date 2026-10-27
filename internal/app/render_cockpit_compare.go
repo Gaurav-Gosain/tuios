@@ -191,7 +191,7 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 // name, else its session's.
 func (m *OS) ckAttemptName(session string) string {
 	for _, e := range m.Inbox.ck.agents {
-		if e.Host == "" && e.SessionID == session {
+		if e.Host == "" && m.ckAgentSession(e) == session {
 			if t := printableTitle(e.Title); t != "" {
 				return t
 			}
@@ -390,7 +390,7 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 	c.text(cx+2, yy, px, ckSeg{t: ckTrunc(m.ckAttemptName(a.Session), px-cx-2), fg: ink(pal.Fg), attrs: ckBold})
 	yy++
 	who := ckHarness(firstNonEmptyStr(a.Harness, a.Agent))
-	c.text(x+2, yy, right, ckSeg{t: who, fg: ink(pal.FgDim)}, ckSeg{t: sepWord() + l.g(ckGlyphHost) + " " + ckLocalName(), fg: ink(pal.FgMute)})
+	c.text(x+2, yy, right, ckSeg{t: who, fg: ink(pal.FgDim)}, ckSeg{t: sepWord() + l.g(ckGlyphHost) + " " + m.ckLocalLabel(), fg: ink(pal.FgMute)})
 	yy++
 	// How it went: done in how long, or still at work.
 	state := []ckSeg{{t: l.g(ckGlyphWorking) + " ", fg: pal.Busy}, {t: sidebarStateWords(a.State), fg: ink(pal.FgMute)}}

@@ -292,6 +292,12 @@ func (m *OS) renderCockpit() (string, int, int, int) {
 		m.drawCockpit(c, l, top, now)
 	}
 	ck.frame, ck.frameAt = c.render(), key
+	if transient {
+		// The key holds none of what makes a frame transient, so the next
+		// frame after the peek or a sheet closes would match it and show
+		// what was closed. A transient frame is never reused.
+		ck.frameAt = ckFrameKey{}
+	}
 	return ck.frame, top, w, h
 }
 
@@ -1082,6 +1088,17 @@ func (m *OS) ckMachine(host string) string {
 	if host != "" {
 		return ckHostLabel(host)
 	}
+	return m.ckLocalLabel()
+}
+
+// ckLocalLabel is this machine's name: its host name, or in Learn mode the
+// name the tour gives it.
+func (m *OS) ckLocalLabel() string {
+	if m.LearnMode && m.learnSpawn != nil {
+		if n := m.learnSpawn().Machine; n != "" {
+			return n
+		}
+	}
 	return ckLocalName()
 }
 
@@ -1346,7 +1363,24 @@ func (m *OS) ckBranch(e sidebarAgentEntry) string {
 
 // ckWorktreeOf is the agent's worktree session, zero when it is not in one.
 func (m *OS) ckWorktreeOf(e sidebarAgentEntry) ckWorktree {
+	if m.LearnMode && e.Host == "" {
+		// The tour's attempts are panes of its one session.
+		if w, ok := m.Inbox.ck.branches["\x00"+e.SessionID+"\x00"+e.WindowID]; ok {
+			return w
+		}
+	}
 	return m.Inbox.ck.branches[e.Host+"\x00"+e.SessionID]
+}
+
+// ckAgentSession is the session an agent's row stands for in a fan: its
+// session, or in Learn mode the name its attempt has in place of one.
+func (m *OS) ckAgentSession(e sidebarAgentEntry) string {
+	if m.LearnMode {
+		if n := m.ckWorktreeOf(e).name; n != "" {
+			return n
+		}
+	}
+	return e.SessionID
 }
 
 // ckBranches reads every worktree session's record once per rebuild of the
@@ -1358,6 +1392,13 @@ func (m *OS) ckBranches() map[string]ckWorktree {
 			out[s.Host+"\x00"+s.ID] = ckWorktree{branch: printableTitle(w.Branch), group: w.Group, fanID: w.FanID,
 				path: printableTitle(w.Path), prompt: printableTitle(w.Prompt), failed: w.PRFailed, repo: w.RepoRoot,
 				pick: w.Pick, judgeWindow: w.JudgeWindow, verdictAt: w.VerdictAt, name: s.ID}
+		}
+	}
+	if m.LearnMode {
+		for win, w := range m.learnFans {
+			if m.windowByID(win) != nil {
+				out["\x00"+m.sidebarCurrentSessionID()+"\x00"+win] = w
+			}
 		}
 	}
 	return out
@@ -1438,7 +1479,7 @@ func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 	switch {
 	case st.Unsupported:
 		return []string{"This daemon is too old for the agents view.", m.restartHint()}
-	case !m.IsDaemonSession:
+	case !m.IsDaemonSession && !m.LearnMode:
 		return []string{"The agents view needs the daemon.", "Start a daemon session with: tuios new"}
 	case st.Filter == session.AttentionMail:
 		return []string{"No unread mail for you.", "m opens the mailbox, with every thread between agents too."}

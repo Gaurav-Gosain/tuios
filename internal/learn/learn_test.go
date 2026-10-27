@@ -312,7 +312,7 @@ func TestCommandsListMatchesRunCommand(t *testing.T) {
 		EventWindowFocus, EventWindowRename, EventWindowMinimize, EventWindowZoom, EventWorkspace,
 		EventTiling, EventLayout, EventTheme, EventOverlayOpen, EventOverlayClose, EventNotification,
 		EventAgent, EventTapeStart, EventTapeFinish, EventShellStart, EventShellCommand, EventShellCwd,
-		EventWindowMove, EventWindowFloat, EventSetting,
+		EventWindowMove, EventWindowFloat, EventSetting, EventAgentsSelect, EventAgentsTab,
 	} {
 		if !strings.Contains(string(readme), "`"+typ+"`") {
 			t.Errorf("README does not document the %q event", typ)

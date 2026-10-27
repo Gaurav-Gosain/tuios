@@ -1073,6 +1073,12 @@ type OS struct {
 	// LearnMode is the guided tour in the browser build: nothing quits, and
 	// what the demo cannot do says so. See learn_mode.go.
 	LearnMode bool
+	// learnSpawn is what the New agent sheet reads in Learn mode. See
+	// learn_cockpit.go.
+	learnSpawn func() LearnSpawnInfo
+	// learnFans are the panes Learn mode starts as the attempts of a fan,
+	// by window. See learn_cockpit.go.
+	learnFans map[string]ckWorktree
 	// OnAction, when set, hears the name of every action the dispatcher runs,
 	// before it runs. The browser build reports it to the page, so a lesson
 	// knows which binding a key reached. Nil everywhere else.

@@ -1197,6 +1197,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case threadGrewMsg:
 		return m, m.applyThreadGrew(msg)
 
+	case LearnTranscriptGrewMsg:
+		return m, m.applyLearnTranscriptGrew(msg)
+
 	case threadWatchEnded:
 		m.applyThreadWatchEnded(msg)
 		return m, m.InboxThreadFetch()

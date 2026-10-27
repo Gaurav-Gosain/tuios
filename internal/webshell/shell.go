@@ -47,7 +47,7 @@ var summaries = [][2]string{
 	{"touch, mkdir, rm", "make and remove files"},
 	{"git", "status, log and diff in ~/projects/hello"},
 	{"go run .", "run the tiny Go project"},
-	{"claude", "a pretend coding agent that asks first"},
+	{"claude, codex, gemini", "pretend coding agents"},
 	{"top", "a live process monitor (q quits)"},
 	{"rain", "digital rain (any key stops it)"},
 	{"fastfetch", "system info, the pretty way"},
@@ -152,6 +152,8 @@ func init() {
 		"go":        cmdGo,
 		"tuios":     cmdTuios,
 		"claude":    cmdAgent,
+		"codex":     cmdAgent,
+		"gemini":    cmdAgent,
 		"agent":     cmdAgent,
 		"neofetch":  fromTTY(cmdFastfetch), // the old name, kept for muscle memory and older lessons
 		"fastfetch": fromTTY(cmdFastfetch),
@@ -194,6 +196,8 @@ func Programs() []Program {
 	return []Program{
 		{"top", "Live process monitor"},
 		{"claude", "A pretend coding agent"},
+		{"codex", "A pretend coding agent"},
+		{"gemini", "A pretend coding agent"},
 		{"rain", "Digital rain"},
 		{"fastfetch", "System info, the pretty way"},
 		{"vim", "Read-only file viewer"},

@@ -80,7 +80,7 @@ Events come in a fixed order for one key press: `key` first, then any
 |---|---|---|
 | `ready` | `{}` | the program started. Carries `state` |
 | `key` | `{key, mode}` | a key press, before tuios handles it. `key` is Bubble Tea's name for it (`"ctrl+b"`, `"n"`, `"enter"`), `mode` is `"window"` or `"terminal"` |
-| `action` | `{name, mode}` | the exact keybinding action a key, a prefix chord, a menu row or `command("action")` ran, such as `"prefix_new_window"` or `"toggle_tiling"`. Also sent for an action Learn mode turns off |
+| `action` | `{name, mode}` | the exact keybinding action a key, a prefix chord, a menu row or `command("action")` ran, such as `"prefix_new_window"` or `"toggle_tiling"`. The keys of the agents view and its peek send theirs too, such as `"inbox_allow"` or `"peek_back"`. Also sent for an action Learn mode turns off |
 | `mode` | `{from, to}` | `"window"` or `"terminal"` |
 | `prefix` | `{from, to}` | the prefix state: `""`, `"prefix"`, `"workspace"`, `"window"`, `"minimize"`, `"layout"`, `"debug"` or `"tape"`. The leader key gives `to: "prefix"` |
 | `window.open` | `{id, title, workspace, count}` | a window opened. `count` is the total over every workspace |
@@ -103,6 +103,8 @@ Events come in a fixed order for one key press: `key` first, then any
 | `agent` | `{id, from, to, message, kind, harness}` | a pane's agent state: `""`, `"working"`, `"needs_input"`, `"idle"`, `"done"`, `"errored"` or `"unknown"`. `kind` is `"approval"` or `"question"` for `needs_input` |
 | `keys` | `{from, to}` | the keymap changed. Each side is `{preset, leader, lock}`: the preset (`"tuios"`, `"tmux"`, `"screen"` or `"zellij"`), the leader key, and whether lock mode is on |
 | `pip` | `{from, to}` | the window picture-in-picture shows changed. `to` is `""` when it is off |
+| `agents.select` | `{from, to, title, agent, kind, harness}` | the agents view's cursor moved to another agent. `from` and `to` are window ids, `""` while the view is closed. `title`, `agent` (its state), `kind` and `harness` are the agent's under the cursor now |
+| `agents.tab` | `{from, to}` | the agents view's focus tab changed: `"thread"`, `"changes"`, `"checkpoints"`, `"artifacts"` or `"pane"`. `""` while the view is closed |
 | `tape.start` | `{name?}` | a tape started playing |
 | `tape.finish` | `{}` | the tape finished |
 | `shell.start` | `{command, line, cwd}` | the fake shell started a command. `command` is the first word |
@@ -115,7 +117,10 @@ Overlay names: `help`, `whichkey`, `commandPalette`, `launcher`, `settings`,
 search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
 `sidebar`, `logs`, `screensaver`, `agents` (the agents view), `mail`,
 `presets` (the keybind preset picker), `goto` (the go-to picker), `hints`,
-`paneLabels`, `spotlight` and `scratch` (the scratch pane is up).
+`paneLabels`, `spotlight`, `scratch` (the scratch pane is up), and over the
+agents view `peek` (the prompt an agent waits on), `reply` (the reply editor),
+`newAgent` (the New agent sheet) and `compare` (the attempts of a fan side by
+side).
 
 ## State
 
@@ -138,13 +143,15 @@ search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
   minimized: 0,              // on the current workspace
   totalWindows: 3,           // on every workspace
   windowList: [              // every window, in tuios's order
-    { id, title, workspace, x, y, width, height, minimized, zoomed, floating, agent, agentMessage }
+    { id, title, workspace, x, y, width, height, minimized, zoomed, floating,
+      agent, agentMessage, agentKind, harness }
   ],                         // x, y, width, height are in cells
   tape: false,               // a tape is playing
   glyphs: "default",         // the glyph set
   borderStyle: "rounded",
   keys: { preset: "tuios", leader: "ctrl+b", lock: false },
   pip: "",                   // the window picture-in-picture shows
+  agentsView: { selected: "<window id>", tab: "thread" }, // "" for both while the agents view is closed
   cols: 120, rows: 36
 }
 ```
@@ -187,6 +194,16 @@ The browser build runs in Learn mode (`app.OSOptions.LearnMode`):
   Sessions (switcher, detach, new session), screenshots, tape recording and
   the tape manager, the rail's file actions, agent mail and host clipboard
   paste are the ones turned off.
+- The agents view (`ctrl+b i`) works with the pretend agents, with no daemon.
+  `internal/learn/fleet.go` answers the verbs the view calls from the agents'
+  own records: the thread with its edits, checkpoints, the peek, the answer
+  keys, a reply, and the New agent sheet, which starts agents in new panes.
+  More than one attempt starts a fan: its attempts are grouped under one row,
+  and `c` compares them. The judge (`j`) picks the attempt that changed the
+  most lines, and a keep (`k` twice) closes the panes of the others. claude's
+  approvals are held for the view, as with the tuios hooks installed, so
+  `a`, `A`, `r` and `R` answer them from the view. A question is answered
+  from the peek (`space`, then its number).
 
 ## The fake shell
 
@@ -200,13 +217,27 @@ lesson:
   `go run .` and `go test` (which fails until the change is restored).
 - `less`, `more`, `view` and `vim` open a read-only viewer: `j`, `k`, space,
   `g`, `G`, `/` to search, `q` or `:q` to quit.
-- `claude` is a scripted agent in the style of Claude Code. It reads two
-  files, thinks for about three seconds, then asks to edit `style.css` with
-  three options. `y`, `1`, `2` or Enter approve, `n`, `3` or Esc turn it down,
-  arrows move the choice. It reports `working`, `needs_input` (kind
-  `approval`) and `done` through the same in-process path a local pane's
-  set-agent-state takes, so the rail, the title glyph and the `agent` event
-  all follow it. Its screen also matches the claude-code harness rules.
+- `claude`, `codex` and `gemini` are scripted agents in the style of Claude
+  Code, Codex and Gemini CLI. Each one names its pane after its task and
+  reports `working`, `needs_input` and `done` through the same in-process
+  path a local pane's set-agent-state takes, so the rail, the title glyph,
+  the `agent` event and the agents view all follow it. With no task, each
+  one runs its own script:
+  - `claude` (harness `claude-code`) reads two files, thinks for about three
+    seconds, then asks to edit `style.css` with three options (kind
+    `approval`). `y`, `1`, `2` or Enter approve, `n`, `3` or Esc turn it
+    down, arrows move the choice. Its screen matches the claude-code harness
+    rules.
+  - `gemini` (harness `gemini-cli`) reads `style.css`, then asks which
+    colors the dark theme uses (kind `question`, options 1 to 3), and writes
+    `theme.css`.
+  - `codex` (harness `codex`) reads the Go project, adds a test and runs
+    `go vet`, and is done in about four seconds. It asks nothing.
+
+  With a task of the person's own (`claude add a footer`), the agent writes
+  a short plan for it to a notes file and is done. At the end of a turn the
+  agent waits at its input line: the next line typed there is a new turn,
+  and ctrl+d or `/exit` goes back to the shell.
 - `tuios tape play demo.tape` plays a tape that opens two windows and runs
   commands in them. `tuios tape list` lists the tapes.
 - `top`, `rain`, `fastfetch`, `tree`, `fortune`, `cowsay` and `colors` are
