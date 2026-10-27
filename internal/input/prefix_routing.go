@@ -160,15 +160,23 @@ func HandleTuiosPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 // that must keep working while typing into a shell. It reports whether the key
 // was consumed.
 func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
+	_, ok := runTerminalModeBinds(msg, o)
+	return ok
+}
+
+// runTerminalModeBinds is handleTerminalModeBinds with the action's command,
+// which the caller has to return: move_workspace_left/right do their work in
+// it, and dropping it left the move in flight forever (#1217).
+func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	if o.KeybindRegistry == nil {
-		return false
+		return nil, false
 	}
 	action := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
 	if o.Mode == app.TerminalMode && isTerminalFocusAction(action) && o.ArmNvimNavigation(nvimNavigationDirection(action)) {
-		return false
+		return nil, false
 	}
-	if _, _, ok := dispatchAction(action, msg, o); ok {
-		return true
+	if _, cmd, ok := dispatchAction(action, msg, o); ok {
+		return cmd, true
 	}
 
 	// Workspace switching is bound in the main section and has to work from
@@ -177,14 +185,14 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	// Option glyph, which arrives with no modifier at all) are eligible, so
 	// rebinding a workspace onto a bare letter cannot start swallowing input.
 	if !isReservedTerminalChord(msg) {
-		return false
+		return nil, false
 	}
 	action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
 	if !isTerminalSafeAction(action) {
-		return false
+		return nil, false
 	}
-	_, _, ok := dispatchAction(action, msg, o)
-	return ok
+	_, cmd, ok := dispatchAction(action, msg, o)
+	return cmd, ok
 }
 
 func isTerminalFocusAction(action string) bool {

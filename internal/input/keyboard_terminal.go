@@ -227,8 +227,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// keybind registry so a rebind in config.toml takes effect. These must be
 	// checked before the PTY forwarding below so their keys are not typed into
 	// the shell.
-	if handleTerminalModeBinds(msg, o) {
-		return o, nil
+	if cmd, ok := runTerminalModeBinds(msg, o); ok {
+		return o, cmd
 	}
 	// The key's terminal-mode action, looked up once for the checks below.
 	// It depends on the key and the registry alone.
