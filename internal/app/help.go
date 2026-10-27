@@ -816,7 +816,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_workspace_switcher", "choose_tree", "goto_picker", "new_worktree", "set_note",
 		"prefix_toggle_sidebar", "prefix_toggle_spotlight", "prefix_explore",
 		"prefix_jump_notif", "prefix_last_message", "prefix_mail", "prefix_inbox", "prefix_next_attention",
-		"toggle_scratch", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",
+		"toggle_scratch", "toggle_calm", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",
 		config.ActionEditScrollback, config.ActionClearScrollback,
 		"hints", "hints_all_panes", "display_panes", "pick_path", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
 		// prefix_review and prefix_next_finished are listed only in the

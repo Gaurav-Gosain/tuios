@@ -1227,6 +1227,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Calm mode: stop motion and quiet messages",
+			Shortcut: "prefix+Z",
+			Bind:     "toggle_calm",
+			Category: "View",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.ToggleCalm()
+			},
+		},
+		{
 			Name:     "Scratch: show or hide the scratch terminal",
 			Shortcut: "prefix+g",
 			Bind:     "toggle_scratch",

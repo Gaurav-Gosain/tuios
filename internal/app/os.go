@@ -256,6 +256,8 @@ type OS struct {
 	// bring the client back. RestartFailure is set with ExitRestartFailed.
 	RestartExec    *RestartExec
 	RestartFailure *RestartFailure
+	// calm is calm mode's runtime state. See calm.go.
+	calm calmState
 	// restartLater says the person put the version notice off for this run.
 	restartLater bool
 	// afterRestart is OSOptions.AfterRestart.

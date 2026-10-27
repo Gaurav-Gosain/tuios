@@ -80,6 +80,7 @@ var settingLabels = map[string]string{
 	"appearance.niri_click_reveals":       "Click reveals column",
 	"appearance.niri_hover_reveals":       "Hover reveals column",
 	"appearance.motion":                   "Motion",
+	"appearance.calm":                     "Calm mode",
 	"appearance.modal_dim":                "Dim behind panels",
 	"appearance.popup_dim":                "Dim behind popups",
 	"appearance.confirm_quit":             "Confirm quit",

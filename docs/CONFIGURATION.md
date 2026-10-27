@@ -452,6 +452,21 @@ A value outside 25 to 400 moves to the nearest end. `appearance.motion = "none"`
 still turns the animations off, whatever the speed. Overlay fades and the copy
 sweep keep their own timing. The copy sweep uses `appearance.selection.flash_ms`.
 
+## Calm mode
+
+`appearance.calm` turns calm mode on. Nothing moves or blinks, and only the
+messages that need you show in the dock. `Ctrl+B Z` (`toggle_calm`) turns it
+on and off and saves the choice here.
+
+```toml
+[appearance]
+calm = true   # default: false
+```
+
+Calm mode sits over `appearance.motion`. When you turn calm mode off, the
+motion level you set comes back. See
+[KEYBINDINGS.md](KEYBINDINGS.md#calm-mode) for what calm mode changes.
+
 ## Theme transition
 
 `appearance.theme_transition` sets how tuios shows a change of theme. The

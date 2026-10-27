@@ -35,7 +35,9 @@ func (m *OS) noteWorkspaceMark(ws int, mark uint8) bool {
 			return false
 		}
 	case workspaceMarkActivity:
-		if tabs.ActivityMarker == "" {
+		// Output on another workspace is the busiest mark there is, and
+		// calm mode is for not being pulled away by it.
+		if tabs.ActivityMarker == "" || m.Settings.Calm {
 			return false
 		}
 	}

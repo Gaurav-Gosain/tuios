@@ -412,10 +412,15 @@ func (m *OS) renderDockString() (string, int) {
 	chip := m.spotlightChip()
 	chipW := lipgloss.Width(chip)
 	m.recordSpotlightChip(0, 0, dockY)
-	if chip != "" && !m.dockPlan.Has(config.DockComponentMode) {
-		m.recordSpotlightChip(leftX, chipW, dockY)
+	// The calm mark rides after it on the same terms. See calm.go.
+	calm := m.calmChip()
+	if !m.dockPlan.Has(config.DockComponentMode) {
+		if chip != "" {
+			m.recordSpotlightChip(leftX, chipW, dockY)
+		}
 		leftB.WriteString(chip)
-		leftX += chipW
+		leftB.WriteString(calm)
+		leftX += chipW + lipgloss.Width(calm)
 	}
 	for _, name := range m.dockPlan.Left {
 		var chunk string
@@ -427,6 +432,7 @@ func (m *OS) renderDockString() (string, int) {
 				m.recordSpotlightChip(leftX+lipgloss.Width(chunk), chipW, dockY)
 				chunk += chip
 			}
+			chunk += calm
 		case config.DockComponentWorkspaces:
 			// Both dock paths render through here, so the tab hit rects are the
 			// drawn geometry rather than a second guess at it.

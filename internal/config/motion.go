@@ -41,7 +41,7 @@ func motionRank(level string) int {
 // configured level reaches it and nothing has suppressed animations for the
 // moment (a remote command in flight, a tape being played).
 func (s *Settings) MotionAllows(level string) bool {
-	if s.AnimationsSuppressed {
+	if s.AnimationsSuppressed || s.Calm {
 		return false
 	}
 	return motionRank(s.Motion) >= motionRank(level)

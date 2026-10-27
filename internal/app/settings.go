@@ -605,6 +605,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	behavior := settingsCategory{
 		Name: "Behavior",
 		Items: m.resolveRows([]settingsRow{
+			custom("appearance.calm", m.calmItem()),
 			opt("appearance.motion"),
 			opt("appearance.animation_speed"),
 			opt("appearance.theme_transition"),
@@ -1120,6 +1121,16 @@ func (m *OS) spotlightItem() settingItem {
 			m.setOption("spotlight.enabled", strconv.FormatBool(v))
 		})
 	item.differs = differsFromDefault("spotlight.enabled", func(m *OS) string { return strconv.FormatBool(m.SpotlightOn()) })
+	return item
+}
+
+// calmItem is the calm mode switch. Hand-written, as the spotlight row is,
+// because turning calm off also reports and resets the held messages.
+func (m *OS) calmItem() settingItem {
+	item := boolItem("Calm mode", "Stop motion and blinking. Show only messages that need you.",
+		func() bool { return m.CalmOn() },
+		func(m *OS, v bool) { m.SetCalm(v) })
+	item.differs = differsFromDefault("appearance.calm", func(m *OS) string { return strconv.FormatBool(m.CalmOn()) })
 	return item
 }
 

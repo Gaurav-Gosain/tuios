@@ -10070,3 +10070,16 @@ a `go build -overlay`.
 The fixed build reads margins of 1 row above and below and 4 columns each
 side beside the rail. With `TUIOS_E2E_FRAMES` set, the test writes
 `navigator-over-rail.png` and `navigator-over-rail-search.png`.
+## Calm mode quiets a working session (discussion #1207)
+
+`TestCalmModeQuietsAWorkingSession` runs one working agent at motion full, with
+calm off and then with calm on, and counts the shimmer's looks, the bytes the
+client writes and its motion clock frames over 3s.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `Settings.Calm` dropped from `MotionAllows` (`internal/config/motion.go`) | calm-on: "the working name took 9 looks" (925 bytes, 24 motion frames, as with calm off) | **caught** |
+| The `calmHolds` gate in `showNotification` never taken (`internal/app/os_notify.go`) | calm-on: "the dock never counted the held message" | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, each run writes `working-N.png`, and the calm run
+writes `held.png`, `needs-you.png` and `off.png`.

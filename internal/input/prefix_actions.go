@@ -72,6 +72,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_quit", handlePrefixQuit)
 	d.Register("hints", handleOpenHints)
 	d.Register("toggle_scratch", handleToggleScratch)
+	d.Register("toggle_calm", handleToggleCalm)
 	d.Register(config.ActionEditScrollback, handleEditScrollback)
 	d.Register(config.ActionClearScrollback, handleClearScrollback)
 	d.Register("hints_all_panes", handleOpenHintsAllPanes)
@@ -654,4 +655,9 @@ func handleTerminalExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // internal/app/scratch.go.
 func handleToggleScratch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ToggleScratch()
+}
+
+// handleToggleCalm turns calm mode on and off. See app/calm.go.
+func handleToggleCalm(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.ToggleCalm()
 }

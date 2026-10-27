@@ -149,6 +149,12 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 		m.showAgentNotification(text, sev, to, m.Settings.NotificationDuration,
 			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: w.ID})
 	}
+	// Calm mode lets only an agent that needs the person out of tuios: no
+	// terminal notification, bell, sound or hook for one that finished or went
+	// idle. The dock message above was held and counted the same way.
+	if m.Settings.Calm && !policy.AttentionCue(to) {
+		return
+	}
 	// What reaches outside tuios is rate limited for a pane whose state
 	// comes from its OSC 7501 report: a program can change state as fast as
 	// it writes. See programAlertOutside.

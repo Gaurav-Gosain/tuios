@@ -123,7 +123,8 @@ func (m *OS) paneCursor() (cur *tea.Cursor, hidden bool) {
 
 	cursor := tea.NewCursor(screenX, screenY)
 	cursor.Shape = mapCursorStyle(style)
-	cursor.Blink = !steady
+	// Calm mode draws every cursor steady: nothing on screen blinks.
+	cursor.Blink = !steady && !m.Settings.Calm
 	// nil unless the guest set one with OSC 12, and Bubble Tea sends OSC 112
 	// when it goes back to nil, so the host's own cursor colour returns when
 	// the guest resets or the focus moves to a pane that set none.

@@ -258,6 +258,16 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	effective, sticky := notificationLifetime(notifType, duration, &m.Settings)
 	shown := effective > 0 || sticky
 
+	// Calm mode keeps a message from a pane, an agent or mail off the dock
+	// unless it needs the person. It is logged so it can be read later, and
+	// counted so the dock can say that something is waiting. See calm.go.
+	if shown && m.calmHolds(notifType, agentState, target) {
+		m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
+		m.calm.held++
+		m.MarkAllDirty()
+		return
+	}
+
 	// An info or a success message is logged when the dock shows it. It used
 	// to be logged only with verbose logging on, so a message that went by
 	// too fast to read was nowhere to be found afterwards. The ones the dock

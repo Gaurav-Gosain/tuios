@@ -289,10 +289,10 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		copyRow.desc = fmt.Sprintf("Multi copy (%d)/paste image/buffer", st.MultiCopy)
 		copyRow.parts[0].desc = fmt.Sprintf("Multi copy (%d)", st.MultiCopy)
 	}
-	sidebarRow := pair("Sidebar/other/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("prefix_toggle_spotlight", "Spotlight"))
+	sidebarRow := pair("Sidebar/other/spotlight/calm", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("prefix_toggle_spotlight", "Spotlight"), part("toggle_calm", "Calm mode"))
 	if st.Spotlight {
 		// While the beam is on, its row says the key turns it off.
-		sidebarRow.desc = "Sidebar/other/spotlight off"
+		sidebarRow.desc = "Sidebar/other/spotlight off/calm"
 		sidebarRow.parts[2].desc = "Spotlight off"
 	}
 	modes.rows = append(modes.rows,

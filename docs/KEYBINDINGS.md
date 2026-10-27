@@ -676,6 +676,24 @@ open.
 The action is `pick_path`. `path_picker.show_hidden = true` shows the hidden
 files when the picker opens. The default is `false`.
 
+## Calm mode
+
+`Ctrl+B Z` turns calm mode on and off. Use it to keep your attention on one
+task. While calm mode is on:
+
+- Nothing moves. Window slides, panel fades, the working-agent shimmer and the
+  copy sweep stop. Your `appearance.motion` level does not change.
+- Nothing blinks. The cursor is steady.
+- Messages from panes, agents and mail do not show in the dock. The log keeps
+  them. An agent that needs you still shows its message, and so do warnings
+  and errors.
+- The dock tabs do not mark output on other workspaces. The bell mark stays.
+
+The dock shows `calm` while it is on. `calm 3` means that 3 messages are in
+the log. When you turn calm mode off, tuios tells you how many messages came
+in. The action is `toggle_calm`. To keep calm mode on after a restart, set
+`appearance.calm = true`. See [CONFIGURATION.md](CONFIGURATION.md#calm-mode).
+
 ## Paste an image
 
 `Ctrl+B V` pastes the image on your clipboard into the focused pane. tuios

@@ -884,6 +884,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// The spotlight chip rides after the mode pill whether or not the plan
 	// lists the mode: it is the way out of a dimmed screen, not a component.
 	width += m.spotlightChipWidth()
+	width += lipgloss.Width(m.calmChip())
 	width += 4
 
 	return modeLabel, trail, tape, width, modeInfo

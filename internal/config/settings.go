@@ -89,6 +89,12 @@ type Settings struct {
 	// Read it through MotionAllows, which also honours AnimationsSuppressed.
 	Motion string
 
+	// Calm is appearance.calm: nothing moves or blinks, and only messages
+	// that need the person reach the dock. It sits over Motion rather than
+	// replacing it, so turning calm off gives back the level the person had.
+	// See internal/app/calm.go.
+	Calm bool
+
 	// NoAnimationsFlag records --no-animations, so re-applying the config at
 	// runtime keeps the level at none until something sets the level itself
 	// (OS.SetMotion).
