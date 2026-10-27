@@ -3898,7 +3898,7 @@ the same way, by reading the directory. `list-sessions` carries the record as
 ### list-worktrees
 
 List the sessions whose directory is a git worktree. A session in the
-repository's main checkout reads as a row with `main` true; no worktree verb
+repository's main checkout reads as a row with `main` true. No worktree verb
 acts on such a row.
 
 Params: `repo` (filter by repository name), `group` (filter by fan-out stem),
