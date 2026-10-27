@@ -266,8 +266,11 @@ func saveCockpitFrames(t *testing.T, term *tuitest.Terminal, name string, pics .
 	var f *shot.Frame
 	regularPath, boldPath := os.Getenv("TUIOS_E2E_FONT_REGULAR"), os.Getenv("TUIOS_E2E_FONT_BOLD")
 	if fonts := os.Getenv("TUIOS_E2E_FONT_DIR"); fonts != "" && regularPath == "" {
-		regularPath = filepath.Join(fonts, "GeistMonoNerdFontMono-Regular.otf")
-		boldPath = filepath.Join(fonts, "GeistMonoNerdFontMono-Bold.otf")
+		regularPath = filepath.Join(fonts, "JetBrainsMonoNerdFontMono-Regular.ttf")
+		boldPath = filepath.Join(fonts, "JetBrainsMonoNerdFontMono-Bold.ttf")
+	}
+	if regularPath == "" {
+		regularPath, boldPath = frameFontPaths()
 	}
 	if regularPath != "" {
 		regular, err1 := os.ReadFile(regularPath)

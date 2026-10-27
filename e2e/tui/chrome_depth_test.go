@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"image/color"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,21 +82,62 @@ func resolveCell(c tuitest.Color, p *shot.Palette, def shot.Color) shot.Color {
 }
 
 // frameFont is the font the PNG frames are drawn in: TUIOS_E2E_FONT and
-// TUIOS_E2E_FONT_BOLD name the files. Unset, shot's own Go Mono draws them.
+// TUIOS_E2E_FONT_BOLD name the files. Unset, the frames use JetBrainsMono
+// Nerd Font Mono when the machine has it installed (frames attached to pull
+// requests should not depend on someone remembering to set the variables),
+// and shot's own Go Mono otherwise, as on CI.
 func frameFont() *shot.Frame {
-	path := os.Getenv("TUIOS_E2E_FONT")
-	if path == "" {
+	regularPath, boldPath := frameFontPaths()
+	if regularPath == "" {
 		return nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(regularPath)
 	if err != nil {
 		return nil
 	}
 	f := &shot.Frame{Font: shot.Font{Data: data}}
-	if bold, err := os.ReadFile(os.Getenv("TUIOS_E2E_FONT_BOLD")); err == nil {
+	if bold, err := os.ReadFile(boldPath); err == nil {
 		f.BoldFont = shot.Font{Data: bold}
 	}
 	return f
+}
+
+// frameFontPaths returns the regular and bold font files for frames: the
+// TUIOS_E2E_FONT variables when set, else an installed JetBrainsMono Nerd
+// Font Mono, else nothing.
+func frameFontPaths() (regular, bold string) {
+	if path := os.Getenv("TUIOS_E2E_FONT"); path != "" {
+		return path, os.Getenv("TUIOS_E2E_FONT_BOLD")
+	}
+	if path := os.Getenv("TUIOS_E2E_FONT_REGULAR"); path != "" {
+		return path, os.Getenv("TUIOS_E2E_FONT_BOLD")
+	}
+	home, _ := os.UserHomeDir()
+	dirs := []string{
+		filepath.Join(home, ".local", "share", "fonts"),
+		filepath.Join(home, ".fonts"),
+		filepath.Join(home, "Library", "Fonts"),
+		"/usr/share/fonts",
+		"/usr/local/share/fonts",
+		"/Library/Fonts",
+	}
+	for _, dir := range dirs {
+		var found string
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || found != "" {
+				return filepath.SkipDir
+			}
+			if !d.IsDir() && d.Name() == "JetBrainsMonoNerdFontMono-Regular.ttf" {
+				found = path
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if found != "" {
+			return found, filepath.Join(filepath.Dir(found), "JetBrainsMonoNerdFontMono-Bold.ttf")
+		}
+	}
+	return "", ""
 }
 
 // savePNG draws the screen through tuios.dev/shot and writes it beside the
