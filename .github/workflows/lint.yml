@@ -181,25 +181,31 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   cross-vet:
-    name: go vet (${{ matrix.goos }})
+    name: go vet (darwin, windows, freebsd, openbsd)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # The release targets besides linux, which go-test.yml vets. A test
-        # file that uses a unix-only syscall without a build tag breaks these
-        # and nothing else.
-        goos: [darwin, windows, freebsd, openbsd]
+    # The release targets besides linux, which go-test.yml vets. A test file
+    # that uses a unix-only syscall without a build tag breaks these and
+    # nothing else. One job vets all four: each vet takes under half a minute,
+    # and a job of its own spent as long again on setup and held a runner
+    # that other pull requests wait for.
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-id: vet-${{ matrix.goos }}
+          cache-id: vet-cross
 
       - name: Vet
-        env:
-          GOOS: ${{ matrix.goos }}
-        run: go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...
+        run: |
+          status=0
+          for goos in darwin windows freebsd openbsd; do
+            echo "::group::go vet (GOOS=$goos)"
+            if ! GOOS=$goos go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/...; then
+              status=1
+              echo "::error title=go vet failed::go vet failed for GOOS=$goos"
+            fi
+            echo "::endgroup::"
+          done
+          exit $status

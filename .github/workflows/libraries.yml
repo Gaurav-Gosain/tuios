@@ -46,16 +46,30 @@ jobs:
         run: scripts/library-pins.sh check
 
   module:
-    name: ${{ matrix.dir }} alone
+    name: ${{ matrix.name }} alone
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        dir: [progstatus, vt, swatch, shot, tml, plot, loom, sketch]
-    defaults:
-      run:
-        working-directory: ${{ matrix.dir }}
+        # vt and sketch take a minute or more each and get a job of their own.
+        # The small libraries share one, since each tests in seconds and a job
+        # of its own spent longer on setup than on the library.
+        include:
+          - name: vt
+            id: vt
+            dirs: vt
+            gomod: vt/go.mod
+          - name: sketch
+            id: sketch
+            dirs: sketch
+            gomod: sketch/go.mod
+          - name: progstatus, swatch, shot, tml, plot and loom
+            id: small
+            dirs: progstatus swatch shot tml plot loom
+            # All six ask for go 1.25, and swatch/go.mod names 1.25.0, the
+            # oldest Go any of them allows.
+            gomod: swatch/go.mod
     env:
       # The module as an importer builds it: no workspace, and the oldest Go
       # its go.mod allows.
@@ -66,14 +80,20 @@ jobs:
 
       - uses: ./.github/actions/setup-go
         with:
-          go-version-file: ${{ matrix.dir }}/go.mod
-          cache-id: lib-${{ matrix.dir }}
+          go-version-file: ${{ matrix.gomod }}
+          cache-id: lib-${{ matrix.id }}
 
-      - name: Tidy
-        run: go mod tidy -diff
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Test
-        run: go test -count=1 ./...
+      - name: Tidy, vet and test
+        env:
+          DIRS: ${{ matrix.dirs }}
+        run: |
+          status=0
+          for dir in $DIRS; do
+            echo "::group::$dir"
+            if ! (cd "$dir" && go mod tidy -diff && go vet ./... && go test -count=1 ./...); then
+              status=1
+              echo "::error title=$dir failed::tidy, vet or test failed in $dir"
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
