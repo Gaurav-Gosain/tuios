@@ -534,7 +534,7 @@ tuios set-session-accent cyan
 tuios set-workspace-name 2 review
 tuios set-session-space payments          # file the session under the space payments
 tuios set-session-space                   # take it out of any space
-tuios set-session-order work notes        # list work, then notes, first on every client
+tuios set-session-order work notes        # work, then notes, on every client
 tuios new --detach pay-api --space payments
 ```
 
