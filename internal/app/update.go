@@ -1212,6 +1212,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ckCheckpointsMsg:
 		m.applyCheckpoints(msg)
 		return m, nil
+	case ckTaskMsg:
+		m.applyCard(msg)
+		return m, nil
+	case ckTakeMsg:
+		m.applyTake(msg)
+		return m, nil
 	case ckCompareMsg:
 		return m, m.applyCompare(msg)
 	case ckFanActMsg:

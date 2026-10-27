@@ -67,6 +67,7 @@ func (m *OS) applyAgentsSwitch() tea.Cmd {
 	m.endInboxWatch()
 	m.inboxEvents = nil
 	m.Inbox.Items = nil
+	m.Inbox.ck.cards = nil
 	m.Inbox.Live = false
 	m.AgentMail.Messages = nil
 	return nil

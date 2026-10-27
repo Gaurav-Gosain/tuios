@@ -1662,6 +1662,11 @@ const (
 	// ActionInboxCompare opens the comparison of the attempts of the fan
 	// under the cursor.
 	ActionInboxCompare = "inbox_compare"
+	// ActionInboxBoard groups the fleet by task stage, or by agent state
+	// again; ActionInboxTake claims the card under the cursor for the
+	// focused pane.
+	ActionInboxBoard = "inbox_board"
+	ActionInboxTake  = "inbox_take"
 	// ActionInboxArtifact opens what the agent under the cursor has shown,
 	// such as a TML form, on its Artifacts tab, and gives it the keys.
 	ActionInboxArtifact   = "inbox_artifact"
@@ -1749,6 +1754,8 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxDenyReason:  {"R"},
 		ActionInboxNewAgent:    {"n"},
 		ActionInboxCompare:     {"c"},
+		ActionInboxBoard:       {"b"},
+		ActionInboxTake:        {"t"},
 		ActionInboxArtifact:    {"o"},
 		ActionInboxDetailDown:  {"J", "ctrl+d"},
 		ActionInboxDetailUp:    {"K", "ctrl+u"},

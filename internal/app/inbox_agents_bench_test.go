@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -26,11 +27,32 @@ func benchAgents200OS(b testing.TB) *OS {
 		})
 	}
 	m := &OS{Settings: config.Global, Windows: wins, Width: 160, Height: 60, SessionName: "s", CurrentWorkspace: 1}
-	m.applyInboxSnapshot(InboxSnapshotMsg{Items: benchInboxItems()})
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: benchInboxItems(), Cards: benchCards(now)})
 	m.OpenInbox("")
 	m.Inbox.agents.on = true
 	benchThread(m)
 	return m
+}
+
+// benchCards are sixty cards across the stages, every third agent holding
+// one and every seventh blocked.
+func benchCards(now int64) []session.TaskRow {
+	cards := make([]session.TaskRow, 0, 60)
+	for i := range 60 {
+		c := session.TaskRow{
+			ID: "t" + strconv.Itoa(i+1), Session: "s", Title: "make the retry jitter configurable " + strconv.Itoa(i),
+			Stage: session.TaskStages[i%len(session.TaskStages)], StageAt: now - int64(i)*int64(time.Second),
+		}
+		if c.Stage != session.TaskStageDone {
+			w := "agent" + strconv.Itoa(i*3)
+			c.Holder = &session.TaskHolder{Window: w, Name: "task" + strconv.Itoa(i*3), Harness: "claude-code", HeldAt: now}
+		}
+		if i%7 == 0 {
+			c.Blocked = &session.TaskBlock{Reason: "waits on the api review", At: now}
+		}
+		cards = append(cards, c)
+	}
+	return cards
 }
 
 // benchThread gives the selected agent a read transcript of two hundred
@@ -62,6 +84,18 @@ func benchThread(m *OS) {
 // is on screen. The design's budget is 1 ms and 200 allocations.
 func BenchmarkInboxAgents200(b *testing.B) {
 	m := benchAgents200OS(b)
+	m.renderInbox()
+	b.ReportAllocs()
+	for b.Loop() {
+		m.renderInbox()
+	}
+}
+
+// BenchmarkInboxBoard200 is BenchmarkInboxAgents200 with the board up: sixty
+// cards held by two hundred agents. The same budget.
+func BenchmarkInboxBoard200(b *testing.B) {
+	m := benchAgents200OS(b)
+	m.CockpitToggleBoard()
 	m.renderInbox()
 	b.ReportAllocs()
 	for b.Loop() {

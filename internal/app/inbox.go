@@ -163,6 +163,12 @@ type InboxSnapshotMsg struct {
 	// NoReview says the same of review-diff: the daemon is older than the
 	// review overlay.
 	NoReview bool
+	// Cards are every session's task cards. NoBoard says the daemon is
+	// older than the board, and BoardErr why it refused to list them
+	// otherwise; either way the attention list goes on without the board.
+	Cards    []session.TaskRow
+	NoBoard  bool
+	BoardErr string
 }
 
 // InboxEventsMsg is a batch of attention events from the watcher.
@@ -174,6 +180,8 @@ type InboxEventsMsg struct {
 type InboxEvent struct {
 	Action string                 `json:"action"`
 	Item   *session.AttentionItem `json:"attention"`
+	// Task is the card of a task event.
+	Task *session.TaskRow `json:"task"`
 }
 
 // InboxDownMsg says the watcher lost the daemon. Unsupported says the daemon
@@ -337,8 +345,18 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	if err := json.Unmarshal(raw, &listing); err != nil {
 		return false, err
 	}
+	// The cards are listed after the items: list-tasks has no seq, so every
+	// task event the subscription replays is no newer than this listing.
+	types := []string{session.EventAttention}
+	cards, noBoard, boardErr, err := inboxListCards(client)
+	if err != nil {
+		return false, err
+	}
+	if !noBoard && boardErr == "" {
+		types = append(types, session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged)
+	}
 	if _, err := client.CallWithTimeout("subscribe", map[string]any{
-		"types":     []string{session.EventAttention},
+		"types":     types,
 		"after_seq": listing.Seq,
 		"boot_id":   listing.BootID,
 	}, 5*time.Second); err != nil {
@@ -354,7 +372,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	// And whether it can review a pane's changes, so the review keys are
 	// not offered by a daemon that would refuse every one of them.
 	reviewOK, reviewKnown := probeVerb(probe, "review-diff")
-	if !inboxSend(ctx, out, InboxSnapshotMsg{Items: listing.Items, NoMark: known && !supported, NoReview: reviewKnown && !reviewOK}) {
+	if !inboxSend(ctx, out, InboxSnapshotMsg{Items: listing.Items, NoMark: known && !supported, NoReview: reviewKnown && !reviewOK, Cards: cards, NoBoard: noBoard, BoardErr: boardErr}) {
 		return true, ctx.Err()
 	}
 
@@ -397,7 +415,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 			case ev.Type == session.EventGap:
 				put(read{gap: true})
 				return
-			case ev.Type == session.EventAttention && ev.Item != nil:
+			case ev.Type == session.EventAttention && ev.Item != nil, ev.Task != nil:
 				if !put(read{ev: ev.InboxEvent}) {
 					return
 				}
@@ -447,6 +465,31 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 			return true, end
 		}
 	}
+}
+
+// inboxListCards lists every session's task cards. noBoard is true when the
+// daemon has no list-tasks or no all_sessions, and boardErr says why it
+// refused otherwise. Neither is an error: the attention list must not go down
+// with the board.
+func inboxListCards(client *session.VerbClient) (cards []session.TaskRow, noBoard bool, boardErr string, err error) {
+	raw, err := client.CallWithTimeout("list-tasks", map[string]any{"all_sessions": true}, 5*time.Second)
+	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
+		if callErr.Code == session.ErrVerbUnknownVerb || callErr.Code == session.ErrVerbInvalidParams {
+			return nil, true, "", nil
+		}
+		return nil, false, callErr.Error(), nil
+	}
+	if err != nil {
+		return nil, false, "", err
+	}
+	var res struct {
+		Tasks []session.TaskRow `json:"tasks"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return nil, false, "", err
+	}
+	sortCards(res.Tasks)
+	return res.Tasks, false, "", nil
 }
 
 // handleInboxWatch applies one delivery and re-arms the listener.
@@ -513,6 +556,7 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	st.Unsupported = false
 	st.life.noMark = msg.NoMark
 	st.noReview = msg.NoReview
+	m.applyBoardSnapshot(msg)
 	m.inboxChanged()
 	m.announceResumes(st.Items)
 }
@@ -564,6 +608,10 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	var alert []string
 	var cmds []tea.Cmd
 	for _, ev := range msg.Events {
+		if ev.Task != nil {
+			m.applyTaskEvent(ev.Action, *ev.Task)
+			continue
+		}
 		it := ev.Item
 		if it == nil {
 			continue

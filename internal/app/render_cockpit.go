@@ -363,7 +363,7 @@ func (m *OS) drawCockpit(c *ckCanvas, l ckLook, top int, now time.Time) {
 	case c.w < ckWide:
 		fleetW = 48
 	}
-	strip := c.w >= ckOneColumn && agents <= 2 && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
+	strip := c.w >= ckOneColumn && agents <= 2 && !ck.board && !ck.needsOnly && st.Filter == "" && st.Select == "" && st.agents.query == ""
 	focusX, focusW := fleetW+3, c.w-fleetW-5
 	switch {
 	case strip:
@@ -412,9 +412,13 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	pal := l.pal
 	x := c.text(2, y, 0, ckSeg{t: "Agents", fg: pal.Fg, attrs: ckBold}) + 3
 	var counts [ckGroups]int
-	for _, r := range ck.rows {
-		if r.kind == ckRowHead {
-			counts[r.group] = r.count
+	if ck.board {
+		counts = m.ckAgentCounts()
+	} else {
+		for _, r := range ck.rows {
+			if r.kind == ckRowHead {
+				counts[r.group] = r.count
+			}
 		}
 	}
 	type cnt struct {
@@ -462,6 +466,16 @@ func (m *OS) drawCockpitHeader(c *ckCanvas, l ckLook, y, top int) {
 	if n := len(m.markedAgents()); n > 0 {
 		x = c.text(x, y, 0, ckSeg{t: strconv.Itoa(n) + " marked", fg: pal.AccentBright, attrs: ckBold}) + 3
 	}
+	// The board's switch: the word names the view a click opens, as the
+	// footer's b does.
+	view := "Board"
+	if ck.board {
+		view = "Agents"
+	}
+	bx0 := x
+	x = c.text(x, y, 0, ckSeg{t: view + " ", fg: pal.FgDim}, ckSeg{t: l.g(ckGlyphOpen), fg: pal.FgMute})
+	ck.hits = append(ck.hits, ckHit{x0: bx0, y0: top + y, x1: x, y1: top + y + 1, kind: ckHitAction, action: "board"})
+	x += 3
 	if !st.Live {
 		x = c.text(x, y, 0, ckSeg{t: "not connected", fg: pal.Warning}) + 3
 	}
@@ -776,11 +790,16 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		return
 	case ckRowHead:
 		mark := ""
-		if ck.folded[r.group] {
+		if (!ck.board && ck.folded[r.group]) || (ck.board && ck.stageFolded(r.group)) {
 			mark = l.g(ckGlyphFold) + " "
 		}
-		title := ckGroupTitles[r.group]
-		if f := m.Inbox.Filter; f != "" && r.group == ckNeeds {
+		var title string
+		if ck.board {
+			title = ckStageTitle(r.group)
+		} else {
+			title = ckGroupTitles[r.group]
+		}
+		if f := m.Inbox.Filter; !ck.board && f != "" && r.group == ckNeeds {
 			// Narrowed to one kind, as ctrl+b M opens on mail: the heading
 			// names the kind.
 			title = inboxGroupTitle(f)
@@ -792,7 +811,11 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	case ckRowMore:
 		words := "+" + strconv.Itoa(r.count) + " more"
 		if r.group >= 0 {
-			words += " " + strings.ToLower(ckGroupTitles[r.group])
+			if ck.board {
+				words += " in " + strings.ToLower(ckStageTitle(r.group))
+			} else {
+				words += " " + strings.ToLower(ckGroupTitles[r.group])
+			}
 			ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y, x1: x + w, y1: top + y + 1, kind: ckHitMore, group: r.group})
 		}
 		c.text(x+5, y, right, ckSeg{t: words, fg: pal.FgMute})
@@ -821,6 +844,9 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 		if r.lines > 1 {
 			c.text(x+5, y+1, right, ckSeg{t: ckTrunc(wt.prompt, right-x-5), fg: pal.FgMute})
 		}
+		return
+	case ckRowCard:
+		m.drawCardRow(c, l, r, cursor, hover, x, y, w, top)
 		return
 	}
 
@@ -1406,6 +1432,9 @@ func (m *OS) cockpitEmptyLines(rows []ckRow) []string {
 			return nil
 		}
 	}
+	if st.ck.board && !st.Unsupported && m.IsDaemonSession {
+		return m.ckBoardEmptyLines()
+	}
 	switch {
 	case st.Unsupported:
 		return []string{"This daemon is too old for the agents view.", m.restartHint()}
@@ -1553,7 +1582,9 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	}
 	var hints []overlay.Hint
 	r, ok := m.cockpitSelected()
-	if ok {
+	if ok && r.kind == ckRowCard {
+		hints = m.ckCardHints(st.ck.cards[r.card])
+	} else if ok {
 		if it, held := m.cockpitHeldItem(); held && !m.inboxCut(it) {
 			words := [4]string{"allow", "always", "reject", "say why"}
 			if it.Kind == session.AttentionPlan {
@@ -1614,7 +1645,11 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 			hints = append(hints, m.keyHints(config.ActionInboxCompare, "compare")...)
 		}
 	}
-	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxReview, "review",
+	board := "board"
+	if st.ck.board {
+		board = "agents"
+	}
+	hints = append(hints, m.keyHints(config.ActionInboxNewAgent, "new agent", config.ActionInboxBoard, board, config.ActionInboxReview, "review",
 		config.ActionInboxFilter, "filter", config.ActionInboxSelect, "search")...)
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
 	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
@@ -1644,6 +1679,10 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	pal := l.pal
 	r, ok := m.cockpitSelected()
 	if !ok {
+		return
+	}
+	if r.kind == ckRowCard && (r.agent < 0 || m.cockpitTab() == "Card") {
+		m.drawCardFocus(c, l, r, st.ck.cards[r.card], x, y, w, y1, top, now)
 		return
 	}
 	var e sidebarAgentEntry
@@ -1728,31 +1767,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			rule = y + 4
 		}
 	}
-	tabs := m.cockpitTabs(e, r)
-	if len(tabs) > 0 {
-		rule++
-		ty, tx := rule-1, x
-		for i, tab := range tabs {
-			x0 := tx
-			if i == m.cockpitTabIndex() {
-				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.Fg, attrs: ckBold})
-			} else {
-				// A count beside an idle tab is quieter than its name.
-				name, count, _ := strings.Cut(tab, " ")
-				segs := []ckSeg{{t: name, fg: pal.FgMute}}
-				if count != "" {
-					segs = append(segs, ckSeg{t: " " + count, fg: overlay.Shown(overlay.MixColors(pal.FgMute, l.canvas, 0.25))})
-				}
-				tx = c.text(tx, ty, right, segs...)
-			}
-			st.ck.hits = append(st.ck.hits, ckHit{x0: x0, y0: top + ty, x1: tx, y1: top + ty + 1, kind: ckHitTab, group: i})
-			if i == m.cockpitTabIndex() {
-				defer c.hline(x0, rule, tx-x0, "━", pal.Accent)
-			}
-			tx += 4
-		}
-	}
-	c.hline(x, rule, w, hzGlyph(), l.edge)
+	rule = m.drawFocusTabs(c, l, m.cockpitTabs(e, r), x, w, rule, top)
 	bodyTop := rule + 2
 	if c.h < 30 {
 		bodyTop = rule + 1
@@ -1841,9 +1856,56 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	}
 }
 
+// drawFocusTabs draws the focus tabs above the rule, which moves down a line
+// for them, and the rule. It returns the rule's row.
+func (m *OS) drawFocusTabs(c *ckCanvas, l ckLook, tabs []string, x, w, rule, top int) int {
+	pal := l.pal
+	right := x + w
+	var under func()
+	if len(tabs) > 0 {
+		rule++
+		ty, tx := rule-1, x
+		for i, tab := range tabs {
+			x0 := tx
+			if i == m.cockpitTabIndex() {
+				tx = c.text(tx, ty, right, ckSeg{t: tab, fg: pal.Fg, attrs: ckBold})
+			} else {
+				// A count beside an idle tab is quieter than its name.
+				name, count, _ := strings.Cut(tab, " ")
+				segs := []ckSeg{{t: name, fg: pal.FgMute}}
+				if count != "" {
+					segs = append(segs, ckSeg{t: " " + count, fg: overlay.Shown(overlay.MixColors(pal.FgMute, l.canvas, 0.25))})
+				}
+				tx = c.text(tx, ty, right, segs...)
+			}
+			m.Inbox.ck.hits = append(m.Inbox.ck.hits, ckHit{x0: x0, y0: top + ty, x1: tx, y1: top + ty + 1, kind: ckHitTab, group: i})
+			if i == m.cockpitTabIndex() {
+				// Drawn after the rule, over this tab alone: tx moves on.
+				x1 := tx
+				under = func() { c.hline(x0, rule, x1-x0, "━", pal.Accent) }
+			}
+			tx += 4
+		}
+	}
+	c.hline(x, rule, w, hzGlyph(), l.edge)
+	if under != nil {
+		under()
+	}
+	return rule
+}
+
 // cockpitTabs are the focus tabs for the selected row: the thread and the
-// last turn's changes, for an agent whose transcript tuios reads.
+// last turn's changes, for an agent whose transcript tuios reads. A card's
+// are Card, then its holder's.
 func (m *OS) cockpitTabs(e sidebarAgentEntry, r ckRow) []string {
+	if r.kind == ckRowCard {
+		tabs := []string{"Card"}
+		if r.agent >= 0 {
+			r.kind = ckRowAgent
+			tabs = append(tabs, m.cockpitTabs(e, r)...)
+		}
+		return tabs
+	}
 	if r.agent < 0 || e.Host != "" {
 		return nil
 	}

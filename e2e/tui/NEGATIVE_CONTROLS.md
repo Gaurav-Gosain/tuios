@@ -9664,6 +9664,31 @@ The artifacts `tasks-claim-and-restart.txt` and `tasks-release-with-pane.txt`
 hold each pane's claim output, the card histories after the pane closed and
 the agent left, and the listings after the restart and after the client sync.
 
+## Task board (#1093)
+
+`TestTaskBoardGroupsCardsByStage` in `tasks_board_test.go` adds six cards in
+session S, holds two from fake agent panes, blocks one, stages one to verify
+and finishes one. It lists them with `tuios task ls --all-sessions`, opens the
+agents view, presses `b`, and reads the board: the stage heads in order with
+their counts, Done folded, the blocked card first in Todo, a holder that needs
+you before one that works, the Card tab's history. A claim from the CLI must
+reach the open board, `t` must take a card for the focused pane, `n` must open
+the sheet with the card's title, the rows must be one line at 70x16, and
+`[tasks] stages` must hide Verify and Done. Run on 2026-10-28 on macOS against
+`tasks-board` on upstream main at `ecdeec289`. Each control is a text
+replacement, built and put back before the next.
+
+| Control: what was changed | Where it fails | Verdict |
+| --- | --- | --- |
+| The task types left off the Inbox subscription (`inboxWatchOnce`, `inbox.go`) | "the CLI claim of t4 never showed on the board", after the 10 s wait | **caught** |
+| No blocked rank inside a stage (`rank` in `buildBoardRows`, `cockpit_board.go`) | "the blocked card is not the first row of Todo" | **caught** |
+| The stage order inside a stage cut to oldest first (the `rank` compare in `buildBoardRows`) | "t2, held by an agent that needs you, is below t1" | **caught** |
+| `[tasks] stages` ignored (`ckStageShows` returns true) | "[tasks] stages = [doing, todo] still shows Verify or Done" | **caught** |
+| `list-tasks` all_sessions handler cut (`verbListTasks`, `verb_task.go`) | "task ls --all-sessions listed 6 cards (all_sessions false)": the daemon answers for one session | **caught** |
+
+The frames are `task-board-200x55`, `task-board-spawn-200x55`,
+`task-board-70x16` and `task-board-stages-200x55`, as text and PNG.
+
 ## Border prominence by mode and on light grounds (discussion #850)
 
 `TestFocusedBorderStandsOutOnTheHostGround` runs on Nord, Catppuccin Mocha

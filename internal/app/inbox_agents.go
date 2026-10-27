@@ -82,6 +82,7 @@ type agentsListKey struct {
 	sort           int
 	query, select_ string
 	built          bool
+	cards          uint64
 }
 
 // inboxAgentsTickMsg moves the time labels on. gen is the tick it belongs to:
@@ -162,6 +163,10 @@ func (m *OS) inboxAgentsList() []sidebarAgentEntry {
 		sig: m.sidebarSignature(), sort: a.sort,
 		query: a.query, select_: m.Inbox.Select, built: true,
 	}
+	if m.Inbox.Select != "" {
+		// task: and stage: read the cards.
+		key.cards = m.Inbox.ck.cardsGen
+	}
 	if a.listAt == key {
 		return a.list
 	}
@@ -217,6 +222,11 @@ func (m *OS) agentsKeep(e sidebarAgentEntry) bool {
 		t := session.SelectorTarget{
 			Host: e.Host, Session: e.SessionID, Name: e.Title, State: e.State,
 			Harness: e.Harness, NeedsYou: sidebarAgentGroup(e.State, e.DoneSeen) == sidebarGroupNeedsYou,
+		}
+		if e.Host == "" {
+			for _, c := range m.ckHeldCards()[e.SessionID+"\x00"+e.WindowID] {
+				t.Tasks, t.Stages = append(t.Tasks, c.ID), append(t.Stages, c.Stage)
+			}
 		}
 		if !sel.Match(t) {
 			return false

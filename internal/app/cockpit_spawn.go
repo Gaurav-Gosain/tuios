@@ -131,6 +131,8 @@ type spawnSheet struct {
 	hits   []ckHit
 	// gen tells an answer for this opening from one for an earlier one.
 	gen uint64
+	// card is the task card n opened the sheet on, nil for none.
+	card *spawnCard
 }
 
 // spawnInfoMsg carries what the sheet's opening command read.
@@ -199,7 +201,7 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	}
 	// A kept draft keeps what was read for it, so its Start works at once;
 	// the command below reads it again.
-	s.field, s.list, s.notice = spTask, false, ""
+	s.field, s.list, s.notice, s.card = spTask, false, "", nil
 	ck.spawnGen++
 	s.gen = ck.spawnGen
 	s.folder = m.spawnFolder()
@@ -1027,7 +1029,10 @@ func (m *OS) spawnStart() tea.Cmd {
 	default:
 		m.ShowNotification("Starting "+s.agents[s.agent].cmd+" in a new worktree"+where+".", "info", m.Settings.NotificationDuration)
 	}
-	call := m.inboxCaller()
+	call, nonce, card := m.inboxCaller(), m.inboxNonce(), s.card
+	if verb != "start-agent" || host != "" {
+		card = nil
+	}
 	build := ""
 	if m.DaemonClient != nil {
 		build = m.DaemonClient.ClientVersion()
@@ -1057,21 +1062,23 @@ func (m *OS) spawnStart() tea.Cmd {
 			Group                   string
 			PromptStatus            string `json:"prompt_status"`
 			PromptNote              string `json:"prompt_note"`
+			WindowID                string `json:"window_id"`
 		}
 		_ = json.Unmarshal(raw, &res)
+		held := spawnClaim(call, nonce, card, res.Session, res.WindowID)
 		switch {
 		case verb == "fan" && res.Total > 1:
 			return spawnStartedMsg{sheet: s, text: fmt.Sprintf("Started %d agents on %s%s.", res.Total, res.Group, where)}
 		case verb == "fan":
 			return spawnStartedMsg{sheet: s, text: "Started " + what + where + ". The task is typed when the agent is ready."}
 		case !res.Ready && res.Reason != "":
-			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". It is not ready: " + res.Reason}
+			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". It is not ready: " + res.Reason + held}
 		case res.PromptStatus != "" && res.PromptStatus != session.PromptSent:
 			// The agent is up and its task did not go through: the
 			// notice says so, and not that all went well.
-			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". The task was not sent: " + res.PromptNote}
+			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". The task was not sent: " + res.PromptNote + held}
 		}
-		return spawnStartedMsg{sheet: s, text: "Started " + what + " in " + res.Session + where + "."}
+		return spawnStartedMsg{sheet: s, text: "Started " + what + " in " + res.Session + where + "." + held}
 	}
 }
 

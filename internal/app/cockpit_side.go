@@ -486,7 +486,7 @@ func (m *OS) CockpitSideFetch() tea.Cmd {
 	}
 	ck := &m.Inbox.ck
 	ck.cpWant = false
-	follow := m.cockpitLiveFollow()
+	follow := tea.Batch(m.cockpitLiveFollow(), m.cockpitCardFetch())
 	if m.GetRenderWidth() < ckWide && m.cockpitTab() != "Checkpoints" {
 		return follow
 	}
@@ -542,7 +542,7 @@ func (m *OS) cockpitNoteCheckpoints(e sidebarAgentEntry) {
 // CockpitSideWanted is CockpitSideFetch when a frame found the checkpoints
 // on screen stale, nil otherwise. Update asks it after every message.
 func (m *OS) CockpitSideWanted() tea.Cmd {
-	if !m.Inbox.ck.cpWant {
+	if !m.Inbox.ck.cpWant && !m.Inbox.ck.cardWant {
 		return nil
 	}
 	return m.CockpitSideFetch()

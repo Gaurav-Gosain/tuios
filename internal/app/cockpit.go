@@ -78,6 +78,8 @@ const (
 	ckRowGap
 	ckRowNote
 	ckRowFan
+	// ckRowCard is a task card on the board (cockpit_board.go).
+	ckRowCard
 )
 
 // ckRow is one row of the fleet.
@@ -87,8 +89,11 @@ type ckRow struct {
 	// count is a heading's count, and how many rows a "more" row stands
 	// for.
 	count int
-	// agent indexes the cockpit's agents, -1 for an item with no agent.
-	agent   int
+	// agent indexes the cockpit's agents, -1 for an item with no agent. A
+	// card's agent is its holder.
+	agent int
+	// card indexes the cockpit's cards, for a card row.
+	card    int
 	item    session.AttentionItem
 	hasItem bool
 	child   sessiontree.Subagent
@@ -102,7 +107,9 @@ type ckRow struct {
 }
 
 // selectable reports whether the cursor can rest on the row.
-func (r ckRow) selectable() bool { return r.kind == ckRowAgent || r.kind == ckRowItem }
+func (r ckRow) selectable() bool {
+	return r.kind == ckRowAgent || r.kind == ckRowItem || r.kind == ckRowCard
+}
 
 // cockpitState is the cockpit's own state, beside the Inbox's.
 type cockpitState struct {
@@ -232,6 +239,28 @@ type cockpitState struct {
 	cmp *ckCompare
 	// art is the Artifacts tab. See cockpit_artifacts.go.
 	art ckArtState
+	// board says the fleet column groups the cards by stage. cards are
+	// every card the daemon listed, by session then number, and cardsGen
+	// counts their changes. noBoard says the daemon is older than the
+	// board, and boardErr why it refused to list the cards otherwise.
+	// boardFolded flips a stage's fold (Done starts folded), and boardOpened
+	// shows every row of a long one, by stage. card is the Card tab's
+	// detail, and cardWant says a frame drew it stale. See cockpit_board.go.
+	board                    bool
+	cards                    []session.TaskRow
+	cardsGen                 uint64
+	noBoard                  bool
+	boardErr                 string
+	boardFolded, boardOpened map[string]bool
+	card                     *ckTaskDetail
+	cardWant                 bool
+	// held indexes the cards by their holder, session and window, built
+	// once per cardsGen (heldGen). stages is [tasks] stages joined, once
+	// per config (stagesCfg).
+	held      map[string][]session.TaskRow
+	heldGen   uint64
+	stages    string
+	stagesCfg *config.UserConfig
 }
 
 // ckBack is the cursor and the scroll to open the view on again.
@@ -257,6 +286,10 @@ type ckRowsKey struct {
 	colH    int
 	oneLine bool
 	minute  int64
+	// The board's: the cards, and the stages [tasks] shows.
+	cards  uint64
+	board  bool
+	stages string
 }
 
 // ckHit is a click target: a fleet row, a group heading, a button.
@@ -310,6 +343,7 @@ func (m *OS) cockpitRows() []ckRow {
 	key := ckRowsKey{
 		list: m.Inbox.agents.listAt, inbox: m.Inbox.Gen, gen: ck.rowsGen, colH: ck.colH, arts: m.tml.setGen<<20 + ck.art.gen,
 		oneLine: ck.oneLine, minute: now.Unix() / 60,
+		cards: ck.cardsGen, board: ck.board, stages: m.ckStagesShown(),
 	}
 	if ck.rows != nil && ck.rowsAt == key {
 		return ck.rows
@@ -324,7 +358,12 @@ func (m *OS) cockpitRows() []ckRow {
 			ck.machines[e.Host]++
 		}
 	}
-	ck.rows, ck.rowsAt = m.buildCockpitRows(list, now), key
+	if ck.board {
+		ck.rows = m.buildBoardRows(list)
+	} else {
+		ck.rows = m.buildCockpitRows(list, now)
+	}
+	ck.rowsAt = key
 	m.cockpitClamp()
 	return ck.rows
 }
@@ -873,6 +912,22 @@ func (m *OS) cockpitSelectKey(key string) bool {
 // group the list folded.
 func (m *OS) CockpitToggleGroup(g int, more bool) {
 	ck := &m.Inbox.ck
+	if ck.board {
+		if g < 0 || g >= len(session.TaskStages) {
+			return
+		}
+		flip := &ck.boardFolded
+		if more {
+			flip = &ck.boardOpened
+		}
+		if *flip == nil {
+			*flip = map[string]bool{}
+		}
+		s := session.TaskStages[g]
+		(*flip)[s] = !(*flip)[s]
+		m.cockpitTouchRows()
+		return
+	}
 	if g < 0 || g >= ckGroups {
 		return
 	}
@@ -973,6 +1028,9 @@ func (m *OS) CockpitGo() tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if r.kind == ckRowCard {
+		return m.cockpitCardGo(r, m.Inbox.ck.cards[r.card])
+	}
 	if r.hasItem {
 		return m.InboxActivate()
 	}
@@ -1061,6 +1119,8 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	switch action {
 	case "new":
 		return m.CockpitNewAgent()
+	case "board":
+		m.CockpitToggleBoard()
 	case "search":
 		m.InboxStartSelect()
 	case "scope":
@@ -1359,7 +1419,15 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		m.cockpitTouch()
 		return nil, true
 	case config.ActionInboxNewAgent:
+		if _, c, ok := m.cockpitCard(); ok {
+			return m.CockpitNewAgentFor(c), true
+		}
 		return m.CockpitNewAgent(), true
+	case config.ActionInboxBoard:
+		m.CockpitToggleBoard()
+		return nil, true
+	case config.ActionInboxTake:
+		return m.CockpitTake(), true
 	case config.ActionInboxCompare:
 		return m.CockpitCompare(), true
 	case config.ActionInboxWrite:
