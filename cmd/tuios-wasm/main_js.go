@@ -107,6 +107,9 @@ func main() {
 	ptyspawn.NewGuestPty = func(width, height int) (xpty.Pty, error) {
 		return webshell.NewPty(width, height), nil
 	}
+	// A pane opened in a folder, such as a worktree's, starts in the fake
+	// shell's folder.
+	ptyspawn.GuestDir = webshell.IsDir
 
 	cols, rows := 120, 36
 	if v := js.Global().Get("tuiosInitialSize"); v.Truthy() {

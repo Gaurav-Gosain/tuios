@@ -198,6 +198,8 @@ func (m *Model) reset() {
 	if o.ShowAgentMail {
 		o.CloseAgentMail()
 	}
+	o.CloseReview()
+	o.WorktreePromptCancel()
 	o.ClosePresetPicker()
 	o.CloseGotoPicker()
 	o.CloseHints()

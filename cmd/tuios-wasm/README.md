@@ -105,6 +105,11 @@ Events come in a fixed order for one key press: `key` first, then any
 | `pip` | `{from, to}` | the window picture-in-picture shows changed. `to` is `""` when it is off |
 | `agents.select` | `{from, to, title, agent, kind, harness}` | the agents view's cursor moved to another agent. `from` and `to` are window ids, `""` while the view is closed. `title`, `agent` (its state), `kind` and `harness` are the agent's under the cursor now |
 | `agents.tab` | `{from, to}` | the agents view's focus tab changed: `"thread"`, `"changes"`, `"checkpoints"`, `"artifacts"` or `"pane"`. `""` while the view is closed |
+| `files` | `{from, to}` | the rail's files section changed. Each side is `{dir, cursor}`: the folder it lists, and the path of the row under the rail's cursor while the rail has the keyboard. Each is `""` when there is none |
+| `review.move` | `{file, hunk, from}` | the review's cursor moved to another file or hunk. `file` is the path in the repository, `hunk` the index of the hunk the cursor is in, `-1` for none. `from` is `{file, hunk}` before. Opening and closing the review are `overlay.*` events |
+| `review.note` | `{action, path?, line?, text?, notes}` | a review note was saved. `action` is `"add"`, `"edit"` or `"remove"`. `notes` is how many notes the review holds now |
+| `review.send` | `{notes}` | `S` in the review marked this many notes as sent. Nothing leaves the tab: the dock says what `S` does on a real machine |
+| `worktree` | `{repo, branch, path}` | a worktree of the fake repository was made, with `ctrl+b U` |
 | `tape.start` | `{name?}` | a tape started playing |
 | `tape.finish` | `{}` | the tape finished |
 | `shell.start` | `{command, line, cwd}` | the fake shell started a command. `command` is the first word |
@@ -121,6 +126,10 @@ search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
 agents view `peek` (the prompt an agent waits on), `reply` (the reply editor),
 `newAgent` (the New agent sheet) and `compare` (the attempts of a fan side by
 side).
+`paneLabels`, `spotlight`, `scratch` (the scratch pane is up), `railFocus`
+(the rail has the keyboard, `ctrl+b e`), `fileSearch` (the palette searches
+files, `ctrl+b f`), `review` (the review overlay, `ctrl+b v`) and
+`worktree` (the new worktree dialog, `ctrl+b U`).
 
 ## State
 
@@ -152,6 +161,8 @@ side).
   keys: { preset: "tuios", leader: "ctrl+b", lock: false },
   pip: "",                   // the window picture-in-picture shows
   agentsView: { selected: "<window id>", tab: "thread" }, // "" for both while the agents view is closed
+  files: { dir: "/home/guest/projects/hello", cursor: "" },  // as in the files event
+  review: { file: "greet.go", hunk: 0 },  // null while the review is closed
   cols: 120, rows: 36
 }
 ```
@@ -179,7 +190,7 @@ races a key. An unknown command or a bad argument does nothing.
 | `agent` | `state`, `message?`, `kind?` | set the focused pane's agent state, without waiting for the fake agent |
 | `tape` | `script`, `name?` | play a tape script |
 | `celebrate` | `"big"?`, `"still"?`, `"x,y"?` or a window id | confetti drawn by tuios in terminal cells. `still` is a static sparkle for reduced motion |
-| `reset` | | no windows, workspace 1, tiling on in bsp, window mode, the starting theme, the shipped keys, the rail closed, no overlay, beam or picture-in-picture |
+| `reset` | | no windows, workspace 1, tiling on in bsp, window mode, the starting theme, the shipped keys, the rail closed, no overlay, beam or picture-in-picture. The fake files and repository stay as they are |
 
 ## Learn mode
 
@@ -189,11 +200,22 @@ The browser build runs in Learn mode (`app.OSOptions.LearnMode`):
   other quit show a note in the dock instead, and every pane stays open.
 - The keybind preset picker (`U` in window mode) changes the keys of the tab
   at once. Nothing is written, and `reset` brings back the shipped keys.
+- The rail's files section lists the fake shell's files and follows `cd` in
+  the focused pane. Its tree, `ctrl+b f` (file search) and walking into
+  folders work. `enter` on a file opens it in the `less` viewer in a new
+  pane, and `shift+enter` in the `vim` viewer. On a real machine `enter`
+  copies the path and `shift+enter` opens the editor, and the dock says so.
+- `ctrl+b v` reviews the focused pane's change in the fake repository:
+  files, hunks and notes work as on a real machine. `S` marks the notes as
+  sent, and the dock says that a real machine sends them to the pane's agent.
+- `ctrl+b U` in a pane under `~/projects/hello` makes a worktree on a new
+  branch under `~/.local/share/tuios/worktrees/hello/`, and opens a pane in
+  it. A real machine makes a session there instead. The dock names it.
 - An action that needs a daemon, a real process, the network or the host's
   files shows a note instead of an error. `tuios.unavailable()` lists them.
   Sessions (switcher, detach, new session), screenshots, tape recording and
-  the tape manager, the rail's file actions, agent mail and host clipboard
-  paste are the ones turned off.
+  the tape manager, the rail's file changes (new, rename, delete, copy,
+  paste), agent mail and host clipboard paste are the ones turned off.
 - The agents view (`ctrl+b i`) works with the pretend agents, with no daemon.
   `internal/learn/fleet.go` answers the verbs the view calls from the agents'
   own records: the thread with its edits, checkpoints, the peek, the answer
@@ -213,8 +235,18 @@ lesson:
 
 - `~/projects/hello` is a tiny Go project and a git repository with four
   commits and a change in the working tree. `git status`, `git log`,
-  `git diff`, `git add`, `git commit -m`, `git restore` work, and so do
-  `go run .` and `go test` (which fails until the change is restored).
+  `git diff`, `git add`, `git commit -m`, `git restore`, `git branch` and
+  `git worktree list` work, and so do `go run .` and `go test` (which fails
+  until the change is restored). Every worktree made with `ctrl+b U` is a
+  checkout of its own, on its own branch.
+- `tuios ship` lists the steps from the pane's worktree to a merged change.
+  `tuios ship commit -m MSG` and `tuios ship merge` work on the fake
+  repository. The merge refuses a main checkout with uncommitted changes, as
+  on a real machine, and the demo repository has one. `tuios ship push` and
+  `tuios ship pr` show what they would send, and what a real machine prints
+  after you say yes. `tuios ship status` shows the pull request `pr` opened.
+- Every pane announces its folder with OSC 7 when it starts, where a real
+  tuios reads the folder of the pane's process.
 - `less`, `more`, `view` and `vim` open a read-only viewer: `j`, `k`, space,
   `g`, `G`, `/` to search, `q` or `:q` to quit.
 - `claude`, `codex` and `gemini` are scripted agents in the style of Claude

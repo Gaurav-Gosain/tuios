@@ -377,6 +377,13 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 		return nil
 	}
 	path := filepath.Join(dir, e.Name)
+	if m.learnFiles() {
+		if e.Dir {
+			return m.fileViewOpen(dir, e.Name, true)
+		}
+		m.learnOpenFile(path, true)
+		return nil
+	}
 	editor := m.Settings.SidebarEditor
 	if otherHost := m.filesView.Host != ""; otherHost || m.AttachedHost != "" {
 		return m.handleFileEdit(remoteEditTarget(path, editor, e.Dir, otherHost))

@@ -1088,6 +1088,10 @@ type OS struct {
 	// OnNotification, when set, hears every message shown in the dock, with
 	// its level. The browser build reports it to the page. Nil everywhere else.
 	OnNotification func(message, level string)
+	// learn is what Learn mode reads in place of the disk and git: the fake
+	// shell's files and repository. Nil everywhere else. See
+	// SetLearnBackend.
+	learn LearnBackend
 	// configReadOnlyTold keeps the "this will not be saved" notice to once per
 	// session, since it would otherwise fire on every keypress in the settings
 	// page.

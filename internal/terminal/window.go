@@ -800,10 +800,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // NewWindowIn is NewWindow with the directory the process starts in. An empty
 // dir, or one that is not a directory, keeps this process's own.
 func NewWindowIn(dir, id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
-	if dir != "" {
-		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			dir = ""
-		}
+	if dir != "" && !ptyspawn.DirExists(dir) {
+		dir = ""
 	}
 	window := newWindowBase(id, title, x, y, width, height, z, ptyDataChan, scrollbackLines)
 	terminalWidth := max(width-2, 1)

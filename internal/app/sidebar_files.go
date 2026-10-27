@@ -939,6 +939,13 @@ func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
 		}
 		return cmd
 	}
+	if m.learnFiles() {
+		// The browser has no clipboard to put the path on, so the file
+		// opens in the fake viewer instead, and the dock says what enter
+		// does on a real machine.
+		m.learnOpenFile(full, false)
+		return nil
+	}
 	return m.copyFilePath(full)
 }
 

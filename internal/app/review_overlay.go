@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -65,6 +66,9 @@ type reviewQuery struct {
 	Uncommitted bool
 	// Against names another attempt of the same fan, diffed with Session.
 	Against string
+	// Dir is the pane's folder, sent only in Learn mode, where the fake
+	// review-diff has no daemon that knows where each pane is.
+	Dir string
 }
 
 // reviewDiffResult is review-diff's answer, as the overlay reads it.
@@ -373,7 +377,22 @@ func (m *OS) ReviewFocusedPane() (tea.Cmd, bool) {
 	if who == "" {
 		who = shortWindowLabel(w.ID)
 	}
+	if m.learnFiles() {
+		return m.openLearnReview(w, who), true
+	}
 	return m.openReview(m.SessionName, w.ID, who), true
+}
+
+// openLearnReview opens the review of a pane in Learn mode, where the diff
+// comes from the fake shell's repository through the verb seam.
+func (m *OS) openLearnReview(w *terminal.Window, who string) tea.Cmd {
+	r := &m.review
+	if r.pending {
+		return nil
+	}
+	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split}
+	r.query = reviewQuery{Session: m.SessionName, Window: w.ID, Dir: m.paneDir(w)}
+	return m.reviewLoadCmd(r.query, true)
 }
 
 // InboxReview opens the review of the selected Inbox item's pane. handled is
@@ -460,6 +479,9 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 	}
 	if q.Window != "" {
 		params["window"] = q.Window
+	}
+	if q.Dir != "" {
+		params["dir"] = q.Dir
 	}
 	if q.Against != "" {
 		params["against"] = q.Against
@@ -1026,7 +1048,11 @@ func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	}
 	notes := reviewCount(msg.Notes, "note")
 	text := notes + " sent to " + msg.Who
-	if !msg.Delivering {
+	if m.learnFiles() {
+		// Nothing in the tab reads the notes, so the dock says what S does
+		// on a real machine instead of saying they went somewhere.
+		text = "On your machine, S sends " + notes + " to the agent in " + msg.Who + ". Here, nothing leaves the tab."
+	} else if !msg.Delivering {
 		text = notes + " queued, sent when " + msg.Who + " is at rest"
 	}
 	if len(msg.Withheld) > 0 {

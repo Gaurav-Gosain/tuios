@@ -1644,6 +1644,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cmd = tea.Batch(m.refreshChangedFolder(), cmd)
 		}
 		return m, tea.Batch(cmd, listenForFileChange(m.stopSignal(), m.fileWatchChan(), msg.at))
+	case LearnFilesChangedMsg:
+		// A file of the browser build's fake shell changed. See learn_mode.go.
+		return m, m.learnFilesChanged()
 	case fileTreeListMsg:
 		// A folder open in the tree, read on its own goroutine.
 		cmd := m.HandleFileTreeList(msg)

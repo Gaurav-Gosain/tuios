@@ -24,6 +24,7 @@ package ptyspawn
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -51,6 +52,21 @@ var StartProcess = func(p xpty.Pty, cmd *exec.Cmd) error {
 // tests of that build, which run natively. Production code on a real machine
 // leaves it nil.
 var NewGuestPty func(width, height int) (xpty.Pty, error)
+
+// GuestDir, when set, says whether a folder a pane asks to start in exists.
+// The browser build sets it with NewGuestPty, because its panes start in the
+// fake shell's folders, which are not on any disk. Production code on a real
+// machine leaves it nil, and the disk answers.
+var GuestDir func(dir string) bool
+
+// DirExists reports whether dir is a folder a pane can start in.
+func DirExists(dir string) bool {
+	if GuestDir != nil {
+		return GuestDir(dir)
+	}
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
+}
 
 // newPty allocates the pty a pane runs on: a guest one when NewGuestPty is
 // set, the kernel's otherwise.

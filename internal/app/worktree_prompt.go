@@ -126,7 +126,12 @@ func (m *OS) BeginWorktreePromptForFocusedPane() {
 		m.ShowNotification("This pane is on another machine. Run tuios worktree new on that machine.", "info", m.Settings.NotificationDuration)
 		return
 	}
-	root := repoRootOf(m.paneDir(w))
+	var root string
+	if m.learnFiles() {
+		root = m.learn.RepoRoot(m.paneDir(w))
+	} else {
+		root = repoRootOf(m.paneDir(w))
+	}
 	if root == "" {
 		m.ShowNotification("This pane is not in a git repository.", "info", m.Settings.NotificationDuration)
 		return
@@ -308,6 +313,10 @@ func (m *OS) WorktreePromptSubmit() tea.Cmd {
 	}
 	repoRoot := m.worktreePrompt.RepoRoot
 	m.WorktreePromptCancel()
+	if m.learnFiles() {
+		m.learnNewWorktree(repoRoot, branch)
+		return nil
+	}
 	// Acknowledge the hand-off at once: the dialog is closed, and checking out
 	// a large repository can take a while, so without this the enter reads as
 	// lost until the worktreeCreatedMsg comes back.

@@ -32,7 +32,7 @@ type fileSearchMsg struct {
 // folder the sidebar shows when fromSidebar is set. It shows the results in the
 // existing palette. The filesystem walk runs off the Update goroutine.
 func (m *OS) OpenFileSearch(fromSidebar bool) tea.Cmd {
-	if m.learnOff(learnNoteFiles) {
+	if !m.learnFiles() && m.learnOff(learnNoteFiles) {
 		return nil
 	}
 	window := m.GetFocusedWindow()

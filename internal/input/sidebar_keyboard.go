@@ -55,7 +55,10 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// row the lookup finds nothing and the rail's own binding runs, unchanged.
 	if o.SidebarCursorOnFile() {
 		if act := lookupAction(o, msg, o.KeybindRegistry.GetSidebarFilesAction); act != "" {
-			o.NoteAction(act)
+			noteRailAction(o, act)
+			if o.LearnBlocksAction(act) {
+				return o, nil
+			}
 			return o, handleSidebarFileAction(act, o)
 		}
 	}
@@ -67,7 +70,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarCursorOnAgent() {
 		if act := lookupAction(o, msg, o.KeybindRegistry.GetSidebarAgentsAction); act != "" {
 			if cmd, handled := o.SidebarAgentAction(act); handled {
-				o.NoteAction(act)
+				noteRailAction(o, act)
 				return o, cmd
 			}
 		}
@@ -124,7 +127,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Workspace/session jumps share a numeric suffix.
 	if after, ok := strings.CutPrefix(action, sidebarActJumpPrefix); ok {
 		if n, err := strconv.Atoi(after); err == nil {
-			o.NoteAction(action)
+			noteRailAction(o, action)
 			o.SidebarJumpToSession(n)
 		}
 		return o, nil
@@ -168,10 +171,10 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// session and filters it by who needs a human. Rail focus is kept, so
 		// closing the palette comes back to the row the cursor was on; a row that
 		// actually relocates the user drops it on the way out.
-		o.NoteAction(action)
+		noteRailAction(o, action)
 		return o, o.OpenCommandPalette()
 	case sidebarActFileSearch:
-		o.NoteAction(action)
+		noteRailAction(o, action)
 		return o, o.OpenFileSearch(true)
 	case sidebarActAgentFilter:
 		o.SidebarCycleAgentsFilter()
@@ -180,7 +183,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActMail:
 		// The mailbox, narrowed to the pane under the cursor when there is one.
 		// Rail focus is kept, like the palette, so closing it comes back here.
-		o.NoteAction(action)
+		noteRailAction(o, action)
 		return o, o.SidebarOpenMail()
 	case sidebarActNarrow:
 		// On the divider the two width keys move the split instead: narrow
@@ -221,13 +224,22 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		handled = false
 	}
 	if handled {
-		o.NoteAction(action)
+		noteRailAction(o, action)
 	}
 	// Two rows of the rail's file view answer with a command rather than with a
 	// state change: copying a path is a clipboard write. The switch above cannot
 	// return one, so it parks it on the model and it is picked up here, the same
 	// way the click handler picks it up.
 	return o, o.TakeSidebarCmd()
+}
+
+// noteRailAction records a rail action the way Dispatch records the others,
+// and tells the browser build's tour about it, as Dispatch does.
+func noteRailAction(o *app.OS, action string) {
+	o.NoteAction(action)
+	if o.OnAction != nil {
+		o.OnAction(action)
+	}
 }
 
 // makeSidebarReorderHandler is the reorder action as the dispatcher takes it:

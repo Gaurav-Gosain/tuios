@@ -52,6 +52,11 @@ const (
 	EventShellStart      = webshell.EventCommandStart
 	EventShellCommand    = webshell.EventCommand
 	EventShellCwd        = webshell.EventCwd
+	EventFiles           = "files"
+	EventReviewMove      = "review.move"
+	EventReviewNote      = "review.note"
+	EventReviewSend      = "review.send"
+	EventWorktree        = webshell.EventWorktree
 )
 
 // Event is one thing that happened, as the page receives it.
@@ -96,6 +101,8 @@ type Model struct {
 	tapeName string
 	// fleet answers the agents view in place of a daemon. See fleet.go.
 	fleet *fleet
+	// verbs are the daemon verbs the tour fakes. See callVerb.
+	verbs map[string]verbFunc
 }
 
 // New wraps o for the tour. emit receives every event; it may be called from
@@ -105,8 +112,10 @@ type Model struct {
 // New puts o in Learn mode and installs the fake shell's event sink, so there
 // is one tour per process.
 func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
-	m := &Model{OS: o, emit: emit, send: send}
+	m := &Model{OS: o, emit: emit, send: send, verbs: map[string]verbFunc{}}
 	o.LearnMode = true
+	o.SetLearnBackend(backend{})
+	m.registerReviewVerbs()
 	o.OnAction = func(action string) {
 		mode := "window"
 		if m.OS.Mode == app.TerminalMode {
@@ -120,7 +129,9 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	m.fleet = newFleet(send)
 	m.fleet.spawn = func(msg spawnAgentsMsg) { send(msg) }
 	m.fleet.close = func(windows []string) { send(closeWindowsMsg{windows: windows}) }
-	o.SetInboxVerbCaller(m.fleet.call, func() string { return learnNonce })
+	// One caller answers every verb: the review's from m.verbs, the agents
+	// view's from the fleet.
+	o.SetInboxVerbCaller(m.callVerb, func() string { return learnNonce })
 	o.SetLearnSpawnInfo(spawnInfo)
 	webshell.SetEventSink(m.fromGuest)
 	m.last = take(o)
@@ -152,6 +163,8 @@ func (m *Model) fromGuest(e webshell.Event) {
 		m.send(playTapeMsg{name: str("name"), script: str("script")})
 	case webshell.EventAgentChanged:
 		m.fleet.changed(e.WindowID)
+	case webshell.EventFilesChanged:
+		m.send(app.LearnFilesChangedMsg{})
 	default:
 		m.emit(Event{Type: e.Type, WindowID: e.WindowID, Data: e.Data})
 	}

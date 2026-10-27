@@ -42,6 +42,10 @@ const (
 	OverlayNewAgent          = "newAgent"
 	OverlayCompare           = "compare"
 	OverlayReply             = "reply"
+	OverlayRailFocus         = "railFocus"
+	OverlayFileSearch        = "fileSearch"
+	OverlayReview            = "review"
+	OverlayWorktree          = "worktree"
 )
 
 // Setting names in the setting event: the looks the settings page changes
@@ -71,6 +75,25 @@ type agentsSnap struct {
 
 func (a agentsSnap) toMap() map[string]any {
 	return map[string]any{"selected": a.Selected, "tab": a.Tab}
+}
+
+// filesSnap is the rail's files section: the folder it lists and the path
+// of the row under the rail's cursor, "" for none.
+type filesSnap struct{ Dir, Cursor string }
+
+func (f filesSnap) toMap() map[string]any {
+	return map[string]any{"dir": f.Dir, "cursor": f.Cursor}
+}
+
+// reviewSnap is the review overlay: the file it shows and the hunk the
+// cursor is in, -1 for none.
+type reviewSnap struct {
+	File string
+	Hunk int
+}
+
+func (r reviewSnap) toMap() map[string]any {
+	return map[string]any{"file": r.File, "hunk": r.Hunk}
 }
 
 // rect is a window's place and size in cells.
@@ -118,6 +141,8 @@ type Snapshot struct {
 	PiP        string // the window picture-in-picture shows, "" for none
 	// Agents is the agents view's cursor while it is open.
 	Agents agentsSnap
+	Files  filesSnap
+	Review reviewSnap // zero while the review is closed
 	// Moving is true while an animation is running, when window rects are
 	// still on their way. Moves are reported once it is false again.
 	Moving bool
@@ -200,6 +225,14 @@ func take(o *app.OS) Snapshot {
 	ov[OverlayNewAgent] = o.CockpitSpawnOpen()
 	ov[OverlayCompare] = o.CockpitCompareOpen()
 	ov[OverlayReply] = o.CockpitReplyOpen()
+	ov[OverlayRailFocus] = o.SidebarActive() && o.SidebarFocused
+	ov[OverlayFileSearch] = o.FileSearchOpen()
+	ov[OverlayWorktree] = o.WorktreePromptOpen()
+	if open, file, hunk := o.LearnReview(); open {
+		ov[OverlayReview] = true
+		s.Review = reviewSnap{File: file, Hunk: hunk}
+	}
+	s.Files.Dir, s.Files.Cursor = o.LearnFiles()
 	if b, ok := o.ScrollbackBrowser.(*scrollback.Browser); ok && o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
@@ -303,9 +336,19 @@ func (s Snapshot) ToMap() map[string]any {
 		"keys":           s.Keys.toMap(),
 		"pip":            s.PiP,
 		"agentsView":     s.Agents.toMap(),
+		"files":          s.Files.toMap(),
+		"review":         s.reviewMap(),
 		"cols":           s.Cols,
 		"rows":           s.Rows,
 	}
+}
+
+// reviewMap is the review in the state: nil while it is closed.
+func (s Snapshot) reviewMap() any {
+	if !s.Overlays[OverlayReview] {
+		return nil
+	}
+	return s.Review.toMap()
 }
 
 // diff lists the events that take prev to now, in a fixed order.
@@ -396,6 +439,14 @@ func diff(prev, now Snapshot) []Event {
 	}
 	if prev.Agents.Tab != now.Agents.Tab {
 		add(EventAgentsTab, "", map[string]any{"from": prev.Agents.Tab, "to": now.Agents.Tab})
+	}
+	if prev.Files != now.Files {
+		add(EventFiles, "", map[string]any{"from": prev.Files.toMap(), "to": now.Files.toMap()})
+	}
+	if prev.Overlays[OverlayReview] && now.Overlays[OverlayReview] && prev.Review != now.Review {
+		data := now.Review.toMap()
+		data["from"] = prev.Review.toMap()
+		add(EventReviewMove, "", data)
 	}
 
 	names := make([]string, 0, len(now.Overlays))
