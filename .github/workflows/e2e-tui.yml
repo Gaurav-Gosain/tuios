@@ -264,6 +264,9 @@ jobs:
         run: |
           set -euo pipefail
           start=$SECONDS
+          # How busy the runner is while the lanes run, for tuning E2E_LANES.
+          vmstat -n 5 > "$RUNNER_TEMP/vmstat.log" &
+          vmstat_pid=$!
           # The test listing in the step before built the suite's packages, so
           # the lanes find them in the build cache and only link.
           pids=()
@@ -280,6 +283,9 @@ jobs:
             pids+=("$!")
           done
           wait "${pids[@]}"
+          kill "$vmstat_pid" || true
+          awk 'NR > 3 { n++; idle += $15; wa += $16; if ($1 > r) r = $1 }
+            END { if (n) printf "runner while the lanes ran: %d%% idle, %d%% io wait, run queue up to %d\n", idle / n, wa / n, r }' "$RUNNER_TEMP/vmstat.log"
           # A failure of tests listed in .github/flaky-tests.txt, and only of
           # those, gets one retry of those tests. Anything else fails the shard.
           status=0

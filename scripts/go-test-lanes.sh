@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# SPLIT="PKG..." [LANES=4] [LOG=FILE] go-test-lanes.sh [GO_TEST_FLAG]... -- PATTERN...
+# SPLIT="PKG..." [LANES=4] [ONLY=split|rest] [LOG=FILE] go-test-lanes.sh [GO_TEST_FLAG]... -- PATTERN...
 #
 # Runs go test on PATTERN, like `go test GO_TEST_FLAG... PATTERN...`, but
 # splits the tests of each package in SPLIT across LANES go test processes
 # that run at the same time. Every other package runs in one more go test
-# process beside them.
+# process beside them. ONLY=split runs only the SPLIT packages, and
+# ONLY=rest only the others, so two CI jobs can share the work.
 #
 # Why: internal/app and internal/session hold no t.Parallel, so each runs its
 # tests one after another for over three minutes, and a CI job waits for the
@@ -32,6 +33,14 @@
 set -euo pipefail
 
 lanes=${LANES:-4}
+only=${ONLY:-}
+case $only in
+"" | split | rest) ;;
+*)
+	echo "go-test-lanes.sh: ONLY is split or rest, not $only" >&2
+	exit 2
+	;;
+esac
 log=${LOG:-go-test-lanes.log}
 read -r -a split <<<"${SPLIT:?name the packages to split in SPLIT}"
 
@@ -60,6 +69,8 @@ if [ "$(comm -12 "$work/all" "$work/split" | wc -l)" -ne "$(wc -l <"$work/split"
 fi
 mapfile -t splitpkgs <"$work/split"
 mapfile -t restpkgs <"$work/rest"
+[ "$only" != rest ] || splitpkgs=()
+[ "$only" != split ] || restpkgs=()
 
 procs=()
 n=0

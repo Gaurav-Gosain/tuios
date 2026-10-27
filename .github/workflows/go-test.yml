@@ -111,9 +111,8 @@ jobs:
 
       - name: Test
         # internal/app and internal/session run their tests one after another
-        # for over three minutes each, and the job waits for the slowest
-        # package. scripts/go-test-lanes.sh splits the tests of those two
-        # across four go test processes that run side by side.
+        # for over three minutes each. They run in the app-session job below,
+        # split into lanes, and this job runs every other package.
         #
         # TestTheSuiteWritesNothingOutsideItsOwnTree runs the whole suite a
         # second time, at the same time as this one. It runs in the isolation
@@ -135,9 +134,42 @@ jobs:
           pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/..."
           # $pkgs is split on purpose: one argument per pattern.
           # shellcheck disable=SC2086
-          SPLIT="./internal/app ./internal/session" LOG="$RUNNER_TEMP/unit.log" \
+          SPLIT="./internal/app ./internal/session" ONLY=rest LOG="$RUNNER_TEMP/unit.log" \
             scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- $pkgs ||
             scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $pkgs
+
+  app-session:
+    name: go test (internal/app and internal/session)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    # The two packages hold no t.Parallel and ran over three minutes each.
+    # Their tests mostly wait on a pty, a daemon or a timer: internal/session
+    # used 23 CPU seconds in 207 seconds of wall time. scripts/go-test-lanes.sh
+    # runs each as four go test processes side by side, each with one
+    # contiguous run of the tests in their usual order. They have a runner of
+    # their own because the CPU-bound packages of the unit job (sketch, vt)
+    # beside them pushed a timed budget test in loom over its limit.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: go.mod
+          cache-id: unit
+
+      - name: Allow user namespaces
+        # The same setting as the unit job, so the two packages see the same
+        # machine they saw there.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Test
+        run: |
+          set -o pipefail
+          SPLIT="./internal/app ./internal/session" ONLY=split LOG="$RUNNER_TEMP/unit.log" \
+            scripts/go-test-lanes.sh -count=1 -timeout 20m -- ./internal/app ./internal/session ||
+            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" ./internal/app ./internal/session
 
   isolation:
     name: go test isolation guard
