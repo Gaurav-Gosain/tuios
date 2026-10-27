@@ -421,7 +421,15 @@ sleep 120
 	if info, _ := tuiosCLI(t, base, "plugins", "info", "e2e.victim"); !strings.Contains(info, "waiting for approval") {
 		t.Errorf("the victim left the waiting state:\n%s", info)
 	}
-	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_PLUGIN_ID=e2e.tok", "TUIOS_PLUGIN_TOKEN=00" + tok[1][2:], "TUIOS_SOCKET=" + sock}, "list-sessions")
+	// Flip one hex digit: writing a fixed "00" prefix leaves a token that
+	// already starts with 00 untouched, and the daemon rightly takes it.
+	tampered := []byte(tok[1])
+	if tampered[0] == '0' {
+		tampered[0] = '1'
+	} else {
+		tampered[0] = '0'
+	}
+	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_PLUGIN_ID=e2e.tok", "TUIOS_PLUGIN_TOKEN=" + string(tampered), "TUIOS_SOCKET=" + sock}, "list-sessions")
 	if err == nil || !strings.Contains(out, "did not take its token") {
 		t.Errorf("a token that does not prove the plugin: %v\n%s", err, out)
 	}
