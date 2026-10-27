@@ -2766,6 +2766,32 @@ Response:
 {"result": {"type": "pip", "pinned": true, "window_id": "6a7ad980-..."}}
 ```
 
+### rail-pane
+
+Start, keep or close the session's rail pane: the pane a client draws in its
+rail's pane section. The attached client calls it from its
+`[appearance.sidebar.pane]` table. A session has one rail pane. It sits on a
+workspace no client shows, so it is in no layout. `list-windows` leaves it
+out unless you pass `rail: true`, and then it carries `rail`, its command
+line. The daemon closes it when its program exits.
+
+Params: `session` (optional), `key` (the command line, as configured),
+`command` (the argv), `cwd`, `width` and `height` (the size it starts at),
+`off` (bool; close it, and take no key or command). A pane with the same key
+is kept. A pane with another key is closed and replaced.
+
+Request:
+
+```json
+{"verb": "rail-pane", "params": {"session": "work", "key": "htop", "command": ["sh", "-c", "htop"], "width": 27, "height": 12}}
+```
+
+Response:
+
+```json
+{"result": {"type": "rail_pane", "window_id": "6a7ad980-...", "created": true}}
+```
+
 ### send-keys
 
 Send keys to a window's program: arrows, page keys, Enter, `ctrl+c`. Tokens

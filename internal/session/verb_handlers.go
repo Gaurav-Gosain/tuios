@@ -186,6 +186,8 @@ func (d *Daemon) verbSessionInfo(cs *connState, params json.RawMessage) (any, *v
 func (d *Daemon) verbListWindows(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
+		// Rail lists the rail pane too. See WindowState.Rail.
+		Rail bool `json:"rail"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -205,7 +207,30 @@ func (d *Daemon) verbListWindows(cs *connState, params json.RawMessage) (any, *v
 	addShellFacts(sess, data)
 	addPaneMeta(sess, data)
 	addResumable(d, state, data)
+	if !p.Rail {
+		dropRailPane(data)
+	}
 	return data, nil
+}
+
+// dropRailPane takes the rail pane out of a window list. It is not a pane
+// the user placed, and a script that counts panes or walks them must not
+// trip over it. It runs after every addition that pairs list entries with
+// state.Windows by position, and each entry keeps its index, which is the
+// state's, so a target read from the list still names the same window.
+func dropRailPane(data map[string]any) {
+	windows, _ := data["windows"].([]map[string]any)
+	kept := windows[:0]
+	for _, w := range windows {
+		if _, rail := w["rail"]; !rail {
+			kept = append(kept, w)
+		}
+	}
+	if len(kept) == len(windows) {
+		return
+	}
+	data["windows"] = kept
+	data["total"] = len(kept)
 }
 
 // addResumable marks each pane whose agent conversation a restart would offer

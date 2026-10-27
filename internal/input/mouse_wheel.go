@@ -78,6 +78,9 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						scrollCopyModeDown(w, &o.Settings)
 					}
 				}
+				// The rail pane is drawn from the rail's cache, which a
+				// scroll of its history has to move.
+				o.TouchRailPane(w)
 			}
 			return o, nil
 		}

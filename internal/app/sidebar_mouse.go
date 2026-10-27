@@ -457,6 +457,8 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.queueSidebarCmd(m.openHostSignIn(hit.SessionID))
 	case sidebarRowGlobalNew:
 		m.SidebarNewGlobalSession()
+	case sidebarRowRailPaneStart:
+		m.RestartRailPane()
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:

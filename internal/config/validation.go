@@ -230,6 +230,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	validateDock(cfg, result)
 	validateSidebarCustom(cfg, result)
+	validateSidebarPane(cfg, result)
 	validateSidebarEdges(cfg.Appearance.Sidebar, result)
 	validateHints(cfg, result)
 	validatePanes(cfg, result)

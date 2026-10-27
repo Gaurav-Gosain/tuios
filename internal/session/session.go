@@ -264,6 +264,15 @@ type WindowState struct {
 	// of type scratch. A session has at most one scratch pane per name. It is
 	// the daemon's, like Scratch.
 	ScratchName string `json:"scratch_name,omitempty"`
+	// Rail marks the pane a client draws in its rail's pane section, and
+	// holds the command line the client's config gave it, which is how a
+	// client tells its own pane from one another config asked for. Empty for
+	// every other window. The pane sits on a scratch-range workspace that no
+	// client shows, so no layout, tiler or workspace list reaches it, and
+	// the lists a user reads leave it out. It is set at creation by the
+	// rail-pane verb and is the daemon's, like Scratch: a push cannot set or
+	// clear it. See verb_rail_pane.go.
+	Rail string `json:"rail,omitempty"`
 	// Stack and StackIndex put the window in a stack: panes that share one
 	// tile of the split tree, one open and the others as title rows. Every
 	// client lays the stack out from them, as from IsFloating, so a client
@@ -3837,8 +3846,10 @@ func (s *Session) windowSummaries() []WindowSummary {
 			ProgramStatus: w.ProgramStatus,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
-			Scratch:       w.Scratch,
-			Note:          w.Note,
+			// The rail pane is left out of a rail's rows as the scratch
+			// terminal is, and an older reader knows only this mark.
+			Scratch: w.Scratch || w.Rail != "",
+			Note:    w.Note,
 		})
 	}
 	return out

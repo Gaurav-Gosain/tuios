@@ -70,7 +70,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	for i, w := range m.Windows {
 		// The scratch terminal has no row, shown or hidden. It is reached by
 		// its key, and a row for it read as one more pane of the layout.
-		if w == nil || isScratch(w) {
+		if w == nil || hiddenFromLists(w) {
 			continue
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)

@@ -105,6 +105,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PopupDim:    w.PopupDim,
 			Scratch:     w.IsScratch,
 			ScratchName: w.ScratchName,
+			Rail:        w.Rail,
 			Stack:       w.Stack,
 			StackIndex:  w.StackIndex,
 			Kind:        w.Kind,
@@ -1320,6 +1321,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.IsPopup = ws.Popup
 	w.IsScratch = ws.Scratch
 	w.ScratchName = ws.ScratchName
+	w.Rail = ws.Rail
 	w.Stack, w.StackIndex = ws.Stack, ws.StackIndex
 	w.Kind, w.URI = ws.Kind, ws.URI
 	w.PopupWidth = ws.PopupWidth
@@ -1462,6 +1464,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.IsPopup = ws.Popup
 	window.IsScratch = ws.Scratch
 	window.ScratchName = ws.ScratchName
+	window.Rail = ws.Rail
 	window.Stack, window.StackIndex = ws.Stack, ws.StackIndex
 	window.Kind, window.URI = ws.Kind, ws.URI
 	window.PopupWidth = ws.PopupWidth
@@ -2226,7 +2229,7 @@ func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
 	// The pinned pane is drawn in the picture-in-picture view wherever it
 	// is, so its stream stays open. Unpinning it, or its closing, clears the
 	// pin first and lets this through. See pip.go.
-	if m.pipKeepsStream(window) || m.cockpitKeepsStream(window) {
+	if m.pipKeepsStream(window) || m.cockpitKeepsStream(window) || m.railPaneKeepsStream(window) {
 		return
 	}
 

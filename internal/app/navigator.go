@@ -406,7 +406,7 @@ func (m *OS) navigatorCurrentSession() navSession {
 	s := navSession{Name: name, Title: name, Current: true, WorkspaceNames: map[int]string{}, Shell: m.navClientShell()}
 	maps.Copy(s.WorkspaceNames, m.WorkspaceNames)
 	for i, w := range m.Windows {
-		if w == nil || isScratch(w) {
+		if w == nil || hiddenFromLists(w) {
 			continue
 		}
 		cwd := w.Cwd

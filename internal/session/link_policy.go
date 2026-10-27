@@ -202,6 +202,7 @@ var verbCapabilities = map[string][]string{
 
 	"refresh-dock":    {config.LinkAllowWrite},
 	"pip":             {config.LinkAllowWrite},
+	"rail-pane":       {config.LinkAllowOpen},
 	"remove-worktree": {config.LinkAllowWrite},
 	// bundle-worktree reads a worktree's files out, which write already
 	// reaches through a shell, and list must not.

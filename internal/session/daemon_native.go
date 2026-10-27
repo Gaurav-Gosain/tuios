@@ -159,7 +159,9 @@ func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args
 
 	// Read-only verbs answerable from state without a client.
 	case "ListWindows":
-		return buildWindowListData(sess.GetState()), nil
+		data := buildWindowListData(sess.GetState())
+		dropRailPane(data)
+		return data, nil
 	case "GetSessionInfo":
 		return buildSessionInfoData(sess, sess.GetState(), false, HostFocusUnknown), nil
 	case "GetWindow":
@@ -354,6 +356,11 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.Scratch {
 		info["scratch"] = true
 		info["scratch_name"] = w.ScratchKey()
+	}
+	// The rail pane is marked, with the command line it runs, so a script
+	// that asked for it can tell it from the panes the user placed.
+	if w.Rail != "" {
+		info["rail"] = w.Rail
 	}
 	// A window a renderer draws itself names what draws it and what it
 	// shows. Omitted for a terminal. A TML window also names its surface,

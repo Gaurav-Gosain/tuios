@@ -706,6 +706,7 @@ var ActionDescriptions = map[string]string{
 	"restore_all":        "Restore all minimized",
 	"toggle_zoom":        "Toggle zoom (fullscreen)",
 	"toggle_pip":         "Pin or unpin the picture-in-picture view",
+	"focus_rail_pane":    "Type into the pane in the rail",
 	"start_screensaver":  "Start the screen saver now",
 	"screenshot":         "Pick what to screenshot",
 	"screenshot_window":  "Screenshot this window",

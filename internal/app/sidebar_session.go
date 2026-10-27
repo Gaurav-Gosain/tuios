@@ -470,8 +470,12 @@ func (m *OS) sidebarSessionOutputPending() bool {
 }
 
 // SidebarSessionAt claims the body of a docked session's pane, leaving the
-// rail's outer edge available for the existing width-resize gesture.
+// rail's outer edge available for the existing width-resize gesture. The rail
+// pane's cells answer railPaneFocus.
 func (m *OS) SidebarSessionAt(x, y int) (edge int, ok bool) {
+	if m.RailPaneAt(x, y) {
+		return railPaneFocus, true
+	}
 	x, y = m.ScreenPoint(x, y)
 	for _, side := range []sidebarEdge{sidebarLeft, sidebarRight} {
 		if !m.sidebarSessionVisible(side) || len(m.sidebarSessions[side].windows) == 0 {
@@ -516,6 +520,9 @@ func (m *OS) SidebarSessionHeaderAt(x, y int) (edge int, ok bool) {
 
 // SidebarSessionPaneAt returns the stacked pane displayed at this screen cell.
 func (m *OS) SidebarSessionPaneAt(x, y int) *terminal.Window {
+	if m.RailPaneAt(x, y) {
+		return m.railPaneWindow()
+	}
 	if edge, ok := m.SidebarSessionAt(x, y); ok {
 		_, row := m.ScreenPoint(x, y)
 		v := &m.sidebarSessions[edge-1]
@@ -611,6 +618,9 @@ func (m *OS) SidebarSessionWindow() *terminal.Window {
 	if m.sidebarSessionFocus == 0 {
 		return nil
 	}
+	if m.sidebarSessionFocus == railPaneFocus {
+		return m.railPaneWindow()
+	}
 	v := &m.sidebarSessions[m.sidebarSessionFocus-1]
 	if w := v.windows[v.focusPTY]; w != nil {
 		return w
@@ -621,7 +631,8 @@ func (m *OS) SidebarSessionWindow() *terminal.Window {
 // FocusSidebarSessionPane makes a clicked stacked pane the input target and
 // records its daemon focus, without changing the center session attachment.
 func (m *OS) FocusSidebarSessionPane(w *terminal.Window) {
-	if w == nil || m.sidebarSessionFocus == 0 {
+	// The rail pane is the only pane its focus target has.
+	if w == nil || m.sidebarSessionFocus == 0 || m.sidebarSessionFocus == railPaneFocus {
 		return
 	}
 	v := &m.sidebarSessions[m.sidebarSessionFocus-1]
@@ -635,6 +646,10 @@ func (m *OS) FocusSidebarSessionPane(w *terminal.Window) {
 func (m *OS) WriteSidebarSession(data []byte) bool {
 	if m.sidebarSessionFocus == 0 {
 		return false
+	}
+	if m.sidebarSessionFocus == railPaneFocus {
+		w := m.railPaneWindow()
+		return w != nil && w.SendInput(data) == nil
 	}
 	v := &m.sidebarSessions[m.sidebarSessionFocus-1]
 	w := m.SidebarSessionWindow()
@@ -652,7 +667,9 @@ func (m *OS) PasteSidebarSession(text string) bool {
 // SidebarSessionIntent runs a pane command in the assigned session, without
 // mutating the center session's layout or attachment.
 func (m *OS) SidebarSessionIntent(command string, args ...string) bool {
-	if m.sidebarSessionFocus == 0 {
+	// The rail pane is not a session: a pane command acts where it always
+	// does.
+	if m.sidebarSessionFocus == 0 || m.sidebarSessionFocus == railPaneFocus {
 		return false
 	}
 	v := &m.sidebarSessions[m.sidebarSessionFocus-1]
@@ -669,7 +686,7 @@ func (m *OS) SidebarSessionIntent(command string, args ...string) bool {
 // NewSidebarSessionWindow creates a normal daemon pane in the session whose
 // rail currently owns the keyboard, without changing the center attachment.
 func (m *OS) NewSidebarSessionWindow() bool {
-	if m.sidebarSessionFocus == 0 {
+	if m.sidebarSessionFocus == 0 || m.sidebarSessionFocus == railPaneFocus {
 		return false
 	}
 	v := &m.sidebarSessions[m.sidebarSessionFocus-1]

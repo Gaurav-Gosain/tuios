@@ -262,6 +262,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		workspace int
 	}
 	scratches := make(map[string]scratchMark)
+	// The rail pane's mark, the daemon's like the scratch one.
+	var rails map[string]string
 	workspaces := make(map[string]int, len(canonical.Windows))
 	// The machine a window's process runs on is stamped once, when the daemon
 	// creates the window, and nothing moves a process between machines
@@ -332,6 +334,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.Scratch {
 			scratches[w.ID] = scratchMark{w.ScratchName, w.Workspace}
 		}
+		if w.Rail != "" {
+			if rails == nil {
+				rails = make(map[string]string)
+			}
+			rails[w.ID] = w.Rail
+		}
 		if w.Kind != "" || w.URI != "" {
 			views[w.ID] = viewMark{w.Kind, w.URI}
 		}
@@ -401,6 +409,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		p, ok := popups[w.ID]
 		sm, isScratch := scratches[w.ID]
 		w.Scratch, w.ScratchName = isScratch, sm.name
+		w.Rail = rails[w.ID]
 		switch {
 		case isScratch && IsScratchWorkspace(sm.workspace):
 			w.Workspace = sm.workspace

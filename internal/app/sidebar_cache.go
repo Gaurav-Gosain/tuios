@@ -218,6 +218,20 @@ func (m *OS) sidebarSignature() uint64 {
 		mixU(m.railCustom.gen)
 	}
 	mixI(m.SidebarScrollC)
+	// The pane section: its output, which is the generation, whether it has
+	// the keyboard (the dim and the cursor change), and the line it draws
+	// when there is no pane.
+	mixU(m.railPaneView.gen)
+	mixB(m.RailPaneFocused())
+	mixB(m.railPaneView.stopped)
+	mixS(m.railPaneView.err)
+	mixS(m.railPaneView.windowID)
+	if !m.sidebarDrawing && m.UserConfig != nil {
+		pane := m.railPaneConfig()
+		mixS(pane.Command)
+		mixS(pane.Title)
+		mixI(pane.Height)
+	}
 	// The git section scrolls like the others once it is given fewer lines
 	// than its two rows.
 	mixI(m.SidebarScrollG)

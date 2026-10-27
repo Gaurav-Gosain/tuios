@@ -31,7 +31,7 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 	for i, w := range m.Windows {
 		// The scratch terminal is not a window the user placed. The scratch
 		// key shows it.
-		if isScratch(w) {
+		if hiddenFromLists(w) {
 			continue
 		}
 		// Laundered here rather than at the three places that draw it: the field

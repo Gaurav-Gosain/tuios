@@ -98,6 +98,12 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			if out && m.cockpitNoteOutput(window) {
 				hasChanges = true
 			}
+			// The rail pane lives on a workspace nobody is on, and the rail
+			// draws it. It is paced like a visible pane.
+			if out && m.railPaneNoteOutput(window) {
+				hasChanges = true
+				continue
+			}
 			if out && window.ID == m.pip.windowID {
 				window.UpdateCounter++
 				if window.UpdateCounter%3 == 0 {

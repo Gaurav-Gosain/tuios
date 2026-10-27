@@ -653,6 +653,12 @@ pane, to unpin it. A click on the view focuses the pane. The action is
 `toggle_pip`, and `[pip]` sets the size and the corner. See
 [SESSIONS.md](SESSIONS.md#picture-in-picture).
 
+## Rail pane
+
+`P` in window mode gives the keyboard to the pane in the rail's pane section.
+`alt+esc` gives it back. The action is `focus_rail_pane`. See
+[CONFIGURATION.md](CONFIGURATION.md#the-rails-pane-section).
+
 ## Spotlight
 
 `B` in window mode turns the spotlight on and off. The spotlight dims the

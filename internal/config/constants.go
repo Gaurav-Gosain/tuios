@@ -493,7 +493,7 @@ const SidebarDefaultSections = "sessions:25,terminals,files:25,agents:34"
 // section the rail does not draw, and that is the only way to turn one off:
 // there is no second switch per section, because a switch cannot say where a
 // thing goes and two spacers would have no switch to share.
-var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git", SidebarSectionCustom}
+var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git", SidebarSectionCustom, SidebarSectionPane}
 
 // SidebarSectionCustom is the rail section whose rows are the output of a
 // command the user writes, configured in [appearance.sidebar.custom]. It is

@@ -925,6 +925,10 @@ type SidebarConfig struct {
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
 	Custom SidebarCustomConfig `toml:"custom"`
+	// Pane is the [appearance.sidebar.pane] table: the program the pane
+	// section runs, its heading and its height. Read from the file only, for
+	// the reason Custom is. See sidebar_pane.go.
+	Pane SidebarPaneConfig `toml:"pane"`
 	// Left and Right independently configure rails on the two screen edges.
 	// When absent, the existing rail still lives at Position with its existing
 	// settings. A new edge must be explicitly enabled; see sidebar_edges.go.
@@ -1212,6 +1216,9 @@ func DefaultConfig() *UserConfig {
 				// p pins the focused pane as the picture-in-picture view and
 				// unpins it again. p for pin. It was free in window mode.
 				"toggle_pip": {"p"},
+				// P gives the keyboard to the rail's pane section, next to
+				// the p that pins a pane in the corner.
+				"focus_rail_pane": {"P"},
 				// Finishing a mouse selection has always told the user to press
 				// 'c' to copy it. Until this binding existed, nothing was
 				// listening.
@@ -3764,6 +3771,8 @@ var yieldingDefaults = map[string]bool{
 	"set_note": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
+	// P in window mode, new with the rail's pane section.
+	"focus_rail_pane": true,
 	// V after the prefix, new in the release after v0.8.2.
 	"paste_image": true,
 	// ] and # after the prefix, new in the release after v0.8.5.

@@ -300,6 +300,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_spotlight", handleToggleSpotlight)
 	d.Register("prefix_toggle_spotlight", handleToggleSpotlight)
 	d.Register("toggle_pip", handleTogglePiP)
+	d.Register("focus_rail_pane", handleFocusRailPane)
 
 	// Multifocus actions (see multifocus_actions.go)
 	d.registerMultifocusHandlers()
@@ -1099,6 +1100,16 @@ func handleToggleSpotlight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // unpins the pinned one. See internal/app/pip.go.
 func handleTogglePiP(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.TogglePiP()
+	return o, nil
+}
+
+// handleFocusRailPane gives the keyboard to the rail's pane section. With no
+// pane on the screen it says how to put one there.
+func handleFocusRailPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if !o.FocusRailPane() {
+		o.ShowNotification("The rail shows no pane. Add pane to appearance.sidebar.sections and set [appearance.sidebar.pane] command.",
+			"info", o.Settings.NotificationDuration)
+	}
 	return o, nil
 }
 

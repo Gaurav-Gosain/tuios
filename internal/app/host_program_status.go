@@ -160,7 +160,7 @@ func (m *OS) hostProgramStatusReports() map[string]string {
 		session = "local"
 	}
 	for _, w := range m.Windows {
-		if w == nil || isScratch(w) || len(want) >= hostProgramStatusMax {
+		if w == nil || hiddenFromLists(w) || len(want) >= hostProgramStatusMax {
 			continue
 		}
 		stateWord, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)

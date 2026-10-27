@@ -1609,13 +1609,14 @@ type OS struct {
 	sidebarSessionStateEvents [2]chan sidebarSessionEvent // latest snapshot for each rail
 	sidebarSessionStateMu     [2]sync.Mutex               // serialize replacements from old/new clients
 	sidebarSessionDone        chan struct{}
-	sidebarSessionFocus       int // 0 none, 1 left, 2 right
+	sidebarSessionFocus       int // 0 none, 1 left, 2 right, 3 the rail pane (railPaneFocus)
 	SidebarScrollS            int
 	SidebarScrollT            int
 	SidebarScrollA            int
 	SidebarScrollF            int
 	SidebarScrollG            int
 	SidebarScrollC            int
+	SidebarScrollP            int
 
 	// stopCh is closed by Cleanup. Every listener command takes it when it is
 	// armed, so a session that ends leaves none of them parked on a channel
@@ -2039,6 +2040,9 @@ type OS struct {
 	pendingStartTerminalMode bool
 	// pip is this client's picture-in-picture view. See pip.go.
 	pip pipState
+	// railPane is this client's view of the rail's pane section. See
+	// rail_pane.go.
+	railPaneView railPaneState
 	// PiPPressed says the button that is down was pressed on the
 	// picture-in-picture view, so its release is the view's as well.
 	PiPPressed bool

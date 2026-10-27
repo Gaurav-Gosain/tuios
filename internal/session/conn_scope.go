@@ -185,6 +185,7 @@ var verbScopes = map[string]scopeKind{
 	"list-dock-components": scopeDeny,
 	"refresh-dock":         scopeDeny,
 	"pip":                  scopeDeny,
+	"rail-pane":            scopeDeny,
 	"new-session":          scopeDeny,
 	// switch-session moves a client and detach-client takes clients off
 	// their sessions: client-level actions, like attach.

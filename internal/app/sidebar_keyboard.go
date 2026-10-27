@@ -440,6 +440,8 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowHostSignIn:
 		// The page opens in a browser, so the keyboard stays in the rail.
 		m.queueSidebarCmd(m.openHostSignIn(row.SessionID))
+	case sidebarRowRailPaneStart:
+		m.RestartRailPane()
 	case sidebarRowGlobalNew:
 		// A new global session is where the user asked to end up, so the rail
 		// hands the keyboard back the way the other create controls do.

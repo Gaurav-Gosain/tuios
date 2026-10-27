@@ -175,6 +175,10 @@ question about the screen. Do not change them unless the person asks.
   `appearance.sidebar.sections`. `set-config` cannot set its command.
   `tuios refresh-dock rail/custom` runs it again, and `list-dock-components`
   lists it as `rail/custom`.
+- The rail's pane section runs a program in a live pane in the rail. The
+  person sets it in `[appearance.sidebar.pane]` in the file (`command`,
+  `height`, `title`) and places `pane` in `appearance.sidebar.sections`.
+  `tuios list-windows` leaves the pane out. `--rail` lists it.
 - In the rail's files section, `Y` or the folder menu's Copy path copies a
   path to the person's clipboard.
 - When the last pane on the workspace on screen closes, the session shows

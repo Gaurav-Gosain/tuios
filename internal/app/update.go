@@ -1013,6 +1013,12 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// rail's size are what its command is told, and the layout is what says
 	// whether it runs at all.
 	railSync := m.RailCustomSyncCmd()
+	// The rail pane on the same beat: the layout, the rail's size and the
+	// session's windows are what decide whether it is asked for, sized,
+	// streamed or left alone. See rail_pane.go.
+	if pane := m.RailPaneSyncCmd(); pane != nil {
+		railSync = tea.Batch(railSync, pane)
+	}
 	// Same shape as the files sync: the rail opening is one of the fifty
 	// handlers, and the poll it re-plans is armed here rather than in each of
 	// the five places that can open it.
@@ -2387,6 +2393,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ScratchOpenedMsg:
 		m.handleScratchOpened(msg)
+		return m, nil
+
+	case RailPaneOpenedMsg:
+		m.handleRailPaneOpened(msg)
 		return m, nil
 
 	case CommandRanMsg:

@@ -32,6 +32,7 @@ var optionWalkSkips = map[string]string{
 	"ssh":                          "the limits of the tuios ssh server, read from the file when it starts; a pane must not change what guards the server over the control protocol",
 	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
+	"appearance.sidebar.pane":      "the rail pane's command, which runs in a pane the person did not open; set-option must not be able to set it, for the reason appearance.sidebar.custom is kept out",
 	"appearance.sidebar.custom":    "the rail section's command, which runs outside every pane on every refresh, as dock commands and hooks do; set-option, a verb any pane can call in the default open mode, must not be able to set it, the way daemon.respond_from_shell is kept out above",
 	"appearance.sidebar.left":      "the second rail's file-only configuration includes a command that runs outside panes; do not expose its table through set-option until safe scalar controls have separate registry entries",
 	"appearance.sidebar.right":     "the second rail's file-only configuration includes a command that runs outside panes; do not expose its table through set-option until safe scalar controls have separate registry entries",
@@ -125,6 +126,7 @@ func TestSetOptionValueRejectsBadInput(t *testing.T) {
 		{"out-of-range int", "appearance.scroll_lines", "9999"},
 		{"unparseable bool", "appearance.hide_window_buttons", "maybe"},
 		{"the rail section's command", "appearance.sidebar.custom.command", "echo"},
+		{"the rail pane's command", "appearance.sidebar.pane.command", "echo"},
 	}
 
 	for _, tc := range cases {

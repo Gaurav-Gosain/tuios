@@ -205,6 +205,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
 			continue
 		}
+		// The rail pane is a client's, started from its config on attach.
+		// Restored, it would be a shell under a mark that says it runs the
+		// command, and the client would keep it.
+		if w.Rail != "" {
+			debugLog("[DEBUG] dropping restored rail pane %s, the client starts it again", shortID(w.ID))
+			continue
+		}
 		// A TML surface lives in the daemon, so the daemon that held it took
 		// it along. Its window would come back empty.
 		if w.Kind == WindowKindTML {

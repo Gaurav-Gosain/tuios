@@ -240,6 +240,11 @@ type NewWindowOptions struct {
 	Scratch bool
 	// ScratchName is the scratch pane's name. See WindowState.ScratchName.
 	ScratchName string
+	// Rail makes the window the session's rail pane, keyed by this command
+	// line. See WindowState.Rail. The window goes on a free scratch-range
+	// workspace and its process starts at RailWidth by RailHeight cells.
+	Rail                  string
+	RailWidth, RailHeight int
 	// stdout, when set, is the process's standard output in place of the PTY.
 	// See createPTY. It is unexported: only the popup verb's capture sets it.
 	stdout *os.File
@@ -356,6 +361,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		// The box is the PTY's plus a border, for the reason a popup's is.
 		// The PTY is never larger than the session.
 		ptyWidth, ptyHeight = min(opts.Cols, ptyWidth+2), min(opts.Rows, ptyHeight+2)
+		width, height = ptyWidth+2, ptyHeight+2
+	}
+	// The rail pane starts at the size of the section it is drawn in, so its
+	// program draws its first frame for the rail and not for the session.
+	if opts.Rail != "" && opts.RailWidth > 0 && opts.RailHeight > 0 {
+		ptyWidth, ptyHeight = opts.RailWidth, opts.RailHeight
 		width, height = ptyWidth+2, ptyHeight+2
 	}
 
@@ -485,6 +496,16 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			}
 			scratch, scratchName = true, name
 		}
+		// One rail pane per session, checked under the state lock for the
+		// reason the scratch check is. It goes on a workspace nobody is on.
+		if opts.Rail != "" {
+			for i := range state.Windows {
+				if state.Windows[i].Rail != "" {
+					return ErrRailPaneExists
+				}
+			}
+			opts.Workspace = freeScratchWorkspace(state)
+		}
 		if first && (state.Worktree == nil || !state.Worktree.Managed) {
 			state.Worktree = detected
 		}
@@ -544,6 +565,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			PopupDim:    opts.PopupDim,
 			Scratch:     scratch,
 			ScratchName: scratchName,
+			Rail:        opts.Rail,
 			Kind:        opts.Kind,
 			URI:         opts.URI,
 		}
@@ -592,6 +614,9 @@ var windowSpawnedHook func(*PTY)
 // that has a pane already. The caller treats it as a success that did
 // nothing. See ExecuteCommandPayload.FocusIfShown.
 var ErrWorkspaceHasPane = errors.New("the workspace has a pane already")
+
+// ErrRailPaneExists is the refusal of a second rail pane in a session.
+var ErrRailPaneExists = errors.New("this session already has a rail pane")
 
 // ErrScratchExists is the refusal of a second scratch terminal in a session.
 var ErrScratchExists = errors.New("this session already has a scratch terminal of this name. Press its key to show it")

@@ -1030,14 +1030,18 @@ func runCommandRendered(sessionName, command string, args []string, jsonOutput b
 }
 
 // queryWindows queries the window list over the verb protocol (no TUI required).
-func queryWindows(sessionName string, jsonOutput bool) error {
+func queryWindows(sessionName string, jsonOutput, rail bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	raw, err := t.client.Call("list-windows", t.params(map[string]any{"session": sessionName}))
+	params := map[string]any{"session": sessionName}
+	if rail {
+		params["rail"] = true
+	}
+	raw, err := t.client.Call("list-windows", t.params(params))
 	if err != nil {
 		return reportVerbError(t.explain("list-windows", err), jsonOutput)
 	}

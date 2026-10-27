@@ -1928,6 +1928,49 @@ the command runs outside every pane on every refresh, as dock commands and
 hooks do, and in the default open mode any pane can call `set-option`, so
 the command stays out of its reach, as `daemon.respond_from_shell` does.
 
+## The rail's pane section
+
+The rail can show a live terminal pane under its own heading. Place `pane` in
+`appearance.sidebar.sections` and describe it in `[appearance.sidebar.pane]`:
+
+```toml
+[appearance.sidebar]
+sections = "sessions:25,terminals,files:25,pane,agents:34"
+
+[appearance.sidebar.pane]
+title   = "tv"
+command = "tuiostv-helper view"
+height  = 12
+```
+
+| Key | Meaning |
+|---|---|
+| `title` | The section's heading. Defaults to `pane`. |
+| `command` | The program the pane runs, through `sh -c` (`cmd /C` on Windows). |
+| `height` | The most rows the pane takes. `0` or unset takes the section's share, such as `pane:30` in the layout. |
+
+The program runs in a real terminal in the session, so it survives a detach.
+The pane is not one of your panes: tiling, layouts, the terminals section and
+`tuios list-windows` leave it out. `tuios list-windows --rail` lists it.
+
+The pane is as wide as the rail's content and as tall as the lines the section
+gets. When the rail changes size, the program gets the new size. When the rail
+is hidden, folded, narrower than 10 columns or gives the section no lines, the
+program keeps running at its last size and the client draws nothing for it. An
+idle program costs no frames. The pane shows text only: kitty images are not
+drawn in the rail.
+
+Click the pane, or press `P` in window mode (`focus_rail_pane`), to type into
+it. A program that asks for the mouse gets clicks, motion and the wheel.
+`alt+esc`, a click outside the pane, or the leader key gives the keyboard back.
+`esc` goes to the program.
+
+When the program exits, the pane closes and the section says so. Click the
+line to start it again. A session has one rail pane, and only the main rail
+draws it. If two clients name different commands, the last one to ask
+replaces the pane. `[appearance.sidebar.pane]` is read from the file only, for
+the reason `[appearance.sidebar.custom]` is.
+
 ## Turn off agent features
 
 Use this setting if you want only the multiplexer:

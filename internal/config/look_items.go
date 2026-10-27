@@ -106,9 +106,10 @@ func IsLookFileKey(path string) bool {
 }
 
 // lookSectionItems are the rail sections a look may list: every built-in
-// section but custom, and the spacer.
+// section but custom and pane, and the spacer. Both run a command, and a look
+// carries no commands.
 func lookSectionItems() []string {
-	return slices.DeleteFunc(SidebarLayoutNames(), func(s string) bool { return s == SidebarSectionCustom })
+	return slices.DeleteFunc(SidebarLayoutNames(), func(s string) bool { return s == SidebarSectionCustom || s == SidebarSectionPane })
 }
 
 // lookItemKeys are the look keys checked item by item, with the items each

@@ -329,6 +329,11 @@ type Window struct {
 	// ScratchName keys a scratch pane: "scratch" (or empty, from before
 	// names) for the built-in one, the entry's name for a command entry.
 	ScratchName string
+	// Rail marks the session's rail pane, the pane a client draws in its
+	// rail's pane section, with the command line it runs. It is the
+	// session's, like IsScratch. See session.WindowState.Rail.
+	Rail string
+
 	PopupWidth  string
 	PopupHeight string
 	// PopupDim is nil to inherit the popup or modal dim, or an explicit override.

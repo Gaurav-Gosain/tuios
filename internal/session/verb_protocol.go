@@ -1040,9 +1040,33 @@ func buildVerbRegistry() map[string]verbEntry {
 		},
 		"list-windows": {
 			description: "List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating.",
-			params:      []verbParam{sessionParam},
-			examples:    []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
-			handler:     (*Daemon).verbListWindows,
+			params: []verbParam{
+				sessionParam,
+				{Name: "rail", Type: "bool", Description: "Also list the rail pane, the pane a client draws in its rail's pane section. It carries rail, the command line it runs.", Default: "false"},
+			},
+			examples: []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
+			handler:  (*Daemon).verbListWindows,
+		},
+		"rail-pane": {
+			description: "Start, keep or close the session's rail pane: the pane an attached client draws in its rail's pane section. A session has at most one. It sits on a workspace no client shows, so it is in no layout and in no list a user reads. The daemon owns its process, so it survives a detach, and closes it when the process exits. The attached client calls this from its [appearance.sidebar.pane] table.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "key", Type: "string", Description: "The command line the pane runs, as configured. A pane with the same key is kept, and a pane with another key is closed and replaced."},
+				{Name: "command", Type: "string[]", Description: "The argv the pane runs. Required unless off is set."},
+				{Name: "cwd", Type: "string", Description: "Directory the program starts in. Omit to inherit the focused pane's."},
+				{Name: "width", Type: "int", Description: "Columns the program starts at."},
+				{Name: "height", Type: "int", Description: "Rows the program starts at."},
+				{Name: "off", Type: "bool", Description: "Close the rail pane, if there is one. Takes no command.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the rail pane, empty after off."},
+				{Name: "created", Type: "bool", Description: "Whether this call started it."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"rail-pane","params":{"session":"work","key":"htop","command":["sh","-c","htop"],"width":27,"height":12}}`,
+				`{"id":1,"verb":"rail-pane","params":{"session":"work","off":true}}`,
+			},
+			handler: (*Daemon).verbRailPane,
 		},
 		"get-window": {
 			description: "Describe one window, as the client protocol's GetWindow does: an attached client answers with its cursor and process fields, and with none attached the daemon answers with the window's list-windows entry. It is a read, which a pane holding read may call on its own session.",
