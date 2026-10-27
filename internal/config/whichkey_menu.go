@@ -186,14 +186,15 @@ var leaderSessionRows = []menuRow{
 	// The worktree key shares the switcher's row: a row more makes the
 	// leader's menu too tall for a 120x40 screen.
 	{parts: []menuPart{{"prefix_session_switcher", "Sessions"}, {"new_worktree", "New worktree"}}, desc: "Sessions/new worktree"},
-	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}}, desc: "Workspaces"},
+	// The session note shares the workspace switcher's row, for the same
+	// height reason.
+	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}, {"set_note", "Session note"}}, desc: "Workspaces/session note"},
 	{parts: []menuPart{{"choose_tree", "Find a pane"}}, desc: "Find a pane"},
 	{parts: []menuPart{{"goto_picker", "Go to anything"}}, desc: "Go to anything"},
 	{parts: []menuPart{{"prefix_close_session", "Close session"}}, desc: "Close session"},
 	{parts: []menuPart{{"toggle_scratch", "Scratch session"}}, desc: "Scratch session"},
 	{parts: []menuPart{{"last_session", "Last session"}}, desc: "Last session"},
-	// The note shares the rename row, for the height reason above.
-	{parts: []menuPart{{"rename_session", "Rename session"}, {"set_note", "Note"}}, desc: "Rename/note"},
+	{parts: []menuPart{{"rename_session", "Rename session"}}, desc: "Rename session"},
 }
 
 // leaderMenuRows is the leader menu's Menus section.
