@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -132,10 +133,13 @@ func TestRailOpensTheTailscaleSignIn(t *testing.T) {
 	}
 
 	// A click on "sign in" opens the page the link waits on, and says where.
-	url := lastURL(t, g)
+	// The link dials again while it waits, and each dial gets a new page, so
+	// the page opened is the one given out last by the time of the click: the
+	// one read here or one given out after it.
+	issued := len(g.urls(t)) - 1
 	lcol, lrow := signInLabel(t, term, "gated")
 	mouseClick(t, term, lcol, lrow, tuitest.MouseLeft, 0)
-	waitOpened(t, record, []string{url}, "a click on the sign in label")
+	url := waitOpenedCurrent(t, record, g, issued, "a click on the sign in label")
 	if err := term.WaitForText("Opening login.tailscale.com to sign in to gated.", uiTimeout); err != nil {
 		t.Errorf("ASSERTION: the click did not say what it did and where: %v\n%s", err, term.Snapshot())
 	}
@@ -394,5 +398,24 @@ func signInURLOf(t *testing.T, base string, env []string, host string) string {
 			return h.ApprovalURL
 		}
 	}
+	return ""
+}
+
+// waitOpenedCurrent waits until the opener has run once, with a page the
+// wrapper gave out at index from of its list or after it, and returns that
+// page. A page older than that is one the link no longer waits on.
+func waitOpenedCurrent(t *testing.T, record string, g tailscaleGate, from int, what string) string {
+	t.Helper()
+	if from < 0 {
+		t.Fatalf("%s: the wrapper gave out no page before the click", what)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		if got := openedLinks(record); len(got) == 1 && slices.Contains(g.urls(t)[from:], got[0]) {
+			return got[0]
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("%s: the opener was started with %q, want one page of %q", what, openedLinks(record), g.urls(t)[from:])
 	return ""
 }
