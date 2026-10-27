@@ -87,6 +87,6 @@ require (
 	tuios.dev/shot v0.2.1-0.20261023124927-50c38920e301
 	tuios.dev/sketch v0.4.1-0.20261026100045-84b0cd549f12
 	tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078
-	tuios.dev/tml v0.1.2-0.20261026053458-d16ce6efff34
+	tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a
 	tuios.dev/vt v0.3.3-0.20261027060756-f23e6dcde8e9
 )

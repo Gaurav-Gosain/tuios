@@ -39,7 +39,7 @@ require (
 	tuios.dev/progstatus v0.1.1-0.20261023124927-50c38920e301 // indirect
 	tuios.dev/sketch v0.4.1-0.20261026100045-84b0cd549f12 // indirect
 	tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078 // indirect
-	tuios.dev/tml v0.1.2-0.20261026053458-d16ce6efff34 // indirect
+	tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a // indirect
 )
 
 require (

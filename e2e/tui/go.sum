@@ -134,7 +134,7 @@ tuios.dev/sketch v0.4.1-0.20261026100045-84b0cd549f12 h1:WBAcxwJpLbolem6bydaAohj
 tuios.dev/sketch v0.4.1-0.20261026100045-84b0cd549f12/go.mod h1:h553QTAks0AADC1LjCMrSFkqKjqeG0c+xrllTM13zLQ=
 tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078 h1:+3QAC7jjJt/mOJDVj5DOvbewid8o6S/vAOzY1NFYjAY=
 tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078/go.mod h1:+YERlhpL1niy5V1gEFcr7KKkxpGUvmug1kiGJDiS4j4=
-tuios.dev/tml v0.1.2-0.20261026053458-d16ce6efff34 h1:fXEhJ5g3GAwGHGJIhUm5Gs++usa/W+Yo+LctGG43CFY=
-tuios.dev/tml v0.1.2-0.20261026053458-d16ce6efff34/go.mod h1:8F9rKdZTa4zslNLjGxEMDA+UUw3RODNSU/tbYDcSMdc=
+tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a h1:Bi8RLQpd9vg+WPWXBqtlDtibxRrOsmz8akSkbt/2NEU=
+tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a/go.mod h1:8F9rKdZTa4zslNLjGxEMDA+UUw3RODNSU/tbYDcSMdc=
 tuios.dev/vt v0.3.3-0.20261027060756-f23e6dcde8e9 h1:oljNVR6sVZPnJ3Z4gZgCcGeiaJaP77V1FsyvxVK0JhM=
 tuios.dev/vt v0.3.3-0.20261027060756-f23e6dcde8e9/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
