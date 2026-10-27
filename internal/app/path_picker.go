@@ -1,10 +1,12 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -60,6 +62,9 @@ type pathPicker struct {
 	query string
 	// hidden lists the names that start with a dot.
 	hidden bool
+	// home is the home folder on the pane's machine, empty when it is not
+	// known. The title shows a folder under it as ~/...
+	home string
 
 	// dir is the folder the entries belong to, as it was asked for.
 	dir     string
@@ -96,6 +101,7 @@ type pathPickerListMsg struct {
 	gen     uint64
 	dir     string
 	base    string
+	home    string
 	entries []fileEntry
 	err     string
 }
@@ -141,13 +147,49 @@ func (m *OS) OpenPathPicker() tea.Cmd {
 	client, host := m.DaemonClient, m.AttachedHost
 	origin := w.ID
 	return func() tea.Msg {
+		homeCh := make(chan string, 1)
+		go func() { homeCh <- pathPickerHome(local, client, origin) }()
 		base := pathPickerBase(local, pgid, cwd, cached)
 		if base == "" {
 			return pathPickerListMsg{gen: gen, err: "tuios cannot tell which folder this pane is in."}
 		}
 		msg := readListing(client, host, origin, base, true, 0, false)
-		return pathPickerListMsg{gen: gen, dir: base, base: base, entries: msg.Entries, err: msg.Err}
+		return pathPickerListMsg{gen: gen, dir: base, base: base, home: <-homeCh, entries: msg.Entries, err: msg.Err}
 	}
+}
+
+// pathPickerHome is the home folder on the pane's machine. A pane on another
+// machine asks its daemon to list "~" with room for one name: the daemon
+// expands it to its own home and names the folder it listed. A daemon too old
+// to expand it names "~" back, and the title then keeps the full path.
+func pathPickerHome(local bool, client *session.TUIClient, origin string) string {
+	if local {
+		home, _ := os.UserHomeDir()
+		return home
+	}
+	if client == nil {
+		return ""
+	}
+	listing, err := client.ReadDir(origin, "~", 1, true)
+	if err != nil || listing == nil || !filepath.IsAbs(listing.Dir) {
+		return ""
+	}
+	return filepath.Clean(listing.Dir)
+}
+
+// homeShort writes a path under home as ~/..., the way a shell prompt shows
+// it. With no home it is the path as it is.
+func homeShort(path, home string) string {
+	if home == "" || home == "/" {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	if rest, ok := strings.CutPrefix(path, home+"/"); ok {
+		return "~/" + rest
+	}
+	return path
 }
 
 // pathPickerBase is the folder the picker opens on. For a local pane it is
@@ -181,6 +223,9 @@ func (m *OS) HandlePathPickerList(msg pathPickerListMsg) {
 	// because every relative step is relative to it.
 	if msg.base != "" && p.base == "" {
 		p.base = msg.base
+	}
+	if msg.home != "" {
+		p.home = msg.home
 	}
 	if msg.gen != p.gen {
 		return

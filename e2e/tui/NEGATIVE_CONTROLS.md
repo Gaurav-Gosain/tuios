@@ -9872,3 +9872,11 @@ with `Enter`. The shell then reads the file. Run on 2026-10-27 on Linux.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `PathPickerAccept` returns before `w.Paste` | the wait for `cat 'zulu/release notes.md'` on the shell line times out | **caught** |
+| `placePathPicker` fits the box to the screen, not to the pane | in a narrow pane beside the rail, the box spans past the pane's right border | **caught** |
+
+`TestFilesFollowAWindowOnAHost` also opens the picker on a window on another
+machine, in a folder under that machine's home. Run on 2026-10-27 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `pathPickerHome` answers no home for a far pane | the picker's title never reads `~/farproj` | **caught** |

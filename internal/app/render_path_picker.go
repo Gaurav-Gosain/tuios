@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -44,6 +45,34 @@ func (m *OS) pathPickerAnchor(w *terminal.Window) (int, int) {
 	return x, y
 }
 
+// pathPickerFloor is the smallest box the picker keeps inside the pane: this
+// inner width and this many list rows. A pane smaller than that gets the box
+// fitted to the screen instead, which is better than a box too small to read.
+const (
+	pathPickerFloorWidth = 16
+	pathPickerFloorRows  = 3
+)
+
+// pathPickerRoom is the part of the screen the box must stay in: the focused
+// pane's content area, as the screen shows it. A box fitted only to the screen
+// ran over the rail and over the next pane's status line. ok is false when the
+// pane is too small to hold the smallest box.
+func (m *OS) pathPickerRoom(w *terminal.Window) (image.Rectangle, bool) {
+	border := 1
+	if w.Tiled {
+		border = 0
+	}
+	x0, y0 := w.X+border, w.Y+border
+	r := image.Rect(x0, y0, x0+w.ContentWidth(), y0+w.ContentHeight())
+	if v := m.sessionView; v.on {
+		ax, ay := v.toScreen(r.Min.X, r.Min.Y)
+		r = r.Add(image.Pt(ax-r.Min.X, ay-r.Min.Y)).Intersect(v.clip)
+	}
+	r = r.Intersect(image.Rect(0, 0, m.GetRenderWidth(), m.GetRenderHeight()))
+	ok := r.Dx() >= pathPickerFloorWidth+2 && r.Dy() >= pathPickerFloorRows+pathPickerChrome+1
+	return r, ok
+}
+
 // placePathPicker draws the picker as a layer at the pane's cursor and records
 // where it landed, so the mouse handlers can map a cell to a row.
 func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
@@ -65,16 +94,20 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 		return layers
 	}
 	ax, ay := m.pathPickerAnchor(w)
+	room, ok := m.pathPickerRoom(w)
+	if !ok {
+		room = image.Rect(0, 0, rw, rh)
+	}
 
 	line := p.prefix() + p.query
 	width := max(p.nameWidth+6, lipgloss.Width(line)+6, pathPickerMinWidth)
-	width = min(width, pathPickerMaxWidth, max(rw-2, overlay.MinDialogWidth))
+	width = min(width, pathPickerMaxWidth, max(room.Dx()-2, overlay.MinDialogWidth))
 
 	// Above the cursor when the box fits there, as a shell's own completion
 	// menu sits next to the line being typed; below it when it does not; and
 	// on the roomier side, with fewer rows, when it fits on neither.
 	rows := max(min(len(p.matches), pathPickerRows), 1)
-	above, below := ay, rh-ay-1
+	above, below := ay-room.Min.Y, room.Max.Y-ay-1
 	y := 0
 	switch need := rows + pathPickerChrome; {
 	case above >= need:
@@ -83,7 +116,7 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 		y = ay + 1
 	case above >= below:
 		rows = max(above-pathPickerChrome, 1)
-		y = max(ay-rows-pathPickerChrome, 0)
+		y = ay - rows - pathPickerChrome
 	default:
 		rows = max(below-pathPickerChrome, 1)
 		y = ay + 1
@@ -92,8 +125,8 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	content, geo := m.renderPathPicker(p, width, rows)
 	// The filter text starts over the cursor's column: the border, the
 	// magnifier and its space come first.
-	x := clampInt(ax-3, 0, max(rw-geo.Width, 0))
-	y = clampInt(y, 0, max(rh-geo.Height, 0))
+	x := clampInt(ax-3, room.Min.X, max(room.Max.X-geo.Width, room.Min.X))
+	y = clampInt(y, room.Min.Y, max(room.Max.Y-geo.Height, room.Min.Y))
 
 	p.visible = true
 	p.boundsX, p.boundsY, p.boundsW, p.boundsH = x, y, geo.Width, geo.Height
@@ -161,16 +194,11 @@ func (m *OS) renderPathPicker(p *pathPicker, width, rows int) (string, overlay.G
 	return dialog.Render(pal)
 }
 
-// pathPickerTitle is the folder being listed, cut from the left so the end of
-// the path, the part that tells folders apart, stays.
+// pathPickerTitle is the folder being listed, under the home folder of the
+// pane's machine as ~/..., cut from the left so the end of the path, the part
+// that tells folders apart, stays.
 func (m *OS) pathPickerTitle(p *pathPicker, room int) string {
-	dir := p.dir
-	if p.origin == "" && m.AttachedHost == "" {
-		if w := m.windowByID(p.windowID); w != nil && w.Host == "" {
-			dir = shortenHome(dir)
-		}
-	}
-	dir = printableTitle(dir)
+	dir := printableTitle(homeShort(p.dir, p.home))
 	if p.loading {
 		dir += " " + overlay.Ellipsis()
 	}

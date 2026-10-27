@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The rail's files section for a pane on another machine follows the pane
@@ -160,6 +161,38 @@ func TestFilesFollowAWindowOnAHost(t *testing.T) {
 	}
 	toggleSidebarViaPalette(t, term)
 	followCdAndDelete(t, term, inner, false)
+
+	// The path picker on the far window names a folder under the far
+	// machine's home as ~/..., the way it does on this machine. The far home
+	// is not this client's, so only the far daemon can say what it is.
+	//
+	// NEGATIVE CONTROL: with pathPickerHome answering "" for a far pane, the
+	// title is the absolute path and the wait times out.
+	if err := os.MkdirAll(filepath.Join(remote, "HOME", "farproj"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(remote, "HOME", "farproj", "far-a.txt"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	enterTerminalMode(t, term)
+	runInShell(t, term, `cd "$HOME"/far""proj && echo in-far-$((40+2))`, "in-far-42", uiTimeout)
+	// The rail lists the folder once the far daemon has said the pane moved,
+	// and the picker opens on the same answer.
+	railLists(t, term, "the files list did not follow the cd to the far home",
+		[]string{"far-a.txt"}, []string{"inner-keep.txt"})
+	sendKeys(t, term, tuitest.Alt(";"))
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		for line := range strings.SplitSeq(s.Text(), "\n") {
+			if strings.Contains(line, "╭") && strings.Contains(line, "~/farproj") {
+				return true
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		t.Fatalf("the picker on a far window does not name the far home as ~: %v\n%s", err, term.Snapshot())
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "path-picker-far-home")
+	sendKeys(t, term, tuitest.Esc)
 	alive(t, term, "after following a far window's folder")
 }
 

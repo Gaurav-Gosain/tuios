@@ -688,7 +688,100 @@ func TestPathPickerTypesAPath(t *testing.T) {
 			if err := term.WaitForText("PICKED-FILE-OK", uiTimeout); err != nil {
 				t.Fatalf("the shell could not read the typed path: %v\n%s", err, term.Snapshot())
 			}
+			if daemon {
+				pathPickerStaysInANarrowPane(t, term, dir)
+			}
 			alive(t, term, "after typing a path with the picker")
 		})
 	}
+}
+
+// pathPickerStaysInANarrowPane splits the pane, puts the rail beside it, and
+// opens the picker with the cursor near the new pane's right edge. The box
+// must stay inside the pane: fitted only to the screen, it ran over the next
+// pane and the rail.
+//
+// NEGATIVE CONTROL: with placePathPicker fitting the box to the screen (the
+// room from pathPickerRoom ignored), the box's right edge lands on or past
+// the pane's right border and the assertion fails.
+func pathPickerStaysInANarrowPane(t *testing.T, term *tuitest.Terminal, dir string) {
+	t.Helper()
+	sendKeys(t, term, tuitest.Ctrl('b'), "|")
+	waitWindowCount(t, term, 2, "splitting the pane")
+	toggleSidebarViaPalette(t, term)
+	if err := term.WaitForText(sidebarHeader, uiTimeout); err != nil {
+		t.Fatalf("the rail never came up: %v\n%s", err, term.Snapshot())
+	}
+	runInShell(t, term, "cd "+dir+" && clear && echo nar\"\"row", "narrow", uiTimeout)
+
+	// The pane's content starts where the shell printed narrow, and its
+	// right border is the first border cell after it on that row.
+	scr := term.Screen()
+	left, row, ok := findOnGrid(scr, "narrow")
+	if !ok {
+		t.Fatalf("no output line to measure the pane by:\n%s", term.Snapshot())
+	}
+	right := gridCellAfter(scr, row, left, "│")
+	if right < 0 {
+		t.Fatalf("the pane has no right border on row %d:\n%s", row, term.Snapshot())
+	}
+	// The prompt is two cells, so this puts the cursor four cells from the
+	// border, where a box anchored at the cursor would run past it.
+	sendKeys(t, term, strings.Repeat("x", max(right-left-6, 1)), tuitest.Alt(";"))
+	// The box's top border is the only "╭─ " on the screen: a pane's border
+	// starts with its buttons, and the rail lists the same names as the box.
+	if err := term.WaitForText("╭─ ", uiTimeout); err != nil {
+		t.Fatalf("alt+; did not open the picker in the narrow pane: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(200 * time.Millisecond)
+	scr = term.Screen()
+	boxLeft, boxTop := pathPickerCorner(scr)
+	boxRight := gridCellAfter(scr, boxTop, boxLeft, "╮")
+	savePNG(t, scr, shot.XTermPalette(), artifactDir(t), "path-picker-narrow-pane")
+	saveArtifact(t, term, artifactDir(t), "path-picker-narrow-pane")
+	if boxLeft < left || boxRight < 0 || boxRight >= right {
+		t.Fatalf("the picker box spans columns %d to %d, outside the pane's content %d to %d:\n%s",
+			boxLeft, boxRight, left, right-1, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "╭─ ") }, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the picker: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// pathPickerCorner is the cell of the picker box's top-left corner: a "╭"
+// followed by "─" and a space, or (-1, -1).
+func pathPickerCorner(s tuitest.Screen) (int, int) {
+	cols, rows := s.Size()
+	for r := range rows {
+		for c := range cols - 2 {
+			if s.Cell(c, r).Content == "╭" && s.Cell(c+1, r).Content == "─" && s.Cell(c+2, r).Content == " " {
+				return c, r
+			}
+		}
+	}
+	return -1, -1
+}
+
+// gridCellAfter is the first column right of col on row whose cell is want,
+// or -1.
+func gridCellAfter(s tuitest.Screen, row, col int, want string) int {
+	cols, _ := s.Size()
+	for c := col + 1; c < cols; c++ {
+		if s.Cell(c, row).Content == want {
+			return c
+		}
+	}
+	return -1
+}
+
+// gridCellBefore is the last column left of col on row whose cell is want,
+// or -1.
+func gridCellBefore(s tuitest.Screen, row, col int, want string) int {
+	for c := col - 1; c >= 0; c-- {
+		if s.Cell(c, row).Content == want {
+			return c
+		}
+	}
+	return -1
 }
