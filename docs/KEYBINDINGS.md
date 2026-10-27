@@ -1572,6 +1572,7 @@ the Inbox held is the Needs you group. See
 |---|---|
 | `ctrl+b i` | Open the agents view |
 | `ctrl+b o` | Go to the oldest item that needs you; `o` again, inside the repeat window, goes to the next |
+| `opt+shift+j` / `opt+shift+k` (`alt+shift+j` / `alt+shift+k` off macOS), or `ctrl+b J` / `ctrl+b K` | Next and previous agent pane (`next_agent`, `prev_agent`), in the order the rail's agents section lists them, wrapping at the ends. From a pane with no agent they go to the first and the last. An agent in another session or workspace is switched to, as choosing its row does. The chords work in terminal mode too |
 | `ctrl+b M` | Open the agents view on the mail for you (`m` there opens the whole mailbox) |
 
 Inside it:
@@ -2126,6 +2127,7 @@ ordinary `ctrl` chord that no terminal interferes with:
 | `ctrl+b` then an arrow | Focus the pane in that direction |
 | `ctrl+b n` / `ctrl+b p` | Next and previous pane |
 | `ctrl+b (` / `ctrl+b )` | Previous and next session |
+| `ctrl+b K` / `ctrl+b J` | Previous and next agent pane |
 | `ctrl+b a` | Launcher |
 | `ctrl+b 0` to `ctrl+b 9` | Jump to a pane |
 
