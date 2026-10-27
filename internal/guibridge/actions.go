@@ -54,6 +54,7 @@ var allowedActions = map[string]bool{
 	"nav_left": true, "nav_right": true, "nav_up": true, "nav_down": true,
 	// Sessions
 	"next_session": true, "prev_session": true,
+	"next_agent": true, "prev_agent": true,
 	// The same work under the leader and its sub-prefixes, which is where
 	// the renderer's own prefix resolver ends up.
 	"prefix_new_window": true, "prefix_close_window": true,

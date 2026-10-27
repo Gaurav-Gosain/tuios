@@ -290,3 +290,73 @@ func (m *OS) sidebarAgentFoldRow(e sidebarAgentEntry, cw int, pal overlay.Palett
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(sidebarNameAvail(cw, 0)-(indent-sidebarNameCol()), 1))), cw, rowBg)
 }
+
+// railAgentOrder is every agent pane on this machine in the order the rail's
+// agents section lists it: the section's own filter and sort, then the rows at
+// rest that the fold gathers into its line at the end, in their own order. It
+// reads the tree and the controls whether or not the section is in the rail's
+// layout, so the order a key walks is the one the section would show.
+//
+// Panes on other machines are left out, as CycleSession leaves out their
+// sessions: reaching one opens a connection, which a cycle key must not do by
+// surprise.
+func (m *OS) railAgentOrder() []sidebarAgentEntry {
+	all, _ := m.sidebarFilterAgents(m.agentEntries(m.BuildSessionTree().Sessions))
+	agents := all[:0:0]
+	for _, e := range all {
+		if e.Host == "" {
+			agents = append(agents, e)
+		}
+	}
+	m.sidebarSortAgents(agents)
+	now := time.Now()
+	folded := m.sidebarFoldAgents(agents, now)
+	if n := len(folded); n == 0 || folded[n-1].Fold == 0 {
+		return agents
+	}
+	awake := append([]sidebarAgentEntry(nil), folded[:len(folded)-1]...)
+	for _, e := range agents {
+		if sidebarAgentRests(e, m.Settings.SidebarAgentRestFold, now) {
+			awake = append(awake, e)
+		}
+	}
+	return awake
+}
+
+// CycleAgent focuses the agent pane delta places from the focused one in the
+// rail's order (railAgentOrder), wrapping at both ends. From a pane that runs
+// no agent, next goes to the first and previous to the last. An agent in
+// another session or on another workspace is reached the way choosing its row
+// in the rail reaches it.
+func (m *OS) CycleAgent(delta int) {
+	if m.refuseAgentsOff() {
+		return
+	}
+	agents := m.railAgentOrder()
+	n := len(agents)
+	if n == 0 {
+		m.ShowNotification("No agents running", "info", m.Settings.NotificationDuration)
+		return
+	}
+	next := n - 1
+	if delta > 0 {
+		next = 0
+	}
+	for i, e := range agents {
+		if e.Focused {
+			next = ((i+delta)%n + n) % n
+			if next == i {
+				m.ShowNotification("No other agents", "info", m.Settings.NotificationDuration)
+				return
+			}
+			break
+		}
+	}
+	e := agents[next]
+	m.sidebarFocusWindow(sidebarRowHit{
+		Kind:        sidebarRowAgent,
+		SessionID:   e.SessionID,
+		WindowID:    e.WindowID,
+		WindowIndex: e.WindowIndex,
+	})
+}

@@ -229,6 +229,7 @@ var leaderToolRows = []menuRow{
 var leaderAgentRows = []menuRow{
 	{parts: []menuPart{{"prefix_inbox", "Agents view"}}, desc: "Agents view"},
 	{parts: []menuPart{{"prefix_next_attention", "Oldest waiting"}}, desc: "Oldest waiting"},
+	{parts: []menuPart{{"prev_agent", "Previous agent"}, {"next_agent", "Next agent"}}, desc: "Prev/next agent"},
 	{parts: []menuPart{{"prefix_mail", "Mail for you"}}, desc: "Mail for you"},
 	{parts: []menuPart{{"prefix_next_finished", "Newest finished"}}, desc: "Newest finished"},
 	{parts: []menuPart{{"prefix_review", "Review changes"}}, desc: "Review changes"},
@@ -322,11 +323,12 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
 // means something to a person running agents: the Inbox, the oldest waiting
 // item, the Inbox on its mail, reviewing a pane's changes, the newest finished
-// turn and the Agents settings tab. The client leaves them out of the menu
+// turn, the Agents settings tab and stepping between agent panes. The client leaves them out of the menu
 // until an agent has been seen; the keys work either way.
 func IsAgentPrefixKeybinding(k Keybinding) bool {
 	switch k.Action {
-	case "prefix_inbox", "prefix_next_attention", "prefix_mail", "prefix_review", "prefix_next_finished", "prefix_agents_settings":
+	case "prefix_inbox", "prefix_next_attention", "prefix_mail", "prefix_review", "prefix_next_finished", "prefix_agents_settings",
+		"next_agent", "prev_agent":
 		return true
 	}
 	return false

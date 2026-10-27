@@ -1093,6 +1093,27 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The agent panes in the rail's order, across sessions.
+			Name:     "Agents: next agent",
+			Shortcut: "alt+shift+j",
+			Bind:     "next_agent",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.CycleAgent(1)
+				return m, nil
+			},
+		},
+		{
+			Name:     "Agents: previous agent",
+			Shortcut: "alt+shift+k",
+			Bind:     "prev_agent",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.CycleAgent(-1)
+				return m, nil
+			},
+		},
+		{
 			// The review overlay on the focused pane's changes. The word
 			// "review" finds it, like "Review changes" in the prefix menu.
 			Name:     paletteReviewName,

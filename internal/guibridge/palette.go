@@ -78,6 +78,8 @@ var paletteActions = map[string]string{
 	"Switch session":                             "gui_sessions",
 	"Agents: what needs you":                     "gui_inbox",
 	"Agents: go to the oldest waiting":           "prefix_next_attention",
+	"Agents: next agent":                         "next_agent",
+	"Agents: previous agent":                     "prev_agent",
 	"Show help":                                  "gui_keys",
 	"Hints: label text on the pane to copy it":   "gui_hints",
 	"Scratch: show or hide the scratch terminal": "toggle_scratch",

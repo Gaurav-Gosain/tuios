@@ -223,6 +223,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("new_session", handleNewSession)
 	d.Register("next_session", handleNextSession)
 	d.Register("prev_session", handlePrevSession)
+	d.Register("next_agent", handleNextAgent)
+	d.Register("prev_agent", handlePrevAgent)
 
 	// Session switching (1-9), by the rail's own order
 	for i := 1; i <= 9; i++ {
@@ -1180,6 +1182,18 @@ func handleNextSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleSession(-1)
+	return o, nil
+}
+
+// handleNextAgent and handlePrevAgent walk the agent panes in the order the
+// rail's agents section lists them, across sessions.
+func handleNextAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleAgent(1)
+	return o, nil
+}
+
+func handlePrevAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleAgent(-1)
 	return o, nil
 }
 

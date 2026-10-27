@@ -1219,6 +1219,11 @@ func DefaultConfig() *UserConfig {
 				// "alt+N" normalizes to alt+n, which is already next-window.
 				"next_session": {"alt+shift+n"},
 				"prev_session": {"alt+shift+p"},
+				// Walking agent panes, on the vim pair, terminal-safe for the
+				// same reason. On macOS Option+Shift+j and k compose Ô and ,
+				// which the glyph table maps back to these chords.
+				"next_agent": {"alt+shift+j"},
+				"prev_agent": {"alt+shift+k"},
 			},
 			Workspaces: getDefaultWorkspaceKeybinds(),
 			Layout:     getDefaultLayoutKeybinds(),
@@ -1308,6 +1313,10 @@ func DefaultConfig() *UserConfig {
 				// out of the glyph table on purpose and nothing matches it.
 				"next_session": {")"},
 				"prev_session": {"("},
+				// Stepping through agent panes, shifted j and k as on the
+				// direct chords. Lower j and k are taken here.
+				"next_agent": {"J"},
+				"prev_agent": {"K"},
 				// The launcher's direct chord is alt+space, which macOS turns
 				// into a non-breaking space that matches nothing. This is the
 				// way in that does not depend on the terminal.

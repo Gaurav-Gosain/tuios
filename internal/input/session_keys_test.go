@@ -35,6 +35,8 @@ func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
 	}{
 		{"letter", tea.KeyPressMsg{Code: 'n', ShiftedCode: 'N', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+n", "next_session"},
 		{"letter", tea.KeyPressMsg{Code: 'p', ShiftedCode: 'P', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+p", "prev_session"},
+		{"letter", tea.KeyPressMsg{Code: 'j', ShiftedCode: 'J', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+j", "next_agent"},
+		{"letter", tea.KeyPressMsg{Code: 'k', ShiftedCode: 'K', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+k", "prev_agent"},
 		{"kitty digit", tea.KeyPressMsg{Code: '1', ShiftedCode: '!', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+1", "move_and_follow_1"},
 		{"legacy digit", tea.KeyPressMsg{Code: '!', Mod: tea.ModAlt}, "alt+!", "move_and_follow_1"},
 		{"modifyOtherKeys digit", tea.KeyPressMsg{Code: '!', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+!", "move_and_follow_1"},
