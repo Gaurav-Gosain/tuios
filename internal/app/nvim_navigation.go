@@ -103,6 +103,11 @@ func (m *OS) FocusTerminalDirection(direction string) int {
 	if m.LeaveRailToward(direction) {
 		return previous
 	}
+	// Any other focus key while the rail holds the keyboard would move pane
+	// focus under it, out of sight; it does nothing instead.
+	if m.SidebarFocused {
+		return previous
+	}
 	if m.AutoTiling && m.UseScrollingLayout && (direction == "left" || direction == "right") {
 		if direction == "left" {
 			m.ScrollingFocusLeft()
