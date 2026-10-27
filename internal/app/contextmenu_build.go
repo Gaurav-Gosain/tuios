@@ -409,6 +409,7 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 		// the attached session.
 		m.item(glyphRename, "Rename", "rename_session", false),
 		m.item(glyphPalette, "Session color", "set_session_accent", false),
+		m.item(glyphRename, "Note...", "set_note", false),
 		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
 		// Dimmed off the attached session for the same reason detach is: the

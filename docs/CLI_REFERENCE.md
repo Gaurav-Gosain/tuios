@@ -3072,6 +3072,46 @@ tuios set-session-accent -s work cyan
 tuios set-session-accent
 ```
 
+### `tuios note`
+
+Set, read or clear the return note of a session or a pane. A note is one short
+line. It says what the session is for or what comes next. tuios shows it in
+the dock when you attach or switch to the session. The sidebar, the session
+switcher and the Inbox show it too.
+
+The note is kept with the session. It survives a detach and a daemon restart.
+A note is at most 200 bytes. Newlines become spaces.
+
+**Usage:**
+```bash
+tuios note set TEXT... [flags]
+tuios note get [flags]
+tuios note clear [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
+- `-w, --window <pane>`: A pane by name or id, for the pane's note (default: the session's note)
+- `--json`: Output result as JSON
+
+`tuios note get` prints the note, and prints nothing when there is none.
+`tuios ls --json` also gives each session's `note`.
+
+**Examples:**
+```bash
+# Say what comes next before you stop
+tuios note set next: run the migration
+
+# Read it back
+tuios note get
+
+# A note on one pane
+tuios note set -w build waiting for CI
+
+# Remove the note
+tuios note clear
+```
+
 ### `tuios set-session-space`
 
 File a session under a space, a named group of related sessions that `tuios ls` and the sidebar list together, under the space's name. A space is only a label on its sessions: it exists while at least one session is in it, and it survives a daemon restart with them. Pass no space to take the session out of any.

@@ -597,6 +597,16 @@ If the focused pane is not in a git repository, a message says so. The action
 is `new_worktree`, and the command palette has it too. A right-click on a
 session or a repository in the sidebar opens the same dialog.
 
+## Session note
+
+`Ctrl+B I` opens a one-line editor with the note of the session. A note says
+what the session is for or what comes next. `enter` saves the note. An empty
+note removes it. `esc` closes the editor. The action is `set_note`. The command
+palette and the menu of a session row in the sidebar have it too.
+
+The dock shows the note when you attach or switch to the session. See
+[SESSIONS.md](SESSIONS.md#return-notes).
+
 ## Picture in picture
 
 `p` in window mode pins the focused pane as the picture-in-picture view, a

@@ -1620,6 +1620,23 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	return append(hints, m.keyHints(config.ActionInboxClose, "close")...)
 }
 
+// cockpitNote is the return note the focus shows for a row: its pane's note,
+// else its session's. A pane on another machine has none here: the link
+// does not carry notes.
+func (m *OS) cockpitNote(r ckRow, e sidebarAgentEntry) string {
+	sessionName, windowID, host := e.SessionID, e.WindowID, e.Host
+	if r.agent < 0 {
+		if !r.hasItem {
+			return ""
+		}
+		sessionName, windowID, host = r.item.Session, r.item.Window, r.item.Host
+	}
+	if sessionName == "" || host != "" {
+		return ""
+	}
+	return m.paneNote(sessionName, windowID)
+}
+
 // drawFocus draws the selected row's work: its header, the thread, the card
 // of what it asks, and the reply line.
 func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Time) {
@@ -1700,6 +1717,16 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 	rule := y + 3
 	if c.h < 30 {
 		rule = y + 2
+	}
+	// The third line: the pane's return note, else its session's, dim. The
+	// rule moves down to make room for it when the header is tight.
+	if note := m.cockpitNote(r, e); note != "" {
+		c.text(x, y+2, right, ckSeg{t: overlay.Truncate(printableTitle(note), max(w, 1)), fg: pal.FgDim})
+		rule = max(rule, y+3)
+		if c.h >= 30 {
+			// The gap under the header stays, one line lower.
+			rule = y + 4
+		}
 	}
 	tabs := m.cockpitTabs(e, r)
 	if len(tabs) > 0 {

@@ -2281,6 +2281,37 @@ func (c *TUIClient) SessionSpace(name string) string {
 	return ""
 }
 
+// SessionNote is the named session's return note from the cached listing,
+// empty when it has none or is unknown.
+func (c *TUIClient) SessionNote(name string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.Note
+		}
+	}
+	return ""
+}
+
+// SessionWindowNote is the return note of one pane of the named session, from
+// the cached listing, empty when it has none or is unknown.
+func (c *TUIClient) SessionWindowNote(name, windowID string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name != name {
+			continue
+		}
+		for _, w := range s.Windows {
+			if w.ID == windowID {
+				return w.Note
+			}
+		}
+	}
+	return ""
+}
+
 // SessionCurrentWorkspace is the workspace the named session is showing, from
 // the cached listing, or 0 when it is unknown: an older daemon does not send
 // the field, and a surface reading zero simply says nothing about where that
@@ -2482,7 +2513,7 @@ func listingsAgree(a, b []SessionInfo) bool {
 		}
 		// A rename moves no window, so without these a renamed session kept the
 		// old label until something else happened to bump the generation.
-		if a[i].DisplayName != b[i].DisplayName || a[i].Accent != b[i].Accent {
+		if a[i].DisplayName != b[i].DisplayName || a[i].Accent != b[i].Accent || a[i].Note != b[i].Note {
 			return false
 		}
 		// Attaching to a restored session moves no window either, and the tag has
@@ -2750,5 +2781,5 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		slices.Equal(a.SubagentList, b.SubagentList) &&
 		slices.Equal(a.ProgramStatus, b.ProgramStatus) &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
-		a.Scratch == b.Scratch
+		a.Scratch == b.Scratch && a.Note == b.Note
 }

@@ -374,6 +374,11 @@ var verbScopes = map[string]scopeKind{
 	"set-buffer":    scopeBufferWrite,
 	"delete-buffer": scopeBufferWrite,
 	"paste-buffer":  scopeWrite,
+
+	// The return notes (verb_note.go): a line of text on a session or a
+	// pane, written in the caller's own session. Nothing is typed.
+	"set-note": scopeWrite,
+	"get-note": scopeRead,
 }
 
 // readsBuffers reports whether a verb reads the paste buffers. paste-buffer

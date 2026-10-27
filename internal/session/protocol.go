@@ -601,6 +601,9 @@ type WindowSummary struct {
 	// leaves the row out, as the attached client does. Additive and omitted
 	// when false.
 	Scratch bool `json:"scratch,omitempty"`
+	// Note is the pane's return note (WindowState.Note). Additive and omitted
+	// when empty, which is what an older peer sends.
+	Note string `json:"note,omitempty"`
 }
 
 // ClientInfo describes one daemon connection for listing.
@@ -631,6 +634,10 @@ type SessionInfo struct {
 	// how a client reads "fall back to Name".
 	DisplayName string `json:"display_name,omitempty"`
 	Accent      string `json:"accent,omitempty"`
+	// Note is the session's return note (SessionState.Note), so a client can
+	// show it for a session it is not attached to. Omitted when empty, which
+	// is also what an older daemon sends.
+	Note string `json:"note,omitempty"`
 	// CurrentWorkspace is the workspace the session is showing, which is what
 	// decides whether one of its panes counts as "here" and so goes untagged.
 	// Additive and omitted when zero; a client reading zero tags nothing, which

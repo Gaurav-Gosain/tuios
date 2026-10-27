@@ -320,6 +320,10 @@ var verbCapabilities = map[string][]string{
 	"ship-push":   {config.LinkAllowWrite},
 	"ship-pr":     {config.LinkAllowWrite},
 	"ship-status": {config.LinkAllowList},
+
+	// The return notes (verb_note.go).
+	"set-note": {config.LinkAllowWrite},
+	"get-note": {config.LinkAllowList},
 }
 
 // msgCapabilities is what each binary message needs on a link connection.

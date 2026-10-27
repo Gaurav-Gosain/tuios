@@ -306,7 +306,14 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	ids := make(map[string]WindowState, len(kept))
 	grants := make(map[string][]string)
 	startedBy := make(map[string]*PaneRef)
+	var notes map[string]string // most panes have none
 	for _, w := range kept {
+		if w.Note != "" {
+			if notes == nil {
+				notes = make(map[string]string)
+			}
+			notes[w.ID] = w.Note
+		}
 		if w.Grants != nil {
 			grants[w.ID] = w.Grants
 		}
@@ -353,6 +360,8 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// Whether the rail is shown is daemon-owned in the same way. See
 	// RestoreSidebar.
 	sess.RestoreSidebar(state.Sidebar)
+	// The return notes are daemon-owned in the same way. See RestoreNotes.
+	sess.RestoreNotes(state.Note, notes)
 	// The scratch mark is daemon-owned in the same way: UpdateState keeps
 	// only the marks canonical state already has, and a new session has none.
 	if len(scratchPanes) > 0 {

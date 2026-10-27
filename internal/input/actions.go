@@ -241,6 +241,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// route through the same OS methods, so the two cannot drift apart)
 	d.Register("settings_sidebar", handleSettingsSidebar)
 	d.Register("rename_session", handleRenameSession)
+	d.Register("set_note", handleSetNote)
 	d.Register("rename_workspace", handleRenameWorkspace)
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
@@ -453,6 +454,17 @@ func handleSetAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleSetSessionAccent opens the same picker on a session: the row's own
 // session when the action came from a rail menu, and the attached one when it
 // came from a key.
+// handleSetNote opens the note editor on the session whose row the menu was
+// opened on, else the attached session.
+func handleSetNote(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	name := o.TakeMenuSession()
+	if name == "" {
+		name = o.SessionName
+	}
+	o.BeginEditNote(name)
+	return o, nil
+}
+
 func handleSetSessionAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	name := o.TakeMenuSession()
 	if name == "" {

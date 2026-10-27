@@ -721,6 +721,14 @@ type OS struct {
 	// switch and the daemon's own addressing use.
 	SessionDisplayName string
 	SessionAccent      string
+	// SessionNote is the attached session's return note, daemon-owned like
+	// the label. noteAnnouncedFor is the session whose note the dock last
+	// showed on arrival, so the note is shown once per attach or switch and
+	// not again when it changes while you stay. paneNotes are the attached
+	// session's pane notes by window id, only the panes that have one.
+	SessionNote      string
+	noteAnnouncedFor string
+	paneNotes        map[string]string
 	// sessionColors is the automatic colour each session was arbitrated onto for
 	// the surface currently being drawn, settled once per render by
 	// refreshSessionColors. Derived state, never persisted and never synced: it

@@ -1406,6 +1406,8 @@ func DefaultConfig() *UserConfig {
 				// E opens the scrollback in the editor, one shift from the e
 				// that focuses the rail. Copy mode has it on ctrl+g.
 				ActionEditScrollback: {"E"},
+				// I writes the session's return note. i is the Inbox.
+				"set_note": {"I"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -3654,6 +3656,8 @@ var yieldingDefaults = map[string]bool{
 	"goto_picker": true,
 	// U after the prefix, new with the worktree key.
 	"new_worktree": true,
+	// I after the prefix, new with the return notes.
+	"set_note": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
 	// V after the prefix, new in the release after v0.8.2.

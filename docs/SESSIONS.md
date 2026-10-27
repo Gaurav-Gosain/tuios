@@ -17,6 +17,7 @@ what does and does not come back after each kind of interruption.
 - [Sessionizer](#sessionizer)
 - [The Scratch Terminal](#the-scratch-terminal)
 - [Picture in Picture](#picture-in-picture)
+- [Return Notes](#return-notes)
 - [What Survives](#what-survives)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
@@ -473,6 +474,25 @@ corner = "bottom-right"  # bottom-right, bottom-left, top-right or top-left
 The action is `toggle_pip`. If your config puts `p` on a different window
 mode action, `toggle_pip` has no key. `tuios keybinds doctor` shows this.
 
+## Return Notes
+
+A layout comes back after a detach or a restart. It does not tell you what you
+wanted to do next. A return note does. It is one short line on a session, or on
+one pane.
+
+```bash
+tuios note set next: run the migration
+```
+
+When you attach or switch to the session, the dock shows `Note: next: run the
+migration`. The sidebar shows the note after the session name, in place of the
+branch. The session switcher shows it after the label. The focus of the Inbox
+shows the note of the pane, else the note of its session.
+
+`Ctrl+B I` edits the note of the session in the app. An agent can leave a note
+from its pane before it stops. The note is saved with the session, so it
+survives a daemon restart. See [`tuios note`](CLI_REFERENCE.md#tuios-note).
+
 ## What Survives
 
 Four tiers of interruption, and what comes back after each. "Structure" means
@@ -492,6 +512,7 @@ BSP tree and the layout mode.
 | Agent conversations (resumable harnesses) | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
 | Sidebar shown or hidden | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
 | Space membership | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
+| Return notes | Yes | Yes | Partial: as of the last save | Partial: as of the last save |
 | Copy-mode position, selection | No, per-client | No | No | No |
 | Input mode (window vs terminal) | No, per-client | No | No | No |
 

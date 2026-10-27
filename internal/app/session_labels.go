@@ -17,6 +17,7 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionRestored = state.Restored
 	m.SessionGlobal = state.Global
 	m.SessionSpace = state.Space
+	m.adoptNotes(state)
 	// The worktree record travels with the state, so the attached row is drawn
 	// from the same push every other label on it comes from. A copy, because
 	// the state snapshot is the daemon's and this outlives the call.
@@ -34,6 +35,60 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 		return
 	}
 	m.WorkspaceNames = maps.Clone(state.WorkspaceNames)
+}
+
+// adoptNotes copies the return notes off a state push, and shows the
+// session's note in the dock when this client has just come to the session:
+// an attach or a switch. A note that changes while the client stays is not
+// shown again: the person who changed it has just read it.
+func (m *OS) adoptNotes(state *session.SessionState) {
+	m.SessionNote = state.Note
+	clear(m.paneNotes)
+	for i := range state.Windows {
+		if n := state.Windows[i].Note; n != "" {
+			if m.paneNotes == nil {
+				m.paneNotes = make(map[string]string)
+			}
+			m.paneNotes[state.Windows[i].ID] = n
+		}
+	}
+	name := state.Name
+	if name == "" {
+		name = m.SessionName
+	}
+	if name == "" || name == m.noteAnnouncedFor {
+		return
+	}
+	m.noteAnnouncedFor = name
+	if state.Note != "" {
+		m.ShowNotification("Note: "+printableTitle(state.Note), "info", 2*m.Settings.NotificationDuration)
+	}
+}
+
+// sessionNote is the return note of the named session: the attached one from
+// its state, any other from the cached listing.
+func (m *OS) sessionNote(name string) string {
+	if name == m.SessionName {
+		return m.SessionNote
+	}
+	if m.DaemonClient != nil {
+		return m.DaemonClient.SessionNote(name)
+	}
+	return ""
+}
+
+// paneNote is the return note of one pane, else the note of its session.
+func (m *OS) paneNote(sessionName, windowID string) string {
+	if sessionName == m.SessionName {
+		if n := m.paneNotes[windowID]; n != "" {
+			return n
+		}
+	} else if m.DaemonClient != nil {
+		if n := m.DaemonClient.SessionWindowNote(sessionName, windowID); n != "" {
+			return n
+		}
+	}
+	return m.sessionNote(sessionName)
 }
 
 // SessionLabel is what to show for a session: its display name when it has one,

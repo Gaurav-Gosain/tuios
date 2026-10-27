@@ -1875,6 +1875,40 @@ func buildVerbRegistry() map[string]verbEntry {
 			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
+		"set-note": {
+			description: "Set the return note of a session, or of one pane with window: one short line that says what it is for or what comes next. Every client shows it, the dock shows it when a person comes back to the session, and it survives a reattach and a daemon restart.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window id or name for a pane's note. Omit for the session's note."},
+				{Name: "note", Type: "string", Description: "The note. Newlines and tabs become spaces, other control characters are dropped, and it is cut to 200 bytes. Omit or pass an empty string to clear it."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always note_set."},
+				{Name: "session", Type: "string", Description: "The session's name."},
+				{Name: "window", Type: "string", Description: "The id of the pane the note is on, empty for the session's note."},
+				{Name: "note", Type: "string", Description: "The note as stored, empty when cleared."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-note","params":{"session":"work","note":"next: run the migration"}}`,
+				`{"id":1,"verb":"set-note","params":{"session":"work","window":"build","note":""}}`,
+			},
+			handler: (*Daemon).verbSetNote,
+		},
+		"get-note": {
+			description: "Read the return note of a session, or of one pane with window. See set-note.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window id or name for a pane's note. Omit for the session's note."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always note."},
+				{Name: "session", Type: "string", Description: "The session's name."},
+				{Name: "window", Type: "string", Description: "The id of the pane, empty for the session's note."},
+				{Name: "note", Type: "string", Description: "The note, empty when there is none."},
+			},
+			examples: []string{`{"id":1,"verb":"get-note","params":{"session":"work"}}`},
+			handler:  (*Daemon).verbGetNote,
+		},
 		"set-session-space": {
 			description: "File a session under a space, a named group of related sessions that tuios ls and the sidebar list together. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.",
 			params: []verbParam{

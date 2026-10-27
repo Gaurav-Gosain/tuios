@@ -1169,6 +1169,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Session note: what this session is for or what comes next",
+			Shortcut: "prefix+I",
+			Bind:     "set_note",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.BeginEditNote(m.SessionName)
+				return m, nil
+			},
+		},
+		{
 			Name:     "New worktree: a branch and a session in this pane's repository",
 			Shortcut: "prefix+U",
 			Bind:     "new_worktree",

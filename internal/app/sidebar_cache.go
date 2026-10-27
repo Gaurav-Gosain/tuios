@@ -376,6 +376,8 @@ func (m *OS) sidebarSignature() uint64 {
 	// under, and like its worktree record it arrives on the session state, so
 	// the client's cache generation below does not speak for it.
 	mixS(m.SessionSpace)
+	// The attached session's note rides the state push the same way.
+	mixS(m.SessionNote)
 
 	// Foreign-session data, folded by generation instead of by locking the client.
 	if m.DaemonClient != nil {

@@ -2922,6 +2922,10 @@ func (m *OS) windowIndexByID(id string) int {
 //
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
+// railNoteMin is the fewest cells a return note is drawn in after a name:
+// fewer than that says nothing but an ellipsis.
+const railNoteMin = 4
+
 func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	if dragged {
@@ -2995,6 +2999,13 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	if !grouped && variant == sidebarVariantFull {
 		b = printableTitle(node.Branch)
 	}
+	// A return note takes the branch's slot. It is cut to whatever room the
+	// name leaves rather than kept whole or dropped, so it costs the name no
+	// cells: it is not a token of the fit.
+	note := ""
+	if node.Note != "" && variant == sidebarVariantFull {
+		note, b = printableTitle(node.Note), ""
+	}
 	s := &m.railFit
 	s.tokens = append(s.tokens[:0], railToken{Whole: true})
 	if b != "" {
@@ -3025,8 +3036,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW-capsW)
 	s.keep = keep
 	branch := ""
-	if keep[0] {
+	if keep[0] && b != "" {
 		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
+	}
+	if room := avail - titleW - 1; note != "" && room >= railNoteMin {
+		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(note, room))
 	}
 	right := sidebarJoinFigures(figures[:], keep[1:], sidebarStyle(rowBg, pal.FgMute))
 	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)

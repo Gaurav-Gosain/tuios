@@ -192,7 +192,8 @@ var leaderSessionRows = []menuRow{
 	{parts: []menuPart{{"prefix_close_session", "Close session"}}, desc: "Close session"},
 	{parts: []menuPart{{"toggle_scratch", "Scratch session"}}, desc: "Scratch session"},
 	{parts: []menuPart{{"last_session", "Last session"}}, desc: "Last session"},
-	{parts: []menuPart{{"rename_session", "Rename session"}}, desc: "Rename session"},
+	// The note shares the rename row, for the height reason above.
+	{parts: []menuPart{{"rename_session", "Rename session"}, {"set_note", "Note"}}, desc: "Rename/note"},
 }
 
 // leaderMenuRows is the leader menu's Menus section.

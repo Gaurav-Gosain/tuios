@@ -699,6 +699,7 @@ var ActionDescriptions = map[string]string{
 	// Reached from the rail's session row and its menu; the row carries which
 	// session, so it has no key of its own.
 	"set_session_accent": "Session color",
+	"set_note":           "Write a note for the session: what it is for or what comes next",
 	"minimize_window":    "Minimize window",
 	"restore_all":        "Restore all minimized",
 	"toggle_zoom":        "Toggle zoom (fullscreen)",

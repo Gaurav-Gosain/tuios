@@ -9797,3 +9797,16 @@ and terminal mode shows the terminal icon, each with the split letter. Run on
 | The `input` branch in `tiledModeLabel` never taken | input: window mode never shows "WM" and the split letter | **caught** |
 
 With `TUIOS_E2E_FRAMES` set, the case writes `mode-pill-<setting>-<mode>.png`.
+
+## Return notes
+
+`TestReturnNotesComeBackWithTheSession` sets a note on a detached session and
+on one of its panes, attaches, and reads the dock, the rail, the session
+switcher and the Inbox focus. It restarts the daemon, reads both notes back,
+clears the session note and sets a new one while attached. Run on 2026-10-27
+on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The dock notice in `adoptNotes` | the dock never shows "Note: next: run the migration" on attach | **caught** |
+| Pane notes collected after `UpdateState` in the restore, which rewrites the restored windows in place (the first draft of the change) | after a daemon restart `note get -w worker` prints nothing | **caught** |

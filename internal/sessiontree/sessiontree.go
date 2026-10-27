@@ -123,6 +123,9 @@ type Node struct {
 	// it is not in a checkout or the daemon did not say. Always empty for
 	// window nodes.
 	Branch string
+	// Note is the session's return note, empty for none. Always empty for
+	// window nodes.
+	Note string
 	// Host is the machine a node belongs to, empty for anything on this one. It
 	// is set on a KindHost header and on every session node under it.
 	Host string
@@ -272,7 +275,9 @@ type SessionInput struct {
 	// that is not one.
 	Worktree *WorktreeRef
 	// Space is the space the session is filed under, empty for none.
-	Space   string
+	Space string
+	// Note is the session's return note, empty for none.
+	Note    string
 	Windows []WindowInput
 }
 
@@ -351,6 +356,7 @@ func BuildSession(s SessionInput) Node {
 		ID:          s.Name,
 		Title:       title,
 		Branch:      s.Branch,
+		Note:        s.Note,
 		Attached:    s.Attached,
 		IsCurrent:   s.IsCurrent,
 		WindowCount: s.WindowCount,

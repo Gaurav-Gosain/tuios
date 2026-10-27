@@ -41,6 +41,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.Accent == "" {
 		incoming.Accent = canonical.Accent
 	}
+	// The return note is written only by set-note, so canonical wins
+	// unconditionally: a sync can neither set it nor clear it.
+	incoming.Note = canonical.Note
 	// Restored is set by the restore and cleared by the first attach, both
 	// daemon-side. A bool cannot say "not sent", so canonical simply wins: no
 	// client can either raise the mark or clear it by syncing.
@@ -292,10 +295,19 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// window, and a grant is held to it, so canonical wins unconditionally:
 	// a push can neither set one nor move it, even where canonical has none.
 	startDirs := make(map[string]string, len(canonical.Windows))
+	// A pane's return note is written only by set-note, so canonical wins
+	// unconditionally, like the start folder.
+	var notes map[string]string // most panes have none
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
 		if w.StartDir != "" {
 			startDirs[w.ID] = w.StartDir
+		}
+		if w.Note != "" {
+			if notes == nil {
+				notes = make(map[string]string)
+			}
+			notes[w.ID] = w.Note
 		}
 		if w.StartedBy != nil {
 			startedBy[w.ID] = w.StartedBy
@@ -367,6 +379,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			w.Cwd = cwd
 		}
 		w.StartDir = startDirs[w.ID]
+		w.Note = notes[w.ID]
 		if pid, ok := shellPIDs[w.ID]; ok || w.ShellPID == 0 {
 			w.ShellPID = pid
 		}

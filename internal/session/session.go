@@ -124,6 +124,10 @@ type WindowState struct {
 	// daemon fixes it when it makes the window, and the shell's cd and OSC 7
 	// never move it, so a grant can be held to it. Clients never set it.
 	StartDir string `json:"start_dir,omitempty"`
+	// Note is the pane's return note: one short line that says what the pane
+	// is for or what comes next. Only the set-note verb writes it, so a client
+	// sync never moves it, and it is saved with the session. Empty for none.
+	Note string `json:"note,omitempty"`
 	// CwdHost names the machine the pane's shell last reported its folder on,
 	// when that is not the machine the pane runs on: the pane is running ssh.
 	// Empty otherwise. A live fact, filled into every snapshot and never
@@ -411,6 +415,11 @@ type SessionState struct {
 	// It lives here rather than in a client-side file because it has to survive a
 	// reattach and be the same for every client attached to this session.
 	Accent string `json:"accent,omitempty"`
+	// Note is the session's return note: one short line that says what the
+	// session is for or what comes next, shown when a person comes back to
+	// it. Only the set-note verb writes it, so canonical state wins over any
+	// client sync, and it is saved with the session. Empty for none.
+	Note string `json:"note,omitempty"`
 	// Restored marks a session the daemon rebuilt from saved state and that no
 	// client has attached to since. Nothing else at session level says so: the
 	// layout is back but every shell under it is new, and the only evidence was
@@ -3115,6 +3124,50 @@ func (s *Session) SetAccent(accent string) error {
 	})
 }
 
+// SetNote records the session's return note, or the note of the window
+// target names when target is not empty, propagated and persisted exactly as
+// SetDisplayName is. The note is stored as given: the verb cleans it.
+// It returns the window id the note went on, empty for the session.
+func (s *Session) SetNote(target, note string) (string, error) {
+	var id string
+	err := s.mutateState(func(st *SessionState) error {
+		if target == "" {
+			st.Note = note
+			return nil
+		}
+		idx, err := findWindowStateIndex(st.Windows, target)
+		if err != nil {
+			return err
+		}
+		if idx < 0 {
+			return fmt.Errorf("no window found matching %q", target)
+		}
+		st.Windows[idx].Note = note
+		id = st.Windows[idx].ID
+		return nil
+	})
+	return id, err
+}
+
+// RestoreNotes puts saved notes back on a session a restore just rebuilt.
+// UpdateState keeps the daemon's own copy of the notes (see
+// retainDaemonExclusive), and a new session has none, so the restore cannot
+// hand them in through the state it pushes.
+func (s *Session) RestoreNotes(sessionNote string, windowNotes map[string]string) {
+	if sessionNote == "" && len(windowNotes) == 0 {
+		return
+	}
+	_ = s.mutateState(func(st *SessionState) error {
+		st.Note = sessionNote
+		for i := range st.Windows {
+			if n, ok := windowNotes[st.Windows[i].ID]; ok {
+				st.Windows[i].Note = n
+			}
+		}
+		return nil
+	})
+}
+
 // SetSpace files the session under the named space, propagated and persisted
 // exactly as SetDisplayName is. An empty space takes it out of any.
 func (s *Session) SetSpace(space string) error {
@@ -3667,6 +3720,7 @@ func (s *Session) Info() SessionInfo {
 
 	s.stateMu.RLock()
 	displayName, accent, space := s.state.DisplayName, s.state.Accent, s.state.Space
+	note := s.state.Note
 	currentWorkspace := s.state.CurrentWorkspace
 	restored := s.state.Restored
 	focusedPTY := ""
@@ -3694,6 +3748,7 @@ func (s *Session) Info() SessionInfo {
 		Windows:          windows,
 		DisplayName:      displayName,
 		Accent:           accent,
+		Note:             note,
 		CurrentWorkspace: currentWorkspace,
 		Restored:         restored,
 		Global:           s.isGlobal(),
@@ -3752,6 +3807,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 			Scratch:       w.Scratch,
+			Note:          w.Note,
 		})
 	}
 	return out
