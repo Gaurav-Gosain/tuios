@@ -5142,3 +5142,77 @@ timer (#787).
   opened.
 - The `time.AfterFunc` closures (`cockpit.go`, `sixel_symbols.go`), which hold
   no goroutine while they wait.
+
+## 2026-10 the escape-string buffer is given back when a pane is idle
+
+The vt parser keeps one buffer for the payload of an OSC, DCS, SOS, PM or APC
+string. It starts at 4 KiB (`seqParserInitialData`) and doubles towards the
+4 MiB cap, so a sixel image or an OSC 52 write of just over 1 MiB leaves a
+2 MiB buffer and one of 3 MiB leaves 4 MiB, in the daemon's emulator and in the
+client's, for the pane's life. Commit 5d4243c2d, which made the buffer grow on
+demand, states the cost: "A pane that never receives a large payload never pays
+for one, and a pane that does keeps the grown buffer, which is the cost it had
+before." The idle release now removes that cost, and a pane that never grew pays
+nothing for it.
+
+### What changed
+
+- `seqParser.releaseData` replaces the buffer with a freshly allocated 4 KiB one
+  (a reslice would keep the grown array alive) and sets `dataLen` to 0. It does
+  nothing unless the parser is at the ground state and the buffer is larger than
+  `seqParserInitialData`.
+- `Emulator.ReleaseReflowScratch` calls it. The daemon runs that every 30 s
+  while a pane's activity latch is up, and the client after a frame changed.
+
+### Why the idle sweep and not the end of the sequence
+
+The emulator already has a precedent for the other choice: `dropPending` in
+`vt/snapshot_state.go` frees the pending-input buffer at the end of a sequence
+when it grew past `pendingKeepCap` (64 KiB). The same could be done for this
+buffer, dropping it when a string sequence is dispatched. That would regrow the
+buffer on every large payload, where the sweep regrows it at most once per 30 s
+release. The end-of-sequence drop is an option, not built.
+
+### Numbers
+
+Heap: a throwaway test in package `vt`, not kept in the tree, built with
+`GOTOOLCHAIN=go1.26.10`, run on cores 0 to 5 under the memory cap. It writes
+one test-only APC (`ESC _ X x...x ESC \`, first byte not `G`, so no built-in
+handler keeps it) into `NewEmulator(80, 24)`, calls `runtime.GC()` twice, reads
+`HeapAlloc`, calls `ReleaseReflowScratch`, collects twice and reads it again.
+Two runs of the branch and one of the base, the values within a few hundred
+bytes of each other.
+
+| payload (body plus header) | buffer | heap, base, after the release | heap, branch, after the release |
+|---|---:|---:|---:|
+| 1 MiB + 1 KiB (1,049,600 B) | 2,097,152 B | 3,013,688 B | 920,872 B |
+| 3 MiB (3,145,728 B) | 4,194,304 B | 5,112,792 B | 928,624 B |
+
+The branch gives back 2,092,816 B and 4,190,160 B, the grown buffer less the
+4,096 B that replaces it. A parser that never grew keeps its slice, with no
+allocation.
+
+### Regrowth for a pane that keeps receiving large payloads
+
+The release is not limited to idle panes, so such a pane regrows the buffer once
+per 30 s release. Measured the same way, one payload written after a release:
+
+- A payload that arrives in one `Write` allocates the final buffer once and
+  copies nothing: 2,097,187 B for the 1 MiB + 1 KiB payload and 4,194,309 B for
+  3 MiB, one allocation, about 0.2 ms (1 MiB) and 0.4 ms (3 MiB) more write time
+  than with the buffer kept.
+- A payload that arrives in small reads grows by doubling, 9 doublings to 2 MiB
+  and 10 to 4 MiB. Allocation: 4,186,112 B (1 MiB) and 8,380,416 B (3 MiB),
+  about 0.5 to 0.7 ms and 0.8 to 0.9 ms. Copying: 2,093,056 B and 4,190,208 B,
+  about 0.2 to 0.4 ms and 0.25 to 0.3 ms.
+
+That is the first-payload cost the base already pays once per pane, repeated
+once per release interval and only while payloads of that size keep arriving. A
+variant that skips the release for a buffer used since the last one would remove
+it; it is not built.
+
+### Measured and deliberately not changed
+
+- A pane left inside a string sequence (a guest killed mid-sixel, an ESC whose
+  backslash never came) keeps its grown buffer. The release needs the ground
+  state, because dropping the buffer mid-sequence would cut the payload.

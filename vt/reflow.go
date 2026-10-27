@@ -61,9 +61,11 @@ type reflowScratch struct {
 // 1.7 MB at 171x83. The next reflow allocates them again. The rows on screen
 // keep the block they are in alive on their own, and a remap handed out by
 // the last reflow keeps the tables it reads, so only what nothing reads is
-// freed.
+// freed. It also gives back the escape-string buffer a large OSC, DCS or APC
+// payload grew, which is worth nothing between sequences.
 func (e *Emulator) ReleaseReflowScratch() {
 	e.scrs[0].rf = reflowScratch{}
+	e.parser.releaseData()
 }
 
 // reflowRow is a row a reflow reads: its cells and how it ends.

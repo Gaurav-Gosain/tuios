@@ -341,6 +341,19 @@ func (p *seqParser) parseStringCmd() {
 	}
 }
 
+// releaseData gives back a data buffer a large payload grew. It runs only at
+// the ground state, where no payload is being collected and the next string
+// sequence starts at dataLen 0, so nothing is lost. The new buffer is a fresh
+// allocation: a reslice would keep the grown array alive. A buffer that never
+// grew past seqParserInitialData is left as it is.
+func (p *seqParser) releaseData() {
+	if p.state != parser.GroundState || len(p.data) <= seqParserInitialData {
+		return
+	}
+	p.data = make([]byte, min(p.dataCap, seqParserInitialData))
+	p.dataLen = 0
+}
+
 // put appends one byte of string data. The buffer doubles towards the cap
 // when it is full, and a byte past the cap is dropped, which is where the
 // fixed buffer dropped it too.
