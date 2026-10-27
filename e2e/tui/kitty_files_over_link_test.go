@@ -88,9 +88,12 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 	waitWindowCount(t, term, 1, "opening the window on build")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo FAR-$((20+22))", "FAR-42", shellTimeout)
-	// kittylive's t=t file goes in a temporary folder of the far machine.
-	// kitty accepts $TMPDIR only when it is not a parent of the home, and
-	// the far home here is under the test's own $TMPDIR, so /tmp it is.
+	// kittylive's and kitten icat's t=t files go in a temporary folder of
+	// the far machine. kitty accepts $TMPDIR only when it is not a parent of
+	// the home, and the far home here is under the test's own $TMPDIR, so
+	// /tmp it is. On Linux icat's probe picks memory first and never needs
+	// the folder. On macOS it has no memory mode, and with the refused
+	// folder it falls back to stream.
 	tmp, err := os.MkdirTemp("/tmp", "kittylive-")
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +163,7 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		path, img := writeIcatPNG(t, pics)
 		host.mark("icat")
 		clearPane(t, term)
-		runTagged(t, term, "detect", kitten+" icat --detect-support 2>&1 | tr a-z A-Z | sed 's/^/MODE-/'")
+		runTagged(t, term, "detect", "TMPDIR="+tmp+" "+kitten+" icat --detect-support 2>&1 | tr a-z A-Z | sed 's/^/MODE-/'")
 		if snap := term.Snapshot(); !strings.Contains(snap, "MODE-MEMORY") && !strings.Contains(snap, "MODE-FILE") {
 			t.Errorf("icat did not pick file or memory transfer for a pane on another machine:\n%s", snap)
 		}
@@ -171,7 +174,7 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 			modes = modes[:1]
 		}
 		for _, mode := range modes {
-			runTagged(t, term, mode, kitten+" icat --stdin=no --transfer-mode="+mode+" "+path)
+			runTagged(t, term, mode, "TMPDIR="+tmp+" "+kitten+" icat --stdin=no --transfer-mode="+mode+" "+path)
 		}
 		saveArtifact(t, term, artifactDir(t), "icat")
 		stream := host.bytes()
