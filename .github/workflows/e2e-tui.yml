@@ -37,8 +37,8 @@ concurrency:
 # estimate is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
 # minute go test timeout. Keep the matrix below in step with E2E_SHARDS.
 env:
-  E2E_SHARDS: "8"
-  E2E_LANES: "4"
+  E2E_SHARDS: "12"
+  E2E_LANES: "2"
   E2E_LANE_LIMIT: 6m
   # A partial selection fills lanes to about this much each and leaves the
   # rest empty, so a small change does not start every runner.
@@ -133,19 +133,21 @@ jobs:
     # globals. Each shard runs E2E_LANES go test processes side by side
     # instead, each with a list of its own. The tests mostly wait on a pty or
     # a daemon: a serial run used about one CPU second in five of its wall
-    # time, so four lanes on a four-core runner do four times the work in
-    # about the same time. Tests that must not overlap share a lane through
-    # e2e/tui/shardplan/together.txt.
+    # time, so two lanes on a four-core runner do twice the work in about the
+    # same time. Four lanes were tried: the runner stayed about two thirds
+    # idle on average, but the bursts made one to two timing-sensitive tests
+    # fail in four of seven full runs. Tests that must not overlap share a
+    # lane through e2e/tui/shardplan/together.txt.
     #
     # The split was a hash of the test name until seven shards ran between 525
     # and 1054 seconds, and the long one crossed the 1080 second timeout. A
     # hash balances the count of tests, and a few tests take a minute or two.
-    # The split is now by measured time, with eight shards of four lanes near
-    # three minutes each.
+    # The split is now by measured time, with twelve shards of two lanes near
+    # four minutes each.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     name: e2e-tui (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: tested
     # tested is skipped on a pull request, so the shards must not wait for its
