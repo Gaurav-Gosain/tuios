@@ -121,6 +121,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
 	validatePasteBuffers(cfg, result)
+	validateTasks(cfg, result)
 
 	// Validate the notifications section (warn on a duration tuios cannot use)
 	validateNotificationsConfig(cfg, result)
