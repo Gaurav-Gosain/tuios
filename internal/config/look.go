@@ -148,6 +148,7 @@ var lookKeys = []string{
 	"appearance.dock_mode_icon_terminal",
 	"appearance.dock_mode_icon_tiling",
 	"appearance.dock_mode_icon_window",
+	"appearance.dock_mode_pill",
 	"appearance.dock_mode_split_letter",
 	"appearance.dock_workspace_tabs",
 	"appearance.dock_workspace_tab_format",

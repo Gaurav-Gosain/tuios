@@ -407,6 +407,7 @@ type AppearanceConfig struct {
 	DockWorkspaceTooltip   *bool    `toml:"dock_workspace_tooltip"`    // Show the workspace name on hover when the pill cuts or omits it (default: true)
 	DockWorkspaceLabelMax  *int     `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
 	DockPrefixIndicator    string   `toml:"dock_prefix_indicator"`     // Where an armed leader shows: pill (default) or badge
+	DockModePill           string   `toml:"dock_mode_pill"`            // What the mode pill shows while tiling is on: tiling (default) or input
 	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Rounded caps on every dock pill (default: true; false draws flat pills)
 	DockModeSplitLetter    *bool    `toml:"dock_mode_split_letter"`    // V or H after the tiling icon in the mode pill (default: true)
 	DockModeIconWindow     *string  `toml:"dock_mode_icon_window"`     // Mode pill icon in window mode; "" draws none (default: the glyph set's)
@@ -1069,6 +1070,7 @@ func DefaultConfig() *UserConfig {
 			ScrollLines:              3,
 			DockbarPosition:          DefaultDockbarPosition,
 			DockPrefixIndicator:      DefaultDockPrefixIndicator,
+			DockModePill:             DefaultDockModePill,
 			WindowTitlePosition:      DefaultWindowTitlePosition,
 			WindowTitleStyle:         DefaultWindowTitleStyle,
 			WindowTitleAlign:         DefaultWindowTitleAlign,
@@ -2673,6 +2675,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.DockPrefixIndicator = cfg.Appearance.DockPrefixIndicator
 	} else {
 		s.DockPrefixIndicator = DefaultDockPrefixIndicator
+	}
+	if slices.Contains(DockModePills, cfg.Appearance.DockModePill) {
+		s.DockModePill = cfg.Appearance.DockModePill
+	} else {
+		s.DockModePill = DefaultDockModePill
 	}
 	s.DockCompact = cfg.Appearance.DockCompact
 	// The mode icons are pointers so an empty string can hide the icon, which is

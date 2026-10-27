@@ -692,6 +692,29 @@ func (m *OS) prefixArmed() bool {
 		m.LayoutPrefixActive || m.TuiosPrefixActive || m.Menu != ""
 }
 
+// tiledModeLabel is the mode pill's label in terminal or window mode. With
+// tiling off it is the mode's own icon. With tiling on it is the tiling icon
+// and the next split, unless appearance.dock_mode_pill is "input": then the
+// mode's own icon keeps its place and the split letter alone says tiling is
+// on, so the two modes differ by more than colour (discussion 1182).
+//
+// The built-in icons carry their own padding. A configured one such as "TL"
+// does not, and the letter used to run into it ("TLV"), so a space goes
+// between them when the icon does not end in one.
+func (m *OS) tiledModeLabel(modeIcon, nextSplit string) string {
+	if !m.AutoTiling {
+		return modeIcon
+	}
+	icon := m.Settings.GetDockModeIconTiling()
+	if m.Settings.DockModePill == "input" {
+		icon = modeIcon
+	}
+	if nextSplit != "" && icon != "" && !strings.HasSuffix(icon, " ") {
+		icon += " "
+	}
+	return icon + nextSplit
+}
+
 // prefixOnPill reports whether the dock's mode pill shows the armed leader.
 // The floating badge takes over when the dock is hidden, when the plan has
 // no mode pill, or when appearance.dock_prefix_indicator is "badge".
@@ -775,12 +798,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		} else {
 			// Terminal mode
 			modeInfo.Color = theme.DockColorTerminal()
-			// Add tiling indicator for terminal mode (with split direction)
-			if m.AutoTiling {
-				modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit
-			} else {
-				modeLabel = m.Settings.GetDockModeIconTerminal()
-			}
+			modeLabel = m.tiledModeLabel(m.Settings.GetDockModeIconTerminal(), modeInfo.NextSplit)
 			// Lock mode says every key but the leader goes to the pane.
 			if m.Locked() {
 				modeLabel = withLockIcon(modeLabel, m.Settings.GetDockLockIcon(true))
@@ -789,12 +807,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	default:
 		// Window mode
 		modeInfo.Color = theme.DockColorWindow()
-		// Add tiling indicator for window mode (with split direction)
-		if m.AutoTiling {
-			modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit
-		} else {
-			modeLabel = m.Settings.GetDockModeIconWindow()
-		}
+		modeLabel = m.tiledModeLabel(m.Settings.GetDockModeIconWindow(), modeInfo.NextSplit)
 	}
 
 	// Add zoom indicator. The workspace's zoomed pane, not the focused one: the

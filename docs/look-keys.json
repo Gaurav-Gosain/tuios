@@ -151,6 +151,16 @@
       "default": "default"
     },
     {
+      "path": "appearance.dock_mode_pill",
+      "type": "string",
+      "description": "What the mode pill shows while tiling is on: tiling shows the tiling icon, input shows the terminal or window icon",
+      "default": "tiling",
+      "accepted": [
+        "tiling",
+        "input"
+      ]
+    },
+    {
       "path": "appearance.dock_mode_split_letter",
       "type": "bool",
       "description": "Show V or H after the tiling icon in the mode pill. The letter is the direction of the next split",

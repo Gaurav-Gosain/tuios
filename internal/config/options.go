@@ -119,6 +119,9 @@ var (
 	// DockPrefixIndicators are where an armed leader shows: on the dock's
 	// mode pill, or on the floating badge it had before the pill could.
 	DockPrefixIndicators = []string{"pill", "badge"}
+	// DockModePills are what the mode pill shows while tiling is on: the
+	// tiling icon, or the icon of the input mode (terminal or window).
+	DockModePills = []string{"tiling", "input"}
 	// WindowTitleStyles are the shapes of a pane's title: pill has rounded
 	// caps on a fill, tab is the fill alone, plain is the text on the line.
 	WindowTitleStyles = []string{"pill", "tab", "plain"}
@@ -138,6 +141,7 @@ const (
 	DefaultSidebarPosition     = "right"
 	DefaultWindowTitlePosition = "top"
 	DefaultDockPrefixIndicator = "pill"
+	DefaultDockModePill        = "tiling"
 	// DefaultBorderGradientAngle runs the gradient from the top left corner
 	// to the bottom right one.
 	DefaultBorderGradientAngle = 45
@@ -718,6 +722,11 @@ var optionSpecs = []Option{
 		Path: "appearance.dock_mode_icon_tiling", Type: OptionString, Section: "dock",
 		Description: "Icon in the mode pill while tiling is on. An empty value shows no icon. default uses the icon of the glyph set",
 		Default:     DockModeIconDefault, DefaultClears: true, Icon: true,
+	},
+	{
+		Path: "appearance.dock_mode_pill", Type: OptionString, Section: "dock",
+		Description: "What the mode pill shows while tiling is on: tiling shows the tiling icon, input shows the terminal or window icon",
+		Accepted:    DockModePills, Default: DefaultDockModePill,
 	},
 	{
 		Path: "appearance.dock_mode_split_letter", Type: OptionBool, Section: "dock",

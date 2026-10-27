@@ -1983,6 +1983,7 @@ name alone. Some of them:
 | `dock_mode_icon_window` | text, `""` or `default` | Icon in the mode pill in window mode. An empty value shows no icon. `default` uses the icon of the glyph set |
 | `dock_mode_icon_terminal` | text, `""` or `default` | Icon in the mode pill in terminal mode |
 | `dock_mode_icon_tiling` | text, `""` or `default` | Icon in the mode pill while tiling is on |
+| `dock_mode_pill` | `tiling`, `input` | What the mode pill shows while tiling is on: the tiling icon, or the terminal or window icon (default `tiling`) |
 | `dock_prefix_indicator` | `pill`, `badge` | Where the dock shows an armed leader key (default `pill`) |
 | `theme_light` | a theme id, or empty | The theme while the terminal is light. `theme` is then the dark theme (default empty) |
 | `border_focused_gradient` | two or more colours, or empty | Colours the focused pane's border blends through (default empty) |

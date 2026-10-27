@@ -1077,6 +1077,15 @@ dock_mode_icon_tiling = ""
   alone. With the default icons, the pill then has the same width as the pill
   of the leader key, so the workspace tabs do not move when you press the
   leader key.
+- `appearance.dock_mode_pill` sets what the pill shows while tiling is on.
+  `tiling` (the default) shows the tiling icon in terminal mode and in window
+  mode. `input` shows the terminal icon or the window icon, and the split
+  letter after it shows that tiling is on.
+
+```toml
+[appearance]
+dock_mode_pill = "input"
+```
 
 To remove the whole mode pill, remove `"mode"` from the `left` list in the
 `[dock]` table. See [The dock's components](#the-docks-components).

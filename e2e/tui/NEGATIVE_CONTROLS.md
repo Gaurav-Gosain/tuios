@@ -9753,3 +9753,18 @@ After review of #966 (overlay frames drawn like pane borders): the pane look mov
 | Row grounds stay on the chrome's ramp | The ramp `buildUIOn` builds on the pane ground (`paneChrome`) | `PaneUI` returns `UI()` with only `Surface` and `Canvas` set to the ground | `TestPaneOverlaysStepRowsFromThePaneGround` (`selected row bg={R:45 G:44 B:54}`, 1.02:1 to the ground) | **caught** |
 | Frame ink and ground shared between the clients of one process | `overlayUI` computing both from its own client | Stored in a package `atomic.Pointer` and read back, as `overlay.SetFrameColors` did | `TestPaneOverlayPalettesStayWithTheirClient` (`green client drew Frame in another client's colour`, `red client drew Surface in another client's colour`); with a plain package variable `-race` also reports `WARNING: DATA RACE` | **caught** |
 | Text inks lifted against the pane ground for every caller | `theme.UI` left unmeasured, the lift only in `PaneUI` | Run against the previous head of #966, `684198a4d` | `TestRailReadsOnALightPaneGround` (`the rail's attached session is {193 189 185 255} with a light pane ground and pane_overlays, {255 250 241 255} without`) | **caught** |
+
+## Mode pill shows the input mode while tiling is on (discussion #1182)
+
+The `mode-pill` case of `TestDockModeIconsFollowTheConfig` turns tiling on and
+opens a pane, then reads the dock in window mode and in terminal mode. With the
+default `dock_mode_pill = "tiling"` both modes show the tiling icon and the
+split letter. With `dock_mode_pill = "input"` window mode shows the window icon
+and terminal mode shows the terminal icon, each with the split letter. Run on
+2026-10-27 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `input` branch in `tiledModeLabel` never taken | input: window mode never shows "WM" and the split letter | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, the case writes `mode-pill-<setting>-<mode>.png`.

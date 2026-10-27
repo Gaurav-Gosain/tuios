@@ -310,6 +310,49 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
+	// Discussion 1182: while tiling is on, the pill shows the tiling icon in
+	// window mode and in terminal mode, so only the colour tells them apart.
+	// With dock_mode_pill = "input" it shows the window or terminal icon, and
+	// the split letter after it still says tiling is on. The default case is
+	// the positive half: the tiling icon in both modes.
+	t.Run("mode-pill", func(t *testing.T) {
+		icons := "dock_mode_icon_window = \"WM\"\ndock_mode_icon_terminal = \">_\"\ndock_mode_icon_tiling = \"TL\"\n"
+		for _, tc := range []struct{ name, cfg, window, terminal string }{
+			{"tiling", "", "TL", "TL"},
+			{"input", "dock_mode_pill = \"input\"\n", "WM", ">_"},
+		} {
+			term := startDockModeIcons(t, icons+tc.cfg)
+			if err := term.SendKeys("t"); err != nil {
+				t.Fatalf("%s: toggle tiling: %v", tc.name, err)
+			}
+			newWindow(t, term)
+			for _, step := range []struct{ mode, icon string }{
+				{"window", tc.window},
+				{"terminal", tc.terminal},
+			} {
+				if step.mode == "terminal" {
+					enterTerminalMode(t, term)
+				}
+				want := []string{" " + step.icon + " V ", " " + step.icon + " H "}
+				if err := term.WaitFor(func(s tuitest.Screen) bool {
+					r := dockStatusRow(s)
+					if r < 0 {
+						return false
+					}
+					line := s.Line(r)
+					pill := line[:max(0, strings.Index(line, "1:"))]
+					return strings.Contains(pill, want[0]) || strings.Contains(pill, want[1])
+				}, uiTimeout); err != nil {
+					t.Fatalf("%s: %s mode never showed %q and the split letter on the pill: %v\n%s",
+						tc.name, step.mode, step.icon, err, term.Snapshot())
+				}
+				s := term.Screen()
+				saveArtifact(t, term, artifactDir(t), "mode-pill-"+tc.name+"-"+step.mode)
+				savePNG(t, s, hostPalette(t, ""), artifactDir(t), "mode-pill-"+tc.name+"-"+step.mode)
+			}
+		}
+	})
+
 	t.Run("too-wide", func(t *testing.T) {
 		term := startDockModeIcons(t, "dock_mode_icon_window = \"123456789\"\n")
 		s := term.Screen()

@@ -363,6 +363,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	}
 	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition, DockbarPositions)
 	checkEnum("dock_prefix_indicator", cfg.Appearance.DockPrefixIndicator, DockPrefixIndicators)
+	checkEnum("dock_mode_pill", cfg.Appearance.DockModePill, DockModePills)
 	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position, SidebarPositions)
 	for _, problem := range SidebarSectionProblems(cfg.Appearance.Sidebar.Sections) {
 		result.Warnings = append(result.Warnings, ValidationError{
