@@ -20,35 +20,36 @@ import (
 
 // Event types. See cmd/tuios-wasm/README.md for each one's data.
 const (
-	EventReady          = "ready"
-	EventKey            = "key"
-	EventAction         = "action"
-	EventMode           = "mode"
-	EventPrefix         = "prefix"
-	EventWindowOpen     = "window.open"
-	EventWindowClose    = "window.close"
-	EventWindowFocus    = "window.focus"
-	EventWindowRename   = "window.rename"
-	EventWindowMinimize = "window.minimize"
-	EventWindowZoom     = "window.zoom"
-	EventWindowMove     = "window.move"
-	EventWindowFloat    = "window.float"
-	EventSetting        = "setting"
-	EventWorkspace      = "workspace"
-	EventTiling         = "tiling"
-	EventLayout         = "layout"
-	EventTheme          = "theme"
-	EventOverlayOpen    = "overlay.open"
-	EventOverlayClose   = "overlay.close"
-	EventNotification   = "notification"
-	EventAgent          = "agent"
-	EventTapeStart      = "tape.start"
-	EventTapeFinish     = "tape.finish"
-	EventKeys           = "keys"
-	EventPiP            = "pip"
-	EventShellStart     = webshell.EventCommandStart
-	EventShellCommand   = webshell.EventCommand
-	EventShellCwd       = webshell.EventCwd
+	EventReady           = "ready"
+	EventKey             = "key"
+	EventAction          = "action"
+	EventMode            = "mode"
+	EventPrefix          = "prefix"
+	EventWindowOpen      = "window.open"
+	EventWindowClose     = "window.close"
+	EventWindowFocus     = "window.focus"
+	EventWindowRename    = "window.rename"
+	EventWindowMinimize  = "window.minimize"
+	EventWindowZoom      = "window.zoom"
+	EventWindowMove      = "window.move"
+	EventWindowFloat     = "window.float"
+	EventWindowWorkspace = "window.workspace"
+	EventSetting         = "setting"
+	EventWorkspace       = "workspace"
+	EventTiling          = "tiling"
+	EventLayout          = "layout"
+	EventTheme           = "theme"
+	EventOverlayOpen     = "overlay.open"
+	EventOverlayClose    = "overlay.close"
+	EventNotification    = "notification"
+	EventAgent           = "agent"
+	EventTapeStart       = "tape.start"
+	EventTapeFinish      = "tape.finish"
+	EventKeys            = "keys"
+	EventPiP             = "pip"
+	EventShellStart      = webshell.EventCommandStart
+	EventShellCommand    = webshell.EventCommand
+	EventShellCwd        = webshell.EventCwd
 )
 
 // Event is one thing that happened, as the page receives it.

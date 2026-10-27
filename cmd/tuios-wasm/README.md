@@ -91,6 +91,7 @@ Events come in a fixed order for one key press: `key` first, then any
 | `window.zoom` | `{id, zoomed}` | zoomed or unzoomed |
 | `window.move` | `{id, x, y, width, height, from}` | a window's place or size changed, in cells. `from` is `{x, y, width, height}` before. Sent once any animation has finished, so a snap or a retile is one event per window, not one per frame. A window that opened or closed is left out |
 | `window.float` | `{id, floating}` | the window floats above the tiling, or went back into it |
+| `window.workspace` | `{id, from, to}` | the window moved to another workspace. The scratch pane's workspace is 1000 |
 | `workspace` | `{from, to}` | the current workspace, 1 to 9 |
 | `tiling` | `{from, to}` | tiling on (`true`) or off |
 | `layout` | `{from, to}` | the layout mode: `"bsp"`, `"master-stack"` or `"scrolling"` |

@@ -328,6 +328,9 @@ func diff(prev, now Snapshot) []Event {
 		if p.Floating != w.Floating {
 			add(EventWindowFloat, w.ID, map[string]any{"id": w.ID, "floating": w.Floating})
 		}
+		if p.Workspace != w.Workspace {
+			add(EventWindowWorkspace, w.ID, map[string]any{"id": w.ID, "from": p.Workspace, "to": w.Workspace})
+		}
 		if p.Agent != w.Agent {
 			add(EventAgent, w.ID, map[string]any{
 				"id": w.ID, "from": p.Agent, "to": w.Agent,
