@@ -913,6 +913,24 @@ func (e *Emulator) ReleaseAltScreen() {
 	g.tail = nil
 }
 
+// ReleaseScrollbackCache drops the decoded history lines the main screen's
+// scrollback keeps for its readers. Scrolling a pane back, hovering a link or
+// browsing the history decodes each line it shows and keeps it, up to about
+// 7 MB, and after the pane is scrolled down again nothing reads them for the
+// rest of the pane's life. The next read decodes the line again, so the
+// history reads the same. A line already handed out stays valid, because the
+// release drops the cache's map and not the lines in it.
+func (e *Emulator) ReleaseScrollbackCache() {
+	sb := e.scrs[0].Scrollback()
+	if sb == nil {
+		return
+	}
+	sb.cacheMu.Lock()
+	sb.cache = nil
+	sb.cacheCells = 0
+	sb.cacheMu.Unlock()
+}
+
 // RestoreAltScreenMode restores the alternate screen mode state.
 // This is used when reconnecting to a daemon session to restore the emulator state
 // without re-sending the escape sequences that would trigger the mode change.
