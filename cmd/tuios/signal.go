@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 
+	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -60,13 +61,20 @@ func signalExitCode(sig os.Signal) int {
 // runReturned as soon as Program.Run returns: Bubble Tea's exit has then popped
 // the kitty keyboard flags and left the alternate screen, so a forced exit
 // during the cleanup must not do either again.
+//
+// Until finish, a panic on a goroutine tuios started (see crashexit) gets the
+// same terminal reset as a forced exit before the process ends.
 func armSignalQuit(p *tea.Program) (runReturned, finish func()) {
 	restore := captureTerminalState()
 	var returned atomic.Bool
-	finish = armSignalQuitWith(p, signalQuitGrace, func(code int) {
+	crashexit.SetTeardown(func() { resetTerminalForExit(restore, returned.Load()) })
+	finishQuit := armSignalQuitWith(p, signalQuitGrace, func(code int) {
 		forceExit(restore, returned.Load(), code)
 	})
-	return func() { returned.Store(true) }, finish
+	return func() { returned.Store(true) }, func() {
+		finishQuit()
+		crashexit.SetTeardown(nil)
+	}
 }
 
 // armSignalQuitWith is armSignalQuit with the grace and the exit passed in, so
@@ -185,6 +193,13 @@ func forcedExitReset(runReturned bool) string {
 }
 
 func forceExit(restoreTerminal func(), runReturned bool, code int) {
+	resetTerminalForExit(restoreTerminal, runReturned)
+	os.Exit(code)
+}
+
+// resetTerminalForExit is the terminal half of forceExit. A panic on a
+// goroutine tuios started runs it too, through crashexit.
+func resetTerminalForExit(restoreTerminal func(), runReturned bool) {
 	restoreTerminal()
 	wrote := make(chan struct{})
 	go func() {
@@ -198,5 +213,4 @@ func forceExit(restoreTerminal func(), runReturned bool, code int) {
 	case <-wrote:
 	case <-time.After(forcedResetBudget):
 	}
-	os.Exit(code)
 }

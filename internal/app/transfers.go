@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -186,6 +187,7 @@ func listenForTransfers(ch <-chan tea.Msg) tea.Cmd {
 // runTransfersWatch keeps a watch running until ctx ends, starting over after
 // every failure with a growing wait.
 func runTransfersWatch(ctx context.Context, dial inboxDial, out chan<- tea.Msg) {
+	defer crashexit.Recover()
 	defer close(out)
 	wait := time.Second
 	for ctx.Err() == nil {

@@ -1,6 +1,10 @@
 package app
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
+)
 
 // windowExitQueue parks the window exits that did not fit in WindowExitChan.
 type windowExitQueue struct {
@@ -58,6 +62,7 @@ func (m *OS) queueWindowExit(windowID string) {
 }
 
 func (m *OS) drainWindowExits(stop chan struct{}) {
+	defer crashexit.Recover()
 	q := &m.windowExits
 	for {
 		q.mu.Lock()

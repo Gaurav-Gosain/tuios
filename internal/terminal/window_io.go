@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
@@ -492,6 +493,7 @@ func (w *Window) ChargeRenderCost(d time.Duration) {
 // instead of ticking also means an idle pane costs no wakeups at all, where a
 // ticker wakes every open pane 125 times a second forever.
 func (w *Window) renderCoalescer() {
+	defer crashexit.Recover()
 	timer := time.NewTimer(w.minFrameInterval())
 	if !timer.Stop() {
 		<-timer.C

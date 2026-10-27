@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
@@ -394,6 +395,7 @@ const dockWallCheck = 15 * time.Second
 // on a receive and no timer exists at all, which is the invariant this whole
 // design is built to hold.
 func (e *dockEngine) schedule() {
+	defer crashexit.Recover()
 	for {
 		next, due := e.earliest()
 		if next == nil {
@@ -668,6 +670,7 @@ func (e *dockEngine) railCommandEnv(rail railContext) []string {
 // timed out is a failed cell, and a half written value is the confidently wrong
 // reading applyUpdate blanks a failure to avoid.
 func (e *dockEngine) runOnce(c *dockComponent) {
+	defer crashexit.Recover()
 	e.mu.Lock()
 	if c.running {
 		e.mu.Unlock()
@@ -797,6 +800,7 @@ func (w *dockCappedWriter) Write(p []byte) (int, error) {
 // consecutive immediate failures it is left alone: a script that cannot start is
 // not made more likely to start by being started faster.
 func (e *dockEngine) readPushed(c *dockComponent) {
+	defer crashexit.Recover()
 	backoff := 500 * time.Millisecond
 	failures := 0
 

@@ -20,6 +20,7 @@ const ResetSequence = "\033[!p" + // DECSTR: soft reset, which clears nothing
 	"\033[?1004l" + // Disable focus tracking
 	"\033[?1006l" + // Disable SGR extended mouse mode
 	"\033[?1016l" + // Disable SGR-pixel mouse reports
+	"\033[?2004l" + // Disable bracketed paste
 	"\033[?2031l" + // Stop colour scheme (light and dark) reports
 	"\033[?25h" + // Show cursor
 	"\033[?7h" + // Autowrap on: a frame cut short can leave it off, and DECSTR differs by terminal

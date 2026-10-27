@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"tuios.dev/swatch"
 
+	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -72,6 +73,7 @@ func (h *omarchyFollowHub) subscribe() (<-chan swatch.Palette, func()) {
 // forward hands each palette the watcher reads to every session, newest
 // wins. It ends when the watcher is closed.
 func (h *omarchyFollowHub) forward(w *swatch.Watcher) {
+	defer crashexit.Recover()
 	for p := range w.Changes() {
 		h.mu.Lock()
 		for ch := range h.subs {
