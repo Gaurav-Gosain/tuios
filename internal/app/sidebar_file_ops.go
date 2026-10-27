@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -332,6 +333,19 @@ type fileEditMsg struct {
 	IsDir bool
 	Note  string
 	Err   error
+	// Background runs the editor command with no pane: the File editor
+	// setting starts with "&". The command opens the file somewhere itself.
+	Background bool
+}
+
+// backgroundEditor reports whether the File editor setting asks for the
+// command to run in the background, and the setting without its "&".
+func backgroundEditor(setting string) (string, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(setting), "&")
+	if !ok {
+		return setting, false
+	}
+	return rest, true
 }
 
 // SidebarFileEdit opens the selected text file in the configured terminal
@@ -347,12 +361,14 @@ func (m *OS) SidebarFileEdit() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	editor := m.Settings.SidebarEditor
+	editor, background := backgroundEditor(m.Settings.SidebarEditor)
 	if otherHost := m.filesView.Host != ""; otherHost || m.AttachedHost != "" {
 		return m.handleFileEdit(remoteEditTarget(path, editor, m.fileTargetIsDir(name), otherHost))
 	}
 	return func() tea.Msg {
-		return inspectEditTarget(path, editor)
+		msg := inspectEditTarget(path, editor)
+		msg.Background = background
+		return msg
 	}
 }
 
@@ -461,6 +477,9 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	if msg.IsDir {
 		return m.fileViewOpen(filepath.Dir(msg.Path), filepath.Base(msg.Path), true)
 	}
+	if msg.Background {
+		return m.runBackgroundEditor(msg)
+	}
 	remoteHost := m.AttachedHost
 	before := len(m.Windows)
 	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, msg.Path)...)
@@ -481,6 +500,33 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	m.pendingStartTerminalMode = true
 	if !m.daemonWindowIntent {
 		m.maybeEnterPendingTerminalMode()
+	}
+	return nil
+}
+
+// runBackgroundEditor starts the editor command with the file and no pane.
+// The command is told the session it was asked from, as a pane's program is,
+// so it can reach an editor already running there or open a pane itself.
+func (m *OS) runBackgroundEditor(msg fileEditMsg) tea.Cmd {
+	session := m.SessionName
+	if m.DaemonClient != nil {
+		if name := m.DaemonClient.SessionName(); name != "" {
+			session = name
+		}
+	}
+	cmd := exec.Command(msg.Argv[0], append(msg.Argv[1:], msg.Path)...)
+	cmd.Dir = filepath.Dir(msg.Path)
+	cmd.Env = append(os.Environ(), "TUIOS_ENV=1", "TUIOS_SESSION="+session, "TUIOS_PANE_ID=", "TUIOS_FILE_EDIT_BACKGROUND=1")
+	if err := cmd.Start(); err != nil {
+		m.LogError("Could not start the editor for %s: %v", msg.Path, err)
+		m.ShowNotification("tuios could not start the editor.", "error", m.Settings.NotificationDuration)
+		return nil
+	}
+	go func() { _ = cmd.Wait() }()
+	m.clearSidebarReturn()
+	m.ExitSidebarFocus()
+	if m.hasFocusedWindow() {
+		return m.EnterTerminalMode()
 	}
 	return nil
 }
