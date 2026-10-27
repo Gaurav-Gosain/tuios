@@ -140,7 +140,9 @@ nest = ["alt+shift+enter"]
   read goes back to `F12`, so nest mode always has a way out, and a key that
   programs type, such as a letter or `enter`, is reported in the log viewer.
 - Overlays opened with the mouse, copy mode and the mouse itself do not
-  change.
+  change. A drag or a resize with the mouse keeps nest mode on.
+- While the sidebar has the keyboard, it takes the keys. Press `esc` to give
+  them back to the pane in nest mode.
 - Nest mode belongs to the client, not to the session. Another client on the
   same session keeps its keys. It ends when the client leaves terminal mode,
   and on detach.

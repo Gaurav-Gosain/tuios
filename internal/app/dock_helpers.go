@@ -767,10 +767,11 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		if m.lockPillShown() {
 			modeLabel = withLockIcon(modeLabel, m.Settings.GetDockLockIcon(false))
 		}
-	case m.Nested():
+	case m.Nested() && (focusedWindow == nil || !focusedWindow.CopyModeVisible()):
 		// Nest mode: tuios is off for this client. The pill says so in the
 		// info colour, which no other mode wears, and names the one key that
-		// turns it back on. See nest_mode.go.
+		// turns it back on. Copy mode has the keys while it is up, and its
+		// pill says so instead. See nest_mode.go.
 		modeInfo.Color = theme.UI().Info
 		modeLabel = m.nestLabel()
 	case m.SidebarFocused:

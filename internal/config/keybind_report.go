@@ -503,6 +503,9 @@ func (r *KeybindRegistry) OptionKeys() []KeyReadAs {
 	if kb.LeaderKey != "" {
 		check("keybindings", "leader_key", kb.LeaderKey)
 	}
+	if kb.NestExitKey != "" {
+		check("keybindings", "nest_exit_key", kb.NestExitKey)
+	}
 	for _, name := range kb.SectionNamesFor() {
 		section := kb.section(name)
 		actions := make([]string, 0, len(section))
@@ -549,6 +552,9 @@ func (r *KeybindRegistry) KeyProblems() []KeyProblem {
 	}
 	if kb.LeaderKey != "" {
 		check("keybindings", "leader_key", kb.LeaderKey)
+	}
+	if kb.NestExitKey != "" {
+		check("keybindings", "nest_exit_key", kb.NestExitKey)
 	}
 	for _, name := range kb.SectionNamesFor() {
 		section := kb.section(name)

@@ -758,7 +758,10 @@ func KeyTypes(key string) bool {
 		return unicode.IsPrint([]rune(k)[0])
 	}
 	switch k {
-	case "space", "enter", "return", "tab", "backspace", "esc", "escape":
+	case "space", "enter", "return", "tab", "backspace", "esc", "escape",
+		// A terminal without the kitty keyboard protocol sends these as tab,
+		// enter and esc, which programs type.
+		"ctrl+i", "ctrl+m", "ctrl+[", "ctrl+h":
 		return true
 	}
 	return false

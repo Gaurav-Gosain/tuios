@@ -10161,3 +10161,26 @@ The fixed build passes.
 | `isNestExitKey` matching only the key produced | "the composed character did not end nest mode" | **caught** |
 | `defer m.settleNest()` cut from `Update` | "nest mode came back after the session switch" | **caught** |
 
+### Adversarial review of #1190
+
+A second review, by an agent that read only the code, found the rows below.
+`TestNestModeSurvivesAMouseGesture` turns nest mode on over `cat -v` and
+alt-drags the pane: the pill must still say NEST F12 after the release, and
+ctrl+b x must reach `cat -v`. `TestNestModeWaitsBehindTheRail` clicks the rail
+in nest mode: the pill must say SIDEBAR and not NEST F12, esc must give the
+keys back to nest mode, and F12 must end it. `TestNestExitKeyThatCannotBeReadIsF12`
+gains `nest_exit_key = "ctrl+m"`, which a terminal without the kitty keyboard
+protocol sends as enter, and `nest_exit_key = "ctrl+b"`, the leader: the log
+must warn about each. Run on 2026-10-27 on macOS, based on origin/main at
+ecdeec289.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `modeBorrowed` returning false, so a gesture's press ends nest mode | "the drag ended nest mode" | **caught** |
+| `Nested()` true while the rail has the keyboard | "after a click on the rail the pill does not say SIDEBAR, and not NEST F12" | **caught** |
+| `ctrl+m` out of `KeyTypes` | "the log has no warning for nest_exit_key = \"ctrl+m\"" | **caught** |
+| the leader warning cut from `ValidateConfig` | "the log has no warning for nest_exit_key = \"ctrl+b\"" | **caught** |
+
+A first control of `modeBorrowed` wrote `false && a || b ...`, which is still
+true while the pane is dragged, and the test passed. The control above returns
+false outright.

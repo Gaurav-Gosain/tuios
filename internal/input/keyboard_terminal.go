@@ -151,6 +151,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// leader. See app/nest_mode.go.
 	if o.Nested() {
 		if isNestExitKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+			// Recorded as a key, so a tape that turned nest mode on also
+			// turns it off when it is played.
+			recordTerminalKey(o, msg)
 			o.LeaveNest()
 			return o, nil
 		}

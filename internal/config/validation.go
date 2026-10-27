@@ -105,6 +105,12 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 				Key:     "nest_exit_key",
 				Message: fmt.Sprintf("%q is a key programs type, so nest mode ends each time it is typed. Use a function key, such as %s, or a key with ctrl or alt", k, DefaultNestExitKey),
 			})
+		} else if leader := cfg.Keybindings.LeaderKey; leader != "" && IsKeyPress(CanonicalKey(leader), k) {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field:   "keybindings",
+				Key:     "nest_exit_key",
+				Message: fmt.Sprintf("%q is the leader, so the program in the pane never gets it in nest mode. Use another key, such as %s", k, DefaultNestExitKey),
+			})
 		}
 	}
 

@@ -63,6 +63,8 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 	d.Register("nest", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.EnterNest() {
 			o.ShowNotification("Nest mode is on. Press "+config.KeyLabel(o.Settings.GetNestExitKey())+" to leave it.", "info", o.Settings.NotificationDuration)
+		} else {
+			o.ShowNotification("Nest mode needs a focused pane.", "info", o.Settings.NotificationDuration)
 		}
 		return o, nil
 	})

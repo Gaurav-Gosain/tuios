@@ -227,20 +227,26 @@ func TestNestExitKeyThatCannotBeReadIsF12(t *testing.T) {
 			t.Fatalf("ASSERTION: F12 did not end nest mode with an unreadable nest_exit_key: %v\n%s", err, term.Snapshot())
 		}
 	})
-	t.Run("typed", func(t *testing.T) {
-		const sess = "nesttyped"
-		term, base := lockedSession(t, sess, "\n[keybindings]\nnest_exit_key = \"x\"\n")
-		waitForSettledGeometryIn(t, base, sess, 1)
-		if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
-			t.Fatalf("open the log viewer: %v", err)
-		}
-		if err := term.WaitForText("copy errors", uiTimeout); err != nil {
-			t.Fatalf("the log viewer did not open: %v\n%s", err, term.Snapshot())
-		}
-		if err := term.WaitForText("nest_exit_key", uiTimeout); err != nil {
-			t.Fatalf("ASSERTION: the log has no warning for nest_exit_key = \"x\": %v\n%s", err, term.Snapshot())
-		}
-	})
+	for _, tc := range []struct{ name, key string }{
+		{"typed", "x"},
+		{"ctrl-m", "ctrl+m"},
+		{"the-leader", "ctrl+b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const sess = "nesttyped"
+			term, base := lockedSession(t, sess, "\n[keybindings]\nnest_exit_key = \""+tc.key+"\"\n")
+			waitForSettledGeometryIn(t, base, sess, 1)
+			if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
+				t.Fatalf("open the log viewer: %v", err)
+			}
+			if err := term.WaitForText("copy errors", uiTimeout); err != nil {
+				t.Fatalf("the log viewer did not open: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.WaitForText("nest_exit_key", uiTimeout); err != nil {
+				t.Fatalf("ASSERTION: the log has no warning for nest_exit_key = %q: %v\n%s", tc.key, err, term.Snapshot())
+			}
+		})
+	}
 }
 
 // TestNestExitKeyFiresOnTheComposedCharacter is the exit key matched as the
@@ -307,4 +313,92 @@ func TestNestModeDoesNotComeBackAfterWindowMode(t *testing.T) {
 		t.Fatalf("ctrl+b c: %v", err)
 	}
 	waitForSettledGeometryIn(t, base, "nestother", 2)
+}
+
+// TestNestModeSurvivesAMouseGesture: a drag with the mouse borrows window
+// mode from its press to its release, over many messages. Nest mode must wait
+// for it: after an alt+drag of the nested pane, the pill still says NEST F12
+// and ctrl+b still reaches cat -v.
+//
+// Negative control: with settleNest ending nest mode whatever borrowed window
+// mode, the press ends it and ctrl+b opens the tuios leader. The run is in
+// NEGATIVE_CONTROLS.md.
+func TestNestModeSurvivesAMouseGesture(t *testing.T) {
+	const sess = "nestdrag"
+	term, base := lockedSession(t, sess, "")
+	waitForSettledGeometryIn(t, base, sess, 1)
+	newWindowIn(t, base, sess)
+	rects := waitForSettledGeometryIn(t, base, sess, 2)
+	send := func(keys ...any) {
+		t.Helper()
+		if err := term.SendKeys(keys...); err != nil {
+			t.Fatalf("send %v: %v", keys, err)
+		}
+	}
+	send("cat -v", tuitest.Enter)
+	time.Sleep(500 * time.Millisecond)
+	send(tuitest.Ctrl('b'), tuitest.Enter)
+	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
+		t.Fatalf("setup: ctrl+b enter did not turn nest mode on: %v\n%s", err, term.Snapshot())
+	}
+	r := rects[1]
+	col, row := r.X+r.Width/2, r.Y+r.Height/2
+	mousePress(t, term, col, row, tuitest.MouseLeft, tuitest.ModAlt)
+	for i := 1; i <= 4; i++ {
+		mouseMotion(t, term, col+i, row, tuitest.MouseLeft, tuitest.ModAlt)
+	}
+	mouseRelease(t, term, col+4, row, tuitest.MouseLeft, tuitest.ModAlt)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the frame never settled after the drag: %v", err)
+	}
+	if !dockNested(term.Screen()) {
+		t.Fatalf("ASSERTION: the drag ended nest mode\n%s", term.Snapshot())
+	}
+	send(tuitest.Ctrl('b'), "x", tuitest.Enter)
+	if err := term.WaitForText("^Bx", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: ctrl+b x did not reach cat -v after the drag: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestNestModeWaitsBehindTheRail: the rail's list takes the keys while it has
+// the keyboard, so nest mode must not claim them: the pill says SIDEBAR, not
+// NEST F12. esc gives the keys back, and the pill says NEST F12 again, and F12
+// then ends nest mode.
+//
+// Negative control: with Nested() true while the rail has the keyboard, the
+// pill says NEST F12 over the rail, whose list swallows F12. The run is in
+// NEGATIVE_CONTROLS.md.
+func TestNestModeWaitsBehindTheRail(t *testing.T) {
+	const sess = "nestrail"
+	term, base := lockedSession(t, sess, "")
+	waitForSettledGeometryIn(t, base, sess, 1)
+	toggleSidebarViaPalette(t, term)
+	if err := term.WaitForText(sidebarHeader, uiTimeout); err != nil {
+		t.Fatalf("setup: no rail: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Enter); err != nil {
+		t.Fatalf("ctrl+b enter: %v", err)
+	}
+	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
+		t.Fatalf("setup: ctrl+b enter did not turn nest mode on: %v\n%s", err, term.Snapshot())
+	}
+	// A blank row near the bottom of the rail.
+	mouseClick(t, term, 3, 30, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "SIDEBAR") && !dockNested(s)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: after a click on the rail the pill does not say SIDEBAR, and not NEST F12: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc on the rail did not give the keys back to nest mode: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.F12); err != nil {
+		t.Fatalf("F12: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dockNested(s) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: F12 did not end nest mode after the rail: %v\n%s", err, term.Snapshot())
+	}
 }
