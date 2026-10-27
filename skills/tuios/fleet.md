@@ -29,6 +29,7 @@ and a comma gives alternatives.
 | `name:` | the window's name, a glob |
 | `cwd:` | the directory or anything under it; `~` is the home directory |
 | `task:` | a task card the pane holds, by id, a glob (`tuios --skill tasks`) |
+| `stage:` | the stage of a task card the pane holds |
 
 A glob's `*` does not cross a slash. A term the pane cannot answer does not
 match. `list-agents --all-hosts --select` reads every machine.

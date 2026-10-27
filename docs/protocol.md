@@ -197,6 +197,12 @@ nothing. The reply gains
 `queued_behind` and `waited_turn_ms`. A queued prompt (`queue-prompt`) is not
 typed while an ask holds the target's turn.
 
+**list-tasks takes all_sessions.** It lists every session's cards, and the
+answer has `all_sessions: true` in place of `session`. The agents view's
+board reads it; a daemon from before this refuses the parameter with
+`invalid_params`, and the board says the daemon is too old. A selector
+takes `stage:`.
+
 **list-host-sessions rows carry agents.** A remote session row gains
 `agents`, one entry per agent pane: `id`, `title`, `state`, `state_at`,
 `harness`, `message`, `kind`, `meta` and `subagents`, at most 32 a session.
@@ -1861,8 +1867,8 @@ Under `own`:
   is checked as it is written, so a session that joins the reach later is
   streamed from then on. Events that name no session, and events relayed
   from linked hosts, are not written.
-- `all_sessions` on `list-agents`, `any_session` on `wait-for` and `hosts` on
-  `subscribe` are refused.
+- `all_sessions` on `list-agents` and `list-tasks`, `any_session` on
+  `wait-for` and `hosts` on `subscribe` are refused.
 - `select` is refused on every verb but `list-agents`, where it reads only the
   caller's own session: a selector reaches every session.
 - A `host` naming another machine, such as `send-agent-message`'s outbox
@@ -5467,8 +5473,9 @@ string of terms separated by spaces, all of which must match; a term is
 (only `needs:you`: `needs_input` or `errored`), `session` (glob), `group` (the
 fan-out group, glob), `host` (`local` or a host name, glob), `name` (window
 name, glob), `cwd` (the directory or under it; a leading `~` is the
-daemon's home) and `task` (a task card the pane holds, by id, glob; see
-[Task verbs](#task-verbs)). Globs are `path.Match`: `*` does not cross a slash. A term a
+daemon's home), `task` (a task card the pane holds, by id, glob; see
+[Task verbs](#task-verbs)) and `stage` (the stage of a card the pane holds;
+a done card has no holder, so `stage:done` matches no pane). Globs are `path.Match`: `*` does not cross a slash. A term a
 pane cannot answer does not match. A selector that does not parse is
 `invalid_params` naming `select`, with the keys in `accepted`.
 
@@ -7042,7 +7049,7 @@ stuck with a reason, keeping its holder and stage, and `clear` lifts the mark.
 | Verb | What it does | A pane without `admin` | Over a link | Result `type` |
 | --- | --- | --- | --- | --- |
 | `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`) | `task`, own session | `write` | `task_added` |
-| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it | `read` | `list` | `task_list` |
+| `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder` | `read` | `list` | `task_list` |
 | `get-task` | One card with its `prompt` and `history` | `read` | `list` | `task` |
 | `claim-task` | Take the card `id`, or with `next` the oldest card no pane holds that is not blocked or done, for `window` | `task`; for itself only | `write` | `task_claimed` |
 | `finish-task` | Mark the card done | `task`; only the card it holds | `write` | `task_finished` |
@@ -7058,7 +7065,8 @@ line of the prompt, at most 80 characters), `stage`, `stage_at`, `holder`
 `held_at`; `null` when no pane holds it), `by`, `at`, `blocked` (`reason`,
 `by`, `at`; `null` when it is not blocked), and `fan` (`fan`, `fan_id`: the
 session's fan group and fan id) for a card added in a fan's session. `list-tasks`
-answers `tasks`, one row each. Times are Unix nanoseconds, as `list-queued`
+answers `tasks`, one row each, and `session`, or `all_sessions: true` instead
+for every session. Times are Unix nanoseconds, as `list-queued`
 gives them.
 
 Who made a change (`by`, and each history entry's `by`) is decided from the

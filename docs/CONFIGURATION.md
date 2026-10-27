@@ -2425,6 +2425,20 @@ from protocol panes, and a key the harness never states draws nothing (see
 [Agent metadata](AGENT_STATE.md#what-feeds-it)). No option is needed to turn
 the feeds on, and there is nothing to configure for them.
 
+## The task board
+
+`b` in the agents view shows the task board: the cards of every session,
+grouped by stage ([AGENT_STATE.md](AGENT_STATE.md#the-agents-view)). `[tasks]
+stages` picks the stages it shows. The order stays todo, plan, doing, verify,
+review, shipped, done whatever the list's order, and a stage the list leaves
+out has no head. Empty, or naming no known stage, shows every stage. An
+unknown name is reported as a config warning and ignored.
+
+```toml
+[tasks]
+stages = ["todo", "doing", "verify"]
+```
+
 ## What a pane may do
 
 Every pane holds grants that say what a process in it may do through tuios:

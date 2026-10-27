@@ -2492,7 +2492,7 @@ it to `done` and lets it go.
 **Usage:**
 ```bash
 tuios task add [-p PROMPT] [--stage STAGE] TITLE... [flags]
-tuios task ls [--stage STAGE] [--open] [flags]
+tuios task ls [--stage STAGE] [--open] [--all-sessions] [flags]
 tuios task get ID [flags]
 tuios task claim ID | --next [-w <window>] [flags]
 tuios task done ID [flags]
@@ -2507,6 +2507,7 @@ tuios task rm ID [flags]
 - `-p, --prompt <text>` (`add`): What the pane that takes the card is to do, at most 16 KiB; `-` reads it from standard input
 - `--stage <stage>` (`add`, `ls`): The stage it starts in; for `ls`, only the cards in it
 - `--open` (`ls`): Leave out the cards that are done
+- `--all-sessions` (`ls`): List the cards of every session on this machine, with a SESSION column first. Takes no `--session`
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block

@@ -2580,6 +2580,36 @@ the focus. When the list is taller than the screen, rows are one line and a
 group longer than 8 rows shows its first 8 and `+N more`, which a click or
 `right` opens. Needs you never folds.
 
+`b`, or the `Board` word in the header, turns the list into the task board:
+every session's task cards grouped by stage, in the fixed stage order. A
+stage with no card has no head, and Done starts folded.
+
+```
+Todo  2 ──────────────────────────────    split the auth middleware
+▌ ×  split the auth middleware      4m    Todo · 4m · api t6
+     Blocked  waits on t1           t6    Card   Thread   Checkpoints   Pane
+  ○  write the changelog            9m    ────────────────────────────────────
+     free                           t3    Blocked waits on t1
+Doing  2 ─────────────────────────────    History
+  ●  port the cache to lru          2m    4m   blocked, waits on t1   shell
+     api-2   claude   Needs you     t2    9m   added   shell
+```
+
+Inside a stage the blocked cards come first, then the cards whose holder needs
+you, then the oldest. A held card wears its holder's mark and the holder's
+second line; a free card is `free`. The Card tab shows the card's prompt and
+history; on a held card the holder's tabs follow it. `enter` goes to the
+holder's pane. `t` takes the card for the pane behind the agents view, when
+the card is in that pane's session. `n` opens the New agent sheet with the
+card's prompt as the task, or its title until the prompt has been read; a
+Start in this folder claims the card for the new pane. The search narrows
+the cards with their holders, and with no selector it also matches a card's
+id and title. `[tasks] stages` in the config picks the stages the board
+shows ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)). The board
+lists this machine's cards: under the scope of another machine it is empty
+and says so. A daemon older than the board says so too, and the agents view
+works as before.
+
 The Artifacts tab lists what the agent has shown you, newest first: the TML
 documents its pane opened with `tuios tml show`, open or closed, and the
 screenshots it took. An open document is drawn live and takes the keys on
@@ -2939,6 +2969,8 @@ match.
 | `host:` | The machine: `local` (or this machine's own name), or a host from `[hosts]`, a glob. |
 | `name:` | The window's name, a glob. |
 | `cwd:` | The pane's directory, or any directory under it. `~` is the home directory. |
+| `task:` | A task card the pane holds, by id, a glob. |
+| `stage:` | The stage of a task card the pane holds. A done card has no holder, so `stage:done` matches no pane. |
 
 A glob is `*`, `?` and `[...]`, and `*` does not cross a slash, so `group:fan/*`
 is every group under `fan/`. A term the pane cannot answer does not match, so
