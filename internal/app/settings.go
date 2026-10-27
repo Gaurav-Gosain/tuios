@@ -491,6 +491,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.file_actions"),
 			opt("appearance.sidebar.file_delete"),
 			opt("appearance.sidebar.marquee"),
+			opt("appearance.sidebar.peek"),
 			opt("appearance.sidebar.tooltips"),
 			// Filed here rather than under Appearance, which is where it used to
 			// sit: the registry already calls it a sidebar option, it counts paths

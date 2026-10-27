@@ -217,6 +217,12 @@ type Settings struct {
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee bool
 
+	// SidebarPeekEnabled lets hovering a session row, or moving the rail
+	// cursor onto it, show that session's panes in the terminals section.
+	// Off, the section shows the attached session's panes until a click
+	// attaches another one (issue #1227).
+	SidebarPeekEnabled bool
+
 	// SidebarSections is the rail's layout: which sections it stacks, in what
 	// order, and the share of the rail each one may claim. See
 	// SidebarDefaultSections for the syntax.
@@ -936,6 +942,7 @@ func DefaultSettings() Settings {
 		SidebarShowCounts:           true,
 		SidebarShowNumbers:          false,
 		SidebarMarquee:              true,
+		SidebarPeekEnabled:          true,
 		SidebarSections:             SidebarDefaultSections,
 		SidebarFileIcons:            true,
 		SidebarFileIconColors:       true,

@@ -924,6 +924,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.sidebar.peek", Type: OptionBool, Section: "sidebar",
+		Description: "Show a session's panes in the terminals section while the pointer or the rail cursor is on its row",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.sidebar.tooltips", Type: OptionBool, Section: "sidebar",
 		Description: "Label the collapsed strip on hover",
 		Default:     "true",

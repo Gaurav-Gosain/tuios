@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // TestRailPeekHoldsTheTerminalsHeight: with the terminals section laid out
@@ -212,10 +213,14 @@ func peekRowText(s tuitest.Screen, row int) string {
 //   - one good frame among changing ones: the screen must settle before the
 //     rows are read.
 //
-// The rail at rest and while peeking is saved under artifactDir.
+// With appearance.sidebar.peek set to false the same hover leaves the
+// attached session's pane in the section (issue #1227).
+//
+// The rail at rest, while peeking and with the peek off is saved under
+// artifactDir.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail peek holds the
-// terminals height").
+// terminals height" and "Sidebar peek option").
 func TestRailPeekOnTheDefaultOrderListsEveryPane(t *testing.T) {
 	base := t.TempDir()
 	dir := artifactDir(t)
@@ -269,6 +274,7 @@ func TestRailPeekOnTheDefaultOrderListsEveryPane(t *testing.T) {
 	_ = term.WaitStable(500 * time.Millisecond)
 	s := term.Screen()
 	saveArtifact(t, term, dir, "peek")
+	savePNG(t, s, shot.XTermPalette(), dir, "peek-on")
 	hdr := peekHeaderRow(s, "terminals")
 	for i, name := range panes {
 		text := peekRowText(s, hdr+1+i)
@@ -287,5 +293,28 @@ func TestRailPeekOnTheDefaultOrderListsEveryPane(t *testing.T) {
 		t.Fatalf("leaving the rail did not end the peek: %v\n%s", err, term.Snapshot())
 	}
 	saveArtifact(t, term, dir, "after")
+
+	// appearance.sidebar.peek = false (issue #1227): the same hover that just
+	// peeked pk-six leaves the attached session's pane in the section. The
+	// pointer reaches the row the same way it did above, so a hover that never
+	// landed cannot pass for a peek that is off.
+	if out, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.peek", "false", "-s", "pk-one"); err != nil {
+		t.Fatalf("turn the peek off: %v: %s", err, out)
+	}
+	mouseHover(t, term, strings.Index(railLine(rest, row), "pk-six")+1, row)
+	_ = term.WaitStable(2 * time.Second)
+	s = term.Screen()
+	saveArtifact(t, term, dir, "peek-off")
+	savePNG(t, s, shot.XTermPalette(), dir, "peek-off")
+	if hdr := railLine(s, peekHeaderRow(s, "terminals")); strings.Contains(hdr, "pk-six") {
+		t.Fatalf("ASSERTION: with appearance.sidebar.peek = false, hovering pk-six names it on the terminals header: %q\n%s", hdr, term.Snapshot())
+	}
+	for i := range 2 {
+		if text := peekRowText(s, peekHeaderRow(s, "terminals")+1+i); slices.ContainsFunc(panes, func(p string) bool {
+			return slices.Contains(strings.Fields(text), p)
+		}) {
+			t.Fatalf("ASSERTION: with appearance.sidebar.peek = false, the terminals section's line %d is %q, a pk-six pane\n%s", i, text, term.Snapshot())
+		}
+	}
 	alive(t, term, "after peeking pk-six")
 }

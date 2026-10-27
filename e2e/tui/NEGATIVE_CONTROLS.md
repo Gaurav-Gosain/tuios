@@ -9909,3 +9909,20 @@ Run on 2026-10-27 on Linux.
 | The preselection fallback in `insertSyncedWindow` (a binary built from main before the fix) | `cli_spiral_preselect_left`: "the new pane is not left of the focused pane", new pane at (0,23) 80x23 below the focused pane. `cli_alternate_preselect_up`: "the new pane is not above the focused pane", new pane at (40,0) 40x46 beside it. `cli_spiral_no_preselection` passes on both binaries | **caught** |
 
 With `TUIOS_E2E_FRAMES` set, each `cli_*` case writes `before.png` and `after.png`.
+## Sidebar peek option
+
+`TestRailPeekOnTheDefaultOrderListsEveryPane` first peeks `pk-six` by hovering
+its row. It then runs `tuios set-config appearance.sidebar.peek false` and
+hovers the same row again. The terminals header must not name `pk-six`, and
+no line under it may be a `pk-six` pane (issue #1227). The first hover proves
+that the pointer reaches the row, so a hover that never lands cannot pass for
+a peek that is off. Run on 2026-10-27 on Linux, on branch
+`feat/sidebar-peek-option` from `main` (`3d91716c0`).
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The setting check in `sidebarPeekAt` never taken (`if false && !m.sidebarPeekAllowed()`) | with the peek off, hovering `pk-six` names it on the terminals header | **caught** |
+| The key never read (`s.SidebarPeekEnabled = true` in `ApplyAppearanceConfig`) | the same assertion | **caught** |
+| The positive half | none: the peek with the default config lists the six panes, and with `peek = false` the section keeps `pk-one`'s pane | **guard** |
+
+With `TUIOS_E2E_FRAMES` set, the test writes `peek-on.png` and `peek-off.png`.

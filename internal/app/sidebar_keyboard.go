@@ -91,7 +91,7 @@ func (m *OS) sidebarSetCursor(i int) {
 	m.sidebarCursorWantSet = false
 	m.SidebarCursor = i
 	row, ok := m.sidebarCursorRow()
-	if !ok || row.Kind != sidebarRowSession || row.SessionID == m.sidebarCurrentSessionID() {
+	if !ok || !m.sidebarPeekAllowed() || row.Kind != sidebarRowSession || row.SessionID == m.sidebarCurrentSessionID() {
 		m.sidebarClearPeek()
 		return
 	}

@@ -835,6 +835,9 @@ type SidebarConfig struct {
 	Workspaces string `toml:"workspaces"`
 	Marquee    *bool  `toml:"marquee"`  // Scroll a hovered row's overflowing title (default: true)
 	Tooltips   *bool  `toml:"tooltips"` // Label the collapsed strip on hover (default: true)
+	// Peek shows a session's panes in the terminals section while the pointer
+	// or the rail cursor rests on that session's row (default: true).
+	Peek *bool `toml:"peek"`
 	// Sections is the rail's layout: which sections it stacks, in what order,
 	// and the share of it each may claim. See SidebarDefaultSections.
 	Sections string `toml:"sections"`
@@ -2608,6 +2611,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Marquee != nil {
 		s.SidebarMarquee = *sb.Marquee
 	}
+	// Assigned whatever the file says, so a key removed from it turns the
+	// peek back on at the next reload.
+	s.SidebarPeekEnabled = sb.Peek == nil || *sb.Peek
 	// The layout falls back to the shipped one when unset, so a config file
 	// written before the files section existed lays the rail out the way it
 	// always did plus the new section, rather than drawing nothing at all.

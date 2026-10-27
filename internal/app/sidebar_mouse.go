@@ -298,6 +298,13 @@ func (m *OS) sidebarClearPeek() {
 	m.SidebarPeek = ""
 }
 
+// sidebarPeekAllowed reports whether the person leaves the peek on
+// (appearance.sidebar.peek). Off, the terminals section shows the attached
+// session's panes until a click attaches another one.
+func (m *OS) sidebarPeekAllowed() bool {
+	return m.Settings.SidebarPeekEnabled
+}
+
 // sidebarPeekAt sets the preview to the session row under the pointer, or
 // clears it when the pointer is anywhere else. One event decides: session rows
 // are one cell tall and terminals report motion per cell, so a pointer crossing
@@ -311,6 +318,10 @@ func (m *OS) sidebarClearPeek() {
 // rows clears the preview, which is why the pointer can never reach a peeked
 // terminal row while the peek is still on screen.
 func (m *OS) sidebarPeekAt(x, y int) {
+	if !m.sidebarPeekAllowed() {
+		m.sidebarClearPeek()
+		return
+	}
 	if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
 		// The strip does now have a terminals list to preview into, and the one
 		// thing it cannot do is say whose panes it is showing: the open rail
