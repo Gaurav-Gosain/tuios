@@ -9880,3 +9880,18 @@ machine, in a folder under that machine's home. Run on 2026-10-27 on Linux.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | `pathPickerHome` answers no home for a far pane | the picker's title never reads `~/farproj` | **caught** |
+## The other end of a copy-mode selection (#1226)
+
+`TestCopyModeVisualOtherEnd` presses `o` in a `v` and a `V` selection and
+reads each copy off the wire. The issue's case `0 v l l o l y` copies `bc`
+only when `o` moves the cursor to the start. The positive halves: `0 v l l o
+y` still copies `abc`, `o o l` copies `abcd`, and in a `V` selection whose
+start is off screen, `o` brings the start row back with the cursor on it, and
+`j y` copies ROW06 to ROW50. Run on 2026-10-27 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `case "o"` in `handleVisualInput` | `0 [v l l o l y] copied "abcd", want "bc"` | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, the test writes `other-end-v.png`,
+`other-end-V-before.png` and `other-end-V-after.png`.

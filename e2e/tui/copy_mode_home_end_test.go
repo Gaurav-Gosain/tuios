@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -147,4 +148,102 @@ func TestCopyModeEndRebinds(t *testing.T) {
 		t.Fatalf("ctrl+e put the copy cursor on column %d, want column %d where $ puts it", got, dollar)
 	}
 	alive(t, term, "after the rebound line end")
+}
+
+// o in a v or V selection moves the copy cursor to the other end (#1226), as
+// other-end does in tmux and o in vim.
+//
+// How these could pass wrongly, written down first:
+//   - o could do nothing and the copy still match. The issue's case, 0 v l l
+//     o l, copies "bc" only when l moves the start. Without o it copies "abcd".
+//   - o could move the cursor and change the selection with it. 0 v l l o y
+//     must still copy "abc".
+//   - o could swap once and then stick. o o l must move the far end again and
+//     copy "abcd".
+//   - The other end could be off screen and the cursor left there unseen. The
+//     V case moves 45 lines down from a line at the top of the pane, so the
+//     start scrolls out, and o must bring its row back with the cursor on it.
+func TestCopyModeVisualOtherEnd(t *testing.T) {
+	term, out := startWhitespaceClient(t, false)
+	runInShell(t, term, `clear; seq -f 'ROW%02g' 1 60; printf 'abc%sdef\n' ''`, "abcdef", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+	row := lastRowWith(term.Screen(), "abcdef")
+	if row < 0 {
+		t.Fatalf("the line is not on the screen\n%s", term.Snapshot())
+	}
+
+	// v: each case starts at the a of abcdef.
+	toA := func() int {
+		t.Helper()
+		copySearch(t, term, "abcdef", row)
+		sendEach(t, term, "0")
+		r, c, ok := copyCursorCell(term.Screen())
+		if !ok || r != row {
+			t.Fatalf("0 did not keep the copy cursor on row %d\n%s", row, term.Snapshot())
+		}
+		return c
+	}
+	cases := []struct {
+		keys []any
+		want string
+	}{
+		{[]any{"v", "l", "l", "o", "l", "y"}, "bc"},
+		{[]any{"v", "l", "l", "o", "y"}, "abc"},
+		{[]any{"v", "l", "l", "o", "o", "l", "y"}, "abcd"},
+	}
+	for _, tc := range cases {
+		toA()
+		from := len(clipboardWrites(out))
+		sendEach(t, term, tc.keys...)
+		what := fmt.Sprint(tc.keys...)
+		if got := rawWrite(t, term, out, from, what); got != tc.want {
+			t.Fatalf("0 %v copied %q, want %q", tc.keys, got, tc.want)
+		}
+	}
+
+	// o puts the cursor on the start, at the a.
+	a := toA()
+	sendEach(t, term, "v", "l", "l", "o")
+	if r, c, ok := copyCursorCell(term.Screen()); !ok || r != row || c != a {
+		t.Fatalf("0 v l l o put the copy cursor on row %d column %d, want row %d column %d\n%s", r, c, row, a, term.Snapshot())
+	}
+	copiesFrame(t, term, "other-end-v")
+	sendEach(t, term, "q")
+
+	// V: the start is off screen when o is pressed, and comes back.
+	if err := term.SendKeys("?ROW05", tuitest.Enter); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, _, ok := copyCursorCell(s)
+		return ok && strings.Contains(s.Line(r), "ROW05")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the search did not land on ROW05\n%s", term.Snapshot())
+	}
+	sendEach(t, term, "V", "4", "5", "j")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, _, ok := copyCursorCell(s)
+		return ok && strings.Contains(s.Line(r), "ROW50") && lastRowWith(s, "ROW05") < 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("V 45j did not reach ROW50 with ROW05 off screen\n%s", term.Snapshot())
+	}
+	copiesFrame(t, term, "other-end-V-before")
+	sendEach(t, term, "o")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, _, ok := copyCursorCell(s)
+		return ok && strings.Contains(s.Line(r), "ROW05")
+	}, uiTimeout); err != nil {
+		t.Fatalf("o did not bring the copy cursor to ROW05 on screen\n%s", term.Snapshot())
+	}
+	copiesFrame(t, term, "other-end-V-after")
+	from := len(clipboardWrites(out))
+	sendEach(t, term, "j", "y")
+	var want []string
+	for i := 6; i <= 50; i++ {
+		want = append(want, fmt.Sprintf("ROW%02d", i))
+	}
+	if got := rawWrite(t, term, out, from, "V 45j o j y"); got != strings.Join(want, "\n") {
+		t.Fatalf("V 45j o j y copied %q, want ROW06 to ROW50", got)
+	}
+	alive(t, term, "after o in copy mode")
 }

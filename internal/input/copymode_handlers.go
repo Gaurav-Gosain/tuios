@@ -676,6 +676,10 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		moveToMatchingBracket(cm, window)
 		updateVisualEnd(cm, window)
 
+	// Go to the other end of the selection
+	case "o":
+		swapVisualEnds(cm, window)
+
 	// Toggle visual mode (pressing v/V again exits visual mode)
 	case "v":
 		// Exit visual mode and return to normal mode

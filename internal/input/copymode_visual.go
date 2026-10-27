@@ -266,3 +266,36 @@ func getLineText(_ *terminal.CopyMode, window *terminal.Window, absY int) string
 
 	return ""
 }
+
+// swapVisualEnds moves the copy cursor to the other end of the selection, as
+// o does in vim visual mode and other-end in tmux. The anchor and the moving
+// end change places, so the selected text stays the same and the next motion
+// moves the end that was the anchor. The view scrolls only as far as it must
+// to show the cursor.
+func swapVisualEnds(cm *terminal.CopyMode, window *terminal.Window) {
+	cm.VisualStart, cm.VisualEnd = cm.VisualEnd, cm.VisualStart
+	if cm.State == terminal.CopyModeVisualChar {
+		cm.CursorX = cm.VisualEnd.X
+	}
+	// A line selection keeps the cursor column: its ends are whole lines.
+	showAbsoluteRow(cm, window, cm.VisualEnd.Y)
+	// In a line selection this sets the X of each end again for the new
+	// direction, which covers the same lines.
+	updateVisualEnd(cm, window)
+}
+
+// showAbsoluteRow puts the copy cursor on the absolute row absY. When the row
+// is outside the view, the view scrolls the least that shows it.
+func showAbsoluteRow(cm *terminal.CopyMode, window *terminal.Window, absY int) {
+	scrollbackLen := window.ScrollbackLen()
+	top := scrollbackLen - cm.ScrollOffset
+	switch {
+	case absY < top:
+		top = absY
+	case absY >= top+window.Height:
+		top = absY - window.Height + 1
+	}
+	cm.ScrollOffset = max(scrollbackLen-top, 0)
+	window.ScrollbackOffset = cm.ScrollOffset // Sync for rendering
+	cm.CursorY = absY - (scrollbackLen - cm.ScrollOffset)
+}

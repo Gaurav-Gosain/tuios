@@ -644,6 +644,7 @@ func copyModeKeys(leader string) []HelpBinding {
 		{Keys: []string{"/, ?"}, Description: "Search forward/backward", Category: "Copy Mode"},
 		{Keys: []string{"n, N"}, Description: "Repeat search/reverse", Category: "Copy Mode"},
 		{Keys: []string{"v, V"}, Description: "Visual char/line", Category: "Copy Mode"},
+		{Keys: []string{"o"}, Description: "Other end of selection", Category: "Copy Mode"},
 		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
 		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
 	}

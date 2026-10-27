@@ -1312,6 +1312,14 @@ edit_scrollback = ["ctrl+o"]
 The tmux preset uses `Ctrl+B E` to make the splits equal. With that preset,
 the editor key is `Ctrl+B Ctrl+T E`.
 
+### Other end of a selection
+
+In a `v` or `V` selection, `o` moves the copy cursor to the other end of the
+selection. The selected text does not change. The next motion moves the end
+that the cursor is on now. Press `o` again to go back. If the other end is
+outside the pane, the pane scrolls to show it. tmux and vim use `o` the same
+way.
+
 ### Clear the scrollback
 
 The `clear_scrollback` action clears the scrollback of the focused pane. It
