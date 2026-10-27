@@ -59,8 +59,14 @@ func reftableStamp(gitdir, commondir string) string {
 			b.WriteString("-\x00")
 			continue
 		}
-		data, _ := io.ReadAll(io.LimitReader(f, tablesListLimit))
+		data, err := io.ReadAll(io.LimitReader(f, tablesListLimit))
 		_ = f.Close() // opened read-only: nothing to flush
+		if err != nil {
+			// A read error counts as no list, the same as a stack that is
+			// not there.
+			b.WriteString("-\x00")
+			continue
+		}
 		b.Write(data)
 		b.WriteByte(0)
 	}
@@ -86,12 +92,12 @@ var (
 // reftableFor is the answers kept for gitdir, emptied when its stamp has
 // moved. The caller holds reftableMu.
 func reftableFor(gitdir, stamp string) *reftableAnswers {
-	a := reftableCache[gitdir]
-	if a == nil || a.stamp != stamp {
-		a = &reftableAnswers{stamp: stamp, refs: map[string]string{}}
-		reftableCache[gitdir] = a
+	ans := reftableCache[gitdir]
+	if ans == nil || ans.stamp != stamp {
+		ans = &reftableAnswers{stamp: stamp, refs: map[string]string{}}
+		reftableCache[gitdir] = ans
 	}
-	return a
+	return ans
 }
 
 // askGit runs git in root, the working tree, and answers its trimmed output.
@@ -113,8 +119,8 @@ func askGit(root string, args ...string) (string, error) {
 func ReftableHead(gitdir, commondir, root string) (branch, sha string, detached bool) {
 	stamp := reftableStamp(gitdir, commondir)
 	reftableMu.Lock()
-	if a := reftableFor(gitdir, stamp); a.headOK {
-		branch, sha, detached = a.branch, a.sha, a.detached
+	if ans := reftableFor(gitdir, stamp); ans.headOK {
+		branch, sha, detached = ans.branch, ans.sha, ans.detached
 		reftableMu.Unlock()
 		return branch, sha, detached
 	}
@@ -141,8 +147,8 @@ func ReftableHead(gitdir, commondir, root string) (branch, sha string, detached 
 	}
 
 	reftableMu.Lock()
-	if a := reftableFor(gitdir, stamp); !a.headOK {
-		a.branch, a.sha, a.detached, a.headOK = branch, sha, detached, true
+	if ans := reftableFor(gitdir, stamp); !ans.headOK {
+		ans.branch, ans.sha, ans.detached, ans.headOK = branch, sha, detached, true
 	}
 	reftableMu.Unlock()
 	return branch, sha, detached
@@ -163,8 +169,7 @@ func reftableRef(gitdir, commondir, root, ref string) string {
 	if err != nil {
 		// git exits 1 for a ref that does not exist, which is an answer worth
 		// keeping. Anything else, a timeout included, is asked again.
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() != 1 {
 			return ""
 		}
 		sha = ""
