@@ -29,17 +29,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
-# The shard count and the time each shard may take. shardplan packs the tests
-# into E2E_SHARDS shards by the measured times in
-# e2e/tui/shardplan/durations.txt. The shard plan job fails when a shard's
-# estimate is over E2E_SHARD_LIMIT, which leaves a wide margin under the 18
+# The shard count, the lanes in each shard, and the time each lane may take.
+# A shard is one runner. A lane is one go test process, and the lanes of a
+# shard run side by side on its runner. shardplan packs the tests into
+# E2E_SHARDS times E2E_LANES lanes by the measured times in
+# e2e/tui/shardplan/durations.txt. The shard plan job fails when a lane's
+# estimate is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
 # minute go test timeout. Keep the matrix below in step with E2E_SHARDS.
 env:
-  E2E_SHARDS: "10"
-  E2E_SHARD_LIMIT: 11m
-  # A partial selection fills shards to about this much each and leaves the
-  # rest empty, so a small change does not start ten runners.
-  E2E_SHARD_FILL: 8m
+  E2E_SHARDS: "8"
+  E2E_LANES: "4"
+  E2E_LANE_LIMIT: 6m
+  # A partial selection fills lanes to about this much each and leaves the
+  # rest empty, so a small change does not start every runner.
+  E2E_LANE_FILL: 3m
 
 jobs:
   # ff-merge lands the exact commit that passed as the pull request head, so
@@ -97,7 +100,7 @@ jobs:
           TUIOS_E2E: "1"
         run: |
           set -euo pipefail
-          go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$E2E_SHARDS" -max "$E2E_SHARD_LIMIT"
+          go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT"
 
       # The shards make the same choice on their own. This copy says on the
       # run what was chosen and why. Its notice "mode=all" is how
@@ -125,19 +128,24 @@ jobs:
     # failed. A kill prints no failing test, which is the worst shape a red
     # build can take.
     #
-    # The tests hold no t.Parallel, and they should not: each one starts a real
-    # daemon and a real pseudo-terminal, so running them together inside one
-    # process would multiply the memory rather than the throughput. Splitting
-    # across machines gives each shard the whole runner.
+    # The tests hold no t.Parallel: each one starts a real daemon and a real
+    # pseudo-terminal, and tests in one process share its environment and
+    # globals. Each shard runs E2E_LANES go test processes side by side
+    # instead, each with a list of its own. The tests mostly wait on a pty or
+    # a daemon: a serial run used about one CPU second in five of its wall
+    # time, so four lanes on a four-core runner do four times the work in
+    # about the same time. Tests that must not overlap share a lane through
+    # e2e/tui/shardplan/together.txt.
     #
     # The split was a hash of the test name until seven shards ran between 525
     # and 1054 seconds, and the long one crossed the 1080 second timeout. A
     # hash balances the count of tests, and a few tests take a minute or two.
-    # The split is now by measured time, with ten shards near ten minutes.
+    # The split is now by measured time, with eight shards of four lanes near
+    # three minutes each.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     name: e2e-tui (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: tested
     # tested is skipped on a pull request, so the shards must not wait for its
@@ -175,12 +183,14 @@ jobs:
 
       # Every shard computes the same plan from the same test list, diff and
       # durations file, so together they run each selected test once. A test
-      # that is not in the durations file yet counts as the mean.
+      # that is not in the durations file yet counts as the mean. shardplan
+      # packs E2E_SHARDS times E2E_LANES lanes, and shard N takes lanes
+      # (N-1)*E2E_LANES+1 to N*E2E_LANES.
       #
       # On a pull request, scripts/e2e-select.sh keeps only the tests the
       # change can reach (see e2e/tui/testselect). Main, the nightly and a
       # manual run always select every test. A partial selection is packed
-      # into as few shards as it needs, and the other shards stop here.
+      # into as few lanes as it needs, and the shards with none stop here.
       #
       # Listing needs TUIOS_E2E as well: without it the suite's TestMain
       # returns before it can print a name, and the shard would silently be
@@ -201,20 +211,26 @@ jobs:
           fi
           ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt" 2> "$RUNNER_TEMP/select.log"
           cat "$RUNNER_TEMP/select.log" >&2
-          if grep -q '^mode=all$' "$GITHUB_OUTPUT"; then
-            names=$(go run ./shardplan -shards "$SHARDS" -shard "$SHARD" < "$RUNNER_TEMP/selected.txt")
-            if [ -z "$names" ]; then
-              echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
-              exit 1
+          lanes=$((SHARDS * E2E_LANES))
+          go build -o "$RUNNER_TEMP/shardplan" ./shardplan
+          for lane in $(seq 1 "$E2E_LANES"); do
+            v=$(( (SHARD - 1) * E2E_LANES + lane ))
+            if grep -q '^mode=all$' "$GITHUB_OUTPUT"; then
+              "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" < "$RUNNER_TEMP/selected.txt" > "$RUNNER_TEMP/names-$lane.txt"
+            elif grep -q '^mode=none$' "$GITHUB_OUTPUT"; then
+              # The change reaches no e2e test, so the list is empty and
+              # shardplan would refuse it. Every shard stops here.
+              : > "$RUNNER_TEMP/names-$lane.txt"
+            else
+              "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" -fill "$E2E_LANE_FILL" < "$RUNNER_TEMP/selected.txt" > "$RUNNER_TEMP/names-$lane.txt"
             fi
-          elif grep -q '^mode=none$' "$GITHUB_OUTPUT"; then
-            # The change reaches no e2e test, so the list is empty and
-            # shardplan would refuse it. Every shard stops here.
-            names=""
-          else
-            names=$(go run ./shardplan -shards "$SHARDS" -shard "$SHARD" -fill "$E2E_SHARD_FILL" < "$RUNNER_TEMP/selected.txt")
+            sed -i '/^$/d' "$RUNNER_TEMP/names-$lane.txt"
+          done
+          cat "$RUNNER_TEMP"/names-*.txt > "$RUNNER_TEMP/names.txt"
+          if grep -q '^mode=all$' "$GITHUB_OUTPUT" && [ ! -s "$RUNNER_TEMP/names.txt" ]; then
+            echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
+            exit 1
           fi
-          printf '%s\n' "$names" | sed '/^$/d' > "$RUNNER_TEMP/names.txt"
           if [ -s "$RUNNER_TEMP/names.txt" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             wc -l < "$RUNNER_TEMP/names.txt" | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
@@ -242,21 +258,48 @@ jobs:
         # result across a change of binary. -race is deliberately absent: the
         # program under test is a child process, so the detector would
         # instrument only the harness.
+        #
+        # The lanes write to a log each, and the logs print one after another
+        # when every lane is done, so no two lanes' lines interleave.
         run: |
           set -euo pipefail
-          names=$(cat "$RUNNER_TEMP/names.txt")
           start=$SECONDS
+          # The test listing in the step before built the suite's packages, so
+          # the lanes find them in the build cache and only link.
+          pids=()
+          for lane in $(seq 1 "$E2E_LANES"); do
+            [ -s "$RUNNER_TEMP/names-$lane.txt" ] || continue
+            names=$(paste -sd'|' "$RUNNER_TEMP/names-$lane.txt")
+            (
+              lstart=$SECONDS
+              lstatus=0
+              go test -count=1 -timeout 12m -v -run "^($names)$" ./... > "$RUNNER_TEMP/e2e-$lane.log" 2>&1 || lstatus=$?
+              echo "$lstatus" > "$RUNNER_TEMP/status-$lane"
+              echo "$((SECONDS - lstart))" > "$RUNNER_TEMP/took-$lane"
+            ) &
+            pids+=("$!")
+          done
+          wait "${pids[@]}"
           # A failure of tests listed in .github/flaky-tests.txt, and only of
           # those, gets one retry of those tests. Anything else fails the shard.
           status=0
-          go test -count=1 -timeout 18m -v -run "^($(echo "$names" | paste -sd'|' -))$" ./... 2>&1 | tee "$RUNNER_TEMP/e2e.log" || status=$?
-          # A shard that ran over the limit still passes, but says so, so the
-          # drift shows before it reaches the timeout.
-          took=$((SECONDS - start))
-          limit=$(( ${E2E_SHARD_LIMIT%m} * 60 ))
-          if [ "$took" -gt "$limit" ]; then
-            echo "::warning title=Slow e2e shard::Shard $SHARD ran ${took}s, over the $E2E_SHARD_LIMIT limit. Refresh e2e/tui/shardplan/durations.txt or add a shard."
-          fi
+          limit=$(( ${E2E_LANE_LIMIT%m} * 60 ))
+          : > "$RUNNER_TEMP/e2e.log"
+          for lane in $(seq 1 "$E2E_LANES"); do
+            [ -s "$RUNNER_TEMP/names-$lane.txt" ] || continue
+            took=$(cat "$RUNNER_TEMP/took-$lane")
+            lstatus=$(cat "$RUNNER_TEMP/status-$lane")
+            echo "=== lane $lane of shard $SHARD: $(wc -l < "$RUNNER_TEMP/names-$lane.txt") tests, ${took}s, exit $lstatus"
+            cat "$RUNNER_TEMP/e2e-$lane.log"
+            cat "$RUNNER_TEMP/e2e-$lane.log" >> "$RUNNER_TEMP/e2e.log"
+            [ "$lstatus" = 0 ] || status=1
+            # A lane that ran over the limit still passes, but says so, so the
+            # drift shows before it reaches the timeout.
+            if [ "$took" -gt "$limit" ]; then
+              echo "::warning title=Slow e2e lane::Lane $lane of shard $SHARD ran ${took}s, over the $E2E_LANE_LIMIT limit. Refresh e2e/tui/shardplan/durations.txt or add a shard."
+            fi
+          done
+          echo "shard $SHARD ran in $((SECONDS - start))s"
           if [ "$status" -ne 0 ]; then
             ../../scripts/retry-flaky.sh "$RUNNER_TEMP/e2e.log" ./...
           fi

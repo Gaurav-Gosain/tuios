@@ -1,0 +1,9 @@
+# Tests that must not run at the same time as each other. The tests on one
+# line always land in one shard, which runs them one after another. The e2e
+# workflow runs the shards of one runner side by side, so tests that share
+# something outside their own directories go on one line here.
+#
+# These read /tmp/tuios-debug.log, the fixed name TUIOS_DEBUG_INTERNAL=1
+# writes, and count the lines their own daemon added. A second of them running
+# at the same time adds its lines to the count.
+TestImageSymbolsFlood TestImageSymbolsKeepAPictureOnScreen TestImageSymbolsWithChafa

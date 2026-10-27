@@ -21,7 +21,9 @@
 //	    rewrites durations.txt from go test -v output, such as gh run view --log.
 //
 // A test missing from durations.txt is estimated at the mean of the known
-// tests. Every shard computes the same plan from the same list and file, so
+// tests. The tests on one line of together.txt always land in one shard, in
+// the order the shard runs them, so they never run at the same time as each
+// other. Every shard computes the same plan from the same list and file, so
 // the shards together run each test exactly once.
 package main
 
@@ -43,6 +45,7 @@ import (
 
 func main() {
 	durations := flag.String("durations", "shardplan/durations.txt", "file of measured test durations")
+	togetherFile := flag.String("together", "shardplan/together.txt", "file of test groups that share a shard")
 	shards := flag.Int("shards", 0, "number of shards")
 	shard := flag.Int("shard", 0, "print the tests of this shard (1-based)")
 	limit := flag.Duration("max", 0, "fail if a shard's estimated time is over this")
@@ -64,6 +67,10 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	groups, err := readGroups(*togetherFile)
+	if err != nil {
+		fail(err)
+	}
 	names, err := readNames(os.Stdin)
 	if err != nil {
 		fail(err)
@@ -73,9 +80,9 @@ func main() {
 	}
 	used := *shards
 	if *fill > 0 && *shard > 0 {
-		used = shardsNeeded(names, known, *fill, *shards)
+		used = shardsNeeded(names, known, groups, *fill, *shards)
 	}
-	plan := pack(names, known, used)
+	plan := pack(names, known, groups, used)
 
 	if *shard > 0 {
 		if *shard > used {
@@ -116,9 +123,9 @@ func main() {
 // shardsNeeded is how many shards hold the tests at about fill each, at least
 // one and at most shards. A selection of a few tests then starts a few
 // runners, not all of them.
-func shardsNeeded(names []string, known map[string]float64, fill time.Duration, shards int) int {
+func shardsNeeded(names []string, known map[string]float64, groups [][]string, fill time.Duration, shards int) int {
 	total := 0.0
-	for _, s := range pack(names, known, 1) {
+	for _, s := range pack(names, known, groups, 1) {
 		total += s.load
 	}
 	n := int(math.Ceil(total / fill.Seconds()))
@@ -131,9 +138,10 @@ type shardLoad struct {
 }
 
 // pack assigns the longest test first to the shard with the least time so
-// far. The order is fixed by time and then name, so the plan depends only on
-// its inputs.
-func pack(names []string, known map[string]float64, shards int) []shardLoad {
+// far. A group from together.txt counts as one test as long as its members
+// together. The order is fixed by time and then name, so the plan depends
+// only on its inputs.
+func pack(names []string, known map[string]float64, groups [][]string, shards int) []shardLoad {
 	fallback := 1.0
 	if len(known) > 0 {
 		sum := 0.0
@@ -149,25 +157,74 @@ func pack(names []string, known map[string]float64, shards int) []shardLoad {
 		return fallback
 	}
 
-	order := slices.Clone(names)
-	slices.SortFunc(order, func(a, b string) int {
-		return cmp.Or(cmp.Compare(estimate(b), estimate(a)), cmp.Compare(a, b))
+	// A unit is one test, or the members of a group that are among names.
+	type unit struct {
+		names []string
+		load  float64
+	}
+	selected := map[string]bool{}
+	for _, name := range names {
+		selected[name] = true
+	}
+	grouped := map[string]bool{}
+	var units []unit
+	for _, group := range groups {
+		var u unit
+		for _, name := range group {
+			if selected[name] && !grouped[name] {
+				grouped[name] = true
+				u.names = append(u.names, name)
+				u.load += estimate(name)
+			}
+		}
+		if len(u.names) > 0 {
+			units = append(units, u)
+		}
+	}
+	for _, name := range names {
+		if !grouped[name] {
+			units = append(units, unit{names: []string{name}, load: estimate(name)})
+		}
+	}
+	slices.SortFunc(units, func(a, b unit) int {
+		return cmp.Or(cmp.Compare(b.load, a.load), cmp.Compare(a.names[0], b.names[0]))
 	})
+
 	plan := make([]shardLoad, shards)
-	for _, name := range order {
+	for _, u := range units {
 		lightest := 0
 		for i := range plan {
 			if plan[i].load < plan[lightest].load {
 				lightest = i
 			}
 		}
-		plan[lightest].names = append(plan[lightest].names, name)
-		plan[lightest].load += estimate(name)
+		plan[lightest].names = append(plan[lightest].names, u.names...)
+		plan[lightest].load += u.load
 	}
 	for i := range plan {
 		slices.Sort(plan[i].names)
 	}
 	return plan
+}
+
+// readGroups reads together.txt: one group per line, the test names apart by
+// spaces, and # comments. A missing file means no groups.
+func readGroups(path string) ([][]string, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read groups: %w", err)
+	}
+	var groups [][]string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line, _, _ = strings.Cut(line, "#")
+		if fields := strings.Fields(line); len(fields) > 1 {
+			groups = append(groups, fields)
+		}
+	}
+	return groups, nil
 }
 
 func readNames(r io.Reader) ([]string, error) {
