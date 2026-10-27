@@ -220,9 +220,10 @@ type shell struct {
 	paste   bool   // inside a bracketed paste
 }
 
-func runShell(t *TTY) int {
-	s := &shell{t: t, cwd: Home}
+func runShell(t *TTY, dir string) int {
+	s := &shell{t: t, cwd: startDir(dir)}
 	t.laid, _ = t.Size()
+	announceCwd(t, s.cwd)
 	greeting := []string{bold + "tuios" + reset, dim + "web" + reset, dim + "shell." + reset, dim + "Type" + reset, bold + "help" + reset}
 	for w := range strings.FieldsSeq("to see what it can do.") {
 		greeting = append(greeting, dim+w+reset)
@@ -253,8 +254,9 @@ func (s *shell) repaint() { s.t.repaint(s.editLine()) }
 
 // runProgram runs one command as a pane's own process, the way a real
 // terminal runs a program it was asked for instead of a shell.
-func runProgram(t *TTY, name string, args []string) int {
-	s := &shell{t: t, cwd: Home}
+func runProgram(t *TTY, dir, name string, args []string) int {
+	s := &shell{t: t, cwd: startDir(dir)}
+	announceCwd(t, s.cwd)
 	return commands[name](s, append([]string{name}, args...), strings.Join(append([]string{name}, args...), " "))
 }
 
@@ -264,8 +266,8 @@ func (s *shell) promptText() string {
 		mark = red + "❯" + reset
 	}
 	branch := ""
-	if inRepo(s.cwd) {
-		branch = " " + purple + "main" + reset
+	if b := branchAt(s.cwd); b != "" {
+		branch = " " + purple + b + reset
 	}
 	return cyan + bold + prettyPath(s.cwd) + reset + branch + " " + mark + " "
 }
@@ -655,8 +657,26 @@ func (s *shell) cd(args []string, _ string) int {
 	s.cwd = target
 	s.t.Emit(EventCwd, map[string]any{"cwd": s.cwd})
 	// OSC 7 tells tuios the directory, the way a configured real shell does.
-	s.t.Print("\x1b]7;file://tuios" + s.cwd + "\x1b\\")
+	s.t.Print(cwdReport(s.cwd))
 	return 0
+}
+
+// cwdReport is the OSC 7 report of dir. It names no host, which is this
+// machine: tuios takes a report from another host as a shell on another
+// machine, and does not list its files.
+func cwdReport(dir string) string { return "\x1b]7;file://" + dir + "\x1b\\" }
+
+// announceCwd tells tuios where a pane's program starts. On a real machine
+// tuios reads that from the process, which this pane does not have.
+func announceCwd(t *TTY, dir string) { t.write(cwdReport(dir)) }
+
+// startDir is where a pane's program starts: the folder the pane asked for
+// when it is one, home otherwise.
+func startDir(dir string) string {
+	if dir != "" && isDir(dir) {
+		return dir
+	}
+	return Home
 }
 
 func (s *shell) cat(name string, paths []string) int {

@@ -31,6 +31,12 @@ const (
 	// EventTapePlay asks tuios to play a tape, from `tuios tape play`. The
 	// browser build turns it into app.PlayTapeMsg. Data: name, script.
 	EventTapePlay = "tape.play"
+	// EventFilesChanged is a file written, made or removed, for tuios and not
+	// for the page: the browser build reads the rail's folder again. No data.
+	EventFilesChanged = "files.changed"
+	// EventWorktree is a worktree made in the fake repository. Data: repo,
+	// branch, path.
+	EventWorktree = "worktree"
 )
 
 var (

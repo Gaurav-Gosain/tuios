@@ -463,10 +463,11 @@ func cmdGo(s *shell, args []string, _ string) int {
 		s.t.Print("Try " + bold + "go run ." + reset + ", " + bold + "go test" + reset + " or " + bold + "go build" + reset + " in ~/projects/hello.\r\n")
 		return 0
 	}
-	if !inRepo(s.cwd) {
+	root, _ := WorktreeAt(s.cwd)
+	if root == "" {
 		return s.fail("go: no go.mod here. The Go project is in " + bold + "~/projects/hello" + reset)
 	}
-	greet, _ := readFile(ProjectDir + "/greet.go")
+	greet, _ := readFile(root + "/greet.go")
 	bang := strings.Contains(greet, `+ "!"`)
 	switch sub {
 	case "run":

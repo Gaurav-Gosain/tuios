@@ -1,10 +1,13 @@
 package webshell
 
 import (
+	"io/fs"
+	"os"
 	"path"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // fsMu guards files, fsDirs and the fake git repository. Every pane shares
@@ -236,14 +239,16 @@ func readFile(p string) (string, bool) {
 // writeFile creates or replaces a file. The parent has to exist.
 func writeFile(p, content string, appendTo bool) bool {
 	fsMu.Lock()
-	defer fsMu.Unlock()
 	if !fsDirs[path.Dir(p)] || fsDirs[p] {
+		fsMu.Unlock()
 		return false
 	}
 	if appendTo {
 		content = files[p] + content
 	}
 	files[p] = content
+	fsMu.Unlock()
+	filesChanged()
 	return true
 }
 
@@ -286,26 +291,94 @@ func WriteConfig(theme, border, glyphs string) {
 
 func mkdir(p string) bool {
 	fsMu.Lock()
-	defer fsMu.Unlock()
-	if !fsDirs[path.Dir(p)] || fsDirs[p] {
-		return false
+	ok := fsDirs[path.Dir(p)] && !fsDirs[p]
+	if _, isFile := files[p]; isFile {
+		ok = false
 	}
-	if _, ok := files[p]; ok {
-		return false
+	if ok {
+		fsDirs[p] = true
 	}
-	fsDirs[p] = true
-	return true
+	fsMu.Unlock()
+	if ok {
+		filesChanged()
+	}
+	return ok
 }
 
 func remove(p string) bool {
 	fsMu.Lock()
-	defer fsMu.Unlock()
-	if _, ok := files[p]; ok {
-		delete(files, p)
-		return true
+	_, ok := files[p]
+	delete(files, p)
+	fsMu.Unlock()
+	if ok {
+		filesChanged()
 	}
-	return false
+	return ok
 }
+
+// filesChanged tells tuios that a file was written, made or removed, so the
+// rail's files section reads its folder again. On a real machine a watch on
+// the folder does that.
+func filesChanged() { emit(Event{Type: EventFilesChanged}) }
+
+// IsDir reports whether p is a directory of the fake filesystem.
+func IsDir(p string) bool { return isDir(p) }
+
+// IsFile reports whether p is a file of the fake filesystem.
+func IsFile(p string) bool {
+	_, ok := readFile(p)
+	return ok
+}
+
+// ReadDir lists a directory of the fake filesystem for tuios's files
+// section, in place of the disk read a real machine makes. It reads up to
+// limit entries, and capped says there were more.
+func ReadDir(dir string, limit int) (entries []fs.DirEntry, capped bool, err error) {
+	dir = path.Clean(dir)
+	if !isDir(dir) {
+		if IsFile(dir) {
+			return nil, false, &fs.PathError{Op: "readdir", Path: dir, Err: fs.ErrInvalid}
+		}
+		return nil, false, &fs.PathError{Op: "open", Path: dir, Err: fs.ErrNotExist}
+	}
+	for _, e := range list(dir) {
+		if limit > 0 && len(entries) >= limit {
+			return entries, true, nil
+		}
+		size := 0
+		if !e.dir {
+			c, _ := readFile(dir + "/" + e.name)
+			size = len(c)
+		}
+		entries = append(entries, dirEntry{name: e.name, dir: e.dir, size: int64(size)})
+	}
+	return entries, false, nil
+}
+
+// dirEntry is one name of a ReadDir listing.
+type dirEntry struct {
+	name string
+	dir  bool
+	size int64
+}
+
+func (e dirEntry) Name() string               { return e.name }
+func (e dirEntry) IsDir() bool                { return e.dir }
+func (e dirEntry) Type() fs.FileMode          { return e.mode().Type() }
+func (e dirEntry) Info() (fs.FileInfo, error) { return e, nil }
+func (e dirEntry) Size() int64                { return e.size }
+func (e dirEntry) ModTime() time.Time         { return started }
+func (e dirEntry) Sys() any                   { return nil }
+func (e dirEntry) Mode() fs.FileMode          { return e.mode() }
+
+func (e dirEntry) mode() fs.FileMode {
+	if e.dir {
+		return fs.ModeDir | 0o755
+	}
+	return 0o644
+}
+
+var _ os.DirEntry = dirEntry{}
 
 // resolve turns a path typed at the prompt into an absolute path.
 func resolve(cwd, p string) string {

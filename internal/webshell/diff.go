@@ -26,32 +26,32 @@ func lineDiff(a, b string) []diffOp {
 	return linediff.LCS(al, bl)
 }
 
-// unifiedHunks renders a diff as unified hunks with three lines of context,
-// coloured the way git colours them. It returns "" when nothing changed.
-func unifiedHunks(ops []diffOp) string {
-	const context = 3
-	changed := make([]bool, len(ops))
-	someChange := false
-	for i, op := range ops {
-		if op.Op != ' ' {
-			changed[i] = true
-			someChange = true
-		}
-	}
-	if !someChange {
-		return ""
-	}
+// opHunk is one hunk of a line diff: where it starts on each side, how many
+// lines it covers there, and its lines.
+type opHunk struct {
+	aStart, aCount, bStart, bCount int
+	ops                            []diffOp
+}
+
+// groupHunks splits a diff into hunks with context lines of context around
+// every change, the way git does. It returns nil when nothing changed.
+func groupHunks(ops []diffOp, context int) []opHunk {
 	// Mark every op within context of a change as shown.
 	show := make([]bool, len(ops))
-	for i := range ops {
-		if !changed[i] {
+	someChange := false
+	for i, op := range ops {
+		if op.Op == ' ' {
 			continue
 		}
+		someChange = true
 		for k := max(0, i-context); k <= min(len(ops)-1, i+context); k++ {
 			show[k] = true
 		}
 	}
-	var b strings.Builder
+	if !someChange {
+		return nil
+	}
+	var out []opHunk
 	aLine, bLine := 1, 1
 	for i := 0; i < len(ops); {
 		if !show[i] {
@@ -64,39 +64,52 @@ func unifiedHunks(ops []diffOp) string {
 			i++
 			continue
 		}
+		h := opHunk{aStart: aLine, bStart: bLine}
 		start := i
-		aStart, bStart := aLine, bLine
-		aCount, bCount := 0, 0
 		for i < len(ops) && show[i] {
 			if ops[i].Op != '+' {
-				aCount++
+				h.aCount++
 				aLine++
 			}
 			if ops[i].Op != '-' {
-				bCount++
+				h.bCount++
 				bLine++
 			}
 			i++
 		}
-		fmt.Fprintf(&b, "%s@@ -%d,%d +%d,%d @@%s\r\n", cyan, aStart, aCount, bStart, bCount, reset)
-		for _, op := range ops[start:i] {
+		h.ops = ops[start:i]
+		out = append(out, h)
+	}
+	return out
+}
+
+// header is the hunk's @@ line. A side with no lines starts at the line
+// before it, as git writes it.
+func (h opHunk) header() string {
+	a, b := h.aStart, h.bStart
+	if h.aCount == 0 {
+		a--
+	}
+	if h.bCount == 0 {
+		b--
+	}
+	return fmt.Sprintf("@@ -%d,%d +%d,%d @@", a, h.aCount, b, h.bCount)
+}
+
+// unifiedHunks renders a diff as unified hunks with three lines of context,
+// coloured the way git colours them. It returns "" when nothing changed.
+func unifiedHunks(ops []diffOp) string {
+	var b strings.Builder
+	for _, h := range groupHunks(ops, 3) {
+		b.WriteString(cyan + h.header() + reset + "\r\n")
+		for _, op := range h.ops {
 			switch op.Op {
 			case '-':
-				b.WriteString(red)
-				b.WriteString("-")
-				b.WriteString(op.Line)
-				b.WriteString(reset)
-				b.WriteString("\r\n")
+				b.WriteString(red + "-" + op.Line + reset + "\r\n")
 			case '+':
-				b.WriteString(green)
-				b.WriteString("+")
-				b.WriteString(op.Line)
-				b.WriteString(reset)
-				b.WriteString("\r\n")
+				b.WriteString(green + "+" + op.Line + reset + "\r\n")
 			default:
-				b.WriteString(" ")
-				b.WriteString(op.Line)
-				b.WriteString("\r\n")
+				b.WriteString(" " + op.Line + "\r\n")
 			}
 		}
 	}

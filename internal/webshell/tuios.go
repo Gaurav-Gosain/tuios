@@ -30,6 +30,7 @@ func cmdTuios(s *shell, args []string, _ string) int {
 			lines = append(lines, table([][2]string{
 				{"tuios tape play demo.tape", "watch tuios drive itself"},
 				{"tuios tape list", "the tapes here"},
+				{"tuios ship", "commit and ship a worktree's change"},
 				{"tuios version", ""},
 			}, 2, green, cols)...)
 			lines = append(lines, "")
@@ -47,6 +48,8 @@ func cmdTuios(s *shell, args []string, _ string) int {
 		return 0
 	case "tape":
 		return tuiosTape(s, args[2:])
+	case "ship":
+		return tuiosShip(s, args[2:])
 	}
 	if printSample(t, sub) {
 		return 0

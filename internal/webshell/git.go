@@ -9,12 +9,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// A fake git with one repository, the Go project in ProjectDir. It keeps the
-// files of the last commit and a staging set, and compares them with the
-// shared filesystem, so a file changed at the prompt shows up in git status
-// and git diff like it would for real.
+// A fake git with one repository, the Go project in ProjectDir, and the
+// worktrees made of it. Each checkout keeps the files of its last commit and
+// a staging set, and compares them with the shared filesystem, so a file
+// changed at the prompt shows up in git status and git diff like it would for
+// real.
 
 type gitCommit struct {
 	hash    string
@@ -22,11 +25,34 @@ type gitCommit struct {
 	when    time.Time
 }
 
-var repo = struct {
-	head    map[string]string // path relative to ProjectDir -> content at HEAD
-	staged  map[string]bool
-	commits []gitCommit // oldest first
-}{
+// checkout is one work tree of the repository: the main checkout, or a
+// linked worktree on a branch of its own.
+type checkout struct {
+	root   string
+	branch string
+	// base is the branch a linked worktree was made from, "" for the main
+	// checkout. Review diffs a worktree from where it left base.
+	base string
+	// fork is base's files, and forkHash its last commit, when the worktree
+	// was made. Nil for the main checkout.
+	fork     map[string]string
+	forkHash string
+	head     map[string]string // path relative to root -> content at HEAD
+	staged   map[string]bool
+	commits  []gitCommit // oldest first
+}
+
+// headHash is the checkout's last commit.
+func (c *checkout) headHash() string {
+	if len(c.commits) == 0 {
+		return "0000000"
+	}
+	return c.commits[len(c.commits)-1].hash
+}
+
+var repo = &checkout{
+	root:   ProjectDir,
+	branch: "main",
 	head: map[string]string{
 		"go.mod":        helloGoMod,
 		"main.go":       helloMain,
@@ -43,6 +69,48 @@ var repo = struct {
 	},
 }
 
+// linked are the worktrees made since the tab opened, oldest first. Guarded
+// by fsMu, like the files.
+var linked []*checkout
+
+// WorktreeDir is where tuios makes a worktree, as worktree.DefaultDir is on
+// a real machine with no TUIOS_WORKTREE_DIR set.
+const WorktreeDir = Home + "/.local/share/tuios/worktrees"
+
+// checkouts is the main checkout, then every linked worktree. The caller
+// holds fsMu.
+func checkouts() []*checkout { return append([]*checkout{repo}, linked...) }
+
+// checkoutAt is the checkout dir is in, or nil. The caller holds fsMu.
+func checkoutAt(dir string) *checkout {
+	var best *checkout
+	for _, c := range checkouts() {
+		if dir == c.root || strings.HasPrefix(dir, c.root+"/") {
+			if best == nil || len(c.root) > len(best.root) {
+				best = c
+			}
+		}
+	}
+	return best
+}
+
+// lockedCheckoutAt is checkoutAt for a caller that does not hold fsMu.
+func lockedCheckoutAt(dir string) *checkout {
+	fsMu.RLock()
+	defer fsMu.RUnlock()
+	return checkoutAt(dir)
+}
+
+// branchAt is the branch checked out where dir is, "" outside the repository.
+func branchAt(dir string) string {
+	fsMu.RLock()
+	defer fsMu.RUnlock()
+	if c := checkoutAt(dir); c != nil {
+		return c.branch
+	}
+	return ""
+}
+
 // gitChange is one path that differs from HEAD.
 type gitChange struct {
 	path   string
@@ -50,46 +118,60 @@ type gitChange struct {
 	staged bool
 }
 
-// repoFiles lists the files under the repository with their content. The
+// files lists the files under the checkout with their content. The
 // caller holds fsMu.
-func repoFiles() map[string]string {
+func (c *checkout) files() map[string]string {
 	out := map[string]string{}
-	prefix := ProjectDir + "/"
-	for p, c := range files {
-		if strings.HasPrefix(p, prefix) {
-			out[p[len(prefix):]] = c
+	prefix := c.root + "/"
+	for p, content := range files {
+		if strings.HasPrefix(p, prefix) && !inLinkedBelow(c, p) {
+			out[p[len(prefix):]] = content
 		}
 	}
 	return out
 }
 
-// gitChanges compares the working tree with HEAD.
-func gitChanges() []gitChange {
-	fsMu.RLock()
-	defer fsMu.RUnlock()
-	work := repoFiles()
-	var out []gitChange
-	for p, c := range work {
-		head, tracked := repo.head[p]
-		switch {
-		case !tracked:
-			out = append(out, gitChange{path: p, status: "new file", staged: repo.staged[p]})
-		case head != c:
-			out = append(out, gitChange{path: p, status: "modified", staged: repo.staged[p]})
+// inLinkedBelow reports whether p is in another checkout inside c, which c
+// does not track. The caller holds fsMu.
+func inLinkedBelow(c *checkout, p string) bool {
+	for _, o := range linked {
+		if o != c && len(o.root) > len(c.root) && strings.HasPrefix(p, o.root+"/") {
+			return true
 		}
 	}
-	for p := range repo.head {
+	return false
+}
+
+// changes compares the checkout's working tree with its HEAD.
+func (c *checkout) changes() []gitChange {
+	fsMu.RLock()
+	defer fsMu.RUnlock()
+	return c.changesLocked()
+}
+
+// changesLocked is changes for a caller that holds fsMu.
+func (c *checkout) changesLocked() []gitChange {
+	work := c.files()
+	var out []gitChange
+	for p, content := range work {
+		head, tracked := c.head[p]
+		switch {
+		case !tracked:
+			out = append(out, gitChange{path: p, status: "new file", staged: c.staged[p]})
+		case head != content:
+			out = append(out, gitChange{path: p, status: "modified", staged: c.staged[p]})
+		}
+	}
+	for p := range c.head {
 		if _, ok := work[p]; !ok {
-			out = append(out, gitChange{path: p, status: "deleted", staged: repo.staged[p]})
+			out = append(out, gitChange{path: p, status: "deleted", staged: c.staged[p]})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
 	return out
 }
 
-func inRepo(cwd string) bool {
-	return cwd == ProjectDir || strings.HasPrefix(cwd, ProjectDir+"/")
-}
+func inRepo(cwd string) bool { return lockedCheckoutAt(cwd) != nil }
 
 func cmdGit(s *shell, args []string) int {
 	t := s.t
@@ -103,6 +185,7 @@ func cmdGit(s *shell, args []string) int {
 			{"commit", "commit what is staged (git commit -m \"msg\")"},
 			{"restore", "throw a change away"},
 			{"branch", "list branches"},
+			{"worktree list", "the worktrees of the repository"},
 		}
 		t.Lay(func(cols int) []string { return table(rows, 2, green, cols) })
 		return 0
@@ -111,28 +194,30 @@ func cmdGit(s *shell, args []string) int {
 		t.Print("git version 2.99.0 (tuios web edition)\r\n")
 		return 0
 	}
-	if !inRepo(s.cwd) {
+	c := lockedCheckoutAt(s.cwd)
+	if c == nil {
 		s.fail("fatal: not a git repository. The demo repo is in " + bold + "~/projects/hello" + reset)
 		return 128
 	}
 	switch args[0] {
 	case "status", "st":
-		return gitStatus(t, hasFlag(args, "-s", "--short"))
+		return gitStatus(t, c, hasFlag(args, "-s", "--short"))
 	case "log":
-		return gitLog(t, args[1:])
+		return gitLog(t, c, args[1:])
 	case "diff":
-		return gitDiff(t, hasFlag(args, "--staged", "--cached"))
+		return gitDiff(t, c, hasFlag(args, "--staged", "--cached"))
 	case "add":
-		return gitAdd(s, args[1:])
+		return gitAdd(s, c, args[1:])
 	case "commit":
-		return gitCommitCmd(s, args[1:])
+		return gitCommitCmd(s, c, args[1:])
 	case "restore", "checkout":
-		return gitRestore(s, args[1:])
+		return gitRestore(s, c, args[1:])
 	case "branch":
-		t.Print("* " + green + "main" + reset + "\r\n")
-		return 0
+		return gitBranch(t, c)
+	case "worktree":
+		return gitWorktree(s, args[1:])
 	case "show":
-		return gitShow(t)
+		return gitShow(t, c)
 	}
 	s.fail("git: '" + args[0] + "' is not in this demo. Try git status, git log or git diff.")
 	return 1
@@ -147,32 +232,32 @@ func hasFlag(args []string, names ...string) bool {
 	return false
 }
 
-func gitStatus(t *TTY, short bool) int {
-	changes := gitChanges()
+func gitStatus(t *TTY, c *checkout, short bool) int {
+	changes := c.changes()
 	if short {
-		for _, c := range changes {
-			code := map[string]string{"modified": "M", "new file": "A", "deleted": "D"}[c.status]
+		for _, ch := range changes {
+			code := map[string]string{"modified": "M", "new file": "A", "deleted": "D"}[ch.status]
 			switch {
-			case c.staged:
-				t.Printf("%s%s%s  %s\r\n", green, code, reset, c.path)
-			case c.status == "new file":
-				t.Printf("%s??%s %s\r\n", red, reset, c.path)
+			case ch.staged:
+				t.Printf("%s%s%s  %s\r\n", green, code, reset, ch.path)
+			case ch.status == "new file":
+				t.Printf("%s??%s %s\r\n", red, reset, ch.path)
 			default:
-				t.Printf(" %s%s%s %s\r\n", red, code, reset, c.path)
+				t.Printf(" %s%s%s %s\r\n", red, code, reset, ch.path)
 			}
 		}
 		return 0
 	}
-	t.Print("On branch " + bold + "main" + reset + "\r\n")
+	t.Print("On branch " + bold + c.branch + reset + "\r\n")
 	var staged, unstaged, untracked []gitChange
-	for _, c := range changes {
+	for _, ch := range changes {
 		switch {
-		case c.staged:
-			staged = append(staged, c)
-		case c.status == "new file":
-			untracked = append(untracked, c)
+		case ch.staged:
+			staged = append(staged, ch)
+		case ch.status == "new file":
+			untracked = append(untracked, ch)
 		default:
-			unstaged = append(unstaged, c)
+			unstaged = append(unstaged, ch)
 		}
 	}
 	if len(changes) == 0 {
@@ -181,8 +266,8 @@ func gitStatus(t *TTY, short bool) int {
 	}
 	if len(staged) > 0 {
 		t.Print("\r\nChanges to be committed:\r\n")
-		for _, c := range staged {
-			t.Printf("\t%s%-10s %s%s\r\n", green, c.status+":", c.path, reset)
+		for _, ch := range staged {
+			t.Printf("\t%s%-10s %s%s\r\n", green, ch.status+":", ch.path, reset)
 		}
 	}
 	if len(unstaged) > 0 {
@@ -194,22 +279,26 @@ func gitStatus(t *TTY, short bool) int {
 			}
 			return lines
 		})
-		for _, c := range unstaged {
-			t.Printf("\t%s%-10s %s%s\r\n", red, c.status+":", c.path, reset)
+		for _, ch := range unstaged {
+			t.Printf("\t%s%-10s %s%s\r\n", red, ch.status+":", ch.path, reset)
 		}
 	}
 	if len(untracked) > 0 {
 		t.Print("\r\nUntracked files:\r\n")
-		for _, c := range untracked {
-			t.Printf("\t%s%s%s\r\n", red, c.path, reset)
+		for _, ch := range untracked {
+			t.Printf("\t%s%s%s\r\n", red, ch.path, reset)
 		}
 	}
 	return 0
 }
 
-func gitLog(t *TTY, args []string) int {
+func gitLog(t *TTY, co *checkout, args []string) int {
 	oneline := hasFlag(args, "--oneline")
-	limit := len(repo.commits)
+	fsMu.RLock()
+	commits := append([]gitCommit(nil), co.commits...)
+	branch := co.branch
+	fsMu.RUnlock()
+	limit := len(commits)
 	for i, a := range args {
 		if a == "-n" && i+1 < len(args) {
 			if n, err := strconv.Atoi(args[i+1]); err == nil {
@@ -221,15 +310,12 @@ func gitLog(t *TTY, args []string) int {
 			}
 		}
 	}
-	fsMu.RLock()
-	commits := append([]gitCommit(nil), repo.commits...)
-	fsMu.RUnlock()
 	shown := 0
 	for i := len(commits) - 1; i >= 0 && shown < limit; i-- {
 		c := commits[i]
 		ref := ""
 		if i == len(commits)-1 {
-			ref = " (" + cyan + bold + "HEAD -> " + green + "main" + reset + yellow + ")"
+			ref = " (" + cyan + bold + "HEAD -> " + green + branch + reset + yellow + ")"
 		}
 		if oneline {
 			// One commit to a line, cut at the pane edge the way git's
@@ -247,13 +333,13 @@ func gitLog(t *TTY, args []string) int {
 	return 0
 }
 
-func gitDiff(t *TTY, staged bool) int {
+func gitDiff(t *TTY, co *checkout, staged bool) int {
 	fsMu.RLock()
-	work := repoFiles()
-	head := make(map[string]string, len(repo.head))
-	maps.Copy(head, repo.head)
+	work := co.files()
+	head := make(map[string]string, len(co.head))
+	maps.Copy(head, co.head)
 	fsMu.RUnlock()
-	for _, c := range gitChanges() {
+	for _, c := range co.changes() {
 		if c.staged != staged || (!staged && c.status == "new file") {
 			continue
 		}
@@ -272,24 +358,24 @@ func gitDiff(t *TTY, staged bool) int {
 	return 0
 }
 
-func gitAdd(s *shell, args []string) int {
+func gitAdd(s *shell, co *checkout, args []string) int {
 	if len(args) == 0 {
 		s.fail("Nothing specified, nothing added. Try " + bold + "git add ." + reset)
 		return 1
 	}
 	all := hasFlag(args, ".", "-A", "--all")
-	changes := gitChanges()
+	changes := co.changes()
 	fsMu.Lock()
 	defer fsMu.Unlock()
 	for _, c := range changes {
 		if all || hasFlag(args, c.path) {
-			repo.staged[c.path] = true
+			co.staged[c.path] = true
 		}
 	}
 	return 0
 }
 
-func gitCommitCmd(s *shell, args []string) int {
+func gitCommitCmd(s *shell, co *checkout, args []string) int {
 	msg := ""
 	all := false
 	for i := 0; i < len(args); i++ {
@@ -313,30 +399,7 @@ func gitCommitCmd(s *shell, args []string) int {
 		s.fail("The demo has no editor for the message. Use " + bold + "git commit -m \"your message\"" + reset)
 		return 1
 	}
-	changes := gitChanges()
-	fsMu.Lock()
-	work := repoFiles()
-	n := 0
-	for _, c := range changes {
-		if !c.staged && !(all && c.status != "new file") {
-			continue
-		}
-		if c.status == "deleted" {
-			delete(repo.head, c.path)
-		} else {
-			repo.head[c.path] = work[c.path]
-		}
-		delete(repo.staged, c.path)
-		n++
-	}
-	var hash string
-	if n > 0 {
-		h := fnv.New32a()
-		_, _ = h.Write([]byte(msg + strconv.Itoa(len(repo.commits))))
-		hash = fmt.Sprintf("%07x", h.Sum32())[:7]
-		repo.commits = append(repo.commits, gitCommit{hash: hash, message: msg, when: time.Now()})
-	}
-	fsMu.Unlock()
+	hash, n := co.commit(msg, func(c gitChange) bool { return c.staged || (all && c.status != "new file") })
 	if n == 0 {
 		s.fail("nothing to commit. Stage something first with " + bold + "git add" + reset)
 		return 1
@@ -345,11 +408,47 @@ func gitCommitCmd(s *shell, args []string) int {
 	if n == 1 {
 		plural = ""
 	}
-	s.t.Printf("[main %s] %s\r\n %d file%s changed\r\n", hash, msg, n, plural)
+	s.t.Printf("[%s %s] %s\r\n %d file%s changed\r\n", co.branch, hash, msg, n, plural)
 	return 0
 }
 
-func gitRestore(s *shell, args []string) int {
+// commit records every change take accepts as a new commit with msg, and
+// returns its hash and how many files it took. It takes nothing and makes
+// no commit when take accepts no change.
+func (co *checkout) commit(msg string, take func(gitChange) bool) (string, int) {
+	fsMu.Lock()
+	defer fsMu.Unlock()
+	work := co.files()
+	n := 0
+	for _, c := range co.changesLocked() {
+		if !take(c) {
+			continue
+		}
+		if c.status == "deleted" {
+			delete(co.head, c.path)
+		} else {
+			co.head[c.path] = work[c.path]
+		}
+		delete(co.staged, c.path)
+		n++
+	}
+	if n == 0 {
+		return "", 0
+	}
+	hash := commitHash(co.branch, msg, len(co.commits))
+	co.commits = append(co.commits, gitCommit{hash: hash, message: msg, when: time.Now()})
+	return hash, n
+}
+
+// commitHash is a short hash for a new commit, the same for the same branch,
+// message and place in the history.
+func commitHash(branch, msg string, n int) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(branch + msg + strconv.Itoa(n)))
+	return fmt.Sprintf("%07x", h.Sum32())[:7]
+}
+
+func gitRestore(s *shell, co *checkout, args []string) int {
 	var targets []string
 	for _, a := range args {
 		if !strings.HasPrefix(a, "-") {
@@ -361,24 +460,159 @@ func gitRestore(s *shell, args []string) int {
 		return 1
 	}
 	fsMu.Lock()
+	defer filesChanged()
 	defer fsMu.Unlock()
 	for _, p := range targets {
-		rel := strings.TrimPrefix(resolve(s.cwd, p), ProjectDir+"/")
-		head, ok := repo.head[rel]
+		rel := strings.TrimPrefix(resolve(s.cwd, p), co.root+"/")
+		head, ok := co.head[rel]
 		if !ok {
 			s.t.Print(red + "error: " + p + " is not in the last commit" + reset + "\r\n")
 			return 1
 		}
-		files[ProjectDir+"/"+rel] = head
-		delete(repo.staged, rel)
+		files[co.root+"/"+rel] = head
+		delete(co.staged, rel)
 	}
 	return 0
 }
 
-func gitShow(t *TTY) int {
+func gitShow(t *TTY, co *checkout) int {
 	fsMu.RLock()
-	c := repo.commits[len(repo.commits)-1]
+	c := co.commits[len(co.commits)-1]
 	fsMu.RUnlock()
 	t.Printf("%scommit %s%s\r\nAuthor: guest <guest@tuios.dev>\r\nDate:   %s\r\n\r\n    %s\r\n", yellow, c.hash, reset, c.when.Format("Mon Jan 2 15:04 2006"), c.message)
 	return 0
+}
+
+// gitBranch lists the branches, the way git branch does: * on the one
+// checked out here, + on one checked out in another worktree.
+func gitBranch(t *TTY, here *checkout) int {
+	fsMu.RLock()
+	all := checkouts()
+	fsMu.RUnlock()
+	sort.Slice(all, func(i, j int) bool { return all[i].branch < all[j].branch })
+	for _, c := range all {
+		switch {
+		case c == here:
+			t.Print("* " + green + c.branch + reset + "\r\n")
+		default:
+			t.Print("+ " + cyan + c.branch + reset + " " + dim + "(" + prettyPath(c.root) + ")" + reset + "\r\n")
+		}
+	}
+	return 0
+}
+
+// gitWorktree is git worktree list. A worktree is made with ctrl+b U here,
+// the way tuios makes one on a real machine.
+func gitWorktree(s *shell, args []string) int {
+	t := s.t
+	switch argOr(args, 0, "list") {
+	case "list":
+		fsMu.RLock()
+		all := checkouts()
+		rows := make([][3]string, len(all))
+		for i, c := range all {
+			rows[i] = [3]string{prettyPath(c.root), c.headHash(), c.branch}
+		}
+		fsMu.RUnlock()
+		width := 0
+		for _, r := range rows {
+			width = max(width, len(r[0]))
+		}
+		t.Lay(func(cols int) []string {
+			var out []string
+			for _, r := range rows {
+				line := r[0] + strings.Repeat(" ", width-len(r[0])) + "  " + yellow + r[1] + reset + " [" + green + r[2] + reset + "]"
+				out = append(out, fit(line, cols))
+			}
+			return out
+		})
+		return 0
+	case "add":
+		s.fail("In the demo, make a worktree with " + bold + "Ctrl+B U" + reset + " in this pane.")
+		return 1
+	}
+	s.fail("git worktree " + args[0] + " is not in this demo. Try " + bold + "git worktree list" + reset)
+	return 1
+}
+
+// RepoRoot is the main checkout of the repository dir is in, or "" outside
+// it. From a linked worktree it is the main checkout too, as on a real
+// machine.
+func RepoRoot(dir string) string {
+	if lockedCheckoutAt(dir) == nil {
+		return ""
+	}
+	return repo.root
+}
+
+// WorktreeAt is the root of the checkout dir is in and its branch, or empty
+// strings outside the repository.
+func WorktreeAt(dir string) (root, branch string) {
+	fsMu.RLock()
+	defer fsMu.RUnlock()
+	if c := checkoutAt(dir); c != nil {
+		return c.root, c.branch
+	}
+	return "", ""
+}
+
+// NewWorktree makes a worktree of the repository at repoRoot on a new branch,
+// where tuios puts one on a real machine, with the files of the last commit
+// of the main checkout. It returns the worktree's folder and the session name
+// tuios would give it.
+func NewWorktree(repoRoot, branch string) (path, session string, err error) {
+	branch = strings.TrimSpace(branch)
+	if repoRoot != repo.root {
+		return "", "", fmt.Errorf("%s is not a git repository", prettyPath(repoRoot))
+	}
+	if err := validBranch(branch); err != nil {
+		return "", "", err
+	}
+	path = WorktreeDir + "/" + baseName(repo.root) + "/" + worktree.Slug(branch)
+	session = worktree.SessionName(baseName(repo.root), branch)
+	fsMu.Lock()
+	for _, c := range checkouts() {
+		if c.branch == branch {
+			fsMu.Unlock()
+			return "", "", fmt.Errorf("a branch named %s already exists", branch)
+		}
+		if c.root == path {
+			fsMu.Unlock()
+			return "", "", fmt.Errorf("%s already exists", prettyPath(path))
+		}
+	}
+	c := &checkout{
+		root:     path,
+		branch:   branch,
+		base:     repo.branch,
+		fork:     maps.Clone(repo.head),
+		forkHash: repo.headHash(),
+		head:     maps.Clone(repo.head),
+		staged:   map[string]bool{},
+		commits:  slices.Clone(repo.commits),
+	}
+	linked = append(linked, c)
+	for rel, content := range c.head {
+		files[path+"/"+rel] = content
+		addParents(path + "/" + rel)
+	}
+	fsDirs[path] = true
+	fsMu.Unlock()
+	filesChanged()
+	emit(Event{Type: EventWorktree, Data: map[string]any{"repo": baseName(repo.root), "branch": branch, "path": path}})
+	return path, session, nil
+}
+
+// validBranch refuses the branch names git refuses, in the ways a person is
+// likely to type one.
+func validBranch(name string) error {
+	switch {
+	case name == "":
+		return fmt.Errorf("type a branch name")
+	case strings.ContainsAny(name, " ~^:?*[\\") || strings.Contains(name, ".."),
+		strings.HasPrefix(name, "-"), strings.HasPrefix(name, "/"), strings.HasSuffix(name, "/"),
+		strings.HasSuffix(name, ".lock"), strings.HasSuffix(name, "."):
+		return fmt.Errorf("%q is not a valid branch name", name)
+	}
+	return nil
 }
