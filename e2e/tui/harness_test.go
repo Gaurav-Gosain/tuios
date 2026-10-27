@@ -1185,7 +1185,7 @@ func enableTiling(t *testing.T, term *tuitest.Terminal, markers ...string) {
 	t.Helper()
 	if !settledTiling(t, term) {
 		if len(markers) == 0 {
-			// notifications linger for config.NotificationDuration (6s), so this is
+			// notifications linger for config.NotificationDuration (2s), so this is
 			// the budget for an earlier one to expire. In practice it is already
 			// gone and this returns immediately.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {

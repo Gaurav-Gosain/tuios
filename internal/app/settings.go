@@ -644,6 +644,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.error_duration"),
 		opt("notifications.error_sticky"),
 		opt("notifications.bell"),
+		opt("notifications.style"),
 	}
 	// The agent alerts, under their heading row. With the agent features
 	// off both go, heading and all.

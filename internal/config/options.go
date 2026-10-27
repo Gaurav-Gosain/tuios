@@ -60,7 +60,7 @@ type Option struct {
 	//
 	// The line it draws is between a proportion and a count. Both are ints with
 	// a Max, but a gauge on a count says nothing: notifications.duration allows
-	// up to an hour, so the usual four seconds would draw an empty bar, and
+	// up to an hour, so the usual two seconds would draw an empty bar, and
 	// appearance.scrollback_lines allows a million, so ten thousand would too.
 	// A proportion is the case
 	// where the far end is a place you would actually put the value, which is
@@ -1118,17 +1118,17 @@ var optionSpecs = []Option{
 	// [notifications]
 	{
 		Path: "notifications.duration", Type: OptionInt, Section: "notifications",
-		Description: "Seconds an info message stays up. 0 uses the default.",
+		Description: "Seconds an info message stays up. 0 uses the default, 2.",
 		Default:     "0", Min: 0, Max: 3600,
 	},
 	{
 		Path: "notifications.warning_duration", Type: OptionInt, Section: "notifications",
-		Description: "Seconds a warning stays up. 0 uses the default.",
+		Description: "Seconds a warning stays up. 0 uses the default, 8.",
 		Default:     "0", Min: 0, Max: 3600,
 	},
 	{
 		Path: "notifications.error_duration", Type: OptionInt, Section: "notifications",
-		Description: "Seconds an error stays up when error_sticky is false",
+		Description: "Seconds an error stays up when error_sticky is false. 0 uses the default, 15.",
 		Default:     "0", Min: 0, Max: 3600,
 	},
 	{
@@ -1140,6 +1140,11 @@ var optionSpecs = []Option{
 		Path: "notifications.bell", Type: OptionString, Section: "notifications",
 		Description: "What a pane's bell does: a dock message, a bell in your terminal, both, or nothing",
 		Accepted:    BellModes, Default: BellToast,
+	},
+	{
+		Path: "notifications.style", Type: OptionString, Section: "notifications",
+		Description: "How a dock message looks: full shows a side bar and a countdown line, plain shows the icon and the text only",
+		Accepted:    NotificationStyles, Default: NotificationStyleFull,
 	},
 
 	// [notifications.agent]. The sounds table is absent: its two keys are paths

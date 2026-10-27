@@ -122,8 +122,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateAgentWork(cfg, result)
 	validatePasteBuffers(cfg, result)
 
-	// Validate the notifications section (warn on a duration that would put a
-	// message back under the accessibility floor)
+	// Validate the notifications section (warn on a duration tuios cannot use)
 	validateNotificationsConfig(cfg, result)
 	validateNotify(cfg, result)
 
@@ -274,33 +273,30 @@ func validateDisplay(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "daemon", "display", cfg.Daemon.Display, DisplayModes, DisplayOff)
 }
 
-// minReadableNotification is the shortest message lifetime this config will
-// accept without complaint. Below about four seconds a status line is a time
-// limit on reading content with no way to extend it, which is the WCAG 2.2.1
-// failure the old 1500ms default was. The value is not enforced, because a user
-// who has read the warning and wants a faster bar is entitled to one; it is
-// reported so the choice is a choice.
-const minReadableNotification = 4
-
-// validateNotificationsConfig warns when a configured message lifetime is short
-// enough to be unreadable. Negative and zero values are not warned about: they
-// mean "unset" and leave the default in place.
+// validateNotificationsConfig warns about a message lifetime tuios cannot use.
+// A short lifetime is the user's choice and is not reported. Zero means "use
+// the default". A negative value is ignored and the default stays, and a value
+// past the registry's Max is cut to it, which also keeps the seconds-to-
+// Duration conversion from overflowing.
 func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 	check := func(key string, seconds int) {
-		if seconds <= 0 || seconds >= minReadableNotification {
+		limit := notificationDurationMax(key)
+		var msg string
+		switch {
+		case seconds < 0:
+			msg = fmt.Sprintf("%d is less than 0. tuios uses the default.", seconds)
+		case seconds > limit:
+			msg = fmt.Sprintf("%d is more than %d. tuios uses %d.", seconds, limit, limit)
+		default:
 			return
 		}
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "notifications",
-			Key:   key,
-			Message: fmt.Sprintf("%ds is shorter than the %ds needed to read a message; it is applied as written but is an accessibility (WCAG 2.2.1) failure",
-				seconds, minReadableNotification),
-		})
+		result.Warnings = append(result.Warnings, ValidationError{Field: "notifications", Key: key, Message: msg})
 	}
 	check("duration", cfg.Notifications.Duration)
 	check("warning_duration", cfg.Notifications.WarningDuration)
 	check("error_duration", cfg.Notifications.ErrorDuration)
 	warnEnum(result, "notifications", "bell", cfg.Notifications.Bell, BellModes, BellToast)
+	warnEnum(result, "notifications", "style", cfg.Notifications.Style, NotificationStyles, NotificationStyleFull)
 
 	agent := &cfg.Notifications.Agent
 	if _, _, err := ParseQuietHours(agent.QuietHours); err != nil {

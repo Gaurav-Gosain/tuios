@@ -45,6 +45,12 @@ type Settings struct {
 	// goroutine reads it.
 	Bell string
 
+	// NotificationStyle is notifications.style: NotificationStyleFull draws a
+	// dock message with its severity cap and the countdown on the rule above
+	// it, NotificationStylePlain draws the mark and the text only. A mode
+	// that wants a quieter screen sets it to NotificationStylePlain.
+	NotificationStyle string
+
 	// NormalFPS is the normal refresh rate during regular operation.
 	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS int
@@ -877,13 +883,33 @@ const (
 // BellModes is what notifications.bell accepts.
 var BellModes = []string{BellToast, BellForward, BellBoth, BellOff}
 
+// The values of notifications.style.
+const (
+	// NotificationStyleFull draws the severity cap on the message's left and
+	// burns the rule above it down as the message ages. It is the default.
+	NotificationStyleFull = "full"
+	// NotificationStylePlain draws the severity mark and the text, with no cap
+	// and no countdown.
+	NotificationStylePlain = "plain"
+)
+
+// NotificationStyles is what notifications.style accepts.
+var NotificationStyles = []string{NotificationStyleFull, NotificationStylePlain}
+
+// NotificationsPlain reports whether a dock message is drawn without its cap
+// and countdown.
+func (s *Settings) NotificationsPlain() bool {
+	return s.NotificationStyle == NotificationStylePlain
+}
+
 func DefaultSettings() Settings {
 	return Settings{
-		NotificationDuration:        6 * time.Second,
+		NotificationDuration:        2 * time.Second,
 		NotificationWarningDuration: 8 * time.Second,
 		NotificationErrorDuration:   15 * time.Second,
 		NotificationErrorSticky:     true,
 		Bell:                        BellToast,
+		NotificationStyle:           NotificationStyleFull,
 		NormalFPS:                   DefaultFPS,
 		UseASCIIOnly:                false,
 		Motion:                      MotionFull,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // dockRow returns the last non-empty row, which is where the dock lives, so an
@@ -39,30 +40,115 @@ func paneRows(s tuitest.Screen) string {
 // placement decision. A message must be readable in the dock and must not
 // appear anywhere in the pane region, which is what the previous corner toast
 // did and what the redesign exists to stop.
+//
+// It runs in both notifications.style values. full draws the severity cap
+// left of the mark and lights the rule above the block in the severity colour
+// as a countdown. plain draws neither (#1208): the cap's column is blank and
+// the rule above is the dock's own hairline, one colour end to end. The mark
+// stays in both, so the kind of message is still readable. A frame of each
+// is saved under TUIOS_E2E_FRAMES.
 func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
-	term, _ := start(t, startOpts{cols: 120, rows: 40})
-	waitBoot(t, term)
-	newWindow(t, term)
+	for _, style := range []string{"full", "plain"} {
+		t.Run(style, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, "[notifications]\nstyle = \""+style+"\"\nduration = 30\n")
+			term := startIn(t, base, startOpts{cols: 120, rows: 40})
+			waitBoot(t, term)
+			newWindow(t, term)
 
-	// Toggling tiling pushes a message the app itself generates, so this does
-	// not depend on a test-only injection path. Tiling starts off, because
-	// startup.tiled ships on and the message this waits for is the one the key
-	// pushes going the other way.
-	disableTiling(t, term)
-	if err := term.SendKeys("t"); err != nil {
-		t.Fatalf("send 't': %v", err)
-	}
-	if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
-		t.Fatalf("no message after toggling tiling: %v\n%s", err, term.Snapshot())
-	}
+			// Toggling tiling pushes a message the app itself generates, so
+			// this does not depend on a test-only injection path. Tiling
+			// starts off, because startup.tiled ships on and the message this
+			// waits for is the one the key pushes going the other way.
+			disableTiling(t, term)
+			if err := term.SendKeys("t"); err != nil {
+				t.Fatalf("send 't': %v", err)
+			}
+			if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
+				t.Fatalf("no message after toggling tiling: %v\n%s", err, term.Snapshot())
+			}
+			// The cap and the rule are drawn with the block; one more frame
+			// lets a late compose land before they are read.
+			time.Sleep(300 * time.Millisecond)
 
-	s := term.Screen()
-	if !strings.Contains(dockRow(s), "Tiling on") {
-		t.Errorf("message is not in the dock row.\ndock row: %q\n%s", dockRow(s), term.Snapshot())
+			s := term.Screen()
+			if !strings.Contains(dockRow(s), "Tiling on") {
+				t.Errorf("message is not in the dock row.\ndock row: %q\n%s", dockRow(s), term.Snapshot())
+			}
+			if strings.Contains(paneRows(s), "Tiling on") {
+				t.Errorf("message appears in the pane region, which is what this design removes\n%s", term.Snapshot())
+			}
+
+			dir := artifactDir(t)
+			saveArtifact(t, term, dir, "dock-message-"+style)
+			savePNG(t, s, shot.XTermPalette(), dir, "dock-message-"+style)
+
+			// The block is cap, space, mark, two spaces, text.
+			row, _ := findText(t, term, "Tiling on")
+			col := cellColumn(s, row, "Tiling on")
+			if row < 1 || col < 5 {
+				t.Fatalf("message not found at a readable place (%d,%d)\n%s", col, row, term.Snapshot())
+			}
+			capCell := s.Cell(col-5, row).Content
+			if mark := s.Cell(col-3, row).Content; strings.TrimSpace(mark) == "" {
+				t.Errorf("%s: no severity mark left of the text\n%s", style, term.Snapshot())
+			}
+			// The rule above the block: its cells over the block's span.
+			colours := map[tuitest.Color]bool{}
+			for x := col - 5; x < col+len("Tiling on"); x++ {
+				colours[s.Cell(x, row-1).Fg] = true
+			}
+			switch style {
+			case "full":
+				if strings.TrimSpace(capCell) == "" {
+					t.Errorf("full: no severity cap left of the mark\n%s", term.Snapshot())
+				}
+				if !ruleHasTwoInks(s, row-1, colours) {
+					t.Errorf("full: the rule above the message is not lit\n%s", term.SnapshotStyled())
+				}
+			case "plain":
+				if strings.TrimSpace(capCell) != "" {
+					t.Errorf("plain: the cap %q is still drawn left of the mark\n%s", capCell, term.Snapshot())
+				}
+				if ruleHasTwoInks(s, row-1, colours) {
+					t.Errorf("plain: the rule above the message is lit as a countdown\n%s", term.SnapshotStyled())
+				}
+			}
+		})
 	}
-	if strings.Contains(paneRows(s), "Tiling on") {
-		t.Errorf("message appears in the pane region, which is what this design removes\n%s", term.Snapshot())
+}
+
+// cellColumn is the cell column where text starts on row, or -1. It counts
+// cells, not runes: a Nerd Font mark can take two cells and one rune.
+func cellColumn(s tuitest.Screen, row int, text string) int {
+	cols, _ := s.Size()
+	for x := range cols {
+		var b strings.Builder
+		for i := x; i < cols && b.Len() < len(text); i++ {
+			b.WriteString(s.Cell(i, row).Content)
+		}
+		if strings.HasPrefix(b.String(), text) {
+			return x
+		}
 	}
+	return -1
+}
+
+// ruleHasTwoInks reports whether the rule row is drawn in more than one
+// colour: span holds the colours of its cells over the message, and the rest
+// of the row is the dock's own hairline.
+func ruleHasTwoInks(s tuitest.Screen, row int, span map[tuitest.Color]bool) bool {
+	all := map[tuitest.Color]bool{}
+	cols, _ := s.Size()
+	for x := range cols {
+		if strings.TrimSpace(s.Cell(x, row).Content) != "" {
+			all[s.Cell(x, row).Fg] = true
+		}
+	}
+	for c := range span {
+		all[c] = true
+	}
+	return len(all) > 1
 }
 
 // TestNotificationDismissesOnEscAndTheKeyStillLands pins the two halves of the

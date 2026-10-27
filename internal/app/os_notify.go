@@ -171,7 +171,7 @@ const maxLiveNotifications = 16
 // A non-positive duration means "do not show this", but only for info and
 // success. Copy mode pushes its state indicators that way ("VISUAL", a bare
 // "f", the pending count), and they stay invisible; promoting them to
-// six-second dock messages is a copy-mode decision.
+// full dock messages is a copy-mode decision.
 //
 // A warning or an error is shown whatever duration it was handed. Passing zero
 // for one of those is never a considered choice, it is a caller reaching for

@@ -94,7 +94,7 @@ func (m *OS) notifBurnMoved() bool {
 	}
 	d := m.notifDrawn
 	return s.msg.ID != d.id || s.queued != d.queued ||
-		notifLitSpan(s.frac, d.span) != d.lit
+		m.notifLit(s.frac, d.span) != d.lit
 }
 
 // notifNextMove is how long from now until the live messages would draw
@@ -117,7 +117,7 @@ func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 	}
 	d := m.notifDrawn
 	if s.msg.ID != d.id || s.queued != d.queued || d.span <= 0 ||
-		notifLitSpan(s.frac, d.span) != d.lit {
+		m.notifLit(s.frac, d.span) != d.lit {
 		return 0, false
 	}
 	next := time.Duration(math.MaxInt64)
@@ -331,6 +331,11 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// as two, four or six eighths of a cell of ink, and it is the block's whole
 	// left edge now that there is no fill to open.
 	lead := inked.Render(notifCap(s.msg.Type, &m.Settings))
+	if m.Settings.NotificationsPlain() {
+		// The plain style keeps the column, so the block measures the same
+		// in both styles, and the mark alone carries the severity.
+		lead = " "
+	}
 	mark := inked.Render(" " + notifGlyph(s.msg.Type, &m.Settings))
 	if glyph, fg := agentMark(s.msg.AgentState, false, 0, ground); glyph != "" {
 		// A message about an agent wears that state's mark in that state's
@@ -399,16 +404,17 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	block := lead + mark + body + meta + "  "
 	width := lipgloss.Width(block)
 
+	lit := m.notifLit(s.frac, width)
 	return notifBlock{
 		Text:     block,
-		Rule:     notifBurnRule(s, width, &m.Settings, m.railRule()),
+		Rule:     notifBurnRule(s, width, lit, &m.Settings, m.railRule()),
 		Width:    width,
 		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
 		Cut:      cut,
 		drawn: notifDrawn{
 			id:     s.msg.ID,
 			queued: s.queued,
-			lit:    notifLitSpan(s.frac, width),
+			lit:    lit,
 			span:   width,
 		},
 	}, true
@@ -468,18 +474,26 @@ func notifWordCut(cut, message string) string {
 // affordance, and it is the reason the burn is on the rule rather than in a
 // cell of its own: a line that has stopped is legible as stopped at a glance,
 // where a single character that has stopped changing is not.
-func notifBurnRule(s notifStatus, span int, set *config.Settings, rule color.Color) string {
+func notifBurnRule(s notifStatus, span, lit int, set *config.Settings, rule color.Color) string {
 	if span <= 0 {
 		return ""
 	}
-
-	lit := notifLitSpan(s.frac, span)
 
 	burnt := lipgloss.NewStyle().Foreground(theme.NotificationSeverity(s.msg.Type)).
 		Render(strings.Repeat(notifRuleStroke(s.msg.Type, set), lit))
 	rest := lipgloss.NewStyle().Foreground(rule).
 		Render(strings.Repeat(set.GetWindowSeparatorChar(), span-lit))
 	return burnt + rest
+}
+
+// notifLit is notifLitSpan under the message style: the plain style lights no
+// cell, so its rule is the dock's own hairline, and with nothing that burns
+// down the tick sleeps until the message runs out.
+func (m *OS) notifLit(frac float64, span int) int {
+	if m.Settings.NotificationsPlain() {
+		return 0
+	}
+	return notifLitSpan(frac, span)
 }
 
 // notifLitSpan is how many of the rule's cells are still lit at this fraction
