@@ -128,7 +128,21 @@ func runSuite(t *testing.T, home string) (string, error) {
 		childMarker+"=1",
 	)
 
-	cmd := exec.Command("go", "test", "-count=1", "./internal/...", "./cmd/...", "./pkg/...")
+	pkgs := []string{"./internal/...", "./cmd/...", "./pkg/..."}
+	cmd := exec.Command("go", append([]string{"test", "-count=1"}, pkgs...)...)
+	// internal/app and internal/session run their tests one after another
+	// for over three minutes each, so the child suite took as long as the
+	// rest of the unit tests together. scripts/go-test-lanes.sh splits them
+	// across four processes. It needs bash 4 for its arrays, which macOS
+	// does not ship, so plain go test stays the fallback.
+	lanes := filepath.Join(root, "scripts", "go-test-lanes.sh")
+	if _, err := os.Stat(lanes); err == nil && exec.Command("bash", "-c", `[ "${BASH_VERSINFO[0]}" -ge 4 ]`).Run() == nil {
+		cmd = exec.Command("bash", append([]string{lanes, "-count=1", "--"}, pkgs...)...)
+		env = append(env,
+			"SPLIT=./internal/app ./internal/session",
+			"LOG="+filepath.Join(t.TempDir(), "lanes.log"),
+		)
+	}
 	cmd.Dir = root
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
