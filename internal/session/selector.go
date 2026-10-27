@@ -32,6 +32,7 @@ import (
 //	name:G       the window's name, a glob
 //	cwd:DIR      the working directory is DIR or under it; ~ is the home dir
 //	task:G       a task card the pane holds, by id, a glob (task.go)
+//	stage:S      a task card the pane holds is in stage S; a done card has no holder
 //
 // A glob is path.Match syntax: * and ? do not cross a slash, so group:fan/*
 // matches every group under fan/.
@@ -54,11 +55,12 @@ const (
 	SelectorName    = "name"
 	SelectorCwd     = "cwd"
 	SelectorTask    = "task"
+	SelectorStage   = "stage"
 )
 
 // SelectorKeys lists the keys a selector takes, in the order the docs give
 // them.
-var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask}
+var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask, SelectorStage}
 
 // selectorMaxLen bounds a selector's text. A selector is typed by a person or
 // written by an agent, and one longer than this is not a selector.
@@ -96,6 +98,8 @@ type SelectorTarget struct {
 	// Tasks are the ids of the task cards the pane holds. Only a pane of
 	// this machine fills it, so a task term matches nothing else.
 	Tasks []string
+	// Stages are the stages of those cards.
+	Stages []string
 }
 
 // ParseSelector reads a selector. homeDir expands a leading ~ in a cwd term;
@@ -140,6 +144,11 @@ func ParseSelector(text, homeDir string) (*Selector, error) {
 				v = strings.ToLower(v)
 				if !slices.Contains(AgentStateNames, v) {
 					return nil, errors.New("state " + echoName(v) + " is not an agent state. The states are " + strings.Join(AgentStateNames, ", "))
+				}
+			case SelectorStage:
+				v = strings.ToLower(v)
+				if !slices.Contains(TaskStages, v) {
+					return nil, errors.New("stage " + echoName(v) + " is not a task stage. The stages are " + strings.Join(TaskStages, ", "))
 				}
 			case SelectorNeeds:
 				v = strings.ToLower(v)
@@ -262,6 +271,8 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 		return glob(t.Name)
 	case SelectorTask:
 		return slices.ContainsFunc(t.Tasks, glob)
+	case SelectorStage:
+		return slices.Contains(t.Stages, v)
 	case SelectorCwd:
 		// t.Cwd is the folder the pane last reported, which the pane sets
 		// itself with cd or an OSC 7 it prints. A cwd: term only narrows

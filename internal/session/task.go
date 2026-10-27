@@ -187,18 +187,18 @@ func newTaskID(st *SessionState) string {
 	return "t" + strconv.FormatUint(st.NextTaskID, 10)
 }
 
-// heldTasks maps each window that holds a card to the ids of the cards it
-// holds, oldest first.
-func heldTasks(tasks []TaskState) map[string][]string {
-	var out map[string][]string
+// heldTasks maps each window that holds a card to the cards it holds, oldest
+// first.
+func heldTasks(tasks []TaskState) map[string][]TaskState {
+	var out map[string][]TaskState
 	for _, tk := range tasks {
 		if tk.Holder == "" {
 			continue
 		}
 		if out == nil {
-			out = map[string][]string{}
+			out = map[string][]TaskState{}
 		}
-		out[tk.Holder] = append(out[tk.Holder], tk.ID)
+		out[tk.Holder] = append(out[tk.Holder], tk)
 	}
 	return out
 }

@@ -67,6 +67,7 @@ func (f *taskFlags) register(cmd *cobra.Command) {
 
 // taskRow is one card as the task verbs return it.
 type taskRow struct {
+	Session string `json:"session"`
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Preview string `json:"preview"`
@@ -183,7 +184,7 @@ standard input. The card starts in todo unless --stage says otherwise.`,
 func newTaskListCommand() *cobra.Command {
 	var f taskFlags
 	var stage string
-	var open bool
+	var open, allSessions bool
 	cmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List the task cards",
@@ -191,23 +192,31 @@ func newTaskListCommand() *cobra.Command {
 that holds it, its age, and its title. A blocked card is marked with !.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runTaskList(os.Stdout, f, stage, open)
+			if allSessions && f.session != "" {
+				return fmt.Errorf("--all-sessions lists every session, so it takes no --session")
+			}
+			return runTaskList(os.Stdout, f, stage, open, allSessions)
 		},
 	}
 	f.register(cmd)
 	cmd.Flags().StringVar(&stage, "stage", "", "Only the cards in this stage")
 	cmd.Flags().BoolVar(&open, "open", false, "Leave out the cards that are done")
+	cmd.Flags().BoolVar(&allSessions, "all-sessions", false, "List the cards of every session on this machine")
 	_ = cmd.RegisterFlagCompletionFunc("stage", cobra.FixedCompletions(session.TaskStages, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }
 
-func runTaskList(w io.Writer, f taskFlags, stage string, open bool) error {
+func runTaskList(w io.Writer, f taskFlags, stage string, open, allSessions bool) error {
 	t, err := dialSessionTarget(f.session)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 	params := t.params(nil)
+	if allSessions {
+		// Every session, so no session is named, whatever TUIOS_SESSION says.
+		params = map[string]any{"all_sessions": true}
+	}
 	if stage != "" {
 		params["stage"] = stage
 	}
@@ -222,28 +231,39 @@ func runTaskList(w io.Writer, f taskFlags, stage string, open bool) error {
 		return printVerbResultOn(t, raw, true)
 	}
 	var res struct {
-		Session string    `json:"session"`
-		Tasks   []taskRow `json:"tasks"`
+		Session     string    `json:"session"`
+		AllSessions bool      `json:"all_sessions"`
+		Tasks       []taskRow `json:"tasks"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	return printTaskRows(w, res.Session+t.on(), res.Tasks)
+	if res.AllSessions {
+		return printTaskRows(w, "any session"+t.on(), res.Tasks, true)
+	}
+	return printTaskRows(w, "session "+res.Session+t.on(), res.Tasks, false)
 }
 
 // printTaskRows writes list-tasks' cards as a table. Every field but the id,
 // stage and age came from a caller, so each is kept to one plain line.
-func printTaskRows(w io.Writer, where string, rows []taskRow) error {
+// withSession adds a SESSION column first.
+func printTaskRows(w io.Writer, where string, rows []taskRow, withSession bool) error {
 	if len(rows) == 0 {
-		_, err := fmt.Fprintf(w, "No task cards in session %s.\n", plainLine(where))
+		_, err := fmt.Fprintf(w, "No task cards in %s.\n", plainLine(where))
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if withSession {
+		fmt.Fprint(tw, "SESSION\t")
+	}
 	fmt.Fprintln(tw, "ID\tSTAGE\tHOLDER\tAGE\tTITLE")
 	for _, r := range rows {
 		stage := plainLine(r.Stage)
 		if r.Blocked != nil {
 			stage += " !"
+		}
+		if withSession {
+			fmt.Fprintf(tw, "%s\t", plainLine(r.Session))
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", plainLine(r.ID), stage, r.holderLabel(), agoOf(r.At), plainLine(r.Title))
 	}

@@ -13,6 +13,7 @@ func TestParseSelectorRefusesWhatIsNotASelector(t *testing.T) {
 		{"codex", "not key:value"},
 		{"colour:red", "not a selector key"},
 		{"state:sleeping", "not an agent state"},
+		{"stage:blocked", "not a task stage"},
 		{"needs:me", "needs takes one value"},
 		{"harness:", "has no value"},
 		{"session:[", "not a valid glob"},
@@ -34,6 +35,7 @@ func TestSelectorMatch(t *testing.T) {
 	codex := SelectorTarget{
 		Host: "local", Session: "api-fan-retry-2", Name: "reviewer", State: "idle",
 		Harness: "codex", Cwd: "/home/me/src/api", Group: "fan/retry",
+		Tasks: []string{"t3"}, Stages: []string{"doing"},
 	}
 	blocked := SelectorTarget{
 		Host: "build", Session: "web", Name: "claude", State: "needs_input",
@@ -51,6 +53,8 @@ func TestSelectorMatch(t *testing.T) {
 		{"harness:claude-c", false, false},
 		{"state:idle,done", true, false},
 		{"needs:you", false, true},
+		{"stage:DOING,verify", true, false},
+		{"task:t* stage:todo", false, false},
 		{"session:api-fan-*", true, false},
 		{"group:fan/*", true, false},
 		// A glob does not cross a slash, and a target with no group never

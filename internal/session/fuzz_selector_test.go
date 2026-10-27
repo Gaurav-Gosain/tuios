@@ -40,6 +40,8 @@ func FuzzSelector(f *testing.F) {
 		"needs:you",
 		"cwd:~/src/tuios cwd:~ cwd:/ cwd:/tmp/",
 		"host:local name:build group:fan/*",
+		"task:t1,t2 stage:Doing,verify",
+		"stage:plan2",
 		"STATE:IDLE Harness:Codex",
 		"name:[a-",
 		"name:\\",
@@ -95,7 +97,7 @@ func FuzzSelector(f *testing.F) {
 			}
 			seen[term.key] = true
 			for _, v := range term.values {
-				if term.key == SelectorState || term.key == SelectorNeeds || term.key == SelectorCwd {
+				if term.key == SelectorState || term.key == SelectorStage || term.key == SelectorNeeds || term.key == SelectorCwd {
 					continue
 				}
 				if _, err := path.Match(v, "a/b.c"); err != nil {
@@ -119,6 +121,10 @@ func FuzzSelector(f *testing.F) {
 				target.Host = v
 			case SelectorName:
 				target.Name = v
+			case SelectorTask:
+				target.Tasks = []string{v}
+			case SelectorStage:
+				target.Stages = []string{v}
 			case SelectorCwd:
 				// cwd:/// parses to "", which the matcher reads as the
 				// root: every absolute directory is under it. A pane has
@@ -128,7 +134,7 @@ func FuzzSelector(f *testing.F) {
 					target.Cwd = "/"
 				}
 			}
-			if term.key != SelectorState && term.key != SelectorNeeds && term.key != SelectorCwd && !literal(v) {
+			if term.key != SelectorState && term.key != SelectorStage && term.key != SelectorNeeds && term.key != SelectorCwd && !literal(v) {
 				once = false
 			}
 		}

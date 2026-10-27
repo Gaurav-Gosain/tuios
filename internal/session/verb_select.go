@@ -76,8 +76,13 @@ func (d *Daemon) parseVerbSelector(text string) (*Selector, *verbError) {
 }
 
 // paneSelectorTarget is what a selector reads from one pane of this machine.
-// tasks are the cards the pane holds, from heldTasks.
-func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, tasks []string) SelectorTarget {
+// cards are the cards the pane holds, from heldTasks.
+func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, cards []TaskState) SelectorTarget {
+	var tasks, stages []string
+	for _, tk := range cards {
+		tasks = append(tasks, tk.ID)
+		stages = append(stages, tk.Stage)
+	}
 	return SelectorTarget{
 		Host:     localAttentionHost,
 		Session:  sess.Name(),
@@ -88,6 +93,7 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, 
 		Group:    group,
 		NeedsYou: w.AgentState.NeedsYou(),
 		Tasks:    tasks,
+		Stages:   stages,
 	}
 }
 

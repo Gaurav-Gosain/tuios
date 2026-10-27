@@ -45,13 +45,16 @@ func taskVerbs() map[string]verbEntry {
 				{Name: "stage", Type: "string", Description: "Only the cards in this stage.", Accepted: TaskStages},
 				{Name: "holder", Type: "string", Description: "Only the cards this window holds, by id or name."},
 				{Name: "open", Type: "bool", Description: "Leave out the cards that are done.", Default: "false"},
+				{Name: "all_sessions", Type: "bool", Description: "List the cards of every session on the daemon, in session name order. Takes no session or holder.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "session", Type: "string", Description: "The session listed."},
+				{Name: "session", Type: "string", Description: "The session listed. Absent with all_sessions."},
+				{Name: "all_sessions", Type: "bool", Description: "True when every session was listed. Each row names its session."},
 				{Name: "tasks", Type: "[]object", Description: "One row per card: " + rowFields},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-tasks","params":{"session":"work","open":true}}`,
+				`{"id":1,"verb":"list-tasks","params":{"all_sessions":true}}`,
 			},
 			handler: (*Daemon).verbListTasks,
 		},

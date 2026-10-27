@@ -249,7 +249,7 @@ var windowParam = verbParam{
 }
 
 // selectorSyntax is the one sentence every select param shares.
-const selectorSyntax = "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home), task (a task card the pane holds, by id, glob)."
+const selectorSyntax = "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home), task (a task card the pane holds, by id, glob), stage (the stage of a card the pane holds)."
 
 // selectWriteParams are the two params a write addressed by selector takes.
 // what says what the write does to the panes the selector matches.

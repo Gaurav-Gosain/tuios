@@ -299,13 +299,15 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 
 // listTasksParams are what list-tasks takes.
 type listTasksParams struct {
-	Session string `json:"session"`
-	Stage   string `json:"stage"`
-	Holder  string `json:"holder"`
-	Open    bool   `json:"open"`
+	Session     string `json:"session"`
+	Stage       string `json:"stage"`
+	Holder      string `json:"holder"`
+	Open        bool   `json:"open"`
+	AllSessions bool   `json:"all_sessions"`
 }
 
-// verbListTasks answers list-tasks: the session's cards, oldest first.
+// verbListTasks answers list-tasks: the session's cards, oldest first. With
+// all_sessions it lists every session's, in session name order.
 func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p listTasksParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -313,6 +315,25 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if verr := taskStageParam("stage", p.Stage); verr != nil {
 		return nil, verr
+	}
+	if p.AllSessions {
+		if p.Session != "" {
+			return nil, invalidParam("all_sessions", "all_sessions lists every session, so it takes no session. Drop one or the other")
+		}
+		if p.Holder != "" {
+			return nil, invalidParam("holder", "a window means nothing across sessions, so all_sessions takes no holder")
+		}
+		sessions := d.manager.AllSessions()
+		slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
+		rows := []TaskRow{}
+		for _, sess := range sessions {
+			rows = append(rows, listedTasks(sess, sess.GetState(), p, "")...)
+		}
+		return map[string]any{
+			"type":         "task_list",
+			"all_sessions": true,
+			"tasks":        rows,
+		}, nil
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -327,6 +348,15 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 		}
 		holder = st.Windows[idx].ID
 	}
+	return map[string]any{
+		"type":    "task_list",
+		"session": sess.Name(),
+		"tasks":   listedTasks(sess, st, p, holder),
+	}, nil
+}
+
+// listedTasks is one session's rows of a list-tasks answer.
+func listedTasks(sess *Session, st *SessionState, p listTasksParams, holder string) []TaskRow {
 	rows := []TaskRow{}
 	for i := range st.Tasks {
 		tk := &st.Tasks[i]
@@ -341,11 +371,7 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 		}
 		rows = append(rows, taskRow(sess, st, tk))
 	}
-	return map[string]any{
-		"type":    "task_list",
-		"session": sess.Name(),
-		"tasks":   rows,
-	}, nil
+	return rows
 }
 
 // taskIDParams are what get-task, finish-task, release-task and remove-task
