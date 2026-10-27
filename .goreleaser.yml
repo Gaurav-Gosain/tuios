@@ -65,6 +65,28 @@ builds:
     flags:
       - -trimpath
 
+  # Termux on Android. A linux build stops there with SIGSYS: Go's linux
+  # os/exec calls faccessat2, and Android's seccomp policy for apps traps it.
+  # Go leaves that call out when GOOS is android. android/arm needs cgo, so
+  # only arm64 is built.
+  - id: tuios-android
+    main: ./cmd/tuios
+    binary: tuios
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - android
+    goarch:
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
   - id: tuios-web
     main: ./cmd/tuios-web
     binary: tuios-web
@@ -284,6 +306,24 @@ archives:
       # tuios links tuios.dev/sketch, a port of pele (MIT), and draws its
       # pictures in Arimo (SIL OFL 1.1) and Go Mono. Both licences ask to
       # travel with copies of the binary.
+      - src: sketch/LICENSE
+        dst: licenses/sketch/LICENSE
+      - src: sketch/raster/fonts/NOTICE
+        dst: licenses/sketch/NOTICE
+
+  # Its own archive, so that the AUR and Homebrew entries, which take
+  # tuios-archive, do not see it. tuios update finds it by the same name rule.
+  - id: tuios-android-archive
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- .Arch }}
+    ids:
+      - tuios-android
+    files:
+      - README.md
+      - LICENSE*
       - src: sketch/LICENSE
         dst: licenses/sketch/LICENSE
       - src: sketch/raster/fonts/NOTICE

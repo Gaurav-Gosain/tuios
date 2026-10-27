@@ -36,7 +36,9 @@ print_warning() {
 # Detect OS
 detect_os() {
     case "$(uname -s)" in
-        Linux*)     OS="Linux";;
+        # Termux on Android. A Linux build there stops with SIGSYS, because
+        # Android blocks a system call that Go uses on Linux.
+        Linux*)     if [ "$(uname -o 2>/dev/null)" = "Android" ]; then OS="Android"; else OS="Linux"; fi;;
         Darwin*)    OS="Darwin";;
         CYGWIN*|MINGW*|MSYS*) OS="Windows";;
         FreeBSD*)   OS="Freebsd";;
@@ -54,7 +56,7 @@ detect_arch() {
         amd64)   echo "x86_64";;
         arm64)   echo "arm64";;
         aarch64) echo "arm64";;
-        armv7l)  echo "armv7";;
+        armv7l|armv8l)  echo "armv7";;
         armv6l)  echo "armv6";;
         i386|i686) echo "i386";;
         *)       echo "unknown";;
@@ -156,6 +158,12 @@ main() {
     # Check if OS/arch is supported
     if [ "$OS" = "UNKNOWN" ] || [ "$ARCH" = "unknown" ]; then
         print_error "Unsupported OS or architecture: $OS/$ARCH"
+        exit 1
+    fi
+
+    if [ "$OS" = "Android" ] && [ "$ARCH" != "arm64" ]; then
+        print_error "On Android, TUIOS runs only on 64-bit ARM (arm64). This device reports $ARCH."
+        print_info "A 64-bit phone can show a 32-bit ARM name when Termux is the 32-bit app."
         exit 1
     fi
 
