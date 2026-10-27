@@ -762,6 +762,13 @@ A git worktree as a session. `worktree new` makes a worktree of the repository
 you are in and a session whose directory is that worktree. The rail groups these
 sessions under the repository and labels each by its branch.
 
+A worktree of a bare repository is grouped under the project's name: `api` for
+`api.git`, and for a bare repository kept as `api/.bare` or `api/git` beside
+its worktrees, the `api` directory. A repository whose refs are in reftable
+(`git clone --ref-format=reftable`) holds no branch name in its HEAD file.
+tuios asks git for its branches instead, so it needs git 2.45 or later on
+`PATH`, and asks again only after a ref changes.
+
 The same verb is reachable from the rail. Right-click a repository's group
 header, or a worktree session's row, and take "New worktree...". The dialog
 asks for the branch and the session name. Leave the name empty and the dialog

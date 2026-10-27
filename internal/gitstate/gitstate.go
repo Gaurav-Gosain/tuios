@@ -15,6 +15,11 @@
 // and it only shells out when the two commits have actually moved. Their hashes
 // are read from files, so the check that decides whether to spend a subprocess
 // is itself two file reads.
+//
+// A repository whose refs are in reftable has no ref files to read, and its
+// HEAD and refs are asked of git instead. Those answers are kept until the
+// reftable's table list changes, so that check is a file read too. See
+// reftable.go.
 package gitstate
 
 import (
@@ -34,8 +39,8 @@ import (
 type State struct {
 	// Root is the working tree's own root directory.
 	Root string
-	// Repo is the repository's name, which is the base name of its main
-	// checkout. Every linked worktree of a repository reports the same Repo.
+	// Repo is the repository's name, from its shared git directory: see
+	// RepoName. Every linked worktree of a repository reports the same Repo.
 	Repo string
 	// Branch is the checked out branch. On a detached HEAD it is the short
 	// hash and Detached is true, because a row still has to say something and
@@ -116,14 +121,14 @@ func Read(dir string) (State, bool) {
 	prev, hadPrev := cache[gitdir]
 	mu.Unlock()
 
-	branch, headSHA, detached := readHead(gitdir, commondir)
+	branch, headSHA, detached := readHead(gitdir, commondir, root)
 	if branch == "" && headSHA == "" {
 		return State{}, false
 	}
 
 	st := State{
 		Root:     root,
-		Repo:     filepath.Base(strings.TrimSuffix(filepath.Dir(commondir), string(filepath.Separator))),
+		Repo:     RepoName(commondir),
 		Branch:   branch,
 		Detached: detached,
 	}
@@ -133,7 +138,7 @@ func Read(dir string) (State, bool) {
 
 	upSHA := ""
 	if st.Upstream != "" {
-		upSHA = resolveRef(gitdir, commondir, st.Upstream)
+		upSHA = resolveRef(gitdir, commondir, root, st.Upstream)
 	}
 
 	// The whole point. Two commits that have not moved cannot have diverged
@@ -164,6 +169,9 @@ func Forget() {
 	clear(cache)
 	clear(misses)
 	mu.Unlock()
+	reftableMu.Lock()
+	clear(reftableCache)
+	reftableMu.Unlock()
 }
 
 // Locate walks up from dir looking for the ".git" that marks a working tree,
@@ -242,11 +250,15 @@ func commonDirOf(gitdir string) string {
 	return filepath.Clean(filepath.Join(gitdir, rel))
 }
 
-// readHead reads the checked out branch and the commit it points at.
-func readHead(gitdir, commondir string) (branch, sha string, detached bool) {
+// readHead reads the checked out branch and the commit it points at. root is
+// the working tree, where git is asked when the refs are in reftable.
+func readHead(gitdir, commondir, root string) (branch, sha string, detached bool) {
 	line, err := readFirstLine(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
 		return "", "", false
+	}
+	if IsReftableHead(line) {
+		return ReftableHead(gitdir, commondir, root)
 	}
 	ref, isSymbolic := strings.CutPrefix(line, "ref:")
 	if !isSymbolic {
@@ -258,14 +270,18 @@ func readHead(gitdir, commondir string) (branch, sha string, detached bool) {
 		return "", "", false
 	}
 	ref = strings.TrimSpace(ref)
-	return strings.TrimPrefix(ref, "refs/heads/"), resolveRef(gitdir, commondir, ref), false
+	return strings.TrimPrefix(ref, "refs/heads/"), resolveRef(gitdir, commondir, root, ref), false
 }
 
 // resolveRef answers the commit a ref names, reading the loose file first and
 // falling back to packed-refs, which is where a ref goes once git has packed it
 // and is therefore where most remote-tracking refs live in a repository that
-// has been fetched more than a few times.
-func resolveRef(gitdir, commondir, ref string) string {
+// has been fetched more than a few times. A repository whose refs are in
+// reftable has neither, and git in root is asked.
+func resolveRef(gitdir, commondir, root, ref string) string {
+	if usesReftable(commondir) {
+		return reftableRef(gitdir, commondir, root, ref)
+	}
 	for _, base := range []string{gitdir, commondir} {
 		if data, err := os.ReadFile(filepath.Join(base, filepath.FromSlash(ref))); err == nil {
 			if sha := strings.TrimSpace(string(data)); sha != "" {

@@ -9833,3 +9833,33 @@ on Linux.
 | --- | --- | --- |
 | The dock notice in `adoptNotes` | the dock never shows "Note: next: run the migration" on attach | **caught** |
 | Pane notes collected after `UpdateState` in the restore, which rewrites the restored windows in place (the first draft of the change) | after a daemon restart `note get -w worker` prints nothing | **caught** |
+
+## Reftable repositories
+
+`TestReftableWorktrees` clones a seed repository three times as bare reftable
+repositories (`alpha/.bare`, `beta.git`, `gamma/git`), adds a linked worktree
+to each, and makes a session in each worktree, plus one in a main reftable
+checkout (`epsilon`). It reads `worktree ls --json`, switches the branch in
+one worktree and makes a second session there, then reads the rail.
+`TestRailGitReftable` puts a pane in a worktree of a bare reftable `delta.git`
+whose branch is one commit ahead of `main`, reads the rail's git section,
+then moves `main` from the pane and reads it again. Both tests first require
+the worktree's HEAD file to hold `ref: refs/heads/.invalid`, so neither can
+pass on a files-backend fixture. Run on 2026-10-27 on macOS arm64 with git
+2.55. Each control cuts one wire from the fixed build, builds it, restores
+the source, and runs both tests against the cut binary. The fixed build
+passes both, and the build of main they are based on fails both.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The fix removed (main at `4ae5a9bb`) | `TestReftableWorktrees` (`alpha-one is ".bare" on ".invalid"`, `beta-two is "beta.git" on ".invalid"`, `gamma-three is "git" on ".invalid"`); `TestRailGitReftable` (`the git section never showed delta, and feat/ahead one commit ahead`: it shows `.invalid` and no divergence) | **caught** |
+| The `gitstate.IsReftableHead` branch in `worktree.readHead` | `TestReftableWorktrees` (`alpha-one is "alpha" on ".invalid", want "alpha" on "feat/one"`) | **caught** |
+| `gitstate.RepoName` in `worktree.Detect`, back to `filepath.Base(repoRoot)` | `TestReftableWorktrees` (`alpha-one is ".bare"`, `beta-two is "beta.git"`, `gamma-three is "git"`) | **caught** |
+| The stamp check in `reftableFor`, so an answer is kept forever | `TestReftableWorktrees` (`alpha-later is "alpha" on "feat/one", want "alpha" on "feat/later"`); `TestRailGitReftable` (`the git section never saw the upstream move`) | **caught** |
+| The repository's `tables.list` left out of the stamp, only the worktree's read | `TestRailGitReftable` (`the git section never saw the upstream move`) | **caught** |
+| The `IsReftableHead` branch in `gitstate.readHead` | `TestRailGitReftable` (`the git section never showed delta, and feat/ahead one commit ahead`) | **caught** |
+| The `usesReftable` branch in `gitstate.resolveRef` | `TestRailGitReftable` (same message: no divergence is drawn) | **caught** |
+| The `IsReftableHead` branch in `gitstate.Branch` | `TestReftableWorktrees` (the `epsilon` row never reads `epsilon trunk`) | **caught** |
+| `RepoName` in `gitstate.Read`, back to the base name of the shared git directory's parent | `TestRailGitReftable` (the git section names the test's directory, not `delta`) | **caught** |
+| The `.bare` and `git` names in `RepoName` | `TestReftableWorktrees` (`alpha-one is ".bare"`, `gamma-three is "git"`) | **caught** |
+| The `.git` suffix rule in `RepoName` | `TestReftableWorktrees` (`beta-two is "beta.git"`); `TestRailGitReftable` | **caught** |

@@ -11,7 +11,9 @@
 // every session whose directory changes, and a subprocess per session per
 // change is the kind of cost that makes an idle daemon busy. A linked worktree
 // is recognisable without git: its ".git" is a file naming the gitdir, and that
-// gitdir holds "commondir" and "HEAD".
+// gitdir holds "commondir" and "HEAD". A repository whose refs are in reftable
+// is the exception: HEAD holds a placeholder, and the branch is asked of git
+// through gitstate, which asks again only when the refs have moved.
 package worktree
 
 import (
@@ -33,7 +35,8 @@ import (
 
 // Info is what a worktree is, as far as the rest of tuios needs to know.
 type Info struct {
-	// Repo is the repository's name: the base name of its main checkout.
+	// Repo is the repository's name: the base name of its main checkout, or
+	// of a bare repository's project directory (see gitstate.RepoName).
 	Repo string `json:"repo"`
 	// RepoRoot is the main checkout, the directory holding the shared .git.
 	RepoRoot string `json:"repo_root"`
@@ -72,12 +75,12 @@ func Detect(dir string) (Info, bool) {
 	if filepath.Base(commonDir) == ".git" {
 		repoRoot = filepath.Dir(commonDir)
 	}
-	branch := readHead(gitdir)
+	branch := readHead(gitdir, commonDir, root)
 	if branch == "" {
 		return Info{}, false
 	}
 	return Info{
-		Repo:     filepath.Base(repoRoot),
+		Repo:     gitstate.RepoName(commonDir),
 		RepoRoot: repoRoot,
 		Branch:   branch,
 		Path:     root,
@@ -85,12 +88,20 @@ func Detect(dir string) (Info, bool) {
 }
 
 // readHead names the branch a gitdir's HEAD points at, or "detached@<hash>".
-func readHead(gitdir string) string {
+// root is the worktree, where git is asked when the refs are in reftable.
+func readHead(gitdir, commonDir, root string) string {
 	data, err := os.ReadFile(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
 		return ""
 	}
 	head := strings.TrimSpace(string(data))
+	if gitstate.IsReftableHead(head) {
+		branch, sha, detached := gitstate.ReftableHead(gitdir, commonDir, root)
+		if detached {
+			return "detached@" + sha[:7]
+		}
+		return branch
+	}
 	if ref, ok := strings.CutPrefix(head, "ref: refs/heads/"); ok {
 		return ref
 	}

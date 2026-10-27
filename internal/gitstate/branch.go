@@ -31,18 +31,25 @@ func readFirstLine(path string) (string, error) {
 // Branch is the branch checked out in the working tree that holds dir, empty
 // when dir is in none. A detached HEAD reads as its short hash, which is what
 // git itself shows for one. It finds the tree with Locate, so a linked worktree
-// reports its own branch, and it reads one file: no cache, no subprocess.
+// reports its own branch, and it reads one file: no cache, no subprocess. A
+// repository whose refs are in reftable is the exception: its HEAD file names
+// no branch, and the answer comes from ReftableHead, which asks git when the
+// refs have moved.
 //
 // It is stricter than Read about a detached HEAD: the line must be a full
 // hexadecimal object name before its first seven characters are shown.
 func Branch(dir string) string {
-	gitdir, _, _, ok := Locate(dir)
+	gitdir, commondir, root, ok := Locate(dir)
 	if !ok {
 		return ""
 	}
 	line, err := readFirstLine(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
 		return ""
+	}
+	if IsReftableHead(line) {
+		branch, _, _ := ReftableHead(gitdir, commondir, root)
+		return branch
 	}
 	if ref, ok := strings.CutPrefix(line, "ref:"); ok {
 		return strings.TrimPrefix(strings.TrimSpace(ref), "refs/heads/")
