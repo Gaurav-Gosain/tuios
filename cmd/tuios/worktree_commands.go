@@ -36,6 +36,7 @@ type worktreeRow struct {
 	Base         string   `json:"base"`
 	Group        string   `json:"group"`
 	FanID        string   `json:"fan_id"`
+	Main         bool     `json:"main"`
 	Managed      bool     `json:"managed"`
 	Gone         bool     `json:"gone"`
 	State        string   `json:"state"`
@@ -1111,7 +1112,9 @@ func completeWorktreeSessions(_ *cobra.Command, _ []string, _ string) ([]string,
 	}
 	names := make([]string, 0, len(rows))
 	for _, r := range rows {
-		names = append(names, r.Session)
+		if !r.Main {
+			names = append(names, r.Session)
+		}
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp
 }

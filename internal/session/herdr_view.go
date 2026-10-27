@@ -353,7 +353,7 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	if wt := st.Worktree; wt != nil && wt.RepoRoot != "" {
 		w.Worktree = &herdrWorkspaceWorktree{
 			RepoKey: wt.RepoRoot, RepoName: wt.Repo, RepoRoot: wt.RepoRoot,
-			CheckoutPath: wt.Path, IsLinkedWorktree: true,
+			CheckoutPath: wt.Path, IsLinkedWorktree: !wt.Main,
 		}
 	}
 

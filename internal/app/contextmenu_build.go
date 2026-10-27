@@ -432,10 +432,10 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 // row that names the repository, which is exactly where a person looks for
 // "make another worktree of this one".
 //
-// The header's left-click folds and unfolds the group, which the rail draws a
-// mark for and every other group header does from its own menu; this menu's
-// one row is the one thing the header offers that no click on it suggests.
-// What the menu is about rides in ContextMenu.Repo; see TakeMenuRepo.
+// With group_main off, the header's left-click folds and unfolds the group.
+// With it on, activation opens the main checkout and folding lives in this
+// menu alongside the repository-wide New worktree action. What the menu is
+// about rides in ContextMenu.Repo; see TakeMenuRepo.
 func (m *OS) repoHeaderMenu(repo string) (string, []ContextMenuItem) {
 	title := printableTitle(repo)
 	if title == "" {

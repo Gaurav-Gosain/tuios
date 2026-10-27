@@ -156,6 +156,67 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 		t.Fatalf("worktree new feat/one: %v: %s", err, out)
 	}
 
+	// Every consumer must distinguish the main checkout from a linked
+	// worktree, whether or not the sidebar grouping is enabled.
+	rows := worktreeRows(t, base)
+	for session, wantMain := range map[string]bool{"mainsess": true, "repo-feat-one": false} {
+		var row map[string]any
+		for _, candidate := range rows {
+			if candidate["session"] == session {
+				row = candidate
+				break
+			}
+		}
+		if row == nil {
+			t.Errorf("worktree ls has no row for %s: %v", session, rows)
+			continue
+		}
+		if got, ok := row["main"].(bool); !ok || got != wantMain {
+			t.Errorf("worktree ls --json main for %s = %v, want %t", session, row["main"], wantMain)
+		}
+	}
+
+	out, err := tuiosCLI(t, base, "__complete", "worktree", "rm", "")
+	if err != nil {
+		t.Fatalf("complete worktree rm: %v: %s", err, out)
+	}
+	completions := make(map[string]bool)
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.HasPrefix(line, ":") {
+			break
+		}
+		completions[line] = true
+	}
+	if completions["mainsess"] {
+		t.Errorf("worktree rm completion offers the main checkout: %s", out)
+	}
+	if !completions["repo-feat-one"] {
+		t.Errorf("worktree rm completion omits the linked worktree: %s", out)
+	}
+
+	listed := herdrCall(t, base, "workspace.list", map[string]any{})
+	for session, wantLinked := range map[string]bool{"mainsess": false, "repo-feat-one": true} {
+		found := false
+		for _, raw := range listed["workspaces"].([]any) {
+			workspace := raw.(map[string]any)
+			if workspace["label"] != session {
+				continue
+			}
+			found = true
+			worktree, ok := workspace["worktree"].(map[string]any)
+			if !ok {
+				t.Errorf("herdr workspace %s has no worktree record: %v", session, workspace)
+				break
+			}
+			if got := worktree["is_linked_worktree"]; got != wantLinked {
+				t.Errorf("herdr is_linked_worktree for %s = %v, want %t", session, got, wantLinked)
+			}
+		}
+		if !found {
+			t.Errorf("herdr workspace.list has no %s workspace: %v", session, listed)
+		}
+	}
+
 	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return countWindows(s) == 1
