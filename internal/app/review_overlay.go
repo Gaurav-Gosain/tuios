@@ -1051,7 +1051,7 @@ func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	if m.learnFiles() {
 		// Nothing in the tab reads the notes, so the dock says what S does
 		// on a real machine instead of saying they went somewhere.
-		text = "On your machine, S sends " + notes + " to the agent in " + msg.Who + ". Here, nothing leaves the tab."
+		text = "On your machine, S sends " + notes + " to the agent in the pane " + msg.Who + ". Here, nothing leaves the tab."
 	} else if !msg.Delivering {
 		text = notes + " queued, sent when " + msg.Who + " is at rest"
 	}

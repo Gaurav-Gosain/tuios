@@ -218,6 +218,9 @@ type shell struct {
 	exiting bool
 	pending []byte // an escape sequence split across reads
 	paste   bool   // inside a bracketed paste
+	// row is the row the cursor is on, counted from the first row of the
+	// prompt, while a line longer than the pane wraps under it.
+	row int
 }
 
 func runShell(t *TTY, dir string) int {
@@ -311,6 +314,7 @@ func (s *shell) prompt() {
 	s.line = s.line[:0]
 	s.cursor = 0
 	s.histPos = len(s.history)
+	s.row = 0
 	s.t.write(markPrompt + s.promptText() + markInput)
 }
 
@@ -318,11 +322,69 @@ func (s *shell) prompt() {
 // back to where it is in the line. It is drawn outside the log while it
 // changes, and kept with keepLine once it is done.
 func (s *shell) editLine() string {
-	line := markPrompt + s.promptText() + markInput + s.highlighted()
-	if back := len(s.line) - s.cursor; back > 0 {
-		line += "\x1b[" + strconv.Itoa(back) + "D"
+	var b strings.Builder
+	prompt := s.promptText()
+	b.WriteString(markPrompt + prompt + markInput + s.highlighted())
+	s.place(&b, prompt)
+	return b.String()
+}
+
+// spans is where the line being edited ends and where its cursor is, as
+// cells from the start of the prompt.
+func (s *shell) spans(prompt string) (end, at int) {
+	pw := visibleLen(prompt)
+	return pw + ansi.StringWidth(string(s.line)), pw + ansi.StringWidth(string(s.line[:s.cursor]))
+}
+
+// lastRow is the row the end of the line being edited is on, counted from
+// the prompt's first row. A line that fills its last row exactly leaves the
+// cursor on that row, at the right edge, until the next character.
+func lastRow(end, cols int) int {
+	if end > 0 && end%cols == 0 {
+		return end/cols - 1
 	}
-	return line
+	return end / cols
+}
+
+// place moves the cursor from the end of the line just written to where it
+// is in the line, across the rows a long line wraps over, and records the
+// row it is on.
+func (s *shell) place(b *strings.Builder, prompt string) {
+	cols, _ := s.t.Size()
+	cols = max(cols, 1)
+	end, at := s.spans(prompt)
+	from := lastRow(end, cols)
+	if at == end {
+		if end > 0 && end%cols == 0 {
+			// The cursor belongs at the start of a row the text has not
+			// opened yet.
+			b.WriteString("\r\n")
+			from++
+		}
+		s.row = from
+		return
+	}
+	row := at / cols
+	b.WriteString("\r")
+	if from > row {
+		b.WriteString("\x1b[" + strconv.Itoa(from-row) + "A")
+	}
+	if col := at % cols; col > 0 {
+		b.WriteString("\x1b[" + strconv.Itoa(col) + "C")
+	}
+	s.row = row
+}
+
+// toEnd moves the cursor to the end of the line being edited, so the output
+// of the command starts under all of it.
+func (s *shell) toEnd() {
+	cols, _ := s.t.Size()
+	cols = max(cols, 1)
+	end, _ := s.spans(s.promptText())
+	if last := lastRow(end, cols); last > s.row {
+		s.t.write("\x1b[" + strconv.Itoa(last-s.row) + "B")
+	}
+	s.row = 0
 }
 
 // keepLine puts the finished prompt line in the log. It is on the screen
@@ -331,18 +393,18 @@ func (s *shell) keepLine() {
 	s.t.keep(markPrompt + s.promptText() + markInput + s.highlighted())
 }
 
-// redraw repaints the line from the prompt. Lines longer than the pane wrap
-// and are not repainted precisely; that is fine for a guided tour.
+// redraw repaints the line from the prompt, over every row a line longer
+// than the pane wraps onto.
 func (s *shell) redraw() {
 	var b strings.Builder
-	b.WriteString("\r\x1b[K")
-	b.WriteString(s.promptText())
-	b.WriteString(s.highlighted())
-	if back := len(s.line) - s.cursor; back > 0 {
-		b.WriteString("\x1b[")
-		b.WriteString(strconv.Itoa(back))
-		b.WriteString("D")
+	if s.row > 0 {
+		b.WriteString("\x1b[" + strconv.Itoa(s.row) + "A")
 	}
+	b.WriteString("\r\x1b[J")
+	prompt := s.promptText()
+	b.WriteString(prompt)
+	b.WriteString(s.highlighted())
+	s.place(&b, prompt)
 	s.t.write(b.String())
 }
 
@@ -410,18 +472,21 @@ func (s *shell) feed(chunk []byte) bool {
 				s.redraw()
 			}
 		case 0x03: // Ctrl+C
+			s.toEnd()
 			s.keepLine()
 			s.t.Print("^C\r\n")
 			s.status = 130
 			s.prompt()
 		case 0x04: // Ctrl+D
 			if len(s.line) == 0 {
+				s.toEnd()
 				s.keepLine()
 				s.t.Print("exit\r\n")
 				return true
 			}
 		case 0x0c: // Ctrl+L
 			s.t.Print("\x1b[H\x1b[2J")
+			s.row = 0
 			s.redraw()
 		case 0x01: // Ctrl+A
 			s.cursor = 0
@@ -597,6 +662,7 @@ func (s *shell) complete() {
 		s.insert(add...)
 		return
 	}
+	s.toEnd()
 	s.keepLine()
 	s.t.Print("\r\n")
 	s.t.Lay(func(cols int) []string { return columns(matches, cols) })
@@ -605,6 +671,7 @@ func (s *shell) complete() {
 
 // enter runs the line and reports whether the shell should exit.
 func (s *shell) enter() bool {
+	s.toEnd()
 	s.keepLine()
 	s.t.Print("\r\n")
 	line := strings.TrimSpace(string(s.line))
