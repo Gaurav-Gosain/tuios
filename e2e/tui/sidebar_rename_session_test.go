@@ -84,8 +84,13 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 
 	// The daemon is the authority on which session was renamed, and ls is
 	// what a person checks (issue #266). These fail if the rename reached the
-	// attached session or only set a label.
+	// attached session or only set a label. The rail can show the new name a
+	// moment before the daemon lists it, so ls is read until it does.
 	names := sessionNames(t, base)
+	for deadline := time.Now().Add(uiTimeout); !hasName(names, "payments") && time.Now().Before(deadline); {
+		time.Sleep(100 * time.Millisecond)
+		names = sessionNames(t, base)
+	}
 	if !hasName(names, "payments") || hasName(names, "bravo") {
 		t.Errorf("tuios ls lists %v, want payments in place of bravo", names)
 	}

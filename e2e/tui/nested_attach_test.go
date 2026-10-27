@@ -85,8 +85,10 @@ func waitSessionSize(t *testing.T, base string) (int, int) {
 
 // tuiosProcessesUnder returns the pids of tuios client processes whose command
 // line holds marker, other than the outer client, so a test can find the
-// nested client it started.
-func tuiosProcessesUnder(outer *tuitest.Terminal, marker string) []int {
+// nested client it started. Only processes whose environment names the
+// test's isolation root base count: the e2e workflow runs several go test
+// processes on one machine, and their clients carry the same flags.
+func tuiosProcessesUnder(outer *tuitest.Terminal, base, marker string) []int {
 	entries, _ := os.ReadDir("/proc")
 	var pids []int
 	for _, e := range entries {
@@ -102,9 +104,14 @@ func tuiosProcessesUnder(outer *tuitest.Terminal, marker string) []int {
 		if len(args) == 0 || args[0] != tuiosBin {
 			continue
 		}
-		if strings.Contains(strings.Join(args, " "), marker) {
-			pids = append(pids, pid)
+		if !strings.Contains(strings.Join(args, " "), marker) {
+			continue
 		}
+		env, err := os.ReadFile("/proc/" + e.Name() + "/environ")
+		if err != nil || !strings.Contains(string(env), "="+base+string(filepath.Separator)) {
+			continue
+		}
+		pids = append(pids, pid)
 	}
 	return pids
 }
@@ -151,7 +158,7 @@ func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker stri
 	if w, h := sessionSize(t, base, nestSession); w != w0 || h != h0 {
 		t.Errorf("session size changed from %dx%d to %dx%d", w0, h0, w, h)
 	}
-	if pids := tuiosProcessesUnder(outer, marker); len(pids) != 0 {
+	if pids := tuiosProcessesUnder(outer, base, marker); len(pids) != 0 {
 		t.Errorf("a nested tuios client is still running: %v", pids)
 	}
 	alive(t, outer, "after the refused nested attach")
@@ -242,7 +249,7 @@ func TestAttachFromPaneToOtherSessionWorks(t *testing.T) {
 	if w, h := sessionSize(t, base, nestSession); w != w0 || h != h0 {
 		t.Errorf("the outer session changed size from %dx%d to %dx%d", w0, h0, w, h)
 	}
-	if pids := tuiosProcessesUnder(outer, "attach "+other); len(pids) != 1 {
+	if pids := tuiosProcessesUnder(outer, base, "attach "+other); len(pids) != 1 {
 		t.Errorf("want one inner client, found %v", pids)
 	}
 	alive(t, outer, "with a client for another session in a pane")
@@ -261,7 +268,7 @@ func TestForcedNestedAttachSettles(t *testing.T) {
 		t.Fatalf("type the forced attach: %v", err)
 	}
 	deadline := time.Now().Add(bootTimeout)
-	for len(tuiosProcessesUnder(outer, marker)) != 1 {
+	for len(tuiosProcessesUnder(outer, base, marker)) != 1 {
 		if !time.Now().Before(deadline) {
 			t.Fatalf("the forced client never started\n%s", outer.Snapshot())
 		}
