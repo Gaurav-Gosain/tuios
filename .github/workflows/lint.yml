@@ -101,12 +101,29 @@ jobs:
           working-directory: sketch
           args: --timeout 10m
 
-  bom:
-    name: no byte order mark in Go files
+  sanity:
+    name: govulncheck, BOM, goimports, gopls and modernizers
+    # Small checks that each took longer to set up than to run, in one job:
+    #
+    #   - no literal byte order mark in a Go file;
+    #   - govulncheck for known vulnerabilities in code tuios reaches;
+    #   - the parts of scripts/check.sh no other job runs, on the files the
+    #     pull request changed: goimports, gopls check, and the go fix
+    #     modernizers as a report. gofmt, tidy, vet and golangci-lint have jobs
+    #     of their own.
+    #
+    # Each step after the first runs even when one before it failed, so one
+    # run reports every failure.
+    #
+    # On main it checks the last commit. That also builds the pinned gopls and
+    # goimports into the shared cache, which pull requests only restore.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The merge base with the target branch decides what changed.
+          fetch-depth: 0
 
       # Go refuses a U+FEFF anywhere but the first bytes of a file ("illegal
       # byte order mark"). Some editors and agent tools turn a \uFEFF escape
@@ -121,29 +138,20 @@ jobs:
             exit 1
           fi
 
-  sanity:
-    name: goimports, gopls and modernizers (changed files)
-    # The parts of scripts/check.sh no other job runs, on the files the pull
-    # request changed: goimports, gopls check, and the go fix modernizers as a
-    # report. gofmt, tidy, vet, golangci-lint and govulncheck have jobs of
-    # their own.
-    #
-    # On main it checks the last commit. That also builds the pinned gopls and
-    # goimports into the shared cache, which pull requests only restore.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # The merge base with the target branch decides what changed.
-          fetch-depth: 0
-
+      # The go.mod toolchain line sets the stdlib that govulncheck scans, as
+      # it did when govulncheck had a job of its own.
       - uses: ./.github/actions/setup-go
+        if: ${{ !cancelled() }}
         with:
           go-version-file: go.mod
           cache-id: sanity
 
+      - name: govulncheck
+        if: ${{ !cancelled() }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Check the changed files
+        if: ${{ !cancelled() }}
         env:
           BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
         run: scripts/check.sh --changed "$BASE" --only fmt,fix,gopls
@@ -162,23 +170,6 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
-
-  govulncheck:
-    name: govulncheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-
-      # The go.mod toolchain line sets the stdlib that govulncheck scans. The
-      # govulncheck action ignores go-version-file and installs "stable".
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   cross-vet:
     name: go vet (darwin, windows, freebsd, openbsd)
