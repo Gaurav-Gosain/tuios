@@ -1,10 +1,6 @@
 package app
 
-import (
-	"strings"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
-)
+import "github.com/Gaurav-Gosain/tuios/internal/config"
 
 // Nest mode: tmux-matryoshka's prefix Enter, as the nest action.
 //
@@ -18,8 +14,8 @@ import (
 //
 // The state is the client's, not the session's: another client attached to
 // the same session keeps its keys. It ends when the client leaves terminal
-// mode or enters it again by any other path, and on detach, since a client
-// that attaches builds a new model.
+// mode by any path (see settleNest) or enters it again, and on detach, since
+// a client that attaches builds a new model.
 //
 // The overlays still take their keys while they are up, as they do under
 // lock: one opened with the mouse in nest mode would otherwise be stranded.
@@ -45,6 +41,20 @@ func (m *OS) EnterNest() bool {
 	return true
 }
 
+// settleNest ends nest mode when the client has left terminal mode. It runs
+// at the end of every Update, so it holds whatever path set the mode: a lot of
+// them assign Mode directly (closing the last pane, a workspace switch, some
+// mouse paths). Without it the flag outlived the window mode they left the
+// client in, and came back with the next terminal mode on its own. A gesture
+// that leaves terminal mode and comes back within one message (a pane drag,
+// the hold key) keeps it, as it never left.
+func (m *OS) settleNest() {
+	if m.nest && m.Mode != TerminalMode {
+		m.nest = false
+		m.MarkAllDirty()
+	}
+}
+
 // LeaveNest turns nest mode off, and leaves the client in terminal mode.
 func (m *OS) LeaveNest() {
 	if !m.nest {
@@ -57,7 +67,7 @@ func (m *OS) LeaveNest() {
 // nestLabel is what the dock's mode pill, or the badge, says in nest mode:
 // NEST and the key that ends it.
 func (m *OS) nestLabel() string {
-	return "NEST " + strings.ToUpper(m.Settings.GetNestExitKey())
+	return "NEST " + config.KeyLabel(m.Settings.GetNestExitKey())
 }
 
 // modePillShown reports whether the dock draws a mode pill at all.

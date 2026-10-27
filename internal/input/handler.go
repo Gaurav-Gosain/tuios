@@ -795,17 +795,32 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // composedChords and optionGlyphsApply). The input path has already taken the
 // base-layout key off msg, so base hands it back; zero when there is none.
 func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
-	if config.IsLeaderPress(producedKey(msg).String(), s.LeaderKey) {
+	return isConfiguredKey(msg, s, base, func(key string) bool { return config.IsLeaderPress(key, s.LeaderKey) })
+}
+
+// isNestExitKey reports whether msg is keybindings.nest_exit_key, matched the
+// way the leader is, so an alt+x exit key still ends nest mode on a non-US
+// layout or with Option composing on macOS.
+func isNestExitKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
+	exit := s.GetNestExitKey()
+	return isConfiguredKey(msg, s, base, func(key string) bool { return config.IsKeyPress(key, exit) })
+}
+
+// isConfiguredKey is isLeaderKey's matching for any one key from the config:
+// the key produced, then the base-layout key, then the characters Option
+// composes. is reports whether a canonical key string is that key.
+func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func(string) bool) bool {
+	if is(producedKey(msg).String()) {
 		return true
 	}
-	if pos, ok := baseLayoutKey(msg); ok && config.IsLeaderPress(pos, s.LeaderKey) {
+	if pos, ok := baseLayoutKey(msg); ok && is(pos) {
 		return true
 	}
 	if base == 0 {
 		base = msg.BaseCode
 	}
 	for _, chord := range composedChords(msg, base) {
-		if config.IsLeaderPress(chord, s.LeaderKey) {
+		if is(chord) {
 			return optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs)
 		}
 	}

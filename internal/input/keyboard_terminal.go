@@ -150,7 +150,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// copy mode, which keep their keys as they do under lock, and before the
 	// leader. See app/nest_mode.go.
 	if o.Nested() {
-		if config.IsKeyPress(producedKey(msg).String(), o.Settings.GetNestExitKey()) {
+		if isNestExitKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 			o.LeaveNest()
 			return o, nil
 		}

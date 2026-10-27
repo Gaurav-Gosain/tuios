@@ -10149,3 +10149,15 @@ The fixed build passes.
 | The nest path in `HandleTerminalModeKey` (`if false && o.Nested()`), the dock pill kept | "ctrl+b alt+2 ctrl+p x did not reach cat -v as bytes"; the tmux test: "ctrl+b c did not open a window in the nested tmux"; each preset: "F12 did not turn nest mode off" | **caught** |
 | The exit key check (`if false && config.IsKeyPress(...)`) | all three: "F12 did not turn nest mode off" | **caught** |
 | The default key (`"nest": {"enter"}` removed from `DefaultConfig`) | all three: "ctrl+b enter did not turn nest mode on", and each preset's leader then enter | **caught** |
+
+### Review of #1190: the exit key and the mode
+
+`TestNestExitKeyThatCannotBeReadIsF12` sets `nest_exit_key = "ctrl+"`, which cannot be read: the pill must name F12 and F12 must end nest mode. With `nest_exit_key = "x"` the log viewer must hold a line for nest_exit_key. `TestNestExitKeyFiresOnTheComposedCharacter` sets `nest_exit_key = "opt+1"` with `option_glyphs = "bind"` on a Mac terminal: the composed "¡" must end nest mode. `TestNestModeDoesNotComeBackAfterWindowMode` turns nest mode on, closes the last pane with close-window (the client drops to window mode by assignment), then moves the client to another session with switch-session (terminal mode restored by assignment): the pill must not say NEST, and ctrl+b c must open a pane there. Run on 2026-10-27 on macOS, based on origin/main at 859cef306.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `kb.NestExitKey = ""` cut from `DropUnreadableKeys` | "an unreadable nest_exit_key did not fall back to F12 on the pill" | **caught** |
+| the `KeyTypes` warning in `ValidateConfig` | "the log has no warning for nest_exit_key = \"x\"" | **caught** |
+| `isNestExitKey` matching only the key produced | "the composed character did not end nest mode" | **caught** |
+| `defer m.settleNest()` cut from `Update` | "nest mode came back after the session switch" | **caught** |
+

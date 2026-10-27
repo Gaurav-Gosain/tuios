@@ -198,3 +198,113 @@ func TestNestModeIsTheLeaderThenEnterInEveryPreset(t *testing.T) {
 		})
 	}
 }
+
+// TestNestExitKeyThatCannotBeReadIsF12 is keybindings.nest_exit_key read as
+// leader_key is. A key that cannot be read ("ctrl+", a modifier with no key)
+// would leave nest mode with no way out, so it goes back to F12: the pill
+// names F12 and F12 ends it. A key programs type ("x") is kept, and the log
+// viewer says why it is a poor choice.
+//
+// Negative control: with the nest_exit_key block cut from DropUnreadableKeys,
+// the pill names the unreadable key and F12 does not end nest mode. With the
+// warning cut from ValidateConfig, the log has no line for "x". The runs are
+// in NEGATIVE_CONTROLS.md.
+func TestNestExitKeyThatCannotBeReadIsF12(t *testing.T) {
+	t.Run("unreadable", func(t *testing.T) {
+		const sess = "nestbadkey"
+		term, base := lockedSession(t, sess, "\n[keybindings]\nnest_exit_key = \"ctrl+\"\n")
+		waitForSettledGeometryIn(t, base, sess, 1)
+		if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Enter); err != nil {
+			t.Fatalf("ctrl+b enter: %v", err)
+		}
+		if err := term.WaitFor(dockNested, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: an unreadable nest_exit_key did not fall back to F12 on the pill: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.F12); err != nil {
+			t.Fatalf("F12: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "NEST") }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: F12 did not end nest mode with an unreadable nest_exit_key: %v\n%s", err, term.Snapshot())
+		}
+	})
+	t.Run("typed", func(t *testing.T) {
+		const sess = "nesttyped"
+		term, base := lockedSession(t, sess, "\n[keybindings]\nnest_exit_key = \"x\"\n")
+		waitForSettledGeometryIn(t, base, sess, 1)
+		if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
+			t.Fatalf("open the log viewer: %v", err)
+		}
+		if err := term.WaitForText("copy errors", uiTimeout); err != nil {
+			t.Fatalf("the log viewer did not open: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.WaitForText("nest_exit_key", uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the log has no warning for nest_exit_key = \"x\": %v\n%s", err, term.Snapshot())
+		}
+	})
+}
+
+// TestNestExitKeyFiresOnTheComposedCharacter is the exit key matched as the
+// leader is. With nest_exit_key = "opt+1" on a Mac terminal where Option
+// composes, Option and 1 arrives as "¡", and that has to end nest mode, as it
+// starts the leader in TestOptionLeaderFiresOnTheComposedCharacter.
+//
+// Negative control: with isNestExitKey matching only the key produced, the
+// "¡" is typed into the pane and nest mode stays on. The run is in
+// NEGATIVE_CONTROLS.md.
+func TestNestExitKeyFiresOnTheComposedCharacter(t *testing.T) {
+	base := t.TempDir()
+	const session = "e2e-nest-opt"
+	term := macSession(t, base, session, "[keybindings]\nnest_exit_key = \"opt+1\"\noption_glyphs = \"bind\"\n")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo ready-$((1+5))", "ready-6", shellTimeout)
+	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Enter); err != nil {
+		t.Fatalf("ctrl+b enter: %v", err)
+	}
+	if err := term.WaitForText("NEST Opt+1", uiTimeout); err != nil {
+		t.Fatalf("setup: nest mode did not turn on with its Opt+1 exit key: %v\n%s", err, term.Snapshot())
+	}
+	press(t, term, "Option and 1 (composed)", normalOptionInvExcl)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "NEST") }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the composed character did not end nest mode: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestNestModeDoesNotComeBackAfterWindowMode: a path that sets the mode
+// directly ends nest mode with it. Closing the last pane drops the client to
+// window mode by assignment, and a session switch restores terminal mode the
+// same way. Nest mode must not come back with it: the pill does not say NEST,
+// and ctrl+b c opens a pane in the new session, as the leader is tuios's.
+//
+// Negative control: with settleNest not run from Update, the switch brings
+// nest mode back: the pill says NEST F12 and ctrl+b c reaches the pane. The
+// run is in NEGATIVE_CONTROLS.md.
+func TestNestModeDoesNotComeBackAfterWindowMode(t *testing.T) {
+	const sess = "nestleft"
+	term, base := lockedSession(t, sess, "")
+	pane := waitForSettledGeometryIn(t, base, sess, 1)[0].ID
+	if out, err := tuiosCLI(t, base, "new", "nestother", "--detach"); err != nil {
+		t.Fatalf("create nestother: %v\n%s", err, out)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Enter); err != nil {
+		t.Fatalf("ctrl+b enter: %v", err)
+	}
+	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
+		t.Fatalf("setup: ctrl+b enter did not turn nest mode on: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "close-window", "-s", sess, pane); err != nil {
+		t.Fatalf("close the last pane: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dockNested(s) }, uiTimeout); err != nil {
+		t.Fatalf("setup: the pill still says NEST with no pane: %v\n%s", err, term.Snapshot())
+	}
+	switchClient(t, base, term, "nestother")
+	waitForSettledGeometryIn(t, base, "nestother", 1)
+	time.Sleep(time.Second)
+	if dockNested(term.Screen()) {
+		t.Fatalf("ASSERTION: nest mode came back after the session switch\n%s", term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
+		t.Fatalf("ctrl+b c: %v", err)
+	}
+	waitForSettledGeometryIn(t, base, "nestother", 2)
+}

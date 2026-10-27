@@ -245,7 +245,7 @@ nest = ["enter"]
 
 | Key | Default | What it does |
 |---|---|---|
-| `nest_exit_key` | `"f12"` | The key that ends nest mode. The `nest` action (the leader, then `enter`) turns nest mode on: every key goes to the pane, the leader too, until this key. |
+| `nest_exit_key` | `"f12"` | The key that ends nest mode. A key that cannot be read goes back to `"f12"`, and a key programs type is reported as a problem. The `nest` action (the leader, then `enter`) turns nest mode on: every key goes to the pane, the leader too, until this key. |
 
 See [Nest mode](KEYBINDINGS.md#nest-mode).
 

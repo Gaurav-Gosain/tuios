@@ -136,7 +136,9 @@ nest = ["alt+shift+enter"]
 - In terminal mode, every key goes to the focused pane: the leader, the keys
   tuios binds and the hold key. A nested tmux gets its own `ctrl+b`.
 - `F12` ends nest mode. It does not go to the pane. Set
-  `keybindings.nest_exit_key` to use another key.
+  `keybindings.nest_exit_key` to use another key. A key that tuios cannot
+  read goes back to `F12`, so nest mode always has a way out, and a key that
+  programs type, such as a letter or `enter`, is reported in the log viewer.
 - Overlays opened with the mouse, copy mode and the mouse itself do not
   change.
 - Nest mode belongs to the client, not to the session. Another client on the

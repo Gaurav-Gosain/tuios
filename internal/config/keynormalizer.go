@@ -748,6 +748,22 @@ type leaderSet struct {
 
 var leaderCache atomic.Pointer[leaderSet]
 
+// KeyTypes reports whether a key from the config is one programs type: a
+// printable character, with shift or without, or space, enter, tab, backspace
+// or esc.
+func KeyTypes(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	k = strings.TrimPrefix(k, "shift+")
+	if utf8.RuneCountInString(k) == 1 {
+		return unicode.IsPrint([]rune(k)[0])
+	}
+	switch k {
+	case "space", "enter", "return", "tab", "backspace", "esc", "escape":
+		return true
+	}
+	return false
+}
+
 // IsKeyPress reports whether pressed, a key event's string in the canonical
 // form, is key as config.toml spells it, normalized as every binding table
 // is. It normalizes key on each call, so it is for a key read only inside a
