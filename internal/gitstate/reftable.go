@@ -101,7 +101,11 @@ func reftableFor(gitdir, stamp string) *reftableAnswers {
 }
 
 // askGit runs git in root, the working tree, and answers its trimmed output.
-func askGit(root string, args ...string) (string, error) {
+//
+// It is a variable so a test can count how often it runs, as countCommits
+// is: answering from the cache while no ref moves is what keeps a reftable
+// repository as cheap to show as any other.
+var askGit = func(root string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)
 	defer cancel()
 	cmd := childproc.Git(ctx, root, args...)
