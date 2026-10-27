@@ -202,7 +202,67 @@ Sleep 300ms
 `,
 	Home + "/projects/website/style.css": `h1 { color: hotpink; }
 `,
-	ConfigPath:  configText("", "rounded", "default", nil),
+	ConfigPath: configText("", "rounded", "default", nil),
+	Home + "/deploy.tml": `<tml version="1" title="Deploy api">
+  <state>{"envs": ["staging", "production"], "deploy": {"tag": "v1.4.0", "env": "staging"}}</state>
+  <form on-submit="close(state.deploy)" pad="1">
+    <kv>
+      <item k="Service" v="api"/>
+      <item k="Change" v="12 files, +210 -64"/>
+      <item k="Checks" v="all passed" role="success"/>
+    </kv>
+    <input name="tag" label="Tag" bind="state.deploy.tag" required="true"/>
+    <text role="dim">Target: pick one with enter</text>
+    <list items="state.envs" as="env" select="single" on-select="set('state.deploy.env', event.item)">
+      <row gap="1"><text w="12">{env}</text><badge if="env == state.deploy.env" role="accent">picked</badge></row>
+    </list>
+    <row gap="2">
+      <button kind="primary" submit="true">Deploy</button>
+      <button key="esc" on-press="close(null)">Cancel</button>
+    </row>
+  </form>
+</tml>
+`,
+	Home + "/status.tml": `<tml version="1" title="api status">
+  <state>{"services": [
+      {"name": "api", "state": "up", "p95": "84 ms"},
+      {"name": "worker", "state": "up", "p95": "210 ms"},
+      {"name": "db", "state": "slow", "p95": "640 ms"}],
+    "rps": [120, 132, 128, 150, 171, 165, 190, 184, 201, 196, 220, 214]}</state>
+  <col gap="1">
+    <table rows="state.services" key="name">
+      <column field="name" title="Service" w="fill"/>
+      <column field="state" title="State"/>
+      <column field="p95" title="p95" align="right"/>
+    </table>
+    <bar data="state.rps" h="4" title="Requests a second, last hour"/>
+    <mermaid>
+flowchart LR
+  lb[load balancer] --> api --> db[(postgres)]
+  api --> worker
+    </mermaid>
+  </col>
+</tml>
+`,
+	Home + "/flow.mmd": `flowchart TD
+  push[git push] --> ci{tests pass?}
+  ci -->|yes| stage[deploy to staging]
+  ci -->|no| fix[fix and push again]
+  fix --> push
+  stage --> check{looks good?}
+  check -->|yes| prod[deploy to production]
+  check -->|no| fix
+`,
+	Home + "/sales.csv": `month,online,store
+Jan,42,31
+Feb,47,29
+Mar,55,33
+Apr,61,30
+May,58,34
+Jun,72,36
+Jul,80,35
+Aug,77,38
+`,
 	"/etc/motd": "Be kind to your terminal.\n",
 }
 

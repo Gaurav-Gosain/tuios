@@ -52,6 +52,9 @@ var summaries = [][2]string{
 	{"rain", "digital rain (any key stops it)"},
 	{"fastfetch", "system info, the pretty way"},
 	{"tuios tape play demo.tape", "watch tuios drive itself"},
+	{"tuios tml show deploy.tml", "a form that tuios draws"},
+	{"tuios mermaid flow.mmd", "a diagram, drawn as text"},
+	{"tplot sales.csv", "a chart from CSV data"},
 	{"fortune, cowsay", "wisdom, delivered"},
 	{"colors", "the terminal palette"},
 	{"tree", "the files as a tree"},
@@ -151,6 +154,9 @@ func init() {
 		"git":       func(s *shell, args []string, _ string) int { return cmdGit(s, args[1:]) },
 		"go":        cmdGo,
 		"tuios":     cmdTuios,
+		"tml":       cmdTML,
+		"sketch":    cmdSketch,
+		"tplot":     cmdTplot,
 		"claude":    cmdAgent,
 		"codex":     cmdAgent,
 		"gemini":    cmdAgent,
@@ -903,6 +909,8 @@ func colourName(e entry) string {
 		return green + e.name + reset
 	case strings.HasSuffix(e.name, ".html"), strings.HasSuffix(e.name, ".css"):
 		return purple + e.name + reset
+	case strings.HasSuffix(e.name, ".tml"), strings.HasSuffix(e.name, ".mmd"), strings.HasSuffix(e.name, ".csv"):
+		return blue + e.name + reset
 	}
 	return e.name
 }

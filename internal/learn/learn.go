@@ -115,6 +115,9 @@ type Model struct {
 	// startLooks is the looks the tour started with. config.toml shows a look
 	// once it differs.
 	startLooks looks
+	// surfaces holds the TML surfaces tuios tml show opens. See
+	// surfaces.go.
+	surfaces *surfaceHost
 }
 
 // New wraps o for the tour. emit receives every event; it may be called from
@@ -146,6 +149,9 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	o.SetInboxVerbCaller(m.callVerb, func() string { return learnNonce })
 	o.SetLearnSpawnInfo(spawnInfo)
 	webshell.SetEventSink(m.fromGuest)
+	m.surfaces = &surfaceHost{m: m}
+	o.SetLearnTMLHost(m.surfaces.call)
+	webshell.SetSurfaceHost(m.surfaces.request)
 	m.last = take(o)
 	m.last.Looks = readLooks(o.UserConfig)
 	m.rest = m.last
@@ -247,6 +253,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.OS.CloseWindow(id)
 		}
 		_, cmd = m.OS.Update(commandDoneMsg{})
+	case openSurfaceMsg, closeSurfaceWindowMsg:
+		cmd, _ = m.surfaces.update(msg)
+		// The window opened or closed outside the app's Update, which is
+		// where a change gets its frame.
+		_, after := m.OS.Update(commandDoneMsg{})
+		cmd = tea.Batch(cmd, after)
 	default:
 		next, c := m.OS.Update(msg)
 		if n, ok := next.(*app.OS); ok {
@@ -255,6 +267,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = c
 	}
 	m.report()
+	m.surfaces.sweep()
 	return m, cmd
 }
 

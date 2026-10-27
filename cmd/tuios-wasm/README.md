@@ -71,7 +71,7 @@ call that sent the output or the event then throws a `TypeError`.
 Every event is `{type, data, windowId?, state?}`. `windowId` is set when the
 event is about one pane. `state` is the snapshot after the change, and is set
 on every event that comes from a state change: all but `key`, `action`,
-`notification` and the `shell.*` events.
+`notification`, the `shell.*` and the `tml.*` events.
 
 Events come in a fixed order for one key press: `key` first, then any
 `action`, then the state changes it caused.
@@ -111,6 +111,10 @@ Events come in a fixed order for one key press: `key` first, then any
 | `review.note` | `{action, path?, line?, text?, notes}` | a review note was saved. `action` is `"add"`, `"edit"` or `"remove"`. `notes` is how many notes the review holds now |
 | `review.send` | `{notes}` | `S` in the review marked this many notes as sent. Nothing leaves the tab: the dock says what `S` does on a real machine |
 | `worktree` | `{repo, branch, path}` | a worktree of the fake repository was made, with `ctrl+b U` |
+| `tml.open` | `{surface, windowId, title, owner, target}` | `tuios tml show` opened a TML surface. `target` is `"popup"` or `"pane"`. `owner` names the pane that ran the command, as the window's frame does |
+| `tml.input` | `{surface, state}` | the person changed the surface's state: a key, a click or typed text in a field that binds a state path. `state` is the whole state after it |
+| `tml.place` | `{surface, windowId, target}` | the person moved the surface to a popup or a pane (`ctrl+b t f`). A `window.float` event follows |
+| `tml.close` | `{surface, windowId, title, reason, value}` | the surface closed. `reason` is `"closed"` (a close action in the document, `value` is the answer), or `"dismissed"` (esc, or its window closed, and `value` is `null`) |
 | `tape.start` | `{name?}` | a tape started playing |
 | `tape.finish` | `{}` | the tape finished |
 | `shell.start` | `{command, line, cwd}` | the fake shell started a command. `command` is the first word |
@@ -176,6 +180,9 @@ that input.
     { id, title, workspace, x, y, width, height, minimized, zoomed, floating,
       agent, agentMessage, agentKind, harness }
   ],                         // x, y, width, height are in cells
+    { id, title, workspace, x, y, width, height, minimized, zoomed, floating, agent, agentMessage, kind, popup }
+  ],                         // x, y, width, height are in cells. kind is "tml"
+                             // for a TML surface, else "". popup: it floats as a popup
   tape: false,               // a tape is playing
   glyphs: "default",         // the glyph set
   borderStyle: "rounded",
@@ -305,5 +312,18 @@ lesson:
   `send-agent-message`, `fan`, `worktree`, `list-verbs` and `list-hooks`.
 - `cat .config/tuios/config.toml` shows the theme, the border style, the glyph
   set and every look above that changed in the tab.
+- `tuios tml show FILE` opens a TML surface in tuios, as a popup or with
+  `--pane` as a pane, with no daemon: the tab holds it
+  (`internal/learn/surfaces.go`). As on a real machine, a surface opened
+  from a pane leaves the keys in that pane. A click, or `ctrl+b` and the
+  window's number, moves them to it. `--wait` blocks until it closes and prints the answer as JSON. Its
+  exit status is 0 for an answer and 1 for esc. `tuios tml render FILE`,
+  `tuios tml validate FILE` and `tml --check FILE` draw and check a document
+  with the real libraries. `~/deploy.tml` is a form and `~/status.tml` a
+  dashboard with a table, a chart and a diagram.
+- `tuios mermaid FILE` and `sketch FILE` draw a Mermaid diagram as text at
+  the pane's width (`~/flow.mmd`). `tplot FILE --kind bar` draws a chart
+  from CSV (`~/sales.csv`) in the theme's colours. Each draws again when the
+  pane changes width.
 - `top`, `rain`, `fastfetch`, `tree`, `fortune`, `cowsay` and `colors` are
   there for fun. `neofetch` is another name for `fastfetch`. The launcher (Alt+Space) lists the full-screen ones.
