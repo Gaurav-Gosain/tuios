@@ -34,10 +34,10 @@ require (
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	tuios.dev/loom v0.2.3-0.20261026100403-53167308ea72 // indirect
+	tuios.dev/loom v0.2.3-0.20261027111307-2ff6c64156c1 // indirect
 	tuios.dev/plot v0.2.2-0.20261023124927-50c38920e301 // indirect
 	tuios.dev/progstatus v0.1.1-0.20261023124927-50c38920e301 // indirect
-	tuios.dev/sketch v0.4.1-0.20261026100045-84b0cd549f12 // indirect
+	tuios.dev/sketch v0.4.1-0.20261027111141-0161afeb2e46 // indirect
 	tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078 // indirect
 	tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a // indirect
 )
