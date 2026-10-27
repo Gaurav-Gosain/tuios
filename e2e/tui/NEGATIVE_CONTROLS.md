@@ -10106,3 +10106,15 @@ The fixed build passes three runs of three.
 | The restore drops the rank (`Rank: state.Rank` cut from `daemon_resurrect.go`) | "after a restart: tuios ls lists [alpha bravo charlie trigger]" | **caught** |
 | `Manager.ListSessions` ignores the ranks (`0 * session.rank()`) | all three: the listing stays in creation order | **caught** |
 | `commitSessionOrder` does not send the order (no `queueSidebarCmd`) | "client B does not list the order A set" | **caught** |
+
+### Review of #1191: quick moves and a restored rank
+
+`TestSessionOrderTakesQuickMoves` makes four sessions, sets their creation order with `set-session-order` (the bug is in an order the daemon keeps), and attaches a client with the rail open. ctrl+b e, then shift+down three times in one burst, must leave bravo, charlie, delta, alpha on the rail and in `tuios ls`. A mouse drag of delta to the top, then at once a second drag of alpha onto the row above it, must leave delta, bravo, alpha, charlie. `TestSessionOrderRestoredSessionDoesNotTie` orders alpha and bravo, stops the daemon, starts one with `--no-restore`, makes and orders charlie and delta, and runs `tuios resurrect alpha`: `tuios ls` must list charlie, delta, alpha. Run on 2026-10-27 on macOS, based on origin/main at 859cef306.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The PR before these fixes (224880265) | "three quick shift+down: the rail does not list [bravo charlie delta alpha]", as in the review | **caught** |
+| `sidebarSessionOrderFor` not drawing the order of a move on its way (`&& !m.sessionOrderPending(host)` cut) | the same | **caught** |
+| The restore keeping the saved rank (`Rank: state.Rank`) | "tuios ls lists [charlie alpha delta], want [charlie delta alpha]" | **caught** |
+
+The controls fail at the burst, before the two drags, which cover the drag the review asked for. The per-machine `sessionOrderLocal` and the one lock for a whole order have no e2e: the first needs an older daemon on another machine, and the second is a race between two callers.

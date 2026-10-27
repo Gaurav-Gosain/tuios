@@ -23,6 +23,10 @@ func (d *Daemon) verbSetSessionOrder(cs *connState, params json.RawMessage) (any
 	if len(p.Order) == 0 {
 		return nil, invalidParam("order", "order is required and is the session names in the order to list them, e.g. [\"work\",\"notes\"]")
 	}
+	// One order at a time, from the names to the last rank, so the ranks of
+	// two clients' orders cannot interleave.
+	d.sessionOrderMu.Lock()
+	defer d.sessionOrderMu.Unlock()
 	// Resolve every name before ranking any, so a typo changes nothing.
 	ranked := make([]*Session, 0, len(p.Order))
 	seen := make(map[*Session]bool, len(p.Order))
@@ -63,4 +67,22 @@ func (d *Daemon) verbSetSessionOrder(cs *connState, params json.RawMessage) (any
 		names = append(names, s.Name)
 	}
 	return map[string]any{"type": "session_order_set", "order": names}, nil
+}
+
+// restoredRank is the rank a session restored from saved state takes. Its
+// saved rank stands unless a live session holds it: the order was set again
+// while the session was not running, and two sessions with one rank would
+// tie. It then comes back unplaced, after the placed sessions.
+func (d *Daemon) restoredRank(rank int) int {
+	if rank == 0 {
+		return 0
+	}
+	d.sessionOrderMu.Lock()
+	defer d.sessionOrderMu.Unlock()
+	for _, s := range d.manager.AllSessions() {
+		if s.rank() == rank {
+			return 0
+		}
+	}
+	return rank
 }

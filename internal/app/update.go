@@ -2419,8 +2419,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.refreshListingCmd()
 
 	case SessionOrderAppliedMsg:
-		m.applySessionOrderResult(msg)
-		return m, nil
+		return m, m.applySessionOrderResult(msg)
 
 	case listingRefreshedMsg:
 		m.refreshSwitcherItems()

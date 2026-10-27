@@ -134,7 +134,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// The saved id comes back, so a client that knew the session by its id
 	// (a phone bridge, a script) still finds it. State from before ids were
 	// saved has none and gets a new one.
-	sess, err := d.manager.CreateSession(state.Name, &SessionConfig{restoreID: state.SessionID, Space: state.Space, Rank: state.Rank}, width, height)
+	sess, err := d.manager.CreateSession(state.Name, &SessionConfig{restoreID: state.SessionID, Space: state.Space, Rank: d.restoredRank(state.Rank)}, width, height)
 	if err != nil {
 		return nil, nil, err
 	}

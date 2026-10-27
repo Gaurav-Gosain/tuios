@@ -2,6 +2,8 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -269,4 +271,144 @@ func TestSessionOrderSurvivesTheDaemon(t *testing.T) {
 		}
 	}
 	wantLsOrder(t, base, "after a restart", "charlie", "alpha", "bravo")
+}
+
+// TestSessionOrderTakesQuickMoves: moves made before the daemon has answered
+// the one before them all stick. The rail draws the order a move made until
+// the daemon answers it, and the next move is built on that. The daemon keeps
+// an order from the start, since with none the client draws its own anyway.
+//
+//  1. ctrl+b e, then shift+down three times in one burst, moves alpha from
+//     the top to the bottom: bravo, charlie, delta, alpha.
+//  2. A mouse drag of delta onto the top row, then at once a second drag of
+//     alpha from the bottom row onto the one above it: delta, bravo, alpha,
+//     charlie.
+//
+// Each order must be on the rail and in tuios ls.
+//
+// Negative control: with sidebarSessionOrderFor not drawing the order of a
+// move on its way, only the first of the three presses sticks, and the second
+// drag is built on the order before the first. The run is in NEGATIVE_CONTROLS.md.
+func TestSessionOrderTakesQuickMoves(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[startup]\nopen_default_window = true\n")
+	names := []string{"alpha", "bravo", "charlie", "delta"}
+	for _, name := range names {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", name, err, out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", "alpha"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	clientShows(t, base, "alpha")
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "the rail with every session", append([]string{sidebarHeader}, names...)...)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railOrder(s, names...) }, uiTimeout); err != nil {
+		t.Fatalf("setup: the rail does not list the creation order: %v\n%s", err, term.Snapshot())
+	}
+	// The bug is in the order the daemon keeps, so the daemon keeps one from
+	// the start: the creation order, set.
+	if out, err := tuiosCLI(t, base, append([]string{"set-session-order"}, names...)...); err != nil {
+		t.Fatalf("set-session-order: %v\n%s", err, out)
+	}
+	want := func(what string, order ...string) {
+		t.Helper()
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return railOrder(s, order...) }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: %s: the rail does not list %v: %v\n%s", what, order, err, term.Snapshot())
+		}
+		wantLsOrder(t, base, what, order...)
+	}
+
+	// 1. Three presses in one burst.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatalf("ctrl+b e: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if err := term.SendKeys("\x1b[1;2B", "\x1b[1;2B", "\x1b[1;2B"); err != nil {
+		t.Fatalf("shift+down three times: %v", err)
+	}
+	want("three quick shift+down", "bravo", "charlie", "delta", "alpha")
+
+	// 2. Two drags, the second before the daemon has answered the first. The
+	// rows are read once: the first drag puts delta on the top row, so the
+	// second drags alpha, still on the bottom row, onto the row above it.
+	s := term.Screen()
+	col, _ := findOnScreen(t, term, "delta")
+	top, third, bottom := screenRowOf(s, "bravo"), screenRowOf(s, "delta"), screenRowOf(s, "alpha")
+	mouseDrag(t, term, col, third, col, top, tuitest.MouseLeft, 0)
+	mouseDrag(t, term, col, bottom, col, third, tuitest.MouseLeft, 0)
+	want("two drags, the second at once", "delta", "bravo", "alpha", "charlie")
+}
+
+// TestSessionOrderRestoredSessionDoesNotTie: a saved session that was not
+// running while the order was set again comes back after the placed sessions,
+// not on the rank it was saved with, which a live session holds now.
+//
+// alpha and bravo are ordered alpha, bravo and saved by kill-server. A daemon
+// started with --no-restore holds neither; charlie and delta are made and
+// ordered charlie, delta, so charlie holds alpha's old rank 1. tuios resurrect
+// alpha must list charlie, delta, alpha.
+//
+// Negative control: with restoredRank keeping the saved rank, alpha ties with
+// charlie and lists between charlie and delta. The run is in
+// NEGATIVE_CONTROLS.md.
+func TestSessionOrderRestoredSessionDoesNotTie(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	for _, name := range []string{"alpha", "bravo"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", name, err, out)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "set-session-order", "alpha", "bravo"); err != nil {
+		t.Fatalf("set-session-order: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	daemon := exec.Command(tuiosBin, "daemon", "--no-restore")
+	daemon.Dir = workDirIn(t, base)
+	daemon.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		daemon.Env = append(daemon.Env, key+"="+xdgDir(base, key))
+	}
+	if err := daemon.Start(); err != nil {
+		t.Fatalf("start the daemon: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = daemon.Process.Kill()
+		_ = daemon.Wait()
+	})
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		out, err := tuiosCLI(t, base, "ls")
+		if err == nil && strings.Contains(out, "No sessions") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("setup: the --no-restore daemon never answered with no sessions: %v\n%s", err, out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for _, name := range []string{"charlie", "delta"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", name, err, out)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "set-session-order", "charlie", "delta"); err != nil {
+		t.Fatalf("set-session-order: %v\n%s", err, out)
+	}
+	// resurrect takes no --no-animations, so the harness is told to keep them.
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, animations: true, args: []string{"resurrect", "alpha"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("setup: tuios resurrect alpha never attached: %v\n%s", err, term.Snapshot())
+	}
+	// The restored mark comes off when a client attaches, and resurrect
+	// attaches, so being listed again is the proof here.
+	waitForSessionInfo(t, base, "alpha")
+	wantLsOrder(t, base, "after alpha is restored", "charlie", "delta", "alpha")
 }

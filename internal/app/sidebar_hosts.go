@@ -747,8 +747,9 @@ func (m *OS) SidebarToggleHostCollapsed(host string) {
 // SidebarOrder for this machine, and the per-host order for any other.
 func (m *OS) sidebarSessionOrderFor(host string) []string {
 	// The attached machine's daemon keeps the order every client shows, and
-	// its listing is already in it. See session_order.go.
-	if host == m.attachedMachine() && m.sessionOrderFromDaemon() {
+	// its listing is already in it, except while a move of this client's is
+	// on its way there. See session_order.go.
+	if host == m.attachedMachine() && m.sessionOrderFromDaemon(host) && !m.sessionOrderPending(host) {
 		return nil
 	}
 	if host == federation.LocalHostName {
