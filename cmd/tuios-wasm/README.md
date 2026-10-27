@@ -96,7 +96,8 @@ Events come in a fixed order for one key press: `key` first, then any
 | `tiling` | `{from, to}` | tiling on (`true`) or off |
 | `layout` | `{from, to}` | the layout mode: `"bsp"`, `"master-stack"` or `"scrolling"` |
 | `theme` | `{from, to}` | the theme id, such as `"catppuccin_mocha"` |
-| `setting` | `{name, from, to}` | a look changed. `name` is `"glyphs"` (the glyph set, `"default"` for the shipped one) or `"borderStyle"` (such as `"rounded"`) |
+| `setting` | `{name, from, to}` | a look changed. `name` is `"glyphs"` (the glyph set, `"default"` for the shipped one), `"borderStyle"` (such as `"rounded"`), or the config path of one of the looks below. Values are strings, as `tuios get-config` prints them, and an enum left unset reads as its default |
+| `themeEdit` | `{changed}` | the theme editor's draft changed: `changed` is `true` once a colour differs from the saved theme, and `false` again after an undo, a save or a close |
 | `overlay.open` | `{name}` | an overlay opened. Names below |
 | `overlay.close` | `{name}` | an overlay closed |
 | `notification` | `{message, level}` | a message in the dock. `level` is `"info"`, `"success"`, `"warning"` or `"error"`. Learn mode's notes are `"info"` |
@@ -130,6 +131,26 @@ side).
 (the rail has the keyboard, `ctrl+b e`), `fileSearch` (the palette searches
 files, `ctrl+b f`), `review` (the review overlay, `ctrl+b v`) and
 `worktree` (the new worktree dialog, `ctrl+b U`).
+`themePicker`, `themeEditor`, `glyphPicker` (the settings page's glyph set
+picker, which previews each set as the cursor moves: a `setting` event for
+`glyphs` comes before the picker closes), `keybinds`, `copyMode`, `search`
+(copy mode or scrollback search), `scrollback`, `quitMenu`, `workspaceSwitcher`,
+`layoutPicker`, `sidebar`, `logs`, `screensaver`, `agents` (the agents view),
+`mail`, `presets` (the keybind preset picker), `goto` (the go-to picker),
+`hints`, `paneLabels`, `spotlight` and `scratch` (the scratch pane is up).
+
+The looks a `setting` event names by config path:
+`appearance.window_title_style`, `appearance.window_title_position`,
+`appearance.window_title_align`, `appearance.border_focused_color`,
+`appearance.border_focused_color_window`,
+`appearance.border_focused_color_terminal`,
+`appearance.border_unfocused_color`, `appearance.theme_light`,
+`appearance.frame_panels`, `appearance.popup_dim`, `appearance.modal_dim`,
+`appearance.gap`, `appearance.sidebar.row_style`,
+`appearance.sidebar.header_style`, `appearance.dock_pill_caps` and
+`appearance.dock_mode_pill`. tuios reads them again after a key, a mouse
+press, a command or a tape step, so a change shows in the event that follows
+that input.
 
 ## State
 
@@ -184,7 +205,7 @@ races a key. An unknown command or a bad argument does nothing.
 | `mode` | `"window"` or `"terminal"` | set the mode |
 | `theme` | `id` | set the theme |
 | `themeJSON` | `id`, `json` | load a theme file's JSON and set it, for a look that carries its own theme. The theme gets the id `look-<id>` in this tab only. tuios checks it as `tuios look apply` does. A theme that fails the check, such as one with a bad id, a control character or a missing base, does nothing. A `theme` event follows |
-| `set` | `path`, `value` | set an option by its `tuios set-config` path, such as `set("appearance.glyphs", "ascii")`. It changes this tab's config and nothing else. It takes the look and input options only, and every key `tuios look keys` lists. A list, such as `dock.left`, is a JSON array: `set("dock.left", '["mode","workspaces"]')`. A dock list or `appearance.sidebar.sections` with an item a look leaves out, such as `custom/clock`, does nothing. `startup.tiled` and `startup.layout` change the tiling of the tab at once. An option that runs a program, names a file or writes the clipboard does nothing. A `setting` event follows for the glyph set and the border style, and a `theme` event for the theme |
+| `set` | `path`, `value` | set an option by its `tuios set-config` path, such as `set("appearance.glyphs", "ascii")`. It changes this tab's config and nothing else. It takes the look and input options only, and every key `tuios look keys` lists. A list, such as `dock.left`, is a JSON array: `set("dock.left", '["mode","workspaces"]')`. A dock list or `appearance.sidebar.sections` with an item a look leaves out, such as `custom/clock`, does nothing. `startup.tiled` and `startup.layout` change the tiling of the tab at once. An option that runs a program, names a file or writes the clipboard does nothing. A `setting` event follows for the glyph set, the border style and the looks listed under the events, and a `theme` event for the theme |
 | `type` | `text` | type into the focused pane, as if typed |
 | `action` | `name` | run a keybinding action by name, as its key would. The page then sees the same `action` event |
 | `agent` | `state`, `message?`, `kind?` | set the focused pane's agent state, without waiting for the fake agent |
@@ -226,6 +247,10 @@ The browser build runs in Learn mode (`app.OSOptions.LearnMode`):
   approvals are held for the view, as with the tuios hooks installed, so
   `a`, `A`, `r` and `R` answer them from the view. A question is answered
   from the peek (`space`, then its number).
+  the tape manager, the rail's file actions, agent mail and host clipboard
+  paste are the ones turned off.
+- The go-to picker (`Ctrl+B G`) works. It lists the tab's one session,
+  `local`, with its workspaces, its panes and any agent.
 
 ## The fake shell
 
@@ -272,5 +297,13 @@ lesson:
   and ctrl+d or `/exit` goes back to the shell.
 - `tuios tape play demo.tape` plays a tape that opens two windows and runs
   commands in them. `tuios tape list` lists the tapes.
+- `tuios theme share NAME` prints the real share line of a shipped theme.
+- Other `tuios` commands that need a daemon or the network print what they
+  print on a real machine, under a line that says so: `ls`, `attach`, `new`,
+  `move-window`, `note set`, `note get`, `restart-server --dry-run`, `hosts`,
+  `task add`, `task ls`, `task claim`, `look list`, `list-agents`,
+  `send-agent-message`, `fan`, `worktree`, `list-verbs` and `list-hooks`.
+- `cat .config/tuios/config.toml` shows the theme, the border style, the glyph
+  set and every look above that changed in the tab.
 - `top`, `rain`, `fastfetch`, `tree`, `fortune`, `cowsay` and `colors` are
   there for fun. `neofetch` is another name for `fastfetch`. The launcher (Alt+Space) lists the full-screen ones.

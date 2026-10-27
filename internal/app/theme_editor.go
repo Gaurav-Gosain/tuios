@@ -145,6 +145,10 @@ type themeEditorState struct {
 // ThemeEditorOpen reports whether the theme editor is open.
 func (m *OS) ThemeEditorOpen() bool { return m.themeEditor.open }
 
+// ThemeEditorDirty reports whether the open editor holds a change that is not
+// saved. The Learn tour reports it, so a lesson can see a colour change.
+func (m *OS) ThemeEditorDirty() bool { return m.themeEditor.open && m.themeEditorDirty() }
+
 // ThemeEditorHidden reports whether the sheet is hidden with space.
 func (m *OS) ThemeEditorHidden() bool { return m.themeEditor.hidden }
 

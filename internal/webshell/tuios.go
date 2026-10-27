@@ -4,6 +4,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // cmdTuios is the tuios command inside the demo. The one subcommand that does
@@ -15,7 +17,7 @@ func cmdTuios(s *shell, args []string, _ string) int {
 	switch sub {
 	case "", "help", "--help", "-h":
 		intro := strings.Fields("You are already in tuios. Press " + bold + "Ctrl+B" + reset + " then " + bold + "?" + reset + " to see every key.")
-		real := []string{"tuios ls", "tuios fan", "tuios worktree", "tuios list-agents", "tuios list-verbs", "tuios list-hooks"}
+		real := []string{"tuios ls", "tuios new", "tuios hosts", "tuios task", "tuios look list", "tuios fan", "tuios worktree", "tuios list-agents", "tuios list-verbs", "tuios list-hooks"}
 		var tokens []string
 		for i, name := range real {
 			tok := green + name + reset
@@ -31,6 +33,7 @@ func cmdTuios(s *shell, args []string, _ string) int {
 				{"tuios tape play demo.tape", "watch tuios drive itself"},
 				{"tuios tape list", "the tapes here"},
 				{"tuios ship", "commit and ship a worktree's change"},
+				{"tuios theme share gilt", "a theme as one line to paste"},
 				{"tuios version", ""},
 			}, 2, green, cols)...)
 			lines = append(lines, "")
@@ -50,11 +53,30 @@ func cmdTuios(s *shell, args []string, _ string) int {
 		return tuiosTape(s, args[2:])
 	case "ship":
 		return tuiosShip(s, args[2:])
+	case "theme":
+		if argOr(args, 2, "") == "share" {
+			return tuiosThemeShare(s, args[3:])
+		}
 	}
-	if printSample(t, sub) {
+	if printSample(t, args) {
 		return 0
 	}
 	t.Print(yellow + "tuios " + sub + reset + " needs a real machine. Install tuios to try it: " + bold + "tuios.dev" + reset + "\r\n")
+	return 0
+}
+
+// tuiosThemeShare is tuios theme share: the real share line, from the theme
+// package the tour runs on. A theme saved on a real machine is not here, so
+// only the shipped themes share.
+func tuiosThemeShare(s *shell, args []string) int {
+	if len(args) != 1 {
+		return s.fail("Which theme? Try " + bold + "tuios theme share gilt" + reset)
+	}
+	line, err := theme.ShareString(args[0])
+	if err != nil {
+		return s.fail("tuios: " + err.Error())
+	}
+	s.t.Print(line + "\r\n")
 	return 0
 }
 

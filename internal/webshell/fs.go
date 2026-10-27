@@ -202,7 +202,7 @@ Sleep 300ms
 `,
 	Home + "/projects/website/style.css": `h1 { color: hotpink; }
 `,
-	ConfigPath:  configText("", "rounded", "default"),
+	ConfigPath:  configText("", "rounded", "default", nil),
 	"/etc/motd": "Be kind to your terminal.\n",
 }
 
@@ -255,10 +255,18 @@ func writeFile(p, content string, appendTo bool) bool {
 // ConfigPath is the fake tuios config file.
 const ConfigPath = Home + "/.config/tuios/config.toml"
 
+// ConfigLine is one more option for config.toml: its dotted path, such as
+// appearance.sidebar.row_style, and its value as TOML spells it, quotes and
+// all.
+type ConfigLine struct {
+	Path  string
+	Value string
+}
+
 // configText is the config file for these looks. An empty theme is tuios's
 // own colours, and "default" glyphs are the shipped set, so neither is
-// written.
-func configText(theme, border, glyphs string) string {
+// written. Each extra line goes under the table its path names.
+func configText(theme, border, glyphs string, extra []ConfigLine) string {
 	var b strings.Builder
 	b.WriteString("[appearance]\n")
 	if theme != "" {
@@ -274,19 +282,44 @@ func configText(theme, border, glyphs string) string {
 		b.WriteString(glyphs)
 		b.WriteString("\"\n")
 	}
+	// The [appearance] keys first: a TOML table's keys end where the next
+	// table starts.
+	var tables []string
+	byTable := map[string][]string{}
+	for _, l := range extra {
+		i := strings.LastIndexByte(l.Path, '.')
+		if i < 0 {
+			continue
+		}
+		table, line := l.Path[:i], l.Path[i+1:]+" = "+l.Value+"\n"
+		if table == "appearance" {
+			b.WriteString(line)
+			continue
+		}
+		if _, ok := byTable[table]; !ok {
+			tables = append(tables, table)
+		}
+		byTable[table] = append(byTable[table], line)
+	}
+	for _, t := range tables {
+		b.WriteString("\n[" + t + "]\n")
+		for _, line := range byTable[t] {
+			b.WriteString(line)
+		}
+	}
 	b.WriteString("\n[keybindings]\nleader_key = \"ctrl+b\"\n")
 	return b.String()
 }
 
 // WriteConfig rewrites the config file to match the looks the tour is
 // showing, so cat config.toml shows what the reader picked.
-func WriteConfig(theme, border, glyphs string) {
+func WriteConfig(theme, border, glyphs string, extra ...ConfigLine) {
 	if border == "" {
 		border = "rounded"
 	}
 	fsMu.Lock()
 	defer fsMu.Unlock()
-	files[ConfigPath] = configText(theme, border, glyphs)
+	files[ConfigPath] = configText(theme, border, glyphs, extra)
 }
 
 func mkdir(p string) bool {

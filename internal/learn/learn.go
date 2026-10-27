@@ -10,11 +10,13 @@
 package learn
 
 import (
+	"strconv"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
@@ -49,6 +51,7 @@ const (
 	EventPiP             = "pip"
 	EventAgentsSelect    = "agents.select"
 	EventAgentsTab       = "agents.tab"
+	EventThemeEdit       = "themeEdit"
 	EventShellStart      = webshell.EventCommandStart
 	EventShellCommand    = webshell.EventCommand
 	EventShellCwd        = webshell.EventCwd
@@ -103,6 +106,15 @@ type Model struct {
 	fleet *fleet
 	// verbs are the daemon verbs the tour fakes. See callVerb.
 	verbs map[string]verbFunc
+	// looksDue says the Update that just ran could have changed a look, so
+	// report reads lookPaths again. A look changes only by a key, the mouse,
+	// a command from the page or a tape. Reading them walks the config by
+	// reflection, about 10 µs a path natively, which is too much for every
+	// Update: the fake shell's output and each animation frame are Updates.
+	looksDue bool
+	// startLooks is the looks the tour started with. config.toml shows a look
+	// once it differs.
+	startLooks looks
 }
 
 // New wraps o for the tour. emit receives every event; it may be called from
@@ -135,9 +147,11 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	o.SetLearnSpawnInfo(spawnInfo)
 	webshell.SetEventSink(m.fromGuest)
 	m.last = take(o)
+	m.last.Looks = readLooks(o.UserConfig)
 	m.rest = m.last
 	m.theme = m.last.Theme
-	writeConfig(m.last)
+	m.startLooks = m.last.Looks
+	m.writeConfig(m.last)
 	return m
 }
 
@@ -211,6 +225,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.emit(Event{Type: EventKey, Data: map[string]any{"key": k.String(), "mode": mode}})
 	}
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.PasteMsg, CommandMsg:
+		m.looksDue = true
+	}
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case CommandMsg:
@@ -245,10 +263,16 @@ func (m *Model) report() {
 	now := take(m.OS)
 	m.mu.Lock()
 	prev := m.last
+	if m.looksDue || now.Tape || prev.Tape {
+		now.Looks = readLooks(m.OS.UserConfig)
+		m.looksDue = false
+	} else {
+		now.Looks = prev.Looks
+	}
 	m.last = now
 	m.mu.Unlock()
-	if prev.Theme != now.Theme || prev.Border != now.Border || prev.Glyphs != now.Glyphs {
-		writeConfig(now)
+	if prev.Theme != now.Theme || prev.Border != now.Border || prev.Glyphs != now.Glyphs || prev.Looks != now.Looks {
+		m.writeConfig(now)
 	}
 	events := diff(prev, now)
 	// A move is reported once it has settled, not once per animation frame.
@@ -271,9 +295,26 @@ func (m *Model) report() {
 
 // writeConfig keeps the fake shell's config.toml in step with the looks on
 // screen. The real app writes nothing in Learn mode, so without this the file
-// would show the defaults after the reader changed them.
-func writeConfig(s Snapshot) {
-	webshell.WriteConfig(s.Theme, s.Border, s.Glyphs)
+// would show the defaults after the reader changed them. A look in lookPaths
+// is written once it differs from the one the tour started with.
+func (m *Model) writeConfig(s Snapshot) {
+	var lines []webshell.ConfigLine
+	for i, path := range lookPaths {
+		if s.Looks[i] == m.startLooks[i] {
+			continue
+		}
+		lines = append(lines, webshell.ConfigLine{Path: path, Value: tomlValue(path, s.Looks[i])})
+	}
+	webshell.WriteConfig(s.Theme, s.Border, s.Glyphs, lines...)
+}
+
+// tomlValue is v as config.toml spells the option at path: a bool or an int
+// bare, anything else quoted.
+func tomlValue(path, v string) string {
+	if opt, ok := config.LookupOption(path); ok && (opt.Type == config.OptionBool || opt.Type == config.OptionInt) && v != "" {
+		return v
+	}
+	return strconv.Quote(v)
 }
 
 // Filter is the program's event filter: Learn mode's quit guard, then the

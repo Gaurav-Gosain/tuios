@@ -46,14 +46,65 @@ const (
 	OverlayFileSearch        = "fileSearch"
 	OverlayReview            = "review"
 	OverlayWorktree          = "worktree"
+	OverlayThemeEditor       = "themeEditor"
+	OverlayGlyphPicker       = "glyphPicker"
 )
 
 // Setting names in the setting event: the looks the settings page changes
-// that a lesson checks.
+// that a lesson checks. The looks in lookPaths are named by their config path.
 const (
 	SettingGlyphs      = "glyphs"
 	SettingBorderStyle = "borderStyle"
 )
+
+// lookPaths are the config options a lesson can check for a change, beyond
+// the glyph set and the border style: the looks the settings page and a look
+// change. Each one is a setting event named by its path when its value moves.
+// Reading one walks the config by reflection, so the list stays short and is
+// read only after input (see Model.looksDue).
+var lookPaths = [...]string{
+	"appearance.window_title_style",
+	"appearance.window_title_position",
+	"appearance.window_title_align",
+	"appearance.border_focused_color",
+	"appearance.border_focused_color_window",
+	"appearance.border_focused_color_terminal",
+	"appearance.border_unfocused_color",
+	"appearance.theme_light",
+	"appearance.frame_panels",
+	"appearance.popup_dim",
+	"appearance.modal_dim",
+	"appearance.gap",
+	"appearance.sidebar.row_style",
+	"appearance.sidebar.header_style",
+	"appearance.dock_pill_caps",
+	"appearance.dock_mode_pill",
+}
+
+// looks holds the value of each of lookPaths, in that order. An array, so a
+// snapshot still compares and copies as a value.
+type looks [len(lookPaths)]string
+
+// readLooks reads lookPaths from the config, each as the value in force: an
+// enum left empty reads as its default, as the settings page shows it.
+func readLooks(cfg *config.UserConfig) looks {
+	var out looks
+	if cfg == nil {
+		return out
+	}
+	for i, path := range lookPaths {
+		opt, _ := config.LookupOption(path)
+		v, _ := config.GetOptionValue(cfg, path)
+		if v == "" && len(opt.Accepted) > 0 {
+			v = opt.Default
+			if v == "" {
+				v = opt.Accepted[0]
+			}
+		}
+		out[i] = v
+	}
+	return out
+}
 
 // keysSnap is the keymap in use: the preset, the leader and lock mode.
 type keysSnap struct {
@@ -143,6 +194,11 @@ type Snapshot struct {
 	Agents agentsSnap
 	Files  filesSnap
 	Review reviewSnap // zero while the review is closed
+	// Looks is the value of each of lookPaths. take leaves it empty: the
+	// Model fills it, after input only. See Model.looksDue.
+	Looks looks
+	// ThemeEdited is true while the theme editor holds a change not saved.
+	ThemeEdited bool
 	// Moving is true while an animation is running, when window rects are
 	// still on their way. Moves are reported once it is false again.
 	Moving bool
@@ -233,6 +289,9 @@ func take(o *app.OS) Snapshot {
 		s.Review = reviewSnap{File: file, Hunk: hunk}
 	}
 	s.Files.Dir, s.Files.Cursor = o.LearnFiles()
+	ov[OverlayThemeEditor] = o.ThemeEditorOpen()
+	ov[OverlayGlyphPicker] = o.ShowGlyphPicker
+	s.ThemeEdited = o.ThemeEditorDirty()
 	if b, ok := o.ScrollbackBrowser.(*scrollback.Browser); ok && o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
@@ -423,6 +482,14 @@ func diff(prev, now Snapshot) []Event {
 	}
 	if prev.Border != now.Border {
 		add(EventSetting, "", map[string]any{"name": SettingBorderStyle, "from": prev.Border, "to": now.Border})
+	}
+	for i, path := range lookPaths {
+		if prev.Looks[i] != now.Looks[i] {
+			add(EventSetting, "", map[string]any{"name": path, "from": prev.Looks[i], "to": now.Looks[i]})
+		}
+	}
+	if prev.ThemeEdited != now.ThemeEdited {
+		add(EventThemeEdit, "", map[string]any{"changed": now.ThemeEdited})
 	}
 	if prev.Keys != now.Keys {
 		add(EventKeys, "", map[string]any{"from": prev.Keys.toMap(), "to": now.Keys.toMap()})
