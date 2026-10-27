@@ -61,6 +61,10 @@ type tmlClient struct {
 	// shownDirty says a surface on the screen changed since the wake
 	// began. UI goroutine only.
 	shownDirty bool
+	// local answers the TML verbs in a session with no daemon: Learn mode,
+	// whose host keeps the surfaces in the tab. See learn_tml.go. Set once,
+	// before the program runs.
+	local inboxVerbCall
 }
 
 // TMLClockMsg is the minute tick of the surfaces that call ago().
@@ -516,11 +520,21 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 }
 
 // DrawsTML reports whether this client draws w as a TML surface: a window of
-// kind tml, on a client of this machine's daemon. A client attached through
-// a host shows the window's placeholder line, since what the person does on
-// a surface goes back through this machine's socket.
+// kind tml, on a client of this machine's daemon or in Learn mode, where the
+// tab holds the surfaces. A client attached through a host shows the
+// window's placeholder line, since what the person does on a surface goes
+// back through this machine's socket.
 func (m *OS) DrawsTML(w *terminal.Window) bool {
-	return w != nil && w.Kind == session.WindowKindTML && m.DaemonClient != nil && m.DaemonClient.DrawsTML()
+	return w != nil && w.Kind == session.WindowKindTML && (m.tml.local != nil || m.DaemonClient != nil && m.DaemonClient.DrawsTML())
+}
+
+// tmlCaller is how the client half reaches the half that holds the
+// surfaces: Learn mode's host when there is one, else the daemon.
+func (m *OS) tmlCaller() inboxVerbCall {
+	if m.tml.local != nil {
+		return m.tml.local
+	}
+	return m.inboxCaller()
 }
 
 // pruneTMLViews forgets the views of surfaces no window of state shows: the
@@ -547,7 +561,7 @@ func (m *OS) pruneTMLViews(state *session.SessionState) {
 // tmlRefresh reads a surface whole with tml-get and applies it as a push, for
 // a client that missed a version. Its answer comes back through the wake.
 func (m *OS) tmlRefresh(id string) tea.Cmd {
-	call := m.inboxCaller()
+	call := m.tmlCaller()
 	return func() tea.Msg {
 		raw, err := call("tml-get", map[string]any{"surface": id}, tmlInputTimeout)
 		if err != nil {
@@ -1086,7 +1100,7 @@ type TMLActionFailedMsg struct{ Text string }
 // tmlInput sends what the person did to the daemon, off the UI goroutine:
 // the state, the emits for the owner, the pane() actions, and a close.
 func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
-	call, nonce := m.inboxCaller(), m.inboxNonce()
+	call, nonce := m.tmlCaller(), m.inboxNonce()
 	params := map[string]any{"surface": v.id, "human_nonce": nonce}
 	if len(r.ops) > 0 {
 		params["ops"] = r.ops
