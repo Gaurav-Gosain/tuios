@@ -168,6 +168,11 @@ func TestIcatStyleStreamReachesHost(t *testing.T) {
 
 // TestKittenIcatDrawsInAPane runs the real kitten icat, when it is installed,
 // in its default file mode and in stream mode.
+//
+// It also asks icat which medium it would pick. Where a shared memory object
+// has no path (macOS), tuios cannot read one and can only hand its name on, so
+// it must not offer shared memory: it did, icat picked it, and a host that does
+// not read files on this machine drew nothing (#1236).
 func TestKittenIcatDrawsInAPane(t *testing.T) {
 	kitten, err := exec.LookPath("kitten")
 	if err != nil {
@@ -199,6 +204,13 @@ func TestKittenIcatDrawsInAPane(t *testing.T) {
 					lens[i] = len(d)
 				}
 				t.Errorf("stream mode: host received transmissions of %v bytes, want one of the %d-byte PNG", lens, len(img))
+			}
+
+			// Asked last, with a marker of its own, so it cannot change what
+			// the checks above read.
+			runTagged(t, term, "medium", kitten+" icat --detect-support 2>&1 | tr a-z A-Z | sed 's/^/MEDIUM-/'")
+			if _, err := os.Stat("/dev/shm"); err != nil && strings.Contains(term.Snapshot(), "MEDIUM-MEMORY") {
+				t.Errorf("tuios offered shared memory on a machine where it cannot read it:\n%s", term.Snapshot())
 			}
 		})
 	}

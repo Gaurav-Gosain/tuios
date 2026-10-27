@@ -255,9 +255,17 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 
 	ok := true
 	errMsg := ""
-	if cmd.Medium.IsFile() && !kp.hostReadsFiles() {
+	switch {
+	case cmd.Medium.IsFile() && !kp.hostReadsFiles():
 		ok = false
 		errMsg = "ENOTSUPPORTED:host terminal cannot read files from this machine"
+	case cmd.Medium == vt.KittyMediumSharedMemory && !kittyShmHasPath():
+		// tuios cannot read a shared memory object that has no path (macOS),
+		// so the frame depends on the host reading it. The daemon refuses
+		// this medium there for the same reason; see kittyQueryResponse in
+		// internal/session. A temporary file works on every path.
+		ok = false
+		errMsg = "ENOTSUPPORTED:shared memory is not supported here"
 	}
 
 	// Quiet mode: q=1 suppresses successes, q=2 suppresses everything. An

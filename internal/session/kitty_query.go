@@ -1,6 +1,10 @@
 package session
 
-import "tuios.dev/vt"
+import (
+	"os"
+
+	"tuios.dev/vt"
+)
 
 // kittyFileMediumRefusal is the answer to a guest asking whether it may send a
 // kitty image as a path (t=f, t=t or t=s) when that path would be read on a
@@ -43,6 +47,14 @@ const kittyFileMediumRefusal = "ENOTSUPPORTED:the path would be read on another 
 //     the session from another machine, where the path names nothing, or
 //     names some other file.
 //
+// A shared memory object (t=s) is refused as well on a machine where it has no
+// path, which is macOS: there it is opened by name with shm_open, and Go
+// reaches that only through cgo. tuios can then only hand the name to the
+// host terminal, and a client whose host does not read files on this machine
+// drops the frame. The daemon cannot tell which clients those are, so it never
+// offers the medium there. kitten icat then uses a temporary file, which every
+// client can read or forward.
+//
 // kitten icat is the guest this is written for. It probes direct, temporary
 // file and shared memory transmission at once and uses the best medium that
 // comes back OK, so an honest refusal costs it nothing but a copy through the
@@ -56,14 +68,30 @@ func (s *Session) kittyQueryResponse(cmd *vt.KittyCommand, remotePane bool) []by
 	}
 	ok := true
 	msg := ""
-	if cmd.Medium.IsFile() && (remotePane || s.linkedViewer.Load()) {
+	switch {
+	case cmd.Medium.IsFile() && (remotePane || s.linkedViewer.Load()):
 		ok = false
 		msg = kittyFileMediumRefusal
+	case cmd.Medium == vt.KittyMediumSharedMemory && !kittySharedMemoryHasPath():
+		ok = false
+		msg = kittySharedMemoryRefusal
 	}
 	if cmd.Quiet >= 2 || (cmd.Quiet >= 1 && ok) {
 		return nil
 	}
 	return vt.BuildKittyResponse(ok, cmd.ImageID, msg)
+}
+
+// kittySharedMemoryRefusal is the answer to a t=s query on a machine where a
+// shared memory object has no path. See kittyQueryResponse.
+const kittySharedMemoryRefusal = "ENOTSUPPORTED:shared memory is not supported here"
+
+// kittySharedMemoryHasPath reports whether a shared memory object on this
+// machine is a file under /dev/shm, as on Linux. It is a variable so a test can
+// pin the answer on any platform.
+var kittySharedMemoryHasPath = func() bool {
+	info, err := os.Stat("/dev/shm")
+	return err == nil && info.IsDir()
 }
 
 // SetLinkedViewer records whether a client attached over a link, from another

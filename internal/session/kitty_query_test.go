@@ -12,7 +12,9 @@ import (
 //
 // The rule it holds: direct transmission is always OK, and a medium that sends
 // a path is OK only when the path will be read on the machine it names a file
-// on. Anything else is refused so the guest streams the bytes instead.
+// on. Anything else is refused so the guest streams the bytes instead. Shared
+// memory is refused as well where it has no path (macOS), because tuios cannot
+// read it there and a client whose host does not read files drops it (#1236).
 func TestKittyQueryResponse(t *testing.T) {
 	probes := []struct {
 		name string
@@ -26,21 +28,27 @@ func TestKittyQueryResponse(t *testing.T) {
 	refused := func(id string) string {
 		return "\x1b_Gi=" + id + ";" + kittyFileMediumRefusal + "\x1b\\"
 	}
+	noShm := "\x1b_Gi=3;" + kittySharedMemoryRefusal + "\x1b\\"
 	ok := func(id string) string { return "\x1b_Gi=" + id + ";OK\x1b\\" }
 
 	tests := []struct {
 		name         string
 		remotePane   bool
 		linkedViewer bool
+		noShmPath    bool
 		want         []string // per probe, in order
 	}{
-		{"local pane, local clients", false, false, []string{ok("1"), ok("2"), ok("3"), ok("4")}},
-		{"pane on another machine", true, false, []string{ok("1"), refused("2"), refused("3"), refused("4")}},
-		{"client on another machine", false, true, []string{ok("1"), refused("2"), refused("3"), refused("4")}},
-		{"both", true, true, []string{ok("1"), refused("2"), refused("3"), refused("4")}},
+		{"local pane, local clients", false, false, false, []string{ok("1"), ok("2"), ok("3"), ok("4")}},
+		{"pane on another machine", true, false, false, []string{ok("1"), refused("2"), refused("3"), refused("4")}},
+		{"client on another machine", false, true, false, []string{ok("1"), refused("2"), refused("3"), refused("4")}},
+		{"both", true, true, false, []string{ok("1"), refused("2"), refused("3"), refused("4")}},
+		{"local pane, no /dev/shm", false, false, true, []string{ok("1"), ok("2"), noShm, ok("4")}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			saved := kittySharedMemoryHasPath
+			t.Cleanup(func() { kittySharedMemoryHasPath = saved })
+			kittySharedMemoryHasPath = func() bool { return !tt.noShmPath }
 			s := &Session{}
 			s.SetKittyAdvertised(true)
 			s.SetLinkedViewer(tt.linkedViewer)
