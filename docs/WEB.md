@@ -117,9 +117,9 @@ a long press keep their meaning: click, scroll and right click.
 - The drag moves the strip in steps of `appearance.niri_scroll_cells`, the
   same steps as `Alt` with the wheel.
 - `appearance.niri_scroll_snap = true` lines the strip up on the nearest
-  column when the finger lifts. See
+  column when the finger lifts, and not before. See
   [LAYOUT_MODES.md](LAYOUT_MODES.md#scrolling-layout).
-- In another layout, the drag reaches the pane as a sideways wheel with `Alt`.
+- In another layout, the drag does nothing. It does not reach the pane.
 
 ## Open the agents view from a notification
 

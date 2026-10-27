@@ -10202,3 +10202,11 @@ false outright.
 | `SnapStrip` does nothing (`if true \|\| ...`) | "one step did not snap back to the first column" | **caught** |
 | tuios-web without the page script (`installStripTouch` not called) | the browser test: "a drag to the left sends steps", received 0 | **caught** |
 
+### Review of #1193: the finger's drag
+
+`TestStripTouchSnapsWhenTheFingerLifts` sends ten finger steps (Ctrl and Alt with a sideways wheel, as `strip_touch.js` writes them) with `niri_scroll_snap` on: after a 600 ms rest the strip must not have snapped, and the lift (Ctrl, Alt and Shift) must line it up on BRAVO. `TestStripTouchStepReachesNoPaneOffTheStrip` runs `cat -v` with the mouse on in a BSP pane: a finger's step and lift must not reach it, and a plain Alt sideways wheel must. `clienttests/strip-touch.spec.mjs` checks that a drag to the left sends steps to the right and ends with the lift, and that a tap still down when a quick swipe's long press would have fired reaches sip's worker as a press of button 1, not 2. Run on 2026-10-27 on macOS, based on origin/main at 859cef306.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The PR before these fixes (5747d0828) | "the strip snapped while the finger rested"; "a finger's step reached the pane off the strip" | **caught** |
+| The `pointercancel` the page sends sip as it takes the drag | "the tap is a press of button 1": received [2], the right click of the review | **caught** |

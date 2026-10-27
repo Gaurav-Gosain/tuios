@@ -51,6 +51,34 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// tuios-web's touch layer (cmd/tuios-web/strip_touch.js) writes a
+	// finger's sideways drag as Ctrl+Alt with a sideways wheel, one report
+	// per niri_scroll_cells, and the lift as Ctrl+Alt+Shift. In the scrolling
+	// layout they move the strip and snap it, and anywhere else they reach
+	// nothing: the page cannot tell which layout is up, and a pane that takes
+	// the mouse must not get a drag that was meant for the strip.
+	if wheelIsHorizontal(msg.Button) {
+		if mod := msg.Mouse().Mod; mod&(tea.ModCtrl|tea.ModAlt) == tea.ModCtrl|tea.ModAlt {
+			if !o.AutoTiling || !o.UseScrollingLayout {
+				return o, nil
+			}
+			if mod&tea.ModShift != 0 {
+				o.SnapStripNow()
+				return o, nil
+			}
+			dir := 1
+			if o.Settings.NiriReverseScroll {
+				dir = -1
+			}
+			if msg.Button == tea.MouseWheelLeft {
+				dir = -dir
+			}
+			o.ScrollingScrollViewport(dir)
+			o.CancelStripSnap()
+			return o, nil
+		}
+	}
+
 	// A docked session is an ordinary pane: send a tracked wheel to its app,
 	// otherwise scroll its own history rather than the rail's old list model.
 	if wm := msg.Mouse(); !o.OverlayActive() {
