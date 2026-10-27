@@ -823,7 +823,10 @@ func TestHintsAllPanesLabelOnlyWhatShows(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		labels = map[string]bool{}
 		cols, rows := s.Size()
-		for r := range rows {
+		// The last row is the dock. Its key help draws "label" and
+		// "shift+label" in bold on a ground, which reads as labels here once
+		// no message covers it.
+		for r := range rows - 1 {
 			for c := range cols {
 				if l := hintLabelAt(s, c, r); l != "" && (c == 0 || !isHintLabelCell(s.Cell(c-1, r))) {
 					labels[l] = true
