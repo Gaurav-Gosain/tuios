@@ -1334,6 +1334,26 @@ all panes of every daemon that the app starts.
   item. `tuios daemon-app uninstall` removes the app and the login item. The
   entry in System Settings can stay.
 
+### If Local Network never turns on
+
+Sometimes macOS keeps an old decision for the app and does not ask again. This
+can occur after you used another app that started the daemon. Then panes still
+get `No route to host`. Reset the permissions of the app, so that macOS asks
+again. Run these commands in a terminal outside tuios:
+
+```bash
+tccutil reset All "$(osascript -e 'id of app "TUIOS Daemon"')"
+tuios kill-server && tuios
+```
+
+Click Allow on each question. If macOS does not ask about the local network,
+look in System Settings > Privacy & Security > Local Network. If that does not
+help, restart the Mac. `tccutil` can only reset a permission. It cannot give one.
+
+- `tccutil list` does not show the local network permission. To check it,
+  connect to a device on your local network from a pane.
+- The Local Network list can show the app as `tuios`, not as TUIOS Daemon.
+
 ## Limitations
 
 - **Screen contents and scrollback survive a daemon restart only as saved
