@@ -86,7 +86,7 @@ install_windows() {
         exit 1
     fi
 
-    LOCAL_APPDATA=$(powershell.exe -NoProfile -NonInteractive -Command "[Environment]::GetFolderPath('LocalApplicationData')" | tr -d '\r')
+    LOCAL_APPDATA=$(powershell.exe -NoProfile -NonInteractive -Command "[Environment]::GetFolderPath('LocalApplicationData')" < /dev/null | tr -d '\r')
     WIN_DIR="${LOCAL_APPDATA}\\Programs\\tuios"
     if command -v wslpath &> /dev/null; then
         INSTALL_DIR=$(wslpath -u "$WIN_DIR")
@@ -113,7 +113,7 @@ install_windows() {
             [Environment]::SetEnvironmentVariable("TUIOS_INSTALL", $null, "User")
             "added"
         }'
-    ADDED=$(powershell.exe -NoProfile -NonInteractive -Command "\$dir = '${WIN_DIR//\'/\'\'}'; $PS_SCRIPT" | tr -d '\r')
+    ADDED=$(powershell.exe -NoProfile -NonInteractive -Command "\$dir = '${WIN_DIR//\'/\'\'}'; $PS_SCRIPT" < /dev/null | tr -d '\r')
     if [ "$ADDED" = "added" ]; then
         print_success "Added $WIN_DIR to your user PATH"
         print_info "Open a new terminal for the PATH change to take effect"
@@ -121,7 +121,7 @@ install_windows() {
 
     print_success "Installation complete!"
     echo ""
-    "$INSTALL_DIR/$BINARY_NAME.exe" --version
+    "$INSTALL_DIR/$BINARY_NAME.exe" --version < /dev/null
 }
 
 # Get latest release version from GitHub API
