@@ -40,7 +40,11 @@ func (d *Daemon) RunAdopted(fd int) error {
 	stopWatch()
 	if err != nil {
 		LogError("Live upgrade: adopting the panes failed: %v", err)
-		fb.reexec(err)
+		if !fb.reexec(err) {
+			// The watchdog's fallback is under way, and it execs or ends
+			// the process itself.
+			select {}
+		}
 		return fmt.Errorf("live upgrade: adopting the panes: %w", err)
 	}
 	<-d.ctx.Done()

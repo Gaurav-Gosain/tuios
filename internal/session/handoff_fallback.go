@@ -87,39 +87,48 @@ func (f *adoptFallback) disarm() bool {
 func (f *adoptFallback) watch(d time.Duration) (stop func()) {
 	t := time.AfterFunc(d, func() {
 		LogError("Live upgrade: adopting the panes took longer than %s", d)
-		f.reexec(errors.New("the adoption watchdog fired"))
+		if f.reexec(errors.New("the adoption watchdog fired")) {
+			// The adoption is still stuck, and can no longer pass the point
+			// of no return. Ending here hangs the panes up, rather than
+			// leaving a daemon that holds them and serves nothing.
+			os.Exit(1)
+		}
 	})
 	return func() { t.Stop() }
 }
 
 // reexec execs the previous binary to adopt the panes. It returns only when
-// that cannot be done, with every descriptor where it was.
-func (f *adoptFallback) reexec(why error) {
+// that cannot be done, with every descriptor where it was, and reports
+// whether it took the adoption over: false when the adoption was disarmed or
+// another reexec ran first. Once it has, the adoption never completes, and
+// the caller ends the process.
+func (f *adoptFallback) reexec(why error) bool {
 	f.mu.Lock()
 	if f.state != 0 {
 		f.mu.Unlock()
-		return
+		return false
 	}
 	f.state = 2
 	path, fds := f.path, f.fds
 	f.mu.Unlock()
 	if path == "" {
 		LogError("Live upgrade: no fallback, the manifest was not read (%v). The panes end with this process", why)
-		return
+		return true
 	}
 	if os.Getenv(handoffFallbackEnv) != "" {
 		LogError("Live upgrade: the fallback image could not adopt the panes either (%v). They end with this process", why)
-		return
+		return true
 	}
 	if err := rewindDescriptor(f.manifestFD); err != nil {
 		LogError("Live upgrade: rewinding the manifest for the fallback: %v", err)
-		return
+		return true
 	}
 	argv := append([]string{path}, os.Args[1:]...)
 	env := append(withoutEnv(os.Environ(), handoffFallbackEnv), handoffFallbackEnv+"=1")
 	LogError("Live upgrade: falling back to %s (%v)", path, why)
 	err := execHandoff(path, argv, env, fds, nil)
 	LogError("Live upgrade: the fallback exec of %s failed: %v. The panes end with this process", path, err)
+	return true
 }
 
 // withoutEnv is env without key.
