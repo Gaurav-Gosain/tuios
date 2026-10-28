@@ -64,11 +64,43 @@ func Theme(pal overlay.Palette, ansi [16]color.Color, bg, fg color.Color) *sketc
 		Critical:   mark(red),
 		Radius:     6,
 	}
+	t.FgOnLight, t.FgOnDark = onFills(bg, text)
 	series := []color.Color{red, overlay.MixColors(red, yellow, 0.5), yellow, green, cyan, blue, magenta, overlay.MixColors(magenta, red, 0.4)}
 	for i, c := range series {
 		t.Series[i] = mark(c)
 	}
 	return t
+}
+
+// fillFlip is the grey where pele switches from dark to light text on a fill
+// the diagram sets itself: #1f1f1f and white have the same contrast with it.
+var fillFlip = color.NRGBA{0x7e, 0x7e, 0x7e, 0xff}
+
+// fillFloor is the contrast #1f1f1f and white have with fillFlip, the least
+// that pele's own text colours give on any fill.
+const fillFloor = 4.0
+
+// onFills is the text on fills a diagram sets itself, in the palette's own
+// colours: the darker of bg and fg on a light fill, the lighter on a dark one.
+// Each moves toward black or white until it reaches fillFloor against
+// fillFlip, so it reads on every fill that pele gives it.
+func onFills(bg, fg color.Color) (onLight, onDark color.Color) {
+	dark, light := bg, fg
+	if overlay.ContrastRatio(bg, color.Black) > overlay.ContrastRatio(fg, color.Black) {
+		dark, light = fg, bg
+	}
+	return toward(dark, color.Black), toward(light, color.White)
+}
+
+// toward moves c toward end, black for text on light fills and white for
+// text on dark ones, until it reaches fillFloor against fillFlip.
+func toward(c, end color.Color) color.Color {
+	for t := 0.0; t < 1; t += 0.05 {
+		if k := overlay.MixColors(c, end, t); overlay.ContrastRatio(k, fillFlip) >= fillFloor {
+			return k
+		}
+	}
+	return end
 }
 
 // readableOn moves c toward white or black, whichever reads better on the
