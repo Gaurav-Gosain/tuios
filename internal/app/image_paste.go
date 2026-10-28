@@ -184,9 +184,12 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 		msg := imageProbeMsg{window: window, mode: mode}
 		// The paste key's text paste waits behind this ask, so the key gives
 		// it a short bound. Past it the text is pasted, and the key does not
-		// ask again.
+		// ask again. An empty paste has nothing waiting behind it, so it takes
+		// the full bound: a clipboard tool run for the first time can take
+		// longer than the key's bound to start, and a timeout here turns the
+		// ask off for every later empty paste.
 		limit := imageClipTypesTimeout
-		if mode != imagePasteAction {
+		if mode == imagePasteKey {
 			limit = imageClipKeyTimeout
 		}
 		// On macOS the type ask is osascript, whose start alone takes longer

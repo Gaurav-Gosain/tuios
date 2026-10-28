@@ -33,12 +33,24 @@ func fakeImage() []byte {
 // that puts it in front of the client.
 func fakeClipboardEnv(t *testing.T, img []byte) []string {
 	t.Helper()
+	return slowClipboardEnv(t, img, "")
+}
+
+// slowClipboardEnv is fakeClipboardEnv with a stand-in that waits delay
+// seconds before it lists the types, like a clipboard tool slow to start. An
+// empty delay answers at once.
+func slowClipboardEnv(t *testing.T, img []byte, delay string) []string {
+	t.Helper()
 	dir := t.TempDir()
 	imgPath := filepath.Join(dir, "clip.png")
 	if err := os.WriteFile(imgPath, img, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\ncase \"$*\" in\n  *--list-types*) printf 'image/png\\n' ;;\n  *) cat '" + imgPath + "' ;;\nesac\n"
+	list := "printf 'image/png\\n'"
+	if delay != "" {
+		list = "sleep " + delay + "; " + list
+	}
+	script := "#!/bin/sh\ncase \"$*\" in\n  *--list-types*) " + list + " ;;\n  *) cat '" + imgPath + "' ;;\nesac\n"
 	if err := os.WriteFile(filepath.Join(dir, "wl-paste"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -162,6 +174,37 @@ func TestAnImagePastedIntoALocalPaneIsAFileHere(t *testing.T) {
 	}
 	// The paste_image action, on its default key.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
+		t.Fatal(err)
+	}
+	checkPasted(t, term, img, base, "")
+}
+
+// TestAnEmptyPasteWaitsForASlowClipboardTool sends the empty bracketed paste a
+// terminal sends for an image, with a clipboard tool that takes 0.6 s to list
+// the types: about what a tool run for the first time takes on macOS. Nothing
+// waits behind an empty paste, so the ask gets the full bound, and the image
+// is pasted.
+//
+// Negative control: the empty paste given the paste key's 0.3 s bound. The
+// ask then times out and nothing is pasted.
+func TestAnEmptyPasteWaitsForASlowClipboardTool(t *testing.T) {
+	base := t.TempDir()
+	img := fakeImage()
+	env := slowClipboardEnv(t, img, "0.6")
+
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
+	waitBoot(t, term)
+	if out, err := tuiosCLIEnv(t, base, env, "new-window", "near", "-s", "home"); err != nil {
+		t.Fatalf("create a window: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("near", uiTimeout); err != nil {
+		t.Fatalf("the window never appeared: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	if err := term.SendKeys("wc -c "); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys("\x1b[200~\x1b[201~"); err != nil {
 		t.Fatal(err)
 	}
 	checkPasted(t, term, img, base, "")
