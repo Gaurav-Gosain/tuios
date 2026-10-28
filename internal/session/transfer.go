@@ -1024,6 +1024,13 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 			return classify(err)
 		}
 		for _, r := range res {
+			if r.code == ErrVerbBusy {
+				// The far machine takes no more new files for now
+				// (files_max_entries). The job waits and goes on; the
+				// files that landed are the same next time and are not
+				// sent again.
+				return &transferError{code: r.code, msg: r.msg, retry: true}
+			}
 			if r.code == ErrVerbHashMismatch {
 				// Once more by itself, which reads it again on both sides.
 				for _, t := range small {

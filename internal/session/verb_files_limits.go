@@ -1,11 +1,15 @@
 package session
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // How much a linked machine may write here.
@@ -23,6 +27,11 @@ import (
 //   - Every other write must leave files_min_free on its disk.
 //   - A linked machine has at most linkWriteStreamsMax write streams and
 //     linkPartsMax part files open here at once.
+//   - A linked machine makes at most files_max_entries new files and folders
+//     in config.FilesEntryWindow. The reserve counts bytes, and an empty file
+//     costs none, so without this a machine could use up the disk's inodes
+//     while the reserve holds. A new part is a new file, so a write that
+//     starts one is charged; a folder is charged for each level it makes.
 
 const (
 	// linkWriteStreamsMax bounds the open-file-stream writes one linked
@@ -44,6 +53,90 @@ type linkFileUsage struct {
 	// fsClaimed is the same for each other filesystem, by fsKey: the free
 	// space a disk reports does not yet count the writes that are open on it.
 	fsClaimed map[string]int64
+	// entries is the new files and folders each machine made here lately,
+	// by peer name, for files_max_entries.
+	entries map[string]*entryUse
+}
+
+// entryUse is a machine's count of new files and folders. used goes down
+// evenly, by the bound in each config.FilesEntryWindow, from at.
+type entryUse struct {
+	used float64
+	at   time.Time
+}
+
+// takeEntries charges n new entries to peer, under limit per window. It
+// reports false, and charges nothing, when they do not fit. u.mu is held.
+func (u *linkFileUsage) takeEntries(peer string, n int, limit int64, now time.Time) bool {
+	if limit <= 0 || n <= 0 {
+		return true
+	}
+	if u.entries == nil {
+		u.entries = map[string]*entryUse{}
+	}
+	e := u.entries[peer]
+	if e == nil {
+		e = &entryUse{at: now}
+		u.entries[peer] = e
+	}
+	back := now.Sub(e.at).Seconds() * float64(limit) / config.FilesEntryWindow.Seconds()
+	e.used, e.at = max(e.used-back, 0), now
+	if e.used+float64(n) > float64(limit) {
+		return false
+	}
+	e.used += float64(n)
+	return true
+}
+
+// tooManyEntries is the refusal of a file or folder past files_max_entries.
+// It is busy, so a copy waits and tries again.
+func tooManyEntries(policy config.LinkPolicy) *verbError {
+	return hintedVerbError(ErrVerbBusy, peerName(policy.Peer)+" made too many new files and folders on this machine. It may make "+strconv.FormatInt(policy.FilesMaxEntries, 10)+" in ten minutes (files_max_entries). Nothing was written.", &VerbHint{
+		Detail: "Wait a few minutes, then try again. To allow more, raise files_max_entries in the config on this machine.",
+	})
+}
+
+// claimLinkDirs charges the folders a MkdirAll of dir in fsys would make for
+// cs against files_max_entries. A call that did not come over a link passes.
+func (d *Daemon) claimLinkDirs(cs *connState, fsys fileFS, dir string) *verbError {
+	if cs == nil || !cs.viaLink {
+		return nil
+	}
+	return d.claimLinkEntries(cs, missingDirs(fsys, dir))
+}
+
+// claimLinkEntries charges n new files or folders that cs makes here against
+// files_max_entries. A call that did not come over a link passes.
+func (d *Daemon) claimLinkEntries(cs *connState, n int) *verbError {
+	if cs == nil || !cs.viaLink || n <= 0 {
+		return nil
+	}
+	peer := linkPeerKey(cs)
+	policy := d.linkPolicy(cs)
+	u := &d.linkFiles
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if !u.takeEntries(peer, n, policy.FilesMaxEntries, time.Now()) {
+		return tooManyEntries(policy)
+	}
+	return nil
+}
+
+// missingDirs is how many folders a MkdirAll of dir would make: the levels
+// from dir up to the first one that is there.
+func missingDirs(fsys fileFS, dir string) int {
+	n := 0
+	for {
+		if _, err := fsys.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+			return n
+		}
+		n++
+		up := filepath.Dir(dir)
+		if up == dir {
+			return n
+		}
+		dir = up
+	}
 }
 
 // linkPeerKey names the machine on cs for the limits.
@@ -172,6 +265,12 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 		if free := diskFree(dir); free >= 0 && free-u.fsClaimed[fs]-grow < policy.FilesMinFree {
 			return none, newVerbError(ErrVerbDiskFull, "the disk on this machine would have less than "+sizeWords(policy.FilesMinFree)+" free after this file, so it was not written. Free space, or lower files_min_free in the config on this machine.")
 		}
+	}
+
+	// A part that is not there yet is a new file, which counts against
+	// files_max_entries; the commit renames it and makes no other.
+	if !partExists && !u.parts[peer][part] && !u.takeEntries(peer, 1, policy.FilesMaxEntries, time.Now()) {
+		return none, tooManyEntries(policy)
 	}
 
 	if stream {

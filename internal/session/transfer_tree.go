@@ -367,8 +367,10 @@ func serveTreeWrite(ctx context.Context, d *Daemon, acc access, root, partID str
 			if verr == nil {
 				last.Close()
 				last = fsys
-				if err := fsys.MkdirAll(fsys.confineDir(p), 0o755); err != nil {
-					verr = fileError("make the folder", p, err)
+				if verr = d.claimLinkDirs(acc.cs, fsys, fsys.confineDir(p)); verr == nil {
+					if err := fsys.MkdirAll(fsys.confineDir(p), 0o755); err != nil {
+						verr = fileError("make the folder", p, err)
+					}
 				}
 			}
 			if verr != nil {
@@ -530,6 +532,9 @@ func takeTreeFile(d *Daemon, acc access, p, partID string, hdr treeHeader, in *b
 		}
 	}()
 	dir := filepath.Dir(p)
+	if verr := d.claimLinkDirs(cs, fsys, fsys.confineDir(dir)); verr != nil {
+		return drop(verr.Code, verr.Message)
+	}
 	if err := fsys.MkdirAll(fsys.confineDir(dir), 0o755); err != nil {
 		v := fileError("write", dir, err)
 		return drop(v.Code, v.Message)

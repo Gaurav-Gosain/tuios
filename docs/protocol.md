@@ -6430,6 +6430,11 @@ checked before a byte moves:
   or off one.
 - One machine may have at most 8 write streams and 64 unfinished part files
   open. Past that the write is `busy`, which a copy retries.
+- One machine may make at most `files_max_entries` (20,000 unless set) new
+  files and folders in ten minutes. A write that starts a new part counts as
+  one. `file-mkdir`, `file-drop-dir` and a tree stream's `dir` record count
+  each folder they make. Past that the call is `busy`, which a copy retries.
+  The count goes down evenly over the ten minutes.
 
 A job is logged in the daemon log when it starts and ends, with both ends
 and the byte count.

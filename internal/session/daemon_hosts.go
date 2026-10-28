@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -275,9 +276,21 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		if now.FilesMinFree < was.FilesMinFree {
 			widened = true
 		}
+		// files_max_entries 0 is no bound, the widest value.
+		bound := func(n int64) int64 {
+			if n <= 0 {
+				return math.MaxInt64
+			}
+			return n
+		}
+		maxEntries := now.FilesMaxEntries
+		if bound(now.FilesMaxEntries) > bound(was.FilesMaxEntries) {
+			maxEntries = was.FilesMaxEntries
+			widened = true
+		}
 		h := next[key]
 		h.Allow, h.HoldMail, h.HostedGrace, h.FilesRoots = allow, &hold, grace.String(), roots
-		h.FilesReadRoots, h.FilesMinFree = readRoots, strconv.FormatInt(minFree, 10)
+		h.FilesReadRoots, h.FilesMinFree, h.FilesMaxEntries = readRoots, strconv.FormatInt(minFree, 10), &maxEntries
 		merged[key] = h
 	}
 	d.SetLinkPolicies(merged)

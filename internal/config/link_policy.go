@@ -129,6 +129,9 @@ type LinkPolicy struct {
 	// FilesMinFree is the free space in bytes a write over the link must
 	// leave on its disk.
 	FilesMinFree int64
+	// FilesMaxEntries is how many new files and folders the machine may make
+	// here in FilesEntryWindow. 0 is no bound.
+	FilesMaxEntries int64
 	// Source names the table the policy came from, for an error that tells
 	// the caller which key to change: hosts.laptop, hosts."*", or empty for
 	// the built-in default.
@@ -150,8 +153,21 @@ func (p LinkPolicy) Allows(caps ...string) bool {
 
 // DefaultLinkPolicy is the policy with nothing configured.
 func DefaultLinkPolicy() LinkPolicy {
-	return LinkPolicy{Allow: slices.Clone(DefaultLinkAllow), HostedGrace: DefaultHostedGrace, FilesMinFree: DefaultFilesMinFree}
+	return LinkPolicy{Allow: slices.Clone(DefaultLinkAllow), HostedGrace: DefaultHostedGrace, FilesMinFree: DefaultFilesMinFree, FilesMaxEntries: DefaultFilesMaxEntries}
 }
+
+// DefaultFilesMaxEntries is how many new files and folders a machine may make
+// here over a link in FilesEntryWindow when files_max_entries says nothing.
+// files_min_free bounds bytes, and an empty file costs none, so without this
+// a machine could use up the disk's inodes while the byte reserve holds. A
+// folder copy of this many files lands at full speed; past it, the copy goes
+// on at the rate the window gives back.
+const DefaultFilesMaxEntries = 20000
+
+// FilesEntryWindow is the time files_max_entries counts over. The count goes
+// down evenly across it, so a machine that made the most it may makes more
+// again at files_max_entries per window.
+const FilesEntryWindow = 10 * time.Minute
 
 // DefaultFilesMinFree is the free space a write over a link leaves on its
 // disk when files_min_free says nothing: 1 GiB.
@@ -217,6 +233,9 @@ func LinkPolicyFor(hosts map[string]HostConfig, peer string) LinkPolicy {
 			if n, err := ParseFilesMinFree(h.FilesMinFree); err == nil {
 				p.FilesMinFree = n
 			}
+		}
+		if h.FilesMaxEntries != nil && *h.FilesMaxEntries >= 0 {
+			p.FilesMaxEntries = *h.FilesMaxEntries
 		}
 		p.Source = "hosts." + key
 	}
@@ -382,6 +401,13 @@ func validateLinkPolicies(cfg *UserConfig, result *ValidationResult) {
 					Message: err.Error() + "; the inherited value is used",
 				})
 			}
+		}
+		if h.FilesMaxEntries != nil && *h.FilesMaxEntries < 0 {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field:   "hosts." + name,
+				Key:     "files_max_entries",
+				Message: "files_max_entries is 0 or more; the inherited value is used",
+			})
 		}
 		if h.HostedGrace != "" {
 			if _, err := ParseHostedGrace(h.HostedGrace); err != nil {

@@ -478,6 +478,9 @@ func (e fileEnd) mkdir(ctx context.Context, path string) error {
 			return err
 		}
 		defer fsys.Close()
+		if verr := e.d.claimLinkDirs(e.gate, fsys, fsys.confineDir(path)); verr != nil {
+			return callError(verr)
+		}
 		return fsys.MkdirAll(fsys.confineDir(path), 0o755)
 	}
 	return e.call(ctx, "file-mkdir", map[string]any{"path": path}, nil)

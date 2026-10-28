@@ -459,3 +459,122 @@ func toJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// TestALinkMakesABoundedNumberOfNewFiles is issue 1284: files_min_free counts
+// bytes, and an empty file costs none, so a linked machine with files could
+// make empty files and folders here without end and use up the disk's inodes.
+// files_max_entries bounds how many new files and folders one machine makes
+// in ten minutes.
+//
+// With the bound at 1000, the loop from the issue (an empty write and a
+// commit, with a new name each round) must be refused as busy at about the
+// thousandth file, naming the setting, and a new folder must be refused the
+// same way. The positive half: with the default bound, a folder copy of 3000
+// files in 30 folders lands whole. The copy's files and folders count too:
+// with the bound back at 1000, the next new file is refused.
+func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	farHome := xdgDir(remote, "HOME")
+	const policy = "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\n"
+	const bound = 1000
+	writeRemoteConfig(t, remote, policy+"files_max_entries = "+itoa(bound)+"\n")
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	recv := filepath.Join(farHome, "Downloads", "tuios")
+	record := map[string]any{}
+
+	// One empty file: a write of length 0, then its commit.
+	far := dialHostVerbs(t, base)
+	emptyFile := func(name string) error {
+		path := "~/Downloads/tuios/" + name
+		if _, err := writeStream(dialHostVerbs(t, base), path, "e0", 0, nil); err != nil {
+			return err
+		}
+		_, err := far.call("file-commit", map[string]any{"path": path, "part_id": "e0"})
+		return err
+	}
+
+	start := time.Now()
+	made := 0
+	var refusal error
+	for i := range 2000 {
+		if err := emptyFile("empty-" + itoa(i)); err != nil {
+			refusal = err
+			break
+		}
+		made++
+	}
+	elapsed := time.Since(start)
+	// The count goes down by the bound in ten minutes, so a slow loop makes
+	// a few more.
+	most := bound + int(elapsed.Seconds()*bound/600) + 1
+	record["empty files made"] = made
+	record["seconds"] = elapsed.Seconds()
+	record["the refusal"] = errString(refusal)
+	if made < bound || made > most {
+		t.Errorf("ASSERTION: the loop made %d empty files, want %d to %d and then a refusal", made, bound, most)
+	}
+	if code(refusal) != "busy" || !strings.Contains(errString(refusal), "files_max_entries") {
+		t.Errorf("ASSERTION: the file past the bound was not refused as busy naming files_max_entries: %v", refusal)
+	}
+	if entries, _ := os.ReadDir(recv); len(entries) != made {
+		t.Errorf("ASSERTION: the receive folder holds %d entries, want the %d files made", len(entries), made)
+	}
+	_, mkErr := far.call("file-mkdir", map[string]any{"path": "~/Downloads/tuios/more/deeper"})
+	record["a new folder past the bound"] = errString(mkErr)
+	if code(mkErr) != "busy" || !strings.Contains(errString(mkErr), "files_max_entries") {
+		t.Errorf("ASSERTION: a new folder past the bound was not refused as busy: %v", mkErr)
+	}
+	if _, err := os.Stat(filepath.Join(recv, "more")); err == nil {
+		t.Errorf("ASSERTION: the refused folder was made")
+	}
+
+	// The positive half: the default bound takes a folder copy of 3000
+	// files whole.
+	writeRemoteConfig(t, remote, policy)
+	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
+		t.Fatalf("apply build's config: %v\n%s", err, out)
+	}
+	tree := filepath.Join(base, "tree")
+	for d := range 30 {
+		dir := filepath.Join(tree, "d"+itoa(d))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for f := range 100 {
+			if err := os.WriteFile(filepath.Join(dir, "f"+itoa(f)+".txt"), []byte(itoa(d*100+f)+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	var row transferRow
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
+		"src": map[string]any{"path": tree}, "dst": map[string]any{"host": "build", "path": "~/Downloads/tuios/tree"},
+	}, &row)
+	row = waitTransferEnd(t, base, row.ID, 3*time.Minute)
+	landed := 0
+	_ = filepath.WalkDir(filepath.Join(recv, "tree"), func(_ string, de os.DirEntry, err error) error {
+		if err == nil && de.Type().IsRegular() {
+			landed++
+		}
+		return nil
+	})
+	record["the folder copy"] = row
+	record["files the copy landed"] = landed
+	if row.State != "done" || landed != 3000 {
+		t.Errorf("ASSERTION: a folder copy of 3000 files ended %s (%s: %s) with %d files on build, want done with 3000", row.State, row.Code, row.Error, landed)
+	}
+
+	// The copy's files and folders were counted: with the bound back at
+	// 1000, nothing new fits.
+	writeRemoteConfig(t, remote, policy+"files_max_entries = "+itoa(bound)+"\n")
+	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
+		t.Fatalf("apply build's config: %v\n%s", err, out)
+	}
+	afterErr := emptyFile("after-the-copy")
+	record["a new file after the copy"] = errString(afterErr)
+	if code(afterErr) != "busy" {
+		t.Errorf("ASSERTION: the files of the folder copy did not count against files_max_entries: a new file then was %v, want busy", afterErr)
+	}
+	saveTransferArtifact(t, "link-entry-bound", record)
+}

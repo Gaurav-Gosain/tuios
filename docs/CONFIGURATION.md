@@ -2686,13 +2686,22 @@ whole number with `B`, `KB`, `MB`, `GB`, `TB`, `KiB`, `MiB`, `GiB` or `TiB`.
 `tuios config apply`. A write that does not fit is refused as
 `disk_full` before a byte moves. One machine may have at most 8 write streams
 and 64 unfinished part files here at once. Past that, a write is `busy`, and
-a copy waits and tries again. The drop folder holds at most 256 MiB for all
+a copy waits and tries again.
+
+A machine may also make at most `files_max_entries` new files and folders
+here in ten minutes: 20,000 unless you set it. An empty file uses no bytes,
+so `files_min_free` does not stop a machine from making millions of them.
+Past the bound, a new file or folder is `busy`, and a copy waits and goes on.
+The count goes down evenly over the ten minutes. A folder copy of 20,000 files
+lands at full speed, and a larger one goes on at about 33 files a second.
+`0` turns the bound off. A reload that raises it waits for `tuios config apply`. The drop folder holds at most 256 MiB for all
 drops together, and a machine writes there only inside a drop that
 `file-drop-dir` made.
 
 ```toml
 [hosts."*"]
 files_min_free = "5GiB"
+files_max_entries = 50000
 ```
 
 A copy that another machine starts here with `transfer-start` or `drop-files`

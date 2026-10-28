@@ -93,11 +93,15 @@ type HostConfig struct {
 	// disk it lands on, such as "2GiB" or "500MB". Empty inherits
 	// [hosts."*"] and then DefaultFilesMinFree.
 	FilesMinFree string `toml:"files_min_free,omitempty"`
+	// FilesMaxEntries is how many new files and folders the machine may
+	// make here in ten minutes, over the link. Nil inherits [hosts."*"] and
+	// then DefaultFilesMaxEntries; 0 turns the bound off.
+	FilesMaxEntries *int64 `toml:"files_max_entries,omitempty"`
 }
 
 // HasLinkPolicy reports whether the entry says anything about what the
 // machine of its name may do here.
 func (h HostConfig) HasLinkPolicy() bool {
 	return h.Allow != nil || h.HoldMail != nil || h.HostedGrace != "" || h.FilesRoots != nil ||
-		h.FilesReadRoots != nil || h.FilesMinFree != ""
+		h.FilesReadRoots != nil || h.FilesMinFree != "" || h.FilesMaxEntries != nil
 }

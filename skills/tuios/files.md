@@ -124,8 +124,9 @@ machine in the config there. A machine can also hold reads to
 
 A write over a link must leave `files_min_free` (1 GiB unless set) free on
 the far disk, or it fails with `disk_full`. A machine may have 8 write
-streams and 64 unfinished copies open on another at once. Past that a call
-is `busy`. A copy waits and tries again by itself.
+streams and 64 unfinished copies open on another at once. It may make
+`files_max_entries` (20,000 unless set) new files and folders there in ten
+minutes. Past that a call is `busy`. A copy waits and tries again by itself.
 
 `tuios hosts test build --speed` measures how fast a copy to a host can be.
 

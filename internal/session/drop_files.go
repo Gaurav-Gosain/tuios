@@ -96,7 +96,7 @@ func pruneDrops(root string, keep int64, now time.Time) {
 
 // verbFileDropDir makes a new private folder for one drop and answers its
 // path. The caller copies the dropped files into it.
-func (d *Daemon) verbFileDropDir(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileDropDir(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Bytes int64 `json:"bytes"`
 	}
@@ -115,6 +115,9 @@ func (d *Daemon) verbFileDropDir(_ *connState, params json.RawMessage) (any, *ve
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	dir := filepath.Join(root, time.Now().Format("20060102-150405")+"-"+hex.EncodeToString(b[:]))
+	if verr := d.claimLinkEntries(cs, 1); verr != nil {
+		return nil, verr
+	}
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		return nil, fileError("make the drop folder", dir, err)
 	}

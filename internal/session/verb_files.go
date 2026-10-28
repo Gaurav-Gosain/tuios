@@ -567,6 +567,9 @@ func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 	defer fsys.Close()
+	if verr := d.claimLinkDirs(cs, fsys, fsys.confineDir(path)); verr != nil {
+		return nil, verr
+	}
 	if err := fsys.MkdirAll(fsys.confineDir(path), 0o755); err != nil {
 		return nil, fileError("make the folder", path, err)
 	}
