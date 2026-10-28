@@ -871,11 +871,13 @@ func (m *OS) createRemoteSession(host string) {
 }
 
 // localSessionIndexes maps a local session's id to its 1-based position in the
-// local rail, the number switch_session_N opens. Remote sessions are absent:
-// no number on this machine reaches them.
+// local rail, the number switch_session_N opens. It numbers railSessionOrder,
+// the order SwitchToSessionByIndex reads, so a row's label and its key agree;
+// a folded repository's sessions keep their numbers though their rows are
+// hidden. Remote sessions are absent: no number on this machine reaches them.
 func localSessionIndexes(nodes []sessiontree.Node) map[string]int {
 	indexes := make(map[string]int, len(nodes))
-	for i, s := range localSessionNodes(nodes) {
+	for i, s := range railSessionOrder(nodes) {
 		indexes[s.ID] = i + 1
 	}
 	return indexes

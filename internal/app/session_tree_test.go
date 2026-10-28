@@ -146,4 +146,39 @@ func TestCycleSessionFollowsTheWorktreeGroups(t *testing.T) {
 	if got, ok := m.railSessionAt(4); ok {
 		t.Errorf("switch_session_5 = %q, want no session", got.ID)
 	}
+	// The number the rail prints beside a row is the key that opens it.
+	labels := localSessionIndexes(m.BuildSessionTree().Sessions)
+	for n := range 4 {
+		got, _ := m.railSessionAt(n)
+		if labels[got.ID] != n+1 {
+			t.Errorf("switch_session_%d opens %s, which the rail labels %d", n+1, got.ID, labels[got.ID])
+		}
+	}
+}
+
+// TestLocalSessionIndexesFollowTheRailOrder is #1299 on the rail's numbers:
+// with show_numbers on, the label beside a session is the switch_session_N
+// that opens it, so the labels count the sessions in the order the rail draws
+// them (api, api-feat-a, api-feat-b, notes), not the order they were made.
+// Another machine's sessions get no number.
+func TestLocalSessionIndexesFollowTheRailOrder(t *testing.T) {
+	nodes := append(issue1299Sessions("api"),
+		sessiontree.Node{Kind: sessiontree.KindHost, ID: hostNodeID("box"), Title: "box", Host: "box"},
+		sessiontree.Node{Kind: sessiontree.KindSession, ID: "box-api", Title: "api", Host: "box"},
+	)
+	got := localSessionIndexes(nodes)
+	want := map[string]int{"api": 1, "api-feat-a": 2, "api-feat-b": 3, "notes": 4}
+	if len(got) != len(want) {
+		t.Errorf("labels = %v, want %v", got, want)
+	}
+	for id, n := range want {
+		if got[id] != n {
+			t.Errorf("label of %s = %d, want %d", id, got[id], n)
+		}
+	}
+	for i, s := range railSessionOrder(nodes) {
+		if got[s.ID] != i+1 {
+			t.Errorf("rail position %d is %s, labelled %d", i+1, s.ID, got[s.ID])
+		}
+	}
 }
