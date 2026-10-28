@@ -194,6 +194,7 @@ func forcedExitReset(runReturned bool) string {
 
 func forceExit(restoreTerminal func(), runReturned bool, code int) {
 	resetTerminalForExit(restoreTerminal, runReturned)
+	stopCPUProfile()
 	os.Exit(code)
 }
 

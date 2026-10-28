@@ -10,6 +10,7 @@ import (
 
 // execClient replaces this process with bin and args.
 func execClient(bin string, args []string) error {
+	stopCPUProfile()
 	if err := syscall.Exec(bin, append([]string{bin}, args...), os.Environ()); err != nil {
 		return &diagnosticError{
 			What: fmt.Sprintf("The daemon restarted, and tuios could not start again: %v.", err),

@@ -30,6 +30,10 @@ func newGUIBridgeCommand() *cobra.Command {
 				pprofAddr = os.Getenv("TUIOS_GUI_BRIDGE_PPROF")
 			}
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			if err := ensureDaemon(); err != nil {
 				return err
 			}

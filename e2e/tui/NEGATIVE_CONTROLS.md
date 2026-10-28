@@ -10570,3 +10570,21 @@ under `TUIOS_E2E_FRAMES`.
 | The same cut, with the "on build" wait passed by a comment in the file that held those words (an earlier draft of the test) | `TestQuickLookOnAFarFile`: "the far machine did not judge the file with two names", linked.txt read locally | **caught** |
 | `quickLookCellsKey` keeps the panes' glyph set (quadrants) | `TestRailQuickLook`: "the picture has 7 quadrant glyphs; the preview draws half blocks" | **caught** |
 | `quickLookPlacement` answers false | `TestRailQuickLookKittyPicture`: "no kitty placement of the picture at its own size was sent" | **caught** |
+## Long-running commands write --cpuprofile
+
+`TestCPUProfileWrittenByLongRunningCommands` starts each command that keeps
+running (the daemon, ssh, the bare client, the standalone TUI, pair,
+agent-proto, mcp, stdio-proxy, gui-bridge, tape play and the mermaid live
+view) with `--cpuprofile FILE`, waits until it is ready, and ends it the clean
+way: its signal, or the end of its input. Once the process has exited, FILE
+must read as a whole gzip stream with a non-empty body. For the daemon, the
+bare client, the standalone TUI and agent-proto, a run without the flag must
+leave no new file in its directory. Run on 2026-10-28 on Linux with Go
+1.26.10. Each control cuts one start from the fixed build and runs the test
+against the cut binary; the fixed build passes every subtest.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `startCPUProfile` in the daemon's RunE | `daemon`: `ASSERTION: daemon --cpuprofile /tmp/TestCPUProfileWrittenByLongRunningCommandsdaemon3744679393/001/cpu.prof wrote no profile: open /tmp/TestCPUProfileWrittenByLongRunningCommandsdaemon3744679393/001/cpu.prof: no such file or directory` | **caught** |
+| `startCPUProfile` in `runDaemonSessionOn` | `bare tuios`: `ASSERTION: bare tuios --cpuprofile /tmp/TestCPUProfileWrittenByLongRunningCommandsbare_tuios1589251332/001/cpu.prof wrote no profile: open /tmp/TestCPUProfileWrittenByLongRunningCommandsbare_tuios1589251332/001/cpu.prof: no such file or directory` | **caught** |
+| `startCPUProfile` in `runLocal` (its deferred stop kept) | `standalone`: `ASSERTION: standalone --cpuprofile /tmp/TestCPUProfileWrittenByLongRunningCommandsstandalone2986448861/001/cpu.prof wrote no profile: open /tmp/TestCPUProfileWrittenByLongRunningCommandsstandalone2986448861/001/cpu.prof: no such file or directory` | **caught** |

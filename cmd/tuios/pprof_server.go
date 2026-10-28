@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -69,6 +70,68 @@ func startPprofServer() {
 			go servePprof(conn)
 		}
 	}()
+}
+
+var (
+	cpuProfileMu   sync.Mutex
+	cpuProfileFile *os.File
+)
+
+// startCPUProfile writes a CPU profile to the --cpuprofile file when that flag
+// is set and no profile is running; otherwise it does nothing.
+//
+// The commands that run until they are told to stop call this and defer
+// stopCPUProfile, so the profile is complete when the command ends by its
+// signal or the end of its input: the standalone TUI (runLocal, before it
+// starts the pprof server), the attached client, the daemon, the ssh server,
+// pair, agent-proto, mcp, stdio-proxy, gui-bridge, tape play and the mermaid
+// live view, each of the others right after its startPprofServer call.
+// subscribe serves --pprof but writes no profile. While a profile runs,
+// /debug/pprof/profile answers 500, as the runtime allows one CPU profile at a
+// time.
+func startCPUProfile() error {
+	if cpuProfile == "" {
+		return nil
+	}
+	cpuProfileMu.Lock()
+	defer cpuProfileMu.Unlock()
+	if cpuProfileFile != nil {
+		return nil
+	}
+	f, err := os.Create(cpuProfile)
+	if err != nil {
+		return fmt.Errorf("could not create CPU profile: %w", err)
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("could not start CPU profile: %w", err)
+	}
+	cpuProfileFile = f
+	return nil
+}
+
+// stopCPUProfile finishes the profile startCPUProfile began and closes its
+// file. The lock is held until the file is written, so a caller that arrives
+// while another stops waits for the profile to be complete. It does nothing
+// when no profile runs, and a later start makes the file again.
+//
+// Besides the deferred call on RunE's return, the paths that end the process
+// without returning call it first, as a deferred call would not run there:
+// forceExit, before os.Exit; execClient, before syscall.Exec on unix and before
+// cmd.Run and os.Exit on windows; the daemon's HandoffArgs closure, before the
+// live upgrade execs the new image; and the mermaid live view's second signal,
+// before os.Exit(130).
+func stopCPUProfile() {
+	cpuProfileMu.Lock()
+	defer cpuProfileMu.Unlock()
+	if cpuProfileFile == nil {
+		return
+	}
+	pprof.StopCPUProfile()
+	if err := cpuProfileFile.Close(); err != nil {
+		log.Printf("Warning: failed to close CPU profile file: %v", err)
+	}
+	cpuProfileFile = nil
 }
 
 // listenPprof opens the listener for --pprof.

@@ -160,6 +160,10 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 			// --pprof is a persistent flag that tape play used to accept and
 			// ignore.
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			return runTapeInteractive(args[0])
 		},
 	}
@@ -518,6 +522,10 @@ Debug log levels:
 			// the process a memory question is about. --pprof is a
 			// persistent flag, so it has to be honoured here too.
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			if daemonAdoptFD > 0 {
 				return runAdoptingDaemon(daemonAdoptFD)
 			}
@@ -3052,6 +3060,10 @@ command in authorized_keys to make the policy a boundary:
 			// The proxy keeps this process running; --pprof is a persistent
 			// flag that stdio-proxy used to accept and ignore.
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			return runStdioProxy(stdioProxyAs)
 		},
 	}

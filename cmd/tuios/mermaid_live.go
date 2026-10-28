@@ -367,6 +367,8 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 				continue
 			}
 			cleanup()
+			// The profile is finished before the exit, which would cut it short.
+			stopCPUProfile()
 			os.Exit(130)
 		}
 	}()

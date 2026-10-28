@@ -12,6 +12,7 @@ import (
 // execClient runs bin with args as a child on this console, waits for it and
 // exits with its status. Windows has no exec.
 func execClient(bin string, args []string) error {
+	stopCPUProfile()
 	cmd := exec.Command(bin, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	err := cmd.Run()

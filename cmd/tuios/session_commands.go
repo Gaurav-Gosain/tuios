@@ -410,6 +410,10 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	}
 
 	startPprofServer()
+	if err := startCPUProfile(); err != nil {
+		return err
+	}
+	defer stopCPUProfile()
 
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
@@ -1248,7 +1252,13 @@ func foregroundDaemonConfig() *session.DaemonConfig {
 		daemonCfg = session.DaemonConfigFromUser(nil)
 	}
 	daemonCfg.Version = version
-	daemonCfg.HandoffArgs = handoffArgs
+	// The profile is finished before the exec, which would cut it short. If
+	// the exec then fails this daemon carries on without a profile, and the
+	// adopting image runs with none.
+	daemonCfg.HandoffArgs = func(fd int) []string {
+		stopCPUProfile()
+		return handoffArgs(fd)
+	}
 	// A terminal on stderr is what makes this daemon a foreground one for
 	// logging. `tuios daemon` is also the command startDaemonBackground
 	// spawns for a detached daemon, with stderr pointed at the log file, so

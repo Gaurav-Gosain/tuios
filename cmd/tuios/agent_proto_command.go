@@ -71,6 +71,10 @@ start-agent adds the app-server subcommand for you.`,
 			// The agent session keeps this process running; --pprof is a
 			// persistent flag that agent-proto used to accept and ignore.
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			code := runAgentProto(o, args)
 			if code != 0 {
 				return &statusError{code: code}

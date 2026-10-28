@@ -18,10 +18,23 @@ const adoptFDFlag = "adopt-fd"
 // handoffArgs is the command line, after the program, a live upgrade execs
 // the next daemon image with: this daemon's own, which carries its server and
 // its log level, plus the manifest's descriptor. A flag left by an earlier
-// upgrade is dropped.
+// upgrade is dropped, and so is --cpuprofile in every form: the next image
+// would truncate the file this one is writing.
 func handoffArgs(manifestFD int) []string {
 	args := make([]string, 0, len(os.Args))
+	skipValue := false
 	for _, a := range os.Args[1:] {
+		if skipValue {
+			skipValue = false
+			continue
+		}
+		if a == "--cpuprofile" {
+			skipValue = true
+			continue
+		}
+		if strings.HasPrefix(a, "--cpuprofile=") {
+			continue
+		}
 		if strings.HasPrefix(a, "--"+adoptFDFlag) {
 			continue
 		}

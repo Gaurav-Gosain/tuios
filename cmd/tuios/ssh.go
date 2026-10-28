@@ -105,6 +105,10 @@ at the same time, and how many sessions may be open. Set the limits in the
 			if err := f.checkLimits(); err != nil {
 				return err
 			}
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			return runSSHServer(f)
 		},
 	}

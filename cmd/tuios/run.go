@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -117,22 +116,10 @@ func runLocal() error {
 		fmt.Fprintln(os.Stderr, "Sessions in this window are not saved. Run 'tuios daemon' to see why it fails.")
 	}
 
-	if cpuProfile != "" {
-		f, err := os.Create(cpuProfile)
-		if err != nil {
-			return fmt.Errorf("could not create CPU profile: %w", err)
-		}
-		defer func() {
-			if closeErr := f.Close(); closeErr != nil {
-				log.Printf("Warning: failed to close CPU profile file: %v", closeErr)
-			}
-		}()
-
-		if err := pprof.StartCPUProfile(f); err != nil {
-			return fmt.Errorf("could not start CPU profile: %w", err)
-		}
-		defer pprof.StopCPUProfile()
+	if err := startCPUProfile(); err != nil {
+		return err
 	}
+	defer stopCPUProfile()
 
 	startPprofServer()
 

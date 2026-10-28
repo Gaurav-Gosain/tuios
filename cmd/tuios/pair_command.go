@@ -173,6 +173,10 @@ code and the fingerprint on the phone with the ones here before you accept.`,
 			// The pairing window keeps this process running; --pprof is a
 			// persistent flag that pair used to accept and ignore.
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return runPair(ctx, o, cmd.OutOrStdout(), cmd.ErrOrStderr(), os.Stdin)

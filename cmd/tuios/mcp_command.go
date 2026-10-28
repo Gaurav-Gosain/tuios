@@ -56,6 +56,10 @@ tuios integration install <harness> --mcp registers it with a harness.`,
 			// The server keeps this process running; --pprof is a persistent
 			// flag that mcp used to accept and ignore.
 			startPprofServer()
+			if err := startCPUProfile(); err != nil {
+				return err
+			}
+			defer stopCPUProfile()
 			if scope != session.ScopeOwn && scope != session.ScopeAll {
 				return fmt.Errorf("--scope must be own or all, not %q", scope)
 			}
