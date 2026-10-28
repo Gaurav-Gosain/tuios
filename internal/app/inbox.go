@@ -468,7 +468,7 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 }
 
 // inboxListCards lists every session's task cards. noBoard is true when the
-// daemon has no list-tasks or no all_sessions, and boardErr says why it
+// daemon has no list-tasks, or answers without all_sessions, and boardErr says why it
 // refused otherwise. Neither is an error: the attention list must not go down
 // with the board.
 func inboxListCards(client *session.VerbClient) (cards []session.TaskRow, noBoard bool, boardErr string, err error) {
@@ -483,10 +483,16 @@ func inboxListCards(client *session.VerbClient) (cards []session.TaskRow, noBoar
 		return nil, false, "", err
 	}
 	var res struct {
-		Tasks []session.TaskRow `json:"tasks"`
+		AllSessions bool              `json:"all_sessions"`
+		Tasks       []session.TaskRow `json:"tasks"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return nil, false, "", err
+	}
+	if !res.AllSessions {
+		// A daemon with the task verbs and no all_sessions ignores the
+		// param and answers one session: params take unknown fields.
+		return nil, true, "", nil
 	}
 	sortCards(res.Tasks)
 	return res.Tasks, false, "", nil

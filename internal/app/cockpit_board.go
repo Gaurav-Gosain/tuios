@@ -339,7 +339,7 @@ func spawnClaim(call inboxVerbCall, nonce string, card *spawnCard, sess, win str
 	}
 	_, err := call("claim-task", map[string]any{"session": card.session, "id": card.id, "window": win, "human_nonce": nonce}, 5*time.Second)
 	if err != nil {
-		return " " + card.id + " was not claimed: " + printableTitle(err.Error())
+		return " " + card.id + " was not taken: " + printableTitle(err.Error())
 	}
 	return " It holds " + card.id + "."
 }
@@ -644,7 +644,7 @@ func (m *OS) ckBoardEmptyLines() []string {
 	case st.ck.boardErr != "":
 		return []string{"tuios cannot list the cards: " + printableTitle(st.ck.boardErr), back}
 	case m.ckScope() != "" && m.ckScope() != "local":
-		return []string{"The board lists this machine's cards.", "Cards on " + ckHostLabel(m.ckScope()) + " come later. " + back}
+		return []string{"The board lists only the cards on this machine.", "It does not list the cards on " + ckHostLabel(m.ckScope()) + ". " + back}
 	case st.Select != "" || st.agents.query != "":
 		return []string{"No card matches the search.", "/ changes the search. " + back}
 	}

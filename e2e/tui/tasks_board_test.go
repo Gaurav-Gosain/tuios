@@ -243,6 +243,10 @@ func TestTaskBoardGroupsCardsByStage(t *testing.T) {
 	if txt := other.Screen().Text(); strings.Contains(txt, "Verify  1") || strings.Contains(txt, "Done  1") {
 		t.Errorf("ASSERTION: [tasks] stages = [doing, todo] still shows Verify or Done\n%s", other.Snapshot())
 	}
+	// The stage order stays fixed whatever order the list gives.
+	if sc := other.Screen(); rowWith(sc, "Todo  1") > rowWith(sc, "Doing  3") {
+		t.Errorf("ASSERTION: [tasks] stages = [doing, todo] put Doing above Todo, want the fixed stage order\n%s", other.Snapshot())
+	}
 	saveCockpitFrames(t, other, "task-board-stages-200x55")
 	alive(t, other, "after the board with [tasks] stages")
 }

@@ -199,8 +199,9 @@ typed while an ask holds the target's turn.
 
 **list-tasks takes all_sessions.** It lists every session's cards, and the
 answer has `all_sessions: true` in place of `session`. The agents view's
-board reads it; a daemon from before this refuses the parameter with
-`invalid_params`, and the board says the daemon is too old. A selector
+board reads it. A daemon from before this ignores the parameter and answers
+for one session, without `all_sessions`; a daemon with no task verbs answers
+`unknown_verb`. In both cases the board says the daemon is too old. A selector
 takes `stage:`.
 
 **list-host-sessions rows carry agents.** A remote session row gains
