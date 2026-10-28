@@ -589,6 +589,19 @@ func newWindow(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
+// waitDockWorkspace blocks until the dock status field names workspace ws.
+// Call it after a key that switches workspace and before newWindow: the count
+// is per workspace, so a count read before the switch is drawn is the old
+// workspace's, and newWindow then waits for one more than that forever.
+func waitDockWorkspace(t *testing.T, term *tuitest.Terminal, ws int) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return dockWorkspace(s) == ws
+	}, uiTimeout); err != nil {
+		t.Fatalf("the dock never showed workspace %d: %v\n%s", ws, err, term.Snapshot())
+	}
+}
+
 // settledWindowCount reads the dock's window count only once the same value has
 // been observed twice in a row.
 //

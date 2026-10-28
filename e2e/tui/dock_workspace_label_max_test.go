@@ -212,6 +212,7 @@ func TestDockIndexTabShowsTheNameOnHover(t *testing.T) {
 			if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 				t.Fatalf("switch to workspace 2: %v", err)
 			}
+			waitDockWorkspace(t, term, 2)
 			newWindow(t, term)
 
 			// The pill for workspace 1 is the first "1" between spaces on the

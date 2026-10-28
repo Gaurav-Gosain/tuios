@@ -65,6 +65,7 @@ func twoWorkspaces(t *testing.T, term *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
 	}
+	waitDockWorkspace(t, term, 2)
 	newWindow(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "1"); err != nil {
 		t.Fatalf("switch to workspace 1: %v", err)
@@ -307,6 +308,7 @@ func TestDockTabAttentionInk(t *testing.T) {
 	newWindow(t, term)
 	renameWindow(t, term, "AGENTPANE")
 	sendKeys(t, term, tuitest.Ctrl('b'), "w", "2")
+	waitDockWorkspace(t, term, 2)
 	newWindow(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(dockRow(s), "2:1") }, uiTimeout); err != nil {
 		t.Fatalf("workspace 2 never got its window: %v\n%s", err, term.Snapshot())
