@@ -1716,7 +1716,7 @@ catalog.
 | `host_unreachable` | The host is configured and is not answering: its link is down, or the far side does not reply. Nothing was queued; only `send-agent-message` with `host` keeps a message for a host that is down, and it answers `queued` instead of this. A write to a window on another machine whose link is being restored also answers it. |
 | `host_refused` | The host's link is up and cannot take another connection. |
 | `unknown_pane` | This daemon is not running a pane with that id. |
-| `upgrade_refused` | `daemon-upgrade` did not start: the new binary failed the preflight, the daemon holds something a live upgrade cannot hand over (a pane on another machine, a running fan check, a capturing popup), or this platform cannot hand off. Nothing was changed. The message says which. |
+| `upgrade_refused` | `daemon-upgrade` did not start: the new binary failed the preflight, the daemon holds something a live upgrade cannot hand over (a pane on another machine, a running fan check, a capturing popup, a hook or a plugin command), or this platform cannot hand off. Nothing was changed. The message says which. |
 | `daemon_upgrading` | A live upgrade replaced the daemon's image while it worked on, or waited in, this call. The connection closes after it. Call again: the new image answers, with the same panes. |
 | `internal` | An unexpected server side failure. |
 | `not_worktree` | The session is not in a git worktree, so there is nothing to remove or diff. |
@@ -1878,7 +1878,7 @@ The daemon first runs `<binary> daemon handoff-accepts`, which prints the handof
 
 `handoff` is the manifest version, and `clients` the attached TUI clients that will be dropped. After the answer, every TUI client is sent `MsgDaemonUpgrading` (the binary message after `MsgPluginApprovals`, payload `{Version}`, the build the daemon is becoming; a client that does not know it ignores it) and dropped, every other call still running or waiting ends with `daemon_upgrading`, and the daemon execs the binary. The socket stays open: a call made during the swap waits in its backlog and the new image answers it. Call `hello` until `instance` changes; its `upgrade` field says what the handoff measured, and `fallback` is set when the new binary could not take the panes over and the binary that was running took them back.
 
-Refused with `upgrade_refused`, and nothing changed, on Windows, in a daemon embedded in another program (`tuios-web`, the SSH server), while a pane runs here for another machine or a window's process runs on another machine, and while a `fan verify` check or a popup with `capture_stdout` runs. A second call while an upgrade runs answers `busy`. Refused with `forbidden` over a link and on a restricted connection; from a pane it needs the `admin` grant.
+Refused with `upgrade_refused`, and nothing changed, on Windows, in a daemon embedded in another program (`tuios-web`, the SSH server), while a pane runs here for another machine or a window's process runs on another machine, and while a `fan verify` check or a popup with `capture_stdout` runs. A second call while an upgrade runs answers `busy`. Refused with `forbidden` over a link, on a restricted connection, and to a caller inside a pane of this daemon or a plugin, whatever its grants: the binary named runs as the daemon, which holds every pane's terminal and the key that signs every pane's token. Run `tuios daemon upgrade` from a terminal outside tuios.
 
 ### restrict-connection
 
