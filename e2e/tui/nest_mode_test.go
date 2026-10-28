@@ -402,3 +402,71 @@ func TestNestModeWaitsBehindTheRail(t *testing.T) {
 		t.Fatalf("ASSERTION: F12 did not end nest mode after the rail: %v\n%s", err, term.Snapshot())
 	}
 }
+
+// TestNestModeReachesARailSessionPane: a session docked in the rail is a pane
+// like any other, and in nest mode the one with the keyboard gets every key,
+// the leader too. The docked session runs cat -v. A click gives its pane the
+// keyboard, ctrl+b enter turns nest mode on, and ctrl+b x must reach cat -v
+// as ^Bx. F12 ends nest mode there too, and the leader is tuios's again: the
+// next ctrl+b x does not reach the pane.
+//
+// Negative control: with the rail pane's nest path in routeKey cut, ^Bx still
+// reaches the pane through the terminal handler, but F12 does not end nest
+// mode from it. The run is in NEGATIVE_CONTROLS.md.
+func TestNestModeReachesARailSessionPane(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "")
+	for _, name := range []string{"center", "side"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("new %s: %v\n%s", name, err, out)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "side", "--literal", "echo RAIL-READY; cat -v"); err != nil {
+		t.Fatalf("type into the docked session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "side", "Enter"); err != nil {
+		t.Fatalf("run cat -v in the docked session: %v\n%s", err, out)
+	}
+	writeConfig(t, base, `[appearance.sidebar]
+position = "right"
+enabled = true
+width = 36
+[appearance.sidebar.right]
+session = "side"
+`)
+	term := startIn(t, base, startOpts{cols: 100, rows: 35, args: []string{"attach", "center"}})
+	if err := term.WaitForText("RAIL-READY", bootTimeout); err != nil {
+		t.Fatalf("setup: the rail pane does not show the docked session: %v\n%s", err, term.Snapshot())
+	}
+	// The rail is the right 36 columns. A click in it gives its pane the
+	// keyboard, and what is typed then is cat -v's.
+	mouseClick(t, term, 82, 12, tuitest.MouseLeft, 0)
+	sendKeys(t, term, "railkeys")
+	if err := term.WaitForText("railkeys", uiTimeout); err != nil {
+		t.Fatalf("setup: the click did not give the rail pane the keyboard: %v\n%s", err, term.Snapshot())
+	}
+
+	sendKeys(t, term, tuitest.Ctrl('b'), tuitest.Enter)
+	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
+		t.Fatalf("setup: ctrl+b enter did not turn nest mode on: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Ctrl('b'), "x")
+	if err := term.WaitForText("^Bx", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: in nest mode ctrl+b x did not reach the rail pane as ^Bx: %v\n%s", err, term.Snapshot())
+	}
+
+	sendKeys(t, term, tuitest.F12)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dockNested(s) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: F12 did not end nest mode from the rail pane: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "after")
+	if err := term.WaitForText("after", uiTimeout); err != nil {
+		t.Fatalf("setup: the rail pane lost the keyboard with nest mode: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Ctrl('b'), tuitest.Esc)
+	time.Sleep(700 * time.Millisecond)
+	if n := strings.Count(term.Screen().Text(), "^B"); n != 1 {
+		t.Fatalf("ASSERTION: after F12 the leader still reached the rail pane (%d ^B on screen)\n%s", n, term.Snapshot())
+	}
+}

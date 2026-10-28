@@ -10184,3 +10184,12 @@ ecdeec289.
 A first control of `modeBorrowed` wrote `false && a || b ...`, which is still
 true while the pane is dragged, and the test passed. The control above returns
 false outright.
+
+### #1190: nest mode in a rail session pane
+
+`TestNestModeReachesARailSessionPane` docks a session running `cat -v` in the right rail, clicks its pane, turns nest mode on with ctrl+b enter, and checks that ctrl+b x reaches `cat -v` as `^Bx`, that F12 ends nest mode from there, and that the next ctrl+b does not reach the pane. A control run after the conflict with be53d5685 was resolved showed no test covered the rail pane's nest path in `routeKey`. Run on 2026-10-28 on macOS, on feat/nest at 125e54007 (on origin/main at c793b00d1).
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The rail pane's nest path in `routeKey` (`if false && ...`) | "F12 did not end nest mode from the rail pane" (`^Bx` still reaches the pane, through the terminal handler) | **caught** |
+| `PanelOwnsKeyboard()` back to main's old list of six panels, where the two meet in `routeKey` | `TestNavigatorOpensOverTheFocusedRail`: "the navigator opened over the focused rail did not take the keys" | **caught** |
