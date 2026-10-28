@@ -3455,8 +3455,8 @@ func migrateInboxKeys(cfg *UserConfig) {
 	}
 }
 
-// RetiredKeybind is a binding to an action tuios no longer has, dropped on
-// load.
+// RetiredKeybind is a binding dropped on load: to an action tuios no longer
+// has, or a key another action took as its default.
 type RetiredKeybind struct {
 	Section string   `json:"section"`
 	Action  string   `json:"action"`
@@ -3703,7 +3703,12 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.GUI, defaultCfg.Keybindings.GUI)
 
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
-		dropStaleDuplicateKeys(section.target, section.defaults)
+		for _, d := range dropStaleDuplicateKeys(section.target, section.defaults) {
+			cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, RetiredKeybind{
+				Section: section.name, Action: d.action, Keys: []string{d.key},
+				Note: fmt.Sprintf("%s runs %s, whose default key it is. To keep %s on %s, bind %s to another key.", d.key, d.owner, d.key, d.action, d.owner),
+			})
+		}
 	}
 }
 
@@ -3924,39 +3929,42 @@ func dropPresetShadows(user, tuios, preset map[string][]string) int {
 }
 
 // keybindSection pairs a config section with the defaults for that section.
-type keybindSection struct{ target, defaults map[string][]string }
+type keybindSection struct {
+	name             string
+	target, defaults map[string][]string
+}
 
 func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 	c, d := &cfg.Keybindings, &defaultCfg.Keybindings
 	return []keybindSection{
-		{c.WindowManagement, d.WindowManagement},
-		{c.Workspaces, d.Workspaces},
-		{c.Layout, d.Layout},
-		{c.ModeControl, d.ModeControl},
-		{c.System, d.System},
-		{c.Navigation, d.Navigation},
-		{c.RestoreMinimized, d.RestoreMinimized},
-		{c.PrefixMode, d.PrefixMode},
-		{c.WindowPrefix, d.WindowPrefix},
-		{c.MinimizePrefix, d.MinimizePrefix},
-		{c.WorkspacePrefix, d.WorkspacePrefix},
-		{c.DebugPrefix, d.DebugPrefix},
-		{c.TapePrefix, d.TapePrefix},
-		{c.LayoutPrefix, d.LayoutPrefix},
-		{c.TuiosPrefix, d.TuiosPrefix},
-		{c.TerminalMode, d.TerminalMode},
-		{c.Sidebar, d.Sidebar},
-		{c.SidebarFiles, d.SidebarFiles},
-		{c.SidebarAgents, d.SidebarAgents},
-		{c.Inbox, d.Inbox},
-		{c.InboxPeek, d.InboxPeek},
-		{c.Mail, d.Mail},
-		{c.Transfers, d.Transfers},
-		{c.CopyMode, d.CopyMode},
-		{c.GUI, d.GUI},
-		{c.Global, d.Global},
-		{c.Script, d.Script},
-		{c.Lists, d.Lists},
+		{"window_management", c.WindowManagement, d.WindowManagement},
+		{"workspaces", c.Workspaces, d.Workspaces},
+		{"layout", c.Layout, d.Layout},
+		{"mode_control", c.ModeControl, d.ModeControl},
+		{"system", c.System, d.System},
+		{"navigation", c.Navigation, d.Navigation},
+		{"restore_minimized", c.RestoreMinimized, d.RestoreMinimized},
+		{"prefix_mode", c.PrefixMode, d.PrefixMode},
+		{"window_prefix", c.WindowPrefix, d.WindowPrefix},
+		{"minimize_prefix", c.MinimizePrefix, d.MinimizePrefix},
+		{"workspace_prefix", c.WorkspacePrefix, d.WorkspacePrefix},
+		{"debug_prefix", c.DebugPrefix, d.DebugPrefix},
+		{"tape_prefix", c.TapePrefix, d.TapePrefix},
+		{"layout_prefix", c.LayoutPrefix, d.LayoutPrefix},
+		{"tuios_prefix", c.TuiosPrefix, d.TuiosPrefix},
+		{"terminal_mode", c.TerminalMode, d.TerminalMode},
+		{"sidebar", c.Sidebar, d.Sidebar},
+		{"sidebar_files", c.SidebarFiles, d.SidebarFiles},
+		{"sidebar_agents", c.SidebarAgents, d.SidebarAgents},
+		{"inbox", c.Inbox, d.Inbox},
+		{"inbox_peek", c.InboxPeek, d.InboxPeek},
+		{"mail", c.Mail, d.Mail},
+		{"transfers", c.Transfers, d.Transfers},
+		{"copy_mode", c.CopyMode, d.CopyMode},
+		{"gui", c.GUI, d.GUI},
+		{"global", c.Global, d.Global},
+		{"script", c.Script, d.Script},
+		{"lists", c.Lists, d.Lists},
 	}
 }
 
@@ -3976,7 +3984,11 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 // silently picking a winner would hide. Nor is an action's last key ever taken,
 // however the defaults read: a sole binding is a deliberate choice, and only a
 // redundant extra one can be residue. ValidateConfig warns about what is left.
-func dropStaleDuplicateKeys(section, defaults map[string][]string) {
+//
+// It returns the keys it took, for keybinds doctor: a key the user wrote on
+// purpose is taken the same way, and would otherwise vanish without a word.
+func dropStaleDuplicateKeys(section, defaults map[string][]string) []droppedKey {
+	var dropped []droppedKey
 	claimants := make(map[string][]string)
 	for action, keys := range section {
 		for _, key := range keys {
@@ -4009,9 +4021,14 @@ func dropStaleDuplicateKeys(section, defaults map[string][]string) {
 			section[action] = slices.DeleteFunc(slices.Clone(section[action]), func(k string) bool {
 				return k == key
 			})
+			dropped = append(dropped, droppedKey{action: action, key: key, owner: owner})
 		}
 	}
+	return dropped
 }
+
+// droppedKey is a key dropStaleDuplicateKeys took from action and left to owner.
+type droppedKey struct{ action, key, owner string }
 
 // ConfigWarnings returns the non-fatal problems in cfg as human-readable lines,
 // for surfacing inside the running TUI. Reported only to a log nobody reads,
