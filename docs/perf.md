@@ -2261,6 +2261,45 @@ The time spread is 10 to 13% per side on a shared laptop, so the allocation
 figures are the firm ones; the time rows are the measured medians with their
 p-values.
 
+A cached frame, the one a held key repeats, spent about a fifth of its CPU in
+`reviewPaint`, most of that in `lipgloss.Style.Render`, which builds and
+resolves a style for every segment of every row, and about a tenth in
+`ansi.StringWidth`, which `CodeRanges` ran on every code line twice. `reviewPaint`
+now writes each segment's escape directly (`reviewSGR`: bold, then the
+foreground, then the background, the order lipgloss writes them), so its bytes
+are the ones lipgloss rendered. A colour that is nil or `lipgloss.NoColor{}`
+(every ground and the default ink at 16 colours) is left out, as before, so
+the terminal's own colours still show at 16 colours. Text holding a tab, a
+carriage return or a newline still goes through lipgloss, because it lays a
+tab out as four spaces, joins `\r\n` into `\n` and styles each line of a
+multi-line text on its own, and an escape does none of that; the review text
+passes through `reviewText`, which drops controls, but a daemon's error
+message does not. `CodeRanges` takes the width of a line of printable ASCII
+(0x20 to 0x7E) from its byte count and the width of the styled result from the
+branch it took, instead of walking both; any other text, and a negative
+offset, keeps the walk. The cockpit's code blocks and diff cards draw through
+`CodeRanges` too and gain the same shortcut. Eight interleaved rounds of the
+base and branch test binaries (go1.26.10, `-benchtime=200x`, cores 6-11 of an
+Intel Core Ultra 9 185H, benchstat):
+
+| `ReviewFrame` | before | after | |
+|---|---|---|---|
+| `unified/cached` allocs/op | 6122 | 5536 | -9.6% |
+| `unified/cached` B/op | 780.1 KiB | 766.0 KiB | -1.8% |
+| `unified/cached` time | 1.34 ms | 1.03 ms | -23% (p=0.001) |
+| `split/cached` allocs/op | 7514 | 6928 | -7.8% |
+| `split/cached` B/op | 1002.6 KiB | 988.5 KiB | -1.4% |
+| `split/cached` time | 2.05 ms | 1.63 ms | -20% (p=0.001) |
+| `unified/page` allocs/op | 34.68k | 34.10k | -1.7% |
+| `unified/page` B/op | 2.98 MiB | 2.96 MiB | -0.5% |
+| `unified/page` time | 5.03 ms | 4.58 ms | ~ (p=0.328) |
+
+The time spread is 10 to 25% per side on a shared laptop, so the allocation
+figures are the firm ones. No row of `BenchmarkReviewFrame` is slower, and the
+cached rows of `BenchmarkReviewFrameDepth` at 256 and 16 colours are 21 to 32%
+faster (p=0.000), so the frame at those depths still costs no more than a
+truecolor one.
+
 ### Measured and deliberately not changed
 
 - **`applyInboxEvents`** now costs 11 us, 7.4 KiB and 43 allocations for a

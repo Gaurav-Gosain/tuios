@@ -85,13 +85,6 @@ func reviewPaint(segs []reviewSeg, width int, bg color.Color) string {
 	if width <= 0 {
 		return ""
 	}
-	style := func(fg color.Color, bold bool) lipgloss.Style {
-		s := lipgloss.NewStyle().Foreground(fg).Bold(bold)
-		if bg != nil {
-			s = s.Background(bg)
-		}
-		return s
-	}
 	var b strings.Builder
 	used := 0
 	for _, sg := range segs {
@@ -106,17 +99,45 @@ func reviewPaint(segs []reviewSeg, width int, bg color.Color) string {
 			if ansi.StringWidth(ell) >= room {
 				text = ansi.Truncate(sg.text, room, "")
 			}
-			b.WriteString(style(sg.fg, sg.bold).Render(text))
+			b.WriteString(reviewSGR(sg.fg, bg, sg.bold, text))
 			used += ansi.StringWidth(text)
 			break
 		}
-		b.WriteString(style(sg.fg, sg.bold).Render(sg.text))
+		b.WriteString(reviewSGR(sg.fg, bg, sg.bold, sg.text))
 		used += w
 	}
 	if used < width {
-		b.WriteString(style(nil, false).Render(strings.Repeat(" ", width-used)))
+		b.WriteString(reviewSGR(nil, bg, false, strings.Repeat(" ", width-used)))
 	}
 	return b.String()
+}
+
+// reviewSGR is the bytes lipgloss renders for text in bold, fg and bg, without
+// the style machinery: bold, then the foreground, then the background, each
+// only when set. A nil colour and lipgloss.NoColor{} are left out, as lipgloss
+// leaves them out (ansi.Style would write NoColor as black); a
+// *lipgloss.NoColor is written, as lipgloss writes it. Text holding a tab, a
+// carriage return or a newline goes through lipgloss, which lays those out
+// where an SGR would not.
+func reviewSGR(fg, bg color.Color, bold bool, text string) string {
+	if strings.ContainsAny(text, "\t\r\n") {
+		s := lipgloss.NewStyle().Foreground(fg).Bold(bold)
+		if bg != nil {
+			s = s.Background(bg)
+		}
+		return s.Render(text)
+	}
+	var st ansi.Style
+	if bold {
+		st = st.Bold()
+	}
+	if fg != nil && fg != (lipgloss.NoColor{}) {
+		st = st.ForegroundColor(fg)
+	}
+	if bg != nil && bg != (lipgloss.NoColor{}) {
+		st = st.BackgroundColor(bg)
+	}
+	return st.Styled(text)
 }
 
 // reviewSpaces is n blank cells on bg.

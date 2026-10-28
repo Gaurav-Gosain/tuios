@@ -66,24 +66,50 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 	}
 	plain := codes[0][Plain]
 	styled := b.String()
-	left := ansi.StringWidth(text) - xOff
+	// Printable ASCII is one cell a byte, so the widths are known without
+	// walking the text; the styled result's follows from the branch taken.
+	ascii := xOff >= 0 && printableASCII(text)
+	textW := len(text)
+	if !ascii {
+		textW = ansi.StringWidth(text)
+	}
+	left := textW - xOff
 	if xOff > 0 && left > 0 {
 		styled = ansi.TruncateLeft(styled, xOff, "")
 	}
 	ell := overlay.Ellipsis()
 	ellW := ansi.StringWidth(ell)
+	known := left
 	switch {
 	case left <= 0:
 		styled = ""
+		known = 0
 	case left > width && width > ellW:
 		styled = ansi.Truncate(styled, width-ellW, "") + plain + ell
+		known = width
 	case left > width:
 		styled = ansi.Truncate(styled, width, "")
+		known = width
 	}
-	if w := ansi.StringWidth(styled); w < width {
+	w := known
+	if !ascii {
+		w = ansi.StringWidth(styled)
+	}
+	if w < width {
 		styled += plain + strings.Repeat(" ", width-w)
 	}
 	return styled + reset
+}
+
+// printableASCII reports whether s holds only bytes 0x20 to 0x7E, each one
+// cell wide.
+func printableASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 // Gutter draws a line number right-aligned in width cells, with a space on
