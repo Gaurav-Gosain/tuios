@@ -10014,3 +10014,15 @@ under each test's results directory.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The empty paste given the paste key's 0.3 s bound (`mode != imagePasteAction` in `probeImageCmd`, as before the fix) | `no path was pasted into the pane`, 5 of 5 runs | **caught** |
+## The agents view: peek after esc, enter in the comparison
+
+`TestInboxPeekAnswersAnApproval` closes the peek with esc and reads the
+agents view again before it opens the peek a second time.
+`TestCockpitFanCompare` presses enter in the comparison of the fan, waits for
+the client to be in B's session, then opens the comparison again. Run on
+2026-10-28 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `renderCockpit` keeps the frame key of a transient frame (the peek) | after esc the peek's answers stay on screen | **caught** |
+| `ckCompareGo` looks for the row by the agent's row key, `a:` and the agent | the client never goes to `repo-cache-2`: the attempt's row is its finished item | **caught** |

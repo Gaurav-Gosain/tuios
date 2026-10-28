@@ -495,6 +495,41 @@ func TestCockpitFanCompare(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "frame-g-before-judge")
 
+	// enter goes to the focused attempt's pane, B's. B reported done, so its
+	// row is its finished item, whose row key is the item's and not the
+	// agent's: enter once found no row and said the pane was not in the list.
+	if err := term.SendKeys("\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitClientOn(t, rig.base, term, "repo-cache-2")
+	if text := term.Screen().Text(); strings.Contains(text, "is not in the list") {
+		t.Fatalf("ASSERTION: enter in the comparison did not find B's row:\n%s", term.Snapshot())
+	}
+	// Back to the comparison, from B's row.
+	windowManagementMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Ready for review", "fan of 3") && fleetRowWith(s, "cache-2") >= 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("the cockpit did not open again: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	row, col = findText(t, term, "cache-2")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "c compare") }, uiTimeout); err != nil {
+		t.Fatalf("B's row does not offer c again: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("c"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "fan of 3", "Ask a judge", "cache-2", "cache-3", "First lines")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the comparison did not open again: %v\n%s", err, term.Snapshot())
+	}
+
 	// j: the judge reads the attempts and picks B.
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatal(err)
@@ -618,6 +653,31 @@ func TestCockpitFanCompare(t *testing.T) {
 		t.Fatalf("ASSERTION: the changes of A and C were not stashed:\n%s", stash)
 	}
 	alive(t, term, "after the fan comparison")
+}
+
+// waitClientOn waits until the daemon lists term's client as attached to
+// session.
+func waitClientOn(t *testing.T, base string, term *tuitest.Terminal, session string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		out, _ := tuiosCLI(t, base, "list-clients", "--json")
+		var rows []struct {
+			PID     int    `json:"pid"`
+			Session string `json:"session"`
+		}
+		if json.Unmarshal([]byte(out), &rows) == nil {
+			for _, r := range rows {
+				if r.PID == term.Pid() && r.Session == session {
+					return
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the client never went to %s: %s\n%s", session, out, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // fleetHasRow reports whether a row of the fleet column is named name: the

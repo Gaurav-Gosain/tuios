@@ -74,6 +74,23 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-peek")
 
+	// esc closes the peek. Nothing in the frame cache's key moves with the
+	// peek, so the next frame once matched the peek's and drew it again.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the peek: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "1 needs you") && !strings.Contains(s.Text(), "Yes, and don")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the peek stayed on the screen after esc: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(" "); err != nil {
+		t.Fatalf("peek again: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Yes, and don") }, uiTimeout); err != nil {
+		t.Fatalf("the peek did not open again: %v\n%s", err, term.Snapshot())
+	}
+
 	if err := term.SendKeys("a"); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
