@@ -673,7 +673,7 @@ lists the folder, with the same read rules as the sidebar's files section.
 When the shell in the pane runs ssh to another machine, the picker does not
 open.
 
-The action is `pick_path`. `path_picker.hidden_files = true` shows the hidden
+The action is `pick_path`. `path_picker.show_hidden = true` shows the hidden
 files when the picker opens. The default is `false`.
 
 ## Paste an image

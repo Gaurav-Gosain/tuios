@@ -172,7 +172,9 @@ var leaderPaneRows = []menuRow{
 	{parts: []menuPart{{"prefix_split_vertical", "Split vertical"}}, desc: "Split vertical"},
 	{parts: []menuPart{{"prefix_rotate_split", "Rotate split"}}, desc: "Rotate split"},
 	{parts: []menuPart{{"prefix_equalize_splits", "Equalize splits"}}, desc: "Equalize splits"},
-	{parts: []menuPart{{"hints", "Hints"}, {"display_panes", "Pane labels"}}, desc: "Hints, labels"},
+	// The path picker shares the row too. Its key goes in a column whose keys
+	// are already five cells wide, so the menu still fits an 80x24 screen.
+	{parts: []menuPart{{"hints", "Hints"}, {"display_panes", "Pane labels"}, {"pick_path", "Pick a path"}}, desc: "Hints, labels, paths"},
 	{parts: []menuPart{{"last_pane", "Last pane"}}, desc: "Last pane"},
 	{parts: []menuPart{{"mark_pane", "Mark pane"}}, desc: "Mark pane"},
 	{parts: []menuPart{{"resize_pane_left_5", "Resize pane left"}, {"resize_pane_up_5", "Resize pane up"}, {"resize_pane_down_5", "Resize pane down"}, {"resize_pane_right_5", "Resize pane right"}}, desc: "Resize pane"},
@@ -303,9 +305,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// and a row more pushes it off the bottom.
 		sidebarRow,
 		row("prefix_explore", "Focus sidebar"),
-		// The path picker shares the file search's row, for the same height
-		// reason.
-		pair("Search files/pick a path", part("prefix_file_search", "Search files"), part("pick_path", "Pick a path")),
+		row("prefix_file_search", "Search files"),
 	)
 	return []menuSection{
 		{title: "Workspaces", rows: leaderWorkspaceRows},

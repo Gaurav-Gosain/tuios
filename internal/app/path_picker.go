@@ -131,7 +131,7 @@ func (m *OS) OpenPathPicker() tea.Cmd {
 		m.ShowNotification("This pane does not take typed text.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	hidden := m.UserConfig != nil && m.UserConfig.PathPicker.HiddenFiles
+	hidden := m.UserConfig != nil && m.UserConfig.PathPicker.ShowHidden
 	var gen uint64 = 1
 	if m.pathPicker != nil {
 		gen = m.pathPicker.gen + 1

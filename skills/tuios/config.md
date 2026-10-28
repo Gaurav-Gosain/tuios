@@ -137,7 +137,7 @@ at the keyboard: to focus a pane, use `focus-window`.
 
 The path picker (`Alt+;` in terminal mode or `Ctrl+B .`, the `pick_path`
 action) lists the folder of the focused pane's shell at its cursor, and
-`Enter` types the chosen path there. `path_picker.hidden_files` shows the
+`Enter` types the chosen path there. `path_picker.show_hidden` shows the
 names that start with a dot. It is for the person at the keyboard: to type
 into a pane, use `send-text`.
 

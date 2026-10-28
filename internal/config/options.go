@@ -1499,7 +1499,7 @@ var optionSpecs = []Option{
 
 	// [path_picker]. Read each time the picker opens.
 	{
-		Path: "path_picker.hidden_files", Type: OptionBool, Section: "panes",
+		Path: "path_picker.show_hidden", Type: OptionBool, Section: "panes",
 		Description: "The path picker lists hidden files. Alt+h in the picker shows or hides them",
 		Default:     "false",
 	},

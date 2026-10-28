@@ -7,7 +7,7 @@ package config
 // It is read each time the picker opens, so an edit to the file is in force
 // the next time.
 type PathPickerConfig struct {
-	// HiddenFiles lists the names that start with a dot (default: false).
+	// ShowHidden lists the names that start with a dot (default: false).
 	// alt+h in the picker shows or hides them until it closes.
-	HiddenFiles bool `toml:"hidden_files"`
+	ShowHidden bool `toml:"show_hidden"`
 }
