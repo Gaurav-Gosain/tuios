@@ -13,7 +13,7 @@
 |        │ Summer │                                          |
 |        └────────┘                                          |
 |                                                            |
-|Cannot draw the diagram: Parse error on line 4. Expecting '…|
+|Cannot draw the diagram: Parse error on line 2. Expecting '…|
 | flowchart LR                                               |
 |   A[open --> B                                             |
 |                                                            |
@@ -71,7 +71,7 @@ h: fg=fg bg=canvas
 |        │ Summer │                                          |
 |        └────────┘                                          |
 |                                                            |
-|Cannot draw the diagram: Parse error on line 4. Expecting '…|
+|Cannot draw the diagram: Parse error on line 2. Expecting '…|
 | flowchart LR                                               |
 |   A[open --> B                                             |
 |                                                            |
@@ -129,7 +129,7 @@ h: fg=fg bg=canvas
 |        │ Summer │                                          |
 |        └────────┘                                          |
 |                                                            |
-|Cannot draw the diagram: Parse error on line 4. Expecting '…|
+|Cannot draw the diagram: Parse error on line 2. Expecting '…|
 | flowchart LR                                               |
 |   A[open --> B                                             |
 |                                                            |
@@ -184,7 +184,7 @@ e: fg=warning
 |        | Summer |                                          |
 |        +--------+                                          |
 |                                                            |
-|Cannot draw the diagram: Parse error on line 4. Expecting '~|
+|Cannot draw the diagram: Parse error on line 2. Expecting '~|
 | flowchart LR                                               |
 |   A[open --> B                                             |
 |                                                            |
