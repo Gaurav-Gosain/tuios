@@ -286,7 +286,31 @@ func clearAgentMarks(nodes []sessiontree.Node) {
 // sessions are cycled: a row on another machine is a different connection,
 // which a cycle key must not open by surprise.
 func (m *OS) railNeighbourSession(delta int) string {
-	sessions := localSessionNodes(m.BuildSessionTree().Sessions)
+	return railNeighbourIn(railSessionOrder(m.BuildSessionTree().Sessions), delta)
+}
+
+// railSessionOrder is the attached machine's sessions in the order the rail's
+// sessions section draws them: under their space and, inside that, with a
+// repository's worktree sessions pulled up under the repository, as
+// sidebarGroupedRows lays them out. Only the session rows are kept, not the
+// space and repository headings. A folded repository's sessions stay in, at
+// the place they would be drawn, so a cycle key can still reach them and the
+// current session is never missing from the list. With no space and no
+// worktree record the grouping changes nothing and this is the tree's order.
+func railSessionOrder(nodes []sessiontree.Node) []sessiontree.Node {
+	rows := sessiontree.GroupBySpace(localSessionNodes(nodes), sessiontree.GroupByRepo)
+	sessions := make([]sessiontree.Node, 0, len(rows))
+	for _, n := range rows {
+		if n.Kind == sessiontree.KindSession {
+			sessions = append(sessions, n)
+		}
+	}
+	return sessions
+}
+
+// railNeighbourIn returns the session delta places from the current one in
+// sessions, wrapping at both ends, or "" when there is nowhere to go.
+func railNeighbourIn(sessions []sessiontree.Node, delta int) string {
 	current := slices.IndexFunc(sessions, func(s sessiontree.Node) bool { return s.IsCurrent })
 	if len(sessions) < 2 || current < 0 {
 		return ""
@@ -313,15 +337,25 @@ func (m *OS) CycleSession(delta int) {
 // local-only scope CycleSession cycles. Pressing a number past the sessions
 // there are says so instead of failing inside the switch.
 func (m *OS) SwitchToSessionByIndex(n int) {
-	sessions := localSessionNodes(m.BuildSessionTree().Sessions)
-	if n < 0 || n >= len(sessions) {
+	target, ok := m.railSessionAt(n)
+	if !ok {
 		m.ShowNotification(fmt.Sprintf("No session %d", n+1), "info", m.Settings.NotificationDuration)
 		return
 	}
-	if sessions[n].IsCurrent {
+	if target.IsCurrent {
 		return
 	}
-	m.openSession("", sessions[n].ID)
+	m.openSession("", target.ID)
+}
+
+// railSessionAt is the session at the rail position n (0-based) in
+// railSessionOrder, and false when there is no session there.
+func (m *OS) railSessionAt(n int) (sessiontree.Node, bool) {
+	sessions := railSessionOrder(m.BuildSessionTree().Sessions)
+	if n < 0 || n >= len(sessions) {
+		return sessiontree.Node{}, false
+	}
+	return sessions[n], true
 }
 
 // sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
