@@ -36,9 +36,10 @@ func extentHolds(g *grid) string {
 
 // TestGridExtentHoldsUnderGeneratedInput drives the emulator with generated
 // terminal input and checks the extent invariant on both screens after every
-// step. The grid-level random test covers the grid's own operations; this one
-// covers the writes that reach rows from outside it: the ASCII run's direct
-// store, the cell shifts, and the whole-screen rotation.
+// step, and that each screen's text is its lines' text. The grid-level random
+// test covers the grid's own operations; this one covers the writes that reach
+// rows from outside it: the ASCII run's direct store, the cell shifts, and the
+// whole-screen rotation.
 func TestGridExtentHoldsUnderGeneratedInput(t *testing.T) {
 	seeds := uint64(200)
 	if testing.Short() {
@@ -56,6 +57,10 @@ func TestGridExtentHoldsUnderGeneratedInput(t *testing.T) {
 			for s := range emu.scrs {
 				if bad := extentHolds(emu.scrs[s].buf); bad != "" {
 					t.Fatalf("seed %d step %d (%s), screen %d: %s", seed, i, seq.Desc, s, bad)
+				}
+				buf := emu.scrs[s].buf
+				if got, want := buf.String(), linesText(buf.rows); got != want {
+					t.Fatalf("seed %d step %d (%s), screen %d: String() = %q, the lines give %q", seed, i, seq.Desc, s, got, want)
 				}
 			}
 		}

@@ -10,6 +10,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// linesText is the text uv.Line.String gives each row, joined with newlines,
+// a nil row empty.
+func linesText(rows []uv.Line) string {
+	var b strings.Builder
+	for y, row := range rows {
+		if y > 0 {
+			b.WriteByte('\n')
+		}
+		if row != nil {
+			b.WriteString(row.String())
+		}
+	}
+	return b.String()
+}
+
 // TestGridStringMatchesTheLines holds grid.String to the text uv.Line.String
 // gives each row, joined with newlines, a nil row empty. Random grids mix the
 // grid test's random cells with every cell that uv.Line.String treats
@@ -36,21 +51,12 @@ func TestGridStringMatchesTheLines(t *testing.T) {
 		{{Content: "👨‍👩‍👧", Width: 2}, {}}, // a ZWJ cluster
 	}
 
-	reference := func(g *grid) string {
-		var b strings.Builder
-		for y, row := range g.rows {
-			if y > 0 {
-				b.WriteByte('\n')
-			}
-			if row != nil {
-				b.WriteString(row.String())
-			}
-		}
-		return b.String()
-	}
 	check := func(t *testing.T, what string, g *grid) {
 		t.Helper()
-		if got, want := g.String(), reference(g); got != want {
+		if bad := extentHolds(g); bad != "" {
+			t.Fatalf("%s: the fixture breaks the extent: %s", what, bad)
+		}
+		if got, want := g.String(), linesText(g.rows); got != want {
 			t.Fatalf("%s: grid.String() = %q, the lines give %q", what, got, want)
 		}
 	}
@@ -112,6 +118,13 @@ func TestGridStringMatchesTheLines(t *testing.T) {
 					}
 				}
 				g.rows[y] = line(w, blanks, cells[:w]...)
+				// The extent is the tightest the grid allows: the column
+				// after the last cell that is not a plain blank.
+				for x := range w {
+					if !isBlankCell(&g.rows[y][x]) {
+						g.ext[y] = x + 1
+					}
+				}
 			}
 			check(t, fmt.Sprintf("seed %d, %dx%d", seed, w, h), g)
 		}

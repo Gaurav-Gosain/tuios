@@ -1715,8 +1715,8 @@ cell releases the pending blanks and writes its content, and blanks still
 pending at the end of the row are dropped. The blanks are counted, not buffered, and `isBlankCell`
 holds exactly when `Equal(&uv.EmptyCell)` does for the pinned ultraviolet, so a
 styled blank, a linked blank and an unstyled empty cell of width 1 all still
-count as text. `String` keeps its state local and writes no field of the grid,
-because both callers run it under a read lock beside other readers.
+count as text. `String` reads `g.ext` and writes nothing, because both callers
+run it under a read lock beside other readers.
 `TestGridStringMatchesTheLines` holds the result to the rows' `uv.Line.String`
 joined with newlines, on random grids and on fixed rows with every one of those
 cells before content and at the row's end; `TestGridStringBudget` bounds the
@@ -1734,6 +1734,36 @@ one core (`taskset -c 2`), compared with `benchstat`, on an Intel Core Ultra 9
 | `EmulatorString` CPU per op | 149.5 us | 77.6 us | -48.1% (p<0.001) |
 | `EmulatorString` allocs/op | 409 | 17 | -95.8% |
 | `EmulatorString` B/op | 72.5 KiB | 42.4 KiB | -41.5% |
+
+**Each row stops at its written extent** (`grid.go`). `writeLineText` still
+walked every cell of a row to find the blanks it drops at the row's end, though
+the grid already records where the written cells stop: `g.ext[y]` bounds every
+cell that is not a plain blank, and every writer keeps it. `String` now hands
+`writeLineText` only `row[:min(g.ext[y], len(row))]`; the `min` is defensive,
+since every row is `g.width` long. The cut is the same bytes as before, and
+`TestGridExtentHoldsUnderGeneratedInput` checks it: after every step of its
+generated input, on both screens, `String` must equal the rows' `uv.Line.String`
+joined with newlines.
+
+Method: 207x55 grids built in four cases, (a) every row 207 printable
+characters, (b) a shell screen of 30 lines of `$ ` plus 10 to 80 characters
+then `\x1b[K` (seeded), (c) case (a) followed by `\x1b[2J\x1b[H$ `, (d) three
+short lines on a fresh emulator, plus `BenchmarkEmulatorString`. Two test
+binaries, the base and the change, built and checked with `go version` as
+Go 1.26.10, run alternately for eight rounds at `-test.benchtime 2000x` with
+`-test.cpu 1` under `nice` on one core, compared with `benchstat`, on an Intel
+Core Ultra 9 185H under WSL2. These settings differ from the entry above
+(500x, ten rounds), so its 77.6 us is not comparable to the base here.
+
+| | before | after | |
+|---|---|---|---|
+| (a) full screen | 140.9 us | 139.1 us | ~ (p=0.96) |
+| (b) shell screen | 37.3 us | 19.0 us | -49.1% (p<0.001) |
+| (c) after a clear | 42.0 us | 2.1 us | -94.9% (p<0.001) |
+| (d) fresh emulator | 3.3 us | 1.4 us | -57.1% (p<0.001) |
+| `EmulatorString` | 110.3 us | 94.1 us | -14.7% (p<0.001) |
+
+Allocations and bytes per op are unchanged in every case.
 
 **A printable ASCII byte skips the grapheme segmenter in loom** (`loom/canvas.go`).
 `nextGrapheme` cuts one character at a time for `canvas.text`, `width`,

@@ -810,7 +810,8 @@ func (g *grid) String() string {
 			b.WriteByte('\n')
 		}
 		if row != nil {
-			writeLineText(&b, row)
+			// Cells at or past the extent are plain blanks, which a row's end drops.
+			writeLineText(&b, row[:min(g.ext[y], len(row))])
 		}
 	}
 	return b.String()
