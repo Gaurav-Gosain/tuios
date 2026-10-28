@@ -10050,3 +10050,23 @@ feat/one`, and after `set-session-name -s mine "My label"` it must read
 
 With `TUIOS_E2E_FRAMES` set, the test writes `rail-worktree-named.png` and
 `rail-worktree-display-name.png`.
+## A panel opened over the focused rail takes the keys (#1239)
+
+`TestNavigatorOpensOverTheFocusedRail` attaches at 200x50 with the rail on
+and gives the rail the keyboard with ctrl+b e. It opens the navigator with
+ctrl+b /, reads the panel's box from the cells of its ground, then types a
+search and waits for the marker on a row, in the preview and in the search
+line. It closes the navigator and checks that the mode pill still says
+SIDEBAR. The go-to picker gets the same check with a typed query. Run on
+2026-10-27 on Linux, each control built from the fix with one change, through
+a `go build -overlay`.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The `PanelOwnsKeyboard` check in the rail gate of `routeKey`, back to the six panels it named before | the typed marker never reaches the navigator's search line | **caught** |
+| The bottom reserve in `panelRoomHeight`, back to the rows under the top dock | the navigator runs from row 0 to the dock's rule: margins top 0, bottom 0 | **caught** |
+| Both, which is main before the fix | the margin check fails first: top 0, bottom 0 | **caught** |
+
+The fixed build reads margins of 1 row above and below and 4 columns each
+side beside the rail. With `TUIOS_E2E_FRAMES` set, the test writes
+`navigator-over-rail.png` and `navigator-over-rail-search.png`.

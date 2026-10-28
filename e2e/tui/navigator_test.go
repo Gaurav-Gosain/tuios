@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/shot"
 )
 
 // The pane navigator (choose_tree, prefix /), driven through a real client:
@@ -657,5 +658,140 @@ func TestNavigatorOpensReadyToType(t *testing.T) {
 			t.Fatalf("ASSERTION: enter switched to work but left the focus on %s, not logs\n%s", focusedIn(t, base, "work"), term.Snapshot())
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// TestNavigatorOpensOverTheFocusedRail: with the rail holding the keyboard,
+// prefix / opens the navigator, the navigator takes the keys at once, and the
+// rail has them again when it closes. The go-to picker is checked the same
+// way, since the fix is one rule for every panel. The navigator sits in the
+// pane area beside the rail with even margins, clear of the dock.
+//
+// How it could pass wrongly, written down first:
+//   - The rail could swallow / and the marker, and the marker could still
+//     show on screen from the rail or a pane. The wait needs it on a row, in
+//     the preview and in the search line, which only the navigator draws.
+//   - The rail could lose its focus when the panel opens, and the panel get
+//     the keys for that reason. The mode pill must still say SIDEBAR after
+//     the panel closes.
+//   - The margins could be read off the text, which has no edge where the
+//     panel's ground ends. They are read from the cells of the panel's ground.
+//
+// Negative control: with the rail's check for an open panel cut from
+// routeKey, the typed marker never reaches the navigator's search line and
+// the wait for it fails. With panelRoomHeight back to the rows under the top
+// dock alone, the panel runs over the dock row and the margin check fails.
+// The runs are in NEGATIVE_CONTROLS.md.
+func TestNavigatorOpensOverTheFocusedRail(t *testing.T) {
+	base, logs := navigatorSessions(t)
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n")
+	term := attachIn(t, base, "home", startOpts{cols: 200, rows: 50})
+	waitRailCurrent(t, term, "home")
+	sendKeys(t, term, tuitest.Ctrl('b'), "e")
+	waitText(t, term, "the mode pill after ctrl+b e", "SIDEBAR")
+
+	openNavigator(t, term, "home", "work")
+	time.Sleep(insertGuard)
+	saveFrame(t, term, "navigator-over-rail")
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "navigator-over-rail")
+	navCheckMargins(t, term.Screen())
+
+	sendKeys(t, term, "/")
+	if err := term.SendKeys(navMarker); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Count(text, navMarker) >= 3 && strings.Contains(text, "logs")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the navigator opened over the focused rail did not take the keys: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "navigator-over-rail-search")
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "navigator-over-rail-search")
+	// esc leaves the search line, esc clears the query, and q closes.
+	sendKeys(t, term, tuitest.Esc)
+	sendKeys(t, term, tuitest.Esc)
+	sendKeys(t, term, "q")
+	railHasKeysAgain(t, term, "Panes")
+
+	// The go-to picker, opened over the rail, takes its query too.
+	openGotoPicker(t, term)
+	if err := term.SendKeys("zq7x"); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	waitText(t, term, "the go-to picker's query typed over the focused rail", "zq7x")
+	sendKeys(t, term, tuitest.Esc)
+	railHasKeysAgain(t, term, "@ # ! filter")
+
+	if f := focusedIn(t, base, "work"); f == logs {
+		t.Fatalf("a key typed into a panel reached the work session and focused logs")
+	}
+}
+
+// railHasKeysAgain waits for the panel that shows marker to close, and for the
+// mode pill to still say SIDEBAR: the rail has the keyboard back.
+func railHasKeysAgain(t *testing.T, term *tuitest.Terminal, marker string) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return !strings.Contains(text, marker) && strings.Contains(text, "SIDEBAR")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the panel did not close back onto the focused rail: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// navCheckMargins reads the navigator's box from the cells of its ground, and
+// fails unless it sits in the pane area with a margin on every side: the same
+// margin, to a cell, above and below it in the rows over the dock, and each
+// side in the columns beside the rail. The ground is read in the pane area
+// only, since panels drawn there never cover the dock or the rail, and a
+// panel over the dock leaves no margin under it.
+func navCheckMargins(t *testing.T, s tuitest.Screen) {
+	t.Helper()
+	cols, rows := s.Size()
+	// The panel's ground is under the corner of its Search box.
+	gx, gy := -1, -1
+	for y := 0; y < rows && gx < 0; y++ {
+		if strings.Contains(s.Line(y), "╭─ Search") {
+			for x := range cols {
+				if s.Cell(x, y).Content == "╭" && s.Cell(x+3, y).Content == "S" {
+					gx, gy = x, y
+					break
+				}
+			}
+		}
+	}
+	if gx < 0 {
+		t.Fatalf("no Search box on screen\n%s", s.Text())
+	}
+	ground := s.Cell(gx, gy).Bg
+	// The rail's edge is its border column on the first row, left of the
+	// panel. The dock is the rows from its top rule down.
+	rail := -1
+	for x := range gx {
+		if s.Cell(x, 0).Content == "│" {
+			rail = x
+		}
+	}
+	dock := rows - 1
+	for y := rows - 1; y > rows-5; y-- {
+		if s.Cell(0, y).Content == "─" {
+			dock = y
+		}
+	}
+	x0, y0, x1, y1 := cols, rows, -1, -1
+	for y := range dock {
+		for x := rail + 1; x < cols; x++ {
+			if s.Cell(x, y).Bg == ground {
+				x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+			}
+		}
+	}
+	top, bottom := y0, dock-1-y1
+	left, right := x0-(rail+1), cols-1-x1
+	t.Logf("navigator box x %d-%d, y %d-%d; rail edge %d; margins top %d bottom %d left %d right %d", x0, x1, y0, y1, rail, top, bottom, left, right)
+	if rail < 0 || abs(top-bottom) > 1 || abs(left-right) > 1 || top < 1 || bottom < 1 || left < 1 || right < 1 {
+		t.Fatalf("ASSERTION: the navigator is not centred in the pane area: margins top %d bottom %d left %d right %d (dock row %d, panel to row %d)\n%s",
+			top, bottom, left, right, dock, y1, s.Text())
 	}
 }
