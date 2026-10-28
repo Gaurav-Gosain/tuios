@@ -125,6 +125,12 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// On Windows, ConPTY puts a NUL before a shifted character, which the
+	// decoder reads as Ctrl+Space. It goes before anything reads keys.
+	if msg = m.dropConPTYShiftNUL(msg); msg == nil {
+		return nil
+	}
+
 	// A report at a negative position reaches here in pieces, the last of
 	// them as typed keys. It is put back together before anything reads keys.
 	if msg = m.rejoinSplitMouse(msg); msg == nil {

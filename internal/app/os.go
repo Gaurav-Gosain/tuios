@@ -628,6 +628,9 @@ type OS struct {
 	// splitMouse holds a pixel report the input decoder split at a minus
 	// sign while the rest of it arrives. See host_mouse_split.go.
 	splitMouse splitMouseReport
+	// conptyNUL holds a Ctrl+Space that may be the phantom ConPTY puts before
+	// a shifted character on Windows. See conpty_shift_nul.go.
+	conptyNUL heldNUL
 	// hostPS is whether this client's terminal takes OSC 7501 reports and
 	// what was last sent to it. See host_program_status.go.
 	hostPS hostProgramStatus
