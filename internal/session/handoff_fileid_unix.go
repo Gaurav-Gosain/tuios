@@ -14,3 +14,11 @@ func fileIDOf(info os.FileInfo) fileID {
 	}
 	return fileID{}
 }
+
+// fileUID is the user that owns a stat result's file.
+func fileUID(info os.FileInfo) (int, bool) {
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		return int(st.Uid), true
+	}
+	return 0, false
+}

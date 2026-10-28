@@ -28,24 +28,18 @@ import (
 type HandoffAccepts struct {
 	// Handoff is the manifest version range it reads, oldest first.
 	Handoff [2]int `json:"handoff"`
-	// Protocol and Verb are the binary and JSON protocol ranges its daemon
-	// serves, which say whether a client can reattach.
-	Protocol [2]int `json:"protocol"`
-	Verb     [2]int `json:"verb"`
-	Backend  string `json:"backend"`
-	Version  string `json:"version"`
-	OS       string `json:"os"`
+	Backend string `json:"backend"`
+	Version string `json:"version"`
+	OS      string `json:"os"`
 }
 
 // LocalHandoffAccepts is what this binary takes.
 func LocalHandoffAccepts(version string) HandoffAccepts {
 	return HandoffAccepts{
-		Handoff:  [2]int{MinHandoffVersion, HandoffVersion},
-		Protocol: [2]int{MinProtocolVersion, ProtocolVersion},
-		Verb:     [2]int{MinVerbProtocolVersion, VerbProtocolVersion},
-		Backend:  vt.Backend,
-		Version:  version,
-		OS:       runtime.GOOS,
+		Handoff: [2]int{MinHandoffVersion, HandoffVersion},
+		Backend: vt.Backend,
+		Version: version,
+		OS:      runtime.GOOS,
 	}
 }
 
@@ -76,6 +70,9 @@ func preflightBinary(path string) (handoffBinary, error) {
 	if err != nil {
 		return handoffBinary{}, fmt.Errorf("%s: %w", abs, err)
 	}
+	if err := checkBinaryOwner(abs); err != nil {
+		return handoffBinary{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), handoffPreflightTimeout)
 	defer cancel()
 	var out, errOut bytes.Buffer
@@ -84,19 +81,16 @@ func preflightBinary(path string) (handoffBinary, error) {
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	started := time.Now()
 	if err := cmd.Run(); err != nil {
-		detail := bytes.TrimSpace(errOut.Bytes())
-		if len(detail) > 200 {
-			detail = detail[:200]
-		}
+		detail := clip(bytes.TrimSpace(errOut.Bytes()), 200)
 		return handoffBinary{}, fmt.Errorf("%s does not run as a tuios that can take this daemon's state: %v %s", abs, err, detail)
 	}
 	took := time.Since(started)
 	var acc HandoffAccepts
 	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &acc); err != nil {
-		return handoffBinary{}, fmt.Errorf("%s answered handoff-accepts with something that is not its answer: %q", abs, bytes.TrimSpace(out.Bytes()))
+		return handoffBinary{}, fmt.Errorf("%s ran, but did not say which live upgrades it accepts (it printed %q), so it is not a tuios this daemon can upgrade to. Check the path names a tuios binary", abs, clip(bytes.TrimSpace(out.Bytes()), 200))
 	}
 	if acc.OS != runtime.GOOS {
-		return handoffBinary{}, fmt.Errorf("%s is a tuios for %s", abs, acc.OS)
+		return handoffBinary{}, fmt.Errorf("%s is built for %s, and this daemon runs on %s. Upgrade to a tuios built for %s", abs, acc.OS, runtime.GOOS, runtime.GOOS)
 	}
 	if HandoffVersion < acc.Handoff[0] || HandoffVersion > acc.Handoff[1] {
 		return handoffBinary{}, fmt.Errorf("%s (%s) cannot read this daemon's state (handoff v%d, it reads v%d to v%d)",
@@ -107,6 +101,31 @@ func preflightBinary(path string) (handoffBinary, error) {
 		return handoffBinary{}, fmt.Errorf("%s was replaced while it was being checked", abs)
 	}
 	return handoffBinary{path: abs, file: after, accepts: acc, duration: took}, nil
+}
+
+// clip is b cut to at most n bytes.
+func clip(b []byte, n int) []byte {
+	if len(b) > n {
+		return b[:n]
+	}
+	return b
+}
+
+// checkBinaryOwner refuses a binary someone else could have put there: one
+// owned by neither this user nor root, or one its group or others can write.
+// The daemon runs it with every pane it holds.
+func checkBinaryOwner(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if uid, ok := fileUID(info); ok && uid != 0 && uid != os.Getuid() {
+		return fmt.Errorf("%s is owned by user %d, not by you or root, so this daemon will not run it. Install it as yourself or as root", path, uid)
+	}
+	if perm := info.Mode().Perm(); perm&0o022 != 0 {
+		return fmt.Errorf("%s can be written by its group or by others (mode %04o), so this daemon will not run it. Make it writable only by its owner: chmod go-w %s", path, perm, path)
+	}
+	return nil
 }
 
 // stillThere reports whether the binary's path still names the file the
