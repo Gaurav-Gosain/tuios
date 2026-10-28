@@ -267,7 +267,7 @@ func (m *OS) CopyDialogActivate(idx int) tea.Cmd {
 			d.err = "Type a folder."
 			return nil
 		}
-		if !strings.HasPrefix(dir, "/") && !strings.HasPrefix(dir, "~") {
+		if !session.IsHostPath(dir) {
 			d.err = "Type a full path, or one that starts with ~."
 			return nil
 		}
