@@ -166,605 +166,639 @@ func spaceRun(src string, p int) int {
 	return q
 }
 
+// lexer is the state of one run of tokenize: the tokens so far, the mode stack and the read position.
+type lexer struct {
+	src    string
+	n      int
+	types  []int
+	texts  []string
+	starts []int
+	stack  []int
+	state  int
+	p      int
+
+	firstGraph bool
+	dirNext    int
+	atNext     int
+	lineEnd    int
+	dirFailed  int
+	runEnd     int
+	runAt      int
+	wsFrom     int
+	wsTo       int
+}
+
+// code is the character at byte q, as charCodeAt would give it, or -1 past the end.
+// A byte inside a character gives 0xfffe, which no test matches.
+func (l *lexer) code(q int) rune {
+	if q < 0 || q >= l.n {
+		return -1
+	}
+	b := l.src[q]
+	if b < utf8.RuneSelf {
+		return rune(b)
+	}
+	r, _ := utf8.DecodeRuneInString(l.src[q:])
+	if r == utf8.RuneError {
+		return 0xfffe
+	}
+	if r > 0xffff {
+		// A high surrogate, as charCodeAt gives for the first unit.
+		return 0xd800
+	}
+	return r
+}
+
+// size is how many bytes the character at q takes: one step of pele's.
+func (l *lexer) size(q int) int {
+	if q >= l.n || l.src[q] < utf8.RuneSelf {
+		return 1
+	}
+	_, s := utf8.DecodeRuneInString(l.src[q:])
+	return s
+}
+
+//go:noinline
+func (l *lexer) isSpace(c rune) bool { return util.IsSpace(c) }
+
+//go:noinline
+func (l *lexer) emit(typ int, s, e int) {
+	l.types = append(l.types, typ)
+	l.texts = append(l.texts, l.src[s:e])
+	l.starts = append(l.starts, s)
+	l.p = e
+}
+
+//go:noinline
+func (l *lexer) push(s int) {
+	l.stack = append(l.stack, l.state)
+	l.state = s
+}
+
+//go:noinline
+func (l *lexer) pop() {
+	if len(l.stack) > 0 {
+		l.state = l.stack[len(l.stack)-1]
+		l.stack = l.stack[:len(l.stack)-1]
+	}
+}
+
+func (l *lexer) at(re *lazyre.Regexp, q int) int {
+	if q > l.n {
+		return -1
+	}
+	loc := re.FindStringIndex(l.src[q:])
+	if loc == nil {
+		return -1
+	}
+	return q + loc[1]
+}
+
+func (l *lexer) kw(word string) bool {
+	return strings.HasPrefix(l.src[l.p:], word) && !util.IsWord(l.code(l.p+len(word)))
+}
+
+func (l *lexer) skipSpace(j int) int {
+	for j < l.n && l.isSpace(l.code(j)) {
+		j += l.size(j)
+	}
+	return j
+}
+
+// First character after any run of whitespace starting at q, skipping one optional x, o or <.
+func (l *lexer) linkChar(q int) rune {
+	j := q
+	if q >= l.wsFrom && q <= l.wsTo {
+		j = l.wsTo
+	} else if l.isSpace(l.code(q)) {
+		j = l.skipSpace(j)
+		l.wsFrom = q
+		l.wsTo = j
+	}
+	d := l.code(j)
+	if d == 120 || d == 111 || d == 60 {
+		return l.code(j + 1)
+	}
+	return d
+}
+
+func (l *lexer) invisAhead(q int) bool {
+	j := q
+	if q >= l.wsFrom && q <= l.wsTo {
+		j = l.wsTo
+	} else if l.isSpace(l.code(q)) {
+		j = l.skipSpace(j)
+		l.wsFrom = q
+		l.wsTo = j
+	}
+	return l.code(j) == 126
+}
+
+func (l *lexer) quote() {
+	if l.code(l.p+1) == 96 {
+		l.push(S_md_string)
+		l.p += 2
+	} else {
+		l.push(S_string)
+		l.p++
+	}
+}
+
+func (l *lexer) invisLink() bool {
+	if !l.invisAhead(l.p) {
+		return false
+	}
+	e := l.at(RE_INVIS_LINK, l.p)
+	if e < 0 {
+		return false
+	}
+	l.emit(T_LINK, l.p, e)
+	return true
+}
+
+func (l *lexer) opener(c rune) bool {
+	d := l.code(l.p + 1)
+	if c == 40 {
+		if d == 45 {
+			l.push(S_ellipseText)
+			l.emit(T_ELLIPSE_START, l.p, l.p+2)
+		} else if d == 91 {
+			l.push(S_text)
+			l.emit(T_STADIUMSTART, l.p, l.p+2)
+		} else if d == 40 && l.code(l.p+2) == 40 {
+			l.push(S_text)
+			l.emit(T_DOUBLECIRCLESTART, l.p, l.p+3)
+		} else {
+			l.push(S_text)
+			l.emit(T_PS, l.p, l.p+1)
+		}
+		return true
+	}
+	if c == 91 {
+		if d == 91 {
+			l.push(S_text)
+			l.emit(T_SUBROUTINESTART, l.p, l.p+2)
+		} else if d == 40 {
+			l.push(S_text)
+			l.emit(T_CYLINDERSTART, l.p, l.p+2)
+		} else if d == 47 {
+			l.push(S_trapText)
+			l.emit(T_TRAPSTART, l.p, l.p+2)
+		} else if d == 92 {
+			l.push(S_trapText)
+			l.emit(T_INVTRAPSTART, l.p, l.p+2)
+		} else {
+			l.push(S_text)
+			l.emit(T_SQS, l.p, l.p+1)
+		}
+		return true
+	}
+	if c == 124 {
+		l.push(S_text)
+		l.emit(T_PIPE, l.p, l.p+1)
+		return true
+	}
+	if c == 123 {
+		l.push(S_text)
+		l.emit(T_DIAMOND_START, l.p, l.p+1)
+		return true
+	}
+	return false
+}
+
+//go:noinline
+func (l *lexer) graph(length int) {
+	if l.firstGraph {
+		l.firstGraph = false
+		l.push(S_dir)
+	}
+	l.emit(T_GRAPH, l.p, l.p+length)
+}
+
+func (l *lexer) nodeString() bool {
+	q := l.p
+	for q < l.n {
+		ch := l.code(q)
+		if ch >= 0 && ch < 128 && NODE_CHAR[ch] == 1 {
+			q++
+		} else if ch == 45 && q+1 < l.n {
+			d := l.code(q + 1)
+			if d == 62 || d == 45 || d == 46 {
+				break
+			}
+			q++
+		} else {
+			break
+		}
+	}
+	if q == l.p {
+		return false
+	}
+	l.emit(T_NODE_STRING, l.p, q)
+	return true
+}
+
+func (l *lexer) link(c rune) bool {
+	d := l.linkChar(l.p)
+	var e int
+	if d == 45 {
+		if e = linkEnd(l.src, l.p); e >= 0 {
+			l.emit(T_LINK, l.p, e)
+			return true
+		}
+		if e = startLinkEnd(l.src, l.p); e >= 0 {
+			l.push(S_edgeText)
+			l.emit(T_START_LINK, l.p, e)
+			return true
+		}
+		if e = l.at(RE_DOTTED_LINK, l.p); e >= 0 {
+			l.emit(T_LINK, l.p, e)
+			return true
+		}
+		if e = l.at(RE_DOTTED_START, l.p); e >= 0 {
+			l.push(S_dottedEdgeText)
+			l.emit(T_START_LINK, l.p, e)
+			return true
+		}
+	} else if d == 61 {
+		if e = l.at(RE_THICK_LINK, l.p); e >= 0 {
+			l.emit(T_LINK, l.p, e)
+			return true
+		}
+		if e = l.at(RE_THICK_START, l.p); e >= 0 {
+			l.push(S_thickEdgeText)
+			l.emit(T_START_LINK, l.p, e)
+			return true
+		}
+	} else if d == 46 {
+		if e = l.at(RE_DOTTED_LINK, l.p); e >= 0 {
+			l.emit(T_LINK, l.p, e)
+			return true
+		}
+	}
+	return c != 45 && c != 61 && c != 46 && l.invisLink()
+}
+
+func (l *lexer) initial(c rune) bool {
+	var e int
+	switch c {
+	case 97:
+		if strings.HasPrefix(l.src[l.p:], "acc") {
+			if e = l.at(RE_ACC_TITLE, l.p); e >= 0 {
+				l.push(S_acc_title)
+				l.emit(T_acc_title, l.p, e)
+				return true
+			}
+			if e = l.at(RE_ACC_DESCR, l.p); e >= 0 {
+				l.push(S_acc_descr)
+				l.emit(T_acc_descr, l.p, e)
+				return true
+			}
+			if e = l.at(RE_ACC_DESCR_ML, l.p); e >= 0 {
+				l.push(S_acc_descr_multiline)
+				l.p = e
+				return true
+			}
+		}
+	case 64:
+		if l.code(l.p+1) == 123 {
+			l.push(S_shapeData)
+			l.types = append(l.types, T_SHAPE_DATA)
+			l.texts = append(l.texts, "")
+			l.starts = append(l.starts, l.p)
+			l.p += 2
+			return true
+		}
+	case 99:
+		if e = l.at(RE_CALL, l.p); e >= 0 {
+			l.push(S_callbackname)
+			l.p = e
+			return true
+		}
+		if l.kw("classDef") {
+			l.emit(T_CLASSDEF, l.p, l.p+8)
+			return true
+		}
+		if l.kw("class") {
+			l.emit(T_CLASS, l.p, l.p+5)
+			return true
+		}
+		if e = l.at(RE_CLICK, l.p); e >= 0 {
+			l.push(S_click)
+			l.p = e
+			return true
+		}
+	case 34:
+		l.quote()
+		return true
+	case 115:
+		if l.kw("style") {
+			l.emit(T_STYLE, l.p, l.p+5)
+			return true
+		}
+		if l.kw("swimlane-beta") {
+			l.graph(13)
+			return true
+		}
+		if l.kw("subgraph") {
+			l.emit(T_subgraph, l.p, l.p+8)
+			return true
+		}
+	case 100:
+		if l.kw("default") {
+			l.emit(T_DEFAULT, l.p, l.p+7)
+			return true
+		}
+	case 108:
+		if l.kw("linkStyle") {
+			l.emit(T_LINKSTYLE, l.p, l.p+9)
+			return true
+		}
+	case 105:
+		if l.kw("interpolate") {
+			l.emit(T_INTERPOLATE, l.p, l.p+11)
+			return true
+		}
+	case 104:
+		if strings.HasPrefix(l.src[l.p:], "href") && l.isSpace(l.code(l.p+4)) {
+			l.emit(T_HREF, l.p, l.p+5)
+			return true
+		}
+	case 102:
+		if l.kw("flowchart-elk") {
+			l.graph(13)
+			return true
+		}
+		if l.kw("flowchart") {
+			l.graph(9)
+			return true
+		}
+	case 103:
+		if l.kw("graph") {
+			l.graph(5)
+			return true
+		}
+	case 101:
+		if l.kw("end") {
+			e = l.skipSpace(l.p + 3)
+			l.emit(T_end, l.p, e)
+			return true
+		}
+	case 95:
+		if l.kw("_self") {
+			l.emit(T_LINK_TARGET, l.p, l.p+5)
+			return true
+		}
+		if l.kw("_blank") {
+			l.emit(T_LINK_TARGET, l.p, l.p+6)
+			return true
+		}
+		if l.kw("_parent") {
+			l.emit(T_LINK_TARGET, l.p, l.p+7)
+			return true
+		}
+		if l.kw("_top") {
+			l.emit(T_LINK_TARGET, l.p, l.p+4)
+			return true
+		}
+	}
+
+	if l.dirNext != -1 && l.p >= l.dirFailed {
+		if l.dirNext < l.p {
+			l.dirNext = indexFrom(l.src, "direction", l.p)
+		}
+		if l.dirNext != -1 {
+			if l.lineEnd < l.p {
+				l.lineEnd = l.n
+				for q := l.p; q < l.n; q += l.size(q) {
+					if util.IsLineEnd(l.code(q)) {
+						l.lineEnd = q
+						break
+					}
+				}
+			}
+			if l.dirNext < l.lineEnd {
+				for i := 0; i < 5; i++ {
+					if e = l.at(RE_DIRECTION[i], l.p); e >= 0 {
+						l.emit(T_direction_tb+i, l.p, e)
+						return true
+					}
+				}
+				// No direction statement starts anywhere in the rest of this line either.
+				l.dirFailed = l.lineEnd
+			}
+		}
+	}
+
+	// A link id is a run of non-space characters up to its last `@` that is not followed by `{` or `"`.
+	if l.atNext != -1 && c != 34 && !l.isSpace(c) {
+		if l.p >= l.runEnd {
+			if l.atNext < l.p {
+				l.atNext = indexFrom(l.src, "@", l.p)
+			}
+			q := l.p
+			for q < l.n {
+				ch := l.code(q)
+				if ch == 34 || l.isSpace(ch) {
+					break
+				}
+				q++
+			}
+			l.runEnd = q
+			l.runAt = -1
+			if l.atNext != -1 && l.atNext < q {
+				for k := min(q, l.n-1) - 1; k >= l.atNext; k-- {
+					if l.code(k) != 64 {
+						continue
+					}
+					after := l.code(k + 1)
+					if after != 123 && after != 34 {
+						l.runAt = k
+						break
+					}
+				}
+			}
+		}
+		if l.runAt > l.p {
+			l.emit(T_LINK_ID, l.p, l.runAt+1)
+			return true
+		}
+	}
+
+	if c >= 48 && c <= 57 {
+		q := l.p + 1
+		for q < l.n {
+			ch := l.code(q)
+			if ch < 48 || ch > 57 {
+				break
+			}
+			q++
+		}
+		l.emit(T_NUM, l.p, q)
+		return true
+	}
+
+	switch c {
+	case 35:
+		l.emit(T_BRKT, l.p, l.p+1)
+		return true
+	case 58:
+		if l.code(l.p+1) == 58 && l.code(l.p+2) == 58 {
+			l.emit(T_STYLE_SEPARATOR, l.p, l.p+3)
+		} else {
+			l.emit(T_COLON, l.p, l.p+1)
+		}
+		return true
+	case 38:
+		l.emit(T_AMP, l.p, l.p+1)
+		return true
+	case 59:
+		l.emit(T_SEMI, l.p, l.p+1)
+		return true
+	case 44:
+		l.emit(T_COMMA, l.p, l.p+1)
+		return true
+	case 42:
+		l.emit(T_MULT, l.p, l.p+1)
+		return true
+	case 120, 111:
+		return l.link(c) || l.nodeString()
+	case 60:
+		if l.link(c) {
+			return true
+		}
+		l.emit(T_TAGSTART, l.p, l.p+1)
+		return true
+	case 45:
+		if l.link(c) || l.nodeString() {
+			return true
+		}
+		l.emit(T_MINUS, l.p, l.p+1)
+		return true
+	case 61:
+		return l.link(c)
+	case 46:
+		return l.link(c) || l.nodeString()
+	case 126:
+		return l.invisLink()
+	case 40:
+		return l.opener(c)
+	case 91:
+		if l.code(l.p+1) == 124 {
+			l.emit(T_VERTEX_WITH_PROPS_START, l.p, l.p+2)
+			return true
+		}
+		return l.opener(c)
+	case 124, 123:
+		return l.opener(c)
+	case 62:
+		l.push(S_text)
+		l.emit(T_TAGEND, l.p, l.p+1)
+		return true
+	case 94:
+		l.emit(T_UP, l.p, l.p+1)
+		return true
+	case 92:
+		if l.code(l.p+1) == 124 {
+			l.emit(T_SEP, l.p, l.p+2)
+			return true
+		}
+		return l.nodeString()
+	case 118:
+		if !util.IsWord(l.code(l.p + 1)) {
+			l.emit(T_DOWN, l.p, l.p+1)
+			return true
+		}
+		return l.nodeString()
+	}
+
+	if l.isSpace(c) {
+		if l.link(c) {
+			return true
+		}
+		if e = newlineRun(l.src, l.p); e >= 0 {
+			l.emit(T_NEWLINE, l.p, e)
+			return true
+		}
+		if e = spaceRun(l.src, l.p); e >= 0 {
+			l.emit(T_SPACE, l.p, e)
+			return true
+		}
+		return false
+	}
+
+	if c < 128 {
+		return l.nodeString()
+	}
+	if util.IsUnicodeLetter(c) {
+		l.emit(T_UNICODE_TEXT, l.p, l.p+l.size(l.p))
+		return true
+	}
+	return false
+}
+
+func (l *lexer) edgeText(c rune, linkRe *lazyre.Regexp, a, b rune) bool {
+	if c == 34 {
+		l.quote()
+		return true
+	}
+	d := l.linkChar(l.p)
+	if d == a || d == b {
+		e := l.at(linkRe, l.p)
+		if e >= 0 {
+			l.pop()
+			l.emit(T_LINK, l.p, e)
+			return true
+		}
+	}
+	if c == a && (a != 45 || l.code(l.p+1) == 45) {
+		return false
+	}
+	q := l.p + l.size(l.p)
+	for q < l.n {
+		ch := l.code(q)
+		if ch == 34 {
+			break
+		}
+		if ch == a {
+			if a != 45 || l.code(q+1) == 45 {
+				break
+			}
+		} else if ch == 120 || ch == 111 || ch == 60 || ch == b || l.isSpace(ch) {
+			dd := l.linkChar(q)
+			if (dd == a || dd == b) && l.at(linkRe, q) >= 0 {
+				break
+			}
+		}
+		q++
+	}
+	l.emit(T_EDGE_TEXT, l.p, q)
+	return true
+}
+
 func tokenize(src string) Tokens {
 	n := len(src)
 	// About one token for every three bytes of a flowchart.
 	guess := n/3 + 8
-	types := make([]int, 0, guess)
-	texts := make([]string, 0, guess)
-	starts := make([]int, 0, guess)
-	var stack []int
-	state := S_INITIAL
-	p := 0
-	firstGraph := true
-	dirNext := strings.Index(src, "direction")
-	atNext := strings.Index(src, "@")
-	lineEnd := -1
-	dirFailed := 0
-	runEnd := 0
-	runAt := -1
-	wsFrom := -1
-	wsTo := -1
-
-	// code is the character at byte q, as charCodeAt would give it, or -1 past the end.
-	// A byte inside a character gives 0xfffe, which no test matches.
-	code := func(q int) rune {
-		if q < 0 || q >= n {
-			return -1
-		}
-		b := src[q]
-		if b < utf8.RuneSelf {
-			return rune(b)
-		}
-		r, _ := utf8.DecodeRuneInString(src[q:])
-		if r == utf8.RuneError {
-			return 0xfffe
-		}
-		if r > 0xffff {
-			// A high surrogate, as charCodeAt gives for the first unit.
-			return 0xd800
-		}
-		return r
+	l := &lexer{
+		src:        src,
+		n:          n,
+		types:      make([]int, 0, guess),
+		texts:      make([]string, 0, guess),
+		starts:     make([]int, 0, guess),
+		state:      S_INITIAL,
+		firstGraph: true,
+		dirNext:    strings.Index(src, "direction"),
+		atNext:     strings.Index(src, "@"),
+		lineEnd:    -1,
+		runAt:      -1,
+		wsFrom:     -1,
+		wsTo:       -1,
 	}
-	// size is how many bytes the character at q takes: one step of pele's.
-	size := func(q int) int {
-		if q >= n || src[q] < utf8.RuneSelf {
-			return 1
-		}
-		_, s := utf8.DecodeRuneInString(src[q:])
-		return s
-	}
-	isSpace := func(c rune) bool { return util.IsSpace(c) }
-
-	emit := func(typ int, s, e int) {
-		types = append(types, typ)
-		texts = append(texts, src[s:e])
-		starts = append(starts, s)
-		p = e
-	}
-	push := func(s int) {
-		stack = append(stack, state)
-		state = s
-	}
-	pop := func() {
-		if len(stack) > 0 {
-			state = stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-		}
-	}
-	at := func(re *lazyre.Regexp, q int) int {
-		if q > n {
-			return -1
-		}
-		loc := re.FindStringIndex(src[q:])
-		if loc == nil {
-			return -1
-		}
-		return q + loc[1]
-	}
-	kw := func(word string) bool {
-		return strings.HasPrefix(src[p:], word) && !util.IsWord(code(p+len(word)))
-	}
-	skipSpace := func(j int) int {
-		for j < n && isSpace(code(j)) {
-			j += size(j)
-		}
-		return j
-	}
-
-	// First character after any run of whitespace starting at q, skipping one optional x, o or <.
-	linkChar := func(q int) rune {
-		j := q
-		if q >= wsFrom && q <= wsTo {
-			j = wsTo
-		} else if isSpace(code(q)) {
-			j = skipSpace(j)
-			wsFrom = q
-			wsTo = j
-		}
-		d := code(j)
-		if d == 120 || d == 111 || d == 60 {
-			return code(j + 1)
-		}
-		return d
-	}
-	invisAhead := func(q int) bool {
-		j := q
-		if q >= wsFrom && q <= wsTo {
-			j = wsTo
-		} else if isSpace(code(q)) {
-			j = skipSpace(j)
-			wsFrom = q
-			wsTo = j
-		}
-		return code(j) == 126
-	}
-
-	quote := func() {
-		if code(p+1) == 96 {
-			push(S_md_string)
-			p += 2
-		} else {
-			push(S_string)
-			p++
-		}
-	}
-
-	invisLink := func() bool {
-		if !invisAhead(p) {
-			return false
-		}
-		e := at(RE_INVIS_LINK, p)
-		if e < 0 {
-			return false
-		}
-		emit(T_LINK, p, e)
-		return true
-	}
-
-	opener := func(c rune) bool {
-		d := code(p + 1)
-		if c == 40 {
-			if d == 45 {
-				push(S_ellipseText)
-				emit(T_ELLIPSE_START, p, p+2)
-			} else if d == 91 {
-				push(S_text)
-				emit(T_STADIUMSTART, p, p+2)
-			} else if d == 40 && code(p+2) == 40 {
-				push(S_text)
-				emit(T_DOUBLECIRCLESTART, p, p+3)
-			} else {
-				push(S_text)
-				emit(T_PS, p, p+1)
-			}
-			return true
-		}
-		if c == 91 {
-			if d == 91 {
-				push(S_text)
-				emit(T_SUBROUTINESTART, p, p+2)
-			} else if d == 40 {
-				push(S_text)
-				emit(T_CYLINDERSTART, p, p+2)
-			} else if d == 47 {
-				push(S_trapText)
-				emit(T_TRAPSTART, p, p+2)
-			} else if d == 92 {
-				push(S_trapText)
-				emit(T_INVTRAPSTART, p, p+2)
-			} else {
-				push(S_text)
-				emit(T_SQS, p, p+1)
-			}
-			return true
-		}
-		if c == 124 {
-			push(S_text)
-			emit(T_PIPE, p, p+1)
-			return true
-		}
-		if c == 123 {
-			push(S_text)
-			emit(T_DIAMOND_START, p, p+1)
-			return true
-		}
-		return false
-	}
-
-	graph := func(length int) {
-		if firstGraph {
-			firstGraph = false
-			push(S_dir)
-		}
-		emit(T_GRAPH, p, p+length)
-	}
-
-	nodeString := func() bool {
-		q := p
-		for q < n {
-			ch := code(q)
-			if ch >= 0 && ch < 128 && NODE_CHAR[ch] == 1 {
-				q++
-			} else if ch == 45 && q+1 < n {
-				d := code(q + 1)
-				if d == 62 || d == 45 || d == 46 {
-					break
-				}
-				q++
-			} else {
-				break
-			}
-		}
-		if q == p {
-			return false
-		}
-		emit(T_NODE_STRING, p, q)
-		return true
-	}
-
-	link := func(c rune) bool {
-		d := linkChar(p)
-		var e int
-		if d == 45 {
-			if e = linkEnd(src, p); e >= 0 {
-				emit(T_LINK, p, e)
-				return true
-			}
-			if e = startLinkEnd(src, p); e >= 0 {
-				push(S_edgeText)
-				emit(T_START_LINK, p, e)
-				return true
-			}
-			if e = at(RE_DOTTED_LINK, p); e >= 0 {
-				emit(T_LINK, p, e)
-				return true
-			}
-			if e = at(RE_DOTTED_START, p); e >= 0 {
-				push(S_dottedEdgeText)
-				emit(T_START_LINK, p, e)
-				return true
-			}
-		} else if d == 61 {
-			if e = at(RE_THICK_LINK, p); e >= 0 {
-				emit(T_LINK, p, e)
-				return true
-			}
-			if e = at(RE_THICK_START, p); e >= 0 {
-				push(S_thickEdgeText)
-				emit(T_START_LINK, p, e)
-				return true
-			}
-		} else if d == 46 {
-			if e = at(RE_DOTTED_LINK, p); e >= 0 {
-				emit(T_LINK, p, e)
-				return true
-			}
-		}
-		return c != 45 && c != 61 && c != 46 && invisLink()
-	}
-
-	initial := func(c rune) bool {
-		var e int
-		switch c {
-		case 97:
-			if strings.HasPrefix(src[p:], "acc") {
-				if e = at(RE_ACC_TITLE, p); e >= 0 {
-					push(S_acc_title)
-					emit(T_acc_title, p, e)
-					return true
-				}
-				if e = at(RE_ACC_DESCR, p); e >= 0 {
-					push(S_acc_descr)
-					emit(T_acc_descr, p, e)
-					return true
-				}
-				if e = at(RE_ACC_DESCR_ML, p); e >= 0 {
-					push(S_acc_descr_multiline)
-					p = e
-					return true
-				}
-			}
-		case 64:
-			if code(p+1) == 123 {
-				push(S_shapeData)
-				types = append(types, T_SHAPE_DATA)
-				texts = append(texts, "")
-				starts = append(starts, p)
-				p += 2
-				return true
-			}
-		case 99:
-			if e = at(RE_CALL, p); e >= 0 {
-				push(S_callbackname)
-				p = e
-				return true
-			}
-			if kw("classDef") {
-				emit(T_CLASSDEF, p, p+8)
-				return true
-			}
-			if kw("class") {
-				emit(T_CLASS, p, p+5)
-				return true
-			}
-			if e = at(RE_CLICK, p); e >= 0 {
-				push(S_click)
-				p = e
-				return true
-			}
-		case 34:
-			quote()
-			return true
-		case 115:
-			if kw("style") {
-				emit(T_STYLE, p, p+5)
-				return true
-			}
-			if kw("swimlane-beta") {
-				graph(13)
-				return true
-			}
-			if kw("subgraph") {
-				emit(T_subgraph, p, p+8)
-				return true
-			}
-		case 100:
-			if kw("default") {
-				emit(T_DEFAULT, p, p+7)
-				return true
-			}
-		case 108:
-			if kw("linkStyle") {
-				emit(T_LINKSTYLE, p, p+9)
-				return true
-			}
-		case 105:
-			if kw("interpolate") {
-				emit(T_INTERPOLATE, p, p+11)
-				return true
-			}
-		case 104:
-			if strings.HasPrefix(src[p:], "href") && isSpace(code(p+4)) {
-				emit(T_HREF, p, p+5)
-				return true
-			}
-		case 102:
-			if kw("flowchart-elk") {
-				graph(13)
-				return true
-			}
-			if kw("flowchart") {
-				graph(9)
-				return true
-			}
-		case 103:
-			if kw("graph") {
-				graph(5)
-				return true
-			}
-		case 101:
-			if kw("end") {
-				e = skipSpace(p + 3)
-				emit(T_end, p, e)
-				return true
-			}
-		case 95:
-			if kw("_self") {
-				emit(T_LINK_TARGET, p, p+5)
-				return true
-			}
-			if kw("_blank") {
-				emit(T_LINK_TARGET, p, p+6)
-				return true
-			}
-			if kw("_parent") {
-				emit(T_LINK_TARGET, p, p+7)
-				return true
-			}
-			if kw("_top") {
-				emit(T_LINK_TARGET, p, p+4)
-				return true
-			}
-		}
-
-		if dirNext != -1 && p >= dirFailed {
-			if dirNext < p {
-				dirNext = indexFrom(src, "direction", p)
-			}
-			if dirNext != -1 {
-				if lineEnd < p {
-					lineEnd = n
-					for q := p; q < n; q += size(q) {
-						if util.IsLineEnd(code(q)) {
-							lineEnd = q
-							break
-						}
-					}
-				}
-				if dirNext < lineEnd {
-					for i := 0; i < 5; i++ {
-						if e = at(RE_DIRECTION[i], p); e >= 0 {
-							emit(T_direction_tb+i, p, e)
-							return true
-						}
-					}
-					// No direction statement starts anywhere in the rest of this line either.
-					dirFailed = lineEnd
-				}
-			}
-		}
-
-		// A link id is a run of non-space characters up to its last `@` that is not followed by `{` or `"`.
-		if atNext != -1 && c != 34 && !isSpace(c) {
-			if p >= runEnd {
-				if atNext < p {
-					atNext = indexFrom(src, "@", p)
-				}
-				q := p
-				for q < n {
-					ch := code(q)
-					if ch == 34 || isSpace(ch) {
-						break
-					}
-					q++
-				}
-				runEnd = q
-				runAt = -1
-				if atNext != -1 && atNext < q {
-					for k := min(q, n-1) - 1; k >= atNext; k-- {
-						if code(k) != 64 {
-							continue
-						}
-						after := code(k + 1)
-						if after != 123 && after != 34 {
-							runAt = k
-							break
-						}
-					}
-				}
-			}
-			if runAt > p {
-				emit(T_LINK_ID, p, runAt+1)
-				return true
-			}
-		}
-
-		if c >= 48 && c <= 57 {
-			q := p + 1
-			for q < n {
-				ch := code(q)
-				if ch < 48 || ch > 57 {
-					break
-				}
-				q++
-			}
-			emit(T_NUM, p, q)
-			return true
-		}
-
-		switch c {
-		case 35:
-			emit(T_BRKT, p, p+1)
-			return true
-		case 58:
-			if code(p+1) == 58 && code(p+2) == 58 {
-				emit(T_STYLE_SEPARATOR, p, p+3)
-			} else {
-				emit(T_COLON, p, p+1)
-			}
-			return true
-		case 38:
-			emit(T_AMP, p, p+1)
-			return true
-		case 59:
-			emit(T_SEMI, p, p+1)
-			return true
-		case 44:
-			emit(T_COMMA, p, p+1)
-			return true
-		case 42:
-			emit(T_MULT, p, p+1)
-			return true
-		case 120, 111:
-			return link(c) || nodeString()
-		case 60:
-			if link(c) {
-				return true
-			}
-			emit(T_TAGSTART, p, p+1)
-			return true
-		case 45:
-			if link(c) || nodeString() {
-				return true
-			}
-			emit(T_MINUS, p, p+1)
-			return true
-		case 61:
-			return link(c)
-		case 46:
-			return link(c) || nodeString()
-		case 126:
-			return invisLink()
-		case 40:
-			return opener(c)
-		case 91:
-			if code(p+1) == 124 {
-				emit(T_VERTEX_WITH_PROPS_START, p, p+2)
-				return true
-			}
-			return opener(c)
-		case 124, 123:
-			return opener(c)
-		case 62:
-			push(S_text)
-			emit(T_TAGEND, p, p+1)
-			return true
-		case 94:
-			emit(T_UP, p, p+1)
-			return true
-		case 92:
-			if code(p+1) == 124 {
-				emit(T_SEP, p, p+2)
-				return true
-			}
-			return nodeString()
-		case 118:
-			if !util.IsWord(code(p + 1)) {
-				emit(T_DOWN, p, p+1)
-				return true
-			}
-			return nodeString()
-		}
-
-		if isSpace(c) {
-			if link(c) {
-				return true
-			}
-			if e = newlineRun(src, p); e >= 0 {
-				emit(T_NEWLINE, p, e)
-				return true
-			}
-			if e = spaceRun(src, p); e >= 0 {
-				emit(T_SPACE, p, e)
-				return true
-			}
-			return false
-		}
-
-		if c < 128 {
-			return nodeString()
-		}
-		if util.IsUnicodeLetter(c) {
-			emit(T_UNICODE_TEXT, p, p+size(p))
-			return true
-		}
-		return false
-	}
-
-	edgeText := func(c rune, linkRe *lazyre.Regexp, a, b rune) bool {
-		if c == 34 {
-			quote()
-			return true
-		}
-		d := linkChar(p)
-		if d == a || d == b {
-			e := at(linkRe, p)
-			if e >= 0 {
-				pop()
-				emit(T_LINK, p, e)
-				return true
-			}
-		}
-		if c == a && (a != 45 || code(p+1) == 45) {
-			return false
-		}
-		q := p + size(p)
-		for q < n {
-			ch := code(q)
-			if ch == 34 {
-				break
-			}
-			if ch == a {
-				if a != 45 || code(q+1) == 45 {
-					break
-				}
-			} else if ch == 120 || ch == 111 || ch == 60 || ch == b || isSpace(ch) {
-				dd := linkChar(q)
-				if (dd == a || dd == b) && at(linkRe, q) >= 0 {
-					break
-				}
-			}
-			q++
-		}
-		emit(T_EDGE_TEXT, p, q)
-		return true
-	}
-
 	for {
-		if p >= n {
+		if l.p >= l.n {
 			typ := -1
-			switch state {
+			switch l.state {
 			case S_INITIAL:
 				typ = T_EOF
 			case S_acc_title:
@@ -781,217 +815,217 @@ func tokenize(src string) Tokens {
 				typ = T_CALLBACKARGS
 			}
 			if typ != -1 {
-				emit(typ, n, n)
+				l.emit(typ, l.n, l.n)
 			}
 			break
 		}
 
-		c := code(p)
+		c := l.code(l.p)
 		ok := true
 
-		switch state {
+		switch l.state {
 		case S_INITIAL:
-			ok = initial(c)
+			ok = l.initial(c)
 
 		case S_string:
 			if c == 34 {
-				if code(p+1) == 96 {
-					push(S_md_string)
-					p += 2
+				if l.code(l.p+1) == 96 {
+					l.push(S_md_string)
+					l.p += 2
 				} else {
-					pop()
-					p++
+					l.pop()
+					l.p++
 				}
 			} else {
-				e := indexFrom(src, `"`, p)
+				e := indexFrom(l.src, `"`, l.p)
 				if e == -1 {
-					e = n
+					e = l.n
 				}
-				emit(T_STR, p, e)
+				l.emit(T_STR, l.p, e)
 			}
 
 		case S_md_string:
 			if c == 96 {
-				if code(p+1) == 34 {
-					pop()
-					p += 2
+				if l.code(l.p+1) == 34 {
+					l.pop()
+					l.p += 2
 				} else {
 					ok = false
 				}
 			} else if c == 34 {
-				quote()
+				l.quote()
 			} else {
-				q := p + size(p)
-				for q < n {
-					ch := code(q)
+				q := l.p + l.size(l.p)
+				for q < l.n {
+					ch := l.code(q)
 					if ch == 96 || ch == 34 {
 						break
 					}
 					q++
 				}
-				emit(T_MD_STR, p, q)
+				l.emit(T_MD_STR, l.p, q)
 			}
 
 		case S_acc_title, S_acc_descr:
-			e := indexFrom(src, "\n", p)
+			e := indexFrom(l.src, "\n", l.p)
 			if e == -1 {
-				e = n
+				e = l.n
 			}
 			typ := T_acc_descr_value
-			if state == S_acc_title {
+			if l.state == S_acc_title {
 				typ = T_acc_title_value
 			}
-			pop()
-			emit(typ, p, e)
+			l.pop()
+			l.emit(typ, l.p, e)
 
 		case S_acc_descr_multiline:
 			if c == 125 {
-				pop()
-				p++
+				l.pop()
+				l.p++
 			} else {
-				e := indexFrom(src, "}", p)
+				e := indexFrom(l.src, "}", l.p)
 				if e == -1 {
-					e = n
+					e = l.n
 				}
-				emit(T_acc_descr_multiline_value, p, e)
+				l.emit(T_acc_descr_multiline_value, l.p, e)
 			}
 
 		case S_dir:
 			var e int
 			if c == 34 {
-				quote()
-			} else if e = at(RE_NODIR, p); e >= 0 {
-				pop()
-				emit(T_NODIR, p, e)
-			} else if e = at(RE_DIR, p); e >= 0 {
-				pop()
-				emit(T_DIR, p, e)
-			} else if e = at(RE_DIR_SYM, p); e >= 0 {
-				pop()
-				emit(T_DIR, p, e)
-			} else if e = at(RE_DIR_V, p); e >= 0 {
-				pop()
-				emit(T_DIR, p, e)
+				l.quote()
+			} else if e = l.at(RE_NODIR, l.p); e >= 0 {
+				l.pop()
+				l.emit(T_NODIR, l.p, e)
+			} else if e = l.at(RE_DIR, l.p); e >= 0 {
+				l.pop()
+				l.emit(T_DIR, l.p, e)
+			} else if e = l.at(RE_DIR_SYM, l.p); e >= 0 {
+				l.pop()
+				l.emit(T_DIR, l.p, e)
+			} else if e = l.at(RE_DIR_V, l.p); e >= 0 {
+				l.pop()
+				l.emit(T_DIR, l.p, e)
 			} else {
-				ok = invisLink() || opener(c)
+				ok = l.invisLink() || l.opener(c)
 			}
 
 		case S_text:
-			d := code(p + 1)
+			d := l.code(l.p + 1)
 			switch c {
 			case 34:
-				quote()
+				l.quote()
 			case 40, 91, 123:
-				opener(c)
+				l.opener(c)
 			case 93:
-				pop()
+				l.pop()
 				if d == 41 {
-					emit(T_STADIUMEND, p, p+2)
+					l.emit(T_STADIUMEND, l.p, l.p+2)
 				} else if d == 93 {
-					emit(T_SUBROUTINEEND, p, p+2)
+					l.emit(T_SUBROUTINEEND, l.p, l.p+2)
 				} else {
-					emit(T_SQE, p, p+1)
+					l.emit(T_SQE, l.p, l.p+1)
 				}
 			case 41:
-				pop()
+				l.pop()
 				if d == 93 {
-					emit(T_CYLINDEREND, p, p+2)
-				} else if d == 41 && code(p+2) == 41 {
-					emit(T_DOUBLECIRCLEEND, p, p+3)
+					l.emit(T_CYLINDEREND, l.p, l.p+2)
+				} else if d == 41 && l.code(l.p+2) == 41 {
+					l.emit(T_DOUBLECIRCLEEND, l.p, l.p+3)
 				} else {
-					emit(T_PE, p, p+1)
+					l.emit(T_PE, l.p, l.p+1)
 				}
 			case 124:
-				pop()
-				emit(T_PIPE, p, p+1)
+				l.pop()
+				l.emit(T_PIPE, l.p, l.p+1)
 			case 125:
-				pop()
-				emit(T_DIAMOND_STOP, p, p+1)
+				l.pop()
+				l.emit(T_DIAMOND_STOP, l.p, l.p+1)
 			default:
-				if (c == 126 || isSpace(c)) && invisLink() {
+				if (c == 126 || l.isSpace(c)) && l.invisLink() {
 					break
 				}
-				q := p + size(p)
-				for q < n {
-					ch := code(q)
+				q := l.p + l.size(l.p)
+				for q < l.n {
+					ch := l.code(q)
 					if ch == 91 || ch == 93 || ch == 40 || ch == 41 || ch == 123 || ch == 125 || ch == 124 || ch == 34 {
 						break
 					}
 					q++
 				}
-				emit(T_TEXT, p, q)
+				l.emit(T_TEXT, l.p, q)
 			}
 
 		case S_ellipseText:
-			d := code(p + 1)
+			d := l.code(l.p + 1)
 			if c == 34 {
-				quote()
-			} else if (c == 126 || isSpace(c)) && invisLink() {
+				l.quote()
+			} else if (c == 126 || l.isSpace(c)) && l.invisLink() {
 				break
 			} else if (c == 45 || c == 47 || c == 41) && d == 41 {
-				pop()
-				emit(T_ELLIPSE_END, p, p+2)
+				l.pop()
+				l.emit(T_ELLIPSE_END, l.p, l.p+2)
 			} else if c == 40 || c == 91 || c == 123 {
-				opener(c)
+				l.opener(c)
 			} else if c == 41 || c == 93 || c == 125 {
 				ok = false
 			} else {
-				q := p + size(p)
-				for q < n {
-					ch := code(q)
+				q := l.p + l.size(l.p)
+				for q < l.n {
+					ch := l.code(q)
 					if ch == 34 || ch == 40 || ch == 41 || ch == 91 || ch == 93 || ch == 123 || ch == 125 {
 						break
 					}
-					if (ch == 45 || ch == 47) && code(q+1) == 41 {
+					if (ch == 45 || ch == 47) && l.code(q+1) == 41 {
 						break
 					}
-					if (ch == 126 || isSpace(ch)) && invisAhead(q) && at(RE_INVIS_LINK, q) >= 0 {
+					if (ch == 126 || l.isSpace(ch)) && l.invisAhead(q) && l.at(RE_INVIS_LINK, q) >= 0 {
 						break
 					}
 					q++
 				}
-				emit(T_TEXT, p, q)
+				l.emit(T_TEXT, l.p, q)
 			}
 
 		case S_trapText:
-			d := code(p + 1)
+			d := l.code(l.p + 1)
 			if c == 34 {
-				quote()
+				l.quote()
 				break
 			}
-			if (c == 126 || isSpace(c)) && invisLink() {
+			if (c == 126 || l.isSpace(c)) && l.invisLink() {
 				break
 			}
 			switch c {
 			case 40:
-				if d == 45 || d == 91 || (d == 40 && code(p+2) == 40) {
-					opener(c)
+				if d == 45 || d == 91 || (d == 40 && l.code(l.p+2) == 40) {
+					l.opener(c)
 				} else if d == 93 {
-					pop()
-					emit(T_TRAPEND, p, p+2)
+					l.pop()
+					l.emit(T_TRAPEND, l.p, l.p+2)
 				} else {
-					opener(c)
+					l.opener(c)
 				}
 			case 91, 123:
-				opener(c)
+				l.opener(c)
 			case 92:
 				if d == 93 {
-					pop()
-					emit(T_TRAPEND, p, p+2)
+					l.pop()
+					l.emit(T_TRAPEND, l.p, l.p+2)
 				} else {
-					emit(T_TEXT, p, p+1)
+					l.emit(T_TEXT, l.p, l.p+1)
 				}
 			case 47:
 				if d == 93 {
-					pop()
-					emit(T_INVTRAPEND, p, p+2)
+					l.pop()
+					l.emit(T_INVTRAPEND, l.p, l.p+2)
 				} else {
-					emit(T_TEXT, p, p+1)
+					l.emit(T_TEXT, l.p, l.p+1)
 				}
 			case 93, 41:
 				if d == 93 {
-					pop()
-					emit(T_TRAPEND, p, p+2)
+					l.pop()
+					l.emit(T_TRAPEND, l.p, l.p+2)
 				} else {
 					ok = false
 				}
@@ -999,121 +1033,121 @@ func tokenize(src string) Tokens {
 				ok = false
 			default:
 				if (c == 63 || c == 61) && d == 93 {
-					pop()
-					emit(T_TRAPEND, p, p+2)
+					l.pop()
+					l.emit(T_TRAPEND, l.p, l.p+2)
 					break
 				}
-				q := p + size(p)
-				for q < n {
-					ch := code(q)
+				q := l.p + l.size(l.p)
+				for q < l.n {
+					ch := l.code(q)
 					if ch == 92 || ch == 91 || ch == 93 || ch == 40 || ch == 41 || ch == 123 || ch == 125 || ch == 47 {
 						break
 					}
 					q++
 				}
-				emit(T_TEXT, p, q)
+				l.emit(T_TEXT, l.p, q)
 			}
 
 		case S_edgeText:
-			ok = edgeText(c, RE_LINK, 45, -1)
+			ok = l.edgeText(c, RE_LINK, 45, -1)
 		case S_thickEdgeText:
-			ok = edgeText(c, RE_THICK_LINK, 61, -1)
+			ok = l.edgeText(c, RE_THICK_LINK, 61, -1)
 		case S_dottedEdgeText:
-			ok = edgeText(c, RE_DOTTED_LINK, 46, 45)
+			ok = l.edgeText(c, RE_DOTTED_LINK, 46, 45)
 
 		case S_click:
 			if c == 34 {
-				quote()
-			} else if isSpace(c) {
-				pop()
-				p += size(p)
+				l.quote()
+			} else if l.isSpace(c) {
+				l.pop()
+				l.p += l.size(l.p)
 			} else {
-				q := p + size(p)
-				for q < n && !isSpace(code(q)) {
+				q := l.p + l.size(l.p)
+				for q < l.n && !l.isSpace(l.code(q)) {
 					q++
 				}
-				emit(T_CLICK, p, q)
+				l.emit(T_CLICK, l.p, q)
 			}
 
 		case S_callbackname:
 			if c == 40 {
-				e := at(RE_EMPTY_CALL, p)
-				pop()
+				e := l.at(RE_EMPTY_CALL, l.p)
+				l.pop()
 				if e >= 0 {
-					p = e
+					l.p = e
 				} else {
-					push(S_callbackargs)
-					p++
+					l.push(S_callbackargs)
+					l.p++
 				}
 			} else {
-				e := indexFrom(src, "(", p)
+				e := indexFrom(l.src, "(", l.p)
 				if e == -1 {
-					e = n
+					e = l.n
 				}
-				emit(T_CALLBACKNAME, p, e)
+				l.emit(T_CALLBACKNAME, l.p, e)
 			}
 
 		case S_callbackargs:
 			if c == 41 {
-				pop()
-				p++
+				l.pop()
+				l.p++
 			} else {
-				e := indexFrom(src, ")", p)
+				e := indexFrom(l.src, ")", l.p)
 				if e == -1 {
-					e = n
+					e = l.n
 				}
-				emit(T_CALLBACKARGS, p, e)
+				l.emit(T_CALLBACKARGS, l.p, e)
 			}
 
 		case S_shapeData:
 			if c == 34 {
-				push(S_shapeDataStr)
-				emit(T_SHAPE_DATA, p, p+1)
+				l.push(S_shapeDataStr)
+				l.emit(T_SHAPE_DATA, l.p, l.p+1)
 			} else if c == 125 {
-				pop()
-				p++
+				l.pop()
+				l.p++
 			} else if c == 94 {
 				ok = false
 			} else {
-				q := p + size(p)
-				for q < n {
-					ch := code(q)
+				q := l.p + l.size(l.p)
+				for q < l.n {
+					ch := l.code(q)
 					if ch == 125 || ch == 94 || ch == 34 {
 						break
 					}
 					q++
 				}
-				emit(T_SHAPE_DATA, p, q)
+				l.emit(T_SHAPE_DATA, l.p, q)
 			}
 
 		case S_shapeDataStr:
 			if c == 34 {
-				pop()
-				emit(T_SHAPE_DATA, p, p+1)
+				l.pop()
+				l.emit(T_SHAPE_DATA, l.p, l.p+1)
 			} else {
-				e := indexFrom(src, `"`, p)
+				e := indexFrom(l.src, `"`, l.p)
 				if e == -1 {
-					e = n
+					e = l.n
 				}
-				types = append(types, T_SHAPE_DATA)
-				texts = append(texts, RE_BR.ReplaceAllString(src[p:e], "<br/>"))
-				starts = append(starts, p)
-				p = e
+				l.types = append(l.types, T_SHAPE_DATA)
+				l.texts = append(l.texts, RE_BR.ReplaceAllString(l.src[l.p:e], "<br/>"))
+				l.starts = append(l.starts, l.p)
+				l.p = e
 			}
 		}
 
 		if !ok {
-			types = append(types, T_ERROR)
-			texts = append(texts, "")
-			starts = append(starts, p)
-			return Tokens{types, texts, starts}
+			l.types = append(l.types, T_ERROR)
+			l.texts = append(l.texts, "")
+			l.starts = append(l.starts, l.p)
+			return Tokens{l.types, l.texts, l.starts}
 		}
 	}
 
-	types = append(types, T_END)
-	texts = append(texts, "")
-	starts = append(starts, n)
-	return Tokens{types, texts, starts}
+	l.types = append(l.types, T_END)
+	l.texts = append(l.texts, "")
+	l.starts = append(l.starts, l.n)
+	return Tokens{l.types, l.texts, l.starts}
 }
 
 // indexFrom is s.indexOf(sub, from).

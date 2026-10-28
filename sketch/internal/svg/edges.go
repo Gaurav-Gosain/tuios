@@ -271,6 +271,7 @@ func appendPoint(b []byte, x, y float64) []byte {
 	return AppendNum(b, y)
 }
 
+//go:noinline
 func MarkerTrim(typ string) float64 {
 	switch typ {
 	case "arrow_point":

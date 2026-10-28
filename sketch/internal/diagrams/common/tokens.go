@@ -642,6 +642,7 @@ func NewReader(tokens Tokens, types []*TokenType, diagram string) *Reader {
 	return &Reader{Kinds: tokens.Kinds, Tokens: tokens, Types: types, Diagram: diagram}
 }
 
+//go:noinline
 func (r *Reader) Kind() int {
 	if r.I >= len(r.Kinds) {
 		return -1
@@ -649,6 +650,7 @@ func (r *Reader) Kind() int {
 	return r.Kinds[r.I]
 }
 
+//go:noinline
 func (r *Reader) Text(index int) string {
 	if index >= len(r.Kinds) {
 		index = len(r.Kinds) - 1
@@ -656,12 +658,14 @@ func (r *Reader) Text(index int) string {
 	return r.Tokens.Src[r.Tokens.Starts[index]:r.Tokens.Ends[index]]
 }
 
+//go:noinline
 func (r *Reader) Take() string {
 	text := r.Text(r.I)
 	r.I++
 	return text
 }
 
+//go:noinline
 func (r *Reader) Accept(kind int) bool {
 	if r.Kind() != kind {
 		return false

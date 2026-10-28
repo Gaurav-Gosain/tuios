@@ -148,303 +148,318 @@ func isWordAt(src string, q int) bool {
 	return q < len(src) && util.IsWord(rune(src[q]))
 }
 
-// tokenize produces the token stream of Mermaid's requirement lexer. Its rules are tried in order and
-// the first match wins, so a line that holds a direction statement anywhere is one token.
-func tokenize(src string) Tokens {
-	n := len(src)
-	var out Tokens
-	var stack []int
-	state := S_INITIAL
-	p := 0
+// lexer is the state of one run of tokenize: the tokens so far, the mode stack and the read position.
+type lexer struct {
+	src   string
+	n     int
+	out   Tokens
+	stack []int
+	state int
+	p     int
 
 	// Where each kind of direction statement starts and where its keyword ends, found in one pass.
-	dirStarts, dirEnds, anyDir := directions(src)
-	var dirSeen [4]int
-	lineEnd := -1
+	dirStarts [4][]int
+	dirEnds   [4][]int
+	anyDir    bool
+	dirSeen   [4]int
+	lineEnd   int
+}
 
-	emit := func(typ, s, e int) {
-		out.types = append(out.types, typ)
-		out.texts = append(out.texts, src[s:e])
-		out.starts = append(out.starts, s)
-		p = e
-	}
-	push := func(s int) {
-		stack = append(stack, state)
-		state = s
-	}
-	pop := func() {
-		if len(stack) > 0 {
-			state = stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-		}
-	}
-	lineBreak := func(q int) int {
-		if e := strings.IndexByte(src[q:], '\n'); e >= 0 {
-			return q + e
-		}
-		return n
-	}
+//go:noinline
+func (l *lexer) emit(typ, s, e int) {
+	l.out.types = append(l.out.types, typ)
+	l.out.texts = append(l.out.texts, l.src[s:e])
+	l.out.starts = append(l.out.starts, s)
+	l.p = e
+}
 
-	// direction: `.*direction\s+XX[^\n]*`: the last such statement that starts on this line decides the token.
-	direction := func() bool {
-		if lineEnd < p {
-			lineEnd = n
-			for q := p; q < n; q++ {
-				c := src[q]
-				if c == '\n' || c == '\r' {
-					lineEnd = q
-					break
-				}
-				if c == 0xe2 && q+2 < n && src[q+1] == 0x80 && (src[q+2] == 0xa8 || src[q+2] == 0xa9) {
-					lineEnd = q
-					break
-				}
+//go:noinline
+func (l *lexer) push(s int) {
+	l.stack = append(l.stack, l.state)
+	l.state = s
+}
+
+//go:noinline
+func (l *lexer) pop() {
+	if len(l.stack) > 0 {
+		l.state = l.stack[len(l.stack)-1]
+		l.stack = l.stack[:len(l.stack)-1]
+	}
+}
+
+func (l *lexer) lineBreak(q int) int {
+	if e := strings.IndexByte(l.src[q:], '\n'); e >= 0 {
+		return q + e
+	}
+	return l.n
+}
+
+// direction: `.*direction\s+XX[^\n]*`: the last such statement that starts on this line decides the token.
+func (l *lexer) direction() bool {
+	if l.lineEnd < l.p {
+		l.lineEnd = l.n
+		for q := l.p; q < l.n; q++ {
+			c := l.src[q]
+			if c == '\n' || c == '\r' {
+				l.lineEnd = q
+				break
 			}
-			for k := 0; k < 4; k++ {
-				list := dirStarts[k]
-				j := dirSeen[k]
-				for j < len(list) && list[j] <= lineEnd {
-					j++
-				}
-				dirSeen[k] = j
+			if c == 0xe2 && q+2 < l.n && l.src[q+1] == 0x80 && (l.src[q+2] == 0xa8 || l.src[q+2] == 0xa9) {
+				l.lineEnd = q
+				break
 			}
 		}
 		for k := 0; k < 4; k++ {
-			j := dirSeen[k] - 1
-			if j >= 0 && dirStarts[k][j] >= p {
-				emit(T_direction_tb+k, p, lineBreak(dirEnds[k][j]))
-				return true
+			list := l.dirStarts[k]
+			j := l.dirSeen[k]
+			for j < len(list) && list[j] <= l.lineEnd {
+				j++
 			}
+			l.dirSeen[k] = j
 		}
-		return false
 	}
-
-	isLineEndAt := func(q int) bool {
-		c := src[q]
-		if c < utf8.RuneSelf {
-			return util.IsLineEnd(rune(c))
+	for k := 0; k < 4; k++ {
+		j := l.dirSeen[k] - 1
+		if j >= 0 && l.dirStarts[k][j] >= l.p {
+			l.emit(T_direction_tb+k, l.p, l.lineBreak(l.dirEnds[k][j]))
+			return true
 		}
-		r, _ := utf8.DecodeRuneInString(src[q:])
-		return util.IsLineEnd(r)
 	}
+	return false
+}
 
-	initial := func(c int) bool {
-		lower := c | 32
-		if lower == 116 && p+5 <= n && strings.ToLower(src[p+1:p+5]) == "itle" && isASCII(src[p+1:p+5]) {
-			if s := spaceAt(src, p+5); s > 0 {
-				from := p + 5 + s
-				q := from
-				for q < n {
-					d := src[q]
-					if d == 35 || d == 10 || d == 59 {
-						break
-					}
-					q++
-				}
-				if q > from {
-					emit(T_title, p, q)
-					return true
-				}
-			}
-		}
-		if lower == 97 && byteAt(src, p+1)|32 == 99 && byteAt(src, p+2)|32 == 99 {
-			if e := matchAcc(src, p, "acctitle", ':'); e >= 0 {
-				push(S_acc_title)
-				emit(T_acc_title, p, e)
-				return true
-			}
-			if e := matchAcc(src, p, "accdescr", ':'); e >= 0 {
-				push(S_acc_descr)
-				emit(T_acc_descr, p, e)
-				return true
-			}
-			if e := matchAcc(src, p, "accdescr", '{'); e >= 0 {
-				push(S_acc_descr_multiline)
-				p = e
-				return true
-			}
-		}
-		if anyDir && !isLineEndAt(p) && direction() {
-			return true
-		}
+func (l *lexer) isLineEndAt(q int) bool {
+	c := l.src[q]
+	if c < utf8.RuneSelf {
+		return util.IsLineEnd(rune(c))
+	}
+	r, _ := utf8.DecodeRuneInString(l.src[q:])
+	return util.IsLineEnd(r)
+}
 
-		if c == 10 || (c == 13 && byteAt(src, p+1) == 10) {
-			q := p
-			for q < n {
-				d := src[q]
-				if d == 10 {
-					q++
-				} else if d == 13 && byteAt(src, q+1) == 10 {
-					q += 2
-				} else {
-					break
-				}
-			}
-			emit(T_NEWLINE, p, q)
-			return true
-		}
-		if s := spaceAt(src, p); s > 0 {
-			p = spaces(src, p+s)
-			return true
-		}
-		if c == 35 || c == 37 {
-			p = lineBreak(p)
-			return true
-		}
-
-		if c < utf8.RuneSelf && util.IsWord(rune(c)) {
-			q := p + 1
-			for isWordAt(src, q) {
-				q++
-			}
-			if q-p <= LONGEST_KEYWORD {
-				if kw, ok := keyword(strings.ToLower(src[p:q])); ok {
-					if kw == T_STYLE || kw == T_CLASSDEF || kw == T_CLASS {
-						push(S_style)
-					}
-					emit(kw, p, q)
-					return true
-				}
-			}
-			for q < n {
-				d := src[q]
-				if d < utf8.RuneSelf && isStop(d) {
+func (l *lexer) initial(c int) bool {
+	lower := c | 32
+	if lower == 116 && l.p+5 <= l.n && strings.ToLower(l.src[l.p+1:l.p+5]) == "itle" && isASCII(l.src[l.p+1:l.p+5]) {
+		if s := spaceAt(l.src, l.p+5); s > 0 {
+			from := l.p + 5 + s
+			q := from
+			for q < l.n {
+				d := l.src[q]
+				if d == 35 || d == 10 || d == 59 {
 					break
 				}
 				q++
 			}
-			out.types = append(out.types, T_unqString)
-			out.texts = append(out.texts, js.Trim(src[p:q]))
-			out.starts = append(out.starts, p)
-			p = q
+			if q > from {
+				l.emit(T_title, l.p, q)
+				return true
+			}
+		}
+	}
+	if lower == 97 && byteAt(l.src, l.p+1)|32 == 99 && byteAt(l.src, l.p+2)|32 == 99 {
+		if e := matchAcc(l.src, l.p, "acctitle", ':'); e >= 0 {
+			l.push(S_acc_title)
+			l.emit(T_acc_title, l.p, e)
 			return true
 		}
-
-		switch c {
-		case 123:
-			emit(T_STRUCT_START, p, p+1)
-			return true
-		case 125:
-			emit(T_STRUCT_STOP, p, p+1)
-			return true
-		case 58:
-			if byteAt(src, p+1) == 58 && byteAt(src, p+2) == 58 {
-				emit(T_STYLE_SEPARATOR, p, p+3)
-			} else {
-				emit(T_COLONSEP, p, p+1)
-			}
-			return true
-		case 60:
-			if byteAt(src, p+1) != 45 {
-				return false
-			}
-			emit(T_END_ARROW_L, p, p+2)
-			return true
-		case 45:
-			if byteAt(src, p+1) == 62 {
-				emit(T_END_ARROW_R, p, p+2)
-			} else {
-				emit(T_LINE, p, p+1)
-			}
-			return true
-		case 34:
-			push(S_string)
-			p++
-			return true
-		case 44:
-			emit(T_COMMA, p, p+1)
+		if e := matchAcc(l.src, l.p, "accdescr", ':'); e >= 0 {
+			l.push(S_acc_descr)
+			l.emit(T_acc_descr, l.p, e)
 			return true
 		}
-		return false
+		if e := matchAcc(l.src, l.p, "accdescr", '{'); e >= 0 {
+			l.push(S_acc_descr_multiline)
+			l.p = e
+			return true
+		}
+	}
+	if l.anyDir && !l.isLineEndAt(l.p) && l.direction() {
+		return true
 	}
 
-	style := func(c int) bool {
-		if c < utf8.RuneSelf && util.IsWord(rune(c)) {
-			q := p + 1
-			for isWordAt(src, q) {
+	if c == 10 || (c == 13 && byteAt(l.src, l.p+1) == 10) {
+		q := l.p
+		for q < l.n {
+			d := l.src[q]
+			if d == 10 {
 				q++
+			} else if d == 13 && byteAt(l.src, q+1) == 10 {
+				q += 2
+			} else {
+				break
 			}
-			emit(T_ALPHA, p, q)
-			return true
 		}
-		switch c {
-		case 58:
-			emit(T_COLON, p, p+1)
-			return true
-		case 59:
-			emit(T_SEMICOLON, p, p+1)
-			return true
-		case 37:
-			emit(T_PERCENT, p, p+1)
-			return true
-		case 45:
-			emit(T_MINUS, p, p+1)
-			return true
-		case 35:
-			emit(T_BRKT, p, p+1)
-			return true
-		case 32:
-			p++
-			return true
-		case 34:
-			push(S_string)
-			p++
-			return true
-		case 10:
-			pop()
-			p++
-			return true
-		case 44:
-			emit(T_COMMA, p, p+1)
-			return true
-		}
-		return false
+		l.emit(T_NEWLINE, l.p, q)
+		return true
+	}
+	if s := spaceAt(l.src, l.p); s > 0 {
+		l.p = spaces(l.src, l.p+s)
+		return true
+	}
+	if c == 35 || c == 37 {
+		l.p = l.lineBreak(l.p)
+		return true
 	}
 
-	for p < n {
-		c := int(src[p])
+	if c < utf8.RuneSelf && util.IsWord(rune(c)) {
+		q := l.p + 1
+		for isWordAt(l.src, q) {
+			q++
+		}
+		if q-l.p <= LONGEST_KEYWORD {
+			if kw, ok := keyword(strings.ToLower(l.src[l.p:q])); ok {
+				if kw == T_STYLE || kw == T_CLASSDEF || kw == T_CLASS {
+					l.push(S_style)
+				}
+				l.emit(kw, l.p, q)
+				return true
+			}
+		}
+		for q < l.n {
+			d := l.src[q]
+			if d < utf8.RuneSelf && isStop(d) {
+				break
+			}
+			q++
+		}
+		l.out.types = append(l.out.types, T_unqString)
+		l.out.texts = append(l.out.texts, js.Trim(l.src[l.p:q]))
+		l.out.starts = append(l.out.starts, l.p)
+		l.p = q
+		return true
+	}
+
+	switch c {
+	case 123:
+		l.emit(T_STRUCT_START, l.p, l.p+1)
+		return true
+	case 125:
+		l.emit(T_STRUCT_STOP, l.p, l.p+1)
+		return true
+	case 58:
+		if byteAt(l.src, l.p+1) == 58 && byteAt(l.src, l.p+2) == 58 {
+			l.emit(T_STYLE_SEPARATOR, l.p, l.p+3)
+		} else {
+			l.emit(T_COLONSEP, l.p, l.p+1)
+		}
+		return true
+	case 60:
+		if byteAt(l.src, l.p+1) != 45 {
+			return false
+		}
+		l.emit(T_END_ARROW_L, l.p, l.p+2)
+		return true
+	case 45:
+		if byteAt(l.src, l.p+1) == 62 {
+			l.emit(T_END_ARROW_R, l.p, l.p+2)
+		} else {
+			l.emit(T_LINE, l.p, l.p+1)
+		}
+		return true
+	case 34:
+		l.push(S_string)
+		l.p++
+		return true
+	case 44:
+		l.emit(T_COMMA, l.p, l.p+1)
+		return true
+	}
+	return false
+}
+
+func (l *lexer) style(c int) bool {
+	if c < utf8.RuneSelf && util.IsWord(rune(c)) {
+		q := l.p + 1
+		for isWordAt(l.src, q) {
+			q++
+		}
+		l.emit(T_ALPHA, l.p, q)
+		return true
+	}
+	switch c {
+	case 58:
+		l.emit(T_COLON, l.p, l.p+1)
+		return true
+	case 59:
+		l.emit(T_SEMICOLON, l.p, l.p+1)
+		return true
+	case 37:
+		l.emit(T_PERCENT, l.p, l.p+1)
+		return true
+	case 45:
+		l.emit(T_MINUS, l.p, l.p+1)
+		return true
+	case 35:
+		l.emit(T_BRKT, l.p, l.p+1)
+		return true
+	case 32:
+		l.p++
+		return true
+	case 34:
+		l.push(S_string)
+		l.p++
+		return true
+	case 10:
+		l.pop()
+		l.p++
+		return true
+	case 44:
+		l.emit(T_COMMA, l.p, l.p+1)
+		return true
+	}
+	return false
+}
+
+// tokenize produces the token stream of Mermaid's requirement lexer. Its rules are tried in order and
+// the first match wins, so a line that holds a direction statement anywhere is one token.
+func tokenize(src string) Tokens {
+	l := &lexer{src: src, n: len(src), state: S_INITIAL, lineEnd: -1}
+	l.dirStarts, l.dirEnds, l.anyDir = directions(src)
+
+	for l.p < l.n {
+		c := int(l.src[l.p])
 		ok := true
-		switch state {
+		switch l.state {
 		case S_INITIAL:
-			ok = initial(c)
+			ok = l.initial(c)
 		case S_style:
-			ok = style(c)
+			ok = l.style(c)
 		case S_string:
 			if c == 34 {
-				pop()
-				p++
-			} else if e := strings.IndexByte(src[p:], '"'); e >= 0 {
-				emit(T_qString, p, p+e)
+				l.pop()
+				l.p++
+			} else if e := strings.IndexByte(l.src[l.p:], '"'); e >= 0 {
+				l.emit(T_qString, l.p, l.p+e)
 			} else {
-				emit(T_qString, p, n)
+				l.emit(T_qString, l.p, l.n)
 			}
 		case S_acc_title:
-			pop()
-			emit(T_acc_title_value, p, lineBreak(p))
+			l.pop()
+			l.emit(T_acc_title_value, l.p, l.lineBreak(l.p))
 		case S_acc_descr:
-			pop()
-			emit(T_acc_descr_value, p, lineBreak(p))
+			l.pop()
+			l.emit(T_acc_descr_value, l.p, l.lineBreak(l.p))
 		case S_acc_descr_multiline:
 			if c == 125 {
-				pop()
-				p++
-			} else if e := strings.IndexByte(src[p:], '}'); e >= 0 {
-				emit(T_acc_descr_multiline_value, p, p+e)
+				l.pop()
+				l.p++
+			} else if e := strings.IndexByte(l.src[l.p:], '}'); e >= 0 {
+				l.emit(T_acc_descr_multiline_value, l.p, l.p+e)
 			} else {
-				emit(T_acc_descr_multiline_value, p, n)
+				l.emit(T_acc_descr_multiline_value, l.p, l.n)
 			}
 		}
 		if !ok {
-			out.types = append(out.types, T_ERROR)
-			out.texts = append(out.texts, "")
-			out.starts = append(out.starts, p)
-			return out
+			l.out.types = append(l.out.types, T_ERROR)
+			l.out.texts = append(l.out.texts, "")
+			l.out.starts = append(l.out.starts, l.p)
+			return l.out
 		}
 	}
 
 	// At the end of input Jison still tries the rules that can match nothing, once.
 	last := -1
-	switch state {
+	switch l.state {
 	case S_INITIAL:
 		last = T_EOF
 	case S_string:
@@ -457,8 +472,8 @@ func tokenize(src string) Tokens {
 		last = T_acc_descr_multiline_value
 	}
 	if last != -1 {
-		emit(last, n, n)
+		l.emit(last, l.n, l.n)
 	}
-	emit(T_END, n, n)
-	return out
+	l.emit(T_END, l.n, l.n)
+	return l.out
 }

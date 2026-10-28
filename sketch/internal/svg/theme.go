@@ -201,6 +201,8 @@ func classByte(c byte) bool {
 }
 
 // SeriesColor is the color for the nth data series in a chart, cycling through eight tokens.
+//
+//go:noinline
 func SeriesColor(index int) string {
 	return seriesVars[((index%8)+8)%8]
 }

@@ -44,6 +44,7 @@ type ErrorInfo struct {
 	Snippet     string
 }
 
+//go:noinline
 func NewPeleError(message string, code PeleErrorCode, info ErrorInfo) *PeleError {
 	if code == "" {
 		code = CodeSyntax
@@ -52,6 +53,8 @@ func NewPeleError(message string, code PeleErrorCode, info ErrorInfo) *PeleError
 }
 
 // Throw panics with a PeleError, as pele throws one.
+//
+//go:noinline
 func Throw(message string, code PeleErrorCode, info ErrorInfo) {
 	panic(NewPeleError(message, code, info))
 }

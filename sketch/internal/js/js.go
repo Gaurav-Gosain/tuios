@@ -76,6 +76,8 @@ func Num(x float64) string {
 func Int(n int) string { return strconv.Itoa(n) }
 
 // IsSpace reports whether r is in the set `\s` matches: WhiteSpace and LineTerminator.
+//
+//go:noinline
 func IsSpace(c rune) bool {
 	if c < 128 {
 		return c == 32 || (c >= 9 && c <= 13)
@@ -92,12 +94,18 @@ const S = `\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{
 const Dot = `[^\n\r\x{2028}\x{2029}]`
 
 // Trim is String.prototype.trim.
+//
+//go:noinline
 func Trim(s string) string { return strings.TrimFunc(s, IsSpace) }
 
 // TrimStart is String.prototype.trimStart.
+//
+//go:noinline
 func TrimStart(s string) string { return strings.TrimLeftFunc(s, IsSpace) }
 
 // TrimEnd is String.prototype.trimEnd.
+//
+//go:noinline
 func TrimEnd(s string) string { return strings.TrimRightFunc(s, IsSpace) }
 
 // Len is the length of s in UTF-16 code units, as `.length` counts.

@@ -3447,6 +3447,32 @@ compositor frame. On origin/main at dfc93341d (Go 1.26.10, as CI builds it)
 the build measured 47,972,514 and 44,528,114 bytes, and the branch measured
 47,906,978 and 44,476,482. The binary stays under the 50 MB ceiling.
 
+The sketch tokenizers and their shared helpers stay out of line. The 69
+closures inside the tokenize functions of the agentflow, flowchart, block,
+requirement and usecase lexers are methods on an unexported lexer struct, as
+the class lexer's are, with the state they captured as fields and the same
+preallocated capacities. Each small lexer method called from more than one
+site carries a bare `//go:noinline`, as the class lexer's do, and so do 15
+small helpers (js.IsSpace, Trim, TrimStart and TrimEnd; util.IsSpace, IsDigit
+and IsWord; types.NewPeleError and Throw; the common.Reader Kind, Text, Take
+and Accept; svg.SeriesColor and MarkerTrim). The most called of them (js.Trim
+at 281 sites, Reader.Kind at 309, js.IsSpace at 211) were inlined at hundreds
+of sites. The pragmas are what keep the cut: without them the small methods
+are inlined at every site again. The lexers run once per source and width in
+loom and once per Show, Resize or Redraw in internal/mermaid/live.go, never
+per compositor frame (the per-frame motion draw works on a raster scene and
+never reaches them). The cut is 319,488 bytes on linux/amd64 and 280,576 on
+darwin/arm64 for tuios, and 315,392 and 280,576 for tuios-web. On origin/main
+at 70bbad3c8 (Go 1.26.10, as CI builds it, in workspace mode) tuios measured
+48,115,874 and 44,697,154 bytes and tuios-web 52,650,146 and 49,625,426, and
+the branch measured 47,796,386 and 44,416,578 for tuios and 52,334,754 and
+49,344,850 for tuios-web. A GOWORK=off release build takes the cut once the
+root go.mod pin of tuios.dev/sketch moves, which is the third commit of the
+PR. BenchmarkRenderCorpus on one core with 20 runs per side shows no
+significant change in time (24.38 ms and 24.11 ms, p=0.95, and in a second
+run 24.64 ms and 25.44 ms, p=0.081; Go 1.26.10) and the same bytes and
+allocations per op. The binary stays under the 50 MB ceiling.
+
 To raise the ceiling, do it on purpose in its own commit: change `ceiling` in
 `scripts/binary-size.sh`, record the new value and the reason here, and say in
 the commit message what grew and why it is worth the bytes. A Go version bump

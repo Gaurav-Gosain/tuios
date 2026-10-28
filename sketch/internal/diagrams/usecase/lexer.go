@@ -226,18 +226,25 @@ func lexError(src string, offset int, length int) *types.PeleError {
 		types.CodeSyntax, types.ErrorInfo{Type: "usecase", Line: line, Column: column})
 }
 
+// lexer holds the tokens of one run of tokenize.
+type lexer struct {
+	tk Tokens
+}
+
+//go:noinline
+func (l *lexer) push(t, s, e int) {
+	l.tk.types = append(l.tk.types, t)
+	l.tk.starts = append(l.tk.starts, s)
+	l.tk.ends = append(l.tk.ends, e)
+}
+
 // tokenize produces the tokens of Mermaid's Chevrotain lexer for use case diagrams: the first pattern in
 // its list that matches wins, a keyword gives way to a longer identifier, and `json id@` and `<<`
 // switch to modes that read a JSON object and a stereotype.
 func tokenize(src string) Tokens {
 	// A token is at least one byte, and most are longer.
 	room := len(src)/2 + 4
-	tk := Tokens{types: make([]int, 0, room), starts: make([]int, 0, room), ends: make([]int, 0, room)}
-	push := func(t, s, e int) {
-		tk.types = append(tk.types, t)
-		tk.starts = append(tk.starts, s)
-		tk.ends = append(tk.ends, e)
-	}
+	l := &lexer{tk: Tokens{types: make([]int, 0, room), starts: make([]int, 0, room), ends: make([]int, 0, room)}}
 	n := len(src)
 	i := 0
 	// Whether only blanks came before on this line, where comments and accessibility lines may start.
@@ -308,7 +315,7 @@ func tokenize(src string) Tokens {
 							j++
 						}
 						if at(src, j) == 123 {
-							push(T_JSON_DECLARATION_START, i, j)
+							l.push(T_JSON_DECLARATION_START, i, j)
 							depth := 0
 							quoted := false
 							escaped := false
@@ -340,7 +347,7 @@ func tokenize(src string) Tokens {
 								t = T_JSON_OBJECT_LITERAL
 								i = k + 1
 							}
-							push(t, j, i)
+							l.push(t, j, i)
 							lineStart = false
 							continue
 						}
@@ -479,7 +486,7 @@ func tokenize(src string) Tokens {
 			}
 		} else if c == 60 {
 			if at(src, end) == 60 {
-				push(T_STEREOTYPE_START, i, i+2)
+				l.push(T_STEREOTYPE_START, i, i+2)
 				i += 2
 				if i >= n {
 					break
@@ -501,7 +508,7 @@ func tokenize(src string) Tokens {
 						}
 					}
 					if found && js.Trim(src[i:close]) != "" {
-						push(T_STEREOTYPE_TEXT, i, close)
+						l.push(T_STEREOTYPE_TEXT, i, close)
 						typ = T_STEREOTYPE_END
 						i = close
 						end = close + 2
@@ -587,13 +594,13 @@ func tokenize(src string) Tokens {
 			}
 		}
 
-		push(typ, i, end)
+		l.push(typ, i, end)
 		i = end
 		lineStart = fresh
 	}
 
 	for k := 0; k < 3; k++ {
-		push(T_EOF, n, n)
+		l.push(T_EOF, n, n)
 	}
-	return tk
+	return l.tk
 }
