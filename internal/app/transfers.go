@@ -530,7 +530,7 @@ func (m *OS) transfersLingerCmd() tea.Cmd {
 	}
 	st.lingerGen++
 	gen := st.lingerGen
-	return tea.Tick(left+50*time.Millisecond, func(time.Time) tea.Msg { return transfersLingerMsg{gen: gen} })
+	return m.tickUntilStop(left+50*time.Millisecond, func(time.Time) tea.Msg { return transfersLingerMsg{gen: gen} })
 }
 
 // applyTransfersLinger redraws once the linger ran out.

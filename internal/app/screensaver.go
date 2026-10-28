@@ -90,7 +90,7 @@ func (m *OS) armScreensaver() tea.Cmd {
 		m.screensaver.lastInput = time.Now()
 	}
 	m.screensaver.armed = true
-	return screensaverArmCmd(screensaverIdleDelay(cfg))
+	return m.screensaverArmCmd(screensaverIdleDelay(cfg))
 }
 
 // screensaverIdleDelay is the quiet time before the saver starts.
@@ -99,8 +99,8 @@ func screensaverIdleDelay(cfg config.ScreensaverConfig) time.Duration {
 }
 
 // screensaverArmCmd waits out a delay and then asks whether to start.
-func screensaverArmCmd(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(time.Time) tea.Msg { return screensaverArmMsg{} })
+func (m *OS) screensaverArmCmd(d time.Duration) tea.Cmd {
+	return m.tickUntilStop(d, func(time.Time) tea.Msg { return screensaverArmMsg{} })
 }
 
 // screensaverFPS caps the rate the saver and the effect picker's preview paint
@@ -144,17 +144,17 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 	delay := screensaverIdleDelay(cfg)
 	if idle := time.Since(m.screensaver.lastInput); idle < delay {
 		m.screensaver.armed = true
-		return screensaverArmCmd(delay - idle)
+		return m.screensaverArmCmd(delay - idle)
 	}
 	if !m.screensaverMayStart(cfg) {
 		// Something is working. Wait another full delay and ask again rather
 		// than polling, so a long build costs one timer every few minutes.
 		m.screensaver.armed = true
-		return screensaverArmCmd(delay)
+		return m.screensaverArmCmd(delay)
 	}
 	if !m.startScreensaver(cfg) {
 		m.screensaver.armed = true
-		return screensaverArmCmd(delay)
+		return m.screensaverArmCmd(delay)
 	}
 	return screensaverFrameCmd(&m.Settings)
 }

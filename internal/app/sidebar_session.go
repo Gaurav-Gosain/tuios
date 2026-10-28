@@ -62,7 +62,7 @@ func (m *OS) retrySidebarSession(edge sidebarEdge) tea.Cmd {
 	generation := v.generation
 	delay := min(2*time.Second*time.Duration(1<<min(v.failures, 4)), 30*time.Second)
 	v.failures = min(v.failures+1, 4)
-	return tea.Tick(delay, func(time.Time) tea.Msg {
+	return m.tickUntilStop(delay, func(time.Time) tea.Msg {
 		return sidebarSessionEvent{edge: edge, generation: generation, kind: "retry"}
 	})
 }

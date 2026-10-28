@@ -75,7 +75,7 @@ func (m *OS) tmlClockCmd() tea.Cmd {
 	for _, v := range m.tml.views {
 		if v.surface != nil && v.surface.NeedsClock() {
 			m.tml.clockArmed = true
-			return tea.Tick(time.Minute, func(time.Time) tea.Msg { return TMLClockMsg{} })
+			return m.tickUntilStop(time.Minute, func(time.Time) tea.Msg { return TMLClockMsg{} })
 		}
 	}
 	return nil

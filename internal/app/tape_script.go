@@ -400,7 +400,7 @@ func (m *OS) stepScript() tea.Cmd {
 		// daemon holds the real content. Refresh every pane from the daemon a
 		// beat after playback, once output has settled.
 		if m.DaemonClient != nil {
-			return tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
+			return m.tickUntilStop(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
 				return tapeLayoutRefreshMsg{}
 			})
 		}

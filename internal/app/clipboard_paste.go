@@ -91,14 +91,14 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 					}
 					return tea.ClipboardMsg{Content: text, Selection: 'c'}
 				},
-				tea.Tick(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
+				m.tickUntilStop(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
 			)
 		}
 	}
 
 	return tea.Batch(
 		tea.ReadClipboard,
-		tea.Tick(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
+		m.tickUntilStop(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
 	)
 }
 

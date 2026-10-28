@@ -823,7 +823,7 @@ func (m *OS) foreignSessionRefreshTick(after time.Duration) tea.Cmd {
 		return nil
 	}
 	gen := m.foreignTickGen
-	return tea.Tick(after, func(time.Time) tea.Msg {
+	return m.tickUntilStop(after, func(time.Time) tea.Msg {
 		return ForeignSessionRefreshTickMsg{Gen: gen}
 	})
 }

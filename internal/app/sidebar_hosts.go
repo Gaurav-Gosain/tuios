@@ -154,7 +154,7 @@ type HostsChangedMsg struct{}
 func (m *OS) federationRefreshTick(after time.Duration) tea.Cmd {
 	m.federationTickGen++
 	gen := m.federationTickGen
-	return tea.Tick(after, func(time.Time) tea.Msg { return FederationRefreshTickMsg{Gen: gen} })
+	return m.tickUntilStop(after, func(time.Time) tea.Msg { return FederationRefreshTickMsg{Gen: gen} })
 }
 
 // federationRefreshPlan decides the next poll interval and whether to poll at

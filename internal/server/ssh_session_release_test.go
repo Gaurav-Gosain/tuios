@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -100,6 +102,111 @@ func typeLine(t *testing.T, stdin io.Writer, line string) {
 	}
 }
 
+// TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd runs the release check
+// of the test below with the screen saver on at its shortest idle time, so
+// every session arms a one-minute timer when it starts. Eight ended sessions
+// must still be given back within 10 s, long before any of those timers fires.
+// It runs first so that a run on code that still holds ended sessions until
+// their timers fire stays readable: this test's sessions, held a minute, change
+// nothing during the test below, while the test below's sessions, released over
+// the following 30 s, would drop below this test's baseline.
+func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
+	const (
+		clients        = 8
+		goroutineSlack = 40
+		heapSlack      = 8 << 20
+		saverBound     = 50 * time.Second
+	)
+	// Registered before startSSHExitRun, so it runs after the server stops.
+	t.Cleanup(func() { pinStartupConfig(os.Getenv("XDG_CONFIG_HOME")) })
+	cfg := "[startup]\nopen_default_window = true\nstart_in_terminal_mode = true\n" +
+		"[screensaver]\nenabled = true\nidle_minutes = 1\n"
+	if err := os.WriteFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "tuios", "config.toml"), []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	started := time.Now()
+	run := startSSHExitRun(t, "release-saver")
+
+	warm, warmIn := openReleaseTerm(t, run.client, run.name)
+	warm.waitForOutput(t, 15*time.Second, "the warm-up client never painted a frame")
+	warmBy := time.Now().Add(30 * time.Second)
+	for !strings.Contains(warm.text(), "warm-0") {
+		if time.Now().After(warmBy) {
+			t.Fatalf("the warm-up line never printed warm-0\n--- last output ---\n%s", tailPrintable(warm.text()))
+		}
+		typeLine(t, warmIn, "\x15sleep 2; echo warm-$((0))")
+		retypeAt := time.Now().Add(5 * time.Second)
+		for time.Now().Before(retypeAt) && !strings.Contains(warm.text(), "warm-0") {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	base := readRelease()
+	t.Logf("baseline: %s", base)
+
+	cfgSSH := &gossh.ClientConfig{
+		User:            "tuios",
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Timeout:         2 * time.Second,
+	}
+	addr := run.client.RemoteAddr().String()
+	conns := make([]*gossh.Client, 0, clients)
+	terms := make([]*sshExitRun, 0, clients)
+	var probeIn io.Writer
+	for i := range clients {
+		c, err := gossh.Dial("tcp", addr, cfgSSH)
+		if err != nil {
+			t.Fatalf("dial client %d: %v", i+1, err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		conns = append(conns, c)
+		term, stdin := openReleaseTerm(t, c, run.name)
+		terms = append(terms, term)
+		if i == 0 {
+			probeIn = stdin
+		}
+	}
+	for i, term := range terms {
+		term.waitForOutput(t, 15*time.Second, fmt.Sprintf("client %d never painted a frame", i+1))
+	}
+
+	// Positive half: a live client of this server still gets its pane's output.
+	typeLine(t, probeIn, "sleep 2; echo probe-$((1))")
+	waitForText(t, terms[0], 15*time.Second, "probe-1")
+	t.Log("live session painted probe-1")
+	t.Logf("live, %d clients up: %s", clients, readRelease())
+
+	for _, c := range conns {
+		_ = c.Close()
+	}
+
+	// Negative half: everything the eight sessions held is given back within
+	// 10 s. The kept sessions' savers start a minute after the server did; a
+	// run that reaches the last poll past saverBound measures them too.
+	deadline := time.Now().Add(10 * time.Second)
+	for poll := 1; ; poll++ {
+		now := readRelease()
+		dg := now.goroutines - base.goroutines
+		dh := int64(now.heap) - int64(base.heap)
+		t.Logf("poll %d: %s (goroutines %+d, heap %s over baseline)", poll, now, dg, mib(dh))
+		released := dg <= goroutineSlack && dh <= heapSlack
+		if released || time.Now().After(deadline) {
+			elapsed := time.Since(started)
+			t.Logf("last poll at %s after the server started", elapsed.Round(time.Millisecond))
+			if elapsed > saverBound {
+				t.Fatalf("test defect: the last poll came %s after the server started, past %s, so a kept session's screen saver may have run during the polls",
+					elapsed.Round(time.Millisecond), saverBound)
+			}
+			if released {
+				return
+			}
+			t.Fatalf("after %d clients ended, the server still holds %+d goroutines and %s of heap over the baseline (%s); allowed %d goroutines and %s",
+				clients, dg, mib(dh), base, goroutineSlack, mib(heapSlack))
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 // TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd attaches eight real
 // SSH clients to one daemon session, proves the pane's output still reaches a
 // live one twice, drops all eight, and waits for the server's goroutines and
@@ -180,10 +287,9 @@ func TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd(t *testing.T) {
 		_ = c.Close()
 	}
 
-	// Negative half: everything the eight sessions held is given back. A
-	// pending tick can hold an ended session for up to the 30 s maintenance
-	// interval, so the wait is 45 s.
-	deadline := time.Now().Add(45 * time.Second)
+	// Negative half: everything the eight sessions held is given back within
+	// 10 s of their clients closing.
+	deadline := time.Now().Add(10 * time.Second)
 	for poll := 1; ; poll++ {
 		now := readRelease()
 		dg := now.goroutines - base.goroutines

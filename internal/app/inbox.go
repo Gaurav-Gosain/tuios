@@ -821,7 +821,7 @@ func (m *OS) scheduleInboxAlerts(ids []string) tea.Cmd {
 		m.fireInboxAlerts(keep)
 		return nil
 	}
-	return tea.Tick(policy.Settle, func(time.Time) tea.Msg { return InboxAlertDueMsg{IDs: keep} })
+	return m.tickUntilStop(policy.Settle, func(time.Time) tea.Msg { return InboxAlertDueMsg{IDs: keep} })
 }
 
 // fireInboxAlerts raises one alert for the items still open, however many

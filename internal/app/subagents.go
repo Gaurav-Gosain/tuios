@@ -808,7 +808,7 @@ func (m *OS) subagentHideCmd() tea.Cmd {
 		return nil
 	}
 	m.subagentHideArmed = due
-	return tea.Tick(due.Sub(now), func(time.Time) tea.Msg { return subagentHideMsg{} })
+	return m.tickUntilStop(due.Sub(now), func(time.Time) tea.Msg { return subagentHideMsg{} })
 }
 
 // subagentHideOn reports whether either rail hides finished rows early.

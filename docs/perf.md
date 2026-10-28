@@ -5042,3 +5042,72 @@ pane stays scrolled.
 
 The libghostty backend's `scrollCache` (`vt/ghostty_scrollback.go`) holds the
 same kind of cache and is not covered.
+
+## 2026-10 an ended session's timers
+
+An SSH or web session that ends is let go at once, not when its timers fire.
+A `tea.Tick` command waits on its timer inside bubbletea's command goroutine,
+which holds the Program and the model until the timer fires, so every ended
+session kept its heap and about a dozen goroutines for the length of its
+longest pending tick: up to 30 s for the maintenance tick, minutes with the
+screensaver on. On Go 1.26.10, eight sessions that close together were still
+about 20 MiB over the baseline at the 10 s deadline and were back only after
+about 32 s (poll 27) in the default config, a minute or more with the
+screensaver on; they now leave under 1 MiB at the first poll.
+
+### What changed
+
+- `OS.tickUntilStop` is `tea.Tick` that also returns when `Cleanup` closes
+  `stopSignal`, and stops its timer then. The timer and the stop channel are
+  taken when the command is armed, as `tea.Tick` takes its timer, so a live
+  session gets the same message at the same time.
+- The timers that wait a second or more and can be armed on a served session
+  use it: the maintenance tick (`armTick`), the screensaver arm, the TML
+  clock, the foreign session listing poll, the federation poll, the sidebar
+  session retry, the host reconnect wait, the worktree-remove quit dwell, the
+  paste timeout, the transfers linger, the inbox alert settle, the subagent
+  hide, the review compare tick and the tape finish refresh.
+- `InboxAgentsTick`, a one-minute timer that only `CloseInbox` stopped, also
+  returns when the session ends.
+
+### Numbers
+
+Intel Core Ultra 9 185H, Linux (WSL2), Go 1.26.10 (`go version` checked on the
+test binaries), cores 6 to 11, other work on the machine. The release tests of
+`internal/server` open eight SSH clients, close them, and poll the process.
+
+| | before | after |
+|---|---:|---:|
+| default config, poll 1 | +136 goroutines, 21.17 MiB | +19 goroutines, 0.69 MiB |
+| default config, last poll | +110 goroutines, 20.52 MiB at poll 11 (16 s, test failed) | poll 1 passed (6.4 s) |
+| screensaver on (1 min), poll 1 | +87 goroutines, 21.18 MiB | +0 goroutines, 0.84 MiB |
+| screensaver on, last poll | +59 goroutines, 20.59 MiB at poll 11 (14 s, test failed) | poll 1 passed (4.3 s) |
+
+"Before" is the new tests on the unchanged code, which fail at their 10 s
+deadline; the old test needed 45 s.
+
+The cost of arming a tick, which runs at the frame rate while anything moves.
+A scratch benchmark outside the tree called `m.armTick(framePeriod)` on a
+bare `OS`, as test binaries built from the base and from the branch, run
+alternately eight times each (1 s per run), compared with `benchstat`:
+
+| | before | after |
+|---|---:|---:|
+| time per arm | 278.6 ns | 294.2 ns (+5.6%) |
+| bytes per arm | 288 | 296 |
+| allocations per arm | 5 | 5 |
+
+The extra 8 bytes are the larger closure; the time is the `stopMu` lock
+`stopSignal` takes. `BenchmarkIdleTick` is unchanged: an idle tick arms no
+timer (#787).
+
+### Measured and deliberately not changed
+
+- Every other `tea.Tick` in `internal/app` waits under a second: the
+  daemon reconnect wait (500 ms, never armed on a served client), the drop
+  preview (120 ms by default), the frame and motion ticks, the settles and
+  debounces. They hold a session for at most that long.
+- The 3 s `time.After` in `link_opener.go`, which runs only after a link is
+  opened.
+- The `time.AfterFunc` closures (`cockpit.go`, `sixel_symbols.go`), which hold
+  no goroutine while they wait.

@@ -57,7 +57,32 @@ func (m *OS) armTick(wait time.Duration) tea.Cmd {
 	m.tick.gen++
 	m.tick.due = time.Now().Add(wait)
 	gen := m.tick.gen
-	return tea.Tick(wait, func(t time.Time) tea.Msg { return deadlineTickMsg{gen: gen, at: t} })
+	return m.tickUntilStop(wait, func(t time.Time) tea.Msg { return deadlineTickMsg{gen: gen, at: t} })
+}
+
+// tickUntilStop is tea.Tick that also gives up when the session ends. A
+// tea.Tick command blocks on its timer inside bubbletea's command goroutine,
+// which holds the Program, and with it this model, until the timer fires: an
+// ended SSH or web session would stay in memory for the whole delay, half a
+// minute for the maintenance tick and minutes for the screensaver. This one
+// returns no message once Cleanup closes stopSignal, and stops its timer.
+//
+// The timer and the stop channel are taken when the command is armed, on the
+// Update goroutine, as tea.Tick takes its timer, so a live session gets the
+// same message at the same time and the command never reads the field from
+// inside itself, where it would race Cleanup.
+func (m *OS) tickUntilStop(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+	timer := time.NewTimer(d)
+	stop := m.stopSignal()
+	return func() tea.Msg {
+		select {
+		case t := <-timer.C:
+			return fn(t)
+		case <-stop:
+			timer.Stop()
+			return nil
+		}
+	}
 }
 
 // tickWakeCmd arms the tick for the next job that is due, unless a tick armed

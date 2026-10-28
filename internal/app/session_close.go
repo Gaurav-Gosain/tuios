@@ -559,7 +559,7 @@ func (m *OS) handleWorktreeRemoved(msg worktreeRemovedMsg) tea.Cmd {
 		// quitting tears the alt screen down with it. Dwell for the
 		// notification's duration, then quit — the tick returns tea.Quit, so
 		// the program ends at the same place, just readable.
-		return tea.Tick(m.Settings.NotificationDuration, func(time.Time) tea.Msg {
+		return m.tickUntilStop(m.Settings.NotificationDuration, func(time.Time) tea.Msg {
 			return worktreeRemoveQuitMsg{Name: msg.Name}
 		})
 	}

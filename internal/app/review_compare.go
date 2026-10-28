@@ -164,7 +164,7 @@ func (m *OS) reviewTickIfRunning() tea.Cmd {
 		return nil
 	}
 	gen, tickGen := r.gen, c.tickGen
-	return tea.Tick(reviewTickEvery, func(time.Time) tea.Msg { return ReviewTickMsg{Gen: gen, TickGen: tickGen} })
+	return m.tickUntilStop(reviewTickEvery, func(time.Time) tea.Msg { return ReviewTickMsg{Gen: gen, TickGen: tickGen} })
 }
 
 // applyReviewTick reads the rows again for a tick of the current chain.

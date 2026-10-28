@@ -161,7 +161,7 @@ func (m *OS) hostReconnectWait() tea.Cmd {
 	}
 	gen := r.gen
 	delay := hostReconnectDelay(r.attempt)
-	return tea.Tick(delay, func(time.Time) tea.Msg { return hostReconnectTickMsg{gen: gen} })
+	return m.tickUntilStop(delay, func(time.Time) tea.Msg { return hostReconnectTickMsg{gen: gen} })
 }
 
 // hostReconnectDelay is the wait before dial number attempt+1: one second, then

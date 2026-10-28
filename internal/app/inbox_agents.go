@@ -104,6 +104,9 @@ func (m *OS) InboxAgentsTick() tea.Cmd {
 	gen := a.tickGen
 	stop := make(chan struct{})
 	a.tickStop = stop
+	// CloseInbox closes stop; Cleanup closes ended, so a session that ends
+	// with the Inbox open does not wait out the minute.
+	ended := m.stopSignal()
 	return func() tea.Msg {
 		t := time.NewTimer(inboxAgentsTick)
 		defer t.Stop()
@@ -111,6 +114,8 @@ func (m *OS) InboxAgentsTick() tea.Cmd {
 		case <-t.C:
 			return inboxAgentsTickMsg{gen: gen}
 		case <-stop:
+			return nil
+		case <-ended:
 			return nil
 		}
 	}
