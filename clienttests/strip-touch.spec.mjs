@@ -124,6 +124,44 @@ test('a second finger during the drag reaches neither sip nor the lift', async (
   expect(await page.evaluate(() => window.__pointer.slice()), 'the second finger did not reach sip').toEqual([]);
 });
 
+test('a quick swipe on a busy page is still a swipe', async ({ page }) => {
+  await boot(page);
+  const g = await geometry(page);
+  const y = g.top + g.height / 2;
+  const x0 = g.left + g.width / 2 + 80;
+  const cdp = await page.context().newCDPSession(page);
+  const point = (x) => [{ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x0) });
+  // The page is busy for longer than the long press right after the press,
+  // as a phone drawing a frame can be. The finger moves at once all the same,
+  // so the moves wait in the queue: their time is when the finger moved, not
+  // when the page got to them, and the swipe must not read as a long press.
+  const busy = page.evaluate(() => { const t = performance.now(); while (performance.now() - t < 700) { /* busy */ } });
+  await page.waitForTimeout(50);
+  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x0 - i * 15) });
+  await busy;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  const rs = await reports(page);
+  expect(cellsOf(rs, 2), 'the swipe sent steps').toBeGreaterThan(0);
+  expect(rs.at(-1)?.kind, 'and its lift').toBe(3);
+});
+
+test('a hold, then a sideways move, is sip\'s long press', async ({ page }) => {
+  await boot(page);
+  const g = await geometry(page);
+  const y = g.top + g.height / 2;
+  const x0 = g.left + g.width / 2 + 80;
+  const cdp = await page.context().newCDPSession(page);
+  const point = (x) => [{ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x0) });
+  await page.waitForTimeout(700);
+  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x0 - i * 15) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  expect(await reports(page), 'a hold is sip\'s, and the page sends nothing').toEqual([]);
+});
+
 test('a tap right after a quick sideways swipe is a click, not a right click', async ({ page }) => {
   await boot(page);
   const g = await geometry(page);

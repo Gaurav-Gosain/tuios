@@ -44,18 +44,26 @@
     }
     if (g) { g = null; return; }
     if (!onEngine(ev)) return;
-    g = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: performance.now(), lastX: ev.clientX, acc: 0, mine: false, canvas: ev.target };
+    g = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: ev.timeStamp, lastX: ev.clientX, acc: 0, mine: false, canvas: ev.target };
   }, true);
   document.addEventListener('pointermove', (ev) => {
     if (!ev.isTrusted) return;
     if (kept.has(ev.pointerId)) { ev.stopImmediatePropagation(); return; }
     if (!g || ev.pointerId !== g.id) return;
     if (!g.mine) {
-      const dx = ev.clientX - g.x, dy = ev.clientY - g.y;
-      if (Math.hypot(dx, dy) <= SLOP) return;
+      // The first sample that leaves the slop decides. A busy page gets the
+      // moves queued while it was busy as one event, whose own time is the
+      // last of them, so the samples it carries are read in order.
+      const samples = ev.getCoalescedEvents?.() ?? [];
+      const out = (samples.length ? samples : [ev]).find((e) => Math.hypot(e.clientX - g.x, e.clientY - g.y) > SLOP);
+      if (!out) return;
+      const dx = out.clientX - g.x, dy = out.clientY - g.y;
       // A hold before the move is sip's drag, and a move that is not clearly
       // sideways is its scroll. Either way the gesture is sip's from here on.
-      if (performance.now() - g.t >= HOLD_MS || Math.abs(dx) <= 2 * Math.abs(dy)) { g = null; return; }
+      // The hold is timed by the events' own time, when the finger pressed
+      // and moved: a busy page handles a quick move late, and the time it
+      // was handled would read it as a hold.
+      if (out.timeStamp - g.t >= HOLD_MS || Math.abs(dx) <= 2 * Math.abs(dy)) { g = null; return; }
       g.mine = true;
       g.canvas.dispatchEvent(new PointerEvent('pointercancel', { pointerId: g.id, pointerType: 'touch', bubbles: true }));
     }

@@ -10226,3 +10226,14 @@ The finger is now `CSI 7503 ; kind ; col ; row ; cells ~` (`internal/app/strip_t
 | The workspace check in `SnapStrip` | "a snap armed on workspace 2 moved the strip of workspace 1 from 62 to 55" | **caught** |
 | The page's second-finger handling | "the first finger's lift is still the last report" | **caught** |
 | The page takes a drag with `abs(dx) > abs(dy)` again, not twice | "a diagonal drag is sip's own swipe" | **caught** |
+
+### #1193: a quick swipe on a busy page
+
+Found while testing the branch under load: the page timed the long press by when it handled the move, not when the finger moved, so a busy page read a quick swipe as a long press and sent nothing (the browser test "a horizontal drag scrolls the strip" failed with 0 steps in about half of the runs under load). It now reads `ev.timeStamp`. `clienttests/strip-touch.spec.mjs` gains "a quick swipe on a busy page is still a swipe", which blocks the page for 700 ms right after the press and then moves the finger at once, and its positive half, "a hold, then a sideways move, is sip's long press", which waits 700 ms with the page free and must send nothing. Run on 2026-10-28 on macOS, on feat/touch-strip merged with origin/main at 111bdfbe7.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The hold timed by `performance.now()` when the move is handled (the code before this fix) | "the swipe sent steps", received 0, three runs of three | **caught** |
+| The hold check cut (`if (false \|\| ...)`) | "a hold is sip's, and the page sends nothing" | **caught** |
+
+A code-only review of the fix found one more case: when the first move stays inside the slop and the page is busy, Chrome hands the later moves on as one event whose `timeStamp` is the last of them, and the hold was read off that. The script now takes the first sample past the slop from `getCoalescedEvents()`. A browser test for it (two small moves, then twelve through 1100 ms of a busy page) was tried and left out: under CDP how Chrome splits the moves into batches is not fixed, and the code before this change failed it in only 2 to 3 runs of 10. A debug build logged all ten runs taking the drag on the first sample past the slop, 70 to 160 ms after the press.
