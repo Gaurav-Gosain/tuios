@@ -74,8 +74,9 @@ type UserConfig struct {
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
 	YieldedDefaults []YieldedDefault `toml:"-"`
-	// RetiredKeybinds are the user's bindings to actions tuios no longer
-	// has, dropped on load. See migrateInboxKeys.
+	// RetiredKeybinds are the user's bindings dropped on load: to an action
+	// tuios no longer has, or a key another action took as its default. See
+	// migrateInboxKeys and dropStaleDuplicateKeys.
 	RetiredKeybinds []RetiredKeybind `toml:"-"`
 	// LoadWarnings say what the load of a config split over several files
 	// skipped: an included file that is not there, or an include cycle. It is
@@ -3702,14 +3703,21 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// The GUI section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.GUI, defaultCfg.Keybindings.GUI)
 
+	var dropped []RetiredKeybind
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
 		for _, d := range dropStaleDuplicateKeys(section.target, section.defaults) {
-			cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, RetiredKeybind{
+			dropped = append(dropped, RetiredKeybind{
 				Section: section.name, Action: d.action, Keys: []string{d.key},
-				Note: fmt.Sprintf("%s runs %s, whose default key it is. To keep %s on %s, bind %s to another key.", d.key, d.owner, d.key, d.action, d.owner),
+				Note: fmt.Sprintf("%q is the default key of %s. To keep %q on %s, bind %s to another key.", d.key, d.owner, d.key, d.action, d.owner),
 			})
 		}
 	}
+	// The drops come out of a map walk; sorted, the report reads the same on
+	// every run.
+	slices.SortFunc(dropped, func(a, b RetiredKeybind) int {
+		return cmp.Or(cmp.Compare(a.Section, b.Section), cmp.Compare(a.Action, b.Action), cmp.Compare(a.Keys[0], b.Keys[0]))
+	})
+	cfg.RetiredKeybinds = append(cfg.RetiredKeybinds, dropped...)
 }
 
 // yieldingDefaults are the actions whose default key arrived after users could

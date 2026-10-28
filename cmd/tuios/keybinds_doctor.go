@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -199,7 +200,12 @@ func printKeybindReport(rep config.KeybindReport) {
 			case r.Use != "":
 				use += fmt.Sprintf(" To keep the keys, bind them to %s.", r.Use)
 			}
-			fmt.Printf("  %-22s %s in [keybindings.%s].%s\n", r.Action, strings.Join(r.Keys, ", "), r.Section, use)
+			// Quoted, a key such as "," stands out from the punctuation around it.
+			keys := make([]string, len(r.Keys))
+			for i, k := range r.Keys {
+				keys[i] = strconv.Quote(k)
+			}
+			fmt.Printf("  %-22s %s in [keybindings.%s].%s\n", r.Action, strings.Join(keys, ", "), r.Section, use)
 		}
 	}
 
