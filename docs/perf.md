@@ -5216,3 +5216,71 @@ it; it is not built.
 - A pane left inside a string sequence (a guest killed mid-sixel, an ESC whose
   backslash never came) keeps its grown buffer. The release needs the ground
   state, because dropping the buffer mid-sequence would cut the payload.
+
+## 2026-10 tuios.dev/shot opaque PNG encode
+
+A screenshot with no transparent pixel encodes in well under half the time,
+about 2.3 times faster, and `tuios screenshot` and the preview panel wait that
+much less. The price is a larger file on Go 1.26: 2 to 4% on the code-like
+capture measured below. On Go 1.27, whose `compress/flate` was rewritten, the
+file is about the same size. On a busier capture the file can come out smaller
+(see Numbers), so the size depends on the capture.
+
+### What changed
+
+- `EncodePNG` writes an opaque, non-empty raster itself: an 8-bit RGB PNG with
+  one IDAT of `zlib.BestSpeed` rows, each led by filter byte 0. `image/png`
+  tries all five filters on every row of an RGBA image at any compression
+  level, and that search was about 37% of the CPU of a framed screenshot. Rows
+  are read through `Stride` and `Rect`, so a sub-image encodes what it shows.
+- An empty raster and a raster with any transparent pixel keep
+  `png.Encoder{CompressionLevel: png.BestSpeed}`: the empty one returns the
+  same error as before, and the transparent one keeps its alpha.
+
+### Numbers
+
+Intel Core Ultra 9 185H, Linux (WSL2), Go 1.26.10, one core, other work on the
+machine. The capture is the 120x40 code-like grid of `TestOpaquePNGEncodeBudget`
+at scale 2 (one line of code per row, two background colours, a coloured span
+every 17 columns; bare 2040x1320), bare and framed (window, shadow, wash,
+padding 24), and the preview is the framed capture shrunk to 900x600. That test
+logs the two size ratios. A scratch benchmark, not committed, encodes the three
+rasters. It was built as test binaries from the base and from the branch, run
+alternately 10 times each under `nice -n 10 taskset -c 2` with `-test.cpu 1`,
+and compared with `benchstat`:
+
+| | before | after |
+|---|---:|---:|
+| framed encode time | 72.9 ms | 31.2 ms |
+| bare encode time | 60.9 ms | 26.5 ms |
+| preview encode time | 15.3 ms | 7.2 ms |
+| framed file | 610,008 B | 632,881 B |
+| bare file | 561,868 B | 573,743 B |
+| preview payload | 250,630 B | 238,890 B |
+
+The framed file is 1.037 and the bare file 1.021 times the stdlib's size. The
+preview payload comes out smaller and stays under the 512 KB the preview test
+holds it to.
+
+On a busy grid, where every cell has its own colours, the unfiltered file comes
+out smaller: the framed capture goes from 1,372,976 B to 1,315,082 B, the bare
+one from 1,352,993 B to 1,310,083 B and the preview from 543,465 B to
+490,680 B. The encode time there goes from 87.3 ms to 41.4 ms (framed), from
+83.8 ms to 39.9 ms (bare) and from 23.0 ms to 11.4 ms (preview). The size
+depends on the capture; the encode time gain holds on both grids.
+
+On Go 1.27.3 the same pinned grid gives a file 0.983 (bare) and 0.990 (framed)
+times the stdlib's size. Go 1.25 gives byte-identical output to Go 1.26.10 for
+both encoders.
+
+### Measured and deliberately not changed
+
+- The Sub filter (filter byte 1 on every row, the design the finding first
+  proposed). Measured with the same method (scratch benchmark, 10 alternating
+  rounds, `nice -n 10 taskset -c 2`, `-test.cpu 1`, `-test.benchtime 10x`,
+  benchstat, Go 1.26.10) on the pinned 120x40 code-like grid at scale 2,
+  against the same rows unfiltered. The compressed stream grew from 573,686 B
+  to 646,841 B for the bare capture (1.128 times) and from 632,824 B to
+  723,706 B for the framed one (1.144 times). It was also slower: 29.0 ms
+  against 31.3 ms bare (+7.8%) and 33.4 ms against 36.4 ms framed (+8.8%).
+  Sub makes the file larger and the encode slower, so unfiltered rows stay.

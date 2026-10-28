@@ -87,8 +87,16 @@ func Raster(g *Grid, f *Frame) (*image.RGBA, error) {
 
 // EncodePNG serialises a raster. BestSpeed because the picture is a screenshot
 // on its way to a file or a terminal, and the seconds a smaller file would save
-// are not seconds anybody spends.
+// are not seconds anybody spends. An opaque raster skips the stdlib's filter
+// search for a file a few percent larger; one with any transparency keeps it.
 func EncodePNG(img *image.RGBA) ([]byte, error) {
+	if !img.Rect.Empty() && img.Opaque() {
+		out, err := encodeOpaquePNG(img)
+		if err != nil {
+			return nil, fmt.Errorf("encode png: %w", err)
+		}
+		return out, nil
+	}
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.BestSpeed}
 	if err := enc.Encode(&buf, img); err != nil {
