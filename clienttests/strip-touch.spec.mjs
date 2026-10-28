@@ -131,16 +131,23 @@ test('a quick swipe on a busy page is still a swipe', async ({ page }) => {
   const x0 = g.left + g.width / 2 + 80;
   const cdp = await page.context().newCDPSession(page);
   const point = (x) => [{ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }];
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x0) });
+  // Each event says when the finger did it, in seconds since the epoch. Without
+  // that, an event's time is when this script got to send it, and each send
+  // waits for the page to take the one before. A page slow to take the press
+  // then put the first move past the long press, and the swipe read as a hold
+  // because of the driver, not the finger.
+  const t0 = Date.now() / 1000;
+  const at = (ms) => t0 + ms / 1000;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x0), timestamp: at(0) });
   // The page is busy for longer than the long press right after the press,
   // as a phone drawing a frame can be. The finger moves at once all the same,
   // so the moves wait in the queue: their time is when the finger moved, not
   // when the page got to them, and the swipe must not read as a long press.
   const busy = page.evaluate(() => { const t = performance.now(); while (performance.now() - t < 700) { /* busy */ } });
   await page.waitForTimeout(50);
-  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x0 - i * 15) });
+  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x0 - i * 15), timestamp: at(50 + i * 16) });
   await busy;
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: at(200) });
   await cdp.detach();
   const rs = await reports(page);
   expect(cellsOf(rs, 2), 'the swipe sent steps').toBeGreaterThan(0);
