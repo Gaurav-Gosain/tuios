@@ -23,10 +23,10 @@ replace tuios.dev/swatch v0.1.1-0.20261025090851-2c1449b0d078 => ./swatch
 
 replace tuios.dev/tml v0.1.2-0.20261027072011-3140277ea47a => ./tml
 
-replace tuios.dev/sketch v0.4.1-0.20261027111141-0161afeb2e46 => ./sketch
-
-replace tuios.dev/loom v0.2.3-0.20261028203511-09d26af40771 => ./loom
-
 replace tuios.dev/vt v0.3.3-0.20261028205255-e913b35f884a => ./vt
 
 replace tuios.dev/shot v0.2.2-0.20261028210644-31c5f8a15a38 => ./shot
+
+replace tuios.dev/loom v0.2.3-0.20261028211907-1d9d90849128 => ./loom
+
+replace tuios.dev/sketch v0.4.1-0.20261028211901-35f9299d6613 => ./sketch
