@@ -144,7 +144,7 @@ func (m *OS) handleKeybindPresetSaved(msg keybindPresetSavedMsg) tea.Cmd {
 	text := "The " + msg.name + " keys are in use."
 	if msg.name != config.PresetTuios {
 		menu := m.Settings.LeaderKey + " ctrl+t"
-		text += " Press " + menu + " for the tuios keys it moved."
+		text += " Press " + menu + " to see the tuios keys that this preset moved."
 	}
 	m.ShowNotification(text, "success", m.Settings.NotificationWarningDuration)
 	return cmd

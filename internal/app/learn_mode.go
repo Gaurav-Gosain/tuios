@@ -175,7 +175,7 @@ func (m *OS) LearnApplyPreset(name string) tea.Cmd {
 	cmd := m.ApplyReloadedConfig(&cfg)
 	text := "The " + name + " keys are in use."
 	if name != config.PresetTuios {
-		text += " Press " + m.Settings.LeaderKey + " ctrl+t for the tuios keys it moved."
+		text += " Press " + m.Settings.LeaderKey + " ctrl+t to see the tuios keys that this preset moved."
 	}
 	m.ShowNotification(text, "success", m.Settings.NotificationWarningDuration)
 	return cmd
