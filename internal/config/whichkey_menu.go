@@ -289,10 +289,10 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		copyRow.desc = fmt.Sprintf("Multi copy (%d)/paste image/buffer", st.MultiCopy)
 		copyRow.parts[0].desc = fmt.Sprintf("Multi copy (%d)", st.MultiCopy)
 	}
-	sidebarRow := pair("Sidebar/other/spotlight/calm", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("prefix_toggle_spotlight", "Spotlight"), part("toggle_calm", "Calm mode"))
+	sidebarRow := pair("Sidebar/other/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("prefix_toggle_spotlight", "Spotlight"))
 	if st.Spotlight {
 		// While the beam is on, its row says the key turns it off.
-		sidebarRow.desc = "Sidebar/other/spotlight off/calm"
+		sidebarRow.desc = "Sidebar/other/spotlight off"
 		sidebarRow.parts[2].desc = "Spotlight off"
 	}
 	modes.rows = append(modes.rows,
@@ -307,6 +307,12 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		sidebarRow,
 		row("prefix_explore", "Focus sidebar"),
 		row("prefix_file_search", "Search files"),
+		// Calm mode is a row of its own at the end of Modes. A key added to
+		// a shared row widens that row's key column, and the zoom row's
+		// description has to stay "Toggle zoom" for a rebind to read as one
+		// key. At 80x24 the end of Modes flows into a column of one-cell
+		// keys, so the row costs no width there.
+		row("toggle_calm", "Calm mode"),
 	)
 	return []menuSection{
 		{title: "Workspaces", rows: leaderWorkspaceRows},
