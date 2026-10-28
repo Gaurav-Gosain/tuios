@@ -10289,3 +10289,11 @@ refused.
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | The WSL check in `detectImageClipboard` (the `wslPowerShell` call site), so WSLg's `wl-paste` is asked, as before the fix | `no path was pasted into the pane`, 5 of 5 runs | **caught** |
+
+## A paste key timeout under WSL leaves the empty paste on
+
+`TestAPasteKeyTimeoutUnderWSLLeavesTheEmptyPasteOn` presses the paste key (`ctrl+shift+v`) from a client under WSL with a `powershell.exe` stand-in that takes 0.6 s to list the types, longer than the key's 0.3 s bound, as `powershell.exe` often takes to start. The key times out and pastes text. An empty bracketed paste follows, and the image has to be pasted into the pane as a file path, which the pane's shell reads. The control was built into its own binary and the test run against it 5 times; the unmodified binary passed 5 of 5. Run on 2026-10-28 on Linux (WSL2, x86_64).
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `slowStart` dropped from the timeout check in `probeImageCmd`, so a timeout under WSL sets `keyProbeOff`, as before the fix | `no path was pasted into the pane`, 5 of 5 runs | **caught** |

@@ -208,9 +208,17 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 				nothingWaits = !hasText || mode == imagePasteEmpty
 			}
 		}
+		// Under WSL the type ask is powershell.exe, a Windows process started
+		// across the interop bridge. Its start takes about the key's whole
+		// bound when it is warm, and can outlast the full bound when it is
+		// cold. A timeout there is a slow start, not a tool that cannot
+		// answer, so it does not turn the ask off: one press of the paste key
+		// would otherwise turn off the empty paste Windows Terminal sends for
+		// an image.
+		slowStart := clip.backend == imageClipWSL
 		types, err := clip.typesWithin(ctx, limit)
 		if err != nil && mode != imagePasteAction {
-			if nothingWaits && !errors.Is(err, errClipTypesUnsupported) {
+			if (nothingWaits || slowStart) && !errors.Is(err, errClipTypesUnsupported) {
 				msg.fallback = mode == imagePasteKey
 				return msg
 			}
