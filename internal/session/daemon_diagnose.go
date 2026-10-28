@@ -138,10 +138,16 @@ var ErrShutdownTimeout = errors.New("timed out waiting for the daemon to finish 
 // It returns ErrShutdownTimeout if the deadline passes with the socket still in
 // place, so a caller can say that the daemon is wedged rather than reporting
 // success and letting a subsequent start race the old process.
-func WaitForDaemonShutdown(timeout time.Duration) error {
-	socketPath, err := GetSocketPath()
-	if err != nil {
-		return err
+//
+// socketPath is the socket of the daemon the caller signalled, as it was
+// resolved before the signal. Resolving it again here would be wrong: with a
+// daemon in each socket folder, the pick goes by which one answers, and the
+// signalled daemon stops answering as soon as it closes its listener. The new
+// pick is then the other folder's socket, which may already be gone, and the
+// wait would return while this daemon is still saving.
+func WaitForDaemonShutdown(socketPath string, timeout time.Duration) error {
+	if socketPath == "" {
+		return errors.New("no daemon socket path to wait on")
 	}
 
 	deadline := time.Now().Add(timeout)

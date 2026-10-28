@@ -1298,7 +1298,7 @@ const killServerTimeout = 10 * time.Second
 // the new daemon reads state the old one has not finished writing, or the old
 // one's final write lands on top of the new one's.
 func awaitDaemonShutdown(pid int, socketPath string) error {
-	err := session.WaitForDaemonShutdown(killServerTimeout)
+	err := session.WaitForDaemonShutdown(socketPath, killServerTimeout)
 	if err == nil {
 		fmt.Println("TUIOS daemon stopped. Session state was saved.")
 		return nil
