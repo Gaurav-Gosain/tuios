@@ -10248,3 +10248,13 @@ A code-only review of the fix found one more case: when the first move stays ins
 | The positive half | none: three runs showed charlie in 100 to 103 ms and charlie gone in 102 to 103 ms | **guard** |
 
 With `TUIOS_E2E_FRAMES` set, the test writes `charlie-made.png` and `charlie-gone.png`.
+
+## A worktree record that arrives after the session
+
+`TestSidebarGroupsWorktrees` makes the session `mine`, then moves its shell into the worktree of `feat/one`. The rail must show `mine` under `repo` within 15 seconds. With the listing push sent at once for a new session, the first listing that names `mine` comes before the daemon has read its worktree. The record arrives in a later listing. Run on 2026-10-28 on Linux, on branch `fix/listing-push-on-session-change`, pinned to one core, 20 runs each.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The worktree comparison in `listingsAgree` | "the named session in a worktree lost its name to the branch", 20 of 20 runs | **caught** |
+| None: `main` | none: 20 of 20 runs pass, because the first push waits out the gap and already carries the record | **not caught** |
+| The positive half | none: 20 of 20 runs pass with the comparison | **guard** |

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -2551,6 +2552,13 @@ func listingsAgree(a, b []SessionInfo) bool {
 		// Filing a session under a space moves no window, and the rail draws
 		// the row under the space's heading.
 		if a[i].Space != b[i].Space {
+			return false
+		}
+		// A shell that walks into a worktree moves no window either, and the
+		// rail draws the row under its repository from this record. The first
+		// listing can carry the session before the daemon has read its
+		// worktree, so the record that arrives later must count as a change.
+		if !reflect.DeepEqual(a[i].Worktree, b[i].Worktree) {
 			return false
 		}
 		// The first set-session-order can leave the names where they were and
