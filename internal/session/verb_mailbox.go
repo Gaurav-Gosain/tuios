@@ -74,6 +74,11 @@ const (
 	agentSendBurst = 10
 	// agentSendPerMinute is the sustained rate one sender's bucket refills at.
 	agentSendPerMinute = 30
+	// agentMaxBuckets bounds the send buckets one ring keeps, whatever name a
+	// sender claims. Past it a sender on another machine shares one bucket.
+	agentMaxBuckets = 256
+	// agentOverflowBucket is the key of that shared bucket.
+	agentOverflowBucket = queueByLinkPrefix + "*"
 	// agentLinkMaxQueued bounds what other machines can leave in one ring at
 	// once: unread direct messages that arrived over a link, and notices
 	// that did, counted separately. A message from another machine was
@@ -276,7 +281,9 @@ type agentMailbox struct {
 	msgs    []*AgentMessage
 	bytes   int
 	evicted uint64
-	// buckets is one token bucket per claimed sender.
+	// buckets is one token bucket per claimed sender, at most agentMaxBuckets
+	// of them. Past the bound a sender on another machine is charged on the
+	// shared agentOverflowBucket.
 	buckets map[string]*sendBucket
 }
 
@@ -317,11 +324,17 @@ func (b *agentBus) forget(session string) {
 // allow charges one send against the sender's token bucket, reporting whether
 // there was a token to charge. An unclaimed sender shares one bucket keyed by
 // the empty string, which is the right default: an anonymous flood is a flood.
+// The table of buckets is bounded: when it is full, buckets that have refilled
+// are dropped, a sender on another machine then shares one bucket, and a local
+// sender takes the place of another machine's sender's bucket, or, failing
+// that, another local sender's (never the anonymous one).
 func (mb *agentMailbox) allow(sender string, now time.Time) bool {
 	bk := mb.buckets[sender]
 	if bk == nil {
-		bk = &sendBucket{tokens: agentSendBurst, last: now}
-		mb.buckets[sender] = bk
+		bk = mb.makeBucket(sender, now)
+		if bk == nil {
+			return false
+		}
 	}
 	if refill := now.Sub(bk.last).Minutes() * agentSendPerMinute; refill > 0 {
 		bk.tokens = min(bk.tokens+refill, agentSendBurst)
@@ -332,6 +345,51 @@ func (mb *agentMailbox) allow(sender string, now time.Time) bool {
 	}
 	bk.tokens--
 	return true
+}
+
+// makeBucket returns a bucket to charge a sender that has none, keeping the
+// table within agentMaxBuckets, or nil when a send from another machine finds
+// no room.
+func (mb *agentMailbox) makeBucket(sender string, now time.Time) *sendBucket {
+	fresh := func(key string) *sendBucket {
+		bk := &sendBucket{tokens: agentSendBurst, last: now}
+		mb.buckets[key] = bk
+		return bk
+	}
+	evict := func(match func(string) bool) bool {
+		for k := range mb.buckets {
+			if k != "" && match(k) {
+				delete(mb.buckets, k)
+				return true
+			}
+		}
+		return false
+	}
+	isLink := func(k string) bool { return strings.HasPrefix(k, queueByLinkPrefix) }
+	if len(mb.buckets) < agentMaxBuckets {
+		return fresh(sender)
+	}
+	for k, bk := range mb.buckets {
+		if k != "" && bk.tokens+now.Sub(bk.last).Minutes()*agentSendPerMinute >= agentSendBurst {
+			delete(mb.buckets, k)
+		}
+	}
+	if len(mb.buckets) < agentMaxBuckets {
+		return fresh(sender)
+	}
+	if isLink(sender) {
+		if bk := mb.buckets[agentOverflowBucket]; bk != nil {
+			return bk
+		}
+		if !evict(isLink) {
+			return nil
+		}
+		return fresh(agentOverflowBucket)
+	}
+	if !evict(isLink) && !evict(func(string) bool { return true }) {
+		return nil
+	}
+	return fresh(sender)
 }
 
 // append adds m to the ring and evicts from the oldest end until both caps

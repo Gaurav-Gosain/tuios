@@ -613,10 +613,11 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	// The rate cap is charged after validation so a caller cannot burn its
 	// budget on calls that were never going to be delivered. A sender on
 	// another machine has its own bucket, keyed on the name it claims, so a
-	// flood from a link cannot spend the anonymous local bucket.
+	// flood from a link cannot spend the anonymous local bucket. The table
+	// of buckets is bounded, and past the bound a link shares one bucket.
 	sender := msg.From
 	if viaLink {
-		sender = "link:" + msg.OriginHost + ":" + msg.FromLabel
+		sender = queueByLinkPrefix + msg.OriginHost + ":" + msg.FromLabel
 	}
 	if !d.agents.checkRate(sess.Name(), sender) {
 		return nil, hintedVerbError(ErrVerbRateLimited, "this sender is over the message rate cap", &VerbHint{
