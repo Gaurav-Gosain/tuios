@@ -950,6 +950,13 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Share my look",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.ShareLook("", "", "")
+			},
+		},
+		{
 			Name:     "Edit theme",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

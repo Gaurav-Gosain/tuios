@@ -2652,6 +2652,7 @@ func runCommandCatalog() []runCommandEntry {
 		{"ListWindows", "List all windows (use --json)", "tuios list-windows --json"},
 		{"GetWindow [id-or-name]", "Get window info (use --json)", "tuios get-window --json"},
 		{"GetSessionInfo", "Get session info (use --json)", "tuios session-info --json"},
+		{"ShareLook [name] [author]", "Share the look in the setups discussion on GitHub", "tuios look share"},
 	}
 }
 

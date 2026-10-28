@@ -17,6 +17,7 @@ overlays, the dockbar) from them.
 - [Start from Another Theme](#start-from-another-theme)
 - [Export and Share a Theme](#export-and-share-a-theme)
 - [Looks](#looks)
+- [Export and Share a Look](#export-and-share-a-look)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
 - [Chrome Colors](#chrome-colors)
 - [Colour Depth](#colour-depth)
@@ -450,6 +451,78 @@ tuios does not replace or delete a file of your own. If `config.d/look.toml`
 is a file that tuios did not write, `tuios look` stops. It also stops if a
 theme or glyph set with the `look-<id>` name is there and no look installed
 it. Rename that file, then apply the look again.
+
+## Export and Share a Look
+
+`tuios look export` prints your look as a look file. `tuios look apply` takes
+the file unchanged.
+
+```bash
+tuios look export                                 # print it
+tuios look export -o my.look.toml --name "Neon 84" # write it to a file
+```
+
+- tuios reads the value in force of each look key. The file sets the keys
+  that differ from the defaults. `--all` sets every key.
+- A theme or glyph set from your own folder goes into the file as `[theme]`
+  or `[glyphs]`. A built-in one goes in by name.
+- A look carries one theme. A `theme_light` from your own folder is left out,
+  and tuios says so.
+- An item that a look cannot carry, such as a `custom/` dock cell, is left out.
+  tuios names it on stderr.
+- The author is your GitHub login when `gh` is signed in. `--author` sets it.
+
+`tuios look share` puts your look in
+[Show us your tuios setup](https://github.com/Gaurav-Gosain/tuios/discussions/849),
+the discussion that fills the [gallery](https://tuios.dev/gallery):
+
+1. Run `tuios look share`, or choose "Share my look" in the command palette
+   or on the Appearance page of the settings.
+2. tuios puts a comment with your look on the clipboard. It takes a screenshot
+   of the screen and opens the discussion in your browser.
+3. Paste the comment into the discussion.
+4. Drag the screenshot into the comment. The path is on the screen. The
+   message in the dock is cut. Click it, or press prefix+N, to read all of it.
+
+The comment has a heading, one line about the setup, and the look file in a
+`toml` code block:
+
+````markdown
+### Neon 84
+
+My setup uses the neon theme, double borders, the dock at the top and the rail on the right.
+
+```toml
+look = 1
+name = 'Neon 84'
+author = 'someone'
+
+[appearance]
+border_style = 'double'
+gap = 1
+theme = 'neon'
+
+[theme]
+base = 'dracula'
+bg = '#101020'
+id = 'neon'
+
+[theme.chrome]
+accent = '#ff00aa'
+```
+````
+
+- `--name` sets the heading and the name of the look. With no name, the
+  heading is "My tuios setup".
+- `--print` writes the comment to stdout and opens nothing.
+- Over ssh, the clipboard write goes through your terminal, and tuios prints
+  the address of the discussion.
+- The screenshot goes to your Downloads folder, or to `tuios/share` in your
+  cache folder when there is no Downloads folder.
+- With no tuios attached, the command writes the clipboard through its own
+  terminal and has no screenshot of the screen.
+- The gallery keeps a look file of at most 4000 characters. tuios says so
+  when your look is longer.
 
 ## Defaults for Omitted Colors
 

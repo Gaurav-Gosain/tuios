@@ -288,6 +288,14 @@ tuios look remove
 # List the keys a look can set
 tuios look keys
 tuios look keys --json
+
+# Print your look as a look file, or write it to a file
+tuios look export
+tuios look export -o my.look.toml --name "Neon 84"
+
+# Share your look in the setups discussion on GitHub
+tuios look share
+tuios look share --print
 ```
 
 `tuios look apply <source>`:
@@ -350,6 +358,36 @@ it puts your saved values back:
 A new look applied over a take-over puts back the saved keys that the new look
 does not set. tuios reads each file again before it writes it. If a file
 changed while tuios asked its questions, tuios stops and changes nothing.
+
+`tuios look export` prints the look in force as a look file.
+`tuios look apply` takes the file unchanged.
+
+- `-o FILE` writes the file instead of stdout.
+- `--name` sets the name. `--author` sets the author. The author is your
+  GitHub login when `gh` is signed in.
+- The file sets the keys that differ from the defaults. `--all` sets every
+  look key.
+- A theme or glyph set from your own folder goes into the file. A built-in
+  one goes in by name. tuios names on stderr each key or item it leaves out.
+
+`tuios look share` shares your look in
+[discussion #849](https://github.com/Gaurav-Gosain/tuios/discussions/849).
+The command palette has it as "Share my look". The Appearance page of the
+settings has it too.
+
+- tuios exports the look and takes a screenshot of the screen. The running
+  tuios takes it, and the screenshot goes to Downloads or the cache folder.
+- tuios puts the comment on the clipboard through the terminal (OSC 52), also
+  over ssh. Where a clipboard tool is on this machine, tuios uses it too.
+- tuios opens the discussion in the browser: `appearance.link_opener`, then
+  `$BROWSER`, then the system opener. Over ssh, or with no browser, it prints
+  the address.
+- The command prints at most three lines: what is on the clipboard, where the
+  screenshot is, and the address when no browser opened.
+- `--print` writes the comment to stdout and opens nothing.
+- `--name` and `--author` work as they do for `tuios look export`.
+- With no tuios attached, the command writes the clipboard through its own
+  terminal. The daemon then captures the focused pane, if there is one.
 
 ---
 

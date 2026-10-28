@@ -2843,6 +2843,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.MarkAllDirty()
 		return m, cmd
 
+	case lookShareAuthorMsg:
+		// gh answered with the login. The export reads the config, so it
+		// runs here. See look_share.go.
+		return m, m.handleLookShareAuthor(msg)
+
+	case lookShareDoneMsg:
+		m.handleLookShareDone(msg)
+		return m, nil
+
 	case screenshotCopiedMsg:
 		// The clipboard helper answered. Nothing waited for it, which is the
 		// point: this only decides where to say what it said.
@@ -2953,6 +2962,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
 				}
 				return m, relisten
+			case "ShareLook":
+				// tuios look share: the client has the screen to capture and
+				// the terminal that carries the clipboard. TapeArgs are the
+				// name and the author, either one empty. The result is sent
+				// when the share is done. See look_share.go.
+				var name, author string
+				if len(msg.TapeArgs) > 0 {
+					name = msg.TapeArgs[0]
+				}
+				if len(msg.TapeArgs) > 1 {
+					author = msg.TapeArgs[1]
+				}
+				return m, tea.Batch(m.ShareLook(name, author, msg.RequestID), relisten)
 			case "GetWindow":
 				// Return info about a specific window (read-only, no notification)
 				if len(msg.TapeArgs) > 0 {

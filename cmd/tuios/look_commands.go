@@ -26,7 +26,7 @@ const lookFetchTimeout = 15 * time.Second
 func newLookCommand() *cobra.Command {
 	lookCmd := &cobra.Command{
 		Use:   "look",
-		Short: "Apply, show and remove a look",
+		Short: "Apply, show, export, share and remove a look",
 		Long: `A look is a small TOML file that sets how tuios looks: theme, glyph set,
 borders, gaps, dock and rail style. The tuios.dev gallery shares looks.
 
@@ -34,6 +34,9 @@ tuios writes a look to config.d/look.toml, its own file. config.toml wins over
 it, so a key you set in config.toml hides the look's value. A take-over lets
 the look set those keys. tuios saves your values, and "tuios look remove" puts
 them back. A look may set only look keys. "tuios look keys" lists them.
+
+"tuios look export" prints your look as a look file. "tuios look share" puts
+it in the setups discussion on GitHub, with a screenshot.
 
 "tuios look" with no command, in a terminal, shows the gallery looks to choose
 from, as "tuios look pick" does.`,
@@ -167,7 +170,7 @@ same questions as "tuios look apply". Esc closes the list.`,
 	pickCmd.Flags().BoolVar(&pickHold, "hold", false, "Wait for Enter before the command ends")
 	_ = pickCmd.Flags().MarkHidden("hold")
 
-	lookCmd.AddCommand(applyCmd, removeCmd, showCmd, keysCmd, listCmd, pickCmd)
+	lookCmd.AddCommand(applyCmd, removeCmd, showCmd, keysCmd, listCmd, pickCmd, newLookExportCommand(), newLookShareCommand())
 	return lookCmd
 }
 

@@ -195,3 +195,30 @@ func RegisterLookTheme(id string, data []byte) error {
 	}
 	return registerResolved(r)
 }
+
+// ExportGlyphSet returns a glyph set from the glyphs directory as one file,
+// with every set it inherits folded in, so it draws the same on a machine
+// that has none of those sets. ok is false when id is not a set of the
+// person's own, such as a built-in set.
+func ExportGlyphSet(id string) (data []byte, ok bool, err error) {
+	ReloadGlyphSets()
+	glyphMu.RLock()
+	_, user := userGlyphSets[id]
+	glyphMu.RUnlock()
+	if !user {
+		return nil, false, nil
+	}
+	set := ResolveGlyphSet(id)
+	set.Inherits = ""
+	data, err = json.Marshal(set)
+	return data, true, err
+}
+
+// IsThemeFile reports whether id is a theme from the themes directory: one
+// the person wrote, edited or installed with a look.
+func IsThemeFile(id string) bool {
+	EnsureRegistry()
+	ReloadCustomThemes()
+	yours, _ := ThemeFileOf(id)
+	return yours
+}

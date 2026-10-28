@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
@@ -299,4 +300,26 @@ func Create(ctx context.Context, dir string, o CreateOptions) (string, error) {
 		}
 	}
 	return url, nil
+}
+
+// githubLogin is the shape of a GitHub login: letters, digits and single
+// hyphens, at most 39 characters.
+var githubLogin = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$`)
+
+// Login is the GitHub login gh is signed in with. It asks gh for the login
+// and nothing else, so no address of the person's reaches tuios.
+func Login(ctx context.Context) (string, error) {
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		dir = os.TempDir()
+	}
+	out, err := run(ctx, dir, "api", "user", "--jq", ".login")
+	if err != nil {
+		return "", err
+	}
+	login := strings.TrimSpace(out)
+	if !githubLogin.MatchString(login) {
+		return "", fmt.Errorf("gh answered %q, which is not a GitHub login", login)
+	}
+	return login, nil
 }

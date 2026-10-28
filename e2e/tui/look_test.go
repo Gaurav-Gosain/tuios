@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
 )
 
@@ -69,7 +72,7 @@ border_unfocused_color = "#553300"
 	run := func(args ...string) string {
 		t.Helper()
 		out, err := tuiosCLI(t, base, args...)
-		transcript.WriteString("$ tuios " + strings.Join(args, " ") + "\n" + out + "\n")
+		fmt.Fprintf(&transcript, "$ tuios %s\n%s\n", strings.Join(args, " "), out)
 		if err != nil {
 			t.Fatalf("tuios %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
@@ -506,4 +509,144 @@ blue = "#5050e0"
 		t.Fatalf("ASSERTION: border_style does not come from the look after the take-over: %v\n%s", err, origin)
 	}
 	saveSyncArtifact(t, "look-pick-transcript.txt", out+"\n"+asJSON+"\n"+offline+"\n--- the pick\n"+cli.Snapshot()+"\n--- look show\n"+show)
+}
+
+// TestLookShareRoundTrip covers export and share. It exports a look that
+// carries a theme of its own, applies the file in a fresh config and checks
+// that the second config exports the same file. Then it runs "Share my look"
+// from the palette of a running client and `tuios look share` from the CLI,
+// with gh and the browser stubbed.
+//
+// How this could pass wrongly, written down first:
+//   - The export could leave keys out, and the round trip would still match.
+//     The test checks the keys the config sets are in the file.
+//   - The clipboard write could be some other copy. The test reads the OSC 52
+//     write off the wire and checks it is the comment --print gives.
+//   - The screenshot line could name a file that is not there. The test
+//     checks the file is a PNG.
+//   - The browser could open nothing. The stub writes the address it got.
+func TestLookShareRoundTrip(t *testing.T) {
+	base := t.TempDir()
+	useShippedLooks(base)
+	home := filepath.Join(base, "home")
+	stubs := filepath.Join(base, "stubs")
+	opened := filepath.Join(base, "opened.txt")
+	for _, dir := range []string{home, stubs} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeStub := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(stubs, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeStub("gh", `echo e2e-user`)
+	writeStub("browser", `echo "$1" >> `+opened)
+	env := []string{"HOME=" + home, "PATH=" + stubs + ":" + os.Getenv("PATH"), "BROWSER=" + filepath.Join(stubs, "browser"),
+		// No display, so no clipboard tool reaches the clipboard of the
+		// machine that runs the suite.
+		"WAYLAND_DISPLAY=", "DISPLAY="}
+
+	writeConfigPart(t, base, filepath.Join("themes", "neon.json"),
+		`{"id":"neon","base":"dracula","bg":"#101020","chrome":{"accent":"#ff00aa"}}`)
+	writeConfig(t, base, "[appearance]\ntheme = \"neon\"\nborder_style = \"double\"\ngap = 1\n\n[dock]\nright = [\"notifications\", \"clock\", \"custom/foo\"]\n")
+
+	var transcript strings.Builder
+	cli := func(b string, args ...string) string {
+		t.Helper()
+		out, err := tuiosCLIEnv(t, b, env, args...)
+		fmt.Fprintf(&transcript, "$ tuios %s\n%s\n", strings.Join(args, " "), out)
+		if err != nil {
+			t.Fatalf("tuios %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return out
+	}
+
+	// Export, apply in a fresh config, export again.
+	file := filepath.Join(base, "neon.look.toml")
+	cli(base, "look", "export", "-o", file, "--name", "Neon 84")
+	exported := readFileString(t, file)
+	for _, want := range []string{"name = 'Neon 84'", "author = 'e2e-user'", "border_style = 'double'",
+		"theme = 'neon'", "[theme]", "accent = '#ff00aa'", "right = ['notifications', 'clock']"} {
+		if !strings.Contains(exported, want) {
+			t.Fatalf("ASSERTION: the export does not hold %q:\n%s", want, exported)
+		}
+	}
+	other := t.TempDir()
+	useShippedLooks(other)
+	cli(other, "look", "apply", file, "--yes")
+	again := cli(other, "look", "export", "--name", "Neon 84")
+	if again != exported {
+		t.Fatalf("ASSERTION: the applied look does not export the same file:\n--- first\n%s--- after apply\n%s", exported, again)
+	}
+	noNotes := func(s string) string {
+		var keep []string
+		for line := range strings.Lines(s) {
+			if !strings.HasPrefix(line, "Note: ") {
+				keep = append(keep, line)
+			}
+		}
+		return strings.Join(keep, "")
+	}
+	if all1, all2 := noNotes(cli(base, "look", "export", "--all")), noNotes(cli(other, "look", "export", "--all")); all1 != all2 {
+		t.Fatalf("ASSERTION: the values of the look keys differ after the apply:\n--- first\n%s--- after apply\n%s", all1, all2)
+	}
+	printed := cli(base, "look", "share", "--print")
+
+	// Share from the palette of a running client.
+	out := &lockedBuffer{}
+	term := startIn(t, base, startOpts{cols: 120, rows: 36, shippedLooks: true, out: out, env: env, args: []string{"new", "share"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	from := len(clipboardWrites(out))
+	runPaletteRow(t, term, "share my look", "Share my look", "Share my look")
+	// The screenshot is rendered before the toast, which takes a few seconds
+	// on a loaded machine.
+	if err := term.WaitForText("The comment is on your clipboard", 60*time.Second); err != nil {
+		t.Fatalf("the share did not finish: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "share-toast")
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast")
+	waitClipboardSequence(t, term, out, from, strings.TrimSpace(printed))
+
+	shots, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_CACHE_HOME"), "tuios", "share", "tuios-look-*.png"))
+	if len(shots) != 1 {
+		t.Fatalf("ASSERTION: want one screenshot in the cache folder, got %v", shots)
+	}
+	data, err := os.ReadFile(shots[0])
+	if err != nil || !strings.HasPrefix(string(data), "\x89PNG") {
+		t.Fatalf("ASSERTION: the screenshot is not a PNG: %v", err)
+	}
+	_ = os.WriteFile(filepath.Join(artifactDir(t), "share-screenshot.png"), data, 0o644)
+
+	// The dock cuts the toast. prefix+N shows all of it, the path too.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("into the discussion. Drag the", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the full message does not name the screenshot: %v\n%s", err, term.Snapshot())
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast-full")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+
+	// The CLI asks the running client, and prints at most three lines.
+	shared := cli(base, "look", "share")
+	lines := strings.Split(strings.TrimSpace(shared), "\n")
+	if len(lines) > 3 || lines[0] != "The comment is on your clipboard. Paste it into the discussion." ||
+		!strings.HasPrefix(lines[1], "Drag the screenshot into the comment: ") {
+		t.Fatalf("ASSERTION: look share did not print the two lines:\n%s", shared)
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(lines[1], "Drag the screenshot into the comment: "), ".")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("ASSERTION: look share names a screenshot that is not there: %v", err)
+	}
+	if got := readFileString(t, opened); strings.Count(got, "https://github.com/Gaurav-Gosain/tuios/discussions/849") != 2 {
+		t.Fatalf("ASSERTION: the browser did not open the discussion twice:\n%s", got)
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-cli-toast")
+	saveSyncArtifact(t, "look-share-transcript.txt", transcript.String()+"--- comment\n"+printed)
+	alive(t, term, "after the share")
 }
