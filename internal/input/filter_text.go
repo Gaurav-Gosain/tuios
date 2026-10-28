@@ -4,6 +4,8 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
 // editFilterQuery applies the type-to-filter edit rule to an overlay's query.
@@ -13,6 +15,10 @@ import (
 //
 // The rule:
 //   - backspace removes the last rune, never a single byte of one.
+//   - alt+backspace, ctrl+w and ctrl+backspace remove the last word, by the
+//     rule of app.DropLastWord. They are not gated by allowClear: that flag
+//     is for overlays that give ctrl+u another meaning, and none gives these
+//     keys one.
 //   - ctrl+u clears the query when allowClear is set.
 //   - space types a space.
 //   - any key that carries text types that text, so multi-byte input works.
@@ -32,6 +38,12 @@ func editFilterQuery(msg tea.KeyPressMsg, q *string, allowClear bool) (changed, 
 		}
 		_, size := utf8.DecodeLastRuneInString(*q)
 		*q = (*q)[:len(*q)-size]
+		return true, true
+	case key == "alt+backspace" || key == "ctrl+w" || key == "ctrl+backspace":
+		if *q == "" {
+			return false, true
+		}
+		*q = app.DropLastWord(*q)
 		return true, true
 	case key == "ctrl+u" && allowClear:
 		*q = ""

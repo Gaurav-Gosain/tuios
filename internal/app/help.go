@@ -587,6 +587,7 @@ func generateListBindings() []HelpBinding {
 	const cat = "Modes"
 	return []HelpBinding{
 		{Keys: []string{"ctrl+u"}, Description: "Lists: clear a typed filter", Category: cat},
+		{Keys: []string{"alt+backspace", "ctrl+w"}, Description: "Lists and the rename dialog: delete the last word", Category: cat},
 		{Keys: []string{"wheel"}, Description: "Lists: scroll the list under the pointer", Category: cat},
 		{Keys: []string{"/"}, Description: "Settings: search every tab", Category: cat},
 		{Keys: []string{"1-9"}, Description: "Settings: go to that tab", Category: cat},

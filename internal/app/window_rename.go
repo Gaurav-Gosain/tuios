@@ -131,12 +131,48 @@ func (m *OS) RenameClear() {
 	}
 }
 
+// RenameDeleteWord drops the last word of the buffer, with the blanks after
+// it, so a name can be taken back a word at a time.
+func (m *OS) RenameDeleteWord() {
+	if !m.Renaming() || m.RenameBuffer == "" {
+		return
+	}
+	m.RenameBuffer = DropLastWord(m.RenameBuffer)
+	if t := m.RenameTarget(); t != nil {
+		t.InvalidateCache()
+	}
+}
+
 // dropLastRune removes the last rune of s. It counts in runes because a name
 // may hold multi-byte text, and cutting one byte off é leaves the string
 // holding a broken sequence that renders as a replacement glyph.
 func dropLastRune(s string) string {
 	_, size := utf8.DecodeLastRuneInString(s)
 	return s[:len(s)-size]
+}
+
+// DropLastWord removes the last word of s: the blanks that end it, then the
+// run of characters before them. A word is whatever is not white space, the
+// rule the composer and loom's fields already use, so a name, a filter and a
+// reply all lose the same word to the same key. It steps in runes, so a word
+// of multi-byte text is cut whole and never into invalid UTF-8.
+func DropLastWord(s string) string {
+	end := len(s)
+	for end > 0 {
+		r, size := utf8.DecodeLastRuneInString(s[:end])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		end -= size
+	}
+	for end > 0 {
+		r, size := utf8.DecodeLastRuneInString(s[:end])
+		if unicode.IsSpace(r) {
+			break
+		}
+		end -= size
+	}
+	return s[:end]
 }
 
 // combiningOnly reports whether s is nothing but marks that attach to a

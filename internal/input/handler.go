@@ -776,6 +776,11 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "backspace":
 		o.RenameBackspace()
 		return o, nil
+	case "alt+backspace", "ctrl+w", "ctrl+backspace":
+		// The word chords of a shell and of the composer. Option+Backspace
+		// reaches here as alt+backspace when the terminal sends Option as Alt.
+		o.RenameDeleteWord()
+		return o, nil
 	case "ctrl+u":
 		o.RenameClear()
 		return o, nil

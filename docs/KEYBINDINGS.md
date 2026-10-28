@@ -454,6 +454,7 @@ the tape manager.
 | `pgup`, `pgdown` | A page up or down, stopping at the ends |
 | `k`, `j`, `g`, `G` | Up, down, first and last, in a list with no filter to type into |
 | `ctrl+u` | Clear a typed filter (fixed) |
+| `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the last word of a typed filter (fixed). `alt+backspace` is `Option+Backspace` on a Mac whose terminal sends Option as Alt |
 | wheel | Scroll the list under the pointer, stopping at the ends (fixed) |
 
 The movement keys are the `[keybindings.lists]` section. Each action takes the
@@ -524,6 +525,7 @@ One dialog renames a window, a session and a workspace. It opens holding the cur
 | `enter` | Save the name |
 | `esc` | Cancel |
 | `ctrl+u` | Clear the field |
+| `alt+backspace`, `ctrl+w`, `ctrl+backspace` | Delete the last word |
 | `ctrl+c` | Clear the field, or cancel when it is already empty |
 
 A click on the `clear` hint in the dialog's border clears the field too. In the help's search, `ctrl+u` clears the query.
