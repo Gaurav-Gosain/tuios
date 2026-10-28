@@ -156,6 +156,10 @@ In interactive mode, you can see the automation happening in real-time
 in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			// Playback runs the interface for as long as the tape lasts;
+			// --pprof is a persistent flag that tape play used to accept and
+			// ignore.
+			startPprofServer()
 			return runTapeInteractive(args[0])
 		},
 	}
@@ -3037,6 +3041,9 @@ command in authorized_keys to make the policy a boundary:
   command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// The proxy keeps this process running; --pprof is a persistent
+			// flag that stdio-proxy used to accept and ignore.
+			startPprofServer()
 			return runStdioProxy(stdioProxyAs)
 		},
 	}

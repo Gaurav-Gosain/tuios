@@ -69,6 +69,9 @@ trusting that you saw every change.`,
   tuios subscribe --hosts --types agent-state,host-changed`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// The stream keeps this process running; --pprof is a persistent
+			// flag that subscribe used to accept and ignore.
+			startPprofServer()
 			opts.resume = cmd.Flags().Changed("after-seq")
 			if opts.bootID != "" && !opts.resume {
 				return errors.New("--boot-id only means something with --after-seq: pass the seq the last run printed with it")

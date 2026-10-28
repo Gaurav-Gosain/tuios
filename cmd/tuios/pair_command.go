@@ -170,6 +170,9 @@ code and the fingerprint on the phone with the ones here before you accept.`,
   tuios pair --listen 100.64.0.7:7420 --advertise-pair studio.example.ts.net:7420`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// The pairing window keeps this process running; --pprof is a
+			// persistent flag that pair used to accept and ignore.
+			startPprofServer()
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return runPair(ctx, o, cmd.OutOrStdout(), cmd.ErrOrStderr(), os.Stdin)

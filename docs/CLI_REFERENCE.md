@@ -152,13 +152,13 @@ tuios --standalone
 - `--debug`: Enable debug logging
 - `--server <name>`: Use the daemon named `<name>`. It has its own socket and saved sessions. See [Running a separate daemon](SESSIONS.md#running-a-separate-daemon)
 - `--cpuprofile <file>`: Write CPU profile to file
-- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served. Take two and compare them with `go tool pprof -diff_base`. With `start-server`, the daemon that the command starts serves the profiles. With `ssh`, the SSH server serves the profiles
+- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served. Take two and compare them with `go tool pprof -diff_base`. With `start-server`, the daemon that the command starts serves the profiles. With `ssh`, the SSH server serves the profiles. The commands that keep running serve them too: `daemon`, `gui-bridge`, `mcp`, `stdio-proxy`, `pair`, `subscribe`, `agent-proto`, `tape play` and `mermaid --watch` and `--demo`
 - `-h, --help`: Show help for tuios
 - `-v, --version`: Show version information
 
 The interface flags, from `--theme` to `--shared-borders`, are also flags of
 `attach`, `new`, `ssh` and `tape play`, the commands that draw the interface.
-`--debug`, `--server`, `--cpuprofile` and `--pprof` work on every command.
+`--debug`, `--server` and `--cpuprofile` work on every command. `--pprof` is served by the commands that keep running (see the `--pprof` flag above).
 
 **Examples:**
 ```bash
@@ -6144,7 +6144,7 @@ tuios help -i           # Search the commands in an explorer
 ## Global Flags
 
 The root command's flags are listed under [Root Command](#root-command).
-`--debug`, `--cpuprofile` and `--pprof` are accepted by every subcommand too.
+`--debug` and `--cpuprofile` are accepted by every subcommand too. `--pprof` is accepted by every subcommand and served by the commands that keep running (see the `--pprof` flag under [Root Command](#root-command)).
 
 ---
 

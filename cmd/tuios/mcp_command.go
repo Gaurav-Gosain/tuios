@@ -53,6 +53,9 @@ tuios integration install <harness> --mcp registers it with a harness.`,
   claude mcp add tuios -- tuios mcp`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// The server keeps this process running; --pprof is a persistent
+			// flag that mcp used to accept and ignore.
+			startPprofServer()
 			if scope != session.ScopeOwn && scope != session.ScopeAll {
 				return fmt.Errorf("--scope must be own or all, not %q", scope)
 			}

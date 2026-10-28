@@ -6624,6 +6624,19 @@ The control was run on 2026-10-26 on the branch fix/ssh-pprof.
 | --- | --- | --- | --- |
 | The call cut | startPprofServer() removed from the ssh command | `TestSSHServesPprof/daemon`: "ASSERTION: tuios ssh (daemon) never served /debug/pprof on 127.0.0.1:39865: … connect: connection refused"; `TestSSHServesPprof/ephemeral`: the same | **caught** |
 | A default listener | startPprofServer listening on 127.0.0.1:6060 when the flag is empty | `TestSSHWithoutPprofOpensNoProfileListener/daemon`: "ASSERTION: tuios ssh (daemon) without --pprof listens on [6060 38499], want only the SSH port 38499" | **caught** |
+
+## Long-running commands serve --pprof
+
+`TestPprofServedByLongRunningCommands` starts mcp, stdio-proxy, pair, subscribe, agent-proto, tape play and `mermaid --watch` with `--pprof :P`, reads the heap profile from 127.0.0.1:P and checks the process holds that listener on IPv4 loopback only; then it starts each again without the flag and checks, once the command is running and again a second later, that it listens on no extra port.
+
+The control was run on 2026-10-28 on the branch fix/pprof-long-running.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The call cut | startPprofServer() removed from the mcp command | `TestPprofServedByLongRunningCommands/mcp`: "ASSERTION: mcp --pprof :40343 never served the heap profile on 127.0.0.1:40343: status 0, 0 bytes, ... connect: connection refused" | **caught** |
+| A default listener | startPprofServer listening on 127.0.0.1:6060 when the flag is empty | `TestPprofServedByLongRunningCommands/agent-proto`: "ASSERTION: agent-proto without --pprof listens on [6060], want []" | **caught** |
+| Every interface | listenPprof bypassed (net.Listen on :P) | `TestPprofServedByLongRunningCommands/mcp`: "ASSERTION: mcp --pprof :39101 listens on port 39101 over IPv6, not on loopback only" | **caught** |
+
 ## Panes do not inherit the agent tool call that started the daemon
 
 `TestPanesDoNotInheritTheAgentThatStartedTheDaemon` starts the daemon with

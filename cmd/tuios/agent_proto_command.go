@@ -68,6 +68,9 @@ start-agent adds the app-server subcommand for you.`,
   tuios agent-proto --protocol acp -- opencode acp`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
+			// The agent session keeps this process running; --pprof is a
+			// persistent flag that agent-proto used to accept and ignore.
+			startPprofServer()
 			code := runAgentProto(o, args)
 			if code != 0 {
 				return &statusError{code: code}

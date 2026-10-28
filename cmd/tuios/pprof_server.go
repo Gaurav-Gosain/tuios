@@ -43,7 +43,9 @@ import (
 // contention data. Output is not printed so it cannot corrupt the TUI on stdout.
 //
 // Every path that runs the TUI calls this, including the daemon-attached one,
-// as do the long-running servers (the daemon, the ssh server, the gui bridge).
+// tape play and the mermaid live view (--watch and --demo), as do the
+// long-running commands (the daemon, the ssh server, the gui bridge, mcp,
+// stdio-proxy, pair, subscribe and agent-proto).
 // Profiling an attached client is the only way to see the compositor under a
 // real multi-pane session, which is where the interesting contention lives.
 func startPprofServer() {

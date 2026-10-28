@@ -121,6 +121,9 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 				if err != nil {
 					return err
 				}
+				// The live view keeps this process running; --pprof is a
+				// persistent flag that it used to accept and ignore.
+				startPprofServer()
 				return runMermaidLive(name, o, lo, th, os.Stdout)
 			}
 			if name == "" {
