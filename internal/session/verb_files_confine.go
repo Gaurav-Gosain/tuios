@@ -127,9 +127,13 @@ var linkDenyCredentialHome = []string{
 	// their paths and the sync server.
 	".local/share/atuin",
 	".config/atuin",
-	// Ollama's signing key and Gemini CLI's API key.
+	// Ollama's signing key, and the API keys of Gemini CLI, its fork Qwen
+	// Code, and Hermes Agent.
 	".ollama/id_ed25519",
 	".gemini/.env",
+	".qwen/.env",
+	".hermes/.env",
+	"AppData/Local/hermes/.env",
 }
 
 // linkDenyWriteOnlyHome is the rest of the write deny list: login items,
@@ -298,7 +302,12 @@ var linkReadDenyOnlyHome = []string{
 	".local/share/opencode/mcp-auth.json",
 	".qwen/oauth_creds.json",
 	".local/share/kilo/auth.json",
+	".local/share/kilo/mcp-auth.json",
 	".pi/agent/auth.json",
+	// oh-my-pi, a Pi fork, keeps its logins in a SQLite database, and the
+	// write-ahead log beside it holds the newest of them.
+	".omp/agent/agent.db",
+	".omp/agent/agent.db-wal",
 	".local/share/amp/secrets.json",
 	".copilot/config.json",
 	".cursor/mcp.json",

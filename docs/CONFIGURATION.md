@@ -2663,8 +2663,8 @@ stay, so a script stays runnable. This holds for a paired device too.
 
 **Where a link may read: `files_read_roots`.** Unset, a machine with `files`
 reads any file you can read, apart from the read deny list: keys, credentials
-(also the logins of agent tools such as Gemini CLI, opencode, Qwen Code, Kilo,
-Pi, Amp and the Copilot CLI, Cursor's MCP servers, the sops age keys, atuin's
+(also the logins and API keys of agent tools such as Gemini CLI, opencode, Qwen
+Code, Kilo, Pi, oh-my-pi, Hermes, Amp and the Copilot CLI, Cursor's MCP servers, the sops age keys, atuin's
 key and history, Ollama's key, and the OCI, doctl and ngrok credentials),
 shell start files, `~/.gitconfig`, keyrings, shell histories, browser profiles,
 `/proc` and tuios's own state. A

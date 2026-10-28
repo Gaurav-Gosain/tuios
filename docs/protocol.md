@@ -6355,7 +6355,9 @@ on Windows `AppData/Roaming/devin`, `~/.factory`, `~/.grok`, Hermes's
 `~/.kimi-code`, `~/.pi/agent`, `~/.omp/agent`, `~/.qoder`, `~/.qwen`), the
 sops age keys (`~/.config/sops/age` and its macOS and Windows forms), atuin's
 key, session, history and config (`~/.local/share/atuin`, `~/.config/atuin`),
-Ollama's key (`~/.ollama/id_ed25519`), Gemini CLI's `~/.gemini/.env`, the shell
+Ollama's key (`~/.ollama/id_ed25519`), the API keys in Gemini CLI's
+`~/.gemini/.env`, Qwen Code's `~/.qwen/.env` and Hermes's `~/.hermes/.env` (on
+Windows `AppData/Local/hermes/.env`), the shell
 start files (`.profile`, `.bashrc`, `.bashrc.d`, `.bash_profile`,
 `.bash_login`, `.bash_logout`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`,
 `.zlogout`, `.cshrc`, `.tcshrc`, `.kshrc`, `.mkshrc`, `.xprofile`, `.xsession`,
@@ -6376,13 +6378,15 @@ list above that can hold a secret (`~/.ssh` except a `*.pub` key, `~/.gnupg`,
 `~/.git-credentials`, `~/.gitconfig`, `~/.config/git`, `~/.password-store`,
 the shell start files, `~/.config/systemd`, `~/.config/environment.d`,
 `.pam_environment`, the PowerShell profiles, `~/.claude.json`, the sops age
-keys, atuin's folders, Ollama's key, `~/.gemini/.env`, and tuios's own config,
+keys, atuin's folders, Ollama's key, the Gemini CLI, Qwen Code and Hermes
+`.env` files, and tuios's own config,
 state and data), and also `~/.docker/config.json`,
 `~/.config/gh/hosts.yml`, `~/Library/Keychains`, the
 Claude and Codex credential files, the logins of other agent tools (Gemini
 CLI's `oauth_creds.json` and `mcp-oauth-tokens.json`, opencode's `auth.json`
-and `mcp-auth.json`, Qwen Code's `oauth_creds.json`, Kilo's `auth.json`, Pi's
-`auth.json`, Amp's `secrets.json`, the Copilot CLI's `~/.copilot/config.json`),
+and `mcp-auth.json`, Qwen Code's `oauth_creds.json`, Kilo's `auth.json` and
+`mcp-auth.json`, Pi's `auth.json`, oh-my-pi's `~/.omp/agent/agent.db` and its
+`agent.db-wal`, Amp's `secrets.json`, the Copilot CLI's `~/.copilot/config.json`),
 Cursor's MCP servers (`~/.cursor/mcp.json`, whose env often holds API keys),
 the cloud and tunnel CLI credentials (`~/.oci`, doctl's and ngrok's config
 folders on Linux, macOS and Windows, and `~/.ngrok2`), the package and database
