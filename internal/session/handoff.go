@@ -213,6 +213,12 @@ func (r *handoffRun) prepare() error {
 	if err := d.handoffRefusal(); err != nil {
 		return err
 	}
+	// A hook or a plugin command does not wait on paneLife: from here one
+	// that starts waits, or is refused, until the handoff is put back.
+	if what := d.pipes.shut(); what != "" {
+		return pipeRefusal(what)
+	}
+	r.undo = append(r.undo, d.pipes.open)
 
 	// handoffRefusal counted the hosted panes, but an open-pane from a link
 	// does not wait on paneLife, so the count and the shut are one step.

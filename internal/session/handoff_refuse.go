@@ -10,26 +10,54 @@ import (
 // The exec closes every descriptor that is not handed over, and a handoff
 // hands over only PTY masters, sockets and the start lock. A pipe the daemon
 // reads closes with it, and the program writing it dies of SIGPIPE on its next
-// write: a fan check's status pipe and a capturing popup's output are two.
-// A new feature that keeps a pipe read end takes a hold here too.
+// write, and is never reaped: a fan check's status pipe, a capturing popup's
+// output, a plugin command's output and a hook's stderr are four. A new
+// feature that keeps a pipe read end takes a hold here too.
 
 // pipeHolds counts the pipes the daemon is reading that a handoff would
-// close, by what they are.
+// close, by what they are. While a handoff is under way they are shut, and no
+// new hold is given until it is put back.
 type pipeHolds struct {
 	mu    sync.Mutex
 	holds map[*string]struct{}
+	// closed is non-nil while the holds are shut, and is closed when they
+	// open again.
+	closed chan struct{}
 }
 
 // hold records that what is being read from a pipe until the returned
-// release runs.
+// release runs. While the holds are shut it waits for them to open: a
+// handoff that goes through ends the process first, so what waits never
+// starts its program.
 func (p *pipeHolds) hold(what string) (release func()) {
-	key := &what
+	for {
+		release, wait := p.take(what)
+		if wait == nil {
+			return release
+		}
+		<-wait
+	}
+}
+
+// tryHold is hold for a caller that cannot wait. It reports false, with no
+// hold taken, while the holds are shut.
+func (p *pipeHolds) tryHold(what string) (release func(), ok bool) {
+	release, wait := p.take(what)
+	return release, wait == nil
+}
+
+// take is a hold, or what to wait for while the holds are shut.
+func (p *pipeHolds) take(what string) (release func(), wait <-chan struct{}) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed != nil {
+		return nil, p.closed
+	}
+	key := &what
 	if p.holds == nil {
 		p.holds = map[*string]struct{}{}
 	}
 	p.holds[key] = struct{}{}
-	p.mu.Unlock()
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -37,7 +65,7 @@ func (p *pipeHolds) hold(what string) (release func()) {
 			delete(p.holds, key)
 			p.mu.Unlock()
 		})
-	}
+	}, nil
 }
 
 // first is one of the holds, empty when there are none.
@@ -48,6 +76,28 @@ func (p *pipeHolds) first() string {
 		return *k
 	}
 	return ""
+}
+
+// shut stops new holds until open, and reports one of the holds instead,
+// shutting nothing, when there are any.
+func (p *pipeHolds) shut() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for k := range p.holds {
+		return *k
+	}
+	p.closed = make(chan struct{})
+	return ""
+}
+
+// open gives holds again, and lets every hold that waited take its own.
+func (p *pipeHolds) open() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed != nil {
+		close(p.closed)
+		p.closed = nil
+	}
 }
 
 // handoffRefusal says why the daemon cannot hand off now, nil when it can.
@@ -72,9 +122,14 @@ func (d *Daemon) handoffRefusal() error {
 		}
 	}
 	if what := d.pipes.first(); what != "" {
-		return fmt.Errorf("%s, and the upgrade would close the pipe it reports on. Try again when it has finished", what)
+		return pipeRefusal(what)
 	}
 	return nil
+}
+
+// pipeRefusal is the refusal while what reads a pipe.
+func pipeRefusal(what string) error {
+	return fmt.Errorf("%s, and the upgrade would close the pipe it reports on. Try again when it has finished", what)
 }
 
 // hostedRefusal is the refusal while n panes run here for another machine. A

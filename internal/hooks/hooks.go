@@ -121,6 +121,9 @@ type Manager struct {
 	// inFlight tracks running hooks so a test (or a caller that needs the
 	// side effects to have landed) can join them instead of sleeping.
 	inFlight sync.WaitGroup
+	// hold, when set, is held while a hook runs: the daemon will not hand
+	// off while a pipe it reads is open. See SetHold.
+	hold func(what string) (release func())
 }
 
 // NewManager creates a new hooks manager.
@@ -142,6 +145,14 @@ func (m *Manager) SetRunner(run func(command string, ctx Context)) {
 		run(command, ctx)
 		return hookResult{}
 	}
+}
+
+// SetHold sets what each hook holds while it runs. It may wait before the
+// hook starts.
+func (m *Manager) SetHold(hold func(what string) (release func())) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hold = hold
 }
 
 // Wait blocks until every hook fired so far has finished.
@@ -232,6 +243,7 @@ func (m *Manager) Fire(event Event, ctx Context) {
 	m.mu.RLock()
 	commands := m.hooks[event]
 	run := m.run
+	hold := m.hold
 	m.mu.RUnlock()
 
 	if len(commands) == 0 {
@@ -242,6 +254,9 @@ func (m *Manager) Fire(event Event, ctx Context) {
 
 	for i, cmdStr := range commands {
 		m.inFlight.Go(func() {
+			if hold != nil {
+				defer hold("the " + string(event) + " hook is running")()
+			}
 			if Verbose() {
 				log.Printf("hooks: the %s event fires: %s", event, cmdStr)
 			}

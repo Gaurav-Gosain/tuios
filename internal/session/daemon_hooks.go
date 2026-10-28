@@ -176,6 +176,7 @@ func (d *Daemon) loadHooks(cfg *DaemonConfig) {
 	if !m.HasHooks() {
 		return
 	}
+	m.SetHold(d.pipes.hold)
 	d.hooks = m
 	d.agentHooks = newAgentHookGate()
 }

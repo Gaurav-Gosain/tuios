@@ -102,6 +102,9 @@ var PluginReaper []string
 func newPluginHost(d *Daemon, cfg config.PluginsConfig) *pluginHost {
 	runner := herdrplugin.NewRunner()
 	runner.Reaper = PluginReaper
+	runner.Hold = func(pluginID string) (func(), bool) {
+		return d.pipes.tryHold("a command of plugin " + pluginID + " is running")
+	}
 	return &pluginHost{
 		d: d, runner: runner,
 		enabled: slices.Clone(cfg.Enabled), dirs: slices.Clone(cfg.Dirs),
