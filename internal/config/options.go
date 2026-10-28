@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // Option describes one settable configuration path.
@@ -1620,6 +1621,13 @@ var optionSpecs = []Option{
 		Path: "paste_buffers.max_kb", Type: OptionInt, Section: "selection",
 		Description: "Most KiB all paste buffers hold together, at most 262144 (256 MiB). When it is full, the oldest go. 0 uses 16384.",
 		Default:     "16384", Min: 0, Max: 262144,
+	},
+	// [worktree]. The daemon reads it when it starts and when the file
+	// changes.
+	{
+		Path: "worktree.path", Type: OptionString, Section: "worktree",
+		Description: "Where new worktrees go, as a template of {{ repo_path }}, {{ repo }} and {{ branch }}, with | slug to make one folder name. A relative path starts at repo_path. Empty puts them under $XDG_DATA_HOME/tuios/worktrees",
+		Default:     "", Check: worktree.ValidatePathTemplate,
 	},
 	// Read by the client on each switch, so a change applies at once.
 	{

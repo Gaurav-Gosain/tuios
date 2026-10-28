@@ -25,9 +25,10 @@ import (
 // and the branch, so the client can derive it exactly.
 //
 // The folder is neither asked for nor previewed. The verb takes no path; it
-// puts the worktree under its own worktree.DefaultDir, read in the daemon's
-// environment, which need not be this client's (TUIOS_WORKTREE_DIR set in one
-// and not the other, on the same machine, is enough). A preview derived here
+// places the worktree by the [worktree] path the daemon read, or under
+// TUIOS_WORKTREE_DIR from the daemon's environment, and neither need be this
+// client's (a config reload the daemon has not seen yet, or the variable set in
+// one process and not the other, is enough). A preview derived here
 // would be a guess, so the folder is said once, from the verb's reply, in the
 // notification that reports the create.
 
@@ -351,12 +352,13 @@ func (m *OS) createWorktreeCmd(repoRoot, branch, sessionName string) tea.Cmd {
 		var res struct {
 			Session   string `json:"session"`
 			Path      string `json:"path"`
+			Warning   string `json:"warning"`
 			HookError string `json:"hook_error"`
 		}
 		if err := callWorktreeVerb(dial, "new-worktree", "create the worktree", params, 5*time.Minute, &res); err != nil {
 			return worktreeCreatedMsg{Err: err}
 		}
-		return worktreeCreatedMsg{Session: res.Session, Path: res.Path, HookError: res.HookError}
+		return worktreeCreatedMsg{Session: res.Session, Path: res.Path, Warning: res.Warning, HookError: res.HookError}
 	}
 }
 
@@ -387,6 +389,10 @@ type worktreeCreatedMsg struct {
 	// Path is the worktree's directory as the daemon made it: the only
 	// honest answer to where it went, since the daemon's environment chose it.
 	Path string
+	// Warning is what the daemon says about the worktree's place, such as a
+	// folder inside the repository that git does not ignore. Empty when
+	// there is nothing to say.
+	Warning string
 	// Err is what went wrong, nil on success.
 	Err error
 	// HookError is why the after-new-worktree hook failed, empty when it
@@ -424,6 +430,10 @@ func (m *OS) handleWorktreeCreated(msg worktreeCreatedMsg) tea.Cmd {
 		// The daemon already opened the worktree's first pane, but nobody
 		// has arranged it. Apply [startup] just as other session creates do.
 		m.applyStartupToUnarranged()
+	}
+	// After the note, so the dock shows the warning as the newest message.
+	if msg.Warning != "" {
+		m.ShowNotification(msg.Warning, "warning", m.Settings.NotificationDuration*2)
 	}
 	// The listing the rail reads is refreshed off this goroutine; the new
 	// session joins its repository's group when it lands.

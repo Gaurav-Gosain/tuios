@@ -3947,9 +3947,12 @@ Response:
 ### new-worktree
 
 Create a git worktree of a repository and a session in it. The worktree goes
-under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, and the session is
+where the daemon's `[worktree] path` template puts it (see
+[Where worktrees go](CONFIGURATION.md#where-worktrees-go)), by default under
+`$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, and the session is
 named `<repo>-<branch>` with every slash in the branch turned into a hyphen. A
-branch that does not exist is created from `base`, or from HEAD.
+branch that does not exist is created from `base`, or from HEAD. A template
+that does not render is refused with `internal`, and nothing is created.
 
 Params: `repo` (a directory inside the repository, required unless
 `repo_url` is passed), `branch` (required), `base`, `name`, `command` (argv
@@ -3986,6 +3989,10 @@ Response:
  "branch": "feat/retry", "created_branch": true, "path": "/home/u/.local/share/tuios/worktrees/api/feat-retry",
  "window_id": "...", "pty_id": "..."}}
 ```
+
+When the worktree is inside the repository and git does not ignore it, the
+result carries `warning`, a sentence that names the folder to ignore. The
+worktree and session are made all the same.
 
 An `after-new-worktree` hook runs in the worktree before the first window
 starts, and the verb waits for it (60 seconds at most). When it fails, the
@@ -4147,7 +4154,8 @@ them, so they cannot be overridden.
 
 Each entry of `sessions` gains `agent` (the harness id, empty for a program no
 manifest knows) and `command` (the argv as one line). The top-level `agent`,
-`command` and `prompt` are the first session's.
+`command` and `prompt` are the first session's. `warning` is as for
+`new-worktree`, said once for the fan.
 
 Request:
 

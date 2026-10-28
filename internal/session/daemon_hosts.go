@@ -122,6 +122,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
+	// Where a new worktree goes widens nothing a pane may do: a pane that can
+	// write the file can already run git worktree add itself.
+	d.SetWorktreePath(cfg.Worktree.Path)
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}

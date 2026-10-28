@@ -10887,3 +10887,22 @@ Not controlled: the window-mode branch of `copyModeFocusKey`, `ctrl+c` in a `V` 
 | The build before this change (upstream main at `92258aafe`) | "subagent A ran the tool it asked for: the pane is needs_input ("Claude needs your permission to use Bash"), want working" | **caught** |
 | The `if_subagent_id` check in `applyAgentReport` (`internal/session/agent_state.go`) | "subagent B ran a tool: the pane is working (""), want needs_input" | **caught** |
 | The `if_state` on the `permission_prompt` Notification (`internal/integration/hook_claude.go`) | "subagent A ran the tool it asked for: the pane is needs_input ("Claude needs your permission to use Bash"), want working": the Notification took the subagent's prompt over | **caught** |
+## A configurable worktree path (issue #1278)
+
+`TestWorktreePathTemplate` sets `[worktree] path` to
+`{{ repo_path }}/.worktrees/{{ branch | slug }}` with `TUIOS_WORKTREE_DIR` set
+as well, and makes worktrees with `tuios worktree new`: not ignored, ignored
+through `.git/info/exclude`, under a relative template applied with
+`tuios config apply`, and under a template without `{{ branch }}`.
+`TestFanUsesWorktreePathTemplate` runs `tuios fan 2` with a folder already in
+the way of the first name.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `worktreePathFor` passes `""` to `worktree.PathFor` (`internal/session/verb_worktree.go`) | feat/a lands under `TUIOS_WORKTREE_DIR`; the fan's paths are not under `.worktrees` | **caught** |
+| `UnignoredInRepo` always returns false (`internal/worktree/path.go`) | "no warning for a worktree git does not ignore"; the fan output lacks `Warning: ` | **caught** |
+| `verbFan` passes `""` to `fanBranches` | the fan is refused: `.worktrees/try-retry already exists` | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, the first test writes `worktree-path.txt` (each
+step's output, `git status --porcelain` and `git worktree list`) and the
+second writes `fan.txt`.

@@ -1884,6 +1884,42 @@ as the files section: the folder that the shell in the pane is in. Press
 folder, and `Enter` to type the path. See
 [KEYBINDINGS.md](KEYBINDINGS.md#pick-a-path).
 
+## Where worktrees go
+
+`tuios worktree new`, `New worktree...` on the rail and `tuios fan` make a
+git worktree for each new session. By default it goes in
+`$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, outside the repository.
+`[worktree] path` puts it somewhere else, given as a path template:
+
+```toml
+[worktree]
+path = "{{ repo_path }}/.worktrees/{{ branch | slug }}"
+```
+
+| Variable | What it holds |
+|---|---|
+| `repo_path` | The main checkout's directory |
+| `repo` | Its base name |
+| `branch` | The branch, as given |
+
+`| slug` turns a value into one folder name: `feat/retry` becomes
+`feat-retry`. Without it, `{{ branch }}` keeps the slash and makes a folder
+per part. A relative path starts at `repo_path`, so `.worktrees/{{ branch |
+slug }}` is the same as the example above. A leading `~/` is your home
+folder. The template has to use `branch`, or every branch would get the same
+folder. The names are the ones worktrunk's `worktree-path` uses.
+
+When the worktree is inside the repository and git does not ignore it, the
+main checkout lists it as untracked, and `git add -A` there would take it in.
+tuios then warns after it makes the worktree and names the line to add to
+`.gitignore` or `.git/info/exclude`. It never edits those files itself.
+
+The daemon makes every worktree, so it reads the setting, when it starts and
+when the file changes. The path is then the same whichever client asked.
+Empty is the default. While it is empty, `TUIOS_WORKTREE_DIR` in the daemon's
+environment still moves the default folder (see
+[CLI_REFERENCE.md](CLI_REFERENCE.md#tuios_worktree_dir)).
+
 ## The main checkout in the sessions tree
 
 `appearance.sidebar.group_main` gathers the repository's main checkout under

@@ -30,7 +30,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
-	"github.com/adrg/xdg"
 )
 
 // Info is what a worktree is, as far as the rest of tuios needs to know.
@@ -152,20 +151,6 @@ func Root(dir string) (string, error) {
 		return filepath.Dir(common), nil
 	}
 	return common, nil
-}
-
-// DefaultDir is where tuios puts the worktrees it creates:
-// $XDG_DATA_HOME/tuios/worktrees, one directory per repository under it.
-func DefaultDir() string {
-	if override := os.Getenv("TUIOS_WORKTREE_DIR"); override != "" {
-		return override
-	}
-	return filepath.Join(xdg.DataHome, "tuios", "worktrees")
-}
-
-// PathFor is the directory a worktree of repoRoot on branch gets under dir.
-func PathFor(dir, repoRoot, branch string) string {
-	return filepath.Join(dir, filepath.Base(repoRoot), Slug(branch))
 }
 
 var slugStrip = lazyre.New(`[^A-Za-z0-9._]+`)

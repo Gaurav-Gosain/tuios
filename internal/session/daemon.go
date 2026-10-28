@@ -130,6 +130,9 @@ type Daemon struct {
 	// singleClient is [daemon] single_client: every attach takes the other
 	// clients off its session. See detach_client.go.
 	singleClient atomic.Bool
+	// worktreePath is [worktree] path, read on every create so a config
+	// reload applies to the next one. See SetWorktreePath.
+	worktreePath atomic.Pointer[string]
 	// sshAgent keeps each session's ssh agent link. See ssh_agent_follow.go.
 	sshAgent agentFollow
 	// display keeps each session's Wayland link and the display of its
@@ -872,6 +875,10 @@ type DaemonConfig struct {
 	// program says about drag and drop and answers its query only when on.
 	// See dnd_registration.go.
 	DragAndDrop bool
+	// WorktreePath is [worktree] path: the template the worktrees new-worktree
+	// and fan make are placed by. Empty is the default layout. See
+	// worktree.PathFor.
+	WorktreePath string
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -1040,6 +1047,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)
+	d.SetWorktreePath(cfg.WorktreePath)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
 	d.wakes.init()

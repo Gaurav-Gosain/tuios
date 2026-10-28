@@ -129,6 +129,7 @@ var settingLabels = map[string]string{
 	"launcher.keep_open":                  "Keep launched panes open",
 	"workspaces.return_when_empty":        "Go back from an empty workspace",
 	"workspaces.new_window_when_empty":    "Open a pane on an empty workspace",
+	"worktree.path":                       "Worktree folder",
 	"paste_buffers.limit":                 "Paste buffers to keep",
 	"paste_buffers.max_kb":                "Paste buffer size limit",
 

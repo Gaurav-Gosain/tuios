@@ -71,6 +71,10 @@ tuios worktree diff api-feat-retry --stat
 ```
 
 The session is named `<repo>-<branch>` with slashes turned into hyphens.
+The folder is where the person's `[worktree] path` puts it, so read `path`
+from the result rather than guess it. A `warning` in the result says the
+folder is inside the repository and git does not ignore it. Tell the person;
+do not edit `.gitignore` for them.
 `--agent` names an agent CLI the way you type it and starts it instead of a
 shell. `worktree ls` (the `list-worktrees` verb) reports each session's rolled-up
 `state` and `gone` when the directory was removed; the verb with

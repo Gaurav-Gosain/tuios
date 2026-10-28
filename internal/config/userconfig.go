@@ -74,6 +74,10 @@ type UserConfig struct {
 	// to paste again. See paste_buffers.go.
 	PasteBuffers PasteBuffersConfig `toml:"paste_buffers"`
 
+	// Worktree is the [worktree] table: where the worktrees tuios makes go.
+	// See worktree.go.
+	Worktree WorktreeConfig `toml:"worktree"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.

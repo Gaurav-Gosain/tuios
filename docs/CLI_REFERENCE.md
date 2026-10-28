@@ -858,10 +858,12 @@ The same verb is reachable from the rail. Right-click a repository's group
 header, or a worktree session's row, and take "New worktree...". The dialog
 asks for the branch and the session name. Leave the name empty and the dialog
 derives one from the repository and the branch. It does not ask for the
-folder: the daemon puts the worktree under its worktree directory
-(`TUIOS_WORKTREE_DIR` in the daemon's environment, else
-`$XDG_DATA_HOME/tuios/worktrees`), and the notification reports where it
-went.
+folder: the daemon places the worktree by `[worktree] path` (see
+[Where worktrees go](CONFIGURATION.md#where-worktrees-go)), else under
+`TUIOS_WORKTREE_DIR` in the daemon's environment, else under
+`$XDG_DATA_HOME/tuios/worktrees`, and the notification reports where it
+went. A worktree inside the repository that git does not ignore is reported
+with a warning.
 
 **Usage:**
 ```bash
@@ -881,7 +883,9 @@ tuios worktree rm api-feat-retry --stash               # Keep the changes in git
 ```
 
 The session is named `<repo>-<branch>`, with every slash turned into a hyphen.
-Worktrees go under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`.
+Worktrees go under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, unless
+`[worktree] path` puts them elsewhere (see
+[Where worktrees go](CONFIGURATION.md#where-worktrees-go)).
 
 An `after-new-worktree` hook runs in the new worktree before its first window
 starts, for example to copy `.env` from the main checkout. See
@@ -6460,7 +6464,8 @@ and [The stall heuristic](AGENT_STATE.md#the-stall-heuristic).
 
 Where the daemon puts the worktrees `tuios worktree new` and `tuios fan`
 create, instead of `$XDG_DATA_HOME/tuios/worktrees`. Set it in the daemon's
-environment, before it starts.
+environment, before it starts. A `[worktree] path` in the config wins over it
+(see [Where worktrees go](CONFIGURATION.md#where-worktrees-go)).
 
 ### `TUIOS_LOG_LEVEL`
 

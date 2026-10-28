@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -142,6 +143,32 @@ func repoRootParam(dir string) (string, *verbError) {
 	return root, nil
 }
 
+// SetWorktreePath sets [worktree] path, the template new worktrees are placed
+// by. Empty is the default layout.
+func (d *Daemon) SetWorktreePath(template string) {
+	d.worktreePath.Store(&template)
+}
+
+// worktreeTemplate is what SetWorktreePath last set, or "".
+func (d *Daemon) worktreeTemplate() string {
+	if t := d.worktreePath.Load(); t != nil {
+		return *t
+	}
+	return ""
+}
+
+// worktreePathFor is where a worktree of root on branch goes. A template that
+// does not render is the config's fault, and the error says where to fix it.
+func (d *Daemon) worktreePathFor(root, branch string) (string, *verbError) {
+	path, err := worktree.PathFor(d.worktreeTemplate(), root, branch)
+	if err != nil {
+		return "", hintedVerbError(ErrVerbInternal, "[worktree] path in config.toml: "+err.Error(), &VerbHint{
+			Detail: "The [worktree] path template in config.toml cannot place a worktree. Nothing was created. Fix it, or leave it empty for the default folder.",
+		})
+	}
+	return path, nil
+}
+
 // createWorktreeSession is what new-worktree and fan share: the worktree, then
 // the session in it, then the record that ties them. The worktree is never
 // removed on a later failure. It exists on disk and git lists it, and taking
@@ -149,7 +176,10 @@ func repoRootParam(dir string) (string, *verbError) {
 // caller asked for and can still use. The session gets the caller's terminal
 // from its hello, as one made by new-session does.
 func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessionName string, command, env []string, grants *Grants, record func(*WorktreeInfo)) (map[string]any, *verbError) {
-	path := worktree.PathFor(worktree.DefaultDir(), root, branch)
+	path, verr := d.worktreePathFor(root, branch)
+	if verr != nil {
+		return nil, verr
+	}
 	if _, err := os.Lstat(path); err == nil {
 		return nil, hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
 			Param:  "branch",
@@ -244,7 +274,22 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 	if hookErr != "" {
 		out["hook_error"] = hookErr
 	}
+	if warning := unignoredWorktreeWarning(root, path); warning != "" {
+		out["warning"] = warning
+	}
 	return out, nil
+}
+
+// unignoredWorktreeWarning says so when a worktree was put inside its own
+// repository where git does not ignore it, and what to ignore. tuios never
+// edits the ignore files itself: they are the user's.
+func unignoredWorktreeWarning(root, path string) string {
+	if !worktree.UnignoredInRepo(root, path) {
+		return ""
+	}
+	rel, _ := filepath.Rel(root, path)
+	top, _, _ := strings.Cut(filepath.ToSlash(rel), "/")
+	return filepath.Join(root, top) + " is inside the repository and git does not ignore it, so the main checkout lists the worktree as untracked. Add /" + top + "/ to .gitignore or .git/info/exclude."
 }
 
 // worktreeHookTimeout bounds the after-new-worktree hook. Hooks have no
@@ -624,8 +669,7 @@ func fanStem(prompt string) string {
 // repository and on disk: stem, then stem-2, stem-3, and so on, skipping any
 // that exist. Numbering from 2 keeps the first name bare, so a fan of one
 // reads like a worktree made by hand.
-func fanBranches(root, stem string, count int) []string {
-	dir := worktree.DefaultDir()
+func fanBranches(template, root, stem string, count int) []string {
 	names := make([]string, 0, count)
 	for i := 1; len(names) < count && i < count+100; i++ {
 		name := stem
@@ -635,8 +679,11 @@ func fanBranches(root, stem string, count int) []string {
 		if worktree.BranchExists(root, name) {
 			continue
 		}
-		if _, err := os.Lstat(worktree.PathFor(dir, root, name)); err == nil {
-			continue
+		// A template that does not render is reported by the create.
+		if path, err := worktree.PathFor(template, root, name); err == nil {
+			if _, err := os.Lstat(path); err == nil {
+				continue
+			}
 		}
 		names = append(names, name)
 	}
@@ -780,7 +827,10 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	// The name is held from the check until the call's sessions exist, so
 	// two calls cannot both take it as new.
 	defer release()
-	branches := fanBranches(root, stem, p.Count)
+	if _, verr := d.worktreePathFor(root, stem); verr != nil {
+		return nil, verr
+	}
+	branches := fanBranches(d.worktreeTemplate(), root, stem, p.Count)
 	if len(branches) < p.Count {
 		return nil, invalidParam("name", "could not find "+strconv.Itoa(p.Count)+" free branch names from "+stem)
 	}
@@ -793,6 +843,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	}
 
 	sessions := make([]map[string]any, 0, p.Count)
+	var warnings []string
 	// stamp writes the fan onto the card once a session of it exists, and
 	// returns a line saying what became of the card.
 	stamp := func(out map[string]any) string {
@@ -839,6 +890,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		windowID := out["window_id"].(string)
 		d.noteStartedBy(cs, windowID)
 		go d.deliverFanPrompt(sess, windowID, launch.harness, prompt, readyTimeout)
+		if w, ok := out["warning"].(string); ok && !slices.Contains(warnings, w) {
+			warnings = append(warnings, w)
+		}
 		row := map[string]any{
 			"session":   out["session"],
 			"branch":    branch,
@@ -869,6 +923,9 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	}
 	if cloned {
 		out["cloned"] = true
+	}
+	if len(warnings) > 0 {
+		out["warning"] = strings.Join(warnings, " ")
 	}
 	stamp(out)
 	return out, nil

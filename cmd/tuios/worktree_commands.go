@@ -67,7 +67,8 @@ repository and labels each by its branch. 'worktree ls' lists them with the
 agent state in each. 'worktree rm' removes one. It refuses to discard
 uncommitted work unless you say so, and it never deletes a branch.
 
-Worktrees go under $XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>.`,
+Worktrees go under $XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>, unless
+[worktree] path in config.toml puts them elsewhere.`,
 		Example: `  # A worktree on a new branch, and a session in it
   tuios worktree new feat/retry
 
@@ -497,6 +498,7 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 		RepoRoot      string `json:"repo_root"`
 		CreatedBranch bool   `json:"created_branch"`
 		Cloned        bool   `json:"cloned"`
+		Warning       string `json:"warning"`
 		HookError     string `json:"hook_error"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
@@ -511,6 +513,9 @@ func runWorktreeNew(branch, repo, base, name, agent, host string, clone, detach,
 	}
 	fmt.Printf("%s branch %s in %s%s.\n", verb, res.Branch, res.Path, t.on())
 	fmt.Printf("Created session '%s'%s.\n", res.Session, t.on())
+	if res.Warning != "" {
+		fmt.Fprintln(os.Stderr, "Warning: "+plainLine(res.Warning))
+	}
 	if res.HookError != "" {
 		fmt.Fprintf(os.Stderr, "Warning: %s. The worktree and the session are kept.\n", res.HookError)
 	}
@@ -900,7 +905,8 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 			Command   string `json:"command"`
 			HookError string `json:"hook_error"`
 		} `json:"sessions"`
-		Task *struct {
+		Warning string `json:"warning"`
+		Task    *struct {
 			ID string `json:"id"`
 		} `json:"task"`
 		TaskNote string `json:"task_note"`
@@ -916,6 +922,9 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 				line += "  " + s.Command
 			}
 			fmt.Println(line)
+		}
+		if res.Warning != "" {
+			fmt.Fprintln(os.Stderr, "Warning: "+plainLine(res.Warning))
 		}
 		for _, s := range res.Sessions {
 			if s.HookError != "" {

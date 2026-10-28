@@ -78,6 +78,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.PasteBufferLimit, cfg.PasteBufferMaxBytes = uc.PasteBuffers.Resolved()
 	cfg.PasteBuffersOff = cfg.PasteBufferLimit == 0
 	cfg.DragAndDrop = uc.Panes.DragAndDrop
+	// The daemon makes every worktree, whichever client asked for it, so the
+	// path is the same for all of them.
+	cfg.WorktreePath = uc.Worktree.Path
 	// The daemon runs the hooks for the facts it owns, so a session with
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.

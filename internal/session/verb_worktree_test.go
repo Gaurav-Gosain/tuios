@@ -300,7 +300,7 @@ func TestFanBranchesSkipNamesThatExist(t *testing.T) {
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(t.TempDir(), "worktrees"))
 	testutil.Git(t, repo, "branch", "try")
 	testutil.Git(t, repo, "branch", "try-3")
-	got := fanBranches(repo, "try", 3)
+	got := fanBranches("", repo, "try", 3)
 	want := []string{"try-2", "try-4", "try-5"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("fanBranches = %v, want %v", got, want)
