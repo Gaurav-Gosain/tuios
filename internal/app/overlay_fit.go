@@ -78,14 +78,17 @@ func scrollWindow(scroll, selected, count, visible int) int {
 	return clampInt(scroll, 0, count-visible)
 }
 
-// panelRoomHeight is the rows a panel is fitted to: the screen under a dock at
-// the top. Fitted to the whole screen, a tall panel such as the settings page
-// or the help ran up over that dock and left the ends of its pills and its
-// buttons showing beside the panel's title.
+// panelRoomHeight is the rows a panel is fitted to: the screen between a dock
+// at the top and one at the bottom. Fitted to the whole screen, a tall panel
+// such as the settings page or the help ran up over a dock at the top and left
+// the ends of its pills and its buttons showing beside the panel's title. The
+// navigator, the tallest panel, ran down over a dock at the bottom the same
+// way, its key hints written over the dock's row.
 func (m *OS) panelRoomHeight() int {
 	rh := m.GetRenderHeight()
 	if rh <= 0 {
 		return rh
 	}
-	return max(rh-m.viewReserve().Top, 1)
+	r := m.viewReserve()
+	return max(rh-r.Top-r.Bottom, 1)
 }

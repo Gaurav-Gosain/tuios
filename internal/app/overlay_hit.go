@@ -216,12 +216,17 @@ func (m *OS) centerOrigin(w, h int) (int, int) {
 // shifted by that kind's drag offset, and clamped so the panel stays on screen.
 func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
-	// Centred in the rows under a dock at the top, and kept below it while it
-	// fits there. See panelRoomHeight.
-	top := min(m.viewReserve().Top, max(rh-geo.Height, 0))
+	// Centred in the rows between the docks, where panelRoomHeight fits it,
+	// and kept below a dock at the top while it fits under it.
+	r := m.viewReserve()
+	top := min(r.Top, max(rh-geo.Height, 0))
+	room := rh - top
+	if geo.Height <= rh-r.Top-r.Bottom {
+		room -= r.Bottom
+	}
 	off := m.overlayOffset(kind)
 	x := m.panelCenterX(geo.Width, rw) + off[0]
-	y := top + m.overlayAnchorY(kind, geo.Height, rh-top) + off[1]
+	y := top + m.overlayAnchorY(kind, geo.Height, room) + off[1]
 	x = max(min(x, rw-geo.Width), 0)
 	y = max(min(y, rh-geo.Height), top)
 	return x, y

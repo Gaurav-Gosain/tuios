@@ -45,6 +45,11 @@ const (
 	// navigatorListTop is the body line the first list line is on: under the
 	// search box and the list box's top border.
 	navigatorListTop = 4
+	// navigatorMarginRows is the rows the navigator leaves free above and
+	// below it. It is the one panel tall enough to fill the room between the
+	// docks, and drawn flush against both it read as pushed down under the top
+	// bar, while the columns beside it showed a margin.
+	navigatorMarginRows = 1
 )
 
 // navigatorHints are the footer's keys, in the order of their worth.
@@ -75,7 +80,7 @@ func (m *OS) navigatorHints() []overlay.Hint {
 // the list lines the screen has room for.
 func (m *OS) navigatorGeometry() (width, listW, previewW, lines int, hints []overlay.Hint) {
 	width = m.panelWidth(navigatorWidth)
-	lines, hints = m.panelBody(navigatorRowsWanted, navigatorChrome, width, nil, m.navigatorHints())
+	lines, hints = m.panelBody(navigatorRowsWanted, navigatorChrome+2*navigatorMarginRows, width, nil, m.navigatorHints())
 	listW = max(width-2, 1)
 	// Two boxes side by side cost five cells: two borders each and the gap.
 	if width-5-navigatorListMin >= navigatorPreviewMin {
