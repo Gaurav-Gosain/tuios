@@ -285,8 +285,7 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			runToExit(t, term, "clear")
 			host.mark("tall")
 			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark --fit --diagram 1 "+md)
-			time.Sleep(time.Second)
-			alone := replayKittyHost(t, host.bytes(), "tall")
+			alone := settleKittyHost(t, host, "tall", 1)
 			if len(alone.order) != 1 {
 				t.Fatalf("the host was sent %d pictures for one diagram", len(alone.order))
 			}
@@ -300,9 +299,7 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			host.mark("mermaid")
 			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark "+md)
 			// The refresh passes that place the pictures run on the next frames.
-			time.Sleep(time.Second)
-
-			view := replayKittyHost(t, host.bytes(), "mermaid")
+			view := settleKittyHost(t, host, "mermaid", 3)
 			g := screenGrid(term.Screen(), shot.XTermPalette())
 			for _, p := range view.live {
 				g.Images = append(g.Images, p.shotImage(view))
@@ -462,6 +459,30 @@ type kittyHostView struct {
 // hostCmdRE is a graphics command with the cursor move tuios puts in front of
 // each placement.
 var hostCmdRE = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
+
+// settleKittyHost waits until the host was sent at least want pictures since
+// the phase mark and the stream has gone quiet, then replays it. The pictures
+// arrive over the next frames after the command exits, and a fixed sleep lost
+// the last of them on a busy runner.
+func settleKittyHost(t *testing.T, host *kittyHost, phase string, want int) *kittyHostView {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	last, quietSince := -1, time.Now()
+	for {
+		stream := host.bytes()
+		view := replayKittyHost(t, stream, phase)
+		if len(stream) != last {
+			last, quietSince = len(stream), time.Now()
+		}
+		if len(view.uploads) >= want && time.Since(quietSince) >= 500*time.Millisecond {
+			return view
+		}
+		if time.Now().After(deadline) {
+			return view
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
 
 // replayKittyHost plays the host's stream from the phase mark the way kitty
 // keeps pictures and placements.
