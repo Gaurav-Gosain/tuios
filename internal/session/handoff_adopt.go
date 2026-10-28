@@ -110,6 +110,13 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 		}
 		listeners[name] = l
 	}
+	// The previous binary's descriptor stays open for the fallback, and is
+	// closed with the listeners' once the adoption has gone through.
+	if m.Daemon.FallbackFD >= 0 {
+		f := adoptedFile(m.Daemon.FallbackFD, "tuios-prev")
+		fb.keep(f)
+		inherited = append(inherited, f)
+	}
 	if m.Daemon.LockFD >= 0 {
 		lock := adoptedFile(m.Daemon.LockFD, startLockPath(socketPath))
 		fb.keep(lock)

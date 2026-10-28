@@ -1476,8 +1476,8 @@ func (d *Daemon) Start() error {
 
 	// The binary this image runs, kept for a live upgrade to fall back to,
 	// before an installer can put another in its place. A daemon inside
-	// another program never hands off.
-	if d.handoffArgs != nil {
+	// another program never hands off, nor one on a platform without it.
+	if d.handoffArgs != nil && handoffSupported() {
 		d.keepPrevBinary()
 	}
 

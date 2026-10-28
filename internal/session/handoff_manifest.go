@@ -98,8 +98,11 @@ type handoffDaemon struct {
 	Mail         handoffMail   `json:"mail"`
 	// Fallback is the binary the writing image runs, kept for the new image
 	// to re-exec when it cannot adopt the panes. See handoff_prev.go.
-	Fallback string       `json:"fallback"`
-	Stats    HandoffStats `json:"stats"`
+	Fallback string `json:"fallback"`
+	// FallbackFD is the descriptor Fallback names, carried across the exec,
+	// or -1 when Fallback is a file by name.
+	FallbackFD int          `json:"fallback_fd"`
+	Stats      HandoffStats `json:"stats"`
 }
 
 // handoffManifest is a manifest as read.

@@ -55,6 +55,9 @@ func (f *adoptFallback) prepare(m *handoffManifest) {
 	if m.Daemon.LockFD >= 0 {
 		f.fds = append(f.fds, m.Daemon.LockFD)
 	}
+	if m.Daemon.FallbackFD >= 0 {
+		f.fds = append(f.fds, m.Daemon.FallbackFD)
+	}
 	for _, p := range m.Panes {
 		f.fds = append(f.fds, p.FD)
 	}

@@ -350,7 +350,11 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		Events:       d.events.handoffState(),
 		Mail:         d.agents.handoffState(),
 		Fallback:     r.prev.path,
+		FallbackFD:   r.prev.fd(),
 		Stats:        r.stats,
+	}
+	if dr.FallbackFD >= 0 {
+		r.fds = append(r.fds, dr.FallbackFD)
 	}
 	for name, l := range d.namedListeners() {
 		var fd int
