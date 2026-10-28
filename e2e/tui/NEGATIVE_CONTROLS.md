@@ -9888,6 +9888,16 @@ passes both, and the build of main they are based on fails both.
 | `RepoName` in `gitstate.Read`, back to the base name of the shared git directory's parent | `TestRailGitReftable` (the git section names the test's directory, not `delta`) | **caught** |
 | The `.bare` and `git` names in `RepoName` | `TestReftableWorktrees` (`alpha-one is ".bare"`, `gamma-three is "git"`) | **caught** |
 | The `.git` suffix rule in `RepoName` | `TestReftableWorktrees` (`beta-two is "beta.git"`); `TestRailGitReftable` | **caught** |
+
+Since #1245 a worktree row keeps a name the test gave its session and shows
+the branch after it, so `TestReftableWorktrees` gives the rail 40 columns and
+reads each row as its project's row, then the session's name and branch.
+Run on 2026-10-28 on Linux amd64 with git 2.56:
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The `node.Named` case that shows the branch after a named worktree row, in `sidebarSessionRow` | `TestReftableWorktrees` (`the rail never grouped the reftable worktrees by project and branch`: the rows read `├─ alpha-one`, `└─ alpha-later`, `└─ beta-two`, `└─ gamma-three`, with no branch) | **caught** |
+
 ## Path picker
 
 `TestPathPickerTypesAPath` opens the picker with `alt+;` at a shell prompt,

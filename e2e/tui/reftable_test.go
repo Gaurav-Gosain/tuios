@@ -91,11 +91,15 @@ func waitWorktreeRows(t *testing.T, base string, want map[string]reftableWorktre
 }
 
 // TestReftableWorktrees: a session in a linked worktree of a bare reftable
-// repository is listed and grouped under the project's name and labelled by
-// its real branch, for the three ways a bare repository is commonly kept
-// beside its worktrees: <name>/.bare, <name>.git and <name>/git. A branch
-// switched in a worktree is what the next session made there reports. A
-// session in a main checkout with reftable refs is labelled by its branch.
+// repository is listed and grouped under the project's name and shows its
+// real branch, for the three ways a bare repository is commonly kept beside
+// its worktrees: <name>/.bare, <name>.git and <name>/git. A branch switched
+// in a worktree is what the next session made there reports. A session in a
+// main checkout with reftable refs is labelled by its branch.
+//
+// The test names its sessions itself, so each worktree row keeps that name
+// and shows the branch after it (#1245). The rail is wide enough for both,
+// since a row too narrow for its branch drops it.
 //
 // How it could pass wrongly, and what stops it: the fixture falling back to
 // the files backend, where HEAD names the branch. Every worktree's HEAD must
@@ -106,6 +110,7 @@ func waitWorktreeRows(t *testing.T, base string, want map[string]reftableWorktre
 func TestReftableWorktrees(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
+	writeConfig(t, base, reftableRailConfig)
 	seed := reftableSeed(t)
 	projects := t.TempDir()
 	if resolved, err := filepath.EvalSymlinks(projects); err == nil {
@@ -168,13 +173,28 @@ func TestReftableWorktrees(t *testing.T) {
 	windowManagementMode(t, term)
 	toggleSidebarViaPalette(t, term)
 
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		text := s.Text()
-		return strings.Contains(text, "· alpha") && strings.Contains(text, "· beta") &&
-			strings.Contains(text, "· gamma") && strings.Contains(text, "feat/later") &&
-			strings.Contains(text, "feat/two") && strings.Contains(text, "feat/three") &&
-			railLineWith(s, "epsilon trunk") >= 0
-	}, bootTimeout); err != nil {
+	// Each project's row, and under it its worktree sessions, in order, each
+	// with its own branch.
+	groups := [][][]string{
+		{{"·", "alpha"}, {"·", "├─", "alpha-one", "feat/one"}, {"·", "└─", "alpha-later", "feat/later"}},
+		{{"·", "beta"}, {"·", "└─", "beta-two", "feat/two"}},
+		{{"·", "gamma"}, {"·", "└─", "gamma-three", "feat/three"}},
+	}
+	grouped := func(s tuitest.Screen) bool {
+		for _, g := range groups {
+			top := reftableRailRow(s, g[0])
+			if top < 0 {
+				return false
+			}
+			for i, row := range g[1:] {
+				if reftableRailRow(s, row) != top+1+i {
+					return false
+				}
+			}
+		}
+		return railLineWith(s, "epsilon trunk") >= 0
+	}
+	if err := term.WaitFor(grouped, bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: the rail never grouped the reftable worktrees by project and branch: %v\n%s", err, term.Snapshot())
 	}
 	text := term.Screen().Text()
@@ -185,6 +205,26 @@ func TestReftableWorktrees(t *testing.T) {
 	}
 	saveFrame(t, term, "rail-reftable-worktrees")
 	alive(t, term, "after grouping the reftable worktrees")
+}
+
+// reftableRailConfig gives the rail room for a worktree row's name and its
+// branch. The rail stays off until the test shows it.
+const reftableRailConfig = `[appearance.sidebar]
+width = 40
+`
+
+// reftableRailRow is the screen row whose rail text starts with the words in
+// want, or -1. A word is matched whole, so "alpha" does not match
+// "alpha-one".
+func reftableRailRow(s tuitest.Screen, want []string) int {
+	_, rows := s.Size()
+	for r := range rows {
+		rail, _, _ := strings.Cut(s.Line(r), "│")
+		if f := strings.Fields(strings.TrimPrefix(strings.TrimSpace(rail), "▎")); len(f) >= len(want) && slices.Equal(f[:len(want)], want) {
+			return r
+		}
+	}
+	return -1
 }
 
 // railGitReftableConfig is a rail with the sessions and git sections only.
