@@ -38,16 +38,37 @@ func openAggregateView(t *testing.T, term *tuitest.Terminal) {
 	// the word "Windows", which the palette row that opens it also contains, so
 	// waiting on the title returned while the palette was still on screen and
 	// every measurement below then described the palette instead.
+	//
+	// A screen too short for the footer drops the hint, so there the picker is
+	// known by its title on a line of its own and its position readout.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), aggregateHint) && !strings.Contains(s.Text(), paletteTitle)
+		text := s.Text()
+		if strings.Contains(text, paletteTitle) {
+			return false
+		}
+		return strings.Contains(text, aggregateHint) || (aggregateTitleRow(s) >= 0 && strings.Contains(text, " of "))
 	}, uiTimeout); err != nil {
 		t.Fatalf("the picker did not open: %v\n%s", err, term.Snapshot())
 	}
 }
 
+// aggregateTitleRow is the screen row whose only text is the picker's title,
+// or -1. The palette row that opens the picker holds more than the title.
+func aggregateTitleRow(s tuitest.Screen) int {
+	_, height := s.Size()
+	for r := range height {
+		if strings.TrimSpace(s.Line(r)) == aggregateTitle {
+			return r
+		}
+	}
+	return -1
+}
+
 // panelExtent measures the block of rows the picker occupies, by the rows
 // between its title and its hint line. It is the measurement the redesign is
 // about: the old overlay took three quarters of the screen whatever it held.
+// On a screen too short for the hint, the position readout is the last line
+// measured.
 func panelExtent(t *testing.T, term *tuitest.Terminal) (rows int) {
 	t.Helper()
 	s := term.Screen()
@@ -59,7 +80,14 @@ func panelExtent(t *testing.T, term *tuitest.Terminal) (rows int) {
 		}
 	}
 	if bottom < 0 {
-		t.Fatalf("the picker's hint line is not on screen\n%s", term.Snapshot())
+		for r := range height {
+			if strings.Contains(s.Line(r), " of ") {
+				bottom = r
+			}
+		}
+	}
+	if bottom < 0 {
+		t.Fatalf("the picker's hint line and readout are not on screen\n%s", term.Snapshot())
 	}
 	// The nearest title above the hint, which with the palette gone is the
 	// picker's own.
