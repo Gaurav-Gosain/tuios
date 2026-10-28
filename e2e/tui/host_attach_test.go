@@ -3,7 +3,9 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,7 +56,9 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 }
 
 // remoteMachine is the second daemon: its isolation root, with the XDG
-// directories made and a cleanup that kills it.
+// directories made and a cleanup that kills it. The root is kept for the
+// test, so breakTheLink and freezeTheLink reach this test's links and no
+// other's.
 func remoteMachine(t *testing.T) string {
 	t.Helper()
 	base := t.TempDir()
@@ -62,7 +66,54 @@ func remoteMachine(t *testing.T) string {
 		xdgDir(base, key)
 	}
 	killDaemon(t, base)
+	remotesOfTests.add(t, base)
 	return base
+}
+
+// remotesOfTests is the far machines each running test made, keyed by the
+// top-level test's name, so a subtest finds the machines its parent made.
+var remotesOfTests = &remoteRegistry{byTest: map[string][]string{}}
+
+type remoteRegistry struct {
+	mu     sync.Mutex
+	byTest map[string][]string
+}
+
+func topTestName(t *testing.T) string {
+	name, _, _ := strings.Cut(t.Name(), "/")
+	return name
+}
+
+func (r *remoteRegistry) add(t *testing.T, base string) {
+	name := topTestName(t)
+	r.mu.Lock()
+	r.byTest[name] = append(r.byTest[name], base)
+	r.mu.Unlock()
+	t.Cleanup(func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.byTest[name] = slices.DeleteFunc(r.byTest[name], func(b string) bool { return b == base })
+		if len(r.byTest[name]) == 0 {
+			delete(r.byTest, name)
+		}
+	})
+}
+
+// testProxies is every stdio-proxy that serves a far machine this test made.
+//
+// The suite runs in parallel processes on one machine, so a match on the
+// binary's command line, which every link of every test shares, ends links
+// of tests that have nothing to do with this one.
+func testProxies(t *testing.T) []int {
+	t.Helper()
+	remotesOfTests.mu.Lock()
+	remotes := slices.Clone(remotesOfTests.byTest[topTestName(t)])
+	remotesOfTests.mu.Unlock()
+	var pids []int
+	for _, remote := range remotes {
+		pids = append(pids, farProxies(remote)...)
+	}
+	return pids
 }
 
 // writeOneHostConfig names one host, build, that the stand-in routes to the

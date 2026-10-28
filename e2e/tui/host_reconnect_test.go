@@ -3,9 +3,9 @@ package tuie2e
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -74,37 +74,40 @@ func clickRailSession(t *testing.T, term *tuitest.Terminal, session string) {
 	mouseClick(t, term, 3, row, tuitest.MouseLeft, 0)
 }
 
-// freezeTheLink stops the far side of every open link without ending it. The
-// pipe stays open and carries nothing, which is what a link looks like after
-// a laptop wakes from sleep: no end of it has been told, and the fake ssh has
-// no keepalives to find out. Only the link's own heartbeat can.
+// freezeTheLink stops the far side of every link this test opened without
+// ending it. The pipe stays open and carries nothing, which is what a link
+// looks like after a laptop wakes from sleep: no end of it has been told, and
+// the fake ssh has no keepalives to find out. Only the link's own heartbeat
+// can.
 func freezeTheLink(t *testing.T) {
 	t.Helper()
-	out, err := exec.Command("pgrep", "-f", tuiosBin+" stdio-proxy").Output()
-	pids := strings.Fields(string(out))
-	if err != nil || len(pids) == 0 {
-		t.Fatalf("find the link's proxy: %v", err)
+	pids := testProxies(t)
+	if len(pids) == 0 {
+		t.Fatalf("find the link's proxy: no stdio-proxy serves a machine this test made")
 	}
 	for _, pid := range pids {
-		if out, err := exec.Command("kill", "-STOP", pid).CombinedOutput(); err != nil {
-			t.Fatalf("stop the link's proxy %s: %v\n%s", pid, err, out)
+		if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
+			t.Fatalf("stop the link's proxy %d: %v", pid, err)
 		}
 	}
 	t.Cleanup(func() {
 		for _, pid := range pids {
-			_ = exec.Command("kill", "-CONT", pid).Run()
-			_ = exec.Command("kill", "-KILL", pid).Run()
+			_ = syscall.Kill(pid, syscall.SIGCONT)
+			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
 	})
 }
 
-// breakTheLink kills the far side of every open link, which is what an ssh
-// child dying looks like from this machine.
+// breakTheLink kills the far side of every link this test opened, which is
+// what an ssh child dying looks like from this machine.
 func breakTheLink(t *testing.T) {
 	t.Helper()
-	out, err := exec.Command("pkill", "-f", tuiosBin+" stdio-proxy").CombinedOutput()
-	if err != nil {
-		t.Fatalf("kill the link's proxy: %v\n%s", err, out)
+	pids := testProxies(t)
+	if len(pids) == 0 {
+		t.Fatalf("kill the link's proxy: no stdio-proxy serves a machine this test made")
+	}
+	for _, pid := range pids {
+		_ = syscall.Kill(pid, syscall.SIGTERM)
 	}
 }
 
