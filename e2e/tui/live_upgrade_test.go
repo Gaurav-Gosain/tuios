@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -559,5 +560,187 @@ func TestDaemonUpgradeMeasuresABusyDaemon(t *testing.T) {
 	})
 	if after.PID != img.PID || kept != panes {
 		t.Errorf("ASSERTION: the busy upgrade kept the daemon pid %v and %d of %d panes", after.PID == img.PID, kept, panes)
+	}
+}
+
+// TestDaemonUpgradeRefusesWhileHookOrPluginRuns asks for an upgrade while a
+// hook command runs, and while a plugin command runs. Each is a child of the
+// daemon whose output it reads on a pipe the exec would close: the command
+// would die of SIGPIPE on its next write and never be reaped. Each upgrade
+// must be refused, naming what runs. The positive half: once the command has
+// finished, the same upgrade goes through.
+func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		config func(t *testing.T) string
+		start  func(t *testing.T, base string)
+		refuse string
+	}{
+		{
+			name:   "hook",
+			config: func(*testing.T) string { return "[hooks]\nafter-new-window = \"sleep 4\"\n" },
+			start: func(t *testing.T, base string) {
+				newCommandWindow(t, base, "e2e-pipes", "second", false, "sh", "-c", "exec sleep 600")
+			},
+			refuse: "the after-new-window hook is running",
+		},
+		{
+			name: "plugin",
+			config: func(t *testing.T) string {
+				dir := filepath.Join(t.TempDir(), "slow")
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				manifest := "id = \"e2e.slow\"\nname = \"E2E slow\"\nversion = \"1.0.0\"\nmin_herdr_version = \"0.9.5\"\n\n" +
+					"[[actions]]\nid = \"wait\"\ntitle = \"Wait\"\ncontexts = [\"pane\"]\ncommand = [\"sh\", \"-c\", \"sleep 4; echo done\"]\n"
+				if err := os.WriteFile(filepath.Join(dir, "herdr-plugin.toml"), []byte(manifest), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return "[plugins]\nenabled = [\"e2e.slow\"]\ndirs = [" + strconv.Quote(dir) + "]\n"
+			},
+			start: func(t *testing.T, base string) {
+				if out, err := handoffCLI(t, base, 20*time.Second, "plugins", "run", "e2e.slow", "wait"); err != nil {
+					t.Fatalf("plugins run: %v\n%s", err, out)
+				}
+			},
+			refuse: "a command of plugin e2e.slow is running",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, tc.config(t))
+			startHandoffDaemon(t, base)
+			second := copyTuios(t)
+			newCommandWindow(t, base, "e2e-pipes", "anchor", false, "sh", "-c", "exec sleep 600")
+			// The anchor's own hook, if any, finishes before the one under test.
+			time.Sleep(4500 * time.Millisecond)
+			img := helloImage(t, base)
+			tc.start(t, base)
+			_, refused := callVerb(t, base, "test-handoff", map[string]any{"binary": second})
+			kept := helloImage(t, base)
+			time.Sleep(5 * time.Second)
+			_, again := callVerb(t, base, "test-handoff", map[string]any{"binary": second})
+			var after daemonImage
+			if again == nil {
+				after = awaitNewImage(t, base, img, 30*time.Second)
+			}
+			writeHandoffArtifact(t, map[string]any{"refusal": errString(refused), "instance_kept": kept.Instance == img.Instance,
+				"after_finish": errString(again), "new_instance": after.Instance})
+			if refused == nil || !strings.Contains(refused.Error(), tc.refuse) {
+				t.Errorf("ASSERTION: the upgrade was not refused while the %s ran (want %q): %v", tc.name, tc.refuse, refused)
+			}
+			if kept.Instance != img.Instance {
+				t.Errorf("ASSERTION: the daemon's image changed although the upgrade was refused")
+			}
+			if again != nil {
+				t.Errorf("ASSERTION: the upgrade was still refused after the %s finished: %v", tc.name, again)
+			}
+		})
+	}
+}
+
+// TestDaemonUpgradeEndsWhenFallbackExecFails makes the new image hang while
+// it adopts the panes, and removes the binary the fallback would exec while
+// the upgrade is held between the manifest and the exec. The watchdog fires,
+// the fallback exec fails, and the daemon must then exit, so every pane hangs
+// up, rather than hold the panes and serve nothing.
+func TestDaemonUpgradeEndsWhenFallbackExecFails(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base, "TUIOS_TEST_HANDOFF_FAIL=hang", "TUIOS_TEST_HANDOFF_WATCHDOG_MS=1500")
+	second := copyTuios(t)
+	win := newCommandWindow(t, base, "e2e-fallback-fails", "counter", false, "sh", "-c",
+		`echo pid-$$; while :; do echo x; sleep 0.05; done`)
+	waitHandoffPane(t, base, "e2e-fallback-fails", win, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
+	img := helloImage(t, base)
+	pane := panePIDs(t, base, "e2e-fallback-fails")[win]
+	if pane <= 0 {
+		t.Fatalf("list-windows gave window %s no pid", win)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(img.PID, syscall.SIGKILL)
+		_ = syscall.Kill(pane, syscall.SIGKILL)
+	})
+	var prev string
+	_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && d.Name() == "tuios.prev" && filepath.Base(filepath.Dir(path)) == "handoff" {
+			prev = path
+		}
+		return nil
+	})
+	if prev == "" {
+		t.Fatal("the daemon kept no handoff/tuios.prev under the test's folders")
+	}
+
+	_ = mustCall(t, base, "test-handoff", map[string]any{"binary": second, "hold_ms": 1500})
+	removeErr := os.Remove(prev)
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) && (processAlive(img.PID) || processAlive(pane)) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	daemonAlive, paneAlive := processAlive(img.PID), processAlive(pane)
+	writeHandoffArtifact(t, map[string]any{"daemon_pid": img.PID, "pane_pid": pane, "removed": errString(removeErr),
+		"daemon_alive": daemonAlive, "pane_alive": paneAlive})
+	if removeErr != nil {
+		t.Fatalf("remove %s during the hold: %v", prev, removeErr)
+	}
+	if daemonAlive {
+		t.Errorf("ASSERTION: the daemon (pid %d) still runs 20s after its fallback exec failed, holding the panes and serving nothing", img.PID)
+	}
+	if paneAlive {
+		t.Errorf("ASSERTION: the pane's process (pid %d) still runs 20s after its daemon's fallback failed, so it never hung up", pane)
+	}
+}
+
+// TestDaemonUpgradePreflightRefusals asks for upgrades the preflight must
+// refuse, each with a message that says what is wrong and what to do: a tuios
+// its group can write, a program that runs but prints no answer, and one that
+// answers for another system. The daemon's image must not change.
+func TestDaemonUpgradePreflightRefusals(t *testing.T) {
+	script := func(t *testing.T, body string) string {
+		path := filepath.Join(t.TempDir(), "fake-tuios")
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	other := "plan9"
+	for _, tc := range []struct {
+		name   string
+		binary func(t *testing.T) string
+		want   string
+	}{
+		{"group-writable", func(t *testing.T) string {
+			bin := copyTuios(t)
+			if err := os.Chmod(bin, 0o775); err != nil {
+				t.Fatal(err)
+			}
+			return bin
+		}, "can be written by its group or by others (mode 0775), so this daemon will not run it. Make it writable only by its owner: chmod go-w"},
+		{"no answer", func(t *testing.T) string { return script(t, "echo hello") },
+			"so it is not a tuios this daemon can upgrade to. Check the path names a tuios binary"},
+		{"another system", func(t *testing.T) string {
+			return script(t, `echo '{"handoff":[1,1],"os":"`+other+`"}'`)
+		}, "is built for " + other + ", and this daemon runs on " + runtime.GOOS + ". Upgrade to a tuios built for " + runtime.GOOS},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			startHandoffDaemon(t, base)
+			newCommandWindow(t, base, "e2e-preflight", "anchor", false, "sh", "-c", "exec sleep 600")
+			img := helloImage(t, base)
+			bin := tc.binary(t)
+			_, err := callVerb(t, base, "test-handoff", map[string]any{"binary": bin})
+			time.Sleep(time.Second)
+			after := helloImage(t, base)
+			writeHandoffArtifact(t, map[string]any{"binary": bin, "refusal": errString(err), "instance_kept": after.Instance == img.Instance})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("ASSERTION: the upgrade to %s was not refused with %q: %v", bin, tc.want, err)
+			}
+			if after.Instance != img.Instance || after.PID != img.PID {
+				t.Errorf("ASSERTION: a refused upgrade changed the daemon: %+v then %+v", img, after)
+			}
+		})
 	}
 }
