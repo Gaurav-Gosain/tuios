@@ -71,8 +71,13 @@ func TestBlockedAgentAlertCarriesTheQuestion(t *testing.T) {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
 	}
 	enterTerminalMode(t, term)
+	// The words the rule reads come in as printf's arguments, so the command
+	// line the shell echoes does not hold the question. The rule
+	// takes the first line in the pane's last rows that has the question's
+	// stem. Until the shell prints its next prompt, the echoed command is in
+	// those rows, and a literal question in it was read as the question.
 	runInShell(t, term,
-		`printf 'Do you want to make this edit to main.go?\n\342\235\257 1. Yes\n  2. %s, and tell Claude what to do differently (esc)\n' No`,
+		`printf '%s want to make this edit to main.go?\n\342\235\257 1. Yes\n  2. %s, and tell Claude what to do differently (esc)\n' 'Do you' No`,
 		"2. No, and tell Claude", shellTimeout)
 
 	// The dock cuts a long toast to its budget and the rail cuts the note to
