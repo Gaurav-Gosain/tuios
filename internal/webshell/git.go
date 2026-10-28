@@ -171,8 +171,6 @@ func (c *checkout) changesLocked() []gitChange {
 	return out
 }
 
-func inRepo(cwd string) bool { return lockedCheckoutAt(cwd) != nil }
-
 func cmdGit(s *shell, args []string) int {
 	t := s.t
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {

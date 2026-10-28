@@ -100,16 +100,22 @@ func (h opHunk) header() string {
 // coloured the way git colours them. It returns "" when nothing changed.
 func unifiedHunks(ops []diffOp) string {
 	var b strings.Builder
+	line := func(parts ...string) {
+		for _, p := range parts {
+			b.WriteString(p)
+		}
+		b.WriteString("\r\n")
+	}
 	for _, h := range groupHunks(ops, 3) {
-		b.WriteString(cyan + h.header() + reset + "\r\n")
+		line(cyan, h.header(), reset)
 		for _, op := range h.ops {
 			switch op.Op {
 			case '-':
-				b.WriteString(red + "-" + op.Line + reset + "\r\n")
+				line(red, "-", op.Line, reset)
 			case '+':
-				b.WriteString(green + "+" + op.Line + reset + "\r\n")
+				line(green, "+", op.Line, reset)
 			default:
-				b.WriteString(" " + op.Line + "\r\n")
+				line(" ", op.Line)
 			}
 		}
 	}

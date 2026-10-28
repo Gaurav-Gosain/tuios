@@ -324,7 +324,10 @@ func (s *shell) prompt() {
 func (s *shell) editLine() string {
 	var b strings.Builder
 	prompt := s.promptText()
-	b.WriteString(markPrompt + prompt + markInput + s.highlighted())
+	b.WriteString(markPrompt)
+	b.WriteString(prompt)
+	b.WriteString(markInput)
+	b.WriteString(s.highlighted())
 	s.place(&b, prompt)
 	return b.String()
 }
@@ -367,12 +370,19 @@ func (s *shell) place(b *strings.Builder, prompt string) {
 	row := at / cols
 	b.WriteString("\r")
 	if from > row {
-		b.WriteString("\x1b[" + strconv.Itoa(from-row) + "A")
+		csi(b, from-row, 'A')
 	}
 	if col := at % cols; col > 0 {
-		b.WriteString("\x1b[" + strconv.Itoa(col) + "C")
+		csi(b, col, 'C')
 	}
 	s.row = row
+}
+
+// csi writes a cursor move of n cells or rows, final naming the direction.
+func csi(b *strings.Builder, n int, final byte) {
+	b.WriteString("\x1b[")
+	b.WriteString(strconv.Itoa(n))
+	b.WriteByte(final)
 }
 
 // toEnd moves the cursor to the end of the line being edited, so the output
@@ -398,7 +408,7 @@ func (s *shell) keepLine() {
 func (s *shell) redraw() {
 	var b strings.Builder
 	if s.row > 0 {
-		b.WriteString("\x1b[" + strconv.Itoa(s.row) + "A")
+		csi(&b, s.row, 'A')
 	}
 	b.WriteString("\r\x1b[J")
 	prompt := s.promptText()
