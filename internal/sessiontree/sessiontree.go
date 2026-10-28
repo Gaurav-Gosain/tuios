@@ -151,8 +151,12 @@ type Node struct {
 	Global bool
 	// Worktree is the git worktree this session sits in, nil for a session
 	// that is not one. It is what puts the row under a repository parent and
-	// labels it with its branch.
+	// labels it with its branch, unless the session is Named.
 	Worktree *WorktreeRef
+	// Named says the session wears a label a person gave it: a display name,
+	// or a name tuios did not make up. A worktree row keeps such a label and
+	// shows the branch after it, rather than taking the branch as its label.
+	Named bool
 	// GroupLast marks the last member of a repository group, so the row can
 	// draw the tree glyph that closes the group. Set by GroupByRepo and
 	// meaningless anywhere else.
@@ -274,6 +278,8 @@ type SessionInput struct {
 	// Worktree is the git worktree this session sits in, nil for a session
 	// that is not one.
 	Worktree *WorktreeRef
+	// Named says a person chose the session's label. See Node.Named.
+	Named bool
 	// Space is the space the session is filed under, empty for none.
 	Space string
 	// Note is the session's return note, empty for none.
@@ -364,6 +370,7 @@ func BuildSession(s SessionInput) Node {
 		Restored:    s.Restored,
 		Global:      s.Global,
 		Worktree:    s.Worktree,
+		Named:       s.Named,
 		Space:       s.Space,
 	}
 	if len(s.Windows) == 0 {

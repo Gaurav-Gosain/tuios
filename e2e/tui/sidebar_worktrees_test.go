@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
@@ -113,16 +114,57 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	}
 	saveFrame(t, term, "rail-worktrees")
 
+	// A session a person named, which then walks into a worktree (#1245). It
+	// joins the group, and keeps its name with the branch after it: the
+	// promise is that a session with a custom name keeps it. Before the fix
+	// the row took the branch as its whole label.
+	var wtPath string
+	for _, r := range worktreeRows(t, base) {
+		if r["session"] == "repo-feat-one" {
+			wtPath, _ = r["path"].(string)
+		}
+	}
+	if wtPath == "" {
+		t.Fatalf("worktree ls has no path for repo-feat-one: %v", worktreeRows(t, base))
+	}
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "mine", "--detach"); err != nil {
+		t.Fatalf("create the named session: %v: %s", err, out)
+	}
+	// /bin/sh reports no directory on cd, so the report fish sends is printed
+	// by hand. The daemon reads the bytes either way.
+	cd := "cd '" + wtPath + "' && printf '\\033]7;file://localhost%s\\007' \"$PWD\"\n"
+	if err := paneSend(base, "mine", "0", cd); err != nil {
+		t.Fatalf("move the named session into the worktree: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		line := railLineWith(s, "─ mine")
+		return line >= 0 && strings.Contains(s.Line(line), "feat/one")
+	}, 15*time.Second); err != nil {
+		t.Fatalf("the named session in a worktree lost its name to the branch: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-worktree-named")
+
+	// A display name wins the same way.
+	if out, err := tuiosCLI(t, base, "set-session-name", "-s", "mine", "My label"); err != nil {
+		t.Fatalf("set-session-name: %v: %s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railLineWith(s, "─ My label") >= 0
+	}, 15*time.Second); err != nil {
+		t.Fatalf("the display name never reached the worktree row: %v\n%s", err, term.Snapshot())
+	}
+	railShot(t, term, "rail-worktree-display-name")
+
 	// A click on the repository row folds the group.
 	col, row := findOnScreen(t, term, "· repo")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		if strings.Contains(text, "feat/one") || strings.Contains(text, "feat/two") {
+		if strings.Contains(text, "feat/one") || strings.Contains(text, "feat/two") || strings.Contains(text, "My label") {
 			return false
 		}
 		line := railLineWith(s, "repo")
-		return line >= 0 && strings.Contains(s.Line(line), "2")
+		return line >= 0 && strings.Contains(s.Line(line), "3")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the click did not fold the group into a row carrying its count: %v\n%s", err, term.Snapshot())
 	}

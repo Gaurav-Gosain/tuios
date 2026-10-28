@@ -2985,7 +2985,8 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	indent := m.sidebarNodeIndent(node)
 	// A worktree session is named by its branch under its repository's row,
 	// behind the mark that says whether the group goes on below it. The branch
-	// is the whole label there, so nothing rides after it.
+	// is the whole label there, so nothing rides after it. A Named session
+	// keeps its own name there, and the branch rides after it as on any row.
 	grouped := false
 	if label, ok := m.sidebarWorktreeLabel(node); ok {
 		title, grouped = label, true
@@ -2996,8 +2997,13 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// name in the row's budget, see railRowFit, and the figures on the right
 	// are offered their cells before it.
 	b := ""
-	if !grouped && variant == sidebarVariantFull {
-		b = printableTitle(node.Branch)
+	if variant == sidebarVariantFull {
+		switch {
+		case !grouped:
+			b = printableTitle(node.Branch)
+		case node.Named:
+			b = printableTitle(node.Worktree.Branch)
+		}
 	}
 	// A return note takes the branch's slot. It is cut to whatever room the
 	// name leaves rather than kept whole or dropped, so it costs the name no

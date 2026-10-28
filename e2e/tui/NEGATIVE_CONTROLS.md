@@ -10026,3 +10026,17 @@ the client to be in B's session, then opens the comparison again. Run on
 | --- | --- | --- |
 | `renderCockpit` keeps the frame key of a transient frame (the peek) | after esc the peek's answers stay on screen | **caught** |
 | `ckCompareGo` looks for the row by the agent's row key, `a:` and the agent | the client never goes to `repo-cache-2`: the attempt's row is its finished item | **caught** |
+## A named session keeps its name in a worktree group (#1245)
+
+`TestSidebarGroupsWorktrees` creates a session called `mine` outside the
+repository and moves its pane into the `feat/one` worktree with `send-text`.
+The rail files it under the repository row. The row must read `└─ mine
+feat/one`, and after `set-session-name -s mine "My label"` it must read
+`└─ My label`. Run on 2026-10-28 on Linux.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole fix: `Named` on the session node, `sessionNamed`, and the named branch in `sidebarWorktreeLabel` and the row's branch | the row reads `└─ feat/one`, the same label as the session that tuios made for that branch | **caught** |
+
+With `TUIOS_E2E_FRAMES` set, the test writes `rail-worktree-named.png` and
+`rail-worktree-display-name.png`.

@@ -105,6 +105,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	return sessiontree.SessionInput{
 		Name:             name,
 		DisplayName:      m.SessionDisplayName,
+		Named:            sessionNamed(name, m.SessionDisplayName, m.SessionWorktree),
 		Dir:              dir,
 		Branch:           branch,
 		Attached:         true,
@@ -157,6 +158,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 	return sessiontree.SessionInput{
 		Name:             name,
 		DisplayName:      display,
+		Named:            sessionNamed(name, display, client.SessionWorktree(name)),
 		Dir:              dir,
 		Branch:           branch,
 		Restored:         client.SessionRestored(name),

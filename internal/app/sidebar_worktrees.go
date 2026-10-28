@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // The rail's worktree groups.
@@ -156,6 +157,11 @@ func (m *OS) SidebarToggleRepoCollapsed(repo string) {
 // behind the tree mark that says whether the group goes on below it. It
 // reports false for a session that is not a worktree, whose row is unchanged.
 //
+// A Named session keeps its own title behind the mark instead, and the branch
+// rides after it like on any other row (#1245): a name a person chose says
+// more than the branch, and the documented promise is that a session with a
+// custom name keeps it.
+//
 // The branch is laundered like any other title, and the mark is not: the mark
 // is one of ours, chosen by the glyph settings, and already ASCII in the mode
 // that asks for ASCII.
@@ -166,6 +172,9 @@ func (m *OS) sidebarWorktreeLabel(node sessiontree.Node) (string, bool) {
 	mark := m.Settings.GetRailTreeBranch()
 	if node.GroupLast {
 		mark = m.Settings.GetRailTreeLast()
+	}
+	if node.Named {
+		return mark + printableTitle(node.Title), true
 	}
 	label := printableTitle(node.Worktree.Branch)
 	if label == "" {
@@ -225,4 +234,19 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		Render(overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarGutter(false, state, rowBg, pal, &m.Settings)
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
+}
+
+// sessionNamed reports whether a person chose the label of the session called
+// name: it has a display name, or a name tuios did not make up. Two names are
+// made up: the generated session-N, and the <repo>-<branch> name that
+// worktree new and fan give the session they make, which only repeats what
+// the repository row and the branch already say.
+func sessionNamed(name, display string, wt *session.WorktreeInfo) bool {
+	if display != "" {
+		return true
+	}
+	if session.IsGeneratedSessionName(name) {
+		return false
+	}
+	return wt == nil || name != worktree.SessionName(wt.Repo, wt.Branch)
 }
