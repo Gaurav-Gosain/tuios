@@ -9926,3 +9926,21 @@ a peek that is off. Run on 2026-10-27 on Linux, on branch
 | The positive half | none: the peek with the default config lists the six panes, and with `peek = false` the section keeps `pk-one`'s pane | **guard** |
 
 With `TUIOS_E2E_FRAMES` set, the test writes `peek-on.png` and `peek-off.png`.
+## A new pane's shell starts at the size of its tile (#1205)
+
+`TestNewPaneShellStartsAtItsSize` opens three panes into a tiled layout in four
+setups: daemon and standalone, each with animations on and off. The shell is
+bash, with an rc file that logs the size at start, every SIGWINCH and every
+prompt. Each new pane is judged when its shell has drawn a prompt and its frame
+on screen holds the size the shell last logged. A new pane's shell must take no
+SIGWINCH before the next pane is made. Run on 2026-10-28 on Linux, four test
+processes at once, three runs each.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The whole fix (main at `3d91716c0`) | daemon, daemon-animated and standalone-animated, 12 of 12 runs: "new pane N started at 43x158 and took 1 SIGWINCH" (19x78 in standalone-animated). The standalone setup passes, as it did on main before the fix | **caught** |
+
+The fixed build passes 12 of 12 runs under the same load. The first draft of
+the test waited a fixed 1.5 s and used zsh. The CI runners have no zsh, so no
+pane was made. A draft that made the next pane right after the prompt caught
+only 5 of 48 cases: the client resized the new pane after its prompt.

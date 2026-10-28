@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // TestDaemonCreatedWindowsTile drives the exact scenario the owner reported:
@@ -156,20 +158,34 @@ func parseWindows(jsonOut string) ([]winRect, bool) {
 	return rects, true
 }
 
-// TestNewPaneShellStartsAtItsSize opens panes into a tiled layout with zsh
-// as the shell and checks that each new pane's shell starts at the size its
-// tile gives it and takes no SIGWINCH while it starts (#1205).
+// TestNewPaneShellStartsAtItsSize opens panes into a tiled layout and checks
+// that each new pane's shell starts at the size its tile gives it and takes no
+// SIGWINCH while it starts (#1205).
 //
 // The shell was started at the session's size, or at the floating placement
 // box, and resized once the client tiled the pane. zsh started in that window
 // took the SIGWINCH during startup and drew its prompt again under PROMPT_SP's
-// "%" mark, with empty rows above it. The rc file is the reporter's: it logs
-// the size at start, every SIGWINCH and every prompt, and sleeps 0.1 s so the
-// resize lands while the shell is still starting.
+// "%" mark, with empty rows above it. The rc file follows the reporter's: it
+// logs the size at start, every SIGWINCH and every prompt, and sleeps 0.1 s so
+// the resize lands while the shell is still starting.
+//
+// The shell is bash, not the reporter's zsh. The CI runners have no zsh, and a
+// pane whose shell does not exist is never made, so the test would fail at the
+// first new pane. bash is also the better witness: it runs its WINCH trap for
+// a resize that lands during the rc file's sleep, where zsh's TRAPWINCH misses
+// it because the signal goes to the sleep's process group.
+//
+// The test waits on conditions, not on time. A pane is judged once its shell
+// has drawn a prompt and the frame on screen holds the size the shell last
+// logged. The next pane is made only then.
 //
 // A pane that is split gets a SIGWINCH, which is right: its tile shrank. Only
 // the new pane is held to none. The log is saved as an artifact.
 func TestNewPaneShellStartsAtItsSize(t *testing.T) {
+	const shell = "/bin/bash"
+	if _, err := os.Stat(shell); err != nil {
+		t.Skipf("%s is not installed", shell)
+	}
 	cases := []struct {
 		name       string
 		args       []string
@@ -183,67 +199,174 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
-			logPath := filepath.Join(base, "zsize.log")
-			rc := "zmodload zsh/datetime\n" +
-				"_log() { print -r -- \"$EPOCHREALTIME $$ $1 $(stty size)\" >> " + logPath + " }\n" +
-				"_log start\nTRAPWINCH() { _log WINCH }\nprecmd() { _log precmd }\nsleep 0.1\nPS1='%% '\n"
-			if err := os.WriteFile(filepath.Join(base, ".zshrc"), []byte(rc), 0o600); err != nil {
+			logPath := filepath.Join(base, "size.log")
+			// The trap is set before the start line, so a resize that lands
+			// after the shell logs its start size is never missed.
+			rc := "_log() { echo \"$$ $1 $(stty size) $EPOCHREALTIME\" >> " + logPath + "; }\n" +
+				"trap '_log WINCH' WINCH\n_log start\nPROMPT_COMMAND='_log precmd'\nsleep 0.1\nPS1='p$$ $ '\n"
+			if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), ".bashrc"), []byte(rc), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			term := startIn(t, base, startOpts{cols: 160, rows: 45, args: tc.args, animations: tc.animations,
-				env: []string{"SHELL=/usr/bin/zsh", "ZDOTDIR=" + base}})
+				env: []string{"SHELL=" + shell}})
 			if tc.args != nil {
 				killDaemon(t, base)
+			}
+			// Each log line is the shell's pid, the event and the size.
+			events := func() [][]string {
+				data, _ := os.ReadFile(logPath)
+				var out [][]string
+				for line := range strings.Lines(string(data)) {
+					if f := strings.Fields(line); len(f) >= 4 {
+						out = append(out, f)
+					}
+				}
+				return out
+			}
+			// awaitNewShell waits until a shell that is not in seen has logged
+			// its start and then its first prompt, and returns its pid. Each
+			// pane is judged only once its shell is up, so a slow start on a
+			// busy machine is not read as the next pane's.
+			seen := map[string]bool{}
+			awaitNewShell := func(pane string) string {
+				var pid string
+				waitForFileText(t, logPath, func(string) bool {
+					pid = ""
+					for _, f := range events() {
+						switch {
+						case f[1] == "start" && pid == "" && !seen[f[0]]:
+							pid = f[0]
+						case f[1] == "precmd" && f[0] == pid && pid != "":
+							return true
+						}
+					}
+					return false
+				}, pane+": its shell never started and drew a prompt")
+				seen[pid] = true
+				return pid
+			}
+			// awaitTileSize waits until the frame the client draws around the
+			// shell's prompt, "p<pid> $ ", holds exactly the size the shell
+			// last logged. The next pane is not made before then. Without the
+			// fix the client resizes a new pane after its first prompt, and a
+			// keypress made at the prompt let that SIGWINCH fall among the
+			// next pane's lines, where it was never judged.
+			awaitTileSize := func(pane, pid string) {
+				err := term.WaitForDesc(pane+"'s frame holds the size its shell logged", func(s tuitest.Screen) bool {
+					cols, rows, ok := frameAround(s, "p"+pid+" $")
+					if !ok {
+						return false
+					}
+					last := ""
+					for _, f := range events() {
+						if f[0] == pid {
+							last = f[2] + "x" + f[3]
+						}
+					}
+					return last == fmt.Sprintf("%dx%d", rows, cols)
+				}, uiTimeout)
+				if err != nil {
+					t.Fatalf("%s: %v\nlog:\n%s", pane, err, func() string {
+						data, _ := os.ReadFile(logPath)
+						return string(data)
+					}())
+				}
 			}
 			waitBoot(t, term)
 			newWindow(t, term)
 			enableTiling(t, term)
-			// Panes made before this point were not made into a tiled layout.
-			time.Sleep(1500 * time.Millisecond)
-			readLog := func() []string {
-				data, _ := os.ReadFile(logPath)
-				if s := strings.TrimSpace(string(data)); s != "" {
-					return strings.Split(s, "\n")
-				}
-				return nil
-			}
+			// The first pane was not made into a tiled layout. It is not
+			// judged, but its shell must be up before the next pane is made.
+			awaitNewShell("the first pane")
 			// Each pane is judged on the log lines from its own keypress to the
 			// next one. The SIGWINCH of the pane it split is the right answer
 			// to the split, and comes from another pid.
-			var segments [][]string
-			for range 3 {
-				mark := len(readLog())
-				newWindow(t, term)
-				time.Sleep(1500 * time.Millisecond)
-				segments = append(segments, readLog()[mark:])
+			type pane struct {
+				pid  string
+				from int
 			}
-			all := strings.Join(readLog(), "\n")
-			if err := os.WriteFile(filepath.Join(artifactDir(t), "zsize.log"), []byte(all+"\n"), 0o644); err != nil {
+			var panes []pane
+			for i := range 3 {
+				from := len(events())
+				newWindow(t, term)
+				name := fmt.Sprintf("new pane %d", i+1)
+				pid := awaitNewShell(name)
+				awaitTileSize(name, pid)
+				panes = append(panes, pane{pid, from})
+			}
+			all := events()
+			var text strings.Builder
+			for _, f := range all {
+				text.WriteString(strings.Join(f, " "))
+				text.WriteByte('\n')
+			}
+			if err := os.WriteFile(filepath.Join(artifactDir(t), "size.log"), []byte(text.String()), 0o644); err != nil {
 				t.Logf("could not save the log: %v", err)
 			}
-			for i, seg := range segments {
-				pid, start, winch := "", "", 0
-				for _, line := range seg {
-					f := strings.Fields(line)
-					if len(f) < 5 {
-						continue
-					}
+			for i, p := range panes {
+				to := len(all)
+				if i+1 < len(panes) {
+					to = panes[i+1].from
+				}
+				start, winch := "", 0
+				for _, f := range all[p.from:to] {
 					switch {
-					case f[2] == "start" && pid == "":
-						pid, start = f[1], f[3]+"x"+f[4]
-					case f[2] == "WINCH" && f[1] == pid:
+					case f[0] != p.pid:
+					case f[1] == "start":
+						start = f[2] + "x" + f[3]
+					case f[1] == "WINCH":
 						winch++
 					}
 				}
-				if pid == "" {
-					t.Fatalf("pane %d: its shell logged no start\n%s", i+1, all)
-				}
 				if winch != 0 {
 					t.Errorf("new pane %d (pid %s) started at %s and took %d SIGWINCH; a new pane's "+
-						"shell must start at its tile's size\n%s", i+1, pid, start, winch, all)
+						"shell must start at its tile's size\n%s", i+1, p.pid, start, winch, text.String())
 				}
 			}
 			alive(t, term, "after opening panes")
 		})
 	}
+}
+
+// frameAround finds marker on the first row inside a pane's frame and returns
+// the cells inside that frame. ok is false while the marker is not on screen
+// or does not sit right inside a frame's top-left corner, as during an
+// animation.
+func frameAround(s tuitest.Screen, marker string) (cols, rows int, ok bool) {
+	vertical := func(r rune) bool { return strings.ContainsRune("│┃║╎┆┊", r) }
+	w, h := s.Size()
+	want := []rune(marker)
+	for y := 1; y < h; y++ {
+		for x := 1; x+len(want) <= w; x++ {
+			hit := true
+			for i, r := range want {
+				if s.Cell(x+i, y).Rune != r {
+					hit = false
+					break
+				}
+			}
+			if !hit {
+				continue
+			}
+			// The marker starts right after the left border, and the cell
+			// above that border is the top edge, not more border.
+			left := x - 1
+			if !vertical(s.Cell(left, y).Rune) || vertical(s.Cell(left, y-1).Rune) {
+				return 0, 0, false
+			}
+			right := x
+			for right < w && !vertical(s.Cell(right, y).Rune) {
+				right++
+			}
+			bottom := y
+			for bottom < h && vertical(s.Cell(left, bottom).Rune) {
+				bottom++
+			}
+			if right >= w || bottom >= h {
+				return 0, 0, false
+			}
+			return right - x, bottom - y, true
+		}
+	}
+	return 0, 0, false
 }
