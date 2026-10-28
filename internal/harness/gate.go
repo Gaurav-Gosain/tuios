@@ -80,6 +80,16 @@ func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	if b.predicates += len(g.All) + len(g.Any) + len(g.Not) + len(g.Regex) + len(g.NotRegex); b.predicates > maxPredicates {
 		return fmt.Errorf("more than %d predicates in one manifest", maxPredicates)
 	}
+	// substringText keeps a region's lines and their joined form apart with a
+	// NUL, so a substring holding one could match across the two. No screen
+	// or title holds one, so such a substring could never match anyway.
+	for _, list := range [][]string{g.All, g.Any, g.Not} {
+		for _, s := range list {
+			if strings.IndexByte(s, 0) >= 0 {
+				return fmt.Errorf("substring %q holds a NUL, which tuios never reads", s)
+			}
+		}
+	}
 	if foldCase {
 		for _, list := range [][]string{g.All, g.Any, g.Not} {
 			for i, s := range list {
@@ -172,7 +182,8 @@ func (g *Gate) nestedPositiveStrings() []string {
 }
 
 // match applies the gate to a region's text. Substrings check the folded
-// haystack, which is the plain one unless the manifest folds case; patterns
+// haystack, which regionText.get builds: lowercased when the manifest folds
+// case, and joined across a wrap for after_last_horizontal_rule. Patterns
 // always read the plain haystack, because a pattern chooses its own case
 // handling with (?i).
 //

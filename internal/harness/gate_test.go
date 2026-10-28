@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -260,5 +261,119 @@ regex    = ['^⠋ ']
 		if got := ProgressText(tc.state, tc.percent); got != tc.want {
 			t.Errorf("ProgressText(%d, %d) = %q, want %q", tc.state, tc.percent, got, tc.want)
 		}
+	}
+}
+
+// TestAfterLastRuleSkipsATrailingTitledRule: Claude Code 2.1.311 draws a rule
+// with the session's name under a form ("──── My session ─"). A rule that
+// carries a title and has nothing under it is skipped, so the region is still
+// what sits under the rule before it. Every other rule counts as before.
+func TestAfterLastRuleSkipsATrailingTitledRule(t *testing.T) {
+	form := []string{
+		"────────────",
+		"  5. Chat about this",
+		"Enter to select · ↑/↓ to navigate · Esc to cancel",
+	}
+	under := form[1:]
+	for _, tc := range []struct {
+		name string
+		tail []string
+		want []string
+	}{
+		{"titled rule at the bottom", append(slices.Clone(form), "──────── AskUserQuestion Color Test ─"), under},
+		{"title in Hebrew", append(slices.Clone(form), "──────── בדיקה: איזה צבע ─"), under},
+		{"title in CJK and emoji", append(slices.Clone(form), "──────── 设置 🎨 ─"), under},
+		{"titled rule, then blank lines", append(slices.Clone(form), "──────── My session ─", "   ", ""), under},
+		{"the old layout, no titled rule", form, under},
+		{"a bare rule at the bottom still counts", append(slices.Clone(form), "────────────"), []string{}},
+		{"a rounded box's bottom is not a title", append(slices.Clone(form), "╰──────────╯"), []string{}},
+		{"a tee is not a title", append(slices.Clone(form), "──────┴─────"), []string{}},
+		{"a titled rule with a line under it counts", append(slices.Clone(form), "──── My session ─", "  ⏵⏵ accept edits on"), []string{"  ⏵⏵ accept edits on"}},
+		{"only the last titled rule is skipped", append(slices.Clone(form), "──── one ─", "──── two ─"), []string{}},
+		{"a titled rule with no rule above it leaves nothing", []string{"Esc to cancel", "──── My session ─"}, []string{}},
+		{"a box's bottom with a title is a border", append(slices.Clone(form), "╰──── hint ─╯"), []string{}},
+		{"a zero-width space is not a title", append(slices.Clone(form), "──── \u200b ─"), []string{}},
+		{"block elements are not a title", append(slices.Clone(form), "──── ▀▀ ─"), []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := regionLines(tc.tail, RegionAfterLastRule)
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") || len(got) != len(tc.want) {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSubstringsReadAcrossAWrap: in a narrow pane Claude Code wraps its form's
+// footer at a space ("… · Esc" / "to cancel"). A rule reading
+// after_last_horizontal_rule finds its substrings across that wrap. What
+// matched on one line still matches, a pattern still reads the lines as they
+// are, and a rule reading the whole tail, where transcript prose wraps
+// anywhere, does not join lines.
+func TestSubstringsReadAcrossAWrap(t *testing.T) {
+	r := mustManifest(t, `
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+[[screen.rule]]
+state  = "needs_input"
+region = "after_last_horizontal_rule"
+all    = ["esc to cancel"]
+`)
+	if got := classified(r, "Enter to select · ↑/↓ to navigate · Esc", "to cancel"); got != "needs_input" {
+		t.Errorf("a footer wrapped at a space: got %s, want needs_input", got)
+	}
+	if got := classified(r, "Enter to select · ↑/↓ to navigate · Esc to cancel"); got != "needs_input" {
+		t.Errorf("the footer on one line: got %s, want needs_input", got)
+	}
+	if got := classified(r, "esc to", "x", "cancel"); got != "none" {
+		t.Errorf("words on rows with other text between them matched: got %s, want none", got)
+	}
+	// A pattern reads the rows as they are: the wrap does not join them for it.
+	p := mustManifest(t, `
+[screen]
+enabled = true
+lines   = 8
+[[screen.rule]]
+state  = "needs_input"
+region = "after_last_horizontal_rule"
+regex  = ['(?m)^Esc to cancel$']
+`)
+	if got := classified(p, "Esc", "to cancel"); got != "none" {
+		t.Errorf("a pattern matched across a wrap: got %s, want none", got)
+	}
+	// Without fold_case the wrap is read the same way.
+	c := mustManifest(t, `
+[screen]
+enabled = true
+lines   = 8
+[[screen.rule]]
+state  = "needs_input"
+region = "after_last_horizontal_rule"
+all    = ["Esc to cancel"]
+`)
+	if got := classified(c, "Enter to select · Esc", "to cancel"); got != "needs_input" {
+		t.Errorf("a wrapped footer without fold_case: got %s, want needs_input", got)
+	}
+	// The whole tail holds transcript prose: a phrase wrapped there is not
+	// joined, so prose that only reads as the phrase across a wrap matches
+	// nothing.
+	w := mustManifest(t, `
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+[[screen.rule]]
+state  = "needs_input"
+any    = ["waiting for permission"]
+`)
+	if got := classified(w, "⏺ The pane stops at the line that says it is waiting for", "  permission, and then nothing happens."); got != "none" {
+		t.Errorf("a tail rule matched prose across a wrap: got %s, want none", got)
+	}
+	// The lines and their joined form are kept apart by a NUL, so a
+	// substring holding one is refused at load.
+	if _, err := parseManifest("x.toml", []byte(manifestHead+"[screen]\nenabled = true\n[[screen.rule]]\nstate = \"working\"\nall = [\"a\\u0000b\"]\n")); err == nil {
+		t.Error("a substring holding a NUL loaded")
 	}
 }

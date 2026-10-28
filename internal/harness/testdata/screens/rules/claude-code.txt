@@ -101,3 +101,118 @@
 ❯
 ────────────────────────────────────────────
   ? for shortcuts
+=====
+# harness: claude-code
+# want: needs_input
+# how: measured on Claude Code 2.1.311, 2026-10-27, with tuios capture-pane.
+# An AskUserQuestion form in Hebrew. Claude Code draws a rule with the
+# session's name under the form, so the form is above the last rule.
+---
+❯ Use the AskUserQuestion tool exactly once. Question (in Hebrew): 'בדיקה:
+  איזה צבע?' header 'צבע', options: 'אדום', 'ירוק', 'כחול', each with a
+  one-word Hebrew description. Then stop.
+──────────────────────────────────────────────────────────────────────────────
+ ☐ צבע
+
+בדיקה: איזה צבע?
+
+❯ 1. אדום
+     חם
+  2. ירוק
+     טבעי
+  3. כחול
+     קר
+  4. Type something.
+──────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+───────────────────────────────────────────────── AskUserQuestion Color Test ─
+=====
+# harness: claude-code
+# want: needs_input
+# how: measured on Claude Code 2.1.311, 2026-10-27, in a pane 39 columns wide.
+# The form's footer wraps at a space, and the titled rule is under it.
+---
+אבחון (מקליט את המסך שלי): חכה 15 שניות
+לפני שתענה
+
+❯ 1. הגיע ל-Snap
+     עניתי מ-Snap
+  2. לא הגיע
+     עניתי כאן
+  3. Type something.
+───────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc
+to cancel
+─────── Tuios cheat sheet and roadmap ─
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. The permission menu with the titled rule of Claude Code
+# 2.1.311 under it.
+---
+ Bash command
+
+   rm -rf build
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for rm commands
+   3. No, and tell Claude what to do differently (esc)
+
+ Esc to cancel · Tab to amend · ctrl+e to explain
+───────────────────────────────────────────────── Build cleanup ─
+=====
+# harness: claude-code
+# want: none
+# how: derived. A titled rule with a line under it is a rule like any other:
+# a form's footer above it is settled output, not a form waiting.
+---
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+   release/2.1
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+──────────────────────────────── My session ─
+  ⏵⏵ accept edits on
+=====
+# harness: claude-code
+# want: idle
+# how: measured on Claude Code 2.1.311, 2026-10-28, an idle pane in a named
+# session. The titled rule is the top of the prompt box, a bare rule closes
+# it, and the status line is under it.
+---
+                                                                     new task? /clear to save 155.1k tokens
+────────────────────────────────────────────────────────────── Kanata Keyboard Recapture After Wake ─
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Opus 5.5 ◑ high] │ brain
+  Context ██░░░░░░░░ 15%
+=====
+# harness: claude-code
+# want: idle
+# how: derived. Transcript prose wraps a phrase a whole-tail rule looks for
+# ("waiting for" / "permission"), with a draft typed. Only the form under the
+# last rule is read across a wrap, so this stays idle.
+---
+⏺ The pane stops at the line that says it is waiting for
+  permission, and then nothing happens.
+──────────────────────────────────────────────────────
+❯ ok
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+=====
+# harness: claude-code
+# want: none
+# how: derived. An answered form scrolled up, with a titled line at the
+# bottom and no rule above it in the tail. The region stays empty rather than
+# reading the settled form.
+---
+⏺ User answered Claude's questions:
+  ⎿ · Which branch should the PR target? → main
+     Enter to select · ↑/↓ to navigate · Esc to cancel
+⏺ Opening the PR against main.
+──────────── Showing detailed transcript · ctrl+o to toggle ─

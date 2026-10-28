@@ -28,7 +28,9 @@
 //   - regions keep their names: whole_recent is the tail, and
 //     bottom_non_empty_lines(N), prompt_box_body, above_prompt_box,
 //     last_non_empty_above_prompt_box and after_last_horizontal_rule read the
-//     same part of it. bottom_lines(N) becomes bottom_non_empty_lines(N),
+//     same part of it, except that tuios skips a titled rule at the very
+//     bottom for after_last_horizontal_rule, and finds its substrings across a
+//     wrapped line. bottom_lines(N) becomes bottom_non_empty_lines(N),
 //     which reads at least as much. The manifest's lines is the largest window
 //     any kept rule asks for, and whole_recent counts as eight. herdr reads the
 //     whole screen for whole_recent, so a rule relying on text far up the

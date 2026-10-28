@@ -1644,7 +1644,17 @@ lines is empty, and a rule reading it matches nothing.
 `after_last_horizontal_rule` on a screen with no border line is the whole tail,
 as it is in herdr. It is the region that keeps an answered prompt still in the
 tail from holding `needs_input`: Claude Code draws a live form under a rule, and
-once the form is answered the rule and the form scroll up together.
+once the form is answered the rule and the form scroll up together. A bare
+dash rule that carries a title and has nothing under it is skipped, once:
+Claude Code 2.1.311 draws one with the session's name under a form
+(`──── My session ─`), and the form is what sits above it. A line opened by a
+corner is a box's border, a tee or more dashes is not a title, a titled line
+with anything under it is a border line like any other, and a titled line with
+no rule above it leaves the region empty. The substrings of a rule reading this
+region are also found across a line break: its lines are joined with a space,
+so a footer a narrow pane wrapped at a space (`… · Esc` and `to cancel`) still
+holds `esc to cancel`, and what matched on one line matches as before. Wider
+regions hold transcript prose, which wraps anywhere, and are not joined.
 
 N in `bottom_non_empty_lines(N)` is a plain number from 1 to 200 and must not be
 more than the manifest's `lines`: the loader refuses a rule that asks to read
@@ -1691,9 +1701,9 @@ present; a group inside `none_of` may be vetoes only, but not empty. Groups nest
 at most eight deep, and one manifest carries at most 512 groups and 1024 strings
 and patterns, so the scan the daemon runs on every settle stays priced.
 
-Substrings are matched plainly, lowercased when the manifest sets `fold_case`.
-Patterns are RE2 with `^` and `$` anchoring lines, and choose their own case
-handling with `(?i)`. A folded substring is a plain search, while a `(?i)`
+Substrings are matched plainly, lowercased when the manifest sets `fold_case`,
+and may not hold a NUL. Patterns are RE2 with `^` and `$` anchoring lines, read
+the lines as they are, and choose their own case handling with `(?i)`. A folded substring is a plain search, while a `(?i)`
 pattern over a screen of box drawing costs microseconds, so a bundled rule writes
 case-insensitive text as a substring. A rule is tried only if it could still
 win: rules run highest priority first, and the first match decides.

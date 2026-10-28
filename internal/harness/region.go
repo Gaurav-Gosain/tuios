@@ -31,7 +31,8 @@ import (
 //	prompt_box (or prompt_box_body)    between the last two border lines
 //	above_prompt_box                   everything above that box
 //	last_non_empty_above_prompt_box    the one line just above the box
-//	after_last_horizontal_rule         everything under the last border line
+//	after_last_horizontal_rule         everything under the last border line,
+//	                                   past a titled one at the very bottom
 //
 // Title rules read osc_title, the pane's window title, unless they name
 // osc_progress, the last OSC 9;4 progress report written as "4;<state>" for
@@ -133,6 +134,38 @@ func isBoxBorder(line string) bool {
 	return n >= 3
 }
 
+// isTitledRule reports whether a border line is a bare dash rule with a title
+// after its dashes. Claude Code 2.1.311 draws one with the session's name
+// under a form: "──── My session ─". A line opened by a corner is a box's
+// border, titled or not. After the dashes, a title needs a character that
+// shows: box drawing, block elements, spaces, combining marks and format
+// characters alone are not one.
+func isTitledRule(line string) bool {
+	t := strings.TrimSpace(line)
+	if t == "" || strings.ContainsRune(boxCorners, []rune(t)[0]) {
+		return false
+	}
+	for _, r := range strings.TrimLeft(t, "─━") {
+		switch {
+		case unicode.IsSpace(r), r >= 0x2500 && r <= 0x259F,
+			unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf):
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// blankFrom reports whether every line of tail from i on is blank.
+func blankFrom(tail []string, i int) bool {
+	for _, t := range tail[i:] {
+		if strings.TrimSpace(t) != "" {
+			return false
+		}
+	}
+	return true
+}
+
 // promptBox finds the input box at the bottom of tail: the lines between the
 // last two border lines. ok is false when the tail holds fewer than two.
 func promptBox(tail []string) (top, bottom int, ok bool) {
@@ -193,10 +226,25 @@ func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 		}
 		return 0, 0, false
 	case RegionAfterLastRule:
+		// A titled rule with nothing under it closes the frame rather than
+		// separating settled output from what is live: Claude Code 2.1.311
+		// draws one under a form. It is skipped, once, so the region is what
+		// sits between the rule before it and it. Any other rule counts. With
+		// no rule above it, the region stays empty, as it was before: the
+		// whole tail would let settled output in.
+		end := len(tail)
 		for i, t := range slices.Backward(tail) {
-			if isBoxBorder(t) {
-				return i + 1, len(tail), true
+			if !isBoxBorder(t) {
+				continue
 			}
+			if end == len(tail) && isTitledRule(t) && blankFrom(tail, i+1) {
+				end = i
+				continue
+			}
+			return i + 1, end, true
+		}
+		if end < len(tail) {
+			return end, end, true
 		}
 		return 0, len(tail), true
 	}
@@ -228,9 +276,11 @@ func newRegionText(tail []string, foldCase bool) *regionText {
 	return &regionText{tail: tail, foldCase: foldCase}
 }
 
-// get returns the plain and folded haystack for a region, and false when the
-// region is empty on this screen. The folded haystack is the plain one when
-// the manifest does not fold case or needFolded is false.
+// get returns the plain haystack for a region, the one its substrings are
+// looked for in, and false when the region is empty on this screen. The
+// second is lowercased when the manifest folds case, and for
+// after_last_horizontal_rule it is substringText, so a wrapped phrase is
+// found. Otherwise, or with needFolded false, it is the plain one.
 func (t *regionText) get(region string, needFolded bool) (hay, folded string, ok bool) {
 	if region == RegionTail {
 		region = ""
@@ -248,17 +298,63 @@ func (t *regionText) get(region string, needFolded bool) (hay, folded string, ok
 		}
 		t.cache[region] = e
 	}
-	if t.foldCase && needFolded && !e.hasFolded && e.hay != "" {
-		if t.lowered == nil {
-			t.lowered = make([]string, len(t.tail))
-			for i, line := range t.tail {
-				t.lowered[i] = foldLine(line)
+	// Only the form under the last rule is read across a wrap. A wider
+	// region holds transcript prose, which wraps anywhere, and joining it
+	// would let a rule match words that were never one phrase on the screen.
+	wrap := region == RegionAfterLastRule
+	if needFolded && !e.hasFolded && e.hay != "" && (t.foldCase || wrap) {
+		lines := t.tail[e.lo:e.hi]
+		if t.foldCase {
+			if t.lowered == nil {
+				t.lowered = make([]string, len(t.tail))
+				for i, line := range t.tail {
+					t.lowered[i] = foldLine(line)
+				}
 			}
+			lines = t.lowered[e.lo:e.hi]
 		}
-		e.folded = strings.Join(t.lowered[e.lo:e.hi], "\n")
+		if wrap {
+			e.folded = substringText(lines)
+		} else {
+			e.folded = strings.Join(lines, "\n")
+		}
 		e.hasFolded = true
 	}
 	return e.hay, e.folded, e.hay != ""
+}
+
+// substringText is what a rule reading after_last_horizontal_rule looks for
+// its substrings in: the lines as they are, then the same lines joined into
+// one, so a footer a narrow pane wrapped at a space is found too ("… · Esc" /
+// "to cancel"). A NUL keeps the two apart, and no substring holds one, so
+// whatever matched before matches the same way. Patterns read the lines as
+// they are.
+func substringText(lines []string) string {
+	var b strings.Builder
+	n := 1
+	for _, line := range lines {
+		n += 2*len(line) + 2
+	}
+	b.Grow(n)
+	for i, line := range lines {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(line)
+	}
+	b.WriteByte(0)
+	first := true
+	for _, line := range lines {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+		if !first {
+			b.WriteByte(' ')
+		}
+		b.WriteString(line)
+		first = false
+	}
+	return b.String()
 }
 
 // foldLine lowercases a line, returning it as it is when nothing in it has a
