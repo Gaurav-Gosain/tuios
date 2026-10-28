@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -167,4 +168,70 @@ func railOrderIs(s tuitest.Screen, names ...string) bool {
 		line = found
 	}
 	return true
+}
+
+// TestCycleAgentsLeaderKeysYieldToTheUsers is a config that gives J and K
+// after the prefix to swap_down and swap_up, as a tmux-style config does. The
+// agent walk's leader keys are newer than such a config, so they yield: J and
+// K keep swapping, and keybinds doctor names the two defaults left off.
+//
+// Negative control: next_agent and prev_agent dropped from yieldingDefaults.
+// explain then says J runs next_agent after the prefix, and this fails there.
+func TestCycleAgentsLeaderKeysYieldToTheUsers(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `[keybindings.prefix_mode]
+swap_down = ['J', 'shift+down']
+swap_up = ['K', 'shift+up']
+`)
+	killDaemon(t, base)
+
+	for key, want := range map[string]string{"J": "swap_down", "K": "swap_up"} {
+		out, err := tuiosCLI(t, base, "keybinds", "explain", key, "--json")
+		if err != nil {
+			t.Fatalf("keybinds explain %s: %v\n%s", key, err, out)
+		}
+		var fate struct {
+			Acts []struct {
+				Scope    string `json:"scope"`
+				Action   string `json:"action"`
+				Shadowed bool   `json:"shadowed"`
+			} `json:"acts"`
+		}
+		if err := json.Unmarshal([]byte(out), &fate); err != nil {
+			t.Fatalf("keybinds explain json: %v\n%s", err, out)
+		}
+		var prefix []string
+		for _, a := range fate.Acts {
+			if a.Scope == "prefix" && !a.Shadowed {
+				prefix = append(prefix, a.Action)
+			}
+		}
+		if len(prefix) != 1 || prefix[0] != want {
+			t.Fatalf("explain says %s after the prefix runs %v, want %s:\n%s", key, prefix, want, out)
+		}
+	}
+
+	out, err := tuiosCLI(t, base, "keybinds", "doctor", "--json")
+	if err != nil {
+		t.Fatalf("keybinds doctor: %v\n%s", err, out)
+	}
+	var rep struct {
+		Yielded []struct {
+			Section string `json:"section"`
+			Action  string `json:"action"`
+			TakenBy string `json:"taken_by"`
+		} `json:"yielded_defaults"`
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil {
+		t.Fatalf("keybinds doctor json: %v\n%s", err, out)
+	}
+	got := map[string]string{}
+	for _, y := range rep.Yielded {
+		if y.Section == "prefix_mode" {
+			got[y.Action] = y.TakenBy
+		}
+	}
+	if got["next_agent"] != "swap_down" || got["prev_agent"] != "swap_up" {
+		t.Fatalf("the doctor does not report the agent keys yielding to the swaps, got %v:\n%s", got, out)
+	}
 }

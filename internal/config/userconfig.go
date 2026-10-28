@@ -3731,6 +3731,9 @@ var yieldingDefaults = map[string]bool{
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,
+	// J and K after the prefix, new with the agent walk.
+	"next_agent": true,
+	"prev_agent": true,
 	// The Inbox keys new with the agents cockpit, after v0.10.1. R and n
 	// changed hands: R was free and n was inbox_deny_reason's.
 	"inbox_new_agent":    true,

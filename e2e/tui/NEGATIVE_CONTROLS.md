@@ -9980,3 +9980,9 @@ only 5 of 48 cases: the client resized the new pane after its prompt.
 | `next_agent` and `prev_agent` dropped from `isTerminalSafeAction` | step 1: `want bravo/ag-b1 focused, have attached [alpha] with d3ed3ea6-… focused there` (the chord went to the shell) | **caught** |
 
 With `TUIOS_E2E_FRAMES` set, the test writes `step-NN.txt` and `step-NN.styled.txt` for each press and `cycle-agents.txt`, the walk step by step, under `TestCycleAgentsWalksTheRailOrder/`.
+
+`TestCycleAgentsLeaderKeysYieldToTheUsers` writes a config that gives `J` and `K` after the prefix to `swap_down` and `swap_up`, as a tmux-style config does. It checks that `keybinds explain` says those keys still swap after the prefix, and that `keybinds doctor` reports `next_agent` and `prev_agent` as defaults left off for the swaps. Run on 2026-10-28 on macOS; the unmodified binary passed.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| `next_agent` and `prev_agent` dropped from `yieldingDefaults` | `explain says J after the prefix runs [next_agent], want swap_down` | **caught** |
