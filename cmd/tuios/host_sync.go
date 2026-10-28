@@ -174,7 +174,8 @@ lists the sessions and the panes with a running program that a restart would
 end on each host. Then it asks you to agree. Without a terminal, add --yes. A
 daemon with no sessions is moved without a question. A daemon with the new
 version is never touched. Run in a pane of this machine's daemon, --local
-upgrades that daemon live or leaves it, and never restarts it.
+installs and leaves that daemon: it refuses an upgrade from its own panes,
+and a restart would end the pane.
 
 If Tailscale SSH asks you to approve a login, sync shows the link to open.
 On a terminal, sync asks to wait for the approvals. Each host continues when

@@ -4917,7 +4917,7 @@ With `--restart`, sync moves each daemon whose version is different onto the bin
 
 Before anything moves, sync lists the sessions on each daemon and the panes with a running program that a restart would end, and asks. A daemon with no sessions is moved without a question. A daemon that already runs the new version is never touched.
 
-On this machine, `--local` from a pane of this machine's daemon upgrades that daemon live and never restarts it, since a restart would end the pane the command runs in. When it cannot be upgraded live, sync leaves it on the old version, says why, and asks for the restart from a terminal outside tuios. `tuios --server NAME hosts sync --local` moves the daemon of server NAME and leaves every other daemon alone.
+On this machine, `--local` from a pane of this machine's daemon installs the binary and never moves that daemon: the daemon refuses a live upgrade asked for from one of its own panes, whatever the pane's grants, and a restart would end the pane the command runs in. sync leaves it on the old version, says why, and asks for the upgrade from a terminal outside tuios. `tuios --server NAME hosts sync --local` moves the daemon of server NAME and leaves every other daemon alone.
 
 With `--start`, sync starts the daemon on each host where it does not run,
 with the binary that the host has after the install. On a host with no

@@ -592,7 +592,7 @@ Run from inside a pane, the upgrade asks you first. The binary named runs as the
 
 | Path | What it does with a running daemon |
 |------|-----------------------------------|
-| `tuios hosts sync --restart` | Upgrades each old daemon live, on its own host, and restarts the ones that cannot be. Run from a pane of this machine's daemon, `--local` only upgrades it live and leaves it when it cannot. See [Keeping Hosts on One Version](#keeping-hosts-on-one-version) |
+| `tuios hosts sync --restart` | Upgrades each old daemon live, on its own host, and restarts the ones that cannot be. Run from a pane of this machine's daemon, `--local` installs and leaves that daemon, which refuses an upgrade from its own panes. See [Keeping Hosts on One Version](#keeping-hosts-on-one-version) |
 | `scripts/install.sh --upgrade-server` | Upgrades the default server's daemon live, or leaves it on the previous build and says why. Its prompt offers the same as `u`. `--kill-server` stops the daemon |
 | `tuios update` | Leaves the daemon, and prints `tuios daemon upgrade`, then `tuios kill-server` for when it cannot be upgraded live |
 | `just restart` (in a checkout) | `tuios daemon upgrade --binary <tuios on PATH> --or-restart` |
