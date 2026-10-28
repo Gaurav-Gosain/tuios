@@ -5,9 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
-	"path/filepath"
-	"regexp"
+	"maps"
 	"slices"
 	"strings"
 )
@@ -50,8 +48,11 @@ func funcKey(fn *ast.FuncDecl) string {
 }
 
 // testFileChange judges a change to a test file of the suite. It returns the
-// tests to run, or nil when the change can reach tests in other files.
-func testFileChange(root, base, head string, c change) ([]string, string) {
+// tests to run, or nil when every test has to run: the change sets up the
+// whole package (TestMain, an init function, a blank declaration, or a blank
+// or dot import). A changed helper selects the tests whose code names it,
+// in any file of the suite, through sg.
+func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string, string) {
 	switch c.status {
 	case 'D':
 		return []string{}, "a removed test file"
@@ -77,6 +78,9 @@ func testFileChange(root, base, head string, c change) ([]string, string) {
 	hs, err := hunks(root, base, head, c.path)
 	if err != nil {
 		return nil, "the diff cannot be read"
+	}
+	if globalImports(oldFile) != globalImports(newFile) {
+		return nil, "changes a blank or dot import"
 	}
 	tests := map[string]bool{}
 	helpers := map[string]bool{}
@@ -133,34 +137,48 @@ func testFileChange(root, base, head string, c change) ([]string, string) {
 	if helpers["init"] || helpers["TestMain"] || helpers["_"] {
 		return nil, "changes package set-up"
 	}
+	var why []string
 	if len(helpers) > 0 {
-		others, _ := filepath.Glob(filepath.Join(root, "e2e/tui/*_test.go"))
-		for _, other := range others {
-			if filepath.ToSlash(mustRel(root, other)) == c.path {
-				continue
-			}
-			data, err := os.ReadFile(other)
-			if err != nil {
-				return nil, "cannot read the other test files"
-			}
-			for h := range helpers {
-				if regexp.MustCompile(`\b` + regexp.QuoteMeta(h) + `\b`).Match(data) {
-					return nil, fmt.Sprintf("changes %s, which %s also uses", h, filepath.Base(other))
-				}
-			}
+		names := slices.Sorted(maps.Keys(helpers))
+		users := sg.testsUsing(names)
+		for _, t := range users {
+			tests[t] = true
 		}
-		fileWide = true
+		why = append(why, fmt.Sprintf("changes %s, which %d tests use", listNames(names), len(users)))
 	}
 	if fileWide {
 		all := testsIn(newFile)
-		return all, fmt.Sprintf("changes code all %d tests in the file share", len(all))
+		for _, t := range all {
+			tests[t] = true
+		}
+		why = append(why, fmt.Sprintf("changes the imports all %d tests in the file share", len(all)))
 	}
-	out := make([]string, 0, len(tests))
-	for t := range tests {
-		out = append(out, t)
+	out := slices.Sorted(maps.Keys(tests))
+	if len(why) == 0 {
+		why = append(why, "changes "+listNames(out))
+	}
+	return out, strings.Join(why, "; ")
+}
+
+// globalImports is the blank and dot imports of a file, which change what
+// the whole package sees.
+func globalImports(f *ast.File) string {
+	var out []string
+	for _, imp := range f.Imports {
+		if imp.Name != nil && (imp.Name.Name == "_" || imp.Name.Name == ".") {
+			out = append(out, imp.Name.Name+" "+imp.Path.Value)
+		}
 	}
 	slices.Sort(out)
-	return out, "changes " + strings.Join(out, ", ")
+	return strings.Join(out, "\n")
+}
+
+// listNames joins names for a reason line, at most eight of them.
+func listNames(names []string) string {
+	if len(names) > 8 {
+		return strings.Join(names[:8], ", ") + fmt.Sprintf(" and %d more", len(names)-8)
+	}
+	return strings.Join(names, ", ")
 }
 
 func isInit(d ast.Decl) bool {

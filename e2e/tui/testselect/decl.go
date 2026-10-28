@@ -285,7 +285,9 @@ func packageFiles(root, dir string) []parsedFile {
 	var files []parsedFile
 	matches, _ := filepath.Glob(filepath.Join(root, dir, "*.go"))
 	for _, m := range matches {
-		if strings.HasSuffix(m, "_test.go") {
+		// The suite's package is all test files. Any other package's test
+		// files are not in the binary or the test process.
+		if strings.HasSuffix(m, "_test.go") && dir != suiteDir {
 			continue
 		}
 		src, err := os.ReadFile(m)

@@ -22,6 +22,9 @@ type testMap struct {
 	every map[string]bool     // tests to run on every change that reaches the binary
 	init  map[string][]string // file to the functions every process runs in it
 	funcs map[funcRef][]int   // function to the tests that ran it
+	// harness is true when the map holds the suite's test process too, not
+	// only the tuios processes it starts.
+	harness bool
 }
 
 // funcRef names a function the way go tool cover -func does: its file and
@@ -41,6 +44,7 @@ const mapHeader = `# The end-to-end test map: for each function, the tests that 
 # by the e2e-tui test map workflow (.github/workflows/e2e-tui-map.yml), which
 # runs every test against a tuios built with -cover. Do not edit it by hand.
 #
+#   cover harness          the test process was measured too, not only tuios
 #   file PATH              a source file; the files are numbered from 0
 #   init PATH FUNC         a function every tuios process runs at start-up
 #   test NAME              a test; the tests are numbered from 0
@@ -70,6 +74,8 @@ func readMap(name string) (*testMap, error) {
 		bad := func(err error) error { return fmt.Errorf("%s:%d: %v: %q", name, n, err, line) }
 		fields := strings.Fields(line)
 		switch {
+		case fields[0] == "cover" && len(fields) == 2 && fields[1] == "harness":
+			m.harness = true
 		case fields[0] == "file" && len(fields) == 2:
 			m.files = append(m.files, fields[1])
 		case fields[0] == "init" && len(fields) == 3:
@@ -241,6 +247,10 @@ func buildMap(dir, out, root string) error {
 
 	var b strings.Builder
 	b.WriteString(mapHeader)
+	// collect.sh leaves harness.cover when it measured the test process.
+	if _, err := os.Stat(filepath.Join(dir, "harness.cover")); err == nil {
+		b.WriteString("cover harness\n")
+	}
 	for _, f := range files {
 		fmt.Fprintf(&b, "file %s\n", f)
 	}

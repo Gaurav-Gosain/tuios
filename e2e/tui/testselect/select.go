@@ -48,10 +48,16 @@ type pkgInfo struct {
 }
 
 type graph struct {
-	bin       map[string]*pkgInfo // by directory
+	// bin is every workspace package of the binary or of the suite's test
+	// process, by directory. The coverage run measures both processes.
+	bin       map[string]*pkgInfo
 	harness   map[string]bool     // directories of packages the suite itself builds
-	importers map[string][]string // directory to the directories that import it
+	importers map[string][]string // directory to the directories that import it; the suite is suiteDir
 }
+
+// suiteDir is the suite's own package. It is an importer in the graph, so a
+// changed name reaches the suite's code that names it (see reach).
+const suiteDir = "e2e/tui"
 
 // The paths that can change neither the binary nor the suite. Anything not
 // named here and not in a Go package runs the whole suite.
@@ -94,6 +100,16 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 	mapPath := filepath.ToSlash(filepath.Join("e2e/tui", mapFile))
 
 	sel := &selection{tests: map[string]bool{}}
+	var sg *suiteGraph
+	suite := func() (*suiteGraph, error) {
+		if sg == nil {
+			var err error
+			if sg, err = loadSuiteGraph(root); err != nil {
+				return nil, err
+			}
+		}
+		return sg, nil
+	}
 	bodyFuncs := map[funcRef]bool{} // functions whose body alone changed
 	declPkgs := map[string]bool{}   // packages changed in a way only their importers bound
 	var names []name                // declarations that changed
@@ -125,10 +141,14 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 			continue
 		}
 		if strings.HasPrefix(p, "e2e/tui/") {
-			if path.Dir(p) != "e2e/tui" || !strings.HasSuffix(p, "_test.go") || path.Base(p) == "harness_test.go" {
+			if !suiteFile(p) {
 				return everything(p + " is part of the e2e harness")
 			}
-			tests, why := testFileChange(root, base, head, c)
+			sg, err := suite()
+			if err != nil {
+				return everything(fmt.Sprintf("the suite's test files cannot be read: %v", err))
+			}
+			tests, why := testFileChange(root, base, head, c, sg)
 			if tests == nil {
 				return everything(p + ": " + why)
 			}
@@ -140,8 +160,10 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 			continue
 		}
 		dir := nearestPackage(p, g)
-		if dir != "" && g.harness[dir] {
-			return everything(p + " is in " + dir + ", which the e2e harness imports")
+		if dir != "" && g.harness[dir] && !m.harness {
+			// A map without the suite's own coverage cannot say which
+			// tests the harness code reaches.
+			return everything(p + " is in " + dir + ", which the e2e harness imports, and the test map has no coverage of the harness")
 		}
 		if info := g.bin[dir]; info != nil {
 			switch {
@@ -211,6 +233,14 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 	if !reaches {
 		return sel
 	}
+	// Code of a package the harness builds runs in every test process when
+	// it changes in a way no name carries: an init function, a build
+	// constraint, cgo, or an embedded file with no variable.
+	for dir := range declPkgs {
+		if g.harness[dir] {
+			return everything(dir + " changed in a way no name carries, and the e2e harness imports it")
+		}
+	}
 
 	// A changed declaration reaches the code that names it (see reach). When
 	// that walk cannot finish, or the change has effects no name carries, the
@@ -255,6 +285,23 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 		near[dir] = true
 		for _, imp := range g.importers[dir] {
 			near[imp] = true
+		}
+	}
+	// The suite's code is not in the map. A function of the suite that names
+	// a changed declaration selects the tests whose code reaches it.
+	var suiteDecls []string
+	for f := range refFuncs {
+		if path.Dir(f.file) == suiteDir {
+			suiteDecls = append(suiteDecls, f.name)
+		}
+	}
+	if len(suiteDecls) > 0 {
+		sg, err := suite()
+		if err != nil {
+			return everything(fmt.Sprintf("the suite's test files cannot be read: %v", err))
+		}
+		for _, t := range sg.testsUsing(suiteDecls) {
+			sel.tests[t] = true
 		}
 	}
 	hit := map[int]bool{}
@@ -383,6 +430,11 @@ func pinOnly(root, base, head, p string) (bool, error) {
 			continue
 		}
 		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+			// A blank line moves with a replace block when the pin
+			// changes, and means nothing to the go command.
+			if strings.TrimSpace(line[1:]) == "" {
+				continue
+			}
 			if !strings.Contains(line, "tuios.dev/") {
 				return false, nil
 			}
@@ -461,6 +513,10 @@ func loadGraph(root string) (*graph, error) {
 		}
 	}
 
+	// The suite's test process: its own package, the helper programs under
+	// e2e/tui, and what they import. Its workspace packages join the graph,
+	// since the coverage run measures the test process too, and the suite's
+	// package is an importer of what it imports directly.
 	patterns := []string{"./e2e/tui/..."}
 	helpers, _ := filepath.Glob(filepath.Join(root, "e2e/tui/testdata/*/*.go"))
 	seen := map[string]bool{}
@@ -471,15 +527,54 @@ func loadGraph(root string) (*graph, error) {
 			patterns = append(patterns, dir)
 		}
 	}
-	out, err = list(append([]string{"-deps", "-test", "-f", "{{if not .Standard}}{{.Dir}}{{end}}"}, patterns...)...)
+	out, err = list(append([]string{"-deps", "-test", "-f", "{{if not .Standard}}{{.ImportPath}}\t{{.Dir}}\t{{join .Imports \" \"}}\t{{join .EmbedFiles \"|\"}}{{end}}"}, patterns...)...)
 	if err != nil {
 		return nil, err
 	}
+	raws = raws[:0]
+	var suiteImports []string
 	for line := range strings.Lines(out) {
-		if dir, ok := rel(strings.TrimSpace(line)); ok && dir != "" {
-			if !strings.HasPrefix(dir, "e2e/tui") {
-				g.harness[dir] = true
+		fields := strings.Split(strings.TrimRight(line, "\n"), "\t")
+		if len(fields) != 4 {
+			continue
+		}
+		importPath, _, _ := strings.Cut(fields[0], " ")
+		dir, ok := rel(fields[1])
+		if !ok || dir == "" {
+			continue
+		}
+		if dir == suiteDir {
+			suiteImports = append(suiteImports, strings.Fields(fields[2])...)
+			continue
+		}
+		if strings.HasPrefix(dir, suiteDir+"/") {
+			continue
+		}
+		g.harness[dir] = true
+		if g.bin[dir] != nil {
+			continue
+		}
+		info := &pkgInfo{dir: dir, embeds: map[string]bool{}}
+		for e := range strings.SplitSeq(fields[3], "|") {
+			if e != "" {
+				info.embeds[path.Join(dir, e)] = true
 			}
+		}
+		g.bin[dir] = info
+		byImport[importPath] = dir
+		raws = append(raws, raw{dir, strings.Fields(fields[2])})
+	}
+	for _, r := range raws {
+		for _, imp := range r.imports {
+			if dir, ok := byImport[imp]; ok {
+				g.bin[r.dir].imports = append(g.bin[r.dir].imports, dir)
+				g.importers[dir] = append(g.importers[dir], r.dir)
+			}
+		}
+	}
+	for _, imp := range suiteImports {
+		if dir, ok := byImport[imp]; ok && !slices.Contains(g.importers[dir], suiteDir) {
+			g.importers[dir] = append(g.importers[dir], suiteDir)
 		}
 	}
 	return g, nil
