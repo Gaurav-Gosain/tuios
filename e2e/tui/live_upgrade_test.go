@@ -348,7 +348,13 @@ func TestDaemonUpgradeFallsBackToPreviousBinary(t *testing.T) {
 			if after.PID != img.PID {
 				t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d", img.PID, after.PID)
 			}
-			if !strings.HasSuffix(exe, string(filepath.Separator)+filepath.Join("handoff", "tuios.prev")) {
+			if runtime.GOOS == "linux" {
+				// The fallback execs the descriptor of /proc/self/exe the
+				// daemon kept, so the image runs the file it ran before.
+				if want := resolvedTuios(t); exe != want {
+					t.Errorf("ASSERTION: the daemon runs %s after the fallback, want the binary it ran before, %s", exe, want)
+				}
+			} else if !strings.HasSuffix(exe, string(filepath.Separator)+filepath.Join("handoff", "tuios.prev")) {
 				t.Errorf("ASSERTION: the daemon runs %s after the fallback, want the kept tuios.prev", exe)
 			}
 			if fb, _ := stats["fallback"].(bool); !fb {
@@ -645,6 +651,9 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 // the fallback exec fails, and the daemon must then exit, so every pane hangs
 // up, rather than hold the panes and serve nothing.
 func TestDaemonUpgradeEndsWhenFallbackExecFails(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("on Linux the fallback is a descriptor the daemon holds, not a file a test can remove, so its exec cannot be made to fail from outside; the exit after a failed fallback is the same code on every system")
+	}
 	base := t.TempDir()
 	startHandoffDaemon(t, base, "TUIOS_TEST_HANDOFF_FAIL=hang", "TUIOS_TEST_HANDOFF_WATCHDOG_MS=1500")
 	second := copyTuios(t)
@@ -719,6 +728,16 @@ func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 			}
 			return bin
 		}, "can be written by its group or by others (mode 0775), so this daemon will not run it. Make it writable only by its owner: chmod go-w"},
+		{"owned by another user", func(t *testing.T) string {
+			if os.Geteuid() != 0 {
+				t.Skip("giving the binary to another user needs root")
+			}
+			bin := copyTuios(t)
+			if err := os.Chown(bin, 65534, 65534); err != nil {
+				t.Fatal(err)
+			}
+			return bin
+		}, "is owned by user 65534, not by you or root, so this daemon will not run it. Install it as yourself or as root"},
 		{"no answer", func(t *testing.T) string { return script(t, "echo hello") },
 			"so it is not a tuios this daemon can upgrade to. Check the path names a tuios binary"},
 		{"another system", func(t *testing.T) string {
@@ -742,5 +761,91 @@ func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 				t.Errorf("ASSERTION: a refused upgrade changed the daemon: %+v then %+v", img, after)
 			}
 		})
+	}
+}
+
+// resolvedTuios is the binary under test with its links resolved, as
+// /proc/<pid>/exe names it.
+func resolvedTuios(t *testing.T) string {
+	t.Helper()
+	exe, err := filepath.EvalSymlinks(tuiosBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, err := filepath.Abs(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
+// TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary is the case the
+// Linux fallback descriptor exists for. The daemon runs a copy of tuios, and
+// an installer then renames a new file over that path, as install.sh does, so
+// the inode the daemon runs has no name left. The upgrade is asked for to that
+// path, and the new image fails to adopt the panes on purpose. The fallback
+// must exec the old image through the descriptor of /proc/self/exe the
+// daemon kept at start: the daemon keeps its pid and every pane, says it is
+// the fallback, and runs the old, now nameless, inode.
+func TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("elsewhere the fallback is the kept file tuios.prev, which TestDaemonUpgradeFallsBackToPreviousBinary covers")
+	}
+	base := t.TempDir()
+	installed := copyTuios(t)
+	killDaemon(t, base)
+	cmd := exec.Command(installed, "start-server")
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh", "TUIOS_TEST_HANDOFF_FAIL=error")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	cmd.Env = append(cmd.Env, handoffTestEnv...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("start-server from %s: %v\n%s", installed, err, out)
+	}
+	t.Cleanup(func() { killDaemon(t, base) })
+	const sess = "e2e-installer"
+	win := newCommandWindow(t, base, sess, "counter", false, "sh", "-c",
+		`echo pid-$$; i=0; while :; do i=$((i+1)); echo i-$i; sleep 0.02; done`)
+	waitHandoffPane(t, base, sess, win, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
+	img := helloImage(t, base)
+	before := panePIDs(t, base, sess)
+	if exe := executableOf(t, img.PID); exe != installed {
+		t.Fatalf("the daemon runs %s, want the installed copy %s", exe, installed)
+	}
+
+	// The installer: a new file renamed over the path the daemon runs.
+	fresh := copyTuios(t)
+	if err := os.Rename(fresh, installed); err != nil {
+		t.Fatalf("rename the new binary over %s: %v", installed, err)
+	}
+
+	_ = mustCall(t, base, "test-handoff", map[string]any{"binary": installed})
+	after := awaitNewImage(t, base, img, 40*time.Second)
+	exe := executableOf(t, after.PID)
+	afterPIDs := panePIDs(t, base, sess)
+	stats := handoffStats(t, base)
+	time.Sleep(200 * time.Millisecond)
+	ticks := counterLines(mustScrollback(t, base, sess, win), "i-")
+	writeHandoffArtifact(t, map[string]any{
+		"pid_before": img.PID, "pid_after": after.PID, "executable_after": exe,
+		"panes_before": before, "panes_after": afterPIDs, "stats": stats, "tick_gap_at": firstGap(ticks),
+	})
+	if after.PID != img.PID {
+		t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d", img.PID, after.PID)
+	}
+	if exe != installed+" (deleted)" {
+		t.Errorf("ASSERTION: the daemon runs %q after the fallback, want the replaced inode, %q", exe, installed+" (deleted)")
+	}
+	if fb, _ := stats["fallback"].(bool); !fb {
+		t.Errorf("ASSERTION: the image does not say it is the fallback: %v", stats)
+	}
+	for id, pid := range before {
+		if afterPIDs[id] != pid {
+			t.Errorf("ASSERTION: window %s had pid %d, and %d after the fallback", id, pid, afterPIDs[id])
+		}
+	}
+	if i := firstGap(ticks); i >= 0 {
+		t.Errorf("ASSERTION: the counter jumps from %d to %d", ticks[i-1], ticks[i])
 	}
 }
