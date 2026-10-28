@@ -762,6 +762,7 @@ tuios reads the image with the clipboard tool of your system:
 | Linux, X11 | `xclip`. `xsel` cannot read an image. |
 | macOS | `osascript`, or `pngpaste` when it is installed |
 | Windows | PowerShell |
+| WSL | `powershell.exe`, which reads the Windows clipboard. WSLg's `wl-paste` and `xclip` see no image copied on Windows. |
 
 The file is a PNG, JPEG, GIF, WebP, BMP or TIFF image of 8 MB or less. Only
 you can read it. tuios deletes it after one hour, or when the daemon stops.

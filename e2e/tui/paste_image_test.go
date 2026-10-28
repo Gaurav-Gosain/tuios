@@ -2,9 +2,11 @@ package tuie2e
 
 import (
 	"bytes"
+	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -191,6 +193,68 @@ func TestAnEmptyPasteWaitsForASlowClipboardTool(t *testing.T) {
 	base := t.TempDir()
 	img := fakeImage()
 	env := slowClipboardEnv(t, img, "0.6")
+
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
+	waitBoot(t, term)
+	if out, err := tuiosCLIEnv(t, base, env, "new-window", "near", "-s", "home"); err != nil {
+		t.Fatalf("create a window: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("near", uiTimeout); err != nil {
+		t.Fatalf("the window never appeared: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	if err := term.SendKeys("wc -c "); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys("\x1b[200~\x1b[201~"); err != nil {
+		t.Fatal(err)
+	}
+	checkPasted(t, term, img, base, "")
+}
+
+// wslClipboardEnv is the clipboard a client under WSL2 with WSLg sees. The
+// image is on the Windows clipboard, which a powershell.exe stand-in on PATH
+// answers for: the type ask with image/png and the read with the image as
+// base64, each line ending in CRLF as Windows writes it. WSLg's Wayland
+// display is there too, and its wl-paste stand-in lists text only, as WSLg's
+// bridge does when Windows holds an image.
+func wslClipboardEnv(t *testing.T, img []byte) []string {
+	t.Helper()
+	dir := t.TempDir()
+	b64Path := filepath.Join(dir, "clip.b64")
+	if err := os.WriteFile(b64Path, []byte(base64.StdEncoding.EncodeToString(img)+"\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	powershell := "#!/bin/sh\ncase \"$*\" in\n  *ContainsImage*) printf 'image/png\\r\\n' ;;\n  *) cat '" + b64Path + "' ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(dir, "powershell.exe"), []byte(powershell), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	wlPaste := "#!/bin/sh\ncase \"$*\" in\n  *--list-types*) printf 'text/plain\\n' ;;\n  *) printf 'not the image' ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(dir, "wl-paste"), []byte(wlPaste), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return []string{
+		"PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"WAYLAND_DISPLAY=tuios-test-no-compositor",
+		"WSL_DISTRO_NAME=tuios-test",
+	}
+}
+
+// TestAnEmptyPasteUnderWSLReadsTheWindowsClipboard sends the empty bracketed
+// paste Windows Terminal sends when the clipboard holds only an image, from a
+// client under WSL. The image is on the Windows clipboard, not on WSLg's, so
+// tuios has to read it through powershell.exe, and the pane's shell has to
+// read the pasted file.
+//
+// Negative control: detectImageClipboard without the WSL check. tuios then
+// asks WSLg's wl-paste, which lists no image, and nothing is pasted.
+func TestAnEmptyPasteUnderWSLReadsTheWindowsClipboard(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("WSL is Linux")
+	}
+	base := t.TempDir()
+	img := fakeImage()
+	env := wslClipboardEnv(t, img)
 
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)

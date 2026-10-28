@@ -10282,3 +10282,10 @@ Each negative step has its positive half in the same fixture: the four
 admitted clients get a version line and stay open past the fifth, and the
 first key login draws its session and opens a pane before the second is
 refused.
+## An empty paste under WSL reads the Windows clipboard
+
+`TestAnEmptyPasteUnderWSLReadsTheWindowsClipboard` sends the empty bracketed paste Windows Terminal sends when the clipboard holds only an image, from a client under WSL (`WSL_DISTRO_NAME` set). A `powershell.exe` stand-in answers for the Windows clipboard with the image, and a `wl-paste` stand-in for WSLg's lists text only, as WSLg's bridge does when Windows holds an image. The image has to be pasted into the pane as a file path, and the pane's shell has to read the file. The control was built into its own binary and the test run against it 5 times; the unmodified binary passed 5 of 5. Run on 2026-10-28 on Linux (WSL2, x86_64).
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The WSL check in `detectImageClipboard` (the `wslPowerShell` call site), so WSLg's `wl-paste` is asked, as before the fix | `no path was pasted into the pane`, 5 of 5 runs | **caught** |
