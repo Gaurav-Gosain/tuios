@@ -9004,6 +9004,7 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_MEASURE=1 \
 - `TestAttachedClientIsToldToReattach`: a real attached client exits with status 0 and prints "The daemon was upgraded to dev. Your programs are still running. Run 'tuios attach e2e-reattach' to continue."; the command reports "1 attached client was told to attach again".
 - `TestFederationLinkRedialsAfterUpgrade`: a daemon linked to a host through the ssh stand-in of `hosts_manage_test.go` has the link up after the upgrade, with one live link child, a new one, and none defunct.
 - `TestDaemonUpgradeRefusalNamesTheServer`: an upgrade of a named server to `false` is refused, and the refusal says to run `tuios --server <name> kill-server`, never the bare `tuios kill-server` that stops the default daemon.
+- `TestDaemonUpgradeFromAPaneIsRefused`: a pane under the default open mode, which holds admin, runs `tuios daemon upgrade --binary <copy>`. It must exit non-zero with "daemon-upgrade is for the person", the daemon's image must not change, and the same upgrade from outside every pane then goes through. Run on 2026-10-28 on macOS arm64 (Go 1.26.10).
 
 Run on 2026-10-17 on macOS arm64, one build per control.
 
@@ -9013,13 +9014,14 @@ Run on 2026-10-17 on macOS arm64, one build per control.
 | A waiting call is not answered | the `cs.verbCall.take()` answer in `closeClientsForHandoff` cut | `TestDaemonUpgradeCommandKeepsPanes`: "a wait-for in flight during the upgrade ended with \"failed to read response: EOF\"" | **caught** |
 | The new image does not dial its links | `serve` skips `federation.Start` on an image made by a handoff | `TestFederationLinkRedialsAfterUpgrade`: "the link to the host did not come back up after the upgrade" | **caught** |
 | The refusal names no server | `killServerCommand` returns the bare `tuios kill-server` | `TestDaemonUpgradeRefusalNamesTheServer`: "the refusal on server e2e-upname does not say to run 'tuios --server e2e-upname kill-server'", "… says to run the bare 'tuios kill-server', which stops the default daemon" | **caught** |
+| A pane with admin may upgrade (2026-10-28) | the `mayActAsHuman` check in `verbDaemonUpgrade` made false | `TestDaemonUpgradeFromAPaneIsRefused`, 2 runs of 2: "a pane upgraded the daemon ({PID:38155 Instance:3731d834-…} then {PID:38155 Instance:bef886f4-…})" | **caught** |
 | The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | none | **not caught** |
 
 The last control is not caught by this rig. The stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to a real machine does not end that way; with the stop cut, its ssh child would stay this pid's child across the exec, unread and never waited for. The stop is kept on the strength of that reasoning, not of a test.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
-  go test -count=1 -run '^(TestDaemonUpgradeCommandKeepsPanes|TestAttachedClientIsToldToReattach|TestFederationLinkRedialsAfterUpgrade|TestDaemonUpgradeRefusalNamesTheServer)$' .
+  go test -count=1 -run '^(TestDaemonUpgradeCommandKeepsPanes|TestAttachedClientIsToldToReattach|TestFederationLinkRedialsAfterUpgrade|TestDaemonUpgradeRefusalNamesTheServer|TestDaemonUpgradeFromAPaneIsRefused)$' .
 ```
 
 ## Deleting a worktree from the close-confirmation dialog

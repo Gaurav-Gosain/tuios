@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -269,5 +270,37 @@ func TestDaemonUpgradeRefusalNamesTheServer(t *testing.T) {
 	}
 	if strings.Contains(text, "'tuios kill-server'") {
 		t.Errorf("ASSERTION: the refusal on server %s says to run the bare 'tuios kill-server', which stops the default daemon:\n%s", server, text)
+	}
+}
+
+// TestDaemonUpgradeFromAPaneIsRefused runs `tuios daemon upgrade` from a pane
+// under the default open mode, where every pane holds admin. The binary named
+// would run as the daemon, which holds every pane's terminal and the key that
+// signs every pane's token, so a process inside a pane is refused whatever
+// its grants, as apply-config is. The daemon's image must not change, and the
+// same upgrade from outside every pane must go through.
+func TestDaemonUpgradeFromAPaneIsRefused(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const sess = "e2e-upgrade-from-pane"
+	win := newCommandWindow(t, base, sess, "agent", false, "sh")
+	img := helloImage(t, base)
+	second := copyTuios(t)
+	_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": win,
+		"text": tuiosBin + " daemon upgrade --binary " + second + "; echo UP_EXIT=$?\n"})
+	m := waitHandoffPane(t, base, sess, win, regexp.MustCompile(`UP_EXIT=(\d+)`), 60*time.Second)
+	lines := mustScrollback(t, base, sess, win)
+	after := helloImage(t, base)
+	res, out, err := daemonUpgrade(t, base, second)
+	writeHandoffArtifact(t, map[string]any{"exit": m[1], "screen": lines, "before": img, "after": after,
+		"from_outside": res, "from_outside_err": errString(err)})
+	if after.Instance != img.Instance || after.PID != img.PID {
+		t.Fatalf("ASSERTION: a pane upgraded the daemon (%+v then %+v)", img, after)
+	}
+	if m[1] == "0" || !screenLinesHave(lines, "daemon-upgrade is for the person") {
+		t.Errorf("ASSERTION: the pane's daemon upgrade was not refused as one for the person (exit %s):\n%s", m[1], strings.Join(lines, "\n"))
+	}
+	if err != nil {
+		t.Errorf("ASSERTION: the same upgrade from outside every pane failed: %v\n%s", err, out)
 	}
 }
