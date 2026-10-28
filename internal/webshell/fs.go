@@ -302,7 +302,9 @@ func configText(theme, border, glyphs string, extra []ConfigLine) string {
 		byTable[table] = append(byTable[table], line)
 	}
 	for _, t := range tables {
-		b.WriteString("\n[" + t + "]\n")
+		b.WriteString("\n[")
+		b.WriteString(t)
+		b.WriteString("]\n")
 		for _, line := range byTable[t] {
 			b.WriteString(line)
 		}
