@@ -10449,3 +10449,29 @@ corner check fails the case of a box's bottom with a title.
 | origin/main, e2e | `TestSixelAtTheBottomKeepsItsLastRow` passed 290 of 290 runs on one machine (#1304) | **not caught here**, CI only |
 
 With the fix, every sixel test in this package passed, among them `TestSixelRealPrograms` (chafa, timg, lsix, yazi), and `TestSixelAtTheBottomKeepsItsLastRow` with `TestSixelScrollsWithThePane` passed 10 of 10.
+
+## The leader menu on a tiny client
+
+`TestWhichKeyOnATinyClient` attaches at 120x40, shrinks the client to 20x4,
+35x6 and 40x10, and presses the leader at each. The menu has no room for a
+binding at the first two, so clipWhichKey keeps no column and counts every
+binding as more. The test watches the screen for the crash overlay, which
+20 columns cut to "tuios hit a b…", then wants the menu's title and its count,
+and at the end no crash log.
+
+Run on 2026-10-28 on macOS with Go 1.26.8, on `ba756a0ed` (main) and the
+branch.
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The empty-column guard in `renderWhichKey` (main at `ba756a0ed`) | 20x4: "the leader menu crashed the frame" (index out of range [-1]) | **caught** |
+
+The unit tests in `internal/app/overlay_narrow_test.go` were cut one fix at a
+time with `go test -overlay`, each cut read back first:
+
+| Control: what was cut | Where it fails | Verdict |
+| --- | --- | --- |
+| The empty-column guard | `TestWhichKeyOnTinyScreens`: index out of range [-1] at 20x4 | **caught** |
+| The cut of the count line to the panel | `TestWhichKeyOnTinyScreens`: a line wider than the panel at 10x6 and 5x1 | **caught** |
+| One row of room under a dock that takes every row | `TestWhichKeyUnderADockThatTakesEveryRow`: a 30-row menu at 80x1 | **caught** |
+| Keeping a layout with no columns | `TestWhichKeyKeepsALayoutWithNoColumns` | **caught** |

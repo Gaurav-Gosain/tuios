@@ -374,6 +374,9 @@ type whichKeyCache struct {
 	key  uint64
 	cols []wkColumn
 	more int
+	// valid says the entry holds a layout. A screen too small for any
+	// binding has no columns, and that layout is kept like any other.
+	valid bool
 }
 
 // whichKeyLayout is layoutWhichKey for the screen in force, cached. The panel
@@ -387,14 +390,14 @@ func (m *OS) whichKeyLayout(title string, groups []config.KeybindingGroup, maxRo
 		beside = max(cw-8, 1)
 	}
 	key := whichKeySignature(title, groups, full, beside, maxRows)
-	if c := &m.whichKeyCache; c.key == key && c.cols != nil {
+	if c := &m.whichKeyCache; c.valid && c.key == key {
 		return c.cols, c.more
 	}
 	cols, more := layoutWhichKey(groups, beside, maxRows)
 	if beside < full && (more > 0 || wkCut(cols)) {
 		cols, more = layoutWhichKey(groups, full, maxRows)
 	}
-	m.whichKeyCache = whichKeyCache{key: key, cols: cols, more: more}
+	m.whichKeyCache = whichKeyCache{key: key, cols: cols, more: more, valid: true}
 	return cols, more
 }
 
@@ -492,6 +495,10 @@ func (m *OS) renderWhichKey() (string, int, int) {
 	maxRows := 1 << 20
 	if room := m.GetRenderHeight() - m.viewReserve().Top; room > 0 {
 		maxRows = max(room-5, 1)
+	} else if m.GetRenderHeight() > 0 {
+		// A dock that takes every row leaves no room: the least panel, not
+		// one with no limit at all.
+		maxRows = 1
 	}
 	cols, more := m.whichKeyLayout(title, groups, maxRows)
 
@@ -544,20 +551,24 @@ func (m *OS) renderWhichKey() (string, int, int) {
 	}
 	if more > 0 {
 		// The count takes the last line of the last column, which clipWhichKey
-		// left free for it.
-		last := len(cols) - 1
-		x := 0
-		for i := range last {
-			x += cols[i].width() + whichKeyGap
+		// left free for it. On a screen too small for any binding there is no
+		// column, and the count is the panel's one line.
+		x, y := 0, 0
+		if last := len(cols) - 1; last >= 0 {
+			for i := range last {
+				x += cols[i].width() + whichKeyGap
+			}
+			y = len(cols[last].lines)
 		}
-		y := len(cols[last].lines)
 		note := overlay.Style(bg).Foreground(pal.FgMute).Render(fmt.Sprintf("+%d more", more))
 		if y >= len(body) {
 			body = append(body, overlay.Fill("", contentWidth, bg))
 			y = len(body) - 1
 		}
+		// Cut to the panel: on a screen narrower than "+N more" the panel is
+		// narrower than the count, and Fill only pads.
 		row := body[y]
-		body[y] = overlay.Fill(ansi.Truncate(row, x, "")+note, contentWidth, bg)
+		body[y] = overlay.Fill(ansi.Truncate(ansi.Truncate(row, x, "")+note, contentWidth, ""), contentWidth, bg)
 	}
 
 	pad := overlay.Style(bg).Render("  ")

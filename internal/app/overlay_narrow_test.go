@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // narrowScreens are the sizes the overlays have to survive: a tall narrow
@@ -337,5 +339,117 @@ func TestWelcomeSplashFitsNarrowScreens(t *testing.T) {
 			}
 			t.Fatal("no welcome layer rendered")
 		})
+	}
+}
+
+// tinyScreens are sizes a shrunk client reaches: a narrowed browser tab, a
+// pane-sized client, and the least a terminal can be. All but 40x10 leave the
+// which-key panel no room for a single binding, and the narrow ones are
+// narrower than its "+N more" count.
+var tinyScreens = []struct {
+	name string
+	w, h int
+}{
+	{"20x4", 20, 4},
+	{"35x6", 35, 6},
+	{"40x10", 40, 10},
+	{"1x1", 1, 1},
+	{"80x3", 80, 3},
+	{"12x40", 12, 40},
+	{"10x6", 10, 6},
+	{"5x1", 5, 1},
+}
+
+// TestWhichKeyOnTinyScreens holds the leader menus to tiny screens. With no
+// room for a binding, clipWhichKey keeps no column and counts every binding
+// as more, and the "+N more" line looked for the last column: cols[-1]. A
+// client at 35x6 crashed on ctrl+b. The menu now shows the count alone, every
+// line as wide as the panel, and the whole frame draws with it.
+func TestWhichKeyOnTinyScreens(t *testing.T) {
+	prefixes := []struct {
+		name  string
+		apply func(*OS)
+	}{
+		{"leader", func(m *OS) {}},
+		{"workspace", func(m *OS) { m.WorkspacePrefixActive = true }},
+		{"window", func(m *OS) { m.TilingPrefixActive = true }},
+		{"layout", func(m *OS) { m.LayoutPrefixActive = true }},
+	}
+	for _, sc := range tinyScreens {
+		for _, p := range prefixes {
+			t.Run(sc.name+"/"+p.name, func(t *testing.T) {
+				m := newNarrowOS(t, sc.w, sc.h)
+				m.PrefixActive = true
+				m.LastPrefixTime = time.Now().Add(-time.Hour)
+				p.apply(m)
+				found := false
+				for _, layer := range m.renderOverlays() {
+					if layer.GetID() != "whichkey" {
+						continue
+					}
+					found = true
+					// Under the title's rule, a line of dashes alone (a frame's
+					// edge has corners), there is a binding or the count of the
+					// ones that did not fit.
+					lines := strings.Split(ansi.Strip(layer.GetContent()), "\n")
+					rule := slices.IndexFunc(lines, func(l string) bool {
+						l = strings.TrimSpace(l)
+						return l != "" && strings.Trim(l, "─") == ""
+					})
+					if rule < 0 || !slices.ContainsFunc(lines[rule+1:], func(l string) bool { return strings.TrimSpace(l) != "" }) {
+						t.Errorf("the menu shows no binding and no count:\n%s", layer.GetContent())
+					}
+					// Every line is the panel's width: a count wider than a
+					// narrow panel used to run past it.
+					for i, l := range lines {
+						if w := lipgloss.Width(l); w != layer.Width() {
+							t.Errorf("line %d is %d cells wide, the panel is %d: %q", i, w, layer.Width(), l)
+						}
+					}
+				}
+				if !found {
+					t.Fatal("no whichkey layer rendered")
+				}
+				// The whole frame, with the menu over the panes: the compositor
+				// takes a panel taller or wider than the screen.
+				if _, ok := m.safeComposeFrame(); !ok {
+					t.Errorf("drawing the frame with the menu up crashed")
+				}
+			})
+		}
+	}
+}
+
+// TestWhichKeyUnderADockThatTakesEveryRow: a top dock on a screen one or two
+// rows tall leaves the menu no room. It used to lay out with no limit at all,
+// a panel 30 rows tall on a screen of one. It takes the least panel now.
+func TestWhichKeyUnderADockThatTakesEveryRow(t *testing.T) {
+	for _, h := range []int{1, 2} {
+		m := newNarrowOS(t, 80, h)
+		m.Settings.DockbarPosition = "top"
+		m.PrefixActive = true
+		m.LastPrefixTime = time.Now().Add(-time.Hour)
+		for _, layer := range m.renderOverlays() {
+			if layer.GetID() == "whichkey" && layer.Height() > 7 {
+				t.Errorf("80x%d under a top dock: the menu is %d rows tall", h, layer.Height())
+			}
+		}
+	}
+}
+
+// TestWhichKeyKeepsALayoutWithNoColumns: a screen too small for any binding
+// lays out to no columns, and that is kept like any other layout rather than
+// laid out again on every frame the menu is up.
+func TestWhichKeyKeepsALayoutWithNoColumns(t *testing.T) {
+	m := newNarrowOS(t, 20, 4)
+	m.PrefixActive = true
+	m.LastPrefixTime = time.Now().Add(-time.Hour)
+	title, groups := m.whichKeyMenu()
+	cols, more := m.whichKeyLayout(title, groups, 1)
+	if len(cols) != 0 || more == 0 {
+		t.Fatalf("precondition: 20x4 laid out to %d columns and %d more, want none and a count", len(cols), more)
+	}
+	if !m.whichKeyCache.valid {
+		t.Errorf("a layout with no columns was not kept")
 	}
 }
