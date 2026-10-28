@@ -9,7 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// HandleTerminalModeKey handles keyboard input in terminal mode
+// HandleTerminalModeKey handles keyboard input in terminal mode.
 func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// There used to be a guard here that dropped every unmodified printable
 	// key for 150 ms after entering terminal mode, against mouse-sequence
