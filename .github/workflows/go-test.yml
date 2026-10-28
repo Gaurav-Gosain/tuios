@@ -109,7 +109,33 @@ jobs:
         # under CI rather than skip.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # A pull request tests only the packages its change can affect (see
+      # scripts/go-test-affected.sh). Main, the nightly and a manual run test
+      # every package.
+      - name: Choose the packages this change can affect
+        id: affected
+        run: |
+          # shellcheck disable=SC2086
+          scripts/go-test-affected.sh ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... > "$RUNNER_TEMP/affected.txt"
+          if grep -qx all "$RUNNER_TEMP/affected.txt"; then
+            echo "Every package runs." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "pkgs=all" >> "$GITHUB_OUTPUT"
+          else
+            grep -vE '/internal/(app|session)$' "$RUNNER_TEMP/affected.txt" > "$RUNNER_TEMP/rest.txt" || true
+            echo "This change can affect $(grep -c . "$RUNNER_TEMP/affected.txt") packages; $(grep -c . "$RUNNER_TEMP/rest.txt") run in this job." | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ -s "$RUNNER_TEMP/rest.txt" ]; then echo "pkgs=some" >> "$GITHUB_OUTPUT"; else echo "pkgs=none" >> "$GITHUB_OUTPUT"; fi
+          fi
+
+      - name: Test the affected packages
+        if: steps.affected.outputs.pkgs == 'some'
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2046
+          go test -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' $(cat "$RUNNER_TEMP/rest.txt") 2>&1 | tee "$RUNNER_TEMP/unit.log" ||
+            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $(cat "$RUNNER_TEMP/rest.txt")
+
       - name: Test
+        if: steps.affected.outputs.pkgs == 'all'
         # internal/app and internal/session run their tests one after another
         # for over three minutes each. They run in the app-session job below,
         # split into lanes, and this job runs every other package.
@@ -153,6 +179,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # HEAD^1 is the base of a pull request (scripts/go-test-affected.sh).
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup-go
         with:
@@ -164,12 +193,28 @@ jobs:
         # machine they saw there.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      - name: Choose the packages this change can affect
+        id: affected
+        run: |
+          list=$(scripts/go-test-affected.sh ./internal/app ./internal/session)
+          if [ "$list" = all ]; then
+            pkgs="./internal/app ./internal/session"
+          else
+            pkgs=$(sed -n 's|.*/\(internal/[a-z]*\)$|./\1|p' <<<"$list" | tr '\n' ' ')
+          fi
+          echo "Packages to test: ${pkgs:-none}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "pkgs=$pkgs" >> "$GITHUB_OUTPUT"
+
       - name: Test
+        if: steps.affected.outputs.pkgs != ''
+        env:
+          PKGS: ${{ steps.affected.outputs.pkgs }}
         run: |
           set -o pipefail
-          SPLIT="./internal/app ./internal/session" ONLY=split LOG="$RUNNER_TEMP/unit.log" \
-            scripts/go-test-lanes.sh -count=1 -timeout 20m -- ./internal/app ./internal/session ||
-            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" ./internal/app ./internal/session
+          # shellcheck disable=SC2086
+          SPLIT="$PKGS" ONLY=split LOG="$RUNNER_TEMP/unit.log" \
+            scripts/go-test-lanes.sh -count=1 -timeout 20m -- $PKGS ||
+            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $PKGS
 
   isolation:
     name: go test isolation guard
@@ -183,6 +228,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # HEAD^1 is the base of a pull request (scripts/go-test-affected.sh).
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup-go
         with:
@@ -194,7 +242,27 @@ jobs:
         # does.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # The guard's child suite is ./internal/... ./cmd/... ./pkg/... On a
+      # pull request it is only the packages the change can affect, and a
+      # change that affects none of them skips the guard.
+      - name: Choose the packages the guard runs
+        id: affected
+        run: |
+          list=$(scripts/go-test-affected.sh ./internal/... ./cmd/... ./pkg/...)
+          if [ "$list" = all ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$list" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "packages=$(tr '\n' ' ' <<<"$list")" >> "$GITHUB_OUTPUT"
+            echo "The guard runs $(grep -c . <<<"$list") packages." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "This change affects no package of the guard's suite." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: The suite writes nothing outside its own tree
+        if: steps.affected.outputs.run == 'true'
+        env:
+          TUIOS_ISOLATION_PACKAGES: ${{ steps.affected.outputs.packages }}
         run: go test -count=1 -timeout 20m -v -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
 
   windows:
