@@ -95,7 +95,7 @@ Put a release tag after the repo name to build that release. Without a tag, Nix 
 ### Other Methods
 
 ```bash
-# Quick install script (Linux/macOS)
+# Quick install script (Linux/macOS, and Windows from Git Bash or PowerShell with WSL)
 curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
 
 # Go install
