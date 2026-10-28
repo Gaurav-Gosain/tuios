@@ -140,6 +140,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		} else {
 			result, cmd = handleMouseWheel(msg, o)
 		}
+	case app.StripTouchMsg:
+		// A finger's drag on tuios-web moves the strip out from under the
+		// labels, as a wheel does.
+		o.CloseHints()
+		o.ClosePaneLabels()
+		if o.ReviewOpen() || o.ScreenshotPreviewOpen() || o.ShowScrollbackBrowser {
+			return o, nil
+		}
+		result, cmd = handleStripTouch(msg, o)
 	case tea.PasteMsg:
 		// Incoming bracketed paste from the outer terminal (ESC[200~ ... ESC[201~).
 		// This is passthrough input, not a clipboard operation: the outer terminal

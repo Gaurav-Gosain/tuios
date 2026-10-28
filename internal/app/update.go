@@ -1969,7 +1969,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
 		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
-		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
+		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg, StripTouchMsg:
 		// Reset idle counter on any user input to restore full tick rate
 		// A resize drag is live only while the pointer is still reporting. This
 		// is what lets the deferral in resize_deferral.go expire when a mouse
@@ -2427,7 +2427,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applySessionOrderResult(msg)
 
 	case StripSnapMsg:
-		m.SnapStrip(msg)
+		if m.SnapStrip(msg) && m.IsDaemonSession {
+			m.SyncStateToDaemon()
+		}
 		return m, nil
 
 	case listingRefreshedMsg:

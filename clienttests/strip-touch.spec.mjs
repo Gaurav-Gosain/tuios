@@ -6,15 +6,16 @@
 // events of type touch. The assertions are what the page handed to sip as
 // input, window.sip.send, which is the boundary between the page and the
 // session, and what sip's touch layer handed its worker, which is where a
-// click or a right click starts. What tuios does with the steps is
-// TestStripTouchSnapsWhenTheFingerLifts and the strip tests in the Go suite.
+// click or a right click starts. What tuios does with the reports is
+// strip_snap_test.go in the Go suite.
 //
 // How it could pass wrongly, written down first:
-//   - The steps could come from sip's own vertical swipe. sip's swipe scrolls
-//     through its worker, never through window.sip.send, so a step seen here
-//     is the page script's.
-//   - A drag of any direction could send steps. The vertical drag must send
-//     none, and the two horizontal drags must send opposite buttons.
+//   - The reports could come from sip's own vertical swipe. sip's swipe
+//     scrolls through its worker, never through window.sip.send, so a report
+//     seen here is the page script's.
+//   - A drag of any direction could send reports. The vertical and the
+//     diagonal drag must send none, and the two horizontal drags must send
+//     opposite kinds.
 
 import { test, expect } from '@playwright/test';
 
@@ -56,36 +57,71 @@ const geometry = (page) => page.evaluate(() => {
   return { left: r.left, top: r.top, width: r.width, height: r.height, cw: r.width / s.cols, ch: r.height / s.rows };
 });
 
-/** The wheel buttons the page sent since the last clear: 90 left and 91 right
- *  (Ctrl and Alt), 94 the lift (Ctrl, Alt and Shift). */
-const wheels = (page) => page.evaluate(() => {
+/** The finger reports the page sent since the last clear, CSI 7503 ; kind ;
+ *  col ; row ; cells ~: kind 2 brings the columns to the right into view, 1
+ *  those to the left, 3 is the lift. */
+const reports = (page) => page.evaluate(() => {
   const out = [];
-  for (const d of window.__sent) for (const m of d.matchAll(/\x1b\[<(\d+);\d+;\d+M/g)) out.push(Number(m[1]));
+  for (const d of window.__sent) {
+    for (const m of d.matchAll(/\x1b\[7503;(\d);\d+;\d+(?:;(\d+))?~/g)) out.push({ kind: Number(m[1]), cells: Number(m[2] || 0) });
+  }
   window.__sent.length = 0;
   return out;
 });
 
-test('a horizontal drag scrolls the strip, a vertical one does not', async ({ page }) => {
+const cellsOf = (rs, kind) => rs.filter((r) => r.kind === kind).reduce((n, r) => n + r.cells, 0);
+
+test('a horizontal drag scrolls the strip, a vertical or a diagonal one does not', async ({ page }) => {
   await boot(page);
   const g = await geometry(page);
   const y = g.top + g.height / 2;
-  // niri_scroll_cells is 8 by default: 2.5 steps' worth of finger is 2 steps.
-  const span = 8 * 2.5 * g.cw;
+  // Twenty cells of finger. The first ones go to the slop.
+  const span = 20 * g.cw;
   const x0 = g.left + g.width / 2 + span / 2;
 
   await drag(page, x0, y, x0 - span, y);
-  const left = await wheels(page);
-  expect(left.filter((b) => b === 91).length, 'a drag to the left sends steps to the right').toBeGreaterThanOrEqual(2);
-  expect(left.at(-1), 'the lift is the last report').toBe(94);
-  expect(new Set(left), 'a drag to the left is steps to the right and the lift').toEqual(new Set([91, 94]));
+  const left = await reports(page);
+  expect(cellsOf(left, 2), 'a drag to the left brings the columns to the right, a cell for each cell').toBeGreaterThanOrEqual(15);
+  expect(cellsOf(left, 2), 'no more cells than the finger crossed').toBeLessThanOrEqual(20);
+  expect(left.at(-1).kind, 'the lift is the last report').toBe(3);
+  expect(new Set(left.map((r) => r.kind)), 'a drag to the left is steps to the right and the lift').toEqual(new Set([2, 3]));
 
   await drag(page, x0 - span, y, x0, y);
-  const right = await wheels(page);
-  expect(right.filter((b) => b === 90).length, 'a drag to the right sends steps to the left').toBeGreaterThanOrEqual(2);
-  expect(new Set(right), 'a drag to the right is steps to the left and the lift').toEqual(new Set([90, 94]));
+  const right = await reports(page);
+  expect(cellsOf(right, 1), 'a drag to the right brings the columns to the left').toBeGreaterThanOrEqual(15);
+  expect(new Set(right.map((r) => r.kind)), 'a drag to the right is steps to the left and the lift').toEqual(new Set([1, 3]));
 
   await drag(page, x0, g.top + g.height / 4, x0, g.top + (3 * g.height) / 4);
-  expect(await wheels(page), 'a vertical drag is sip\'s own swipe').toEqual([]);
+  expect(await reports(page), 'a vertical drag is sip\'s own swipe').toEqual([]);
+
+  // Sideways a little more than it is down: not clearly sideways, so sip's.
+  await drag(page, x0, g.top + g.height / 4, x0 - 60, g.top + g.height / 4 + 40);
+  expect(await reports(page), 'a diagonal drag is sip\'s own swipe').toEqual([]);
+});
+
+test('a second finger during the drag reaches neither sip nor the lift', async ({ page }) => {
+  await boot(page);
+  const g = await geometry(page);
+  const y = g.top + g.height / 2;
+  const x0 = g.left + g.width / 2 + 80;
+  const cdp = await page.context().newCDPSession(page);
+  const one = (x) => ({ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 });
+  const two = { x: g.left + 40, y: g.top + 40, id: 2, radiusX: 4, radiusY: 4, force: 1 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [one(x0)] });
+  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - i * 10)] });
+  await page.evaluate(() => { window.__pointer.length = 0; });
+  // A second finger lands and lifts while the first is dragging: a tap, if
+  // sip saw it. CDP lifts one finger of two with a move that leaves it out.
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [one(x0 - 60), two] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - 60)] });
+  for (let i = 7; i <= 12; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [one(x0 - i * 10)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  await page.waitForTimeout(300);
+  const rs = await reports(page);
+  expect(rs.at(-1)?.kind, 'the first finger\'s lift is still the last report').toBe(3);
+  expect(rs.filter((r) => r.kind === 3).length, 'one lift, the first finger\'s').toBe(1);
+  expect(await page.evaluate(() => window.__pointer.slice()), 'the second finger did not reach sip').toEqual([]);
 });
 
 test('a tap right after a quick sideways swipe is a click, not a right click', async ({ page }) => {

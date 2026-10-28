@@ -355,15 +355,21 @@ func (m *OS) ScrollingExpelWindow() {
 // ScrollingScrollViewport scrolls the viewport manually (mouse wheel).
 // Uses instant positioning so scrolling feels direct and responsive.
 func (m *OS) ScrollingScrollViewport(delta int) {
-	sl := m.GetOrCreateScrollingLayout()
-	viewW := m.ScrollingViewWidth()
-	// Cancel any in-flight slide animations so the wheel feels direct
-	m.CompleteAllAnimations()
 	// A flat number of cells rather than a share of the view. See
 	// config.NiriScrollCellsDefault: a trackpad sends one wheel event per cell
 	// the fingers cross, so a step measured against the screen's width made one
 	// flick cross the whole strip and stop dead at the clamp.
-	sl.ViewportX += delta * max(m.Settings.NiriScrollCells, config.NiriScrollCellsMin)
+	m.ScrollingScrollViewportCells(delta * max(m.Settings.NiriScrollCells, config.NiriScrollCellsMin))
+}
+
+// ScrollingScrollViewportCells moves the strip by cells, to the right when
+// positive. A finger on tuios-web moves it this way, by the cells it crossed.
+func (m *OS) ScrollingScrollViewportCells(cells int) {
+	sl := m.GetOrCreateScrollingLayout()
+	viewW := m.ScrollingViewWidth()
+	// Cancel any in-flight slide animations so the wheel feels direct
+	m.CompleteAllAnimations()
+	sl.ViewportX += cells
 	sl.ClampViewport(viewW)
 	m.scrollingSetPositionsInstant()
 }

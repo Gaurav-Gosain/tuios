@@ -51,34 +51,6 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// tuios-web's touch layer (cmd/tuios-web/strip_touch.js) writes a
-	// finger's sideways drag as Ctrl+Alt with a sideways wheel, one report
-	// per niri_scroll_cells, and the lift as Ctrl+Alt+Shift. In the scrolling
-	// layout they move the strip and snap it, and anywhere else they reach
-	// nothing: the page cannot tell which layout is up, and a pane that takes
-	// the mouse must not get a drag that was meant for the strip.
-	if wheelIsHorizontal(msg.Button) {
-		if mod := msg.Mouse().Mod; mod&(tea.ModCtrl|tea.ModAlt) == tea.ModCtrl|tea.ModAlt {
-			if !o.AutoTiling || !o.UseScrollingLayout {
-				return o, nil
-			}
-			if mod&tea.ModShift != 0 {
-				o.SnapStripNow()
-				return o, nil
-			}
-			dir := 1
-			if o.Settings.NiriReverseScroll {
-				dir = -1
-			}
-			if msg.Button == tea.MouseWheelLeft {
-				dir = -dir
-			}
-			o.ScrollingScrollViewport(dir)
-			o.CancelStripSnap()
-			return o, nil
-		}
-	}
-
 	// A docked session is an ordinary pane: send a tracked wheel to its app,
 	// otherwise scroll its own history rather than the rail's old list model.
 	if wm := msg.Mouse(); !o.OverlayActive() {
@@ -163,11 +135,12 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			if o.Settings.NiriReverseScroll {
 				dir = -1
 			}
+			step := 0
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				o.ScrollingScrollViewport(-1 * dir)
+				step = -1 * dir
 			case tea.MouseWheelDown:
-				o.ScrollingScrollViewport(1 * dir)
+				step = 1 * dir
 			// A horizontal wheel moves the viewport under the same modifier as
 			// a vertical one, rather than on its own: answering it unmodified
 			// walked the whole layout sideways whenever someone scrolled back
@@ -176,13 +149,15 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// strip and the user's hand does not know which axis their terminal
 			// chose to report.
 			case tea.MouseWheelLeft:
-				o.ScrollingScrollViewport(-1 * dir)
+				step = -1 * dir
 			case tea.MouseWheelRight:
-				o.ScrollingScrollViewport(1 * dir)
+				step = 1 * dir
 			}
+			o.ScrollingScrollViewport(step)
 			// With niri_scroll_snap on, the strip lines up on a column once
-			// the steps stop. See app/strip_snap.go.
-			return o, o.ScheduleStripSnap()
+			// the steps stop, the next one in the way they went. See
+			// app/strip_snap.go.
+			return o, o.ScheduleStripSnap(step)
 		}
 	}
 
@@ -270,5 +245,33 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	return o, nil
+}
+
+// handleStripTouch moves the strip with a finger's sideways drag on
+// tuios-web, and snaps it when the finger lifts. See app/strip_touch.go.
+//
+// The report reaches nothing but the strip: not an overlay, the rail, a
+// docked session, the picture-in-picture view or the log viewer, where a
+// sideways wheel reaches nothing either, and not a pane in another layout.
+// The page cannot tell any of those apart, so it is decided here, at the cell
+// the drag started on.
+func handleStripTouch(msg app.StripTouchMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if !o.AutoTiling || !o.UseScrollingLayout || o.OverlayActive() || o.ShowLogs {
+		return o, nil
+	}
+	if o.SidebarSessionPaneAt(msg.X, msg.Y) != nil || (o.SidebarActive() && o.SidebarBandContains(msg.X, msg.Y)) || pipOwns(msg.X, msg.Y, o) {
+		return o, nil
+	}
+	switch msg.Kind {
+	case app.StripTouchLift:
+		o.SnapStripNow()
+	case app.StripTouchLeft:
+		o.ScrollingScrollViewportCells(-msg.Cells)
+		o.CancelStripSnap()
+	case app.StripTouchRight:
+		o.ScrollingScrollViewportCells(msg.Cells)
+		o.CancelStripSnap()
+	}
 	return o, nil
 }

@@ -361,19 +361,35 @@ func (s *ScrollingLayout) ClampViewport(screenWidth int) {
 	}
 }
 
-// SnapViewport lines the viewport up on the nearest column: its left edge
-// goes to the start of the column closest to it, or to the strip's far end
-// when that is closer, so the last columns are not pushed back off it.
-func (s *ScrollingLayout) SnapViewport(screenWidth int) {
+// SnapViewport lines the viewport up on a column: its left edge goes to the
+// start of a column, or to the strip's far end, so the last columns are not
+// pushed back off it. dir is the way the strip was travelling. With dir 0 it
+// goes to the nearest of those. With dir > 0 it goes to the nearest one at or
+// past where it is, and with dir < 0 the nearest one at or before, so a step
+// shorter than half a column still reaches the next one instead of sliding
+// back.
+func (s *ScrollingLayout) SnapViewport(screenWidth, dir int) {
 	if len(s.Columns) == 0 {
 		return
 	}
 	maxScroll := max(s.TotalStripWidth(screenWidth)-screenWidth, 0)
-	best := maxScroll
-	for i := range s.Columns {
-		if x := s.columnX(i, screenWidth); abs(x-s.ViewportX) < abs(best-s.ViewportX) {
-			best = x
+	best, found := 0, false
+	consider := func(x int) {
+		x = min(x, maxScroll)
+		if (dir > 0 && x < s.ViewportX) || (dir < 0 && x > s.ViewportX) {
+			return
 		}
+		if !found || abs(x-s.ViewportX) < abs(best-s.ViewportX) {
+			best, found = x, true
+		}
+	}
+	for i := range s.Columns {
+		consider(s.columnX(i, screenWidth))
+	}
+	consider(maxScroll)
+	if !found {
+		s.SnapViewport(screenWidth, 0)
+		return
 	}
 	s.ViewportX = best
 	s.ClampViewport(screenWidth)

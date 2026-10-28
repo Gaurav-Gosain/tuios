@@ -10210,3 +10210,19 @@ false outright.
 | --- | --- | --- |
 | The PR before these fixes (5747d0828) | "the strip snapped while the finger rested"; "a finger's step reached the pane off the strip" | **caught** |
 | The `pointercancel` the page sends sip as it takes the drag | "the tap is a press of button 1": received [2], the right click of the review | **caught** |
+
+### Second round on #1193: the finger's own report, and the snap's direction
+
+The finger is now `CSI 7503 ; kind ; col ; row ; cells ~` (`internal/app/strip_touch.go`) and not a wheel with Ctrl and Alt, the wheel's pause snap goes to the next column in the way it went, and the snap is sent to the daemon. `TestStripSnapsToTheNearestColumn` became `TestStripSnapsToTheNextColumn`: one `Alt` wheel step (3 cells) must line the strip up on BRAVO and one step back must bring back the first frame. `TestStripSnapReachesTheOtherClient` attaches a second client at the same size and measures when each one lines up on BRAVO: the second may be at most 150 ms behind the first. `TestStripTouchSnapsWhenTheFingerLifts` now also checks that the steps moved the strip, and that a short drag lifts back to the nearest column. `TestStripTouchReachesOnlyTheStrip` opens the rail: a drag that starts on it must not move the strip, the same drag on the strip must. `TestStripTouchLeavesTheWheelToThePane` replaces `TestStripTouchStepReachesNoPaneOffTheStrip`: in a BSP pane running `cat -v` with the mouse on, the finger's report must not arrive and a sideways wheel with Ctrl and Alt must. `TestStripSnapStaysOnItsWorkspace` (unit, `internal/app`) fires a snap armed on another workspace. `clienttests/strip-touch.spec.mjs` checks the cells the reports carry, that a diagonal drag sends none, and that a second finger during the drag leaves one lift and reaches no sip worker. Each control is a build to a separate binary, the source put back before the next. Run on 2026-10-28 on macOS, based on origin/main at ecdeec289.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The PR before these fixes (b3eccbe2f) | all five e2e tests. The one this is about: "a sideways wheel with Ctrl and Alt did not reach the pane" | **caught** |
+| `SnapStrip` snaps to the nearest column (`snapStrip(0)`) | "one step to the right did not line the strip up on BRAVO" | **caught** |
+| The `SyncStateToDaemon` after a snap | "A's snap reached B 513 ms after A lined up, more than 150ms" (three runs: 513, 530, 512 ms) | **caught** |
+| The rail check in `handleStripTouch` | "a finger's drag on the rail moved the strip" | **caught** |
+| A finger's step arms the wheel's pause snap | "the strip snapped while the finger rested" | **caught** |
+| `stripTouchReport` not called in `FilterMouseMotion` | "ten finger steps did not move the strip" | **caught** |
+| The workspace check in `SnapStrip` | "a snap armed on workspace 2 moved the strip of workspace 1 from 62 to 55" | **caught** |
+| The page's second-finger handling | "the first finger's lift is still the last report" | **caught** |
+| The page takes a drag with `abs(dx) > abs(dy)` again, not twice | "a diagonal drag is sip's own swipe" | **caught** |

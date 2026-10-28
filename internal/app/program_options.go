@@ -131,6 +131,9 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return nil
 	}
 
+	// tuios-web's report of a finger's sideways drag. See strip_touch.go.
+	msg = stripTouchReport(msg)
+
 	// A terminal asked for SGR-pixel reports sends the pointer in pixels.
 	// Everything below, and everything in Update, works in cells.
 	msg = m.convertHostPixelMouse(msg)

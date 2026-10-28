@@ -2,25 +2,31 @@
 //
 // It runs on the worker engine's canvas (?renderer=engine), whose touch layer
 // already gives a tap, a vertical swipe and a long press their meanings. A
-// drag that leaves the slop mostly sideways, before the long press would make
+// drag that leaves the slop clearly sideways, before the long press would make
 // it sip's drag, is taken here: the listeners run in the capture phase on the
 // document, ahead of sip's on the canvas, and keep the rest of the gesture
 // from reaching it. sip is sent a pointercancel as the drag is taken, so its
 // own touch state ends there and its hold timer cannot turn the next tap into
-// a right click.
+// a right click. A second finger that lands while the drag is ours is kept
+// from sip too, from its press to its lift. One that lands before is sip's
+// gesture, a pinch, and the drag is left to sip.
 //
-// Every niri_scroll_cells cells the finger crosses is one sideways wheel
-// report with Ctrl and Alt, and the lift is one with Ctrl, Alt and Shift.
-// tuios moves the strip with the first and snaps it with the second, in the
-// scrolling layout only; anywhere else it drops both, since the page cannot
-// tell which layout is up. The strip follows the finger whatever
-// niri_reverse_scroll says, which is about wheels.
+// The finger is written as tuios's own report, CSI 7503 ; kind ; col ; row ;
+// cells ~ (see internal/app/strip_touch.go). kind 2 brings the columns to the
+// right into view, 1 those to the left, and 3 is the lift. cells is the cells
+// the finger crossed, so the strip follows the finger one cell for one,
+// whatever niri_scroll_cells and niri_reverse_scroll say, which are about
+// wheels. tuios moves the strip with it in the scrolling layout only, and
+// drops it everywhere else, since the page cannot tell which layout is up.
 (() => {
-  const cfg = window.tuiosStripTouch || { cells: 8, reverse: false };
   const SLOP = 10, HOLD_MS = 450;
   let g = null;
+  // Pointers of fingers that landed while a drag was ours, kept from sip
+  // until they lift.
+  const kept = new Set();
   const onEngine = (ev) => ev.isTrusted && ev.pointerType === 'touch' && ev.target instanceof HTMLCanvasElement && ev.target.classList.contains('wt-canvas');
-  // The cell the drag started on, 1-based, as an SGR mouse report counts.
+  // The cell the drag started on, 1-based as in a mouse report, and the
+  // width of a cell.
   const cell = () => {
     const size = window.sip?.size();
     if (!size) return null;
@@ -28,18 +34,28 @@
     const cw = r.width / size.cols, ch = r.height / size.rows;
     return { cw, col: Math.max(1, Math.floor((g.x - r.left) / cw) + 1), row: Math.max(1, Math.floor((g.y - r.top) / ch) + 1) };
   };
+  const report = (kind, c, cells) => window.sip.send(`\x1b[7503;${kind};${c.col};${c.row}${cells ? ';' + cells : ''}~`);
   document.addEventListener('pointerdown', (ev) => {
+    if (!ev.isTrusted) return;
+    if (g?.mine) {
+      kept.add(ev.pointerId);
+      ev.stopImmediatePropagation();
+      return;
+    }
+    if (g) { g = null; return; }
     if (!onEngine(ev)) return;
     g = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: performance.now(), lastX: ev.clientX, acc: 0, mine: false, canvas: ev.target };
   }, true);
   document.addEventListener('pointermove', (ev) => {
-    if (!ev.isTrusted || !g || ev.pointerId !== g.id) return;
+    if (!ev.isTrusted) return;
+    if (kept.has(ev.pointerId)) { ev.stopImmediatePropagation(); return; }
+    if (!g || ev.pointerId !== g.id) return;
     if (!g.mine) {
       const dx = ev.clientX - g.x, dy = ev.clientY - g.y;
       if (Math.hypot(dx, dy) <= SLOP) return;
-      // A hold before the move is sip's drag, a mostly vertical move its
-      // scroll. Either way the gesture is sip's from here on.
-      if (performance.now() - g.t >= HOLD_MS || Math.abs(dx) <= Math.abs(dy)) { g = null; return; }
+      // A hold before the move is sip's drag, and a move that is not clearly
+      // sideways is its scroll. Either way the gesture is sip's from here on.
+      if (performance.now() - g.t >= HOLD_MS || Math.abs(dx) <= 2 * Math.abs(dy)) { g = null; return; }
       g.mine = true;
       g.canvas.dispatchEvent(new PointerEvent('pointercancel', { pointerId: g.id, pointerType: 'touch', bubbles: true }));
     }
@@ -49,22 +65,19 @@
     // The finger going left brings the columns to the right into view.
     g.acc += (g.lastX - ev.clientX) / c.cw;
     g.lastX = ev.clientX;
-    const steps = Math.trunc(g.acc / cfg.cells);
-    if (!steps) return;
-    g.acc -= steps * cfg.cells;
-    let right = steps > 0;
-    if (cfg.reverse) right = !right;
-    // SGR wheel left (66) or right (67), plus 8 for Alt and 16 for Ctrl.
-    const button = (right ? 67 : 66) + 8 + 16;
-    window.sip.send(`\x1b[<${button};${c.col};${c.row}M`.repeat(Math.abs(steps)));
+    const cells = Math.trunc(g.acc);
+    if (!cells) return;
+    g.acc -= cells;
+    report(cells > 0 ? 2 : 1, c, Math.abs(cells));
   }, true);
   const end = (ev) => {
-    if (!ev.isTrusted || !g || ev.pointerId !== g.id) return;
+    if (!ev.isTrusted) return;
+    if (kept.delete(ev.pointerId)) { ev.stopImmediatePropagation(); return; }
+    if (!g || ev.pointerId !== g.id) return;
     if (g.mine) {
       ev.stopImmediatePropagation();
       const c = cell();
-      // The lift: wheel left with Shift, Alt and Ctrl (66 + 4 + 8 + 16).
-      if (c) window.sip.send(`\x1b[<94;${c.col};${c.row}M`);
+      if (c) report(3, c);
     }
     g = null;
   };

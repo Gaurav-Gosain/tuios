@@ -114,12 +114,18 @@ settings panel), a finger dragged sideways scrolls the strip of the
 `scrolling` layout. The strip follows the finger. A tap, a vertical swipe and
 a long press keep their meaning: click, scroll and right click.
 
-- The drag moves the strip in steps of `appearance.niri_scroll_cells`, the
-  same steps as `Alt` with the wheel.
+- The strip moves one cell for each cell the finger crosses.
+  `appearance.niri_scroll_cells` and `appearance.niri_reverse_scroll` are
+  about the wheel and do not change it.
 - `appearance.niri_scroll_snap = true` lines the strip up on the nearest
   column when the finger lifts, and not before. See
   [LAYOUT_MODES.md](LAYOUT_MODES.md#scrolling-layout).
-- In another layout, the drag does nothing. It does not reach the pane.
+- A drag that starts on the rail, a docked session or the picture-in-picture
+  view does nothing, and so does one in another layout. It does not reach
+  the pane.
+- A second finger that lands during the drag is ignored until it lifts.
+- The page sends the drag to tuios as `CSI 7503 ; kind ; col ; row ; cells ~`,
+  a sequence no terminal sends, so no key or wheel is taken for it.
 
 ## Open the agents view from a notification
 
