@@ -580,23 +580,19 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// bindings never fire underneath it. Checked after the modal overlays above,
 	// which outrank it, and before the mode split, which it supersedes.
 	//
-	// The leader is the one exception, and a pending chord with it. The rail
+	// The leader is one exception, and a pending chord with it. The rail
 	// swallows what it does not bind, so holding the leader here would strand
 	// every prefix command behind an esc, and ctrl+b e (which toggles the rail's
 	// focus) could never toggle it back off. Both are left to fall through to the
 	// mode handlers below, which already route the whole chord; PrefixActive
 	// stays set for sub-prefixes too, so ctrl+b w 2 works from the rail as well.
-	// The help overlay and the command palette are the other exceptions, for the
-	// same reason as the modals above: the rail's own keys open both, and the rail
-	// swallows what it does not bind, so leaving it in front would strand the
-	// overlay's scroll, search and close keys (and every character of a palette
-	// query) behind an esc that also drops the rail's focus.
-	// The mailbox is the third exception, for the same reason: the rail opens
-	// it, and a reply typed into it must reach it and not the rail.
-	// The Inbox is the fourth: a prefix chord opens it over the rail, and
-	// its keys must reach it.
-	// The message view and the log viewer are the last two: ctrl+b N opens the
-	// view over the rail, and its scroll and close keys must reach it.
+	//
+	// An open panel is the other: the help, the palette, the navigator, the
+	// Inbox, settings and every other overlay. The rail or a prefix chord opens
+	// it over the rail, and the rail swallows what it does not bind, so left in
+	// front it would keep the panel's keys and move its own cursor behind the
+	// panel. The panel takes the keys in the mode handlers below, and the rail
+	// has them again when it closes, since its focus is left as it was.
 	if o.SidebarSessionFocused() && !o.AnyOverlayOpen() {
 		if msg.String() == "alt+esc" {
 			o.BlurSidebarSession()
@@ -612,8 +608,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return o, nil
 		}
 	}
-	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox &&
-		!o.MessageViewOpen() && !o.ShowLogs && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+	if o.SidebarFocused && !o.PanelOwnsKeyboard() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return HandleSidebarKey(msg, o)
 	}
 

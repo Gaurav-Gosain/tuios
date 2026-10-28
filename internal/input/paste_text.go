@@ -65,8 +65,7 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 		return typed(o.CopyDialogPaste)
 	case o.TransfersOwnsKeys(), o.ShowTapeReview:
 		return nil
-	case o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox &&
-		!o.MessageViewOpen() && !o.ShowLogs:
+	case o.SidebarFocused && !o.PanelOwnsKeyboard():
 		return nil
 	case o.ShowTapeManager:
 		if o.TapeManager == nil || o.TapeManager.Mode != app.TapeManagerNaming {
