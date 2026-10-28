@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,9 +111,9 @@ func parseArgs(in []string, valued, bools []string) (args, error) {
 		}
 		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
 		switch {
-		case contains(bools, name):
+		case slices.Contains(bools, name):
 			a.flags[name] = "true"
-		case contains(valued, name):
+		case slices.Contains(valued, name):
 			if !hasValue {
 				if i+1 >= len(in) {
 					return a, errors.New("flag needs a value: " + arg)
@@ -126,15 +127,6 @@ func parseArgs(in []string, valued, bools []string) (args, error) {
 		}
 	}
 	return a, nil
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // readSource reads the one file a command takes. It prints why when it
