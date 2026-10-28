@@ -9,6 +9,18 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths-ignore:
+      # Files that no Go build, Go test or e2e test reads. A pull request
+      # that changes only these starts none of this workflow's jobs. Main
+      # still runs everything.
+      - "*.md"
+      - "e2e/tui/*.md"
+      - "assets/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE/**"
+      - ".github/contributors-exclude"
+      - "LICENSE"
+      - "CITATION.cff"
   schedule:
     # 03:17 UTC daily, for the race build below.
     - cron: "17 3 * * *"
