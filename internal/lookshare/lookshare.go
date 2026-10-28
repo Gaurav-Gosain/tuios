@@ -33,7 +33,14 @@ const DiscussionURL = "https://github.com/Gaurav-Gosain/tuios/discussions/849"
 // MaxGalleryText is the longest code block the gallery keeps, in characters.
 const MaxGalleryText = 4000
 
-// The lines the CLI prints and the toast shows.
+// The dock message. It fits one dock line at 80 columns, so nothing of it is
+// cut. The full message, with the screenshot path, is kept for prefix+N.
+const (
+	MsgToast          = "Look copied. Paste it in the browser page."
+	MsgToastNoBrowser = "Look copied. Prefix+N shows the steps."
+)
+
+// The lines the CLI prints and the full message holds.
 const (
 	MsgCopied  = "The comment is on your clipboard. Paste it into the discussion."
 	MsgShot    = "Drag the screenshot into the comment: %s."

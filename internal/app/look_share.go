@@ -138,9 +138,14 @@ func (m *OS) handleLookShareDone(msg lookShareDoneMsg) {
 	if msg.tooLong {
 		lines = append(lines, lookshare.MsgTooLong)
 	}
-	// The dock draws a message on one line and cuts it with "more". A click
-	// or prefix+N shows the whole of it, the screenshot path too.
-	m.ShowNotification(strings.Join(lines, " "), "success", 3*m.Settings.NotificationDuration)
+	// The dock gets a short line that is never cut. The full message, with
+	// the screenshot path, is what prefix+N opens.
+	toast := lookshare.MsgToast
+	if !msg.opened {
+		toast = lookshare.MsgToastNoBrowser
+	}
+	m.ShowNotification(toast, "success", 3*m.Settings.NotificationDuration)
+	m.rememberMessage(messageEntry{Text: strings.Join(lines, " "), Level: "success", Time: time.Now(), Source: "tuios"})
 	if msg.shotErr != nil {
 		m.LogError("share my look: the screenshot failed: %v", msg.shotErr)
 	}

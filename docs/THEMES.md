@@ -481,8 +481,8 @@ the discussion that fills the [gallery](https://tuios.dev/gallery):
 2. tuios puts a comment with your look on the clipboard. It takes a screenshot
    of the screen and opens the discussion in your browser.
 3. Paste the comment into the discussion.
-4. Drag the screenshot into the comment. The path is on the screen. The
-   message in the dock is cut. Click it, or press prefix+N, to read all of it.
+4. Drag the screenshot into the comment. The dock says "Look copied". Press
+   prefix+N to read the full message with the path of the screenshot.
 
 The comment has a heading, one line about the setup, and the look file in a
 `toml` code block:

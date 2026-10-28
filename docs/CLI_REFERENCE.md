@@ -373,7 +373,9 @@ changed while tuios asked its questions, tuios stops and changes nothing.
 `tuios look share` shares your look in
 [discussion #849](https://github.com/Gaurav-Gosain/tuios/discussions/849).
 The command palette has it as "Share my look". The Appearance page of the
-settings has it too.
+settings has it too. There the dock says "Look copied. Paste it in the browser
+page." Press prefix+N to read the full message with the path of the
+screenshot.
 
 - tuios exports the look and takes a screenshot of the screen. The running
   tuios takes it, and the screenshot goes to Downloads or the cache folder.

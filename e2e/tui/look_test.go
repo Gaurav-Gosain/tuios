@@ -603,11 +603,14 @@ func TestLookShareRoundTrip(t *testing.T) {
 	runPaletteRow(t, term, "share my look", "Share my look", "Share my look")
 	// The screenshot is rendered before the toast, which takes a few seconds
 	// on a loaded machine.
-	if err := term.WaitForText("The comment is on your clipboard", 60*time.Second); err != nil {
+	if err := term.WaitForText("Look copied. Paste it in the browser page.", 60*time.Second); err != nil {
 		t.Fatalf("the share did not finish: %v\n%s", err, term.Snapshot())
 	}
 	saveArtifact(t, term, artifactDir(t), "share-toast")
-	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast")
+	if strings.Contains(term.Snapshot(), "more") {
+		t.Fatalf("ASSERTION: the dock cuts the share message at 120 columns:\n%s", term.Snapshot())
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast-120")
 	waitClipboardSequence(t, term, out, from, strings.TrimSpace(printed))
 
 	shots, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_CACHE_HOME"), "tuios", "share", "tuios-look-*.png"))
@@ -646,7 +649,20 @@ func TestLookShareRoundTrip(t *testing.T) {
 	if got := readFileString(t, opened); strings.Count(got, "https://github.com/Gaurav-Gosain/tuios/discussions/849") != 2 {
 		t.Fatalf("ASSERTION: the browser did not open the discussion twice:\n%s", got)
 	}
-	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-cli-toast")
+	// At 80 columns the dock line is shorter, and the message still fits.
+	if err := term.Resize(80, 24); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		c, _ := s.Size()
+		return c == 80 && strings.Contains(s.Text(), "Look copied. Paste it in the browser page.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the share message is cut or gone at 80 columns: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Snapshot(), "more") {
+		t.Fatalf("ASSERTION: the dock cuts the share message at 80 columns:\n%s", term.Snapshot())
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "share-toast-80")
 	saveSyncArtifact(t, "look-share-transcript.txt", transcript.String()+"--- comment\n"+printed)
 	alive(t, term, "after the share")
 }
