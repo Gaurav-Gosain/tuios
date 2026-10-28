@@ -32,21 +32,31 @@ type sshPprofServer struct {
 // The server's output is kept in the test's temp dir.
 func startSSHPprofServer(t *testing.T, mode, pprofAddr string) sshPprofServer {
 	t.Helper()
-	base := t.TempDir()
+	args := []string{"--no-auth"}
+	if pprofAddr != "" {
+		args = append(args, "--pprof", pprofAddr)
+	}
+	return startSSHServerIn(t, t.TempDir(), mode, args...)
+}
+
+// startSSHServerIn starts tuios ssh for the isolation root base on a free
+// loopback port, in the given mode, with extra after the address flags. The
+// caller puts any config file in base first. It returns once the SSH port
+// accepts.
+func startSSHServerIn(t *testing.T, base, mode string, extra ...string) sshPprofServer {
+	t.Helper()
 	killDaemon(t, base)
 	port := freePort(t)
 	env := append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
 		env = append(env, key+"="+xdgDir(base, key))
 	}
-	args := []string{"ssh", "--host", "127.0.0.1", "--port", strconv.Itoa(port), "--no-auth",
+	args := []string{"ssh", "--host", "127.0.0.1", "--port", strconv.Itoa(port),
 		"--key-path", filepath.Join(base, "hostkey")}
 	if mode == "ephemeral" {
 		args = append(args, "--ephemeral")
 	}
-	if pprofAddr != "" {
-		args = append(args, "--pprof", pprofAddr)
-	}
+	args = append(args, extra...)
 	srv := exec.Command(tuiosBin, args...)
 	srv.Env = env
 	srv.Dir = workDirIn(t, base)

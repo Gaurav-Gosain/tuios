@@ -57,6 +57,9 @@ type UserConfig struct {
 	// view that toggle_pip pins. Client-local, like the spotlight. See pip.go.
 	PiP PiPConfig `toml:"pip"`
 
+	// SSH is the [ssh] table: the limits of the tuios ssh server. See ssh.go.
+	SSH SSHConfig `toml:"ssh"`
+
 	// Mermaid is the [mermaid] table: the colours of tuios mermaid. See mermaid.go.
 	Mermaid MermaidConfig `toml:"mermaid"`
 	// Launcher is the [launcher] table: how the app launcher starts a
@@ -1185,6 +1188,7 @@ func DefaultConfig() *UserConfig {
 		Hints:        defaultHintsConfig(),
 		Scratch:      defaultScratchConfig(),
 		PiP:          defaultPiPConfig(),
+		SSH:          defaultSSHConfig(),
 		Mermaid:      MermaidConfig{Theme: "tuios", Background: "theme"},
 		Panes:        defaultPanesConfig(),
 		PasteBuffers: defaultPasteBuffersConfig(),

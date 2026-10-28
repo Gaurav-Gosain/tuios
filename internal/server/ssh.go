@@ -49,6 +49,13 @@ type SSHServerConfig struct {
 	// opt-out that lets a non-loopback bind run with no authorized keys, and
 	// the way back in for an operator whose key file locked them out.
 	NoAuth bool
+	// HandshakeTimeout, IdleTimeout, MaxHandshakes and MaxSessions are the
+	// command line limits. Each one that is set replaces the value of the
+	// [ssh] section of the config file. Nil keeps the file's value.
+	HandshakeTimeout *time.Duration
+	IdleTimeout      *time.Duration
+	MaxHandshakes    *int
+	MaxSessions      *int
 	// Overrides carries the interface CLI flags, layered over the appearance
 	// baseline inside the same once-guarded application so flags win over the
 	// file. The zero value applies nothing.
@@ -152,6 +159,11 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		}
 	}
 
+	limits := sshLimits(userConfig, cfg)
+	log.Printf("SSH limits: handshake_timeout %s, idle_timeout %s, max_handshakes %s, max_sessions %s",
+		limitDuration(limits.HandshakeTimeout), limitDuration(limits.IdleTimeout),
+		limitCount(limits.MaxHandshakes), limitCount(limits.MaxSessions))
+
 	// Create SSH server with middleware
 	opts := []ssh.Option{
 		wish.WithAddress(net.JoinHostPort(cfg.Host, cfg.Port)),
@@ -159,6 +171,9 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		wish.WithMiddleware(
 			// Bubble Tea middleware for interactive sessions
 			tuiosSessionMiddleware(),
+			// The session cap, outside the TUI middleware so a refused
+			// session never builds a model or opens a pane.
+			sessionLimitMiddleware(limits.MaxSessions),
 			// Logging middleware for connection tracking
 			logging.Middleware(),
 			// Outermost backstop: contain any panic in a single session's
@@ -184,6 +199,8 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		// line nobody reads, and this one has to be read.
 		log.Print(authPlan.Warning)
 	}
+
+	opts = append(opts, limitOptions(limits)...)
 
 	server, err := wish.NewServer(opts...)
 	if err != nil {

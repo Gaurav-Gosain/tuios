@@ -2560,6 +2560,42 @@ what you copied, so a pane needs `read` to read them, `write` to change them,
 and both to paste one.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
 
+## SSH server limits
+
+The `[ssh]` section sets the limits of the `tuios ssh` server. The server reads
+it when it starts. The defaults do not stop a normal login.
+
+```toml
+[ssh]
+handshake_timeout = "120s" # time to finish the login; 0 turns the limit off
+idle_timeout = "0"         # close a connection with no traffic for this long; 0 is off
+max_handshakes = 32        # connections that log in at the same time; 0 is no limit
+max_sessions = 64          # sessions open at the same time; 0 is no limit
+```
+
+- `handshake_timeout`: The server closes a connection that does not log in
+  within this time. It is the same as `LoginGraceTime` in OpenSSH. The limit
+  ends when the login is complete, so it does not close a session that you
+  use.
+- `idle_timeout`: The server closes a connection after this time with no
+  traffic in either direction. It is off by default. A session that shows a
+  clock or other output that changes stays open.
+- `max_handshakes`: When this many connections are logging in, the server
+  closes a new connection at once. A connection that is logged in does not
+  count.
+- `max_sessions`: When this many sessions are open, over all connections, the
+  server refuses a new session. The client sees a message. The refused session
+  does not attach to a session and does not open a pane.
+
+A duration is a value such as `90s`, `30m` or `2h`. A value that does not
+parse, or a negative value, gives a warning and the default.
+`tuios ssh --handshake-timeout`, `--idle-timeout`, `--max-handshakes` and
+`--max-sessions` replace these values for one run. The server writes the limits
+it uses to its log when it starts.
+
+Like `[hosts]`, the section is not in `list-options`, and `tuios set-config`
+cannot change it.
+
 ## What another machine may do here
 
 A `[hosts.NAME]` table names a machine this one links to. Read on the machine

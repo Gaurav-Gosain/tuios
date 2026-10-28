@@ -5265,6 +5265,14 @@ tuios ssh [flags]
 - `--ephemeral`: Run in ephemeral mode (standalone, no daemon)
 - `--authorized-keys <string>`: Path to the public keys allowed to connect (default: `~/.config/tuios/authorized_keys`). Keys with options are not accepted
 - `--no-auth`: Give every connection a shell without checking who it is (trusted networks only)
+- `--handshake-timeout <duration>`: Close a connection that does not log in within this time (default: `2m0s`). `0` turns the limit off
+- `--idle-timeout <duration>`: Close a connection after this time with no traffic (default: `0`, off)
+- `--max-handshakes <int>`: Close a new connection at once when this many connections are logging in (default: `32`). `0` turns the limit off
+- `--max-sessions <int>`: Refuse a new session when this many sessions are open (default: `64`). `0` turns the limit off
+
+The four limit flags replace the same values in the `[ssh]` section of the
+config file. A limit flag that you do not give keeps the value in the file. See
+[SSH server limits](CONFIGURATION.md#ssh-server-limits).
 
 **Who can connect:**
 

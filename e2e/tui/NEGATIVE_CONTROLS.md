@@ -10258,3 +10258,27 @@ With `TUIOS_E2E_FRAMES` set, the test writes `charlie-made.png` and `charlie-gon
 | The worktree comparison in `listingsAgree` | "the named session in a worktree lost its name to the branch", 20 of 20 runs | **caught** |
 | None: `main` | none: 20 of 20 runs pass, because the first push waits out the gap and already carries the record | **not caught** |
 | The positive half | none: 20 of 20 runs pass with the comparison | **guard** |
+
+## The tuios ssh limits
+
+`TestSSHServerLimits` runs `tuios ssh` in daemon mode with key
+authentication and `[ssh]` set to `handshake_timeout = "3s"`,
+`max_handshakes = 4` and `max_sessions = 1`. Four clients send only the
+version line and get the server's version line back. A fifth must be closed
+before half the timeout, the four must be closed between 2.5 s and 8 s after
+they connect, a key login must draw its session and outlive the timeout, and
+a second login must get the limit message while the server's PTY count and
+the daemon's session list stay the same. Run on 2026-10-28 on Linux, based on
+origin/main at ba756a0ed.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| origin/main, which has no limits | "connection 5 of 5 with max_handshakes = 4 was still open after 1.5s" | **caught** |
+| `s.ConnCallback = gate.admit` in `limitOptions` | the same | **caught** |
+| `s.HandshakeTimeout = l.HandshakeTimeout` set to 0 | "idle connection 0 was still open 8s after it connected, with handshake_timeout = 3s" | **caught** |
+| `sessionLimitMiddleware(limits.MaxSessions)` out of the middleware list | "a second session with max_sessions = 1 got no message about the limit" | **caught** |
+
+Each negative step has its positive half in the same fixture: the four
+admitted clients get a version line and stay open past the fifth, and the
+first key login draws its session and opens a pane before the second is
+refused.
