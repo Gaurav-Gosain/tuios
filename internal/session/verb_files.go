@@ -1021,7 +1021,7 @@ func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict s
 		}
 	}
 	if perm != 0 {
-		_ = fsys.Chmod(part, os.FileMode(perm&0o777))
+		_ = fsys.Chmod(part, fsys.commitMode(perm))
 	}
 	if mtime > 0 {
 		t := time.UnixMilli(mtime)

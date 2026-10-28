@@ -2654,6 +2654,11 @@ write outside the roots is refused, and the refusal says where writes may land
 and which setting to change. A reload that widens `files_roots`, like one that
 widens `allow`, waits for `tuios config apply`.
 
+**The mode of a file a link writes.** A file that another machine writes here
+gets the sender's permission bits under this machine's umask, as `cp` and
+`scp` without `-p` do. It never gets group or world write. The execute bits
+stay, so a script stays runnable. This holds for a paired device too.
+
 **Where a link may read: `files_read_roots`.** Unset, a machine with `files`
 reads any file you can read, apart from the read deny list: keys, credentials,
 shell start files, `~/.gitconfig`, keyrings, shell histories, browser profiles,

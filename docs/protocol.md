@@ -6205,7 +6205,8 @@ gives (up to 32 hex digits). A caller with no `part_id` writes
 opened must be the regular file at the part's name, so a link put there turns
 the copy into a failure, not a write to the link's target. `file-commit` sets
 the original's permission bits and modification time on the part, renames it
-into place, and syncs the folder.
+into place, and syncs the folder. Over a link, the bits are masked by the
+daemon's umask and lose group and world write. The execute bits stay.
 
 **Tree streams.** A folder copy sends each file of 8 MiB or less in one tree
 stream each way, with no round trip between files. A file sent by itself

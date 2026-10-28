@@ -43,7 +43,9 @@ is there and differs follows `--conflict`:
 | `replace` | `-f` | Replace it. Ask the person first unless they told you to |
 | `keep-both` | `-b` | Keep it, and name the copy `name (from HOST).ext` |
 
-Each file keeps its permission bits and modification time. `--no-perms` and
+Each file keeps its permission bits and modification time. A file that
+arrives on another machine gets that machine's umask and loses group and
+world write. `--no-perms` and
 `--no-times` turn that off. `--bwlimit 5M` caps the rate. `--no-compress`
 sends the bytes as they are. `--detach` prints the copy's id and returns.
 A detached copy skips a file that differs unless you pass `--conflict`.

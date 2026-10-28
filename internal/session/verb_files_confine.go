@@ -265,6 +265,25 @@ var linkReadDenyOnlyHome = []string{
 type fileFS struct {
 	root *os.Root
 	dir  string
+	// link says the write came from another machine: a linked machine or a
+	// paired device. A file it commits gets the sender's mode the way cp and
+	// scp without -p give it, under this process's umask, and never with
+	// group or world write. See commitMode.
+	link bool
+}
+
+// commitMode is the mode a committed file gets for the sender's perm. The
+// person's own copy, and a pane's, keep the bits as sent, as the docs
+// promise. A copy from another machine is masked by the umask and loses
+// group and world write, so a file another local user could change never
+// arrives that way on a shared machine. The execute bits stay, so a script
+// that arrives still runs.
+func (f fileFS) commitMode(perm uint32) os.FileMode {
+	m := os.FileMode(perm & 0o777)
+	if f.link {
+		m &^= os.FileMode(processUmask) | 0o022
+	}
+	return m
 }
 
 // rel is path relative to the root.
@@ -965,7 +984,7 @@ func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError
 	if err != nil {
 		return fileFS{}, fileError("open", chosen, err)
 	}
-	return fileFS{root: r, dir: chosen}, nil
+	return fileFS{root: r, dir: chosen, link: true}, nil
 }
 
 // receiveFolder is the folder a copy to this machine lands in when it names

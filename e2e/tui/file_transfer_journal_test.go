@@ -435,7 +435,61 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(farHome, "inbox", "renamed.pub")); err == nil {
 		t.Errorf("ASSERTION: the remove in build's home did nothing")
 	}
-	saveTransferArtifact(t, "link-write-confinement", map[string]any{"copies": copies, "verbs": verbs, "allowed": ok})
+	modes := linkCommitModes(t, base, c, far, farHome)
+	saveTransferArtifact(t, "link-write-confinement", map[string]any{"copies": copies, "verbs": verbs, "allowed": ok, "modes": modes})
+}
+
+// linkCommitModes is issue 1285: a file a linked machine commits with perm
+// 0o6777 must land with the receiving process's umask applied and without
+// group or world write, and keep its execute bits. The positive half: the
+// person's own copy on this machine keeps 0o777 exactly, as the docs promise.
+func linkCommitModes(t *testing.T, base string, c, far *fileVerbConn, farHome string) map[string]string {
+	t.Helper()
+	// The daemons inherit this process's umask. It can only be read by
+	// setting it.
+	umask := os.FileMode(syscall.Umask(0o022))
+	syscall.Umask(int(umask))
+	modes := map[string]string{}
+
+	body := []byte("#!/bin/sh\n")
+	reply, err := writeStream(dialHostVerbs(t, base), "~/inbox/run.sh", "c0ffee", int64(len(body)), body)
+	if err != nil || reply["error"] != nil {
+		t.Fatalf("write run.sh on build over the link: %v %v", err, reply)
+	}
+	far.must("file-commit", map[string]any{"path": "~/inbox/run.sh", "part_id": "c0ffee", "perm": 0o6777, "conflict": "replace"}, nil)
+	fi, err := os.Stat(filepath.Join(farHome, "inbox", "run.sh"))
+	if err != nil {
+		t.Fatalf("ASSERTION: run.sh did not arrive on build: %v", err)
+	}
+	want := os.FileMode(0o777) &^ (umask | 0o022)
+	modes["link commit of 0o6777"] = fi.Mode().String()
+	if fi.Mode() != want {
+		t.Errorf("ASSERTION: a link commit of perm 0o6777 landed as %v, want %v (umask %03o, no group or world write)", fi.Mode(), want, umask)
+	}
+	if fi.Mode()&0o100 == 0 {
+		t.Errorf("ASSERTION: the received script lost its execute bit: %v", fi.Mode())
+	}
+
+	src := filepath.Join(base, "mine.sh")
+	if err := os.WriteFile(src, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(src, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(base, "mine-copy.sh")
+	var row transferRow
+	c.must("transfer-start", map[string]any{"src": map[string]any{"path": src}, "dst": map[string]any{"path": dst}}, &row)
+	row = waitTransferEnd(t, base, row.ID, 30*time.Second)
+	got, err := os.Stat(dst)
+	if row.State != "done" || err != nil {
+		t.Fatalf("ASSERTION: the person's own copy ended %s (%s): %v", row.State, row.Error, err)
+	}
+	modes["the person's own copy of 0o777"] = got.Mode().String()
+	if got.Mode() != 0o777 {
+		t.Errorf("ASSERTION: the person's own copy of a 0o777 file landed as %v, want -rwxrwxrwx", got.Mode())
+	}
+	return modes
 }
 
 // TestFileWritesNeedTheFilesCapability gives the hub list and write on build,

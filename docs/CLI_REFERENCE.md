@@ -4628,6 +4628,9 @@ command stops with exit code 2.
 #### What a copy keeps
 
 A copy keeps the permission bits and the modification time of each file.
+A file that arrives over a link is the exception. It gets the permission bits
+under the receiving machine's umask, and never group or world write. The
+execute bits stay. A copy from this machine to a host arrives over a link.
 `--no-perms` gives each file the default permission bits. `--no-times` gives
 each file the time of the copy. A copy never keeps the owner.
 

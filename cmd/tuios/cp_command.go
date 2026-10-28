@@ -88,6 +88,8 @@ differs follows --conflict:
   keep-both  keep it, and name the copy "name (from HOST).ext" (-b)
 
 The copy runs in the daemon. It keeps permission bits and modification times.
+A file that arrives on another machine gets that machine's umask, and never
+group or world write.
 It checks every file with sha256 before it puts it in place. When a host goes
 away, the copy waits for it and goes on from where it stopped. Ctrl+C asks
 whether to cancel the copy or keep it running. A second Ctrl+C cancels it.
