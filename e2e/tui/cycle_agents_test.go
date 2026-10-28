@@ -129,6 +129,15 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	fmt.Fprintf(&log, "typed line ran in %s/%s: terminal mode held\n", a1.sess, a1.name)
+
+	// With the rail holding the keyboard, the chord and the leader keys walk
+	// the same order.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatalf("focus the rail: %v", err)
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+	press("next with the rail focused", next, rail[2])
+	press("leader K with the rail focused", []any{tuitest.Ctrl('b'), "K"}, rail[1])
 	if err := os.WriteFile(filepath.Join(dir, "cycle-agents.txt"), []byte(log.String()), 0o644); err != nil {
 		t.Errorf("save the walk: %v", err)
 	}

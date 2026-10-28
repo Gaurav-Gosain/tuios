@@ -9978,6 +9978,7 @@ only 5 of 48 cases: the client resized the new pane after its prompt.
 | `m.sidebarSortAgents(agents)` removed from `railAgentOrder`, leaving tree order | step 1: `want bravo/ag-b1 focused, have attached [alpha] with 5b4890ae-… focused there` (it went to `ag-a1`, first in tree order) | **caught** |
 | The wrap in `CycleAgent` clamped: `next = min(max(i+delta, 0), n-1)` | step 4, next past the last: `want bravo/ag-b1 focused, have attached [alpha] with 25163ad7-… focused there` | **caught** |
 | `next_agent` and `prev_agent` dropped from `isTerminalSafeAction` | step 1: `want bravo/ag-b1 focused, have attached [alpha] with d3ed3ea6-… focused there` (the chord went to the shell) | **caught** |
+| The rail's hand-off of terminal-safe chords in `handleSidebarKey` cut (`sidebar_keyboard.go`) | step 9, next with the rail focused: `want alpha/ag-a2 focused, have attached [alpha] with 99173718-… focused there` (the rail swallowed the chord). Run on 2026-10-28 on Linux | **caught** |
 
 With `TUIOS_E2E_FRAMES` set, the test writes `step-NN.txt` and `step-NN.styled.txt` for each press and `cycle-agents.txt`, the walk step by step, under `TestCycleAgentsWalksTheRailOrder/`.
 

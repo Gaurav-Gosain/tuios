@@ -87,6 +87,18 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return m, cmd
 		}
 
+		// The chords that walk workspaces, sessions and agent panes from a
+		// shell walk them from the rail too, by the same rule: only a
+		// reserved chord, and only a terminal-safe action. The rail is where
+		// a person reads the order they walk, and it was swallowing them.
+		if isReservedTerminalChord(msg) {
+			if act := lookupAction(o, msg, o.KeybindRegistry.GetAction); isTerminalSafeAction(act) {
+				if m, cmd, ok := dispatchAction(act, msg, o); ok {
+					return m, cmd
+				}
+			}
+		}
+
 		// A terminal focus key pointing back at the panes leaves the rail, so
 		// the key that walked into it from the outermost pane walks back out.
 		focus := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
