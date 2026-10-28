@@ -24,6 +24,13 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 			Detail: "Nothing was changed. Run tuios daemon upgrade on the machine whose daemon it is.",
 		})
 	}
+	// Whatever the caller's grants: the binary named runs as the daemon, which
+	// holds every pane's terminal and the key that signs every pane's token.
+	if !d.mayActAsHuman(cs) {
+		return nil, hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person: the caller runs inside a pane of this daemon or is a plugin, and an upgrade is refused there whatever its grants", &VerbHint{
+			Detail: "Nothing was changed. Run tuios daemon upgrade from a terminal outside tuios.",
+		})
+	}
 	if p.Binary == "" || !filepath.IsAbs(p.Binary) {
 		return nil, invalidParam("binary", "binary must be the absolute path of a tuios binary")
 	}
